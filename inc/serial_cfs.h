@@ -17,11 +17,12 @@
 #define SCFS_RENAME 8
 #define SCFS_MKDIR 9
 #define SCFS_RMDIR 10
-#define SCFS_GET_FEATURES 11
-#define SCFS_GET_METADATA 12
-#define SCFS_SET_METADATA 13
-#define SCFS_SYNC 14
-#define SCFS_SHUTDOWN 15
+#define SCFS_GET_NUM_FEATURES 11
+#define SCFS_GET_FEATURE 12
+#define SCFS_GET_METADATA 13
+#define SCFS_SET_METADATA 14
+#define SCFS_SYNC 15
+#define SCFS_SHUTDOWN 16
 
 #define SCFS_TYPE int scfs_type
 
