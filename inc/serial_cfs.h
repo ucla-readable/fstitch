@@ -2,6 +2,7 @@
 #define __KUDOS_INC_SERIAL_CFS_H
 
 #include <inc/types.h>
+#include <inc/mmu.h>
 
 //
 // CFS Methods
