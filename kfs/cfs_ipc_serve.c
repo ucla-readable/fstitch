@@ -188,8 +188,14 @@ static void serve()
 	uint32_t whom;
 	int type;
 	int perm = 0;
+	uint32_t r;
 
-	ipc_recv(&whom, (void*) REQVA, &perm);
+	r = ipc_recv(&whom, (void*) REQVA, &perm);
+	if (!whom && !perm)
+	{
+		fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);
+		return;
+	}
 
 	// All requests must contain an argument page
 	if ((!perm & PTE_P))
