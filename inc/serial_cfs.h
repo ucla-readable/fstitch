@@ -111,6 +111,7 @@ struct Scfs_set_metadata {
 struct Scfs_sync {
 	SCFS_TYPE;
 	int fid;
+	char name[SCFSMAXNAMELEN];
 };
 
 struct Scfs_shutdown {
