@@ -16,6 +16,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/chdesc.o \
 			$(OBJDIR)/kfs/depman.o \
+			$(OBJDIR)/kfs/modman.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/josfs_cfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \

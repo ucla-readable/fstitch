@@ -19,6 +19,7 @@
 #include <kfs/fidcloser_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
@@ -48,6 +49,12 @@ int kfsd_init(void)
 	if((r = depman_init()) < 0)
 	{
 		fprintf(STDERR_FILENO, "depman_init: %e\n", r);
+		kfsd_shutdown();
+	}
+
+	if((r = modman_init()) < 0)
+	{
+		fprintf(STDERR_FILENO, "modman_init: %e\n", r);
 		kfsd_shutdown();
 	}
 
