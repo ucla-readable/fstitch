@@ -218,7 +218,7 @@ net_loop(struct netif *nif, void (* poll)(void))
 		if(jn_sl == 0)
 		{
 			if ((r = josnicif_check_inpacket(nif)) < 0)
-				fprintf(STDERR_FILENO, "josnicif_check_inpacket: %e\n");
+				fprintf(STDERR_FILENO, "josnicif_check_inpacket: %e\n", r);
 			else
 				read_data += r;
 			josnicif_input(nif);
