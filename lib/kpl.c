@@ -1,5 +1,6 @@
 #include <inc/lib.h>
 #include <inc/cfs_ipc_client.h>
+#include <kfs/feature.h>
 
 static int kpl_close(struct Fd* fd);
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset);
@@ -64,21 +65,35 @@ static int kpl_close(struct Fd* fd)
 // Read 'n' bytes from 'fd' at the current seek position into 'buf'.
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 {
-	//cfs_read(fid, offset, size, data);
-	return -1;
+	int r;
+	r = cfs_read(fd->fd_kpl.fid, offset, n, buf);
+	if (r >= 0) return n;
+	return r;
 }
 
 // Write 'n' bytes from 'buf' to 'fd' at the current seek position.
 static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 {
-	//kpl_write(fid, offset, size, data);
-	return -1;
+	int r;
+	r = cfs_write(fd->fd_kpl.fid, offset, n, buf);
+	if (r >= 0) return n;
+	return r;
 }
 
 static int kpl_stat(struct Fd* fd, struct Stat* st)
 {
-	/* use get/set metadata */
-	return -1;
+	int r;
+	struct Scfs_metadata md;
+
+	strcpy(st->st_name, fd->fd_file.file.f_name);
+	r = cfs_get_metadata(st->st_name, KFS_feature_size.id, &md);
+	if (r < 0) return r;
+	memcpy(&st->st_size, md.data, 4);
+	r = cfs_get_metadata(st->st_name, KFS_feature_getfiletype.id, &md);
+	if (r < 0) return r;
+	memcpy(&st->st_isdir, md.data, 4);
+	if (st->st_isdir != 1) st->st_isdir = 0;
+	return 0;
 }
 
 // Truncate or extend an open file to 'size' bytes

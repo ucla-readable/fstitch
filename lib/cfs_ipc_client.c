@@ -135,7 +135,7 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 }
 
 int
-cfs_write(int fid, uint32_t offset, uint32_t size, char *data)
+cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 {
 	int r = 0;
 	envid_t fsid;
