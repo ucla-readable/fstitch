@@ -85,7 +85,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	block->translated++;
 	block->bd = lfs_bd;
 
-    r =  CALL(state->lfs, write_block, block, block->offset, block->length, block->ddesc->data, &head, &tail);
+	r =  CALL(state->lfs, write_block, block, block->offset, block->length, block->ddesc->data, &head, &tail);
 
 	if (refs)
 	{
