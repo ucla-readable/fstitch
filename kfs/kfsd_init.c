@@ -6,6 +6,7 @@
 #include <kfs/pc_ptable_bd.h>
 #include <kfs/chdesc_stripper_bd.h>
 #include <kfs/wt_cache_bd.h>
+#include <kfs/wb_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
 #include <kfs/journal_queue_bd.h>
@@ -277,7 +278,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		if (4096 != CALL(partitions[i], get_atomicsize))
 		{
 			/* create a cache below the resizer */
-			if (! (cache = wt_cache_bd(partitions[i], cache_nblks)) )
+			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
 				kfsd_shutdown();
 
 			/* create a resizer */
@@ -285,12 +286,12 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 
 			/* create a cache above the resizer */
-			if (! (cache = wt_cache_bd(resizer, 4)) )
+			if (! (cache = wt_cache_bd(resizer, 16)) )
 				kfsd_shutdown();
 		}
 		else
 		{
-			if (! (cache = wt_cache_bd(partitions[i], cache_nblks)) )
+			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
 				kfsd_shutdown();
 		}
 
@@ -352,7 +353,7 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 	if (4096 != CALL(bd, get_blocksize))
 	{
 		/* create a cache below the resizer */
-		if (! (bd = wt_cache_bd(bd, cache_nblks)) )
+		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
 			kfsd_shutdown();
 
 		/* create a resizer */
@@ -360,12 +361,12 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 			kfsd_shutdown();
 
 		/* create a cache above the resizer */
-		if (! (bd = wt_cache_bd(bd, 4)) )
+		if (! (bd = wt_cache_bd(bd, 16)) )
 			kfsd_shutdown();
 	}
 	else
 	{
-		if (! (bd = wt_cache_bd(bd, cache_nblks)) )
+		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
 			kfsd_shutdown();
 	}
 

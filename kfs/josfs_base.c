@@ -410,10 +410,12 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	Dprintf("JOSFSDEBUG: write_bitmap %d\n", blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
-	int target;
-	int r;
+	int r, target;
 	uint32_t * ptr;
 	chdesc_t * ch;
+
+	if (tail)
+		*tail = NULL;
 
 	if (blockno == 0) {
 		printf("josfs_base: attempted to write to zero block!\n");
@@ -483,9 +485,10 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	return r;
 }
 
-int count_free_space(LFS_t * object) {
+int count_free_space(LFS_t * object)
+{
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-    const uint32_t s_nblocks = super->s_nblocks;
+	const uint32_t s_nblocks = super->s_nblocks;
 	int i, count = 0;
 
 	for (i = 0; i < s_nblocks; i++)
@@ -683,6 +686,9 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 	int blockno;
 	int bitmap_size;
 	int s_nblocks;
+
+	if (tail)
+		*tail = NULL;
 
 	if (size != JOSFS_BLKSIZE)
 		return NULL;
@@ -904,8 +910,10 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 	int r, offset;
 	chdesc_t *newtail, * curhead, *oldhead = NULL;
 
-	if (head && tail)
+	if (head && tail) {
 		oldhead = *head;
+		*tail = NULL;
+	}
 
 	num = block->number;
 	bdesc_drop(&block);
@@ -1069,6 +1077,9 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	int i, j, r, index, offset;
 	uint32_t nblock, dirblock;
 	chdesc_t * oldhead = NULL, * newtail, * curhead;
+
+	if (tail)
+		*tail = NULL;
 
 	if (link)
 		return NULL;
@@ -1238,8 +1249,10 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	int i, r, offset;
 	chdesc_t * oldhead = NULL, * newtail, * curhead;
 
-	if (head && tail)
+	if (head && tail) {
 		oldhead = *head;
+		*tail = NULL;
+	}
 
 	oldfdesc = josfs_lookup_name(object, oldname);
 	if (oldfdesc) {
@@ -1330,8 +1343,10 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	uint32_t data = 0;
 	chdesc_t * oldhead = NULL;
 
-	if (head && tail)
+	if (head && tail) {
 		oldhead = *head;
+		*tail = NULL;
+	}
 
 	if (nblocks > JOSFS_NINDIRECT || nblocks < 1) {
 		return NULL;
@@ -1509,6 +1524,9 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	uint8_t data = 0;
 	chdesc_t * oldhead;
 
+	if (tail)
+		*tail = NULL;
+
 	file = josfs_lookup_name(object, name);
 
 	if (!file)
@@ -1569,6 +1587,9 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	int r;
 	chdesc_t * oldhead;
+
+	if (tail)
+		*tail = NULL;
 
 	if (offset + size > JOSFS_BLKSIZE)
 		return -E_INVAL;
@@ -1684,6 +1705,9 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	bdesc_t * dirblock = NULL;
 	int r, offset;
 	chdesc_t * oldhead;
+
+	if (tail)
+		*tail = NULL;
 
 	if (id == KFS_feature_size.id) {
 		if (sizeof(off_t) == size) {

@@ -3,6 +3,7 @@
 #include <kfs/loop_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/wt_cache_bd.h>
+#include <kfs/wb_cache_bd.h>
 #include <kfs/chdesc_stripper_bd.h>
 #include <kfs/journal_queue_bd.h>
 #include <kfs/wholedisk_lfs.h>
@@ -72,7 +73,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 		if (!partitions[i])
 			continue;
 
-		if (! (cache = wt_cache_bd(partitions[i], cache_nblks)) )
+		if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
 		{
 			fprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
 			exit();
@@ -82,7 +83,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 		if ((resizer = block_resizer_bd(cache, 4096)) )
 		{
 			/* create a cache above the resizer */
-			if (! (cache = wt_cache_bd(resizer, 4)) )
+			if (! (cache = wt_cache_bd(resizer, 16)) )
 			{
 				fprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
 				exit();
