@@ -1,4 +1,4 @@
-#include <inc/fixed_heap.h>
+#include <inc/fixed_max_heap.h>
 #include <inc/malloc.h>
 
 static int parent(int child) {
