@@ -12,6 +12,7 @@
 #include <kern/trap.h>
 #include <kern/syscall.h>
 #include <kern/console.h>
+#include <kern/kclock.h>
 #include <kern/sched.h>
 #include <kern/kernbin.h>
 #include <kern/sb16.h>
@@ -360,7 +361,7 @@ sys_set_pgfault_upcall(envid_t envid, uintptr_t upcall)
 // Return < 0 on error.  Errors are:
 //	-E_INVAL if dstva < UTOP but dstva is not page-aligned.
 static int
-sys_ipc_recv(uintptr_t dstva)
+sys_ipc_recv(uintptr_t dstva, int timeout)
 {
 	if(dstva >= UTOP)
 		curenv->env_ipc_dstva = UTOP;
@@ -369,12 +370,13 @@ sys_ipc_recv(uintptr_t dstva)
 	else
 		curenv->env_ipc_dstva = dstva;
 	
-	/* if we get woken up for some reason (like
-	 * the kernel monitor) we will return this */
-	curenv->env_tf.tf_eax = -E_BUSY;
+	/* 0 or negative mean "forever" (really 248 days at 100Hz) */
+	if(timeout < 1)
+		timeout = 0x7FFFFFFF;
 	
 	curenv->env_ipc_recving = 1;
 	curenv->env_status = ENV_NOT_RUNNABLE;
+	curenv->env_ipc_timeout = jiffies + timeout;
 	sched_yield();
 }
 
@@ -877,8 +879,7 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 		case SYS_set_pgfault_upcall:
 			return sys_set_pgfault_upcall(a1, a2);
 		case SYS_ipc_recv:
-			/* the return will never actually happen... */
-			return sys_ipc_recv(a1);
+			return sys_ipc_recv(a1, a2);
 		case SYS_ipc_try_send:
 			return sys_ipc_try_send(a1, a2, a3, a4);
 		case SYS_batch_syscall:

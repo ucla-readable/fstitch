@@ -190,7 +190,7 @@ static void serve()
 	int perm = 0;
 	uint32_t r;
 
-	r = ipc_recv(&whom, (void*) REQVA, &perm);
+	r = ipc_recv(&whom, (void*) REQVA, &perm, 0);
 	if (!whom && !perm)
 	{
 		fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);

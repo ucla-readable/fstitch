@@ -66,6 +66,7 @@ struct Env {
 	uint32_t env_ipc_value;		// data value sent to us 
 	envid_t env_ipc_from;		// envid of the sender	
 	unsigned env_ipc_perm;		// perm of page mapping received
+	int env_ipc_timeout;		// timeout for when to fail ipc_recv
 
 #if ENABLE_ENV_SYMS
 	struct Sym *symtbl;

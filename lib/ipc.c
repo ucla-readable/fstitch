@@ -16,13 +16,16 @@
 //   If 'pg' is null, pass sys_ipc_recv a value that it will understand
 //   as meaning "no page".  (Zero is not the right value.)
 uint32_t
-ipc_recv(envid_t* fromenv, void* pg, unsigned* perm)
+ipc_recv(envid_t* fromenv, void* pg, unsigned* perm, int timeout)
 {
 	int r;
 	if(!pg)
 		pg = (void *) UTOP;
 	
-	r = sys_ipc_recv(pg);
+	do {
+		r = sys_ipc_recv(pg, timeout);
+	} while(r == -E_TIMEOUT && timeout < 1);
+	
 	if(r)
 	{
 		if(fromenv)

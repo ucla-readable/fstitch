@@ -72,7 +72,7 @@ connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 	ipc_send(netd_ipcrecv, NETREQ_CONNECT, req, PTE_P|PTE_U);
 
 	// Determine whether the connect succeded
-	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL)) < 0)
+	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL, 0)) < 0)
 		return r;
 
 	// Receive fds
@@ -106,11 +106,11 @@ bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 	ipc_send(netd_ipcrecv, NETREQ_BIND_LISTEN, req, PTE_P|PTE_U);
 
 	// Determine whether the bind_listen succeded
-	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL)) < 0)
+	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL, 0)) < 0)
 		return r;
 
 	// Receive listen key
-	*listen_key = ipc_recv(NULL, NULL, NULL);
+	*listen_key = ipc_recv(NULL, NULL, NULL, 0);
 
 	return 0;
 }
@@ -144,7 +144,7 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 	ipc_send(netd_ipcrecv, NETREQ_ACCEPT, req, PTE_P|PTE_U);
 
 	// Determine whether the accept succeded
-	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL)) < 0)
+	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL, 0)) < 0)
 		return r;
 
 	// Receive the fds
@@ -154,8 +154,8 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 		panic("dup2env_recv: %e", r);
 
 	// Receive the remote ipaddr and port
-	ripaddr.addr = ipc_recv(NULL, NULL, NULL);
-	rport = (uint16_t) ipc_recv(NULL, NULL, NULL);
+	ripaddr.addr = ipc_recv(NULL, NULL, NULL, 0);
+	rport = (uint16_t) ipc_recv(NULL, NULL, NULL, 0);
 	if (remote_ipaddr)
 		*remote_ipaddr = ripaddr;
 	if (remote_port)
