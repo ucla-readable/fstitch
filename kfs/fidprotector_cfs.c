@@ -145,6 +145,7 @@ static int fidprotector_close(CFS_t * cfs, int fid)
 	if ((r = CALL(state->frontend_cfs, close, fid)) < 0)
 		return r;
 
+	hash_map_erase(state->open_files, (void*) fid);
 	open_file_close(of);
 
 	return 0;

@@ -90,6 +90,7 @@ static int uhfs_close(CFS_t * cfs, int fid)
 	if (!f)
 		return -E_INVAL;
 
+	hash_map_erase(state->open_files, (void*) fid);
 	open_file_close(state->lfs, f);
 	return 0;
 }
