@@ -8,10 +8,19 @@
 
 #define IPC_RECV_TIMEOUT 100
 
+#define CFS_IPC_SERVE_DEBUG 1
+
+
+#if CFS_IPC_SERVE_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
 
 // Va at which to receive page mappings containing client reqs.
 // This is the same va as serv.c's, why not.
 #define REQVA (0x10000000 - PGSIZE)
+#define PAGESNDVA (REQVA - PGSIZE)
 
 struct prev_serve_recv {
 	envid_t envid;
@@ -62,24 +71,29 @@ void cfs_ipc_serve_run()
 
 static void serve_open(envid_t envid, struct Scfs_open * req)
 {
-	printf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
+	int r;
+	r = CALL(frontend_cfs, open, req->path, req->mode);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_close(envid_t envid, struct Scfs_close * req)
 {
-	printf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
+	int r;
+	r = CALL(frontend_cfs, close, req->fid);
 	ipc_send(envid, 0, NULL, 0);
 }
 
-char read_test_data[2*PGSIZE];
-
 static void serve_read(envid_t envid, struct Scfs_read * req)
 {
-	printf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
-	char *buf = (char*) ROUNDUP32(read_test_data, PGSIZE);
-	strcpy(buf, "0123456789");
-	ipc_send(envid, 0, (void*) buf, PTE_P|PTE_U);
+	Dprintf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+	int r;
+	void *buf = (uint8_t*) PAGESNDVA;
+	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+	r = CALL(frontend_cfs, read, req->fid, buf, req->offset, req->size);
+	ipc_send(envid, r, buf, PTE_P|PTE_U);
 }
 
 static void serve_write(envid_t envid, struct Scfs_write * req)
@@ -88,17 +102,19 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
+		Dprintf("%s [1]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 		prevrecv->envid = envid;
 		prevrecv->type  = req->scfs_type;
 		memcpy(prevrecv->scfs, req, PGSIZE);
-
-		printf("%s [1]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 	}
 	else
 	{
 		// Second of two recvs
-		ipc_send(envid, 0, NULL, 0);
-		printf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+		struct Scfs_write *scfs = (struct Scfs_write*) prevrecv->scfs;
+		int r;
+		r = CALL(frontend_cfs, write, scfs->fid, req, scfs->offset, scfs->size);
+		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
 	}
@@ -106,50 +122,90 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 
 static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 {
-	printf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
+	int r;
+	r = CALL(frontend_cfs, truncate, req->fid, req->size);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_unlink(envid_t envid, struct Scfs_unlink * req)
 {
-	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	int r;
+	r = CALL(frontend_cfs, unlink, req->name);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_link(envid_t envid, struct Scfs_link * req)
 {
-	printf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
+	int r;
+	r = CALL(frontend_cfs, link, req->oldname, req->newname);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_rename(envid_t envid, struct Scfs_rename * req)
 {
-	printf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
+	int r;
+	r = CALL(frontend_cfs, rename, req->oldname, req->newname);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 {
-	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
+	int r;
+	r = CALL(frontend_cfs, mkdir, req->path);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_rmdir(envid_t envid, struct Scfs_rmdir * req)
 {
-	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
+	int r;
+	r = CALL(frontend_cfs, rmdir, req->path);
+	ipc_send(envid, r, NULL, 0);
 }
 
-static void serve_get_features(envid_t envid, struct Scfs_get_features * req)
+static void serve_get_num_features(envid_t envid, struct Scfs_get_num_features * req)
 {
-	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-	ipc_send(envid, 0, (void*) REQVA, PTE_P|PTE_U);
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	int r;
+	r = CALL(frontend_cfs, get_num_features, req->name);
+	ipc_send(envid, r, NULL, 0);
+}
+
+static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
+{
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	const feature_t *f;
+	void *buf = (uint8_t*) PAGESNDVA;
+	int r;
+
+	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+	f = CALL(frontend_cfs, get_feature, req->name, req->num);
+	if (!f)
+		ipc_send(envid, -E_UNSPECIFIED, (void*) NULL, 0);
+	else
+	{
+		memcpy(buf, f, sizeof(*f));
+		ipc_send(envid, r, buf, PTE_P|PTE_U);
+	}
 }
 
 static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 {
-	printf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
-	ipc_send(envid, 0, (void*) REQVA, PTE_P|PTE_U);
+	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
+	struct Scfs_metadata *md = (struct Scfs_metadata*) PAGESNDVA;
+	int r;
+
+	if ((r = sys_page_alloc(0, md, PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+	md->id = req->id;
+	r = CALL(frontend_cfs, get_metadata, req->name, req->id, &md->size, md->data);
+	ipc_send(envid, r, (void*) md, PTE_P|PTE_U);
 }
 
 static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
@@ -158,17 +214,20 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
+		Dprintf("%s [1]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 		prevrecv->envid = envid;
 		prevrecv->type  = req->scfs_type;
 		memcpy(prevrecv->scfs, req, PGSIZE);
-
-		printf("%s [1]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	}
 	else
 	{
 		// Second of two recvs
-		printf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-		ipc_send(envid, 0, NULL, 0);
+		Dprintf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+		struct Scfs_set_metadata *scfs = (struct Scfs_set_metadata*) prevrecv->scfs;
+		struct Scfs_metadata *md = (struct Scfs_metadata*) req;
+		int r;
+		r = CALL(frontend_cfs, set_metadata, scfs->name, md->id, md->size, md->data);
+		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
 	}
@@ -176,13 +235,15 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 
 static void serve_sync(envid_t envid, struct Scfs_sync * req)
 {
-	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-	ipc_send(envid, 0, NULL, 0);
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	int r;
+	r = CALL(frontend_cfs, sync, req->name);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
-	printf("%s: %08x\n", __FUNCTION__, envid);
+	Dprintf("%s: %08x\n", __FUNCTION__, envid);
 	ipc_send(envid, 0, NULL, 0);
 	kfsd_shutdown();
 }
@@ -251,8 +312,11 @@ static void serve()
 		case SCFS_RMDIR:
 			serve_rmdir(whom, (struct Scfs_rmdir*) REQVA);
 			break;
-		case SCFS_GET_FEATURES:
-			serve_get_features(whom, (struct Scfs_get_features*) REQVA);
+		case SCFS_GET_NUM_FEATURES:
+			serve_get_num_features(whom, (struct Scfs_get_num_features*) REQVA);
+			break;
+		case SCFS_GET_FEATURE:
+			serve_get_feature(whom, (struct Scfs_get_feature*) REQVA);
 			break;
 		case SCFS_GET_METADATA:
 			serve_get_metadata(whom, (struct Scfs_get_metadata*) REQVA);
@@ -267,7 +331,10 @@ static void serve()
 			serve_shutdown(whom, (struct Scfs_shutdown*) REQVA);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "kfsd : Unknown type %d\n", __FUNCTION__, type);
+			fprintf(STDERR_FILENO, "kfsd %s: Unknown type %d\n", __FUNCTION__, type);
 	}
-	sys_page_unmap(0, (void*) REQVA);
+	if ((r = sys_page_unmap(0, (void*) REQVA)) < 0)
+		panic("sys_page_unmap: %e", r);
+	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
+		panic("sys_page_unmap: %e", r);
 }
