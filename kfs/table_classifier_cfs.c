@@ -167,6 +167,7 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 {
 	Dprintf("%s(0x%08x, \"%s\", 0x%08x)\n", __FUNCTION__, mount_table, name, transformed_name);
 	const size_t mount_table_size = vector_size(mount_table);
+	const size_t name_len = strlen(name);
 	size_t longest_match = 0;
 	CFS_t * best_match = NULL;
 	int i;
@@ -176,11 +177,13 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 		const mount_entry_t *me = (mount_entry_t *) vector_elt(mount_table, i);
 		const size_t mount_len = strlen(me->path);
 
-		if(mount_len <= longest_match)
+		if(mount_len <= longest_match || name_len < mount_len)
 			continue;
 
 		if(!strncmp(me->path, name, mount_len))
 		{
+			if(name[mount_len] && name[mount_len] != '/')
+				continue;
 			longest_match = mount_len;
 			best_match = me->cfs;
 		}
