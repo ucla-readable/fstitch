@@ -1,4 +1,5 @@
 #include <kfs/ide_pio_bd.h>
+#include <kfs/wt_cache_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/cfs_ipc_serve.h>
@@ -16,7 +17,8 @@ static struct module_shutdown module_shutdowns[10];
 // Init kfsd modules.
 int kfsd_init(int argc, char * argv[])
 {
-	BD_t * bd;
+	BD_t * bd_direct;
+	BD_t * bd_cache;
 	LFS_t * lfs;
 	CFS_t * frontend_cfs;
 
@@ -25,10 +27,13 @@ int kfsd_init(int argc, char * argv[])
 	if (!cfs_ipc_serve())
 		kfsd_shutdown();
 
-	if (! (bd = ide_pio_bd(1)) )
+	if (! (bd_direct = ide_pio_bd(1)) )
 		kfsd_shutdown();
 
-	if (! (lfs = wholedisk(bd)) )
+	if (! (bd_cache = wt_cache_bd(bd_direct, 4)) )
+		kfsd_shutdown();
+
+	if (! (lfs = wholedisk(bd_cache)) )
 		kfsd_shutdown();
 
 	if (! (frontend_cfs = uhfs(lfs)) )

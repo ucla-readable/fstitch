@@ -57,27 +57,23 @@ int kpl_open(const char* path, int mode)
 // This function is called by fd_close.
 static int kpl_close(struct Fd* fd)
 {
-	cfs_close(fd->fd_kpl.fid);
-	sys_page_unmap(0, fd);
-	return 0;
+	int r;
+	r = cfs_close(fd->fd_kpl.fid);
+	if (r >= 0)
+		sys_page_unmap(0, fd);
+	return r;
 }
 
 // Read 'n' bytes from 'fd' at the current seek position into 'buf'.
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 {
-	int r;
-	r = cfs_read(fd->fd_kpl.fid, offset, n, buf);
-	if (r >= 0) return n;
-	return r;
+	return cfs_read(fd->fd_kpl.fid, offset, n, buf);
 }
 
 // Write 'n' bytes from 'buf' to 'fd' at the current seek position.
 static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 {
-	int r;
-	r = cfs_write(fd->fd_kpl.fid, offset, n, buf);
-	if (r >= 0) return n;
-	return r;
+	return cfs_write(fd->fd_kpl.fid, offset, n, buf);
 }
 
 static int kpl_stat(struct Fd* fd, struct Stat* st)

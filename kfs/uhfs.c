@@ -14,7 +14,7 @@
 #define Dprintf(x...)
 #endif
 
-#define FIDX(fid) ((uint32_t) (fid) & ~0xFFF)
+#define FIDX(fid) (((uint32_t)(fid) - ((uint32_t)UHFS_FD_MAP & ~0x80000000)) >> 12)
 
 
 struct open_file {
@@ -129,12 +129,12 @@ static int uhfs_close(CFS_t * cfs, int fid)
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(cfs, %x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	open_file_t * f;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
-	uint32_t dataoffset = blockoffset;
+	uint32_t dataoffset = (offset % blocksize);
 	bdesc_t * bd;
 	uint32_t size_read = 0;
 
@@ -149,13 +149,14 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 
 	while (size_read < size)
 	{
-		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + size_read);
+		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_read);
 		if (!bd)
 			return size_read;
 
-		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, bd->length - dataoffset);
+		const uint32_t n = MIN(bd->length - dataoffset, size - size_read);
+		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, n);
+		size_read += n;
 		dataoffset = 0; /* dataoffset only needed for first block */
-		size_read += bd->length;
 
 		bdesc_drop(&bd);
 	}
