@@ -22,6 +22,44 @@ struct mirror_info {
 	int16_t bad_disk; // {none, disk 0, disk 1} => {-1, 0, 1}
 };
 
+static int mirror_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct mirror_info * info = (struct mirror_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "disks: 2, count: %d, blocksize: %d, stride: %d", info->numblocks, info->blocksize, info->stride);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "disks: 2");
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "disks: 2, count: %d", info->numblocks);
+	}
+	return 0;
+}
+
+static int mirror_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct mirror_info * info = (struct mirror_info *) bd->instance;
+	switch(level)
+	{
+		case STATUS_VERBOSE:
+			snprintf(string, length, "health: %s", (info->bad_disk == -1) ? "OK" : (info->bad_disk == 0) ? "Disk 0 FAILURE" : "Disk 1 FAILURE");
+			break;
+		case STATUS_BRIEF:
+			snprintf(string, length, "%s", (info->bad_disk == -1) ? "OK" : (info->bad_disk == 0) ? "Disk 0 FAILURE" : "Disk 1 FAILURE");
+			break;
+		case STATUS_NORMAL:
+		default:
+			snprintf(string, length, "health: %s", (info->bad_disk == -1) ? "OK" : (info->bad_disk == 0) ? "Disk 0 FAILURE" : "Disk 1 FAILURE");
+	}
+	return 0;
+}
+
 static uint32_t mirror_bd_get_numblocks(BD_t * object)
 {
 	return ((struct mirror_info *) object->instance)->numblocks;
@@ -350,6 +388,10 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 	}
 	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, mirror_bd, get_config);
+	OBJASSIGN(bd, mirror_bd, get_status);
 	ASSIGN(bd, mirror_bd, get_numblocks);
 	ASSIGN(bd, mirror_bd, get_blocksize);
 	ASSIGN(bd, mirror_bd, get_atomicsize);

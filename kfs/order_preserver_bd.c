@@ -14,11 +14,26 @@
 #endif
 
 
-struct order_preserver_state {
+struct order_info {
 	BD_t * bd;
 	chdesc_t * prev_head;
 };
-typedef struct order_preserver_state order_preserver_state_t;
+typedef struct order_info order_info_t;
+
+
+static int order_preserver_get_config(void * object, int level, char * string, size_t length)
+{
+	/* no configuration of interest */
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int order_preserver_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
 
 
 //
@@ -27,10 +42,10 @@ typedef struct order_preserver_state order_preserver_state_t;
 static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block_new);
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	order_info_t * info = (order_info_t *) bd->instance;
 	bdesc_t * block_old;
 	chdesc_t * head = NULL, * tail = NULL;
-	// a backup of state->prev_head so that it can be restored upon a failure:
+	// a backup of info->prev_head so that it can be restored upon a failure:
 	chdesc_t * prev_head_backup = NULL; 
 	int r;
 
@@ -39,28 +54,28 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 	// (however it /is/ ok for others to depend on block. ex: inter-bd deps.)
 	assert(!depman_get_deps(block_new));
 
-	block_old = CALL(state->bd, read_block, block_new->number);
+	block_old = CALL(info->bd, read_block, block_new->number);
 	if (!block_old)
 		return -E_UNSPECIFIED;
 	if ((r = chdesc_create_full(block_old, block_new->ddesc->data, &head, &tail)) < 0)
 		goto error_read_block_old;
 
-	if (state->prev_head)
+	if (info->prev_head)
 	{
-		if ((r = chdesc_add_depend(tail, state->prev_head)))
+		if ((r = chdesc_add_depend(tail, info->prev_head)))
 			goto error_chdesc_create;
 
-		if ((r = chdesc_weak_retain(state->prev_head, &prev_head_backup)) < 0)
+		if ((r = chdesc_weak_retain(info->prev_head, &prev_head_backup)) < 0)
 			goto error_add_depend;
 	}
 
-	if ((r = chdesc_weak_retain(head, &state->prev_head)) < 0)
+	if ((r = chdesc_weak_retain(head, &info->prev_head)) < 0)
 		goto error_prev_head_backup_weak_retain;
 
 	if ((r = depman_add_chdesc(head)) < 0)
 		goto error_head_weak_retain;
 
-	if ((r = CALL(state->bd, write_block, block_old)) < 0)
+	if ((r = CALL(info->bd, write_block, block_old)) < 0)
 		goto error_depman_add;
 	
 	bdesc_drop(&block_old);
@@ -77,16 +92,16 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 	// TODO: remove the subgraph added to depman
 	fprintf(STDERR_FILENO, "WARNING: %s%d: post-failure leakage into depman.\n", __FILE__, __LINE__);
   error_head_weak_retain:
-	chdesc_weak_release(&state->prev_head);
+	chdesc_weak_release(&info->prev_head);
   error_prev_head_backup_weak_retain:
 	if (prev_head_backup)
 	{
-		(void) chdesc_weak_retain(prev_head_backup, &state->prev_head);
+		(void) chdesc_weak_retain(prev_head_backup, &info->prev_head);
 		chdesc_weak_release(&prev_head_backup);
 	}
   error_add_depend:
-	if (state->prev_head)
-		(void) chdesc_remove_depend(head, state->prev_head);
+	if (info->prev_head)
+		(void) chdesc_remove_depend(head, info->prev_head);
   error_chdesc_create:
 	// TODO: add this: (void) chdesc_destroy_graph(&head);
 	fprintf(STDERR_FILENO, "WARNING: %s%d: post-failure chdesc leakage.\n", __FILE__, __LINE__);
@@ -99,17 +114,17 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 static int order_preserver_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	order_info_t * info = (order_info_t *) bd->instance;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(state->bd, bd);
+	modman_dec_bd(info->bd, bd);
 
-	if (state->prev_head)
-		chdesc_weak_release(&state->prev_head);
+	if (info->prev_head)
+		chdesc_weak_release(&info->prev_head);
 
-	memset(state, 0, sizeof(*state));
-	free(state);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 
@@ -122,11 +137,11 @@ static int order_preserver_destroy(BD_t * bd)
 
 static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
 {
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	order_info_t * info = (order_info_t *) bd->instance;
 	bdesc_t * bdesc;
 	int r;
 
-	if (!(bdesc = CALL(state->bd, read_block, number)))
+	if (!(bdesc = CALL(info->bd, read_block, number)))
 		return NULL;
 
 	// adjust bdesc to match this bd
@@ -142,20 +157,20 @@ static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
 
 static int order_preserver_sync(BD_t * bd, bdesc_t * block)
 {
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	order_info_t * info = (order_info_t *) bd->instance;
 	uint32_t refs;
 	int r;
 
 	if (!block)
-		return CALL(state->bd, sync, NULL);
+		return CALL(info->bd, sync, NULL);
 
 	assert(block->bd == bd);
 
 	refs = block->refs;
 	block->translated++;
-	block->bd = state->bd;
+	block->bd = info->bd;
 
-	r = CALL(state->bd, sync, block);
+	r = CALL(info->bd, sync, block);
 
 	if (refs)
 	{
@@ -172,20 +187,20 @@ static int order_preserver_sync(BD_t * bd, bdesc_t * block)
 
 static uint32_t order_preserver_get_numblocks(BD_t * bd)
 {
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
-	return CALL(state->bd, get_numblocks);
+	order_info_t * info = (order_info_t *) bd->instance;
+	return CALL(info->bd, get_numblocks);
 }
 
 static uint16_t order_preserver_get_blocksize(BD_t * bd)
 {
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
-	return CALL(state->bd, get_blocksize);
+	order_info_t * info = (order_info_t *) bd->instance;
+	return CALL(info->bd, get_blocksize);
 }
 
 static uint16_t order_preserver_get_atomicsize(BD_t * bd)
 {
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
-	return CALL(state->bd, get_atomicsize);
+	order_info_t * info = (order_info_t *) bd->instance;
+	return CALL(info->bd, get_atomicsize);
 }
 
 
@@ -195,17 +210,21 @@ static uint16_t order_preserver_get_atomicsize(BD_t * bd)
 BD_t * order_preserver_bd(BD_t * disk)
 {
 	BD_t * bd;
-	order_preserver_state_t * state;
+	order_info_t * info;
 
 	bd = malloc(sizeof(*bd));
 	if (!bd)
 		return NULL;
 	
-	state = malloc(sizeof(*state));
-	if (!state)
+	info = malloc(sizeof(*info));
+	if (!info)
 		goto error_bd;
-	bd->instance = state;
+	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, order_preserver, get_config);
+	OBJASSIGN(bd, order_preserver, get_status);
 	ASSIGN(bd, order_preserver, get_numblocks);
 	ASSIGN(bd, order_preserver, get_blocksize);
 	ASSIGN(bd, order_preserver, get_atomicsize);
@@ -214,8 +233,8 @@ BD_t * order_preserver_bd(BD_t * disk)
 	ASSIGN(bd, order_preserver, sync);
 	DESTRUCTOR(bd, order_preserver, destroy);
 	
-	state->bd = disk;
-	state->prev_head = NULL;
+	info->bd = disk;
+	info->prev_head = NULL;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

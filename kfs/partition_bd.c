@@ -15,6 +15,32 @@ struct partition_info {
 	uint16_t blocksize;
 };
 
+static int partition_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct partition_info * info = (struct partition_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "start: %d, length: %d, blocksize: %d", info->start, info->length, info->blocksize);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "[%d:%d]", info->start, info->length);
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "start: %d, length: %d", info->start, info->length);
+	}
+	return 0;
+}
+
+static int partition_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t partition_bd_get_numblocks(BD_t * object)
 {
 	return ((struct partition_info *) object->instance)->length;
@@ -173,6 +199,10 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	}
 	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, partition_bd, get_config);
+	OBJASSIGN(bd, partition_bd, get_status);
 	ASSIGN(bd, partition_bd, get_numblocks);
 	ASSIGN(bd, partition_bd, get_blocksize);
 	ASSIGN(bd, partition_bd, get_atomicsize);

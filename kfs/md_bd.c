@@ -14,6 +14,32 @@ struct md_info {
 	uint16_t blocksize, atomicsize;
 };
 
+static int md_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct md_info * info = (struct md_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "disks: 2, count: %d, blocksize: %d", info->numblocks, info->blocksize);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "disks: 2");
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "disks: 2, count: %d", info->numblocks);
+	}
+	return 0;
+}
+
+static int md_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t md_bd_get_numblocks(BD_t * object)
 {
 	return ((struct md_info *) object->instance)->numblocks;
@@ -194,6 +220,10 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	}
 	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, md_bd, get_config);
+	OBJASSIGN(bd, md_bd, get_status);
 	ASSIGN(bd, md_bd, get_numblocks);
 	ASSIGN(bd, md_bd, get_blocksize);
 	ASSIGN(bd, md_bd, get_atomicsize);
