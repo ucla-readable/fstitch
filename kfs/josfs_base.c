@@ -396,7 +396,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		return -1;
 	}
 
-	target = 2 + (blockno / (JOSFS_BLKBITSIZE));
+	target = 2 + (blockno / JOSFS_BLKBITSIZE);
 
 	bdesc = CALL(info->ubd, read_block, target);
 
@@ -405,8 +405,14 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		return -1;
 	}
 
-	if (head && tail) {
-		ch = chdesc_create_bit(bdesc, 4*(blockno / 32), 1 << (blockno % 32));
+	if (head && tail && 0) {
+		if (((uint32_t *) bdesc->ddesc->data)[blockno / 32] >> (blockno % 32) == value) {
+			/* already has the right value */
+			bdesc_drop(&bdesc);
+			return 0;
+		}
+		/* bit chdescs take offset in increments of 32 bits */
+		ch = chdesc_create_bit(bdesc, blockno / 32, 1 << (blockno % 32));
 		if (!ch) {
 			bdesc_drop(&bdesc);
 			return -1;
@@ -610,15 +616,17 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 		return NULL;
 
 	s_nblocks = super->s_nblocks;
-	bitmap_size = s_nblocks / JOSFS_BLKBITSIZE;
-
-	if (s_nblocks % JOSFS_BLKBITSIZE)
-		bitmap_size++;
+	bitmap_size = (s_nblocks + JOSFS_BLKBITSIZE + 1) / JOSFS_BLKBITSIZE;
 
 	for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
-		if (block_is_free(object, blockno) == 1) {
+		if (block_is_free(object, blockno)) {
+			bdesc_t * bdesc;
 			write_bitmap(object, blockno, 0, head, tail);
-			return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
+			assert(!block_is_free(object, blockno));
+			bdesc = bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
+			/* FIXME maybe use chdescs? */
+			memset(bdesc->ddesc->data, 0, JOSFS_BLKSIZE);
+			return bdesc;
 		}
 	}
 
@@ -680,7 +688,6 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	bdesc_t * indirect;
 	uint32_t nblocks = 0;
 	int i;
-	uint32_t * j;
 
 	for (i = 0; i < JOSFS_NDIRECT; i++) {
 		if (f->file->f_direct[i])
@@ -689,11 +696,15 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 			break;
 	}
 
+	// f->file->f_indirect -> i == JOSFS_NDIRECT
+	assert(!f->file->f_indirect || i == JOSFS_NDIRECT);
+
 	if (f->file->f_indirect) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
-			for (j = ((uint32_t *) indirect->ddesc->data) + JOSFS_NDIRECT; j < (uint32_t *) (indirect->ddesc->data + JOSFS_BLKSIZE); j++) {
-				if (*j)
+			uint32_t * j = (uint32_t *) indirect->ddesc->data;
+			for (i = JOSFS_NDIRECT; i < NINDIRECT; i++) {
+				if (j[i])
 					nblocks++;
 				else
 					break;
