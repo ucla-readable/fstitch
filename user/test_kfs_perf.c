@@ -11,7 +11,7 @@ void umain(int argc, const char ** argv)
 
 	if (get_arg_idx(argc, argv, "-h"))
 	{
-		printf("Usage: %s [test_file] [size]\n");
+		printf("Usage: %s [test_file] [size]\n", argv[0]);
 		exit();
 	}
 
