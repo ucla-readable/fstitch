@@ -223,8 +223,6 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		if ((r = read(fd, &f, sizeof(struct File))) < 0)
 			goto exit;
 
-		*basep += sizeof(struct File);
-
 		// Pseudo unique fileno generator
 		ent.d_fileno = 0;
 		k = 1;
@@ -245,8 +243,10 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		if (ent.d_reclen > nbytes_read - nbytes)
 			break;
 		memcpy(buf, &ent, ent.d_reclen);
+
 		nbytes_read += ent.d_reclen;
 		buf += ent.d_reclen;
+		*basep += sizeof(struct File);
 	}
 
   exit:
