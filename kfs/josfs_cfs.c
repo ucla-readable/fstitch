@@ -12,7 +12,7 @@
 #include <kfs/josfs_cfs.h>
 
 
-#define JOSFS_CFS_DEBUG 0
+#define JOSFS_CFS_DEBUG 1
 
 
 #if JOSFS_CFS_DEBUG
@@ -200,7 +200,7 @@ static int josfs_cfs_write(CFS_t * cfs, int fid, const void * data, uint32_t off
 
 static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
+	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
 	int idx;
 	int fd;
@@ -215,13 +215,24 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 	fd = state->open_file[idx].fd;
 
 	if ((r = seek(fd, *basep)) < 0)
-		goto exit;
+		return r;
 
 	for (i=0; nbytes_read < nbytes; i++)
 	{
+#define FILEBASE	0xd0000000
+#define FDTABLE		(FILEBASE - PTSIZE)
+#define INDEX2FD(i)	((struct Fd*) (FDTABLE + (i)*PGSIZE))
+		printf("offset %d\n", INDEX2FD(fd)->fd_offset);
+
 		// Read a dirent
-		if ((r = read(fd, &f, sizeof(struct File))) < 0)
+		if ((r = read(fd, &f, sizeof(struct File))) <= 0)
 			break;
+		assert(r == sizeof(struct File));
+		if (!f.f_name[0])
+		{
+			*basep += sizeof(struct File);
+			continue;
+		}
 
 		// Pseudo unique fileno generator
 		ent.d_fileno = 0;
@@ -235,13 +246,15 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 
 		// Store the dirent into ent
 		ent.d_type = f.f_type;
-		ent.d_reclen = sizeof(ent.d_fileno) + sizeof(ent.d_type) + sizeof(ent.d_reclen) + sizeof(ent.d_namelen) + f_name_len + 1;
-		ent.d_namelen = MIN(f_name_len, sizeof(ent.d_name));
-		strncpy(ent.d_name, f.f_name, MIN(ent.d_namelen+1, sizeof(ent.d_name)));
+		ent.d_namelen = MIN(f_name_len, sizeof(ent.d_name) - 1);
+		ent.d_reclen = sizeof(ent) - sizeof(ent.d_name) + ent.d_namelen + 1;
+		printf("setting ent.d_reclen: %d\n", ent.d_reclen);
+		strncpy(ent.d_name, f.f_name, sizeof(ent.d_name));
 
 		// Store the dirent ent into the buffer
-		if (ent.d_reclen > nbytes_read - nbytes)
+		if (nbytes_read + ent.d_reclen > nbytes)
 			break;
+
 		memcpy(buf, &ent, ent.d_reclen);
 
 		nbytes_read += ent.d_reclen;
@@ -249,11 +262,7 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		*basep += sizeof(struct File);
 	}
 
-  exit:
-	if (!nbytes || nbytes_read > 0)
-		return nbytes_read;
-	else
-		return r;
+	return nbytes_read ? nbytes_read : r;
 }
 
 static int josfs_cfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)

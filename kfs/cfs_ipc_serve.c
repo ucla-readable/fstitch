@@ -183,6 +183,7 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 	resp->basep = req->basep;
 
 	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, sizeof(resp->buf), &resp->basep);
+	printf("%s: %d\n", __FUNCTION__, ((dirent_t *)resp->buf)->d_reclen);
 	resp->nbytes_read = r;
 	ipc_send(envid, r, resp, PTE_P|PTE_U);
 }

@@ -182,7 +182,45 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 int
 cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep)
 {
-	panic("TODO: implement");
+	int r, i;
+	envid_t fsid;
+	envid_t from;
+	uint32_t perm;
+	struct Scfs_getdirentries_return *ret;
+	int retval = 0;
+
+	fsid = find_fs();
+
+	struct Scfs_getdirentries *pg = (struct Scfs_getdirentries*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	for (i = 0; i < nbytes;) {
+		memset(pg, 0, PGSIZE);
+		pg->scfs_type = SCFS_GETDIRENTRIES;
+		pg->fid = fid;
+		pg->basep = *basep;
+
+		ipc_send(fsid, 0, pg, PTE_U|PTE_P);
+		
+		if (get_pte((void*) REQVA) & PTE_P)
+			panic("kpl ipcrecv: REQVA already mapped\n");
+	
+		do {
+			r = ipc_recv(fsid, &from, (void*)REQVA, &perm, 0);
+			assert(from == fsid);
+			if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
+		} while (from != fsid);
+		if (r < 0) return r;
+		ret = (struct Scfs_getdirentries_return*)REQVA;
+
+		retval += ret->nbytes_read;
+		memcpy(buf+i, &ret->buf, MIN(nbytes-i, ret->nbytes_read));
+		*basep = ret->basep;
+
+		i += ret->nbytes_read;
+		sys_page_unmap(0, (void*)REQVA);
+	}
+
+	return retval;
 }
 
 int
