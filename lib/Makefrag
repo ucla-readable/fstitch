@@ -30,6 +30,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/fsipc.c \
 			lib/pageref.c \
 			lib/pipe.c \
+			lib/socket.c \
 			lib/wait.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \

@@ -169,6 +169,9 @@ int	opencons(void);
 int	pipe(int pipefd[2]);
 int	pipeisclosed(int pipefd);
 
+int	socket(int socketfd[2]);
+int	socketisclosed(int socketfd);
+
 // wait.c
 void	wait(envid_t env);
 

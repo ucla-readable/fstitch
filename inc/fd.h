@@ -64,6 +64,7 @@ int	dev_lookup(int devid, struct Dev** dev);
 extern struct Dev devcons;
 extern struct Dev devfile;
 extern struct Dev devpipe;
+extern struct Dev devsocket;
 extern struct Dev devkpl;
 
 #endif	// not KUDOS_INC_FD_H
