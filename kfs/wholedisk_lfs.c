@@ -123,7 +123,7 @@ static const feature_t * wholedisk_get_feature(LFS_t * object, const char * name
 	return wholedisk_features[num];
 }
 
-static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
+static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, void ** data)
 {
 	struct wd_info * state = (struct wd_info *) object->instance;
 
@@ -151,9 +151,29 @@ static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id
 	return 0;
 }
 
-static int wholedisk_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_get_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
+{
+	return wholedisk_get_metadata(object, id, size, data);
+}
+
+static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
+{
+	return wholedisk_get_metadata(object, id, size, data);
+}
+
+static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	return -1;
+}
+
+static int wholedisk_set_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+	return wholedisk_set_metadata(object, id, size, data, head, tail);
+}
+
+static int wholedisk_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+	return wholedisk_set_metadata(object, id, size, data, head, tail);
 }
 
 static int wholedisk_sync(LFS_t * object, const char * name)
@@ -204,8 +224,10 @@ LFS_t * wholedisk(BD_t * bd)
 	ASSIGN(lfs, wholedisk, write_block);
 	ASSIGN(lfs, wholedisk, get_num_features);
 	ASSIGN(lfs, wholedisk, get_feature);
-	ASSIGN(lfs, wholedisk, get_metadata);
-	ASSIGN(lfs, wholedisk, set_metadata);
+	ASSIGN(lfs, wholedisk, get_metadata_name);
+	ASSIGN(lfs, wholedisk, get_metadata_fdesc);
+	ASSIGN(lfs, wholedisk, set_metadata_name);
+	ASSIGN(lfs, wholedisk, set_metadata_fdesc);
 	ASSIGN(lfs, wholedisk, sync);
 	ASSIGN_DESTROY(lfs, wholedisk, destroy);
 	

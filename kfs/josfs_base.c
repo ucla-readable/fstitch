@@ -497,10 +497,8 @@ static const feature_t * josfs_get_feature(LFS_t * object, const char * name, si
     return NULL;
 }
 
-static int josfs_get_metadata(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
+static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t * size, void ** data)
 {
-    struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
-
     if (id == KFS_feature_size.id) {
         if (sizeof(off_t) <= *size) {
             *data = (void *) f->file->f_size;
@@ -510,10 +508,20 @@ static int josfs_get_metadata(LFS_t * object, const char * name, uint32_t id, si
     return 0;
 }
 
-static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int josfs_get_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
-    struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
+	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
+	return josfs_get_metadata(object, f, id, size, data);
+}
 
+static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
+{
+	const struct josfs_fdesc * f = NULL; /* TODO: obtain f */
+	return josfs_get_metadata(object, f, id, size, data);
+}
+
+static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+{
     if (id == KFS_feature_size.id) {
         if (sizeof(off_t) >= size) {
             if ((off_t)data >= 0 && (off_t)data < 4194304) {
@@ -524,6 +532,18 @@ static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, si
     }
 
     return -1;
+}
+
+static int josfs_set_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+	const struct josfs_fdesc * file = (struct josfs_fdesc *) josfs_lookup_name(object, name);
+	return josfs_set_metadata(object, file, id, size, data, head, tail);
+}
+
+static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+	const struct josfs_fdesc * f = NULL; /* TODO: obtain f */
+	return josfs_set_metadata(object, f, id, size, data, head, tail);
 }
 
 // TODO
@@ -574,8 +594,10 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN(lfs, josfs, write_block);
     ASSIGN(lfs, josfs, get_num_features);
     ASSIGN(lfs, josfs, get_feature);
-    ASSIGN(lfs, josfs, get_metadata);
-    ASSIGN(lfs, josfs, set_metadata);
+    ASSIGN(lfs, josfs, get_metadata_name);
+    ASSIGN(lfs, josfs, get_metadata_fdesc);
+    ASSIGN(lfs, josfs, set_metadata_name);
+    ASSIGN(lfs, josfs, set_metadata_fdesc);
     ASSIGN(lfs, josfs, sync);
     ASSIGN_DESTROY(lfs, josfs, destroy);
 

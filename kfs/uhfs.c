@@ -291,7 +291,7 @@ static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 
-	return CALL(state->lfs, get_metadata, name, id, size, data);
+	return CALL(state->lfs, get_metadata_name, name, id, size, data);
 }
 
 static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
@@ -301,7 +301,7 @@ static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t
 	chdesc_t * head = NULL, * tail = NULL;
 	int r;
 
-	r = CALL(state->lfs, set_metadata, name, id, size, data, &head, &tail);
+	r = CALL(state->lfs, set_metadata_name, name, id, size, data, &head, &tail);
 	if (r < 0)
 		return r;
 
