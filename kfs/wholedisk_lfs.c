@@ -29,7 +29,7 @@ static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int pur
 {
 	if (head && tail)
 		*head = *tail = NULL;
-	/* always fail - no free blocks */
+	/* always fail - no block accounting */
 	return NULL;
 }
 
@@ -40,6 +40,9 @@ static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number, uint32_
 
 static fdesc_t * wholedisk_lookup_name(LFS_t * object, const char * name)
 {
+	/* only allow the empty name */
+	if(name[0])
+		return NULL;
 	return &fdesc;
 }
 
@@ -68,6 +71,7 @@ static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t *
 {
 	if (head && tail)
 		*head = *tail = NULL;
+	/* always fail - size immutable */
 	return -E_INVAL;
 }
 
@@ -75,6 +79,7 @@ static fdesc_t * wholedisk_allocate_name(LFS_t * object, const char * name, uint
 {
 	if (head && tail)
 		*head = *tail = NULL;
+	/* always fail - no filenames */
 	return NULL;
 }
 
@@ -82,6 +87,7 @@ static int wholedisk_rename(LFS_t * object, const char * oldname, const char * n
 {
 	if (head && tail)
 		*head = *tail = NULL;
+	/* always fail - no filenames */
 	return -E_INVAL;
 }
 
@@ -89,6 +95,7 @@ static bdesc_t * wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, c
 {
 	if (head && tail)
 		*head = *tail = NULL;
+	/* always fail - size immutable */
 	return NULL;
 }
 
@@ -96,6 +103,7 @@ static int wholedisk_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** hea
 {
 	if (head && tail)
 		*head = *tail = NULL;
+	/* always fail - no block accounting */
 	return -E_INVAL;
 }
 
@@ -103,13 +111,13 @@ static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** 
 {
 	if (head && tail)
 		*head = *tail = NULL;
+	/* always fail - no filenames */
 	return -E_INVAL;
 }
 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct wd_info * info = (struct wd_info *) object->instance;
-	int value;
 	
 	if (head && tail)
 		*head = *tail = NULL;
@@ -121,9 +129,7 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offse
 	bdesc_touch(block);
 	memcpy(&block->ddesc->data[offset], data, size);
 	/* pass our ownership of this bdesc on */
-	value = CALL(info->bd, write_block, block);
-	
-	return value;
+	return CALL(info->bd, write_block, block);
 }
 
 static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype};
