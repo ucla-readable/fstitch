@@ -27,8 +27,12 @@ bool   vector_empty(const vector_t * v) __attribute__((always_inline));
 // Push elt onto the back of the vector, growing if necessary.
 // Returns 0 on success, or -E_NO_MEM.
 int    vector_push_back(vector_t * v, void * elt);
+// Push vector onto the back, growing if necessary.
+// Returns 0 on success, or -E_NO_MEM.
+int    vector_push_back_vector(vector_t * v, const vector_t * v2);
 // Remove the last elt in the vector, does not destroy elt.
-void   vector_pop_back(vector_t * v);
+static __inline
+void   vector_pop_back(vector_t * v) __attribute__((always_inline));
 // Remove the given elt at position i, does not destroy elt.
 void   vector_erase(vector_t * v, size_t i);
 // Remove all elts in the vector, does not destroy elts.
@@ -67,6 +71,14 @@ static __inline
 bool vector_empty(const vector_t * v)
 {
 	return (v->size == 0);
+}
+
+static __inline
+void vector_pop_back(vector_t * v)
+{
+	if (v->size == 0)
+		return;
+	v->size--;
 }
 
 static __inline

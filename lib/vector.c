@@ -85,11 +85,23 @@ int vector_push_back(vector_t * v, void * elt)
 	return 0;
 }
 
-void vector_pop_back(vector_t * v)
+int vector_push_back_vector(vector_t * v, const vector_t * v2)
 {
-	if (v->size == 0)
-		return;
-	v->size--;
+	size_t v2_size = vector_size(v2);
+	size_t i;
+	int r;
+
+	r = vector_reserve(v, vector_size(v) + v2_size);
+	if (r < 0)
+		return r;
+
+	for (i=0; i < v2_size; i++)
+	{
+		r = vector_push_back(v, vector_elt((vector_t *) v2, i));
+		assert(r >= 0); // no error since space is pre-allocated
+	}
+
+	return 0;
 }
 
 void vector_erase(vector_t * v, size_t i)
