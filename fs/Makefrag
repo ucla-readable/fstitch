@@ -14,6 +14,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/echo \
 			$(OBJDIR)/user/es \
 			$(OBJDIR)/user/fire \
+			$(OBJDIR)/user/fourem \
 			$(OBJDIR)/user/free \
 			$(OBJDIR)/user/get \
 			$(OBJDIR)/user/grep \
@@ -56,6 +57,7 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/goomba.spr \
 			fs/index.html \
 			fs/init.sh \
+			fs/foo.sh \
 			fs/kbear.jpg \
 			fs/kudos.0 \
 			fs/lady.img \
