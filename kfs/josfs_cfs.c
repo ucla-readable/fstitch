@@ -165,7 +165,8 @@ static int josfs_cfs_close(CFS_t * cfs, int fid)
 
 	if ((r = open_file_close(f)) < 0)
 		return r;
-	if ((s = close(f->fd)) < 0)
+	/* only close it if there are no more clients using it */
+	if (!r && (s = close(f->fd)) < 0)
 		return s;
 
 	/* return r and not s because r informs cfs clients if the file is
