@@ -76,6 +76,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
+		// First of two recvs
 		Dprintf("%s [1]: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
 		prevrecv->envid = envid;
 		prevrecv->type = req->scfs_type;
@@ -83,8 +84,9 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 	}
 	else
 	{
-		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
+		// Second of two recvs
 		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
+		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
 		void * fdpage = req;
 		int r;
 		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void*) fdpage);
@@ -127,8 +129,8 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 	else
 	{
 		// Second of two recvs
-		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 		struct Scfs_write *scfs = (struct Scfs_write*) prevrecv->scfs;
+		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, scfs->fid, scfs->offset, scfs->size);
 		int r;
 		r = CALL(frontend_cfs, write, scfs->fid, req, scfs->offset, scfs->size);
 		ipc_send(envid, r, NULL, 0);
@@ -249,8 +251,8 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 	else
 	{
 		// Second of two recvs
-		Dprintf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 		struct Scfs_set_metadata *scfs = (struct Scfs_set_metadata*) prevrecv->scfs;
+		Dprintf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, scfs->name);
 		struct Scfs_metadata *md = (struct Scfs_metadata*) req;
 		int r;
 		r = CALL(frontend_cfs, set_metadata, scfs->name, md->id, md->size, md->data);
