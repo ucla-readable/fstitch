@@ -10,6 +10,8 @@
 #include <kfs/journal_queue_bd.h>
 #include <kfs/journal_lfs.h>
 
+#define JOURNAL_PROGRESS_ENABLED
+#define JOURNAL_PROGRESS_COLOR 14
 
 #define JOURNAL_DEBUG 0
 
@@ -28,6 +30,9 @@ struct journal_state {
 	chdesc_t ** commit_chdesc;
 	uint16_t ncommit_records, next_trans_slot;
 	uint16_t blocksize;
+#ifdef JOURNAL_PROGRESS_ENABLED
+	size_t jbdescs_size, njbdescs_released, disp_ncols, disp_period, disp_prev;
+#endif
 };
 typedef struct journal_state journal_state_t;
 
@@ -314,6 +319,15 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
 		assert(r >= 0); // TODO: handle error
 		//assert(!lfs_head && !lfs_tail);
+
+#ifdef JOURNAL_PROGRESS_ENABLED
+		if (++state->njbdescs_released >= state->disp_prev + state->disp_period)
+		{
+			r = textbar_set_progress(state->njbdescs_released * state->disp_ncols / state->jbdescs_size, JOURNAL_PROGRESS_COLOR);
+			assert(r >= 0);
+			state->disp_prev = state->njbdescs_released;
+		}
+#endif
 	}
 
 
@@ -547,6 +561,16 @@ static int transaction_stop(journal_state_t * state)
 		return 0;
 	}
 
+#ifdef JOURNAL_PROGRESS_ENABLED
+	state->jbdescs_size = ndatabdescs;
+	state->njbdescs_released = 0;
+	state->disp_prev = 0;
+	r = textbar_init(-1);
+	assert(r >= 0);
+	state->disp_ncols = r;
+	state->disp_period = (state->jbdescs_size + state->disp_ncols - 1) / state->disp_ncols;
+#endif
+
 	chrs = malloc(num_subtransactions * sizeof(*chrs));
 	assert(chrs); // TODO: handle error
 	for (i=0; i < num_subtransactions; i++)
@@ -575,13 +599,19 @@ static int transaction_stop(journal_state_t * state)
 		{
 			free(data_bdescs);
 			for (i=0; i < num_subtransactions; i++)
-					 chdesc_weak_release(&chrs[i].chdesc);
+				chdesc_weak_release(&chrs[i].chdesc);
 			free(chrs);
 			return r;
 		}
 
 		prev_slot = slot;
 	}
+
+#ifdef JOURNAL_PROGRESS_ENABLED
+	r = textbar_close();
+	assert(r >= 0);
+#endif
+
 
 	//
 	// Release the data bdescs and mark the commit records as invalidated
