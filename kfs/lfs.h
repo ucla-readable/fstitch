@@ -15,10 +15,6 @@
 struct LFS;
 typedef struct LFS LFS_t;
 
-#define TYPE_FILE 0
-#define TYPE_DIR 1
-#define TYPE_SYMLINK 2
-
 /* Ideally, LFS wouldn't have any calls that weren't directly related to blocks.
  * However, the on-disk structure of directory files is a part of the specification
  * of the filesystem. So we have to handle it inside the LFS module. Thus a few of

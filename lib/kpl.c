@@ -3,7 +3,6 @@
 #include <inc/kpl.h>
 #include <inc/cfs_ipc_client.h>
 #include <kfs/feature.h>
-#include <kfs/lfs.h>
 
 static int kpl_close(struct Fd* fd);
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset);
