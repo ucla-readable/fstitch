@@ -18,6 +18,7 @@
 #include <kern/sb16.h>
 #include <kern/vga.h>
 #include <kern/3c509.h>
+#include <kern/8390.h>
 #include <kern/elf.h>
 #include <kern/kclock.h>
 
@@ -709,6 +710,10 @@ sys_vga_set_palette(uint8_t * palette, uint8_t dim)
 	return 0;
 }
 
+/* Until the NE2K driver is fully ported to the way we do NICs in KudOS, we
+ * have to toggle between 3c509 and NE2K support. 3c509 is the default. */
+#define USE_NE2K 0
+
 static int
 sys_net_ioctl(int req, int ival1, void * pval, int ival2)
 {
@@ -719,38 +724,70 @@ sys_net_ioctl(int req, int ival1, void * pval, int ival2)
 	{
 		case NET_IOCTL_ALLOCATE:
 			/* allocate/reserve card */
+#if USE_NE2K
+			value = ei_open(&theNetDev);
+#else
 			value = el3_allocate(ival1);
+#endif
 			break;
 		case NET_IOCTL_RELEASE:
 			/* release card */
+#if USE_NE2K
+			value = -E_INVAL;
+#else
 			value = el3_release(ival1);
+#endif
 			break;
 		case NET_IOCTL_GETADDRESS:
 			/* get card HW address */
 			page_fault_mode = PFM_KILL;
+#if USE_NE2K
+			value = ei_get_address(&theNetDev, TRUP(pval));
+#else
 			value = el3_get_address(ival1, TRUP(pval));
+#endif
 			break;
 		case NET_IOCTL_SETFILTER:
 			/* set packet filter */
+#if USE_NE2K
+			value = -E_INVAL;
+#else
 			value = el3_set_filter(ival1, ival2);
+#endif
 			break;
 		case NET_IOCTL_RESET:
 			/* reset the card */
+#if USE_NE2K
+			value = ei_tx_reset(&theNetDev);
+#else
 			value = el3_tx_reset(ival1);
+#endif
 			break;
 		case NET_IOCTL_SEND:
 			/* send packet */
 			page_fault_mode = PFM_KILL;
+#if USE_NE2K
+			value = ei_send_packet(&theNetDev, TRUP(pval), ival2);
+#else
 			value = el3_send_packet(ival1, TRUP(pval), ival2);
+#endif
 			break;
 		case NET_IOCTL_QUERY:
 			/* query for available packets */
+#if USE_NE2K
+			value = ei_query(&theNetDev);
+#else
 			value = el3_query(ival1);
+#endif
 			break;
 		case NET_IOCTL_RECEIVE:
 			/* receive packet */
 			page_fault_mode = PFM_KILL;
+#if USE_NE2K
+			value = ei_get_packet(&theNetDev, TRUP(pval), ival2);
+#else
 			value = el3_get_packet(ival1, TRUP(pval), ival2);
+#endif
 			break;
 	}
 	
