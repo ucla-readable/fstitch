@@ -1072,7 +1072,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 		return -E_INVAL;
 
 	if (head && tail) {
-		r = chdesc_create_full(block, data, head, tail);
+		r = chdesc_create_byte(block, offset, size, data, head, tail);
 		if (r < 0) {
 			bdesc_drop(&block);
 			return r;
@@ -1080,9 +1080,9 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 	}
 	else {
 		bdesc_touch(block);
+		memcpy(&block->ddesc->data[offset], data, size);
 	}
 
-	memcpy(&block->ddesc->data[offset], data, size);
 	if ((r = CALL(info->ubd, write_block, block)) < 0) {
 		bdesc_drop(&block);
 		return r;
