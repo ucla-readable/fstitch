@@ -80,7 +80,7 @@ static bd_entry_t * bde_lookup_fid(devfs_state_t * state, int fid)
 
 static bd_entry_t * bde_lookup_name(devfs_state_t * state, const char * name)
 {
-	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, bd_table, name);
+	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, state, name);
 	const size_t bd_table_size = vector_size(state->bd_table);
 	int i;
 	
@@ -96,7 +96,7 @@ static bd_entry_t * bde_lookup_name(devfs_state_t * state, const char * name)
 
 static int bde_lookup_index(devfs_state_t * state, const char * name)
 {
-	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, bd_table, name);
+	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, state, name);
 	const size_t bd_table_size = vector_size(state->bd_table);
 	int i;
 	
@@ -131,6 +131,8 @@ static int devfs_open(CFS_t * cfs, const char * name, int mode)
 		return state->root_fid;
 	}
 	
+	if(name[0] == '/')
+		name++;
 	bde = bde_lookup_name(state, name);
 	if(!bde)
 		return -E_NOT_FOUND;
@@ -388,7 +390,11 @@ static const feature_t * devfs_get_feature(CFS_t * cfs, const char * name, size_
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, num);
 	devfs_state_t * state = (devfs_state_t *) cfs->instance;
-	bd_entry_t * bde = bde_lookup_name(state, name);
+	bd_entry_t * bde;
+	
+	if(name[0] == '/')
+		name++;
+	bde = bde_lookup_name(state, name);
 	
 	if(!bde || num < 0 || num >= sizeof(devfs_features) / sizeof(devfs_features[0]))
 		return NULL;
@@ -404,6 +410,8 @@ static int devfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 	/* check for the special file / */
 	if(name[0] && strcmp(name, "/"))
 	{
+		if(name[0] == '/')
+			name++;
 		bde = bde_lookup_name(state, name);
 		if(!bde)
 			return -E_NOT_FOUND;
@@ -457,6 +465,8 @@ static int devfs_sync(CFS_t * cfs, const char * name)
 		return 0;
 	}
 	
+	if(name[0] == '/')
+		name++;
 	bde = bde_lookup_name(state, name);
 	
 	if(!bde)
@@ -544,7 +554,7 @@ error_cfs:
 
 int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 {
-	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, path, path_cfs);
+	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, bd);
 	devfs_state_t * state = (devfs_state_t *) cfs->instance;
 	bd_entry_t * bde;
 	int r;
@@ -573,7 +583,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 
 BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, path);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	devfs_state_t * state = (devfs_state_t *) cfs->instance;
 	bd_entry_t * bde;
 	int i;
