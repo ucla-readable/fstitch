@@ -1199,13 +1199,14 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	else if (nblocks == JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
+			bdesc_retain(&indirect);
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 
 			if (head && tail) {
 				offset = f->index * sizeof(JOSFS_File_t);
 				offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
 				if ((r = chdesc_create_byte(f->dirb, offset, sizeof(uint32_t), &data, head, tail)) < 0) {
-					bdesc_drop(&indirect);
+					bdesc_release(&indirect);
 					return NULL;
 				}
 
@@ -1214,7 +1215,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 				if (oldhead) {
 					if ((r = chdesc_add_depend(*tail, oldhead)) < 0) {
-						bdesc_drop(&indirect);
+						bdesc_release(&indirect);
 						return NULL;
 					}
 				}
@@ -1227,14 +1228,14 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 			weak_retain_pair(head, tail);
 			if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
-				bdesc_drop(&indirect);
+				bdesc_release(&indirect);
 				return NULL;
 			}
 			weak_forget_pair(head, tail);
 
 			f->file->f_indirect = 0;
 			r = josfs_free_block(object, indirect, head, tail);
-			bdesc_drop(&indirect);
+			bdesc_release(&indirect);
 
 			if (r >= 0) {
 				weak_retain_pair(head, tail);
@@ -1285,11 +1286,13 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_free_block\n");
+	uint32_t number;
 
 	if (!block || block->number == 0)
 		return -E_INVAL;
-	write_bitmap(object, block->number, 1, head, tail);
+	number = block->number;
 	bdesc_drop(&block);
+	write_bitmap(object, number, 1, head, tail);
 	return 0;
 }
 
