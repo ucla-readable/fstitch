@@ -60,7 +60,7 @@ ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, uint3
 //   If 'pg' is null, pass sys_ipc_recv a value that it will understand
 //   as meaning "no page".  (Zero is not the right value.)
 void
-ipc_send(envid_t toenv, uint32_t val, void* pg, unsigned perm, void* cap)
+ipc_send(envid_t toenv, uint32_t val, void* pg, unsigned perm, const void* cap)
 {
 	int r;
 	if(!pg)

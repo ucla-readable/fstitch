@@ -123,7 +123,7 @@ sys_ipc_recv(envid_t fromenv, void* dstva, int timeout)
 }
 
 int
-sys_ipc_try_send(envid_t envid, uint32_t value, void* srcva, unsigned perm, void* capva)
+sys_ipc_try_send(envid_t envid, uint32_t value, void* srcva, unsigned perm, const void* capva)
 {
 	return syscall(SYS_ipc_try_send, envid, value, (uintptr_t) srcva, perm, (uintptr_t) capva);
 }
