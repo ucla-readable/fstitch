@@ -55,7 +55,7 @@ static const char journal_filename[] = "/.journal";
 // This structure will be used on disk, so we use all exact size types
 struct commit_record {
 	uint32_t magic;
-	uint16_t type, next; // TODO: next not yet supported
+	uint16_t type, next;
 	uint32_t nblocks;
 };
 typedef struct commit_record commit_record_t;
@@ -94,88 +94,116 @@ static int ensure_journal_exists(journal_state_t * state)
 	return 0;
 }
 
-static int replay_journal(journal_state_t * state)
+/* transaction_start is the block number containing the commit record */
+static int replay_single_transaction(journal_state_t * state, uint32_t transaction_start, uint16_t expected_type)
 {
-	// FIXME: support more than one transaction, and transaction sub-commits
-	Dprintf("%s()\n", __FUNCTION__);
-	
 	const size_t bnpb = numbers_per_block(state->blocksize);
 	const uint32_t transaction_size = ROUNDDOWN32(TRANSACTION_SIZE, state->blocksize);
-	uint32_t transaction_start;
-
-	for (transaction_start=0; transaction_start < transaction_size*state->ncommit_records; transaction_start += transaction_size)
-	{
-
-		uint32_t block, bnb, db;
-		struct commit_record * cr;
-		const typeof(cr->type) empty = CREMPTY;
-		bdesc_t * commit_block = CALL(state->journal, get_file_block, state->jfdesc, transaction_start * state->blocksize);
-		if(!commit_block)
-			return -E_UNSPECIFIED;
-		bdesc_retain(&commit_block);
 	
-		cr = (struct commit_record *) commit_block->ddesc->data;
-		if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
+	uint32_t block, bnb, db;
+	struct commit_record * cr;
+	bdesc_t * commit_block = CALL(state->journal, get_file_block, state->jfdesc, transaction_start * state->blocksize);
+	if(!commit_block)
+		return -E_UNSPECIFIED;
+	bdesc_retain(&commit_block);
+	
+	cr = (struct commit_record *) commit_block->ddesc->data;
+	if(cr->magic != JOURNAL_MAGIC || cr->type != expected_type)
+	{
+		bdesc_release(&commit_block);
+		return 0;
+	}
+	
+	/* check for chained transaction */
+	block = cr->next * transaction_size;
+	if(block != transaction_start)
+	{
+		/* expect a CRSUBCOMMIT as the next element */
+		int r = replay_single_transaction(state, block, CRSUBCOMMIT);
+		if(r < 0)
 		{
 			bdesc_release(&commit_block);
-			return 0;
+			return r;
 		}
-		printf("%s(): recovering journal transaction (%u data blocks)\n", __FUNCTION__, cr->nblocks);
+	}
 	
-		/* bnb is "block number block" number */
-		bnb = transaction_start + 1;
-		/* db is "data block" number */
-		db = bnb + trans_number_block_count(state->blocksize);
-		for(block = 0; block < cr->nblocks; block += bnpb)
+	printf("%s(): recovering journal transaction (%u data blocks)\n", __FUNCTION__, cr->nblocks);
+	
+	/* bnb is "block number block" number */
+	bnb = transaction_start + 1;
+	/* db is "data block" number */
+	db = bnb + trans_number_block_count(state->blocksize);
+	for(block = 0; block < cr->nblocks; block += bnpb)
+	{
+		uint32_t index, max = MIN(bnpb, cr->nblocks - block);
+		uint32_t * numbers;
+		bdesc_t * number_block = CALL(state->journal, get_file_block, state->jfdesc, bnb * state->blocksize);
+		if(!number_block)
 		{
-			uint32_t index, max = MIN(bnpb, cr->nblocks - block);
-			uint32_t * numbers;
-			bdesc_t * number_block = CALL(state->journal, get_file_block, state->jfdesc, bnb * state->blocksize);
-			if(!number_block)
-			{
-				bdesc_release(&commit_block);
-				return -E_UNSPECIFIED;
-			}
-			bdesc_retain(&number_block);
-		
-			numbers = (uint32_t *) number_block->ddesc->data;
-			for(index = 0; index != max; index++)
-			{
-				int r = -E_UNSPECIFIED;
-				bdesc_t * output;
-				bdesc_t * data_block = CALL(state->journal, get_file_block, state->jfdesc, db++ * state->blocksize);
-				if(!data_block)
-					goto data_error;
-				bdesc_retain(&data_block);
-			
-				output = CALL(state->queue, read_block, numbers[index]);
-				if(!output)
-					goto output_error;
-			
-				Dprintf("%s(): recovering block %d from journal entry %d\n", __FUNCTION__, numbers[index], block + index);
-				if((r = bdesc_touch(output)) < 0)
-					goto touch_error;
-				
-				memcpy(output->ddesc->data, data_block->ddesc->data, state->blocksize);
-				CALL(state->queue, write_block, output);
-				bdesc_drop(&data_block);
-				continue;
-			
-			  touch_error:
-				bdesc_drop(&output);
-			  output_error:
-				bdesc_retain(&data_block);
-			  data_error:
-				bdesc_release(&number_block);
-				bdesc_release(&commit_block);
-				return r;
-			}
-		
-			bdesc_release(&number_block);
+			bdesc_release(&commit_block);
+			return -E_UNSPECIFIED;
 		}
+		bdesc_retain(&number_block);
+		
+		numbers = (uint32_t *) number_block->ddesc->data;
+		for(index = 0; index != max; index++)
+		{
+			int r = -E_UNSPECIFIED;
+			bdesc_t * output;
+			bdesc_t * data_block = CALL(state->journal, get_file_block, state->jfdesc, db++ * state->blocksize);
+			if(!data_block)
+				goto data_error;
+			bdesc_retain(&data_block);
+			
+			output = CALL(state->queue, read_block, numbers[index]);
+			if(!output)
+				goto output_error;
+			
+			Dprintf("%s(): recovering block %d from journal entry %d\n", __FUNCTION__, numbers[index], block + index);
+			if((r = bdesc_touch(output)) < 0)
+				goto touch_error;
+			
+			memcpy(output->ddesc->data, data_block->ddesc->data, state->blocksize);
+			CALL(state->queue, write_block, output);
+			bdesc_drop(&data_block);
+			continue;
+			
+		  touch_error:
+			bdesc_drop(&output);
+		  output_error:
+			bdesc_retain(&data_block);
+		  data_error:
+			bdesc_release(&number_block);
+			bdesc_release(&commit_block);
+			return r;
+		}
+		
+		bdesc_release(&number_block);
+	}
 	
+	/* only CRCOMMIT records need to be cancelled */
+	if(cr->type == CRCOMMIT)
+	{
+		const typeof(cr->type) empty = CREMPTY;
 		CALL(state->journal, write_block, commit_block, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, NULL, NULL);
-		bdesc_release(&commit_block);
+	}
+	bdesc_release(&commit_block);
+	
+	return 0;
+}
+
+static int replay_journal(journal_state_t * state)
+{
+	Dprintf("%s()\n", __FUNCTION__);
+	
+	const uint32_t transaction_size = ROUNDDOWN32(TRANSACTION_SIZE, state->blocksize);
+	uint32_t transaction;
+
+	for(transaction = 0; transaction < state->ncommit_records; transaction++)
+	{
+		int r = replay_single_transaction(state, transaction * transaction_size, CRCOMMIT);
+		if(r < 0)
+			return r;
 	}
 	
 	return 0;
