@@ -200,6 +200,8 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		tail = NULL;
 		const uint32_t n = MIN(bd->length - dataoffset, size - size_written);
 		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &head, &tail);
+		if (r < 0)
+			return size_written;
 		size_written += n;
 		dataoffset = 0; /* dataoffset only needed for first block */
 
