@@ -91,7 +91,7 @@ static int open_file_close(fidfairy_state_t * state, open_file_t * of)
 	assert(1 <= pageref(of->page));
 	if (1 < pageref(of->page))
 	{
-		Dprintf("fidfairy_cfs %s: not closing fid %d, %d external refs\n", __FUNCTION__, of->fid, pageref(of->page));
+		Dprintf("fidfairy_cfs %s: not closing fid %d, %d external refs\n", __FUNCTION__, of->fid, pageref(of->page)-1);
 		return 0;
 	}
 
