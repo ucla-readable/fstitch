@@ -352,7 +352,7 @@ do {                                                              \
   chunk_size_t  mctmp = (nbytes)/sizeof(internal_size_t);         \
   long mcn;                                                       \
   if(mctmp < 8) mcn = 0; else { mcn = (mctmp-1)/8; mctmp %= 8; } \
-  switch (mctmp) {                                                \
+  switch(mctmp) {                                                 \
     case 0: for(;;) { *mzp++ = 0;                                 \
     case 7:           *mzp++ = 0;                                 \
     case 6:           *mzp++ = 0;                                 \
@@ -371,7 +371,7 @@ do {                                                                    \
   chunk_size_t  mctmp = (nbytes)/sizeof(internal_size_t);               \
   long mcn;                                                             \
   if(mctmp < 8) mcn = 0; else { mcn = (mctmp-1)/8; mctmp %= 8; }       \
-  switch (mctmp) {                                                      \
+  switch(mctmp) {                                                       \
     case 0: for(;;) { *mcdst++ = *mcsrc++;                              \
     case 7:           *mcdst++ = *mcsrc++;                              \
     case 6:           *mcdst++ = *mcsrc++;                              \
