@@ -180,7 +180,7 @@ int kfsd_init(void)
 	//
 	// Mount uhfses
 
-	if (! (table_class = table_classifier_cfs(NULL, NULL, 0)) )
+	if (! (table_class = table_classifier_cfs()) )
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
