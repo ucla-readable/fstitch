@@ -173,6 +173,9 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	/* make sure it's an even multiple of the block size */
 	if(blocksize % original_size)
 		return NULL;
+	/* block resizer not needed */
+	if(blocksize == original_size)
+		return NULL;
 	
 	bd = malloc(sizeof(*bd));
 	if(!bd)
