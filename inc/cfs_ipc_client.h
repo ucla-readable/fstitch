@@ -3,12 +3,12 @@
 
 #include <inc/serial_cfs.h>
 
-int cfs_open(const char *fname, int mode, void *refpg);
-int cfs_close(int fid);
-int cfs_read(int fid, uint32_t offset, uint32_t size, char *data);
-int cfs_write(int fid, uint32_t offset, uint32_t size, const char *data);
-int cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep);
-int cfs_truncate(int fid, uint32_t size);
+int cfs_open(const char *fname, int mode, void *refpg, const void * cappg);
+int cfs_close(int fid, const void * cappg);
+int cfs_read(int fid, uint32_t offset, uint32_t size, char *data, const void * cappg);
+int cfs_write(int fid, uint32_t offset, uint32_t size, const char *data, const void * cappg);
+int cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep, const void * cappg);
+int cfs_truncate(int fid, uint32_t size, const void * cappg);
 int cfs_unlink(const char *name);
 int cfs_link(const char *oldname, const char *newname);
 int cfs_rename(const char *oldname, const char *newname);

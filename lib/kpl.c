@@ -26,6 +26,10 @@ struct Dev devkpl =
 	.dev_trunc =	kpl_trunc
 };
 
+// KPL uses the first data page of a Fd ('fd2data(fd)') to store a file's name.
+// KPL also uses this page as the file's capability page.
+
+
 // Open a file (or directory),
 // returning the file descriptor index on success, < 0 on failure.
 int kpl_open(const char* path, int mode)
@@ -70,7 +74,7 @@ int kpl_open(const char* path, int mode)
 		mode &= ~(O_MKDIR | O_CREAT);
 	}
 	
-	r = cfs_open(path, mode, fd);
+	r = cfs_open(path, mode, fd, fd2data(fd));
 	if(r < 0)
 	{
 		sys_page_unmap(0, namecopy);
@@ -92,18 +96,20 @@ static int kpl_close(struct Fd* fd)
 {
 	int fid = fd->fd_kpl.fid;
 	void * page = fd2data(fd);
+	int r;
 	/* we must unmap the Fd page before calling cfs_close so that the server will
 	 * be able to detect if we were the last environment with this file open */
 	sys_page_unmap(0, fd);
+	r = cfs_close(fid, page);
 	sys_page_unmap(0, page);
 	sys_page_unmap(0, page + PGSIZE);
-	return cfs_close(fid);
+	return r;
 }
 
 // Read 'n' bytes from 'fd' at the given offset into 'buf'.
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 {
-	return cfs_read(fd->fd_kpl.fid, offset, n, buf);
+	return cfs_read(fd->fd_kpl.fid, offset, n, buf, fd2data(fd));
 }
 
 static int kpl_read_map(struct Fd* fd, off_t offset, void** blk)
@@ -122,13 +128,13 @@ static int kpl_read_map(struct Fd* fd, off_t offset, void** blk)
 // Write 'n' bytes from 'buf' to 'fd' at the given offset.
 static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 {
-	return cfs_write(fd->fd_kpl.fid, offset, n, buf);
+	return cfs_write(fd->fd_kpl.fid, offset, n, buf, fd2data(fd));
 }
 
 static ssize_t kpl_getdirentries(struct Fd* fd, void* buf, int nbytes, uint32_t* basep)
 {
 	const int fid = fd->fd_kpl.fid;
-	return cfs_getdirentries(fid, buf, nbytes, basep);
+	return cfs_getdirentries(fid, buf, nbytes, basep, fd2data(fd));
 }
 
 /* warning: not multithread safe! */
@@ -151,7 +157,7 @@ static int kpl_stat(struct Fd* fd, struct Stat* st)
 // Truncate or extend an open file to 'size' bytes
 static int kpl_trunc(struct Fd* fd, off_t newsize)
 {
-	return cfs_truncate(fd->fd_kpl.fid, newsize);
+	return cfs_truncate(fd->fd_kpl.fid, newsize, fd2data(fd));
 }
 
 // Delete a file

@@ -51,7 +51,7 @@ cfs_pathcpy(char *dst, const char *src, size_t len)
 }
 
 int
-cfs_open(const char *fname, int mode, void *refpg)
+cfs_open(const char *fname, int mode, void *refpg, const void * cappg)
 {
 	envid_t fsid;
 	uint32_t perm;
@@ -65,15 +65,15 @@ cfs_open(const char *fname, int mode, void *refpg)
 	pg->mode = mode;
 	cfs_pathcpy(pg->path, fname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
-	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+	ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 
-	ipc_send(fsid, 0, refpg, PTE_U|PTE_P, NULL);
+	ipc_send(fsid, 0, refpg, PTE_U|PTE_P, cappg);
 
 	return ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
 }
 
 int
-cfs_close(int fid)
+cfs_close(int fid, const void * cappg)
 {
 	envid_t fsid;
 	uint32_t perm;
@@ -86,14 +86,14 @@ cfs_close(int fid)
 	pg->scfs_type = SCFS_CLOSE;
 	pg->fid = fid;
 
-	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+	ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 
 	//assert(!(get_pte((void*) REQVA) & PTE_P)); // FIXME: why does this fail?
 	return ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
 }
 
 int
-cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
+cfs_read(int fid, uint32_t offset, uint32_t size, char *data, const void * cappg)
 {
 	int r = 0;
 	envid_t fsid;
@@ -113,7 +113,7 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 		pg->offset = offset + i;
 		pg->size = requested;
 
-		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+		ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 
 		assert(!(get_pte((void*) REQVA) & PTE_P));
 		r = ipc_recv(fsid, NULL, (void*)REQVA, &perm, NULL, 0);
@@ -128,7 +128,7 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 }
 
 int
-cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
+cfs_write(int fid, uint32_t offset, uint32_t size, const char *data, const void * cappg)
 {
 	int r = 0;
 	envid_t fsid;
@@ -146,7 +146,7 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 		pg->offset = offset + i;
 		pg->size = MIN(size - i, PGSIZE);
 
-		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+		ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 		r = sys_page_unmap(0, pg);
 		if (r < 0) panic("%s:%d\n", __FILE__, __LINE__);
 		r = sys_page_alloc(0, pg, PTE_W|PTE_U|PTE_P);
@@ -154,7 +154,7 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 
 		memcpy(pg, data + i, MIN(size - i, PGSIZE));
 
-		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+		ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 
 		r = ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
 		if (r < MIN(size - i, PGSIZE))
@@ -164,7 +164,7 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 }
 
 int
-cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep)
+cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep, const void * cappg)
 {
 	int r = 0, nbytes_read = 0;
 	envid_t fsid;
@@ -183,7 +183,7 @@ cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep)
 		pg->nbytes = nbytes - nbytes_read;
 		pg->basep = *basep;
 
-		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+		ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 		
 		assert(!(get_pte((void*) ret) & PTE_P));
 		r = ipc_recv(fsid, NULL, (void*) ret, &perm, NULL, 0);
@@ -207,7 +207,7 @@ cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep)
 }
 
 int
-cfs_truncate(int fid, uint32_t size)
+cfs_truncate(int fid, uint32_t size, const void * cappg)
 {
 	envid_t fsid;
 	uint32_t perm;
@@ -221,7 +221,7 @@ cfs_truncate(int fid, uint32_t size)
 	pg->fid = fid;
 	pg->size = size;
 
-	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
+	ipc_send(fsid, 0, pg, PTE_U|PTE_P, cappg);
 
 	return ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
 }
