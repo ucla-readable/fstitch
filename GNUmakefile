@@ -166,7 +166,7 @@ $(OBJDIR)/fs/%.o: fs/%.c
 $(OBJDIR)/kfs/%.o: kfs/%.c
 	@echo + cc[USER] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+	$(V)$(CC) -nostdinc -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 
 # Build vi/emacs tag files
