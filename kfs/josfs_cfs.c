@@ -198,11 +198,40 @@ static int josfs_cfs_write(CFS_t * cfs, int fid, const void * data, uint32_t off
 	return write(fd, data, size);
 }
 
-static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
+static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
-	panic("TODO: implement");
-	return -E_UNSPECIFIED;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	int idx;
+	int fd;
+	int i;
+	int nbytes_read = 0;
+	dirent_t ent;
+	int r = 0;
+
+	if ((idx = fid_idx(fid, state->open_file)) < 0)
+		return idx;
+	fd = state->open_file[idx].fd;
+
+	for (i=0; nbytes_read < nbytes; i++)
+	{
+		panic("TODO: set variable ent's fields");
+		if (r < 0)
+			goto exit;
+
+		if (ent.d_reclen > nbytes_read - nbytes)
+			break;
+
+		memcpy(buf, &ent, ent.d_reclen);
+		nbytes_read += ent.d_reclen;
+		buf += ent.d_reclen;
+	}
+
+  exit:
+	if (!nbytes || nbytes_read > 0)
+		return nbytes_read;
+	else
+		return r;
 }
 
 static int josfs_cfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
