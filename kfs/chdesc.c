@@ -123,7 +123,7 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void *
 	assert(copied == length);
 	
 	for(i = 0; i != count; i++)
-		if(chdesc_apply(chdescs[0]))
+		if(chdesc_apply(chdescs[i]))
 			break;
 	
 	/* failed to apply the chdescs */
