@@ -5,6 +5,15 @@
 #include <inc/vector.h>
 #include <inc/hash_map.h>
 
+#define HASH_MAP_DEBUG 0
+
+#if HASH_MAP_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
+
 //
 // Implement hash_map.h using a chaining hash table.
 
@@ -136,6 +145,7 @@ bool hash_map_empty(const hash_map_t * hm)
 
 int hash_map_insert(hash_map_t * hm, void * k, void * v)
 {
+	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
@@ -183,6 +193,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 void * hash_map_erase(hash_map_t * hm, const void * k)
 {
+	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 	void * v;
@@ -211,6 +222,7 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 
 int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 {
+	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, oldk, newk);
 	chain_elt_t * head;
 	chain_elt_t * elt;
 
@@ -259,6 +271,7 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 
 void hash_map_clear(hash_map_t * hm)
 {
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, hm);
 	size_t i;
 
 	for (i=0; i < vector_size(hm->tbl); i++)
