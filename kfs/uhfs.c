@@ -17,6 +17,20 @@
 #define Dprintf(x...)
 #endif
 
+struct open_file {
+	int fid;
+	struct Fd * page;
+	fdesc_t * fdesc;
+	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
+	bool type; /* whether the type metadata is supported */
+};
+typedef struct open_file open_file_t;
+
+struct uhfs_state {
+	LFS_t * lfs;
+	open_file_t open_file[UHFS_MAX_OPEN];
+};
+
 
 static bool lfs_feature_supported(LFS_t * lfs, const char * name, int feature_id)
 {
@@ -35,21 +49,6 @@ static int va_is_mapped(void * va)
 {
 	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
 }
-
-
-struct open_file {
-	int fid;
-	struct Fd * page;
-	fdesc_t * fdesc;
-	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
-	bool type; /* whether the type metadata is supported */
-};
-typedef struct open_file open_file_t;
-
-struct uhfs_state {
-	LFS_t * lfs;
-	open_file_t open_file[UHFS_MAX_OPEN];
-};
 
 static int open_file_free(LFS_t * lfs, open_file_t * f)
 {
