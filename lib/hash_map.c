@@ -26,7 +26,6 @@ struct hash_map {
 
 static size_t hash_ptr(const void * k, size_t tbl_size);
 
-#include <inc/assert.h>
 
 // A rotating hash, http://burtleburtle.net/bob/hash/doobs.html.
 // NOTE: rotating hashes don't hash well, this fn could be improved.
@@ -70,7 +69,8 @@ hash_map_t * hash_map_create_size(size_t n)
 		return NULL;
 
 	hm->size = 0;
-	if (! (hm->tbl = vector_create_size(n)) )
+	hm->tbl = vector_create_size(n);
+	if (!hm->tbl)
 	{
 		free(hm);
 		return NULL;
@@ -108,7 +108,8 @@ bool hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 	if (!head)
 	{
-		if (! (head = chain_elt_create()) )
+		head = chain_elt_create();
+		if (!head)
 			return 0;
 	}
 	else
@@ -144,7 +145,6 @@ bool hash_map_insert(hash_map_t * hm, void * k, void * v)
 bool hash_map_erase(hash_map_t * hm, const void * k)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
-	assert(elt_num < vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
 	if (!head)
@@ -220,6 +220,11 @@ size_t hash_map_bucket_count(const hash_map_t * hm)
 	return vector_size(hm->tbl);
 }
 
+// Implement if useful
+/*
+bool   hash_map_resize(hash_map_t * hm, size_t n);
+*/
+
 
 //
 // Element access
@@ -237,12 +242,12 @@ hash_map_elt_t hash_map_elt_next(hash_map_t * hm, hash_map_elt_t elt);
 
 static chain_elt_t * chain_elt_create()
 {
-	chain_elt_t * c = malloc(sizeof(*c));
-	c->elt.key = NULL;
-	c->elt.val = NULL;
-	c->next = NULL;
-	c->prev = NULL;
-	return c;
+	chain_elt_t * elt = malloc(sizeof(*elt));
+	elt->elt.key = NULL;
+	elt->elt.val = NULL;
+	elt->next = NULL;
+	elt->prev = NULL;
+	return elt;
 }
 
 static void chain_elt_destroy(chain_elt_t * elt)

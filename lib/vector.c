@@ -6,7 +6,7 @@ static void ** vector_create_elts(size_t n);
 static void    vector_destroy_elts(vector_t * v);
 static bool    vector_grow(vector_t * v);
 
-#define INIT_NUM_ELTS 10
+# define INIT_CAPACITY 10
 
 
 //
@@ -14,7 +14,14 @@ static bool    vector_grow(vector_t * v);
 
 vector_t * vector_create()
 {
-	return vector_create_size(INIT_NUM_ELTS);
+	// Create a vector with no elements, but with a capacity.
+
+	vector_t * v = vector_create_size(INIT_CAPACITY);
+	if (!v)
+		return NULL;
+
+	v->size = 0;
+	return v;
 }
 
 vector_t * vector_create_size(size_t n)
@@ -24,7 +31,8 @@ vector_t * vector_create_size(size_t n)
 		return NULL;
 
 	v->size = n;
-	if (! (v->elts = vector_create_elts(n)) )
+	v->elts = vector_create_elts(n);
+	if (!v->elts)
 	{
 		free(v);
 		return NULL;
@@ -40,7 +48,7 @@ void vector_destroy(vector_t * v)
 	free(v);
 }
 
-static void **  vector_create_elts(size_t n)
+static void ** vector_create_elts(size_t n)
 {
 	void ** elts = malloc(n*sizeof(*elts));
 	return elts;
@@ -64,18 +72,14 @@ static void vector_destroy_elts(vector_t * v)
 
 bool vector_push_back(vector_t * v, void * elt)
 {
-	if (v->size != v->capacity)
-	{
-		v->elts[v->size++] = elt;
-		return 1;
-	}
-	else
+	if (v->size == v->capacity)
 	{
 		if (!vector_grow(v))
 			return 0;
-		v->elts[v->size++] = elt;
-		return 1;
 	}
+
+	v->elts[v->size++] = elt;
+	return 1;
 }
 
 void vector_pop_back(vector_t * v)
