@@ -120,6 +120,8 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 			return -E_UNSPECIFIED;
 
 		save_head = prev_head;
+		r = chdesc_weak_retain(save_head, &save_head);
+		assert(r >= 0); // TODO: handle error
 
 		/* Now free the block */
 		r = CALL(state->lfs, free_block, block, &prev_head, &tail);
@@ -127,6 +129,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 			return r;
 
 		prev_head = save_head;
+		chdesc_weak_release(&save_head);
 	}
 
 	/* Update the file's size as recorded by lfs, which also updates
@@ -336,6 +339,9 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			prev_head = NULL; /* no need to link with previous chains here */
 			bd = CALL(state->lfs, allocate_block, blocksize, type, &prev_head, &tail);
 			save_head = prev_head;
+			r = chdesc_weak_retain(save_head, &save_head);
+			assert(r >= 0); // TODO: handle error
+
 			if (!bd)
 				return size_written;
 			bdesc_retain(&bd);
@@ -345,6 +351,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 				return size_written;
 			}
 			prev_head = save_head;
+			chdesc_weak_release(&save_head);
 			allocated_block = 1;
 		}
 
@@ -370,6 +377,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 				return r;
 		}
 	}
+
 	return size_written;
 }
 
@@ -439,6 +447,8 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 		}
 
 		save_head = prev_head;
+		r = chdesc_weak_retain(save_head, &save_head);
+		assert(r >= 0); // TODO: handle error
 
 		r = CALL(state->lfs, free_block, blk, &prev_head, &tail);
 		if (r < 0) {
@@ -446,6 +456,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 			return r;
 		}
 		prev_head = save_head;
+		chdesc_weak_release(&save_head);
 	}
 
 	CALL(state->lfs, free_fdesc, f);
