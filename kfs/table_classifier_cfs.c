@@ -175,10 +175,14 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 	for (i = 0; i < mount_table_size; i++)
 	{
 		const mount_entry_t *me = (mount_entry_t *) vector_elt(mount_table, i);
-		const size_t mount_len = strlen(me->path);
+		size_t mount_len = strlen(me->path);
 
 		if(mount_len <= longest_match || name_len < mount_len)
 			continue;
+
+		/* / needs special consideration because it has a trailing / */
+		if(mount_len == 1)
+			mount_len = 0;
 
 		if(!strncmp(me->path, name, mount_len))
 		{
