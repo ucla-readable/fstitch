@@ -109,7 +109,33 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 	
 	return id[57] | (((uint32_t) id[58]) << 16);
 }
-	
+
+static int ide_pio_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct ide_info * info = (struct ide_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "controller: %d, drive: %d, count: %d, atomic: 512", info->controller, info->disk, info->length);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "(%d, %d), count: %d", info->controller, info->disk, info->length);
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "controller: %d, drive: %d, count: %d", info->controller, info->disk, info->length);
+	}
+	return 0;
+}
+
+static int ide_pio_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t ide_pio_bd_get_numblocks(BD_t * object)
 {
 	return ((struct ide_info *) object->instance)->length;
@@ -218,6 +244,10 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	}
 	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, ide_pio_bd, get_config);
+	OBJASSIGN(bd, ide_pio_bd, get_status);
 	ASSIGN(bd, ide_pio_bd, get_numblocks);
 	ASSIGN(bd, ide_pio_bd, get_blocksize);
 	ASSIGN(bd, ide_pio_bd, get_atomicsize);

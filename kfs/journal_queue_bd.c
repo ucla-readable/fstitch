@@ -13,12 +13,37 @@
 #define JOURNAL_QUEUE_MAGIC 0x4A6E6C51
 
 struct queue_info {
-	uint32_t magic;
 	BD_t * bd;
 	hash_map_t * bdesc_hash;
 	uint16_t blocksize;
 	enum {RELEASE, HOLD, PASSTHROUGH} state;
 };
+
+static int journal_queue_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	/* no configuration of interest */
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int journal_queue_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct queue_info * info = (struct queue_info *) bd->instance;
+	switch(level)
+	{
+		case STATUS_VERBOSE:
+			snprintf(string, length, "state: %s, blocked: %d", (info->state == RELEASE) ? "RELEASE" : (info->state == HOLD) ? "HOLD" : "PASSTHROUGH", hash_map_size(info->bdesc_hash));
+			break;
+		case STATUS_BRIEF:
+			snprintf(string, length, "%s", (info->state == RELEASE) ? "RELEASE" : (info->state == HOLD) ? "HOLD" : "PASSTHROUGH");
+			break;
+		case STATUS_NORMAL:
+		default:
+			snprintf(string, length, "state: %s", (info->state == RELEASE) ? "RELEASE" : (info->state == HOLD) ? "HOLD" : "PASSTHROUGH");
+	}
+	return 0;
+}
 
 static uint32_t journal_queue_bd_get_numblocks(BD_t * object)
 {
@@ -232,6 +257,10 @@ BD_t * journal_queue_bd(BD_t * disk)
 		return NULL;
 	}
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = JOURNAL_QUEUE_MAGIC;
+	OBJASSIGN(bd, journal_queue_bd, get_config);
+	OBJASSIGN(bd, journal_queue_bd, get_status);
 	ASSIGN(bd, journal_queue_bd, get_numblocks);
 	ASSIGN(bd, journal_queue_bd, get_blocksize);
 	ASSIGN(bd, journal_queue_bd, get_atomicsize);
@@ -240,7 +269,6 @@ BD_t * journal_queue_bd(BD_t * disk)
 	ASSIGN(bd, journal_queue_bd, sync);
 	DESTRUCTOR(bd, journal_queue_bd, destroy);
 
-	info->magic = JOURNAL_QUEUE_MAGIC;
 	info->bd = disk;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->state = RELEASE;
@@ -262,14 +290,14 @@ BD_t * journal_queue_bd(BD_t * disk)
 
 bool journal_queue_detect(BD_t * bd)
 {
-	return ((struct queue_info *) bd->instance)->magic == JOURNAL_QUEUE_MAGIC;
+	return OBJMAGIC(bd) == JOURNAL_QUEUE_MAGIC;
 }
 
 int journal_queue_release(BD_t * bd)
 {
 	struct queue_info * info = (struct queue_info *) bd->instance;
 	
-	if(info->magic != JOURNAL_QUEUE_MAGIC)
+	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return -E_INVAL;
 	
 	if(info->state != RELEASE)
@@ -313,7 +341,7 @@ int journal_queue_hold(BD_t * bd)
 {
 	struct queue_info * info = (struct queue_info *) bd->instance;
 	
-	if(info->magic != JOURNAL_QUEUE_MAGIC)
+	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return -E_INVAL;
 	
 	info->state = HOLD;
@@ -324,7 +352,7 @@ int journal_queue_passthrough(BD_t * bd)
 {
 	struct queue_info * info = (struct queue_info *) bd->instance;
 	
-	if(info->magic != JOURNAL_QUEUE_MAGIC)
+	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return -E_INVAL;
 	
 	info->state = PASSTHROUGH;
@@ -335,7 +363,7 @@ const hash_map_t * journal_queue_blocklist(BD_t * bd)
 {
 	struct queue_info * info = (struct queue_info *) bd->instance;
 	
-	if(info->magic != JOURNAL_QUEUE_MAGIC)
+	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return NULL;
 	
 	return info->bdesc_hash;

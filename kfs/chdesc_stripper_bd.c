@@ -15,10 +15,10 @@
 #endif
 
 
-struct chdesc_stripper_state {
+struct stripper_info {
 	BD_t * bd;
 };
-typedef struct chdesc_stripper_state chdesc_stripper_state_t;
+typedef struct stripper_info stripper_info_t;
 
 
 static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_t * c)
@@ -70,13 +70,28 @@ static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_
 }
 
 
+static int chdesc_stripper_get_config(void * object, int level, char * string, size_t length)
+{
+	/* no configuration of interest */
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int chdesc_stripper_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
+
 //
 // Intercepted BD_t functions
 
 static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	chdesc_t * block_chdesc, * cur_chdesc;
 	uint32_t refs;
 	int r;
@@ -137,7 +152,7 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 static int chdesc_stripper_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -157,7 +172,7 @@ static int chdesc_stripper_destroy(BD_t * bd)
 
 static bdesc_t * chdesc_stripper_read_block(BD_t * bd, uint32_t number)
 {
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	bdesc_t * bdesc;
 	int r;
 
@@ -177,7 +192,7 @@ static bdesc_t * chdesc_stripper_read_block(BD_t * bd, uint32_t number)
 
 static int chdesc_stripper_sync(BD_t * bd, bdesc_t * block)
 {
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	uint32_t refs;
 	int r;
 
@@ -207,19 +222,19 @@ static int chdesc_stripper_sync(BD_t * bd, bdesc_t * block)
 
 static uint32_t chdesc_stripper_get_numblocks(BD_t * bd)
 {
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	return CALL(state->bd, get_numblocks);
 }
 
 static uint16_t chdesc_stripper_get_blocksize(BD_t * bd)
 {
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	return CALL(state->bd, get_blocksize);
 }
 
 static uint16_t chdesc_stripper_get_atomicsize(BD_t * bd)
 {
-	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) bd->instance;
 	return CALL(state->bd, get_atomicsize);
 }
 
@@ -230,7 +245,7 @@ static uint16_t chdesc_stripper_get_atomicsize(BD_t * bd)
 BD_t * chdesc_stripper_bd(BD_t * disk)
 {
 	BD_t * bd;
-	chdesc_stripper_state_t * state;
+	stripper_info_t * state;
 
 	bd = malloc(sizeof(*bd));
 	if (!bd)
@@ -241,6 +256,10 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 		goto error_bd;
 	bd->instance = state;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, chdesc_stripper, get_config);
+	OBJASSIGN(bd, chdesc_stripper, get_status);
 	ASSIGN(bd, chdesc_stripper, get_numblocks);
 	ASSIGN(bd, chdesc_stripper, get_blocksize);
 	ASSIGN(bd, chdesc_stripper, get_atomicsize);
