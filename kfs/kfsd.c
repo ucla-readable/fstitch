@@ -84,7 +84,7 @@ int kfsd_init(int argc, char * argv[])
 			kfsd_shutdown();
 
 		/* create a cache above the resizer */
-		if (! (cache = wt_cache_bd(partitions[i], 4)) )
+		if (! (cache = wt_cache_bd(resizer, 4)) )
 			kfsd_shutdown();
 
 		if (! (lfs = wholedisk(cache)) )
