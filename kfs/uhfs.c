@@ -17,8 +17,6 @@
 #define Dprintf(x...)
 #endif
 
-#define FIDX(fid) (((uint32_t)(fid) - ((uint32_t)UHFS_FD_MAP & ~0x80000000)) >> 12)
-
 
 struct open_file {
 	int fid;
