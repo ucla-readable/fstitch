@@ -139,7 +139,7 @@ static int loop_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_lfs(state->lfs);
+	modman_dec_lfs(state->lfs, bd);
 	
 	CALL(state->lfs, free_fdesc, state->file);
 	free((char *) state->filename);
@@ -198,7 +198,12 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 		DESTROY(bd);
 		return NULL;
 	}
-	modman_inc_lfs(lfs);
+	if(modman_inc_lfs(lfs, bd) < 0)
+	{
+		modman_rem_bd(bd);
+		DESTROY(bd);
+		return NULL;
+	}
 
 	return bd;
 

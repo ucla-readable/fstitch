@@ -591,7 +591,12 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 		return r;
 	}
 	
-	modman_inc_bd(bd);
+	if((r = modman_inc_bd(bd, cfs)) < 0)
+	{
+		vector_pop_back(state->bd_table);
+		bd_entry_destroy(bde);
+		return r;
+	}
 	
 	return 0;
 }
@@ -621,7 +626,7 @@ BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 	}
 	vector_erase(state->bd_table, i);
 	
-	modman_dec_bd(bde->bd);
+	modman_dec_bd(bde->bd, cfs);
 	
 	return bd_entry_destroy(bde);
 }

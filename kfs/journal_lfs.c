@@ -706,9 +706,9 @@ static int journal_destroy(LFS_t * lfs)
 		transaction_start(state);
 		return r;
 	}
-	modman_dec_bd(state->queue);
-	modman_dec_lfs(state->fs);
-	modman_dec_lfs(state->journal);
+	modman_dec_bd(state->queue, lfs);
+	modman_dec_lfs(state->fs, lfs);
+	modman_dec_lfs(state->journal, lfs);
 
 	CALL(state->journal, free_fdesc, state->jfdesc);
 	state->jfdesc = NULL;
@@ -1037,13 +1037,13 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 		goto error_chdescs;
 
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
-	{
-		DESTROY(lfs);
-		return NULL;
-	}
-	modman_inc_lfs(journal);
-	modman_inc_lfs(fs);
-	modman_inc_bd(fs_queue);
+		goto error_add;
+	if(modman_inc_lfs(journal, lfs) < 0)
+		goto error_inc_1;
+	if(modman_inc_lfs(fs, lfs) < 0)
+		goto error_inc_2;
+	if(modman_inc_bd(fs_queue, lfs) < 0)
+		goto error_inc_3;
 
 	return lfs;
 
@@ -1053,6 +1053,16 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	free(state);
   error_lfs:
 	free(lfs);
+	return NULL;
+	
+  error_inc_3:
+	modman_dec_lfs(fs, lfs);
+  error_inc_2:
+	modman_dec_lfs(journal, lfs);
+  error_inc_1:
+	modman_rem_lfs(lfs);
+  error_add:
+	DESTROY(lfs);
 	return NULL;
 }
 

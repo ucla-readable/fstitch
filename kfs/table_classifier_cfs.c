@@ -541,7 +541,12 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 		return r;
 	}
 
-	modman_inc_cfs(path_cfs);
+	if ((r = modman_inc_cfs(path_cfs, cfs)) < 0)
+	{
+		vector_pop_back(state->mount_table);
+		mount_entry_destroy(me);
+		return r;
+	}
 
 	fprintf(STDERR_FILENO, "table_classifier_cfs: mount to %s\n", path);
 	return 0;
@@ -568,7 +573,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	path_cfs = me->cfs;
 	mount_entry_destroy(me);
 
-	modman_dec_cfs(path_cfs);
+	modman_dec_cfs(path_cfs, cfs);
 
 	return path_cfs;
 }

@@ -218,7 +218,7 @@ static int wholedisk_destroy(LFS_t * lfs)
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct wd_info *) lfs->instance)->bd);
+	modman_dec_bd(((struct wd_info *) lfs->instance)->bd, lfs);
 	
 	free(lfs->instance);
 	memset(lfs, 0, sizeof(*lfs));
@@ -277,7 +277,12 @@ LFS_t * wholedisk(BD_t * bd)
 		DESTROY(lfs);
 		return NULL;
 	}
-	modman_inc_bd(bd);
+	if(modman_inc_bd(bd, lfs) < 0)
+	{
+		modman_rem_lfs(lfs);
+		DESTROY(lfs);
+		return NULL;
+	}
 	
 	return lfs;
 }

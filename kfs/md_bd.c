@@ -160,8 +160,8 @@ static int md_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct md_info *) bd->instance)->bd[1]);
-	modman_dec_bd(((struct md_info *) bd->instance)->bd[0]);
+	modman_dec_bd(((struct md_info *) bd->instance)->bd[1], bd);
+	modman_dec_bd(((struct md_info *) bd->instance)->bd[0], bd);
 	free(bd->instance);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -210,12 +210,19 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	info->atomicsize = MIN(atomicsize0, atomicsize1);
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
-	{
-		DESTROY(bd);
-		return NULL;
-	}
-	modman_inc_bd(disk0);
-	modman_inc_bd(disk1);
+		goto error_add;
+	if(modman_inc_bd(disk0, bd) < 0)
+		goto error_inc_1;
+	if(modman_inc_bd(disk1, bd) < 0)
+		goto error_inc_2;
 	
 	return bd;
+	
+error_inc_2:
+	modman_dec_bd(disk0, bd);
+error_inc_1:
+	modman_rem_bd(bd);
+error_add:
+	DESTROY(bd);
+	return NULL;
 }

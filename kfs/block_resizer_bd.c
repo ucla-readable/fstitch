@@ -154,7 +154,7 @@ static int block_resizer_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct resize_info *) bd->instance)->bd);
+	modman_dec_bd(((struct resize_info *) bd->instance)->bd, bd);
 	
 	free(bd->instance);
 	memset(bd, 0, sizeof(*bd));
@@ -206,7 +206,12 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 		DESTROY(bd);
 		return NULL;
 	}
-	modman_inc_bd(disk);
+	if(modman_inc_bd(disk, bd) < 0)
+	{
+		modman_rem_bd(bd);
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

@@ -198,7 +198,7 @@ static int journal_queue_bd_destroy(BD_t * bd)
 	r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(info->bd);
+	modman_dec_bd(info->bd, bd);
 	
 	hash_map_destroy(info->bdesc_hash);
 	free(info);
@@ -250,7 +250,12 @@ BD_t * journal_queue_bd(BD_t * disk)
 		DESTROY(bd);
 		return NULL;
 	}
-	modman_inc_bd(disk);
+	if(modman_inc_bd(disk, bd) < 0)
+	{
+		modman_rem_bd(bd);
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

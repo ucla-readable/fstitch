@@ -160,7 +160,7 @@ static int wt_cache_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(info->bd);
+	modman_dec_bd(info->bd, bd);
 	
 	for(block = 0; block != info->size; block++)
 		if(info->blocks[block])
@@ -215,7 +215,12 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 		DESTROY(bd);
 		return NULL;
 	}
-	modman_inc_bd(disk);
+	if(modman_inc_bd(disk, bd) < 0)
+	{
+		modman_rem_bd(bd);
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

@@ -1,6 +1,7 @@
 #include <inc/lib.h>
 #include <inc/malloc.h>
 #include <inc/hash_map.h>
+#include <inc/vector.h>
 
 #include <kfs/bd.h>
 #include <kfs/cfs.h>
@@ -16,11 +17,7 @@
 #define Dprintf(x...)
 #endif
 
-struct module {
-	void * module;
-	uint32_t usage;
-	const char * name;
-};
+MODMAN_ENTRY_STRUCT(void, module);
 
 static hash_map_t * bd_map = NULL;
 static hash_map_t * cfs_map = NULL;
@@ -30,7 +27,7 @@ CFS_t * modman_devfs = NULL;
 
 static int modman_add(hash_map_t * map, void * module, const char * name)
 {
-	struct module * mod = (struct module *) hash_map_find_val(map, module);
+	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	int r;
 	
 	if(mod)
@@ -50,9 +47,18 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 		return -E_NO_MEM;
 	}
 	
+	mod->users = vector_create();
+	if(!mod->users)
+	{
+		free((char *) mod->name);
+		free(mod);
+		return -E_NO_MEM;
+	}
+	
 	r = hash_map_insert(map, module, mod);
 	if(r < 0)
 	{
+		vector_destroy(mod->users);
 		free((char *) mod->name);
 		free(mod);
 		return r;
@@ -80,36 +86,53 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 	return 0;
 }
 
-static int modman_add_anon(hash_map_t * map, void * module, const char * function)
+static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
 {
 	char name[64];
-	snprintf(name, 64, "%s-%08x", function, module);
+	snprintf(name, 64, "%s-%08x", prefix, module);
 	return modman_add(map, module, name);
 }
 
-static uint32_t modman_inc(hash_map_t * map, void * module)
+static int modman_inc(hash_map_t * map, void * module, void * user)
 {
-	struct module * mod = (struct module *) hash_map_find_val(map, module);
+	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
 		return -E_NOT_FOUND;
-	Dprintf("%s: increasing usage of %s to %d\n", __FUNCTION__, mod->name, mod->usage + 1);
+	if(user)
+	{
+		int r = vector_push_back(mod->users, user);
+		if(r < 0)
+			return r;
+	}
+	Dprintf("%s: increasing usage of %s to %d by 0x%08x\n", __FUNCTION__, mod->name, mod->usage + 1, user);
 	return ++mod->usage;
 }
 
-static uint32_t modman_dec(hash_map_t * map, void * module)
+static int modman_dec(hash_map_t * map, void * module, void * user)
 {
-	struct module * mod = (struct module *) hash_map_find_val(map, module);
+	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
 		return -E_NOT_FOUND;
 	if(!mod->usage)
 		return -E_INVAL;
-	Dprintf("%s: decreasing usage of %s to %d\n", __FUNCTION__, mod->name, mod->usage - 1);
+	if(user)
+	{
+		/* remove the last instance of this user from the vector (more efficient than the first) */
+		size_t last = vector_size(mod->users);
+		while(last-- > 0)
+			if(vector_elt(mod->users, last) == user)
+			{
+				vector_erase(mod->users, last);
+				break;
+			}
+	}
+	Dprintf("%s: decreasing usage of %s to %d by 0x%08x\n", __FUNCTION__, mod->name, mod->usage - 1, user);
 	return --mod->usage;
 }
 
 static int modman_rem(hash_map_t * map, void * module)
 {
-	struct module * mod = (struct module *) hash_map_find_val(map, module);
+	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	
 	if(!mod)
 		return -E_NOT_FOUND;
@@ -124,23 +147,24 @@ static int modman_rem(hash_map_t * map, void * module)
 	
 	Dprintf("%s: removing module %s\n", __FUNCTION__, mod->name);
 	hash_map_erase(map, module);
+	vector_destroy(mod->users);
 	free((char *) mod->name);
 	free(mod);
 	return 0;
 }
 
-static uint32_t modman_query(hash_map_t * map, void * module)
+static const modman_entry_module_t * modman_lookup(hash_map_t * map, void * module)
 {
-	struct module * mod = (struct module *) hash_map_find_val(map, module);
-	if(!mod)
-		return -E_NOT_FOUND;
-	Dprintf("%s: query usage count of %s (%d)\n", __FUNCTION__, mod->name, mod->usage);
-	return mod->usage;
+	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
+	/* this conditional will be optimized away when not compiling with debugging */
+	if(mod)
+		Dprintf("%s: lookup module %s\n", __FUNCTION__, mod->name);
+	return mod;
 }
 
 static const char * modman_name(hash_map_t * map, void * module)
 {
-	struct module * mod = (struct module *) hash_map_find_val(map, module);
+	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
 		return NULL;
 	Dprintf("%s: lookup module %s (by address 0x%08x)\n", __FUNCTION__, mod->name, module);
@@ -178,23 +202,27 @@ typedef BD_t bd_t;
 typedef CFS_t cfs_t;
 typedef LFS_t lfs_t;
 
-#define MODMAN_ADD(type) \
-int modman_add_##type(type##_t * type, const char * name) \
+#define MODMAN_ADD(type, postfix...) \
+int modman_add##postfix##_##type(type##_t * type, const char * name) \
 { \
-	return modman_add(type##_map, type, name); \
+	return modman_add##postfix(type##_map, type, name); \
 }
 
-#define MODMAN_ADD_ANON(type) \
-int modman_add_anon_##type(type##_t * type, const char * function) \
+#define MODMAN_ADD_ANON(type) MODMAN_ADD(type, _anon)
+
+#define MODMAN_COUNT(op, type) \
+int modman_##op##_##type(type##_t * type, void * user) \
 { \
-	return modman_add_anon(type##_map, type, function); \
+	return modman_##op(type##_map, type, user); \
 }
 
-#define MODMAN_OP(value, op, type) \
+#define MODMAN_OP(value, op, type, cast...) \
 value modman_##op##_##type(type##_t * type) \
 { \
-	return modman_##op(type##_map, type); \
+	return cast modman_##op(type##_map, type); \
 }
+
+#define MODMAN_OP_CAST(value, op, type) MODMAN_OP(value, op, type, (value))
 
 MODMAN_ADD(bd);
 MODMAN_ADD(cfs);
@@ -203,18 +231,18 @@ MODMAN_ADD_ANON(bd);
 MODMAN_ADD_ANON(cfs);
 MODMAN_ADD_ANON(lfs);
 
-MODMAN_OP(uint32_t, inc, bd);
-MODMAN_OP(uint32_t, inc, cfs);
-MODMAN_OP(uint32_t, inc, lfs);
-MODMAN_OP(uint32_t, dec, bd);
-MODMAN_OP(uint32_t, dec, cfs);
-MODMAN_OP(uint32_t, dec, lfs);
+MODMAN_COUNT(inc, bd);
+MODMAN_COUNT(inc, cfs);
+MODMAN_COUNT(inc, lfs);
+MODMAN_COUNT(dec, bd);
+MODMAN_COUNT(dec, cfs);
+MODMAN_COUNT(dec, lfs);
 MODMAN_OP(int, rem, bd);
 MODMAN_OP(int, rem, cfs);
 MODMAN_OP(int, rem, lfs);
-MODMAN_OP(uint32_t, query, bd);
-MODMAN_OP(uint32_t, query, cfs);
-MODMAN_OP(uint32_t, query, lfs);
+MODMAN_OP_CAST(const modman_entry_bd_t *, lookup, bd);
+MODMAN_OP_CAST(const modman_entry_cfs_t *, lookup, cfs);
+MODMAN_OP_CAST(const modman_entry_lfs_t *, lookup, lfs);
 
 MODMAN_OP(const char *, name, bd);
 MODMAN_OP(const char *, name, cfs);

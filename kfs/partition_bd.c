@@ -151,7 +151,7 @@ static int partition_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct partition_info *) bd->instance)->bd);
+	modman_dec_bd(((struct partition_info *) bd->instance)->bd, bd);
 	free(bd->instance);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -191,7 +191,12 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 		DESTROY(bd);
 		return NULL;
 	}
-	modman_inc_bd(disk);
+	if(modman_inc_bd(disk, bd) < 0)
+	{
+		modman_rem_bd(bd);
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }
