@@ -1,5 +1,5 @@
 echo Welcome to KudOS!
-sb16 kudos | null
+sb16 kudos | null &
 sleep 1
 telnetd &
 josweb &
