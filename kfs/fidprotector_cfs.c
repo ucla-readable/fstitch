@@ -303,17 +303,19 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 		goto error_state;
 
 	if(modman_add_anon_cfs(cfs, __FUNCTION__))
-		goto error_open_files;
-
+	{
+		DESTROY(cfs);
+		return NULL;
+	}
 	if(modman_inc_cfs(frontend_cfs, cfs, NULL) < 0)
-		goto error_modman_add;
+	{
+		modman_rem_cfs(cfs);
+		DESTROY(cfs);
+		return NULL;
+	}
 
 	return cfs;
 
-  error_modman_add:
-	modman_rem_cfs(cfs);
-  error_open_files:
-	hash_map_destroy(state->open_files);
   error_state:
 	free(state);
 	cfs->instance = NULL;
