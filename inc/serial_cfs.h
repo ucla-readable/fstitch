@@ -20,10 +20,11 @@
 #define SCFS_GET_METADATA 12
 #define SCFS_SET_METADATA 13
 #define SCFS_SYNC 13
+#define SCFS_SHUTDOWN 14
 
 #define SCFS_TYPE int scfs_type
 
-// MAXPATHLEN is the maxiumum length we can fit in a method page, given
+// SCFSMAXNAMELEN is the maxiumum length we can fit in a method page, given
 // where names are used and the common denonimator amount of space available
 // in these pages.
 #define SCFSMAXNAMELEN ((PGSIZE - 2*sizeof(int)) / 2)
@@ -110,6 +111,9 @@ struct Scfs_sync {
 	int fid;
 };
 
+struct Scfs_shutdown {
+	SCFS_TYPE;
+};
 
 //
 // CFS "data-page-blobs"
