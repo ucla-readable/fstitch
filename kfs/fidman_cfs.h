@@ -7,6 +7,12 @@
 // fidman_cfs also uses its knowledge of fids to allow create_fid() to
 // not handout a fid still in use.
 
+// Characterization of fidman:
+// depman is characterized as Santa Claus. fidman, as a fairy god mother.
+// Modules don't know of fidman, but fidman is there behind the scenes
+// helping CFS modules out by letting them know when fids are no longer in use.
+
+
 #include <kfs/cfs.h>
 
 // The range used by fidman for mapping client Fd pages.
