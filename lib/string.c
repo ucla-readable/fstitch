@@ -1,6 +1,7 @@
 // Basic string routines.  Not hardware optimized, but not shabby.
 
 #include <inc/string.h>
+#include <inc/malloc.h>
 
 int
 strlen(const char *s)
@@ -70,7 +71,7 @@ strchr(const char *s, char c)
 }
 
 char *
-strstr(const char * big, const char * little)
+strstr(const char *big, const char *little)
 {
 	int length = strlen(little);
 	for(; *big; big++)
@@ -78,6 +79,14 @@ strstr(const char * big, const char * little)
 			return (char *) big;
 	return NULL;
 }
+
+#ifndef KUDOS_KERNEL
+char *
+strdup(const char *src)
+{
+	return memdup(src, strlen(src) + 1);
+}
+#endif
 
 long
 strtol(const char *s, char **endptr, int base)
@@ -178,6 +187,17 @@ memmove(void *dst, const void *src, size_t n)
 	
 	return dst;
 }
+
+#ifndef KUDOS_KERNEL
+void *
+memdup(const void *src, size_t len)
+{
+	void * copy = malloc(len);
+	if(copy)
+		memcpy(copy, src, len);
+	return copy;
+}
+#endif
 
 int
 isnum(char c)

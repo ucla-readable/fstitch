@@ -38,20 +38,18 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor)
 	
 	/* make sure it applies cleanly */
 	if(chdesc_apply(chdesc))
-	{
-		free(chdesc);
-		return NULL;
-	}
+		chdesc_destroy(&chdesc);
 	
 	return chdesc;
 }
 
-#if 0
 int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
 	uint16_t init_offset = offset % atomic_size;
+	uint16_t index = offset / atomic_size;
 	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
+	uint16_t copied = 0;
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
 	
@@ -60,33 +58,236 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void *
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
 		if(!chdescs[i])
 			break;
+		
+		chdescs[i]->block = block;
+		chdescs[i]->type = BYTE;
+		chdescs[i]->byte.offset = (index + i) * atomic_size + (i ? 0 : init_offset);
+		if(count == 1)
+			chdescs[i]->byte.length = length;
+		else if(i == count - 1)
+			chdescs[i]->byte.length = (init_offset + length) % atomic_size;
+		else
+			chdescs[i]->byte.length = atomic_size - (i ? 0 : init_offset);
+		
+		chdescs[i]->byte.olddata = memdup(&block->ddesc->data[chdescs[i]->byte.offset], chdescs[i]->byte.length);
+		chdescs[i]->byte.newdata = memdup(&((uint8_t *) data)[copied], chdescs[i]->byte.length);
+		
+		chdescs[i]->dependencies = NULL;
+		chdescs[i]->dependents = NULL;
+		chdescs[i]->weak_refs = NULL;
+		
+		/* start rolled back so we can apply it */
+		chdescs[i]->flags = CHDESC_ROLLBACK;
+		
+		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
+		{
+			chdesc_destroy(&chdescs[i]);
+			break;
+		}
+		
+		copied += chdescs[i]->byte.length;
+		
+		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
+		{
+			chdesc_destroy(&chdescs[i]);
+			break;
+		}
 	}
 	
-	/* failed */
+	/* failed to create the chdescs */
 	if(i != count)
 	{
 		while(i--)
+		{
+			if(chdescs[i]->dependencies)
+				chdesc_remove_depend(chdescs[i], chdescs[i - 1]);
 			chdesc_destroy(&chdescs[i]);
+		}
 		free(chdescs);
 		return -E_NO_MEM;
 	}
 	
-	/* ... */
+	assert(copied == length);
 	
-	*head = chdescs[0];
-	*tail = chdescs[count - 1];
+	for(i = 0; i != count; i++)
+		if(chdesc_apply(chdescs[0]))
+			break;
+	
+	/* failed to apply the chdescs */
+	if(i != count)
+	{
+		while(i--)
+			chdesc_rollback(chdescs[i]);
+		for(i = 0; i != count; i++)
+		{
+			chdesc_satisfy(chdescs[i]);
+			chdesc_destroy(&chdescs[i]);
+		}
+		free(chdescs);
+		return -E_INVAL;
+	}
+	
+	*head = chdescs[count - 1];
+	*tail = chdescs[0];
 	
 	return 0;
 }
 
 int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
+	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
+	uint16_t count = block->length / atomic_size;
+	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
+	int i;
+	
+	for(i = 0; i != count; i++)
+	{
+		chdescs[i] = malloc(sizeof(*chdescs[i]));
+		if(!chdescs[i])
+			break;
+		
+		chdescs[i]->block = block;
+		chdescs[i]->type = BYTE;
+		chdescs[i]->byte.offset = i * atomic_size;
+		chdescs[i]->byte.length = atomic_size;
+		
+		chdescs[i]->byte.olddata = memdup(&block->ddesc->data[i * atomic_size], atomic_size);
+		chdescs[i]->byte.newdata = calloc(1, atomic_size);
+		
+		chdescs[i]->dependencies = NULL;
+		chdescs[i]->dependents = NULL;
+		chdescs[i]->weak_refs = NULL;
+		
+		/* start rolled back so we can apply it */
+		chdescs[i]->flags = CHDESC_ROLLBACK;
+		
+		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
+		{
+			chdesc_destroy(&chdescs[i]);
+			break;
+		}
+		
+		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
+		{
+			chdesc_destroy(&chdescs[i]);
+			break;
+		}
+	}
+	
+	/* failed to create the chdescs */
+	if(i != count)
+	{
+		while(i--)
+		{
+			if(chdescs[i]->dependencies)
+				chdesc_remove_depend(chdescs[i], chdescs[i - 1]);
+			chdesc_destroy(&chdescs[i]);
+		}
+		free(chdescs);
+		return -E_NO_MEM;
+	}
+	
+	for(i = 0; i != count; i++)
+		if(chdesc_apply(chdescs[0]))
+			break;
+	
+	/* failed to apply the chdescs */
+	if(i != count)
+	{
+		while(i--)
+			chdesc_rollback(chdescs[i]);
+		for(i = 0; i != count; i++)
+		{
+			chdesc_satisfy(chdescs[i]);
+			chdesc_destroy(&chdescs[i]);
+		}
+		free(chdescs);
+		return -E_INVAL;
+	}
+	
+	*head = chdescs[count - 1];
+	*tail = chdescs[0];
+	
+	return 0;
 }
 
 int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
+	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
+	uint16_t count = block->length / atomic_size;
+	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
+	int i;
+	
+	for(i = 0; i != count; i++)
+	{
+		chdescs[i] = malloc(sizeof(*chdescs[i]));
+		if(!chdescs[i])
+			break;
+		
+		chdescs[i]->block = block;
+		chdescs[i]->type = BYTE;
+		chdescs[i]->byte.offset = i * atomic_size;
+		chdescs[i]->byte.length = atomic_size;
+		
+		chdescs[i]->byte.olddata = memdup(&block->ddesc->data[i * atomic_size], atomic_size);
+		chdescs[i]->byte.newdata = memdup(&((uint8_t *) data)[i * atomic_size], atomic_size);
+		
+		chdescs[i]->dependencies = NULL;
+		chdescs[i]->dependents = NULL;
+		chdescs[i]->weak_refs = NULL;
+		
+		/* start rolled back so we can apply it */
+		chdescs[i]->flags = CHDESC_ROLLBACK;
+		
+		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
+		{
+			chdesc_destroy(&chdescs[i]);
+			break;
+		}
+		
+		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
+		{
+			chdesc_destroy(&chdescs[i]);
+			break;
+		}
+	}
+	
+	/* failed to create the chdescs */
+	if(i != count)
+	{
+		while(i--)
+		{
+			if(chdescs[i]->dependencies)
+				chdesc_remove_depend(chdescs[i], chdescs[i - 1]);
+			chdesc_destroy(&chdescs[i]);
+		}
+		free(chdescs);
+		return -E_NO_MEM;
+	}
+	
+	for(i = 0; i != count; i++)
+		if(chdesc_apply(chdescs[0]))
+			break;
+	
+	/* failed to apply the chdescs */
+	if(i != count)
+	{
+		while(i--)
+			chdesc_rollback(chdescs[i]);
+		for(i = 0; i != count; i++)
+		{
+			chdesc_satisfy(chdescs[i]);
+			chdesc_destroy(&chdescs[i]);
+		}
+		free(chdescs);
+		return -E_INVAL;
+	}
+	
+	*head = chdescs[count - 1];
+	*tail = chdescs[0];
+	
+	return 0;
 }
-#endif
 
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
