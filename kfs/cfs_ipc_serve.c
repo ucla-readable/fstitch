@@ -135,6 +135,9 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 	Dprintf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 	int r;
 	void *buf = (uint8_t*) PAGESNDVA;
+
+	if (get_pte(buf) & PTE_P)
+		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
 	r = CALL(frontend_cfs, read, req->fid, buf, req->offset, req->size);
@@ -231,6 +234,8 @@ static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
 	void *buf = (uint8_t*) PAGESNDVA;
 	int r;
 
+	if (get_pte(buf) & PTE_P)
+		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
 	f = CALL(frontend_cfs, get_feature, req->name, req->num);
@@ -250,6 +255,8 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	void * data = NULL;
 	int r;
 
+	if (get_pte(md) & PTE_P)
+		panic("md (PAGESNDVA = 0x%08x) already mapped", md);
 	if ((r = sys_page_alloc(0, md, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
 	md->id = req->id;
