@@ -963,6 +963,11 @@ netd(int argc, const char **argv)
 	}
 	if (!r)
 	{
+		char name[ENV_NAME_LENGTH];
+
+		snprintf(name, ENV_NAME_LENGTH, "%s:IPC", env->env_name);
+		sys_env_set_name(0, name);
+
 		close(p[0]);
 		netd_ipcrecv(net_envid, p[1], argc, argv);
 	}
