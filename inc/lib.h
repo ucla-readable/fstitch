@@ -152,7 +152,7 @@ uint32_t fsipc_avail_space(void);
 int   fsipc_shutdown(void);
 
 // pageref.c
-int	pageref(void*);
+int	pageref(const void*);
 
 // console.c
 void	putchar(int c);
