@@ -1,8 +1,8 @@
 #include <inc/vector.h>
 #include <inc/lib.h>
+#include <inc/partition.h>
 
 #include <kfs/ide_pio_bd.h>
-#include <inc/partition.h>
 #include <kfs/pc_ptable_bd.h>
 #include <kfs/chdesc_stripper_bd.h>
 #include <kfs/wt_cache_bd.h>
@@ -23,8 +23,7 @@
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 
-
-static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k4"};
+static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
 // Init kfsd modules.
 int kfsd_init(void)
@@ -34,7 +33,6 @@ int kfsd_init(void)
 	const bool use_net    = 0;
 
 	vector_t * uhfses = NULL;
-	CFS_t * josfscfs = NULL;
 	CFS_t * table_class = NULL;
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidfairy = NULL;
