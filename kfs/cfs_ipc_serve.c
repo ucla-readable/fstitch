@@ -72,7 +72,7 @@ static void serve_close(envid_t envid, struct Scfs_close * req)
 static void serve_read(envid_t envid, struct Scfs_read * req)
 {
 	printf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
-	ipc_send(envid, 0, (void*) REQVA, PTE_P|PTE_U);
+	ipc_send(envid, 0, (void*) "0123456789", PTE_P|PTE_U);
 }
 
 static void serve_write(envid_t envid, struct Scfs_write * req)
