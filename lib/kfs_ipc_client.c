@@ -432,6 +432,22 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 	return create_lfs(lfs_id);
 }
 
+#include <kfs/wholedisk_lfs.h>
+LFS_t * wholedisk(BD_t * bd)
+{
+	const envid_t fsid = find_fs();
+	uint32_t lfs_id;
+
+	INIT_PG(WHOLEDISK, wholedisk);
+
+	pg->bd = (uint32_t) bd->instance;
+
+	SEND_PG();
+	lfs_id = RECV_PG();
+
+	return create_lfs(lfs_id);
+}
+
 
 //
 // BD

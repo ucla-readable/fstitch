@@ -169,6 +169,22 @@ void kis_josfs_base(envid_t whom, const Skfs_josfs_base_t * pg)
 	RETURN_IPC;
 }
 
+// wholedisk
+#include <kfs/wholedisk_lfs.h>
+
+void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
+{
+	BD_t * bd = (BD_t *) pg->bd;
+	uint32_t val;
+
+	if (!modman_name_bd(bd))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) wholedisk(bd);
+
+	RETURN_IPC;
+}
+
 
 //
 // BD
@@ -455,6 +471,8 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
 
 		SERVE(JOSFS_BASE, josfs_base);
+
+		SERVE(WHOLEDISK, wholedisk);
 
 		// BD
 

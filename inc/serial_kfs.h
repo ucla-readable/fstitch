@@ -27,27 +27,29 @@
 
 #define SKFS_JOSFS_BASE 10
 
+#define SKFS_WHOLEDISK 11
+
 // BD
 
-#define SKFS_LOOP_BD 11
-#define SKFS_NBD_BD 12
-#define SKFS_JOURNAL_QUEUE_BD 13
-#define SKFS_ORDER_PRESERVER_BD 14
-#define SKFS_CHDESC_STRIPPER_BD 15
-#define SKFS_WB_CACHE_BD 16
-#define SKFS_WT_CACHE_BD 17
-#define SKFS_BLOCK_RESIZER_BD 18
-#define SKFS_PARTITION_BD 19
-#define SKFS_PC_PTABLE_BD 20
-#define SKFS_IDE_PIO_BD 21
+#define SKFS_LOOP_BD 12
+#define SKFS_NBD_BD 13
+#define SKFS_JOURNAL_QUEUE_BD 14
+#define SKFS_ORDER_PRESERVER_BD 15
+#define SKFS_CHDESC_STRIPPER_BD 16
+#define SKFS_WB_CACHE_BD 17
+#define SKFS_WT_CACHE_BD 18
+#define SKFS_BLOCK_RESIZER_BD 19
+#define SKFS_PARTITION_BD 20
+#define SKFS_PC_PTABLE_BD 21
+#define SKFS_IDE_PIO_BD 22
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 22
-#define SKFS_MODMAN_RETURN_LOOKUP  23
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 24
-#define SKFS_MODMAN_REQUEST_ITS    25
-#define SKFS_MODMAN_RETURN_IT      26
+#define SKFS_MODMAN_REQUEST_LOOKUP 23
+#define SKFS_MODMAN_RETURN_LOOKUP  24
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 25
+#define SKFS_MODMAN_REQUEST_ITS    26
+#define SKFS_MODMAN_RETURN_IT      27
 
 
 #define SKFS_TYPE int skfs_type
@@ -137,6 +139,13 @@ typedef struct {
 	uint32_t bd;
 	int do_fsck; // TODO: return success/failure?
 } Skfs_josfs_base_t;
+
+// wholedisk_lfs
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t bd;
+} Skfs_wholedisk_t;
 
 
 //
