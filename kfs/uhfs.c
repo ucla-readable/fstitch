@@ -7,6 +7,7 @@
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
 
+
 #define UHFS_DEBUG 0
 
 
@@ -39,6 +40,18 @@ static int link_chains(chdesc_t ** prevhead, chdesc_t * head, chdesc_t * tail)
 	return 0;
 }
 
+static bool lfs_feature_supported(LFS_t * lfs, const char * name, int feature_id)
+{
+	const size_t num_features = CALL(lfs, get_num_features, name);
+	size_t i;
+
+	for (i=0; i < num_features; i++)
+		if (CALL(lfs, get_feature, name, i)->id == KFS_feature_size.id)
+			return 1;
+
+	return 0;
+}
+
 /* Is this virtual address mapped? */
 static int va_is_mapped(void * va)
 {
@@ -51,6 +64,7 @@ struct open_file {
 	struct Fd * page;
 	fdesc_t * fdesc;
 	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
+	bool type; /* whether the type metadata is supported */
 };
 typedef struct open_file open_file_t;
 
@@ -112,6 +126,8 @@ static int fid_idx(int fid, open_file_t f[])
 
 
 
+// TODO:
+// - respect mode
 static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
 	Dprintf("%s(\"%s\", %d, 0x%x)\n", __FUNCTION__, name, mode, page);
@@ -152,18 +168,23 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 		return -E_NOT_FOUND;
 	}
 	
-	/* detect whether the filesize feature is supported */
+	/* detect whether the filesize and filetype features are supported */
 	state->open_file[index].size_id = 0;
+	state->open_file[index].type = 0;
 	{
 		const size_t num_features = CALL(state->lfs, get_num_features, name);
+		open_file_t * of = &state->open_file[index];
 		size_t i;
 		for (i=0; i < num_features; i++)
 		{
-			if (CALL(state->lfs, get_feature, name, i)->id == KFS_feature_size.id)
-			{
-				state->open_file[index].size_id = i;
+			const feature_t * f = CALL(state->lfs, get_feature, name, i);
+			if (f->id == KFS_feature_size.id)
+				of->size_id = i;
+			else if (f->id == KFS_feature_filetype.id)
+				of->type = 1;
+
+			if (of->size_id && of->type)
 				break;
-			}
 		}
 	}
 
@@ -237,6 +258,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	uint32_t dataoffset = (offset % blocksize);
 	bdesc_t * bd;
 	uint32_t size_written = 0;
+	chdesc_t * prevhead = NULL;
 	chdesc_t * head, * tail;
 	int r;
 
@@ -249,11 +271,18 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		/* get the block to write to */
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (!bd)
-			return size_written;
+		{
+			const int type = TYPE_FILE; /* TODO: can this be other types? */
+			bd = CALL(state->lfs, allocate_block, blocksize, type, &head, &tail);
+			if (!bd)
+				return size_written;
+			prevhead = head;
+			if ((r = link_chains(&prevhead, head, tail)) < 0)
+				return size_written;
+		}
 
 		/* write the data to the block */
-		head = NULL;
-		tail = NULL;
+		head = tail = NULL;
 		const uint32_t n = MIN(bd->length - dataoffset, size - size_written);
 		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &head, &tail);
 		if (r < 0)
@@ -261,12 +290,17 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		size_written += n;
 		dataoffset = 0; /* dataoffset only needed for first block */
 
-		/* no need to do anything with the chdescs */
+		/* link the data block's chain with the allocated block's chain,
+		 * link_chains() has no effect if allocate_block() wasn't needed */
+		prevhead = head;
+		if ((r = link_chains(&prevhead, head, tail)) < 0)
+			return size_written;
 	}
 
 	return size_written;
 }
 
+// TODO: implement
 static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
@@ -296,8 +330,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	for (; target_nblks < nblks; nblks--)
 	{
 		/* Truncate the block */
-		head = NULL;
-		tail = NULL;
+		head = tail = NULL;
 		block = CALL(state->lfs, truncate_file_block, file->fdesc, &head, &tail);
 		if (!block)
 			return -E_UNSPECIFIED;
@@ -305,8 +338,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 			return r;
 
 		/* Now free the block */
-		head = NULL;
-		tail = NULL;
+		head = tail = NULL;
 		r = CALL(state->lfs, free_block, block, &head, &tail);
 		if (r < 0)
 			return r;
@@ -331,8 +363,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 
 		if (target_size < size)
 		{
-			head = NULL;
-			tail = NULL;
+			head = tail = NULL;
 			r = CALL(state->lfs, set_metadata_fdesc, file->fdesc, file->size_id, sizeof(target_size), &target_size, &head, &tail);
 			if (r < 0)
 				return r;
@@ -340,38 +371,139 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 				return r;
 		}
 	}
-	
 
 	return 0;
 }
 
+// TODO: implement
 static int uhfs_unlink(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	// 1. See if this is the last link, in which case truncate to zero?
+	// 2. remove_name()
+	// 3. free_fdesc()
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	fdesc_t * oldf, * newf;
+	const bool type_supported = lfs_feature_supported(state->lfs, oldname, KFS_feature_filetype.id);
+	int oldtype;
+	chdesc_t * prevhead;
+	chdesc_t * head, * tail;
+	int r;
+
+	oldf = CALL(state->lfs, lookup_name, oldname);
+	if (!oldf)
+		return -E_NOT_FOUND;
+
+	/* determine oldname's type to set newname's type */
+	if (!type_supported)
+		panic("%s() requires LFS filetype feature support to determine whether newname is to be a file or directory", __FUNCTION__);
+	{
+		void * data;
+		size_t data_len;
+		r= CALL(state->lfs, get_metadata_fdesc, oldf, KFS_feature_filetype.id, &data_len, &data);
+		if (r < 0)
+			return r;
+
+		assert(data_len == sizeof(oldtype));
+		oldtype = *(int *) data;
+		free(data);
+	}
+
+	if (CALL(state->lfs, lookup_name, newname))
+		return -E_FILE_EXISTS;
+
+	head = tail = NULL;
+	newf = CALL(state->lfs, allocate_name, newname, oldtype, oldf, &head, &tail);
+	if (!newf)
+		return -E_UNSPECIFIED;
+	prevhead = head;
+
+	if (type_supported)
+	{
+		head = tail = NULL;
+		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &head, &tail);
+		if (r < 0)
+			return r;
+		if ((r = link_chains(&prevhead, head, tail)) < 0)
+			return r;
+	}
+
+	return 0;
 }
 
 static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	chdesc_t * head = NULL, * tail = NULL;
+	int r;
+
+	r = CALL(state->lfs, rename, oldname, newname, &head, &tail);
+	if (r < 0)
+		return r;
+	/* no need to do anything with the chdescs */
+
+	return 0;
 }
 
 static int uhfs_mkdir(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	fdesc_t * f;
+	chdesc_t * prevhead = NULL;
+	chdesc_t * head, * tail;
+	int r;
+
+	if (CALL(state->lfs, lookup_name, name))
+		return -E_FILE_EXISTS;
+
+	head = tail = NULL;
+	f = CALL(state->lfs, allocate_name, name, TYPE_DIR, NULL, &head, &tail);
+	if (!f)
+		return -E_UNSPECIFIED;
+	prevhead = head;
+
+	/* set the filetype metadata */
+	if (lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id))
+	{
+		const int type = TYPE_DIR;
+		head = tail = NULL;
+		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &head, &tail);
+		if (r < 0)
+		{
+			/* ignore errors in favor of the real error */
+			(void) link_chains(&prevhead, head, tail);
+			head = tail = NULL;
+			(void) CALL(state->lfs, remove_name, name, &head, &tail);
+			(void) link_chains(&prevhead, head, tail);
+			return r;
+		}
+
+		if ((r = link_chains(&prevhead, head, tail)) < 0)
+		{
+			fprintf(STDERR_FILENO, "%s: LFS::link_chains() failed, returning error but not deallocating directory \"%s\"\n", __FUNCTION__, name);
+			return r;
+		}
+	}
+
+	return 0;
 }
 
+// TODO: implement
 static int uhfs_rmdir(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	// 1. ensure no entries?
+	// 2. truncate?
+	// 3. remove_name()
+	// 4. free_fdesc()
 	return -E_UNSPECIFIED;
 }
 
