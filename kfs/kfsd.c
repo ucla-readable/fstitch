@@ -84,16 +84,23 @@ void kfsd_loop()
 		cfs_ipc_serve_run();
 }
 
-void bd_test(int argc, char * argv[]);
+void bd_test(void);
 
 void umain(int argc, char * argv[])
 {
 	int r;
+	
+	if(sys_grant_io(0))
+	{
+		printf("Failed to get I/O priveleges.\n");
+		return;
+	}
+	
 	if ((r = kfsd_init(argc, argv)) < 0)
 		exit();
 
 	kfsd_loop();
-	//bd_test(argc, argv);
+	//bd_test();
 }
 
 
@@ -119,19 +126,13 @@ static uint32_t bdesc_sum(bdesc_t * bdesc)
 	return sum;
 }
 
-void bd_test(int argc, char * argv[])
+void bd_test(void)
 {
 	BD_t * bd;
 	BD_t * cbd;
 	BD_t * part = NULL;
 	void * ptbl;
 	uint32_t i;
-	
-	if(sys_grant_io(0))
-	{
-		printf("Failed to get I/O priveleges.\n");
-		return;
-	}
 	
 	bd = ide_pio_bd(1);
 	cbd = wt_cache_bd(bd, 4);
