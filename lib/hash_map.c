@@ -350,14 +350,78 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 
 
 //
-// Element access
+// Iteration
 
-// Implement if useful
-/*
-hash_map_elt_t hash_map_elt_begin(hash_map_t * hm);
-hash_map_elt_t hash_map_elt_end(hash_map_t * hm);
-hash_map_elt_t hash_map_elt_next(hash_map_t * hm, hash_map_elt_t elt);
-*/
+struct hash_map_it {
+	size_t bucket;
+	chain_elt_t * elt;
+};
+
+
+hash_map_it_t * hash_map_it_create()
+{
+	hash_map_it_t * it = malloc(sizeof(*it));
+	if (!it)
+		return NULL;
+	it->bucket = 0;
+	it->elt = NULL;
+	return it;
+}
+
+void hash_map_it_destroy(hash_map_it_t * it)
+{
+	it->bucket = 0;
+	it->elt = NULL;
+	free(it);
+}
+
+void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
+{
+	size_t i;
+	chain_elt_t * head;
+
+	if (!it->bucket && !it->elt)
+	{
+		// New iterator
+
+		// Set it to the first elt
+		for (i=0; i < vector_size(hm->tbl); i++)
+		{
+			head = vector_elt(hm->tbl, i);
+			if (head)
+			{
+				it->bucket = i;
+				it->elt = head;
+				break;
+			}
+		}
+
+		if (!it->bucket)
+			return NULL; // no elts in the hash map
+	}
+
+	// If there are more elts in this chain, return the next
+	if (it->elt->next)
+	{
+		it->elt = it->elt->next;
+		return it->elt->elt.val;
+	}
+
+	// Find the next bucket with an elt
+	for (i=0; i < vector_size(hm->tbl); i++)
+	{
+		head = vector_elt(hm->tbl, i);
+		if (head)
+		{
+			it->bucket = i;
+			it->elt = head;
+			return it->elt->elt.val;
+		}
+	}
+
+	return NULL;
+}
+
 
 
 //
