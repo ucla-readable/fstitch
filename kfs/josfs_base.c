@@ -416,6 +416,7 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 	int target;
 	uint32_t * ptr;
 	bool result;
+	int r;
 
 	target = 2 + (blockno / (JOSFS_BLKBITSIZE));
 
@@ -432,7 +433,8 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 				bdesc_drop(&bdesc);
 			return -1;
 		}
-		assert(bdesc_retain(&bdesc) >= 0); // TODO: handle error
+		r = bdesc_retain(&bdesc);
+		assert(r >= 0); // TODO: handle error
 		info->bitmap_cache = bdesc;
 	}
 
