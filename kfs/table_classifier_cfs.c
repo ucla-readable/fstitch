@@ -78,6 +78,8 @@ static int fd_table_add(table_classifier_state_t * state, int fd, CFS_t * cfs)
 			state->fd_table[i].cfs = cfs;
 			return 0;
 		}
+
+		assert(fd != state->fd_table[i].fd);
 	}
 	return -E_NO_MEM;
 }
@@ -102,8 +104,7 @@ static int fd_table_del(table_classifier_state_t * state, int fd)
 	{
 		if (state->fd_table[i].fd == fd)
 		{
-			state->fd_table[i].fd = -1;
-			state->fd_table[i].cfs = NULL;
+			fd_entry_init(&state->fd_table[i]);
 			return 0;
 		}
 	}
