@@ -94,8 +94,31 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 	
 	/* look up the name */
 	fdesc = CALL(state->lfs, lookup_name, name);
-	if (!fdesc)
-		return -E_NOT_FOUND;
+
+	if ((mode & O_CREAT) && !fdesc)
+	{
+		const uint32_t blksize = CALL(state->lfs, get_blocksize);
+		chdesc_t * head, * tail;
+		bdesc_t * blk;
+
+		head = tail = NULL;
+		fdesc = CALL(state->lfs, allocate_name, name, 0, NULL, &head, &tail);
+		if (!fdesc)
+			return -E_UNSPECIFIED;
+
+		tail = NULL;
+		blk = CALL(state->lfs, allocate_block, blksize, 0, &head, &tail);
+		if (!blk)
+			return -E_UNSPECIFIED;
+
+		tail = NULL;
+		r = CALL(state->lfs, append_file_block, fdesc, blk, &head, &tail);
+		if (r < 0)
+			return r;
+	}
+	else
+		if (!fdesc)
+			return -E_NOT_FOUND;
 	
 	/* detect whether the filesize and filetype features are supported */
 	{
