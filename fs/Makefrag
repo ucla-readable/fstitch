@@ -97,6 +97,11 @@ $(OBJDIR)/fs/fsformat: fs/fsformat.c
 	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(USER_CFLAGS) -o $(OBJDIR)/fs/fsformat fs/fsformat.c
 
+$(OBJDIR)/fs/bdsplit: fs/bdsplit.c
+	@echo + mk $(OBJDIR)/fs/bdsplit
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(USER_CFLAGS) -o $(OBJDIR)/fs/bdsplit fs/bdsplit.c
+
 include conf/fs.mk
 ifndef FSSIZE
 	FSINUSE := \`du -slLc --block-size=4096 $(OBJDIR)/kern/kernel $(FSIMGFILES) | grep total$$ | awk '{print $$1}'\`
