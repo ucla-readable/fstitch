@@ -32,7 +32,6 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/mkdir \
 			$(OBJDIR)/user/more \
 			$(OBJDIR)/user/mv \
-			$(OBJDIR)/user/netd \
 			$(OBJDIR)/user/netstats \
 			$(OBJDIR)/user/null \
 			$(OBJDIR)/user/pong \
