@@ -246,6 +246,7 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		}
 
 		// Store the dirent into *ent
+		ent->d_filesize = f.f_size;
 		ent->d_reclen = reclen;
 		ent->d_type = f.f_type;
 		ent->d_namelen = namelen;

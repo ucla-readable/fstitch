@@ -5,7 +5,7 @@
 int flag[256];
 
 void lsdir(const char*, const char*);
-void ls1(const char*, bool, const char*);
+void ls1(const char*, bool, off_t, const char*);
 
 void
 ls(const char *path, const char *prefix)
@@ -20,7 +20,7 @@ ls(const char *path, const char *prefix)
 	if (st.st_isdir && !flag['d'])
 		lsdir(path, prefix);
 	else
-		ls1(0, st.st_isdir, path);
+		ls1(0, st.st_isdir, st.st_size, path);
 }
 
 void
@@ -43,26 +43,19 @@ lsdir(const char *path, const char *prefix)
 		d = (struct dirent *) &buf;
 		while((uintptr_t) d < (uintptr_t) &buf + r)
 		{
-			ls1(prefix, d->d_type==TYPE_DIR, d->d_name);
+			ls1(prefix, d->d_type==TYPE_DIR, d->d_filesize, d->d_name);
 			d = (struct dirent *) ((uintptr_t) d + d->d_reclen);
 		}
 	}
 }
 
 void
-ls1(const char *prefix, bool isdir, const char *name)
+ls1(const char *prefix, bool isdir, off_t size, const char *name)
 {
 	char *sep;
-	struct Stat s;
-	int r;
 
 	if(flag['l'])
-	{
-		if ((r = stat(name, &s)) < 0)
-			fprintf(STDERR_FILENO, "ls: stat failed: %e\n", r);
-		else
-			printf("%11d %c ", s.st_size, isdir ? 'd' : '-');
-	}
+		fprintf(1, "%11d %c ", size, isdir ? 'd' : '-');
 	if(prefix) {
 		if (prefix[0] && prefix[strlen(prefix)-1] != '/')
 			sep = "/";

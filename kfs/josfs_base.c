@@ -389,7 +389,8 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 			if (size >= 8 + strlen(dirfile->f_name) + 1) {
 				// FIXME ???
 				entry->d_fileno = 0;
-				entry->d_type = 0;
+				entry->d_filesize = dirfile->f_size;
+				entry->d_type = dirfile->f_type;
 				entry->d_reclen = 8 + strlen(dirfile->f_name) + 1;
 				entry->d_namelen = strlen(dirfile->f_name);
 				strcpy(entry->d_name, dirfile->f_name);

@@ -7,6 +7,7 @@
 
 struct dirent {
 	uint32_t d_fileno;
+	uint32_t d_filesize;
 	uint16_t d_reclen;
 	uint8_t d_type;
 	uint8_t d_namelen;
