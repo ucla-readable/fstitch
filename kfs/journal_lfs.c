@@ -25,8 +25,8 @@ struct journal_state {
 	fdesc_t * jfdesc;
 	LFS_t * fs;
 	chdesc_t ** commit_chdesc;
-	uint16_t ncommit_records, blocksize;
-	size_t next_trans_slot;
+	uint16_t ncommit_records, next_trans_slot;
+	uint16_t blocksize;
 };
 typedef struct journal_state journal_state_t;
 
@@ -42,7 +42,8 @@ typedef struct journal_state journal_state_t;
 //          | k = trans_number_block_count()
 // k+1..end | the journal data blocks
 
-#define TRANSACTION_SIZE (500*1024)
+#define TRANSACTION_SIZE (64*4096)
+//(100*1024)
 static const char journal_filename[] = "/.journal";
 
 /* "SAFEDATA" */
@@ -98,7 +99,7 @@ static int ensure_journal_exists(journal_state_t * state)
 static int replay_single_transaction(journal_state_t * state, uint32_t transaction_start, uint16_t expected_type)
 {
 	const size_t bnpb = numbers_per_block(state->blocksize);
-	const uint32_t transaction_size = ROUNDDOWN32(TRANSACTION_SIZE, state->blocksize);
+	const uint32_t transaction_blocks = TRANSACTION_SIZE / state->blocksize;
 	
 	uint32_t block, bnb, db;
 	struct commit_record * cr;
@@ -115,7 +116,7 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 	}
 	
 	/* check for chained transaction */
-	block = cr->next * transaction_size;
+	block = cr->next * transaction_blocks;
 	if(block != transaction_start)
 	{
 		/* expect a CRSUBCOMMIT as the next element */
@@ -127,7 +128,7 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 		}
 	}
 	
-	printf("%s(): recovering journal transaction (%u data blocks)\n", __FUNCTION__, cr->nblocks);
+	printf("%s(): recovering journal transaction %d (%u data blocks)\n", __FUNCTION__, transaction_start / transaction_blocks, cr->nblocks);
 	
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
@@ -159,7 +160,7 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 			if(!output)
 				goto output_error;
 			
-			Dprintf("%s(): recovering block %d from journal entry %d\n", __FUNCTION__, numbers[index], block + index);
+			//Dprintf("%s(): recovering block %d from journal entry %d\n", __FUNCTION__, numbers[index], block + index);
 			if((r = bdesc_touch(output)) < 0)
 				goto touch_error;
 			
@@ -196,12 +197,13 @@ static int replay_journal(journal_state_t * state)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	
-	const uint32_t transaction_size = ROUNDDOWN32(TRANSACTION_SIZE, state->blocksize);
+	const uint32_t transaction_blocks = TRANSACTION_SIZE / state->blocksize;
 	uint32_t transaction;
 
+	Dprintf("Journal: %d transactions, %d blocks each.\n", state->ncommit_records, transaction_blocks);
 	for(transaction = 0; transaction < state->ncommit_records; transaction++)
 	{
-		int r = replay_single_transaction(state, transaction * transaction_size, CRCOMMIT);
+		int r = replay_single_transaction(state, transaction * transaction_blocks, CRCOMMIT);
 		if(r < 0)
 			return r;
 	}
@@ -211,93 +213,27 @@ static int replay_journal(journal_state_t * state)
 
 static int transaction_start(journal_state_t * state)
 {
-	Dprintf("---> %s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return journal_queue_hold(state->queue);
 }
 
-static int transaction_stop(journal_state_t * state)
+
+typedef struct {
+	bdesc_t * bdesc;
+	commit_record_t * cr;
+} commit_record_holder_t;
+
+static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_t next_slot, uint16_t type, bdesc_t **data_bdescs, size_t ndatabdescs, commit_record_holder_t * crh)
 {
-	Dprintf("---> %s() [transaction slot %u]\n", __FUNCTION__, state->next_trans_slot);
-	size_t transaction_slot;
+	Dprintf("%s(slot %u, next_slot %u, type %u)\n", __FUNCTION__, slot, next_slot, type);
 	size_t file_offset;
-	bdesc_t ** data_bdescs;
-	size_t ndatabdescs;
-	size_t blknos_begin, blknos_end;
 	bdesc_t * bdesc;
 	size_t i;
 	int r;
 
-	//
-	// Choose transaction slot.
-
-	{
-		transaction_slot = state->next_trans_slot;
-
-		file_offset = transaction_slot * TRANSACTION_SIZE;
-		blknos_begin = file_offset + state->blocksize;
-		blknos_end = blknos_begin + state->blocksize*(trans_number_block_count(state->blocksize) - 1);
-		
-		if (state->commit_chdesc[transaction_slot])
-		{
-			// TODO: Make this transaction dependent on the non-synced
-			// transaction's invalid chdesc.
-			// For now, sync this transaction slot.
-
-			bdesc = state->commit_chdesc[transaction_slot]->block;
-			/* FIXME check for errors? */
-			CALL(bdesc->bd, sync, bdesc);
-			assert(!state->commit_chdesc[transaction_slot]);
-		}
-	}
-
-
-	//
-	// Sort the data_bdescs, allowing for faster disk access.
-	// TODO: it'd be nice if this also sorted journal_queue's copy.
-
-	{
-		const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
-		size_t transaction_size;
-		hash_map_it_t * it;
-
-		data_bdescs_map = journal_queue_blocklist(state->queue);
-		if (!data_bdescs_map)
-			return 0; // nothing to journal
-
-		ndatabdescs = hash_map_size(data_bdescs_map);
-
-		if (ndatabdescs)
-			state->next_trans_slot = (state->next_trans_slot+1) % state->ncommit_records;
-		else
-			return 0; // Do no work if no entries.
-
-		transaction_size = (1 + ndatabdescs) * state->blocksize;
-		if (transaction_size > TRANSACTION_SIZE)
-		{
-			// TODO: break up into multiple transactions.
-			panic("Transaction breakup not yet implemented, transaction size = %d, max transaction size = %d", transaction_size, TRANSACTION_SIZE);
-		}
-
-		data_bdescs = malloc(ndatabdescs * sizeof(*data_bdescs));
-		if (!data_bdescs)
-			return -E_NO_MEM;
-
-		it = hash_map_it_create();
-		if (!it)
-		{
-			free(data_bdescs);
-			return -E_NO_MEM;
-		}
-
-		i = 0;
-		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, it)))
-			data_bdescs[i++] = bdesc;
-		assert(i == ndatabdescs);
-
-		qsort(data_bdescs, ndatabdescs, sizeof(*data_bdescs), bdesc_blockno_compare);
-
-		hash_map_it_destroy(it);
-	}
+	file_offset = slot * TRANSACTION_SIZE;
+	const size_t blknos_begin = file_offset + state->blocksize;
+	const size_t blknos_end = blknos_begin + state->blocksize*(trans_number_block_count(state->blocksize) - 1);
 
 
 	//
@@ -322,16 +258,12 @@ static int transaction_stop(journal_state_t * state)
 
 	jdata_chdescs = chdesc_create_noop(NULL);
 	if (!jdata_chdescs)
-	{
-		free(data_bdescs);
 		return -E_NO_MEM;
-	}
 
 	fsdata_chdescs = chdesc_create_noop(NULL); 
 	if (!fsdata_chdescs)
 	{
 		chdesc_destroy(&jdata_chdescs);
-		free(data_bdescs);
 		return -E_NO_MEM;
 	}
 
@@ -340,7 +272,6 @@ static int transaction_stop(journal_state_t * state)
 	{
 		chdesc_destroy(&fsdata_chdescs);
 		chdesc_destroy(&jdata_chdescs);
-		free(data_bdescs);
 		return r;
 	}
 
@@ -350,7 +281,6 @@ static int transaction_stop(journal_state_t * state)
 		// Ignore possible depman error
 		(void) depman_remove_chdesc(jdata_chdescs);
 		chdesc_destroy(&fsdata_chdescs);
-		free(data_bdescs);
 		return r;
 	}
 
@@ -365,7 +295,6 @@ static int transaction_stop(journal_state_t * state)
 
 	for (i=0; i < ndatabdescs; i++, file_offset += state->blocksize)
 	{
-		Dprintf("jdb #%d, ", file_offset / state->blocksize);
 		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 		assert(bdesc); // TODO: handle error
 
@@ -384,7 +313,6 @@ static int transaction_stop(journal_state_t * state)
 		assert(r >= 0); // TODO: handle error
 		//assert(!lfs_head && !lfs_tail);
 	}
-	Dprintf("\n");
 
 
 	// Write journal data block numbers
@@ -421,11 +349,17 @@ static int transaction_stop(journal_state_t * state)
 			r = chdesc_add_depend(jdata_chdescs, prev_head);
 			assert(r >= 0); // TODO: handle error
 
+			// retain for commit record
+			r = chdesc_weak_retain(prev_head, &prev_head);
+			assert(r >= 0); // TODO: handle error
+
 			lfs_head = NULL;
 			lfs_tail = NULL;
 			r = CALL(state->journal, write_block, bdesc, 0, state->blocksize, num_block, &lfs_head, &lfs_tail);
 			assert(r >= 0); // TODO: handle error
 			//assert(!lfs_head && !lfs_tail);
+
+			chdesc_weak_forget(&prev_head);
 		}
 
 		free(num_block);
@@ -437,8 +371,8 @@ static int transaction_stop(journal_state_t * state)
 	// Create commit record
 
 	commit.magic = JOURNAL_MAGIC;
-	commit.type = CRCOMMIT; // TODO: support sub-commit
-	// commit.next = -1; // TODO: not yet supported
+	commit.type = type;
+	commit.next = next_slot;
 	commit.nblocks = ndatabdescs;
 
 	bdesc = CALL(state->journal, get_file_block, state->jfdesc, commit_offset);
@@ -450,6 +384,10 @@ static int transaction_stop(journal_state_t * state)
 	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
+	// retain for creating fsdata_chdescs
+	r = chdesc_weak_retain(prev_head, &prev_head);
+	assert(r >= 0); // TODO: handle error
+
 	lfs_head = NULL;
 	lfs_tail = NULL;
 	// this single line atomically commits this transaction to disk
@@ -458,6 +396,7 @@ static int transaction_stop(journal_state_t * state)
 	//assert(!lfs_head && !lfs_tail);
 
 	chdesc_t * commit_chdesc = prev_head;
+	chdesc_weak_forget(&prev_head);
 
 	// create fsdata_chdescs
 	for (i=0; i < ndatabdescs; i++)
@@ -487,25 +426,163 @@ static int transaction_stop(journal_state_t * state)
 	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
-	r = chdesc_weak_retain(prev_head, &state->commit_chdesc[transaction_slot]);
+	r = chdesc_weak_retain(prev_head, &state->commit_chdesc[slot]);
 	assert(r >= 0); // TODO: handle error
 
-	lfs_head = NULL;
-	lfs_tail = NULL;
-	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
-	assert(r >= 0); // TODO: handle error
-	//assert(!lfs_head && !lfs_tail);
+	// save the bdesc and commit record for later marking as invalidated
+	crh->bdesc = bdesc;
+	crh->cr = &commit;
+
+	return 0;
+}
+
+static size_t use_next_trans_slot(journal_state_t * state)
+{
+	size_t slot;
+	int r;
+
+	slot = state->next_trans_slot;
+	state->next_trans_slot = (state->next_trans_slot+1) % state->ncommit_records;
+
+	if (state->commit_chdesc[slot])
+	{
+		// TODO: Make this transaction dependent on the non-synced
+		// transaction's invalid chdesc.
+		// For now, sync this transaction slot.
+		// NOTE: if we do update this to depend rather than sync,
+		bdesc_t * bdesc;
+
+		bdesc = state->commit_chdesc[slot]->block;
+			
+		r = CALL(bdesc->bd, sync, bdesc);
+		assert(r >= 0); // TODO: handle error
+		assert(!state->commit_chdesc[slot]);
+	}
+
+	return slot;
+}
+
+static int transaction_stop(journal_state_t * state)
+{
+	Dprintf("%s() [transaction slot %u]\n", __FUNCTION__, state->next_trans_slot);
+	bdesc_t ** data_bdescs;
+	size_t ndatabdescs;
+	bdesc_t * bdesc;
+	size_t i;
+	int r;
 
 
 	//
+	// Sort the data_bdescs, allowing for faster disk access.
+	// TODO: it'd be nice if this also sorted journal_queue's copy.
+
+	{
+		const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
+		hash_map_it_t * it;
+
+		data_bdescs_map = journal_queue_blocklist(state->queue);
+		if (!data_bdescs_map)
+			return 0; // nothing to journal
+
+		ndatabdescs = hash_map_size(data_bdescs_map);
+
+		// Do no work if no entries.
+		if (!ndatabdescs)
+			return 0;
+
+		data_bdescs = malloc(ndatabdescs * sizeof(*data_bdescs));
+		if (!data_bdescs)
+			return -E_NO_MEM;
+
+		it = hash_map_it_create();
+		if (!it)
+		{
+			free(data_bdescs);
+			return -E_NO_MEM;
+		}
+
+		i = 0;
+		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, it)))
+			data_bdescs[i++] = bdesc;
+		assert(i == ndatabdescs);
+
+		qsort(data_bdescs, ndatabdescs, sizeof(*data_bdescs), bdesc_blockno_compare);
+
+		hash_map_it_destroy(it);
+	}
+
+
+	//
+	// Perform the journaling.
+	// When breaking this transaction into subtransactions, link them
+	// up in reverse so that the last slot is the CRCOMMIT.
+
+	const size_t max_datablks_per_trans = TRANSACTION_SIZE/state->blocksize - trans_number_block_count(state->blocksize) - 1;
+	const size_t num_subtransactions = ROUNDUP32(ndatabdescs, max_datablks_per_trans) / max_datablks_per_trans;
+	commit_record_holder_t * chrs;
+	size_t prev_slot = -1;
+
+	if (num_subtransactions > state->ncommit_records)
+		panic("num_subtransactions (%u) > state->ncommit_records (%u), death!", num_subtransactions, state->ncommit_records);
+
+	chrs = malloc(num_subtransactions * sizeof(chrs[0]));
+	assert(chrs); // TODO: handle error
+
+	for (i=0; i < ndatabdescs; i += max_datablks_per_trans)
+	{
+		size_t slot;
+		uint32_t nblocks;
+		uint16_t type;
+
+		slot = use_next_trans_slot(state);
+
+		if (!i)
+			prev_slot = slot; // indicates this is the beginning of the chain
+
+		nblocks = MIN(ndatabdescs - i, max_datablks_per_trans);
+
+		if (i + max_datablks_per_trans < ndatabdescs)
+			type = CRSUBCOMMIT;
+		else
+			type = CRCOMMIT;
+
+		r = transaction_stop_slot(state, slot, prev_slot, type, data_bdescs+i, nblocks, &chrs[i/max_datablks_per_trans]);
+		if (r < 0)
+		{
+			free(data_bdescs);
+			return r;
+		}
+
+		prev_slot = slot;
+	}
+
+	//
+	// Release the data bdescs and mark the commit records as invalidated
+
 	// Release the data bdescs.
+	// Release before marking invalid to allow the bds under the journal
+	// to force fs data syncing.
 
 	r = journal_queue_release(state->queue);
 	if (r < 0)
+	{
+		free(data_bdescs);
+		free(chrs);
 		return r;
+	}
+
+	for (i=0; i < num_subtransactions; i++)
+	{
+		chdesc_t * lfs_head = NULL;
+		chdesc_t * lfs_tail = NULL;
+		r = CALL(state->journal, write_block, chrs[i].bdesc, 0, sizeof(chrs[i].cr), &chrs[i].cr, &lfs_head, &lfs_tail);
+		assert(r >= 0); // TODO: handle error
+		//assert(!lfs_head && !lfs_tail);
+	}
 
 
 	free(data_bdescs);
+	free(chrs);
 
 	return 0;
 }
@@ -816,10 +893,6 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 		goto error_lfs;
 	lfs->instance = state;
 
-	state->commit_chdesc = calloc(state->ncommit_records, sizeof(*state->commit_chdesc));
-	if (!state->commit_chdesc)
-		goto error_state;
-
 	ASSIGN(lfs, journal, get_blocksize);
 	ASSIGN(lfs, journal, get_blockdev);
 	ASSIGN(lfs, journal, allocate_block);
@@ -854,14 +927,18 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 
 	r = ensure_journal_exists(state);
 	if (r < 0)
-		goto error_chdescs;
+		goto error_state;
 
-	state->ncommit_records = CALL(state->journal, get_file_numblocks, state->jfdesc);
+	state->ncommit_records = CALL(state->journal, get_file_numblocks, state->jfdesc) / (TRANSACTION_SIZE / state->blocksize);
 	if (!state->ncommit_records)
 	{
 		fprintf(STDERR_FILENO, "Not enough room in journal file for even one transaction.\n");
-		goto error_chdescs;
+		goto error_state;
 	}
+
+	state->commit_chdesc = calloc((size_t) state->ncommit_records, sizeof(*state->commit_chdesc));
+	if (!state->commit_chdesc)
+		goto error_state;
 
 	r = replay_journal(state);
 	if (r < 0)
