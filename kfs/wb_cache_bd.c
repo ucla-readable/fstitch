@@ -157,7 +157,6 @@ heapify_nodes(chdesc_t *ch, fixed_max_heap_t *heap)
 	chmetadesc_t *p;
 	if (ch->flags & CHDESC_MARKED) return;
 	ch->flags |= CHDESC_MARKED;
-	printf("heapifying 0x%08x (dist %d)\n", ch, ch->distance);
 	fixed_max_heap_insert(heap, ch, ch->distance);
 	p = ch->dependencies;
 	while (p) {
@@ -240,6 +239,7 @@ rollback_block(bdesc_t *block, fixed_max_heap_t *heap,
 		panic("vector_create failed!\n");
 	}
 	root = (chdesc_t*)depman_get_deps(block);
+	if (root == NULL) return; // nothing to do
 	// foreach chedsc ch in block:
 	for (p = root->dependencies; p != NULL; p = p->next) {
 		ch = p->desc;
@@ -327,7 +327,6 @@ satisfy_chdescs(vector_t *vect, fixed_max_heap_t *heap)
 		ch = vector_elt_end(vect);
 		if (ch) {
 			depman_remove_chdesc(ch);
-			printf("about to remove 0x%08x from the heap\n", ch);
 			fixed_max_heap_delete(heap, ch);
 		}
 		vector_pop_back(vect);
@@ -347,7 +346,6 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 	int count;
 	int value;
 
-	printf("Evicting block %d\n", block->number);
 	rollback = vector_create();
 	if (rollback == NULL) {
 		printf("%s: out of memory on vector_create()\n",
@@ -364,9 +362,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 	root = (chdesc_t*)depman_get_deps(block); // shedding const
 											  // intentionally b/c of
 											  // CHDESC_MARKED flag.
-	printf("root is 0x%08x\n", root);
 	if (root == NULL) {
-		printf("no chdescs!\n");
 		goto end;
 	}
 	count = reset_chdescs(root);
@@ -378,8 +374,8 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 	}
 
 	number_chdescs(root, 0); // calc max distance from nodes to root
-	print_chdescs(root, 0);
-	reset_marks(root);
+	//print_chdescs(root, 0);
+	//reset_marks(root);
 	heapify_nodes(root, heap);
 	reset_marks(root);
 
@@ -388,9 +384,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 		chdesc_t *leaf;
 		bdesc_t *leafblock;
 		leaf = fixed_max_heap_head(heap);
-		printf("popped leaf 0x%08x (dist %d)\n", leaf, leaf->distance);
 		if (leaf == root) {
-			printf("got root. all done!\n");
 			break;
 		}
 		assert(leaf->dependencies == NULL);
@@ -402,9 +396,6 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 		rollback_block(leafblock, heap, rollback, satisfy);
 
 		// do the write
-		printf("writing back block %d. ch rb: %d, sat %d\n",
-			   leafblock->number, vector_size(rollback),
-			   vector_size(satisfy));
 		leafblock->translated++;
 		leafblock->bd = info->bd;
 		value = CALL(leafblock->bd, write_block, leafblock);
@@ -434,8 +425,6 @@ wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	struct cache_info * info = (struct cache_info *) object->instance;
 	uint32_t index;
 	
-	printf("reading block %d\n", number);
-
 	/* make sure it's a valid block */
 	if(number >= CALL(info->bd, get_numblocks))
 		return NULL;
@@ -445,15 +434,12 @@ wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	{
 		/* in the cache, use it */
 		if(info->blocks[index]->number == number) {
-			printf("cache hit!\n");
 			return info->blocks[index];
 		}
 		
-		printf("cache miss.. evicting\n");
 		// evict this cache entry
 		wb_cache_bd_evict_block(object, info->blocks[index]);
-	} else
-		printf("cache miss.. no eviction necessary\n");
+	}
 	
 	/* not in the cache, need to read it */
 	info->blocks[index] = CALL(info->bd, read_block, number);
@@ -482,7 +468,6 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	uint32_t index;
 	int value = 0;
 
-	printf("write block\n");
 	/* make sure this is the right block device */
 	if(block->bd != object)
 		return -E_INVAL;
@@ -498,17 +483,13 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	index = block->number % info->size;
 	if (info->blocks[index]->number == block->number) {
 		// overwrite existing block
-		printf("cache hit!\n");
 		value = bdesc_overwrite(block, info->blocks[index]);
 		if (value < 0)
 			panic("bdesc_overwrite: %e\n", value);
 	} else {
 		// evict old block and write a new one
-		if (info->blocks[index]) {
-			printf("cache miss..evicting\n");
+		if (info->blocks[index])
 			value = wb_cache_bd_evict_block(object, info->blocks[index]);
-		} else
-			printf("cache miss..no eviction necessary\n");
 		bdesc_retain(&block);
 		info->blocks[index] = block;
 	}
