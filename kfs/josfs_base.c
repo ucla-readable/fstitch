@@ -71,6 +71,7 @@ static int check_super(LFS_t * object)
 
 	numblocks = CALL(info->ubd, get_numblocks);
 
+	printf("Filesystem size: %d blocks (%dMB)\n", super->s_nblocks, super->s_nblocks / (1024 * 1024 / BLKSIZE));
 	if (super->s_nblocks > numblocks) {
 		printf("josfs_base: file system is too large\n");
 		bdesc_release(&info->super_block);
