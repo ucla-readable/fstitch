@@ -221,7 +221,7 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 	{
 		// Read a dirent
 		if ((r = read(fd, &f, sizeof(struct File))) < 0)
-			goto exit;
+			break;
 
 		// Pseudo unique fileno generator
 		ent.d_fileno = 0;
@@ -235,8 +235,8 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 
 		// Store the dirent into ent
 		ent.d_type = f.f_type;
-		ent.d_reclen = sizeof(ent.d_fileno) + sizeof(ent.d_type) + sizeof(ent.d_reclen) + sizeof(ent.d_namelen) + strlen(f.f_name) + 1;
-		ent.d_namelen = MIN(strlen(f.f_name), sizeof(ent.d_name));
+		ent.d_reclen = sizeof(ent.d_fileno) + sizeof(ent.d_type) + sizeof(ent.d_reclen) + sizeof(ent.d_namelen) + f_name_len + 1;
+		ent.d_namelen = MIN(f_name_len, sizeof(ent.d_name));
 		strncpy(ent.d_name, f.f_name, MIN(ent.d_namelen+1, sizeof(ent.d_name)));
 
 		// Store the dirent ent into the buffer
