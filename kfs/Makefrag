@@ -5,14 +5,15 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable_bd.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
+			$(OBJDIR)/kfs/block_resizer_bd.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/chdesc.o \
 			$(OBJDIR)/kfs/depman.o \
 			$(OBJDIR)/kfs/uhfs.o \
+			$(OBJDIR)/kfs/dos_classifier.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
-			$(OBJDIR)/kfs/kfsd.o \
-			$(OBJDIR)/kfs/dos_classifier.o
+			$(OBJDIR)/kfs/kfsd.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
 	@echo + ld $@
