@@ -138,7 +138,7 @@ static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, vo
 	}
 	else if (id == KFS_feature_filetype.id)
 	{
-		const int32_t type = TYPE_FILE;
+		const int32_t type = TYPE_DEVICE;
 		*data = malloc(sizeof(type));
 		if (!*data)
 			return -E_NO_MEM;

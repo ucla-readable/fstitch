@@ -19,5 +19,6 @@ extern const feature_t KFS_feature_nlinks;
 #define TYPE_FILE 0
 #define TYPE_DIR 1
 #define TYPE_SYMLINK 2
+#define TYPE_DEVICE 3
 
 #endif /* __KUDOS_KFS_FEATURE_H */
