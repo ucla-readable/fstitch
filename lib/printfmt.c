@@ -26,6 +26,7 @@ static char *error_string[MAXERROR+1] =
 	"out of memory",
 	"out of environments",
 	"env is not recving",
+	"env responded that capability failed",
 	"unexpected end of file",
 	"no free space on disk",
 	"too many files are open",
