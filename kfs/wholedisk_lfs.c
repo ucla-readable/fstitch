@@ -9,12 +9,36 @@
 #include <kfs/modman.h>
 #include <kfs/wholedisk_lfs.h>
 
+// "WOLEDISC"
+#define WHOLEDISK_MAGIC 0x301ED15C
+
 struct wd_info {
 	BD_t * bd;
 	uint32_t blocksize;
 };
 
 static fdesc_t fdesc;
+
+
+static int wholedisk_get_config(void * object, int level, char * string, size_t length)
+{
+	LFS_t * lfs = (LFS_t *) object;
+	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int wholedisk_get_status(void * object, int level, char * string, size_t length)
+{
+	LFS_t * lfs = (LFS_t *) object;
+	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
+		return -E_INVAL;
+	
+	snprintf(string, length, "");
+	return 0;
+}
 
 static uint32_t wholedisk_get_blocksize(LFS_t * object)
 {
@@ -243,6 +267,10 @@ LFS_t * wholedisk(BD_t * bd)
 	}
 	lfs->instance = info;
 
+	OBJFLAGS(lfs) = 0;
+	OBJMAGIC(lfs) = WHOLEDISK_MAGIC;
+	OBJASSIGN(lfs, wholedisk, get_config);
+	OBJASSIGN(lfs, wholedisk, get_status);
 	ASSIGN(lfs, wholedisk, get_blocksize);
 	ASSIGN(lfs, wholedisk, get_blockdev);
 	ASSIGN(lfs, wholedisk, allocate_block);

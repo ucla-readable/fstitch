@@ -21,7 +21,6 @@
 
 
 struct journal_state {
-	uint32_t magic;
 	BD_t * queue;
 	LFS_t * journal;
 	fdesc_t * jfdesc;
@@ -647,6 +646,26 @@ static void timer_callback(void * arg)
 //
 // Intercepted LFS_t functions
 
+static int journal_get_config(void * object, int level, char * string, size_t length)
+{
+	LFS_t * lfs = (LFS_t *) object;
+	if(OBJMAGIC(lfs) != JOURNAL_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "max avg bandwidth: %u kB/s", journal_lfs_max_bandwidth(lfs));
+	return 0;
+}
+
+static int journal_get_status(void * object, int level, char * string, size_t length)
+{
+	LFS_t * lfs = (LFS_t *) object;
+	if(OBJMAGIC(lfs) != JOURNAL_MAGIC)
+		return -E_INVAL;
+	
+	snprintf(string, length, "");
+	return 0;
+}
+
 static fdesc_t * journal_lookup_name(LFS_t * lfs, const char * name)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
@@ -977,6 +996,10 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 		goto error_lfs;
 	lfs->instance = state;
 
+	OBJFLAGS(lfs) = 0;
+	OBJMAGIC(lfs) = JOURNAL_MAGIC;
+	OBJASSIGN(lfs, journal, get_config);
+	OBJASSIGN(lfs, journal, get_status);
 	ASSIGN(lfs, journal, get_blocksize);
 	ASSIGN(lfs, journal, get_blockdev);
 	ASSIGN(lfs, journal, allocate_block);
@@ -1003,7 +1026,6 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	ASSIGN(lfs, journal, sync);
 	DESTRUCTOR(lfs, journal, destroy);
 
-	state->magic = JOURNAL_MAGIC;
 	state->queue = fs_queue;
 	state->journal = journal;
 	state->jfdesc = NULL;
@@ -1074,7 +1096,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 size_t journal_lfs_max_bandwidth(const LFS_t * lfs)
 {
 	const journal_state_t * state = (const journal_state_t *) lfs->instance;
-	if(state->magic == JOURNAL_MAGIC)
+	if(OBJMAGIC(lfs) == JOURNAL_MAGIC)
 	{
 		size_t bytes_per_slot = TRANSACTION_SIZE - state->blocksize * (trans_number_block_count(state->blocksize) + 1);
 		return (state->ncommit_records * (bytes_per_slot / 1024)) / TRANSACTION_PERIOD;

@@ -645,6 +645,26 @@ static int walk_path(LFS_t * object, const char* path, JOSFS_File_t** pdir, JOSF
 	return 0;
 }
 
+static int josfs_get_config(void * object, int level, char * string, size_t length)
+{
+	LFS_t * lfs = (LFS_t *) object;
+	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int josfs_get_status(void * object, int level, char * string, size_t length)
+{
+	LFS_t * lfs = (LFS_t *) object;
+	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
+		return -E_INVAL;
+	
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t josfs_get_blocksize(LFS_t * object)
 {
 	return JOSFS_BLKSIZE;
@@ -1837,6 +1857,10 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 	}
 	lfs->instance = info;
 
+	OBJFLAGS(lfs) = 0;
+	OBJMAGIC(lfs) = JOSFS_FS_MAGIC;
+	OBJASSIGN(lfs, josfs, get_config);
+	OBJASSIGN(lfs, josfs, get_status);
 	ASSIGN(lfs, josfs, get_blocksize);
 	ASSIGN(lfs, josfs, get_blockdev);
 	ASSIGN(lfs, josfs, allocate_block);
