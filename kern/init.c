@@ -82,8 +82,7 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	// Should always have an idle process as first one.
 	ENV_CREATE(user_idle);
 
-	// Start fs.
-	ENV_CREATE(fs_fs);
+	// Start kfsd and netd
 	ENV_CREATE(user_netd);
 	ENV_CREATE(kfs_kfsd);
 
@@ -94,7 +93,6 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 #else
 	// Touch all you want.
 	ENV_CREATE(user_init);
-	//ENV_CREATE(user_initsh);
 #endif	// TEST
 
 
