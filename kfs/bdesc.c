@@ -165,3 +165,8 @@ void bdesc_release(bdesc_t ** bdesc)
 	(*bdesc)->refs--;
 	bdesc_drop(bdesc);
 }
+
+int bdesc_blockno_compare(const void * b1, const void * b2)
+{
+	return (*(bdesc_t **) b1)->number - (*(bdesc_t **) b2)->number;
+}

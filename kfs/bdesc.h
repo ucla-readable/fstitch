@@ -88,4 +88,7 @@ void bdesc_drop(bdesc_t ** bdesc);
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc);
 
+/* compares two bdescs' blocknos for qsort */
+int bdesc_blockno_compare(const void * b1, const void * b2);
+
 #endif /* __KUDOS_KFS_BDESC_H */
