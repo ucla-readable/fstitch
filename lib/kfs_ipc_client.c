@@ -779,8 +779,9 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 	Skfs_modman_return_lookup_user_t * lookup_user = (Skfs_modman_return_lookup_user_t *) ROUNDUP32(ipc_recv_page, PGSIZE);	\
 	int perm;															\
 	int users_remaining, ur;											\
+	vector_t * recved_lookup_users;										\
 	modman_entry_##typel##_t * me;										\
-	int r;																\
+	int i, r;															\
 																		\
 	/* setup the modman_entry */										\
 	me = malloc(sizeof(*me));											\
@@ -792,6 +793,9 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 	me->use_names = vector_create();									\
 	if (!me->use_names)													\
 		goto error_users;												\
+	recved_lookup_users = vector_create();								\
+	if (!recved_lookup_users)											\
+		goto error_use_names;											\
 																		\
 	/* request the lookup */											\
 	INIT_PG(MODMAN_REQUEST_LOOKUP, modman_request_lookup);				\
@@ -802,7 +806,7 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 	/* receive the lookup page */										\
 	users_remaining = (int) ipc_recv(fsid, NULL, lookup, &perm, NULL, 0); \
 	if (!perm)															\
-		goto error_use_names;											\
+		goto error_recved_lookup_users;									\
 	me->typel = create_##typel(lookup->id);								\
 	*(int *) &me->usage = lookup->usage; /* '*(int*) &' to work around const member */ \
 	me->name = strdup(lookup->name);									\
@@ -814,7 +818,22 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 		ur = ipc_recv(fsid, NULL, lookup_user, &perm, NULL, 0);			\
 		assert(ur == users_remaining);									\
 																		\
+		vector_push_back(recved_lookup_users, memdup(lookup_user, sizeof(*lookup_user))); \
+		assert(vector_elt_end(recved_lookup_users));					\
+																		\
+		r = vector_push_back((vector_t *) me->use_names, strdup(lookup_user->use_name)); \
+		if (r < 0)														\
+			panic("vector_push_back() failed\n");						\
+																		\
+		Dprintf("%s(): added user %s, %d users_remaining\n", __FUNCTION__, lookup_user->use_name, users_remaining); \
+	}																	\
+																		\
+	/* create objects, which can't be done above because create_*()	*/	\
+	/* may need to talk to kfsd */										\
+	for (i=0; i < vector_size(recved_lookup_users);  i++)				\
+	{																	\
 		void * ut;														\
+		lookup_user = vector_elt(recved_lookup_users, i);				\
 		switch (lookup_user->type)										\
 		{																\
 			case 0: ut = create_cfs(lookup_user->id); break;			\
@@ -823,24 +842,23 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 			default: assert(0);											\
 		}																\
 		if (!ut)														\
-			goto error_use_names;										\
+			panic("create_*() failed\n");								\
 		r = vector_push_back((vector_t *) me->users, ut);				\
 		if (r < 0)														\
-			goto error_use_names;										\
+			panic("vector_push_back() failed\n");						\
 																		\
-		r = vector_push_back((vector_t *) me->use_names, strdup(lookup_user->use_name)); \
-		if (r < 0)														\
-			goto error_use_names;										\
-		Dprintf("%s(): added user %s, %d users_remaining\n", __FUNCTION__, lookup_user->use_name, users_remaining); \
+		free(lookup_user);												\
 	}																	\
+	vector_destroy(recved_lookup_users);								\
 																		\
 	return me;															\
 																		\
+  error_recved_lookup_users:											\
+	panic("TODO: free each entry");										\
+	vector_destroy(recved_lookup_users);								\
   error_use_names:														\
-	panic("TODO: free each name in the vector me->use_names");			\
 	vector_destroy((vector_t *) me->use_names);							\
   error_users:															\
-	panic("TODO: destroy each t in the vector me->users? (what if they already existed?"); \
 	vector_destroy((vector_t *) me->users);								\
   error_me:																\
 	free(me);															\
