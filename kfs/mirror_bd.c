@@ -14,6 +14,8 @@
 #define disk1_good (info->bad_disk != 1)
 #define both_good (info->bad_disk == -1)
 
+#define MIRROR_BD_MAGIC 0x888BDA1D
+
 struct mirror_info {
 	BD_t * bd[2];
 	uint32_t numblocks;
@@ -78,6 +80,7 @@ static uint16_t mirror_bd_get_atomicsize(BD_t * object)
 static void label_drive_bad(BD_t * object, int disk)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
+
 	if (disk != 0 && disk != 1) // Should never happen...
 		return;
 
@@ -85,7 +88,12 @@ static void label_drive_bad(BD_t * object, int disk)
 		return;
 
 	info->bad_disk = disk;
-	panic("Disk %d is bad!!!\n", disk); // TODO better error handling
+
+	if (info->bd[disk])
+		modman_dec_bd(info->bd[disk], object);
+	info->bd[disk] = NULL;
+	printf("mirror_bd: disk %d is bad!!!\n", disk);
+
 }
 
 static bdesc_t * try_read(BD_t * object, uint32_t number, int disk)
@@ -389,7 +397,7 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
+	OBJMAGIC(bd) = MIRROR_BD_MAGIC;
 	OBJASSIGN(bd, mirror_bd, get_config);
 	OBJASSIGN(bd, mirror_bd, get_status);
 	ASSIGN(bd, mirror_bd, get_numblocks);
@@ -439,3 +447,98 @@ error_add:
 	DESTROY(bd);
 	return NULL;
 }
+
+int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
+{
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
+	int numblocks, blocksize, atomicsize, i, r, good_disk = 1 - info->bad_disk;
+	bdesc_t * bdesc;
+
+	if (OBJMAGIC(bd) != MIRROR_BD_MAGIC)
+		return -E_INVAL;
+
+	if (info->bad_disk == -1)
+		return -E_INVAL;
+
+	if (!newdevice || newdevice == info->bd[good_disk])
+		return -E_INVAL;
+
+	printf("mirror_bd: trying to replace disk %d\n", info->bad_disk);
+
+	blocksize = CALL(newdevice, get_blocksize);
+	if (blocksize != info->blocksize) {
+		printf("mirror_bd: blocksize is different\n");
+		return -E_INVAL;
+	}
+
+	atomicsize = CALL(newdevice, get_atomicsize);
+	if (atomicsize < info->atomicsize) {
+		printf("mirror_bd: atomic size too small\n");
+		return -E_INVAL;
+	}
+
+	numblocks = CALL(newdevice, get_numblocks);
+	if (numblocks < info->numblocks) {
+		printf("mirror_bd: disk not big enough\n");
+		return -E_INVAL;
+	}
+
+	if (info->bad_disk == 0)
+		r = modman_inc_bd(newdevice, bd, "Disk 0");
+	else
+		r = modman_inc_bd(newdevice, bd, "Disk 1");
+
+	if (r < 0)
+		return r;
+
+	printf("mirror_bd: disk looks good, syncing...\n");
+
+	for (i = 0; i < info->numblocks; i++) {
+		bdesc = CALL(info->bd[good_disk], read_block, i);
+		if (!bdesc) {
+			printf("mirror_bd: uh oh, erroring reading block %d on sync\n", i);
+			return -E_UNSPECIFIED;
+		}
+
+		bdesc->bd = newdevice;
+		r = CALL(newdevice, write_block, bdesc);
+		if (r < 0) {
+			printf("mirror_bd: uh oh, erroring writing block %d on sync\n", i);
+			return r;
+		}
+	}
+
+	info->bd[info->bad_disk] = newdevice;
+	info->bad_disk = -1;
+
+	printf("mirror_bd: sync done!\n");
+
+	return 0;
+}
+
+int mirror_bd_remove_device(BD_t * bd, int diskno) {
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
+	int r;
+
+	if (OBJMAGIC(bd) != MIRROR_BD_MAGIC)
+		return -E_INVAL;
+
+	if (diskno < 0 || diskno > 1)
+		return -E_INVAL;
+
+	r = mirror_bd_sync(bd, NULL);
+	if (r < 0)
+		return r;
+
+	if (info->bad_disk != -1)
+		return -E_INVAL;
+
+	info->bad_disk = diskno;
+	modman_dec_bd(info->bd[diskno], bd);
+	info->bd[diskno] = NULL;
+
+	printf("mirror_bd: removed disk %d\n", diskno);
+
+	return 0;
+}
+
