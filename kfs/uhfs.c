@@ -461,7 +461,11 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 		chdesc_weak_release(&save_head);
 	}
 
+	r = chdesc_weak_retain(prev_head, &prev_head);
+	assert(r >= 0); // TODO: handle error
 	CALL(state->lfs, free_fdesc, f);
+	chdesc_weak_release(&prev_head);
+
 	return CALL(state->lfs, remove_name, name, &prev_head, &tail);
 }
 
