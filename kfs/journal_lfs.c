@@ -42,7 +42,7 @@ typedef struct journal_state journal_state_t;
 //          | k = trans_number_block_count()
 // k+1..end | the journal data blocks
 
-#define TRANSACTION_SIZE (4*4096)
+#define TRANSACTION_SIZE (64*4096)
 //(100*1024)
 static const char journal_filename[] = "/.journal";
 
