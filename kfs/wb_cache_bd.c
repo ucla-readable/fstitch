@@ -549,6 +549,7 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
+	modman_dec_bd(info->bd);
 	
 	/* FIXME a write-back cache should probably sync these blocks in case they are dirty */
 	for(block = 0; block != info->size; block++)
@@ -604,6 +605,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 		DESTROY(bd);
 		return NULL;
 	}
+	modman_inc_bd(disk);
 	
 	return bd;
 }

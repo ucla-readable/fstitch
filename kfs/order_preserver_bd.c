@@ -103,6 +103,7 @@ static int order_preserver_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
+	modman_dec_bd(state->bd);
 
 	if (state->prev_head)
 		chdesc_weak_release(&state->prev_head);
@@ -221,6 +222,7 @@ BD_t * order_preserver_bd(BD_t * disk)
 		DESTROY(bd);
 		return NULL;
 	}
+	modman_inc_bd(disk);
 	
 	return bd;
 

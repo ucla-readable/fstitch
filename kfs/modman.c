@@ -71,6 +71,9 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 			free(mod);
 			return r;
 		}
+		/* usage count will have increased to 1, put it down to 0 again */
+		mod->usage = 0;
+		Dprintf("%s: resetting usage count of new module %s to 0\n", __FUNCTION__, mod->name);
 	}
 	
 	Dprintf("%s: new module %s\n", __FUNCTION__, mod->name);
@@ -119,7 +122,7 @@ static int modman_rem(hash_map_t * map, void * module)
 	if(map == bd_map)
 		devfs_bd_remove(modman_devfs, mod->name);
 	
-	Dprintf("%s: removing module %s to %d\n", __FUNCTION__, mod->name);
+	Dprintf("%s: removing module %s\n", __FUNCTION__, mod->name);
 	hash_map_erase(map, module);
 	free((char *) mod->name);
 	free(mod);

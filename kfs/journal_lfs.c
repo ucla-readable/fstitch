@@ -694,13 +694,21 @@ static int journal_sync(LFS_t * lfs, const char * name)
 static int journal_destroy(LFS_t * lfs)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
-	int r = modman_rem_lfs(lfs);
-	if(r < 0)
-		return r;
+	int r;
 
 	r = transaction_stop(state);
 	if (r < 0)
 		return r;
+
+	r = modman_rem_lfs(lfs);
+	if(r < 0)
+	{
+		transaction_start(state);
+		return r;
+	}
+	modman_dec_bd(state->queue);
+	modman_dec_lfs(state->fs);
+	modman_dec_lfs(state->journal);
 
 	CALL(state->journal, free_fdesc, state->jfdesc);
 	state->jfdesc = NULL;
@@ -1033,6 +1041,9 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 		DESTROY(lfs);
 		return NULL;
 	}
+	modman_inc_lfs(journal);
+	modman_inc_lfs(fs);
+	modman_inc_bd(fs_queue);
 
 	return lfs;
 

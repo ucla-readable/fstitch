@@ -141,6 +141,7 @@ static int chdesc_stripper_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
+	modman_dec_bd(state->bd);
 
 	memset(state, 0, sizeof(*state));
 	free(state);
@@ -255,6 +256,7 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 		DESTROY(bd);
 		return NULL;
 	}
+	modman_inc_bd(disk);
 	
 	return bd;
 

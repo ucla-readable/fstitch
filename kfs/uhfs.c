@@ -706,10 +706,13 @@ static int uhfs_destroy(CFS_t * cfs)
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
+	modman_dec_lfs(state->lfs);
+
 	hash_map_destroy(state->open_files);
 	free(cfs->instance);
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
+
 	return 0;
 }
 
@@ -757,6 +760,7 @@ CFS_t * uhfs(LFS_t * lfs)
 		DESTROY(cfs);
 		return NULL;
 	}
+	modman_inc_lfs(lfs);
 	
 	return cfs;
 

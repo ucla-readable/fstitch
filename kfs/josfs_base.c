@@ -1762,9 +1762,12 @@ static int josfs_destroy(LFS_t * lfs)
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
+	modman_dec_bd(((struct lfs_info *) lfs->instance)->ubd);
+	
 	free(lfs->instance);
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
+	
 	return 0;
 }
 
@@ -1835,6 +1838,7 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 		DESTROY(lfs);
 		return NULL;
 	}
+	modman_inc_bd(block_device);
 
 	return lfs;
 }
