@@ -53,15 +53,17 @@ ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, int t
 //   If 'pg' is null, pass sys_ipc_recv a value that it will understand
 //   as meaning "no page".  (Zero is not the right value.)
 void
-ipc_send(envid_t toenv, uint32_t val, void* pg, unsigned perm)
+ipc_send(envid_t toenv, uint32_t val, void* pg, unsigned perm, void* cap)
 {
 	int r;
 	if(!pg)
 		pg = (void *) UTOP;
+	if(!cap)
+		cap = (void *) UTOP;
 	
 	for(;;)
 	{
-		r = sys_ipc_try_send(toenv, val, pg, perm);
+		r = sys_ipc_try_send(toenv, val, pg, perm, cap);
 		
 		if(!r || r == 1)
 			return;

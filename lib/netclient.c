@@ -99,7 +99,7 @@ connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 	req->req_port   = port;
 
 	// Send request
-	ipc_send(netd_ipcrecv, NETREQ_CONNECT, req, PTE_P|PTE_U);
+	ipc_send(netd_ipcrecv, NETREQ_CONNECT, req, PTE_P|PTE_U, NULL);
 
 	// Determine whether the connect succeded
 	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, 0)) < 0)
@@ -139,7 +139,7 @@ bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 	req->req_port   = port;
 
 	// Send request
-	ipc_send(netd_ipcrecv, NETREQ_BIND_LISTEN, req, PTE_P|PTE_U);
+	ipc_send(netd_ipcrecv, NETREQ_BIND_LISTEN, req, PTE_P|PTE_U, NULL);
 
 	// Determine whether the bind_listen succeded
 	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, 0)) < 0)
@@ -183,7 +183,7 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 	req->req_listen_key = listen_key;
 
 	// Send request
-	ipc_send(netd_ipcrecv, NETREQ_ACCEPT, req, PTE_P|PTE_U);
+	ipc_send(netd_ipcrecv, NETREQ_ACCEPT, req, PTE_P|PTE_U, NULL);
 
 	// Determine whether the accept succeded
 	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, 0)) < 0)
@@ -233,7 +233,7 @@ net_stats(int fd)
 	struct Netreq_stats *req = (struct Netreq_stats*) ROUND32(req_buf, PGSIZE);
 
 	// Send request
-	ipc_send(netd_ipcrecv, NETREQ_STATS, req, PTE_P|PTE_U);
+	ipc_send(netd_ipcrecv, NETREQ_STATS, req, PTE_P|PTE_U, NULL);
 
 	// Receive stats fd
 	if ((stats_fd = r = dup2env_recv(netd_net)) < 0)

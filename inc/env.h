@@ -66,6 +66,7 @@ struct Env {
 	uint32_t env_ipc_value;		// data value sent to us 
 	envid_t env_ipc_from;		// envid of the sender	
 	unsigned env_ipc_perm;		// perm of page mapping received
+	uint32_t env_ipc_cap;		// capability physical page address
 	int env_ipc_timeout;		// timeout for when to fail ipc_recv
 	envid_t env_ipc_allow_from; // if != 0, the only env allowed to send to us
 

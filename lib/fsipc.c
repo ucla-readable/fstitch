@@ -47,7 +47,7 @@ fsipc(unsigned type, void* fsreq, void* dstva, int* perm)
 
 	if (!fs_envid)
 		return -E_BAD_ENV;
-	ipc_send(fs_envid, type, fsreq, PTE_P | PTE_W | PTE_U);
+	ipc_send(fs_envid, type, fsreq, PTE_P | PTE_W | PTE_U, NULL);
 	return ipc_recv(fs_envid, &whom, dstva, perm, 0);
 }
 

@@ -84,13 +84,13 @@ sys_exofork(void)
 int	sys_set_pgfault_upcall(envid_t env, void* upcall);
 int	sys_ipc_recv(envid_t fromenv, void* rcv_pg, int timeout);
 int	sys_ipc_try_send(envid_t dst_env, uint32_t value,
-			 void* pg, unsigned pg_perm);
+			 void* pg, unsigned pg_perm, void* cap);
 ssize_t	sys_kernbin_page_alloc(envid_t dst_env, const char* name,
 			       size_t offset, void* pg, unsigned pg_perm);
 int	sys_set_trapframe(envid_t env, struct Trapframe* tf);
 
 // ipc.c
-void	ipc_send(envid_t to_env, uint32_t value, void* pg, unsigned perm);
+void	ipc_send(envid_t to_env, uint32_t value, void* pg, unsigned perm, void* cap);
 uint32_t ipc_recv(envid_t restrict_from_env, envid_t* from_env, void* pg, unsigned* perm, int timeout);
 
 // fork.c

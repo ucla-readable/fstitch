@@ -79,8 +79,8 @@ openfile_lookup(envid_t envid, uint32_t fileid, struct OpenFile** po)
 }
 
 // Serve requests, sending responses back to envid.
-// To send a result back, ipc_send(envid, r, 0, 0).
-// To include a page, ipc_send(envid, r, srcva, perm).
+// To send a result back, ipc_send(envid, r, NULL, 0, NULL).
+// To include a page, ipc_send(envid, r, srcva, perm, NULL).
 void
 serve_open(envid_t envid, struct Fsreq_open* rq)
 {
@@ -124,10 +124,10 @@ serve_open(envid_t envid, struct Fsreq_open* rq)
 
 	if (debug)
 		printf("sending success, page %08x\n", (uintptr_t) o->o_fd);
-	ipc_send(envid, 0, o->o_fd, PTE_P|PTE_U|PTE_W|PTE_SHARE);
+	ipc_send(envid, 0, o->o_fd, PTE_P|PTE_U|PTE_W|PTE_SHARE, NULL);
 	return;
 out:
-	ipc_send(envid, r, 0, 0);
+	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 void
@@ -187,7 +187,7 @@ serve_set_size(envid_t envid, struct Fsreq_set_size* rq)
 	// Finally, return to the client!
 	// (We just return r since we know it's 0 at this point.)
 out:
-	ipc_send(envid, r, 0, 0);
+	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 void
@@ -218,10 +218,10 @@ serve_map(envid_t envid, struct Fsreq_map* rq)
 
 	o->o_fd->fd_file.file = *o->o_file;
 
-	ipc_send(envid, r, blk, perm);
+	ipc_send(envid, r, blk, perm, NULL);
 	return;
 out:
-	ipc_send(envid, r, 0, 0);
+	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 void
@@ -240,7 +240,7 @@ serve_close(envid_t envid, struct Fsreq_close* rq)
 
 	file_close(o->o_file);
 out:
-	ipc_send(envid, r, 0, 0);
+	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 void
@@ -258,7 +258,7 @@ serve_remove(envid_t envid, struct Fsreq_remove* rq)
 
 	strncpy(path, rq->req_path, MAXPATHLEN - 1);
 	r = file_remove(path);
-	ipc_send(envid, r, 0, 0);
+	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 void
@@ -280,7 +280,7 @@ serve_dirty(envid_t envid, struct Fsreq_dirty* rq)
 		goto out;
 
 out:
-	ipc_send(envid, r, 0, 0);
+	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 void
@@ -288,13 +288,13 @@ serve_sync(envid_t envid)
 {
 	printf("Syncing filesystem.\n");
 	fs_sync();
-	ipc_send(envid, 0, 0, 0);
+	ipc_send(envid, 0, NULL, 0, NULL);
 }
 
 void
 serve_avail_space(envid_t envid)
 {
-	ipc_send(envid, fs_get_navail_blocks(), 0, 0);
+	ipc_send(envid, fs_get_navail_blocks(), NULL, 0, NULL);
 }
 
 void
@@ -302,7 +302,7 @@ serve_shutdown(envid_t envid)
 {
 	printf("Syncing and shutting down classic filesystem.\n");
 	fs_sync();
-	ipc_send(envid, 0, NULL, 0);
+	ipc_send(envid, 0, NULL, 0, NULL);
 	exit();
 }
 

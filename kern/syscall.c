@@ -417,10 +417,11 @@ sys_ipc_recv(envid_t fromenv, uintptr_t dstva, int timeout)
 //	-E_NO_MEM if there's not enough memory to map srcva in envid's
 //		address space.
 static int
-sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm)
+sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm, uintptr_t capva)
 {
 	struct Env * e;
 	int map = 0;
+	uint32_t cappa;
 	
 	if(envid2env(envid, &e, 0) || e->env_status == ENV_FREE)
 		return -E_BAD_ENV;
@@ -431,6 +432,19 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm)
 		if(e->env_epriority < curenv->env_epriority)
 			sched_update(e, curenv->env_epriority);
 		return -E_IPC_NOT_RECV;
+	}
+	
+	if(capva >= UTOP)
+		cappa = -1;
+	else if(capva != PTE_ADDR(capva))
+		return -E_INVAL;
+	else
+	{
+		pte_t * pte;
+		page_lookup(curenv->env_pgdir, capva, &pte);
+		if(!pte)
+			return -E_INVAL;
+		cappa = PTE_ADDR(*pte);
 	}
 	
 	if(srcva >= UTOP)
@@ -465,6 +479,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm)
 	
 	e->env_ipc_from = curenv->env_id;
 	e->env_ipc_value = value;
+	e->env_ipc_cap = cappa;
 	e->env_ipc_recving = 0;
 	e->env_status = ENV_RUNNABLE;
 	e->env_tf.tf_eax = 0;
@@ -901,7 +916,7 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 		case SYS_ipc_recv:
 			return sys_ipc_recv(a1, a2, a3);
 		case SYS_ipc_try_send:
-			return sys_ipc_try_send(a1, a2, a3, a4);
+			return sys_ipc_try_send(a1, a2, a3, a4, a5);
 		case SYS_batch_syscall:
 			return sys_batch_syscall((register_t *) a1, a2, a3);
 		case SYS_kernbin_page_alloc:

@@ -221,7 +221,7 @@ dup2env_send(int fdnum, envid_t envid)
 	// Send the fd page
 	va = (uint8_t*) fd;
 	pte = vpt[VPN(va)];
-	ipc_send(envid, 0, va, pte & PTE_USER);
+	ipc_send(envid, 0, va, pte & PTE_USER, NULL);
 
 	// Send the data pages
 	va = fd2data(fd);
@@ -237,12 +237,12 @@ dup2env_send(int fdnum, envid_t envid)
 				// then send mapped pages that follow.
 				break;
 			}
-			ipc_send(envid, i, va+i, pte & PTE_USER);
+			ipc_send(envid, i, va+i, pte & PTE_USER, NULL);
 		}
 	}
 
 	// Note end of data
-	ipc_send(envid, 0, NULL, 0);
+	ipc_send(envid, 0, NULL, 0, NULL);
 
 	return 0;
 }
