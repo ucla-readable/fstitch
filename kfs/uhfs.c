@@ -326,6 +326,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		free(data);
 	}
 
+	// FIXME: support lfses that do not support file_size
 	target_size = filesize;
 
 	// FIXME if offset > filesize, allocate blocks
