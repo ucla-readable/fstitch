@@ -282,8 +282,10 @@ fsck_dir_cleanup:
 	return r;
 }
 
-static int fsck(LFS_t * object)
+int josfs_fsck(LFS_t * object)
 {
+	if ((OBJMAGIC(object) != JOSFS_FS_MAGIC))
+		return -E_INVAL;
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	const uint32_t s_nblocks = super->s_nblocks;
 	int8_t *free_bitmap = malloc(sizeof(int8_t) * s_nblocks);
@@ -338,7 +340,7 @@ static int fsck(LFS_t * object)
 			}
 			else {
 				printf("hash_set_it_create failed!\n");
-				r = -1;
+				r = -E_NO_MEM;
 				break; // gonna leak mem, but if we're here, we're probably screwed
 			}
 		}
@@ -356,16 +358,12 @@ static int fsck(LFS_t * object)
 	}
 	else {
 		printf("hash_set_create failed!\n");
-		r = -1;
+		r = -E_NO_MEM;
 	}
 
 	free(blocklist);
 	free(free_bitmap);
 	free(used_bitmap);
-	if (r < 0)
-		printf("JOS FSCK encountered some problems\n");
-	else
-		printf("JOS FSCK Complete!\n");
 	return r;
 }
 
@@ -1887,9 +1885,7 @@ static int josfs_destroy(LFS_t * lfs)
 	return 0;
 }
 
-// do_fsck: input  - fsck() if *do_fsck != 0
-//          output - >= 0 if no errors, < 0 if errors
-LFS_t * josfs(BD_t * block_device, int * do_fsck)
+LFS_t * josfs(BD_t * block_device)
 {
 	struct lfs_info * info;
 	LFS_t * lfs = malloc(sizeof(*lfs));
@@ -1948,10 +1944,6 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 		free(lfs);
 		return NULL;
 	}
-
-	if (do_fsck)
-		if (*do_fsck)
-			*do_fsck = fsck(lfs);
 
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{

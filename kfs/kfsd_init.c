@@ -31,7 +31,7 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
-#define USE_WB_CACHE
+//#define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
 #endif
@@ -231,10 +231,10 @@ int kfsd_init(void)
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
 	const bool enable_internal_journaling = 0;
+	const bool enable_fsck = 1;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
-	int josfs_fsck = 1;
 
 	/* discover partitions */
 	ptbl = pc_ptable_init(bd);
@@ -276,6 +276,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	{
 		BD_t * cache;
 		BD_t * resizer;
+		LFS_t * josfs_lfs;
 		LFS_t * lfs;
 		bool journaling = 0;
 		LFS_t * journal = NULL;
@@ -315,7 +316,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 			if (! (journal_queue = journal_queue_bd(cache)) )
 				kfsd_shutdown();
-			if ((lfs = josfs(journal_queue, &josfs_fsck)))
+			if ((lfs = josfs_lfs = josfs(journal_queue)))
 			{
 				if ((journal = journal_lfs(lfs, lfs, journal_queue)))
 				{
@@ -332,7 +333,17 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				(void) DESTROY(journal_queue);			
 		}
 		else
-			lfs = josfs(cache, &josfs_fsck);
+			lfs = josfs_lfs = josfs(cache);
+
+		if (josfs_lfs && enable_fsck)
+		{
+			printf("Fscking... ");
+			int r = josfs_fsck(josfs_lfs);
+			if (r >= 0)
+				printf("done.\n");
+			else
+				printf("errors found: %e\n");
+		}
 
 		if (lfs)
 			printf("Using josfs");
@@ -390,14 +401,13 @@ CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal)
 	LFS_t * j_lfs;
 	LFS_t * data_lfs;
 	CFS_t * u;
-	int josfs_fsck = 1;
 
 	if (! (j_lfs = wholedisk(j_bd)) )
 		kfsd_shutdown();
 
 	if (! (journal_queue = data_bd = journal_queue_bd(data_bd)) )
 		kfsd_shutdown();
-	if (! (data_lfs = josfs(data_bd, &josfs_fsck)) )
+	if (! (data_lfs = josfs(data_bd)) )
 		kfsd_shutdown();
 
 	if (! (data_lfs = journal_lfs(j_lfs, data_lfs, journal_queue)) )

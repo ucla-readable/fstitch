@@ -496,7 +496,7 @@ size_t journal_lfs_max_bandwidth(const LFS_t * journal)
 }
 
 #include <kfs/josfs_base.h>
-LFS_t * josfs(BD_t * block_device, int * do_fsck)
+LFS_t * josfs(BD_t * block_device)
 {
 	const envid_t fsid = find_fs();
 	uint32_t lfs_id;
@@ -504,12 +504,23 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 	INIT_PG(JOSFS_BASE, josfs_base);
 
 	pg->bd = (uint32_t) OBJLOCAL(block_device);
-	pg->do_fsck = do_fsck ? *do_fsck : 0;
 
 	SEND_PG();
 	lfs_id = RECV_PG();
 
 	return create_lfs(lfs_id);
+}
+
+int josfs_fsck(LFS_t * lfs)
+{
+	const envid_t fsid = find_fs();
+
+	INIT_PG(JOSFS_FSCK, josfs_fsck);
+
+	pg->lfs = (uint32_t) OBJLOCAL(lfs);
+
+	SEND_PG();
+	return RECV_PG();
 }
 
 #include <kfs/wholedisk_lfs.h>

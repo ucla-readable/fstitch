@@ -24,12 +24,11 @@ static bool use_wb_cache = 1;
 
 static struct Scfs_metadata md;
 
-static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, bool stripper)
+static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, bool enable_fsck, uint32_t cache_nblks, bool stripper)
 {
 //	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
-	int josfs_fsck = !enable_journal;
 
 	/* discover partitions */
 /* // pc_ptable_init not yet supported by kfs rpc
@@ -69,6 +68,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 	{
 		BD_t * cache;
 		BD_t * resizer;
+		LFS_t * josfs_lfs;
 		LFS_t * lfs;
 		bool journaling = 0;
 		LFS_t * journal = NULL;
@@ -117,8 +117,19 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 				exit();
 			}
 
-			if ((lfs = josfs(journal_queue, &josfs_fsck)))
+			if ((lfs = josfs_lfs = josfs(journal_queue)))
 			{
+				if (enable_jfsck)
+				{
+					if (verbose)
+						printf("Fscking pre-journal-replayed filesystem... ");
+					int r = josfs_fsck(lfs);
+					if (r < 0)
+						fprintf(STDERR_FILENO, "errors found: %e\n");
+					else if (verbose)
+						printf("done.\n");
+				}
+
 				if ((journal = journal_lfs(lfs, lfs, journal_queue)))
 				{
 					lfs = journal;
@@ -128,19 +139,30 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 				{
 					(void) DESTROY(lfs);
 					(void) DESTROY(journal_queue);
-					printf("%s: journal_lfs() failed\n", __FUNCTION__);
+					fprintf(STDERR_FILENO, "%s: journal_lfs() failed\n", __FUNCTION__);
 					return NULL;
 				}
 			}
 			else
 			{
 				(void) DESTROY(journal_queue);
-				printf("%s: josfs() failed\n", __FUNCTION__);
+				fprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
 				return NULL;
 			}
 		}
 		else
-			lfs = josfs(cache, &josfs_fsck);
+			lfs = josfs_lfs = josfs(cache);
+
+		if (josfs_lfs && enable_fsck)
+		{
+			if (verbose)
+				printf("Fscking... ");
+			int r = josfs_fsck(josfs_lfs);
+			if (r < 0)
+				fprintf(STDERR_FILENO, "errors found: %e\n");
+			else if (verbose)
+				printf("done.\n");
+		}
 
 		if (lfs)
 			printf("Using josfs");
@@ -166,8 +188,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 			exit();
 		}
 
-		if (verbose)
-			printf("uhfs made, OBJLOCAL(u) = 0x%08x\n", OBJLOCAL(u));
 		return u;
 	}
 
@@ -176,16 +196,21 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 
 static void print_usage(const char * bin)
 {
-	printf("Usage: %s -d <device> -m <mount_point> [-j <on|off>] [-$ <num_blocks>] [-v] [-wb|-wt]\n", bin);
+	printf("Usage:\n");
+	printf("%s -d <device> -m <mount_point> [-v]\n", bin);
+	printf("    [-j <on|off> [-jfsck <on|off>]] [-fsck <on|off]\n");
+	printf("    [-$ <num_blocks>] [-wb|-wt]\n");
 	printf("  <device> is one of:\n");
-	printf("    ide <controller> <diskno>\n");
-	printf("    nbd <host> [-p <port>]\n");
+	printf("    ide  <controllerno> <diskno>\n");
+	printf("    nbd  <host> [-p <port>]\n");
 	printf("    loop <file>\n");
 }
 
-static void parse_options(int argc, const char ** argv, bool * journal, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, bool * fsck, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
+	const char * fsck_str;
+	const char * jfsck_str;
 	const char * cache_num_blocks_str;
 
 	if (get_arg_idx(argc, argv, "-v"))
@@ -200,6 +225,38 @@ static void parse_options(int argc, const char ** argv, bool * journal, uint32_t
 		else
 		{
 			fprintf(STDERR_FILENO, "Illegal -j option \"%s\"\n", journal_str);
+			print_usage(argv[0]);
+			exit();
+		}
+	}
+
+	if ((jfsck_str = get_arg_val(argc, argv, "-jfsck")))
+	{
+		if (!strcmp("on", jfsck_str))
+			*jfsck = 1;
+		else if (!strcmp("off", jfsck_str))
+			*jfsck = 0;
+		else
+		{
+			fprintf(STDERR_FILENO, "Illegal -jfsck option \"%s\"\n", jfsck_str);
+			print_usage(argv[0]);
+			exit();
+		}
+
+	}
+
+	if (!*journal && *jfsck)
+		printf("Ignoring pre-journal-replay fsck request, journaling is off.\n");
+
+	if ((fsck_str = get_arg_val(argc, argv, "-fsck")))
+	{
+		if (!strcmp("on", fsck_str))
+			*fsck = 1;
+		else if (!strcmp("off", fsck_str))
+			*fsck = 0;
+		else
+		{
+			fprintf(STDERR_FILENO, "Illegal -fsck option \"%s\"\n", fsck_str);
 			print_usage(argv[0]);
 			exit();
 		}
@@ -349,6 +406,7 @@ void umain(int argc, const char ** argv)
 	BD_t * disk;
 	CFS_t * cfs;
 	bool journal = 0;
+	bool fsck = 0, jfsck = 0;
 	uint32_t cache_num_blocks = 128;
 	bool stripper = 1;
 	CFS_t * tclass;
@@ -368,13 +426,13 @@ void umain(int argc, const char ** argv)
 		exit();
 	}
 
-	parse_options(argc, argv, &journal, &cache_num_blocks);
+	parse_options(argc, argv, &journal, &jfsck, &fsck, &cache_num_blocks);
 
 	disk = create_disk(argc, argv, &stripper);
 	if (!disk)
 		exit();
 
-	cfs = build_uhfs(disk, journal, cache_num_blocks, stripper);
+	cfs = build_uhfs(disk, journal, jfsck, fsck, cache_num_blocks, stripper);
 	if (!cfs)
 		exit();
 
