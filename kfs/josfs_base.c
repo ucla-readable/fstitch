@@ -405,7 +405,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		return -1;
 	}
 
-	if (head && tail && 0) {
+	if (head && tail) {
 		if (((uint32_t *) bdesc->ddesc->data)[blockno / 32] >> (blockno % 32) == value) {
 			/* already has the right value */
 			bdesc_drop(&bdesc);
