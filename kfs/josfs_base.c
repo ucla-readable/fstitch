@@ -1069,7 +1069,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	JOSFS_File_t * oldfile;
 	JOSFS_File_t * newfile;
 	JOSFS_File_t temp_file;
-	int i, r, oldindex, offset;
+	int i, r, offset;
 	chdesc_t * oldhead = NULL, * newtail, * curhead;
 
 	if (head && tail)
@@ -1079,7 +1079,6 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	if (oldfdesc) {
 		old = (struct josfs_fdesc *) oldfdesc;
 		oldfile = ((JOSFS_File_t *) old->dirb->ddesc->data) + old->index;
-		oldindex = old->index;
 		memcpy(&temp_file, oldfile, sizeof(JOSFS_File_t));
 		josfs_free_fdesc(object, oldfdesc);
 
@@ -1094,7 +1093,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 
 			if (head && tail) {
 				curhead = *head;
-				offset = oldindex * sizeof(JOSFS_File_t);
+				offset = new->index * sizeof(JOSFS_File_t);
 				if ((r = chdesc_create_byte(new->dirb, offset, sizeof(JOSFS_File_t), &temp_file, head, &newtail)) < 0) {
 					josfs_free_fdesc(object, newfdesc);
 					return r;
