@@ -65,7 +65,7 @@ static size_t hash_ptr(const void * k, size_t tbl_size)
 	return (hash % tbl_size);
 }
 
-// Instead of the rotating hash above we could use the multiplcation method
+// Instead of the rotating hash above we could use the multiplication method
 // (CLR, 11.3.2). Implement math.c using assembly, then try this out.
 #if 0
 // A is s/2^32, close to Knuth's suggested (sqrt(5)-1)/2.
