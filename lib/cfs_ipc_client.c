@@ -324,7 +324,7 @@ cfs_rmdir(char *name)
 }
 
 int
-cfs_get_features(char *name, void *dump)
+cfs_get_num_features(char *name)
 {
 	int r;
 	envid_t fsid;
@@ -333,11 +333,37 @@ cfs_get_features(char *name, void *dump)
 
 	fsid = find_fs();
 
-	struct Scfs_get_features *pg = (struct Scfs_get_features*)
+	struct Scfs_get_num_features *pg = (struct Scfs_get_num_features*)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
-	pg->scfs_type = SCFS_GET_FEATURES;
+	pg->scfs_type = SCFS_GET_NUM_FEATURES;
 	strcpy(pg->name, name);
+
+	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
+
+	do {
+		r = ipc_recv(&from, 0, &perm, 0);
+		if (from == 0) panic("cfs_get_features::ipc_recv\n");
+	} while (from != fsid);
+	return r;
+}
+
+int
+cfs_get_feature(char *name, int num, char *dump)
+{
+	int r;
+	envid_t fsid;
+	envid_t from;
+	uint32_t perm;
+
+	fsid = find_fs();
+
+	struct Scfs_get_feature *pg = (struct Scfs_get_feature*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_GET_FEATURE;
+	strcpy(pg->name, name);
+	pg->num = num;
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 

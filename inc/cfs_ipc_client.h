@@ -18,5 +18,5 @@ int cfs_get_metadata(char *name, int id, struct Scfs_metadata *md);
 int cfs_set_metadata(char *name, struct Scfs_metadata *md);
 int cfs_sync(char *name);
 int cfs_shutdown(void);
-    
+
 #endif // not _CFS_IPC_CLIENT_H_
