@@ -49,7 +49,8 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct partition_info * info = (struct partition_info *) object->instance;
-	int value, refs = block->refs;
+	uint32_t refs = block->refs;
+	int value;
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
