@@ -36,6 +36,9 @@ struct lfs_info
 	BD_t * ubd;
 	bdesc_t * super_block;
 	bdesc_t * bitmap_cache; // Bitmap mini write through cache!
+	int color;
+	int p;
+	int m;
 };
 
 struct josfs_fdesc {
@@ -249,6 +252,13 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 		}
 
 		DFprintf("Checking %s\n", entry.d_name);
+
+		if (info->m >= 0 && info->p < 140) {
+			(info->p)++;
+			textbar_set_progress(info->p, info->color);
+			sleep(5);
+		}
+
 		blockno = i / JOSFS_BLKFILES;
 		dirblock = josfs_get_file_block(object, (fdesc_t *) fdesc, blockno * JOSFS_BLKSIZE);
 		if (dirblock) {
@@ -299,6 +309,9 @@ int josfs_fsck(LFS_t * object)
 	hash_set_it_t * hsitr = NULL;
 	int reserved = 2 + (s_nblocks / JOSFS_BLKBITSIZE);
 	int d = 0, r = 0;
+	info->m = -1;
+	info->p = 5;
+	info->color = 10;
 
 	if (s_nblocks % JOSFS_BLKBITSIZE)
 		reserved++;
@@ -312,11 +325,17 @@ int josfs_fsck(LFS_t * object)
 
 	hsdirs = hash_set_create();
 	if (hsdirs) {
+		info->m = textbar_init(-1);
 		temp_fdesc.file = &rootfile;
 		temp_fdesc.fullpath[0] = 0;
 
 		memcpy(&rootfile, &super->s_root, sizeof(JOSFS_File_t));
 		fsck_file(object, rootfile, reserved, free_bitmap, used_bitmap, blocklist);
+
+		if (info->m >= 0) {
+			textbar_set_progress(info->p, info->color);
+			sleep(5);
+		}
 
 		do {
 			if (r == 0)
@@ -346,8 +365,18 @@ int josfs_fsck(LFS_t * object)
 		}
 		while (dirfile != NULL);
 
+		info->p = 140;
+
 		if (r >= 0) {
 			for (j = 0; j < s_nblocks; j++) {
+				if (info->m >= 0) {
+					if (info->p < 141 + (j*20/s_nblocks)) {
+						(info->p)++;
+						textbar_set_progress(info->p, info->color);
+						sleep(5);
+					}
+				}
+
 				if (used_bitmap[j] > 0)
 					printf("block %d is marked as used, but unclaimed\n", j);
 				else if (used_bitmap[j] < 0)
@@ -361,6 +390,18 @@ int josfs_fsck(LFS_t * object)
 		r = -E_NO_MEM;
 	}
 
+	if (r < 0) {
+		if (info->m >= 0) {
+			for (j = 0; j < 5; j++) {
+				sleep(75);
+				textbar_set_progress(info->p, 12);
+				sleep(75);
+				textbar_set_progress(0, 12);
+			}
+		}
+	}
+
+	textbar_close();
 	free(blocklist);
 	free(free_bitmap);
 	free(used_bitmap);
