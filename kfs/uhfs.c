@@ -29,13 +29,15 @@
 static int link_chains(chdesc_t ** prevhead, chdesc_t * head, chdesc_t * tail)
 {
 	int r;
+	assert((head && tail) || (!head && !tail));
 
-	if (tail && *prevhead)
-		if ((r = chdesc_add_depend(*prevhead, tail)) < 0)
-			return r;
-
-	if (head)
+	if (head && tail)
+	{
+		if (*prevhead)
+			if ((r = chdesc_add_depend(*prevhead, tail)) < 0)
+				return r;
 		*prevhead = head;
+	}
 
 	return 0;
 }
