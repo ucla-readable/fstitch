@@ -120,7 +120,7 @@ struct Scfs_shutdown {
 //
 // CFS "data-page-blobs"
 
-struct Scfs_metdata {
+struct Scfs_metadata {
 	uint32_t id;
 	size_t size;
 	uint8_t data[PGSIZE - sizeof(int) - sizeof(uint32_t)];
