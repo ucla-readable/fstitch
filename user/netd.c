@@ -80,6 +80,28 @@ client_state_init(struct client_state *cs)
 	buf_init(&cs->send_buf);
 }
 
+static void
+gc_listens()
+{
+	err_t err;
+	int i;
+
+	for (i = 0; i < NENV; i++)
+	{
+		if (listen_states[i].pcb
+			 && (envs[i].env_id != listen_states[i].listener
+				  || envs[i].env_status == ENV_FREE))
+		{
+			if((err = tcp_close(listen_states[i].pcb)) != ERR_OK)
+			{
+				fprintf(STDERR_FILENO, "netd gc_listens: tcp_close: %s, aborting.\n", lwip_strerr(err));
+				tcp_abort(listen_states[i].pcb);
+			}
+			listen_states[i].pcb = NULL;
+		}
+	}
+}
+
 /*---------------------------------------------------------------------------*/
 static void
 setup_client_netd_pipes(envid_t client, int *to_client, int *from_client)
@@ -441,7 +463,7 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 
 	ls = (struct listen_state*) arg;
 
-	if (!ls->acceptor)
+	if (!ls->acceptor || envs[ENVX(ls->acceptor)].env_status == ENV_FREE)
 	{
 		// No env is waiting to accept a new connection, tell lwip not
 		// enough memory, which is sort of similar.
@@ -452,7 +474,17 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 		// lib/net/core/tcp_in.c:574: pcb->accept != NULL
 		// and then crash in a checksum fuction. Returning ERR_MEM is a hack
 		// workaround to avoid this problem.
-		fprintf(STDERR_FILENO, "netd: !ls->acceptor\n");
+		fprintf(STDERR_FILENO, "netd: ");
+		if (!ls->acceptor)
+			fprintf(STDERR_FILENO, "!ls->acceptor");
+		else
+			fprintf(STDERR_FILENO, "ls->acceptor no longer around");
+		fprintf(STDERR_FILENO, ", on %s:%d, from %s:%d\n",
+				  inet_iptoa(pcb->local_ip), pcb->local_port,
+				  inet_iptoa(pcb->remote_ip), pcb->remote_port);
+
+		gc_listens();
+
 		return ERR_MEM;
 	}
 
@@ -586,28 +618,6 @@ serve_connect(envid_t whom, struct Netreq_connect *req)
 	err = tcp_connect(pcb, &req->req_ipaddr, req->req_port, netd_connect);
 	if (err != ERR_OK)
 		panic("tcp_connect: %s", lwip_strerr(err));
-}
-
-static void
-gc_listens()
-{
-	err_t err;
-	int i;
-
-	for (i = 0; i < NENV; i++)
-	{
-		if (listen_states[i].pcb
-			 && (envs[i].env_id != listen_states[i].listener
-				  || envs[i].env_status == ENV_FREE))
-		{
-			if((err = tcp_close(listen_states[i].pcb)) != ERR_OK)
-			{
-				fprintf(STDERR_FILENO, "netd gc_listens: tcp_close: %s, aborting.\n", lwip_strerr(err));
-				tcp_abort(listen_states[i].pcb);
-			}
-			listen_states[i].pcb = NULL;
-		}
-	}
 }
 
 void
