@@ -132,7 +132,11 @@ strtol(const char *s, char **endptr, int base)
 
 	if (endptr)
 		*endptr = (char*)s;
-	return val;
+
+	if (neg)
+		return -val;
+	else
+		return val;
 }
 
 void *
