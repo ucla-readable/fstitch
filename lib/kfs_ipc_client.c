@@ -276,8 +276,8 @@ static CFS_t * create_cfs(uint32_t id)
 	OBJLOCAL(cfs) = (void *) id;
 	r = kic_get_flags_magic((object_t *) cfs);
 	assert(r >= 0); // TODO: handle error
-	r = OBJASSIGN(cfs, kic, get_config);
-	r = OBJASSIGN(cfs, kic, get_status);
+	OBJASSIGN(cfs, kic, get_config);
+	OBJASSIGN(cfs, kic, get_status);
 	DESTRUCTOR(cfs, kic_cfs, destroy);
 
 	add_obj(id, cfs);
