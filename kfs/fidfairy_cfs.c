@@ -346,6 +346,8 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
 	if (fidfairy_cfs_exists)
 		panic("fidfairy can currently have at most one instance.");
 
+	if (!frontend_cfs)
+		return NULL;
 
 	cfs = malloc(sizeof(*cfs));
 	if (!cfs)
