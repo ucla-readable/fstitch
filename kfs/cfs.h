@@ -21,9 +21,9 @@ struct CFS {
 	DECLARE(CFS_t, int, rename, const char * oldname, const char * newname);
 	DECLARE(CFS_t, int, mkdir, const char * name);
 	DECLARE(CFS_t, int, rmdir, const char * name);
-	DECLARE(CFS_t, const feature_t *, get_features);
-	DECLARE(CFS_t, int, get_metadata, int fid, uint32_t id, ...);
-	DECLARE(CFS_t, int, set_metadata, int fid, uint32_t id, ...);
+	DECLARE(CFS_t, const feature_t *, get_features, const char * name);
+	DECLARE(CFS_t, int, get_metadata, const char * name, uint32_t id, ...);
+	DECLARE(CFS_t, int, set_metadata, const char * name, uint32_t id, ...);
 	DECLARE(CFS_t, int, sync, int fid);
 	void * instance;
 };
