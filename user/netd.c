@@ -37,8 +37,8 @@ struct listen_state {
 // Statically allocate these so that we can find expired listens
 struct listen_state listen_states[NENV];
 
-// This value should probably be about the size you find you need pipes, to
-// have to get good throughput.
+// This value should probably be about the size you find you need pipes to
+// have, to get good throughput.
 #define PER_TCP_PCB_BUFFER (16*PGSIZE)
 
 struct buf {
@@ -86,7 +86,7 @@ client_state_init(struct client_state *cs)
 }
 
 static void
-gc_listens()
+gc_listens(void)
 {
 	err_t err;
 	int i;
@@ -889,8 +889,8 @@ netd_net(envid_t ipcrecv, int fd, int argc, const char **argv)
 // The netd ipc receive process
 
 // Va at which to receive page mappings containing client reqs.
-// This is the same va as serv.c's, why not.
-#define REQVA (0x10000000 - PGSIZE)
+// This is where kfs/uhfs.h begins using memory, why not?
+#define REQVA (0xC0000000 - PGSIZE)
 
 static void
 netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
