@@ -156,7 +156,7 @@ static BD_t * josfs_get_blockdev(LFS_t * object)
 	return ((struct lfs_info *) object->instance)->ubd;
 }
 
-static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose)
+static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
     struct lfs_info * info = (struct lfs_info *) object->instance;
     int blockno;
@@ -212,25 +212,25 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, stru
 }
 
 // TODO
-static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block)
+static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
     return 0;
 }
 
 // TODO
-static fdesc_t * josfs_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link)
+static fdesc_t * josfs_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
     return 0;
 }
 
 // TODO
-static int josfs_rename(LFS_t * object, const char * oldname, const char * newname)
+static int josfs_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
     return 0;
 }
 
 // TODO
-static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file)
+static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
     /*
     struct JOS_File * f;
@@ -251,7 +251,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file)
 }
 
 // TODO
-static int josfs_free_block(LFS_t * object, bdesc_t * block)
+static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
     if (block->number == 0)
         return -1;
@@ -260,12 +260,12 @@ static int josfs_free_block(LFS_t * object, bdesc_t * block)
 }
 
 // TODO
-static int josfs_remove_name(LFS_t * object, const char * name)
+static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
     return 0;
 }
 
-static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data)
+static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
     int r;
     struct lfs_info * info = (struct lfs_info *) object->instance;
@@ -307,7 +307,7 @@ static int josfs_get_metadata(LFS_t * object, const char * name, uint32_t id, si
     return 0;
 }
 
-static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data)
+static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
     // TODO: lookup file path
     struct jos_fdesc foo;

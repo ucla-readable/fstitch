@@ -24,7 +24,7 @@ static BD_t * wholedisk_get_blockdev(LFS_t * object)
 	return ((struct wd_info *) object->instance)->bd;
 }
 
-static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose)
+static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	/* always fail - no free blocks */
 	return NULL;
@@ -56,37 +56,37 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, 
 	return -1;
 }
 
-static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block)
+static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
 	return -1;
 }
 
-static fdesc_t * wholedisk_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link)
+static fdesc_t * wholedisk_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
 	return NULL;
 }
 
-static int wholedisk_rename(LFS_t * object, const char * oldname, const char * newname)
+static int wholedisk_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
 	return -1;
 }
 
-static bdesc_t * wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file)
+static bdesc_t * wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
 	return NULL;
 }
 
-static int wholedisk_free_block(LFS_t * object, bdesc_t * block)
+static int wholedisk_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
 	return -1;
 }
 
-static int wholedisk_remove_name(LFS_t * object, const char * name)
+static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
 	return -1;
 }
 
-static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data)
+static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct wd_info * info = (struct wd_info *) object->instance;
 	int value;
@@ -120,7 +120,7 @@ static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id
 	return -1;
 }
 
-static int wholedisk_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data)
+static int wholedisk_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	return -1;
 }
