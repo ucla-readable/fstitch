@@ -107,7 +107,8 @@ int kfsd_init(void)
 				fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
 				kfsd_shutdown();
 			}
-			OBJFLAGS(j_bd) |= OBJ_PERSISTENT;
+			if (j_bd)
+				OBJFLAGS(j_bd) |= OBJ_PERSISTENT;
 		}
 
 		if (! (j_bd = construct_cacheing(j_bd, 32)) )
@@ -120,7 +121,8 @@ int kfsd_init(void)
 			fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
 			kfsd_shutdown();
 		}
-		OBJFLAGS(data_bd) |= OBJ_PERSISTENT;
+		if (data_bd)
+			OBJFLAGS(data_bd) |= OBJ_PERSISTENT;
 		if (! (data_bd = construct_cacheing(data_bd, 32)) )
 			kfsd_shutdown();
 		if (! (data_bd = chdesc_stripper_bd(data_bd)) )
@@ -154,7 +156,8 @@ int kfsd_init(void)
 
 		if (! (bd = ide_pio_bd(0, 0)) )
 			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0) failed\n");
-		OBJFLAGS(bd) |= OBJ_PERSISTENT;
+		if (bd)
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
 		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)
 			kfsd_shutdown();
@@ -166,7 +169,8 @@ int kfsd_init(void)
 
 		if (! (bd = ide_pio_bd(0, 1)) )
 			fprintf(STDERR_FILENO, "ide_pio_bd(0, 1) failed\n");
-		OBJFLAGS(bd) |= OBJ_PERSISTENT;
+		if (bd)
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
 		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)		
 			kfsd_shutdown();
@@ -235,7 +239,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			if (type == PTABLE_KUDOS_TYPE)
 			{
 				partitions[i-1] = pc_ptable_bd(ptbl, i);
-				OBJFLAGS(partitions[i-1]) |= OBJ_PERSISTENT;
+				if (partitions[i-1])
+					OBJFLAGS(partitions[i-1]) |= OBJ_PERSISTENT;
 			}
 		}
 		pc_ptable_free(ptbl);
