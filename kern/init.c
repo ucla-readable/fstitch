@@ -17,6 +17,7 @@
 #include <kern/sb16.h>
 #include <kern/3c509.h>
 #include <kern/elf.h>
+#include <kern/breakpoints.h>
 #include <kern/version.h>
 
 void
@@ -47,6 +48,7 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	outb(0x3F2, 0);
 
 	set_kernel_symtbls();
+	breakpoints_init();
 
 	// Lab 2 memory management initialization functions
 	i386_detect_memory(boot_eax, boot_ebx);

@@ -243,13 +243,13 @@ mon_breakpoint(int argc, char **argv, struct Trapframe *tf)
 
 			int len = strtol(argv[switch_argn+1], NULL, 10);
 
-			return breakpoints_set(reg, addr, mem_exec, w_rw, len);
+			return breakpoints_set(envid, reg, addr, mem_exec, w_rw, len);
 		}
 		else if(!strcmp("exec", argv[switch_argn]))
 		{
 			mem_exec = 1;
 
-			return breakpoints_set(reg, addr, mem_exec, 0, 0);
+			return breakpoints_set(envid, reg, addr, mem_exec, 0, 0);
 		}
 		else
 		{
@@ -261,7 +261,7 @@ mon_breakpoint(int argc, char **argv, struct Trapframe *tf)
 			  || !strcmp("off", argv[switch_argn]))
 	{
 		bool active;
-		if(!strcmp("on", argv[switch_argn]))
+		if(!strcmp("on", argv[switch_argn++]))
 			active = 1;
 		else
 			active = 0;
@@ -273,11 +273,11 @@ mon_breakpoint(int argc, char **argv, struct Trapframe *tf)
 			reg = -1;
 		else
 		{
-			printf("Bad on/off argument\n");
+			printf("Bad on/off argument, argc = %d\n", argc);
 			return 0;
 		}
 
-		return breakpoints_active(reg, active);
+		return breakpoints_active(reg, active, 0);
 	}
 	else if(!strcmp("ss", argv[switch_argn]))
 	{

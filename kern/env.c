@@ -13,6 +13,7 @@
 #include <kern/monitor.h>
 #include <kern/sched.h>
 #include <kern/kclock.h>
+#include <kern/breakpoints.h>
 
 int env_debug = 0;
 struct Env* envs = NULL;		// All environments
@@ -493,6 +494,7 @@ env_run(struct Env* e)
 		curenv->env_runs = 2;
 		curenv->env_tsc = 0;
 	}
+	breakpoints_sched(e->env_id);
 	curenv->env_jiffies = jiffies;
 	env_tsc = read_tsc();
 	lcr3(e->env_cr3);
