@@ -73,11 +73,23 @@ void cfs_ipc_serve_run()
 
 static void serve_open(envid_t envid, struct Scfs_open * req)
 {
-	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
-	int r;
-#warning FIXME Chris
-	r = CALL(frontend_cfs, open, req->path, req->mode, 0);
-	ipc_send(envid, r, NULL, 0);
+	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
+	if (!prevrecv->type || prevrecv->envid != envid)
+	{
+		Dprintf("%s [1]: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
+		prevrecv->envid = envid;
+		prevrecv->type = req->scfs_type;
+		memcpy(prevrecv->scfs, req, PGSIZE);
+	}
+	else
+	{
+		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
+		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
+		void * fdpage = req;
+		int r;
+		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void*) fdpage);
+		ipc_send(envid, r, NULL, 0);
+	}
 }
 
 static void serve_close(envid_t envid, struct Scfs_close * req)
