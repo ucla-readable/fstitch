@@ -22,22 +22,21 @@
 #define E_FILE_EXISTS	13	// File already exists
 #define E_NOT_EXEC	14	// File not a valid executable
 #define E_NOT_DIR	15	// File is not a directory
+#define E_NOT_EMPTY 16 // Directory not empty
 
-#define E_BUSY		16	// Device is busy
-#define E_NO_DEV	17	// No such device
-#define E_PERM		18	// Permission denied
-#define E_TIMEOUT	19	// Timed out
+#define E_BUSY		17	// Device is busy
+#define E_NO_DEV	18	// No such device
+#define E_PERM		19	// Permission denied
+#define E_TIMEOUT	20	// Timed out
 
-#define E_BAD_SYM 20 // Elf symbol doesn't exist
-#define E_SYMTBL  21 // No elf symbol/symbol string table loaded in kernel
+#define E_BAD_SYM 21 // Elf symbol doesn't exist
+#define E_SYMTBL  22 // No elf symbol/symbol string table loaded in kernel
 
-#define E_NET_ABRT 22 // Net connection aborted
-#define E_NET_RST  23 // Net connection reset
-#define E_NET_CONN 24 // No connection
-#define E_NET_USE  25 // Net address in use
-#define E_NET_IF   26 // Net low-level netif error
-
-#define E_NOT_EMPTY   26 // Directory not empty
+#define E_NET_ABRT 23 // Net connection aborted
+#define E_NET_RST  24 // Net connection reset
+#define E_NET_CONN 25 // No connection
+#define E_NET_USE  26 // Net address in use
+#define E_NET_IF   27 // Net low-level netif error
 
 #define MAXERROR	27
 

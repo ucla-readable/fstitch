@@ -35,6 +35,7 @@ static char *error_string[MAXERROR+1] =
 	"file already exists",
 	"file is not a valid executable",
 	"not a directory",
+	"directory not empty",
 	"device busy",
 	"no such device",
 	"permission denied",
@@ -45,8 +46,7 @@ static char *error_string[MAXERROR+1] =
 	"connection reset",
 	"no connection",
 	"address in use",
-	"low-level netif error",
-	"directory not empty"
+	"low-level netif error"
 };
 
 /*
