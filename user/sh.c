@@ -11,6 +11,12 @@
 int debug = 0;
 
 
+// A place to stash a dup of stdin for cases when sh wants to make stdin
+// a file to read from, but then wants spawned children to use sh's original
+// stdin.
+static int stdin_stash = 0;
+
+
 // gettoken(s, 0) prepares gettoken for subsequent calls and returns 0.
 // gettoken(0, token) parses a shell token from the previously set string,
 // null-terminates that token, stores the token pointer in '*token',
@@ -64,7 +70,7 @@ again:
 			// We can't open a file onto a particular descriptor,
 			// so open the file as 'fd',
 			// then check whether 'fd' is 0.
-			// If not, dup 'fd' onto file descriptor 0,
+			// If not, dup2 'fd' onto file descriptor 0,
 			// then close the original 'fd'.
 			
 			fd = open(t, O_RDONLY);
@@ -75,8 +81,26 @@ again:
 			}
 			if(fd)
 			{
-				dup(fd, 0);
-				close(fd);
+				// stash stdin to send to child
+				stdin_stash = dup(STDIN_FILENO);
+				if (stdin_stash < 0)
+				{
+					fprintf(STDERR_FILENO, "Unable to stash stdin, dup: %e\n", stdin_stash);
+					exit();
+				}
+
+				r = dup2(fd, 0);
+				if (r < 0)
+				{
+					fprintf(STDERR_FILENO, "dup2: %e\n", r);
+					exit();
+				}
+				r = close(fd);
+				if (r < 0)
+				{
+					fprintf(STDERR_FILENO, "close: %e\n", r);
+					exit();
+				}
 			}
 				
 			break;
@@ -92,7 +116,7 @@ again:
 			// We can't open a file onto a particular descriptor,
 			// so open the file as 'fd',
 			// then check whether 'fd' is 1.
-			// If not, dup 'fd' onto file descriptor 1,
+			// If not, dup2 'fd' onto file descriptor 1,
 			// then close the original 'fd'.
 			
 			fd = open(t, O_WRONLY | O_CREAT | O_TRUNC);
@@ -103,7 +127,7 @@ again:
 			}
 			if(fd != 1)
 			{
-				dup(fd, 1);
+				dup2(fd, 1);
 				close(fd);
 			}
 			
@@ -118,7 +142,7 @@ again:
 			// data written onto 'p[1]' can be read from 'p[0]'.
 			// Then fork.
 			// The child runs the right side of the pipe:
-			//	Use dup() to duplicate the read end of the pipe
+			//	Use dup2() to duplicate the read end of the pipe
 			//	(p[0]) onto file descriptor 0 (standard input).
 			//	Then close the pipe (both p[0] and p[1]).
 			//	(The read end will still be open, as file
@@ -127,7 +151,7 @@ again:
 			//	command line as a new command.
 			// The parent runs the left side of the pipe:
 			//	Set 'pipe_child' to the child env ID.
-			//	dup() the write end of the pipe onto
+			//	dup2() the write end of the pipe onto
 			//	file descriptor 1 (standard output).
 			//	Then close the pipe.
 			//	Then 'goto runit', to execute this piece of
@@ -149,13 +173,13 @@ again:
 			{
 				/* parent */
 				pipe_child = r;
-				dup(p[1], 1);
+				dup2(p[1], 1);
 				close(p[0]);
 				close(p[1]);
 				goto runit;
 			}
 			/* child */
-			dup(p[0], 0);
+			dup2(p[0], 0);
 			close(p[0]);
 			close(p[1]);
 			goto again;
@@ -207,6 +231,23 @@ runit:
 		for (i = 0; argv[i]; i++)
 			printf(" %s", argv[i]);
 		printf("\n");
+	}
+
+	// Unstash sh's original stdin to pass on to child
+	if (0 < stdin_stash)
+	{
+		r = dup2(stdin_stash, STDIN_FILENO);
+		if (r < 0)
+		{
+			fprintf(STDERR_FILENO, "dup2: %e\n", r);
+			exit();
+		}
+		r = close(stdin_stash);
+		if (r < 0)
+		{
+			fprintf(STDERR_FILENO, "close: %e\n", r);
+			exit();
+		}
 	}
 
 	// Spawn the command!
@@ -349,7 +390,20 @@ umain(int argc, char** argv)
 	if (argc > 1)
 		usage();
 	if (argc == 1) {
-		close(STDIN_FILENO);
+		// stash stdin to send to child
+		stdin_stash = dup(STDIN_FILENO);
+		if (stdin_stash < 0)
+		{
+			fprintf(STDERR_FILENO, "dup2: %e\n", stdin_stash);
+			exit();
+		}
+
+		r = close(STDIN_FILENO);
+		if (r < 0)
+		{
+			fprintf(STDERR_FILENO, "close: %e\n", r);
+			exit();
+		}
 		if ((r = open(argv[0], O_RDONLY)) < 0)
 			panic("open %s: %e", r);
 		assert(r==STDIN_FILENO);

@@ -163,7 +163,7 @@ close_all(void)
 // Closes any previously open file descriptor at 'newfdnum'.
 // This is implemented using virtual memory tricks (of course!).
 int
-dup(int oldfdnum, int newfdnum)
+dup2(int oldfdnum, int newfdnum)
 {
 	int i, r;
 	char* ova, *nva;
@@ -198,6 +198,20 @@ err:
 	for (i = 0; i < PTSIZE; i += PGSIZE)
 		sys_page_unmap(0, nva + i);
 	return r;
+}
+
+// Return a new file descriptor that is a duplicate of file descriptor 'fdnum'.
+int
+dup(int fdnum)
+{
+	struct Fd * fd;
+	int newfdnum;
+
+	newfdnum = fd_alloc(&fd);
+	if (newfdnum < 0)
+		return newfdnum;
+
+	return dup2(fdnum, newfdnum);
 }
 
 // 'dup', but dup to another environment.

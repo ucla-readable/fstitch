@@ -750,14 +750,14 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 			exit();
 		}
 
-		if ((r = dup(p[1], STDOUT_FILENO)) < 0)
+		if ((r = dup2(p[1], STDOUT_FILENO)) < 0)
 		{
-			fprintf(STDERR_FILENO, "dup: %e\n", r);
+			fprintf(STDERR_FILENO, "dup2: %e\n", r);
 			exit();
 		}
-		if ((r = dup(STDOUT_FILENO, STDERR_FILENO)) < 0)
+		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
-			fprintf(STDERR_FILENO, "dup: %e\n", r);
+			fprintf(STDERR_FILENO, "dup2: %e\n", r);
 			exit();
 		}
 
