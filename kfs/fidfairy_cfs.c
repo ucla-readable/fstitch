@@ -37,8 +37,6 @@ typedef struct open_file open_file_t;
 struct fidfairy_state {
 	hash_map_t * open_files;
 	CFS_t * frontend_cfs;
-	uint32_t nfids_created;
-	void * cur_page;
 };
 typedef struct fidfairy_state fidfairy_state_t;
 
@@ -236,8 +234,6 @@ static int fidfairy_destroy(CFS_t * cfs)
 	// TODO: open_file_gc() here? force close all files?
 
 	state->frontend_cfs = NULL;
-	state->nfids_created = 0;
-	state->cur_page = NULL;
 
 	hash_map_destroy(state->open_files);
 	state->open_files = NULL;
@@ -379,8 +375,6 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
 		goto error_cfs;
 	cfs->instance = state;
 	state->frontend_cfs = frontend_cfs;
-	state->nfids_created = 0;
-	state->cur_page = NULL;
 	state->open_files = hash_map_create();
 	if (!state->open_files)
 		goto error_state;
