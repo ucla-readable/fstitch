@@ -302,8 +302,7 @@ serve_shutdown(envid_t envid)
 {
 	printf("Syncing and shutting down filesystem.\n");
 	fs_sync();
-	//printf("0x%08x\n", envid);
-	//ipc_send(envid, 0, 0, 0);
+	ipc_send(envid, 0, NULL, 0);
 	exit();
 }
 
