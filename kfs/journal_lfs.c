@@ -645,6 +645,30 @@ static void timer_callback(void * arg)
 //
 // Intercepted LFS_t functions
 
+static fdesc_t * journal_lookup_name(LFS_t * lfs, const char * name)
+{
+	journal_state_t * state = (journal_state_t *) lfs->instance;
+	/* hide the journal file */
+	if(!strcmp(name, journal_filename))
+		return NULL;
+	return CALL(state->fs, lookup_name, name);
+}
+
+static int journal_get_dirent(LFS_t * lfs, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
+{
+	journal_state_t * state = (journal_state_t *) lfs->instance;
+	int value = CALL(state->fs, get_dirent, file, entry, size, basep);
+	const char * hide = (journal_filename[0] == '/') ? &journal_filename[1] : journal_filename;
+	/* hide the journal filename - slight hack, hides it from all directories */
+	if(value >= 0 && !strcmp(entry->d_name, hide))
+	{
+		entry->d_name[0] = 0;
+		entry->d_reclen = 0;
+		entry->d_namelen = 0;
+	}
+	return value;
+}
+
 static int journal_sync(LFS_t * lfs, const char * name)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
@@ -742,6 +766,11 @@ static int journal_rename(LFS_t * lfs, const char * oldname, const char * newnam
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
 	int r;
+	/* hide the journal file */
+	if(!strcmp(oldname, journal_filename))
+		return -E_NOT_FOUND;
+	if(!strcmp(newname, journal_filename))
+		return -E_INVAL;
 	r = CALL(state->fs, rename, oldname, newname, head, tail);
 	eat_chdesc_graph(*head);
 	*head = *tail = NULL;
@@ -772,6 +801,9 @@ static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head,
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
 	int r;
+	/* hide the journal file */
+	if(!strcmp(name, journal_filename))
+		return -E_NOT_FOUND;
 	r = CALL(state->fs, remove_name, name, head, tail);
 	eat_chdesc_graph(*head);
 	*head = *tail = NULL;
@@ -792,6 +824,9 @@ static int journal_set_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
 	int r;
+	/* hide the journal file */
+	if(!strcmp(name, journal_filename))
+		return -E_NOT_FOUND;
 	r = CALL(state->fs, set_metadata_name, name, id, size, data, head, tail);
 	eat_chdesc_graph(*head);
 	*head = *tail = NULL;
@@ -830,12 +865,6 @@ static bdesc_t * journal_lookup_block(LFS_t * lfs, uint32_t number, uint32_t off
 	return CALL(state->fs, lookup_block, number, offset, size);
 }
 
-static fdesc_t * journal_lookup_name(LFS_t * lfs, const char * name)
-{
-	journal_state_t * state = (journal_state_t *) lfs->instance;
-	return CALL(state->fs, lookup_name, name);
-}
-
 static void journal_free_fdesc(LFS_t * lfs, fdesc_t * fdesc)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
@@ -855,12 +884,6 @@ static bdesc_t * journal_get_file_block(LFS_t * lfs, fdesc_t * file, uint32_t of
 	return CALL(state->fs, get_file_block, file, offset);
 }
 
-static int journal_get_dirent(LFS_t * lfs, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
-{
-	journal_state_t * state = (journal_state_t *) lfs->instance;
-	return CALL(state->fs, get_dirent, file, entry, size, basep);
-}
-
 static size_t journal_get_num_features(LFS_t * lfs, const char * name)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
@@ -876,6 +899,9 @@ static const feature_t * journal_get_feature(LFS_t * lfs, const char * name, siz
 static int journal_get_metadata_name(LFS_t * lfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
+	/* hide the journal file */
+	if(!strcmp(name, journal_filename))
+		return -E_NOT_FOUND;
 	return CALL(state->fs, get_metadata_name, name, id, size, data);
 }
 
