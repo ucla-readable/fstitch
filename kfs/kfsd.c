@@ -5,9 +5,11 @@
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
 #include <kfs/wholedisk_lfs.h>
+#include <kfs/josfs_base.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/table_classifier_cfs.h>
+#include <kfs/fidman_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/josfs_base.h>
 #include <kfs/kfsd.h>
@@ -34,14 +36,15 @@ int kfsd_init(int argc, char * argv[])
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	CFS_t * uhfses[2] = {NULL};
-	CFS_t * josfscfs;
-	CFS_t * frontend_cfs;
+	CFS_t * josfscfs = NULL;
+	CFS_t * table_class = NULL;
+	CFS_t * fidman = NULL;
 	uint32_t i;
 	int r;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
-	if (!cfs_ipc_serve())
+	if (!cfs_ipc_serve_init())
 		kfsd_shutdown();
 
 
@@ -115,32 +118,25 @@ int kfsd_init(int argc, char * argv[])
 		}
 	}
 
+	// josfs_cfs
 	if (! (josfscfs = josfs_cfs()) )
 		kfsd_shutdown();
 
-
-	/* setup frontend cfs */
-
-	if (! (frontend_cfs = table_classifier_cfs(NULL, NULL, 0)) )
+	// table_classifier_cfs
+	if (! (table_class = table_classifier_cfs(NULL, NULL, 0)) )
 		kfsd_shutdown();
+	assert(!get_frontend_cfs());
+	set_frontend_cfs(table_class);
 
-	if ((r = register_frontend_cfs(frontend_cfs)) < 0)
-	{
-		DESTROY(frontend_cfs);
-		kfsd_shutdown();
-	}
-
+	// Mount the uhfs modules
 	for (i=0; i < sizeof(uhfses)/sizeof(uhfses[0]); i++)
 	{
 		if (!uhfses[i])
 			continue;
 
-		r = table_classifier_cfs_add(frontend_cfs, fspaths[i], uhfses[i]);
+		r = table_classifier_cfs_add(table_class, fspaths[i], uhfses[i]);
 		if (r < 0)
-		{
-			DESTROY(frontend_cfs);
 			kfsd_shutdown();
-		}
 	}
 	
 	if(use_net)
@@ -149,10 +145,10 @@ int kfsd_init(int argc, char * argv[])
 		BD_t * cache;
 		LFS_t * wd;
 		CFS_t * net;
-		
+
 		/* delay kfsd startup slightly for netd to start */
 		sleep(200);
-		
+
 		nbd = nbd_bd("192.168.4.15", 2492);
 		if(!nbd)
 			goto a;
@@ -165,7 +161,8 @@ int kfsd_init(int argc, char * argv[])
 		net = uhfs(wd);
 		if(!net)
 			goto d;
-		if(table_classifier_cfs_add(frontend_cfs, "/net", net))
+
+		if(table_classifier_cfs_add(table_class, "/net", net))
 		{
 			DESTROY(net);
 			d: DESTROY(wd);
@@ -175,12 +172,15 @@ int kfsd_init(int argc, char * argv[])
 		}
 	}
 
-	r = table_classifier_cfs_add(frontend_cfs, josfspath, josfscfs);
+	// mount josfs_cfs last, so that it gets priority over no other mounts
+	r = table_classifier_cfs_add(table_class, josfspath, josfscfs);
 	if (r < 0)
-	{
-		DESTROY(frontend_cfs);
 		kfsd_shutdown();
-	}
+
+	// fidman
+	if (! (fidman = fidman_cfs(get_frontend_cfs())) )
+		kfsd_shutdown();
+	set_frontend_cfs(fidman);
 
 	return 0;
 }

@@ -1,7 +1,7 @@
 #include <kfs/cfs.h>
 #include <inc/serial_cfs.h>
 #include <kfs/kfsd.h>
-#include <kfs/uhfs.h>
+#include <kfs/fidman_cfs.h> // for FIDMAN_CFS_FD_MAP
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -21,8 +21,9 @@
 
 // VA at which to receive page mappings containing client reqs.
 // Just before the range used by the UHFS module for mapping client pages.
-#define REQVA (UHFS_FD_MAP - PGSIZE)
+#define REQVA (FIDMAN_CFS_FD_MAP - PGSIZE)
 #define PAGESNDVA (REQVA - PGSIZE)
+
 
 // Previous message store for two-part message methods.
 // If prev_serve_recvs[i] == NULL, allocate it and then use it
@@ -36,17 +37,28 @@ typedef struct prev_serve_recv prev_serve_recv_t;
 static prev_serve_recv_t * prev_serve_recvs[NENV];
 
 
-static void serve(void);
-
-
 static CFS_t * frontend_cfs = NULL;
 
-int register_frontend_cfs(CFS_t * cfs)
+void set_frontend_cfs(CFS_t * cfs)
 {
 	frontend_cfs = cfs;
-	return 0;
 }
 
+CFS_t * get_frontend_cfs(void)
+{
+	return frontend_cfs;
+}
+
+
+static void * cur_page = NULL;
+
+void * cfs_ipc_serve_cur_page(void)
+{
+	return cur_page;
+}
+
+
+static void serve(void);
 
 static void cfs_ipc_serve_shutdown(void * arg)
 {
@@ -64,7 +76,7 @@ static void cfs_ipc_serve_shutdown(void * arg)
 }
 
 // Return like a constructor would, 0 for fail
-int cfs_ipc_serve(void)
+int cfs_ipc_serve_init(void)
 {
 	int r;
 
@@ -115,7 +127,9 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
 		int r;
 		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
-		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void *) req);
+		cur_page = req;
+		r = CALL(frontend_cfs, open, scfs->path, scfs->mode);
+		cur_page = NULL;
 		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;

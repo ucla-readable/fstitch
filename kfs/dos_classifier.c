@@ -19,11 +19,13 @@ struct class_state {
 	const char * p2;
 };
 
-static int xlate[UHFS_MAX_OPEN*2];
+#define DOS_CLASS_MAX_OPEN 256
+
+static int xlate[DOS_CLASS_MAX_OPEN*2];
 
 static int put(int fd, int side) {
 	int i;
-	for (i = 0; i < UHFS_MAX_OPEN; i++) {
+	for (i = 0; i < DOS_CLASS_MAX_OPEN; i++) {
 		if (xlate[i*2] == -1) {
 			xlate[i*2] = fd;
 			xlate[i*2 + 1] = side;
@@ -35,7 +37,7 @@ static int put(int fd, int side) {
 
 static int get(int fd) {
 	int i;
-	for (i = 0; i < UHFS_MAX_OPEN; i++) {
+	for (i = 0; i < DOS_CLASS_MAX_OPEN; i++) {
 		if (xlate[i*2] == fd)
 			return xlate[i*2+1];
 	}
@@ -44,7 +46,7 @@ static int get(int fd) {
 
 static int del(int fd) {
 	int i;
-	for (i = 0; i < UHFS_MAX_OPEN; i++) {
+	for (i = 0; i < DOS_CLASS_MAX_OPEN; i++) {
 		if (xlate[i*2] == fd) {
 			xlate[i*2] = xlate[i*2+1] = -1;
 			return 0;
@@ -53,7 +55,7 @@ static int del(int fd) {
 	return -1;
 }
 
-static int class_open(CFS_t * cfs, const char * name, int mode, void * page)
+static int class_open(CFS_t * cfs, const char * name, int mode)
 {
 	int r;
 	int fd;
@@ -61,7 +63,7 @@ static int class_open(CFS_t * cfs, const char * name, int mode, void * page)
 	if (name[0] == '/')
 		name++;
 	if (!strncmp(name, "A:", 2)) {
-		fd = CALL(state->cfs1, open, name+2, mode, page);
+		fd = CALL(state->cfs1, open, name+2, mode);
 		if (fd < 0) return fd;
 		r = put(fd, 0);
 		if (r < 0) {
@@ -71,7 +73,7 @@ static int class_open(CFS_t * cfs, const char * name, int mode, void * page)
 		}
 		return fd;
 	} else if (!strncmp(name, "C:", 2)) {
-		fd = CALL(state->cfs2, open, name+2, mode, page);
+		fd = CALL(state->cfs2, open, name+2, mode);
 		if (fd < 0) return fd;
 		r = put(fd, 1);
 		if (r < 0) {
@@ -91,12 +93,12 @@ static int class_close(CFS_t * cfs, int fid)
 	int side = get(fid);
 	if (side == 0) {
 		r = CALL(state->cfs1, close, fid);
-		if(!r)
+		if (0 <= r)
 			del(fid);
 		return r;
 	} else if (side == 1) {
 		r = CALL(state->cfs2, close, fid);
-		if(!r)
+		if(0 <= r)
 			del(fid);
 		return r;
 	}
@@ -355,7 +357,7 @@ CFS_t * dos_classifier(CFS_t * cfs1, const char * p1, CFS_t * cfs2, const char *
 	state->p2 = p2;
 	
 	int i;
-	for (i = 0; i < UHFS_MAX_OPEN; i++) {
+	for (i = 0; i < DOS_CLASS_MAX_OPEN; i++) {
 		xlate[i*2] = -1;
 		xlate[i*2 + 1] = -1;
 	}

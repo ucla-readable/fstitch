@@ -4,10 +4,11 @@
 
 #include <inc/lib.h>
 #include <inc/malloc.h>
+#include <inc/hash_map.h>
 #include <inc/vector.h>
 
+#include <kfs/fidman.h>
 #include <kfs/cfs.h>
-#include <kfs/uhfs.h>
 #include <kfs/table_classifier_cfs.h>
 
 #define TABLE_CLASSIFIER_DEBUG 0
@@ -23,16 +24,16 @@
 // Data structs and initers
 
 struct mount_entry {
-	char * path;
+	const char * path;
 	CFS_t * cfs;
 };
 typedef struct mount_entry mount_entry_t;
 
-struct fid_entry {
+struct open_file {
 	int fid;
 	CFS_t * cfs;
 };
-typedef struct fid_entry fid_entry_t;
+typedef struct open_file open_file_t;
 
 /* "TBLCLASS" */
 #define TABLE_CLASSIFIER_MAGIC 0x7B1C1A55
@@ -40,75 +41,106 @@ typedef struct fid_entry fid_entry_t;
 struct table_classifier_state {
 	uint32_t magic;
 	vector_t * mount_table;
-	fid_entry_t fid_table[UHFS_MAX_OPEN];
+	hash_map_t * open_files;
 };
 typedef struct table_classifier_state table_classifier_state_t;
 
 
-static mount_entry_t * mount_entry(void)
+//
+// mount_entry_t functions
+
+static mount_entry_t * mount_entry_create(const char * path, CFS_t * cfs)
 {
 	mount_entry_t * me = malloc(sizeof(*me));
 	if (!me)
 		return NULL;
 
-	me->path = NULL;
-	me->cfs = NULL;
+	me->path = path;
+	me->cfs = cfs;
 	return me;
 }
 
-static void fid_entry_init(fid_entry_t * fe)
+static void mount_entry_destroy(mount_entry_t * me)
 {
-	fe->fid = -1;
-	fe->cfs = NULL;
+	me->path = NULL;
+	me->cfs = NULL;
+	free(me);
 }
 
 
 //
-// fid_table_t functions
+// open_file_t functions
+
+static open_file_t * open_file_create(int fid, CFS_t * cfs)
+{
+	open_file_t * f = malloc(sizeof(*f));
+	if (!f)
+		return NULL;
+
+	f->fid = fid;
+	f->cfs = cfs;
+	return f;
+}
+
+static void open_file_destroy(open_file_t * f)
+{
+	f->fid = -1;
+	f->cfs = NULL;
+	free(f);
+}
+
+
+//
+// open_files functions
 
 // Add a fid-cfs pair
 static int fid_table_add(table_classifier_state_t * state, int fid, CFS_t * cfs)
 {
-	int i;
-	for (i = 0; i < sizeof(state->fid_table)/sizeof(state->fid_table[0]); i++)
-	{
-		if (!state->fid_table[i].cfs)
-		{
-			state->fid_table[i].fid = fid;
-			state->fid_table[i].cfs = cfs;
-			return 0;
-		}
+	Dprintf("%s(0x%08x, %d, 0x%08x)\n", __FUNCTION__, state, fid, cfs);
+	open_file_t * f;
+	int r;
 
-		assert(fid != state->fid_table[i].fid);
+	f = open_file_create(fid, cfs);
+	if (!f)
+		return -E_NO_MEM;
+	r = hash_map_insert(state->open_files, (void*) fid, f);
+	if (r < 0)
+	{
+		open_file_destroy(f);
+		return r;
 	}
-	return -E_NO_MEM;
+
+	return 0;
 }
 
 // Get the existing cfs for fid
 static CFS_t * fid_table_get(const table_classifier_state_t * state, int fid)
 {
-	int i;
-	for (i = 0; i < sizeof(state->fid_table)/sizeof(state->fid_table[0]); i++)
-	{
-		if (state->fid_table[i].fid == fid)
-			return state->fid_table[i].cfs;
-	}
-	return NULL;
+	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
+	open_file_t * f;
+
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return NULL;
+
+	return f->cfs;
 }
 
-// Delete teh cfs-fid entry for fid
+// Delete the cfs-fid entry for fid
 static int fid_table_del(table_classifier_state_t * state, int fid)
 {
-	int i;
-	for (i = 0; i < sizeof(state->fid_table)/sizeof(state->fid_table[0]); i++)
-	{
-		if (state->fid_table[i].fid == fid)
-		{
-			fid_entry_init(&state->fid_table[i]);
-			return 0;
-		}
-	}
-	return -E_NOT_FOUND;
+	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
+	open_file_t * f;
+	int r;
+
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+
+	r = hash_map_erase(state->open_files, (void*) fid);
+	assert(0 <= r);
+	open_file_destroy(f);
+	return 0;
 }
 
 
@@ -118,6 +150,7 @@ static int fid_table_del(table_classifier_state_t * state, int fid)
 // Find the index into mount_table of the given mount-point's path
 int mount_lookup(vector_t * mount_table, const char * path)
 {
+	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, mount_table, path);
 	const size_t mount_table_size = vector_size(mount_table);
 	int i;
 	
@@ -135,22 +168,23 @@ int mount_lookup(vector_t * mount_table, const char * path)
 // to be the filename this cfs expects
 static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char ** transformed_name)
 {
+	Dprintf("%s(0x%08x, \"%s\", 0x%08x)\n", __FUNCTION__, mount_table, name, transformed_name);
 	const size_t mount_table_size = vector_size(mount_table);
 	int i;
 
 	for (i = 0; i < mount_table_size; i++)
 	{
 		const mount_entry_t *me = (mount_entry_t *) vector_elt(mount_table, i);
-		const size_t path_len = strlen(me->path);
+		const size_t mount_len = strlen(me->path);
 
-		if (!strncmp(me->path, name, path_len))
+		if (!strncmp(me->path, name, mount_len))
 		{
-			*transformed_name = (char *)name + path_len;
+			*transformed_name = (char *)name + mount_len;
 			return me->cfs;
 		}
-		else if ((me->path[0] == '/') && !strncmp(me->path+1, name, path_len-1))
+		else if ((me->path[0] == '/') && !strncmp(me->path+1, name, mount_len-1))
 		{
-			*transformed_name = (char *)name + path_len - 1;
+			*transformed_name = (char *)name + mount_len - 1;
 			return me->cfs;
 		}
 	}
@@ -162,9 +196,9 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 //
 // table_classifier_cfs
 
-static int table_classifier_open(CFS_t * cfs, const char * name, int mode, void * page)
+static int table_classifier_open(CFS_t * cfs, const char * name, int mode)
 {
-	Dprintf("%s(\"%s\", %d, 0x%x)\n", __FUNCTION__, name, mode, page);
+	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 	char * newname = NULL;
 	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
@@ -174,10 +208,13 @@ static int table_classifier_open(CFS_t * cfs, const char * name, int mode, void 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	if ((fid = CALL(selected_cfs, open, newname, mode, page)) < 0)
+	if ((fid = CALL(selected_cfs, open, newname, mode)) < 0)
 		return fid;
 	if ((r = fid_table_add(state, fid, selected_cfs)) < 0)
+	{
+		(void) CALL(selected_cfs, close, fid);
 		return r;
+	}
 	return fid;
 }
 
@@ -192,7 +229,7 @@ static int table_classifier_close(CFS_t * cfs, int fid)
 		return -E_NOT_FOUND;
 
 	r = CALL(selected_cfs, close, fid);
-	if (!r)
+	if (0 <= r)
 		if ((s = fid_table_del(state, fid)) < 0)
 			return s;
 	return r;
@@ -224,7 +261,7 @@ static int table_classifier_write(CFS_t * cfs, int fid, const void * data, uint3
 
 static int table_classifier_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
+	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 	CFS_t * selected_cfs = fid_table_get(state, fid);
 
@@ -397,6 +434,7 @@ static int table_classifier_destroy(CFS_t * cfs)
 {
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 
+	hash_map_destroy(state->open_files);
 	vector_destroy(state->mount_table);
 	memset(state, 0, sizeof(*state));
 	free(state);
@@ -421,7 +459,6 @@ CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_e
 	if (!state)
 		goto error_cfs;
 	cfs->instance = state;
-	state->magic = TABLE_CLASSIFIER_MAGIC;
 	
 	ASSIGN(cfs, table_classifier, open);
 	ASSIGN(cfs, table_classifier, close);
@@ -441,13 +478,15 @@ CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_e
 	ASSIGN(cfs, table_classifier, sync);
 	ASSIGN_DESTROY(cfs, table_classifier, destroy);
 
-	for (i = 0; i < sizeof(state->fid_table)/sizeof(state->fid_table[0]); i++)
-		fid_entry_init(&state->fid_table[i]);
+	state->magic = TABLE_CLASSIFIER_MAGIC;
 
+	state->open_files = hash_map_create();
+	if (!state->open_files)
+		goto error_state;
 
 	state->mount_table = vector_create();
 	if (!state->mount_table)
-		goto error_state;
+		goto error_open_files;
 
 	for (i = 0; i < num_entries; i++)
 		if ((r = table_classifier_cfs_add(cfs, paths[i], cfses[i])) < 0)
@@ -457,6 +496,8 @@ CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_e
 
   error_mount_table:
 	vector_destroy(state->mount_table);
+  error_open_files:
+	hash_map_destroy(state->open_files);
   error_state:
 	free(cfs->instance);
   error_cfs:
@@ -478,15 +519,13 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 	if (0 <= already_mounted)
 		return -E_INVAL;
 
-	mount_entry_t * me = mount_entry();
+	mount_entry_t * me = mount_entry_create(path, path_cfs);
 	if (!me)
 		return -E_NO_MEM;
-	me->path = (char *) path;
-	me->cfs  = path_cfs;
 
 	if ((r = vector_push_back(state->mount_table, me)) < 0)
 	{
-		free(me);
+		mount_entry_destroy(me);
 		return r;
 	}
 
@@ -498,6 +537,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, path);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
+	mount_entry_t * me;
 	CFS_t * path_cfs = NULL;
 
 	/* make sure this is really a table classifier */
@@ -509,7 +549,9 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 		return NULL;
 
 	fprintf(STDERR_FILENO,"table_classifier_cfs: removed mount at %s\n", path);
-	path_cfs = vector_elt(state->mount_table, idx);
+	me = vector_elt(state->mount_table, idx);
 	vector_erase(state->mount_table, idx);
+	path_cfs = me->cfs;
+	mount_entry_destroy(me);
 	return path_cfs;
 }

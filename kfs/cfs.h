@@ -9,13 +9,11 @@
 struct CFS;
 typedef struct CFS CFS_t;
 
-/* Note that CFS close() returns 0 to indicate that the file is closed in all
- * clients, and 1 to indicate that some other client still has it open. */
-
 struct CFS {
 	DESTRUCTOR(CFS_t);
-	DECLARE(CFS_t, int, open, const char * name, int mode, void * page);
+	DECLARE(CFS_t, int, open, const char * name, int mode);
 	DECLARE(CFS_t, int, close, int fid);
+	DECLARE(CFS_t, void, closed, int fid); // fid was passively closed
 	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, getdirentries, int fid, char * buf, int nbytes, uint32_t * basep);

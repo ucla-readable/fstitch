@@ -3,12 +3,13 @@
 
 #include <inc/lib.h>
 #include <inc/malloc.h>
+#include <inc/hash_map.h>
 #include <inc/fd.h>
 
+#include <kfs/fidman.h>
 #include <kfs/chdesc.h>
-#include <kfs/lfs.h>
 #include <kfs/cfs.h>
-#include <kfs/uhfs.h> // for UHFS' limits and ranges
+#include <inc/dirent.h>
 #include <kfs/josfs_cfs.h>
 
 
@@ -24,157 +25,108 @@
 
 struct open_file {
 	int fid;
-	struct Fd * page;
 	int fd;
 };
 typedef struct open_file open_file_t;
 
 struct josfs_cfs_state {
-	open_file_t open_file[UHFS_MAX_OPEN];
+	hash_map_t * open_files;
 };
 typedef struct josfs_cfs_state josfs_cfs_state_t;
 
 
-/* Is this virtual address mapped? */
-static int va_is_mapped(void * va)
+//
+// open_file_t functions
+
+static open_file_t * open_file_create(int fid, int fd)
 {
-	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
+	open_file_t * f = malloc(sizeof(*f));
+	if (!f)
+		return NULL;
+
+	f->fid = fid;
+	f->fd = fd;
+	return f;
 }
 
+static void open_file_destroy(open_file_t * f)
+{
+	f->fid = -1;
+	f->fd = -1;
+	free(f);
+}
 
-static int open_file_free(open_file_t * f)
+static int open_file_close(open_file_t * f)
 {
 	int r;
 	if ((r = close(f->fd)) < 0)
 		return r;
 
-	sys_page_unmap(0, (void*) f->page);
-	f->page = NULL;
-	/* we do not reset fid here on purpose */
+	f->fid = -1;
 	f->fd = -1;
+
+	open_file_destroy(f);
+
 	return 0;
 }
 
-/* returns 0 if it is closed in all clients, 1 if it is still open somewhere */
-static int open_file_close(open_file_t * f)
+
+
+static int josfs_cfs_open(CFS_t * cfs, const char * name, int mode)
 {
-	if (!f->page)
-		return -E_INVAL;
-	if (pageref(f->page) == 1)
-		return open_file_free(f);
-	return 1;
-}
-
-// Scan through f[] and close f's no longer in use by other envs
-static void open_file_gc(open_file_t f[])
-{
-	size_t i;
-	for (i = 0; i < UHFS_MAX_OPEN; i++)
-		open_file_close(&f[i]);
-}
-
-static int fid_idx(int fid, open_file_t f[])
-{
-	uint32_t ufid = fid;
-	struct Fd * fd;
-	int idx;
-
-	if ((uint32_t)UHFS_FD_MAP >> 31)
-		ufid |= 0x80000000;
-	fd = (struct Fd *) (ufid & ~(PGSIZE - 1));
-	if (!va_is_mapped(fd))
-		return -E_INVAL;
-
-	idx = fd->fd_kpl.index;
-	if (idx <0 || UHFS_MAX_OPEN <= idx)
-		return -E_INVAL;
-
-	if (f[idx].fid != fid)
-		return -E_INVAL;
-
-	assert(f[idx].page && f[idx].fid);
-
-	return idx;
-}
-
-
-
-static int josfs_cfs_open(CFS_t * cfs, const char * name, int mode, void * page)
-{
-	Dprintf("%s(\"%s\", %d, 0x%x)\n", __FUNCTION__, name, mode, page);
+	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	void * cache;
-	int r, index;
+	int fd, fid;
+	open_file_t * f;
+	int r;
 	
-	open_file_gc(state->open_file);
+	/* look up the name */
+	fd = jfs_open(name, mode);
+	if (fd < 0)
+		return fd;
 
-	/* find an available index */
-	for(index = 0; index != UHFS_MAX_OPEN; index++)
-		if(!state->open_file[index].page)
-			break;
-	if(index == UHFS_MAX_OPEN)
-		return -E_MAX_OPEN;
-	
-	/* find a free page */
-	for(cache = UHFS_FD_MAP; cache != UHFS_FD_END; cache += PGSIZE)
-		if(!va_is_mapped(cache))
-			break;
-	if(cache == UHFS_FD_END)
-		return -E_MAX_OPEN;
-	
-	/* store the index in the client's page */
-	((struct Fd *) page)->fd_kpl.index = index;
+	fid = create_fid();
+	if (fid < 0)
+		return fid;
 
-	/* remap the client's page read-only in its new home */
-	r = sys_page_map(0, page, 0, cache, PTE_U | PTE_P);
-	if(r < 0)
-		return r;
-	sys_page_unmap(0, page);
-	
-	/* now look up the name */
-	r = jfs_open(name, mode);
+	f = open_file_create(fid, fd);
+	if (!f)
+		return -E_NO_MEM;
+	r = hash_map_insert(state->open_files, (void*) fid, f);
 	if (r < 0)
 	{
-		sys_page_unmap(0, cache);
-		return r;
+		open_file_destroy(f);
+		return -E_NO_MEM;
 	}
-	state->open_file[index].fd = r;
-	
-	/* good to go, save the client page... */
-	state->open_file[index].page = cache;
-	
-	/* ...and make up a new ID */
-	r = state->open_file[index].fid + 1;
-	r &= PGSIZE - 1;
-	r |= 0x7FFFFFFF & (int) cache;
-	state->open_file[index].fid = r;
 
-	return r;
+	return fid;
 }
 
 static int josfs_cfs_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	int idx;
+	open_file_t * f;
 
-	if ((idx = fid_idx(fid, state->open_file)) < 0)
-		return idx;
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
 
-	return open_file_close(&state->open_file[idx]);
+	return open_file_close(f);
 }
 
 static int josfs_cfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(cfs, 0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	int idx;
+	open_file_t * f;
 	int fd;
 	int r;
 
-	if ((idx = fid_idx(fid, state->open_file)) < 0)
-		return idx;
-	fd = state->open_file[idx].fd;
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+	fd = f->fd;
 
 	if ((r = seek(fd, offset)) < 0)
 		return r;
@@ -185,13 +137,14 @@ static int josfs_cfs_write(CFS_t * cfs, int fid, const void * data, uint32_t off
 {
 	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	int idx;
+	open_file_t * f;
 	int fd;
 	int r;
 
-	if ((idx = fid_idx(fid, state->open_file)) < 0)
-		return idx;
-	fd = state->open_file[idx].fd;
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+	fd = f->fd;
 
 	if ((r = seek(fd, offset)) < 0)
 		return r;
@@ -202,12 +155,14 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	int idx, fd, r;
+	open_file_t * f;
+	int fd, r;
 	int nbytes_read = 0;
 
-	if ((idx = fid_idx(fid, state->open_file)) < 0)
-		return idx;
-	fd = state->open_file[idx].fd;
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+	fd = f->fd;
 
 	if ((r = seek(fd, *basep)) < 0)
 		return r;
@@ -264,12 +219,13 @@ static int josfs_cfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
 	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	const int file_idx = fid_idx(fid, state->open_file);
+	open_file_t * f;
 	int fd;
 
-	if (file_idx < 0)
-		return file_idx;
-	fd = state->open_file[file_idx].fd;
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+	fd = f->fd;
 
 	return ftruncate(fd, target_size);
 }
@@ -390,6 +346,9 @@ static int josfs_cfs_sync(CFS_t * cfs, const char * name)
 
 static int josfs_cfs_destroy(CFS_t * cfs)
 {
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+
+	hash_map_destroy(state->open_files);
 	free(cfs->instance);
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
@@ -429,11 +388,15 @@ CFS_t * josfs_cfs(void)
 	ASSIGN(cfs, josfs_cfs, sync);
 	ASSIGN_DESTROY(cfs, josfs_cfs, destroy);
 
-	memset(state->open_file, 0, sizeof(state->open_file));
+	state->open_files = hash_map_create();
+	if (!state->open_files)
+		goto error_state;
 
 	return cfs;
 
- error_josfs_cfs:
+  error_state:
+	free(state);
+  error_josfs_cfs:
 	free(cfs);
 	return NULL;
 }

@@ -42,7 +42,6 @@ struct Fd
 		// KPL files
 		struct {
 			int fid;
-			int index;
 		} fd_kpl;
 	};
 };

@@ -56,8 +56,7 @@ cfs_open(const char *fname, int mode, void *refpg)
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
-	// the server needs write access to this page
-	ipc_send(fsid, 0, refpg, PTE_U|PTE_W|PTE_P);
+	ipc_send(fsid, 0, refpg, PTE_U|PTE_P);
 
 	//if (get_pte((void*) REQVA) & PTE_P)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
