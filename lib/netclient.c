@@ -11,8 +11,10 @@ static bool
 env_is_netd_net(const struct Env *e)
 {
 	return (e->env_status != ENV_FREE
-			&& (!strncmp(e->env_name, netd_name_sh, strlen(netd_name_sh))
-				|| !strncmp(e->env_name, netd_name_kern, strlen(netd_name_kern))));
+			&& ((!strncmp(e->env_name, netd_name_sh, strlen(netd_name_sh))
+				 && e->env_name[strlen(netd_name_sh)] != ':')
+				|| (!strncmp(e->env_name, netd_name_kern, strlen(netd_name_kern))
+					&& e->env_name[strlen(netd_name_kern)] != ':')));
 }
 
 static bool
