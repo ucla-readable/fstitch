@@ -105,6 +105,8 @@ int vector_push_back_vector(vector_t * v, const vector_t * v2)
 	return 0;
 }
 
+// vector_pop_back() inlined
+
 void vector_erase(vector_t * v, size_t i)
 {
 	for (; i+1 < v->size; i++)
