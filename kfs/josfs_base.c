@@ -314,6 +314,7 @@ static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number, uint32_t of
 	if (offset != 0 || size != JOSFS_BLKSIZE)
 		return NULL;
 	
+	// FIXME this is supposed to read off the disk
 	return bdesc_alloc(((struct lfs_info *) object->instance)->ubd, number, 0, JOSFS_BLKSIZE);
 }
 
@@ -345,6 +346,8 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	Dprintf("JOSFSDEBUG: josfs_get_file_numblocks\n");
 	int nblocks;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
+	// FIXME f_size is treated as metadata, so we can't count on it being correct here
+	// alternately we can update it automatically when blocks are added/removed and make sure it is reasonable when we set it in set_metadata
 	nblocks = f->file->f_size / JOSFS_BLKSIZE;
 
 	if (f->file->f_size % JOSFS_BLKSIZE) {
@@ -557,6 +560,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	if (oldfdesc != NULL) {
 		newfdesc = josfs_allocate_name(object, newname, ((struct JOSFS_File *) oldfdesc)->f_type, NULL, NULL, NULL);
 		if (newfdesc != NULL) {
+			// FIXME move the data from the old name to the new name
 			if (josfs_remove_name(object, oldname, NULL, NULL) == 0) {
 				return 0;
 			}
@@ -713,7 +717,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	Dprintf("JOSFSDEBUG: josfs_set_metadata\n");
 	if (id == KFS_feature_size.id) {
 		if (sizeof(off_t) == size) {
-			if ((off_t)data >= 0 && (off_t)data < 4194304) {
+			if ((off_t)data >= 0 && (off_t)data < JOSFS_MAXFILESIZE) {
 				// FIXME write to disk
 				f->file->f_size = (off_t)data;
 				return 0;
@@ -748,6 +752,9 @@ static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 // TODO
 static int josfs_sync(LFS_t * object, const char * name)
 {
+	struct lfs_info * info = (struct lfs_info *) object->instance;
+	if(!name || !name[0])
+		return CALL(info->ubd, sync, NULL);
 	return 0;
 }
 
