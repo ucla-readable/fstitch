@@ -8,6 +8,7 @@
 
 #include <inc/lib.h>
 #include <inc/net.h>
+#include <inc/malloc.h>
 
 #include "lwip/debug.h"
 #include "lwip/stats.h"
@@ -35,6 +36,10 @@ struct listen_state {
 
 // Statically allocate these so that we can find expired listens
 struct listen_state listen_states[NENV];
+
+// This value should probably be about the size you find you need pipes, to
+// have to get good throughput.
+#define PER_TCP_PCB_BUFFER (16*PGSIZE)
 
 struct buf {
 	uint8_t *data;
@@ -183,7 +188,7 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 		}
 	}
 
-	mem_free(cs);
+	free(cs);
 }
 
 static int
@@ -499,10 +504,11 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 
 	tcp_setprio(pcb, TCP_PRIO_MIN);
 	
-	cs = mem_malloc(sizeof(struct client_state));	
+	cs = malloc(sizeof(struct client_state));
+	//cs = mem_malloc(sizeof(struct client_state));	
 	if (!cs)
 	{
-		fprintf(STDERR_FILENO, "netd netd_accept: mem_malloc: Out of memory\n");
+		fprintf(STDERR_FILENO, "netd netd_accept: malloc: Out of memory\n");
 		conn_err_listen(ls, ERR_MEM);
 		return ERR_MEM;
 	}
@@ -591,10 +597,10 @@ serve_connect(envid_t whom, struct Netreq_connect *req)
 		printf("netd net request: Connect to %s:%d\n",
 				 inet_iptoa(req->req_ipaddr), req->req_port);
 
-	cs = mem_malloc(sizeof(struct client_state));
+	cs = malloc(sizeof(struct client_state));
 	if (!cs)
 	{
-		fprintf(STDERR_FILENO, "netd serve_connect: mem_malloc: Out of memory\n");
+		fprintf(STDERR_FILENO, "netd serve_connect: malloc: Out of memory\n");
 		ipc_send(whom, lwip_to_netclient_err(ERR_MEM), NULL, 0);
 		return;
 	}

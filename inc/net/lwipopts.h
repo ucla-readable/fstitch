@@ -78,10 +78,9 @@
    byte alignment -> define MEM_ALIGNMENT to 2. */
 #define MEM_ALIGNMENT           4
 
-/* This is a netd setting, but one which belongs here for easier maintenance.
-   This value should probably be about the size you find you need pipes to
-   have to get good throughput. */
-#define PER_TCP_PCB_BUFFER      (16*PGSIZE)
+/* MEM_SIZE: the size of the heap memory. If the application will send
+a lot of data that needs to be copied, this should be set high. */
+#define MEM_SIZE                5000 // See Simons' 12/23/2004 email
 
 /* MEMP_NUM_PBUF: the number of memp struct pbufs. If the application
    sends a lot of data out of ROM (or other static memory), this
@@ -105,12 +104,6 @@
 /* MEMP_SANITY_CHECK: (Added by Frost because as of 1.1.0 it defaults to 0.) */
 #define MEMP_SANITY_CHECK 1
 
-/* MEM_SIZE: the size of the heap memory. If the application will send
-a lot of data that needs to be copied, this should be set high. */
-/* For netd we set this to give each connection enough send buffer space
-   plus what seems to be enough for lwip's own needs per connection. */
-#define MEM_SIZE                (PER_TCP_PCB_BUFFER*MEMP_NUM_TCP_SEG + 4096*MEMP_NUM_TCP_SEG) // See Simons' 12/23/2004 email
-
 /* The following four are used only with the sequential API and can be
    set to 0 if the application only will use the raw API. */
 /* MEMP_NUM_NETBUF: the number of struct netbufs. */
@@ -133,7 +126,7 @@ a lot of data that needs to be copied, this should be set high. */
 
 /* ---------- Pbuf options ---------- */
 /* PBUF_POOL_SIZE: the number of buffers in the pbuf pool. */
-#define PBUF_POOL_SIZE          256
+#define PBUF_POOL_SIZE          16
 
 /* PBUF_POOL_BUFSIZE: the size of each pbuf in the pbuf pool. */
 #define PBUF_POOL_BUFSIZE       2000 // See Simons' 12/23/2004 email
