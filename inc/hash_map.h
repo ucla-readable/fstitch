@@ -57,6 +57,6 @@ void hash_map_it_destroy(hash_map_it_t * it);
 // - Returns NULL when the end of the hash map is reached.
 // - Behavior is undefined begin iterating, modify hm, and then continue
 //   iterating using the old hm_it.
-void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * hm_it);
+void * hash_map_val_next(const hash_map_t * hm, hash_map_it_t * hm_it);
 
 #endif /* !KUDOS_INC_HASH_MAP_H */

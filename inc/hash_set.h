@@ -46,6 +46,6 @@ void hash_set_it_destroy(hash_set_it_t * it);
 // - Returns NULL when the end of the hash set is reached.
 // - Behavior is undefined begin iterating, modify hs, and then continue
 //   iterating using the old hs_it.
-void * hash_set_next(hash_set_t * hs, hash_set_it_t * hs_it);
+void * hash_set_next(const hash_set_t * hs, hash_set_it_t * hs_it);
 
 #endif /* !KUDOS_INC_HASH_SET_H */

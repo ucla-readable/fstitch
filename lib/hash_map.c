@@ -378,7 +378,7 @@ void hash_map_it_destroy(hash_map_it_t * it)
 	free(it);
 }
 
-void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
+void * hash_map_val_next(const hash_map_t * hm, hash_map_it_t * it)
 {
 	size_t i;
 	chain_elt_t * head;

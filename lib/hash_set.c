@@ -139,7 +139,7 @@ void hash_set_it_destroy(hash_set_it_t * it)
 	free(it);
 }
 
-void * hash_set_next(hash_set_t * hs, hash_set_it_t * it)
+void * hash_set_next(const hash_set_t * hs, hash_set_it_t * it)
 {
 	return hash_map_val_next(hs->hm, it->hm_it);
 }
