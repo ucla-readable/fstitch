@@ -34,7 +34,7 @@ static void reheapify_up_elt(fixed_max_heap_t *heap, int p)
 static void reheapify_up(fixed_max_heap_t *heap)
 {
 	if (heap->len < 2) return;
-	reheapify_up_elt(heap, heap->len);
+	reheapify_up_elt(heap, heap->len-1);
 }
 
 static void reheapify_down_elt(fixed_max_heap_t *heap, int p)
@@ -121,6 +121,15 @@ fixed_max_heap_pop(fixed_max_heap_t *heap)
 	heap->weights[0] = heap->weights[heap->len - 1];
 	heap->len--;
 	reheapify_down(heap);
+	return ret;
+}
+
+void *
+fixed_max_heap_head(const fixed_max_heap_t *heap)
+{
+	void *ret;
+	assert(heap->len >= 1);
+	ret = heap->arr[0];
 	return ret;
 }
 

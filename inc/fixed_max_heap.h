@@ -15,6 +15,7 @@ void  fixed_max_heap_free(fixed_max_heap_t *heap);
 
 void  fixed_max_heap_insert(fixed_max_heap_t *heap, void *elt, int weight);
 void *fixed_max_heap_pop(fixed_max_heap_t *heap);
+void *fixed_max_heap_head(const fixed_max_heap_t *heap);
 void  fixed_max_heap_delete(fixed_max_heap_t *heap, void *elt);
 int   fixed_max_heap_length(const fixed_max_heap_t *heap);
 int   fixed_max_heap_contains(const fixed_max_heap_t *heap, const void *elt);
