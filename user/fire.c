@@ -1,7 +1,7 @@
 #include <inc/lib.h>
 
 /* from demo.c */
-static int rand(int nseed);
+int rand(int nseed);
 
 static uint8_t fire_buf[2][64000];
 
