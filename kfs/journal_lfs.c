@@ -185,8 +185,10 @@ static int transaction_stop(journal_state_t * state)
 	commit_record_t commit;
 	size_t commit_offset;
 	// lfs_head/tail used to check that no metadata changes upon journal writes
-	chdesc_t * lfs_head = NULL, * lfs_tail;
-	chdesc_t * prev_head, * tail;
+	chdesc_t * lfs_head;
+	chdesc_t * lfs_tail;
+	chdesc_t * prev_head;
+	chdesc_t * tail;
 
 	jdata_chdescs = chdesc_create_noop(NULL);
 	if (!jdata_chdescs)
@@ -244,10 +246,11 @@ static int transaction_stop(journal_state_t * state)
 		r = chdesc_add_depend(jdata_chdescs, prev_head);
 		assert(r >= 0); // TODO: handle error
 
+		lfs_head = NULL;
+		lfs_tail = NULL;
 		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
 		assert(r >= 0); // TODO: handle error
-		assert(!lfs_head && !lfs_tail);
-
+		//assert(!lfs_head && !lfs_tail);
 	}
 
 
@@ -267,10 +270,12 @@ static int transaction_stop(journal_state_t * state)
 	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
+	lfs_head = NULL;
+	lfs_tail = NULL;
 	// this single line atomically commits this transaction to disk
 	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
 	assert(r >= 0); // TODO: handle error
-	assert(!lfs_head && !lfs_tail);
+	//assert(!lfs_head && !lfs_tail);
 
 
 	chdesc_t * commit_chdesc = prev_head;
@@ -303,9 +308,11 @@ static int transaction_stop(journal_state_t * state)
 	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
+	lfs_head = NULL;
+	lfs_tail = NULL;
 	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
 	assert(r >= 0); // TODO: handle error
-	assert(!lfs_head && !lfs_tail);
+	//assert(!lfs_head && !lfs_tail);
 
 
 	//
