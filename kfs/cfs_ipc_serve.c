@@ -180,10 +180,10 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 		panic("resp (PAGESNDVA = 0x%08x) already mapped", resp);
 	if ((r = sys_page_alloc(0, resp, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
-
-	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, sizeof(resp->buf), &req->basep);
-	resp->nbytes_read = r;
 	resp->basep = req->basep;
+
+	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, sizeof(resp->buf), &resp->basep);
+	resp->nbytes_read = r;
 	ipc_send(envid, r, resp, PTE_P|PTE_U);
 }
 
