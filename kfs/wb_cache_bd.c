@@ -39,29 +39,29 @@ struct cache_info {
 unsigned short inet_chksum(void *, unsigned short);
 
 static void
-mark_dirty(BD_t * object, uint16_t bno)
+mark_dirty(BD_t * object, uint16_t idx)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	int course = bno/(8*sizeof(uint32_t));
-	int fine = bno % (8*sizeof(uint32_t));
+	int course = idx/(8*sizeof(uint32_t));
+	int fine = idx % (8*sizeof(uint32_t));
 	info->dirty_bits[course] |= 1<<fine;
 }
 
 static bool
-is_dirty(BD_t * object, uint16_t bno)
+is_dirty(BD_t * object, uint16_t idx)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	int course = bno/(8*sizeof(uint32_t));
-	int fine = bno % (8*sizeof(uint32_t));
+	int course = idx/(8*sizeof(uint32_t));
+	int fine = idx % (8*sizeof(uint32_t));
 	return (info->dirty_bits[course] & (1<<fine)) != 0;
 }
 
 static void
-mark_clean(BD_t * object, uint16_t bno)
+mark_clean(BD_t * object, uint16_t idx)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	int course = bno/(8*sizeof(uint32_t));
-	int fine = bno % (8*sizeof(uint32_t));
+	int course = idx/(8*sizeof(uint32_t));
+	int fine = idx % (8*sizeof(uint32_t));
 	info->dirty_bits[course] &= ~(1<<fine);
 }
 
@@ -496,7 +496,7 @@ satisfy_chdescs(vector_t *vect, fixed_max_heap_t *heap)
 // take care of deps. this fxn will only release 'block', and no other
 // blocks.
 static uint32_t
-wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
+wb_cache_bd_evict_block(BD_t *object, bdesc_t *block, int idx)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	chdesc_t *root;
@@ -506,7 +506,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 	int count;
 	int value;
 
-	if (!is_dirty(object, block->number)) {
+	if (!is_dirty(object, idx)) {
 		goto end;
 	}
 
@@ -600,7 +600,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 			leafblock->bd = object;
 			leafblock->translated--;
 			if (vector_size(rollback) == 0) // we're done w/ the leafblock!
-				mark_clean(object, leafblock->number);
+				mark_clean(object, idx);
 		} else {
 			// block in another cache. just tell that cache to write
 			// it.
@@ -619,7 +619,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 	vector_destroy(rollback);
 	vector_destroy(satisfy);
  end:
-	mark_clean(object, block->number);
+	mark_clean(object, idx);
 	root = (chdesc_t*)depman_get_deps(block); // shedding const
 											  // intentionally b/c of
 											  // CHDESC_MARKED flag.
@@ -708,12 +708,17 @@ wb_cache_bd_read_block(BD_t * object, uint32_t number)
 		}
 		
 		// evict this cache entry
-		wb_cache_bd_evict_block(object, info->blocks[index]);
+		//printf("evicting block 0x%08x (no. %d) at index %d\n",
+		//	   info->blocks[index], number, index);
+		wb_cache_bd_evict_block(object, info->blocks[index], index);
 	} else {
 
 	}
 	/* not in the cache, need to read it */
 	info->blocks[index] = CALL(info->bd, read_block, number);
+	assert(number == info->blocks[index]->number);
+	//printf("read in block 0x%08x (no. %d) to index %d\n",
+	//	   info->blocks[index], number, index);
 	
 	if(!info->blocks[index]) {
 		printf("failed to read block number %d from lower level!\n",
@@ -773,11 +778,11 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		// evict old block and write a new one
 		printd("cache conflict or miss. maybe evicting.\n");
 		if (info->blocks[index])
-			value = wb_cache_bd_evict_block(object, info->blocks[index]);
+			value = wb_cache_bd_evict_block(object, info->blocks[index], index);
 		bdesc_retain(&block);
 		info->blocks[index] = block;
 	}
-	mark_dirty(object, info->blocks[index]->number);
+	mark_dirty(object, index);
 
 	return value;
 }
@@ -872,14 +877,14 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 		free(bd);
 		return NULL;
 	}
-	info->dirty_bits = malloc(blocks / (8*sizeof(uint32_t)) + 1);
+	info->dirty_bits = malloc((blocks/32 + 1) * sizeof(uint32_t));
 	if (info->dirty_bits == NULL) {
 		free(info->blocks);
 		free(info);
 		free(bd);
 		return NULL;
 	}
-	for (i = 0; i < blocks / (8*sizeof(uint32_t)) + 1; i++)
+	for (i = 0; i < blocks/32 + 1; i++)
 		info->dirty_bits[i] = 0;
 
 	info->blocksize = CALL(disk, get_blocksize);
