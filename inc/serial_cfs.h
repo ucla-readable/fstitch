@@ -90,8 +90,14 @@ struct Scfs_rmdir {
 	char path[SCFSMAXNAMELEN];
 };
 
-struct Scfs_get_features {
+struct Scfs_get_num_features {
 	SCFS_TYPE;
+	char name[SCFSMAXNAMELEN];
+};
+
+struct Scfs_get_feature {
+	SCFS_TYPE;
+	size_t num;
 	char name[SCFSMAXNAMELEN];
 };
 
