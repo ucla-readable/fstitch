@@ -3,18 +3,14 @@
 
 void usage(char *);
 
+static unsigned char buf[4096];
+
 void
 umain(int argc, char *argv[])
 {
 	int r, fd, i;
-	char *buf;
 	unsigned char out[16];
 	MD5_CTX context;
-
-	buf = malloc(4096);
-	if (buf == NULL) {
-		exit();
-	}
 
 	if (argc != 2) usage(argv[0]);
 
