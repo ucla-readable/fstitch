@@ -800,7 +800,7 @@ static int wb_cache_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t refs;
-	int value;
+	int value = 0;
 	int i;
 	
 	/* since this is a write-through cache, syncing is a no-op */
