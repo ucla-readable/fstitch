@@ -197,8 +197,7 @@ int kfsd_init(void)
 
 	if (! (fidprotector = fidprotector_cfs(get_frontend_cfs())) )
 		kfsd_shutdown();
-	// Uncomment when cfs_ipc_client supports capabilities:
-	//set_frontend_cfs(fidprotector);
+	set_frontend_cfs(fidprotector);
 
 	if (! (fidfairy = fidfairy_cfs(get_frontend_cfs())) )
 		kfsd_shutdown();
