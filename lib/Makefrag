@@ -32,6 +32,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/getarg.c \
 			lib/serial.c \
 			lib/netclient.c \
+			lib/hwclock.c \
 			lib/sleep_cs.c
 
 include lib/net/Makefrag

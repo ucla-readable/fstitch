@@ -64,7 +64,8 @@ int	sys_reboot(void);
 int	sys_set_symtbls(envid_t envid, void *symtbl, size_t symtbl_size, void *symstrtbl, size_t symstrtbl_size);
 int	sys_reg_serial(int port, void *buffer_pg);
 int	sys_unreg_serial(int port);
-int   sys_grant_io(envid_t envid);
+int sys_grant_io(envid_t envid);
+int sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon);
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t sys_exofork(void) __attribute__((always_inline));
@@ -165,6 +166,10 @@ const char* get_arg_val(int argc, const char **argv, const char *arg_name);
 
 // sleep_cs.c
 int sleep(int32_t centisecs);
+
+// hwclock.c
+int hwclock_time(int *t);
+int bcd2dec(int bcd);
 
 /* File open modes */
 #define	O_RDONLY	0x0000		/* open for reading only */

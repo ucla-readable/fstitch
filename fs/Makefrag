@@ -43,6 +43,7 @@ USERAPPS := 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/volume \
 			$(OBJDIR)/user/more \
 			$(OBJDIR)/user/ladybug \
+			$(OBJDIR)/user/clock \
 			$(OBJDIR)/kfs/kfsd
 
 FSIMGTXTFILES :=	fs/newmotd \

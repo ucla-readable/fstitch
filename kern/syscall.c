@@ -19,6 +19,7 @@
 #include <kern/vga.h>
 #include <kern/3c509.h>
 #include <kern/elf.h>
+#include <kern/kclock.h>
 
 
 /**********************************
@@ -839,6 +840,18 @@ sys_grant_io(envid_t envid)
 	return 0;
 }
 
+// RTC challenge
+static int
+sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon)
+{
+        *sec = 0xFF & mc146818_read(NULL, 0);
+        *min = 0xFF & mc146818_read(NULL, 2);
+        *hour = 0xFF & mc146818_read(NULL, 4);
+        *day = 0xFF & mc146818_read(NULL, 7);
+        *mon = 0xFF & mc146818_read(NULL, 8);
+        return 0xFF & mc146818_read(NULL, 9);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 register_t
 syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a4, register_t a5)
@@ -908,6 +921,8 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_unreg_serial(a1);
 		case(SYS_grant_io):
 			return sys_grant_io(a1);
+		case(SYS_get_hw_time):
+			sys_get_hw_time((int*)a1, (int*)a2, (int*)a3, (int*)a4, (int*)a5);
 		default:
 			return -E_INVAL;
 	}

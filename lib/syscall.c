@@ -235,3 +235,9 @@ sys_grant_io(envid_t envid)
 {
 	return syscall(SYS_grant_io, (register_t) envid, 0, 0, 0, 0);
 }
+
+int
+sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon)
+{
+        return syscall(SYS_get_hw_time, (int)sec, (int)min, (int)hour, (int)day, (int)mon);
+}
