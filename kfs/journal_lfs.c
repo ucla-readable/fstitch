@@ -978,15 +978,54 @@ static const feature_t * journal_get_feature(LFS_t * lfs, const char * name, siz
 static int journal_get_metadata_name(LFS_t * lfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
+
 	/* hide the journal file */
 	if(!strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
+
+	// Intercept because journal_lfs is a higher lfs than state->fs.
+	// TODO: journal_lfs should either only intercept if state->lfs
+	// reports to support this feature or journal_lfs ensures this
+	// feature is in get_features() and get_feature().
+	if (id == KFS_feature_file_lfs_name.id)
+	{
+		*data = strdup(name);
+		if (!*data)
+			return -E_NO_MEM;
+		*size = strlen(*data);
+		return 0;
+	}
+	if (id == KFS_feature_file_lfs.id)
+	{
+		*data = malloc(sizeof(lfs));
+		if (!*data)
+			return -E_NO_MEM;
+		*size = sizeof(lfs);
+		memcpy(*data, &lfs, sizeof(lfs));
+		return 0;
+	}
+
 	return CALL(state->fs, get_metadata_name, name, id, size, data);
 }
 
 static int journal_get_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
 {
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
+
+	// Intercept because journal_lfs is a higher lfs than state->fs.
+	// TODO: journal_lfs should either only intercept if state->lfs
+	// reports to support this feature or journal_lfs ensures this
+	// feature is in get_features() and get_feature().
+	if (id == KFS_feature_file_lfs.id)
+	{
+		*data = malloc(sizeof(lfs));
+		if (!*data)
+			return -E_NO_MEM;
+		*size = sizeof(lfs);
+		memcpy(*data, &lfs, sizeof(lfs));
+		return 0;
+	}
+
 	return CALL(state->fs, get_metadata_fdesc, file, id, size, data);
 }
 
