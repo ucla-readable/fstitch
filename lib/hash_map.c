@@ -196,6 +196,56 @@ bool hash_map_erase(hash_map_t * hm, const void * k)
 	return 1;
 }
 
+bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
+{
+	size_t elt_num;
+	chain_elt_t * head;
+	chain_elt_t * elt;
+
+	// Check that newk isn't already in use
+
+	if (hash_map_find_val(hm, newk))
+		return 0;
+
+	// Find oldk
+
+	elt_num = hash_ptr(oldk, vector_size(hm->tbl));
+	head = vector_elt(hm->tbl, elt_num);
+	if (!head)
+		return 0;
+
+	head = chain_search_key(head, oldk);
+	if (!head)
+		return 0;
+
+	// The hashmap has oldk, move elt to its new home
+
+	elt = head;
+	if (elt->prev)
+		elt->prev->next = elt->next;
+	else
+		vector_elt_set(hm->tbl, elt_num, elt->next);
+	if (elt->next)
+		elt->next->prev = elt->prev;
+
+	elt->elt.key = newk;
+	elt->prev = NULL;
+	elt->next = NULL;
+
+	elt_num = hash_ptr(newk, vector_size(hm->tbl));
+	head = vector_elt(hm->tbl, elt_num);
+
+	if (head)
+	{
+		elt->next = head;
+		head->prev = elt;
+	}
+
+	vector_elt_set(hm->tbl, elt_num, elt);
+
+	return 1;
+}
+
 void hash_map_clear(hash_map_t * hm)
 {
 	size_t i;

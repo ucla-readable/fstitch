@@ -27,6 +27,8 @@ bool   hash_map_empty(const hash_map_t * hm);
 bool   hash_map_insert(hash_map_t * hm, void * k, void * v);
 // Remove the given key-val pair, does not destory key or val.
 bool   hash_map_erase(hash_map_t * hm, const void * k);
+// Change the mapping from oldk->val to be newk->val.
+bool   hash_map_change_key(hash_map_t * hm, void * oldk, void * newk);
 // Remove all key-val pairs, does not destroy keys or vals.
 void   hash_map_clear(hash_map_t * hm);
 // Return the val associated with k.
