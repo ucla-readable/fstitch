@@ -188,6 +188,21 @@ memmove(void *dst, const void *src, size_t n)
 	return dst;
 }
 
+int
+memcmp(const void *p, const void *q, size_t len)
+{
+	uint8_t * bp = (uint8_t *) p;
+	uint8_t * bq = (uint8_t *) q;
+	while(len-- > 0)
+	{
+		if(*bp != *bq)
+			return (int) *bp - (int) *bq;
+		bp++;
+		bp++;
+	}
+	return 0;
+}
+
 #ifndef KUDOS_KERNEL
 void *
 memdup(const void *src, size_t len)

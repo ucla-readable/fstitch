@@ -19,6 +19,7 @@ void *		memcpy(void *dest, const void *src, size_t len);
 void *		memmove(void *dest, const void *src, size_t len);
 void *		memchr(const void *s, int c, size_t n);
 void *		memdup(const void *src, size_t len);
+int		memcmp(const void *p, const void *q, size_t len);
 
 int      isnum(char c);
 
