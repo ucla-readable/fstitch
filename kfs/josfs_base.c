@@ -854,7 +854,6 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
-		// FIXME need to link with oldhead
 		indirect = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, head, tail);
 		if (indirect) {
 			// Initialize the structure, then point to it
@@ -882,6 +881,13 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 				// this should add both changes at once, because they are linked
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
+
+				if (oldhead) {
+					if ((chdesc_add_depend(*tail, oldhead)) < 0) {
+						bdesc_drop(&indirect);
+						return r;
+					}
+				}
 			}
 			else {
 				bdesc_touch(indirect);
@@ -1062,38 +1068,69 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	struct josfs_fdesc * new;
 	JOSFS_File_t * oldfile;
 	JOSFS_File_t * newfile;
-	int i, r;
+	JOSFS_File_t temp_file;
+	int i, r, oldindex, offset;
+	chdesc_t * oldhead = NULL, * newtail, * curhead;
+
+	if (head && tail)
+		oldhead = *head;
 
 	oldfdesc = josfs_lookup_name(object, oldname);
 	if (oldfdesc) {
 		old = (struct josfs_fdesc *) oldfdesc;
-		// FIXME chdesc
-		newfdesc = josfs_allocate_name(object, newname, old->file->f_type, NULL, NULL, NULL);
+		oldfile = ((JOSFS_File_t *) old->dirb->ddesc->data) + old->index;
+		oldindex = old->index;
+		memcpy(&temp_file, oldfile, sizeof(JOSFS_File_t));
+		josfs_free_fdesc(object, oldfdesc);
+
+		newfdesc = josfs_allocate_name(object, newname, temp_file.f_type, NULL, head, tail);
 		if (newfdesc) {
 			new = (struct josfs_fdesc *) newfdesc;
-			new->file->f_size = old->file->f_size;
-			new->file->f_indirect = old->file->f_indirect;
+			strcpy(temp_file.f_name, new->file->f_name);
+			new->file->f_size = temp_file.f_size;
+			new->file->f_indirect = temp_file.f_indirect;
 			for (i = 0; i < JOSFS_NDIRECT; i++)
-				new->file->f_direct[i] = old->file->f_direct[i];
+				new->file->f_direct[i] = temp_file.f_direct[i];
 
-			bdesc_touch(new->dirb);
-			oldfile = ((JOSFS_File_t *) old->dirb->ddesc->data) + old->index;
-			newfile = ((JOSFS_File_t *) new->dirb->ddesc->data) + new->index;
-			memcpy(newfile, oldfile, sizeof(JOSFS_File_t));
-			strcpy(newfile->f_name, new->file->f_name);
-			josfs_free_fdesc(object, oldfdesc);
-			// FIXME chdesc
+			if (head && tail) {
+				curhead = *head;
+				offset = oldindex * sizeof(JOSFS_File_t);
+				if ((r = chdesc_create_byte(new->dirb, offset, sizeof(JOSFS_File_t), &temp_file, head, &newtail)) < 0) {
+					josfs_free_fdesc(object, newfdesc);
+					return r;
+				}
+
+				if ((r = chdesc_add_depend(newtail, curhead)) < 0) {
+					josfs_free_fdesc(object, newfdesc);
+					return r;
+				}
+
+				r = depman_add_chdesc(*head);
+				assert(r >= 0); // TODO: handle error
+
+				if (oldhead) {
+					if ((r = chdesc_add_depend(*tail, oldhead)) < 0) {
+						josfs_free_fdesc(object, newfdesc);
+						return r;
+					}
+				}
+			}
+			else {
+				bdesc_touch(new->dirb);
+				newfile = ((JOSFS_File_t *) new->dirb->ddesc->data) + new->index;
+				memcpy(newfile, &temp_file, sizeof(JOSFS_File_t));
+			}
+
 			if ((r = CALL(info->ubd, write_block, new->dirb)) < 0) {
 				josfs_free_fdesc(object, newfdesc);
 				return r;
 			}
 			josfs_free_fdesc(object, newfdesc);
 
-			// FIXME chdesc
-			if (josfs_remove_name(object, oldname, NULL, NULL) == 0)
+			if (josfs_remove_name(object, oldname, head, tail) == 0)
 				return 0;
 			else
-				josfs_remove_name(object, newname, NULL, NULL);
+				josfs_remove_name(object, newname, head, tail);
 		}
 	}
 
@@ -1125,15 +1162,19 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 			if (head && tail) {
 				offset = (nblocks - 1) * sizeof(uint32_t);
-				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &data, head, tail)) < 0)
+				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &data, head, tail)) < 0) {
+					bdesc_drop(&indirect);
 					return NULL;
+				}
 
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
 
 				if (oldhead) {
-					if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+					if ((r = chdesc_add_depend(*tail, oldhead)) < 0) {
+						bdesc_drop(&indirect);
 						return NULL;
+					}
 				}
 			}
 			else {
