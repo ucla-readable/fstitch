@@ -24,7 +24,7 @@ static bool use_wb_cache = 1;
 
 static struct Scfs_metadata md;
 
-static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, bool enable_fsck, uint32_t cache_nblks, bool stripper)
+static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS_t * external_journal, bool enable_fsck, uint32_t cache_nblks, bool stripper)
 {
 //	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -119,6 +119,8 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, boo
 
 			if ((lfs = josfs_lfs = josfs(journal_queue)))
 			{
+				LFS_t * fs_journal;
+
 				if (enable_jfsck)
 				{
 					if (verbose)
@@ -132,7 +134,12 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, boo
 						printf("done.\n");
 				}
 
-				if ((journal = journal_lfs(lfs, lfs, journal_queue)))
+				if (external_journal)
+					fs_journal = external_journal;
+				else
+					fs_journal = lfs;
+
+				if ((journal = journal_lfs(fs_journal, lfs, journal_queue)))
 				{
 					lfs = journal;
 					journaling = 1;
@@ -177,7 +184,12 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, boo
 		}
 
 		if (journaling)
-			printf(" [journaled, %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
+		{
+			printf(" [journaled");
+			if (external_journal)
+				printf(" external");
+			printf(", %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
+		}
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
@@ -200,7 +212,7 @@ static void print_usage(const char * bin)
 {
 	printf("Usage:\n");
 	printf("%s -d <device> -m <mount_point> [-v]\n", bin);
-	printf("    [-j <on|off> [-jfsck <on|off>]] [-fsck <on|off]\n");
+	printf("    [-j <on|off> [-jfsck <on|off>] [-ej <lfs_name>]] [-fsck <on|off>]\n");
 	printf("    [-$ <num_blocks>] [-wb|-wt]\n");
 	printf("  <device> is one of:\n");
 	printf("    ide  <controllerno> <diskno>\n");
@@ -209,11 +221,12 @@ static void print_usage(const char * bin)
 	printf("    bd   <bd_name>\n");
 }
 
-static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, bool * fsck, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** external_journal, bool * fsck, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
 	const char * fsck_str;
 	const char * jfsck_str;
+	const char * extjournal_name;
 	const char * cache_num_blocks_str;
 
 	if (get_arg_idx(argc, argv, "-v"))
@@ -250,6 +263,22 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 
 	if (!*journal && *jfsck)
 		printf("Ignoring pre-journal-replay fsck request, journaling is off.\n");
+
+	if (*journal && (extjournal_name = get_arg_val(argc, argv, "-ej")))
+	{
+		modman_it_t * it = modman_it_create_lfs();
+		assert(it);
+		while ((*external_journal = modman_it_next_lfs(it)))
+			if (!strcmp(extjournal_name, modman_name_lfs(*external_journal)))
+				break;
+		modman_it_destroy(it);
+
+		if (!*external_journal)
+		{
+			fprintf(STDERR_FILENO, "Unable to find LFS %s\n", extjournal_name);
+			exit();
+		}
+	}
 
 	if ((fsck_str = get_arg_val(argc, argv, "-fsck")))
 	{
@@ -434,6 +463,7 @@ void umain(int argc, const char ** argv)
 {
 	const char * mount_point;
 	BD_t * disk;
+	LFS_t * external_journal = NULL;
 	CFS_t * cfs;
 	bool journal = 0;
 	bool fsck = 0, jfsck = 0;
@@ -456,13 +486,13 @@ void umain(int argc, const char ** argv)
 		exit();
 	}
 
-	parse_options(argc, argv, &journal, &jfsck, &fsck, &cache_num_blocks);
+	parse_options(argc, argv, &journal, &jfsck, &external_journal, &fsck, &cache_num_blocks);
 
 	disk = create_disk(argc, argv, &stripper);
 	if (!disk)
 		exit();
 
-	cfs = build_uhfs(disk, journal, jfsck, fsck, cache_num_blocks, stripper);
+	cfs = build_uhfs(disk, journal, jfsck, external_journal, fsck, cache_num_blocks, stripper);
 	if (!cfs)
 		exit();
 
