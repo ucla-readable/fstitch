@@ -414,7 +414,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 	uint32_t nlinks, nblocks;
 	size_t data_len;
 	void * data;
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * prev_head = NULL, * tail, * save_head;
 	bdesc_t * blk;
 
 	if (link_supported) {
@@ -436,20 +436,20 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 
 	nblocks = CALL(state->lfs, get_file_numblocks, f);
 	for (i = 0 ; i < nblocks; i++) {
-		// TODO: for chdescs, does this need to depend on remove_name above?
-		// Does each iteration of this loop need to depend on the prev it?
-		// For now, we play it safe and make this dependencies.
 		blk = CALL(state->lfs, truncate_file_block, f, &prev_head, &tail);
 		if (!blk) {
 			CALL(state->lfs, free_fdesc, f);
 			return -E_INVAL;
 		}
 
+		save_head = prev_head;
+
 		r = CALL(state->lfs, free_block, blk, &prev_head, &tail);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
 		}
+		prev_head = save_head;
 	}
 
 	CALL(state->lfs, free_fdesc, f);
