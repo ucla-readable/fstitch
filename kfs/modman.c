@@ -247,3 +247,23 @@ MODMAN_OP_CAST(const modman_entry_lfs_t *, lookup, lfs);
 MODMAN_OP(const char *, name, bd);
 MODMAN_OP(const char *, name, cfs);
 MODMAN_OP(const char *, name, lfs);
+
+#define MODMAN_IT_CREATE(type) \
+modman_it_t * modman_it_create_##type(void) \
+{ \
+	return hash_map_it_create(type##_map); \
+}
+
+#define MODMAN_IT_NEXT(type) \
+type##_t * modman_it_next_##type(modman_it_t * it) \
+{ \
+	return (type##_t *) hash_map_val_next(type##_map, it); \
+}
+
+MODMAN_IT_CREATE(bd);
+MODMAN_IT_CREATE(cfs);
+MODMAN_IT_CREATE(lfs);
+
+MODMAN_IT_NEXT(bd);
+MODMAN_IT_NEXT(cfs);
+MODMAN_IT_NEXT(lfs);

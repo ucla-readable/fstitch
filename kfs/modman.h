@@ -2,6 +2,7 @@
 #define __KUDOS_KFS_MODMAN_BD_H
 
 #include <inc/vector.h>
+#include <inc/hash_map.h>
 
 #include <kfs/bd.h>
 #include <kfs/cfs.h>
@@ -21,6 +22,8 @@ typedef struct modman_entry_##type modman_entry_##type##_t;
 MODMAN_ENTRY_STRUCT(BD_t, bd, const);
 MODMAN_ENTRY_STRUCT(CFS_t, cfs, const);
 MODMAN_ENTRY_STRUCT(LFS_t, lfs, const);
+
+typedef hash_map_it_t modman_it_t;
 
 int modman_init(void);
 
@@ -58,5 +61,15 @@ const modman_entry_lfs_t * modman_lookup_lfs(LFS_t * lfs);
 const char * modman_name_bd(BD_t * bd);
 const char * modman_name_cfs(CFS_t * cfs);
 const char * modman_name_lfs(LFS_t * lfs);
+
+modman_it_t * modman_it_create_bd(void);
+modman_it_t * modman_it_create_cfs(void);
+modman_it_t * modman_it_create_lfs(void);
+
+BD_t * modman_it_next_bd(modman_it_t * it);
+CFS_t * modman_it_next_cfs(modman_it_t * it);
+LFS_t * modman_it_next_lfs(modman_it_t * it);
+
+#define modman_it_destroy hash_map_it_destroy
 
 #endif /* __KUDOS_KFS_MODMAN_BD_H */
