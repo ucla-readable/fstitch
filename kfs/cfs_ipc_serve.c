@@ -4,6 +4,7 @@
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
+#include <inc/malloc.h>
 #include <inc/env.h>
 
 #define IPC_RECV_TIMEOUT 100
@@ -22,12 +23,17 @@
 #define REQVA (0x10000000 - PGSIZE)
 #define PAGESNDVA (REQVA - PGSIZE)
 
+// Previous message store for two-part message methods.
+// If prev_serve_recvs[i] == NULL, allocate it and then use it
+// (this helps kfsd in bochs startup faster without much runtime overhead.)
 struct prev_serve_recv {
 	envid_t envid;
 	int     type;
 	uint8_t scfs[PGSIZE];
 };
-static struct prev_serve_recv prev_serve_recvs[NENV];
+typedef struct prev_serve_recv prev_serve_recv_t;
+static prev_serve_recv_t * prev_serve_recvs[NENV];
+
 
 static void serve();
 
@@ -43,11 +49,16 @@ int register_frontend_cfs(CFS_t * cfs)
 
 static void cfs_ipc_serve_shutdown(void * arg)
 {
+	int i;
+
 	if (frontend_cfs)
 	{
 		DESTROY(frontend_cfs);
 		frontend_cfs = NULL;
 	}
+
+	for (i = 0; i < sizeof(prev_serve_recvs)/(sizeof(prev_serve_recvs[0])); i++)
+		free(prev_serve_recvs[i]);
 }
 
 // Return like a constructor would, 0 for fail
@@ -73,7 +84,16 @@ void cfs_ipc_serve_run()
 
 static void serve_open(envid_t envid, struct Scfs_open * req)
 {
-	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
+	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
+	if (!prevrecv)
+	{
+		if (! (prevrecv = malloc(sizeof(prev_serve_recv_t))) )
+		{
+			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
+			kfsd_shutdown();
+		}
+	}
+
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
@@ -117,7 +137,16 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 
 static void serve_write(envid_t envid, struct Scfs_write * req)
 {
-	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
+	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
+	if (!prevrecv)
+	{
+		if (! (prevrecv = malloc(sizeof(prev_serve_recv_t))) )
+		{
+			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
+			kfsd_shutdown();
+		}
+	}
+
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
@@ -239,7 +268,16 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 
 static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 {
-	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
+	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
+	if (!prevrecv)
+	{
+		if (! (prevrecv = malloc(sizeof(prev_serve_recv_t))) )
+		{
+			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
+			kfsd_shutdown();
+		}
+	}
+
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
@@ -304,8 +342,8 @@ static void serve()
 		return; // just leave it hanging...
 	}
 
-	const struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(whom)];
-	if (prevrecv->type && prevrecv->envid == whom)
+	const prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(whom)];
+	if (prevrecv && prevrecv->type && prevrecv->envid == whom)
 		type = prevrecv->type;
 	else
 		type = *((int*) REQVA);
