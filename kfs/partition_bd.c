@@ -40,10 +40,15 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 	
 	bdesc = CALL(info->bd, read_block, info->start + number);
 	
-	/* FIXME bdesc_alter() can fail */
+	if(!bdesc)
+		return NULL;
 	
 	/* ensure we can alter the structure without conflict */
-	bdesc_alter(&bdesc);
+	if(bdesc_alter(&bdesc))
+	{
+		bdesc_drop(&bdesc);
+		return NULL;
+	}
 	
 	/* adjust the block descriptor to match the partition */
 	bdesc->bd = object;
@@ -102,10 +107,14 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 static int partition_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct partition_info * info = (struct partition_info *) object->instance;
+	uint32_t refs;
 	int value;
 	
 	if(!block)
 		return CALL(info->bd, sync, NULL);
+	
+	/* save reference count */
+	refs = block->refs;
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
@@ -126,9 +135,12 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 	/* sync it */
 	value = CALL(block->bd, sync, block);
 	
-	block->bd = object;
-	block->number -= info->start;
-	block->translated--;
+	if(refs)
+	{
+		block->bd = object;
+		block->number -= info->start;
+		block->translated--;
+	}
 	
 	return value;
 }

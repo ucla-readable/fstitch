@@ -52,7 +52,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
 	/* not in the cache, need to read it */
 	info->blocks[index] = CALL(info->bd, read_block, number);
 	
-	if(!info->blocks)
+	if(!info->blocks[index])
 		return NULL;
 	
 	/* FIXME bdesc_alter() and bdesc_retain() can fail */
@@ -72,7 +72,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) object->instance;
-	uint32_t index;
+	uint32_t index, refs = block->refs;
 	int value;
 	
 	/* make sure this is the right block device */
@@ -103,8 +103,11 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	/* write it */
 	value = CALL(block->bd, write_block, block);
 	
-	block->bd = object;
-	block->translated--;
+	if(refs)
+	{
+		block->bd = object;
+		block->translated--;
+	}
 	
 	return value;
 }
@@ -112,6 +115,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) object->instance;
+	uint32_t refs;
 	int value;
 	
 	/* since this is a write-through cache, syncing is a no-op */
@@ -119,6 +123,9 @@ static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 	
 	if(!block)
 		return CALL(info->bd, sync, NULL);
+	
+	/* save reference count */
+	refs = block->refs;
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
@@ -138,8 +145,11 @@ static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 	/* sync it */
 	value = CALL(block->bd, sync, block);
 	
-	block->bd = object;
-	block->translated--;
+	if(refs)
+	{
+		block->bd = object;
+		block->translated--;
+	}
 	
 	return value;
 }
