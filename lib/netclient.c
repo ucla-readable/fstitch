@@ -53,7 +53,7 @@ find_netd_net(void)
 	size_t ntries;
 	size_t i;
 
-	// Try to find netc a few times, in case this env is being
+	// Try to find netd a few times, in case this env is being
 	// started at the same time as netd, thus giving netd time to do its
 	// fork.
 	// 20 is most arbitrary: 10 worked in bochs, so I doubled to get 20.
