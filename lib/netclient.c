@@ -224,12 +224,9 @@ net_stats(int fd)
 		fprintf(STDERR_FILENO, "net_stats: unable to find netd ipcrecv\n");
 		return -1;
 	}
-	netd_net = find_netd_net();
-	if (!netd_net)
-	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
-		return -1;
-	}
+
+	// stats_fd comes from a child of netd and we don't know their envid
+	netd_net = 0;
 
 	// Setup accept request
 	struct Netreq_stats *req = (struct Netreq_stats*) ROUND32(req_buf, PGSIZE);
