@@ -12,7 +12,7 @@
 #include <kfs/josfs_cfs.h>
 
 
-#define JOSFS_CFS_DEBUG 1
+#define JOSFS_CFS_DEBUG 0
 
 
 #if JOSFS_CFS_DEBUG
@@ -202,13 +202,8 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
-	int idx;
-	int fd;
-	int i, j, k;
+	int idx, fd, r;
 	int nbytes_read = 0;
-	dirent_t ent;
-	int r = 0;
-	struct File f;
 
 	if ((idx = fid_idx(fid, state->open_file)) < 0)
 		return idx;
@@ -217,12 +212,12 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 	if ((r = seek(fd, *basep)) < 0)
 		return r;
 
-	for (i=0; nbytes_read < nbytes; i++)
+	while (nbytes_read < nbytes)
 	{
-#define FILEBASE	0xd0000000
-#define FDTABLE		(FILEBASE - PTSIZE)
-#define INDEX2FD(i)	((struct Fd*) (FDTABLE + (i)*PGSIZE))
-		printf("offset %d\n", INDEX2FD(fd)->fd_offset);
+		int i;
+		struct File f;
+		uint16_t namelen, reclen;
+		dirent_t * ent = (dirent_t *) &buf[nbytes_read];
 
 		// Read a dirent
 		if ((r = read(fd, &f, sizeof(struct File))) <= 0)
@@ -234,31 +229,30 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 			continue;
 		}
 
+		namelen = strlen(f.f_name);
+		namelen = MIN(namelen, sizeof(ent->d_name) - 1);
+		reclen = sizeof(*ent) - sizeof(ent->d_name) + namelen + 1;
+		
+		// Make sure it's not too long
+		if(nbytes_read + reclen > nbytes)
+			break;
+		
 		// Pseudo unique fileno generator
-		ent.d_fileno = 0;
-		k = 1;
-		const int f_name_len = strlen(f.f_name);
-		for (j = 0; j < f_name_len; j++)
+		ent->d_fileno = 0;
+		for (i = 0; f.f_name[i]; i++)
 		{
-			ent.d_fileno += j * k;
-			k = k * 2;
+			ent->d_fileno *= 5;
+			ent->d_fileno += f.f_name[i];
 		}
 
-		// Store the dirent into ent
-		ent.d_type = f.f_type;
-		ent.d_namelen = MIN(f_name_len, sizeof(ent.d_name) - 1);
-		ent.d_reclen = sizeof(ent) - sizeof(ent.d_name) + ent.d_namelen + 1;
-		printf("setting ent.d_reclen: %d\n", ent.d_reclen);
-		strncpy(ent.d_name, f.f_name, sizeof(ent.d_name));
+		// Store the dirent into *ent
+		ent->d_reclen = reclen;
+		ent->d_type = f.f_type;
+		ent->d_namelen = namelen;
+		strncpy(ent->d_name, f.f_name, sizeof(ent->d_name));
 
-		// Store the dirent ent into the buffer
-		if (nbytes_read + ent.d_reclen > nbytes)
-			break;
-
-		memcpy(buf, &ent, ent.d_reclen);
-
-		nbytes_read += ent.d_reclen;
-		buf += ent.d_reclen;
+		// Update position variables
+		nbytes_read += reclen;
 		*basep += sizeof(struct File);
 	}
 
