@@ -75,7 +75,6 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
-	const chdesc_t * tmp;
 	chdesc_t * block_chdesc, * cur_chdesc;
 	uint32_t refs;
 	int r;
@@ -84,18 +83,21 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 		printf("block->bd 0x%08x, bd 0x%08x\n", block->bd, bd);
 	assert(block->bd == bd);
 
-	tmp = depman_get_deps(block);
-	r = chdesc_weak_retain((chdesc_t *) tmp, &block_chdesc);
-	if (r < 0)
-		return r;
+	block_chdesc = (chdesc_t *) depman_get_deps(block);
+	if (block_chdesc)
+	{
+		r = chdesc_weak_retain(block_chdesc, &block_chdesc);
+		if (r < 0)
+			return r;
 
-	assert(!block_chdesc || !block_chdesc->dependents); // no one should depend on block
+		assert(!block_chdesc->dependents); // no one should depend on block
 
-	// Satisfy block's chdesc's inter-BD deps
+		// Satisfy block's chdesc's inter-BD deps
 
-	r = satisfy_external_deps(bd, block, block_chdesc);
-	if (r < 0)
-		return r;
+		r = satisfy_external_deps(bd, block, block_chdesc);
+		if (r < 0)
+			return r;
+	}
 
 	// Write block
 
