@@ -20,6 +20,7 @@ struct loop_state {
 	LFS_t * lfs;
 	fdesc_t * file;
 	const char * filename;
+	uint16_t blocksize;
 };
 typedef struct loop_state loop_state_t;
 
@@ -50,10 +51,9 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_state_t * state = (loop_state_t *) bd->instance;
-	uint32_t blksize = CALL(state->lfs, get_blocksize);
 	bdesc_t * bdesc;
 
-	bdesc = CALL(state->lfs, get_file_block, state->file, number*blksize);
+	bdesc = CALL(state->lfs, get_file_block, state->file, number * state->blocksize);
 	if (!bdesc)
 		return NULL;
 
@@ -64,6 +64,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 		return NULL;
 	}
 	bdesc->bd = bd;
+	bdesc->number = number;
 
 	return bdesc;
 }
@@ -72,8 +73,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_state_t * state = (loop_state_t *) bd->instance;
-	BD_t * lfs_bd = CALL(state->lfs, get_blockdev);
-	uint32_t refs;
+	uint32_t refs, loop_number, lfs_number;
 	chdesc_t * head = NULL;
 	chdesc_t * tail;
 	int r;
@@ -81,15 +81,23 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	if(block->bd != bd)
 		return -E_INVAL;
 
+	loop_number = block->number;
+	lfs_number = CALL(state->lfs, get_file_block_num, state->file, loop_number * state->blocksize);
+	if(lfs_number == -1)
+		return -E_INVAL;
+
 	refs = block->refs;
 	block->translated++;
-	block->bd = lfs_bd;
+	block->bd = CALL(state->lfs, get_blockdev);
+	block->number = lfs_number;
 
 	r =  CALL(state->lfs, write_block, block, block->offset, block->length, block->ddesc->data, &head, &tail);
+	/* FIXME add head, tail to depman? */
 
 	if (refs)
 	{
 		block->bd = bd;
+		block->number = loop_number;
 		block->translated--;
 	}
 
@@ -178,6 +186,8 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	state->file = CALL(state->lfs, lookup_name, state->filename);
 	if (!state->file)
 		goto error_filename;
+
+	state->blocksize = CALL(state->lfs, get_blocksize);
 
 	return bd;
 
