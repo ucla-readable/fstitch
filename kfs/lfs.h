@@ -29,8 +29,8 @@ typedef struct LFS LFS_t;
  * whole graph. Thus to make the resulting subgraph depend on something else,
  * make its tail depend on that. To make something else depend on the resulting
  * subgraph, make it depend on its head.
- * - head is both an input and output parameter, if input head is non-NULL it will
- * be made to depend on the new tail. tail is output only, it outputs the new tail. */
+ * - head is both an input and output parameter: if input head is non-NULL, the new
+ * tail will be made to depend on it. tail is output only, it outputs the new tail. */
 
 struct LFS {
 	DESTRUCTOR(LFS_t);
