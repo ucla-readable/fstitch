@@ -25,6 +25,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/int3 \
 			$(OBJDIR)/user/josweb \
 	 		$(OBJDIR)/kern/kernel \
+	 		$(OBJDIR)/user/knbd-server \
 			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/ls \
 			$(OBJDIR)/user/lsfd \
@@ -48,6 +49,10 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/telnetd \
 			$(OBJDIR)/user/testfpu \
 			$(OBJDIR)/user/testkpl \
+			$(OBJDIR)/user/testvector \
+			$(OBJDIR)/user/testhm \
+			$(OBJDIR)/user/testqsort \
+			$(OBJDIR)/user/testskfs \
 			$(OBJDIR)/user/uptime \
 			$(OBJDIR)/user/volume
 
@@ -57,7 +62,6 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/goomba.spr \
 			fs/index.html \
 			fs/init.sh \
-			fs/foo.sh \
 			fs/kbear.jpg \
 			fs/kudos.0 \
 			fs/lady.img \
@@ -67,6 +71,7 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/mario.pal \
 			fs/mario.spr \
 			fs/motd \
+			fs/loop \
 			fs/winamp.0
 
 -include fs/audio/Makefrag
