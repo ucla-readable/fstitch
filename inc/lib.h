@@ -48,7 +48,7 @@ int	sys_page_alloc(envid_t env, void* pg, int perm);
 int	sys_page_map(envid_t dst_env, void* dst_pg,
 		     envid_t src_env, void* src_pg, int perm);
 int	sys_page_unmap(envid_t env, void* pg);
-int	sys_env_set_name(envid_t envid, char * name);
+int	sys_env_set_name(envid_t envid, const char * name);
 int	sys_env_set_priority(envid_t env, int priority);
 int	sys_sb16_close(void);
 int	sys_sb16_open(uint16_t rate, uint8_t output, uintptr_t address);
@@ -108,6 +108,7 @@ int	spawnl(const char*, const char*, ...);
 int	close(int fd);
 ssize_t	read(int fd, void* buf, size_t nbytes);
 ssize_t	read_nb(int fd, void* buf, size_t nbytes);
+int	read_map(int fd, off_t offset, void** blk);
 ssize_t	write(int fd, const void* buf, size_t nbytes);
 int	seek(int fd, off_t offset);
 void	close_all(void);
@@ -127,9 +128,7 @@ int	sync(void);
 int	fs_shutdown(void);
 
 // file.c
-int jfs_open(const char* path, int mode);
-int read_map(int fd, off_t offset, void** blk);
-int	jfs_read_map(int fd, off_t offset, void** blk);
+int	jfs_open(const char* path, int mode);
 int	jfs_remove(const char* path);
 int	jfs_sync(void);
 uint32_t disk_avail_space(void);

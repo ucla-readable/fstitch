@@ -19,6 +19,7 @@ struct Dev
 	char* dev_name;
 	int (*dev_read)(struct Fd* fd, void* buf, size_t len, off_t offset);
 	int (*dev_read_nb)(struct Fd* fd, void* buf, size_t len, off_t offset);
+	int (*dev_read_map)(struct Fd* fd, off_t offset, void** blk);
 	int (*dev_write)(struct Fd* fd, const void* buf, size_t len, off_t offset);
 	int (*dev_close)(struct Fd* fd);
 	int (*dev_stat)(struct Fd* fd, struct Stat* stat);

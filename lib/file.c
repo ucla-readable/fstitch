@@ -6,6 +6,7 @@
 
 static int file_close(struct Fd* fd);
 static ssize_t file_read(struct Fd* fd, void* buf, size_t n, off_t offset);
+static int file_read_map(struct Fd* fd, off_t offset, void** blk);
 static ssize_t file_write(struct Fd* fd, const void* buf, size_t n, off_t offset);
 static int file_stat(struct Fd* fd, struct Stat* stat);
 static int file_trunc(struct Fd* fd, off_t newsize);
@@ -16,6 +17,7 @@ struct Dev devfile =
 	.dev_name =	"file",
 	.dev_read =	file_read,
 	.dev_read_nb =	file_read,
+	.dev_read_map =	file_read_map,
 	.dev_write =	file_write,
 	.dev_close =	file_close,
 	.dev_stat =	file_stat,
@@ -96,17 +98,11 @@ file_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 
 // Find the page that maps the file block starting at 'offset',
 // and store its address in '*blk'.
-int
-jfs_read_map(int fdnum, off_t offset, void** blk)
+static int
+file_read_map(struct Fd* fd, off_t offset, void** blk)
 {
-	int r;
 	char* va;
-	struct Fd *fd;
 
-	if ((r = fd_lookup(fdnum, &fd)) < 0)
-		return r;
-	if (fd->fd_dev_id != devfile.dev_id)
-		return -E_INVAL;
 	va = fd2data(fd) + offset;
 	if (offset >= MAXFILESIZE)
 		return -E_NO_DISK;
@@ -114,12 +110,6 @@ jfs_read_map(int fdnum, off_t offset, void** blk)
 		return -E_NO_DISK;
 	*blk = (void*) va;
 	return 0;
-}
-
-// TODO: implement using KPL
-int read_map(int fdnum, off_t offset, void** blk)
-{
-	return jfs_read_map(fdnum, offset, blk);
 }
 
 // Write 'n' bytes from 'buf' to 'fd' at the current seek position.

@@ -6,6 +6,7 @@
 
 static int kpl_close(struct Fd* fd);
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset);
+static int kpl_read_map(struct Fd* fd, off_t offset, void** blk);
 static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset);
 static int kpl_stat(struct Fd* fd, struct Stat* stat);
 static int kpl_trunc(struct Fd* fd, off_t newsize);
@@ -16,6 +17,7 @@ struct Dev devkpl =
 	.dev_name =	"kpl",
 	.dev_read =	kpl_read,
 	.dev_read_nb =	kpl_read,
+	.dev_read_map =	kpl_read_map,
 	.dev_write =	kpl_write,
 	.dev_close =	kpl_close,
 	.dev_stat =	kpl_stat,
@@ -81,20 +83,33 @@ open(const char* path, int mode)
 static int kpl_close(struct Fd* fd)
 {
 	int fid = fd->fd_kpl.fid;
+	void * page = fd2data(fd);
 	/* we must unmap the Fd page before calling cfs_close so that the server will
 	 * be able to detect if we were the last environment with this file open */
 	sys_page_unmap(0, fd);
-	sys_page_unmap(0, fd2data(fd));
+	sys_page_unmap(0, page);
+	sys_page_unmap(0, page + PGSIZE);
 	return cfs_close(fid);
 }
 
-// Read 'n' bytes from 'fd' at the current seek position into 'buf'.
+// Read 'n' bytes from 'fd' at the given offset into 'buf'.
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 {
 	return cfs_read(fd->fd_kpl.fid, offset, n, buf);
 }
 
-// Write 'n' bytes from 'buf' to 'fd' at the current seek position.
+static int kpl_read_map(struct Fd* fd, off_t offset, void** blk)
+{
+	int r;
+	*blk = fd2data(fd) + PGSIZE;
+	if((r = sys_page_alloc(0, *blk, PTE_U | PTE_W | PTE_P)) < 0)
+		return r;
+	if(kpl_read(fd, *blk, PGSIZE, offset & ~(PGSIZE - 1)) < 0)
+		return -1;
+	return 0;
+}
+
+// Write 'n' bytes from 'buf' to 'fd' at the given offset.
 static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 {
 	return cfs_write(fd->fd_kpl.fid, offset, n, buf);

@@ -334,6 +334,25 @@ readn(int fdnum, void* buf, size_t n)
 }
 
 int
+read_map(int fdnum, off_t offset, void** blk)
+{
+	int r;
+	struct Dev* dev;
+	struct Fd *fd;
+	
+	if ((r = fd_lookup(fdnum, &fd)) < 0
+	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
+		return r;
+	if(!dev->dev_read_map)
+		return -E_INVAL;
+	if ((fd->fd_omode & O_ACCMODE) == O_WRONLY) {
+		fprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
+		return -E_INVAL;
+	}
+	return (*dev->dev_read_map)(fd, offset, blk);
+}
+
+int
 write(int fdnum, const void* buf, size_t n)
 {
 	int r;
