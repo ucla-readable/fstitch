@@ -114,6 +114,7 @@ void output_graph_dot(hash_map_t * nodes)
 
 	printf("digraph kfs\n");
 	printf("{\n");
+	printf("nodesep=0.15;\nranksep=0.15;\n");
 	printf("node [shape=box,color=black];\n");
 
 	while ((n = hash_map_val_next(nodes, it)))
