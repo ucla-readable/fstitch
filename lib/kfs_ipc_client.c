@@ -713,6 +713,38 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 	return create_bd(bd_id);
 }
 
+int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
+{
+	const envid_t fsid = find_fs();
+	int bd_id;
+
+	INIT_PG(MIRROR_BD_ADD, mirror_bd_add);
+
+	pg->bd = (uint32_t) OBJLOCAL(bd);
+	pg->newdevice = (uint32_t) OBJLOCAL(newdevice);
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return bd_id;
+}
+
+int mirror_bd_remove_device(BD_t * bd, int diskno)
+{
+	const envid_t fsid = find_fs();
+	int bd_id;
+
+	INIT_PG(MIRROR_BD_REMOVE, mirror_bd_remove);
+
+	pg->bd = (uint32_t) OBJLOCAL(bd);
+	pg->diskno = diskno;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return bd_id;
+}
+
 #include <kfs/ide_pio_bd.h>
 BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 {
