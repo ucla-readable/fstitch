@@ -431,7 +431,6 @@ static int transaction_stop(journal_state_t * state)
 	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
 	assert(r >= 0); // TODO: handle error
 	//assert(!lfs_head && !lfs_tail);
-	panic("SYSTEM MELTDOWN!");
 
 	chdesc_t * commit_chdesc = prev_head;
 
