@@ -1,6 +1,8 @@
 #ifndef __KUDOS_KFS_OO_H
 #define __KUDOS_KFS_OO_H
 
+#include <inc/types.h>
+
 #define OBJECT(interface) object_t uniform; int (*__destroy_type)(interface * object)
 #define DECLARE(interface, type, method, args...) type (*_##method)(interface * object, ##args)
 
@@ -15,9 +17,21 @@
 #define OBJFLAGS(object) (object)->uniform.flags
 #define OBJMAGIC(object) (object)->uniform.magic
 
+/* values for OBJFLAGS */
+#define OBJ_PERSISTENT 0x01
+
+/* config and status levels */
+#define CONFIG_VERBOSE 0
+#define CONFIG_NORMAL 1
+#define CONFIG_BRIEF 2
+#define STATUS_VERBOSE 0
+#define STATUS_NORMAL 1
+#define STATUS_BRIEF 2
+
 struct object {
 	uint32_t flags, magic;
-	DECLARE(void, int, get_status, int level, char * string, int length);
+	DECLARE(void, int, get_config, int level, char * string, size_t length);
+	DECLARE(void, int, get_status, int level, char * string, size_t length);
 	int (*__destroy)(void * object);
 };
 typedef struct object object_t;
