@@ -139,6 +139,7 @@ static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
 static int order_preserver_sync(BD_t * bd, bdesc_t * block)
 {
 	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	uint32_t refs;
 	int r;
 
 	if (!block)
@@ -146,13 +147,17 @@ static int order_preserver_sync(BD_t * bd, bdesc_t * block)
 
 	assert(block->bd == bd);
 
+	refs = block->refs;
 	block->translated++;
 	block->bd = state->bd;
 
 	r = CALL(state->bd, sync, block);
 
-	block->bd = bd;
-	block->translated--;
+	if (refs)
+	{
+		block->bd = bd;
+		block->translated--;
+	}
 
 	return r;
 }
