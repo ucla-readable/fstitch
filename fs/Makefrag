@@ -59,6 +59,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 
 FSIMGTXTFILES :=	fs/.journal \
 			fs/404.html \
+			fs/bomb.img \
 			fs/favicon.ico \
 			fs/goomba.spr \
 			fs/index.html \
