@@ -10,6 +10,13 @@
 // This is the same va as serv.c's, why not.
 #define REQVA (0x10000000 - PGSIZE)
 
+struct prev_serve_recv {
+	envid_t envid;
+	int     type;
+	uint8_t scfs[PGSIZE];
+};
+static struct prev_serve_recv prev_serve_recvs[NENV];
+
 static void serve();
 
 
@@ -67,7 +74,23 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 
 static void serve_write(envid_t envid, struct Scfs_write * req)
 {
-	printf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
+	if (prevrecv->envid == envid && !prevrecv->type)
+	{
+		// First of two recvs
+		prevrecv->envid = envid;
+		prevrecv->type  = req->scfs_type;
+		memcpy(prevrecv->scfs, req, PGSIZE);
+
+		printf("%s [1]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+	}
+	else
+	{
+		// Second of two recvs
+		printf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+		prevrecv->envid = 0;
+		prevrecv->type  = 0;
+	}
 }
 
 static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
@@ -112,7 +135,23 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 
 static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 {
-	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
+	if (prevrecv->envid == envid && !prevrecv->type)
+	{
+		// First of two recvs
+		prevrecv->envid = envid;
+		prevrecv->type  = req->scfs_type;
+		memcpy(prevrecv->scfs, req, PGSIZE);
+
+		printf("%s [1]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	}
+	else
+	{
+		// Second of two recvs
+		printf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+		prevrecv->envid = 0;
+		prevrecv->type  = 0;
+	}
 }
 
 static void serve_sync(envid_t envid, struct Scfs_sync * req)
