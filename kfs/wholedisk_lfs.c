@@ -127,6 +127,8 @@ static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id
 		const size_t file_size = state->blocksize * CALL(state->bd, get_numblocks);
 		*size = sizeof(file_size);
 		*data = malloc(*size);
+		if (!*data)
+			return -E_NO_MEM;
 		memcpy(*data, (void*) file_size, *size);
 	}
 	else if (id == KFS_feature_filetype.id)
@@ -134,6 +136,8 @@ static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id
 		const int32_t type = TYPE_FILE;
 		*size = sizeof(type);
 		*data = malloc(*size);
+		if (!*data)
+			return -E_NO_MEM;
 		memcpy(*data, (void*) type, *size);
 	}
 	else
