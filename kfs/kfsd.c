@@ -165,7 +165,6 @@ void kfsd_shutdown(void)
 {
 	int i;
 	printf("kfsd shutting down.\n");
-	asm("int3");
 
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
