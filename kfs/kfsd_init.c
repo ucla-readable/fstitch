@@ -221,8 +221,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 		}
 
-		//if (! (cache = chdesc_stripper_bd(cache)) )
-		//	kfsd_shutdown();
+		if (! (cache = chdesc_stripper_bd(cache)) )
+			kfsd_shutdown();
 
 		if (enable_journaling)
 		{
