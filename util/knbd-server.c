@@ -40,8 +40,10 @@ static void serve_loop(int bd, int client)
 	for(;;)
 	{
 		unsigned char buffer[BLOCK_SIZE];
-		read(client, &command, 1);
-		read(client, &number, sizeof(number));
+		if(read(client, &command, 1) != 1)
+			break;
+		if(read(client, &number, sizeof(number)) != 4)
+			break;
 		number = ntohl(number);
 		if(number >= st.st_size / bs)
 		{
@@ -65,6 +67,7 @@ static void serve_loop(int bd, int client)
 				printf("Unknown command 0x%02x!\n", command);
 		}
 	}
+	printf("Connection reset.\n");
 }
 
 static int serve_client(int bd)
@@ -93,13 +96,23 @@ static int serve_client(int bd)
 int main(int argc, char * argv[])
 {
 	int bd;
+	
 	if(argc != 2)
 	{
 		printf("Usage: %s <bd>\n", argv[0]);
 		return 0;
 	}
+	
 	bd = open(argv[1], O_RDWR);
+	if(bd == -1)
+	{
+		perror(argv[1]);
+		return 1;
+	}
+	
 	while(!serve_client(bd));
+	
 	close(bd);
+	
 	return 0;
 }
