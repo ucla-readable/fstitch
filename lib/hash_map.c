@@ -1,3 +1,5 @@
+#include <inc/assert.h>
+#include <inc/config.h>
 #include <inc/malloc.h>
 #include <inc/vector.h>
 #include <inc/hash_map.h>
@@ -19,16 +21,30 @@ static chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k);
 
 struct hash_map {
 	size_t size;
+	bool auto_resize;
 	vector_t * tbl;
 };
 
-#define INIT_NUM_ELTS 16
+// No strong reason for 16, but do ensure this value should plays nicely
+// with the hash function.
+#define INIT_NUM_BUCKETS 16
+
+// Expected time for successful and unsuccessful searches is Theta(1 + load),
+// given chaining hash tables and a uniform hash, CLR theorems 11.1 and 11.2.
+// 2.0 seems good, that is all.
+#define AUTO_RESIZE_LOAD 2.0
 
 static size_t hash_ptr(const void * k, size_t tbl_size);
 
 
+//
+// The hashing function.
+// For now only one hashing function is needed, if hash_map's usage grows
+// beyond that of pointers hash_map should be enhanced to allow other hash
+// functions.
+
 // A rotating hash, http://burtleburtle.net/bob/hash/doobs.html.
-// NOTE: rotating hashes don't hash well, this fn could be improved.
+// NOTE: rotating hashes don't hash well, this could be improved.
 static size_t hash_ptr(const void * k, size_t tbl_size)
 {
 	const uint8_t const * key = (uint8_t*) k;
@@ -44,7 +60,8 @@ static size_t hash_ptr(const void * k, size_t tbl_size)
 // Instead of the rotating hash above we could use the multiplcation method
 // (CLR, 11.3.2). Implement math.c using assembly, then try this out.
 #if 0
-static const double hash_ptr_A = 0.6180339887; //sqrt(5) - 1;
+// A is s/2^32, close to Knuth's suggested (sqrt(5)-1)/2.
+static const double hash_ptr_A = (double)2654435769 / (double)0xffffffff; 
 
 static size_t hash_ptr(const void * k, size_t tbl_size)
 {	
@@ -59,16 +76,24 @@ static size_t hash_ptr(const void * k, size_t tbl_size)
 
 hash_map_t * hash_map_create()
 {
-	return hash_map_create_size(INIT_NUM_ELTS);
+	return hash_map_create_size(INIT_NUM_BUCKETS, 1);
 }
 
-hash_map_t * hash_map_create_size(size_t n)
+hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 {
+	// hash_map uses floating point for auto rehashing
+	if (auto_resize)
+		assert(ENABLE_ENV_FP);
+
+	if (!n)
+		return NULL;
+
 	hash_map_t * hm = malloc(sizeof(*hm));
 	if (!hm)
 		return NULL;
 
 	hm->size = 0;
+	hm->auto_resize = auto_resize;
 	hm->tbl = vector_create_size(n);
 	if (!hm->tbl)
 	{
@@ -138,6 +163,12 @@ bool hash_map_insert(hash_map_t * hm, void * k, void * v)
 	head->elt.key = k;
 	head->elt.val = v;
 	hm->size++;
+
+	if (hm->auto_resize && AUTO_RESIZE_LOAD <= (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm))
+	{
+		// (safe to ignore failure)
+		(void) hash_map_resize(hm, 2*vector_size(hm->tbl));
+	}
 
 	return 1;
 }
@@ -220,10 +251,42 @@ size_t hash_map_bucket_count(const hash_map_t * hm)
 	return vector_size(hm->tbl);
 }
 
-// Implement if useful
-/*
-bool   hash_map_resize(hash_map_t * hm, size_t n);
-*/
+bool hash_map_resize(hash_map_t * hm, size_t n)
+{
+	if (n <= vector_size(hm->tbl))
+		return 1;
+
+	// Create larger hash table
+	hash_map_t * new_hm = hash_map_create_size(n, hm->auto_resize);
+	if (!new_hm)
+		return 0;
+
+	// Rehash elements
+	size_t i;
+	chain_elt_t * elt;
+	for (i=0; i < vector_size(hm->tbl); i++)
+	{
+		elt = vector_elt(hm->tbl, i);
+		while (elt)
+		{
+			if (!hash_map_insert(new_hm, elt->elt.key, elt->elt.val))
+			{
+				hash_map_destroy(new_hm);
+				return 0;
+			}
+			elt = elt->next;
+		}
+	}
+
+	// Expire the old hash table and move in the new
+	hash_map_clear(hm);
+	hm->size = new_hm->size;
+	hm->tbl  = new_hm->tbl;
+	free(new_hm);
+
+	return 1;
+}
+
 
 
 //

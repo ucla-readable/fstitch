@@ -14,8 +14,8 @@ typedef struct hash_map hash_map_t;
 
 // Create a hash_map.
 hash_map_t * hash_map_create();
-// Create a hash_map, reserve space for n entries.
-hash_map_t * hash_map_create_size(size_t n);
+// Create a hash_map, reserve space for n entries, allow/don't auto resizing.
+hash_map_t * hash_map_create_size(size_t n, bool auto_resize);
 // Destroy a hash_map, does not destroy keys or vals.
 void         hash_map_destroy(hash_map_t * hm);
 
@@ -37,10 +37,7 @@ hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k);
 // Return the number of buckets currently allocated.
 size_t hash_map_bucket_count(const hash_map_t * hm);
 // Increase the number of buckets to at least n.
-// Implement if useful.
-/*
 bool   hash_map_resize(hash_map_t * hm, size_t n);
-*/
 
 // Implement if useful
 /*
