@@ -38,7 +38,7 @@ struct chdesc {
 	chmetadesc_t * dependencies;
 	chmetadesc_t * dependents;
 	chrefdesc_t * weak_refs;
-	uint8_t flags;
+	uint16_t flags, distance;
 };
 
 struct chmetadesc {
