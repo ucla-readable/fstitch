@@ -61,11 +61,17 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 	 * function modman_add_bd() below */
 	if(map == bd_map)
 	{
+		char * dev_name;
 		r = devfs_bd_add(modman_devfs, mod->name, (BD_t *) module);
 		if(r < 0)
 			goto error_hack;
 		/* usage count will have increased to 1, put it down to 0 again */
 		mod->usage = 0;
+		vector_pop_back(mod->users);
+		dev_name = vector_elt(mod->use_names, vector_size(mod->use_names));
+		if(dev_name)
+			free(dev_name);
+		vector_pop_back(mod->use_names);
 		Dprintf("%s: resetting usage count of new module %s to 0\n", __FUNCTION__, mod->name);
 	}
 	
