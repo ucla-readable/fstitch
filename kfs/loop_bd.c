@@ -92,7 +92,6 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	block->number = lfs_number;
 
 	r =  CALL(state->lfs, write_block, block, block->offset, block->length, block->ddesc->data, &head, &tail);
-	/* FIXME add head, tail to depman? */
 
 	if (refs)
 	{
