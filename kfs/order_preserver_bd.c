@@ -51,7 +51,6 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 
 		if ((r = chdesc_weak_retain(state->prev_head, &prev_head_backup)) < 0)
 			goto error_add_depend;
-		chdesc_weak_release(&state->prev_head);
 	}
 
 	if ((r = chdesc_weak_retain(head, &state->prev_head)) < 0)
@@ -77,7 +76,7 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 	// TODO: remove the subgraph added to depman
 	fprintf(STDERR_FILENO, "WARNING: %s%d: post-failure leakage into depman.\n", __FILE__, __LINE__);
   error_head_weak_retain:
-	chdesc_weak_release(&prev_head_backup);
+	chdesc_weak_release(&state->prev_head);
   error_prev_head_backup_weak_retain:
 	if (prev_head_backup)
 	{
