@@ -210,15 +210,15 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			/* create a cache above the resizer */
 			if (! (cache = wt_cache_bd(resizer, 4)) )
 				kfsd_shutdown();
-
-			//if (! (cache = chdesc_stripper_bd(cache)) )
-			//	kfsd_shutdown();
 		}
 		else
 		{
 			if (! (cache = wt_cache_bd(partitions[i], cache_nblks)) )
 				kfsd_shutdown();
 		}
+
+		//if (! (cache = chdesc_stripper_bd(cache)) )
+		//	kfsd_shutdown();
 
 		if ((lfs = josfs(cache)))
 			printf("Using josfs");
