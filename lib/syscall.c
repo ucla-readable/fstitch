@@ -99,7 +99,7 @@ sys_page_unmap(envid_t envid, void* pg)
 // sys_exofork is inlined in lib.h
 
 int
-sys_env_set_name(envid_t envid, char * name)
+sys_env_set_name(envid_t envid, const char * name)
 {
 	return syscall(SYS_env_set_name, envid, (uintptr_t) name, 0, 0, 0);
 }
