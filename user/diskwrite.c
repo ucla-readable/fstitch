@@ -118,8 +118,6 @@ umain(int argc, char **argv)
 		ide_write(disk_no, sector + fs_offset, blk, BLKSECTS);
 	}
 
-	if (blockno > 0)
-		blockno--; // wrote blockno-1 blocks
 	printf("Wrote %d blocks\n", blockno);
 
 	if (blockno > 0)
