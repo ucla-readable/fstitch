@@ -17,7 +17,7 @@ umain(int argc, char **argv)
 	printf("r = read(f, 0, 10, data); = %d\n", r);
 	data[sizeof(data)-1] = '\0';
 	r = close(fd);
-	printf("r = close(f); = %d\n", r);
+	printf("r = close(f); = %d %e\n", r);
 
 	printf("data: [%s]\n", data);
 }
