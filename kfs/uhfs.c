@@ -91,7 +91,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 	int fid;
 	open_file_t * f;
 	int r;
-	
+
 	/* look up the name */
 	fdesc = CALL(state->lfs, lookup_name, name);
 
@@ -119,7 +119,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 	else
 		if (!fdesc)
 			return -E_NOT_FOUND;
-	
+
 	/* detect whether the filesize and filetype features are supported */
 	{
 		const size_t num_features = CALL(state->lfs, get_num_features, name);
@@ -204,7 +204,7 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 	while (size_read < size)
 	{
 		uint32_t limit;
-		
+
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_read);
 		if (!bd)
 			return size_read ? size_read : -E_EOF;
@@ -213,7 +213,7 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 		if (f->size_id)
 			if (offset + size_read + limit > file_size)
 				limit = file_size - offset - size_read;
-		
+
 		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, limit);
 		size_read += limit;
 		/* dataoffset only needed for first block */
@@ -363,24 +363,15 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	return 0;
 }
 
-// FIXME don't remove directories
-static int uhfs_unlink(CFS_t * cfs, const char * name)
+static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	// 1. See if this is the last link, in which case truncate to zero?
-	// 2. remove_name() [which does free_fdesc()]
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	const bool link_supported = lfs_feature_supported(state->lfs, name, KFS_feature_nlinks.id);
-	fdesc_t * f;
-	int r;
-	uint32_t nlinks;
+	int i, r;
+	uint32_t nlinks, nblocks;
 	size_t data_len;
 	void * data;
 	bdesc_t * blk;
-
-	f = CALL(state->lfs, lookup_name, name);
-	if (!f)
-		return -E_NOT_FOUND;
 
 	if (link_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, &data_len, &data);
@@ -399,19 +390,58 @@ static int uhfs_unlink(CFS_t * cfs, const char * name)
 		}
 	}
 
-	do {
+	nblocks = CALL(state->lfs, get_file_numblocks, f);
+	for (i = 0 ; i < nblocks; i++) {
 		blk = CALL(state->lfs, truncate_file_block, f, NULL, NULL); // FIXME chdesc
-		if (!blk)
-			break;
+		if (!blk) {
+			CALL(state->lfs, free_fdesc, f);
+			return -E_INVAL;
+		}
+
 		r = CALL(state->lfs, free_block, blk, NULL, NULL); // FIXME chdesc
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
 		}
-	} while (blk);
+	}
 
 	CALL(state->lfs, free_fdesc, f);
 	return CALL(state->lfs, remove_name, name, NULL, NULL); // FIXME chdesc
+}
+
+static int uhfs_unlink(CFS_t * cfs, const char * name)
+{
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
+	fdesc_t * f;
+	size_t data_len;
+	void * data;
+	uint32_t filetype;
+	int r;
+
+	f = CALL(state->lfs, lookup_name, name);
+	if (!f)
+		return -E_NOT_FOUND;
+
+	if (dir_supported) {
+		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
+		if (r < 0) {
+			CALL(state->lfs, free_fdesc, f);
+			return r;
+		}
+
+		assert(data_len == sizeof(filetype));
+		filetype = *(uint32_t *) data;
+		free(data);
+
+		if (filetype == TYPE_DIR) {
+			CALL(state->lfs, free_fdesc, f);
+			return -E_INVAL;
+		}
+	}
+
+	return unlink_file(cfs, name, f);
 }
 
 static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
@@ -530,14 +560,45 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 	return 0;
 }
 
-// TODO: implement
 static int uhfs_rmdir(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	// 1. ensure no entries?
-	// 2. truncate?
-	// 3. remove_name() [which does free_fdesc()]
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
+	fdesc_t * f;
+	struct dirent entry;
+	size_t data_len;
+	void * data;
+	uint32_t filetype;
+	uint32_t basep = 0;
+	int r, retval = -E_INVAL;
+
+	f = CALL(state->lfs, lookup_name, name);
+	if (!f)
+		return -E_NOT_FOUND;
+
+	if (dir_supported) {
+		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
+		if (r < 0) {
+			CALL(state->lfs, free_fdesc, f);
+			return r;
+		}
+
+		assert(data_len == sizeof(filetype));
+		filetype = *(uint32_t *) data;
+		free(data);
+
+		if (filetype == TYPE_DIR) {
+			r = CALL(state->lfs, get_dirent, f, &entry, sizeof(struct dirent), &basep);
+			if (r < 0) {
+				return unlink_file(cfs, name, f);
+			}
+		}
+		retval = -E_NOT_DIR;
+	}
+
+	CALL(state->lfs, free_fdesc, f);
+	return retval;
 }
 
 static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
