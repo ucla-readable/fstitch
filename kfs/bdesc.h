@@ -11,7 +11,7 @@
  *     c) Drop it (bdesc_drop).
  *
  *    If you choose option a above, you may optionally also do
- *    b. However, b and c are mutually exclusive.
+ *    b (but only after a). However, b and c are mutually exclusive.
  *
  * 2. If you want to write to the data in a bdesc, you must call
  *    bdesc_touch() first. Note that this may create a copy of the data,
