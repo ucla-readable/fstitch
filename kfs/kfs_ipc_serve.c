@@ -4,8 +4,8 @@
 #include <inc/serial_kfs.h>
 #include <kfs/kfs_ipc_serve.h>
 
-#define RETURN_IPC_INVAL { val = -E_INVAL; goto exit; }
-#define RETURN_IPC exit: ipc_send(whom, (uint32_t) val, NULL, 0, NULL);
+#define RETURN_IPC_INVAL do { val = -E_INVAL; goto exit; } while(0)
+#define RETURN_IPC exit: ipc_send(whom, (uint32_t) val, NULL, 0, NULL)
 
 
 //
