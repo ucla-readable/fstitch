@@ -13,6 +13,8 @@
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/modman.h>
 
+#include <inc/cfs_ipc_client.h>
+#include <inc/kfs_ipc_client.h>
 #include <inc/kfs_uses.h>
 #include <arch/simple.h>
 #include <inc/stdio.h>
@@ -20,6 +22,7 @@
 static bool verbose = 0;
 static bool use_wb_cache = 1;
 
+static struct Scfs_metadata md;
 
 static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, bool stripper)
 {
@@ -177,7 +180,7 @@ static void print_usage(const char * bin)
 	printf("  <device> is one of:\n");
 	printf("    ide <controller> <diskno>\n");
 	printf("    nbd <host> [-p <port>]\n");
-	printf("    loop <lfs_name> <lfs filename>\n");
+	printf("    loop <file>\n");
 }
 
 static void parse_options(int argc, const char ** argv, bool * journal, uint32_t * cache_num_blocks)
@@ -277,34 +280,49 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 	else if (!strcmp("loop", argv[device_index]))
 	{
 		const char * filename;
-		const char * lfs_name;
-		modman_it_t * it;
+		const char * lfs_filename;
 		LFS_t * lfs;
+		int r;
 
-		if (device_index + 2 >= argc)
+		if (device_index + 1 >= argc)
 		{
 			fprintf(STDERR_FILENO, "Insufficient parameters for loop\n");
 			print_usage(argv[0]);
 			exit();
 		}
 
-		lfs_name = argv[device_index+1];
-		filename = argv[device_index+2];
-		
-		it = modman_it_create_lfs();
-		assert(it);
-		while ((lfs = modman_it_next_lfs(it)))
+		filename = argv[device_index+1];
+
+		// Find the lfs for filename
+		r = cfs_get_metadata(filename, KFS_feature_file_lfs.id, &md);
+		if (r < 0)
 		{
-			if (!strcmp(modman_name_lfs(lfs), lfs_name))
-				break;
+			fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename);
+			exit();
 		}
+		lfs = create_lfs(*(uint32_t *) md.data);
 		if (!lfs)
 		{
-			fprintf(STDERR_FILENO, "Unable to find LFS %s\n", lfs_name);
-			return NULL;
+			fprintf(STDERR_FILENO, "Unable to find the LFS for file %s\n", filename);
+			exit();
 		}
 
-		if (! (disk = loop_bd(lfs, filename)) )
+		// Find the lfs's name for filename
+		r = cfs_get_metadata(filename, KFS_feature_file_lfs_name.id, &md);
+		if (r < 0)
+		{
+			fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename);
+			exit();
+		}
+		lfs_filename = (char *) md.data;
+		if (!lfs_filename)
+		{
+			fprintf(STDERR_FILENO, "Unable to get lfs filename\n");
+			exit();
+		}
+
+		// Create loop_bd
+		if (! (disk = loop_bd(lfs, lfs_filename)) )
 		{
 			fprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
 			return NULL;
