@@ -33,7 +33,15 @@ typedef struct journal_state journal_state_t;
 //
 // Journaling
 
-#define TRANSACTION_SIZE (1024*1024)
+// A transaction's layout on disk:
+// blkno    | description
+// ---------+-------------
+// 0        | commit_record_t
+// 1..k     | disk blknos for where each journal data block goes
+//          | k 
+// k+1..end | the journal data blocks
+
+#define TRANSACTION_SIZE (500*1024)
 static const char journal_filename[] = "/.journal";
 
 /* "SAFEDATA" */
@@ -50,6 +58,24 @@ struct commit_record {
 	uint32_t nblocks;
 };
 typedef struct commit_record commit_record_t;
+
+
+// Return the number of journal data block numbers that fit in a disk block
+size_t blknos_per_blk(uint16_t blksize)
+{
+	return blksize / sizeof(uint32_t);
+}
+
+// Return the number of blocks reserved in a transaction for the journal data
+// block numbers
+size_t nblks_journaldatablknos(uint16_t blksize)
+{
+	const size_t nos_per_blk = blknos_per_blk(blksize);
+	const size_t nblks_transaction = ROUNDDOWN32(TRANSACTION_SIZE, blksize) / blksize;
+	const size_t nblocks = ROUNDUP32(nblks_transaction - 2, nos_per_blk) / nos_per_blk;
+
+	return nblocks;
+}
 
 
 // TODO
@@ -77,20 +103,20 @@ static int replay_journal(journal_state_t * state)
 
 static int transaction_start(journal_state_t * state)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("---> %s()\n", __FUNCTION__);
 	return journal_queue_hold(state->queue);
 }
 
 static int transaction_stop(journal_state_t * state)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("---> %s()\n", __FUNCTION__);
 	size_t file_offset;
 	bdesc_t ** data_bdescs;
 	size_t ndatabdescs;
+	size_t blknos_begin, blknos_end;
 	bdesc_t * bdesc;
 	size_t i;
 	int r;
-
 
 	//
 	// Choose transaction slot.
@@ -101,6 +127,8 @@ static int transaction_stop(journal_state_t * state)
 		// For now, always use transaction_slot 0 - later, search for an available chdesc slot
 		transaction_slot = 0;
 		file_offset = transaction_slot * TRANSACTION_SIZE;
+		blknos_begin = file_offset + state->blocksize;
+		blknos_end = blknos_begin + state->blocksize*(nblks_journaldatablknos(state->blocksize) - 1);
 		
 		if (state->commit_chdesc[transaction_slot])
 		{
@@ -140,6 +168,8 @@ static int transaction_stop(journal_state_t * state)
 			return 0; // nothing to journal
 
 		ndatabdescs = hash_map_size(data_bdescs_map);
+
+		// TODO: do no work if no entries.
 
 		transaction_size = (1 + ndatabdescs) * state->blocksize;
 		if (transaction_size > TRANSACTION_SIZE)
@@ -229,12 +259,13 @@ static int transaction_stop(journal_state_t * state)
 
 	// save space for the commit record
 	commit_offset = file_offset;
-	file_offset += state->blocksize;
+	file_offset = blknos_end + state->blocksize;
 
 	// Create journal data
 
 	for (i=0; i < ndatabdescs; i++, file_offset += state->blocksize)
 	{
+		Dprintf("jdb #%d, ", file_offset / state->blocksize);
 		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 		assert(bdesc); // TODO: handle error
 
@@ -252,6 +283,54 @@ static int transaction_stop(journal_state_t * state)
 		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
 		assert(r >= 0); // TODO: handle error
 		//assert(!lfs_head && !lfs_tail);
+	}
+	Dprintf("\n");
+
+
+	// Write journal data block numbers
+
+	{
+		const size_t blknos_per_block = blknos_per_blk(state->blocksize);
+		const size_t nblocks_jdbn = nblks_journaldatablknos(state->blocksize);
+		size_t blkno;
+		size_t bdescno = 0;
+		uint32_t * num_block;
+		uint32_t * cur_blkno_entry;
+
+		num_block = malloc(state->blocksize);
+		assert(num_block); // TODO: handle error
+
+		for (blkno=0; blkno < nblocks_jdbn && bdescno < ndatabdescs; blkno++)
+		{
+			// unused space can have any value, fill with 0xff for readability
+			memset(num_block, 0xff, state->blocksize);
+			// set cur_blkno_entry to the beginning
+			cur_blkno_entry = num_block;
+
+			for (i=0; i < blknos_per_block && bdescno < ndatabdescs; i++, bdescno++, cur_blkno_entry++)
+				*cur_blkno_entry = data_bdescs[bdescno]->number;
+
+			bdesc = CALL(state->journal, get_file_block, state->jfdesc, blknos_begin + blkno * state->blocksize);
+			assert(bdesc); // TODO: handle error
+
+			prev_head = NULL;
+			r = chdesc_create_full(bdesc, num_block, &prev_head, &tail);
+			assert(r >= 0); // TODO: handle error
+			r = depman_add_chdesc(prev_head);
+			assert(r >= 0); // TODO: handle error
+			r = chdesc_add_depend(jdata_chdescs, prev_head);
+			assert(r >= 0); // TODO: handle error
+
+			lfs_head = NULL;
+			lfs_tail = NULL;
+			r = CALL(state->journal, write_block, bdesc, 0, state->blocksize, num_block, &lfs_head, &lfs_tail);
+			assert(r >= 0); // TODO: handle error
+			//assert(!lfs_head && !lfs_tail);
+		}
+
+		free(num_block);
+		num_block = NULL;
+		cur_blkno_entry = NULL;
 	}
 
 
