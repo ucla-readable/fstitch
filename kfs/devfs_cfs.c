@@ -128,7 +128,7 @@ static int devfs_get_status(void * object, int level, char * string, size_t leng
 		return -E_INVAL;
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	
-	snprintf(string, length, "devices: %u", hash_map_size(state->fid_map));
+	snprintf(string, length, "devices: %u, fids: %u", vector_size(state->bd_table), hash_map_size(state->fid_map));
 	return 0;
 }
 
