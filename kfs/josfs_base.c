@@ -9,7 +9,7 @@
 #include <kfs/lfs.h>
 #include <kfs/josfs_base.h>
 
-#define JOSFS_BASE_DEBUG 0
+#define JOSFS_BASE_DEBUG 1
 
 #if JOSFS_BASE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -392,6 +392,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	int blockno, i;
 	uint16_t namelen, reclen;
 
+	// Make sure it's a directory and we can read from it
 	if (f->file->f_type == TYPE_DIR) {
 		blockno = *basep * sizeof(struct JOSFS_File) / JOSFS_BLKSIZE;
 		dirblock = josfs_get_file_block(object, file, blockno * JOSFS_BLKSIZE);
@@ -400,6 +401,15 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 
 			namelen = strlen(dirfile->f_name);
 			namelen = MIN(namelen, sizeof(entry->d_name) - 1);
+
+			// If the name length is 0 (or less?) then we assume it's an empty slot
+			if (namelen < 1) {
+				entry->d_reclen = 0;
+				bdesc_drop(&dirblock);
+				*basep += 1;
+				return 1;
+			}
+
 			reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
 
 			if (size >= reclen) {
@@ -412,6 +422,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 				}
 
 				entry->d_type = dirfile->f_type;
+				entry->d_filesize = dirfile->f_size;
 				entry->d_reclen = reclen;
 				entry->d_namelen = namelen;
 				strncpy(entry->d_name, dirfile->f_name, sizeof(entry->d_name));
