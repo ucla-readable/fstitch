@@ -326,7 +326,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	if (file_idx < 0)
 		return file_idx;
 	file = &state->open_file[file_idx];
-	nblks = CALL(state->lfs, get_filesize, file->fdesc);
+	nblks = CALL(state->lfs, get_file_numblocks, file->fdesc);
 
 	/* Truncate and free the blocks no longer in use because of this trunc */
 	for (; target_nblks < nblks; nblks--)
@@ -382,8 +382,7 @@ static int uhfs_unlink(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	// 1. See if this is the last link, in which case truncate to zero?
-	// 2. remove_name()
-	// 3. free_fdesc()
+	// 2. remove_name() [which does free_fdesc()]
 	return -E_UNSPECIFIED;
 }
 
@@ -504,8 +503,7 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	// 1. ensure no entries?
 	// 2. truncate?
-	// 3. remove_name()
-	// 4. free_fdesc()
+	// 3. remove_name() [which does free_fdesc()]
 	return -E_UNSPECIFIED;
 }
 
