@@ -1,0 +1,145 @@
+#include <inc/assert.h>
+#include <inc/error.h>
+#include <inc/config.h>
+#include <inc/malloc.h>
+#include <inc/vector.h>
+#include <inc/hash_map.h>
+#include <inc/hash_set.h>
+
+//
+// Implement hash_set.h using hash_map (to quickly implement this).
+
+
+struct hash_set {
+	hash_map_t * hm;
+};
+
+
+//
+// Construction/destruction
+
+hash_set_t * hash_set_create(void)
+{
+	hash_set_t * hs = malloc(sizeof(*hs));
+	if (!hs)
+		return NULL;
+
+	hs->hm = hash_map_create();
+	if (!hs->hm)
+	{
+		free(hs);
+		return NULL;
+	}
+
+	return hs;
+}
+
+hash_set_t * hash_set_create_size(size_t n, bool auto_resize)
+{
+	hash_set_t * hs = malloc(sizeof(*hs));
+	if (!hs)
+		return NULL;
+
+	hs->hm = hash_map_create_size(n, auto_resize);
+	if (!hs->hm)
+	{
+		free(hs);
+		return NULL;
+	}
+
+	return hs;
+}
+
+void hash_set_destroy(hash_set_t * hs)
+{
+	hash_set_clear(hs);
+	hash_map_destroy(hs->hm);
+	hs->hm = NULL;
+	free(hs);
+}
+
+
+//
+// General
+
+size_t hash_set_size(const hash_set_t * hs)
+{
+	return hash_map_size(hs->hm);
+}
+
+bool hash_set_empty(const hash_set_t * hs)
+{
+	return hash_map_empty(hs->hm);
+}
+
+int hash_set_insert(hash_set_t * hs, void * elt)
+{
+	return hash_map_insert(hs->hm, elt, elt);
+}
+
+void * hash_set_erase(hash_set_t * hs, const void * elt)
+{
+	return hash_map_erase(hs->hm, elt);
+}
+
+void hash_set_clear(hash_set_t * hs)
+{
+	hash_map_clear(hs->hm);
+}
+
+bool hash_set_exists(const hash_set_t * hs, const void * elt)
+{
+	return (elt == hash_map_find_val(hs->hm, elt));
+}
+
+
+//
+// Resizing
+
+size_t hash_set_bucket_count(const hash_set_t * hs)
+{
+	return hash_map_bucket_count(hs->hm);
+}
+
+int hash_set_resize(hash_set_t * hs, size_t n)
+{
+	return hash_map_resize(hs->hm, n);
+}
+
+
+
+//
+// Iteration
+
+struct hash_set_it {
+	hash_map_it_t * hm_it;
+};
+
+
+hash_set_it_t * hash_set_it_create()
+{
+	hash_set_it_t * it = malloc(sizeof(*it));
+	if (!it)
+		return NULL;
+
+	it->hm_it = hash_map_it_create();
+	if (!it->hm_it)
+	{
+		free(it);
+		return NULL;
+	}
+
+	return it;
+}
+
+void hash_set_it_destroy(hash_set_it_t * it)
+{
+	hash_map_it_destroy(it->hm_it);
+	it->hm_it = NULL;
+	free(it);
+}
+
+void * hash_set_next(hash_set_t * hs, hash_set_it_t * it)
+{
+	return hash_map_val_next(hs->hm, it->hm_it);
+}
