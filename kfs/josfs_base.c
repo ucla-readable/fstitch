@@ -747,14 +747,20 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	else if (nblocks > JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
-			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks);
-			bdesc_drop(&indirect);
+			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
+			bdesc_touch(indirect);
+			*((uint32_t *) (indirect->ddesc->data) + nblocks - 1) = 0;
+			if ((r = CALL(info->ubd, write_block, indirect)) < 0) {
+				bdesc_drop(&indirect);
+				return NULL;
+			}
 			return CALL(info->ubd, read_block, blockno);
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
+			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 			if (josfs_free_block(object, indirect, NULL, NULL) == 0) {
 				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				bdesc_touch(f->dirb);
@@ -765,14 +771,21 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 				}
 
 				f->file->f_indirect = 0;
-				blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks);
 				bdesc_drop(&indirect);
 				return CALL(info->ubd, read_block, blockno);
 			}
 		}
 	}
 	else {
-		return CALL(info->ubd, read_block, f->file->f_direct[nblocks]);
+		blockno = f->file->f_direct[nblocks - 1];
+		dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
+		bdesc_touch(f->dirb);
+		dirfile->f_direct[nblocks - 1] = 0;
+		if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
+			return NULL;
+		}
+		f->file->f_direct[nblocks - 1] = 0;
+		return CALL(info->ubd, read_block, blockno);
 	}
 
 	return NULL;
@@ -781,7 +794,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_free_block\n");
-	if (block->number == 0)
+
+	if (!block || block->number == 0)
 		return -E_INVAL;
 	write_bitmap(object, block->number, 1);
 	bdesc_drop(&block);

@@ -39,7 +39,7 @@ static bool lfs_feature_supported(LFS_t * lfs, const char * name, int feature_id
 	size_t i;
 
 	for (i=0; i < num_features; i++)
-		if (CALL(lfs, get_feature, name, i)->id == KFS_feature_size.id)
+		if (CALL(lfs, get_feature, name, i)->id == feature_id)
 			return 1;
 
 	return 0;
@@ -363,13 +363,55 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	return 0;
 }
 
-// TODO: implement
+// FIXME don't remove directories
 static int uhfs_unlink(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	// 1. See if this is the last link, in which case truncate to zero?
 	// 2. remove_name() [which does free_fdesc()]
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	const bool link_supported = lfs_feature_supported(state->lfs, name, KFS_feature_nlinks.id);
+	fdesc_t * f;
+	int r;
+	uint32_t nlinks;
+	size_t data_len;
+	void * data;
+	bdesc_t * blk;
+
+	f = CALL(state->lfs, lookup_name, name);
+	if (!f)
+		return -E_NOT_FOUND;
+
+	if (link_supported) {
+		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, &data_len, &data);
+		if (r < 0) {
+			CALL(state->lfs, free_fdesc, f);
+			return r;
+		}
+
+		assert(data_len == sizeof(nlinks));
+		nlinks = *(uint32_t *) data;
+		free(data);
+
+		if (nlinks > 1) {
+			CALL(state->lfs, free_fdesc, f);
+			return CALL(state->lfs, remove_name, name, NULL, NULL); // FIXME chdesc
+		}
+	}
+
+	do {
+		blk = CALL(state->lfs, truncate_file_block, f, NULL, NULL); // FIXME chdesc
+		if (!blk)
+			break;
+		r = CALL(state->lfs, free_block, blk, NULL, NULL); // FIXME chdesc
+		if (r < 0) {
+			CALL(state->lfs, free_fdesc, f);
+			return r;
+		}
+	} while (blk);
+
+	CALL(state->lfs, free_fdesc, f);
+	return CALL(state->lfs, remove_name, name, NULL, NULL); // FIXME chdesc
 }
 
 static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
@@ -378,7 +420,7 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	fdesc_t * oldf, * newf, * f;
 	const bool type_supported = lfs_feature_supported(state->lfs, oldname, KFS_feature_filetype.id);
-	int oldtype;
+	uint32_t oldtype;
 	chdesc_t * prevhead;
 	chdesc_t * tail;
 	int r;
@@ -400,7 +442,7 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 		}
 
 		assert(data_len == sizeof(oldtype));
-		oldtype = *(int *) data;
+		oldtype = *(uint32_t *) data;
 		free(data);
 	}
 
