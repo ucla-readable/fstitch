@@ -487,7 +487,12 @@ env_run(struct Env* e)
 	//	layout.
 	
 	curenv = e;
-	curenv->env_runs++;
+	if(!++curenv->env_runs)
+	{
+		/* env_runs has wrapped, reset counters */
+		curenv->env_runs = 2;
+		curenv->env_tsc = 0;
+	}
 	curenv->env_jiffies = jiffies;
 	env_tsc = read_tsc();
 	lcr3(e->env_cr3);
