@@ -43,9 +43,9 @@ struct josfs_fdesc {
 	JOSFS_File_t * file;
 };
 
+static uint32_t josfs_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
-static bdesc_t * get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t *bno);
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
 static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
@@ -234,6 +234,9 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 		}
 
 		d = josfs_get_dirent(object, (fdesc_t *) fdesc, &entry, sizeof(struct dirent), &basep);
+
+		// FIXME potentially buggy, fsck may mistaken an unreadable... say, indirect block
+		// for "no more directory entries"
 		if (d != 0) {
 			free(temp_file);
 			i++;
@@ -508,7 +511,8 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 		r = josfs_get_dirent(object, (fdesc_t *) temp_fdesc, &entry, sizeof(struct dirent), &basep);
 		if (r == 0 && strcmp(entry.d_name, name) == 0) {
 			blockno = i / JOSFS_BLKFILES;
-			dirblock = get_file_block(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE, dirb);
+			*dirb = josfs_get_file_block_num(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE);
+			dirblock = josfs_get_file_block(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE);
 			if (dirblock) {
 				*index = (i % JOSFS_BLKFILES) * sizeof(JOSFS_File_t);
 				target = (uint8_t *) dirblock->ddesc->data;
@@ -727,14 +731,14 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 }
 
 // Offset is a byte offset
-static bdesc_t * get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t *bno)
+static uint32_t josfs_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	bdesc_t * indirect;
 	uint32_t blockno, nblocks;
 
-	Dprintf("JOSFSDEBUG: josfs_get_file_block %s, %d\n", f->file->f_name, offset);
+	Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %d\n", f->file->f_name, offset);
 
 	nblocks = josfs_get_file_numblocks(object, file);
 	if (offset % JOSFS_BLKSIZE == 0 && offset < nblocks * JOSFS_BLKSIZE) {
@@ -742,31 +746,34 @@ static bdesc_t * get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset,
 			indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 			if (indirect) {
 				blockno = ((uint32_t *) indirect->ddesc->data)[offset / JOSFS_BLKSIZE];
-				if (bno)
-					*bno = blockno;
 				bdesc_drop(&indirect);
-				return CALL(info->ubd, read_block, blockno);
+				return blockno;
 			}
 		}
 		else {
 			blockno = f->file->f_direct[offset / JOSFS_BLKSIZE];
-			if (bno)
-				*bno = blockno;
-			return CALL(info->ubd, read_block, blockno);
+			return blockno;
 		}
 	}
 
-	return NULL;
+	return -1;
 }
 
-static uint32_t josfs_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset)
-{
-	return -1; /* FIXME Lei - get block number without reading it */
-}
-
+// Offset is a byte offset
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
-	return get_file_block(object, file, offset, NULL);
+	struct lfs_info * info = (struct lfs_info *) object->instance;
+	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
+	uint32_t blockno;
+
+	Dprintf("JOSFSDEBUG: josfs_get_file_block %s, %d\n", f->file->f_name, offset);
+	blockno = (uint32_t) f; // Shut up compiler
+
+	blockno = josfs_get_file_block_num(object, file, offset);
+	if (blockno < 0)
+		return NULL;
+
+	return CALL(info->ubd, read_block, blockno);
 }
 
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
