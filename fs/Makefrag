@@ -9,11 +9,11 @@ FSOFILES := 		$(OBJDIR)/fs/ide.o \
 USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/cat \
 			$(OBJDIR)/user/clock \
+			$(OBJDIR)/user/demo \
 			$(OBJDIR)/user/df \
 			$(OBJDIR)/user/diskwrite \
 			$(OBJDIR)/user/echo \
 			$(OBJDIR)/user/es \
-			$(OBJDIR)/user/fire \
 			$(OBJDIR)/user/fourem \
 			$(OBJDIR)/user/free \
 			$(OBJDIR)/user/get \
@@ -27,7 +27,6 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 	 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/kfsgraph \
 			$(OBJDIR)/user/knbdd \
-			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/ls \
 			$(OBJDIR)/user/lsfd \
 			$(OBJDIR)/user/mario \
@@ -40,7 +39,6 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/mv \
 			$(OBJDIR)/user/netstats \
 			$(OBJDIR)/user/null \
-			$(OBJDIR)/user/pong \
 			$(OBJDIR)/user/psb16 \
 			$(OBJDIR)/user/reboot \
 			$(OBJDIR)/user/rm \

@@ -1,5 +1,22 @@
 OBJDIRS += user
 
+DEMOS=$(OBJDIR)/user/fire.o $(OBJDIR)/user/ladybug.o $(OBJDIR)/user/life.o $(OBJDIR)/user/matrix.o $(OBJDIR)/user/pong.o $(OBJDIR)/user/textdemo.o
+
+$(OBJDIR)/user/demo: $(OBJDIR)/user/demo.o $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(DEMOS)
+	@echo + ld $@
+	$(V)echo "" > $(SYMTBL)
+	$(V)echo "" > $(SYMSTRTBL)
+	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib $(OBJDIR)/user/entry.o $@.o -L$(OBJDIR)/user $(DEMOS) -luser $(GCC_LIB) -b binary $(SYMTBL) $(SYMSTRTBL)
+	$(V)$(OBJDIR)/util/$(ELFDUMP_SYMTAB) -sym $@ > $(SYMTBL)
+	$(V)$(OBJDIR)/util/$(ELFDUMP_SYMTAB) -symstr $@ > $(SYMSTRTBL)
+	$(V)# We assume here that running ld this second time does not change what
+	$(V)# the elf symtable/strtable holds. TODO: is this a safe assumption?
+	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib $(OBJDIR)/user/entry.o $@.o -L$(OBJDIR)/user $(DEMOS) -luser $(GCC_LIB) -b binary $(SYMTBL) $(SYMSTRTBL)
+	$(V)rm -f $(SYMTBL) $(SYMSTRTBL)
+	$(V)$(OBJDUMP) -S $@ > $@.asm
+	$(V)$(NM) -n $@ > $@.sym
+	$(V)$(STRIP) $@
+
 $(OBJDIR)/user/diskwrite: $(OBJDIR)/user/diskwrite.o $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(OBJDIR)/fs/fs.o $(OBJDIR)/fs/ide.o
 	@echo + ld $@
 	$(V)echo "" > $(SYMTBL)

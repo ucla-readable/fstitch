@@ -1,17 +1,9 @@
 #include <inc/lib.h>
 
-#define VGA 0xA0000
+/* from demo.c */
+int rand(int nseed);
 
-/* a general purpose pseudorandom number generator */
-static int rand(int nseed)
-{
-	static int seed = 0;
-	if(nseed)
-		seed = nseed;
-	seed *= 214013;
-	seed += 2531011;
-	return (seed >> 16) & 0x7fff;
-}
+#define VGA 0xA0000
 
 static void parent_set_video(int eid)
 {
@@ -31,7 +23,7 @@ static void child_set_video(void)
 	rand(hwclock_time(NULL));
 }
 
-static void pong(int child)
+static void playpong(int child)
 {
 	int x = rand(0) % 320, y = rand(0) % 200;
 	int dx = 1, dy = 1;
@@ -85,7 +77,7 @@ static void pong(int child)
 	}
 }
 
-void umain(void)
+void pong(void)
 {
 	int eid = fork();
 	if(eid < 0)
@@ -97,5 +89,5 @@ void umain(void)
 		parent_set_video(eid);
 	else
 		child_set_video();
-	pong(eid);
+	playpong(eid);
 }

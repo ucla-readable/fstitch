@@ -3,8 +3,7 @@
 static uint8_t palette[256 * 3];
 static uint8_t image[200][320];
 
-void
-umain(int argc, char *argv[])
+void ladybug(int argc, char * argv[])
 {
 	char * base = "lady";
 	char filename[128];
