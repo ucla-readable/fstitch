@@ -76,25 +76,26 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= CALL(info->bd, get_numblocks))
 		return -1;
 	
+	/* FIXME bdesc_retain() can fail */
+	/* increase reference count - do this before release, in case they are the same block */
+	bdesc_retain(&block);
+	
 	index = block->number % info->size;
 	/* need to replace this cache entry? */
 	if(info->blocks[index])
 		bdesc_release(&info->blocks[index]);
-	
-	/* FIXME bdesc_retain() can fail */
-	
-	/* increase reference count */
-	bdesc_retain(&block);
 	info->blocks[index] = block;
 	
-	block->translated++;
+	if(block->translated)
+		printf("%s(): (%s:%d): block already translated!\n", __FUNCTION__, __FILE__, __LINE__);
+	block->translated = 1;
 	block->bd = info->bd;
 	
 	/* write it */
 	value = CALL(block->bd, write_block, block);
 	
 	block->bd = object;
-	block->translated--;
+	block->translated = 0;
 	
 	return value;
 }

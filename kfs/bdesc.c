@@ -5,6 +5,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/depman.h>
 
 #define BDESC_DEBUG 0
 
@@ -21,9 +22,17 @@ bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t offset, uint16_t leng
 	Dprintf("<bdesc 0x%08x alloc>\n", bdesc);
 	if(!bdesc)
 		return NULL;
-	bdesc->data = malloc(length);
-	if(!bdesc->data)
+	bdesc->ddesc = malloc(sizeof(*bdesc->ddesc));
+	if(!bdesc->ddesc)
 	{
+		free(bdesc);
+		return NULL;
+	}
+	Dprintf("<bdesc 0x%08x alloc data 0x%08x>\n", bdesc, bdesc->ddesc);
+	bdesc->ddesc->data = malloc(length);
+	if(!bdesc->ddesc->data)
+	{
+		free(bdesc->ddesc);
 		free(bdesc);
 		return NULL;
 	}
@@ -32,100 +41,124 @@ bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t offset, uint16_t leng
 	bdesc->refs = 0;
 	bdesc->offset = offset;
 	bdesc->length = length;
+	bdesc->ddesc->refs = 0;
 	bdesc->translated = 0;
 	return bdesc;
 }
 
-/* free a bdesc */
-static void bdesc_free(bdesc_t * bdesc)
+/* prepare a bdesc's data to be modified, copying its data if it is currently shared with another bdesc */
+int bdesc_touch(bdesc_t * bdesc)
 {
-	Dprintf("<bdesc 0x%08x free>\n", bdesc);
-	free(bdesc->data);
-	free(bdesc);
+	datadesc_t * data;
+	Dprintf("<bdesc 0x%08x touch>\n", bdesc);
+	/* invariant: bdesc->refs <= bdesc->data->refs */
+	if(bdesc->refs == bdesc->ddesc->refs)
+		return 0;
+	Dprintf("<bdesc 0x%08x copy data>\n", bdesc);
+	data = malloc(sizeof(*data));
+	if(!data)
+		return -1;
+	Dprintf("<bdesc 0x%08x alloc data 0x%08x>\n", bdesc, data);
+	data->data = malloc(bdesc->length);
+	if(!data->data)
+	{
+		free(data);
+		return -1;
+	}
+	memcpy(data->data, bdesc->ddesc->data, bdesc->length);
+	data->refs = bdesc->refs;
+	/* bdesc->data->refs > bdesc->refs, so it won't reach 0 */
+	bdesc->ddesc->refs -= bdesc->refs;
+	bdesc->ddesc = data;
+	return 0;
+}
+
+/* prepare the bdesc to be permanently translated ("altered") by copying it if it has nonzero reference count */
+/* this should be used for block device read operations when translations are performed (i.e. any nonterminal BD) */
+int bdesc_alter(bdesc_t ** bdesc)
+{
+	bdesc_t * copy;
+	Dprintf("<bdesc 0x%08x alter>\n", *bdesc);
+	if((*bdesc)->translated)
+		Dprintf("%s(): (%s:%d): unexpected translated block!\n", __FUNCTION__, __FILE__, __LINE__);
+	if(!(*bdesc)->refs)
+		return 0;
+	Dprintf("<bdesc 0x%08x copy>\n", *bdesc);
+	copy = malloc(sizeof(*copy));
+	if(!copy)
+		return -1;
+	Dprintf("<bdesc 0x%08x alloc>\n", copy);
+	*copy = **bdesc;
+	copy->refs = 0;
+	*bdesc = copy;
+	return 0;
+}
+
+/* increase the reference count of a bdesc, copying it if it is currently translated (but sharing the data) */
+int bdesc_retain(bdesc_t ** bdesc)
+{
+	bdesc_t * copy;
+	Dprintf("<bdesc 0x%08x retain>\n", *bdesc);
+	if(!(*bdesc)->translated)
+	{
+		(*bdesc)->refs++;
+		(*bdesc)->ddesc->refs++;
+		return 0;
+	}
+	if(!(*bdesc)->refs)
+	{
+		Dprintf("<bdesc 0x%08x reset translation>\n", *bdesc);
+		(*bdesc)->refs = 1;
+		(*bdesc)->ddesc->refs++;
+		(*bdesc)->translated = 0;
+		/* notify the dependency manager of the translation,
+		 * even though the pointer stays the same */
+		depman_forward_chdesc(*bdesc, *bdesc);
+		return 0;
+	}
+	Dprintf("<bdesc 0x%08x copy>\n", *bdesc);
+	copy = malloc(sizeof(*copy));
+	if(!copy)
+		return -1;
+	Dprintf("<bdesc 0x%08x alloc>\n", copy);
+	*copy = **bdesc;
+	copy->refs = 1;
+	copy->ddesc->refs++;
+	copy->translated = 0;
+	depman_forward_chdesc(*bdesc, copy);
+	*bdesc = copy;
+	return 0;
 }
 
 /* free a bdesc if it has zero reference count */
 void bdesc_drop(bdesc_t ** bdesc)
 {
-	Dprintf("<bdesc 0x%08x drop>\n", bdesc);
-	if(!(*bdesc)->refs < 0)
+	Dprintf("<bdesc 0x%08x drop>\n", *bdesc);
+	if((*bdesc)->refs < 0)
 	{
-		Dprintf("<bdesc 0x%08x negative reference count!>\n", bdesc);
+		Dprintf("<bdesc 0x%08x negative reference count!>\n", *bdesc);
 		(*bdesc)->refs = 0;
 	}
 	if(!(*bdesc)->refs)
 	{
-		bdesc_free(*bdesc);
-		*bdesc = NULL;
+		Dprintf("<bdesc 0x%08x free>\n", *bdesc);
+		if(!(*bdesc)->ddesc->refs)
+		{
+			Dprintf("<bdesc 0x%08x free data 0x%08x>\n", *bdesc, (*bdesc)->ddesc);
+			free((*bdesc)->ddesc->data);
+			free((*bdesc)->ddesc);
+		}
+		free(*bdesc);
 	}
-}
-
-/* copy a bdesc, leaving the original unchanged and giving the new bdesc reference count 0 */
-bdesc_t * bdesc_copy(bdesc_t * orig)
-{
-	bdesc_t * copy;
-	Dprintf("<bdesc 0x%08x copy>\n", orig);
-	copy = bdesc_alloc(orig->bd, orig->number, orig->offset, orig->length);
-	if(!copy)
-		return NULL;
-	memcpy(copy->data, orig->data, orig->length);
-	return copy;
-}
-
-/* prepare a bdesc to be modified, copying it if it has a reference count higher than 1 */
-int bdesc_touch(bdesc_t ** bdesc)
-{
-	bdesc_t * copy;
-	Dprintf("<bdesc 0x%08x touch>\n", *bdesc);
-	if((*bdesc)->refs < 2)
-		return 0;
-	copy = bdesc_copy(*bdesc);
-	if(!copy)
-		return -1;
-	/* refs is >= 2, so it can't reach 0 */
-	(*bdesc)->refs--;
-	copy->refs++;
-	*bdesc = copy;
-	return 0;
-}
-
-/* prepare the bdesc to be permanently translated ("altered") by copying it if it has nonzero reference count  */
-int bdesc_alter(bdesc_t ** bdesc)
-{
-	bdesc_t * copy;
-	Dprintf("<bdesc 0x%08x alter>\n", *bdesc);
-	if(!(*bdesc)->refs)
-		return 0;
-	copy = bdesc_copy(*bdesc);
-	if(!copy)
-		return -1;
-	*bdesc = copy;
-	return 0;
-}
-
-/* increase the reference count of a bdesc, copying it if it is currently translated */
-int bdesc_retain(bdesc_t ** bdesc)
-{
-	bdesc_t * copy;
-	Dprintf("<bdesc 0x%08x reference>\n", *bdesc);
-	if(!(*bdesc)->translated)
-	{
-		(*bdesc)->refs++;
-		return 0;
-	}
-	copy = bdesc_copy(*bdesc);
-	if(!copy)
-		return -1;
-	copy->refs++;
-	*bdesc = copy;
-	return 0;
+	/* dropped, so set pointer to NULL */
+	*bdesc = NULL;
 }
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc)
 {
 	Dprintf("<bdesc 0x%08x release>\n", *bdesc);
-	if(!--(*bdesc)->refs)
-		bdesc_free(*bdesc);
-	*bdesc = NULL;
+	(*bdesc)->ddesc->refs--;
+	(*bdesc)->refs--;
+	bdesc_drop(bdesc);
 }

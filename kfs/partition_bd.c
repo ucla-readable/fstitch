@@ -49,7 +49,7 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct partition_info * info = (struct partition_info *) object->instance;
-	int value;
+	int value, refs = block->refs;
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
@@ -59,16 +59,33 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= info->length)
 		return -1;
 	
-	block->translated++;
+	/* Important logic:
+	 * If somebody has a reference to this bdesc (i.e. refs > 0), then that
+	 * entity must be above us. This is because all entities that have
+	 * references to a bdesc think it has the same BD (in this case, us),
+	 * and everybody below us uses a different BD. So, if there is a
+	 * reference to this bdesc, it will still exist after the call to
+	 * write_block below. If not, the principle of caller-drop applies to
+	 * the bdesc and we do not have to (nor can we) de-translate it.
+	 * However, we must still set the translated flag, as it is the cue to
+	 * bdesc_retain() to notify the dependency manager of the change. In the
+	 * case where translated = 1 and refs = 0, bdesc_retain simply clears
+	 * the translated flag. */
+	if(block->translated)
+		printf("%s(): (%s:%d): block already translated!\n", __FUNCTION__, __FILE__, __LINE__);
+	block->translated = 1;
 	block->bd = info->bd;
-	block->number -= info->start;
+	block->number += info->start;
 	
 	/* write it */
 	value = CALL(block->bd, write_block, block);
 	
-	block->bd = object;
-	block->number += info->start;
-	block->translated--;
+	if(refs)
+	{
+		block->bd = object;
+		block->number -= info->start;
+		block->translated = 0;
+	}
 	
 	return value;
 }
@@ -91,13 +108,13 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 	
 	block->translated++;
 	block->bd = info->bd;
-	block->number -= info->start;
+	block->number += info->start;
 	
 	/* sync it */
 	value = CALL(block->bd, sync, block);
 	
 	block->bd = object;
-	block->number += info->start;
+	block->number -= info->start;
 	block->translated--;
 	
 	return value;

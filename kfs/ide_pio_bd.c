@@ -102,7 +102,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	
 	/* read it */
-	ide_read(((struct ide_info *) object->instance)->disk, number, bdesc->data, 1);
+	ide_read(((struct ide_info *) object->instance)->disk, number, bdesc->ddesc->data, 1);
 	
 	return bdesc;
 }
@@ -122,7 +122,10 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -1;
 	
 	/* write it */
-	ide_write(((struct ide_info *) object->instance)->disk, block->number, block->data, 1);
+	ide_write(((struct ide_info *) object->instance)->disk, block->number, block->ddesc->data, 1);
+	
+	/* drop the hot potato */
+	bdesc_drop(&block);
 	
 	return 0;
 }

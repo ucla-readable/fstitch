@@ -81,11 +81,6 @@ static int wholedisk_free_block(LFS_t * object, bdesc_t * block)
 	return -1;
 }
 
-static int wholedisk_apply_changes(LFS_t * object, chdesc_t * changes)
-{
-	return -1;
-}
-
 static int wholedisk_remove_name(LFS_t * object, const char * name)
 {
 	return -1;
@@ -100,11 +95,10 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offse
 	if(offset >= info->blocksize || size >= info->blocksize || offset + size >= info->blocksize)
 		return -1;
 	
-	bdesc_retain(&block);
-	bdesc_touch(&block);
-	memcpy(&block->data[offset], data, size);
+	bdesc_touch(block);
+	memcpy(&block->ddesc->data[offset], data, size);
+	/* pass our ownership of this bdesc on */
 	value = CALL(info->bd, write_block, block);
-	bdesc_release(&block);
 	
 	return value;
 }
@@ -174,7 +168,6 @@ LFS_t * wholedisk(BD_t * bd)
 	ASSIGN(lfs, wholedisk, rename);
 	ASSIGN(lfs, wholedisk, truncate_file_block);
 	ASSIGN(lfs, wholedisk, free_block);
-	ASSIGN(lfs, wholedisk, apply_changes);
 	ASSIGN(lfs, wholedisk, remove_name);
 	ASSIGN(lfs, wholedisk, write_block);
 	ASSIGN(lfs, wholedisk, get_num_features);

@@ -105,7 +105,7 @@ static uint32_t bdesc_sum(bdesc_t * bdesc)
 	for(i = 0; i != bdesc->length; i++)
 	{
 		sum *= 3;
-		sum += bdesc->data[i];
+		sum += bdesc->ddesc->data[i];
 	}
 	return sum;
 }
@@ -164,25 +164,26 @@ void bd_test(int argc, char * argv[])
 		printf("\n=== Block %d sum\n", i);
 		
 		bdesc = CALL(bd, read_block, i);
-		bdesc_retain(&bdesc);
 		printf("    BD   0x%08x\n", bdesc_sum(bdesc));
-		bdesc_release(&bdesc);
+		bdesc_drop(&bdesc);
 		
 		bdesc = CALL(cbd, read_block, i);
-		bdesc_retain(&bdesc);
 		printf("    CBD  0x%08x\n", bdesc_sum(bdesc));
-		bdesc_release(&bdesc);
+		bdesc_drop(&bdesc);
 		
 		bdesc = CALL(part, read_block, i);
-		bdesc_retain(&bdesc);
 		printf("    PART 0x%08x\n", bdesc_sum(bdesc));
-		bdesc_touch(&bdesc);
-		first = bdesc->data[0];
-		memmove(bdesc->data, bdesc->data + 1, CALL(part, get_blocksize) - 1);
-		bdesc->data[CALL(part, get_blocksize) - 1] = first;
+		bdesc_touch(bdesc);
+		first = bdesc->ddesc->data[0];
+		memmove(bdesc->ddesc->data, bdesc->ddesc->data + 1, CALL(part, get_blocksize) - 1);
+		bdesc->ddesc->data[CALL(part, get_blocksize) - 1] = first;
 		printf("    PART 0x%08x\n", bdesc_sum(bdesc));
+		/* pass ownership on for even i, else keep it to force depman translation */
+		if(i & 1)
+			bdesc_retain(&bdesc);
 		CALL(part, write_block, bdesc);
-		bdesc_release(&bdesc);
+		if(i & 1)
+			bdesc_release(&bdesc);
 	}
 	
 	printf("\n");

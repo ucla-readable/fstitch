@@ -7,7 +7,6 @@
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/josfs_base.h>
-#include <kfs/josfs_fdesc.h>
 
 #define block_is_free read_bitmap
 
@@ -18,8 +17,15 @@ struct lfs_info
 {
     BD_t * ubd;
     bdesc_t * super_block;
-    struct JOS_Super * super;
 };
+
+struct jos_fdesc {
+    struct bdesc * dirb;
+    int index;
+    struct JOS_File * file;
+};
+
+#define super ((struct JOS_Super *) info->super_block->ddesc->data)
 
 // Equivalent to JOS's read_super
 int check_super(LFS_t * object)
@@ -37,8 +43,7 @@ int check_super(LFS_t * object)
     info->super_block = CALL(info->ubd, read_block, 1);
     bdesc_retain(&info->super_block);
 
-    info->super = (struct JOS_Super*) info->super_block->data;
-    if (info->super->s_magic != JOS_FS_MAGIC) {
+    if (super->s_magic != JOS_FS_MAGIC) {
         printf("josfs_base: bad file system magic number\n");
 	bdesc_release(&info->super_block);
         return -1;
@@ -46,7 +51,7 @@ int check_super(LFS_t * object)
 
     numblocks = CALL(info->ubd, get_numblocks);
 
-    if (info->super->s_nblocks > numblocks) {
+    if (super->s_nblocks > numblocks) {
         printf("josfs_base: file system is too large\n");
 	bdesc_release(&info->super_block);
         return -1;
@@ -61,9 +66,9 @@ int check_bitmap(LFS_t * object)
     struct lfs_info * info = (struct lfs_info *) object->instance;
     int i, blocks_to_read;
 
-    blocks_to_read = info->super->s_nblocks / JOS_BLKBITSIZE;
+    blocks_to_read = super->s_nblocks / JOS_BLKBITSIZE;
 
-    if (info->super->s_nblocks % JOS_BLKBITSIZE) {
+    if (super->s_nblocks % JOS_BLKBITSIZE) {
         blocks_to_read++;
     }
 
@@ -100,7 +105,7 @@ int read_bitmap(LFS_t * object, uint32_t blockno)
         return -1;
     }
 
-    ptr = ((uint32_t *)bdesc->data) + (blockno / 32);
+    ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
     if (*ptr & (1 << (blockno % 32)))
         return 1;
     return 0;
@@ -128,7 +133,7 @@ int write_bitmap(LFS_t * object, uint32_t blockno, bool value)
         return -1;
     }
 
-    ptr = ((uint32_t *)bdesc->data) + (blockno / 32);
+    ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
     if (value)
         *ptr |= (1 << (blockno % 32));
     else
@@ -158,7 +163,7 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
     int bitmap_size;
     int s_nblocks;
 
-    s_nblocks = info->super->s_nblocks;
+    s_nblocks = super->s_nblocks;
     bitmap_size = s_nblocks / JOS_BLKBITSIZE;
 
     if (s_nblocks % JOS_BLKBITSIZE) {
@@ -255,12 +260,6 @@ static int josfs_free_block(LFS_t * object, bdesc_t * block)
 }
 
 // TODO
-static int josfs_apply_changes(LFS_t * object, chdesc_t * changes)
-{
-    return 0;
-}
-
-// TODO
 static int josfs_remove_name(LFS_t * object, const char * name)
 {
     return 0;
@@ -275,7 +274,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
         return -1;
     }
 
-    memcpy(block->data + offset, data, size);
+    memcpy(&block->ddesc->data[offset], data, size);
     if ((r = CALL(info->ubd, write_block, block)) < 0)
         return r;
 
@@ -368,7 +367,6 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN(lfs, josfs, rename);
     ASSIGN(lfs, josfs, truncate_file_block);
     ASSIGN(lfs, josfs, free_block);
-    ASSIGN(lfs, josfs, apply_changes);
     ASSIGN(lfs, josfs, remove_name);
     ASSIGN(lfs, josfs, write_block);
     ASSIGN(lfs, josfs, get_num_features);

@@ -8,6 +8,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/josfs_base.o \
+			$(OBJDIR)/kfs/depman.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 			$(OBJDIR)/kfs/kfsd.o

@@ -42,7 +42,6 @@ struct LFS {
 	DECLARE(LFS_t, int, rename, const char * oldname, const char * newname);
 	DECLARE(LFS_t, bdesc_t *, truncate_file_block, fdesc_t * file);
 	DECLARE(LFS_t, int, free_block, bdesc_t * block);
-	DECLARE(LFS_t, int, apply_changes, chdesc_t * changes);
 	DECLARE(LFS_t, int, remove_name, const char * name);
 	DECLARE(LFS_t, int, write_block, bdesc_t * block, uint32_t offset, uint32_t size, void * data);
 	DECLARE(LFS_t, size_t, get_num_features, const char * name);

@@ -13,6 +13,7 @@ typedef struct chmetadesc chmetadesc_t;
 
 struct chdesc {
 	bdesc_t * block;
+	uint32_t refs;
 	enum {BIT, BYTE, NOOP} type;
 	union {
 		struct {

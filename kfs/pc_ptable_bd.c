@@ -12,8 +12,8 @@
 struct ptable_info {
 	BD_t * bd;
 	bdesc_t * ptable_sector;
-	struct pc_ptable * ptable;
 };
+#define ptable ((struct pc_ptable *) &info->ptable_sector->ddesc->data[PTABLE_OFFSET])
 
 #define SECTSIZE 512
 
@@ -40,10 +40,9 @@ void * pc_ptable_init(BD_t * bd)
 	bdesc_retain(&info->ptable_sector);
 	
 	info->bd = bd;
-	info->ptable = (struct pc_ptable *) &info->ptable_sector->data[PTABLE_OFFSET];
 	
-	if(info->ptable_sector->data[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
-	   info->ptable_sector->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
+	if(info->ptable_sector->ddesc->data[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
+	   info->ptable_sector->ddesc->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
 	{
 		printf("No partition table found!\n");
 		bdesc_release(&info->ptable_sector);
@@ -61,7 +60,7 @@ int pc_ptable_count(void * _info)
 	int i, count = 0;
 	
 	for(i = 0; i != 4; i++)
-		if(info->ptable[i].lba_length)
+		if(ptable[i].lba_length)
 			count++;
 	
 	return count;
@@ -73,7 +72,7 @@ uint8_t pc_ptable_type(void * _info, int index)
 	struct ptable_info * info = (struct ptable_info *) _info;
 	if(index < 1 || index > 4)
 		return 0;
-	return info->ptable[index - 1].type;
+	return ptable[index - 1].type;
 }
 
 /* get a partition block device */
@@ -85,7 +84,7 @@ BD_t * pc_ptable_bd(void * _info, int index)
 		return 0;
 	
 	index--;
-	return partition_bd(info->bd, info->ptable[index].lba_start, info->ptable[index].lba_length);
+	return partition_bd(info->bd, ptable[index].lba_start, ptable[index].lba_length);
 }
 
 /* free the partition table structures */
