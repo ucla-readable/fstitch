@@ -17,7 +17,6 @@
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
-
 static const char * josfspath = "/";
 static const char * fspaths[] = {"/k0", "/k1", "/k2", "/k4"};
 
@@ -37,7 +36,7 @@ int kfsd_init(void)
 
 	if((r = depman_init()) < 0)
 	{
-		printf("Failed to initialized DEP MAN: %e\n", r);
+		printf("Failed to initialize DEP MAN: %e\n", r);
 		return r;
 	}
 
@@ -99,6 +98,7 @@ int kfsd_init(void)
 			if (! (cache = wt_cache_bd(resizer, 4)) )
 				kfsd_shutdown();
 
+			/* make josfs on partition 2 (index 1), else wholedisk */
 			if (i == 1)
 			{
 				if (! (lfs = josfs(cache)) )
