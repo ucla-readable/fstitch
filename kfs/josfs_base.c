@@ -30,10 +30,17 @@
 #define super ((struct JOSFS_Super *) info->super_block->ddesc->data)
 #define isvalid(x) (x >= reserved && x < s_nblocks)
 
+struct josfs_bmc
+{
+	uint8_t data[JOSFS_BLKSIZE];
+	uint32_t blockno;
+};
+
 struct lfs_info
 {
 	BD_t * ubd;
 	bdesc_t * super_block;
+	struct josfs_bmc * bitmap_cache; // Bitmap mini write through cache!
 };
 
 struct josfs_fdesc {
@@ -370,24 +377,36 @@ static int fsck(LFS_t * object)
 // Return 1 if block is free
 static int read_bitmap(LFS_t * object, uint32_t blockno)
 {
+	struct lfs_info * info = (struct lfs_info *) object->instance;
 	bdesc_t * bdesc;
 	int target;
 	uint32_t * ptr;
 	bool result;
 
 	target = 2 + (blockno / (JOSFS_BLKBITSIZE));
-	bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
 
-	if (bdesc->length != JOSFS_BLKSIZE) {
-		printf("josfs_base: trouble reading bitmap!\n");
-		bdesc_drop(&bdesc);
-		return -1;
+	if (! info->bitmap_cache) {
+		info->bitmap_cache = malloc(sizeof(struct josfs_bmc));
+		if (!info->bitmap_cache)
+			return -1;
+		info->bitmap_cache->blockno = 0;
 	}
 
-	ptr = ((uint32_t *) bdesc->ddesc->data) + ((blockno % JOSFS_BLKBITSIZE) / 32);
+	if (info->bitmap_cache->blockno != target) {
+		bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
+		if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
+			printf("josfs_base: trouble reading bitmap!\n");
+			if (bdesc)
+				bdesc_drop(&bdesc);
+			return -1;
+		}
+		memcpy(info->bitmap_cache->data, bdesc->ddesc->data, JOSFS_BLKSIZE);
+		info->bitmap_cache->blockno = target;
+		bdesc_drop(&bdesc);
+	}
 
+	ptr = ((uint32_t *) info->bitmap_cache->data) + ((blockno % JOSFS_BLKBITSIZE) / 32);
 	result = *ptr & (1 << (blockno % 32));
-	bdesc_drop(&bdesc);
 
 	if (result)
 		return 1;
@@ -411,10 +430,18 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 
 	target = 2 + (blockno / JOSFS_BLKBITSIZE);
 
+	// Perhaps this can be smarter, but I really need to have a bdesc below (need more than just the data)
+	if (info->bitmap_cache && info->bitmap_cache->blockno == target) {
+		free(info->bitmap_cache);
+		info->bitmap_cache = NULL;
+	}
+
 	bdesc = CALL(info->ubd, read_block, target);
 
 	if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
 		printf("josfs_base: trouble reading bitmap!\n");
+		if (bdesc)
+			bdesc_drop(&bdesc);
 		return -1;
 	}
 
@@ -1789,6 +1816,8 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 	ASSIGN_DESTROY(lfs, josfs, destroy);
 
 	info->ubd = block_device;
+	info->bitmap_cache = NULL;
+
 	if (check_super(lfs)) {
 		free(info);
 		free(lfs);
