@@ -246,7 +246,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 	while (size_written < size)
 	{
-		/* get the block to write to */
+		/* get the block to write to - maybe just get a block number in the future, if we are writing the whole block? */
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (!bd)
 		{
