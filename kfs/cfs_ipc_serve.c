@@ -81,7 +81,7 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 static void serve_write(envid_t envid, struct Scfs_write * req)
 {
 	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
-	if (prevrecv->envid == envid && !prevrecv->type)
+	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
 		prevrecv->envid = envid;
@@ -151,7 +151,7 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 {
 	struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(envid)];
-	if (prevrecv->envid == envid && !prevrecv->type)
+	if (!prevrecv->type || prevrecv->envid != envid)
 	{
 		// First of two recvs
 		prevrecv->envid = envid;
