@@ -364,6 +364,8 @@ seek(int fdnum, off_t offset)
 
 	if ((r = fd_lookup(fdnum, &fd)) < 0)
 		return r;
+	if (fd->fd_dev_id != 'f' && fd->fd_dev_id != 'k')
+		return -E_INVAL;
 	fd->fd_offset = offset;
 	return 0;
 }
@@ -433,7 +435,7 @@ wait_fd(int fdnum, size_t nrefs)
 
 	while (p->pp_ref > nrefs)
 	{
-		printf("wait_fd(%d, %d) = %d\n", fdnum, nrefs, p->pp_ref);
+		fprintf(STDERR_FILENO, "wait_fd(%d, %d) = %d\n", fdnum, nrefs, p->pp_ref);
 		sys_yield();
 	}
 
