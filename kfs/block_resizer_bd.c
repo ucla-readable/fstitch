@@ -22,6 +22,32 @@ struct resize_info {
 	uint32_t block_count;
 };
 
+static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct resize_info * info = (struct resize_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "original: %d, converted: %d, count: %d, atomic: %d", info->original_size, info->converted_size, info->block_count, info->atomic_size);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "%d -> %d", info->original_size, info->converted_size);
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "original: %d, converted: %d, count: %d", info->original_size, info->converted_size, info->block_count);
+	}
+	return 0;
+}
+
+static int block_resizer_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t block_resizer_bd_get_numblocks(BD_t * object)
 {
 	return ((struct resize_info *) object->instance)->block_count;
@@ -189,6 +215,10 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	}
 	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, block_resizer_bd, get_config);
+	OBJASSIGN(bd, block_resizer_bd, get_status);
 	ASSIGN(bd, block_resizer_bd, get_numblocks);
 	ASSIGN(bd, block_resizer_bd, get_blocksize);
 	ASSIGN(bd, block_resizer_bd, get_atomicsize);

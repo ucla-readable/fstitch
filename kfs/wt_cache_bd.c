@@ -15,6 +15,32 @@ struct cache_info {
 	uint16_t blocksize;
 };
 
+static int wt_cache_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct cache_info * info = (struct cache_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "blocksize: %d, size: %d, contention: x%d", info->blocksize, info->size, (CALL(info->bd, get_numblocks) + info->size - 1) / info->size);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "%d x %d", info->blocksize, info->size);
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "blocksize: %d, size: %d", info->blocksize, info->size);
+	}
+	return 0;
+}
+
+static int wt_cache_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t wt_cache_bd_get_numblocks(BD_t * object)
 {
 	return CALL(((struct cache_info *) object->instance)->bd, get_numblocks);
@@ -198,6 +224,10 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	}
 	memset(info->blocks, 0, blocks * sizeof(*info->blocks));
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, wt_cache_bd, get_config);
+	OBJASSIGN(bd, wt_cache_bd, get_status);
 	ASSIGN(bd, wt_cache_bd, get_numblocks);
 	ASSIGN(bd, wt_cache_bd, get_blocksize);
 	ASSIGN(bd, wt_cache_bd, get_atomicsize);

@@ -19,6 +19,32 @@ struct nbd_info {
 	struct ip_addr ip;
 };
 
+static int nbd_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct nbd_info * info = (struct nbd_info *) bd->instance;
+	switch(level)
+	{
+		case CONFIG_VERBOSE:
+			snprintf(string, length, "host: %s, port: %d, blocksize: %d, count: %d", inet_iptoa(info->ip), info->port, info->blocksize, info->length);
+			break;
+		case CONFIG_BRIEF:
+			snprintf(string, length, "%s:%d", inet_iptoa(info->ip), info->port);
+			break;
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "host: %s, port: %d, blocksize: %d, count: %d", inet_iptoa(info->ip), info->port, info->blocksize, info->length);
+	}
+	return 0;
+}
+
+static int nbd_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t nbd_bd_get_numblocks(BD_t * object)
 {
 	return ((struct nbd_info *) object->instance)->length;
@@ -126,6 +152,10 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	}
 	bd->instance = info;
 	
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, nbd_bd, get_config);
+	OBJASSIGN(bd, nbd_bd, get_status);
 	ASSIGN(bd, nbd_bd, get_numblocks);
 	ASSIGN(bd, nbd_bd, get_blocksize);
 	ASSIGN(bd, nbd_bd, get_atomicsize);
