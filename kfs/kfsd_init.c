@@ -140,12 +140,9 @@ int kfsd_init(void)
 		sleep(200);
 
 		if (! (bd = nbd_bd("192.168.2.1", 2492)) )
-		{
 			fprintf(STDERR_FILENO, "nbd_bd failed\n");
-			kfsd_shutdown();
-		}
 
-		if ((r = construct_uhfses(bd, 400, uhfses)) < 0)
+		if (bd && (r = construct_uhfses(bd, 400, uhfses)) < 0)
 			kfsd_shutdown();
 	}
 
@@ -154,12 +151,9 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		if (! (bd = ide_pio_bd(0, 0)) )
-		{
 			fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
-			kfsd_shutdown();
-		}
 
-		if ((r = construct_uhfses(bd, 32, uhfses)) < 0)
+		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)
 			kfsd_shutdown();
 	}
 
@@ -168,12 +162,9 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		if (! (bd = ide_pio_bd(0, 1)) )
-		{
 			fprintf(STDERR_FILENO, "ide_pio_bd(1) failed\n");
-			kfsd_shutdown();
-		}
 
-		if ((r = construct_uhfses(bd, 32, uhfses)) < 0)		
+		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)		
 			kfsd_shutdown();
 	}
 
@@ -221,7 +212,7 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
-	const bool enable_internal_journaling = 1;
+	const bool enable_internal_journaling = 0;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
