@@ -72,7 +72,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) object->instance;
-	uint32_t index, refs = block->refs;
+	uint32_t index;
 	int value;
 	
 	/* make sure this is the right block device */
@@ -103,11 +103,9 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	/* write it */
 	value = CALL(block->bd, write_block, block);
 	
-	if(refs)
-	{
-		block->bd = object;
-		block->translated--;
-	}
+	/* we know we can de-translate it because we retained it */
+	block->bd = object;
+	block->translated--;
 	
 	return value;
 }
