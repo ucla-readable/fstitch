@@ -23,7 +23,9 @@
 #define SCFS_SET_METADATA 14
 #define SCFS_SYNC 15
 #define SCFS_SHUTDOWN 16
-#define SCFS_DEBUG 17
+#define SCFS_GETDIRENTRIES 17
+#define SCFS_GETDIRENTRIES_RETURN 18
+#define SCFS_DEBUG 19
 
 #define SCFS_TYPE int scfs_type
 
@@ -123,6 +125,18 @@ struct Scfs_sync {
 
 struct Scfs_shutdown {
 	SCFS_TYPE;
+};
+
+struct Scfs_getdirentries {
+	SCFS_TYPE;
+	off_t basep;
+};
+
+struct Scfs_getdirentries_return {
+	SCFS_TYPE;
+	int nbytes_read;
+	off_t basep;
+	char buf[PGSIZE - sizeof(int) - sizeof(int) - sizeof(off_t)];
 };
 
 struct Scfs_debug {
