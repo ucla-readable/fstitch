@@ -92,7 +92,7 @@ static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** 
 	return -E_INVAL;
 }
 
-static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct wd_info * info = (struct wd_info *) object->instance;
 	int value;

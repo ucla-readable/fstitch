@@ -49,7 +49,7 @@ struct LFS {
 	DECLARE(LFS_t, bdesc_t *, truncate_file_block, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, free_block, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, remove_name, const char * name, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, int, write_block, bdesc_t * block, uint32_t offset, uint32_t size, void * data, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, int, write_block, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, size_t, get_num_features, const char * name);
 	DECLARE(LFS_t, const feature_t *, get_feature, const char * name, size_t num);
 	DECLARE(LFS_t, int, get_metadata_name, const char * name, uint32_t id, size_t * size, void ** data);

@@ -37,8 +37,8 @@ typedef struct journal_state journal_state_t;
 // blkno    | description
 // ---------+-------------
 // 0        | commit_record_t
-// 1..k     | disk blknos for where each journal data block goes
-//          | k 
+// 1..k     | disk blknos for where each journal data block goes,
+//          | k = trans_number_block_count()
 // k+1..end | the journal data blocks
 
 #define TRANSACTION_SIZE (500*1024)
@@ -61,20 +61,19 @@ typedef struct commit_record commit_record_t;
 
 
 // Return the number of journal data block numbers that fit in a disk block
-size_t blknos_per_blk(uint16_t blksize)
+static size_t numbers_per_block(uint16_t blksize)
 {
 	return blksize / sizeof(uint32_t);
 }
 
 // Return the number of blocks reserved in a transaction for the journal data
 // block numbers
-size_t nblks_journaldatablknos(uint16_t blksize)
+static size_t trans_number_block_count(uint16_t blksize)
 {
-	const size_t nos_per_blk = blknos_per_blk(blksize);
+	const size_t nos_per_blk = numbers_per_block(blksize);
 	const size_t nblks_transaction = ROUNDDOWN32(TRANSACTION_SIZE, blksize) / blksize;
-	const size_t nblocks = ROUNDUP32(nblks_transaction - 2, nos_per_blk) / nos_per_blk;
 
-	return nblocks;
+	return (nblks_transaction - 1 + nos_per_blk) / (nos_per_blk + 1);
 }
 
 
@@ -94,10 +93,79 @@ static int ensure_journal_exists(journal_state_t * state)
 	return 0;
 }
 
-// TODO
 static int replay_journal(journal_state_t * state)
 {
+	// FIXME: support more than one transaction, and transaction sub-commits
 	Dprintf("%s()\n", __FUNCTION__);
+	
+	const size_t bnpb = numbers_per_block(state->blocksize);
+	uint32_t transaction_start = 0;
+	uint32_t block, bnb, db;
+	struct commit_record * cr;
+	const typeof(cr->type) empty = CREMPTY;
+	bdesc_t * commit_block = CALL(state->journal, get_file_block, state->jfdesc, transaction_start * state->blocksize);
+	if(!commit_block)
+		return -E_UNSPECIFIED;
+	
+	cr = (struct commit_record *) commit_block->ddesc->data;
+	if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
+	{
+		bdesc_drop(&commit_block);
+		return 0;
+	}
+	printf("%s(): recovering journal entry\n", __FUNCTION__);
+	
+	/* bnb is "block number block" number */
+	bnb = transaction_start + 1;
+	/* db is "data block" number */
+	db = bnb + trans_number_block_count(state->blocksize);
+	for(block = 0; block < cr->nblocks; block += bnpb)
+	{
+		uint32_t index;
+		uint32_t * numbers;
+		bdesc_t * number_block = CALL(state->journal, get_file_block, state->jfdesc, bnb * state->blocksize);
+		if(!number_block)
+		{
+			bdesc_drop(&commit_block);
+			return -E_UNSPECIFIED;
+		}
+		
+		numbers = (uint32_t *) number_block->ddesc->data;
+		for(index = 0; index != bnpb; index++)
+		{
+			int r = -E_UNSPECIFIED;
+			bdesc_t * output;
+			bdesc_t * data_block = CALL(state->journal, get_file_block, state->jfdesc, db++ * state->blocksize);
+			if(!data_block)
+				goto data_error;
+			
+			output = CALL(state->queue, read_block, numbers[index]);
+			if(!output)
+				goto output_error;
+			
+			if((r = bdesc_touch(output)) < 0)
+				goto touch_error;
+				
+			memcpy(output->ddesc->data, data_block->ddesc->data, state->blocksize);
+			CALL(state->queue, write_block, output);
+			bdesc_drop(&data_block);
+			continue;
+			
+		touch_error:
+			bdesc_drop(&output);
+		output_error:
+			bdesc_drop(&data_block);
+		data_error:
+			bdesc_drop(&number_block);
+			bdesc_drop(&commit_block);
+			return r;
+		}
+		
+		bdesc_drop(&number_block);
+	}
+	
+	CALL(state->journal, write_block, commit_block, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, NULL, NULL);
+	
 	return 0;
 }
 
@@ -128,7 +196,7 @@ static int transaction_stop(journal_state_t * state)
 		transaction_slot = 0;
 		file_offset = transaction_slot * TRANSACTION_SIZE;
 		blknos_begin = file_offset + state->blocksize;
-		blknos_end = blknos_begin + state->blocksize*(nblks_journaldatablknos(state->blocksize) - 1);
+		blknos_end = blknos_begin + state->blocksize*(trans_number_block_count(state->blocksize) - 1);
 		
 		if (state->commit_chdesc[transaction_slot])
 		{
@@ -290,8 +358,8 @@ static int transaction_stop(journal_state_t * state)
 	// Write journal data block numbers
 
 	{
-		const size_t blknos_per_block = blknos_per_blk(state->blocksize);
-		const size_t nblocks_jdbn = nblks_journaldatablknos(state->blocksize);
+		const size_t blknos_per_block = numbers_per_block(state->blocksize);
+		const size_t nblocks_jdbn = trans_number_block_count(state->blocksize);
 		size_t blkno;
 		size_t bdescno = 0;
 		uint32_t * num_block;
@@ -564,7 +632,7 @@ static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head,
 	return r;
 }
 
-static int journal_write_block(LFS_t * lfs, bdesc_t * block, uint32_t offset, uint32_t size, void * data, chdesc_t ** head, chdesc_t ** tail)
+static int journal_write_block(LFS_t * lfs, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
 	int r;

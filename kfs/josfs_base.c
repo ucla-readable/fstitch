@@ -1254,7 +1254,7 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	return 0;
 }
 
-static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data, chdesc_t ** head, chdesc_t ** tail)
+static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_write_block\n");
 	struct lfs_info * info = (struct lfs_info *) object->instance;
