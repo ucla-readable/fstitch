@@ -102,7 +102,7 @@ int kfsd_init(void)
 		}
 		else
 		{
-			if (! (j_bd = ide_pio_bd(1)) )
+			if (! (j_bd = ide_pio_bd(0, 1)) )
 			{
 				fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
 				kfsd_shutdown();
@@ -114,7 +114,7 @@ int kfsd_init(void)
 		if (! (j_bd = chdesc_stripper_bd(j_bd)) )
 			kfsd_shutdown();
 
-		if (! (data_bd = ide_pio_bd(0)) )
+		if (! (data_bd = ide_pio_bd(0, 0)) )
 		{
 			fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
 			kfsd_shutdown();
@@ -153,7 +153,7 @@ int kfsd_init(void)
 	{
 		BD_t * bd;
 
-		if (! (bd = ide_pio_bd(0)) )
+		if (! (bd = ide_pio_bd(0, 0)) )
 		{
 			fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
 			kfsd_shutdown();
@@ -167,7 +167,7 @@ int kfsd_init(void)
 	{
 		BD_t * bd;
 
-		if (! (bd = ide_pio_bd(1)) )
+		if (! (bd = ide_pio_bd(0, 1)) )
 		{
 			fprintf(STDERR_FILENO, "ide_pio_bd(1) failed\n");
 			kfsd_shutdown();
