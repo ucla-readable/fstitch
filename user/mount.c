@@ -212,8 +212,8 @@ static void print_usage(const char * bin)
 {
 	printf("Usage:\n");
 	printf("%s -d <device> -m <mount_point> [-v]\n", bin);
-	printf("    [-j <on|off> [-jfsck <on|off>] [-ej <lfs_name>]] [-fsck <on|off>]\n");
-	printf("    [-$ <num_blocks>] [-wb|-wt]\n");
+	printf("    [-j <on|extern_file|off*> [-jfsck <on|off*>]] [-fsck <on|off*>]\n");
+	printf("    [-$ <num_blocks>] [-wb*|-wt]\n");
 	printf("  <device> is one of:\n");
 	printf("    ide  <controllerno> <diskno>\n");
 	printf("    nbd  <host> [-p <port>]\n");
@@ -226,7 +226,6 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 	const char * journal_str;
 	const char * fsck_str;
 	const char * jfsck_str;
-	const char * extjournal_name;
 	const char * cache_num_blocks_str;
 
 	if (get_arg_idx(argc, argv, "-v"))
@@ -235,14 +234,53 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 	if ((journal_str = get_arg_val(argc, argv, "-j")))
 	{
 		if (!strcmp("on", journal_str))
+		{
 			*journal = 1;
+			*external_journal = NULL;
+		}
 		else if (!strcmp("off", journal_str))
+		{
 			*journal = 0;
+			*external_journal = NULL;
+		}
 		else
 		{
-			fprintf(STDERR_FILENO, "Illegal -j option \"%s\"\n", journal_str);
-			print_usage(argv[0]);
-			exit();
+			const char * extjournal_file = journal_str;
+			const char * extjournal_lfs_file;
+			int r;
+
+			// Find the lfs for extjournal_file
+			memset(&md, 0, sizeof(md));
+			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs.id, &md);
+			if (r < 0)
+			{
+				fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", extjournal_file, r);
+				exit();
+			}
+			*external_journal = create_lfs(*(uint32_t *) md.data);
+
+			if (!*external_journal)
+			{
+				fprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", extjournal_file);
+				exit();
+			}
+
+			// Find the lfs's name for extjournal_file
+			memset(&md, 0, sizeof(md));
+			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs_name.id, &md);
+			if (r < 0)
+			{
+				fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", extjournal_file, r);
+				exit();
+			}
+			extjournal_lfs_file = (char *) md.data;
+			if (strcmp(extjournal_lfs_file, "/.journal"))
+			{
+				fprintf(STDERR_FILENO, "journal_lfs can journal only to files named /.journal, you requested %s.\n", extjournal_lfs_file);
+				exit();
+			}
+
+			*journal = 1;
 		}
 	}
 
@@ -263,22 +301,6 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 
 	if (!*journal && *jfsck)
 		printf("Ignoring pre-journal-replay fsck request, journaling is off.\n");
-
-	if (*journal && (extjournal_name = get_arg_val(argc, argv, "-ej")))
-	{
-		modman_it_t * it = modman_it_create_lfs();
-		assert(it);
-		while ((*external_journal = modman_it_next_lfs(it)))
-			if (!strcmp(extjournal_name, modman_name_lfs(*external_journal)))
-				break;
-		modman_it_destroy(it);
-
-		if (!*external_journal)
-		{
-			fprintf(STDERR_FILENO, "Unable to find LFS %s\n", extjournal_name);
-			exit();
-		}
-	}
 
 	if ((fsck_str = get_arg_val(argc, argv, "-fsck")))
 	{
@@ -383,10 +405,11 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 		filename = argv[device_index+1];
 
 		// Find the lfs for filename
+		memset(&md, 0, sizeof(md));
 		r = cfs_get_metadata(filename, KFS_feature_file_lfs.id, &md);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename);
+			fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename, r);
 			exit();
 		}
 		lfs = create_lfs(*(uint32_t *) md.data);
@@ -397,10 +420,11 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 		}
 
 		// Find the lfs's name for filename
+		memset(&md, 0, sizeof(md));
 		r = cfs_get_metadata(filename, KFS_feature_file_lfs_name.id, &md);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename);
+			fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename, r);
 			exit();
 		}
 		lfs_filename = (char *) md.data;
