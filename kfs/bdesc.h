@@ -7,7 +7,7 @@
  *    retain it to use it.  However, you must do one of three things:
  *
  *     a) Retain it (bdesc_retain) and store it to release it (bdesc_release) later.
- *     b) Return or pass it to another function.
+ *     b) Return or pass it to another module via CALL.
  *     c) Drop it (bdesc_drop).
  *
  *    If you choose option a above, you may optionally also do
@@ -41,7 +41,7 @@
  * 3. Except for the data, nothing else in a bdesc will change while you have a reference to it.
  * */
 
-/* NOTE on rule 1c above - we need to work out what the behavior is if you pass a bdesc to a
+/* NOTE on rules 1b+c above - we need to work out what the behavior is if you pass a bdesc to a
  * function which then fails for some reason. Is it still responsible for dropping the bdesc? */
 
 #include <inc/types.h>
