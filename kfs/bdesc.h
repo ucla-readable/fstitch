@@ -1,6 +1,26 @@
 #ifndef __KUDOS_KFS_BDESC_H
 #define __KUDOS_KFS_BDESC_H
 
+/* RULES FOR USING BDESCS:
+ * 1. When a bdesc is returned or passed to you, you do not need to retain it to use it.
+ *    However, you must do one of three things:
+ *     a) Retain it (bdesc_retain) and store it to release it (bdesc_release) later.
+ *     b) Return or pass it to another function.
+ *     c) Drop it (bdesc_drop).
+ *    If you choose option a above, you may optionally also do b. However, b and c are mutually exclusive.
+ * 2. If you want to write to the data in a bdesc, you must call bdesc_touch() first.
+ *    Note that this may create a copy of the data, so you must do this before saving any pointers to write to.
+ * 3. Since the data descriptor in a bdesc may be copied by someone else calling bdesc_touch(), you should
+ *    never save any pointers into the data of a bdesc. Always access the data through the data descriptor.
+ * 4. To alter the structure of a bdesc (i.e. change any fields other than data), you must call bdesc_alter().
+ *    You should not call bdesc_retain() before using bdesc_alter().
+ * 
+ * These rules guarantee the following conditions:
+ * 1. The memory associated with bdescs and their data will be freed when it is no longer used.
+ * 2. The data in a bdesc can only be changed by somebody with the same bdesc pointer, not a different one sharing the data.
+ * 3. Except for the data, nothing else in a bdesc will change while you have a reference to it.
+ * */
+
 #include <inc/types.h>
 
 #include <kfs/bd.h>
