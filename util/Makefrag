@@ -1,0 +1,23 @@
+#
+# Makefile fragment for KudOS utilities.
+# This is NOT a complete makefile;
+# you must run GNU make in the top-level directory
+# where the GNUmakefile is located.
+#
+
+OBJDIRS += util
+
+$(OBJDIR)/util/$(ELFDUMP_SYMTAB) : util/$(ELFDUMP_SYMTAB).cpp
+	@echo + cc[UTIL] $<
+	@mkdir -p $(@D)
+	$(V)$(NCPP) -Wall -pedantic -o $@ $<
+
+$(OBJDIR)/util/$(PTYPAIR) : util/$(PTYPAIR).cpp
+	@echo + cc[UTIL] $<
+	@mkdir -p $(@D)
+	$(V)$(NCPP) -Wall -pedantic $(LIBUTIL) -o  $@ $<
+
+$(OBJDIR)/util/$(KNBD_SERVER) : util/$(KNBD_SERVER).c
+	@echo + cc[UTIL] $<
+	@mkdir -p $(@D)
+	$(V)$(NCC) -Wall -pedantic -o $@ $<

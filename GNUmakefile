@@ -35,9 +35,12 @@ endif
 
 TOP = .
 
-# Elf symbol and symbol string tables
+# Native utilities
 ELFDUMP_SYMTAB := elfdump_symtab
 PTYPAIR        := ptypair
+KNBD_SERVER    := knbd-server
+
+# Elf symbol and symbol string tables
 SYMTBL         := symtbl
 SYMSTRTBL      := symstrtbl
 
@@ -167,12 +170,12 @@ $(OBJDIR)/kfs/%.o: kfs/%.c
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-tags: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/util/$(PTYPAIR) $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
+tags: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/util/$(PTYPAIR) $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(OBJDIR)/util/$(KNBD_SERVER)
 	@echo + ctags [VI]
 	$(V)find . -type f \
 		| grep -v /CVS/ | grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) -L - --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
-TAGS: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/util/$(PTYPAIR) $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
+TAGS: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/util/$(PTYPAIR) $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(OBJDIR)/util/$(KNBD_SERVER)
 	@echo + ctags [EMACS]
 	$(V)find . -type f \
 		| grep -v /CVS/ | grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
