@@ -222,9 +222,13 @@ int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct 
 	int r;
 	uint32_t i = 0;
 	struct dirent entry;
-	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
 	bdesc_t * dirblock;
 	int blockno;
+	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
+
+	if (!temp_fdesc) {
+		return -E_NO_MEM;
+	}
 
 	temp_fdesc->file = dir;
 	do {
@@ -295,6 +299,10 @@ static fdesc_t * josfs_lookup_name(LFS_t * object, const char * name)
 	char filename[JOSFS_MAXNAMELEN];
 	struct JOSFS_File *dir, *f;
 	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
+	if (!temp_fdesc) {
+		return NULL;
+	}
+
 	if (walk_path(object, name, &dir, &f, filename) == 0) {
 		temp_fdesc->file = f;
 		return (fdesc_t *) temp_fdesc;
@@ -426,9 +434,12 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 {
 	char filename[JOSFS_MAXNAMELEN];
 	struct JOSFS_File *dir, *f;
-	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
 	bdesc_t * blk;
 	int i, j, r, nblock;
+	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
+	if (!temp_fdesc) {
+		return NULL;
+	}
 
 	if ((r = walk_path(object, name, &dir, &f, filename)) != 0) {
 		if (r == -E_NOT_FOUND && dir != NULL) {
@@ -571,7 +582,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 
 static size_t josfs_get_num_features(LFS_t * object, const char * name)
 {
-	return 1;
+	return 2;
 }
 
 static const feature_t * josfs_get_feature(LFS_t * object, const char * name, size_t num)
@@ -579,15 +590,29 @@ static const feature_t * josfs_get_feature(LFS_t * object, const char * name, si
 	if (num == 0) {
 		return &KFS_feature_size;
 	}
+	else if (num == 1) {
+		return &KFS_feature_filetype;
+	}
 	return NULL;
 }
 
 static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t * size, void ** data)
 {
 	if (id == KFS_feature_size.id) {
-		if (sizeof(off_t) <= *size) {
-			*data = (void *) f->file->f_size;
-		}
+		*data = malloc(sizeof(off_t));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(off_t);
+		memcpy(*data, &(f->file->f_size), sizeof(off_t));
+	}
+	else if (id == KFS_feature_filetype.id) {
+		*data = malloc(sizeof(uint32_t));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(uint32_t);
+		memcpy(*data, &(f->file->f_type), sizeof(uint32_t));
 	}
 
 	return 0;
@@ -608,10 +633,19 @@ static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	if (id == KFS_feature_size.id) {
-		if (sizeof(off_t) >= size) {
+		if (sizeof(off_t) == size) {
 			if ((off_t)data >= 0 && (off_t)data < 4194304) {
 				// FIXME write to disk
 				f->file->f_size = (off_t)data;
+				return 0;
+			}
+		}
+	}
+	else if (id == KFS_feature_filetype.id) {
+		if (sizeof(uint32_t) == size) {
+			if ((uint32_t)data == TYPE_FILE || (uint32_t)data == TYPE_DIR) {
+				// FIXME write to disk
+				f->file->f_type = (uint32_t)data;
 				return 0;
 			}
 		}
