@@ -19,6 +19,11 @@
 
 static bool verbose = 0;
 
+#define USE_WB_CACHE
+#ifndef USE_WB_CACHE
+#define wb_cache_bd wt_cache_bd
+#endif
+
 
 static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, bool stripper)
 {
@@ -90,6 +95,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 			}
 		}
 
+#ifndef USE_WB_CACHE
 		if (stripper)
 		{
 			if (! (cache = chdesc_stripper_bd(cache)) )
@@ -98,6 +104,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 				exit();
 			}
 		}
+#endif
 
 		if (enable_journal)
 		{
