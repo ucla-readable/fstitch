@@ -22,10 +22,33 @@
 void print_usage(const char * bin)
 {
 	printf("Usage:\n");
-	printf("%s add mirror_bd disk controller diskno\n", bin);
-	printf("%s add mirror_bd net ip port\n", bin);
-	printf("%s remove mirror_bd diskno\n", bin);
+	printf("%s create disk <controller> <diskno> <stride>\n", bin);
+	printf("%s create net <ip> <port> <stride>\n", bin);
+	printf("%s add <mirror_bd> disk <controller> <diskno>\n", bin);
+	printf("%s add <mirror_bd> net <ip> <port>\n", bin);
+	printf("%s remove mirror_bd <diskno>\n", bin);
 	exit();
+}
+
+BD_t * find_mirror(const char * mirror_name)
+{
+	modman_it_t * it;
+	BD_t * c;
+
+	it = modman_it_create_bd();
+	if (!it)
+	{
+		panic("modman_it_create_bd() failed\n");
+	}
+
+	while ((c = modman_it_next_bd(it)))
+	{
+		const char * name = modman_name_bd(c);
+		if (name && !strcmp(name, mirror_name))
+			return c;
+	}
+
+	return NULL;
 }
 
 void umain(int argc, const char ** argv)
@@ -33,28 +56,8 @@ void umain(int argc, const char ** argv)
 	BD_t * disk = NULL;
 	BD_t * mirror = NULL;
 
-	if (argc < 4 || argc > 6 || argc == 5)
+	if (argc < 4 || argc > 6)
 		print_usage(argv[0]);
-
-	{
-		modman_it_t * it;
-		BD_t * c;
-
-		it = modman_it_create_bd();
-		if (!it)
-		{
-			panic("modman_it_create_bd() failed\n");
-		}
-
-		while ((c = modman_it_next_bd(it)))
-		{
-			const char * name = modman_name_bd(c);
-			if (name && !strcmp(name, argv[2])) {
-				mirror = c;
-				break;
-			}
-		}
-	}
 
 	if (argc == 4 && strcmp(argv[1], "remove") == 0) {
 		int diskno = strtol(argv[3], NULL, 10);
@@ -62,8 +65,9 @@ void umain(int argc, const char ** argv)
 			mirror_bd_remove_device(mirror, diskno);
 	}
 	else if (argc == 6 && strcmp(argv[1], "add") == 0) {
+		mirror = find_mirror(argv[2]);
 		if (!mirror)
-			return;
+			exit();
 
 		if (!strcmp(argv[3], "net")) {
 			int port = strtol(argv[5], NULL, 10);
@@ -74,12 +78,31 @@ void umain(int argc, const char ** argv)
 			int diskno = strtol(argv[5], NULL, 10);
 			disk = ide_pio_bd(controller, diskno);
 		}
+
+		if (!disk)
+			exit();
+
+		mirror_bd_add_device(mirror, disk);
+	}
+	else if (argc == 6 && strcmp(argv[1], "create") == 0) {
+		if (!strcmp(argv[2], "net")) {
+			int port = strtol(argv[4], NULL, 10);
+			disk = nbd_bd(argv[3], port);
+		}
+		else if (!strcmp(argv[2], "disk")) {
+			int controller = strtol(argv[3], NULL, 10);
+			int diskno = strtol(argv[4], NULL, 10);
+			disk = ide_pio_bd(controller, diskno);
+		}
+
+		int stride = strtol(argv[5], NULL, 10);
+		if (disk)
+			mirror = mirror_bd(disk, disk, stride); // disk0 == disk1 -> disk1 = null
+
+		if (mirror)
+			printf("Mirror created\n");
 	}
 
-	if (!disk)
-		return;
-
-	if (mirror != NULL)
-		mirror_bd_add_device(mirror, disk);
+	return;
 }
 
