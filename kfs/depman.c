@@ -15,9 +15,6 @@
  * manager is queried, it can simply return these NOOP change descriptors, which
  * are effectively the roots of the DAG subgraphs that the block depends on. */
 
-/* FIXME - work out details of reference counting and
- * chdesc freeing, in particular with NOOP chdescs */
-
 static hash_map_t * bdesc_hash = NULL;
 
 /* initialize the dependency manager */
@@ -49,10 +46,13 @@ int depman_forward_chdesc(bdesc_t * from, bdesc_t * to)
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, from);
 	if(value)
 	{
+		chmetadesc_t * scan;
 		r = hash_map_change_key(bdesc_hash, from, to);
 		if(r < 0)
 			return r;
 		value->block = to;
+		for(scan = value->dependencies; scan; scan = scan->next)
+			scan->desc->block = to;
 	}
 	
 	return 0;
@@ -115,11 +115,28 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 			{
 				if(!dest)
 				{
-					dest = chdesc_alloc(to);
+					dest = chdesc_create_noop(to);
 					if(!dest)
 						return -E_NO_MEM;
 					if((r = hash_map_insert(bdesc_hash, to, dest)) < 0)
+					{
+						chdesc_destroy(&dest);
 						return r;
+					}
+				}
+				scan->desc->block = to;
+				switch(scan->desc->type)
+				{
+					case BIT:
+						scan->desc->bit.offset -= offset / sizeof(scan->desc->bit.xor);
+						break;
+					case BYTE:
+						scan->desc->byte.offset -= offset;
+						break;
+					case NOOP:
+						break;
+					default:
+						printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, scan->desc->type);
 				}
 				/* FIXME reuse the memory for the metadesc? */
 				/* chdesc_move_depend(value, dest, scan->desc); */
@@ -130,12 +147,20 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 				list = &scan->next;
 			scan = *list;
 		}
+		/* if there are no more chdescs for this bdesc, remove the stub NOOP chdesc */
+		if(!value->dependencies)
+		{
+			chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
+			assert(value == value_erase);
+			assert(!value->dependents);
+			chdesc_destroy(&value);
+		}
 	}
 	
 	return 0;
 }
 
-/* add a chdesc subgraph to the dependency manager - this and all reachable chdescs with reference count 0 */
+/* add a chdesc subgraph to the dependency manager */
 int depman_add_chdesc(chdesc_t * root)
 {
 	chmetadesc_t * scan;
@@ -143,7 +168,7 @@ int depman_add_chdesc(chdesc_t * root)
 	int r;
 	
 	for(scan = root->dependencies; scan; scan = scan->next)
-		if(!scan->desc->refs)
+		if(!(scan->desc->flags & CHDESC_IN_DEPMAN))
 			if((r = depman_add_chdesc(scan->desc)) < 0)
 				return r;
 	
@@ -152,14 +177,15 @@ int depman_add_chdesc(chdesc_t * root)
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, root->block);
 	if(!value)
 	{
-		value = chdesc_alloc(root->block);
+		value = chdesc_create_noop(root->block);
 		if(!value)
 			return -E_NO_MEM;
-		chdesc_retain(value);
+		value->flags |= CHDESC_IN_DEPMAN;
 		r = hash_map_insert(bdesc_hash, root->block, value);
 		if(r < 0)
 		{
-			chdesc_release(&value);
+			/* can't fail */
+			chdesc_destroy(&value);
 			return r;
 		}
 	}
@@ -167,7 +193,7 @@ int depman_add_chdesc(chdesc_t * root)
 	if((r = chdesc_add_depend(value, root)) < 0)
 		return r;
 	
-	chdesc_retain(root);
+	root->flags |= CHDESC_IN_DEPMAN;
 	return 0;
 }
 
@@ -175,18 +201,20 @@ int depman_add_chdesc(chdesc_t * root)
 int depman_remove_chdesc(chdesc_t * chdesc)
 {
 	chdesc_t * value;
-	chdesc_t * value_erase;
 
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
 	if(!value)
 		return -E_NOT_FOUND;
 	chdesc_satisfy(chdesc);
-	chdesc_release(&chdesc);
+	/* can't fail after chdesc_satisfy() */
+	chdesc_destroy(&chdesc);
+	/* if there are no more chdescs for this bdesc, remove the stub NOOP chdesc */
 	if(!value->dependencies)
 	{
-		value_erase = hash_map_erase(bdesc_hash, value->block);
+		chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
 		assert(value == value_erase);
-		chdesc_release(&value);
+		assert(!value->dependents);
+		chdesc_destroy(&value);
 	}
 	return 0;
 }

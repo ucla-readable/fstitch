@@ -5,30 +5,35 @@
 #include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
 
-/* create a new NOOP chdesc */
-chdesc_t * chdesc_alloc(bdesc_t * block)
+chdesc_t * chdesc_create_noop(bdesc_t * block)
 {
 	chdesc_t * chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
 	chdesc->block = block;
-	chdesc->refs = 0;
 	chdesc->type = NOOP;
 	chdesc->dependencies = NULL;
 	chdesc->dependents = NULL;
-	chdesc->marked = 0;
+	chdesc->weak_refs = NULL;
+	chdesc->flags = 0;
 	return chdesc;
 }
+
+/* FIXME */
+int chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor);
+int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data);
+int chdesc_create_init(bdesc_t * block);
+int chdesc_create_full(bdesc_t * block, void * data);
 
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
-	dependent->marked = 1;
+	dependent->flags |= CHDESC_MARKED;
 	for(meta = dependent->dependencies; meta; meta = meta->next)
 	{
 		if(meta->desc == dependency)
 			return 1;
-		if(!meta->desc->marked)
+		if(!(meta->desc->flags & CHDESC_MARKED))
 			if(chdesc_has_dependency(meta->desc, dependency))
 				return 1;
 	}
@@ -39,9 +44,9 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 static void chdesc_unmark_graph(chdesc_t * root)
 {
 	chmetadesc_t * meta;
-	root->marked = 0;
+	root->flags &= ~CHDESC_MARKED;
 	for(meta = root->dependencies; meta; meta = meta->next)
-		if(meta->desc->marked)
+		if(meta->desc->flags & CHDESC_MARKED)
 			chdesc_unmark_graph(meta->desc);
 }
 
@@ -123,6 +128,10 @@ int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
+/* FIXME */
+int chdesc_apply(chdesc_t * chdesc);
+int chdesc_rollback(chdesc_t * chdesc);
+
 /* satisfy a change descriptor, i.e. remove it from all others that depend on it */
 /* WARNING: this function should not be called (except by the dependency
  * manager) once a chdesc has been added to the dependency manager */
@@ -138,30 +147,83 @@ int chdesc_satisfy(chdesc_t * chdesc)
 	return 0;
 }
 
-void chdesc_retain(chdesc_t * chdesc)
+int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 {
-	chdesc->refs++;
+	chrefdesc_t * ref = malloc(sizeof(*ref));
+	if(!ref)
+		return -1;
+	
+	ref->desc = location;
+	ref->next = chdesc->weak_refs;
+	chdesc->weak_refs = ref;
+	
+	if(*location)
+		chdesc_weak_release(location);
+	*location = chdesc;
+	
+	return 0;
 }
 
-void chdesc_release(chdesc_t ** chdesc)
+void chdesc_weak_release(chdesc_t ** location)
 {
-	if(--(*chdesc)->refs <= 0)
+	chrefdesc_t ** prev = &(*location)->weak_refs;
+	chrefdesc_t * scan = (*location)->weak_refs;
+	while(scan && scan->desc != location)
 	{
-		switch((*chdesc)->type)
-		{
-			case BIT:
-				break;
-			case BYTE:
-				if((*chdesc)->byte.olddata)
-					free((*chdesc)->byte.olddata);
-				if((*chdesc)->byte.newdata)
-					free((*chdesc)->byte.newdata);
-				break;
-			case NOOP:
-				break;
-		}
-		memset(*chdesc, 0, sizeof(**chdesc));
-		free(*chdesc);
+		prev = &scan->next;
+		scan = scan->next;
 	}
+	if(!scan)
+	{
+		fprintf(STDERR_FILENO, "%s: weak release of non-weak chdesc pointer!\n", __FUNCTION__);
+		return;
+	}
+	*prev = scan->next;
+	*location = NULL;
+	free(scan);
+}
+
+static void chdesc_weak_collect(chdesc_t * chdesc)
+{
+	while(chdesc->weak_refs)
+	{
+		/* in theory, this is all that is necessary... */
+		if(*chdesc->weak_refs->desc == chdesc)
+			chdesc_weak_release(chdesc->weak_refs->desc);
+		else
+		{
+			/* ...but check for this anyway */
+			chrefdesc_t * next = chdesc->weak_refs;
+			fprintf(STDERR_FILENO, "%s: dangling chdesc weak reference!\n", __FUNCTION__);
+			chdesc->weak_refs = next->next;
+			free(next);
+		}
+	}
+}
+
+int chdesc_destroy(chdesc_t ** chdesc)
+{
+	if((*chdesc)->dependencies || (*chdesc)->dependents)
+		return -1;
+	chdesc_weak_collect(*chdesc);
+	
+	switch((*chdesc)->type)
+	{
+		case BIT:
+			break;
+		case BYTE:
+			if((*chdesc)->byte.olddata)
+				free((*chdesc)->byte.olddata);
+			if((*chdesc)->byte.newdata)
+				free((*chdesc)->byte.newdata);
+			break;
+		case NOOP:
+			break;
+	}
+	
+	memset(*chdesc, 0, sizeof(**chdesc));
+	free(*chdesc);
 	*chdesc = NULL;
+	
+	return 0;
 }

@@ -5,34 +5,40 @@
 
 #include <kfs/bdesc.h>
 
+#define CHDESC_MARKED    0x01 /* marker for graph traversal */
+#define CHDESC_IN_DEPMAN 0x02 /* depman has a reference to it */
+#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
+
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
 struct chmetadesc;
 typedef struct chmetadesc chmetadesc_t;
 
+struct chrefdesc;
+typedef struct chrefdesc chrefdesc_t;
+
 struct chdesc {
 	bdesc_t * block;
-	uint32_t refs;
 	enum {BIT, BYTE, NOOP} type;
 	union {
 		struct {
 			/* offset is in units of 32-bit words */
-			uint32_t offset;
+			uint16_t offset;
 			uint32_t xor;
 		} bit;
 		struct {
 			/* offset is in bytes */
-			uint32_t offset;
-			uint32_t length;
+			uint16_t offset;
+			uint16_t length;
 			uint8_t * olddata;
 			uint8_t * newdata;
 		} byte;
 	};
 	chmetadesc_t * dependencies;
 	chmetadesc_t * dependents;
-	/* marker for graph traversal */
-	uint8_t marked;
+	chrefdesc_t * weak_refs;
+	uint8_t flags;
 };
 
 struct chmetadesc {
@@ -40,8 +46,17 @@ struct chmetadesc {
 	chmetadesc_t * next;
 };
 
-/* create a new NOOP chdesc */
-chdesc_t * chdesc_alloc(bdesc_t * block);
+struct chrefdesc {
+	chdesc_t ** desc;
+	chrefdesc_t * next;
+};
+
+/* create a new chdescs */
+chdesc_t * chdesc_create_noop(bdesc_t * block);
+int chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor);
+int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data);
+int chdesc_create_init(bdesc_t * block);
+int chdesc_create_full(bdesc_t * block, void * data);
 
 /* add a dependency to a change descriptor without checking for cycles */
 int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
@@ -52,12 +67,20 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
 /* remove a dependency from a change descriptor */
 int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
 
+/* apply and roll back change descriptors */
+int chdesc_apply(chdesc_t * chdesc);
+int chdesc_rollback(chdesc_t * chdesc);
+
 /* satisfy a change descriptor, i.e. remove it from all others that depend on it */
 /* WARNING: this function should not be called (except by the dependency
  * manager) once a chdesc has been added to the dependency manager */
 int chdesc_satisfy(chdesc_t * chdesc);
 
-void chdesc_retain(chdesc_t * chdesc);
-void chdesc_release(chdesc_t ** chdesc);
+/* create and remove weak references to a chdesc */
+int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location);
+void chdesc_weak_release(chdesc_t ** location);
+
+/* destroy a chdesc */
+int chdesc_destroy(chdesc_t ** chdesc);
 
 #endif /* __KUDOS_KFS_CHDESC_H */
