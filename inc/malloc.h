@@ -1,6 +1,12 @@
 #ifndef __INC_MALLOC_H
 #define __INC_MALLOC_H
 
+/* Define this symbol if you want to use the special "fail-fast" malloc()
+ * implementation to detect bugs. It uses the virtual memory system to make any
+ * attempt to access freed memory cause a page fault immediately. However, it is
+ * much less space efficient than the default implementation. */
+//#define USE_FAILFAST_MALLOC
+
 #include <inc/types.h>
 #include <inc/assert.h>
 #include <inc/lib.h>

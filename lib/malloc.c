@@ -60,6 +60,8 @@
 #include <inc/types.h>
 #include <inc/stdio.h>
 
+#ifndef USE_FAILFAST_MALLOC /* [ */
+
 /*
   Debugging:
 
@@ -2838,3 +2840,5 @@ static void * sbrk(size_t incr)
 	/* sbrk(<=0) */
 	return (void *) (SBRK_MEM_START + sbrk_size);
 }
+
+#endif /* ] USE_FAILFAST_MALLOC */

@@ -12,6 +12,7 @@ LIB_SRCFILES :=		lib/console.c \
 			lib/memchr.c \
 			lib/syscall.c \
 			lib/malloc.c \
+			lib/malloc_failfast.c \
 			lib/kfs_feature.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
