@@ -364,7 +364,8 @@ umain(int argc, char** argv)
 		if (buf == NULL) {
 			if (debug)
 				printf("EXITING\n");
-			printf("\n");
+			if (interactive)
+				printf("\n");
 			exit();	// end of file
 		}
 		if (debug)
