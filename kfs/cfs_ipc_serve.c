@@ -82,17 +82,22 @@ void cfs_ipc_serve_run()
 }
 
 
+static void alloc_prevrecv(envid_t envid, prev_serve_recv_t ** prevrecv)
+{
+	*prevrecv = prev_serve_recvs[ENVX(envid)] = malloc(sizeof(prev_serve_recv_t));
+	if (!*prevrecv)
+	{
+		fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
+		kfsd_shutdown();
+	}
+}
+
+
 static void serve_open(envid_t envid, struct Scfs_open * req)
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-	{
-		if (! (prevrecv = malloc(sizeof(prev_serve_recv_t))) )
-		{
-			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
-			kfsd_shutdown();
-		}
-	}
+		alloc_prevrecv(envid, &prevrecv);
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -139,13 +144,7 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-	{
-		if (! (prevrecv = malloc(sizeof(prev_serve_recv_t))) )
-		{
-			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
-			kfsd_shutdown();
-		}
-	}
+		alloc_prevrecv(envid, &prevrecv);
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -270,13 +269,7 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-	{
-		if (! (prevrecv = malloc(sizeof(prev_serve_recv_t))) )
-		{
-			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
-			kfsd_shutdown();
-		}
-	}
+		alloc_prevrecv(envid, &prevrecv);
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -404,7 +397,7 @@ static void serve()
 			serve_shutdown(whom, (struct Scfs_shutdown*) REQVA);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "kfsd %s: Unknown type %d\n", __FUNCTION__, type);
+			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Unknown type %d\n", type);
 	}
 	if ((r = sys_page_unmap(0, (void*) REQVA)) < 0)
 		panic("sys_page_unmap: %e", r);
