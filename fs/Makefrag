@@ -26,6 +26,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/josweb \
 	 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/kfsgraph \
+			$(OBJDIR)/user/knbdd \
 			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/ls \
 			$(OBJDIR)/user/lsfd \
