@@ -191,13 +191,19 @@ static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t o
 }
 
 // TODO
+static int josfs_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep)
+{
+	return 0;
+}
+
+// TODO
 static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block)
 {
     return 0;
 }
 
 // TODO
-static fdesc_t * josfs_allocate_name(LFS_t * object, char * name, int type, fdesc_t * link)
+static fdesc_t * josfs_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link)
 {
     return 0;
 }
@@ -344,6 +350,7 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN(lfs, josfs, lookup_name);
     ASSIGN(lfs, josfs, free_fdesc);
     ASSIGN(lfs, josfs, get_file_block);
+    ASSIGN(lfs, josfs, get_dirent);
     ASSIGN(lfs, josfs, append_file_block);
     ASSIGN(lfs, josfs, allocate_name);
     ASSIGN(lfs, josfs, rename);

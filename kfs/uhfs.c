@@ -39,6 +39,12 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	return -E_UNSPECIFIED;
 }
 
+static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
+{
+	printf("%s()\n", __FUNCTION__);
+	return -E_UNSPECIFIED;
+}
+
 static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t size)
 {
 	printf("%s()\n", __FUNCTION__);
@@ -131,6 +137,7 @@ CFS_t * uhfs(void)
 	ASSIGN(cfs, uhfs, close);
 	ASSIGN(cfs, uhfs, read);
 	ASSIGN(cfs, uhfs, write);
+	ASSIGN(cfs, uhfs, getdirentries);
 	ASSIGN(cfs, uhfs, truncate);
 	ASSIGN(cfs, uhfs, unlink);
 	ASSIGN(cfs, uhfs, link);
