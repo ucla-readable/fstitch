@@ -25,6 +25,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/int3 \
 			$(OBJDIR)/user/josweb \
 	 		$(OBJDIR)/kern/kernel \
+			$(OBJDIR)/user/kfsgraph \
 			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/ls \
 			$(OBJDIR)/user/lsfd \
@@ -57,6 +58,7 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/index.html \
 			fs/init.sh \
 			fs/kbear.jpg \
+			fs/kfsgraphviz.sh \
 			fs/kudos.0 \
 			fs/lady.img \
 			fs/lady.jpeg \
