@@ -155,6 +155,8 @@ static int class_unlink(CFS_t * cfs, const char * name)
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, unlink, name+2);
 		return r;
@@ -169,6 +171,7 @@ static int class_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	panic("unimplemented");
 	if (!strncmp(oldname, "A:", 2)) {
 		r = CALL(state->cfs1, link, oldname+2, newname+2);
 		return r;
@@ -183,6 +186,7 @@ static int class_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	panic("unimplemented");
 	if (!strncmp(oldname, "A:", 2)) {
 		r = CALL(state->cfs1, rename, oldname+2, newname+2);
 		return r;
@@ -197,6 +201,8 @@ static int class_mkdir(CFS_t * cfs, const char * name)
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, mkdir, name+2);
 		return r;
@@ -211,6 +217,8 @@ static int class_rmdir(CFS_t * cfs, const char * name)
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, rmdir, name+2);
 		return r;
@@ -225,6 +233,8 @@ static size_t class_get_num_features(CFS_t * cfs, const char * name)
 {
 	size_t r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, get_num_features, name+2);
 		return r;
@@ -239,6 +249,8 @@ static const feature_t * class_get_feature(CFS_t * cfs, const char * name, size_
 {
 	const feature_t *r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, get_feature, name+2, num);
 		return r;
@@ -253,6 +265,8 @@ static int class_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, get_metadata, name+2, id, size, data);
 		return r;
@@ -267,6 +281,8 @@ static int class_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, set_metadata, name+2, id, size, data);
 		return r;
@@ -281,6 +297,8 @@ static int class_sync(CFS_t * cfs, const char * name)
 {
 	int r;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		r = CALL(state->cfs1, sync, name+2);
 		return r;
