@@ -15,6 +15,13 @@
 #include <kfs/josfs_base.h>
 
 #define JOSFS_BASE_DEBUG 0
+#define JOSFS_BASE_DEBUG_FSCK 0
+
+#if JOSFS_BASE_DEBUG_FSCK
+#define DFprintf(x...) printf(x)
+#else
+#define DFprintf(x...)
+#endif
 
 #if JOSFS_BASE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -158,7 +165,7 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 
 	// Check block list
 	for (j = 0; j < JOSFS_NINDIRECT; j++) {
-		Dprintf("block %d is %d\n", j, blist[j]);
+		DFprintf("block %d is %d\n", j, blist[j]);
 		if (blist[j] == 0)
 			break;
 		else if (isvalid(blist[j]))
@@ -171,7 +178,7 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 		else
 			printf("file pointing to invalid block number: %s, %d -> %d\n", file.f_name, j, blist[j]);
 	}
-	Dprintf("%s is %d bytes, %d blocks\n", file.f_name, file.f_size, j);
+	DFprintf("%s is %d bytes, %d blocks\n", file.f_name, file.f_size, j);
 	if (ROUNDUP32(file.f_size, JOSFS_BLKSIZE) != j*JOSFS_BLKSIZE)
 		printf("Invalid file size: %s, %d bytes, %d blocks\n", file.f_name, file.f_size, j);
 
@@ -208,7 +215,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 			continue;
 		}
 
-		Dprintf("Checking %s\n", entry.d_name);
+		DFprintf("Checking %s\n", entry.d_name);
 		blockno = i * sizeof(JOSFS_File_t) / JOSFS_BLKSIZE;
 		dirblock = josfs_get_file_block(object, (fdesc_t *) fdesc, blockno * JOSFS_BLKSIZE);
 		if (dirblock) {
@@ -401,7 +408,8 @@ static inline const char* skip_slash(const char* p)
 	return p;
 }
 
-static void get_parent_path(const char * path, char * parent) {
+static void get_parent_path(const char * path, char * parent)
+{
 	int i;
 	int len = strlen(path);
 	strcpy(parent, path);
@@ -420,6 +428,7 @@ static void get_parent_path(const char * path, char * parent) {
 		parent[i] = 0;
 		i--;
 	}
+
 }
 
 // Evaluate a path name, starting at the root.
@@ -1212,9 +1221,11 @@ static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 
 static int josfs_sync(LFS_t * object, const char * name)
 {
+	printf("JOSFSDEBUG: josfs_sync %s\n", name);
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	fdesc_t * f;
 	int i, r, nblocks;
+	char * parent;
 
 	if(!name || !name[0])
 		return CALL(info->ubd, sync, NULL);
@@ -1223,14 +1234,22 @@ static int josfs_sync(LFS_t * object, const char * name)
 	if (!f)
 		return -E_INVAL;
 
-	/* FIXME this needs to sync all containing directories as well */
 	nblocks = josfs_get_file_numblocks(object, f);
 	for (i = 0 ; i < nblocks; i++) {
 		if ((r = CALL(info->ubd, sync, josfs_get_file_block(object, f, i * JOSFS_BLKSIZE))) < 0)
 			return r;
 	}
 
-	return 0;
+	if (strcmp(name, "/") == 0)
+		return 0;
+
+	parent = malloc(JOSFS_MAXPATHLEN);
+	get_parent_path(name, parent);
+	if (strlen(parent) == 0)
+		strcpy(parent, "/");
+	r = josfs_sync(object, parent);
+	free(parent);
+	return r;
 }
 
 static int josfs_destroy(LFS_t * lfs)
