@@ -24,11 +24,14 @@ size_t hash_map_size(const hash_map_t * hm);
 // Return whether hash_map is empty.
 bool   hash_map_empty(const hash_map_t * hm);
 // Insert the given key-val pair, updating k's v if k exists.
-bool   hash_map_insert(hash_map_t * hm, void * k, void * v);
+// Returns 0 or 1 on success, or -E_NO_MEM.
+int    hash_map_insert(hash_map_t * hm, void * k, void * v);
 // Remove the given key-val pair, does not destory key or val.
-bool   hash_map_erase(hash_map_t * hm, const void * k);
+// Returns 0 on success, or -E_NOT_FOUND.
+int    hash_map_erase(hash_map_t * hm, const void * k);
 // Change the mapping from oldk->val to be newk->val.
-bool   hash_map_change_key(hash_map_t * hm, void * oldk, void * newk);
+// Returns 0 on success, -E_FILE_EXISTS if newk exists, or -E_NOT_FOUND if oldk does not exist.
+int    hash_map_change_key(hash_map_t * hm, void * oldk, void * newk);
 // Remove all key-val pairs, does not destroy keys or vals.
 void   hash_map_clear(hash_map_t * hm);
 // Return the val associated with k.
@@ -39,7 +42,8 @@ hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k);
 // Return the number of buckets currently allocated.
 size_t hash_map_bucket_count(const hash_map_t * hm);
 // Increase the number of buckets to at least n.
-bool   hash_map_resize(hash_map_t * hm, size_t n);
+// Returns 0 on success, or -E_NO_MEM.
+int    hash_map_resize(hash_map_t * hm, size_t n);
 
 // Implement if useful
 /*

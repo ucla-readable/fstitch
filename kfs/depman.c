@@ -1,5 +1,6 @@
 /* This file contains the magic DEP MAN! */
 
+#include <inc/error.h>
 #include <inc/stdio.h>
 #include <inc/hash_map.h>
 
@@ -19,13 +20,16 @@ static hash_map_t * bdesc_hash = NULL;
 int depman_init(void)
 {
 	bdesc_hash = hash_map_create_size(64, 1);
-	return -!bdesc_hash;
+	if(!bdesc_hash)
+		return -E_NO_MEM;
+	return 0;
 }
 
 /* forward a chdesc through bdesc translation automatically, from bdesc_retain() */
 int depman_forward_chdesc(bdesc_t * from, bdesc_t * to)
 {
 	chdesc_t * value;
+	int r;
 	
 	if(from == to)
 	{
@@ -38,10 +42,10 @@ int depman_forward_chdesc(bdesc_t * from, bdesc_t * to)
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, from);
 	if(value)
 	{
-		/* FIXME... what if hash_map_insert() fails? */
-		hash_map_erase(bdesc_hash, from);
+		r = hash_map_change_key(bdesc_hash, from, to);
+		if(r < 0)
+			return r;
 		value->block = to;
-		hash_map_insert(bdesc_hash, to, value);
 	}
 	
 	return 0;
@@ -59,29 +63,30 @@ int depman_add_chdesc(chdesc_t * root)
 {
 	chmetadesc_t * scan;
 	chdesc_t * value;
+	int r;
 	
 	for(scan = root->dependencies; scan; scan = scan->next)
 		if(!scan->desc->refs)
-			if(depman_add_chdesc(scan->desc))
-				return -1;
+			if((r = depman_add_chdesc(scan->desc)) < 0)
+				return r;
 	
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, root->block);
 	if(!value)
 	{
 		value = chdesc_alloc(root->block);
 		if(!value)
-			return -1;
+			return -E_NO_MEM;
 		chdesc_retain(value);
-		/* hash maps use inverted sense status */
-		if(!hash_map_insert(bdesc_hash, root->block, value))
+		r = hash_map_insert(bdesc_hash, root->block, value);
+		if(r < 0)
 		{
 			chdesc_release(&value);
-			return -1;
+			return r;
 		}
 	}
 	
-	if(chdesc_add_depend(value, root))
-		return -1;
+	if((r = chdesc_add_depend(value, root)) < 0)
+		return r;
 	
 	chdesc_retain(root);
 	return 0;
@@ -90,14 +95,17 @@ int depman_add_chdesc(chdesc_t * root)
 /* remove an individual chdesc from the dependency manager */
 int depman_remove_chdesc(chdesc_t * chdesc)
 {
+	int r;
 	chdesc_t * value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
 	if(!value)
-		return -1;
+		return -E_NOT_FOUND;
 	chdesc_satisfy(chdesc);
 	chdesc_release(&chdesc);
 	if(!value->dependencies)
 	{
-		hash_map_erase(bdesc_hash, value->block);
+		r = hash_map_erase(bdesc_hash, value->block);
+		if(r < 0)
+			fprintf(STDERR_FILENO, "%s: hash_map_erase returned %e. TODO: do what?\n", __FUNCTION__, r);
 		chdesc_release(&value);
 	}
 	return 0;

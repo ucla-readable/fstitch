@@ -25,7 +25,7 @@ size_t vector_size(const vector_t * v) __attribute__((always_inline));
 static __inline
 bool   vector_empty(const vector_t * v) __attribute__((always_inline));
 // Push elt onto the back of the vector, growing if necessary.
-bool   vector_push_back(vector_t * v, void * elt);
+int    vector_push_back(vector_t * v, void * elt);
 // Remove the last elt in the vector, does not destroy elt.
 void   vector_pop_back(vector_t * v);
 // Remove the given elt at position i, does not destroy elt.
@@ -49,7 +49,7 @@ void * vector_elt_end(vector_t * v) __attribute__((always_inline));
 // Return the current capacity of the vector.
 size_t vector_capacity(const vector_t * v);
 // Ensure room for n elts is reserved in the vector.
-bool   vector_reserve(vector_t * v, size_t n);
+int    vector_reserve(vector_t * v, size_t n);
 
 
 //

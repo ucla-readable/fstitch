@@ -1,10 +1,11 @@
 #include <inc/malloc.h>
+#include <inc/error.h>
 #include <inc/vector.h>
 
 
 static void ** vector_create_elts(size_t n);
 static void    vector_destroy_elts(vector_t * v);
-static bool    vector_grow(vector_t * v);
+static int     vector_grow(vector_t * v);
 
 # define INIT_CAPACITY 10
 
@@ -70,16 +71,17 @@ static void vector_destroy_elts(vector_t * v)
 
 // vector_empty() inlined
 
-bool vector_push_back(vector_t * v, void * elt)
+int vector_push_back(vector_t * v, void * elt)
 {
+	int r;
 	if (v->size == v->capacity)
 	{
-		if (!vector_grow(v))
-			return 0;
+		if ((r = vector_grow(v)) < 0)
+			return r;
 	}
 
 	v->elts[v->size++] = elt;
-	return 1;
+	return 0;
 }
 
 void vector_pop_back(vector_t * v)
@@ -120,7 +122,7 @@ size_t vector_capacity(const vector_t * v)
 	return v->capacity;
 }
 
-bool vector_reserve(vector_t * v, size_t n)
+int vector_reserve(vector_t * v, size_t n)
 {
 	size_t i;
 	const size_t n_elts = v->size;
@@ -130,7 +132,7 @@ bool vector_reserve(vector_t * v, size_t n)
 
 	void ** elts = vector_create_elts(n);
 	if (!elts)
-		return 0;
+		return -E_NO_MEM;
 
 	for (i=0; i < n_elts; i++)
 		elts[i] = v->elts[i];
@@ -140,10 +142,10 @@ bool vector_reserve(vector_t * v, size_t n)
 	v->size = n_elts;
 	v->capacity = n;
 
-	return 1;
+	return 0;
 }
 
-static bool vector_grow(vector_t * v)
+static int vector_grow(vector_t * v)
 {
 	return vector_reserve(v, 2*v->capacity);
 }

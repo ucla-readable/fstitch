@@ -1,4 +1,5 @@
 #include <inc/assert.h>
+#include <inc/error.h>
 #include <inc/config.h>
 #include <inc/malloc.h>
 #include <inc/vector.h>
@@ -126,7 +127,7 @@ bool hash_map_empty(const hash_map_t * hm)
 	return (hm->size == 0);
 }
 
-bool hash_map_insert(hash_map_t * hm, void * k, void * v)
+int hash_map_insert(hash_map_t * hm, void * k, void * v)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
@@ -135,7 +136,7 @@ bool hash_map_insert(hash_map_t * hm, void * k, void * v)
 	{
 		head = chain_elt_create();
 		if (!head)
-			return 0;
+			return -E_NO_MEM;
 	}
 	else
 	{
@@ -151,7 +152,7 @@ bool hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 		chain_elt_t * new_head = chain_elt_create();
 		if (!new_head)
-			return 0;
+			return -E_NO_MEM;
 
 		new_head->next = head;
 		head->prev = new_head;
@@ -170,20 +171,20 @@ bool hash_map_insert(hash_map_t * hm, void * k, void * v)
 		(void) hash_map_resize(hm, 2*vector_size(hm->tbl));
 	}
 
-	return 1;
+	return 0;
 }
 
-bool hash_map_erase(hash_map_t * hm, const void * k)
+int hash_map_erase(hash_map_t * hm, const void * k)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
 	if (!head)
-		return 0;
+		return -E_NOT_FOUND;
 
 	chain_elt_t * k_chain = chain_search_key(head, k);
 	if (!k_chain)
-		return 0;
+		return -E_NOT_FOUND;
 
 	if (k_chain->prev)
 		k_chain->prev->next = k_chain->next;
@@ -193,10 +194,10 @@ bool hash_map_erase(hash_map_t * hm, const void * k)
 	chain_elt_destroy(k_chain);
 	hm->size--;
 
-	return 1;
+	return 0;
 }
 
-bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
+int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 {
 	chain_elt_t * head;
 	chain_elt_t * elt;
@@ -206,18 +207,18 @@ bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	const size_t newk_elt_num = hash_ptr(newk, vector_size(hm->tbl));
 	head = vector_elt(hm->tbl, newk_elt_num);
 	if (head && chain_search_key(head, newk))
-		return 0;
+		return -E_FILE_EXISTS;
 
 	// Find oldk
 
 	const size_t oldk_elt_num = hash_ptr(oldk, vector_size(hm->tbl));
 	head = vector_elt(hm->tbl, oldk_elt_num);
 	if (!head)
-		return 0;
+		return -E_NOT_FOUND;
 
 	head = chain_search_key(head, oldk);
 	if (!head)
-		return 0;
+		return -E_NOT_FOUND;
 
 	// The hashmap has oldk, move elt to its new home
 
@@ -241,7 +242,7 @@ bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	}
 	vector_elt_set(hm->tbl, newk_elt_num, elt);
 
-	return 1;
+	return 0;
 }
 
 void hash_map_clear(hash_map_t * hm)
@@ -299,15 +300,17 @@ size_t hash_map_bucket_count(const hash_map_t * hm)
 	return vector_size(hm->tbl);
 }
 
-bool hash_map_resize(hash_map_t * hm, size_t n)
+int hash_map_resize(hash_map_t * hm, size_t n)
 {
+	int r;
+
 	if (n <= vector_size(hm->tbl))
 		return 1;
 
 	// Create larger hash table
 	hash_map_t * new_hm = hash_map_create_size(n, hm->auto_resize);
 	if (!new_hm)
-		return 0;
+		return -E_NO_MEM;
 
 	// Rehash elements
 	size_t i;
@@ -317,10 +320,10 @@ bool hash_map_resize(hash_map_t * hm, size_t n)
 		elt = vector_elt(hm->tbl, i);
 		while (elt)
 		{
-			if (!hash_map_insert(new_hm, elt->elt.key, elt->elt.val))
+			if ((r = hash_map_insert(new_hm, elt->elt.key, elt->elt.val)) < 0)
 			{
 				hash_map_destroy(new_hm);
-				return 0;
+				return r;
 			}
 			elt = elt->next;
 		}
@@ -332,7 +335,7 @@ bool hash_map_resize(hash_map_t * hm, size_t n)
 	hm->tbl  = new_hm->tbl;
 	free(new_hm);
 
-	return 1;
+	return 0;
 }
 
 
