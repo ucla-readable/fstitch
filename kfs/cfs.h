@@ -14,7 +14,7 @@ struct CFS {
 	DECLARE(CFS_t, int, open, const char * name, int mode);
 	DECLARE(CFS_t, int, close, int fid);
 	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
-	DECLARE(CFS_t, int, write, int fid, void * data, uint32_t offset, uint32_t size);
+	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, truncate, int fid, uint32_t size);
 	DECLARE(CFS_t, int, unlink, const char * name);
 	DECLARE(CFS_t, int, link, const char * oldname, const char * newname);
@@ -22,8 +22,8 @@ struct CFS {
 	DECLARE(CFS_t, int, mkdir, const char * name);
 	DECLARE(CFS_t, int, rmdir, const char * name);
 	DECLARE(CFS_t, const feature_t *, get_features, const char * name);
-	DECLARE(CFS_t, int, get_metadata, const char * name, uint32_t id, ...);
-	DECLARE(CFS_t, int, set_metadata, const char * name, uint32_t id, ...);
+	DECLARE(CFS_t, int, get_metadata, const char * name, uint32_t id, size_t * size, void * data);
+	DECLARE(CFS_t, int, set_metadata, const char * name, uint32_t id, size_t size, const void * data);
 	DECLARE(CFS_t, int, sync, int fid);
 	void * instance;
 };
