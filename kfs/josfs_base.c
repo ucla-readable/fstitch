@@ -26,7 +26,7 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 
 int read_bitmap(LFS_t * object, uint32_t blockno);
 int write_bitmap(LFS_t * object, uint32_t blockno, bool value);
-int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct JOSFS_File** file);
+int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct JOSFS_File** file, bdesc_t** dirb);
 
 struct lfs_info
 {
@@ -35,7 +35,7 @@ struct lfs_info
 };
 
 struct josfs_fdesc {
-//	bdesc_t * dirb;
+	bdesc_t * dirb;
 //	int index;
 	char fullpath[JOSFS_MAXPATHLEN];
 	struct JOSFS_File * file;
@@ -183,7 +183,7 @@ inline const char* skip_slash(const char* p)
 // If we cannot find the file but find the directory
 // it should be in, set *pdir and copy the final path
 // element into lastelem.
-int walk_path(LFS_t * object, const char* path, struct JOSFS_File** pdir, struct JOSFS_File** pfile, char* lastelem)
+int walk_path(LFS_t * object, const char* path, struct JOSFS_File** pdir, struct JOSFS_File** pfile, char* lastelem, bdesc_t** dirb)
 {
 	Dprintf("JOSFSDEBUG: walk_path\n");
 	struct lfs_info * info = (struct lfs_info *) object->instance;
@@ -214,7 +214,7 @@ int walk_path(LFS_t * object, const char* path, struct JOSFS_File** pdir, struct
 		if (dir->f_type != TYPE_DIR)
 			return -E_NOT_FOUND;
 
-		if ((r = dir_lookup(object, dir, name, &file)) < 0) {
+		if ((r = dir_lookup(object, dir, name, &file, dirb)) < 0) {
 			if (r == -E_NOT_FOUND && *path == '\0') {
 				if (pdir)
 					*pdir = dir;
@@ -233,7 +233,7 @@ int walk_path(LFS_t * object, const char* path, struct JOSFS_File** pdir, struct
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
-int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct JOSFS_File** file)
+int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct JOSFS_File** file, bdesc_t** dirb)
 {
 	Dprintf("JOSFSDEBUG: dir_lookup\n");
 	int r;
@@ -243,6 +243,7 @@ int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct 
 	int blockno;
 	uint32_t basep = 0;
 	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
+	struct JOSFS_File * target;
 
 	if (!temp_fdesc) {
 		return -E_NO_MEM;
@@ -256,10 +257,13 @@ int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct 
 			blockno = i * sizeof(struct JOSFS_File) / JOSFS_BLKSIZE;
 			dirblock = josfs_get_file_block(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE);
 			if (dirblock != NULL) {
-				// FIXME Can't save pointers into data of bdesc
-				*file = (struct JOSFS_File *) dirblock->ddesc->data + (i % (JOSFS_BLKSIZE / sizeof(struct JOSFS_File)));
+				target = (struct JOSFS_File *) dirblock->ddesc->data + (i % (JOSFS_BLKSIZE / sizeof(struct JOSFS_File)));
+				*file = malloc(sizeof(struct JOSFS_File));
+				memcpy(*file, target, sizeof(struct JOSFS_File));
 				(*file)->f_dir = dir;
-				bdesc_retain(&dirblock); // FIXME mem leakage
+
+				*dirb = dirblock;
+				bdesc_retain(&dirblock);
 				free(temp_fdesc);
 				return 0;
 			}
@@ -311,11 +315,12 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number, uint32_t offset, uint32_t size)
 {
 	Dprintf("JOSFSDEBUG: josfs_lookup_block\n");
+	struct lfs_info * info = (struct lfs_info *) object->instance;
+
 	if (offset != 0 || size != JOSFS_BLKSIZE)
 		return NULL;
 	
-	// FIXME this is supposed to read off the disk
-	return bdesc_alloc(((struct lfs_info *) object->instance)->ubd, number, 0, JOSFS_BLKSIZE);
+	return CALL(info->ubd, read_block, number);
 }
 
 static fdesc_t * josfs_lookup_name(LFS_t * object, const char * name)
@@ -323,22 +328,35 @@ static fdesc_t * josfs_lookup_name(LFS_t * object, const char * name)
 	Dprintf("JOSFSDEBUG: josfs_lookup_name %s\n", name);
 	char filename[JOSFS_MAXNAMELEN];
 	struct JOSFS_File *dir, *f;
+	bdesc_t * dirblock;
 	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
 	if (!temp_fdesc) {
 		return NULL;
 	}
 
-	if (walk_path(object, name, &dir, &f, filename) == 0) {
+	if (walk_path(object, name, &dir, &f, filename, &dirblock) == 0) {
 		temp_fdesc->file = f;
+		temp_fdesc->dirb = dirblock;
 		return (fdesc_t *) temp_fdesc;
 	}
 	free(temp_fdesc);
 	return NULL;
 }
 
-// TODO
 static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
+	Dprintf("JOSFSDEBUG: josfs_free_fdesc %x\n", fdesc);
+	struct josfs_fdesc * f;
+	if (fdesc) {
+		f = (struct josfs_fdesc *) fdesc;
+		if (f->file) {
+			free(f->file);
+		}
+		if (f->dirb) {
+			bdesc_release(&f->dirb);
+		}
+		free(f);
+	}
 }
 
 static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
@@ -488,11 +506,12 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 //FIXME bdesc
 static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("JOSFSDEBUG: josfs_allocate_name\n");
+	Dprintf("JOSFSDEBUG: josfs_allocate_name %s\n", name);
 	char filename[JOSFS_MAXNAMELEN];
 	struct JOSFS_File *dir, *f;
 	struct josfs_fdesc * temp_fdesc;
 	bdesc_t * blk;
+	bdesc_t * dirblock;
 	int i, j, r, nblock;
 
 	if (link != NULL) {
@@ -506,7 +525,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 
 	strcpy(temp_fdesc->fullpath, name);
 
-	if ((r = walk_path(object, name, &dir, &f, filename)) != 0) {
+	if ((r = walk_path(object, name, &dir, &f, filename, &dirblock)) != 0) {
 		if (r == -E_NOT_FOUND && dir != NULL) {
 			// Modified dir_alloc_file() from JOS
 			assert((dir->f_size % JOSFS_BLKSIZE) == 0);
@@ -527,6 +546,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 						strcpy(f[j].f_name, filename);
 						f[j].f_type = type;
 						temp_fdesc->file->f_dir = dir;
+						temp_fdesc->dirb = dirblock;
 						return (fdesc_t *) temp_fdesc;
 					}
 				}
@@ -542,6 +562,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 				strcpy(f[0].f_name, filename);
 				f[0].f_type = type;
 				temp_fdesc->file->f_dir = dir;
+				temp_fdesc->dirb = dirblock;
 				return (fdesc_t *) temp_fdesc;
 			}
 		}
@@ -556,9 +577,9 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	fdesc_t * oldfdesc;
 	fdesc_t * newfdesc;
 
-	oldfdesc = josfs_lookup_name(object, oldname);
+	oldfdesc = josfs_lookup_name(object, oldname); // FIXME needs to be freed
 	if (oldfdesc != NULL) {
-		newfdesc = josfs_allocate_name(object, newname, ((struct JOSFS_File *) oldfdesc)->f_type, NULL, NULL, NULL);
+		newfdesc = josfs_allocate_name(object, newname, ((struct JOSFS_File *) oldfdesc)->f_type, NULL, NULL, NULL); // FIXME needs to be freed
 		if (newfdesc != NULL) {
 			// FIXME move the data from the old name to the new name
 			if (josfs_remove_name(object, oldname, NULL, NULL) == 0) {
@@ -702,8 +723,11 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 static int josfs_get_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
+	int r;
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
-	return josfs_get_metadata(object, f, id, size, data);
+	r = josfs_get_metadata(object, f, id, size, data);
+	josfs_free_fdesc(object, (fdesc_t *) f);
+	return r;
 }
 
 static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
@@ -739,7 +763,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 static int josfs_set_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	const struct josfs_fdesc * file = (struct josfs_fdesc *) josfs_lookup_name(object, name);
+	const struct josfs_fdesc * file = (struct josfs_fdesc *) josfs_lookup_name(object, name); // FIXME needs to be freed
 	return josfs_set_metadata(object, file, id, size, data, head, tail);
 }
 
