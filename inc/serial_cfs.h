@@ -11,21 +11,21 @@
 #define SCFS_CLOSE 2
 #define SCFS_READ 3
 #define SCFS_WRITE 4
-#define SCFS_TRUNCATE 5
-#define SCFS_UNLINK 6
-#define SCFS_LINK 7
-#define SCFS_RENAME 8
-#define SCFS_MKDIR 9
-#define SCFS_RMDIR 10
-#define SCFS_GET_NUM_FEATURES 11
-#define SCFS_GET_FEATURE 12
-#define SCFS_GET_METADATA 13
-#define SCFS_SET_METADATA 14
-#define SCFS_SYNC 15
-#define SCFS_SHUTDOWN 16
-#define SCFS_GETDIRENTRIES 17
-#define SCFS_GETDIRENTRIES_RETURN 18
-#define SCFS_DEBUG 19
+#define SCFS_GETDIRENTRIES 5
+#define SCFS_GETDIRENTRIES_RETURN 6
+#define SCFS_TRUNCATE 7
+#define SCFS_UNLINK 8
+#define SCFS_LINK 9
+#define SCFS_RENAME 10
+#define SCFS_MKDIR 11
+#define SCFS_RMDIR 12
+#define SCFS_GET_NUM_FEATURES 13
+#define SCFS_GET_FEATURE 14
+#define SCFS_GET_METADATA 15
+#define SCFS_SET_METADATA 16
+#define SCFS_SYNC 17
+#define SCFS_SHUTDOWN 18
+#define SCFS_DEBUG 20
 
 #define SCFS_TYPE int scfs_type
 
@@ -59,6 +59,18 @@ struct Scfs_write {
 	uint32_t offset;
 	uint32_t size;
 	// data is sent as a separate page
+};
+
+struct Scfs_getdirentries {
+	SCFS_TYPE;
+	off_t basep;
+};
+
+struct Scfs_getdirentries_return {
+	SCFS_TYPE;
+	int nbytes_read;
+	off_t basep;
+	char buf[PGSIZE - sizeof(int) - sizeof(int) - sizeof(off_t)];
 };
 
 struct Scfs_truncate {
@@ -125,18 +137,6 @@ struct Scfs_sync {
 
 struct Scfs_shutdown {
 	SCFS_TYPE;
-};
-
-struct Scfs_getdirentries {
-	SCFS_TYPE;
-	off_t basep;
-};
-
-struct Scfs_getdirentries_return {
-	SCFS_TYPE;
-	int nbytes_read;
-	off_t basep;
-	char buf[PGSIZE - sizeof(int) - sizeof(int) - sizeof(off_t)];
 };
 
 struct Scfs_debug {
