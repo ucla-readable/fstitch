@@ -73,7 +73,11 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void *
 		if(count == 1)
 			chdescs[i]->byte.length = length;
 		else if(i == count - 1)
+		{
 			chdescs[i]->byte.length = (init_offset + length) % atomic_size;
+			if(!chdescs[i]->byte.length)
+				chdescs[i]->byte.length = atomic_size;
+		}
 		else
 			chdescs[i]->byte.length = atomic_size - (i ? 0 : init_offset);
 		
