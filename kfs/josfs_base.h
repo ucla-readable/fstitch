@@ -43,6 +43,7 @@ struct JOSFS_File {
 };
 
 #define JOSFS_FS_MAGIC	0x4A0530AE	  // related vaguely to 'J\0S!'
+#define JOSFS_BLKFILES       (JOSFS_BLKSIZE / sizeof(struct JOSFS_File))
 
 struct JOSFS_Super {
 	uint32_t s_magic;		// Magic number: FS_MAGIC
@@ -51,5 +52,7 @@ struct JOSFS_Super {
 };
 
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
+static int josfs_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep);
+static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 
 #endif /* __KUDOS_KFS_JOSFS_BASE_H */
