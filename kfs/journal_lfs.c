@@ -2,6 +2,7 @@
 #include <inc/hash_map.h>
 
 #include <kfs/bdesc.h>
+#include <kfs/fdesc.h>
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
 #include <kfs/sched.h>
@@ -21,6 +22,7 @@
 struct journal_state {
 	BD_t * queue;
 	LFS_t * journal;
+	fdesc_t * jfdesc;
 	LFS_t * fs;
 };
 typedef struct journal_state journal_state_t;
@@ -28,6 +30,8 @@ typedef struct journal_state journal_state_t;
 
 //
 // Journaling
+
+#define JOURNAL_FILENAME "/.journal"
 
 struct commit_record {
 	enum {CREMPTY, CRSUBCOMMIT, CRCOMMIT} type;
@@ -41,6 +45,13 @@ typedef struct commit_record commit_record_t;
 // TODO
 static int ensure_journal_exists(journal_state_t * state)
 {
+	state->jfdesc = CALL(state->journal, lookup_name, JOURNAL_FILENAME);
+	if (!state->jfdesc)
+	{
+		// TODO: Attempt to create JOURNAL_FILENAME?
+		return -E_NOT_FOUND;
+	}
+
 	return 0;
 }
 
@@ -57,44 +68,146 @@ static int transaction_start(journal_state_t * state)
 
 static int transaction_stop(journal_state_t * state)
 {
-	const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
+	int16_t transaction_slot;
 	const bdesc_t ** data_bdescs;
-	hash_map_it_t * it;
+	size_t ndatabdescs;
 	bdesc_t * bdesc;
-	size_t i;
+	size_t i, file_offset;
+	const size_t journal_blocksize = CALL(state->journal, get_blocksize);
+	chdesc_t * prev_head, * tail;
 	int r;
 
-	data_bdescs_map = journal_queue_blocklist(state->queue);
-	assert(data_bdescs_map);
-	const size_t ndatabdescs = hash_map_size(data_bdescs_map);
+	// For now always use transaction_slot 0
+	transaction_slot = 0;
+
+	// TODO: Either:
+	// - Ensure the picked transaction slot is synced
+	// - Make this transaction's commit record dependent on the non-synced
+	//   transaction's invl message.
+
 
 	//
 	// Sort the data_bdescs, allowing for faster disk access
 
-	data_bdescs = malloc(ndatabdescs * sizeof(*data_bdescs));
-	if (!data_bdescs)
-		return -E_NO_MEM;
-	it = hash_map_it_create();
-	if (!it)
-		return -E_NO_MEM;
-	i = 0;
+	{
+		const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
+		hash_map_it_t * it;
 
-	while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, it)))
-		data_bdescs[i++] = bdesc;
-	assert(i == ndatabdescs);
-	qsort(data_bdescs, ndatabdescs, sizeof(*data_bdescs), bdesc_blockno_compare);
+		data_bdescs_map = journal_queue_blocklist(state->queue);
+		assert(data_bdescs_map);
+		ndatabdescs = hash_map_size(data_bdescs_map);
 
-	// TODO: create journal bdescs & chdescs
+		data_bdescs = malloc(ndatabdescs * sizeof(*data_bdescs));
+		if (!data_bdescs)
+			return -E_NO_MEM;
 
-	// TODO: set deps on chdescs:
-	// - commit -> chdescs
-	// - data -> commit
-	// - invalidate -> data
+		it = hash_map_it_create();
+		if (!it)
+		{
+			free(data_bdescs);
+			return -E_NO_MEM;
+		}
+
+		// TODO: ensure data_bdescs is not larger than the transaction slot,
+		// break this transaction up if so.
+
+		i = 0;
+		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, it)))
+			data_bdescs[i++] = bdesc;
+		assert(i == ndatabdescs);
+
+		qsort(data_bdescs, ndatabdescs, sizeof(*data_bdescs), bdesc_blockno_compare);
+
+		hash_map_it_destroy(it);
+	}
+
+
+	//
+	// Create and write journal transaction entries.
+	//
+	// Dependencies:
+	// - journal data -> commit record
+	// - commit message -> journal data
+	// - invalidate message -> commit message
+
+	BD_t * journal_bd = CALL(state->journal, get_blockdev);
+	assert(journal_bd); // TODO: handle error
+
+	// jdata_chdescs will depend on all journal data chdescs
+	chdesc_t * jdata_chdescs = chdesc_create_noop(NULL);
+	assert(jdata_chdescs); // TODO: handle error
 
 	r = journal_queue_passthrough(state->queue);
 	assert(r >= 0);
 
-	// TODO: write journal bdescs
+
+	// Commit record
+
+	uint8_t * commit_rec = NULL; // TODO: rec's data
+	const uint16_t commit_rec_size = 0; // TODO
+	assert(commit_rec_size <= CALL(journal_bd, get_atomicsize));
+
+	file_offset = 0;
+
+	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+	assert(bdesc); // TODO: handle error
+
+	prev_head = NULL;
+	r = CALL(state->journal, write_block, bdesc, 0, commit_rec_size, commit_rec, &prev_head, &tail);
+	assert(r >= 0); // TODO: handle error
+
+	file_offset += journal_blocksize;
+
+
+	// Create journal data
+
+	for (i=0; i < ndatabdescs; i++, file_offset += journal_blocksize)
+	{
+		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+		assert(bdesc); // TODO: handle error
+
+		prev_head = NULL;
+		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &prev_head, &tail);
+		assert(r >= 0); // TODO: handle error
+
+		r = chdesc_add_depend(jdata_chdescs, prev_head);
+		assert(r >= 0); // TODO: handle error
+	}
+
+
+	// Create commit message
+
+	uint8_t * commit_msg = NULL; // TODO: commit's data
+	const uint16_t commit_msg_size = 0; // TODO
+	assert(commit_msg_size <= CALL(journal_bd, get_atomicsize));
+
+	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+	assert(bdesc); // TODO: handle error
+
+	prev_head = jdata_chdescs;
+	r = CALL(state->journal, write_block, bdesc, 0, commit_msg_size, commit_msg, &prev_head, &tail);
+	assert(r >= 0); // TODO: handle error
+
+	file_offset += journal_blocksize;
+
+
+	// Create invalidate message
+
+	uint8_t * invl_msg = NULL; // TODO: invl's data
+	const uint16_t invl_msg_size = 0; // TODO
+	assert(invl_msg_size <= CALL(journal_bd, get_atomicsize));
+
+	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+	assert(bdesc); // TODO: handle error
+
+	r = CALL(state->journal, write_block, bdesc, 0, invl_msg_size, invl_msg, &prev_head, &tail);
+	assert(r >= 0); // TODO: handle error
+
+	file_offset += journal_blocksize;
+	
+
+	//
+	// Release the data bdescs
 
 	r = journal_queue_release(state->queue);
 	if (r < 0)
@@ -154,6 +267,9 @@ static int journal_destroy(LFS_t * lfs)
 	r = transaction_stop(state);
 	if (r < 0)
 		return r;
+
+	CALL(state->journal, free_fdesc, state->jfdesc);
+	state->jfdesc = NULL;
 
 	free(lfs->instance);
 	memset(lfs, 0, sizeof(*lfs));
@@ -409,9 +525,10 @@ LFS_t * journal_lfs(LFS_t * journal_lfs, LFS_t * fs_lfs, BD_t * fs_queue)
 	ASSIGN(lfs, journal, sync);
 	ASSIGN_DESTROY(lfs, journal, destroy);
 
-	state->journal = journal_lfs;
-	state->fs = fs_lfs;
 	state->queue = fs_queue;
+	state->journal = journal_lfs;
+	state->jfdesc = NULL;
+	state->fs = fs_lfs;
 
 	r = ensure_journal_exists(state);
 	if (r < 0)
