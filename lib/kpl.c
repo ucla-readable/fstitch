@@ -70,6 +70,12 @@ int kpl_open(const char* path, int mode)
 	return i;
 }
 
+int
+open(const char* path, int mode)
+{
+	return kpl_open(path, mode);
+}
+
 // Clean up a file-server file descriptor.
 // This function is called by fd_close.
 static int kpl_close(struct Fd* fd)
@@ -123,15 +129,30 @@ int kpl_remove(const char* path)
 	return cfs_unlink(path);
 }
 
+int remove(const char* path)
+{
+	return kpl_remove(path);
+}
+
 // Synchronize disk with buffer cache
 int kpl_sync(void)
 {
 	return cfs_sync(NULL);
 }
 
+int sync(void)
+{
+	return kpl_sync();
+}
+
 int kpl_shutdown(void)
 {
 	return cfs_shutdown();
+}
+
+int fs_shutdown(void)
+{
+	return kpl_shutdown();
 }
 
 int kpl_link(const char * oldname, const char * newname)

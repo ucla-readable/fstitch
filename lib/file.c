@@ -29,7 +29,7 @@ static int funmap(struct Fd* fd, off_t oldsize, off_t newsize, bool dirty);
 // Open a file (or directory),
 // returning the file descriptor index on success, < 0 on failure.
 int
-open(const char* path, int mode)
+jfs_open(const char* path, int mode)
 {
 	// Find an unused file descriptor page using fd_alloc.
 	// Then send a message to the file server to open a file
@@ -42,9 +42,6 @@ open(const char* path, int mode)
 	// If any step fails, use fd_close to free the file descriptor.
 	struct Fd * fd;
 	int i, r;
-	
-	if((path[0] == '/' && path[2] == ':') || path[1] == ':')
-		return kpl_open(path, mode);
 	
 	i = fd_alloc(&fd);
 	if(i < 0)
@@ -100,7 +97,7 @@ file_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 // Find the page that maps the file block starting at 'offset',
 // and store its address in '*blk'.
 int
-read_map(int fdnum, off_t offset, void** blk)
+jfs_read_map(int fdnum, off_t offset, void** blk)
 {
 	int r;
 	char* va;
@@ -117,6 +114,12 @@ read_map(int fdnum, off_t offset, void** blk)
 		return -E_NO_DISK;
 	*blk = (void*) va;
 	return 0;
+}
+
+// TODO: implement using KPL
+int read_map(int fdnum, off_t offset, void** blk)
+{
+	return jfs_read_map(fdnum, offset, blk);
 }
 
 // Write 'n' bytes from 'buf' to 'fd' at the current seek position.
@@ -228,14 +231,14 @@ funmap(struct Fd* fd, off_t oldsize, off_t newsize, bool dirty)
 
 // Delete a file
 int
-remove(const char* path)
+jfs_remove(const char* path)
 {
 	return fsipc_remove(path);
 }
 
 // Synchronize disk with buffer cache
 int
-sync(void)
+jfs_sync(void)
 {
 	return fsipc_sync();
 }
@@ -247,7 +250,7 @@ disk_avail_space(void)
 }
 
 int
-fs_shutdown(void)
+jfs_fs_shutdown(void)
 {
 	return fsipc_shutdown();
 }

@@ -5,11 +5,16 @@
 #include <kfs/block_resizer_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/uhfs.h>
-#include <kfs/dos_classifier.h>
+#include <kfs/josfs_cfs.h>
+#include <kfs/table_classifier_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/kfsd.h>
 #include <kfs/depman.h>
 #include <inc/lib.h>
+
+static const char * josfspath = "/";
+static const char * fspaths[] = {"/k0", "/k1"};
+
 
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
@@ -26,8 +31,10 @@ int kfsd_init(int argc, char * argv[])
 	void * ptbl;
 	BD_t * partitions[4] = {NULL};
 	CFS_t * uhfses[2] = {NULL};
+	CFS_t * josfscfs;
 	CFS_t * frontend_cfs;
 	uint32_t i;
+	int r;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
@@ -94,28 +101,39 @@ int kfsd_init(int argc, char * argv[])
 			kfsd_shutdown();
 	}
 
-	if (uhfses[0] && uhfses[1])
+	if (! (josfscfs = josfs_cfs()) )
+		kfsd_shutdown();
+
+
+	/* setup frontend cfs */
+
+	if (! (frontend_cfs = table_classifier_cfs(NULL, NULL, 0)) )
+		kfsd_shutdown();
+
+	if ((r = register_frontend_cfs(frontend_cfs)) < 0)
 	{
-		if (! (frontend_cfs = dos_classifier(uhfses[0], "A:", uhfses[1], "C:")) )
-			kfsd_shutdown();
-		if (register_frontend_cfs(frontend_cfs) < 0)
+		DESTROY(frontend_cfs);
+		kfsd_shutdown();
+	}
+
+	for (i=0; i < 2; i++)
+	{
+		if (!uhfses[i])
+			continue;
+
+		r = table_classifier_cfs_add(frontend_cfs, fspaths[i], uhfses[i]);
+		if (r < 0)
 		{
 			DESTROY(frontend_cfs);
 			kfsd_shutdown();
 		}
 	}
-	else
+
+	r = table_classifier_cfs_add(frontend_cfs, josfspath, josfscfs);
+	if (r < 0)
 	{
-		if (uhfses[0] && register_frontend_cfs(uhfses[0]) < 0)
-		{
-			DESTROY(uhfses[0]);
-			kfsd_shutdown();
-		}
-		if (uhfses[1] && register_frontend_cfs(uhfses[1]) < 0)
-		{
-			DESTROY(uhfses[1]);
-			kfsd_shutdown();
-		}
+		DESTROY(frontend_cfs);
+		kfsd_shutdown();
 	}
 
 	return 0;
@@ -124,6 +142,7 @@ int kfsd_init(int argc, char * argv[])
 int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 {
 	int i;
+
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
 		if (!module_shutdowns[i].shutdown)
@@ -141,6 +160,9 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 void kfsd_shutdown(void)
 {
 	int i;
+	printf("kfsd shutting down.\n");
+	asm("int3");
+
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
 		if (module_shutdowns[i].shutdown)
@@ -167,7 +189,8 @@ void bd_test(void);
 void umain(int argc, char * argv[])
 {
 	int r;
-	
+
+	printf("Kfsd [0x%08x]\n", env->env_id);
 	if(!argc)
 	{
 		binaryname = "kfsd";

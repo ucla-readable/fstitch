@@ -480,7 +480,10 @@ cfs_sync(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_SYNC;
-	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	if (name)
+		strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	else
+		pg->name[0] = 0;
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 

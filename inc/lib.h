@@ -120,13 +120,20 @@ int	fstat(int fd, struct Stat*);
 int	stat(const char* path, struct Stat*);
 int	wait_fd(int fdnum, size_t nrefs);
 
-// file.c
+// kpl.c
 int	open(const char* path, int mode);
-int	read_map(int fd, off_t offset, void** blk);
 int	remove(const char* path);
 int	sync(void);
-uint32_t disk_avail_space(void);
 int	fs_shutdown(void);
+
+// file.c
+int jfs_open(const char* path, int mode);
+int read_map(int fd, off_t offset, void** blk);
+int	jfs_read_map(int fd, off_t offset, void** blk);
+int	jfs_remove(const char* path);
+int	jfs_sync(void);
+uint32_t disk_avail_space(void);
+int	jfs_fs_shutdown(void);
 
 // fprintf.c
 int	fprintf(int fd, const char* format, ...);
