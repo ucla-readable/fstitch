@@ -372,7 +372,7 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 	int r;
 
 	// All requests must contain an argument page
-	if ((!perm & PTE_P))
+	if (! ((perm & PTE_P) && (perm & PTE_U)) )
 	{
 		fprintf(STDERR_FILENO, "Invalid request from %08x: no argument page\n", whom);
 		return; // just leave it hanging...
