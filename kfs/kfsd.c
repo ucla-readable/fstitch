@@ -28,7 +28,7 @@ static struct module_shutdown module_shutdowns[10];
 int kfsd_init(int argc, char * argv[])
 {
 	BD_t * bd_disk = NULL;
-	bool use_disk_1 = 0;
+	bool use_disk_1 = 1;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	CFS_t * uhfses[2] = {NULL};
@@ -208,6 +208,11 @@ void umain(int argc, char * argv[])
 	if(depman_init())
 	{
 		printf("Failed to initialized DEP MAN!\n");
+		return;
+	}
+	if((r = sys_env_set_priority(0, ENV_MAX_PRIORITY)) < 0)
+	{
+		printf("Failed to set priority: %e\n", r);
 		return;
 	}
 	
