@@ -247,19 +247,15 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 {
 	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
 	struct Scfs_metadata *md = (struct Scfs_metadata*) PAGESNDVA;
-	void * data;
+	void * data = NULL;
 	int r;
 
 	if ((r = sys_page_alloc(0, md, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
 	md->id = req->id;
+	md->size = 0;
 
 	r = CALL(frontend_cfs, get_metadata, req->name, req->id, &md->size, &data);
-	if (r < 0)
-	{
-		md = NULL;
-		goto exit;
-	}
 
 	assert((md->size > 0 && data) || (!md->size && !data));
 	if (data)
@@ -269,7 +265,6 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 		memcpy(md->data, data, MIN(md->size, sizeof(md->data)));
 	}
 
-	exit:
 	ipc_send(envid, r, (void*) md, PTE_P|PTE_U);
 }
 
