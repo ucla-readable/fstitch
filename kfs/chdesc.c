@@ -84,6 +84,8 @@ static void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 			else
 				dependent->dependencies = scan->next;
 			free(scan);
+			scan = prev->next;
+			/* could return here, but keep going just to be sure */
 		}
 		else
 		{
