@@ -67,7 +67,7 @@ static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t *
 	return -1;
 }
 
-static fdesc_t * wholedisk_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * wholedisk_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
 	return NULL;
 }

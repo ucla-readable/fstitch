@@ -405,7 +405,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 }
 
 // TODO
-static fdesc_t * josfs_allocate_name(LFS_t * object, char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
     return 0;
 }
