@@ -92,9 +92,9 @@ gc_listens()
 			 && (envs[i].env_id != listen_states[i].listener
 				  || envs[i].env_status == ENV_FREE))
 		{
-			if((err = tcp_close(listen_states[i].pcb)) != ERR_OK)
+			if ((err = tcp_close(listen_states[i].pcb)) != ERR_OK)
 			{
-				fprintf(STDERR_FILENO, "netd gc_listens: tcp_close: %s, aborting.\n", lwip_strerr(err));
+				fprintf(STDERR_FILENO, "netd gc_listens: tcp_close: \"%s\", aborting.\n", lwip_strerr(err));
 				tcp_abort(listen_states[i].pcb);
 			}
 			listen_states[i].pcb = NULL;
@@ -176,15 +176,14 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 
 	if (pcb)
 	{
-		if((err = tcp_close(pcb)) != ERR_OK)
+		if ((err = tcp_close(pcb)) != ERR_OK)
 		{
-			fprintf(STDERR_FILENO, "netd close_conn: tcp_close: %s, aborting.\n", lwip_strerr(err));
+			fprintf(STDERR_FILENO, "netd close_conn: tcp_close: \"%s\", aborting.\n", lwip_strerr(err));
 			tcp_abort(pcb);
 		}
 	}
-	mem_free(cs);
 
-	//stats_display();
+	mem_free(cs);
 }
 
 static int
@@ -254,7 +253,7 @@ conn_err_listen(void *arg, err_t err)
 
 	if (ls->pcb)
 	{
-		if((err = tcp_close(ls->pcb)) != ERR_OK)
+		if ((err = tcp_close(ls->pcb)) != ERR_OK)
 		{
 			fprintf(STDERR_FILENO, "netd close_err_listen: tcp_close: %s, aborting.\n", lwip_strerr(err));
 			tcp_abort(ls->pcb);
@@ -317,21 +316,18 @@ netd_queue_send(struct client_state *cs, struct tcp_pcb *pcb)
 	//
 	// Otherwise, the connection is still active
 	// Send any data from the client
-			
+
 	cs->send_buf.data = cs->send_buf._data;
 	cs->send_buf.left = 0;
 	int n = 0;
 	do
 	{
-		if (cs->send_buf.left == sizeof(cs->send_buf._data))
-			break;
-	
 		n = read_nb(cs->from_client, cs->send_buf.data, sizeof(cs->send_buf._data) - cs->send_buf.left);
 		
 		if (n == -1)
 			break;
 	
-		if(n == 0)
+		if (n == 0 && (cs->send_buf.left != sizeof(cs->send_buf._data)))
 			cs->eof = 1;
 	
 		cs->send_buf.data += n;
@@ -357,7 +353,7 @@ netd_poll(void *arg, struct tcp_pcb *pcb)
 	
 	if (cs == NULL)
 	{
-		if((err = tcp_close(pcb)) != ERR_OK)
+		if ((err = tcp_close(pcb)) != ERR_OK)
 		{
 			fprintf(STDERR_FILENO, "netd netd_poll: tcp_close: %s, aborting.\n", lwip_strerr(err));
 			tcp_abort(pcb);
@@ -399,7 +395,6 @@ netd_sent(void *arg, struct tcp_pcb *pcb, u16_t len)
 	}
 	else
 	{
-		//printf("$");
 		return netd_queue_send(cs, pcb);
 		//printf("\nCLOSED.\n");
 		//close_conn(pcb, ts);
@@ -541,7 +536,7 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 	// lwip calls this function again. The chance of the netclient
 	// being able to do this in time decreases as system load increases.
 	int i;
-	for(i=0; i<20; i++)
+	for (i=0; i<20; i++)
 		sys_yield();
 
 	return ERR_OK;
