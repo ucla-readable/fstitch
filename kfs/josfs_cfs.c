@@ -62,6 +62,9 @@ static int open_file_close(open_file_t * f)
 	if ((r = close(f->fd)) < 0)
 		return r;
 
+	r = release_fid(f->fid);
+	assert(0 <= r);
+
 	f->fid = -1;
 	f->fd = -1;
 

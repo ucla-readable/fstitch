@@ -68,11 +68,12 @@ static void open_file_destroy(open_file_t * f)
 
 static void open_file_close(LFS_t * lfs, open_file_t * f)
 {
+	int r;
 	CALL(lfs, free_fdesc, f->fdesc);
-	f->fid = -1;
-	f->fdesc = NULL;
-	f->size_id = 0;
-	f->type = 0;
+
+	r = release_fid(f->fid);
+	assert(0 <= r);
+
 	open_file_destroy(f);
 }
 

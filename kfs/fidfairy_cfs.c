@@ -4,7 +4,6 @@
 #include <inc/lib.h>
 
 #include <kfs/cfs_ipc_serve.h>
-#include <kfs/fidman.h>
 #include <kfs/fidfairy_cfs.h>
 
 
@@ -17,8 +16,16 @@
 #endif
 
 
-// The only fidfairy_cfs instance's CFS_t*
-static CFS_t * cfs_fidfairy = NULL;
+// Because fidfairy_cfs decides when to close a fid based on the pageref
+// number for the struct Fd page, fidfairy_cfs would never close any
+// files in use by multiple fid fairies.
+// Three possibilities to keep this from happening:
+// 1- Assume this won't happen.
+// 2- Figure out if a given fid/page is already in use by another fidfairy.
+// 3- Allow at most one fidfairy to exist at a given time.
+// Possibility 3 is safe (1 is not), simpler than 2, and at least for now
+// mupltiple fidfairies aren't something we want. so possibility 2 it is:
+static bool fidfairy_cfs_exists = 0;
 
 
 struct open_file {
@@ -83,8 +90,12 @@ static int open_file_close(fidfairy_state_t * state, open_file_t * of)
 	assert(of->page);
 	assert(1 <= pageref(of->page));
 	if (1 < pageref(of->page))
+	{
+		Dprintf("fidfairy_cfs %s: not closing fid %d, %d external refs\n", __FUNCTION__, of->fid, pageref(of->page));
 		return 0;
+	}
 
+	Dprintf("fidfairy_cfs %s: sending close for fid %d\n", __FUNCTION__, of->fid);
 	r = CALL(state->frontend_cfs, close, of->fid);
 	if (r < 0)
 		return r;
@@ -144,65 +155,6 @@ static void open_file_gc(fidfairy_state_t * state)
 
 
 //
-// fidman.h implementation
-
-// NOTE: This create_fid() is limited to creating one fid per open request.
-// Chris plans to remove this limitation, and decouple fidfairy_cfs and
-// create_fid() and remove this restriction.
-int create_fid(void)
-{
-	Dprintf("%s()\n", __FUNCTION__);
-	fidfairy_state_t * state;
-	void * cache;
-	int fid;
-	open_file_t * of;
-	int r;
-
-	if (!cfs_fidfairy)
-		panic("fidman used before being created");
-	state = (fidfairy_state_t *) cfs_fidfairy->instance;
-
-	// find a free page
-	for(cache = FIDFAIRY_CFS_FD_MAP; cache != FIDFAIRY_CFS_FD_END; cache += PGSIZE)
-		if(!va_is_mapped(cache))
-			break;
-	if(cache == FIDFAIRY_CFS_FD_END)
-		return -E_MAX_OPEN;
-
-	// remap the client's page to its new home
-	assert(state->cur_page && va_is_mapped(state->cur_page));
-	r = sys_page_map(0, state->cur_page, 0, cache, PTE_U | PTE_P);
-	if(r < 0)
-		return r;
-	r = sys_page_unmap(0, state->cur_page);
-	assert(r >= 0);
-	state->cur_page = NULL;
-	
-	// make up a new fid
-	fid = state->nfids_created++;
-	fid &= PGSIZE - 1;
-	fid |= 0x7FFFFFFF & (int) cache;
-
-	// save this open_file
-	r = 0;
-	of = open_file_create(fid, cache);
-	if (!of || ((r = hash_map_insert(state->open_files, (void*) fid, of)) < 0))
-	{
-		int s = sys_page_unmap(0, cache);
-		assert(0 <= s);
-		if (r == 0)
-			return -E_NO_MEM;
-		else
-			return r;
-	}
-
-	return fid;
-}
-
-
-//
-// fidfairy_cfs implementation
-
 // Intercepted CFS_t functions
 
 static int fidfairy_open(CFS_t * cfs, const char * name, int mode)
@@ -210,33 +162,52 @@ static int fidfairy_open(CFS_t * cfs, const char * name, int mode)
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
 	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
 	int fid;
+	void * page, * cache;
 	open_file_t * of;
+	int r;
 
 	open_file_gc(state);
 
-	state->cur_page = cfs_ipc_serve_cur_page();
-	assert(state->cur_page);
+	page = cfs_ipc_serve_cur_page();
+	assert(page && va_is_mapped(page));
+
 
 	fid = CALL(state->frontend_cfs, open, name, mode);
 	if (fid < 0)
-	{
-		// Check that create_fid() was not called
-		// (this code could be enhanced to clean up when this happens)
-		assert(state->cur_page);
-
-		sys_page_unmap(0, state->cur_page);
-		state->cur_page = NULL;
 		return fid;
+
+
+	// find a free slot to cache page
+	for(cache = FIDFAIRY_CFS_FD_MAP; cache != FIDFAIRY_CFS_FD_END; cache += PGSIZE)
+		if(!va_is_mapped(cache))
+			break;
+	if(cache == FIDFAIRY_CFS_FD_END)
+	{
+		(void) CALL(state->frontend_cfs, close, fid);
+		return -E_MAX_OPEN;
 	}
 
-	// An approximate check that fid is the one created by create_fid():
-	assert(!state->cur_page);
-	of = hash_map_find_val(state->open_files, (void*) fid);
-	assert(of);
-	assert(of->page);
-	assert(FIDFAIRY_CFS_FD_MAP <= (void*) of->page && (void*) of->page < FIDFAIRY_CFS_FD_END);
-	assert(va_is_mapped(of->page));
-	assert((fid & (PGSIZE-1)) == state->nfids_created - 1);
+	// remap the client's page to fidfairy's cache
+	r = sys_page_map(0, page, 0, cache, PTE_U | PTE_P);
+	if(r < 0)
+	{
+		(void) CALL(state->frontend_cfs, close, fid);
+		return r;
+	}
+
+	// save this open_file
+	r = 0;
+	of = open_file_create(fid, cache);
+	if (!of || ((r = hash_map_insert(state->open_files, (void*) fid, of)) < 0))
+	{
+		(void) CALL(state->frontend_cfs, close, fid);
+		int s = sys_page_unmap(0, cache);
+		assert(0 <= s);
+		if (r == 0)
+			return -E_NO_MEM;
+		else
+			return r;
+	}
 
 	return fid;
 }
@@ -271,7 +242,7 @@ static int fidfairy_destroy(CFS_t * cfs)
 	hash_map_destroy(state->open_files);
 	state->open_files = NULL;
 
-	cfs_fidfairy = NULL;
+	fidfairy_cfs_exists = 0;
 
 	free(cfs->instance);
 	memset(cfs, 0, sizeof(*cfs));
@@ -279,6 +250,8 @@ static int fidfairy_destroy(CFS_t * cfs)
 	return 0;
 }
 
+
+//
 // Passthrough CFS_t functions
 
 static int fidfairy_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
@@ -374,14 +347,13 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
 	CFS_t * cfs;
 	fidfairy_state_t * state;
 
-	if (cfs_fidfairy)
-		panic("fidfairy can currently have at most one instance");
+	if (fidfairy_cfs_exists)
+		panic("fidfairy can currently have at most one instance.");
 
 
 	cfs = malloc(sizeof(*cfs));
 	if (!cfs)
 		return NULL;
-	cfs_fidfairy = cfs;
 
 	ASSIGN(cfs, fidfairy, open);
 	ASSIGN(cfs, fidfairy, close);
@@ -413,6 +385,8 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
 	if (!state->open_files)
 		goto error_state;
 
+	fidfairy_cfs_exists = 1;
+
 	return cfs;
 
   error_state:
@@ -421,6 +395,5 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
   error_cfs:
 	free(cfs);
 	cfs = NULL;
-	cfs_fidfairy = NULL;
 	return NULL;
 }

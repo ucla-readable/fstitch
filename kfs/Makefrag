@@ -17,6 +17,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/fidfairy_cfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
+			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/kfsd.o \
 			$(OBJDIR)/kfs/kfsd_init.o \
 
