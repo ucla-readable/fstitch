@@ -1121,10 +1121,13 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 				memcpy(newfile, &temp_file, sizeof(JOSFS_File_t));
 			}
 
+			weak_retain_pair(head, tail);
 			if ((r = CALL(info->ubd, write_block, new->dirb)) < 0) {
+				weak_forget_pair(head, tail);
 				josfs_free_fdesc(object, newfdesc);
 				return r;
 			}
+			weak_forget_pair(head, tail);
 			josfs_free_fdesc(object, newfdesc);
 
 			if (josfs_remove_name(object, oldname, head, tail) == 0)
