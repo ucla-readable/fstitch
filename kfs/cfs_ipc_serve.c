@@ -54,6 +54,7 @@ static void cfs_ipc_serve_shutdown(void * arg)
 
 	if (frontend_cfs)
 	{
+		CALL(frontend_cfs, sync, NULL);
 		DESTROY(frontend_cfs);
 		frontend_cfs = NULL;
 	}
@@ -336,6 +337,7 @@ static void serve_sync(envid_t envid, struct Scfs_sync * req)
 static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
 	Dprintf("%s: %08x\n", __FUNCTION__, envid);
+	/* must respond before shutdown, because kfsd_shutdown() exits */
 	ipc_send(envid, 0, NULL, 0);
 	kfsd_shutdown();
 }
@@ -358,13 +360,9 @@ static void serve(void)
 	r = ipc_recv(0, &whom, (void*) REQVA, &perm, IPC_RECV_TIMEOUT);
 	if (!whom && !perm)
 	{
-		if (r == -E_TIMEOUT)
-			return;
-		else
-		{
+		if (r != -E_TIMEOUT)
 			fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);
-			return;
-		}
+		return;
 	}
 
 	// All requests must contain an argument page

@@ -371,7 +371,21 @@ static int table_classifier_sync(CFS_t * cfs, const char * name)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	CFS_t * selected_cfs;
+
+	if(!name || !name[0])
+	{
+		const size_t mount_table_size = vector_size(state->mount_table);
+		int i;
+		
+		/* FIXME save return values? */
+		for(i = 0; i < mount_table_size; i++)
+			CALL(((mount_entry_t *) vector_elt(state->mount_table, i))->cfs, sync, NULL);
+		
+		return 0;
+	}
+
+	selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
@@ -384,8 +398,8 @@ static int table_classifier_destroy(CFS_t * cfs)
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 
 	vector_destroy(state->mount_table);
-	memset(cfs->instance, 0, sizeof(*cfs->instance));
-	free(cfs->instance);
+	memset(state, 0, sizeof(*state));
+	free(state);
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
 	return 0;

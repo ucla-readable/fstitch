@@ -45,6 +45,8 @@ fsipc(unsigned type, void* fsreq, void* dstva, int* perm)
 	if (debug)
 		printf("[%08x] fsipc %d %08x\n", env->env_id, type, fsipcbuf);
 
+	if (!fs_envid)
+		return -E_BAD_ENV;
 	ipc_send(fs_envid, type, fsreq, PTE_P | PTE_W | PTE_U);
 	return ipc_recv(fs_envid, &whom, dstva, perm, 0);
 }

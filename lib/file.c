@@ -241,7 +241,7 @@ disk_avail_space(void)
 }
 
 int
-jfs_fs_shutdown(void)
+jfs_shutdown(void)
 {
 	return fsipc_shutdown();
 }

@@ -189,7 +189,12 @@ int kpl_shutdown(void)
 
 int fs_shutdown(void)
 {
-	return kpl_shutdown();
+	int r = kpl_shutdown();
+	if(r < 0)
+		return r;
+	/* wait for shutdown to complete */
+	sleep(100);
+	return jfs_shutdown();
 }
 
 int kpl_link(const char * oldname, const char * newname)

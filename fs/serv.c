@@ -300,7 +300,7 @@ serve_avail_space(envid_t envid)
 void
 serve_shutdown(envid_t envid)
 {
-	printf("Syncing and shutting down filesystem.\n");
+	printf("Syncing and shutting down classic filesystem.\n");
 	fs_sync();
 	ipc_send(envid, 0, NULL, 0);
 	exit();
@@ -380,7 +380,7 @@ umain(void)
 	fs_init();
 	//fs_test();
 
-	sys_env_set_priority(0, ENV_MAX_PRIORITY);
+	//sys_env_set_priority(0, ENV_MAX_PRIORITY);
 	serve();
 }
 
