@@ -179,6 +179,7 @@ static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
 	printf("%s: %08x\n", __FUNCTION__, envid);
 	ipc_send(envid, 0, NULL, 0);
+	kfsd_shutdown();
 }
 
 
