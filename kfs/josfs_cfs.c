@@ -214,15 +214,13 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		return idx;
 	fd = state->open_file[idx].fd;
 
+	if ((r = seek(fd, *basep)) < 0)
+		goto exit;
+
 	for (i=0; nbytes_read < nbytes; i++)
 	{
-		if ((r = seek(fd, *basep)) < 0) {
-			goto exit;
-		}
-
-		r = read(fd, &f, sizeof(struct File));
-
-		if (r < 0)
+		// Read a dirent
+		if ((r = read(fd, &f, sizeof(struct File))) < 0)
 			goto exit;
 
 		*basep += sizeof(struct File);
@@ -230,19 +228,22 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		// Pseudo unique fileno generator
 		ent.d_fileno = 0;
 		k = 1;
-		for (j = 0; j < strlen(f.f_name); j++) {
+		const int f_name_len = strlen(f.f_name);
+		for (j = 0; j < f_name_len; j++)
+		{
 			ent.d_fileno += j * k;
 			k = k * 2;
 		}
 
+		// Store the dirent into ent
 		ent.d_type = f.f_type;
 		ent.d_reclen = sizeof(ent.d_fileno) + sizeof(ent.d_type) + sizeof(ent.d_reclen) + sizeof(ent.d_namelen) + strlen(f.f_name) + 1;
-		ent.d_namelen = strlen(f.f_name);
-		strcpy(ent.d_name, f.f_name);
-		
+		ent.d_namelen = MIN(strlen(f.f_name), sizeof(ent.d_name));
+		strncpy(ent.d_name, f.f_name, MIN(ent.d_namelen+1, sizeof(ent.d_name)));
+
+		// Store the dirent ent into the buffer
 		if (ent.d_reclen > nbytes_read - nbytes)
 			break;
-
 		memcpy(buf, &ent, ent.d_reclen);
 		nbytes_read += ent.d_reclen;
 		buf += ent.d_reclen;
