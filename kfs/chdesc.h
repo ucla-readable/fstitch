@@ -62,6 +62,9 @@ int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t 
 int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original);
 int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 
+/* unmark a chdesc graph (i.e. clear CHDESC_MARKED) */
+void chdesc_unmark_graph(chdesc_t * root);
+
 /* add a dependency to a change descriptor without checking for cycles */
 int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 

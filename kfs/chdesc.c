@@ -388,7 +388,7 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
-static void chdesc_unmark_graph(chdesc_t * root)
+void chdesc_unmark_graph(chdesc_t * root)
 {
 	chmetadesc_t * meta;
 	root->flags &= ~CHDESC_MARKED;
