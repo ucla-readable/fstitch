@@ -44,6 +44,22 @@ static void bdesc_free(bdesc_t * bdesc)
 	free(bdesc);
 }
 
+/* free a bdesc if it has zero reference count */
+void bdesc_drop(bdesc_t ** bdesc)
+{
+	Dprintf("<bdesc 0x%08x drop>\n", bdesc);
+	if(!(*bdesc)->refs < 0)
+	{
+		Dprintf("<bdesc 0x%08x negative reference count!>\n", bdesc);
+		(*bdesc)->refs = 0;
+	}
+	if(!(*bdesc)->refs)
+	{
+		bdesc_free(*bdesc);
+		*bdesc = NULL;
+	}
+}
+
 /* copy a bdesc, leaving the original unchanged and giving the new bdesc reference count 0 */
 bdesc_t * bdesc_copy(bdesc_t * orig)
 {
@@ -88,7 +104,7 @@ int bdesc_alter(bdesc_t ** bdesc)
 }
 
 /* increase the reference count of a bdesc, copying it if it is currently translated */
-int bdesc_reference(bdesc_t ** bdesc)
+int bdesc_retain(bdesc_t ** bdesc)
 {
 	bdesc_t * copy;
 	Dprintf("<bdesc 0x%08x reference>\n", *bdesc);

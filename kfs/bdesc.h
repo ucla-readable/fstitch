@@ -20,6 +20,9 @@ struct bdesc {
 /* allocate a new bdesc */
 bdesc_t * bdesc_alloc(struct BD * bd, uint32_t number, uint16_t offset, uint16_t length);
 
+/* free a bdesc if it has zero reference count */
+void bdesc_drop(bdesc_t ** bdesc);
+
 /* copy a bdesc, leaving the original unchanged and giving the new bdesc reference count 0 */
 bdesc_t * bdesc_copy(bdesc_t * orig);
 
@@ -30,7 +33,7 @@ int bdesc_touch(bdesc_t ** bdesc);
 int bdesc_alter(bdesc_t ** bdesc);
 
 /* increase the reference count of a bdesc, copying it if it is currently translated */
-int bdesc_reference(bdesc_t ** bdesc);
+int bdesc_retain(bdesc_t ** bdesc);
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc);

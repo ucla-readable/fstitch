@@ -6,144 +6,91 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/partition_bd.h>
 #include <kfs/pc_ptable_bd.h>
 
 struct ptable_info {
 	BD_t * bd;
-	uint32_t start;
-	uint32_t length;
+	bdesc_t * ptable_sector;
+	struct pc_ptable * ptable;
 };
 
 #define SECTSIZE 512
-	
-static uint32_t pc_ptable_bd_get_numblocks(BD_t * object)
-{
-	return ((struct ptable_info *) object->instance)->length;
-}
 
-static uint32_t pc_ptable_bd_get_blocksize(BD_t * object)
+/* initialize the PC partition table reader */
+void * pc_ptable_init(BD_t * bd)
 {
-	return SECTSIZE;
-}
-
-static bdesc_t * pc_ptable_bd_read_block(BD_t * object, uint32_t number)
-{
-	bdesc_t * bdesc;
+	struct ptable_info * info;
 	
-	/* make sure it's a valid block */
-	if(number >= ((struct ptable_info *) object->instance)->length)
+	/* make sure the block size is SECTSIZE */
+	if(CALL(bd, get_blocksize) != SECTSIZE)
 		return NULL;
 	
-	bdesc = CALL(((struct ptable_info *) object->instance)->bd, read_block, ((struct ptable_info *) object->instance)->start + number);
-	
-	/* ensure we can alter the structure without conflict */
-	bdesc_alter(&bdesc);
-	
-	/* adjust the block descriptor to match the partition */
-	bdesc->bd = object;
-	bdesc->number = number;
-	
-	return bdesc;
-}
-
-static int pc_ptable_bd_write_block(BD_t * object, bdesc_t * block)
-{
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -1;
-	
-	/* make sure it's a whole block */
-	if(block->offset || block->length != SECTSIZE)
-		return -1;
-	
-	/* make sure it's a valid block */
-	if(block->number >= ((struct ptable_info *) object->instance)->length)
-		return -1;
-	
-	block->translated++;
-	block->bd = ((struct ptable_info *) object->instance)->bd;
-	block->number -= ((struct ptable_info *) object->instance)->start;
-	
-	/* write it */
-	CALL(block->bd, write_block, block);
-	
-	block->bd = object;
-	block->number += ((struct ptable_info *) object->instance)->start;
-	block->translated--;
-	
-	return 0;
-}
-
-static int pc_ptable_bd_sync(BD_t * object, bdesc_t * block)
-{
-	return 0;
-}
-
-static int pc_ptable_bd_destroy(BD_t * bd)
-{
-	free(bd->instance);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
-	return 0;
-}
-
-BD_t * pc_ptable_bd(BD_t * disk, uint8_t partition)
-{
-	BD_t * bd;
-	bdesc_t * bdesc;
-	struct pc_ptable * ptable;
-	
-	/* partition numbers are 1-based */
-	if(!partition || partition > 4)
+	info = malloc(sizeof(*info));
+	if(!info)
 		return NULL;
-	
-	/* make sure the block size matches */
-	if(CALL(disk, get_blocksize) != SECTSIZE)
-		return NULL;
-	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
-	bd->instance = malloc(sizeof(struct ptable_info));
-	if(!bd->instance)
-	{
-		free(bd);
-		return NULL;
-	}
-	
-	ASSIGN(bd, pc_ptable_bd, get_numblocks);
-	ASSIGN(bd, pc_ptable_bd, get_blocksize);
-	ASSIGN(bd, pc_ptable_bd, read_block);
-	ASSIGN(bd, pc_ptable_bd, write_block);
-	ASSIGN(bd, pc_ptable_bd, sync);
-	ASSIGN_DESTROY(bd, pc_ptable_bd, destroy);
 	
 	/* read the partition table */
-	bdesc = CALL(disk, read_block, 0);
+	info->ptable_sector = CALL(bd, read_block, 0);
+	if(!info->ptable_sector)
+	{
+		free(info);
+		return NULL;
+	}
+	bdesc_retain(&info->ptable_sector);
 	
-	bdesc_reference(&bdesc);
-	if(bdesc->data[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] || bdesc->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
+	info->bd = bd;
+	info->ptable = (struct pc_ptable *) &info->ptable_sector->data[PTABLE_OFFSET];
+	
+	if(info->ptable_sector->data[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
+	   info->ptable_sector->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
 	{
 		printf("No partition table found!\n");
-		bdesc_release(&bdesc);
-		free(bd->instance);
-		free(bd);
+		bdesc_release(&info->ptable_sector);
+		free(info);
 		return NULL;
 	}
 	
-	ptable = (struct pc_ptable *) &bdesc->data[PTABLE_OFFSET];
-	partition--;
+	return info;
+}
+
+/* count the partitions */
+int pc_ptable_count(void * _info)
+{
+	struct ptable_info * info = (struct ptable_info *) _info;
+	int i, count = 0;
 	
-	if(ptable[partition].type != PTABLE_KUDOS_TYPE)
-		printf("WARNING: Using non-KudOS partition %d!\n", partition + 1);
-	printf("Initialized partition %d: %2x [%d:%d]\n", partition + 1, ptable[partition].type, ptable[partition].lba_start, ptable[partition].lba_length);
+	for(i = 0; i != 4; i++)
+		if(info->ptable[i].lba_length)
+			count++;
 	
-	((struct ptable_info *) bd->instance)->bd = disk;
-	((struct ptable_info *) bd->instance)->start = ptable[partition].lba_start;
-	((struct ptable_info *) bd->instance)->length = ptable[partition].lba_length;
+	return count;
+}
+
+/* get the partition type */
+uint8_t pc_ptable_type(void * _info, int index)
+{
+	struct ptable_info * info = (struct ptable_info *) _info;
+	if(index < 1 || index > 4)
+		return 0;
+	return info->ptable[index - 1].type;
+}
+
+/* get a partition block device */
+BD_t * pc_ptable_bd(void * _info, int index)
+{
+	struct ptable_info * info = (struct ptable_info *) _info;
 	
-	bdesc_release(&bdesc);
+	if(index < 1 || index > 4)
+		return 0;
 	
-	return bd;
+	index--;
+	return partition_bd(info->bd, info->ptable[index].lba_start, info->ptable[index].lba_length);
+}
+
+/* free the partition table structures */
+void pc_ptable_free(void * info)
+{
+	bdesc_release(&((struct ptable_info *) info)->ptable_sector);
+	free(info);
 }
