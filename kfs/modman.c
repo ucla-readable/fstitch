@@ -9,7 +9,7 @@
 
 struct module {
 	void * module;
-	int usage;
+	uint32_t usage;
 	const char * name;
 };
 
@@ -43,7 +43,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 	return r;
 }
 
-static int modman_inc(hash_map_t * map, void * module)
+static uint32_t modman_inc(hash_map_t * map, void * module)
 {
 	struct module * mod = (struct module *) hash_map_find_val(map, module);
 	if(!mod)
@@ -51,7 +51,7 @@ static int modman_inc(hash_map_t * map, void * module)
 	return ++mod->usage;
 }
 
-static int modman_dec(hash_map_t * map, void * module)
+static uint32_t modman_dec(hash_map_t * map, void * module)
 {
 	struct module * mod = (struct module *) hash_map_find_val(map, module);
 	if(!mod)
@@ -74,7 +74,7 @@ static int modman_rem(hash_map_t * map, void * module)
 	return 0;
 }
 
-static int modman_query(hash_map_t * map, void * module)
+static uint32_t modman_query(hash_map_t * map, void * module)
 {
 	struct module * mod = (struct module *) hash_map_find_val(map, module);
 	if(!mod)
@@ -123,35 +123,29 @@ int modman_add_##type(type##_t * type, const char * name) \
 	return modman_add(type##_map, type, name); \
 }
 
-#define MODMAN_OP(op, type) \
-int modman_##op##_##type(type##_t * type) \
+#define MODMAN_OP(value, op, type) \
+value modman_##op##_##type(type##_t * type) \
 { \
 	return modman_##op(type##_map, type); \
-}
-
-#define MODMAN_NAME(type) \
-const char * modman_name_##type(type##_t * type) \
-{ \
-	return modman_name(type##_map, type); \
 }
 
 MODMAN_ADD(bd);
 MODMAN_ADD(cfs);
 MODMAN_ADD(lfs);
 
-MODMAN_OP(inc, bd);
-MODMAN_OP(inc, cfs);
-MODMAN_OP(inc, lfs);
-MODMAN_OP(dec, bd);
-MODMAN_OP(dec, cfs);
-MODMAN_OP(dec, lfs);
-MODMAN_OP(rem, bd);
-MODMAN_OP(rem, cfs);
-MODMAN_OP(rem, lfs);
-MODMAN_OP(query, bd);
-MODMAN_OP(query, cfs);
-MODMAN_OP(query, lfs);
+MODMAN_OP(uint32_t, inc, bd);
+MODMAN_OP(uint32_t, inc, cfs);
+MODMAN_OP(uint32_t, inc, lfs);
+MODMAN_OP(uint32_t, dec, bd);
+MODMAN_OP(uint32_t, dec, cfs);
+MODMAN_OP(uint32_t, dec, lfs);
+MODMAN_OP(int, rem, bd);
+MODMAN_OP(int, rem, cfs);
+MODMAN_OP(int, rem, lfs);
+MODMAN_OP(uint32_t, query, bd);
+MODMAN_OP(uint32_t, query, cfs);
+MODMAN_OP(uint32_t, query, lfs);
 
-MODMAN_NAME(bd);
-MODMAN_NAME(cfs);
-MODMAN_NAME(lfs);
+MODMAN_OP(const char *, name, bd);
+MODMAN_OP(const char *, name, cfs);
+MODMAN_OP(const char *, name, lfs);
