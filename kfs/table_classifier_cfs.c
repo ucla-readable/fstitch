@@ -56,13 +56,14 @@ static mount_entry_t * mount_entry_create(const char * path, CFS_t * cfs)
 	if (!me)
 		return NULL;
 
-	me->path = path;
+	me->path = strdup(path);
 	me->cfs = cfs;
 	return me;
 }
 
 static void mount_entry_destroy(mount_entry_t * me)
 {
+	free((void *) me->path);
 	me->path = NULL;
 	me->cfs = NULL;
 	free(me);
