@@ -18,30 +18,6 @@
 #endif
 
 
-/**
- * Make the chdesc chain described by head and tail depend on the chain
- * described by prevhead.
- * @param prevhead [inout] The previous head, updated to be the new head.
- * @param head The head of the chain to depend on prevhead.
- * @param tail The tail of the chain to depend on prevhead.
- * @return 0 on success, <0 on chdesc_add_depend() failure.
- */
-static int link_chains(chdesc_t ** prevhead, chdesc_t * head, chdesc_t * tail)
-{
-	int r;
-	assert((head && tail) || (!head && !tail));
-
-	if (head && tail)
-	{
-		if (*prevhead)
-			if ((r = chdesc_add_depend(*prevhead, tail)) < 0)
-				return r;
-		*prevhead = head;
-	}
-
-	return 0;
-}
-
 static bool lfs_feature_supported(LFS_t * lfs, const char * name, int feature_id)
 {
 	const size_t num_features = CALL(lfs, get_num_features, name);
@@ -261,7 +237,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	bdesc_t * bd;
 	uint32_t size_written = 0;
 	chdesc_t * prevhead = NULL;
-	chdesc_t * head, * tail;
+	chdesc_t * tail;
 	int r;
 
 	if ((idx = fid_idx(fid, state->open_file)) < 0)
@@ -275,28 +251,20 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		if (!bd)
 		{
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
-			bd = CALL(state->lfs, allocate_block, blocksize, type, &head, &tail);
+			prevhead = NULL; /* no need to link with previous chains here */
+			bd = CALL(state->lfs, allocate_block, blocksize, type, &prevhead, &tail);
 			if (!bd)
-				return size_written;
-			prevhead = head;
-			if ((r = link_chains(&prevhead, head, tail)) < 0)
 				return size_written;
 		}
 
 		/* write the data to the block */
-		head = tail = NULL;
+		tail = NULL;
 		const uint32_t n = MIN(bd->length - dataoffset, size - size_written);
-		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &head, &tail);
+		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &prevhead, &tail);
 		if (r < 0)
 			return size_written;
 		size_written += n;
 		dataoffset = 0; /* dataoffset only needed for first block */
-
-		/* link the data block's chain with the allocated block's chain,
-		 * link_chains() has no effect if allocate_block() wasn't needed */
-		prevhead = head;
-		if ((r = link_chains(&prevhead, head, tail)) < 0)
-			return size_written;
 	}
 
 	return size_written;
@@ -320,7 +288,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	size_t target_nblks = ROUNDUP32(target_size, blksize) / blksize;
 	bdesc_t * block;
 	chdesc_t * prevhead = NULL;
-	chdesc_t * head, * tail;
+	chdesc_t * tail;
 	int r;
 
 	if (file_idx < 0)
@@ -332,19 +300,15 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	for (; target_nblks < nblks; nblks--)
 	{
 		/* Truncate the block */
-		head = tail = NULL;
-		block = CALL(state->lfs, truncate_file_block, file->fdesc, &head, &tail);
+		tail = NULL;
+		block = CALL(state->lfs, truncate_file_block, file->fdesc, &prevhead, &tail);
 		if (!block)
 			return -E_UNSPECIFIED;
-		if ((r = link_chains(&prevhead, head, tail)) < 0)
-			return r;
 
 		/* Now free the block */
-		head = tail = NULL;
-		r = CALL(state->lfs, free_block, block, &head, &tail);
+		tail = NULL;
+		r = CALL(state->lfs, free_block, block, &prevhead, &tail);
 		if (r < 0)
-			return r;
-		if ((r = link_chains(&prevhead, head, tail)) < 0)
 			return r;
 	}
 
@@ -365,11 +329,9 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 
 		if (target_size < size)
 		{
-			head = tail = NULL;
-			r = CALL(state->lfs, set_metadata_fdesc, file->fdesc, file->size_id, sizeof(target_size), &target_size, &head, &tail);
+			tail = NULL;
+			r = CALL(state->lfs, set_metadata_fdesc, file->fdesc, file->size_id, sizeof(target_size), &target_size, &prevhead, &tail);
 			if (r < 0)
-				return r;
-			if ((r = link_chains(&prevhead, head, tail)) < 0)
 				return r;
 		}
 	}
@@ -394,7 +356,7 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 	const bool type_supported = lfs_feature_supported(state->lfs, oldname, KFS_feature_filetype.id);
 	int oldtype;
 	chdesc_t * prevhead;
-	chdesc_t * head, * tail;
+	chdesc_t * tail;
 	int r;
 
 	oldf = CALL(state->lfs, lookup_name, oldname);
@@ -419,19 +381,16 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 	if (CALL(state->lfs, lookup_name, newname))
 		return -E_FILE_EXISTS;
 
-	head = tail = NULL;
-	newf = CALL(state->lfs, allocate_name, newname, oldtype, oldf, &head, &tail);
+	tail = NULL;
+	newf = CALL(state->lfs, allocate_name, newname, oldtype, oldf, &prevhead, &tail);
 	if (!newf)
 		return -E_UNSPECIFIED;
-	prevhead = head;
 
 	if (type_supported)
 	{
-		head = tail = NULL;
-		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &head, &tail);
+		tail = NULL;
+		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &prevhead, &tail);
 		if (r < 0)
-			return r;
-		if ((r = link_chains(&prevhead, head, tail)) < 0)
 			return r;
 	}
 
@@ -442,13 +401,12 @@ static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
-	chdesc_t * head = NULL, * tail = NULL;
+	chdesc_t * prevhead = NULL, * tail = NULL;
 	int r;
 
-	r = CALL(state->lfs, rename, oldname, newname, &head, &tail);
+	r = CALL(state->lfs, rename, oldname, newname, &prevhead, &tail);
 	if (r < 0)
 		return r;
-	/* no need to do anything with the chdescs */
 
 	return 0;
 }
@@ -459,37 +417,28 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	fdesc_t * f;
 	chdesc_t * prevhead = NULL;
-	chdesc_t * head, * tail;
+	chdesc_t * tail;
 	int r;
 
 	if (CALL(state->lfs, lookup_name, name))
 		return -E_FILE_EXISTS;
 
-	head = tail = NULL;
-	f = CALL(state->lfs, allocate_name, name, TYPE_DIR, NULL, &head, &tail);
+	tail = NULL;
+	f = CALL(state->lfs, allocate_name, name, TYPE_DIR, NULL, &prevhead, &tail);
 	if (!f)
 		return -E_UNSPECIFIED;
-	prevhead = head;
 
 	/* set the filetype metadata */
 	if (lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id))
 	{
 		const int type = TYPE_DIR;
-		head = tail = NULL;
-		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &head, &tail);
+		tail = NULL;
+		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &prevhead, &tail);
 		if (r < 0)
 		{
-			/* ignore errors in favor of the real error */
-			(void) link_chains(&prevhead, head, tail);
-			head = tail = NULL;
-			(void) CALL(state->lfs, remove_name, name, &head, &tail);
-			(void) link_chains(&prevhead, head, tail);
-			return r;
-		}
-
-		if ((r = link_chains(&prevhead, head, tail)) < 0)
-		{
-			fprintf(STDERR_FILENO, "%s: LFS::link_chains() failed, returning error but not deallocating directory \"%s\"\n", __FUNCTION__, name);
+			/* ignore remove_name() error in favor of the real error */
+			tail = NULL;
+			(void) CALL(state->lfs, remove_name, name, &prevhead, &tail);
 			return r;
 		}
 	}
@@ -535,14 +484,12 @@ static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t
 {
 	Dprintf("%s(\"%s\", 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, name, id, size, data);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
-	chdesc_t * head = NULL, * tail = NULL;
+	chdesc_t * prevhead = NULL, * tail = NULL;
 	int r;
 
-	r = CALL(state->lfs, set_metadata_name, name, id, size, data, &head, &tail);
+	r = CALL(state->lfs, set_metadata_name, name, id, size, data, &prevhead, &tail);
 	if (r < 0)
 		return r;
-
-	/* no need to do anything with the chdescs */
 
 	return r;
 }

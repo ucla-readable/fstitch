@@ -25,13 +25,16 @@ typedef struct LFS LFS_t;
  * the calls below (like "get_dirent") seem a little bit higher-level than you would
  * otherwise expect from such a low-level interface. */
 
-/* The functions below that take "head" and "tail" parameters are mutators and
+/* "head" and "tail" parameters:
+ * - The functions below that take head and tail parameters are mutators and
  * will pass back the changes they make using these pointers. The change
  * descriptor subgraphs they generate will be set up so that the head pointer
  * depends on the whole subgraph, and the tail pointer is depended upon by the
  * whole graph. Thus to make the resulting subgraph depend on something else,
  * make its tail depend on that. To make something else depend on the resulting
- * subgraph, make it depend on its head. */
+ * subgraph, make it depend on its head.
+ * - head is both an input and output parameter, if input head is non-NULL it will
+ * be made to depend on the new tail. tail is output only, it outputs the new tail. */
 
 struct LFS {
 	DESTRUCTOR(LFS_t);
