@@ -10,7 +10,7 @@
 #include <kfs/journal_lfs.h>
 
 
-#define JOURNAL_DEBUG 1
+#define JOURNAL_DEBUG 0
 
 #if JOURNAL_DEBUG
 #define Dprintf(x...) printf(x)
@@ -106,14 +106,15 @@ static int replay_journal(journal_state_t * state)
 	bdesc_t * commit_block = CALL(state->journal, get_file_block, state->jfdesc, transaction_start * state->blocksize);
 	if(!commit_block)
 		return -E_UNSPECIFIED;
+	bdesc_retain(&commit_block);
 	
 	cr = (struct commit_record *) commit_block->ddesc->data;
 	if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
 	{
-		bdesc_drop(&commit_block);
+		bdesc_release(&commit_block);
 		return 0;
 	}
-	printf("%s(): recovering journal entry\n", __FUNCTION__);
+	printf("%s(): recovering journal transaction (%u data blocks)\n", __FUNCTION__, cr->nblocks);
 	
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
@@ -121,28 +122,31 @@ static int replay_journal(journal_state_t * state)
 	db = bnb + trans_number_block_count(state->blocksize);
 	for(block = 0; block < cr->nblocks; block += bnpb)
 	{
-		uint32_t index;
+		uint32_t index, max = MIN(bnpb, cr->nblocks - block);
 		uint32_t * numbers;
 		bdesc_t * number_block = CALL(state->journal, get_file_block, state->jfdesc, bnb * state->blocksize);
 		if(!number_block)
 		{
-			bdesc_drop(&commit_block);
+			bdesc_release(&commit_block);
 			return -E_UNSPECIFIED;
 		}
+		bdesc_retain(&number_block);
 		
 		numbers = (uint32_t *) number_block->ddesc->data;
-		for(index = 0; index != bnpb; index++)
+		for(index = 0; index != max; index++)
 		{
 			int r = -E_UNSPECIFIED;
 			bdesc_t * output;
 			bdesc_t * data_block = CALL(state->journal, get_file_block, state->jfdesc, db++ * state->blocksize);
 			if(!data_block)
 				goto data_error;
+			bdesc_retain(&data_block);
 			
 			output = CALL(state->queue, read_block, numbers[index]);
 			if(!output)
 				goto output_error;
 			
+			Dprintf("%s(): recovering block %d from journal entry %d\n", __FUNCTION__, numbers[index], block + index);
 			if((r = bdesc_touch(output)) < 0)
 				goto touch_error;
 				
@@ -154,17 +158,18 @@ static int replay_journal(journal_state_t * state)
 		touch_error:
 			bdesc_drop(&output);
 		output_error:
-			bdesc_drop(&data_block);
+			bdesc_retain(&data_block);
 		data_error:
-			bdesc_drop(&number_block);
-			bdesc_drop(&commit_block);
+			bdesc_release(&number_block);
+			bdesc_release(&commit_block);
 			return r;
 		}
 		
-		bdesc_drop(&number_block);
+		bdesc_release(&number_block);
 	}
 	
 	CALL(state->journal, write_block, commit_block, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, NULL, NULL);
+	bdesc_release(&commit_block);
 	
 	return 0;
 }
@@ -237,7 +242,9 @@ static int transaction_stop(journal_state_t * state)
 
 		ndatabdescs = hash_map_size(data_bdescs_map);
 
-		// TODO: do no work if no entries.
+		// Do no work if no entries.
+		if (!ndatabdescs)
+			return 0;
 
 		transaction_size = (1 + ndatabdescs) * state->blocksize;
 		if (transaction_size > TRANSACTION_SIZE)
@@ -407,7 +414,7 @@ static int transaction_stop(journal_state_t * state)
 	commit.magic = JOURNAL_MAGIC;
 	commit.type = CRCOMMIT; // TODO: support sub-commit
 	// commit.next = -1; // TODO: not yet supported
-	commit.nblocks = ROUND32(ndatabdescs, state->blocksize) / state->blocksize;
+	commit.nblocks = ndatabdescs;
 
 	bdesc = CALL(state->journal, get_file_block, state->jfdesc, commit_offset);
 	assert(bdesc); // TODO: handle error
@@ -424,7 +431,7 @@ static int transaction_stop(journal_state_t * state)
 	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
 	assert(r >= 0); // TODO: handle error
 	//assert(!lfs_head && !lfs_tail);
-
+	panic("SYSTEM MELTDOWN!");
 
 	chdesc_t * commit_chdesc = prev_head;
 
@@ -824,7 +831,10 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 
 	r = replay_journal(state);
 	if (r < 0)
+	{
+		fprintf(STDERR_FILENO, "Unable to replay journal.\n");
 		goto error_chdescs;
+	}
 
 	r = transaction_start(state);
 	if (r < 0)
