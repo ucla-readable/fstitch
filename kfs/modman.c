@@ -58,7 +58,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 		return r;
 	}
 	
-	/* this is a special hack to add the module to modman_devfs
+	/* this is a cheezy hack to add BD modules to modman_devfs
 	 * here in modman_add(), rather than the macro-generated
 	 * function modman_add_bd() below */
 	if(map == bd_map)
@@ -107,10 +107,18 @@ static uint32_t modman_dec(hash_map_t * map, void * module)
 static int modman_rem(hash_map_t * map, void * module)
 {
 	struct module * mod = (struct module *) hash_map_find_val(map, module);
+	
 	if(!mod)
 		return -E_NOT_FOUND;
 	if(mod->usage)
 		return -E_BUSY;
+	
+	/* this is a cheezy hack to remove BD modules from modman_devfs
+	 * here in modman_rem(), rather than the macro-generated
+	 * function modman_rem_bd() below */
+	if(map == bd_map)
+		devfs_bd_remove(modman_devfs, mod->name);
+	
 	Dprintf("%s: removing module %s to %d\n", __FUNCTION__, mod->name);
 	hash_map_erase(map, module);
 	free((char *) mod->name);
