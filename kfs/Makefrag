@@ -4,6 +4,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/ide_pio_bd.o \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable_bd.o \
+			$(OBJDIR)/kfs/chdesc_stripper_bd.o \
 			$(OBJDIR)/kfs/order_preserver_bd.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
