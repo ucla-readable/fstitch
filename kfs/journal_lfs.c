@@ -12,7 +12,7 @@
 
 #define JOURNAL_DEBUG 0
 
-#if JOURNALDEBUG
+#if JOURNAL_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
@@ -31,8 +31,8 @@ typedef struct journal_state journal_state_t;
 //
 // Journaling
 
-#define JOURNAL_FILENAME "/.journal"
-#define TRANSACTION_SIZE 1024*1024
+#define TRANSACTION_SIZE (1024*1024)
+static const char journal_filename[] = "/.journal";
 
 struct commit_record {
 	enum {CREMPTY, CRSUBCOMMIT, CRCOMMIT} type;
@@ -43,15 +43,15 @@ struct commit_record {
 };
 typedef struct commit_record commit_record_t;
 
-// TODO: create/destroy/serialize commit_record_t
 
 // TODO
 static int ensure_journal_exists(journal_state_t * state)
 {
-	state->jfdesc = CALL(state->journal, lookup_name, JOURNAL_FILENAME);
+	Dprintf("%s()\n", __FUNCTION__);
+	state->jfdesc = CALL(state->journal, lookup_name, journal_filename);
 	if (!state->jfdesc)
 	{
-		// TODO: Attempt to create JOURNAL_FILENAME?
+		// TODO: Attempt to create journal_filename?
 		return -E_NOT_FOUND;
 	}
 
@@ -61,16 +61,19 @@ static int ensure_journal_exists(journal_state_t * state)
 // TODO
 static int replay_journal(journal_state_t * state)
 {
+	Dprintf("%s()\n", __FUNCTION__);
 	return 0;
 }
 
 static int transaction_start(journal_state_t * state)
 {
+	Dprintf("%s()\n", __FUNCTION__);
 	return journal_queue_hold(state->queue);
 }
 
 static int transaction_stop(journal_state_t * state)
 {
+	Dprintf("%s()\n", __FUNCTION__);
 	size_t file_offset;
 	const size_t journal_blocksize = CALL(state->journal, get_blocksize);
 	bdesc_t ** data_bdescs;
@@ -97,9 +100,12 @@ static int transaction_stop(journal_state_t * state)
 		// TODO: LFS::sync only allows syncing a file, not a range in the file.
 		// For now, sync the entire file.
 
-		r = CALL(state->journal, sync, JOURNAL_FILENAME);
+		// FIXME: this returns -E_INVAL, why?
+		/*
+		r = CALL(state->journal, sync, journal_filename);
 		if (r < 0)
 			return r;
+		*/
 	}
 
 
@@ -214,7 +220,7 @@ static int transaction_stop(journal_state_t * state)
 	// Create commit record
 
 	commit.type = CRCOMMIT; // TODO: support sub-commit
-	commit.nblocks = ndatabdescs * journal_blocksize;
+	commit.nblocks = ROUND32(ndatabdescs, journal_blocksize)/journal_blocksize;
 	commit.commit = 0;
 	commit.invalid = 0;
 	// commit.next = NULL; // TODO: not yet supported
@@ -337,11 +343,11 @@ static void timer_callback(void * arg)
 
 	r = transaction_stop(state);
 	if (r < 0)
-		fprintf(STDERR_FILENO, "%s: transaction_stop: %e\n", __FUNCTION__, r);
+		fprintf(STDERR_FILENO, "%s:%s: transaction_stop: %e\n", __FILE__, __FUNCTION__, r);
 
 	r = transaction_start(state);
 	if (r < 0)
-		fprintf(STDERR_FILENO, "%s: transaction_start: %e\n", __FUNCTION__, r);
+		fprintf(STDERR_FILENO, "%s:%s: transaction_start: %e\n", __FILE__, __FUNCTION__, r);
 }
 
 
@@ -583,19 +589,19 @@ static int journal_get_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_
 //
 //
 
-LFS_t * journal_lfs(LFS_t * journal_lfs, LFS_t * fs_lfs, BD_t * fs_queue)
+LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 {
 	LFS_t * lfs;
 	journal_state_t * state;
 	int r;
 
-	if (!journal_lfs || !fs_lfs || !fs_queue)
+	if (!journal || !fs || !fs_queue)
 		return NULL;
 
 	// Check that queue is valid and directly below the base lfs.
 	// It is not stricly necessary that queue be directly below base lfs,
 	// but at least for now we assume this.
-	if (fs_queue != CALL(fs_lfs, get_blockdev))
+	if (fs_queue != CALL(fs, get_blockdev))
 		return NULL;
 	if (!journal_queue_detect(fs_queue))
 		return NULL;
@@ -635,9 +641,9 @@ LFS_t * journal_lfs(LFS_t * journal_lfs, LFS_t * fs_lfs, BD_t * fs_queue)
 	ASSIGN_DESTROY(lfs, journal, destroy);
 
 	state->queue = fs_queue;
-	state->journal = journal_lfs;
+	state->journal = journal;
 	state->jfdesc = NULL;
-	state->fs = fs_lfs;
+	state->fs = fs;
 
 	r = ensure_journal_exists(state);
 	if (r < 0)
