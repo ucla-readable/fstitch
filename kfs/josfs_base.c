@@ -303,7 +303,7 @@ static int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, 
 			}
 		}
 		i++;
-	} while (r == 0);
+	} while (r >= 0);
 
 	free(temp_fdesc);
 
@@ -685,14 +685,39 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 static int josfs_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_rename\n");
+	struct lfs_info * info = (struct lfs_info *) object->instance;
 	fdesc_t * oldfdesc;
 	fdesc_t * newfdesc;
+	struct josfs_fdesc * old;
+	struct josfs_fdesc * new;
+	struct JOSFS_File * oldfile;
+	struct JOSFS_File * newfile;
+	int i, r;
 
-	oldfdesc = josfs_lookup_name(object, oldname); // FIXME needs to be freed
+	oldfdesc = josfs_lookup_name(object, oldname);
 	if (oldfdesc) {
-		newfdesc = josfs_allocate_name(object, newname, ((struct JOSFS_File *) oldfdesc)->f_type, NULL, NULL, NULL); // FIXME needs to be freed
+		old = (struct josfs_fdesc *) oldfdesc;
+		newfdesc = josfs_allocate_name(object, newname, old->file->f_type, NULL, NULL, NULL);
 		if (newfdesc) {
-			// FIXME move the data from the old name to the new name
+			new = (struct josfs_fdesc *) newfdesc;
+			new->file->f_size = old->file->f_size;
+			new->file->f_indirect = old->file->f_indirect;
+			for (i = 0; i < JOSFS_NDIRECT; i++) {
+				new->file->f_direct[i] = old->file->f_direct[i];
+			}
+
+			oldfile = ((struct JOSFS_File *) old->dirb->ddesc->data) + old->index;
+			newfile = ((struct JOSFS_File *) new->dirb->ddesc->data) + new->index;
+			bdesc_touch(new->dirb);
+			memcpy(newfile, oldfile, sizeof(struct JOSFS_File));
+			strcpy(newfile->f_name, new->file->f_name);
+			josfs_free_fdesc(object, oldfdesc);
+			if ((r = CALL(info->ubd, write_block, new->dirb)) < 0) {
+				josfs_free_fdesc(object, newfdesc);
+				return r;
+			}
+			josfs_free_fdesc(object, newfdesc);
+
 			if (josfs_remove_name(object, oldname, NULL, NULL) == 0) {
 				return 0;
 			}
@@ -928,7 +953,6 @@ static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 	return josfs_set_metadata(object, f, id, size, data, head, tail);
 }
 
-// TODO
 static int josfs_sync(LFS_t * object, const char * name)
 {
 	struct lfs_info * info = (struct lfs_info *) object->instance;
