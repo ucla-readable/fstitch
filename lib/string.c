@@ -197,7 +197,7 @@ memcmp(const void *p, const void *q, size_t len)
 		if(*bp != *bq)
 			return (int) *bp - (int) *bq;
 		bp++;
-		bp++;
+		bq++;
 	}
 	return 0;
 }
