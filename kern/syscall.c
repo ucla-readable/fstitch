@@ -844,12 +844,17 @@ sys_grant_io(envid_t envid)
 static int
 sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon)
 {
-        *sec = 0xFF & mc146818_read(NULL, 0);
-        *min = 0xFF & mc146818_read(NULL, 2);
-        *hour = 0xFF & mc146818_read(NULL, 4);
-        *day = 0xFF & mc146818_read(NULL, 7);
-        *mon = 0xFF & mc146818_read(NULL, 8);
-        return 0xFF & mc146818_read(NULL, 9);
+	uint32_t old_fault_mode = page_fault_mode;
+	
+	*TRUP(sec) = 0xFF & mc146818_read(NULL, 0);
+	*TRUP(min) = 0xFF & mc146818_read(NULL, 2);
+	*TRUP(hour) = 0xFF & mc146818_read(NULL, 4);
+	*TRUP(day) = 0xFF & mc146818_read(NULL, 7);
+	*TRUP(mon) = 0xFF & mc146818_read(NULL, 8);
+	
+	page_fault_mode = old_fault_mode;
+	
+	return 0xFF & mc146818_read(NULL, 9);
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
