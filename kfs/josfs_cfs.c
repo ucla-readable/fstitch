@@ -256,7 +256,7 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		*basep += sizeof(struct File);
 	}
 
-	return nbytes_read ? nbytes_read : r;
+	return nbytes_read ? nbytes_read : (r < 0) ? r : 0;
 }
 
 static int josfs_cfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
