@@ -42,8 +42,8 @@ typedef struct journal_state journal_state_t;
 //          | k = trans_number_block_count()
 // k+1..end | the journal data blocks
 
+#define TRANSACTION_PERIOD 5
 #define TRANSACTION_SIZE (64*4096)
-//(100*1024)
 static const char journal_filename[] = "/.journal";
 
 /* "SAFEDATA" */
@@ -986,7 +986,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	if (r < 0)
 		goto error_chdescs;
 
-	r = sched_register(timer_callback, state, 5*100);
+	r = sched_register(timer_callback, state, TRANSACTION_PERIOD*100);
 	if (r < 0)
 		goto error_chdescs;
 
@@ -999,4 +999,13 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
   error_lfs:
 	free(lfs);
 	return NULL;
+}
+
+size_t journal_lfs_max_bandwidth(const LFS_t * lfs)
+{
+	const journal_state_t * state = (const journal_state_t *) lfs->instance;
+	const size_t data_per_slot = (TRANSACTION_SIZE - state->blocksize*trans_number_block_count(state->blocksize) - state->blocksize) / 1024;
+	const size_t bandwidth = (state->ncommit_records * data_per_slot) / TRANSACTION_PERIOD;
+
+	return bandwidth;
 }
