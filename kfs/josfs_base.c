@@ -303,7 +303,7 @@ static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 }
 
 // TODO
-static uint32_t josfs_get_filesize(LFS_t * object, fdesc_t * file)
+static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
 	return 0;
 }
@@ -582,7 +582,7 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN(lfs, josfs, lookup_block);
     ASSIGN(lfs, josfs, lookup_name);
     ASSIGN(lfs, josfs, free_fdesc);
-	ASSIGN(lfs, josfs, get_filesize);
+	ASSIGN(lfs, josfs, get_file_numblocks);
     ASSIGN(lfs, josfs, get_file_block);
     ASSIGN(lfs, josfs, get_dirent);
     ASSIGN(lfs, josfs, append_file_block);

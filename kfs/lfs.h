@@ -41,7 +41,7 @@ struct LFS {
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number, uint32_t offset, uint32_t size);
 	DECLARE(LFS_t, fdesc_t *, lookup_name, const char * name);
 	DECLARE(LFS_t, void, free_fdesc, fdesc_t * fdesc);
-	DECLARE(LFS_t, uint32_t, get_filesize, fdesc_t * file);
+	DECLARE(LFS_t, uint32_t, get_file_numblocks, fdesc_t * file);
 	DECLARE(LFS_t, bdesc_t *, get_file_block, fdesc_t * file, uint32_t offset);
 	DECLARE(LFS_t, int, get_dirent, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep);
 	DECLARE(LFS_t, int, append_file_block, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
