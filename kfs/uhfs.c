@@ -55,7 +55,7 @@ static int open_file_free(LFS_t * lfs, open_file_t * f)
 	sys_page_unmap(0, (void*) f->page);
 	CALL(lfs, free_fdesc, f->fdesc);
 	f->page = NULL;
-	f->fid = 0;
+	/* we do not reset fid here on purpose */
 	f->fdesc = NULL;
 	return 0;
 }
