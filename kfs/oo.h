@@ -12,7 +12,8 @@
 
 // DESTROY_LOCAL is only for use outside of KFSD
 #ifndef KFSD
-#define DESTROY_LOCAL(object) free(object)
+extern void delete_obj(uint32_t id);
+#define DESTROY_LOCAL(object) do { delete_obj((uint32_t) object->instance); free(object); } while(0)
 #else
 #define DESTROY_LOCAL(object) static_assert(0)
 #endif

@@ -41,13 +41,21 @@
 #define SKFS_PC_PTABLE_BD 20
 #define SKFS_IDE_PIO_BD 21
 
+// modman
+
+#define SKFS_MODMAN_REQUEST_LOOKUP 22
+#define SKFS_MODMAN_RETURN_LOOKUP  23
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 24
+#define SKFS_MODMAN_REQUEST_ITS    25
+#define SKFS_MODMAN_RETURN_IT      26
+
 
 #define SKFS_TYPE int skfs_type
 
 // SKFS_MAX_NAMELEN is the maxiumum length that fits in a method page, given
 // where names are used and the common deonimator amount of space available
 // in these pages.
-#define SKFS_MAX_NAMELEN (PGSIZE - 3*sizeof(int))
+#define SKFS_MAX_NAMELEN (PGSIZE - 4*sizeof(uint32_t))
 
 
 //
@@ -187,6 +195,44 @@ typedef struct {
 	uint8_t controller;
 	uint8_t disk;
 } Skfs_ide_pio_bd_t;
+
+
+//
+// modman
+
+// 'int type' fields are 0 CFS, 1 LFS, 2 BD
+
+typedef struct {
+	SKFS_TYPE;
+	int type;
+	uint32_t id;
+} Skfs_modman_request_lookup_t;
+
+typedef struct {
+	SKFS_TYPE;
+	int type;
+	uint32_t id;
+	int usage;
+	char name[SKFS_MAX_NAMELEN];
+} Skfs_modman_return_lookup_t;
+
+typedef struct {
+	SKFS_TYPE;
+	int type;
+	uint32_t id;
+	char use_name[SKFS_MAX_NAMELEN];
+} Skfs_modman_return_lookup_user_t;
+
+typedef struct {
+	SKFS_TYPE;
+	int type;
+} Skfs_modman_request_its_t;
+
+typedef struct {
+	SKFS_TYPE;
+	int type;
+	uint32_t id;
+} Skfs_modman_return_it_t;
 
 
 #endif // __KUDOS_INC_SERIAL_KFS_H

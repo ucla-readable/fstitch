@@ -4,8 +4,17 @@
 #include <inc/serial_kfs.h>
 #include <kfs/kfs_ipc_serve.h>
 
+#define KIS_DEBUG 0
+
+#if KIS_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
+
 #define RETURN_IPC_INVAL do { val = -E_INVAL; goto exit; } while(0)
-#define RETURN_IPC exit: ipc_send(whom, (uint32_t) val, NULL, 0, NULL)
+#define RETURN_IPC       exit: ipc_send(whom, (uint32_t) val, NULL, 0, NULL)
 
 
 //
@@ -60,7 +69,7 @@ void kis_destroy_bd(envid_t whom, const Skfs_destroy_bd_t * pg)
 void kis_table_classifier_cfs(envid_t whom, const Skfs_table_classifier_cfs_t * pg)
 {
 	uint32_t val = (uint32_t) table_classifier_cfs();
-	printf("%s = 0x%08x\n", __FUNCTION__, val);
+	Dprintf("%s = 0x%08x\n", __FUNCTION__, val);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
@@ -70,7 +79,7 @@ void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifier_cfs_
 	CFS_t * path_cfs = (CFS_t *) pg->path_cfs;
 	uint32_t val;
 
-	printf("%s(0x%08x, %s, 0x%08x)\n", __FUNCTION__, cfs, pg->path, path_cfs);
+	Dprintf("%s(0x%08x, %s, 0x%08x)\n", __FUNCTION__, cfs, pg->path, path_cfs);
 	if (!modman_name_cfs(cfs) || !modman_name_cfs(path_cfs))
 		RETURN_IPC_INVAL;
 
@@ -277,6 +286,132 @@ void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
+
+//
+// modman
+
+static uint8_t ipc_page[2*PGSIZE];
+
+#define LOOKUP_REQEST_RETURN(typel, typeu)								\
+	do {																\
+		Skfs_modman_return_lookup_t * rl = (Skfs_modman_return_lookup_t *) ROUNDUP32(ipc_page, PGSIZE); \
+		Skfs_modman_return_lookup_user_t * ru = (Skfs_modman_return_lookup_user_t *) ROUNDUP32(ipc_page, PGSIZE); \
+		const modman_entry_##typel##_t * me;							\
+		int users_remaining, i;											\
+																		\
+		/* Check that the request object exists */						\
+		me = modman_lookup_##typel((typeu##_t *) pg->id);				\
+		if (!me)														\
+		{																\
+			ipc_send(whom, 0, NULL, 0, NULL);							\
+			return;														\
+		}																\
+																		\
+		/* Send the return_lookup page */								\
+		memset(rl, 0, PGSIZE);											\
+		rl->skfs_type = SKFS_MODMAN_RETURN_LOOKUP;						\
+		rl->type = pg->type;											\
+		rl->id = (uint32_t) me->typel;									\
+		rl->usage = me->usage;											\
+		if (!me->name)													\
+			rl->name[0] = 0;											\
+		else															\
+			strncpy(rl->name, me->name, MIN(SKFS_MAX_NAMELEN, strlen(me->name))); \
+		assert(vector_size(me->users) == vector_size(me->use_names));	\
+		users_remaining = vector_size((vector_t *) me->users);			\
+																		\
+		ipc_send(whom, users_remaining, rl, PTE_P|PTE_U, NULL);			\
+																		\
+		/* Send a return_lookup_user page for each user */				\
+		users_remaining--; /* users_remaining indicates sends to go */	\
+		for (i=0; i < vector_size(me->users); i++, users_remaining--)	\
+		{																\
+			const void * t = (void *) vector_elt((vector_t *) me->users, i); \
+			const char * use_name = (const char *) vector_elt((vector_t *) me->use_names, i); \
+																		\
+			const char * user_name = NULL;								\
+			if (!user_name) user_name = modman_name_bd((void *) t);		\
+			if (!user_name) user_name = modman_name_lfs((void *) t);	\
+			if (!user_name) user_name = modman_name_cfs((void *) t);	\
+																		\
+			memset(ru, 0, PGSIZE);										\
+			ru->skfs_type = SKFS_MODMAN_RETURN_LOOKUP_USER;				\
+																		\
+			if (modman_lookup_cfs((void *) t))							\
+				ru->type = 0;											\
+			else if (modman_lookup_lfs((void *) t))						\
+				ru->type = 1;											\
+			else if (modman_lookup_bd((void *) t))						\
+				ru->type = 2;											\
+			else														\
+				assert(0);												\
+																		\
+			ru->id = (uint32_t) t;										\
+																		\
+			if (!use_name)												\
+				ru->use_name[0] = 0;									\
+			else														\
+				strncpy(ru->use_name, use_name, MIN(SKFS_MAX_NAMELEN, strlen(use_name))); \
+																		\
+			ipc_send(whom, users_remaining, ru, PTE_P|PTE_U, NULL);		\
+		}																\
+	} while(0)
+
+void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lookup_t * pg)
+{
+	switch (pg->type)
+	{
+		case 0: LOOKUP_REQEST_RETURN(cfs, CFS); break;
+		case 1: LOOKUP_REQEST_RETURN(lfs, LFS); break;
+		case 2: LOOKUP_REQEST_RETURN(bd,  BD);  break;
+		default:
+			// Leave requester hanging...
+			fprintf(STDERR_FILENO, "%s(): Unknown type %d\n", __FUNCTION__, pg->type);
+	}
+}
+
+
+#define ITS_REQUEST_RETURN(typel, typeu)								\
+	do {																\
+		modman_it_t * it = modman_it_create_##typel();					\
+		typeu##_t * t;													\
+		Skfs_modman_return_it_t * ri = (Skfs_modman_return_it_t *) ROUNDUP32(ipc_page, PGSIZE);	\
+		assert(it);														\
+																		\
+		/* Send a page for each iterator */								\
+		while ((t = modman_it_next_##typel(it)))						\
+		{																\
+			memset(ri, 0, PGSIZE);										\
+			ri->skfs_type = SKFS_MODMAN_RETURN_IT;						\
+			ri->id = (uint32_t) t;										\
+																		\
+			ipc_send(whom, 1, ri, PTE_P|PTE_U, NULL);					\
+		}																\
+																		\
+		/* Note end of iteration */										\
+		memset(ri, 0, PGSIZE);											\
+		ri->skfs_type = SKFS_MODMAN_RETURN_IT;							\
+		ri->type = pg->type;											\
+		ri->id = 0;														\
+																		\
+		ipc_send(whom, 0, ri, PTE_P|PTE_U, NULL);						\
+	} while (0)
+		
+void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t * pg)
+{
+	Dprintf("%s(): type = %d\n", __FUNCTION__, pg->type);
+	switch (pg->type)
+	{
+		case 0: ITS_REQUEST_RETURN(cfs, CFS); break;
+		case 1: ITS_REQUEST_RETURN(lfs, LFS); break;
+		case 2: ITS_REQUEST_RETURN(bd,  BD);  break;
+		default:
+			// Leave requester hanging...
+			fprintf(STDERR_FILENO, "%s(): Unknown type %d\n", __FUNCTION__, pg->type);
+	}
+}
+
+
 //
 // kfs_ipc_serve
 
@@ -287,13 +422,16 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 	int type;
 
 	// All requests must contain an argument page
-	if ((!perm & PTE_P))
+	if (! ((perm & PTE_P) && (perm & PTE_U)) )
 	{
 		fprintf(STDERR_FILENO, "Invalid serial kfs request from %08x: no argument page\n", whom);
-		return; // just leave it hanging...
+		return; // Just leave it hanging...
 	}
+	assert(pg);
 
 	type = *(int*) pg;
+
+	Dprintf("%s(): type = %d\n", __FUNCTION__, type);
 
 	switch (type)
 	{
@@ -330,9 +468,13 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(BLOCK_RESIZER_BD,   block_resizer_bd);
 		SERVE(IDE_PIO_BD,         ide_pio_bd);
 
+		// modman
+
+		SERVE(MODMAN_REQUEST_LOOKUP, modman_request_lookup);
+		SERVE(MODMAN_REQUEST_ITS,    modman_request_its);
 
 		default:
 			fprintf(STDERR_FILENO, "kfs_ipc_serve: Unknown type %d\n", type);
-			return;
+			return; // Just leave hanging...
 	}
 }

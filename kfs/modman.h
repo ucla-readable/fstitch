@@ -23,7 +23,12 @@ MODMAN_ENTRY_STRUCT(BD_t, bd, const);
 MODMAN_ENTRY_STRUCT(CFS_t, cfs, const);
 MODMAN_ENTRY_STRUCT(LFS_t, lfs, const);
 
+#ifdef KFSD
 typedef hash_map_it_t modman_it_t;
+#else
+struct modman_it_t;
+typedef struct modman_it modman_it_t;
+#endif
 
 int modman_init(void);
 
@@ -70,6 +75,10 @@ BD_t * modman_it_next_bd(modman_it_t * it);
 CFS_t * modman_it_next_cfs(modman_it_t * it);
 LFS_t * modman_it_next_lfs(modman_it_t * it);
 
+#ifdef KFSD
 #define modman_it_destroy hash_map_it_destroy
+#else
+void modman_it_destroy(modman_it_t * it);
+#endif
 
 #endif /* __KUDOS_KFS_MODMAN_BD_H */
