@@ -36,6 +36,10 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/sleep_cs.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/vector.c \
+			lib/hash_map.c
+
+LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/kpl.c \
 			lib/cfs_ipc_client.c
 
