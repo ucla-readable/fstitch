@@ -19,6 +19,7 @@ struct Dev devfile =
 	.dev_read_nb =	file_read,
 	.dev_read_map =	file_read_map,
 	.dev_write =	file_write,
+	.dev_getdirentries = NULL,
 	.dev_close =	file_close,
 	.dev_stat =	file_stat,
 	.dev_trunc =	file_trunc

@@ -376,6 +376,21 @@ write(int fdnum, const void* buf, size_t n)
 }
 
 int
+getdirentries(int fdnum, void* buf, int nbytes, uint32_t* basep)
+{
+	int r;
+	struct Dev* dev;
+	struct Fd* fd;
+
+	if ((r = fd_lookup(fdnum, &fd)) < 0
+	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
+		return r;
+	if (!dev->dev_write)
+		return -E_INVAL;
+	return (*dev->dev_getdirentries)(fd, buf, nbytes, basep);
+}
+
+int
 seek(int fdnum, off_t offset)
 {
 	int r;

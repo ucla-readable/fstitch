@@ -56,6 +56,7 @@ struct Dev devcons =
 	.dev_read_nb =	cons_read_nb,
 	.dev_read_map =	NULL,
 	.dev_write =	cons_write,
+	.dev_getdirentries = NULL,
 	.dev_close =	cons_close,
 	.dev_stat =	cons_stat
 };

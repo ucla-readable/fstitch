@@ -8,6 +8,7 @@ static int kpl_close(struct Fd* fd);
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset);
 static int kpl_read_map(struct Fd* fd, off_t offset, void** blk);
 static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset);
+static ssize_t kpl_getdirentries(struct Fd* fd, void* buf, int nbytes, uint32_t* basep);
 static int kpl_stat(struct Fd* fd, struct Stat* stat);
 static int kpl_trunc(struct Fd* fd, off_t newsize);
 
@@ -19,6 +20,7 @@ struct Dev devkpl =
 	.dev_read_nb =	kpl_read,
 	.dev_read_map =	kpl_read_map,
 	.dev_write =	kpl_write,
+	.dev_getdirentries = kpl_getdirentries,
 	.dev_close =	kpl_close,
 	.dev_stat =	kpl_stat,
 	.dev_trunc =	kpl_trunc
@@ -117,7 +119,7 @@ static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 	return cfs_write(fd->fd_kpl.fid, offset, n, buf);
 }
 
-static ssize_t kpl_getdirentries(struct Fd * fd, char * buf, size_t nbytes, off_t * basep)
+static ssize_t kpl_getdirentries(struct Fd* fd, void* buf, int nbytes, uint32_t* basep)
 {
 	const int fid = fd->fd_kpl.fid;
 	return cfs_getdirentries(fid, buf, nbytes, basep);

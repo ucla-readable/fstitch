@@ -16,6 +16,7 @@ struct Dev devpipe =
 	.dev_read_nb=	piperead_nb,
 	.dev_read_map=	NULL,
 	.dev_write=	pipewrite,
+	.dev_getdirentries = NULL,
 	.dev_close=	pipeclose,
 	.dev_stat=	pipestat,
 };
