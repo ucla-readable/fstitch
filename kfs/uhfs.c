@@ -236,17 +236,41 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	bdesc_t * bd;
-	uint32_t size_written = 0;
+	uint32_t size_written = 0, filesize = 0, target_size;
 	chdesc_t * prevhead = NULL;
 	chdesc_t * tail;
-	int r;
+	int r, allocated_block;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
 	if (!f)
 		return -E_INVAL;
 
+	if (f->size_id) {
+		void * data;
+		size_t data_len;
+
+		r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &data_len, &data);
+		if (r < 0)
+			return r;
+		assert(data_len == sizeof(filesize));
+		filesize = *(size_t *) data;
+		free(data);
+	}
+
+	target_size = filesize;
+
+	// FIXME if offset > filesize, allocate blocks
+	if (offset > filesize) {
+		panic("--- Uh oh ---!\n");
+		target_size = offset;
+	}
+
+	// do we really want to just return size_written if an operation failed???
+	// also, if something fails, do we still update filesize?
+
 	while (size_written < size)
 	{
+		allocated_block = 0;
 		/* get the block to write to - maybe just get a block number in the future, if we are writing the whole block? */
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (!bd)
@@ -256,19 +280,38 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			bd = CALL(state->lfs, allocate_block, blocksize, type, &prevhead, &tail);
 			if (!bd)
 				return size_written;
-			// TODO allocated block needs to be appended to a file
+			bdesc_retain(&bd);
+			r = CALL(state->lfs, append_file_block, f->fdesc, bd, NULL, NULL); // FIXME chdesc
+			if (r < 0) {
+				bdesc_release(&bd);
+				return size_written;
+			}
+			allocated_block = 1;
 		}
 
 		/* write the data to the block */
 		tail = NULL;
 		const uint32_t n = MIN(bd->length - dataoffset, size - size_written);
 		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &prevhead, &tail);
+
+		if (allocated_block)
+			bdesc_release(&bd);
+
 		if (r < 0)
 			return size_written;
+
 		size_written += n;
 		dataoffset = 0; /* dataoffset only needed for first block */
 	}
 
+	if (f->size_id) {
+		if (offset + size_written > target_size) {
+			target_size = offset + size_written;
+			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, NULL, NULL); // FIXME chdesc
+			if (r < 0)
+				return r;
+		}
+	}
 	return size_written;
 }
 
