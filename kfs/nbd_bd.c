@@ -65,6 +65,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	uint8_t command = 0;
 	bdesc_t * bdesc;
+	int r;
 	
 	/* make sure it's a valid block */
 	if(number >= info->length)
@@ -77,13 +78,25 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	/* switch to network byte order */
 	number = htonl(number);
 	
-	/* FIXME check for errors */
 	/* read it */
-	write(info->fd[1], &command, 1);
-	write(info->fd[1], &number, sizeof(number));
-	readn(info->fd[0], bdesc->ddesc->data, info->blocksize);
+
+	r = write(info->fd[1], &command, 1);
+	if (r != 1)
+		goto error;
+
+	r = write(info->fd[1], &number, sizeof(number));
+	if (r != sizeof(number))
+		goto error;
+
+	r = readn(info->fd[0], bdesc->ddesc->data, info->blocksize);
+	if (r != info->blocksize)
+		goto error;
 	
 	return bdesc;
+
+  error:
+	bdesc_drop(&bdesc);
+	return NULL;
 }
 
 static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
@@ -91,6 +104,7 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	uint8_t command = 1;
 	uint32_t number;
+	int r;
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
@@ -108,14 +122,27 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	number = htonl(block->number);
 	
 	/* write it */
-	write(info->fd[1], &command, 1);
-	write(info->fd[1], &number, sizeof(number));
-	write(info->fd[1], block->ddesc->data, info->blocksize);
+
+	r = write(info->fd[1], &command, 1);
+	if (r != 1)
+		goto error;
+
+	r = write(info->fd[1], &number, sizeof(number));
+	if (r != sizeof(number))
+		goto error;
+
+	r = write(info->fd[1], block->ddesc->data, info->blocksize);
+	if (r != info->blocksize)
+		goto error;
 	
 	/* drop the hot potato */
 	bdesc_drop(&block);
 	
 	return 0;
+
+  error:
+	bdesc_drop(&block);
+	return r;
 }
 
 static int nbd_bd_sync(BD_t * object, bdesc_t * block)
@@ -126,30 +153,39 @@ static int nbd_bd_sync(BD_t * object, bdesc_t * block)
 static int nbd_bd_destroy(BD_t * bd)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(bd);
-	int r = modman_rem_bd(bd);
-	if(r < 0)
-		return r;
-	close(info->fd[0]);
-	close(info->fd[1]);
+	int r, val = 0;
+
+	val = modman_rem_bd(bd);
+	if(val < 0)
+		return val;
+
+	r = close(info->fd[0]);
+	if (r < 0)
+		val = r;
+
+	r = close(info->fd[1]);
+	if (r < 0)
+		val = r;
+
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
-	return 0;
+	return val;
 }
 
 BD_t * nbd_bd(const char * address, uint16_t port)
 {
 	struct nbd_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	BD_t * bd;
+	int r;
+
+	bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
 	
 	info = malloc(sizeof(struct nbd_info));
 	if(!info)
-	{
-		free(bd);
-		return NULL;
-	}
+		goto error_bd;
 	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
@@ -165,22 +201,19 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	DESTRUCTOR(bd, nbd_bd, destroy);
 	
 	if(inet_atoip(address, &info->ip) != 1)
-	{
-		free(info);
-		free(bd);
-		return NULL;
-	}
+		goto error_info;
 	info->port = port;
 	
 	if(connect(info->ip, port, info->fd))
-	{
-		free(info);
-		free(bd);
-		return NULL;
-	}
+		goto error_info;
 	
-	read(info->fd[0], &info->length, sizeof(info->length));
-	read(info->fd[0], &info->blocksize, sizeof(info->blocksize));
+	r = read(info->fd[0], &info->length, sizeof(info->length));
+	if (r != sizeof(info->length))
+		goto error_connect;
+
+	r= read(info->fd[0], &info->blocksize, sizeof(info->blocksize));
+	if (r != sizeof(info->blocksize))
+		goto error_connect;
 	
 	/* switch to host byte order */
 	info->length = ntohl(info->length);
@@ -193,4 +226,13 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	}
 	
 	return bd;
+
+  error_connect:
+	close(info->fd[0]);
+	close(info->fd[1]);
+  error_info:
+	free(info);
+  error_bd:
+	free(bd);
+	return NULL;
 }
