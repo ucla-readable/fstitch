@@ -13,7 +13,8 @@ LIB_SRCFILES :=		lib/console.c \
 			lib/syscall.c \
 			lib/malloc.c \
 			lib/malloc_failfast.c \
-			lib/kfs_feature.c
+			lib/kfs_feature.c \
+			lib/md5.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/pgfault.c \
