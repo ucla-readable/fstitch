@@ -56,6 +56,6 @@ struct JOSFS_Super {
 	struct JOSFS_File s_root;		// Root directory node
 };
 
-LFS_t * josfs(BD_t * block_device);
+LFS_t * josfs(BD_t * block_device, int * do_fsck);
 
 #endif /* __KUDOS_KFS_JOSFS_BASE_H */

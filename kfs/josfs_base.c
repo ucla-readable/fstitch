@@ -1722,7 +1722,9 @@ static int josfs_destroy(LFS_t * lfs)
 	return 0;
 }
 
-LFS_t * josfs(BD_t * block_device)
+// do_fsck: input  - fsck() if *do_fsck != 0
+//          output - >= 0 if no errors, < 0 if errors
+LFS_t * josfs(BD_t * block_device, int * do_fsck)
 {
 	struct lfs_info * info;
 	LFS_t * lfs = malloc(sizeof(*lfs));
@@ -1775,7 +1777,9 @@ LFS_t * josfs(BD_t * block_device)
 		return NULL;
 	}
 
-	fsck(lfs);
+	if (do_fsck)
+		if (*do_fsck)
+			*do_fsck = fsck(lfs);
 
 	return lfs;
 }
