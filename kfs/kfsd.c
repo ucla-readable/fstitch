@@ -30,7 +30,7 @@ static struct module_shutdown module_shutdowns[10];
 int kfsd_init(int argc, char * argv[])
 {
 	BD_t * bd_disk = NULL;
-	bool use_disk_1 = 0;
+	bool use_disk_1 = 0, use_net = 0;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	CFS_t * uhfses[2] = {NULL};
@@ -143,7 +143,8 @@ int kfsd_init(int argc, char * argv[])
 		}
 	}
 	
-	do {
+	if(use_net)
+	{
 		BD_t * nbd;
 		BD_t * cache;
 		LFS_t * wd;
@@ -170,9 +171,9 @@ int kfsd_init(int argc, char * argv[])
 			d: DESTROY(wd);
 			c: DESTROY(cache);
 			b: DESTROY(nbd);
-			a: break;
+			a: (void) 0;
 		}
-	} while(0);
+	}
 
 	r = table_classifier_cfs_add(frontend_cfs, josfspath, josfscfs);
 	if (r < 0)
