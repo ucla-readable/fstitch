@@ -122,7 +122,10 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data, const void * cappg
 		assert(!(get_pte((void*) REQVA) & PTE_P));
 		r = ipc_recv(fsid, NULL, (void*)REQVA, &perm, NULL, 0);
 		if (r < 0)
+		{
+			sys_page_unmap(0, (void*)REQVA);
 			return i;
+		}
 		memcpy(data + i, (void*)REQVA, requested);
 		sys_page_unmap(0, (void*)REQVA);
 		if (r < requested)
