@@ -234,11 +234,11 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 		}
 
 		DFprintf("Checking %s\n", entry.d_name);
-		blockno = i * sizeof(JOSFS_File_t) / JOSFS_BLKSIZE;
+		blockno = i / JOSFS_BLKFILES;
 		dirblock = josfs_get_file_block(object, (fdesc_t *) fdesc, blockno * JOSFS_BLKSIZE);
 		if (dirblock) {
 			target = (JOSFS_File_t *) dirblock->ddesc->data;
-			target += i % (JOSFS_BLKSIZE / sizeof(JOSFS_File_t));
+			target += i % JOSFS_BLKFILES;
 			memcpy(temp_file, target, sizeof(JOSFS_File_t));
 			bdesc_drop(&dirblock);
 			if ((r = fsck_file(object, *temp_file, reserved, fbmap, ubmap, blist)) < 0)
@@ -559,10 +559,10 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 	do {
 		r = josfs_get_dirent(object, (fdesc_t *) temp_fdesc, &entry, sizeof(struct dirent), &basep);
 		if (r == 0 && strcmp(entry.d_name, name) == 0) {
-			blockno = i * sizeof(JOSFS_File_t) / JOSFS_BLKSIZE;
+			blockno = i / JOSFS_BLKFILES;
 			dirblock = josfs_get_file_block(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE);
 			if (dirblock) {
-				*index = i % (JOSFS_BLKSIZE / sizeof(JOSFS_File_t));
+				*index = i % JOSFS_BLKFILES;
 				target = (JOSFS_File_t *) dirblock->ddesc->data;
 				target += *index;
 				*file = malloc(sizeof(JOSFS_File_t));
@@ -757,10 +757,10 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 
 	// Make sure it's a directory and we can read from it
 	if (f->file->f_type == TYPE_DIR) {
-		blockno = *basep * sizeof(JOSFS_File_t) / JOSFS_BLKSIZE;
+		blockno = *basep / JOSFS_BLKFILES;
 		dirblock = josfs_get_file_block(object, file, blockno * JOSFS_BLKSIZE);
 		if (dirblock) {
-			dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % (JOSFS_BLKSIZE / sizeof(JOSFS_File_t)));
+			dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
 
 			namelen = strlen(dirfile->f_name);
 			namelen = MIN(namelen, sizeof(entry->d_name) - 1);
