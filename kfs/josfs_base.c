@@ -998,11 +998,6 @@ static int josfs_sync(LFS_t * object, const char * name)
 	return 0;
 }
 
-static int josfs_ioctl(LFS_t * object, uint32_t id, uint32_t op, void ** data)
-{
-	return -E_INVAL;
-}
-
 static int josfs_destroy(LFS_t * lfs)
 {
 	free(lfs->instance);
@@ -1050,7 +1045,6 @@ LFS_t * josfs(BD_t * block_device)
 	ASSIGN(lfs, josfs, set_metadata_name);
 	ASSIGN(lfs, josfs, set_metadata_fdesc);
 	ASSIGN(lfs, josfs, sync);
-	ASSIGN(lfs, josfs, ioctl);
 	ASSIGN_DESTROY(lfs, josfs, destroy);
 
 	info->ubd = block_device;

@@ -182,11 +182,6 @@ static int wholedisk_sync(LFS_t * object, const char * name)
 	return 0;
 }
 
-static int wholedisk_ioctl(LFS_t * object, uint32_t id, uint32_t op, void ** data)
-{
-	return -E_INVAL;
-}
-
 static int wholedisk_destroy(LFS_t * lfs)
 {
 	free(lfs->instance);
@@ -234,7 +229,6 @@ LFS_t * wholedisk(BD_t * bd)
 	ASSIGN(lfs, wholedisk, set_metadata_name);
 	ASSIGN(lfs, wholedisk, set_metadata_fdesc);
 	ASSIGN(lfs, wholedisk, sync);
-	ASSIGN(lfs, wholedisk, ioctl);
 	ASSIGN_DESTROY(lfs, wholedisk, destroy);
 	
 	info->bd = bd;
