@@ -251,9 +251,19 @@ static int josfs_remove_name(LFS_t * object, const char * name)
     return 0;
 }
 
-// TODO
 static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data)
 {
+    int r;
+    struct lfs_info * info = (struct lfs_info *) object->instance;
+
+    if (offset + size > BLKSIZE) {
+        return -1;
+    }
+
+    memcpy(block->data + offset, data, size);
+    if ((r = CALL(info->ubd, write_block, block)) < 0)
+        return r;
+
     return 0;
 }
 
@@ -264,14 +274,16 @@ static size_t josfs_get_num_features(LFS_t * object, const char * name)
 
 static const feature_t * josfs_get_feature(LFS_t * object, const char * name, size_t num)
 {
-    feature_t * f;
     feature_t s;
+    feature_t * f = NULL;
 
     // FIXME
-    s.id = 0xabba;
-    s.optional = 0;
-    s.warn = 0;
-    f = &s;
+    if (num == 0) {
+        s.id = 0xabba;
+        s.optional = 0;
+        s.warn = 0;
+        f = &s;
+    }
     return f;
 }
 
@@ -281,10 +293,21 @@ static int josfs_get_metadata(LFS_t * object, const char * name, uint32_t id, si
     return 0;
 }
 
-// TODO
 static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data)
 {
-    return 0;
+    // TODO: lookup file path
+    struct jos_fdesc foo;
+
+    if (id == 0xabba) {
+        if (size >= sizeof(off_t)) {
+            if ((off_t)data >= 0 && (off_t)data < 4194304) {
+                foo.file->f_size = (off_t)data;
+                return 0;
+            }
+        }
+    }
+
+    return -1;
 }
 
 // TODO
