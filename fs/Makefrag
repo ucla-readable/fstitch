@@ -44,6 +44,7 @@ USERAPPS := 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/more \
 			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/cfstest \
+			$(OBJDIR)/user/testkpl \
 			$(OBJDIR)/user/clock \
 			$(OBJDIR)/kfs/kfsd
 
