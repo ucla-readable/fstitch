@@ -395,10 +395,9 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		assert(r >= 0); // TODO: handle error
 
 		if (*head) {
-			r = chdesc_add_depend(ch, *head);
-			if (r < 0) {
+			if ((r = chdesc_add_depend(ch, *head)) < 0) {
 				bdesc_drop(&bdesc);
-				return -1;
+				return r;
 			}
 		}
 
@@ -769,11 +768,15 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 	Dprintf("JOSFSDEBUG: josfs_append_file_block\n");
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	uint32_t num, nblocks = josfs_get_file_numblocks(object, file);
+	uint32_t num, inum, nblocks = josfs_get_file_numblocks(object, file);
 	bdesc_t * indirect;
 	uint32_t * indirect_offset;
 	JOSFS_File_t * dirfile;
 	int r, offset;
+	chdesc_t *newtail, * curhead, *oldhead = NULL;
+
+	if (head && tail)
+		oldhead = *head;
 
 	num = block->number;
 	bdesc_drop(&block);
@@ -786,12 +789,18 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		if (indirect) {
 			if (head && tail) {
 				offset = nblocks * sizeof(uint32_t *);
-				r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &num, head, tail);
-				if (r < 0)
+				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &num, head, tail)) < 0)
 					return r;
 
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
+
+				if (oldhead) {
+					if ((chdesc_add_depend(*tail, oldhead)) < 0) {
+						bdesc_drop(&indirect);
+						return r;
+					}
+				}
 			}
 			else {
 				bdesc_touch(indirect);
@@ -801,26 +810,58 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 			return CALL(info->ubd, write_block, indirect);
 		}
 	}
-	// FIXME did I forget to write the first entry in the indirect block?
 	else if (nblocks == JOSFS_NDIRECT) {
-		// FIXME chdesc
-		indirect = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, NULL, NULL);
+		indirect = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, head, tail);
 		if (indirect) {
-			// FIXME chdesc
-			bdesc_touch(f->dirb);
-			dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
-			dirfile->f_indirect = indirect->number;
-			if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
+			// Initialize the structure, then point to it
+			inum = indirect->number;
+
+			if (head && tail) {
+				curhead = *head;
+				offset = nblocks * sizeof(uint32_t *);
+				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &num, head, &newtail)) < 0)
+					return r;
+
+				if ((r = chdesc_add_depend(newtail, curhead)) < 0)
+					return r;
+			}
+			else {
+				bdesc_touch(indirect);
+				indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
+				*indirect_offset = num;
+			}
+
+			if ((r = CALL(info->ubd, write_block, indirect)) < 0)
 				return r;
 
-			// FIXME chdesc
-			bdesc_retain(&indirect);
-			bdesc_touch(indirect);
-			f->file->f_indirect = indirect->number;
-			indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
-			*indirect_offset = num;
-			r = CALL(info->ubd, write_block, indirect);
-			bdesc_release(&indirect);
+			if (head && tail) {
+				curhead = *head;
+				offset = f->index * sizeof(JOSFS_File_t *);
+				offset += ((uint32_t) &dirfile->f_indirect) - ((uint32_t) &dirfile);
+				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &inum, head, &newtail)) < 0)
+					return r;
+
+				if ((r = chdesc_add_depend(newtail, curhead)) < 0)
+					return r;
+
+				r = depman_add_chdesc(*head);
+				assert(r >= 0); // TODO: handle error
+
+				if (oldhead) {
+					if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+						return r;
+				}
+			}
+			else {
+				bdesc_touch(f->dirb);
+				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
+				dirfile->f_indirect = inum;
+			}
+			r = CALL(info->ubd, write_block, f->dirb);
+
+			if (r >= 0)
+				f->file->f_indirect = inum;
+
 			return r;
 		}
 	}
@@ -828,12 +869,16 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		if (head && tail) {
 			offset = f->index * sizeof(JOSFS_File_t *);
 			offset += ((uint32_t) &dirfile->f_direct[nblocks]) - ((uint32_t) &dirfile);
-			r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &num, head, tail);
-			if (r < 0)
+			if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &num, head, tail)) < 0)
 				return r;
 
 			r = depman_add_chdesc(*head);
 			assert(r >= 0); // TODO: handle error
+
+			if (oldhead) {
+				if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+					return r;
+			}
 		}
 		else {
 			bdesc_touch(f->dirb);
@@ -1094,6 +1139,7 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	struct josfs_fdesc * f;
 	int r, offset;
 	uint8_t data = 0;
+	chdesc_t * oldhead;
 
 	file = josfs_lookup_name(object, name);
 
@@ -1103,14 +1149,19 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	f = (struct josfs_fdesc *) file;
 
 	if (head && tail) {
+		oldhead = *head;
 		offset = f->index * sizeof(JOSFS_File_t *);
 		offset += ((uint32_t) &dirfile->f_name[0]) - ((uint32_t) &dirfile);
-		r = chdesc_create_byte(f->dirb, offset, 1, &data, head, tail);
-		if (r < 0)
+		if ((r = chdesc_create_byte(f->dirb, offset, 1, &data, head, tail)) < 0)
 			return r;
 
 		r = depman_add_chdesc(*head);
 		assert(r >= 0); // TODO: handle error
+
+		if (oldhead) {
+			if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+				return r;
+		}
 	}
 	else {
 		bdesc_touch(f->dirb);
@@ -1132,18 +1183,26 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 	Dprintf("JOSFSDEBUG: josfs_write_block\n");
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	int r;
+	chdesc_t * oldhead;
 
 	if (offset + size > JOSFS_BLKSIZE)
 		return -E_INVAL;
 
 	if (head && tail) {
-		r = chdesc_create_byte(block, offset, size, data, head, tail);
-		if (r < 0) {
+		oldhead = *head;
+		if ((r = chdesc_create_byte(block, offset, size, data, head, tail)) < 0) {
 			bdesc_drop(&block);
 			return r;
 		}
 		r = depman_add_chdesc(*head);
 		assert(r >= 0); // TODO: handle error
+
+		if (oldhead) {
+			if ((r = chdesc_add_depend(*tail, oldhead)) < 0) {
+				bdesc_drop(&block);
+				return r;
+			}
+		}
 	}
 	else {
 		bdesc_touch(block);
@@ -1222,19 +1281,25 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	JOSFS_File_t * dirfile;
 	int r, offset;
+	chdesc_t * oldhead;
 
 	if (id == KFS_feature_size.id) {
 		if (sizeof(off_t) == size) {
 			if (*((off_t *) data) >= 0 && *((off_t *) data) < JOSFS_MAXFILESIZE) {
 				if (head && tail) {
+					oldhead = *head;
 					offset = f->index * sizeof(JOSFS_File_t *);
 					offset += ((uint32_t) &dirfile->f_size) - ((uint32_t) &dirfile);
-					r = chdesc_create_byte(f->dirb, offset, sizeof(off_t), data, head, tail);
-					if (r < 0)
+					if ((r = chdesc_create_byte(f->dirb, offset, sizeof(off_t), data, head, tail)) < 0)
 						return r;
 
 					r = depman_add_chdesc(*head);
 					assert(r >= 0); // TODO: handle error
+
+					if (oldhead) {
+						if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+							return r;
+					}
 				}
 				else {
 					bdesc_touch(f->dirb);
@@ -1253,14 +1318,19 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		if (sizeof(uint32_t) == size) {
 			if (*((uint32_t *) data) == TYPE_FILE || *((uint32_t *) data) == TYPE_DIR) {
 				if (head && tail) {
+					oldhead = *head;
 					offset = f->index * sizeof(JOSFS_File_t *);
 					offset += ((uint32_t) &dirfile->f_type) - ((uint32_t) &dirfile);
-					r = chdesc_create_byte(f->dirb, offset, sizeof(uint32_t), data, head, tail);
-					if (r < 0)
+					if ((r = chdesc_create_byte(f->dirb, offset, sizeof(uint32_t), data, head, tail)) < 0)
 						return r;
 
 					r = depman_add_chdesc(*head);
 					assert(r >= 0); // TODO: handle error
+
+					if (oldhead) {
+						if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+							return r;
+					}
 				}
 				else {
 					bdesc_touch(f->dirb);
@@ -1298,7 +1368,7 @@ static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 
 static int josfs_sync(LFS_t * object, const char * name)
 {
-	printf("JOSFSDEBUG: josfs_sync %s\n", name);
+	Dprintf("JOSFSDEBUG: josfs_sync %s\n", name);
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	fdesc_t * f;
 	int i, r, nblocks;
