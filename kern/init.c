@@ -68,7 +68,7 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	// Lab 4 multitasking initialization functions
 	pic_init();
 	kclock_init();
-	pci_init();
+	//pci_init(); // pci not in use for now
 
 	if (ENABLE_INKERNEL_INTS)
 	{
