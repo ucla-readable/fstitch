@@ -6,6 +6,7 @@
 
 #include <inc/cfs_ipc_client.h>
 #include <inc/serial_kfs.h>
+#include <inc/kfs_ipc_client.h>
 
 #include <kfs/cfs.h>
 #include <kfs/lfs.h>
@@ -230,7 +231,7 @@ static int kic_get_flags_magic(object_t * obj)
 //
 // Constructors
 
-static CFS_t * create_cfs(uint32_t id)
+CFS_t * create_cfs(uint32_t id)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, id);
 	CFS_t * cfs;
