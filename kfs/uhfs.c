@@ -173,22 +173,12 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 
 	if ((mode & O_CREAT) && !fdesc)
 	{
-		const uint32_t blksize = CALL(state->lfs, get_blocksize);
 		chdesc_t * prev_head, * tail;
-		bdesc_t * blk;
 
 		prev_head = NULL;
 		fdesc = CALL(state->lfs, allocate_name, name, 0, NULL, &prev_head, &tail);
 		if (!fdesc)
 			return -E_UNSPECIFIED;
-
-		blk = CALL(state->lfs, allocate_block, blksize, 0, &prev_head, &tail);
-		if (!blk)
-			return -E_UNSPECIFIED;
-
-		r = CALL(state->lfs, append_file_block, fdesc, blk, &prev_head, &tail);
-		if (r < 0)
-			return r;
 	}
 	else
 		if (!fdesc)
