@@ -363,7 +363,6 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 	return 0;
 }
 
-// FIXME chdesc
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: write_bitmap\n");
@@ -372,6 +371,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	int target;
 	int r;
 	uint32_t * ptr;
+	chdesc_t * ch;
 
 	if (blockno == 0) {
 		printf("josfs_base: attempted to write to zero block!\n");
@@ -387,12 +387,35 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		return -1;
 	}
 
-	bdesc_touch(bdesc);
-	ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
-	if (value)
-		*ptr |= (1 << (blockno % 32));
-	else
-		*ptr &= ~(1 << (blockno % 32));
+	if (head && tail) {
+		ch = chdesc_create_bit(bdesc, 4*(blockno / 32), 1 << (blockno % 32));
+		if (!ch) {
+			bdesc_drop(&bdesc);
+			return -1;
+		}
+
+		r = depman_add_chdesc(ch);
+		assert(r >= 0); // TODO: handle error
+
+		if (*head) {
+			r = chdesc_add_depend(ch, *head);
+			if (r < 0) {
+				bdesc_drop(&bdesc);
+				return -1;
+			}
+		}
+
+		*tail = ch;
+		*head = ch;
+	}
+	else {
+		bdesc_touch(bdesc);
+		ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
+		if (value)
+			*ptr |= (1 << (blockno % 32));
+		else
+			*ptr &= ~(1 << (blockno % 32));
+	}
 
 	if ((r = CALL(info->ubd, write_block, bdesc)) < 0)
 		return r;
@@ -1053,7 +1076,8 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	fdesc_t * file;
 	JOSFS_File_t * dirfile;
 	struct josfs_fdesc * f;
-	int r;
+	int r, offset;
+	uint8_t data = 0;
 
 	file = josfs_lookup_name(object, name);
 
@@ -1061,10 +1085,23 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 		return -E_INVAL;
 
 	f = (struct josfs_fdesc *) file;
-	bdesc_touch(f->dirb);
-	dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
-	dirfile->f_name[0] = '\0';
-	// FIXME chdesc
+
+	if (head && tail) {
+		offset = f->index * sizeof(JOSFS_File_t *);
+		offset += ((uint32_t) &dirfile->f_name[0]) - ((uint32_t) &dirfile);
+		r = chdesc_create_byte(f->dirb, offset, 1, &data, head, tail);
+		if (r < 0)
+			return r;
+
+		r = depman_add_chdesc(*head);
+		assert(r >= 0); // TODO: handle error
+	}
+	else {
+		bdesc_touch(f->dirb);
+		dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
+		dirfile->f_name[0] = '\0';
+	}
+
 	if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
 		return r;
 
