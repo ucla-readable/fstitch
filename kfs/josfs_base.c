@@ -1218,6 +1218,7 @@ static int josfs_sync(LFS_t * object, const char * name)
 	if (!f)
 		return -E_INVAL;
 
+	/* FIXME this needs to sync all containing directories as well */
 	nblocks = josfs_get_file_numblocks(object, f);
 	for (i = 0 ; i < nblocks; i++) {
 		if ((r = CALL(info->ubd, sync, josfs_get_file_block(object, f, i * JOSFS_BLKSIZE))) < 0)
