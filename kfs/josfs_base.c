@@ -181,6 +181,11 @@ static fdesc_t * josfs_lookup_name(LFS_t * object, const char * name)
 }
 
 // TODO
+static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
+{
+}
+
+// TODO
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
     return 0;
@@ -317,6 +322,7 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN(lfs, josfs, allocate_block);
     ASSIGN(lfs, josfs, lookup_block);
     ASSIGN(lfs, josfs, lookup_name);
+    ASSIGN(lfs, josfs, free_fdesc);
     ASSIGN(lfs, josfs, get_file_block);
     ASSIGN(lfs, josfs, append_file_block);
     ASSIGN(lfs, josfs, allocate_name);

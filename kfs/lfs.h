@@ -20,6 +20,7 @@ struct LFS {
 	DECLARE(LFS_t, bdesc_t *, allocate_block, uint32_t size, int purpose);
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number, uint32_t offset, uint32_t size);
 	DECLARE(LFS_t, fdesc_t *, lookup_name, const char * name);
+	DECLARE(LFS_t, void, free_fdesc, fdesc_t * fdesc);
 	DECLARE(LFS_t, bdesc_t *, get_file_block, fdesc_t * file, uint32_t offset);
 	DECLARE(LFS_t, int, append_file_block, fdesc_t * file, bdesc_t * block);
 	DECLARE(LFS_t, fdesc_t *, allocate_name, char * name, int type, fdesc_t * link);
