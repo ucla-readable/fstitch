@@ -26,6 +26,9 @@
  * 3. Except for the data, nothing else in a bdesc will change while you have a reference to it.
  * */
 
+/* NOTE on rule 1c above - we need to work out what the behavior is if you pass a bdesc to a
+ * function which then fails for some reason. Is it still responsible for dropping the bdesc? */
+
 #include <inc/types.h>
 
 #include <kfs/bd.h>
