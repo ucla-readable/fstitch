@@ -927,7 +927,7 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 		case(SYS_grant_io):
 			return sys_grant_io(a1);
 		case(SYS_get_hw_time):
-			sys_get_hw_time((int*)a1, (int*)a2, (int*)a3, (int*)a4, (int*)a5);
+			return sys_get_hw_time((int*)a1, (int*)a2, (int*)a3, (int*)a4, (int*)a5);
 		default:
 			return -E_INVAL;
 	}
