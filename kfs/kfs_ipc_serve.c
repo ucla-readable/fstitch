@@ -22,7 +22,7 @@ static uint8_t ipc_page[2*PGSIZE];
 //
 // Destructors
 
-void kis_destroy_cfs(envid_t whom, const Skfs_destroy_cfs_t * pg)
+static void kis_destroy_cfs(envid_t whom, const Skfs_destroy_cfs_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	int val;
@@ -35,7 +35,7 @@ void kis_destroy_cfs(envid_t whom, const Skfs_destroy_cfs_t * pg)
 	RETURN_IPC;
 }
 
-void kis_destroy_lfs(envid_t whom, const Skfs_destroy_lfs_t * pg)
+static void kis_destroy_lfs(envid_t whom, const Skfs_destroy_lfs_t * pg)
 {
 	LFS_t * lfs = (LFS_t *) pg->lfs;
 	int val;
@@ -48,7 +48,7 @@ void kis_destroy_lfs(envid_t whom, const Skfs_destroy_lfs_t * pg)
 	RETURN_IPC;
 }
 
-void kis_destroy_bd(envid_t whom, const Skfs_destroy_bd_t * pg)
+static void kis_destroy_bd(envid_t whom, const Skfs_destroy_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	int val;
@@ -65,7 +65,7 @@ void kis_destroy_bd(envid_t whom, const Skfs_destroy_bd_t * pg)
 //
 // OBJ
 
-void kis_request_flags_magic(envid_t whom,  const Skfs_request_flags_magic_t * pg)
+static void kis_request_flags_magic(envid_t whom,  const Skfs_request_flags_magic_t * pg)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, pg->id);
 	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ROUNDUP32(ipc_page, PGSIZE);
@@ -82,7 +82,7 @@ void kis_request_flags_magic(envid_t whom,  const Skfs_request_flags_magic_t * p
 	ipc_send(whom, 0, rfm, PTE_P|PTE_U, NULL);
 }
 
-void kis_request_config_status(envid_t whom, const Skfs_request_config_status_t * pg)
+static void kis_request_config_status(envid_t whom, const Skfs_request_config_status_t * pg)
 {
 	Dprintf("%s(0x%08x, %d, %d)\n", __FUNCTION__, pg->id, pg->level, pg->config_status);
 	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ROUNDUP32(ipc_page, PGSIZE);
@@ -113,14 +113,14 @@ void kis_request_config_status(envid_t whom, const Skfs_request_config_status_t 
 // table_classifier_cfs
 #include <kfs/table_classifier_cfs.h>
 
-void kis_table_classifier_cfs(envid_t whom, const Skfs_table_classifier_cfs_t * pg)
+static void kis_table_classifier_cfs(envid_t whom, const Skfs_table_classifier_cfs_t * pg)
 {
 	uint32_t val = (uint32_t) table_classifier_cfs();
 	Dprintf("%s = 0x%08x\n", __FUNCTION__, val);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
-void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifier_cfs_add_t * pg)
+static void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifier_cfs_add_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	CFS_t * path_cfs = (CFS_t *) pg->path_cfs;
@@ -135,7 +135,7 @@ void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifier_cfs_
 	RETURN_IPC;
 }
 
-void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_classifier_cfs_remove_t * pg)
+static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_classifier_cfs_remove_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	uint32_t val;
@@ -151,7 +151,7 @@ void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_classifier_c
 // uhfs
 #include <kfs/uhfs.h>
 
-void kis_uhfs(envid_t whom, const Skfs_uhfs_t * pg)
+static void kis_uhfs(envid_t whom, const Skfs_uhfs_t * pg)
 {
 	LFS_t * lfs = (LFS_t *) pg->lfs;
 	uint32_t val;
@@ -171,7 +171,7 @@ void kis_uhfs(envid_t whom, const Skfs_uhfs_t * pg)
 // journal_lfs
 #include <kfs/journal_lfs.h>
 
-void kis_journal_lfs(envid_t whom, const Skfs_journal_lfs_t * pg)
+static void kis_journal_lfs(envid_t whom, const Skfs_journal_lfs_t * pg)
 {
 	LFS_t * journal = (LFS_t *) pg->journal_lfs;
 	LFS_t * fs = (LFS_t *) pg->fs_lfs;
@@ -186,7 +186,7 @@ void kis_journal_lfs(envid_t whom, const Skfs_journal_lfs_t * pg)
 	RETURN_IPC;
 }
 
-void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_max_bandwidth_t * pg)
+static void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_max_bandwidth_t * pg)
 {
 	LFS_t * journal = (LFS_t *) pg->journal_lfs;
 	uint32_t val;
@@ -202,7 +202,7 @@ void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_max_band
 // josfs_base
 #include <kfs/josfs_base.h>
 
-void kis_josfs_base(envid_t whom, const Skfs_josfs_base_t * pg)
+static void kis_josfs_base(envid_t whom, const Skfs_josfs_base_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -215,7 +215,7 @@ void kis_josfs_base(envid_t whom, const Skfs_josfs_base_t * pg)
 	RETURN_IPC;
 }
 
-void kis_josfs_fsck(envid_t whom, const Skfs_josfs_fsck_t * pg)
+static void kis_josfs_fsck(envid_t whom, const Skfs_josfs_fsck_t * pg)
 {
 	LFS_t * lfs = (LFS_t *) pg->lfs;
 	int32_t val;
@@ -231,7 +231,7 @@ void kis_josfs_fsck(envid_t whom, const Skfs_josfs_fsck_t * pg)
 // wholedisk
 #include <kfs/wholedisk_lfs.h>
 
-void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
+static void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -249,7 +249,7 @@ void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
 // BD
 
 #include <kfs/loop_bd.h>
-void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
+static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 {
 	LFS_t * lfs = (LFS_t *) pg->lfs;
 	uint32_t val;
@@ -263,14 +263,14 @@ void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 }
 
 #include <kfs/nbd_bd.h>
-void kis_nbd_bd(envid_t whom, const Skfs_nbd_bd_t * pg)
+static void kis_nbd_bd(envid_t whom, const Skfs_nbd_bd_t * pg)
 {
 	uint32_t val = (uint32_t) nbd_bd(pg->address, pg->port);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
 #include <kfs/journal_queue_bd.h>
-void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
+static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -284,7 +284,7 @@ void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
 }
 
 #include <kfs/order_preserver_bd.h>
-void kis_order_preserver_bd(envid_t whom, const Skfs_order_preserver_bd_t * pg)
+static void kis_order_preserver_bd(envid_t whom, const Skfs_order_preserver_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -298,7 +298,7 @@ void kis_order_preserver_bd(envid_t whom, const Skfs_order_preserver_bd_t * pg)
 }
 
 #include <kfs/chdesc_stripper_bd.h>
-void kis_chdesc_stripper_bd(envid_t whom, const Skfs_chdesc_stripper_bd_t * pg)
+static void kis_chdesc_stripper_bd(envid_t whom, const Skfs_chdesc_stripper_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -312,7 +312,7 @@ void kis_chdesc_stripper_bd(envid_t whom, const Skfs_chdesc_stripper_bd_t * pg)
 }
 
 #include <kfs/wb_cache_bd.h>
-void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
+static void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -326,7 +326,7 @@ void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 }
 
 #include <kfs/wt_cache_bd.h>
-void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
+static void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -340,7 +340,7 @@ void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 }
 
 #include <kfs/block_resizer_bd.h>
-void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
+static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -354,7 +354,7 @@ void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
 }
 
 #include <kfs/md_bd.h>
-void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
+static void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
 {
 	BD_t * disk0 = (BD_t *) pg->disk0;
 	BD_t * disk1 = (BD_t *) pg->disk1;
@@ -369,7 +369,7 @@ void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
 }
 
 #include <kfs/mirror_bd.h>
-void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
+static void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
 {
 	BD_t * disk0 = (BD_t *) pg->disk0;
 	BD_t * disk1 = (BD_t *) pg->disk1;
@@ -384,7 +384,7 @@ void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
 }
 
 #include <kfs/ide_pio_bd.h>
-void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
+static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 {
 	uint32_t val = (uint32_t) ide_pio_bd(pg->controller, pg->disk);
 	ipc_send(whom, val, NULL, 0, NULL);
@@ -462,7 +462,7 @@ void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 		}																\
 	} while(0)
 
-void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lookup_t * pg)
+static void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lookup_t * pg)
 {
 	switch (pg->type)
 	{
@@ -502,7 +502,7 @@ void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lookup_t 
 		ipc_send(whom, 0, ri, PTE_P|PTE_U, NULL);						\
 	} while (0)
 		
-void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t * pg)
+static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t * pg)
 {
 	Dprintf("%s(): type = %d\n", __FUNCTION__, pg->type);
 	switch (pg->type)
@@ -564,7 +564,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	return time_end - time_start;
 }
 
-void kis_perf_test(envid_t whom, const Skfs_perf_test_t * pg)
+static void kis_perf_test(envid_t whom, const Skfs_perf_test_t * pg)
 {
 	int val;
 
