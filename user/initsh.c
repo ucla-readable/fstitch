@@ -10,7 +10,7 @@ umain(int argc, char **argv)
 
 	for (;;) {
 		printf("initsh: starting sh\n");
-		r = spawnl("/sh", "sh", (char*)0);
+		r = spawnl("/sh", "/sh", NULL);
 		if (r < 0) {
 			fprintf(STDERR_FILENO, "initsh: spawn sh: %e\n", r);
 			continue;
