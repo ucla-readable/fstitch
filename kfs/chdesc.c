@@ -532,8 +532,6 @@ int chdesc_rollback(chdesc_t * chdesc)
 }
 
 /* satisfy a change descriptor, i.e. remove it from all others that depend on it */
-/* WARNING: this function should not be called (except by the dependency
- * manager) once a chdesc has been added to the dependency manager */
 int chdesc_satisfy(chdesc_t * chdesc)
 {
 	while(chdesc->dependents)
@@ -605,7 +603,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 
 int chdesc_destroy(chdesc_t ** chdesc)
 {
-	if((*chdesc)->dependents)
+	if((*chdesc)->dependents || (*chdesc)->flags & CHDESC_IN_DEPMAN)
 		return -E_INVAL;
 	
 	while((*chdesc)->dependencies)

@@ -69,6 +69,7 @@ int depman_forward_chdesc(bdesc_t * from, bdesc_t * to)
 				chdesc_add_depend(dest, desc);
 			}
 			hash_map_erase(bdesc_hash, value->block);
+			value->flags &= ~CHDESC_IN_DEPMAN;
 			chdesc_destroy(&value);
 		}
 		else
@@ -152,6 +153,7 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 						chdesc_destroy(&dest);
 						return r;
 					}
+					dest->flags |= CHDESC_IN_DEPMAN;
 				}
 				desc->block = to;
 				switch(desc->type)
@@ -184,6 +186,7 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 			chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
 			assert(value == value_erase);
 			assert(!value->dependents);
+			value->flags &= ~CHDESC_IN_DEPMAN;
 			chdesc_destroy(&value);
 		}
 	}
@@ -213,7 +216,6 @@ int depman_add_chdesc(chdesc_t * root)
 			value = chdesc_create_noop(root->block);
 			if(!value)
 				return -E_NO_MEM;
-			value->flags |= CHDESC_IN_DEPMAN;
 			r = hash_map_insert(bdesc_hash, root->block, value);
 			if(r < 0)
 			{
@@ -221,6 +223,7 @@ int depman_add_chdesc(chdesc_t * root)
 				chdesc_destroy(&value);
 				return r;
 			}
+			value->flags |= CHDESC_IN_DEPMAN;
 		}
 	}
 	
@@ -230,6 +233,7 @@ int depman_add_chdesc(chdesc_t * root)
 		{
 			chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
 			assert(value == value_erase);
+			value->flags &= ~CHDESC_IN_DEPMAN;
 			/* can't fail */
 			chdesc_destroy(&value);
 		}
@@ -244,12 +248,13 @@ int depman_add_chdesc(chdesc_t * root)
 int depman_remove_chdesc(chdesc_t * chdesc)
 {
 	chdesc_t * value = &null_noops;
-
+	
 	if(chdesc->block)
 		value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
 	if(!value)
 		return -E_NOT_FOUND;
 	chdesc_satisfy(chdesc);
+	chdesc->flags &= ~CHDESC_IN_DEPMAN;
 	/* can't fail after chdesc_satisfy() */
 	chdesc_destroy(&chdesc);
 	/* if there are no more chdescs for this bdesc, remove the stub NOOP chdesc */
@@ -257,6 +262,7 @@ int depman_remove_chdesc(chdesc_t * chdesc)
 	{
 		chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
 		assert(value == value_erase);
+		value->flags &= CHDESC_IN_DEPMAN;
 		/* can't fail */
 		chdesc_destroy(&value);
 	}
