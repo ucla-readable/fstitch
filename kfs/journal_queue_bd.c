@@ -9,6 +9,9 @@
 #include <kfs/modman.h>
 #include <kfs/journal_queue_bd.h>
 
+#define RELEASE_PROGRESS_ENABLED
+#define RELEASE_PROGRESS_COLOR 9
+
 /* "JnlQ" */
 #define JOURNAL_QUEUE_MAGIC 0x4A6E6C51
 
@@ -303,9 +306,23 @@ int journal_queue_release(BD_t * bd)
 	if(info->state != RELEASE)
 	{
 		bdesc_t * bdesc;
-		hash_map_it_t * it = hash_map_it_create();
+		hash_map_it_t * it;
+#ifdef RELEASE_PROGRESS_ENABLED
+		const size_t bdesc_hash_size = hash_map_size(info->bdesc_hash);
+		size_t disp_period, disp_prev = 0, nbdescs_released = 0;
+		int disp_ncols, r;
+#endif
+
+		it = hash_map_it_create();
 		if(!it)
 			return -E_NO_MEM;
+
+#ifdef RELEASE_PROGRESS_ENABLED
+		disp_ncols = textbar_init(-1);
+		assert(disp_ncols > 0);
+		disp_period = (bdesc_hash_size + disp_ncols - 1) / disp_ncols;
+#endif
+
 		while((bdesc = (bdesc_t *) hash_map_val_next(info->bdesc_hash, it)))
 		{
 			int value;
@@ -327,10 +344,24 @@ int journal_queue_release(BD_t * bd)
 			/* note that resetting the value for a key already in the hash map does not break iteration */
 			hash_map_insert(info->bdesc_hash, (void *) bdesc->number, NULL);
 			bdesc_release(&bdesc);
+
+#ifdef RELEASE_PROGRESS_ENABLED
+			if (++nbdescs_released >= disp_prev + disp_period)
+			{
+				r = textbar_set_progress(nbdescs_released * disp_ncols / bdesc_hash_size, RELEASE_PROGRESS_COLOR);
+				assert(r >= 0);
+				disp_prev = nbdescs_released;
+			}
+#endif
 		}
 		hash_map_it_destroy(it);
 		hash_map_clear(info->bdesc_hash);
 		/* FIXME maybe resize the hash map to be small? */
+
+#ifdef RELEASE_PROGRESS_ENABLED
+		r = textbar_close();
+		assert(r >= 0);
+#endif	
 	}
 	
 	info->state = RELEASE;
