@@ -6,62 +6,62 @@ FSOFILES := 		$(OBJDIR)/fs/ide.o \
 			$(OBJDIR)/fs/serv.o \
 			$(OBJDIR)/fs/test.o \
 
-USERAPPS := 		$(OBJDIR)/kern/kernel \
-			$(OBJDIR)/user/init \
-			$(OBJDIR)/user/diskwrite \
-			$(OBJDIR)/user/bless \
-			$(OBJDIR)/user/sleep \
+USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/cat \
-			$(OBJDIR)/user/testfpu \
+			$(OBJDIR)/user/clock \
+			$(OBJDIR)/user/df \
+			$(OBJDIR)/user/diskwrite \
 			$(OBJDIR)/user/echo \
+			$(OBJDIR)/user/es \
+			$(OBJDIR)/user/fire \
+			$(OBJDIR)/user/free \
+			$(OBJDIR)/user/get \
 			$(OBJDIR)/user/grep \
-			$(OBJDIR)/user/null \
-			$(OBJDIR)/user/int3 \
-			$(OBJDIR)/user/netd \
-			$(OBJDIR)/user/netstats \
 			$(OBJDIR)/user/ifdown \
 			$(OBJDIR)/user/ifup \
+			$(OBJDIR)/user/init \
+			$(OBJDIR)/user/int3 \
 			$(OBJDIR)/user/josweb \
-			$(OBJDIR)/user/telnet \
-			$(OBJDIR)/user/telnetd \
-			$(OBJDIR)/user/get \
+	 		$(OBJDIR)/kern/kernel \
+			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/ls \
-			$(OBJDIR)/user/mkdir \
-			$(OBJDIR)/user/df \
-			$(OBJDIR)/user/free \
-			$(OBJDIR)/user/fire \
 			$(OBJDIR)/user/lsfd \
 			$(OBJDIR)/user/mario \
-			$(OBJDIR)/user/es \
-			$(OBJDIR)/user/uptime \
-			$(OBJDIR)/user/sync \
-			$(OBJDIR)/user/reboot \
-			$(OBJDIR)/user/sb16 \
-			$(OBJDIR)/user/psb16 \
-			$(OBJDIR)/user/sh \
-			$(OBJDIR)/user/rm \
-			$(OBJDIR)/user/volume \
+			$(OBJDIR)/user/mkdir \
 			$(OBJDIR)/user/more \
-			$(OBJDIR)/user/ladybug \
+			$(OBJDIR)/user/netd \
+			$(OBJDIR)/user/netstats \
+			$(OBJDIR)/user/null \
+			$(OBJDIR)/user/psb16 \
+			$(OBJDIR)/user/reboot \
+			$(OBJDIR)/user/rm \
+			$(OBJDIR)/user/sb16 \
+			$(OBJDIR)/user/sh \
+			$(OBJDIR)/user/sleep \
+			$(OBJDIR)/user/sync \
+			$(OBJDIR)/user/telnet \
+			$(OBJDIR)/user/telnetd \
+			$(OBJDIR)/user/testfpu \
 			$(OBJDIR)/user/testkpl \
-			$(OBJDIR)/user/clock
+			$(OBJDIR)/user/uptime \
+			$(OBJDIR)/user/volume
 
-FSIMGTXTFILES :=	fs/newmotd \
-			fs/motd \
-			fs/init.sh \
-			fs/lorem \
+FSIMGTXTFILES :=	fs/404.html \
+			fs/favicon.ico \
 			fs/goomba.spr \
+			fs/index.html \
+			fs/init.sh \
+			fs/kbear.jpg \
+			fs/lady.img \
+			fs/lady.jpeg \
+			fs/lady.pal \
+			fs/long.txt \
+			fs/lorem \
 			fs/mario.pal \
 			fs/mario.spr \
-			fs/winamp.0 \
-			fs/index.html \
-			fs/404.html \
-			fs/long.txt \
-			fs/lady.pal \
-			fs/lady.jpeg \
-			fs/lady.img \
-			fs/favicon.ico \
-			fs/kbear.jpg
+			fs/motd \
+			fs/newmotd \
+			fs/winamp.0
 
 -include fs/audio/Makefrag
 
