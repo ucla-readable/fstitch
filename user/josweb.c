@@ -58,6 +58,7 @@
  *
  */
 
+#include <inc/malloc.h>
 #include <inc/lib.h>
 
 
@@ -150,7 +151,7 @@ fs_open(char *filename, struct fs_file *file)
 		panic("fd_lookup: %e", r);
 
 	file->fd   = fd;
-	file->data = fd2data(fds);
+	file->data = NULL;
 	file->len  = stat.st_size;
 
 	// fd is closed during connection close
@@ -525,10 +526,47 @@ httpd_serve(struct httpd_state *hs)
 	if (send_header)
 		send_http_header(hs, http_status);
  
-	if ((r = write(hs->net[1], hs->file.data, hs->file.len)) < 0)
+	if (hs->file.fd >= 0)
 	{
-		fprintf(STDERR_FILENO, "write: %e\n", r);
-		close_conn_and_exit(hs);
+		int nbytes;
+		hs->file.data = malloc(PGSIZE);
+		if (!hs->file.data)
+		{
+			fprintf(STDERR_FILENO, "%s:%d malloc failed\n", __FILE__, __LINE__);
+			close_conn_and_exit(hs);
+		}
+
+		for (i=0; i < hs->file.len; i += PGSIZE)
+		{
+			r = nbytes = read(hs->file.fd, hs->file.data, PGSIZE);
+			if (r < 0)
+			{
+				fprintf(STDERR_FILENO, "%s:%d read: %e\n", __FILE__, __LINE__, r);
+				free(hs->file.data);
+				hs->file.data = NULL;
+				close_conn_and_exit(hs);
+			}
+
+			r = write(hs->net[1], hs->file.data, nbytes);
+			if (r != nbytes)
+			{
+				fprintf(STDERR_FILENO, "%s:%d write: %e\n", __FILE__, __LINE__, r);
+				free(hs->file.data);
+				hs->file.data = NULL;
+				close_conn_and_exit(hs);
+			}
+		}
+
+		free(hs->file.data);
+		hs->file.data = NULL;
+	}
+	else
+	{
+		if ((r = write(hs->net[1], hs->file.data, hs->file.len)) < 0)
+		{
+			fprintf(STDERR_FILENO, "write: %e\n", r);
+			close_conn_and_exit(hs);
+		}
 	}
 
 	return 0;
