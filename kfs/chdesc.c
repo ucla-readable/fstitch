@@ -283,7 +283,7 @@ int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t 
 	}
 	
 	for(i = 0; i != count; i++)
-		if(chdesc_apply(chdescs[0]))
+		if(chdesc_apply(chdescs[i]))
 			break;
 	
 	/* failed to apply the chdescs */
