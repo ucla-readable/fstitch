@@ -352,7 +352,11 @@ static void serve_sync(envid_t envid, struct Scfs_sync * req)
 {
 	int r;
 	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	if(!req->name[0])
+		printf("Syncing filesystem... ");
 	r = CALL(frontend_cfs, sync, req->name);
+	if(!req->name[0])
+		printf("done.\n");
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
