@@ -10,7 +10,7 @@
 #include <kfs/josfs_base.h>
 
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
-static int josfs_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep);
+static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
 
@@ -236,7 +236,7 @@ int dir_lookup(LFS_t * object, struct JOSFS_File* dir, const char* name, struct 
 
 	temp_fdesc->file = dir;
 	do {
-		r = josfs_get_dirent(object, (fdesc_t *) temp_fdesc, i, &entry, sizeof(struct dirent), NULL);
+		r = josfs_get_dirent(object, (fdesc_t *) temp_fdesc, &entry, sizeof(struct dirent), NULL);
 		if (r == 0 && strcmp(entry.d_name, name) == 0) {
 			blockno = i * sizeof(struct JOSFS_File) / JOSFS_BLKSIZE;
 			dirblock = josfs_get_file_block(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE);
@@ -362,12 +362,12 @@ static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t o
 	return NULL;
 }
 
-static int josfs_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep)
+static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	bdesc_t * dirblock;
 	struct JOSFS_File * dirfile;
-	int blockno;
+	int index = 0, blockno;
 
 	if (f->file->f_type == TYPE_DIR) {
 		blockno = index * sizeof(struct JOSFS_File) / JOSFS_BLKSIZE;

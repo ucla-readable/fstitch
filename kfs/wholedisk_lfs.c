@@ -57,7 +57,7 @@ static bdesc_t * wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32
 	return CALL(((struct wd_info *) object->instance)->bd, read_block, offset);
 }
 
-static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep)
+static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	return -1;
 }

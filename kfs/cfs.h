@@ -18,7 +18,7 @@ struct CFS {
 	DECLARE(CFS_t, int, close, int fid);
 	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);
-	DECLARE(CFS_t, int, getdirentries, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset);
+	DECLARE(CFS_t, int, getdirentries, int fid, char * buf, int nbytes, uint32_t * basep);
 	DECLARE(CFS_t, int, truncate, int fid, uint32_t size);
 	DECLARE(CFS_t, int, unlink, const char * name);
 	DECLARE(CFS_t, int, link, const char * oldname, const char * newname);

@@ -271,10 +271,34 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 }
 
 // TODO: implement
-static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
+static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
-	return -E_UNSPECIFIED;
+	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	const int file_idx = fid_idx(fid, state->open_file);
+	fdesc_t * fdesc;
+	uint32_t i;
+	int nbytes_read = 0;
+	int r = 0;
+
+	if (file_idx < 0)
+		return file_idx;
+	fdesc = state->open_file[file_idx].fdesc;
+
+	for (i=0; nbytes_read < nbytes; i++)
+	{
+		r = CALL(state->lfs, get_dirent, fdesc, (dirent_t *) buf, nbytes - nbytes_read, basep);
+		if (r < 0)
+			goto exit;
+		nbytes_read += ((dirent_t *) buf)->d_reclen;
+		buf += ((dirent_t *) buf)->d_reclen;
+	}
+
+  exit:
+	if (!nbytes || nbytes_read > 0)
+		return nbytes_read;
+	else
+		return r;
 }
 
 static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)

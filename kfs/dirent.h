@@ -12,6 +12,7 @@ struct dirent {
 	uint8_t d_namelen;
 	char d_name[DIRENT_MAXNAMELEN + 1];
 };
+typedef struct dirent dirent_t;
 
 int getdirentries(int fd, char * buf, int nbytes, long * basep);
 

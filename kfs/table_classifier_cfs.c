@@ -66,7 +66,7 @@ static void fid_entry_init(fid_entry_t * fe)
 //
 // fid_table_t functions
 
-// Add a fd-cfs pair
+// Add a fid-cfs pair
 static int fid_table_add(table_classifier_state_t * state, int fid, CFS_t * cfs)
 {
 	int i;
@@ -222,7 +222,7 @@ static int table_classifier_write(CFS_t * cfs, int fid, const void * data, uint3
 	return CALL(selected_cfs, write, fid, data, offset, size);
 }
 
-static int table_classifier_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
+static int table_classifier_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
@@ -231,7 +231,7 @@ static int table_classifier_getdirentries(CFS_t * cfs, int fid, char * buf, int 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, getdirentries, fid, buf, nbytes, basep, offset);
+	return CALL(selected_cfs, getdirentries, fid, buf, nbytes, basep);
 }
 
 static int table_classifier_truncate(CFS_t * cfs, int fid, uint32_t size)

@@ -127,14 +127,14 @@ static int class_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 	return -E_NOT_FOUND;
 }
 
-static int class_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
+static int class_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	struct class_state * state = (struct class_state *) cfs->instance;
 	int side = get(fid);
 	if (side == 0) {
-		return CALL(state->cfs1, getdirentries, fid, buf, nbytes, basep, offset);
+		return CALL(state->cfs1, getdirentries, fid, buf, nbytes, basep);
 	} else if (side == 1) {
-		return CALL(state->cfs2, getdirentries, fid, buf, nbytes, basep, offset);
+		return CALL(state->cfs2, getdirentries, fid, buf, nbytes, basep);
 	}
 	return -E_NOT_FOUND;
 }
