@@ -60,16 +60,19 @@ void cfs_ipc_serve_run()
 static void serve_open(envid_t envid, struct Scfs_open * req)
 {
 	printf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_close(envid_t envid, struct Scfs_close * req)
 {
 	printf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_read(envid_t envid, struct Scfs_read * req)
 {
 	printf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
+	ipc_send(envid, 0, (void*) REQVA, PTE_P|PTE_U);
 }
 
 static void serve_write(envid_t envid, struct Scfs_write * req)
@@ -81,12 +84,14 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 		prevrecv->envid = envid;
 		prevrecv->type  = req->scfs_type;
 		memcpy(prevrecv->scfs, req, PGSIZE);
+		ipc_send(envid, 0, NULL, 0);
 
 		printf("%s [1]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 	}
 	else
 	{
 		// Second of two recvs
+		ipc_send(envid, 0, NULL, 0);
 		printf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
@@ -96,41 +101,49 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 {
 	printf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_unlink(envid_t envid, struct Scfs_unlink * req)
 {
 	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_link(envid_t envid, struct Scfs_link * req)
 {
 	printf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_rename(envid_t envid, struct Scfs_rename * req)
 {
 	printf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 {
 	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_rmdir(envid_t envid, struct Scfs_rmdir * req)
 {
 	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_get_features(envid_t envid, struct Scfs_get_features * req)
 {
 	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	ipc_send(envid, 0, (void*) REQVA, PTE_P|PTE_U);
 }
 
 static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 {
 	printf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
+	ipc_send(envid, 0, (void*) REQVA, PTE_P|PTE_U);
 }
 
 static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
@@ -142,6 +155,7 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 		prevrecv->envid = envid;
 		prevrecv->type  = req->scfs_type;
 		memcpy(prevrecv->scfs, req, PGSIZE);
+		ipc_send(envid, 0, NULL, 0);
 
 		printf("%s [1]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	}
@@ -149,6 +163,7 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 	{
 		// Second of two recvs
 		printf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+		ipc_send(envid, 0, NULL, 0);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
 	}
@@ -157,11 +172,13 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 static void serve_sync(envid_t envid, struct Scfs_sync * req)
 {
 	printf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
 	printf("%s: %08x\n", __FUNCTION__, envid);
+	ipc_send(envid, 0, NULL, 0);
 }
 
 
