@@ -29,10 +29,12 @@ const char * color(int type)
 	}
 }
 
-void output_graph_text(hash_map_t * nodes)
+void output_graph_text(hash_map_t * nodes, int level)
 {
 	hash_map_it_t * it;
 	kfs_node_t * n;
+	char tmp_str[100]; // 100 seems like a reasonable number
+	int r;
 
 	it = hash_map_it_create();
 	assert(it);
@@ -40,7 +42,19 @@ void output_graph_text(hash_map_t * nodes)
 	while ((n = hash_map_val_next(nodes, it)))
 	{
 		// output this node
-		printf("%s  %s\n", typename(n->type), n->name);
+		printf("%s  %s", typename(n->type), n->name);
+		if (level == -1)
+			printf("\n");
+		else
+		{
+			r = OBJCALL((object_t *) n->obj, get_config, level, tmp_str, sizeof(tmp_str));
+			assert(r >= 0);
+			printf(" [%s] ", tmp_str);
+
+			r = OBJCALL((object_t *) n->obj, get_status, level, tmp_str, sizeof(tmp_str));
+			assert(r >= 0);
+			printf("[%s]\n", tmp_str);
+		}
 
 		// output nodes used
 		if (n->uses)
@@ -60,10 +74,13 @@ void output_graph_text(hash_map_t * nodes)
 	hash_map_it_destroy(it);
 }
 
-void output_graph_dot(hash_map_t * nodes)
+void output_graph_dot(hash_map_t * nodes, int level)
 {
 	hash_map_it_t * it;
 	kfs_node_t * n;
+	char tmp_strc[100]; // 100 seems like a reasonable number
+	char tmp_strs[100]; // 100 seems like a reasonable number
+	int r;
 
 	it = hash_map_it_create();
 	assert(it);
@@ -71,13 +88,27 @@ void output_graph_dot(hash_map_t * nodes)
 	printf("digraph kfs\n");
 	printf("{\n");
 	printf("nodesep=0.15;\nranksep=0.15;\n");
-	printf("node [shape=box,color=black];\n");
+	printf("node [shape=record,color=black];\n");
 
 	while ((n = hash_map_val_next(nodes, it)))
 	{
 		// output this node
 		printf("n%u [", n);
-		printf("label=\"%s\"", n->name);
+		if (level == -1)
+			printf("label=\"%s\"", n->name);
+		else
+		{
+			r = OBJCALL((object_t *) n->obj, get_config, level, tmp_strc, sizeof(tmp_strc));
+			assert(r >= 0);
+
+			r = OBJCALL((object_t *) n->obj, get_status, level, tmp_strs, sizeof(tmp_strs));
+			assert(r >= 0);
+
+			if (tmp_strc[0] ||tmp_strs[0])
+				printf("label=\"{ %s |{%s|%s}}\"", n->name, tmp_strc, tmp_strs);
+			else
+				printf("label=\"%s\"", n->name);
+		}
 		printf(",fillcolor=%s,style=filled", color(n->type));
 		printf("]\n");
 
@@ -101,13 +132,15 @@ void output_graph_dot(hash_map_t * nodes)
 
 void print_usage(const char * binname)
 {
-	fprintf(STDERR_FILENO, "Usage: %s: [-t|-d]\n", binname);
+	fprintf(STDERR_FILENO, "Usage: %s: [-t|-d] [-l <level>]\n", binname);
 }
 
 void umain(int argc, const char ** argv)
 {
 	hash_map_t * graph;
 	int text_dot = 1;
+	int level;
+	const char * level_str;
 
 	if (get_arg_idx(argc, argv, "-h"))
 	{
@@ -120,12 +153,20 @@ void umain(int argc, const char ** argv)
 	else if (get_arg_idx(argc, argv, "-d"))
 		text_dot = 1;
 
+	if (text_dot == 0)
+		level = -1;
+	else
+		level = CONFIG_BRIEF;
+
+	if ((level_str = get_arg_val(argc, argv, "-l")))
+		level = strtol(level_str, NULL, 10);
+
 	graph = kfs_uses();
 	if (graph)
 	{
 		if (text_dot == 0)
-			output_graph_text(graph);
+			output_graph_text(graph, level);
 		else
-			output_graph_dot(graph);
+			output_graph_dot(graph, level);
 	}
 }
