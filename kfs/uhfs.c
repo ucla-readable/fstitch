@@ -102,7 +102,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	size_t nblks;
 	size_t target_nblks = ROUNDUP32(target_size, blksize) / blksize;
 	bdesc_t * block;
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * prev_head = NULL, * tail, * save_head;
 	int r;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
@@ -119,10 +119,14 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 		if (!block)
 			return -E_UNSPECIFIED;
 
+		save_head = prev_head;
+
 		/* Now free the block */
 		r = CALL(state->lfs, free_block, block, &prev_head, &tail);
 		if (r < 0)
 			return r;
+
+		prev_head = save_head;
 	}
 
 	/* Update the file's size as recorded by lfs, which also updates
@@ -333,13 +337,13 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 	while (size_written < size)
 	{
-		prev_head = NULL; /* no need to link with previous chains here */
 		allocated_block = 0;
 		/* get the block to write to - maybe just get a block number in the future, if we are writing the whole block? */
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (!bd)
 		{
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
+			prev_head = NULL; /* no need to link with previous chains here */
 			bd = CALL(state->lfs, allocate_block, blocksize, type, &prev_head, &tail);
 			save_head = prev_head;
 			if (!bd)
