@@ -350,8 +350,9 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 	// FIXME if offset > filesize, allocate blocks
 	if (offset > filesize) {
-		panic("--- Uh oh ---!\n");
+		fprintf(STDERR_FILENO, "--- Uh oh, offset > filesize, %d > %d ---!\n", offset, filesize);
 		target_size = offset;
+		return -E_UNSPECIFIED;
 	}
 
 	// do we really want to just return size_written if an operation failed???
