@@ -84,7 +84,7 @@ static void serve_close(envid_t envid, struct Scfs_close * req)
 	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
 	int r;
 	r = CALL(frontend_cfs, close, req->fid);
-	ipc_send(envid, 0, NULL, 0);
+	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_read(envid_t envid, struct Scfs_read * req)
