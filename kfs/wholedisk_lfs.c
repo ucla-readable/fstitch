@@ -121,11 +121,27 @@ static const feature_t * wholedisk_get_feature(LFS_t * object, const char * name
 static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
 	struct wd_info * state = (struct wd_info *) object->instance;
-	if(id == KFS_feature_size.id)
-		return state->blocksize * CALL(state->bd, get_numblocks);
-	if(id == KFS_feature_filetype.id)
-		return TYPE_FILE;
-	return -E_INVAL;
+
+	if (id == KFS_feature_size.id)
+	{
+		const size_t file_size = state->blocksize * CALL(state->bd, get_numblocks);
+		*size = sizeof(file_size);
+		*data = malloc(*size);
+		memcpy(data, (void*) file_size, *size);
+	}
+	else if (id == KFS_feature_filetype.id)
+	{
+		const int32_t type = TYPE_FILE;
+		*size = sizeof(type);
+		*data = malloc(*size);
+		memcpy(data, (void*) type, *size);
+	}
+	else
+	{
+		return -E_INVAL;
+	}
+
+	return 0;
 }
 
 static int wholedisk_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
