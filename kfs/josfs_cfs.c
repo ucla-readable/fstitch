@@ -351,7 +351,7 @@ static int josfs_cfs_destroy(CFS_t * cfs)
 }
 
 
-CFS_t * josfs_cfs()
+CFS_t * josfs_cfs(void)
 {
 	josfs_cfs_state_t * state;
 	CFS_t * cfs;

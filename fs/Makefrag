@@ -44,8 +44,7 @@ USERAPPS := 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/more \
 			$(OBJDIR)/user/ladybug \
 			$(OBJDIR)/user/testkpl \
-			$(OBJDIR)/user/clock \
-			$(OBJDIR)/kfs/kfsd
+			$(OBJDIR)/user/clock
 
 FSIMGTXTFILES :=	fs/newmotd \
 			fs/motd \
