@@ -1,21 +1,22 @@
-#ifndef FIXED_HEAP_H
-#define FIXED_HEAP_H
+#ifndef FIXED_MAX_HEAP_H
+#define FIXED_MAX_HEAP_H
 
-struct fixed_heap {
+struct fixed_max_heap {
 	void **arr;
 	int *weights;
 	int len;
 	int max;
 };
 
-typedef struct fixed_heap fixed_heap_t;
+typedef struct fixed_max_heap fixed_max_heap_t;
 
-fixed_heap_t *fixed_heap_create(int len);
-void  fixed_heap_free(fixed_heap_t *heap);
+fixed_max_heap_t *fixed_max_heap_create(int len);
+void  fixed_max_heap_free(fixed_max_heap_t *heap);
 
-void  fixed_heap_insert(fixed_heap_t *heap, void *elt, int weight);
-void *fixed_heap_pop(fixed_heap_t *heap);
-void  fixed_heap_delete(fixed_heap_t *heap, void *elt);
-int   fixed_heap_length(const fixed_heap_t *heap);
+void  fixed_max_heap_insert(fixed_max_heap_t *heap, void *elt, int weight);
+void *fixed_max_heap_pop(fixed_max_heap_t *heap);
+void  fixed_max_heap_delete(fixed_max_heap_t *heap, void *elt);
+int   fixed_max_heap_length(const fixed_max_heap_t *heap);
+int   fixed_max_heap_contains(fixed_max_heap_t *heap, void *elt);
 
-#endif // FIXE_HEAP_H
+#endif // FIXE_MAX_HEAP_H

@@ -9,7 +9,7 @@ static int child(int parent) {
 	return ((parent+1)*2)-1;;
 }
 
-static void reheapify_up_elt(fixed_heap_t *heap, int p)
+static void reheapify_up_elt(fixed_max_heap_t *heap, int p)
 {
 	if (p == 0) return;
 	if (heap->len < 2) return;
@@ -31,13 +31,13 @@ static void reheapify_up_elt(fixed_heap_t *heap, int p)
 }
 
 // this fxn assumes only the final elt may be in the wrong place
-static void reheapify_up(fixed_heap_t *heap)
+static void reheapify_up(fixed_max_heap_t *heap)
 {
 	if (heap->len < 2) return;
 	reheapify_up_elt(heap, heap->len);
 }
 
-static void reheapify_down_elt(fixed_heap_t *heap, int p)
+static void reheapify_down_elt(fixed_max_heap_t *heap, int p)
 {
 	int max;
 	int swap = p;
@@ -64,17 +64,17 @@ static void reheapify_down_elt(fixed_heap_t *heap, int p)
 	reheapify_down_elt(heap, swap);
 }
 
-static void reheapify_down(fixed_heap_t *heap)
+static void reheapify_down(fixed_max_heap_t *heap)
 {
 	if (heap->len < 2) return;
 	return reheapify_down_elt(heap, 0);
 }
 
-fixed_heap_t *
-fixed_heap_create(int len)
+fixed_max_heap_t *
+fixed_max_heap_create(int len)
 {
-	fixed_heap_t *ret;
-	ret = (fixed_heap_t*)malloc(sizeof(fixed_heap_t));
+	fixed_max_heap_t *ret;
+	ret = (fixed_max_heap_t*)malloc(sizeof(fixed_max_heap_t));
 	if (ret == NULL)
 		return NULL;
 	ret->arr = (void*)malloc(sizeof(void*) * len);
@@ -94,7 +94,7 @@ fixed_heap_create(int len)
 }
 
 void
-fixed_heap_free(fixed_heap_t *heap)
+fixed_max_heap_free(fixed_max_heap_t *heap)
 {
 	free(heap->arr);
 	free(heap->weights);
@@ -102,7 +102,7 @@ fixed_heap_free(fixed_heap_t *heap)
 }
 
 void
-fixed_heap_insert(fixed_heap_t *heap, void *elt, int weight)
+fixed_max_heap_insert(fixed_max_heap_t *heap, void *elt, int weight)
 {
 	assert(heap->len < heap->max);
 	heap->arr[heap->len] = elt;
@@ -112,7 +112,7 @@ fixed_heap_insert(fixed_heap_t *heap, void *elt, int weight)
 }
 
 void *
-fixed_heap_pop(fixed_heap_t *heap)
+fixed_max_heap_pop(fixed_max_heap_t *heap)
 {
 	void *ret;
 	assert(heap->len >= 1);
@@ -125,9 +125,10 @@ fixed_heap_pop(fixed_heap_t *heap)
 }
 
 void
-fixed_heap_delete(fixed_heap_t *heap, void *elt)
+fixed_max_heap_delete(fixed_max_heap_t *heap, void *elt)
 {
-	// find element
+	// find element XXX take advantage of the fact that is a heap for
+	// the search
 	int i;
 	bool found = 0;
 	assert(heap->len > 0);
@@ -147,8 +148,21 @@ fixed_heap_delete(fixed_heap_t *heap, void *elt)
 	reheapify_down(heap);
 }
 
+// returns 1 if found. 0 if not found.
 int
-fixed_heap_length(const fixed_heap_t *heap)
+fixed_max_heap_contains(fixed_max_heap_t *heap, void *elt)
+{
+	// find element XXX take advantage of the fact that is a heap for
+	// the search
+	int i;
+	for (i = 0; i < heap->len; i++)
+		if (heap->arr[i] == elt)
+			return 1;
+	return 0;
+}
+
+int
+fixed_max_heap_length(const fixed_max_heap_t *heap)
 {
 	return heap->len;
 }
