@@ -13,5 +13,6 @@ struct feature {
 
 extern const feature_t KFS_feature_size;
 extern const feature_t KFS_feature_filetype;
+extern const feature_t KFS_feature_nlinks;
 
 #endif /* __KUDOS_KFS_FEATURE_H */
