@@ -1,7 +1,10 @@
 #include <kfs/ide_pio_bd.h>
+#include <inc/partition.h>
+#include <kfs/pc_ptable_bd.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/uhfs.h>
+#include <kfs/dos_classifier.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/kfsd.h>
 #include <kfs/depman.h>
@@ -18,32 +21,90 @@ static struct module_shutdown module_shutdowns[10];
 // Init kfsd modules.
 int kfsd_init(int argc, char * argv[])
 {
-	BD_t * bd_direct;
-	BD_t * bd_cache;
-	LFS_t * lfs;
+	BD_t * bd_disk;
+	void * ptbl;
+	BD_t * partitions[4] = {NULL};
+	CFS_t * uhfses[2] = {NULL};
 	CFS_t * frontend_cfs;
+	uint32_t i;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
 	if (!cfs_ipc_serve())
 		kfsd_shutdown();
 
-	if (! (bd_direct = ide_pio_bd(1)) )
+	if (! (bd_disk = ide_pio_bd(1)) )
 		kfsd_shutdown();
 
-	if (! (bd_cache = wt_cache_bd(bd_direct, 4)) )
-		kfsd_shutdown();
 
-	if (! (lfs = wholedisk(bd_cache)) )
-		kfsd_shutdown();
-
-	if (! (frontend_cfs = uhfs(lfs)) )
-		kfsd_shutdown();
-
-	if (register_frontend_cfs(frontend_cfs) < 0)
+	/* discover partitions */
+	ptbl = pc_ptable_init(bd_disk);
+	if (ptbl)
 	{
-		DESTROY(frontend_cfs);
-		kfsd_shutdown();
+		uint32_t max = pc_ptable_count(ptbl);
+		printf("Found %d partitions.\n", max);
+		for (i = 1; i <= max; i++)
+		{
+			uint8_t type = pc_ptable_type(ptbl, i);
+			printf("Partition %d has type %02x\n", i, type);
+			if (type == PTABLE_KUDOS_TYPE)
+				partitions[i-1] = pc_ptable_bd(ptbl, i);
+		}
+		pc_ptable_free(ptbl);
+
+		if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
+		{
+			printf("No KudOS partition found!\n");
+			kfsd_shutdown();
+		}
+	}
+	else
+	{
+		printf("Using whole disk.\n");
+		partitions[0] = bd_disk;
+	}
+
+	/* setup each partition's cache, basefs, and uhfs */
+	for (i=0; i < 2; i++)
+	{
+		BD_t * cache;
+		LFS_t * lfs;
+
+		if (!partitions[i])
+			continue;
+
+		if (! (cache = wt_cache_bd(partitions[i], 4)) )
+			kfsd_shutdown();
+
+		if (! (lfs = wholedisk(cache)) )
+			kfsd_shutdown();
+
+		if (! (uhfses[i] = uhfs(lfs)) )
+			kfsd_shutdown();
+	}
+
+	if (uhfses[0] && uhfses[1])
+	{
+		if (! (frontend_cfs = dos_classifier(uhfses[0], "A:", uhfses[1], "C:")) )
+			kfsd_shutdown();
+		if (register_frontend_cfs(frontend_cfs) < 0)
+		{
+			DESTROY(frontend_cfs);
+			kfsd_shutdown();
+		}
+	}
+	else
+	{
+		if (uhfses[0] && register_frontend_cfs(uhfses[0]) < 0)
+		{
+			DESTROY(uhfses[0]);
+			kfsd_shutdown();
+		}
+		if (uhfses[1] && register_frontend_cfs(uhfses[1]) < 0)
+		{
+			DESTROY(uhfses[1]);
+			kfsd_shutdown();
+		}
 	}
 
 	return 0;
