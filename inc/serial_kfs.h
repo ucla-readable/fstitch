@@ -12,46 +12,53 @@
 #define SKFS_DESTROY_LFS 2
 #define SKFS_DESTROY_BD  3
 
+// OBJ
+
+#define SKFS_REQUEST_FLAGS_MAGIC 4
+#define SKFS_RETURN_FLAGS_MAGIC  5
+#define SKFS_REQUEST_CONFIG_STATUS 6
+#define SKFS_RETURN_CONFIG_STATUS  7
+
 // CFS
 
-#define SKFS_TABLE_CLASSIFIER_CFS 4
-#define SKFS_TABLE_CLASSIFIER_CFS_ADD 5
-#define SKFS_TABLE_CLASSIFIER_CFS_REMOVE 6
+#define SKFS_TABLE_CLASSIFIER_CFS 8
+#define SKFS_TABLE_CLASSIFIER_CFS_ADD 9
+#define SKFS_TABLE_CLASSIFIER_CFS_REMOVE 10
 
-#define SKFS_UHFS 7
+#define SKFS_UHFS 11
 
 // LFS
 
-#define SKFS_JOURNAL_LFS 8
-#define SKFS_JOURNAL_LFS_MAX_BANDWIDTH 9
+#define SKFS_JOURNAL_LFS 12
+#define SKFS_JOURNAL_LFS_MAX_BANDWIDTH 13
 
-#define SKFS_JOSFS_BASE 10
+#define SKFS_JOSFS_BASE 14
 
-#define SKFS_WHOLEDISK 11
+#define SKFS_WHOLEDISK 15
 
 // BD
 
-#define SKFS_LOOP_BD 12
-#define SKFS_NBD_BD 13
-#define SKFS_JOURNAL_QUEUE_BD 14
-#define SKFS_ORDER_PRESERVER_BD 15
-#define SKFS_CHDESC_STRIPPER_BD 16
-#define SKFS_WB_CACHE_BD 17
-#define SKFS_WT_CACHE_BD 18
-#define SKFS_BLOCK_RESIZER_BD 19
-#define SKFS_MD_BD 20
-#define SKFS_MIRROR_BD 21
-#define SKFS_PARTITION_BD 22
-#define SKFS_PC_PTABLE_BD 23
-#define SKFS_IDE_PIO_BD 24
+#define SKFS_LOOP_BD 16
+#define SKFS_NBD_BD 17
+#define SKFS_JOURNAL_QUEUE_BD 18
+#define SKFS_ORDER_PRESERVER_BD 19
+#define SKFS_CHDESC_STRIPPER_BD 20
+#define SKFS_WB_CACHE_BD 21
+#define SKFS_WT_CACHE_BD 22
+#define SKFS_BLOCK_RESIZER_BD 23
+#define SKFS_MD_BD 24
+#define SKFS_MIRROR_BD 25
+#define SKFS_PARTITION_BD 26
+#define SKFS_PC_PTABLE_BD 27
+#define SKFS_IDE_PIO_BD 28
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 25
-#define SKFS_MODMAN_RETURN_LOOKUP  26
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 27
-#define SKFS_MODMAN_REQUEST_ITS    28
-#define SKFS_MODMAN_RETURN_IT      29
+#define SKFS_MODMAN_REQUEST_LOOKUP 29
+#define SKFS_MODMAN_RETURN_LOOKUP  30
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 31
+#define SKFS_MODMAN_REQUEST_ITS    32
+#define SKFS_MODMAN_RETURN_IT      32
 
 
 #define SKFS_TYPE int skfs_type
@@ -82,11 +89,42 @@ typedef struct {
 
 
 //
+// OBJ
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t id;
+} Skfs_request_flags_magic_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t id;
+	uint32_t flags, magic;
+} Skfs_return_flags_magic_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t id;
+	int level;
+	bool config_status; // 0 config, 1 status
+} Skfs_request_config_status_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t id;
+	int level;
+	bool config_status; // 0 config, 1 status
+	char string[SKFS_MAX_NAMELEN];
+} Skfs_return_config_status_t;
+
+
+//
 // CFS
 
 // table_classifier_cfs
 
 typedef struct {
+
 	SKFS_TYPE;
 } Skfs_table_classifier_cfs_t;
 

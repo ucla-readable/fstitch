@@ -16,6 +16,8 @@
 #define RETURN_IPC_INVAL do { val = -E_INVAL; goto exit; } while(0)
 #define RETURN_IPC       exit: ipc_send(whom, (uint32_t) val, NULL, 0, NULL)
 
+static uint8_t ipc_page[2*PGSIZE];
+
 
 //
 // Destructors
@@ -57,6 +59,51 @@ void kis_destroy_bd(envid_t whom, const Skfs_destroy_bd_t * pg)
 	val = DESTROY(bd);
 
 	RETURN_IPC;
+}
+
+
+//
+// OBJ
+
+void kis_request_flags_magic(envid_t whom,  const Skfs_request_flags_magic_t * pg)
+{
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, pg->id);
+	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ROUNDUP32(ipc_page, PGSIZE);
+
+	if (!modman_name_cfs((CFS_t *) pg->id)
+		&& !modman_name_lfs((LFS_t *) pg->id)
+		&& !modman_name_bd((BD_t *) pg->id))
+		ipc_send(whom, 0, NULL, 0, NULL);
+
+	rfm->id = pg->id;
+	rfm->flags = OBJFLAGS((object_t *) pg->id);
+	rfm->magic = OBJMAGIC((object_t *) pg->id);
+
+	ipc_send(whom, 0, rfm, PTE_P|PTE_U, NULL);
+}
+
+void kis_request_config_status(envid_t whom, const Skfs_request_config_status_t * pg)
+{
+	Dprintf("%s(0x%08x, %d, %d)\n", __FUNCTION__, pg->id, pg->level, pg->config_status);
+	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ROUNDUP32(ipc_page, PGSIZE);
+	int r;
+
+	if (!modman_name_cfs((CFS_t *) pg->id)
+		&& !modman_name_lfs((LFS_t *) pg->id)
+		&& !modman_name_bd((BD_t *) pg->id))
+		ipc_send(whom, 0, NULL, 0, NULL);
+
+	rcs->id = pg->id;
+	rcs->level = pg->level;
+	rcs->config_status = pg->config_status;
+	if (pg->config_status == 0)
+		r = OBJCALL((object_t *) pg->id, get_config, pg->level, rcs->string, sizeof(rcs->string));
+	else if (pg->config_status == 1)
+		r = OBJCALL((object_t *) pg->id, get_status, pg->level, rcs->string, sizeof(rcs->string));
+	else
+		r = -E_INVAL;
+
+	ipc_send(whom, r, rcs, PTE_P|PTE_U, NULL);
 }
 
 
@@ -335,8 +382,6 @@ void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 //
 // modman
 
-static uint8_t ipc_page[2*PGSIZE];
-
 #define LOOKUP_REQEST_RETURN(typel, typeu)								\
 	do {																\
 		Skfs_modman_return_lookup_t * rl = (Skfs_modman_return_lookup_t *) ROUNDUP32(ipc_page, PGSIZE); \
@@ -362,6 +407,8 @@ static uint8_t ipc_page[2*PGSIZE];
 			rl->name[0] = 0;											\
 		else															\
 			strncpy(rl->name, me->name, MIN(SKFS_MAX_NAMELEN, strlen(me->name))); \
+		rl->name[MIN(SKFS_MAX_NAMELEN, strlen(me->name))] = 0;			\
+																		\
 		assert(vector_size(me->users) == vector_size(me->use_names));	\
 		users_remaining = vector_size((vector_t *) me->users);			\
 																		\
@@ -397,6 +444,7 @@ static uint8_t ipc_page[2*PGSIZE];
 				ru->use_name[0] = 0;									\
 			else														\
 				strncpy(ru->use_name, use_name, MIN(SKFS_MAX_NAMELEN, strlen(use_name))); \
+			ru->use_name[MIN(SKFS_MAX_NAMELEN, strlen(me->name))] = 0;	\
 																		\
 			ipc_send(whom, users_remaining, ru, PTE_P|PTE_U, NULL);		\
 		}																\
@@ -485,6 +533,11 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(DESTROY_CFS, destroy_cfs);
 		SERVE(DESTROY_LFS, destroy_lfs);
 		SERVE(DESTROY_BD,  destroy_bd);
+
+		// OBJ
+
+		SERVE(REQUEST_FLAGS_MAGIC, request_flags_magic);
+		SERVE(REQUEST_CONFIG_STATUS, request_config_status);
 
 		// CFS
 

@@ -20,6 +20,7 @@
 #endif
 
 static uint8_t ipcpage[2*PGSIZE];
+static uint8_t ipc_recv_page[2*PGSIZE];
 
 #define INIT_PG(typem, type)											\
 	Skfs_##type##_t * pg = (Skfs_##type##_t *) ROUNDUP32(ipcpage, PGSIZE); \
@@ -166,6 +167,64 @@ static int kic_bd_destroy(BD_t * bd)
 
 
 //
+// OBJ
+
+static int kic_get_config_status(bool config_status, object_t * obj, int level, char * string, size_t length)
+{
+	const envid_t fsid = find_fs();
+	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ROUNDUP32(ipc_recv_page, PGSIZE);
+	int perm, r;
+
+	INIT_PG(REQUEST_CONFIG_STATUS, request_config_status);
+
+	pg->id = (uint32_t) OBJLOCAL(obj);
+	pg->level = level;
+	pg->config_status = config_status;
+
+	SEND_PG();
+	r = (int) ipc_recv(fsid, NULL, rcs, &perm, NULL, 0);
+
+	strncpy(string, rcs->string, MIN(length, strlen(rcs->string)));
+	string[MIN(length, strlen(rcs->string))] = 0;
+
+	return r;
+}
+
+static int kic_get_config(void * obj, int level, char * string, size_t length)
+{
+	return kic_get_config_status(0, obj, level, string, length);
+}
+
+static int kic_get_status(void * obj, int level, char * string, size_t length)
+{
+	return kic_get_config_status(1, obj, level, string, length);
+}
+
+static int kic_get_flags_magic(object_t * obj)
+{
+	const envid_t fsid = find_fs();
+	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ROUNDUP32(ipc_recv_page, PGSIZE);
+	int perm, r;
+
+	INIT_PG(REQUEST_FLAGS_MAGIC, request_flags_magic);
+
+	pg->id = (uint32_t) OBJLOCAL(obj);
+	if (!pg->id)
+		assert(0);
+
+	SEND_PG();
+	r = (int) ipc_recv(fsid, NULL, rfm, &perm, NULL, 0);
+	if (r < 0)
+		return r;
+
+	OBJFLAGS(obj) = rfm->flags;
+	OBJMAGIC(obj) = rfm->magic;
+
+	return 0;
+}
+
+
+//
 // Constructors
 
 static CFS_t * create_cfs(uint32_t id)
@@ -210,9 +269,12 @@ static CFS_t * create_cfs(uint32_t id)
 	ASSIGN(cfs, table_classifier, sync);
 	*/
 
+	OBJLOCAL(cfs) = (void *) id;
+	kic_get_flags_magic((object_t *) cfs);
+	OBJASSIGN(cfs, kic, get_config);
+	OBJASSIGN(cfs, kic, get_status);
 	DESTRUCTOR(cfs, kic_cfs, destroy);
 
-	OBJLOCAL(cfs) = (void *) id;
 	add_obj(id, cfs);
 
 	return cfs;
@@ -267,9 +329,12 @@ LFS_t * create_lfs(uint32_t id)
 	ASSIGN(lfs, journal, sync);
 	*/
 
+	OBJLOCAL(lfs) = (void *) id;
+	kic_get_flags_magic((object_t *) lfs);
+	OBJASSIGN(lfs, kic, get_config);
+	OBJASSIGN(lfs, kic, get_status);
 	DESTRUCTOR(lfs, kic_lfs, destroy);
 
-	OBJLOCAL(lfs) = (void *) id;
 	add_obj(id, lfs);
 
 	return lfs;
@@ -306,9 +371,12 @@ BD_t * create_bd(uint32_t id)
 	ASSIGN(bd, wt_cache_bd, sync);
 	*/
 
+	OBJLOCAL(bd) = (void *) id;
+	kic_get_flags_magic((object_t *) bd);
+	OBJASSIGN(bd, kic, get_config);
+	OBJASSIGN(bd, kic, get_status);
 	DESTRUCTOR(bd, kic_bd, destroy);
 
-	OBJLOCAL(bd) = (void *) id;
 	add_obj(id, bd);
 
 	return bd;
@@ -342,6 +410,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 	pg->cfs = (uint32_t) OBJLOCAL(cfs);
 	pg->path_cfs = (uint32_t) OBJLOCAL(path_cfs);
 	strncpy(pg->path, path, MIN(SKFS_MAX_NAMELEN, strlen(path)));
+	pg->path[SKFS_MAX_NAMELEN] = 0;
 
 	SEND_PG();
 
@@ -357,6 +426,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
 
 	pg->cfs = (uint32_t) OBJLOCAL(cfs);
 	strncpy(pg->path, path, MIN(SKFS_MAX_NAMELEN, strlen(path)));
+	pg->path[SKFS_MAX_NAMELEN] = 0;
 
 	SEND_PG();
 	cfs_id = RECV_PG();
@@ -462,6 +532,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 
 	pg->lfs = (uint32_t) OBJLOCAL(lfs);
 	strncpy(pg->file, file, MIN(SKFS_MAX_NAMELEN, strlen(file)));
+	pg->file[SKFS_MAX_NAMELEN] = 0;
 
 	SEND_PG();
 	bd_id = RECV_PG();
@@ -478,6 +549,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	INIT_PG(NBD_BD, nbd_bd);
 
 	strncpy(pg->address, address, MIN(SKFS_MAX_NAMELEN, strlen(address)));
+	pg->address[SKFS_MAX_NAMELEN] = 0;
 	pg->port = port;
 
 	SEND_PG();
@@ -645,8 +717,6 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 // Not supported: init, add, add_anon, inc, dec, and rem.
 
 #include <kfs/modman.h>
-
-uint8_t ipc_recv_page[2*PGSIZE];
 
 // FIXME: Memory leak:
 // In kfsd one does not free a modman_entry_t* when done with it.
