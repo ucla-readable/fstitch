@@ -7,7 +7,7 @@
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
 
-#define UHFS_DEBUG 1
+#define UHFS_DEBUG 0
 
 
 #if UHFS_DEBUG
@@ -17,10 +17,40 @@
 #endif
 
 
+/**
+ * Make the chdesc chain described by head and tail depend on the chain
+ * described by prevhead.
+ * @param prevhead [inout] The previous head, updated to be the new head.
+ * @param head The head of the chain to depend on prevhead.
+ * @param tail The tail of the chain to depend on prevhead.
+ * @return 0 on success, <0 on chdesc_add_depend() failure.
+ */
+static int link_chains(chdesc_t ** prevhead, chdesc_t * head, chdesc_t * tail)
+{
+	int r;
+
+	if (tail && *prevhead)
+		if ((r = chdesc_add_depend(*prevhead, tail)) < 0)
+			return r;
+
+	if (head)
+		*prevhead = head;
+
+	return 0;
+}
+
+/* Is this virtual address mapped? */
+static int va_is_mapped(void * va)
+{
+	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
+}
+
+
 struct open_file {
 	int fid;
 	struct Fd * page;
 	fdesc_t * fdesc;
+	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
 };
 typedef struct open_file open_file_t;
 
@@ -28,13 +58,6 @@ struct uhfs_state {
 	LFS_t * lfs;
 	open_file_t open_file[UHFS_MAX_OPEN];
 };
-
-
-/* Is this virtual address mapped? */
-static int va_is_mapped(void * va)
-{
-	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
-}
 
 static int open_file_free(LFS_t * lfs, open_file_t * f)
 {
@@ -88,6 +111,7 @@ static int fid_idx(int fid, open_file_t f[])
 }
 
 
+
 static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
 	Dprintf("%s(\"%s\", %d, 0x%x)\n", __FUNCTION__, name, mode, page);
@@ -128,6 +152,21 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 		return -E_NOT_FOUND;
 	}
 	
+	/* detect whether the filesize feature is supported */
+	state->open_file[index].size_id = 0;
+	{
+		const size_t num_features = CALL(state->lfs, get_num_features, name);
+		size_t i;
+		for (i=0; i < num_features; i++)
+		{
+			if (CALL(state->lfs, get_feature, name, i)->id == KFS_feature_size.id)
+			{
+				state->open_file[index].size_id = i;
+				break;
+			}
+		}
+	}
+
 	/* good to go, save the client page... */
 	state->open_file[index].page = cache;
 	
@@ -230,14 +269,80 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(%d, 0x%x, %d, 0x%x, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep, offset);
 	return -E_UNSPECIFIED;
 }
 
-static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t size)
+static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, size);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	const size_t blksize = CALL(state->lfs, get_blocksize);
+	const int file_idx = fid_idx(fid, state->open_file);
+	open_file_t * file;
+	size_t nblks;
+	size_t target_nblks = ROUNDUP32(target_size, blksize) / blksize;
+	bdesc_t * block;
+	chdesc_t * prevhead = NULL;
+	chdesc_t * head, * tail;
+	int r;
+
+	if (file_idx < 0)
+		return file_idx;
+	file = &state->open_file[file_idx];
+	nblks = CALL(state->lfs, get_filesize, file->fdesc);
+
+	/* Truncate and free the blocks no longer in use because of this trunc */
+	for (; target_nblks < nblks; nblks--)
+	{
+		/* Truncate the block */
+		head = NULL;
+		tail = NULL;
+		block = CALL(state->lfs, truncate_file_block, file->fdesc, &head, &tail);
+		if (!block)
+			return -E_UNSPECIFIED;
+		if ((r = link_chains(&prevhead, head, tail)) < 0)
+			return r;
+
+		/* Now free the block */
+		head = NULL;
+		tail = NULL;
+		r = CALL(state->lfs, free_block, block, &head, &tail);
+		if (r < 0)
+			return r;
+		if ((r = link_chains(&prevhead, head, tail)) < 0)
+			return r;
+	}
+
+	/* Update the file's size as recorded by lfs, which also updates
+	   the byte-level size (rather than block-level in the above) */
+	if (file->size_id)
+	{
+		void * data;
+		size_t data_len;
+		size_t size;
+
+		r = CALL(state->lfs, get_metadata_fdesc, file->fdesc, file->size_id, &data_len, &data);
+		if (r < 0)
+			return r;
+		assert(data_len == sizeof(target_size));
+		size = *(size_t *) data;
+		free(data);
+
+		if (target_size < size)
+		{
+			head = NULL;
+			tail = NULL;
+			r = CALL(state->lfs, set_metadata_fdesc, file->fdesc, file->size_id, sizeof(target_size), &target_size, &head, &tail);
+			if (r < 0)
+				return r;
+			if ((r = link_chains(&prevhead, head, tail)) < 0)
+				return r;
+		}
+	}
+	
+
+	return 0;
 }
 
 static int uhfs_unlink(CFS_t * cfs, const char * name)
@@ -331,16 +436,16 @@ CFS_t * uhfs(LFS_t * lfs)
 {
 	struct uhfs_state * state;
 	CFS_t * cfs;
-	
+
 	cfs = malloc(sizeof(*cfs));
 	if(!cfs)
 		return NULL;
-	
+
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_uhfs;
 	cfs->instance = state;
-	
+
 	ASSIGN(cfs, uhfs, open);
 	ASSIGN(cfs, uhfs, close);
 	ASSIGN(cfs, uhfs, read);
@@ -358,12 +463,12 @@ CFS_t * uhfs(LFS_t * lfs)
 	ASSIGN(cfs, uhfs, set_metadata);
 	ASSIGN(cfs, uhfs, sync);
 	ASSIGN_DESTROY(cfs, uhfs, destroy);
-	
+
 	state->lfs = lfs;
 	memset(state->open_file, 0, sizeof(state->open_file));
-	
+
 	return cfs;
-	
+
  error_uhfs:
 	free(cfs);
 	return NULL;
