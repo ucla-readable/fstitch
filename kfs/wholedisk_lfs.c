@@ -48,7 +48,7 @@ static void wholedisk_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 
 static uint32_t wholedisk_get_filesize(LFS_t * object, fdesc_t * file)
 {
-	return ((struct wd_info *) object->instance)->blocksize;
+	return CALL(((struct wd_info *) object->instance)->bd, get_numblocks);
 }
 
 static bdesc_t * wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
