@@ -255,6 +255,11 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	md->id = req->id;
 
 	r = CALL(frontend_cfs, get_metadata, req->name, req->id, &md->size, &data);
+	if (r < 0)
+	{
+		md = NULL;
+		goto exit;
+	}
 
 	assert((md->size > 0 && data) || (!md->size && !data));
 	if (data)
@@ -263,6 +268,8 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: CFS->get_metadata() returned more data (%d) than serial_cfs allows (%d), truncating.\n", md->size, sizeof(md->data));
 		memcpy(md->data, data, MIN(md->size, sizeof(md->data)));
 	}
+
+	exit:
 	ipc_send(envid, r, (void*) md, PTE_P|PTE_U);
 }
 
