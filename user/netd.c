@@ -895,7 +895,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 	int r;
 
 	if (get_pte((void*) REQVA) & PTE_P)
-		panic("netd ipcrecv: REQVA already mapped\n");
+		panic("netd ipcrecv: REQVA already mapped");
 
 	while (1)
 	{
