@@ -56,7 +56,7 @@ print_envs(envid_t root_envid)
 
 		printf(" %9d", env->env_jiffies - e->env_jiffies);
 
-		printf(" %9d %9d\n", e->env_runs, (uint32_t) (e->env_tsc >> 26));
+		printf(" %9d %9d", e->env_runs, (uint32_t) (e->env_tsc >> 26));
 		printf(" %c%s\n", (e->env_id == env->env_id) ? '*' : ' ', e->env_name);
 	}
 }
