@@ -570,7 +570,11 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	int r;
 	
 	/* make sure this is really a device FS */
-	if (state->magic != DEVFS_MAGIC)
+	if(state->magic != DEVFS_MAGIC)
+		return -E_INVAL;
+	
+	/* don't allow / in names */
+	if(strchr(name, '/'))
 		return -E_INVAL;
 	
 	bde = bde_lookup_name(state, name);
