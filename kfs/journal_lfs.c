@@ -10,7 +10,7 @@
 #include <kfs/journal_lfs.h>
 
 
-#define JOURNAL_DEBUG 0
+#define JOURNAL_DEBUG 1
 
 #if JOURNAL_DEBUG
 #define Dprintf(x...) printf(x)
@@ -227,7 +227,7 @@ static int transaction_stop(journal_state_t * state)
 	r = journal_queue_passthrough(state->queue);
 	assert(r >= 0);
 
-	// Save space for the commit record */
+	// save space for the commit record
 	commit_offset = file_offset;
 	file_offset += state->blocksize;
 
@@ -238,6 +238,7 @@ static int transaction_stop(journal_state_t * state)
 		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 		assert(bdesc); // TODO: handle error
 
+		// TODO: does journal data need to depend on anything, in case of small cache?
 		prev_head = NULL;
 		r = chdesc_create_full(bdesc, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
@@ -402,6 +403,10 @@ static void eat_chdesc_graph(chdesc_t * c)
 {
 	chmetadesc_t * scan;
 	int r;
+
+	// eat_chdesc_graph() can be passed NULL, watch out:
+	if (!c)
+		return;
 
 	while ((scan = c->dependencies))
 		eat_chdesc_graph(scan->desc);
