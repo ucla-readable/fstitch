@@ -32,11 +32,14 @@ typedef struct journal_state journal_state_t;
 // Journaling
 
 #define JOURNAL_FILENAME "/.journal"
+#define TRANSACTION_SIZE 1024*1024
 
 struct commit_record {
 	enum {CREMPTY, CRSUBCOMMIT, CRCOMMIT} type;
 	size_t nblocks;
-	struct commit_record * next;
+	bool commit;
+	bool invalid;
+	// struct commit_record * next; // TODO: not yet supported
 };
 typedef struct commit_record commit_record_t;
 
@@ -68,34 +71,59 @@ static int transaction_start(journal_state_t * state)
 
 static int transaction_stop(journal_state_t * state)
 {
-	int16_t transaction_slot;
-	const bdesc_t ** data_bdescs;
+	size_t file_offset;
+	const size_t journal_blocksize = CALL(state->journal, get_blocksize);
+	bdesc_t ** data_bdescs;
 	size_t ndatabdescs;
 	bdesc_t * bdesc;
-	size_t i, file_offset;
-	const size_t journal_blocksize = CALL(state->journal, get_blocksize);
-	chdesc_t * prev_head, * tail;
+	size_t i;
 	int r;
-
-	// For now always use transaction_slot 0
-	transaction_slot = 0;
-
-	// TODO: Either:
-	// - Ensure the picked transaction slot is synced
-	// - Make this transaction's commit record dependent on the non-synced
-	//   transaction's invl message.
 
 
 	//
-	// Sort the data_bdescs, allowing for faster disk access
+	// Choose transaction slot.
+
+	{
+		size_t transaction_slot;
+
+		// For now, always use transaction_slot 0
+		transaction_slot = 0;
+		file_offset = transaction_slot * TRANSACTION_SIZE;
+
+		// TODO: Make this transaction's commit record dependent on
+		// the non-synced transaction's invalid chdesc.
+		// For now, sync this transaction slot.
+		//
+		// TODO: LFS::sync only allows syncing a file, not a range in the file.
+		// For now, sync the entire file.
+
+		r = CALL(state->journal, sync, JOURNAL_FILENAME);
+		if (r < 0)
+			return r;
+	}
+
+
+	//
+	// Sort the data_bdescs, allowing for faster disk access.
+	// TODO: it'd be nice if this also sorted journal_queue's copy.
 
 	{
 		const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
+		size_t transaction_size;
 		hash_map_it_t * it;
 
 		data_bdescs_map = journal_queue_blocklist(state->queue);
-		assert(data_bdescs_map);
+		if (!data_bdescs_map)
+			return 0; // nothing to journal
+
 		ndatabdescs = hash_map_size(data_bdescs_map);
+
+		transaction_size = (1 + ndatabdescs) * journal_blocksize;
+		if (transaction_size > TRANSACTION_SIZE)
+		{
+			// TODO: break up into multiple transactions.
+			panic("Transaction breakup not yet implemented, transaction size = %d, max transaction size = %d", transaction_size, TRANSACTION_SIZE);
+		}
 
 		data_bdescs = malloc(ndatabdescs * sizeof(*data_bdescs));
 		if (!data_bdescs)
@@ -107,9 +135,6 @@ static int transaction_stop(journal_state_t * state)
 			free(data_bdescs);
 			return -E_NO_MEM;
 		}
-
-		// TODO: ensure data_bdescs is not larger than the transaction slot,
-		// break this transaction up if so.
 
 		i = 0;
 		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, it)))
@@ -127,91 +152,175 @@ static int transaction_stop(journal_state_t * state)
 	//
 	// Dependencies:
 	// - journal data -> commit record
-	// - commit message -> journal data
-	// - invalidate message -> commit message
+	// - commit -> journal data
+	// - fs data -> commit
+	// - invalid -> fs data
 
-	BD_t * journal_bd = CALL(state->journal, get_blockdev);
-	assert(journal_bd); // TODO: handle error
-
+	BD_t * journal_bd;
 	// jdata_chdescs will depend on all journal data chdescs
-	chdesc_t * jdata_chdescs = chdesc_create_noop(NULL);
-	assert(jdata_chdescs); // TODO: handle error
+	chdesc_t * jdata_chdescs;
+	// fsdata_chdescs will depend on all fs data chdescs
+	chdesc_t * fsdata_chdescs;
+	commit_record_t commit;
+	size_t commit_offset;
+	// lfs_head/tail used to check that no metadata changes upon journal writes
+	chdesc_t * lfs_head = NULL, * lfs_tail;
+	chdesc_t * prev_head, * tail;
+
+	journal_bd = CALL(state->journal, get_blockdev);
+	assert(journal_bd);
+
+	assert(sizeof(commit) <= CALL(journal_bd, get_atomicsize));
+
+	jdata_chdescs = chdesc_create_noop(NULL);
+	if (!jdata_chdescs)
+	{
+		free(data_bdescs);
+		return -E_NO_MEM;
+	}
+
+	fsdata_chdescs = chdesc_create_noop(NULL); 
+	if (!fsdata_chdescs)
+	{
+		free(jdata_chdescs);
+		free(data_bdescs);
+		return -E_NO_MEM;
+	}
+
+	r = depman_add_chdesc(jdata_chdescs);
+	if (r < 0)
+	{
+		free(fsdata_chdescs);
+		free(jdata_chdescs);
+		free(data_bdescs);
+		return r;
+	}
+
+	r = depman_add_chdesc(fsdata_chdescs);
+	if (r < 0)
+	{
+		// Ignore possible depman error
+		(void) depman_remove_chdesc(jdata_chdescs);
+		free(fsdata_chdescs);
+		free(jdata_chdescs);
+		free(data_bdescs);
+		return r;
+	}
 
 	r = journal_queue_passthrough(state->queue);
 	assert(r >= 0);
 
 
-	// Commit record
+	// Create commit record
 
-	uint8_t * commit_rec = NULL; // TODO: rec's data
-	const uint16_t commit_rec_size = 0; // TODO
-	assert(commit_rec_size <= CALL(journal_bd, get_atomicsize));
+	commit.type = CRCOMMIT; // TODO: support sub-commit
+	commit.nblocks = ndatabdescs * journal_blocksize;
+	commit.commit = 0;
+	commit.invalid = 0;
+	// commit.next = NULL; // TODO: not yet supported
 
-	file_offset = 0;
+	commit_offset = file_offset;
 
 	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 	assert(bdesc); // TODO: handle error
 
-	prev_head = NULL;
-	r = CALL(state->journal, write_block, bdesc, 0, commit_rec_size, commit_rec, &prev_head, &tail);
+	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
+	r = depman_add_chdesc(prev_head);
+	assert(r >= 0); // TODO: handle error
+
+	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
+	assert(r >= 0); // TODO: handle error
+	assert(!lfs_head && !lfs_tail);
 
 	file_offset += journal_blocksize;
 
 
 	// Create journal data
 
+	chdesc_t * commit_rec_chdesc = prev_head;
+
 	for (i=0; i < ndatabdescs; i++, file_offset += journal_blocksize)
 	{
 		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 		assert(bdesc); // TODO: handle error
 
-		prev_head = NULL;
-		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &prev_head, &tail);
+		prev_head = commit_rec_chdesc;
+		r = chdesc_create_full(bdesc, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
-
+		r = depman_add_chdesc(prev_head);
+		assert(r >= 0); // TODO: handle error
 		r = chdesc_add_depend(jdata_chdescs, prev_head);
 		assert(r >= 0); // TODO: handle error
+
+		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
+		assert(r >= 0); // TODO: handle error
+		assert(!lfs_head && !lfs_tail);
+
 	}
 
 
-	// Create commit message
+	// Mark as commit
 
-	uint8_t * commit_msg = NULL; // TODO: commit's data
-	const uint16_t commit_msg_size = 0; // TODO
-	assert(commit_msg_size <= CALL(journal_bd, get_atomicsize));
+	commit.commit = 1;
 
-	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+	bdesc = CALL(state->journal, get_file_block, state->jfdesc, commit_offset);
 	assert(bdesc); // TODO: handle error
 
 	prev_head = jdata_chdescs;
-	r = CALL(state->journal, write_block, bdesc, 0, commit_msg_size, commit_msg, &prev_head, &tail);
+	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
+	assert(r >= 0); // TODO: handle error
+	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
-	file_offset += journal_blocksize;
+	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
+	assert(r >= 0); // TODO: handle error
+	assert(!lfs_head && !lfs_tail);
 
 
-	// Create invalidate message
+	// Mark as invalid
 
-	uint8_t * invl_msg = NULL; // TODO: invl's data
-	const uint16_t invl_msg_size = 0; // TODO
-	assert(invl_msg_size <= CALL(journal_bd, get_atomicsize));
+	chdesc_t * commit_chdesc = prev_head;
 
-	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+	// create fsdata_chdescs
+	for (i=0; i < ndatabdescs; i++)
+	{
+		prev_head = commit_chdesc;
+		// TODO: this copies each bdescs' data. All we really want to
+		// to make dependencies:
+		r = chdesc_create_full(data_bdescs[i], data_bdescs[i]->ddesc->data, &prev_head, &tail);
+		assert(r >= 0); // TODO: handle error
+		r = depman_add_chdesc(prev_head);
+		assert(r >= 0); // TODO: handle error
+		r = chdesc_add_depend(fsdata_chdescs, prev_head);
+		assert(r >= 0); // TODO: handle error
+	}
+
+	commit.invalid = 1;
+
+	bdesc = CALL(state->journal, get_file_block, state->jfdesc, commit_offset);
 	assert(bdesc); // TODO: handle error
 
-	r = CALL(state->journal, write_block, bdesc, 0, invl_msg_size, invl_msg, &prev_head, &tail);
+	// TODO: invalid should depend on fs data
+	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
+	assert(r >= 0); // TODO: handle error
+	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
-	file_offset += journal_blocksize;
-	
+	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
+	assert(r >= 0); // TODO: handle error
+	assert(!lfs_head && !lfs_tail);
+
 
 	//
-	// Release the data bdescs
+	// Release the data bdescs.
 
 	r = journal_queue_release(state->queue);
 	if (r < 0)
 		return r;
+
+
+	free(data_bdescs);
 
 	return 0;
 }
