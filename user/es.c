@@ -32,7 +32,7 @@ print_envs(envid_t root_envid)
 {
 	int i;
 
-	printf("    envid     parent  S   pri   d(last)      runs       tsc  name\n");
+	printf("    envid     parent  S   pri   d(last)      runs   TSC util  name\n");
 
 	for(i=0; i < NENV; i++)
 	{
@@ -56,7 +56,11 @@ print_envs(envid_t root_envid)
 
 		printf(" %9d", env->env_jiffies - e->env_jiffies);
 
-		printf(" %9d %9d", e->env_runs, (uint32_t) (e->env_tsc >> 26));
+		printf(" %9d %5d", e->env_runs, (uint32_t) (e->env_tsc >> 26));
+		if(e->env_runs)
+			printf(" %4d", (uint32_t) ((e->env_tsc / e->env_runs) >> 8));
+		else
+			printf("   --");
 		printf(" %c%s\n", (e->env_id == env->env_id) ? '*' : ' ', e->env_name);
 	}
 }
