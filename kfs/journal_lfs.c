@@ -20,6 +20,7 @@
 
 
 struct journal_state {
+	uint32_t magic;
 	BD_t * queue;
 	LFS_t * journal;
 	fdesc_t * jfdesc;
@@ -979,6 +980,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	ASSIGN(lfs, journal, sync);
 	ASSIGN_DESTROY(lfs, journal, destroy);
 
+	state->magic = JOURNAL_MAGIC;
 	state->queue = fs_queue;
 	state->journal = journal;
 	state->jfdesc = NULL;
@@ -1030,8 +1032,10 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 size_t journal_lfs_max_bandwidth(const LFS_t * lfs)
 {
 	const journal_state_t * state = (const journal_state_t *) lfs->instance;
-	const size_t data_per_slot = (TRANSACTION_SIZE - state->blocksize*trans_number_block_count(state->blocksize) - state->blocksize) / 1024;
-	const size_t bandwidth = (state->ncommit_records * data_per_slot) / TRANSACTION_PERIOD;
-
-	return bandwidth;
+	if(state->magic == JOURNAL_MAGIC)
+	{
+		size_t bytes_per_slot = TRANSACTION_SIZE - state->blocksize * (trans_number_block_count(state->blocksize) + 1);
+		return (state->ncommit_records * (bytes_per_slot / 1024)) / TRANSACTION_PERIOD;
+	}
+	return -E_INVAL;
 }
