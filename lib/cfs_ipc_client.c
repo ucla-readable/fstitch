@@ -37,6 +37,19 @@ find_fs(void)
 
 static char ipc_page[PGSIZE * 2];
 
+/* copy a path into the request, prepending a / in case the client did not have one */
+/* we do this here instead of in KPL because we are already copying the string here */
+static void
+cfs_pathcpy(char *dst, const char *src, size_t len)
+{
+	if(*src != '/')
+	{
+		*(dst++) = '/';
+		len--;
+	}
+	strncpy(dst, src, len);
+}
+
 int
 cfs_open(const char *fname, int mode, void *refpg)
 {
@@ -52,7 +65,7 @@ cfs_open(const char *fname, int mode, void *refpg)
    	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_OPEN;
 	pg->mode = mode;
-	strncpy(pg->path, fname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->path, fname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -132,14 +145,11 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 				panic("%s::ipc_recv\n", __FUNCTION__);
 		} while (from != fsid);
 		if (r < 0)
-			return i ? i : r;
+			return i;
 		memcpy(data + i, (void*)REQVA, requested);
 		sys_page_unmap(0, (void*)REQVA);
 		if (r < requested)
-		{
-			size = i + r;
-			return size ? size : -E_EOF;
-		}
+			return i + r;
 	}
 	return size;
 }
@@ -269,7 +279,7 @@ cfs_unlink(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_UNLINK;
-	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -295,8 +305,8 @@ cfs_link(const char *oldname, const char *newname)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_LINK;
-	strncpy(pg->oldname, oldname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
-	strncpy(pg->newname, newname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->oldname, oldname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->newname, newname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -322,8 +332,8 @@ cfs_rename(const char *oldname, const char *newname)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_RENAME;
-	strncpy(pg->oldname, oldname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
-	strncpy(pg->newname, newname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->oldname, oldname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->newname, newname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -349,7 +359,7 @@ cfs_mkdir(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_MKDIR;
-	strncpy(pg->path, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->path, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -375,7 +385,7 @@ cfs_rmdir(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_RMDIR;
-	strncpy(pg->path, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->path, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -401,7 +411,7 @@ cfs_get_num_features(char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_NUM_FEATURES;
-	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -427,7 +437,7 @@ cfs_get_feature(char *name, int num, char *dump)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_FEATURE;
-	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 	pg->num = num;
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
@@ -461,7 +471,7 @@ cfs_get_metadata(const char *name, int id, struct Scfs_metadata *md)
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_METADATA;
 	pg->id = id;
-	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -494,7 +504,7 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_SET_METADATA;
-	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -530,7 +540,7 @@ cfs_sync(const char *name)
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_SYNC;
 	if (name)
-		strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+		cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 	else
 		pg->name[0] = 0;
 
