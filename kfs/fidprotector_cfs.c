@@ -1,6 +1,7 @@
 #include <inc/hash_map.h>
 #include <inc/malloc.h>
 
+#include <kfs/modman.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/fidprotector_cfs.h>
 
@@ -114,6 +115,10 @@ static int fidprotector_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	int r = modman_rem_cfs(cfs);
+	if(r < 0)
+		return r;
+	modman_dec_cfs(state->frontend_cfs, cfs);
 
 	state->frontend_cfs = NULL;
 
@@ -294,6 +299,18 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 	state->open_files = hash_map_create();
 	if (!state->open_files)
 		goto error_state;
+
+	if(modman_add_anon_cfs(cfs, __FUNCTION__))
+	{
+		DESTROY(cfs);
+		return NULL;
+	}
+	if(modman_inc_cfs(frontend_cfs, cfs, NULL) < 0)
+	{
+		modman_rem_cfs(cfs);
+		DESTROY(cfs);
+		return NULL;
+	}
 
 	return cfs;
 
