@@ -9,7 +9,7 @@
 #include <kfs/lfs.h>
 #include <kfs/josfs_base.h>
 
-#define JOSFS_BASE_DEBUG 1
+#define JOSFS_BASE_DEBUG 0
 
 #if JOSFS_BASE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -621,14 +621,18 @@ static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, c
 static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_remove_name\n");
-	int r;
-	struct JOSFS_File *dir, *f;
+	fdesc_t * f;
 
-	if ((r = walk_path(object, name, &dir, &f, 0)) < 0)
-		return r;
+	f = josfs_lookup_name(object, name);
+
+	if (!f) {
+		return -1;
+	}
 
 	// FIXME write this out to disk
-	f->f_name[0] = '\0';
+	((struct josfs_fdesc *) f)->file->f_name[0] = '\0';
+
+	josfs_free_fdesc(object, f);
 	return 0;
 }
 
