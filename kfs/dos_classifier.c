@@ -137,7 +137,7 @@ static int class_close(CFS_t * cfs, int fid)
 		del(fid);
 		return r;
 	}
-	return E_NOT_FOUND;
+	return -E_NOT_FOUND;
 }
 
 static int class_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
@@ -149,7 +149,7 @@ static int class_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 	} else if (side == 1) {
 		return CALL(state->cfs2, read, fid, data, offset, size);
 	}
-	return E_NOT_FOUND;
+	return -E_NOT_FOUND;
 }
 
 static int class_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
@@ -161,7 +161,7 @@ static int class_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 	} else if (side == 1) {
 		return CALL(state->cfs2, write, fid, data, offset, size);
 	}
-	return E_NOT_FOUND;
+	return -E_NOT_FOUND;
 }
 
 static int class_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
@@ -173,7 +173,7 @@ static int class_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uin
 	} else if (side == 1) {
 		return CALL(state->cfs2, getdirentries, fid, buf, nbytes, basep, offset);
 	}
-	return E_NOT_FOUND;
+	return -E_NOT_FOUND;
 }
 
 static int class_truncate(CFS_t * cfs, int fid, uint32_t size)
@@ -185,7 +185,7 @@ static int class_truncate(CFS_t * cfs, int fid, uint32_t size)
 	} else if (side == 1) {
 		return CALL(state->cfs2, truncate, fid, size);
 	}
-	return E_NOT_FOUND;
+	return -E_NOT_FOUND;
 }
 
 static int class_unlink(CFS_t * cfs, const char * name)
@@ -336,7 +336,7 @@ static int class_destroy(CFS_t * cfs)
 	return 0;
 }
 
-CFS_t * class(CFS_t * cfs1, const char * p1, CFS_t * cfs2, const char * p2)
+CFS_t * dos_classifier(CFS_t * cfs1, const char * p1, CFS_t * cfs2, const char * p2)
 {
 	struct class_state * state;
 	CFS_t * cfs;
