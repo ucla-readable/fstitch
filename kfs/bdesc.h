@@ -2,27 +2,42 @@
 #define __KUDOS_KFS_BDESC_H
 
 /* RULES FOR USING BDESCS:
- * 1. When a bdesc is returned or passed to you, you do not need to retain it to use it.
- *    However, you must do one of three things:
+ *
+ * 1. When a bdesc is returned or passed to you, you do not need to
+ *    retain it to use it.  However, you must do one of three things:
+ *
  *     a) Retain it (bdesc_retain) and store it to release it (bdesc_release) later.
  *     b) Return or pass it to another function.
  *     c) Drop it (bdesc_drop).
- *    If you choose option a above, you may optionally also do b. However, b and c are mutually exclusive.
- * 2. If you want to write to the data in a bdesc, you must call bdesc_touch() first.
- *    Note that this may create a copy of the data, so you must do this before saving any pointers to write to.
- * 3. Since the data descriptor in a bdesc may be copied by someone else calling bdesc_touch(), you should
- *    never save any pointers into the data of a bdesc. Always access the data through the data descriptor.
- * 4. To alter the structure of a bdesc (i.e. change any fields other than data), you must call bdesc_alter().
- *    You should not call bdesc_retain() before using bdesc_alter(). Exception to this rule: if you will pass
- *    the bdesc to a function and then regain control when it returns, you may instead set the "translated"
- *    field in the bdesc before doing the translation. Then, when control returns, you must restore the bdesc
- *    to its previous state. In this special case, you must also check the reference count of the bdesc prior
- *    to passing it, and if it is zero, you must not de-translate the bdesc - in this case, you must assume
- *    that the bdesc has been freed and not use it, just as though you had called bdesc_drop().
+ *
+ *    If you choose option a above, you may optionally also do
+ *    b. However, b and c are mutually exclusive.
+ *
+ * 2. If you want to write to the data in a bdesc, you must call
+ *    bdesc_touch() first.  Note that this may create a copy of the data,
+ *    so you must do this before saving any pointers to write to.
+ *
+ * 3. Since the data descriptor in a bdesc may be copied by someone
+ *    else calling bdesc_touch(), you should never save any pointers into
+ *    the data of a bdesc. Always access the data through the data
+ *    descriptor.
+ *
+ * 4. To alter the structure of a bdesc (i.e. change any fields other
+ *    than data), you must call bdesc_alter().  You should not call
+ *    bdesc_retain() before using bdesc_alter(). Exception to this rule:
+ *    if you will pass the bdesc to a function and then regain control
+ *    when it returns, you may instead increase the "translated" field in
+ *    the bdesc before doing the translation. Then, when control returns,
+ *    you must restore the bdesc to its previous state. In this special
+ *    case, you must also check the reference count of the bdesc prior to
+ *    passing it, and if it is zero, you must not de-translate the bdesc
+ *    - in this case, you must assume that the bdesc has been freed and
+ *    not use it, just as though you had called bdesc_drop().
  * 
  * These rules guarantee the following conditions:
  * 1. The memory associated with bdescs and their data will be freed when it is no longer used.
- * 2. The data in a bdesc can only be changed by somebody with the same bdesc pointer, not a different one sharing the data.
+ * 2. The data in a bdesc can only be changed by somebody with the same bdesc pointer, not a different one
+ *    sharing the data.
  * 3. Except for the data, nothing else in a bdesc will change while you have a reference to it.
  * */
 
@@ -52,7 +67,6 @@ struct bdesc {
 	uint32_t number, refs;
 	uint16_t offset, length;
 	datadesc_t * ddesc;
-	/* this field is very likely binary */
 	uint16_t translated;
 };
 
