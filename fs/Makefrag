@@ -36,6 +36,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/psb16 \
 			$(OBJDIR)/user/reboot \
 			$(OBJDIR)/user/rm \
+			$(OBJDIR)/user/rmdir \
 			$(OBJDIR)/user/sb16 \
 			$(OBJDIR)/user/sh \
 			$(OBJDIR)/user/sleep \

@@ -203,6 +203,11 @@ int remove(const char* path)
 	return kpl_remove(path);
 }
 
+int rmdir(const char* path)
+{
+	return kpl_rmdir(path);
+}
+
 int rename(const char* oldname, const char* newname)
 {
 	return kpl_rename(oldname, newname);
