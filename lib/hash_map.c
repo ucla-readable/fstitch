@@ -271,6 +271,7 @@ void hash_map_clear(hash_map_t * hm)
 			chain_elt_destroy(head);
 			head = next;
 		}
+		vector_elt_set(hm->tbl, i, NULL);
 	}
 
 	hm->size = 0;
