@@ -182,6 +182,9 @@ int sleep(int32_t centisecs);
 int hwclock_time(int *t);
 int bcd2dec(int bcd);
 
+// qsort.c
+void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, const void *));
+
 /* File open modes */
 #define	O_RDONLY	0x0000		/* open for reading only */
 #define	O_WRONLY	0x0001		/* open for writing only */
