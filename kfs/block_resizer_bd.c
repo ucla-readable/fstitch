@@ -73,11 +73,15 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
+	
+	/* make sure it's a whole block */
+	if(block->offset || block->length != info->converted_size)
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= info->block_count)
-		return -1;
+		return -E_INVAL;
 	
 	number = block->number * info->merge_count;
 	for(i = 0; i != info->merge_count; i++)
@@ -93,9 +97,9 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 		 * efficient. So long as there are caches above and below us, we
 		 * should be able to avoid most of the inefficiency. */
 		bdesc_t * sub = CALL(info->bd, read_block, number + i);
-		/* ran out of memory? */
+		/* maybe we ran out of memory? */
 		if(!sub)
-			return -1;
+			return -E_NO_MEM;
 		bdesc_touch(sub);
 		memcpy(sub->ddesc->data, &block->ddesc->data[i * info->original_size], info->original_size);
 		/* explicitly forward change descriptors */
@@ -118,11 +122,15 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
+	
+	/* make sure it's a whole block */
+	if(block->offset || block->length != info->converted_size)
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= info->block_count)
-		return -1;
+		return -E_INVAL;
 	
 	number = block->number * info->merge_count;
 	for(i = 0; i != info->merge_count; i++)
@@ -130,7 +138,7 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 		bdesc_t * sub = CALL(info->bd, read_block, number + i);
 		/* ran out of memory? */
 		if(!sub)
-			return -1;
+			return -E_INVAL;
 		/* FIXME check return value? */
 		CALL(info->bd, sync, sub);
 	}

@@ -58,7 +58,7 @@ int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	/* add the dependency to the dependent */
 	meta = malloc(sizeof(*meta));
 	if(!meta)
-		return -1;
+		return -E_NO_MEM;
 	meta->desc = dependency;
 	meta->next = dependent->dependencies;
 	dependent->dependencies = meta;
@@ -70,7 +70,7 @@ int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 		meta = dependent->dependencies;
 		dependent->dependencies = meta->next;
 		free(meta);
-		return -1;
+		return -E_NO_MEM;
 	}
 	meta->desc = dependent;
 	meta->next = dependency->dependents;
@@ -93,7 +93,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	if(dependent == dependency || chdesc_has_dependency(dependency, dependent))
 	{
 		printf("%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
-		return -1;
+		return -E_INVAL;
 	}
 	/* chdesc_has_dependency() marks the DAG rooted at "dependency" so we must unmark it */
 	chdesc_unmark_graph(dependency);
@@ -151,7 +151,7 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 {
 	chrefdesc_t * ref = malloc(sizeof(*ref));
 	if(!ref)
-		return -1;
+		return -E_NO_MEM;
 	
 	ref->desc = location;
 	ref->next = chdesc->weak_refs;
@@ -204,7 +204,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 int chdesc_destroy(chdesc_t ** chdesc)
 {
 	if((*chdesc)->dependencies || (*chdesc)->dependents)
-		return -1;
+		return -E_INVAL;
 	chdesc_weak_collect(*chdesc);
 	
 	switch((*chdesc)->type)

@@ -57,13 +57,13 @@ int bdesc_touch(bdesc_t * bdesc)
 	Dprintf("<bdesc 0x%08x copy data>\n", bdesc);
 	data = malloc(sizeof(*data));
 	if(!data)
-		return -1;
+		return -E_NO_MEM;
 	Dprintf("<bdesc 0x%08x alloc data 0x%08x>\n", bdesc, data);
 	data->data = malloc(bdesc->length);
 	if(!data->data)
 	{
 		free(data);
-		return -1;
+		return -E_NO_MEM;
 	}
 	memcpy(data->data, bdesc->ddesc->data, bdesc->length);
 	data->refs = bdesc->refs;
@@ -86,7 +86,7 @@ int bdesc_alter(bdesc_t ** bdesc)
 	Dprintf("<bdesc 0x%08x copy>\n", *bdesc);
 	copy = malloc(sizeof(*copy));
 	if(!copy)
-		return -1;
+		return -E_NO_MEM;
 	Dprintf("<bdesc 0x%08x alloc>\n", copy);
 	*copy = **bdesc;
 	copy->refs = 0;
@@ -119,7 +119,7 @@ int bdesc_retain(bdesc_t ** bdesc)
 	Dprintf("<bdesc 0x%08x copy>\n", *bdesc);
 	copy = malloc(sizeof(*copy));
 	if(!copy)
-		return -1;
+		return -E_NO_MEM;
 	Dprintf("<bdesc 0x%08x alloc>\n", copy);
 	*copy = **bdesc;
 	copy->refs = 1;

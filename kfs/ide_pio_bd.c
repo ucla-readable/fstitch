@@ -116,15 +116,15 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->offset || block->length != SECTSIZE)
-		return -1;
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= ((struct ide_info *) object->instance)->length)
-		return -1;
+		return -E_INVAL;
 	
 	/* write it */
 	ide_write(((struct ide_info *) object->instance)->disk, block->number, block->ddesc->data, 1);

@@ -67,15 +67,15 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->offset || block->length != info->blocksize)
-		return -1;
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= info->length)
-		return -1;
+		return -E_INVAL;
 	
 	/* switch to network byte order */
 	number = htonl(block->number);

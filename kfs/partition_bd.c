@@ -11,6 +11,7 @@ struct partition_info {
 	BD_t * bd;
 	uint32_t start;
 	uint32_t length;
+	uint16_t blocksize;
 };
 
 static uint32_t partition_bd_get_numblocks(BD_t * object)
@@ -20,7 +21,7 @@ static uint32_t partition_bd_get_numblocks(BD_t * object)
 
 static uint16_t partition_bd_get_blocksize(BD_t * object)
 {
-	return CALL(((struct partition_info *) object->instance)->bd, get_blocksize);
+	return ((struct partition_info *) object->instance)->blocksize;
 }
 
 static uint16_t partition_bd_get_atomicsize(BD_t * object)
@@ -59,11 +60,15 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
+	
+	/* make sure it's a whole block */
+	if(block->offset || block->length != info->blocksize)
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= info->length)
-		return -1;
+		return -E_INVAL;
 	
 	/* Important logic:
 	 * If somebody has a reference to this bdesc (i.e. refs > 0), then that
@@ -104,11 +109,15 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
+	
+	/* make sure it's a whole block */
+	if(block->offset || block->length != info->blocksize)
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= info->length)
-		return -1;
+		return -E_INVAL;
 	
 	block->translated++;
 	block->bd = info->bd;
@@ -158,6 +167,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	info->bd = disk;
 	info->start = start;
 	info->length = length;
+	info->blocksize = CALL(disk, get_blocksize);
 	
 	return bd;
 }

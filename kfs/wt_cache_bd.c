@@ -11,6 +11,7 @@ struct cache_info {
 	BD_t * bd;
 	uint32_t size;
 	bdesc_t ** blocks;
+	uint16_t blocksize;
 };
 
 static uint32_t wt_cache_bd_get_numblocks(BD_t * object)
@@ -20,7 +21,7 @@ static uint32_t wt_cache_bd_get_numblocks(BD_t * object)
 
 static uint16_t wt_cache_bd_get_blocksize(BD_t * object)
 {
-	return CALL(((struct cache_info *) object->instance)->bd, get_blocksize);
+	return ((struct cache_info *) object->instance)->blocksize;
 }
 
 static uint16_t wt_cache_bd_get_atomicsize(BD_t * object)
@@ -76,11 +77,15 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
+	
+	/* make sure it's a whole block */
+	if(block->offset || block->length != info->blocksize)
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= CALL(info->bd, get_numblocks))
-		return -1;
+		return -E_INVAL;
 	
 	/* FIXME bdesc_retain() can fail */
 	/* increase reference count - do this before release, in case they are the same block */
@@ -117,11 +122,15 @@ static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
-		return -1;
+		return -E_INVAL;
+	
+	/* make sure it's a whole block */
+	if(block->offset || block->length != info->blocksize)
+		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= CALL(info->bd, get_numblocks))
-		return -1;
+		return -E_INVAL;
 	
 	block->translated++;
 	block->bd = info->bd;
@@ -186,6 +195,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	
 	info->bd = disk;
 	info->size = blocks;
+	info->blocksize = CALL(disk, get_blocksize);
 	
 	return bd;
 }
