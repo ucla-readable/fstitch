@@ -20,8 +20,8 @@
 #define SCFS_GET_FEATURES 11
 #define SCFS_GET_METADATA 12
 #define SCFS_SET_METADATA 13
-#define SCFS_SYNC 13
-#define SCFS_SHUTDOWN 14
+#define SCFS_SYNC 14
+#define SCFS_SHUTDOWN 15
 
 #define SCFS_TYPE int scfs_type
 
