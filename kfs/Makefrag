@@ -8,6 +8,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/order_preserver_bd.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
+			$(OBJDIR)/kfs/journal_queue_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/journal_lfs.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
