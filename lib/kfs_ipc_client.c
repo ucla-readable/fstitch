@@ -585,6 +585,41 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	return create_bd(bd_id);
 }
 
+#include <kfs/md_bd.h>
+BD_t * md_bd(BD_t * disk0, BD_t * disk1)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(MD_BD, md_bd);
+
+	pg->disk0 = (uint32_t) disk0->instance;
+	pg->disk1 = (uint32_t) disk1->instance;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
+}
+
+#include <kfs/mirror_bd.h>
+BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(MIRROR_BD, mirror_bd);
+
+	pg->disk0 = (uint32_t) disk0->instance;
+	pg->disk1 = (uint32_t) disk1->instance;
+	pg->stride = stride;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
+}
+
 #include <kfs/ide_pio_bd.h>
 BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 {

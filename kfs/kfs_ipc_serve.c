@@ -294,8 +294,37 @@ void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
 	RETURN_IPC;
 }
 
-#include <kfs/ide_pio_bd.h>
+#include <kfs/md_bd.h>
+void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
+{
+	BD_t * disk0 = (BD_t *) pg->disk0;
+	BD_t * disk1 = (BD_t *) pg->disk1;
+	uint32_t val;
+	
+	if (!modman_name_bd(disk0) || !modman_name_bd(disk1))
+		RETURN_IPC_INVAL;
 
+	val = (uint32_t) md_bd(disk0, disk1);
+
+	RETURN_IPC;
+}
+
+#include <kfs/mirror_bd.h>
+void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
+{
+	BD_t * disk0 = (BD_t *) pg->disk0;
+	BD_t * disk1 = (BD_t *) pg->disk1;
+	uint32_t val;
+	
+	if (!modman_name_bd(disk0) || !modman_name_bd(disk1))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) mirror_bd(disk0, disk1, pg->stride);
+
+	RETURN_IPC;
+}
+
+#include <kfs/ide_pio_bd.h>
 void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 {
 	uint32_t val = (uint32_t) ide_pio_bd(pg->controller, pg->disk);
@@ -484,6 +513,8 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(WB_CACHE_BD,        wb_cache_bd);
 		SERVE(WT_CACHE_BD,        wt_cache_bd);
 		SERVE(BLOCK_RESIZER_BD,   block_resizer_bd);
+		SERVE(MD_BD,              md_bd);
+		SERVE(MIRROR_BD,          mirror_bd);
 		SERVE(IDE_PIO_BD,         ide_pio_bd);
 
 		// modman

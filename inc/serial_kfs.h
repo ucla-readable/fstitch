@@ -39,17 +39,19 @@
 #define SKFS_WB_CACHE_BD 17
 #define SKFS_WT_CACHE_BD 18
 #define SKFS_BLOCK_RESIZER_BD 19
-#define SKFS_PARTITION_BD 20
-#define SKFS_PC_PTABLE_BD 21
-#define SKFS_IDE_PIO_BD 22
+#define SKFS_MD_BD 20
+#define SKFS_MIRROR_BD 21
+#define SKFS_PARTITION_BD 22
+#define SKFS_PC_PTABLE_BD 23
+#define SKFS_IDE_PIO_BD 24
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 23
-#define SKFS_MODMAN_RETURN_LOOKUP  24
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 25
-#define SKFS_MODMAN_REQUEST_ITS    26
-#define SKFS_MODMAN_RETURN_IT      27
+#define SKFS_MODMAN_REQUEST_LOOKUP 25
+#define SKFS_MODMAN_RETURN_LOOKUP  26
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 27
+#define SKFS_MODMAN_REQUEST_ITS    28
+#define SKFS_MODMAN_RETURN_IT      29
 
 
 #define SKFS_TYPE int skfs_type
@@ -195,6 +197,19 @@ typedef struct {
 	uint32_t bd;
 	uint16_t blocksize;
 } Skfs_block_resizer_bd_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t disk0;
+	uint32_t disk1;
+} Skfs_md_bd_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t disk0;
+	uint32_t disk1;
+	uint32_t stride;
+} Skfs_mirror_bd_t;
 
 // TODO: partition_bd
 // TODO: pc_ptable_bd
