@@ -57,6 +57,7 @@ struct LFS {
 	DECLARE(LFS_t, int, set_metadata_name, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, set_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, sync, const char * name);
+	DECLARE(LFS_t, int, ioctl, uint32_t id, uint32_t op, void ** data);
 	void * instance;
 };
 

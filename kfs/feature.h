@@ -14,6 +14,7 @@ struct feature {
 extern const feature_t KFS_feature_size;
 extern const feature_t KFS_feature_filetype;
 extern const feature_t KFS_feature_nlinks;
+extern const feature_t KFS_feature_transaction;
 
 /* filetype values */
 #define TYPE_FILE 0
