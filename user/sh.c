@@ -407,7 +407,10 @@ umain(int argc, char** argv)
 			exit();
 		}
 		if ((r = open(argv[0], O_RDONLY)) < 0)
-			panic("open %s: %e", r);
+		{
+			fprintf(STDERR_FILENO, "%s: %e", argv[0], r);
+			exit();
+		}
 		assert(r==STDIN_FILENO);
 	}
 	if (interactive == '?')
