@@ -167,18 +167,13 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 				goto output_error;
 			
 			//Dprintf("%s(): recovering block %d from journal entry %d\n", __FUNCTION__, numbers[index], block + index);
-			if((r = bdesc_touch(output)) < 0)
-				goto touch_error;
 			
-			memcpy(output->ddesc->data, data_block->ddesc->data, state->blocksize);
-			CALL(state->queue, write_block, output);
-			bdesc_drop(&data_block);
+			CALL(state->journal, write_block, output, 0, state->blocksize, data_block->ddesc->data, NULL, NULL);
+			bdesc_release(&data_block);
 			continue;
 			
-		  touch_error:
-			bdesc_drop(&output);
 		  output_error:
-			bdesc_retain(&data_block);
+			bdesc_release(&data_block);
 		  data_error:
 			bdesc_release(&number_block);
 			bdesc_release(&commit_block);
@@ -262,6 +257,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	chdesc_t * lfs_tail;
 	chdesc_t * prev_head;
 	chdesc_t * tail;
+	BD_t * journal_bd = CALL(state->journal, get_blockdev);
 
 	jdata_chdescs = chdesc_create_noop(NULL);
 	if (!jdata_chdescs)
@@ -302,7 +298,9 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 
 	for (i=0; i < ndatabdescs; i++, file_offset += state->blocksize)
 	{
-		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
+		uint32_t bdesc_number = CALL(state->journal, get_file_block_num, state->jfdesc, file_offset);
+		assert(bdesc_number != -1);
+		bdesc = bdesc_alloc(journal_bd, bdesc_number, 0, state->blocksize);
 		assert(bdesc); // TODO: handle error
 
 		// TODO: does journal data need to depend on anything, in case of small cache?

@@ -474,17 +474,17 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		weak_retain_pair(head, tail);
 		bdesc = CALL(info->ubd, read_block, target);
 		weak_forget_pair(head, tail);
-	}
 
-	if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
-		printf("josfs_base: trouble reading bitmap!\n");
-		if (bdesc)
-			bdesc_drop(&bdesc);
-		return -1;
-	}
+		if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
+			printf("josfs_base: trouble reading bitmap!\n");
+			if (bdesc)
+				bdesc_drop(&bdesc);
+			return -1;
+		}
 
-	info->bitmap_cache = bdesc;
-	bdesc_retain(&bdesc);
+		bdesc_retain(&bdesc);
+		info->bitmap_cache = bdesc;
+	}
 
 	if (head && tail) {
 		if (((uint32_t *) bdesc->ddesc->data)[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value) {
@@ -1634,6 +1634,9 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 
 	if (offset + size > JOSFS_BLKSIZE)
 		return -E_INVAL;
+
+	if (info->bitmap_cache && info->bitmap_cache->number == block->number)
+		bdesc_release(&info->bitmap_cache);
 
 	if (head && tail) {
 		oldhead = *head;
