@@ -15,6 +15,8 @@ extern const feature_t KFS_feature_size;
 extern const feature_t KFS_feature_filetype;
 extern const feature_t KFS_feature_nlinks;
 extern const feature_t KFS_feature_freespace;
+extern const feature_t KFS_feature_file_lfs;
+extern const feature_t KFS_feature_file_lfs_name;
 
 /* filetype values */
 #define TYPE_FILE 0
