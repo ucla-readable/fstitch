@@ -275,7 +275,7 @@ static int fsck(LFS_t * object)
 	hsdirs = hash_set_create();
 	if (hsdirs) {
 		temp_fdesc.file = &rootfile;
-		strcpy(temp_fdesc.fullpath, "");
+		temp_fdesc.fullpath[0] = 0;
 
 		memcpy(&rootfile, &super->s_root, sizeof(JOSFS_File_t));
 		fsck_file(object, rootfile, reserved, free_bitmap, used_bitmap, blocklist);
@@ -521,7 +521,8 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 		return -E_NO_MEM;
 	}
 
-	strcpy(temp_fdesc->fullpath, name);
+	strncpy(temp_fdesc->fullpath, name, JOSFS_MAXPATHLEN - 1);
+	temp_fdesc->fullpath[JOSFS_MAXPATHLEN - 1] = 0;
 	temp_fdesc->file = dir;
 	do {
 		r = josfs_get_dirent(object, (fdesc_t *) temp_fdesc, &entry, sizeof(struct dirent), &basep);
@@ -918,7 +919,8 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	if (!new_fdesc)
 		return NULL;
 
-	strcpy(new_fdesc->fullpath, name);
+	strncpy(new_fdesc->fullpath, name, JOSFS_MAXPATHLEN);
+	new_fdesc->fullpath[JOSFS_MAXPATHLEN - 1] = 0;
 
 	if ((r = walk_path(object, name, &dir, &f, filename, &dirblock, &index)) != 0) {
 		if (r == -E_NOT_FOUND && dir) {
@@ -1288,8 +1290,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			if (*((off_t *) data) >= 0 && *((off_t *) data) < JOSFS_MAXFILESIZE) {
 				if (head && tail) {
 					oldhead = *head;
-					offset = f->index * sizeof(JOSFS_File_t *);
-					offset += ((uint32_t) &dirfile->f_size) - ((uint32_t) &dirfile);
+					offset = f->index * sizeof(JOSFS_File_t);
+					offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_size;
 					if ((r = chdesc_create_byte(f->dirb, offset, sizeof(off_t), data, head, tail)) < 0)
 						return r;
 
@@ -1319,8 +1321,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			if (*((uint32_t *) data) == TYPE_FILE || *((uint32_t *) data) == TYPE_DIR) {
 				if (head && tail) {
 					oldhead = *head;
-					offset = f->index * sizeof(JOSFS_File_t *);
-					offset += ((uint32_t) &dirfile->f_type) - ((uint32_t) &dirfile);
+					offset = f->index * sizeof(JOSFS_File_t);
+					offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_type;
 					if ((r = chdesc_create_byte(f->dirb, offset, sizeof(uint32_t), data, head, tail)) < 0)
 						return r;
 
