@@ -11,6 +11,8 @@ char *binaryname = "(PROGRAM NAME UNKNOWN)";
 void
 libmain(int argc, char **argv)
 {
+	int r, consfd;
+
 	// set env to point at our env structure in envs[].
 	env = &envs[ENVX(sys_getenvid())];
 
@@ -22,11 +24,8 @@ libmain(int argc, char **argv)
 	}
 
 	// ensure stdin, stdout, and stderr fds exist
-	int r, consfd;
 	if((consfd = r = opencons()) < 0)
 		panic("opencons: %e", r);
-	if(consfd != STDIN_FILENO && consfd < STDERR_FILENO)
-		panic("some but not all standard fds are present");
 	if(consfd == STDIN_FILENO)
 	{
 		// std fds not allocated, set them up
@@ -35,12 +34,14 @@ libmain(int argc, char **argv)
 		if((r = dup2(STDIN_FILENO, STDERR_FILENO)) < 0)
 			panic("dup2(STDIN_FILENO, STDERR_FILENO): %e", r);
 	}
-	else
+	else if(consfd > STDERR_FILENO)
 	{
 		// std fds are allocated
 		if((r = close(consfd)) < 0)
 			panic("close(%d): %e", consfd, r);
 	}
+	else
+		panic("some but not all standard fds are present");
 
 #if ENABLE_ENV_SYMS
 	// set the kernel's symbol and symbol string tables
