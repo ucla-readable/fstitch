@@ -93,6 +93,11 @@ again:
 					fprintf(STDERR_FILENO, "close: %e\n", r);
 					exit();
 				}
+				if (0 < stdin_stash)
+				{
+					close(stdin_stash);
+					stdin_stash = 0;
+				}
 			}
 				
 			break;
@@ -174,6 +179,11 @@ again:
 			dup2(p[0], 0);
 			close(p[0]);
 			close(p[1]);
+			if(0 < stdin_stash)
+			{
+				close(stdin_stash);
+				stdin_stash = 0;
+			}
 			goto again;
 			
 			break;
