@@ -352,7 +352,7 @@ int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	start = o_start;
 	end = start + o_len + r_len;
 	tag = r_start + r_len;
-	if(tag <= start || tag > end)
+	if(tag <= start || end <= tag)
 		return 0;
 	
 	return chdesc_add_depend(recent, original);
