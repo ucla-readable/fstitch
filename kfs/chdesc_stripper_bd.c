@@ -22,9 +22,14 @@ typedef struct chdesc_stripper_state chdesc_stripper_state_t;
 
 static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_t * c)
 {
-	chmetadesc_t ** list = &c->dependencies;
+	chmetadesc_t ** list;
 	chmetadesc_t * scan;
 	int r;
+
+	if (!c)
+		return 0;
+
+	list = &c->dependencies;
 
 	while ((scan = *list))
 	{
