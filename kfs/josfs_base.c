@@ -854,6 +854,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
+		// FIXME need to link with oldhead
 		indirect = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, head, tail);
 		if (indirect) {
 			// Initialize the structure, then point to it
@@ -1105,12 +1106,15 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	uint32_t nblocks = josfs_get_file_numblocks(object, file);
-	bdesc_t * indirect;
+	bdesc_t * indirect, * retval = NULL;
 	JOSFS_File_t * dirfile;
 	uint32_t blockno;
 	int r, offset;
 	uint32_t data = 0;
-	chdesc_t * oldhead;
+	chdesc_t * oldhead = NULL;
+
+	if (head && tail)
+		oldhead = *head;
 
 	if (nblocks > JOSFS_NINDIRECT || nblocks < 1) {
 		return NULL;
@@ -1118,44 +1122,88 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	else if (nblocks > JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
-			bdesc_touch(indirect);
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
-			*((uint32_t *) (indirect->ddesc->data) + nblocks - 1) = 0;
-			// FIXME chdesc
+			if (head && tail) {
+				offset = (nblocks - 1) * sizeof(uint32_t);
+				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &data, head, tail)) < 0)
+					return NULL;
+
+				r = depman_add_chdesc(*head);
+				assert(r >= 0); // TODO: handle error
+
+				if (oldhead) {
+					if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
+						return NULL;
+				}
+			}
+			else {
+				bdesc_touch(indirect);
+				*((uint32_t *) (indirect->ddesc->data) + nblocks - 1) = 0;
+			}
+
+			weak_retain_pair(head, tail);
 			if ((r = CALL(info->ubd, write_block, indirect)) < 0) {
 				bdesc_drop(&indirect);
 				return NULL;
 			}
-			return CALL(info->ubd, read_block, blockno);
+
+			retval = CALL(info->ubd, read_block, blockno);
+			weak_forget_pair(head, tail);
+			return retval;
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
-			// FIXME chdesc
-			if (josfs_free_block(object, indirect, NULL, NULL) == 0) {
-				bdesc_touch(f->dirb);
-				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
-				dirfile->f_indirect = 0;
-				// FIXME chdesc
-				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
+
+			if (head && tail) {
+				offset = f->index * sizeof(JOSFS_File_t);
+				offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
+				if ((r = chdesc_create_byte(f->dirb, offset, sizeof(uint32_t), &data, head, tail)) < 0) {
 					bdesc_drop(&indirect);
 					return NULL;
 				}
 
-				f->file->f_indirect = 0;
-				bdesc_drop(&indirect);
-				return CALL(info->ubd, read_block, blockno);
+				r = depman_add_chdesc(*head);
+				assert(r >= 0); // TODO: handle error
+
+				if (oldhead) {
+					if ((r = chdesc_add_depend(*tail, oldhead)) < 0) {
+						bdesc_drop(&indirect);
+						return NULL;
+					}
+				}
 			}
+			else {
+				bdesc_touch(f->dirb);
+				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
+				dirfile->f_indirect = 0;
+			}
+
+			weak_retain_pair(head, tail);
+			if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
+				bdesc_drop(&indirect);
+				return NULL;
+			}
+			weak_forget_pair(head, tail);
+
+			f->file->f_indirect = 0;
+			r = josfs_free_block(object, indirect, head, tail);
+			bdesc_drop(&indirect);
+
+			if (r >= 0) {
+				weak_retain_pair(head, tail);
+				retval = CALL(info->ubd, read_block, blockno);
+				weak_forget_pair(head, tail);
+			}
+
+			return retval;
 		}
 	}
 	else {
-		bdesc_t * value;
-
 		blockno = f->file->f_direct[nblocks - 1];
 		if (head && tail) {
-			oldhead = *head;
 			offset = f->index * sizeof(JOSFS_File_t);
 			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks - 1];
 			if ((r = chdesc_create_byte(f->dirb, offset, sizeof(uint32_t), &data, head, tail)) < 0)
@@ -1180,11 +1228,11 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 			return NULL;
 
 		f->file->f_direct[nblocks - 1] = 0;
-		value = CALL(info->ubd, read_block, blockno);
+		retval = CALL(info->ubd, read_block, blockno);
 		
 		weak_forget_pair(head, tail);
 
-		return value;
+		return retval;
 	}
 
 	return NULL;
