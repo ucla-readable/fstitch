@@ -371,7 +371,7 @@ static void serve(void)
 	int perm = 0;
 	uint32_t r;
 
-	r = ipc_recv(0, &whom, (void*) REQVA, &perm, IPC_RECV_TIMEOUT);
+	r = ipc_recv(0, &whom, (void*) REQVA, &perm, NULL, IPC_RECV_TIMEOUT);
 	if (!whom && !perm)
 	{
 		if (r != -E_TIMEOUT)

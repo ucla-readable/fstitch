@@ -91,7 +91,7 @@ int	sys_set_trapframe(envid_t env, struct Trapframe* tf);
 
 // ipc.c
 void	ipc_send(envid_t to_env, uint32_t value, void* pg, unsigned perm, void* cap);
-uint32_t ipc_recv(envid_t restrict_from_env, envid_t* from_env, void* pg, unsigned* perm, int timeout);
+uint32_t ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, uint32_t* cap, int timeout);
 
 // fork.c
 #define	PTE_SHARE	0x400

@@ -62,7 +62,7 @@ cfs_open(const char *fname, int mode, void *refpg)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -91,7 +91,7 @@ cfs_close(int fid)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -124,7 +124,7 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 			panic("kpl ipcrecv: REQVA already mapped\n");
 
 		do {
-			r = ipc_recv(fsid, &from, (void*)REQVA, &perm, 0);
+			r = ipc_recv(fsid, &from, (void*)REQVA, &perm, NULL, 0);
 			assert(from == fsid);
 			if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 		} while (from != fsid);
@@ -168,7 +168,7 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 		do {
-			r = ipc_recv(fsid, &from, 0, &perm, 0);
+			r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 			assert(from == fsid);
 			if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 		} while (from != fsid);
@@ -201,7 +201,7 @@ cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep)
 		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 		
 		assert(!(get_pte((void*) ret) & PTE_P));
-		r = ipc_recv(fsid, NULL, (void*) ret, &perm, 0);
+		r = ipc_recv(fsid, NULL, (void*) ret, &perm, NULL, 0);
 		if (r < 0)
 			goto exit;
 		
@@ -241,7 +241,7 @@ cfs_truncate(int fid, uint32_t size)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -267,7 +267,7 @@ cfs_unlink(const char *name)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -294,7 +294,7 @@ cfs_link(const char *oldname, const char *newname)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -321,7 +321,7 @@ cfs_rename(const char *oldname, const char *newname)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -347,7 +347,7 @@ cfs_mkdir(const char *name)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -373,7 +373,7 @@ cfs_rmdir(const char *name)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -399,7 +399,7 @@ cfs_get_num_features(char *name)
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -429,7 +429,7 @@ cfs_get_feature(char *name, int num, char *dump)
 		panic("kpl ipcrecv: REQVA already mapped\n");
 	
 	do {
-		r = ipc_recv(fsid, &from, (void*)REQVA, &perm, 0);
+		r = ipc_recv(fsid, &from, (void*)REQVA, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -462,7 +462,7 @@ cfs_get_metadata(const char *name, int id, struct Scfs_metadata *md)
 		panic("kpl ipcrecv: REQVA already mapped\n");
 	
 	do {
-		r = ipc_recv(fsid, &from, (void*)REQVA, &perm, 0);
+		r = ipc_recv(fsid, &from, (void*)REQVA, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -501,7 +501,7 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 	
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -533,7 +533,7 @@ cfs_sync(const char *name)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 	
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -561,7 +561,7 @@ cfs_shutdown(void)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 	
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);
@@ -589,7 +589,7 @@ cfs_debug(void)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 	
 	do {
-		r = ipc_recv(fsid, &from, 0, &perm, 0);
+		r = ipc_recv(fsid, &from, 0, &perm, NULL, 0);
 		assert(from == fsid);
 		if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
 	} while (from != fsid);

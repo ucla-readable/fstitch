@@ -9,6 +9,8 @@
 // If 'fromenv' is nonnull, then store the IPC sender's envid in *fromenv.
 // If 'perm' is nonnull, then store the IPC sender's page permission in *perm
 //	(this is nonzero iff a page was successfully transferred to 'pg').
+// If 'cap' is nonnull, then store the IPC sender's capability physical page
+//      number in *cap.
 // If the system call fails, then store 0 in *fromenv and *perm (if
 //	they're nonnull) and return the error.
 //
@@ -17,7 +19,7 @@
 //   If 'pg' is null, pass sys_ipc_recv a value that it will understand
 //   as meaning "no page".  (Zero is not the right value.)
 uint32_t
-ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, int timeout)
+ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, uint32_t* cap, int timeout)
 {
 	int r;
 	if(!pg)
@@ -33,6 +35,8 @@ ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, int t
 			*fromenv = 0;
 		if(perm)
 			*perm = 0;
+		if(cap)
+			*cap = -1;
 		return r;
 	}
 	
@@ -40,6 +44,8 @@ ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, int t
 		*fromenv = env->env_ipc_from;
 	if(perm)
 		*perm = env->env_ipc_perm;
+	if(cap)
+		*cap = env->env_ipc_cap;
 	
 	return env->env_ipc_value;
 }

@@ -277,13 +277,13 @@ dup2env_recv(envid_t from_env)
 		return r;
 
 	// Receive the fd page
-	(void) ipc_recv(from_env, NULL, fd, NULL, 0);
+	(void) ipc_recv(from_env, NULL, fd, NULL, NULL, 0);
 
 	// Receive the data pages
 	va = fd2data(fd);
 	for (i = 0; i < PTSIZE; i += PGSIZE)
 	{
-		(void) ipc_recv(from_env, NULL, va+i, &perm, 0);
+		(void) ipc_recv(from_env, NULL, va+i, &perm, NULL, 0);
 		if (!perm)
 			break; // !perm signifies end of data
 	}
