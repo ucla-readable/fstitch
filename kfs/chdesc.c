@@ -565,21 +565,24 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 
 void chdesc_weak_release(chdesc_t ** location)
 {
-	chrefdesc_t ** prev = &(*location)->weak_refs;
-	chrefdesc_t * scan = (*location)->weak_refs;
-	while(scan && scan->desc != location)
+	if(*location)
 	{
-		prev = &scan->next;
-		scan = scan->next;
+		chrefdesc_t ** prev = &(*location)->weak_refs;
+		chrefdesc_t * scan = (*location)->weak_refs;
+		while(scan && scan->desc != location)
+		{
+			prev = &scan->next;
+			scan = scan->next;
+		}
+		if(!scan)
+		{
+			fprintf(STDERR_FILENO, "%s: weak release of non-weak chdesc pointer!\n", __FUNCTION__);
+			return;
+		}
+		*prev = scan->next;
+		*location = NULL;
+		free(scan);
 	}
-	if(!scan)
-	{
-		fprintf(STDERR_FILENO, "%s: weak release of non-weak chdesc pointer!\n", __FUNCTION__);
-		return;
-	}
-	*prev = scan->next;
-	*location = NULL;
-	free(scan);
 }
 
 static void chdesc_weak_collect(chdesc_t * chdesc)
