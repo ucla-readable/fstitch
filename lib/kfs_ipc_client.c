@@ -184,8 +184,11 @@ static int kic_get_config_status(bool config_status, object_t * obj, int level, 
 	SEND_PG();
 	r = (int) ipc_recv(fsid, NULL, rcs, &perm, NULL, 0);
 
-	strncpy(string, rcs->string, MIN(length, strlen(rcs->string)));
-	string[MIN(length, strlen(rcs->string))] = 0;
+	if (r >= 0)
+	{
+		strncpy(string, rcs->string, MIN(length, strlen(rcs->string)));
+		string[MIN(length, strlen(rcs->string))] = 0;
+	}
 
 	return r;
 }
@@ -231,6 +234,7 @@ static CFS_t * create_cfs(uint32_t id)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, id);
 	CFS_t * cfs;
+	int r;
 
 	if (!id)
 		return NULL;
@@ -270,9 +274,10 @@ static CFS_t * create_cfs(uint32_t id)
 	*/
 
 	OBJLOCAL(cfs) = (void *) id;
-	kic_get_flags_magic((object_t *) cfs);
-	OBJASSIGN(cfs, kic, get_config);
-	OBJASSIGN(cfs, kic, get_status);
+	r = kic_get_flags_magic((object_t *) cfs);
+	assert(r >= 0); // TODO: handle error
+	r = OBJASSIGN(cfs, kic, get_config);
+	r = OBJASSIGN(cfs, kic, get_status);
 	DESTRUCTOR(cfs, kic_cfs, destroy);
 
 	add_obj(id, cfs);
@@ -284,6 +289,7 @@ LFS_t * create_lfs(uint32_t id)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, id);
 	LFS_t * lfs;
+	int r;
 
 	if (!id)
 		return NULL;
@@ -330,7 +336,8 @@ LFS_t * create_lfs(uint32_t id)
 	*/
 
 	OBJLOCAL(lfs) = (void *) id;
-	kic_get_flags_magic((object_t *) lfs);
+	r = kic_get_flags_magic((object_t *) lfs);
+	assert(r >= 0); // TODO: handle error
 	OBJASSIGN(lfs, kic, get_config);
 	OBJASSIGN(lfs, kic, get_status);
 	DESTRUCTOR(lfs, kic_lfs, destroy);
@@ -344,6 +351,7 @@ BD_t * create_bd(uint32_t id)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, id);
 	BD_t * bd;
+	int r;
 
 	if (!id)
 		return NULL;
@@ -372,7 +380,8 @@ BD_t * create_bd(uint32_t id)
 	*/
 
 	OBJLOCAL(bd) = (void *) id;
-	kic_get_flags_magic((object_t *) bd);
+	r = kic_get_flags_magic((object_t *) bd);
+	assert(r >= 0); // TODO: handle error
 	OBJASSIGN(bd, kic, get_config);
 	OBJASSIGN(bd, kic, get_status);
 	DESTRUCTOR(bd, kic_bd, destroy);
