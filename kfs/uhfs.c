@@ -3,7 +3,6 @@
 #include <inc/fd.h>
 
 #include <kfs/chdesc.h>
-#include <kfs/depman.h>
 #include <kfs/lfs.h>
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
@@ -86,6 +85,7 @@ static int fid_idx(int fid, open_file_t f[])
 
 static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
+	Dprintf("%s(\"%s\", %d, 0x%x)\n", __FUNCTION__, name, mode, page);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	void * cache;
 	int r, index;
@@ -137,7 +137,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 
 static int uhfs_close(CFS_t * cfs, int fid)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	int idx;
 	open_file_t * f;
@@ -153,7 +153,7 @@ static int uhfs_close(CFS_t * cfs, int fid)
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(cfs, %d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(cfs, 0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	int idx;
 	open_file_t * f;
@@ -186,7 +186,7 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 
 static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	int idx;
 	open_file_t * f;
@@ -219,9 +219,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		size_written += n;
 		dataoffset = 0; /* dataoffset only needed for first block */
 
-		/* add the chdescs */
-		if (head)
-			depman_add_chdesc(head);
+		/* no need to do anything with the chdescs */
 	}
 
 	return size_written;
@@ -241,62 +239,80 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t size)
 
 static int uhfs_unlink(CFS_t * cfs, const char * name)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_mkdir(CFS_t * cfs, const char * name)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_rmdir(CFS_t * cfs, const char * name)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	return -E_UNSPECIFIED;
 }
 
 static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return 0;
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+
+	return CALL(state->lfs, get_num_features, name);
 }
 
 static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return NULL;
+	Dprintf("\"%s\", 0x%x)\n", __FUNCTION__, name, num);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+
+   return CALL(state->lfs, get_feature, name, num);
 }
 
 static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+
+	return CALL(state->lfs, get_metadata, name, id, size, data);
 }
 
 static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	Dprintf("%s(\"%s\", 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, name, id, size, data);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	chdesc_t * head = NULL, * tail = NULL;
+	int r;
+
+	r = CALL(state->lfs, set_metadata, name, id, size, data, &head, &tail);
+	if (r < 0)
+		return r;
+
+	/* no need to do anything with the chdescs */
+
+	return r;
 }
 
 static int uhfs_sync(CFS_t * cfs, const char * name)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+
+	return CALL(state->lfs, sync, name);
 }
 
 static int uhfs_destroy(CFS_t * cfs)
@@ -306,6 +322,7 @@ static int uhfs_destroy(CFS_t * cfs)
 	free(cfs);
 	return 0;
 }
+
 
 CFS_t * uhfs(LFS_t * lfs)
 {
