@@ -419,7 +419,7 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	if (f->file->f_indirect) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
-			for (j = ((uint32_t *) indirect->ddesc->data) + 10; j < (uint32_t *) (indirect->ddesc->data + JOSFS_BLKSIZE); j++) {
+			for (j = ((uint32_t *) indirect->ddesc->data) + JOSFS_NDIRECT; j < (uint32_t *) (indirect->ddesc->data + JOSFS_BLKSIZE); j++) {
 				if (*j) {
 					nblocks++;
 				}
