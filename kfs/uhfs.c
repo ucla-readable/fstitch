@@ -153,7 +153,7 @@ static int uhfs_close(CFS_t * cfs, int fid)
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(cfs, %x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(cfs, %d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	int idx;
 	open_file_t * f;

@@ -6,59 +6,18 @@
 
 #define CLASS_DEBUG 1
 
-
 #if CLASS_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
 #endif
 
-#define FIDX(fid) (((uint32_t)(fid) - ((uint32_t)CLASS_FD_MAP & ~0x80000000)) >> 12)
-
-/*
-struct open_file {
-	int fid;
-	void * page;
-	fdesc_t * fdesc;
-};
-typedef struct open_file open_file_t;
-*/
 struct class_state {
 	CFS_t * cfs1;
 	const char * p1;
 	CFS_t * cfs2;
 	const char * p2;
 };
-
-/*
-// Is this virtual address mapped?
-static int va_is_mapped(void * va)
-{
-	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
-}
-
-static void open_file_close(LFS_t * lfs, open_file_t * f)
-{
-	sys_page_unmap(0, f->page);
-	CALL(lfs, free_fdesc, f->fdesc);
-	f->page = NULL;
-	f->fdesc = NULL;
-}
-
-// Scan through f[] and close f's no longer in use by other envs
-static void open_file_gc(LFS_t * lfs, struct open_file f[])
-{
-	size_t i;
-	for (i=0; i < CLASS_MAX_OPEN; i++)
-	{
-		if (!f->page)
-			continue;
-
-		if (((struct Page*) UPAGES)[PTX(f->page )].pp_ref == 1)
-			open_file_close(lfs, f);
-	}
-}
-*/
 
 static int xlate[UHFS_MAX_OPEN*2];
 
@@ -110,7 +69,7 @@ static int class_open(CFS_t * cfs, const char * name, int mode, void * page)
 		}
 		return fd;
 	} else if (!strncmp(name, "C:", 2)) {
-		fd = CALL(state->cfs1, open, name+2, mode, page);
+		fd = CALL(state->cfs2, open, name+2, mode, page);
 		if (fd < 0) return fd;
 		r = put(fd, 1);
 		if (r < 0) {
@@ -196,7 +155,7 @@ static int class_unlink(CFS_t * cfs, const char * name)
 		r = CALL(state->cfs1, unlink, name+2);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, unlink, name+2);
+		r = CALL(state->cfs2, unlink, name+2);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -210,7 +169,7 @@ static int class_link(CFS_t * cfs, const char * oldname, const char * newname)
 		r = CALL(state->cfs1, link, oldname+2, newname+2);
 		return r;
 	} else if (!strncmp(oldname, "C:", 2)) {
-		r = CALL(state->cfs1, link, oldname+2, newname+2);
+		r = CALL(state->cfs2, link, oldname+2, newname+2);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -224,7 +183,7 @@ static int class_rename(CFS_t * cfs, const char * oldname, const char * newname)
 		r = CALL(state->cfs1, rename, oldname+2, newname+2);
 		return r;
 	} else if (!strncmp(oldname, "C:", 2)) {
-		r = CALL(state->cfs1, rename, oldname+2, newname+2);
+		r = CALL(state->cfs2, rename, oldname+2, newname+2);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -238,7 +197,7 @@ static int class_mkdir(CFS_t * cfs, const char * name)
 		r = CALL(state->cfs1, mkdir, name+2);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, mkdir, name+2);
+		r = CALL(state->cfs2, mkdir, name+2);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -252,7 +211,7 @@ static int class_rmdir(CFS_t * cfs, const char * name)
 		r = CALL(state->cfs1, rmdir, name+2);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, rmdir, name+2);
+		r = CALL(state->cfs2, rmdir, name+2);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -266,7 +225,7 @@ static size_t class_get_num_features(CFS_t * cfs, const char * name)
 		r = CALL(state->cfs1, get_num_features, name+2);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, get_num_features, name+2);
+		r = CALL(state->cfs2, get_num_features, name+2);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -280,7 +239,7 @@ static const feature_t * class_get_feature(CFS_t * cfs, const char * name, size_
 		r = CALL(state->cfs1, get_feature, name+2, num);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, get_feature, name+2, num);
+		r = CALL(state->cfs2, get_feature, name+2, num);
 		return r;
 	}
 	return (feature_t *)(-E_NO_DEV);
@@ -294,7 +253,7 @@ static int class_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 		r = CALL(state->cfs1, get_metadata, name+2, id, size, data);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, get_metadata, name+2, id, size, data);
+		r = CALL(state->cfs2, get_metadata, name+2, id, size, data);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -308,7 +267,7 @@ static int class_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 		r = CALL(state->cfs1, set_metadata, name+2, id, size, data);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, set_metadata, name+2, id, size, data);
+		r = CALL(state->cfs2, set_metadata, name+2, id, size, data);
 		return r;
 	}
 	return -E_NO_DEV;
@@ -322,7 +281,7 @@ static int class_sync(CFS_t * cfs, const char * name)
 		r = CALL(state->cfs1, sync, name+2);
 		return r;
 	} else if (!strncmp(name, "C:", 2)) {
-		r = CALL(state->cfs1, sync, name+2);
+		r = CALL(state->cfs2, sync, name+2);
 		return r;
 	}
 	return -E_NO_DEV;
