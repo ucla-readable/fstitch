@@ -37,6 +37,8 @@
 #define E_NET_USE  25 // Net address in use
 #define E_NET_IF   26 // Net low-level netif error
 
-#define MAXERROR	26
+#define E_NOT_EMPTY   26 // Directory not empty
+
+#define MAXERROR	27
 
 #endif	// !KUDOS_INC_ERROR_H */

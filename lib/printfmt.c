@@ -45,7 +45,8 @@ static char *error_string[MAXERROR+1] =
 	"connection reset",
 	"no connection",
 	"address in use",
-	"low-level netif error"
+	"low-level netif error",
+	"directory not empty"
 };
 
 /*
