@@ -83,6 +83,7 @@ int chdesc_satisfy(chdesc_t * chdesc);
 
 /* create and remove weak references to a chdesc */
 int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location);
+void chdesc_weak_forget(chdesc_t ** location);
 void chdesc_weak_release(chdesc_t ** location);
 
 /* destroy a chdesc */

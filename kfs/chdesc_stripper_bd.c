@@ -48,6 +48,7 @@ static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_
 		}
 		else if (desc->block->bd != bd)
 		{
+			// maybe some better way to satisfy just a single chdesc?
 			r = CALL(desc->block->bd, sync, desc->block);
 			if (r < 0)
 			{
@@ -79,8 +80,6 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 	uint32_t refs;
 	int r;
 
-	if (block->bd != bd)
-		printf("block->bd 0x%08x, bd 0x%08x\n", block->bd, bd);
 	assert(block->bd == bd);
 
 	block_chdesc = (chdesc_t *) depman_get_deps(block);
@@ -93,19 +92,20 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 		assert(!block_chdesc->dependents); // no one should depend on block
 
 		// Satisfy block's chdesc's inter-BD deps
-
 		r = satisfy_external_deps(bd, block, block_chdesc);
 		if (r < 0)
+		{
+			chdesc_weak_release(&block_chdesc);
 			return r;
-	}
+		}
 
-	// Satisfy block's chdescs
-
-	while (block_chdesc && block_chdesc->dependencies
-		   && (cur_chdesc = block_chdesc->dependencies->desc))
-	{
-		r = depman_remove_chdesc(cur_chdesc);
-		assert(r >= 0);
+		// Satisfy block's chdescs
+		while (block_chdesc && block_chdesc->dependencies
+			   && (cur_chdesc = block_chdesc->dependencies->desc))
+		{
+			r = depman_remove_chdesc(cur_chdesc);
+			assert(r >= 0);
+		}
 	}
 
 	// Write block
@@ -122,14 +122,13 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 		block->translated--;
 	}
 
+	chdesc_weak_release(&block_chdesc);
+
 	if (r < 0)
 	{
 		fprintf(STDERR_FILENO, "%s: Danger Will Robinson! BD::write_block() failed, recovering but chdescs already deleted.\n", __FUNCTION__);
-		if (block_chdesc)
-			chdesc_weak_release(&block_chdesc);
 		return r;
 	}
-
 
 	return 0;
 }

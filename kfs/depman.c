@@ -263,7 +263,7 @@ int depman_remove_chdesc(chdesc_t * chdesc)
 	{
 		chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
 		assert(value == value_erase);
-		value->flags &= CHDESC_IN_DEPMAN;
+		value->flags &= ~CHDESC_IN_DEPMAN;
 		/* can't fail */
 		chdesc_destroy(&value);
 	}

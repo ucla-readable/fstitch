@@ -54,6 +54,27 @@ static int read_bitmap(LFS_t * object, uint32_t blockno);
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
 static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS_File_t** file, bdesc_t** dirb, int *index);
 
+/* these two "pair" functions will help when we use CALL and might lose chdescs unless they are weak retained */
+static int weak_retain_pair(chdesc_t ** head, chdesc_t ** tail)
+{
+	int i = 0, j = 0;
+	if(head && tail)
+	{
+		i = chdesc_weak_retain(*head, head);
+		j = chdesc_weak_retain(*tail, tail);
+	}
+	return (i < 0) ? i : j;
+}
+
+static void weak_forget_pair(chdesc_t ** head, chdesc_t ** tail)
+{
+	if(head && tail)
+	{
+		chdesc_weak_forget(head);
+		chdesc_weak_forget(tail);
+	}
+}
+
 // Equivalent to JOS's read_super
 static int check_super(LFS_t * object)
 {
@@ -413,8 +434,13 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 			*ptr &= ~(1 << (blockno % 32));
 	}
 
+	weak_retain_pair(head, tail);
 	if ((r = CALL(info->ubd, write_block, bdesc)) < 0)
+	{
+		weak_forget_pair(head, tail);
 		return r;
+	}
+	weak_forget_pair(head, tail);
 
 	return 0;
 }
@@ -808,7 +834,12 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 				indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
 				*indirect_offset = num;
 			}
-			return CALL(info->ubd, write_block, indirect);
+
+			weak_retain_pair(head, tail);
+			r = CALL(info->ubd, write_block, indirect);
+			weak_forget_pair(head, tail);
+
+			return r;
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
@@ -818,6 +849,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 			inum = indirect->number;
 
 			if (head && tail) {
+				// this head is from josfs_allocate_block() above
 				curhead = *head;
 				offset = nblocks * sizeof(uint32_t);
 				if ((r = chdesc_create_byte(indirect, offset, sizeof(uint32_t), &num, head, &newtail)) < 0)
@@ -825,17 +857,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 
 				if ((r = chdesc_add_depend(newtail, curhead)) < 0)
 					return r;
-			}
-			else {
-				bdesc_touch(indirect);
-				indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
-				*indirect_offset = num;
-			}
 
-			if ((r = CALL(info->ubd, write_block, indirect)) < 0)
-				return r;
-
-			if (head && tail) {
 				curhead = *head;
 				offset = f->index * sizeof(JOSFS_File_t);
 				offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
@@ -845,20 +867,25 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 				if ((r = chdesc_add_depend(newtail, curhead)) < 0)
 					return r;
 
+				// this should add both changes at once, because they are linked
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
-
-				if (oldhead) {
-					if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
-						return r;
-				}
 			}
 			else {
+				bdesc_touch(indirect);
+				indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
+				*indirect_offset = num;
+
 				bdesc_touch(f->dirb);
 				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_indirect = inum;
 			}
-			r = CALL(info->ubd, write_block, f->dirb);
+
+			weak_retain_pair(head, tail);
+			/* FIXME handle the return values better? */
+			r = CALL(info->ubd, write_block, indirect);
+			r |= CALL(info->ubd, write_block, f->dirb);
+			weak_forget_pair(head, tail);
 
 			if (r >= 0)
 				f->file->f_indirect = inum;
@@ -887,8 +914,13 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 			dirfile->f_direct[nblocks] = num;
 		}
 
+		weak_retain_pair(head, tail);
 		if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
+		{
+			weak_forget_pair(head, tail);
 			return r;
+		}
+		weak_forget_pair(head, tail);
 
 		f->file->f_direct[nblocks] = num;
 		return 0;
@@ -1108,6 +1140,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 		}
 	}
 	else {
+		bdesc_t * value;
+
 		blockno = f->file->f_direct[nblocks - 1];
 		if (head && tail) {
 			oldhead = *head;
@@ -1129,11 +1163,17 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 			dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 			dirfile->f_direct[nblocks - 1] = 0;
 		}
+		
+		weak_retain_pair(head, tail);
 		if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
 			return NULL;
 
 		f->file->f_direct[nblocks - 1] = 0;
-		return CALL(info->ubd, read_block, blockno);
+		value = CALL(info->ubd, read_block, blockno);
+		
+		weak_forget_pair(head, tail);
+
+		return value;
 	}
 
 	return NULL;
@@ -1189,8 +1229,13 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 		dirfile->f_name[0] = '\0';
 	}
 
+	weak_retain_pair(head, tail);
 	if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
+	{
+		weak_forget_pair(head, tail);
 		return r;
+	}
+	weak_forget_pair(head, tail);
 
 	f->file->f_name[0] = '\0';
 
@@ -1229,10 +1274,13 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 		memcpy(&block->ddesc->data[offset], data, size);
 	}
 
+	weak_retain_pair(head, tail);
 	if ((r = CALL(info->ubd, write_block, block)) < 0) {
+		weak_forget_pair(head, tail);
 		bdesc_drop(&block);
 		return r;
 	}
+	weak_forget_pair(head, tail);
 
 	return 0;
 }
@@ -1327,8 +1375,14 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 					dirfile->f_size = *((off_t *) data);
 				}
 
+				weak_retain_pair(head, tail);
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
+				{
+					weak_forget_pair(head, tail);
 					return r;
+				}
+				weak_forget_pair(head, tail);
+
 				f->file->f_size = *((off_t *) data);
 				return 0;
 			}
@@ -1358,8 +1412,14 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 					dirfile->f_type = *((uint32_t *) data);
 				}
 
+				weak_retain_pair(head, tail);
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
+				{
+					weak_forget_pair(head, tail);
 					return r;
+				}
+				weak_forget_pair(head, tail);
+
 				f->file->f_type = *((uint32_t *) data);
 				return 0;
 			}

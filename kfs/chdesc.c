@@ -435,6 +435,10 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
 	
+	/* compensate for Heisenberg's uncertainty principle */
+	if(!dependent || !dependency)
+		return 0;
+	
 	/* first make sure it's not already there */
 	for(meta = dependent->dependencies; meta; meta = meta->next)
 		if(meta->desc == dependency)
@@ -550,22 +554,25 @@ int chdesc_satisfy(chdesc_t * chdesc)
 
 int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 {
-	chrefdesc_t * ref = malloc(sizeof(*ref));
-	if(!ref)
-		return -E_NO_MEM;
+	if(chdesc)
+	{
+		chrefdesc_t * ref = malloc(sizeof(*ref));
+		if(!ref)
+			return -E_NO_MEM;
+		
+		ref->desc = location;
+		ref->next = chdesc->weak_refs;
+		chdesc->weak_refs = ref;
+	}
 	
-	ref->desc = location;
-	ref->next = chdesc->weak_refs;
-	chdesc->weak_refs = ref;
-	
-	if(*location)
+	if(*location && *location != chdesc)
 		chdesc_weak_release(location);
 	*location = chdesc;
 	
 	return 0;
 }
 
-void chdesc_weak_release(chdesc_t ** location)
+void chdesc_weak_forget(chdesc_t ** location)
 {
 	if(*location)
 	{
@@ -578,13 +585,18 @@ void chdesc_weak_release(chdesc_t ** location)
 		}
 		if(!scan)
 		{
-			fprintf(STDERR_FILENO, "%s: weak release of non-weak chdesc pointer!\n", __FUNCTION__);
+			fprintf(STDERR_FILENO, "%s: weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__);
 			return;
 		}
 		*prev = scan->next;
-		*location = NULL;
 		free(scan);
 	}
+}
+
+void chdesc_weak_release(chdesc_t ** location)
+{
+	chdesc_weak_forget(location);
+	*location = NULL;
 }
 
 static void chdesc_weak_collect(chdesc_t * chdesc)
