@@ -27,8 +27,9 @@ static struct module_shutdown module_shutdowns[10];
 // Init kfsd modules.
 int kfsd_init(int argc, char * argv[])
 {
-	BD_t * bd_disk;
-	void * ptbl;
+	BD_t * bd_disk = NULL;
+	bool use_disk_1 = 0;
+	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	CFS_t * uhfses[2] = {NULL};
 	CFS_t * josfscfs;
@@ -41,64 +42,67 @@ int kfsd_init(int argc, char * argv[])
 	if (!cfs_ipc_serve())
 		kfsd_shutdown();
 
-	if (! (bd_disk = ide_pio_bd(1)) )
-		kfsd_shutdown();
 
-
-	/* discover partitions */
-	ptbl = pc_ptable_init(bd_disk);
-	if (ptbl)
+	if (use_disk_1)
 	{
-		uint32_t max = pc_ptable_count(ptbl);
-		printf("Found %d partitions.\n", max);
-		for (i = 1; i <= max; i++)
+		if (! (bd_disk = ide_pio_bd(1)) )
+			kfsd_shutdown();
+
+		/* discover partitions */
+		ptbl = pc_ptable_init(bd_disk);
+		if (ptbl)
 		{
-			uint8_t type = pc_ptable_type(ptbl, i);
-			printf("Partition %d has type %02x\n", i, type);
-			if (type == PTABLE_KUDOS_TYPE)
-				partitions[i-1] = pc_ptable_bd(ptbl, i);
+			uint32_t max = pc_ptable_count(ptbl);
+			printf("Found %d partitions.\n", max);
+			for (i = 1; i <= max; i++)
+			{
+				uint8_t type = pc_ptable_type(ptbl, i);
+				printf("Partition %d has type %02x\n", i, type);
+				if (type == PTABLE_KUDOS_TYPE)
+					partitions[i-1] = pc_ptable_bd(ptbl, i);
+			}
+			pc_ptable_free(ptbl);
+			
+			if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
+			{
+				printf("No KudOS partition found!\n");
+				kfsd_shutdown();
+			}
 		}
-		pc_ptable_free(ptbl);
-
-		if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
+		else
 		{
-			printf("No KudOS partition found!\n");
-			kfsd_shutdown();
+			printf("Using whole disk.\n");
+			partitions[0] = bd_disk;
 		}
-	}
-	else
-	{
-		printf("Using whole disk.\n");
-		partitions[0] = bd_disk;
-	}
 
-	/* setup each partition's cache, basefs, and uhfs */
-	for (i=0; i < 2; i++)
-	{
-		BD_t * cache;
-		BD_t * resizer;
-		LFS_t * lfs;
+		/* setup each partition's cache, basefs, and uhfs */
+		for (i=0; i < 2; i++)
+		{
+			BD_t * cache;
+			BD_t * resizer;
+			LFS_t * lfs;
 
-		if (!partitions[i])
-			continue;
+			if (!partitions[i])
+				continue;
 
-		/* create a cache below the resizer */
-		if (! (cache = wt_cache_bd(partitions[i], 32)) )
-			kfsd_shutdown();
+			/* create a cache below the resizer */
+			if (! (cache = wt_cache_bd(partitions[i], 32)) )
+				kfsd_shutdown();
 
-		/* create a resizer */
-		if (! (resizer = block_resizer_bd(cache, 4096)) )
-			kfsd_shutdown();
+			/* create a resizer */
+			if (! (resizer = block_resizer_bd(cache, 4096)) )
+				kfsd_shutdown();
 
-		/* create a cache above the resizer */
-		if (! (cache = wt_cache_bd(resizer, 4)) )
-			kfsd_shutdown();
+			/* create a cache above the resizer */
+			if (! (cache = wt_cache_bd(resizer, 4)) )
+				kfsd_shutdown();
 
-		if (! (lfs = wholedisk(cache)) )
-			kfsd_shutdown();
+			if (! (lfs = wholedisk(cache)) )
+				kfsd_shutdown();
 
-		if (! (uhfses[i] = uhfs(lfs)) )
-			kfsd_shutdown();
+			if (! (uhfses[i] = uhfs(lfs)) )
+				kfsd_shutdown();
+		}
 	}
 
 	if (! (josfscfs = josfs_cfs()) )
@@ -116,7 +120,7 @@ int kfsd_init(int argc, char * argv[])
 		kfsd_shutdown();
 	}
 
-	for (i=0; i < 2; i++)
+	for (i=0; i < sizeof(uhfses)/sizeof(uhfses[0]); i++)
 	{
 		if (!uhfses[i])
 			continue;
