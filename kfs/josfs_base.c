@@ -159,8 +159,8 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value)
 		return -1;
 	}
 
-	ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
 	bdesc_touch(bdesc);
+	ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
 	if (value)
 		*ptr |= (1 << (blockno % 32));
 	else
@@ -329,6 +329,9 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 	int blockno;
 	int bitmap_size;
 	int s_nblocks;
+
+	if (size != JOSFS_BLKSIZE)
+		return NULL;
 
 	s_nblocks = super->s_nblocks;
 	bitmap_size = s_nblocks / JOSFS_BLKBITSIZE;
@@ -545,25 +548,28 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 	else if (nblocks == JOSFS_NDIRECT) {
 		indirect = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, NULL, NULL);
 		if (indirect) {
-			dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 			bdesc_touch(f->dirb);
+			dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 			dirfile->f_indirect = indirect->number;
 			if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 				bdesc_drop(&block);
 				return r;
 			}
 
+			bdesc_retain(&indirect);
 			bdesc_touch(indirect);
 			f->file->f_indirect = indirect->number;
 			indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
 			*indirect_offset = block->number;
 			bdesc_drop(&block);
-			return CALL(info->ubd, write_block, indirect);
+			r = CALL(info->ubd, write_block, indirect);
+			bdesc_release(&indirect);
+			return r;
 		}
 	}
 	else {
-		dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 		bdesc_touch(f->dirb);
+		dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 		dirfile->f_direct[nblocks] = block->number;
 		if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 			bdesc_drop(&block);
@@ -706,9 +712,9 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 				new->file->f_direct[i] = old->file->f_direct[i];
 			}
 
+			bdesc_touch(new->dirb);
 			oldfile = ((struct JOSFS_File *) old->dirb->ddesc->data) + old->index;
 			newfile = ((struct JOSFS_File *) new->dirb->ddesc->data) + new->index;
-			bdesc_touch(new->dirb);
 			memcpy(newfile, oldfile, sizeof(struct JOSFS_File));
 			strcpy(newfile->f_name, new->file->f_name);
 			josfs_free_fdesc(object, oldfdesc);
@@ -747,8 +753,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	else if (nblocks > JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
-			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 			bdesc_touch(indirect);
+			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 			*((uint32_t *) (indirect->ddesc->data) + nblocks - 1) = 0;
 			if ((r = CALL(info->ubd, write_block, indirect)) < 0) {
 				bdesc_drop(&indirect);
@@ -762,8 +768,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 		if (indirect) {
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 			if (josfs_free_block(object, indirect, NULL, NULL) == 0) {
-				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				bdesc_touch(f->dirb);
+				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_indirect = 0;
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 					bdesc_drop(&indirect);
@@ -778,8 +784,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	}
 	else {
 		blockno = f->file->f_direct[nblocks - 1];
-		dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 		bdesc_touch(f->dirb);
+		dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 		dirfile->f_direct[nblocks - 1] = 0;
 		if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 			return NULL;
@@ -817,8 +823,8 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 		return -E_INVAL;
 
 	f = (struct josfs_fdesc *) file;
-	dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 	bdesc_touch(f->dirb);
+	dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 	dirfile->f_name[0] = '\0';
 	if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 		return r;
@@ -920,8 +926,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	if (id == KFS_feature_size.id) {
 		if (sizeof(off_t) == size) {
 			if (*((off_t *) data) >= 0 && *((off_t *) data) < JOSFS_MAXFILESIZE) {
-				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				bdesc_touch(f->dirb);
+				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_size = *((off_t *) data);
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 					return r;
@@ -934,8 +940,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	else if (id == KFS_feature_filetype.id) {
 		if (sizeof(uint32_t) == size) {
 			if (*((uint32_t *) data) == TYPE_FILE || *((uint32_t *) data) == TYPE_DIR) {
-				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				bdesc_touch(f->dirb);
+				dirfile = ((struct JOSFS_File *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_type = *((uint32_t *) data);
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 					return r;
