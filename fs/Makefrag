@@ -17,6 +17,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/free \
 			$(OBJDIR)/user/get \
 			$(OBJDIR)/user/grep \
+			$(OBJDIR)/user/hexdump \
 			$(OBJDIR)/user/ifdown \
 			$(OBJDIR)/user/ifup \
 			$(OBJDIR)/user/init \
@@ -59,13 +60,10 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/lady.img \
 			fs/lady.jpeg \
 			fs/lady.pal \
-			fs/long.txt \
-			fs/longer.txt \
 			fs/lorem \
 			fs/mario.pal \
 			fs/mario.spr \
 			fs/motd \
-			fs/newmotd \
 			fs/winamp.0
 
 -include fs/audio/Makefrag
