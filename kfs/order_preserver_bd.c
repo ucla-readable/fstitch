@@ -33,6 +33,7 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 	chdesc_t * prev_head_backup = NULL; 
 	int r;
 
+	assert(block_new->bd == bd);
 	// block_new should have no deps
 	// (however it /is/ ok for others to depend on block. ex: inter-bd deps.)
 	assert(!depman_get_deps(block_new));
@@ -113,6 +114,51 @@ static int order_preserver_destroy(BD_t * bd)
 
 
 //
+// Passthrough BD_t functions needing translation
+
+static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
+{
+	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	bdesc_t * bdesc;
+	int r;
+
+	if (!(bdesc = CALL(state->bd, read_block, number)))
+		return NULL;
+
+	// adjust bdesc to match this bd
+	if ((r = bdesc_alter(&bdesc)) < 0)
+	{
+		bdesc_drop(&bdesc);
+		return NULL;
+	}
+	bdesc->bd = bd;
+
+	return bdesc;
+}
+
+static int order_preserver_sync(BD_t * bd, bdesc_t * block)
+{
+	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	int r;
+
+	if (!block)
+		return CALL(state->bd, sync, NULL);
+
+	assert(block->bd == bd);
+
+	block->translated++;
+	block->bd = state->bd;
+
+	r = CALL(state->bd, sync, block);
+
+	block->bd = bd;
+	block->translated--;
+
+	return r;
+}
+
+
+//
 // Passthrough BD_t functions
 
 static uint32_t order_preserver_get_numblocks(BD_t * bd)
@@ -131,18 +177,6 @@ static uint16_t order_preserver_get_atomicsize(BD_t * bd)
 {
 	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
 	return CALL(state->bd, get_atomicsize);
-}
-
-static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
-{
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
-	return CALL(state->bd, read_block, number);
-}
-
-static int order_preserver_sync(BD_t * bd, bdesc_t * block)
-{
-	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
-	return CALL(state->bd, sync, block);	
 }
 
 
