@@ -10,8 +10,8 @@ const char netd_ipc_name_kern[] = "netd:IPC";
 static bool
 env_is_netd_net(const struct Env *e)
 {
-	return (e->env_status != ENV_FREE &&
-			  (!strncmp(e->env_name, netd_name_sh, strlen(netd_name_sh))
+	return (e->env_status != ENV_FREE
+			&& (!strncmp(e->env_name, netd_name_sh, strlen(netd_name_sh))
 				|| !strncmp(e->env_name, netd_name_kern, strlen(netd_name_kern))));
 }
 
@@ -47,6 +47,30 @@ find_netd_ipcrecv(void)
 	return 0;
 }
 
+static envid_t
+find_netd_net(void)
+{
+	size_t ntries;
+	size_t i;
+
+	// Try to find netc a few times, in case this env is being
+	// started at the same time as netd, thus giving netd time to do its
+	// fork.
+	// 20 is most arbitrary: 10 worked in bochs, so I doubled to get 20.
+	// NOTE: fsipc.c:find_fs() does the same.
+	for (ntries = 0; ntries < 20; ntries++)
+	{
+		for (i = 0; i < NENV; i++)
+		{
+			if (env_is_netd_net(&envs[i]))
+				return envs[i].env_id;
+		}
+		sys_yield();
+	}
+
+	return 0;
+}
+
 
 uint8_t req_buf[2*PGSIZE];
 
@@ -54,12 +78,18 @@ int
 connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 {
 	int r;
-	envid_t netd_ipcrecv = 0;
+	envid_t netd_ipcrecv = 0, netd_net = 0;
 
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
 		fprintf(STDERR_FILENO, "connect(): unable to find netd ipcrecv\n");
+		return -1;
+	}
+	netd_net = find_netd_net();
+	if (!netd_net)
+	{
+		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -72,13 +102,13 @@ connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 	ipc_send(netd_ipcrecv, NETREQ_CONNECT, req, PTE_P|PTE_U);
 
 	// Determine whether the connect succeded
-	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL, 0)) < 0)
+	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, 0)) < 0)
 		return r;
 
 	// Receive fds
-	if ((fd[0] = r = dup2env_recv()) < 0)
+	if ((fd[0] = r = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
-	if ((fd[1] = dup2env_recv()) < 0)
+	if ((fd[1] = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
 
 	return 0;
@@ -87,13 +117,19 @@ connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 int
 bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 {
-	envid_t netd_ipcrecv;
+	envid_t netd_ipcrecv = 0, netd_net = 0;
 	int r;
 
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
 		fprintf(STDERR_FILENO, "bind_listen(): unable to find netd ipcrecv\n");
+		return -1;
+	}
+	netd_net = find_netd_net();
+	if (!netd_net)
+	{
+		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -106,11 +142,11 @@ bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 	ipc_send(netd_ipcrecv, NETREQ_BIND_LISTEN, req, PTE_P|PTE_U);
 
 	// Determine whether the bind_listen succeded
-	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL, 0)) < 0)
+	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, 0)) < 0)
 		return r;
 
 	// Receive listen key
-	*listen_key = ipc_recv(NULL, NULL, NULL, 0);
+	*listen_key = ipc_recv(netd_net, NULL, NULL, NULL, 0);
 
 	return 0;
 }
@@ -124,7 +160,7 @@ close_listen(uint32_t listen_key)
 int
 accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* remote_port)
 {
-	envid_t netd_ipcrecv;
+	envid_t netd_ipcrecv = 0, netd_net = 0;
 	struct ip_addr ripaddr;
 	uint16_t rport;
 	int r;
@@ -133,6 +169,12 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 	if (!netd_ipcrecv)
 	{
 		fprintf(STDERR_FILENO, "accept(): unable to find netd ipcrecv\n");
+		return -1;
+	}
+	netd_net = find_netd_net();
+	if (!netd_net)
+	{
+		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -144,18 +186,18 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 	ipc_send(netd_ipcrecv, NETREQ_ACCEPT, req, PTE_P|PTE_U);
 
 	// Determine whether the accept succeded
-	if ((r = (int32_t) ipc_recv(NULL, NULL, NULL, 0)) < 0)
+	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, 0)) < 0)
 		return r;
 
 	// Receive the fds
-	if ((fd[0] = r = dup2env_recv()) < 0)
+	if ((fd[0] = r = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
-	if ((fd[1] = dup2env_recv()) < 0)
+	if ((fd[1] = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
 
 	// Receive the remote ipaddr and port
-	ripaddr.addr = ipc_recv(NULL, NULL, NULL, 0);
-	rport = (uint16_t) ipc_recv(NULL, NULL, NULL, 0);
+	ripaddr.addr = ipc_recv(netd_net, NULL, NULL, NULL, 0);
+	rport = (uint16_t) ipc_recv(netd_net, NULL, NULL, NULL, 0);
 	if (remote_ipaddr)
 		*remote_ipaddr = ripaddr;
 	if (remote_port)
@@ -168,7 +210,7 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 int
 net_stats(int fd)
 {
-	envid_t netd_ipcrecv;
+	envid_t netd_ipcrecv = 0, netd_net = 0;
 	char stats_buf[128];
 	int stats_fd;
 	int n;
@@ -180,6 +222,12 @@ net_stats(int fd)
 		fprintf(STDERR_FILENO, "net_stats: unable to find netd ipcrecv\n");
 		return -1;
 	}
+	netd_net = find_netd_net();
+	if (!netd_net)
+	{
+		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
+		return -1;
+	}
 
 	// Setup accept request
 	struct Netreq_stats *req = (struct Netreq_stats*) ROUND32(req_buf, PGSIZE);
@@ -188,7 +236,7 @@ net_stats(int fd)
 	ipc_send(netd_ipcrecv, NETREQ_STATS, req, PTE_P|PTE_U);
 
 	// Receive stats fd
-	if ((stats_fd = r = dup2env_recv()) < 0)
+	if ((stats_fd = r = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
 
 	// Copy data from stats_fd to fd

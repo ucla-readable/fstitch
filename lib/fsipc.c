@@ -39,13 +39,14 @@ extern uint8_t fsipcbuf[PGSIZE];	// page-aligned, declared in entry.S
 static int
 fsipc(unsigned type, void* fsreq, void* dstva, int* perm)
 {
+	const envid_t fs_envid = find_fs();
 	envid_t whom;
 
 	if (debug)
 		printf("[%08x] fsipc %d %08x\n", env->env_id, type, fsipcbuf);
 
-	ipc_send(find_fs(), type, fsreq, PTE_P | PTE_W | PTE_U);
-	return ipc_recv(&whom, dstva, perm, 0);
+	ipc_send(fs_envid, type, fsreq, PTE_P | PTE_W | PTE_U);
+	return ipc_recv(fs_envid, &whom, dstva, perm, 0);
 }
 
 // Send file-open request to the file server.

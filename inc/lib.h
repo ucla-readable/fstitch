@@ -82,7 +82,7 @@ sys_exofork(void)
 }
 
 int	sys_set_pgfault_upcall(envid_t env, void* upcall);
-int	sys_ipc_recv(void* rcv_pg, int timeout);
+int	sys_ipc_recv(envid_t fromenv, void* rcv_pg, int timeout);
 int	sys_ipc_try_send(envid_t dst_env, uint32_t value,
 			 void* pg, unsigned pg_perm);
 ssize_t	sys_kernbin_page_alloc(envid_t dst_env, const char* name,
@@ -91,7 +91,7 @@ int	sys_set_trapframe(envid_t env, struct Trapframe* tf);
 
 // ipc.c
 void	ipc_send(envid_t to_env, uint32_t value, void* pg, unsigned perm);
-uint32_t ipc_recv(envid_t* from_env, void* pg, unsigned* perm, int timeout);
+uint32_t ipc_recv(envid_t restrict_from_env, envid_t* from_env, void* pg, unsigned* perm, int timeout);
 
 // fork.c
 #define	PTE_SHARE	0x400
@@ -114,7 +114,7 @@ void	close_all(void);
 ssize_t	readn(int fd, void* buf, size_t nbytes);
 int	dup(int oldfd, int newfd);
 int	dup2env_send(int fdnum, envid_t envid);
-int	dup2env_recv(void);
+int	dup2env_recv(envid_t from_env);
 int	ftruncate(int fd, off_t size);
 int	fstat(int fd, struct Stat*);
 int	stat(const char* path, struct Stat*);

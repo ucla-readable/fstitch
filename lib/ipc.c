@@ -16,14 +16,14 @@
 //   If 'pg' is null, pass sys_ipc_recv a value that it will understand
 //   as meaning "no page".  (Zero is not the right value.)
 uint32_t
-ipc_recv(envid_t* fromenv, void* pg, unsigned* perm, int timeout)
+ipc_recv(envid_t restrictfrom, envid_t* fromenv, void* pg, unsigned* perm, int timeout)
 {
 	int r;
 	if(!pg)
 		pg = (void *) UTOP;
 	
 	do {
-		r = sys_ipc_recv(pg, timeout);
+		r = sys_ipc_recv(restrictfrom, pg, timeout);
 	} while(r == -E_TIMEOUT && timeout < 1);
 	
 	if(r)
@@ -42,6 +42,7 @@ ipc_recv(envid_t* fromenv, void* pg, unsigned* perm, int timeout)
 	
 	return env->env_ipc_value;
 }
+
 
 // Send 'val' (and 'pg' with 'perm', assuming 'pg' is nonnull) to 'toenv'.
 // This function keeps trying until it succeeds.

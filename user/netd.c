@@ -906,7 +906,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 	while (1)
 	{
 		perm = 0;
-		req = ipc_recv(&whom, (void*) REQVA, &perm, 0);
+		req = ipc_recv(0, &whom, (void*) REQVA, &perm, 0);
 		if (debug & DEBUG_IPCRECV)
 			printf("netd ipcrecv: request #%d from %08x [page %08x]\n",
 					 req, whom, vpt[VPN(REQVA)]);

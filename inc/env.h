@@ -67,6 +67,7 @@ struct Env {
 	envid_t env_ipc_from;		// envid of the sender	
 	unsigned env_ipc_perm;		// perm of page mapping received
 	int env_ipc_timeout;		// timeout for when to fail ipc_recv
+	envid_t env_ipc_allow_from; // if != 0, the only env allowed to send to us
 
 #if ENABLE_ENV_SYMS
 	struct Sym *symtbl;

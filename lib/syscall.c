@@ -117,9 +117,9 @@ sys_set_pgfault_upcall(envid_t envid, void* upcall)
 }
 
 int
-sys_ipc_recv(void* dstva, int timeout)
+sys_ipc_recv(envid_t fromenv, void* dstva, int timeout)
 {
-	return syscall(SYS_ipc_recv, (uintptr_t) dstva, timeout, 0, 0, 0);
+	return syscall(SYS_ipc_recv, fromenv, (uintptr_t) dstva, timeout, 0, 0);
 }
 
 int

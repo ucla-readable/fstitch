@@ -362,7 +362,7 @@ sys_set_pgfault_upcall(envid_t envid, uintptr_t upcall)
 // Return < 0 on error.  Errors are:
 //	-E_INVAL if dstva < UTOP but dstva is not page-aligned.
 static int
-sys_ipc_recv(uintptr_t dstva, int timeout)
+sys_ipc_recv(envid_t fromenv, uintptr_t dstva, int timeout)
 {
 	if(dstva >= UTOP)
 		curenv->env_ipc_dstva = UTOP;
@@ -378,6 +378,7 @@ sys_ipc_recv(uintptr_t dstva, int timeout)
 	curenv->env_ipc_recving = 1;
 	curenv->env_status = ENV_NOT_RUNNABLE;
 	curenv->env_ipc_timeout = jiffies + timeout;
+	curenv->env_ipc_allow_from = fromenv;
 	sched_yield();
 }
 
@@ -385,6 +386,7 @@ sys_ipc_recv(uintptr_t dstva, int timeout)
 // Try to send 'value' to the target env 'envid'.
 // If va != 0, then also send page currently mapped at 'va',
 // so that receiver gets a duplicate mapping of the same page.
+// If env_ipc_recvingfrom is not 0 and not the sender's id, fails.
 //
 // The send fails with a return value of -E_IPC_NOT_RECV if the
 // target has not requested IPC with sys_ipc_recv.
@@ -423,7 +425,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm)
 	if(envid2env(envid, &e, 0) || e->env_status == ENV_FREE)
 		return -E_BAD_ENV;
 	
-	if(!e->env_ipc_recving)
+	if(!e->env_ipc_recving || (e->env_ipc_allow_from && e->env_ipc_allow_from != curenv->env_id))
 	{
 		/* apply priority inversion */
 		if(e->env_epriority < curenv->env_epriority)
@@ -897,7 +899,7 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 		case SYS_set_pgfault_upcall:
 			return sys_set_pgfault_upcall(a1, a2);
 		case SYS_ipc_recv:
-			return sys_ipc_recv(a1, a2);
+			return sys_ipc_recv(a1, a2, a3);
 		case SYS_ipc_try_send:
 			return sys_ipc_try_send(a1, a2, a3, a4);
 		case SYS_batch_syscall:
