@@ -6,6 +6,9 @@
 #include <inc/lib.h> // for get_pte()
 #include <inc/env.h>
 
+#define IPC_RECV_TIMEOUT 100
+
+
 // Va at which to receive page mappings containing client reqs.
 // This is the same va as serv.c's, why not.
 #define REQVA (0x10000000 - PGSIZE)
@@ -188,11 +191,16 @@ static void serve()
 	int perm = 0;
 	uint32_t r;
 
-	r = ipc_recv(&whom, (void*) REQVA, &perm, 0);
+	r = ipc_recv(&whom, (void*) REQVA, &perm, IPC_RECV_TIMEOUT);
 	if (!whom && !perm)
 	{
-		fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);
-		return;
+		if (r == -E_TIMEOUT)
+			return;
+		else
+		{
+			fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);
+			return;
+		}
 	}
 
 	// All requests must contain an argument page
