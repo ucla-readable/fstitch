@@ -46,7 +46,6 @@ cfs_open(const char *fname, int mode, void *refpg)
 	uint32_t perm;
 
 	fsid = find_fs();
-	printf("sending to env: %08x\n", fsid);
 
 	struct Scfs_open *pg = (struct Scfs_open*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -133,8 +132,7 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 		if (r < 0) return r;
 		memcpy(data + i, (void*)REQVA, MIN(size-i, PGSIZE));
 		sys_page_unmap(0, (void*)REQVA);
-		assert(r == MIN(size - i, PGSIZE));
-		if ((r >= 0) && (r < MIN(size - i, PGSIZE)))
+		if (r < MIN(size - i, PGSIZE))
 			return i+r;
 	}
 	return size;
@@ -175,8 +173,7 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 			assert(from == fsid);
 			if (from == 0) panic("cfs_write::ipc_recv\n");
 		} while (from != fsid);
-		assert(r == MIN(size - i, PGSIZE));
-		if ((r >= 0) && (r < MIN(size - i, PGSIZE)))
+		if (r < MIN(size - i, PGSIZE))
 			return i+r;
 	}
 	return size;
