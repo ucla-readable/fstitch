@@ -30,17 +30,11 @@
 #define super ((struct JOSFS_Super *) info->super_block->ddesc->data)
 #define isvalid(x) (x >= reserved && x < s_nblocks)
 
-struct josfs_bmc
-{
-	uint8_t data[JOSFS_BLKSIZE];
-	uint32_t blockno;
-};
-
 struct lfs_info
 {
 	BD_t * ubd;
 	bdesc_t * super_block;
-	struct josfs_bmc * bitmap_cache; // Bitmap mini write through cache!
+	bdesc_t * bitmap_cache; // Bitmap mini write through cache!
 };
 
 struct josfs_fdesc {
@@ -385,27 +379,24 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 
 	target = 2 + (blockno / (JOSFS_BLKBITSIZE));
 
-	if (! info->bitmap_cache) {
-		info->bitmap_cache = malloc(sizeof(struct josfs_bmc));
-		if (!info->bitmap_cache)
-			return -1;
-		info->bitmap_cache->blockno = 0;
+	if (info->bitmap_cache && info->bitmap_cache->number != target) {
+		bdesc_release(&info->bitmap_cache);
+		info->bitmap_cache = NULL;
 	}
 
-	if (info->bitmap_cache->blockno != target) {
-		bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
+	if (! info->bitmap_cache) {
+		bdesc = CALL(info->ubd, read_block, target);
 		if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap!\n");
 			if (bdesc)
 				bdesc_drop(&bdesc);
 			return -1;
 		}
-		memcpy(info->bitmap_cache->data, bdesc->ddesc->data, JOSFS_BLKSIZE);
-		info->bitmap_cache->blockno = target;
-		bdesc_drop(&bdesc);
+		assert(bdesc_retain(&bdesc) >= 0); // TODO: handle error
+		info->bitmap_cache = bdesc;
 	}
 
-	ptr = ((uint32_t *) info->bitmap_cache->data) + ((blockno % JOSFS_BLKBITSIZE) / 32);
+	ptr = ((uint32_t *) info->bitmap_cache->ddesc->data) + ((blockno % JOSFS_BLKBITSIZE) / 32);
 	result = *ptr & (1 << (blockno % 32));
 
 	if (result)
@@ -430,13 +421,14 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 
 	target = 2 + (blockno / JOSFS_BLKBITSIZE);
 
-	// Perhaps this can be smarter, but I really need to have a bdesc below (need more than just the data)
-	if (info->bitmap_cache && info->bitmap_cache->blockno == target) {
-		free(info->bitmap_cache);
-		info->bitmap_cache = NULL;
+	if (info->bitmap_cache && info->bitmap_cache->number == target) {
+		bdesc = info->bitmap_cache;
 	}
-
-	bdesc = CALL(info->ubd, read_block, target);
+	else {
+		bdesc_release(&info->bitmap_cache);
+		info->bitmap_cache = NULL;
+		bdesc = CALL(info->ubd, read_block, target);
+	}
 
 	if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
 		printf("josfs_base: trouble reading bitmap!\n");
@@ -444,6 +436,9 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 			bdesc_drop(&bdesc);
 		return -1;
 	}
+
+	info->bitmap_cache = bdesc;
+	bdesc_retain(&bdesc);
 
 	if (head && tail) {
 		if (((uint32_t *) bdesc->ddesc->data)[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value) {
@@ -454,7 +449,6 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		/* bit chdescs take offset in increments of 32 bits */
 		ch = chdesc_create_bit(bdesc, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32));
 		if (!ch) {
-			bdesc_drop(&bdesc);
 			return -1;
 		}
 
@@ -463,7 +457,6 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 
 		if (*head) {
 			if ((r = chdesc_add_depend(ch, *head)) < 0) {
-				bdesc_drop(&bdesc);
 				return r;
 			}
 		}
@@ -1131,10 +1124,9 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 				if ((blk = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, head, tail)) != NULL) {
 					r =bdesc_retain(&blk);
 					assert(r >= 0); // TODO: handle error
+					dir->f_size += JOSFS_BLKSIZE;
 					r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &(dir->f_size), head, tail);
 					if (r >= 0) {
-						dir->f_size += JOSFS_BLKSIZE;
-
 						memset(&temp_file, 0, sizeof(JOSFS_File_t));
 						strcpy(temp_file.f_name, filename);
 						temp_file.f_type = type;
