@@ -1,6 +1,8 @@
 OBJDIRS += kfs
 
-KFSOFILES := 		$(OBJDIR)/kfs/ide_pio_bd.o \
+KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
+			$(OBJDIR)/kfs/ide_pio_bd.o \
+			$(OBJDIR)/kfs/pc_ptable_bd.o \
 			$(OBJDIR)/kfs/kfsd.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a

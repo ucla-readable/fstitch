@@ -5,11 +5,12 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/ide_pio_bd.h>
 
 struct ide_info {
 	uint8_t controller;
 	uint8_t disk;
-	uint32_t blocks;
+	uint32_t length;
 };
 
 static void ide_notbusy(void)
@@ -80,7 +81,7 @@ static uint32_t ide_size(uint32_t disk)
 	
 static uint32_t ide_pio_bd_get_numblocks(BD_t * object)
 {
-	return ((struct ide_info *) object->instance)->blocks;
+	return ((struct ide_info *) object->instance)->length;
 }
 
 static uint32_t ide_pio_bd_get_blocksize(BD_t * object)
@@ -93,24 +94,12 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
-	if(number >= ((struct ide_info *) object->instance)->blocks)
+	if(number >= ((struct ide_info *) object->instance)->length)
 		return NULL;
 	
-	bdesc = malloc(sizeof(*bdesc));
+	bdesc = bdesc_alloc(object, number, 0, SECTSIZE);
 	if(!bdesc)
 		return NULL;
-	
-	bdesc->data = malloc(SECTSIZE);
-	if(!bdesc->data)
-	{
-		free(bdesc);
-		return NULL;
-	}
-	
-	bdesc->bd = object;
-	bdesc->number = number;
-	bdesc->offset = 0;
-	bdesc->refs = 0;
 	
 	/* read it */
 	ide_read(((struct ide_info *) object->instance)->disk, number, bdesc->data, 1);
@@ -129,7 +118,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -1;
 	
 	/* make sure it's a valid block */
-	if(block->number >= ((struct ide_info *) object->instance)->blocks)
+	if(block->number >= ((struct ide_info *) object->instance)->length)
 		return -1;
 	
 	/* write it */
@@ -173,7 +162,7 @@ BD_t * ide_pio_bd(uint32_t disk)
 	
 	((struct ide_info *) bd->instance)->controller = 0;
 	((struct ide_info *) bd->instance)->disk = disk;
-	((struct ide_info *) bd->instance)->blocks = ide_size(disk);
+	((struct ide_info *) bd->instance)->length = ide_size(disk);
 	
 	return bd;
 }
