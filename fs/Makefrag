@@ -9,6 +9,7 @@ FSOFILES := 		$(OBJDIR)/fs/ide.o \
 USERAPPS := 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/init \
 			$(OBJDIR)/user/diskwrite \
+			$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/sleep \
 			$(OBJDIR)/user/cat \
 			$(OBJDIR)/user/testfpu \
