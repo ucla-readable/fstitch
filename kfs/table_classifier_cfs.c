@@ -541,7 +541,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 		return r;
 	}
 
-	if ((r = modman_inc_cfs(path_cfs, cfs)) < 0)
+	if ((r = modman_inc_cfs(path_cfs, cfs, path)) < 0)
 	{
 		vector_pop_back(state->mount_table);
 		mount_entry_destroy(me);

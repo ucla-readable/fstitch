@@ -11,13 +11,13 @@
 extern CFS_t * modman_devfs;
 
 #define MODMAN_ENTRY_STRUCT(module, type, qualifier...) \
-struct modman_entry_##type { \
-	qualifier module * type; \
-	qualifier int usage; \
-	const char * name; \
-	qualifier vector_t * users; \
-}; \
-typedef struct modman_entry_##type modman_entry_##type##_t;
+typedef struct modman_entry_##type { \
+	qualifier module * type;         /* this module's address */ \
+	qualifier int usage;             /* this module's usage count */ \
+	const char * name;               /* this module's name */ \
+	qualifier vector_t * users;      /* the users of this module - no type information though */ \
+	qualifier vector_t * use_names;  /* the use names for each user, in the same order */ \
+} modman_entry_##type##_t;
 
 MODMAN_ENTRY_STRUCT(BD_t, bd, const);
 MODMAN_ENTRY_STRUCT(CFS_t, cfs, const);
@@ -38,9 +38,9 @@ int modman_add_anon_cfs(CFS_t * cfs, const char * prefix);
 int modman_add_anon_lfs(LFS_t * lfs, const char * prefix);
 
 /* Increment the usage count and return the new value. */
-int modman_inc_bd(BD_t * bd, void * user);
-int modman_inc_cfs(CFS_t * cfs, void * user);
-int modman_inc_lfs(LFS_t * lfs, void * user);
+int modman_inc_bd(BD_t * bd, void * user, const char * name);
+int modman_inc_cfs(CFS_t * cfs, void * user, const char * name);
+int modman_inc_lfs(LFS_t * lfs, void * user, const char * name);
 
 /* Decrement the usage count and return the new value. */
 int modman_dec_bd(BD_t * bd, void * user);

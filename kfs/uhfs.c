@@ -760,7 +760,7 @@ CFS_t * uhfs(LFS_t * lfs)
 		DESTROY(cfs);
 		return NULL;
 	}
-	if(modman_inc_lfs(lfs, cfs) < 0)
+	if(modman_inc_lfs(lfs, cfs, NULL) < 0)
 	{
 		modman_rem_cfs(cfs);
 		DESTROY(cfs);

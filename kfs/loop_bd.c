@@ -198,7 +198,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 		DESTROY(bd);
 		return NULL;
 	}
-	if(modman_inc_lfs(lfs, bd) < 0)
+	if(modman_inc_lfs(lfs, bd, NULL) < 0)
 	{
 		modman_rem_bd(bd);
 		DESTROY(bd);

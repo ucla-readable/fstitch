@@ -591,7 +591,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 		return r;
 	}
 	
-	if((r = modman_inc_bd(bd, cfs)) < 0)
+	if((r = modman_inc_bd(bd, cfs, name)) < 0)
 	{
 		vector_pop_back(state->bd_table);
 		bd_entry_destroy(bde);

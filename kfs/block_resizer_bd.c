@@ -206,7 +206,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 		DESTROY(bd);
 		return NULL;
 	}
-	if(modman_inc_bd(disk, bd) < 0)
+	if(modman_inc_bd(disk, bd, NULL) < 0)
 	{
 		modman_rem_bd(bd);
 		DESTROY(bd);

@@ -256,7 +256,7 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 		DESTROY(bd);
 		return NULL;
 	}
-	if(modman_inc_bd(disk, bd) < 0)
+	if(modman_inc_bd(disk, bd, NULL) < 0)
 	{
 		modman_rem_bd(bd);
 		DESTROY(bd);

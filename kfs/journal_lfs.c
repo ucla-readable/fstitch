@@ -1038,11 +1038,11 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 		goto error_add;
-	if(modman_inc_lfs(journal, lfs) < 0)
+	if(modman_inc_lfs(journal, lfs, "Journal") < 0)
 		goto error_inc_1;
-	if(modman_inc_lfs(fs, lfs) < 0)
+	if(modman_inc_lfs(fs, lfs, "Filesystem") < 0)
 		goto error_inc_2;
-	if(modman_inc_bd(fs_queue, lfs) < 0)
+	if(modman_inc_bd(fs_queue, lfs, "Queue") < 0)
 		goto error_inc_3;
 
 	return lfs;

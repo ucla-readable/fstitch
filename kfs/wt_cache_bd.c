@@ -215,7 +215,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 		DESTROY(bd);
 		return NULL;
 	}
-	if(modman_inc_bd(disk, bd) < 0)
+	if(modman_inc_bd(disk, bd, NULL) < 0)
 	{
 		modman_rem_bd(bd);
 		DESTROY(bd);

@@ -28,7 +28,7 @@ CFS_t * modman_devfs = NULL;
 static int modman_add(hash_map_t * map, void * module, const char * name)
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
-	int r;
+	int r = -E_NO_MEM;
 	
 	if(mod)
 		return -E_BUSY;
@@ -42,27 +42,19 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 	mod->name = strdup(name);
 	
 	if(!mod->name)
-	{
-		free(mod);
-		return -E_NO_MEM;
-	}
+		goto error_name;
 	
 	mod->users = vector_create();
 	if(!mod->users)
-	{
-		free((char *) mod->name);
-		free(mod);
-		return -E_NO_MEM;
-	}
+		goto error_users;
+	
+	mod->use_names = vector_create();
+	if(!mod->use_names)
+		goto error_use_names;
 	
 	r = hash_map_insert(map, module, mod);
 	if(r < 0)
-	{
-		vector_destroy(mod->users);
-		free((char *) mod->name);
-		free(mod);
-		return r;
-	}
+		goto error_insert;
 	
 	/* this is a cheezy hack to add BD modules to modman_devfs
 	 * here in modman_add(), rather than the macro-generated
@@ -71,12 +63,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 	{
 		r = devfs_bd_add(modman_devfs, mod->name, (BD_t *) module);
 		if(r < 0)
-		{
-			hash_map_erase(map, module);
-			free((char *) mod->name);
-			free(mod);
-			return r;
-		}
+			goto error_hack;
 		/* usage count will have increased to 1, put it down to 0 again */
 		mod->usage = 0;
 		Dprintf("%s: resetting usage count of new module %s to 0\n", __FUNCTION__, mod->name);
@@ -84,6 +71,18 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 	
 	Dprintf("%s: new module %s\n", __FUNCTION__, mod->name);
 	return 0;
+	
+error_hack:
+	hash_map_erase(map, module);
+error_insert:
+	vector_destroy(mod->use_names);
+error_use_names:
+	vector_destroy(mod->users);
+error_users:
+	free((char *) mod->name);
+error_name:
+	free(mod);
+	return r;
 }
 
 static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
@@ -93,16 +92,36 @@ static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
 	return modman_add(map, module, name);
 }
 
-static int modman_inc(hash_map_t * map, void * module, void * user)
+static int modman_inc(hash_map_t * map, void * module, void * user, const char * name)
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
 		return -E_NOT_FOUND;
 	if(user)
 	{
-		int r = vector_push_back(mod->users, user);
+		char * copy = NULL;
+		int r;
+		if(name)
+		{
+			copy = strdup(name);
+			if(!copy)
+				return -E_NO_MEM;
+		}
+		r = vector_push_back(mod->users, user);
 		if(r < 0)
+		{
+			if(copy)
+				free(copy);
 			return r;
+		}
+		r = vector_push_back(mod->use_names, copy);
+		if(r < 0)
+		{
+			vector_pop_back(mod->users);
+			if(copy)
+				free(copy);
+			return -E_NO_MEM;
+		}
 	}
 	Dprintf("%s: increasing usage of %s to %d by 0x%08x\n", __FUNCTION__, mod->name, mod->usage + 1, user);
 	return ++mod->usage;
@@ -117,11 +136,15 @@ static int modman_dec(hash_map_t * map, void * module, void * user)
 		return -E_INVAL;
 	if(user)
 	{
-		/* remove the last instance of this user from the vector (more efficient than the first) */
+		/* remove the last instance of this user from the vectors (more efficient than the first) */
 		size_t last = vector_size(mod->users);
 		while(last-- > 0)
 			if(vector_elt(mod->users, last) == user)
 			{
+				char * name = (char *) vector_elt(mod->use_names, last);
+				if(name)
+					free(name);
+				vector_erase(mod->use_names, last);
 				vector_erase(mod->users, last);
 				break;
 			}
@@ -210,10 +233,16 @@ int modman_add##postfix##_##type(type##_t * type, const char * name) \
 
 #define MODMAN_ADD_ANON(type) MODMAN_ADD(type, _anon)
 
-#define MODMAN_COUNT(op, type) \
-int modman_##op##_##type(type##_t * type, void * user) \
+#define MODMAN_INC(type) \
+int modman_inc_##type(type##_t * type, void * user, const char * name) \
 { \
-	return modman_##op(type##_map, type, user); \
+	return modman_inc(type##_map, type, user, name); \
+}
+
+#define MODMAN_DEC(type) \
+int modman_dec_##type(type##_t * type, void * user) \
+{ \
+	return modman_dec(type##_map, type, user); \
 }
 
 #define MODMAN_OP(value, op, type, cast...) \
@@ -231,12 +260,12 @@ MODMAN_ADD_ANON(bd);
 MODMAN_ADD_ANON(cfs);
 MODMAN_ADD_ANON(lfs);
 
-MODMAN_COUNT(inc, bd);
-MODMAN_COUNT(inc, cfs);
-MODMAN_COUNT(inc, lfs);
-MODMAN_COUNT(dec, bd);
-MODMAN_COUNT(dec, cfs);
-MODMAN_COUNT(dec, lfs);
+MODMAN_INC(bd);
+MODMAN_INC(cfs);
+MODMAN_INC(lfs);
+MODMAN_DEC(bd);
+MODMAN_DEC(cfs);
+MODMAN_DEC(lfs);
 MODMAN_OP(int, rem, bd);
 MODMAN_OP(int, rem, cfs);
 MODMAN_OP(int, rem, lfs);

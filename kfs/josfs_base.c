@@ -1838,7 +1838,7 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 		DESTROY(lfs);
 		return NULL;
 	}
-	if(modman_inc_bd(block_device, lfs) < 0)
+	if(modman_inc_bd(block_device, lfs, NULL) < 0)
 	{
 		modman_rem_lfs(lfs);
 		DESTROY(lfs);

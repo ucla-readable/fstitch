@@ -211,9 +211,9 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 		goto error_add;
-	if(modman_inc_bd(disk0, bd) < 0)
+	if(modman_inc_bd(disk0, bd, "Disk 0") < 0)
 		goto error_inc_1;
-	if(modman_inc_bd(disk1, bd) < 0)
+	if(modman_inc_bd(disk1, bd, "Disk 1") < 0)
 		goto error_inc_2;
 	
 	return bd;

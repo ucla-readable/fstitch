@@ -277,7 +277,7 @@ LFS_t * wholedisk(BD_t * bd)
 		DESTROY(lfs);
 		return NULL;
 	}
-	if(modman_inc_bd(bd, lfs) < 0)
+	if(modman_inc_bd(bd, lfs, NULL) < 0)
 	{
 		modman_rem_lfs(lfs);
 		DESTROY(lfs);
