@@ -955,12 +955,14 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	char filename[JOSFS_MAXNAMELEN];
 	char pname[JOSFS_MAXNAMELEN];
 	JOSFS_File_t *dir = NULL, *f = NULL;
+	JOSFS_File_t temp_file;
 	struct josfs_fdesc * new_fdesc;
 	bdesc_t * blk = NULL;
 	bdesc_t * dirblock = NULL;
 	fdesc_t * pdir_fdesc;
-	int i, j, r, index;
+	int i, j, r, index, offset;
 	uint32_t nblock;
+	chdesc_t * oldhead = NULL;
 
 	if (link)
 		return NULL;
@@ -968,6 +970,9 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	new_fdesc = malloc(sizeof(struct josfs_fdesc));
 	if (!new_fdesc)
 		return NULL;
+
+	if (head && tail)
+		oldhead = *head;
 
 	strncpy(new_fdesc->fullpath, name, JOSFS_MAXPATHLEN);
 	new_fdesc->fullpath[JOSFS_MAXPATHLEN - 1] = 0;
@@ -991,17 +996,47 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 					// Search for an empty slot
 					for (j = 0; j < JOSFS_BLKFILES; j++) {
 						if (f[j].f_name[0] == '\0') {
-							bdesc_touch(blk);
-							f = (JOSFS_File_t *) blk->ddesc->data; // reset ptr after bdesc_touch
-							memset(&f[j], 0, sizeof(JOSFS_File_t));
-							strcpy(f[j].f_name, filename);
-							f[j].f_type = type;
+							memset(&temp_file, 0, sizeof(JOSFS_File_t));
+							strcpy(temp_file.f_name, filename);
+							temp_file.f_type = type;
+
+							if (head && tail) {
+								offset = j * sizeof(JOSFS_File_t);
+								if ((r = chdesc_create_byte(blk, offset, sizeof(JOSFS_File_t), &temp_file, head, tail)) < 0) {
+									bdesc_drop(&blk);
+									free(new_fdesc);
+									josfs_free_fdesc(object, pdir_fdesc);
+									return NULL;
+								}
+
+								r = depman_add_chdesc(*head);
+								assert(r >= 0); // TODO: handle error
+
+								if (oldhead) {
+									if ((chdesc_add_depend(*tail, oldhead)) < 0) {
+										bdesc_drop(&blk);
+										free(new_fdesc);
+										josfs_free_fdesc(object, pdir_fdesc);
+										return NULL;
+									}
+								}
+							}
+							else {
+								bdesc_touch(blk);
+								f = (JOSFS_File_t *) blk->ddesc->data; // reset ptr after bdesc_touch
+								memcpy(&f[j], &temp_file, sizeof(JOSFS_File_t));
+							}
+
 
 							// must retain before passing the hot potato...
 							r = bdesc_retain(&blk);
 							assert(r >= 0);
-							// FIXME chdesc
-							if ((r = CALL(info->ubd, write_block, blk)) >= 0) {
+
+							weak_retain_pair(head, tail);
+							r = CALL(info->ubd, write_block, blk);
+							weak_forget_pair(head, tail);
+
+							if (r >= 0) {
 								new_fdesc->file = malloc(sizeof(JOSFS_File_t));
 								memcpy(new_fdesc->file, &f[j], sizeof(JOSFS_File_t));
 								new_fdesc->file->f_dir = dir;
