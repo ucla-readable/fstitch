@@ -100,6 +100,8 @@ static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset)
 
 static int kpl_read_map(struct Fd* fd, off_t offset, void** blk)
 {
+	/* This version of read_map won't actually take advantage of the
+	 * possibility to share pages used for multiple environments. */
 	int r;
 	*blk = fd2data(fd) + PGSIZE;
 	if((r = sys_page_alloc(0, *blk, PTE_U | PTE_W | PTE_P)) < 0)
