@@ -157,22 +157,11 @@ static int josfs_cfs_close(CFS_t * cfs, int fid)
 	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
 	int idx;
-	open_file_t * f;
-	int r, s;
 
 	if ((idx = fid_idx(fid, state->open_file)) < 0)
 		return idx;
-	f = &state->open_file[idx];
 
-	if ((r = open_file_close(f)) < 0)
-		return r;
-	/* only close it if there are no more clients using it */
-	if (!r && (s = close(f->fd)) < 0)
-		return s;
-
-	/* return r and not s because r informs cfs clients if the file is
-	 * still open in another env */
-	return r;
+	return open_file_close(&state->open_file[idx]);
 }
 
 static int josfs_cfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
