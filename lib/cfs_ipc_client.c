@@ -112,11 +112,13 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 	for (i = 0; i < size; i += PGSIZE) {
 		struct Scfs_read *pg = (struct Scfs_read*)
 			ROUNDUP32(ipc_page, PGSIZE);
+		const uint32_t requested = MIN(size - i, PGSIZE);
+
 		memset(pg, 0, PGSIZE);
 		pg->scfs_type = SCFS_READ;
 		pg->fid = fid;
 		pg->offset = offset + i;
-		pg->size = MIN(size - i, PGSIZE);
+		pg->size = requested;
 
 		ipc_send(fsid, 0, pg, PTE_U|PTE_P, NULL);
 
@@ -126,13 +128,18 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 		do {
 			r = ipc_recv(fsid, &from, (void*)REQVA, &perm, NULL, 0);
 			assert(from == fsid);
-			if (from == 0) panic("%s::ipc_recv\n", __FUNCTION__);
+			if (from == 0)
+				panic("%s::ipc_recv\n", __FUNCTION__);
 		} while (from != fsid);
-		if (r < 0) return r;
-		memcpy(data + i, (void*)REQVA, MIN(size-i, PGSIZE));
+		if (r < 0)
+			return i ? i : r;
+		memcpy(data + i, (void*)REQVA, requested);
 		sys_page_unmap(0, (void*)REQVA);
-		if (r < MIN(size - i, PGSIZE))
-			return i+r;
+		if (r < requested)
+		{
+			size = i + r;
+			return size ? size : -E_EOF;
+		}
 	}
 	return size;
 }

@@ -120,8 +120,8 @@ static int kpl_read_map(struct Fd* fd, off_t offset, void** blk)
 	*blk = fd2data(fd) + PGSIZE;
 	if((r = sys_page_alloc(0, *blk, PTE_U | PTE_W | PTE_P)) < 0)
 		return r;
-	if(kpl_read(fd, *blk, PGSIZE, offset & ~(PGSIZE - 1)) < 0)
-		return -1;
+	if((r = kpl_read(fd, *blk, PGSIZE, offset & ~(PGSIZE - 1))) < 0)
+		return r;
 	return 0;
 }
 

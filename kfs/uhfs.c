@@ -105,7 +105,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 		{
 			const feature_t * f = CALL(state->lfs, get_feature, name, i);
 			if (f->id == KFS_feature_size.id)
-				size_id = i;
+				size_id = KFS_feature_size.id;
 			else if (f->id == KFS_feature_filetype.id)
 				type = 1;
 
@@ -155,26 +155,48 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 	uint32_t dataoffset = (offset % blocksize);
 	bdesc_t * bd;
 	uint32_t size_read = 0;
+	uint32_t file_size = -1;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
 	if (!f)
 		return -E_INVAL;
 
+	/* if we have filesize, use it! */
+	if (f->size_id)
+	{
+		size_t md_size;
+		void * data;
+		int r;
+		if ((r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &md_size, &data)) < 0)
+			return r;
+		assert(md_size == sizeof(file_size));
+		file_size = *((uint32_t *) data);
+		free(data);
+	}
 	while (size_read < size)
 	{
+		uint32_t limit;
+		
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_read);
 		if (!bd)
-			return size_read;
+			return size_read ? size_read : -E_EOF;
 
-		const uint32_t n = MIN(bd->length - dataoffset, size - size_read);
-		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, n);
-		size_read += n;
-		dataoffset = 0; /* dataoffset only needed for first block */
+		limit = MIN(bd->length - dataoffset, size - size_read);
+		if (f->size_id)
+			if (offset + size_read + limit > file_size)
+				limit = file_size - offset - size_read;
+		
+		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, limit);
+		size_read += limit;
+		/* dataoffset only needed for first block */
+		dataoffset = 0;
 
 		bdesc_drop(&bd);
+		if (!limit)
+			break;
 	}
 
-	return size_read;
+	return size_read ? size_read : (size ? -E_EOF : 0);
 }
 
 static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)

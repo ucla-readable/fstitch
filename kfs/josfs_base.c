@@ -419,7 +419,6 @@ static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t o
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	bdesc_t * indirect;
-	uint32_t * indirect_offset;
 	uint32_t blockno;
 
 	Dprintf("JOSFSDEBUG: josfs_get_file_block %s, %d\n", f->file->f_name, offset);
@@ -428,8 +427,7 @@ static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t o
 		if (offset >= JOSFS_NDIRECT * JOSFS_BLKSIZE) {
 			indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 			if (indirect) {
-				indirect_offset = (uint32_t *) (indirect->ddesc->data + (offset / JOSFS_BLKSIZE));
-				blockno = *indirect_offset;
+				blockno = ((uint32_t *) indirect->ddesc->data)[offset / JOSFS_BLKSIZE];
 				bdesc_drop(&indirect);
 				return CALL(info->ubd, read_block, blockno);
 			}
@@ -517,7 +515,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
 			bdesc_touch(indirect);
-			indirect_offset = (uint32_t *) (indirect->ddesc->data + nblocks);
+			indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
 			*indirect_offset = block->number;
 			bdesc_drop(&block);
 			return CALL(info->ubd, write_block, indirect);
@@ -536,7 +534,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 
 			bdesc_touch(indirect);
 			f->file->f_indirect = indirect->number;
-			indirect_offset = (uint32_t *) (indirect->ddesc->data + nblocks);
+			indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
 			*indirect_offset = block->number;
 			bdesc_drop(&block);
 			return CALL(info->ubd, write_block, indirect);
