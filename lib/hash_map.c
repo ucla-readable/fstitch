@@ -198,19 +198,20 @@ bool hash_map_erase(hash_map_t * hm, const void * k)
 
 bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 {
-	size_t elt_num;
 	chain_elt_t * head;
 	chain_elt_t * elt;
 
 	// Check that newk isn't already in use
 
-	if (hash_map_find_val(hm, newk))
+	const size_t newk_elt_num = hash_ptr(newk, vector_size(hm->tbl));
+	head = vector_elt(hm->tbl, newk_elt_num);
+	if (head && chain_search_key(head, newk))
 		return 0;
 
 	// Find oldk
 
-	elt_num = hash_ptr(oldk, vector_size(hm->tbl));
-	head = vector_elt(hm->tbl, elt_num);
+	const size_t oldk_elt_num = hash_ptr(oldk, vector_size(hm->tbl));
+	head = vector_elt(hm->tbl, oldk_elt_num);
 	if (!head)
 		return 0;
 
@@ -224,7 +225,7 @@ bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	if (elt->prev)
 		elt->prev->next = elt->next;
 	else
-		vector_elt_set(hm->tbl, elt_num, elt->next);
+		vector_elt_set(hm->tbl, oldk_elt_num, elt->next);
 	if (elt->next)
 		elt->next->prev = elt->prev;
 
@@ -232,16 +233,13 @@ bool hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	elt->prev = NULL;
 	elt->next = NULL;
 
-	elt_num = hash_ptr(newk, vector_size(hm->tbl));
-	head = vector_elt(hm->tbl, elt_num);
-
+	head = vector_elt(hm->tbl, newk_elt_num);
 	if (head)
 	{
 		elt->next = head;
 		head->prev = elt;
 	}
-
-	vector_elt_set(hm->tbl, elt_num, elt);
+	vector_elt_set(hm->tbl, newk_elt_num, elt);
 
 	return 1;
 }
