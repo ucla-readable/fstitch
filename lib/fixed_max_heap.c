@@ -150,7 +150,7 @@ fixed_max_heap_delete(fixed_max_heap_t *heap, void *elt)
 
 // returns 1 if found. 0 if not found.
 int
-fixed_max_heap_contains(fixed_max_heap_t *heap, void *elt)
+fixed_max_heap_contains(const fixed_max_heap_t *heap, const void *elt)
 {
 	// find element XXX take advantage of the fact that is a heap for
 	// the search
