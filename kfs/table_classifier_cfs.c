@@ -40,7 +40,6 @@ typedef struct open_file open_file_t;
 #define TABLE_CLASSIFIER_MAGIC 0x7B1C1A55
 
 struct table_classifier_state {
-	uint32_t magic;
 	vector_t * mount_table;
 	hash_map_t * open_files;
 };
@@ -511,8 +510,6 @@ CFS_t * table_classifier_cfs(void)
 	ASSIGN(cfs, table_classifier, set_metadata);
 	ASSIGN(cfs, table_classifier, sync);
 	DESTRUCTOR(cfs, table_classifier, destroy);
-
-	state->magic = TABLE_CLASSIFIER_MAGIC;
 
 	state->open_files = hash_map_create();
 	if (!state->open_files)
