@@ -707,7 +707,7 @@ static fdesc_t * journal_lookup_name(LFS_t * lfs, const char * name)
 {
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	/* hide the journal file */
-	if(!strcmp(name, journal_filename))
+	if(state->journal == state->fs && !strcmp(name, journal_filename))
 		return NULL;
 	return CALL(state->fs, lookup_name, name);
 }
@@ -718,7 +718,7 @@ static int journal_get_dirent(LFS_t * lfs, fdesc_t * file, struct dirent * entry
 	int value = CALL(state->fs, get_dirent, file, entry, size, basep);
 	const char * hide = (journal_filename[0] == '/') ? &journal_filename[1] : journal_filename;
 	/* hide the journal filename - slight hack, hides it from all directories */
-	if(value >= 0 && !strcmp(entry->d_name, hide))
+	if(value >= 0 && state->journal == state->fs && !strcmp(entry->d_name, hide))
 	{
 		entry->d_name[0] = 0;
 		entry->d_reclen = 0;
@@ -840,9 +840,9 @@ static int journal_rename(LFS_t * lfs, const char * oldname, const char * newnam
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	/* hide the journal file */
-	if(!strcmp(oldname, journal_filename))
+	if(state->journal == state->fs && !strcmp(oldname, journal_filename))
 		return -E_NOT_FOUND;
-	if(!strcmp(newname, journal_filename))
+	if(state->journal == state->fs && !strcmp(newname, journal_filename))
 		return -E_INVAL;
 	r = CALL(state->fs, rename, oldname, newname, head, tail);
 	eat_chdesc_graph(*head);
@@ -875,7 +875,7 @@ static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head,
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	/* hide the journal file */
-	if(!strcmp(name, journal_filename))
+	if(state->journal == state->fs && !strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
 	r = CALL(state->fs, remove_name, name, head, tail);
 	eat_chdesc_graph(*head);
@@ -898,7 +898,7 @@ static int journal_set_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	/* hide the journal file */
-	if(!strcmp(name, journal_filename))
+	if(state->journal == state->fs && !strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
 	r = CALL(state->fs, set_metadata_name, name, id, size, data, head, tail);
 	eat_chdesc_graph(*head);
@@ -980,11 +980,11 @@ static int journal_get_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 
 	/* hide the journal file */
-	if(!strcmp(name, journal_filename))
+	if(state->journal == state->fs && !strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
 
 	// Intercept because journal_lfs is a higher lfs than state->fs.
-	// TODO: journal_lfs should either only intercept if state->lfs
+	// TODO: journal_lfs should either only intercept if state->fs
 	// reports to support this feature or journal_lfs ensures this
 	// feature is in get_features() and get_feature().
 	if (id == KFS_feature_file_lfs_name.id)
@@ -1013,7 +1013,7 @@ static int journal_get_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 
 	// Intercept because journal_lfs is a higher lfs than state->fs.
-	// TODO: journal_lfs should either only intercept if state->lfs
+	// TODO: journal_lfs should either only intercept if state->fs
 	// reports to support this feature or journal_lfs ensures this
 	// feature is in get_features() and get_feature().
 	if (id == KFS_feature_file_lfs.id)
