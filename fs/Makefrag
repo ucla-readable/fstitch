@@ -48,7 +48,8 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/uptime \
 			$(OBJDIR)/user/volume
 
-FSIMGTXTFILES :=	fs/404.html \
+FSIMGTXTFILES :=	fs/.journal \
+			fs/404.html \
 			fs/favicon.ico \
 			fs/goomba.spr \
 			fs/index.html \
@@ -113,6 +114,10 @@ $(OBJDIR)/fs/clean-fs.img: $(OBJDIR)/fs/fsformat $(FSIMGFILES) $(OBJDIR)/boot/bo
 $(OBJDIR)/fs/fs.img: $(OBJDIR)/fs/clean-fs.img
 	@echo + cp $(OBJDIR)/fs/clean-fs.img $@
 	$(V)cp $(OBJDIR)/fs/clean-fs.img $@
+
+fs/.journal:
+	@echo + dd if=/dev/zero of=fs/.journal
+	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null
 
 all: $(OBJDIR)/fs/fs.img
 
