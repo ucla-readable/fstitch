@@ -81,14 +81,6 @@ again:
 			}
 			if(fd)
 			{
-				// stash stdin to send to child
-				stdin_stash = dup(STDIN_FILENO);
-				if (stdin_stash < 0)
-				{
-					fprintf(STDERR_FILENO, "Unable to stash stdin, dup: %e\n", stdin_stash);
-					exit();
-				}
-
 				r = dup2(fd, 0);
 				if (r < 0)
 				{
