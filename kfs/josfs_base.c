@@ -174,36 +174,58 @@ static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number, uint32_t of
     return bdesc_alloc(((struct lfs_info *) object->instance)->ubd, number, 0, BLKSIZE);
 }
 
+// TODO
 static fdesc_t * josfs_lookup_name(LFS_t * object, const char * name)
 {
     return 0;
 }
 
+// TODO
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
     return 0;
 }
 
+// TODO
 static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block)
 {
     return 0;
 }
 
+// TODO
 static fdesc_t * josfs_allocate_name(LFS_t * object, char * name, int type, fdesc_t * link)
 {
     return 0;
 }
 
+// TODO
 static int josfs_rename(LFS_t * object, const char * oldname, const char * newname)
 {
     return 0;
 }
 
+// TODO
 static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file)
 {
+    /*
+    struct JOS_File * f;
+    uint32_t bno, nblocks, new_nblocks;
+
+    f = (jos_fdesc)file->file;
+
+    nblocks = (f->f_size / BLKSIZE);
+    if (f->f_size % BLKSIZE) {
+        nblocks++;
+    }
+    */
+
+    // FIXME
+
+
     return 0;
 }
 
+// TODO
 static int josfs_free_block(LFS_t * object, bdesc_t * block)
 {
     if (block->number == 0)
@@ -212,36 +234,55 @@ static int josfs_free_block(LFS_t * object, bdesc_t * block)
     return 0;
 }
 
+// TODO
 static int josfs_apply_changes(LFS_t * object, chdesc_t * changes)
 {
     return 0;
 }
 
+// TODO
 static int josfs_remove_name(LFS_t * object, const char * name)
 {
     return 0;
 }
 
+// TODO
 static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, void * data)
 {
     return 0;
 }
 
-static const feature_t * josfs_get_features(LFS_t * object)
+static size_t josfs_get_num_features(LFS_t * object, const char * name)
 {
-    return 0;
+    return 1;
 }
 
+static const feature_t * josfs_get_feature(LFS_t * object, const char * name, size_t num)
+{
+    feature_t * f;
+    feature_t s;
+
+    // FIXME
+    s.id = 0xabba;
+    s.optional = 0;
+    s.warn = 0;
+    f = &s;
+    return f;
+}
+
+// TODO
 static int josfs_get_metadata(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
     return 0;
 }
 
+// TODO
 static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data)
 {
     return 0;
 }
 
+// TODO
 static int josfs_sync(LFS_t * object, const char * name)
 {
 	return 0;
@@ -285,7 +326,8 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN(lfs, josfs, apply_changes);
     ASSIGN(lfs, josfs, remove_name);
     ASSIGN(lfs, josfs, write_block);
-    ASSIGN(lfs, josfs, get_features);
+    ASSIGN(lfs, josfs, get_num_features);
+    ASSIGN(lfs, josfs, get_feature);
     ASSIGN(lfs, josfs, get_metadata);
     ASSIGN(lfs, josfs, set_metadata);
     ASSIGN(lfs, josfs, sync);
