@@ -15,7 +15,7 @@
 #include <kfs/wb_cache_bd.h>
 
 #define WB_CACHE_DEBUG 0
-#define WB_CACHE_DEBUG_TREE 0
+#define WB_CACHE_DEBUG_TREE 1
 
 #if WB_CACHE_DEBUG
 #define printd(x...) printf(x)
@@ -31,6 +31,7 @@ struct cache_info {
 	bdesc_t ** blocks;
 	uint32_t *dirty_bits;
 	uint16_t blocksize;
+	int viz_enabled;
 	char *debug_cache[DEBUG_BACKUP_CACHE_SIZE];
 	int debug_dirty[DEBUG_BACKUP_CACHE_SIZE];
 	int debug_blkno[DEBUG_BACKUP_CACHE_SIZE];
@@ -547,9 +548,11 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block, int idx)
 
 	number_chdescs(root, 0); // calc max distance from nodes to root
 #if WB_CACHE_DEBUG_TREE
-	printf("tree for block %d:\n", block->number);
-	print_chdescs_gv(root, 0);
-	reset_prmarks(root);
+	if (info->viz_enabled) {
+		//printf("tree for block %d:\n", block->number);
+		print_chdescs(root, 0);
+		reset_prmarks(root);
+	}
 #endif
 	heapify_nodes(root, heap);
 	reset_marks(root);
@@ -607,9 +610,11 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block, int idx)
 			// it.
 			value = CALL(leafblock->bd, write_block, leafblock);
 		}
+#if WB_CACHE_DEBUG
 		if (vector_size(rollback)) {
 			printf("post-write block refs: %d\n", leafblock->refs);
 		}
+#endif
 		
 		if (vector_size(rollback) > 0)
 			rollforward_chdescs(rollback);
@@ -626,7 +631,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block, int idx)
 											  // CHDESC_MARKED flag.
 	if (root != NULL) {
 		printf("problem tree?\n");
-		print_chdescs_gv(root, 0);
+		print_chdescs(root, 0);
 		reset_prmarks(root);
 	}
 	bdesc_release(&block);
@@ -773,6 +778,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	index = block->number % info->size;
 	if (info->blocks[index]->number == block->number) {
 		// overwrite existing block
+		//printf("calling bdesc overwrite for block %d\n", block->number);
 		value = bdesc_overwrite(info->blocks[index], block);
 		if (value < 0)
 			panic("bdesc_overwrite: %e\n", value);
@@ -795,14 +801,26 @@ static int wb_cache_bd_sync(BD_t * object, bdesc_t * block)
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t refs;
 	int value;
+	int i;
 	
 	/* since this is a write-through cache, syncing is a no-op */
 	/* ...but we still have to pass the sync on correctly */
 	
-	printf("sync not supported yet. sorry.\n");
-	return CALL(info->bd, sync, NULL);
-	if(!block)
-		return CALL(info->bd, sync, NULL);
+	//printf("sync not supported yet. sorry.\n");
+	//return CALL(info->bd, sync, NULL);
+	if(!block) {
+		// whole device sync!
+		for (i = 0; i < info->size; i++) {
+			if (is_dirty(object, i)) {
+				value = wb_cache_bd_evict_block(object, info->blocks[i], i);
+				if (value < 0) {
+					printf("sync of device failed!\n");
+					return value;
+				}
+			}
+		}
+		return 0;
+	}
 	
 	/* save reference count */
 	refs = block->refs;
@@ -819,16 +837,10 @@ static int wb_cache_bd_sync(BD_t * object, bdesc_t * block)
 	if(block->number >= CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
-	block->translated++;
-	block->bd = info->bd;
-	
-	/* sync it */
-	value = CALL(block->bd, sync, block);
-	
-	if(refs)
-	{
-		block->bd = object;
-		block->translated--;
+	for (i = 0; i < info->size; i++) {
+		if (info->blocks[i] && is_dirty(object, i)) {
+			value = wb_cache_bd_evict_block(object, info->blocks[i], i);
+		}
 	}
 	
 	return value;
@@ -855,6 +867,8 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	
 	return 0;
 }
+
+BD_t *static_wb_cache = 0;
 
 BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 {
@@ -931,5 +945,24 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 		return NULL;
 	}
 	
+	info->viz_enabled = 0;
+	if (static_wb_cache == 0)
+		static_wb_cache = bd;
+	else
+		printf("I'm not the first wb cache\n");
+
 	return bd;
+}
+
+int
+wb_cache_bd_viz_enable(BD_t * object, int on)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	info->viz_enabled = on;
+	if (on) {
+		printf("viz enabled\n");
+	} else {
+		printf("viz disabled\n");
+	}
+	return 0;
 }
