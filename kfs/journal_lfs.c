@@ -523,7 +523,7 @@ static int transaction_stop(journal_state_t * state)
 	// up in reverse so that the last slot is the CRCOMMIT.
 
 	const size_t max_datablks_per_trans = TRANSACTION_SIZE/state->blocksize - trans_number_block_count(state->blocksize) - 1;
-	const size_t num_subtransactions = ROUNDUP32(ndatabdescs, max_datablks_per_trans) / max_datablks_per_trans;
+	const size_t num_subtransactions = (ndatabdescs + max_datablks_per_trans - 1) / max_datablks_per_trans;
 	commit_record_holder_t * chrs;
 	size_t prev_slot = -1;
 
