@@ -913,3 +913,21 @@ typeu##_t * modman_it_next_##typel(modman_it_t * it)					\
 MODMAN_IT_NEXT(cfs, CFS);
 MODMAN_IT_NEXT(lfs, LFS);
 MODMAN_IT_NEXT(bd,  BD);
+
+
+//
+// Perf testing
+
+int perf_test(int cfs_bd, const char * file, int size)
+{
+	const envid_t fsid = find_fs();
+
+	INIT_PG(PERF_TEST, perf_test);
+
+	pg->cfs_bd = cfs_bd;
+	pg->size = size;
+	strncpy(pg->file, file, sizeof(pg->file));
+
+	SEND_PG();
+	return RECV_PG();
+}

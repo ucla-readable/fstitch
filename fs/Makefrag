@@ -50,6 +50,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/telnet \
 			$(OBJDIR)/user/telnetd \
 			$(OBJDIR)/user/testfpu \
+			$(OBJDIR)/user/test_kfs_perf \
 			$(OBJDIR)/user/testkpl \
 			$(OBJDIR)/user/umount \
 			$(OBJDIR)/user/uptime \

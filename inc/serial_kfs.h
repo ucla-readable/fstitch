@@ -58,7 +58,9 @@
 #define SKFS_MODMAN_RETURN_LOOKUP  30
 #define SKFS_MODMAN_RETURN_LOOKUP_USER 31
 #define SKFS_MODMAN_REQUEST_ITS    32
-#define SKFS_MODMAN_RETURN_IT      32
+#define SKFS_MODMAN_RETURN_IT      33
+
+#define SKFS_PERF_TEST 34
 
 
 #define SKFS_TYPE int skfs_type
@@ -296,5 +298,15 @@ typedef struct {
 	uint32_t id;
 } Skfs_modman_return_it_t;
 
+
+//
+// perf testing
+
+typedef struct {
+	SKFS_TYPE;
+	int cfs_bd; // 0 CFS, 1 BD
+	int size;
+	char file[100];
+} Skfs_perf_test_t;
 
 #endif // __KUDOS_INC_SERIAL_KFS_H

@@ -506,6 +506,61 @@ void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t * pg)
 
 
 //
+// Perf testing
+
+int perf_test_cfs(const Skfs_perf_test_t * pg)
+{
+	modman_it_t * it;
+	CFS_t * cfs;
+	int fid;
+	int time_start, time_end;
+	int s, size;
+	char data[512];
+
+	it = modman_it_create_cfs();
+	assert(it);
+	while ((cfs = modman_it_next_cfs(it)))
+		if (!strncmp("table_classifier_cfs-", modman_name_cfs(cfs), strlen("table_classifier_cfs-")))
+			break;
+	assert(cfs);
+
+	fid = CALL(cfs, open, pg->file, O_CREAT|O_WRONLY);
+	if(fid < 0)
+	{
+		printf("open %s: %e\n", pg->file, fid);
+		return fid;
+	}
+
+	time_start = env->env_jiffies;
+	for(size = 0; size + sizeof(data) < pg->size; )
+	{
+		s = CALL(cfs, write, fid, data, size, sizeof(data));
+		if (s < 0)
+		{
+			printf("write: %e\n", s);
+			return s;
+		}
+		size += s;
+	}
+	time_end = env->env_jiffies;
+
+	return time_end - time_start;
+}
+
+void kis_perf_test(envid_t whom, const Skfs_perf_test_t * pg)
+{
+	int val;
+
+	if (pg->cfs_bd == 0)
+		val = perf_test_cfs(pg);
+	else
+		val = -E_INVAL;
+
+	ipc_send(whom, val, NULL, 0, NULL);
+}
+
+
+//
 // kfs_ipc_serve
 
 #define SERVE(type, function) case SKFS_##type: kis_##function(whom, pg); break
@@ -574,6 +629,8 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 
 		SERVE(MODMAN_REQUEST_LOOKUP, modman_request_lookup);
 		SERVE(MODMAN_REQUEST_ITS,    modman_request_its);
+
+		SERVE(PERF_TEST, perf_test);
 
 		default:
 			fprintf(STDERR_FILENO, "kfs_ipc_serve: Unknown type %d\n", type);
