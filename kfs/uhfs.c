@@ -22,7 +22,7 @@
 
 struct open_file {
 	int fid;
-	struct Fd * page;
+	const struct Fd * page;
 	fdesc_t * fdesc;
 };
 typedef struct open_file open_file_t;
@@ -41,24 +41,48 @@ static int va_is_mapped(void * va)
 
 static void open_file_close(LFS_t * lfs, open_file_t * f)
 {
-	sys_page_unmap(0, f->page);
+	sys_page_unmap(0, (void*) f->page);
 	CALL(lfs, free_fdesc, f->fdesc);
 	f->page = NULL;
 	f->fdesc = NULL;
 }
 
 // Scan through f[] and close f's no longer in use by other envs
-static void open_file_gc(LFS_t * lfs, struct open_file f[])
+static void open_file_gc(LFS_t * lfs, open_file_t f[])
 {
 	size_t i;
 	for (i=0; i < UHFS_MAX_OPEN; i++)
 	{
-		if (!f->page)
+		if (!f[i].page)
 			continue;
 
-		if (((struct Page*) UPAGES)[PTX(f->page )].pp_ref == 1)
-			open_file_close(lfs, f);
+		if (((struct Page*) UPAGES)[PTX(f[i].page)].pp_ref == 1)
+			open_file_close(lfs, &f[i]);
 	}
+}
+
+static int fid_idx(int fid, open_file_t f[])
+{
+	uint32_t ufid = fid;
+	struct Fd * fd;
+	int idx;
+
+	if ((uint32_t)UHFS_FD_MAP >> 31)
+		ufid |= 0x80000000;
+	fd = (struct Fd *) (ufid & ~(PGSIZE - 1));
+	if (!va_is_mapped(fd))
+		return -E_INVAL;
+
+	idx = fd->fd_kpl.index;
+	if (idx <0 || UHFS_MAX_OPEN <= idx)
+		return -E_INVAL-1;
+
+	if (f[idx].fid != fid)
+		return -E_INVAL-2;
+
+	assert(f[idx].page && f[idx].fid);
+
+	return idx;
 }
 
 
@@ -86,7 +110,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 	
 	/* store the index in the client's page */
 	((struct Fd *) page)->fd_kpl.index = index;
-	
+
 	/* remap the client's page read-only in its new home */
 	r = sys_page_map(0, page, 0, cache, PTE_U | PTE_P);
 	if(r < 0)
@@ -109,7 +133,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 	r &= PGSIZE - 1;
 	r |= 0x7FFFFFFF & (int) cache;
 	state->open_file[index].fid = r;
-	
+
 	return r;
 }
 
@@ -117,16 +141,12 @@ static int uhfs_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	int idx;
 	open_file_t * f;
 
-	if (0 < FIDX(fid) || FIDX(fid) >= UHFS_MAX_OPEN)
-		return -E_INVAL;
-
-	f = &state->open_file[FIDX(fid)];
-	if (!f->page)
-		return -E_INVAL;
-	assert(f->fdesc);
-
+	if ((idx = fid_idx(fid, state->open_file)) < 0)
+		return idx;
+	f = &state->open_file[idx];
 
 	open_file_close(state->lfs, f);
 	
@@ -137,6 +157,7 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 {
 	Dprintf("%s(cfs, %x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	int idx;
 	open_file_t * f;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
@@ -144,14 +165,9 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 	bdesc_t * bd;
 	uint32_t size_read = 0;
 
-	if (0 < FIDX(fid) || FIDX(fid) >= UHFS_MAX_OPEN)
-		return -E_INVAL;
-
-	f = &state->open_file[FIDX(fid)];
-	if (!f->page)
-		return -E_INVAL;
-	assert(f->fdesc);
-
+	if ((idx = fid_idx(fid, state->open_file)) < 0)
+		return idx;
+	f = &state->open_file[idx];
 
 	while (size_read < size)
 	{
@@ -174,6 +190,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	int idx;
 	open_file_t * f;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
@@ -183,14 +200,9 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	chdesc_t * head, * tail;
 	int r;
 
-	if (0 < FIDX(fid) || FIDX(fid) >= UHFS_MAX_OPEN)
-		return -E_INVAL;
-
-	f = &state->open_file[FIDX(fid)];
-	if (!f->page)
-		return -E_INVAL;
-	assert(f->fdesc);
-
+	if ((idx = fid_idx(fid, state->open_file)) < 0)
+		return idx;
+	f = &state->open_file[idx];
 
 	while (size_written < size)
 	{
