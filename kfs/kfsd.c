@@ -1,3 +1,5 @@
+#include <kfs/ide_pio_bd.h>
+#include <kfs/wholedisk_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/kfsd.h>
@@ -14,6 +16,8 @@ static struct module_shutdown module_shutdowns[10];
 // Init kfsd modules.
 int kfsd_init(int argc, char * argv[])
 {
+	BD_t * bd;
+	LFS_t * lfs;
 	CFS_t * frontend_cfs;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
@@ -21,8 +25,13 @@ int kfsd_init(int argc, char * argv[])
 	if (!cfs_ipc_serve())
 		kfsd_shutdown();
 
-#warning FIXME this NULL will cause a page fault eventually
-	if (! (frontend_cfs = uhfs(NULL)) )
+	if (! (bd = ide_pio_bd(1)) )
+		kfsd_shutdown();
+
+	if (! (lfs = wholedisk(bd)) )
+		kfsd_shutdown();
+
+	if (! (frontend_cfs = uhfs(lfs)) )
 		kfsd_shutdown();
 
 	if (register_frontend_cfs(frontend_cfs) < 0)
