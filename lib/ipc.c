@@ -3,6 +3,7 @@
 #include <inc/lib.h>
 
 // Receive a value via IPC and return it.
+// If restrictfrom is non-zero, only allow a receive from the given env.
 // If 'pg' is nonnull, then any page sent by the sender will be mapped at
 //	that address.
 // If 'fromenv' is nonnull, then store the IPC sender's envid in *fromenv.
