@@ -84,7 +84,6 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 		prevrecv->envid = envid;
 		prevrecv->type  = req->scfs_type;
 		memcpy(prevrecv->scfs, req, PGSIZE);
-		ipc_send(envid, 0, NULL, 0);
 
 		printf("%s [1]: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 	}
@@ -155,7 +154,6 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 		prevrecv->envid = envid;
 		prevrecv->type  = req->scfs_type;
 		memcpy(prevrecv->scfs, req, PGSIZE);
-		ipc_send(envid, 0, NULL, 0);
 
 		printf("%s [1]: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	}
