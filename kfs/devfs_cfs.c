@@ -270,16 +270,18 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 			size = file_size - offset;
 		while(size_written < size)
 		{
-			uint32_t limit;
-			uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
+			const uint32_t limit = MIN(blocksize - dataoffset, size - size_written);
+			const uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
 			chdesc_t * head;
 			chdesc_t * tail;
 			
-			bdesc = CALL(bde->bd, read_block, write_byte / blocksize);
+			if(!dataoffset && limit == blocksize)
+				bdesc = bdesc_alloc(bde->bd, write_byte / blocksize, 0, blocksize);
+			else
+				bdesc = CALL(bde->bd, read_block, write_byte / blocksize);
 			if(!bdesc)
 				return size_written ? size_written : -E_EOF;
 			
-			limit = MIN(bdesc->length - dataoffset, size - size_written);
 			if(chdesc_create_byte(bdesc, dataoffset, limit, (uint8_t *) data + size_written, &head, &tail))
 			{
 				bdesc_drop(&bdesc);

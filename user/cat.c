@@ -1,16 +1,16 @@
 
 #include <inc/lib.h>
 
-char buf[8192];
+static char buf[8192];
 
-int
-cat(int f, char *s)
+static int
+cat(int f, char *s, bool term)
 {
 	long n;
 	int r;
 
-	while ((n = read(f, buf, (long) sizeof(buf))) > 0)
-		if ((r = write(1, buf, n)) != n)
+	while((n = (term ? read : readn)(f, buf, sizeof(buf))) > 0)
+		if((r = write(1, buf, n)) != n)
 			return (r < 0) ? r : -E_NO_DISK;
 	if(n < 0)
 		panic("error reading %s: %e", s, n);
@@ -24,19 +24,24 @@ umain(int argc, char **argv)
 
 	argv0 = "cat";
 	if(argc == 1)
-		r = cat(0, "<stdin>");
+		r = cat(0, "<stdin>", 1);
 	else for(i = 1; i < argc && !r; i++)
 	{
-		int f = open(argv[i], O_RDONLY);
-		if(f < 0)
-		{
-			fprintf(STDERR_FILENO, "can't open %s: %e\n", argv[i], f);
-			exit();
-		}
+		if(!strcmp(argv[i], "-"))
+			r = cat(0, "<stdin>", 0);
 		else
 		{
-			r = cat(f, argv[i]);
-			close(f);
+			int f = open(argv[i], O_RDONLY);
+			if(f < 0)
+			{
+				fprintf(STDERR_FILENO, "can't open %s: %e\n", argv[i], f);
+				exit();
+			}
+			else
+			{
+				r = cat(f, argv[i], 0);
+				close(f);
+			}
 		}
 	}
 	if(r)
