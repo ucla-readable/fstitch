@@ -20,7 +20,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/fidprotector_cfs.o \
-			$(OBJDIR)/kfs/fidfairy_cfs.o \
+			$(OBJDIR)/kfs/fidcloser_cfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/sched.o \
