@@ -97,6 +97,7 @@ struct Scfs_get_features {
 
 struct Scfs_get_metadata {
 	SCFS_TYPE;
+	uint32_t type;
 	char name[SCFSMAXNAMELEN];
 	
 };
