@@ -508,6 +508,7 @@ void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t * pg)
 //
 // Perf testing
 
+static char test_data[4096];
 int perf_test_cfs(const Skfs_perf_test_t * pg)
 {
 	modman_it_t * it;
@@ -515,7 +516,6 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	int fid;
 	int time_start, time_end;
 	int s, size;
-	char data[512];
 
 	it = modman_it_create_cfs();
 	assert(it);
@@ -532,9 +532,9 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	}
 
 	time_start = env->env_jiffies;
-	for(size = 0; size + sizeof(data) < pg->size; )
+	for(size = 0; size + sizeof(test_data) < pg->size; )
 	{
-		s = CALL(cfs, write, fid, data, size, sizeof(data));
+		s = CALL(cfs, write, fid, test_data, size, sizeof(test_data));
 		if (s < 0)
 		{
 			printf("write: %e\n", s);
