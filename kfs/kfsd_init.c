@@ -83,7 +83,7 @@ int kfsd_init(void)
 
 	if (use_disk_0_extern_journal)
 	{
-		const int jbd = 1; // 0 for nbd, 1 for ide(1)
+		const int jbd = 1; // 0 for nbd, 1 for ide(0, 1)
 
 		BD_t * j_bd;
 		BD_t * data_bd;
@@ -105,7 +105,7 @@ int kfsd_init(void)
 		{
 			if (! (j_bd = ide_pio_bd(0, 1)) )
 			{
-				fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
+				fprintf(STDERR_FILENO, "ide_pio_bd(0, 1) failed\n");
 				kfsd_shutdown();
 			}
 			if (j_bd)
@@ -119,7 +119,7 @@ int kfsd_init(void)
 
 		if (! (data_bd = ide_pio_bd(0, 0)) )
 		{
-			fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
+			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0) failed\n");
 			kfsd_shutdown();
 		}
 		if (data_bd)
