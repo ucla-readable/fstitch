@@ -137,11 +137,14 @@ void bdesc_drop(bdesc_t ** bdesc)
 	if((*bdesc)->refs < 0)
 	{
 		Dprintf("<bdesc 0x%08x negative reference count!>\n", *bdesc);
+		(*bdesc)->ddesc->refs -= (*bdesc)->refs;
 		(*bdesc)->refs = 0;
 	}
 	if(!(*bdesc)->refs)
 	{
 		Dprintf("<bdesc 0x%08x free>\n", *bdesc);
+		if(depman_get_deps(*bdesc))
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 		if(!(*bdesc)->ddesc->refs)
 		{
 			Dprintf("<bdesc 0x%08x free data 0x%08x>\n", *bdesc, (*bdesc)->ddesc);

@@ -78,13 +78,13 @@ static bool chdesc_in_range(chdesc_t * chdesc, uint32_t offset, uint32_t size)
 			/* assume in range */
 			return 1;
 		default:
-			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return 0;
 	}
 	if(offset <= chdesc->byte.offset && chdesc->byte.offset + chdesc->byte.length <= offset + size)
 		return 1;
 	if(offset <= chdesc->byte.offset + chdesc->byte.length || chdesc->byte.offset <= offset + size)
-		printf("%s(): (%s:%d): invalid inter-atomic block change descriptor!\n", __FUNCTION__, __FILE__, __LINE__);
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): invalid inter-atomic block change descriptor!\n", __FUNCTION__, __FILE__, __LINE__);
 	return 0;
 }
 
