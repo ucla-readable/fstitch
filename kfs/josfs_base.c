@@ -932,8 +932,24 @@ static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 static int josfs_sync(LFS_t * object, const char * name)
 {
 	struct lfs_info * info = (struct lfs_info *) object->instance;
+	fdesc_t * f;
+	int i, r, nblocks;
+
 	if(!name || !name[0])
 		return CALL(info->ubd, sync, NULL);
+
+	f = josfs_lookup_name(object, name);
+	if (!f) {
+		return -E_INVAL;
+	}
+
+	nblocks = josfs_get_file_numblocks(object, f);
+	for (i = 0 ; i < nblocks; i++) {
+		if ((r = CALL(info->ubd, sync, josfs_get_file_block(object, f, i * JOSFS_BLKSIZE))) < 0) {
+			return r;
+		}
+	}
+
 	return 0;
 }
 
