@@ -205,13 +205,25 @@ void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_max_band
 void kis_josfs_base(envid_t whom, const Skfs_josfs_base_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
-	int fsck = pg->do_fsck;
 	uint32_t val;
 
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) josfs(bd, &fsck);
+	val = (uint32_t) josfs(bd);
+
+	RETURN_IPC;
+}
+
+void kis_josfs_fsck(envid_t whom, const Skfs_josfs_fsck_t * pg)
+{
+	LFS_t * lfs = (LFS_t *) pg->lfs;
+	int32_t val;
+
+	if (!modman_name_lfs(lfs))
+		RETURN_IPC_INVAL;
+
+	val = josfs_fsck(lfs);
 
 	RETURN_IPC;
 }
@@ -613,6 +625,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
 
 		SERVE(JOSFS_BASE, josfs_base);
+		SERVE(JOSFS_FSCK, josfs_fsck);
 
 		SERVE(WHOLEDISK, wholedisk);
 
