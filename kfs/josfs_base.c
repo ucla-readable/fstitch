@@ -852,19 +852,21 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 							strcpy(f[j].f_name, filename);
 							f[j].f_type = type;
 
+							// must retain before passing the hot potato...
+							r = bdesc_retain(&blk);
+							assert(r >= 0);
 							// FIXME chdesc
 							if ((r = CALL(info->ubd, write_block, blk)) >= 0) {
 								new_fdesc->file = malloc(sizeof(JOSFS_File_t));
 								memcpy(new_fdesc->file, &f[j], sizeof(JOSFS_File_t));
 								new_fdesc->file->f_dir = dir;
-								bdesc_retain(&blk);
 								new_fdesc->dirb = blk;
 								new_fdesc->index = j;
 								josfs_free_fdesc(object, pdir_fdesc);
 								return (fdesc_t *) new_fdesc;
 							}
 							else {
-								bdesc_drop(&blk);
+								bdesc_release(&blk);
 								free(new_fdesc);
 								josfs_free_fdesc(object, pdir_fdesc);
 								return NULL;
