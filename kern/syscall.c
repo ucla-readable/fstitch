@@ -147,7 +147,7 @@ sys_env_set_name(envid_t envid, char * name)
 	strcpy(e->env_name, buffer);
 	
 	page_fault_mode = old_fault_mode;
-	return -1;
+	return 0;
 }
 
 // Exercise 9:
