@@ -235,30 +235,39 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 
 
 	fid = create_fid();
-	if (fid < 0) {
+	if (fid < 0)
+	{
 		CALL(state->lfs, free_fdesc, fdesc);
 		return fid;
 	}
+
 	f = open_file_create(fid, fdesc, size_id, type);
-	if (!f) {
-		CALL(state->lfs, free_fdesc, fdesc);
-		return -E_NO_MEM;
-	}
-	r = hash_map_insert(state->open_files, (void*) fid, f);
-	if (r < 0)
+	if (!f)
 	{
-		open_file_destroy(f);
+		release_fid(fid);
 		CALL(state->lfs, free_fdesc, fdesc);
 		return -E_NO_MEM;
 	}
 
-	if (mode & O_TRUNC) {
+	r = hash_map_insert(state->open_files, (void *) fid, f);
+	if (r < 0)
+	{
+		open_file_destroy(f);
+		release_fid(fid);
+		CALL(state->lfs, free_fdesc, fdesc);
+		return -E_NO_MEM;
+	}
+
+	if (mode & O_TRUNC)
+	{
 		r = uhfs_truncate(cfs, fid, 0);
-		if (r < 0) {
+		if (r < 0)
+		{
 			uhfs_close(cfs, fid);
 			return r;
 		}
 	}
+
 	return fid;
 }
 
