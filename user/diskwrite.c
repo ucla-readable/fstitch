@@ -58,7 +58,7 @@ umain(int argc, char **argv)
 		printf("Usage: %s\n", argv[0]);
 		printf("About: write the data from stdin to the partition/disk containing the current fileystem.\n");
 		printf("Example: diskwrite < small_fs.img\n");
-		printf("         get 192.168.0.2/fs.img -q | diskwrite\n");
+		printf("         get 192.168.0.2/fs.img -e | diskwrite\n");
 		exit();
 	}
 
