@@ -79,6 +79,82 @@ static void open_file_close(LFS_t * lfs, open_file_t * f)
 
 
 
+static int uhfs_close(CFS_t * cfs, int fid)
+{
+	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	open_file_t * f;
+
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+
+	open_file_close(state->lfs, f);
+	return 0;
+}
+
+static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
+{
+	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	const size_t blksize = CALL(state->lfs, get_blocksize);
+	open_file_t * f;
+	size_t nblks;
+	size_t target_nblks = ROUNDUP32(target_size, blksize) / blksize;
+	bdesc_t * block;
+	chdesc_t * prevhead = NULL;
+	chdesc_t * tail;
+	int r;
+
+	f = hash_map_find_val(state->open_files, (void*) fid);
+	if (!f)
+		return -E_INVAL;
+
+	nblks = CALL(state->lfs, get_file_numblocks, f->fdesc);
+
+	/* Truncate and free the blocks no longer in use because of this trunc */
+	for (; target_nblks < nblks; nblks--)
+	{
+		/* Truncate the block */
+		tail = NULL;
+		block = CALL(state->lfs, truncate_file_block, f->fdesc, &prevhead, &tail);
+		if (!block)
+			return -E_UNSPECIFIED;
+
+		/* Now free the block */
+		tail = NULL;
+		r = CALL(state->lfs, free_block, block, &prevhead, &tail);
+		if (r < 0)
+			return r;
+	}
+
+	/* Update the file's size as recorded by lfs, which also updates
+	   the byte-level size (rather than block-level in the above) */
+	if (f->size_id)
+	{
+		void * data;
+		size_t data_len;
+		size_t size;
+
+		r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &data_len, &data);
+		if (r < 0)
+			return r;
+		assert(data_len == sizeof(target_size));
+		size = *(size_t *) data;
+		free(data);
+
+		if (target_size < size)
+		{
+			tail = NULL;
+			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, &prevhead, &tail);
+			if (r < 0)
+				return r;
+		}
+	}
+
+	return 0;
+}
+
 // TODO:
 // - respect mode
 static int uhfs_open(CFS_t * cfs, const char * name, int mode)
@@ -156,21 +232,14 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 		return -E_NO_MEM;
 	}
 
+	if (mode & O_TRUNC) {
+		r = uhfs_truncate(cfs, fid, 0);
+		if (r < 0) {
+			uhfs_close(cfs, fid);
+			return r;
+		}
+	}
 	return fid;
-}
-
-static int uhfs_close(CFS_t * cfs, int fid)
-{
-	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
-	open_file_t * f;
-
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	open_file_close(state->lfs, f);
-	return 0;
 }
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
@@ -342,68 +411,6 @@ static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint
 		return nbytes_read;
 	else
 		return r;
-}
-
-static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
-{
-	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
-	const size_t blksize = CALL(state->lfs, get_blocksize);
-	open_file_t * f;
-	size_t nblks;
-	size_t target_nblks = ROUNDUP32(target_size, blksize) / blksize;
-	bdesc_t * block;
-	chdesc_t * prevhead = NULL;
-	chdesc_t * tail;
-	int r;
-
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	nblks = CALL(state->lfs, get_file_numblocks, f->fdesc);
-
-	/* Truncate and free the blocks no longer in use because of this trunc */
-	for (; target_nblks < nblks; nblks--)
-	{
-		/* Truncate the block */
-		tail = NULL;
-		block = CALL(state->lfs, truncate_file_block, f->fdesc, &prevhead, &tail);
-		if (!block)
-			return -E_UNSPECIFIED;
-
-		/* Now free the block */
-		tail = NULL;
-		r = CALL(state->lfs, free_block, block, &prevhead, &tail);
-		if (r < 0)
-			return r;
-	}
-
-	/* Update the file's size as recorded by lfs, which also updates
-	   the byte-level size (rather than block-level in the above) */
-	if (f->size_id)
-	{
-		void * data;
-		size_t data_len;
-		size_t size;
-
-		r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &data_len, &data);
-		if (r < 0)
-			return r;
-		assert(data_len == sizeof(target_size));
-		size = *(size_t *) data;
-		free(data);
-
-		if (target_size < size)
-		{
-			tail = NULL;
-			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, &prevhead, &tail);
-			if (r < 0)
-				return r;
-		}
-	}
-
-	return 0;
 }
 
 static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
@@ -632,12 +639,17 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 		free(data);
 
 		if (filetype == TYPE_DIR) {
-			r = CALL(state->lfs, get_dirent, f, &entry, sizeof(struct dirent), &basep);
-			if (r < 0) {
-				return unlink_file(cfs, name, f);
-			}
+			do {
+				r = CALL(state->lfs, get_dirent, f, &entry, sizeof(struct dirent), &basep);
+				if (r < 0) {
+					return unlink_file(cfs, name, f);
+				}
+			} while (r != 0);
+			retval = -E_NOT_EMPTY;
 		}
-		retval = -E_NOT_DIR;
+		else {
+			retval = -E_NOT_DIR;
+		}
 	}
 
 	CALL(state->lfs, free_fdesc, f);
