@@ -32,7 +32,7 @@ static int block_resizer_bd_get_config(void * object, int level, char * string, 
 			snprintf(string, length, "original: %d, converted: %d, count: %d, atomic: %d", info->original_size, info->converted_size, info->block_count, info->atomic_size);
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "%d -> %d", info->original_size, info->converted_size);
+			snprintf(string, length, "%d to %d", info->original_size, info->converted_size);
 			break;
 		case CONFIG_NORMAL:
 		default:
