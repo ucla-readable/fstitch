@@ -159,6 +159,11 @@ $(OBJDIR)/fs/%.o: fs/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
+$(OBJDIR)/kfs/%.o: kfs/%.c
+	@echo + cc[USER] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
@@ -202,6 +207,7 @@ include kern/Makefrag
 include lib/Makefrag
 include user/Makefrag
 include fs/Makefrag
+include kfs/Makefrag
 include util/Makefrag
 
 

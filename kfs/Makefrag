@@ -1,0 +1,23 @@
+OBJDIRS += kfs
+
+KFSOFILES := 		$(OBJDIR)/kfs/ide_pio_bd.o \
+			$(OBJDIR)/kfs/kfsd.o
+
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
+	@echo + ld $@
+	$(V)mkdir -p $(@D)
+	$(V)echo "" > $(SYMTBL)
+	$(V)echo "" > $(SYMSTRTBL)
+	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib \
+		$(OBJDIR)/user/entry.o $(KFSOFILES) \
+		-L$(OBJDIR)/user -luser $(GCC_LIB) \
+		 -b binary $(SYMTBL) $(SYMSTRTBL)
+	$(V)$(OBJDIR)/util/$(ELFDUMP_SYMTAB) -sym $@ > $(SYMTBL)
+	$(V)$(OBJDIR)/util/$(ELFDUMP_SYMTAB) -symstr $@ > $(SYMSTRTBL)
+	$(V)# We assume here that running ld this second time does not change what
+	$(V)# the elf symtable/strtable holds. TODO: is this a safe assumption?
+	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib \
+		$(OBJDIR)/user/entry.o $(KFSOFILES) \
+		-L$(OBJDIR)/user -luser $(GCC_LIB) \
+		 -b binary $(SYMTBL) $(SYMSTRTBL)
+	$(V)$(OBJDUMP) -S $@ >$@.asm
