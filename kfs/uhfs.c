@@ -1,6 +1,8 @@
 #include <inc/lib.h>
 #include <inc/malloc.h>
 
+#include <kfs/chdesc.h>
+#include <kfs/depman.h>
 #include <kfs/lfs.h>
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
@@ -167,7 +169,46 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	open_file_t * f;
+	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
+	const uint32_t blockoffset = offset - (offset % blocksize);
+	uint32_t dataoffset = (offset % blocksize);
+	bdesc_t * bd;
+	uint32_t size_written = 0;
+	chdesc_t * head, * tail;
+	int r;
+
+	if (0 < FIDX(fid) || FIDX(fid) >= UHFS_MAX_OPEN)
+		return -E_INVAL;
+
+	f = &state->open_file[FIDX(fid)];
+	if (!f->page)
+		return -E_INVAL;
+	assert(f->fdesc);
+
+
+	while (size_written < size)
+	{
+		/* get the block to write to */
+		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
+		if (!bd)
+			return size_written;
+
+		/* write the data to the block */
+		head = NULL;
+		tail = NULL;
+		const uint32_t n = MIN(bd->length - dataoffset, size - size_written);
+		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &head, &tail);
+		size_written += n;
+		dataoffset = 0; /* dataoffset only needed for first block */
+
+		/* add the chdescs */
+		if (head)
+			depman_add_chdesc(head);
+	}
+
+	return size_written;
 }
 
 static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
