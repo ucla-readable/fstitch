@@ -71,13 +71,12 @@ static int knbd_accept(const char * bd_filename, int fd[2], struct ip_addr remot
 {
 	struct knbd_state * ks = &gks;
 	int bd;
-	int r;
 
 	bd = open(bd_filename, O_RDWR);
 	if (bd < 0)
 	{
 		fprintf(STDERR_FILENO, "knbdd %s(%s): open: %e\n", __FUNCTION__, bd_filename, bd);
-		return r;
+		return bd;
 	}
 	
 	// Initialize ks
