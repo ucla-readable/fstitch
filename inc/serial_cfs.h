@@ -130,7 +130,7 @@ struct Scfs_shutdown {
 struct Scfs_metadata {
 	uint32_t id;
 	size_t size;
-	uint8_t data[PGSIZE - sizeof(int) - sizeof(uint32_t)];
+	uint8_t data[PGSIZE - sizeof(size_t) - sizeof(uint32_t)];
 };
 
 #endif // not __KUDOS_INC_SERIAL_CFS_H
