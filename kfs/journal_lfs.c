@@ -652,7 +652,16 @@ static int journal_get_config(void * object, int level, char * string, size_t le
 	if(OBJMAGIC(lfs) != JOURNAL_MAGIC)
 		return -E_INVAL;
 
-	snprintf(string, length, "max avg bandwidth: %u kB/s", journal_lfs_max_bandwidth(lfs));
+	switch (level)
+	{
+		case CONFIG_BRIEF:
+			snprintf(string, length, "%u kB/s", journal_lfs_max_bandwidth(lfs));
+			break;
+		case CONFIG_VERBOSE:
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "max avg bandwidth: %u kB/s", journal_lfs_max_bandwidth(lfs));
+	}
 	return 0;
 }
 
