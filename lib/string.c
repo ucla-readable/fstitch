@@ -139,11 +139,10 @@ void *
 memset(void *v, int c, size_t n)
 {
 	char *p;
-	int m;
+	size_t m;
 
 	p = v;
-	m = n;
-	while (--m >= 0)
+	for (m = 0; m < n; m++)
 		*p++ = c;
 
 	return v;
