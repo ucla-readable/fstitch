@@ -22,6 +22,7 @@
  * are effectively the roots of the DAG subgraphs that the block depends on. */
 
 static hash_map_t * bdesc_hash = NULL;
+static chdesc_t null_noops = {block: NULL, type: NOOP, dependencies: NULL, dependents: NULL, weak_refs: NULL, flags: CHDESC_IN_DEPMAN};
 
 /* initialize the dependency manager */
 int depman_init(void)
@@ -203,25 +204,37 @@ int depman_add_chdesc(chdesc_t * root)
 				return r;
 	
 	if(!root->block)
-		_panic(__FILE__, __LINE__, "Unhandled NOOP chdesc.\n");
-	value = (chdesc_t *) hash_map_find_val(bdesc_hash, root->block);
-	if(!value)
+		value = &null_noops;
+	else
 	{
-		value = chdesc_create_noop(root->block);
+		value = (chdesc_t *) hash_map_find_val(bdesc_hash, root->block);
 		if(!value)
-			return -E_NO_MEM;
-		value->flags |= CHDESC_IN_DEPMAN;
-		r = hash_map_insert(bdesc_hash, root->block, value);
-		if(r < 0)
 		{
-			/* can't fail */
-			chdesc_destroy(&value);
-			return r;
+			value = chdesc_create_noop(root->block);
+			if(!value)
+				return -E_NO_MEM;
+			value->flags |= CHDESC_IN_DEPMAN;
+			r = hash_map_insert(bdesc_hash, root->block, value);
+			if(r < 0)
+			{
+				/* can't fail */
+				chdesc_destroy(&value);
+				return r;
+			}
 		}
 	}
 	
 	if((r = chdesc_add_depend(value, root)) < 0)
+	{
+		if(!value->dependencies && value->block)
+		{
+			chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
+			assert(value == value_erase);
+			/* can't fail */
+			chdesc_destroy(&value);
+		}
 		return r;
+	}
 	
 	root->flags |= CHDESC_IN_DEPMAN;
 	return 0;
@@ -230,20 +243,21 @@ int depman_add_chdesc(chdesc_t * root)
 /* remove an individual chdesc from the dependency manager */
 int depman_remove_chdesc(chdesc_t * chdesc)
 {
-	chdesc_t * value;
+	chdesc_t * value = &null_noops;
 
-	value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
+	if(chdesc->block)
+		value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
 	if(!value)
 		return -E_NOT_FOUND;
 	chdesc_satisfy(chdesc);
 	/* can't fail after chdesc_satisfy() */
 	chdesc_destroy(&chdesc);
 	/* if there are no more chdescs for this bdesc, remove the stub NOOP chdesc */
-	if(!value->dependencies)
+	if(!value->dependencies && value->block)
 	{
 		chdesc_t * value_erase = hash_map_erase(bdesc_hash, value->block);
 		assert(value == value_erase);
-		assert(!value->dependents);
+		/* can't fail */
 		chdesc_destroy(&value);
 	}
 	return 0;
