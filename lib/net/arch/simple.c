@@ -7,6 +7,7 @@
 #include "lwip/udp.h"
 #include "lwip/dhcp.h"
 #include "netif/slipif.h"
+#include "netif/etharp.h"
 #include "arch/simple.h"
 #include <inc/config.h>
 
@@ -101,6 +102,7 @@ net_init()
 	memp_init();
 	pbuf_init();
 	netif_init();
+	etharp_init();
 	ip_init();
 	tcp_init();
 	udp_init();
@@ -199,6 +201,7 @@ net_loop(struct netif *nif, void (* poll)(void))
 
 	const int32_t fast_interval        = TCP_FAST_INTERVAL / 10;
 	const int32_t slow_interval        = TCP_SLOW_INTERVAL / 10;
+	const int32_t etharp_interval      = ARP_TMR_INTERVAL / 10;
 	const int32_t dhcp_fine_interval   = DHCP_FINE_TIMER_MSECS / 10;
 	const int32_t dhcp_coarse_interval = DHCP_COARSE_TIMER_SECS * 100;
 
@@ -206,6 +209,7 @@ net_loop(struct netif *nif, void (* poll)(void))
 	int32_t cur_ncs          = env->env_jiffies;
 	int32_t next_ncs_slow    = cur_ncs;
 	int32_t next_ncs_fast    = cur_ncs;
+	int32_t next_etharp      = cur_ncs;
 	int32_t next_dhcp_fine   = cur_ncs;
 	int32_t next_dhcp_coarse = cur_ncs;
 
@@ -242,6 +246,11 @@ net_loop(struct netif *nif, void (* poll)(void))
 		{
 			tcp_slowtmr();
 			next_ncs_slow = cur_ncs + slow_interval;
+		}
+		if (jn_sl == 0 && next_etharp - cur_ncs <= 0)
+		{
+			etharp_tmr();
+			next_etharp = cur_ncs + etharp_interval;
 		}
 		if (ENABLE_JOSNIC_DHCP && jn_sl == 0)
 		{

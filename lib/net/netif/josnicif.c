@@ -304,12 +304,17 @@ josnicif_check_inpacket(struct netif *netif)
   return sys_net_ioctl(NET_IOCTL_QUERY, josnicif->nicd, NULL, 0);
 }
 
+/* ethernetif.c used arp_timer() and sys_timeout() but we do not
+ * support sys_timeout() and so call etharp_tmr from net_loop().
+ */
+/*
 static void
 arp_timer(void *arg)
 {
   etharp_tmr();
   sys_timeout(ARP_TMR_INTERVAL, arp_timer, NULL);
 }
+*/
 
 /*
  * josnicif_init():
