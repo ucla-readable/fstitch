@@ -1,18 +1,7 @@
 #include <kfs/uhfs.h>
+#include <kfs/cfs_ipc_serve.h>
 #include <kfs/kfsd.h>
 #include <inc/lib.h>
-
-// Init kfsd modules.
-int kfsd_init(int argc, char * argv[])
-{
-	int r;
-
-	if ((r = uhfs_init(argc, argv)) < 0)
-		kfsd_shutdown();
-
-	return 0;
-}
-
 
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
@@ -21,10 +10,33 @@ struct module_shutdown {
 
 static struct module_shutdown module_shutdowns[10];
 
+
+// Init kfsd modules.
+int kfsd_init(int argc, char * argv[])
+{
+	CFS_t * frontend_cfs;
+
+	memset(module_shutdowns, 0, sizeof(module_shutdowns));
+
+	if (!cfs_ipc_serve())
+		kfsd_shutdown();
+
+	if (! (frontend_cfs = uhfs()) )
+		kfsd_shutdown();
+
+	if (register_frontend_cfs(frontend_cfs) < 0)
+	{
+		DESTROY(frontend_cfs);
+		kfsd_shutdown();
+	}
+
+	return 0;
+}
+
 int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 {
 	int i;
-	for (i = 0; i < sizeof(module_shutdowns); i++)
+	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
 		if (!module_shutdowns[i].shutdown)
 		{
@@ -41,7 +53,7 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 void kfsd_shutdown()
 {
 	int i;
-	for (i = 0; i < sizeof(module_shutdowns); i++)
+	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
 		if (module_shutdowns[i].shutdown)
 		{
@@ -54,12 +66,12 @@ void kfsd_shutdown()
 }
 
 // This function will schedule and run requests.
-// For now we use only write-through caches, and so simply call cfsipc().
+// For now we use only write-through caches, and so simply call
+// cfs_ipc_serve_run().
 void kfsd_loop()
 {
-	extern void cfsipc();
 	for (;;)
-		cfsipc();
+		cfs_ipc_serve_run();
 }
 
 void bd_test(int argc, char * argv[]);
@@ -67,7 +79,6 @@ void bd_test(int argc, char * argv[]);
 void umain(int argc, char * argv[])
 {
 	int r;
-
 	if ((r = kfsd_init(argc, argv)) < 0)
 		exit();
 

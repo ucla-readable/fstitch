@@ -234,17 +234,17 @@ static const feature_t * josfs_get_features(LFS_t * object)
     return 0;
 }
 
-static int josfs_get_metadata(LFS_t * object, fdesc_t * file, uint32_t id, size_t ** size, void * data)
+static int josfs_get_metadata(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
     return 0;
 }
 
-static int josfs_set_metadata(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data)
+static int josfs_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data)
 {
     return 0;
 }
 
-static int josfs_sync(LFS_t * object, fdesc_t * file)
+static int josfs_sync(LFS_t * object, const char * name)
 {
 	return 0;
 }

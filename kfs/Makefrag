@@ -7,7 +7,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/uhfs.o \
-			$(OBJDIR)/kfs/cfsipc.o \
+			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 			$(OBJDIR)/kfs/kfsd.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a

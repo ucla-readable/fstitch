@@ -1,6 +1,8 @@
 #ifndef __KUDOS_KFS_UHFS_H
 #define __KUDOS_KFS_UHFS_H
 
-int uhfs_init(int argc, char * argv[]);
+#include <kfs/cfs.h>
+
+CFS_t * uhfs();
 
 #endif // not __KUDOS_KFS_UHFS_H
