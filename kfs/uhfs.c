@@ -270,7 +270,6 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	return size_written;
 }
 
-// TODO: implement
 static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
