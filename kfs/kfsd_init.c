@@ -8,8 +8,10 @@
 #include <kfs/wt_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
+#include <kfs/journal_queue_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
+#include <kfs/journal_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/table_classifier_cfs.h>
@@ -151,6 +153,7 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
+	const bool enable_journaling = 0;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
@@ -192,6 +195,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		BD_t * cache;
 		BD_t * resizer;
 		LFS_t * lfs;
+		bool journaling = 0;
 		CFS_t * u;
 			
 		if (!partitions[i])
@@ -220,12 +224,41 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		//if (! (cache = chdesc_stripper_bd(cache)) )
 		//	kfsd_shutdown();
 
-		if ((lfs = josfs(cache)))
+		if (enable_journaling)
+		{
+			BD_t * journal_queue;
+			LFS_t * journal;
+
+			if (! (journal_queue = journal_queue_bd(cache)) )
+				kfsd_shutdown();
+			if ((lfs = josfs(journal_queue)))
+			{
+				if ((journal = journal_lfs(lfs, lfs, journal_queue)))
+				{
+					lfs = journal;
+					journaling = 1;
+				}
+				else
+				{
+					(void) DESTROY(lfs);
+					(void) DESTROY(journal_queue);
+				}
+			}
+			else
+				(void) DESTROY(journal_queue);			
+		}
+		else
+			lfs = josfs(cache);
+
+		if (lfs)
 			printf("Using josfs");
 		else if ((lfs = wholedisk(cache)))
 			printf("Using wholedisk");
 		else
 			kfsd_shutdown();
+
+		if (journaling)
+			printf(" [journaled]");
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
