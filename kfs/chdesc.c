@@ -53,6 +53,9 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void *
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
 	
+	if(!chdescs)
+		return -E_NO_MEM;
+	
 	for(i = 0; i != count; i++)
 	{
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
@@ -140,6 +143,9 @@ int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
 	
+	if(!chdescs)
+		return -E_NO_MEM;
+	
 	for(i = 0; i != count; i++)
 	{
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
@@ -217,6 +223,9 @@ int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t 
 	uint16_t count = block->length / atomic_size;
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
+	
+	if(!chdescs)
+		return -E_NO_MEM;
 	
 	for(i = 0; i != count; i++)
 	{
