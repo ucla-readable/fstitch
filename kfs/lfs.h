@@ -5,6 +5,7 @@
 
 #include <kfs/oo.h>
 
+#include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 #include <kfs/fdesc.h>
@@ -29,6 +30,7 @@ typedef struct LFS LFS_t;
 struct LFS {
 	DESTRUCTOR(LFS_t);
 	DECLARE(LFS_t, uint32_t, get_blocksize);
+	DECLARE(LFS_t, struct BD *, get_blockdev);
 	DECLARE(LFS_t, bdesc_t *, allocate_block, uint32_t size, int purpose);
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number, uint32_t offset, uint32_t size);
 	DECLARE(LFS_t, fdesc_t *, lookup_name, const char * name);

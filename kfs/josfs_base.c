@@ -146,6 +146,11 @@ static uint32_t josfs_get_blocksize(LFS_t * object)
 	return JOS_BLKSIZE;
 }
 
+static BD_t * josfs_get_blockdev(LFS_t * object)
+{
+	return ((struct lfs_info *) object->instance)->ubd;
+}
+
 static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose)
 {
     struct lfs_info * info = (struct lfs_info *) object->instance;
@@ -351,6 +356,7 @@ LFS_t * josfs(BD_t * block_device)
     lfs->instance = info;
 
     ASSIGN(lfs, josfs, get_blocksize);
+    ASSIGN(lfs, josfs, get_blockdev);
     ASSIGN(lfs, josfs, allocate_block);
     ASSIGN(lfs, josfs, lookup_block);
     ASSIGN(lfs, josfs, lookup_name);

@@ -19,6 +19,11 @@ static uint32_t wholedisk_get_blocksize(LFS_t * object)
 	return ((struct wd_info *) object->instance)->blocksize;
 }
 
+static BD_t * wholedisk_get_blockdev(LFS_t * object)
+{
+	return ((struct wd_info *) object->instance)->bd;
+}
+
 static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose)
 {
 	/* always fail - no free blocks */
@@ -157,6 +162,7 @@ LFS_t * wholedisk(BD_t * bd)
 	lfs->instance = info;
 
 	ASSIGN(lfs, wholedisk, get_blocksize);
+	ASSIGN(lfs, wholedisk, get_blockdev);
 	ASSIGN(lfs, wholedisk, allocate_block);
 	ASSIGN(lfs, wholedisk, lookup_block);
 	ASSIGN(lfs, wholedisk, lookup_name);
