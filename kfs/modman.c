@@ -288,6 +288,8 @@ modman_it_t * modman_it_create_##type(void) \
 type##_t * modman_it_next_##type(modman_it_t * it) \
 { \
 	const modman_entry_##type##_t * me = hash_map_val_next(type##_map, it); \
+	if (!me) \
+		return NULL; \
 	return (type##_t *) me->type; \
 }
 
