@@ -1735,7 +1735,6 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 		*size = sizeof(object);
 		memcpy(*data, &object, sizeof(object));
-		printf("%s wrote: 0x%08x\n", __FUNCTION__, *data);
 	}
 	else
 		return -E_INVAL;
