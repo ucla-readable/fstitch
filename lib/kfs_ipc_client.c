@@ -210,7 +210,7 @@ static CFS_t * create_cfs(uint32_t id)
 	ASSIGN(cfs, table_classifier, sync);
 	*/
 
-	ASSIGN_DESTROY(cfs, kic_cfs, destroy);
+	DESTRUCTOR(cfs, kic_cfs, destroy);
 
 	cfs->instance = (void *) id;
 	add_obj(id, cfs);
@@ -267,7 +267,7 @@ LFS_t * create_lfs(uint32_t id)
 	ASSIGN(lfs, journal, sync);
 	*/
 
-	ASSIGN_DESTROY(lfs, kic_lfs, destroy);
+	DESTRUCTOR(lfs, kic_lfs, destroy);
 
 	lfs->instance = (void *) id;
 	add_obj(id, lfs);
@@ -306,7 +306,7 @@ BD_t * create_bd(uint32_t id)
 	ASSIGN(bd, wt_cache_bd, sync);
 	*/
 
-	ASSIGN_DESTROY(bd, kic_bd, destroy);
+	DESTRUCTOR(bd, kic_bd, destroy);
 
 	bd->instance = (void *) id;
 	add_obj(id, bd);
