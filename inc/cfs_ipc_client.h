@@ -7,6 +7,7 @@ int cfs_open(const char *fname, int mode, void *refpg);
 int cfs_close(int fid);
 int cfs_read(int fid, uint32_t offset, uint32_t size, char *data);
 int cfs_write(int fid, uint32_t offset, uint32_t size, const char *data);
+int cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep);
 int cfs_truncate(int fid, uint32_t size);
 int cfs_unlink(const char *name);
 int cfs_link(const char *oldname, const char *newname);

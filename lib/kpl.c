@@ -100,6 +100,12 @@ static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 	return cfs_write(fd->fd_kpl.fid, offset, n, buf);
 }
 
+static ssize_t kpl_getdirentries(struct Fd * fd, char * buf, size_t nbytes, off_t * basep)
+{
+	const int fid = fd->fd_kpl.fid;
+	return cfs_getdirentries(fid, buf, nbytes, basep);
+}
+
 /* warning: not multithread safe! */
 static struct Scfs_metadata kpl_stat_md;
 static int kpl_stat(struct Fd* fd, struct Stat* st)

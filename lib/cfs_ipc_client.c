@@ -180,6 +180,12 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 }
 
 int
+cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep)
+{
+	panic("TODO: implement");
+}
+
+int
 cfs_truncate(int fid, uint32_t size)
 {
 	int r;
