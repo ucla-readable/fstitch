@@ -13,7 +13,7 @@ typedef struct chmetadesc chmetadesc_t;
 
 struct chdesc {
 	bdesc_t * block;
-	enum {BIT, BYTE} type;
+	enum {BIT, BYTE, NOOP} type;
 	union {
 		struct {
 			uint32_t offset;

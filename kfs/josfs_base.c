@@ -141,6 +141,11 @@ int write_bitmap(LFS_t * object, uint32_t blockno, bool value)
     return 0;
 }
 
+static uint32_t josfs_get_blocksize(LFS_t * object)
+{
+	return JOS_BLKSIZE;
+}
+
 static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose)
 {
     struct lfs_info * info = (struct lfs_info *) object->instance;
@@ -345,6 +350,7 @@ LFS_t * josfs(BD_t * block_device)
     }
     lfs->instance = info;
 
+    ASSIGN(lfs, josfs, get_blocksize);
     ASSIGN(lfs, josfs, allocate_block);
     ASSIGN(lfs, josfs, lookup_block);
     ASSIGN(lfs, josfs, lookup_name);

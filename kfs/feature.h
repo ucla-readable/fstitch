@@ -11,4 +11,6 @@ struct feature {
 	const char * description;
 };
 
+extern const feature_t KFS_feature_size;
+
 #endif /* __KUDOS_KFS_FEATURE_H */
