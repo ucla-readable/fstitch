@@ -80,6 +80,7 @@ static int check_super(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) object->instance;
 	uint32_t numblocks;
+	int r;
 
 	/* make sure we have the block size we expect */
 	if (CALL(info->ubd, get_blocksize) != JOSFS_BLKSIZE) {
@@ -89,7 +90,14 @@ static int check_super(LFS_t * object)
 
 	/* the superblock is in block 1 */
 	info->super_block = CALL(info->ubd, read_block, 1);
-	bdesc_retain(&info->super_block);
+	if (!info->super_block)
+	{
+		printf("Unable to read superblock!\n");
+		return -1;
+	}
+	r = bdesc_retain(&info->super_block);
+	if (r < 0)
+		return r;
 
 	if (super->s_magic != JOSFS_FS_MAGIC) {
 		printf("josfs_base: bad file system magic number\n");
@@ -400,7 +408,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 
 	bdesc = CALL(info->ubd, read_block, target);
 
-	if (bdesc->length != JOSFS_BLKSIZE) {
+	if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
 		printf("josfs_base: trouble reading bitmap!\n");
 		return -1;
 	}
@@ -571,7 +579,8 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 					(*file)->f_dir = dir;
 
 					*dirb = dirblock;
-					bdesc_retain(&dirblock);
+					r = bdesc_retain(&dirblock);
+					assert(r >= 0); // TODO: handle error
 					free(temp_fdesc);
 					Dprintf("JOSFSDEBUG: dir_lookup done: FOUND\n");
 					return 0;
@@ -1052,7 +1061,8 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 				// No empty slots, gotta allocate a new block
 				//BLAH
 				if ((blk = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, head, tail)) != NULL) {
-					bdesc_retain(&blk);
+					r = bdesc_retain(&blk);
+					assert(r >= 0); // TODO: handle error
 					dir->f_size += JOSFS_BLKSIZE;
 					// FIXME chdesc
 					r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &(dir->f_size), NULL, NULL);
@@ -1220,7 +1230,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	else if (nblocks == JOSFS_NDIRECT + 1) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
-			bdesc_retain(&indirect);
+			r = bdesc_retain(&indirect);
+			assert(r >= 0); // TODO: handle error
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 
 			if (head && tail) {
