@@ -18,9 +18,14 @@ static uint32_t partition_bd_get_numblocks(BD_t * object)
 	return ((struct partition_info *) object->instance)->length;
 }
 
-static uint32_t partition_bd_get_blocksize(BD_t * object)
+static uint16_t partition_bd_get_blocksize(BD_t * object)
 {
 	return CALL(((struct partition_info *) object->instance)->bd, get_blocksize);
+}
+
+static uint16_t partition_bd_get_atomicsize(BD_t * object)
+{
+	return CALL(((struct partition_info *) object->instance)->bd, get_atomicsize);
 }
 
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
@@ -144,6 +149,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	
 	ASSIGN(bd, partition_bd, get_numblocks);
 	ASSIGN(bd, partition_bd, get_blocksize);
+	ASSIGN(bd, partition_bd, get_atomicsize);
 	ASSIGN(bd, partition_bd, read_block);
 	ASSIGN(bd, partition_bd, write_block);
 	ASSIGN(bd, partition_bd, sync);

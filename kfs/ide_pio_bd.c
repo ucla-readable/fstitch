@@ -84,7 +84,12 @@ static uint32_t ide_pio_bd_get_numblocks(BD_t * object)
 	return ((struct ide_info *) object->instance)->length;
 }
 
-static uint32_t ide_pio_bd_get_blocksize(BD_t * object)
+static uint16_t ide_pio_bd_get_blocksize(BD_t * object)
+{
+	return SECTSIZE;
+}
+
+static uint16_t ide_pio_bd_get_atomicsize(BD_t * object)
 {
 	return SECTSIZE;
 }
@@ -162,6 +167,7 @@ BD_t * ide_pio_bd(uint32_t disk)
 	
 	ASSIGN(bd, ide_pio_bd, get_numblocks);
 	ASSIGN(bd, ide_pio_bd, get_blocksize);
+	ASSIGN(bd, ide_pio_bd, get_atomicsize);
 	ASSIGN(bd, ide_pio_bd, read_block);
 	ASSIGN(bd, ide_pio_bd, write_block);
 	ASSIGN(bd, ide_pio_bd, sync);

@@ -13,9 +13,10 @@
 
 struct resize_info {
 	BD_t * bd;
-	uint32_t original_size;
-	uint32_t converted_size;
-	uint32_t merge_count;
+	uint16_t original_size;
+	uint16_t converted_size;
+	uint16_t merge_count;
+	uint16_t atomic_size;
 	uint32_t block_count;
 };
 
@@ -24,9 +25,14 @@ static uint32_t block_resizer_bd_get_numblocks(BD_t * object)
 	return ((struct resize_info *) object->instance)->block_count;
 }
 
-static uint32_t block_resizer_bd_get_blocksize(BD_t * object)
+static uint16_t block_resizer_bd_get_blocksize(BD_t * object)
 {
 	return ((struct resize_info *) object->instance)->converted_size;
+}
+
+static uint16_t block_resizer_bd_get_atomicsize(BD_t * object)
+{
+	return ((struct resize_info *) object->instance)->atomic_size;
 }
 
 static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
@@ -141,7 +147,7 @@ static int block_resizer_bd_destroy(BD_t * bd)
 	return 0;
 }
 
-BD_t * block_resizer_bd(BD_t * disk, uint32_t blocksize)
+BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 {
 	struct resize_info * info;
 	uint32_t original_size;
@@ -166,6 +172,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint32_t blocksize)
 	
 	ASSIGN(bd, block_resizer_bd, get_numblocks);
 	ASSIGN(bd, block_resizer_bd, get_blocksize);
+	ASSIGN(bd, block_resizer_bd, get_atomicsize);
 	ASSIGN(bd, block_resizer_bd, read_block);
 	ASSIGN(bd, block_resizer_bd, write_block);
 	ASSIGN(bd, block_resizer_bd, sync);
@@ -175,6 +182,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint32_t blocksize)
 	info->original_size = original_size;
 	info->converted_size = blocksize;
 	info->merge_count = blocksize / original_size;
+	info->atomic_size = CALL(disk, get_atomicsize);
 	info->block_count = CALL(disk, get_numblocks) / info->merge_count;
 	
 	return bd;

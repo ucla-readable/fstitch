@@ -18,9 +18,14 @@ static uint32_t wt_cache_bd_get_numblocks(BD_t * object)
 	return CALL(((struct cache_info *) object->instance)->bd, get_numblocks);
 }
 
-static uint32_t wt_cache_bd_get_blocksize(BD_t * object)
+static uint16_t wt_cache_bd_get_blocksize(BD_t * object)
 {
 	return CALL(((struct cache_info *) object->instance)->bd, get_blocksize);
+}
+
+static uint16_t wt_cache_bd_get_atomicsize(BD_t * object)
+{
+	return CALL(((struct cache_info *) object->instance)->bd, get_atomicsize);
 }
 
 static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
@@ -173,6 +178,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	
 	ASSIGN(bd, wt_cache_bd, get_numblocks);
 	ASSIGN(bd, wt_cache_bd, get_blocksize);
+	ASSIGN(bd, wt_cache_bd, get_atomicsize);
 	ASSIGN(bd, wt_cache_bd, read_block);
 	ASSIGN(bd, wt_cache_bd, write_block);
 	ASSIGN(bd, wt_cache_bd, sync);
