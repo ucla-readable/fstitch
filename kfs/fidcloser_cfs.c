@@ -183,7 +183,7 @@ static int fidcloser_get_status(void * object, int level, char * string, size_t 
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != FIDCLOSER_MAGIC)
 		return -E_INVAL;
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
 	return 0;
@@ -192,7 +192,7 @@ static int fidcloser_get_status(void * object, int level, char * string, size_t 
 static int fidcloser_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	int fid;
 	const void * page;
 	const void * cache;
@@ -248,7 +248,7 @@ static int fidcloser_open(CFS_t * cfs, const char * name, int mode)
 static int fidcloser_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	open_file_t * of;
 	int r;
 
@@ -264,7 +264,7 @@ static int fidcloser_close(CFS_t * cfs, int fid)
 static int fidcloser_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
@@ -279,7 +279,7 @@ static int fidcloser_destroy(CFS_t * cfs)
 
 	fidcloser_cfs_exists = 0;
 
-	free(cfs->instance);
+	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
 	return 0;
@@ -291,85 +291,85 @@ static int fidcloser_destroy(CFS_t * cfs)
 
 static int fidcloser_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, read, fid, data, offset, size);
 }
 
 static int fidcloser_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, write, fid, data, offset, size);
 }
 
 static int fidcloser_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
 }
 
 static int fidcloser_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, truncate, fid, target_size);
 }
 
 static int fidcloser_unlink(CFS_t * cfs, const char * name)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, unlink, name);
 }
 
 static int fidcloser_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, link, oldname, newname);
 }
 
 static int fidcloser_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, rename, oldname, newname);
 }
 
 static int fidcloser_mkdir(CFS_t * cfs, const char * name)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, mkdir, name);
 }
 
 static int fidcloser_rmdir(CFS_t * cfs, const char * name)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, rmdir, name);
 }
 
 static size_t fidcloser_get_num_features(CFS_t * cfs, const char * name)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, get_num_features, name);
 }
 
 static const feature_t * fidcloser_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, get_feature, name, num);
 }
 
 static int fidcloser_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, get_metadata, name, id, size, data);
 }
 
 static int fidcloser_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
 }
 
 static int fidcloser_sync(CFS_t * cfs, const char * name)
 {
-	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, sync, name);
 }
 
@@ -418,7 +418,7 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_cfs;
-	cfs->instance = state;
+	OBJLOCAL(cfs) = state;
 	state->frontend_cfs = frontend_cfs;
 	state->open_files = hash_map_create();
 	if (!state->open_files)
@@ -442,7 +442,7 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 
   error_state:
 	free(state);
-	cfs->instance = NULL;
+	OBJLOCAL(cfs) = NULL;
   error_cfs:
 	free(cfs);
 	cfs = NULL;

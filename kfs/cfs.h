@@ -28,7 +28,6 @@ struct CFS {
 	DECLARE(CFS_t, int, get_metadata, const char * name, uint32_t id, size_t * size, void ** data);
 	DECLARE(CFS_t, int, set_metadata, const char * name, uint32_t id, size_t size, const void * data);
 	DECLARE(CFS_t, int, sync, const char * name);
-	void * instance;
 };
 
 #endif /* __KUDOS_KFS_CFS_H */

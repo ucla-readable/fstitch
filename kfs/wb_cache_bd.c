@@ -41,7 +41,7 @@ unsigned short inet_chksum(void *, unsigned short);
 static void
 mark_dirty(BD_t * object, uint16_t bno)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	int course = bno/(8*sizeof(uint32_t));
 	int fine = bno % (8*sizeof(uint32_t));
 	info->dirty_bits[course] |= 1<<fine;
@@ -50,7 +50,7 @@ mark_dirty(BD_t * object, uint16_t bno)
 static bool
 is_dirty(BD_t * object, uint16_t bno)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	int course = bno/(8*sizeof(uint32_t));
 	int fine = bno % (8*sizeof(uint32_t));
 	return (info->dirty_bits[course] & (1<<fine)) != 0;
@@ -59,7 +59,7 @@ is_dirty(BD_t * object, uint16_t bno)
 static void
 mark_clean(BD_t * object, uint16_t bno)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	int course = bno/(8*sizeof(uint32_t));
 	int fine = bno % (8*sizeof(uint32_t));
 	info->dirty_bits[course] &= ~(1<<fine);
@@ -77,7 +77,7 @@ static int
 wb_cache_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) bd->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -104,19 +104,19 @@ wb_cache_bd_get_status(void * object, int level, char * string, size_t length)
 static uint32_t
 wb_cache_bd_get_numblocks(BD_t * object)
 {
-	return CALL(((struct cache_info *) object->instance)->bd, get_numblocks);
+	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_numblocks);
 }
 
 static uint16_t
 wb_cache_bd_get_blocksize(BD_t * object)
 {
-	return ((struct cache_info *) object->instance)->blocksize;
+	return ((struct cache_info *) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t
 wb_cache_bd_get_atomicsize(BD_t * object)
 {
-	return CALL(((struct cache_info *) object->instance)->bd, get_atomicsize);
+	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
 /*
@@ -498,7 +498,7 @@ satisfy_chdescs(vector_t *vect, fixed_max_heap_t *heap)
 static uint32_t
 wb_cache_bd_evict_block(BD_t *object, bdesc_t *block)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	chdesc_t *root;
 	fixed_max_heap_t *heap;
 	vector_t *rollback;
@@ -650,7 +650,7 @@ dump_data(char *data, int len)
 static void
 backup_insert(BD_t *object, bdesc_t *blk)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	int i;
 	for (i = 0; i < DEBUG_BACKUP_CACHE_SIZE; i++) {
 		if (info->debug_blkno[i] == blk->number ||
@@ -667,7 +667,7 @@ backup_insert(BD_t *object, bdesc_t *blk)
 static bool
 backup_check(BD_t *object, bdesc_t *blk)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	int i;
 	int ret;
 	for (i = 0; i < DEBUG_BACKUP_CACHE_SIZE; i++) {
@@ -692,7 +692,7 @@ backup_check(BD_t *object, bdesc_t *blk)
 static bdesc_t *
 wb_cache_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
 	
 	/* make sure it's a valid block */
@@ -743,7 +743,7 @@ wb_cache_bd_read_block(BD_t * object, uint32_t number)
 
 static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
 	int value = 0;
 
@@ -784,7 +784,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int wb_cache_bd_sync(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) object->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t refs;
 	int value;
 	
@@ -828,7 +828,7 @@ static int wb_cache_bd_sync(BD_t * object, bdesc_t * block)
 
 static int wb_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) bd->instance;
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
 	uint32_t block;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
@@ -863,7 +863,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	info->blocks = malloc(blocks * sizeof(*info->blocks));
 	if(!info->blocks)

@@ -29,7 +29,7 @@ static int journal_queue_bd_get_config(void * object, int level, char * string, 
 static int journal_queue_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct queue_info * info = (struct queue_info *) bd->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case STATUS_VERBOSE:
@@ -47,22 +47,22 @@ static int journal_queue_bd_get_status(void * object, int level, char * string, 
 
 static uint32_t journal_queue_bd_get_numblocks(BD_t * object)
 {
-	return CALL(((struct queue_info *) object->instance)->bd, get_numblocks);
+	return CALL(((struct queue_info *) OBJLOCAL(object))->bd, get_numblocks);
 }
 
 static uint16_t journal_queue_bd_get_blocksize(BD_t * object)
 {
-	return ((struct queue_info *) object->instance)->blocksize;
+	return ((struct queue_info *) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t journal_queue_bd_get_atomicsize(BD_t * object)
 {
-	return CALL(((struct queue_info *) object->instance)->bd, get_atomicsize);
+	return CALL(((struct queue_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
 static bdesc_t * journal_queue_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct queue_info * info = (struct queue_info *) object->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
@@ -92,7 +92,7 @@ static bdesc_t * journal_queue_bd_read_block(BD_t * object, uint32_t number)
 
 static int journal_queue_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct queue_info * info = (struct queue_info *) object->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
 	int value = 0;
 	
 	/* make sure this is the right block device */
@@ -158,7 +158,7 @@ static int journal_queue_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int journal_queue_bd_sync(BD_t * object, bdesc_t * block)
 {
-	struct queue_info * info = (struct queue_info *) object->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
 	uint32_t refs;
 	int value;
 	
@@ -213,7 +213,7 @@ static int journal_queue_bd_sync(BD_t * object, bdesc_t * block)
 
 static int journal_queue_bd_destroy(BD_t * bd)
 {
-	struct queue_info * info = (struct queue_info *) bd->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(bd);
 	int r;
 	
 	if(info->state == HOLD || info->state == PASSTHROUGH)
@@ -247,7 +247,7 @@ BD_t * journal_queue_bd(BD_t * disk)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	info->bdesc_hash = hash_map_create();
 	if(!info->bdesc_hash)
@@ -295,7 +295,7 @@ bool journal_queue_detect(BD_t * bd)
 
 int journal_queue_release(BD_t * bd)
 {
-	struct queue_info * info = (struct queue_info *) bd->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(bd);
 	
 	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return -E_INVAL;
@@ -339,7 +339,7 @@ int journal_queue_release(BD_t * bd)
 
 int journal_queue_hold(BD_t * bd)
 {
-	struct queue_info * info = (struct queue_info *) bd->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(bd);
 	
 	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return -E_INVAL;
@@ -350,7 +350,7 @@ int journal_queue_hold(BD_t * bd)
 
 int journal_queue_passthrough(BD_t * bd)
 {
-	struct queue_info * info = (struct queue_info *) bd->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(bd);
 	
 	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return -E_INVAL;
@@ -361,7 +361,7 @@ int journal_queue_passthrough(BD_t * bd)
 
 const hash_map_t * journal_queue_blocklist(BD_t * bd)
 {
-	struct queue_info * info = (struct queue_info *) bd->instance;
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(bd);
 	
 	if(OBJMAGIC(bd) != JOURNAL_QUEUE_MAGIC)
 		return NULL;

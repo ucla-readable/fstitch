@@ -29,7 +29,7 @@ typedef struct loop_info loop_info_t;
 static int loop_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct loop_info * info = (struct loop_info *) bd->instance;
+	struct loop_info * info = (struct loop_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -54,21 +54,21 @@ static int loop_get_status(void * object, int level, char * string, size_t lengt
 static uint32_t loop_get_numblocks(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	return CALL(info->lfs, get_file_numblocks, info->file);
 }
 
 static uint16_t loop_get_blocksize(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	return CALL(info->lfs, get_blocksize);
 }
 
 static uint16_t loop_get_atomicsize(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	BD_t * lfs_bd = CALL(info->lfs, get_blockdev);
 	return CALL(lfs_bd, get_atomicsize);
 }
@@ -76,7 +76,7 @@ static uint16_t loop_get_atomicsize(BD_t * bd)
 static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	bdesc_t * bdesc;
 
 	bdesc = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
@@ -98,7 +98,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 static int loop_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	uint32_t refs, loop_number, lfs_number;
 	chdesc_t * head = NULL;
 	chdesc_t * tail;
@@ -132,7 +132,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 static int loop_sync(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	BD_t * lfs_bd = CALL(info->lfs, get_blockdev);
 	uint32_t refs;
 	int r;
@@ -160,7 +160,7 @@ static int loop_sync(BD_t * bd, bdesc_t * block)
 static int loop_destroy(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) bd->instance;
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -196,7 +196,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	if(!info)
 		goto error_bd;
 
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

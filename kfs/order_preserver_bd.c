@@ -42,7 +42,7 @@ static int order_preserver_get_status(void * object, int level, char * string, s
 static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block_new);
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	bdesc_t * block_old;
 	chdesc_t * head = NULL, * tail = NULL;
 	// a backup of info->prev_head so that it can be restored upon a failure:
@@ -114,7 +114,7 @@ static int order_preserver_write_block(BD_t * bd, bdesc_t * block_new)
 static int order_preserver_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -137,7 +137,7 @@ static int order_preserver_destroy(BD_t * bd)
 
 static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
 {
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	bdesc_t * bdesc;
 	int r;
 
@@ -157,7 +157,7 @@ static bdesc_t * order_preserver_read_block(BD_t * bd, uint32_t number)
 
 static int order_preserver_sync(BD_t * bd, bdesc_t * block)
 {
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	uint32_t refs;
 	int r;
 
@@ -187,19 +187,19 @@ static int order_preserver_sync(BD_t * bd, bdesc_t * block)
 
 static uint32_t order_preserver_get_numblocks(BD_t * bd)
 {
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	return CALL(info->bd, get_numblocks);
 }
 
 static uint16_t order_preserver_get_blocksize(BD_t * bd)
 {
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	return CALL(info->bd, get_blocksize);
 }
 
 static uint16_t order_preserver_get_atomicsize(BD_t * bd)
 {
-	order_info_t * info = (order_info_t *) bd->instance;
+	order_info_t * info = (order_info_t *) OBJLOCAL(bd);
 	return CALL(info->bd, get_atomicsize);
 }
 
@@ -219,7 +219,7 @@ BD_t * order_preserver_bd(BD_t * disk)
 	info = malloc(sizeof(*info));
 	if (!info)
 		goto error_bd;
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

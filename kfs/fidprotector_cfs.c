@@ -97,7 +97,7 @@ static int fidprotector_get_status(void * object, int level, char * string, size
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != FIDPROTECTOR_MAGIC)
 		return -E_INVAL;
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
 	return 0;
@@ -106,7 +106,7 @@ static int fidprotector_get_status(void * object, int level, char * string, size
 static int fidprotector_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	int fid;
 	uint32_t cappa;
 	open_file_t * of;
@@ -137,7 +137,7 @@ static int fidprotector_open(CFS_t * cfs, const char * name, int mode)
 static int fidprotector_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
@@ -148,7 +148,7 @@ static int fidprotector_destroy(CFS_t * cfs)
 	hash_map_destroy(state->open_files);
 	state->open_files = NULL;
 
-	free(cfs->instance);
+	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
 	return 0;
@@ -161,7 +161,7 @@ static int fidprotector_destroy(CFS_t * cfs)
 static int fidprotector_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	open_file_t * of;
 	int r;
 
@@ -181,7 +181,7 @@ static int fidprotector_close(CFS_t * cfs, int fid)
 
 static int fidprotector_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	int r = check_capability_fid(state, fid);
 	if (r < 0)
 		return r;
@@ -190,7 +190,7 @@ static int fidprotector_read(CFS_t * cfs, int fid, void * data, uint32_t offset,
 
 static int fidprotector_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	int r = check_capability_fid(state, fid);
 	if (r < 0)
 		return r;
@@ -199,7 +199,7 @@ static int fidprotector_write(CFS_t * cfs, int fid, const void * data, uint32_t 
 
 static int fidprotector_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	int r = check_capability_fid(state, fid);
 	if (r < 0)
 		return r;
@@ -208,7 +208,7 @@ static int fidprotector_getdirentries(CFS_t * cfs, int fid, char * buf, int nbyt
 
 static int fidprotector_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	int r = check_capability_fid(state, fid);
 	if (r < 0)
 		return r;
@@ -221,61 +221,61 @@ static int fidprotector_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 
 static int fidprotector_unlink(CFS_t * cfs, const char * name)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, unlink, name);
 }
 
 static int fidprotector_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, link, oldname, newname);
 }
 
 static int fidprotector_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, rename, oldname, newname);
 }
 
 static int fidprotector_mkdir(CFS_t * cfs, const char * name)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, mkdir, name);
 }
 
 static int fidprotector_rmdir(CFS_t * cfs, const char * name)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, rmdir, name);
 }
 
 static size_t fidprotector_get_num_features(CFS_t * cfs, const char * name)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, get_num_features, name);
 }
 
 static const feature_t * fidprotector_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, get_feature, name, num);
 }
 
 static int fidprotector_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, get_metadata, name, id, size, data);
 }
 
 static int fidprotector_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
 }
 
 static int fidprotector_sync(CFS_t * cfs, const char * name)
 {
-	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	return CALL(state->frontend_cfs, sync, name);
 }
 
@@ -321,7 +321,7 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_cfs;
-	cfs->instance = state;
+	OBJLOCAL(cfs) = state;
 	state->frontend_cfs = frontend_cfs;
 	state->open_files = hash_map_create();
 	if (!state->open_files)
@@ -343,7 +343,7 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 
   error_state:
 	free(state);
-	cfs->instance = NULL;
+	OBJLOCAL(cfs) = NULL;
   error_cfs:
 	free(cfs);
 	cfs = NULL;

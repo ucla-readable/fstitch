@@ -126,7 +126,7 @@ static int devfs_get_status(void * object, int level, char * string, size_t leng
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
 		return -E_INVAL;
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "devices: %u", hash_map_size(state->fid_map));
 	return 0;
@@ -135,7 +135,7 @@ static int devfs_get_status(void * object, int level, char * string, size_t leng
 static int devfs_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	int r;
 	
@@ -176,7 +176,7 @@ static int devfs_open(CFS_t * cfs, const char * name, int mode)
 static int devfs_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	
 	/* close / as a directory */
@@ -211,7 +211,7 @@ static int devfs_close(CFS_t * cfs, int fid)
 static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = bde_lookup_fid(state, fid);
 	
 	if(bde)
@@ -253,7 +253,7 @@ static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = bde_lookup_fid(state, fid);
 	
 	if(bde)
@@ -337,7 +337,7 @@ static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes
 static int devfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	uint32_t i;
 	int nbytes_read = 0;
 	int r = 0;
@@ -410,7 +410,7 @@ static size_t devfs_get_num_features(CFS_t * cfs, const char * name)
 static const feature_t * devfs_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, num);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	
 	if(name[0] == '/')
@@ -425,7 +425,7 @@ static const feature_t * devfs_get_feature(CFS_t * cfs, const char * name, size_
 static int devfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = NULL;
 	
 	/* check for the special file / */
@@ -471,7 +471,7 @@ static int devfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 static int devfs_sync(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	
 	if(!name || !name[0])
@@ -498,7 +498,7 @@ static int devfs_sync(CFS_t * cfs, const char * name)
 
 static int devfs_destroy(CFS_t * cfs)
 {
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
@@ -526,7 +526,7 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_cfs;
-	cfs->instance = state;
+	OBJLOCAL(cfs) = state;
 	
 	OBJFLAGS(cfs) = 0;
 	OBJMAGIC(cfs) = DEVFS_MAGIC;
@@ -578,7 +578,7 @@ error_bd_table:
 error_fid_map:
 	hash_map_destroy(state->fid_map);
 error_state:
-	free(cfs->instance);
+	free(OBJLOCAL(cfs));
 error_cfs:
 	free(cfs);
 	return NULL;
@@ -587,7 +587,7 @@ error_cfs:
 int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, bd);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	int r;
 	
@@ -626,7 +626,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	int i;
 	

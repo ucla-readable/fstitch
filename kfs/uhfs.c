@@ -98,7 +98,7 @@ static int uhfs_get_status(void * object, int level, char * string, size_t lengt
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != UHFS_MAGIC)
 		return -E_INVAL;
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
 	return 0;
@@ -107,7 +107,7 @@ static int uhfs_get_status(void * object, int level, char * string, size_t lengt
 static int uhfs_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	open_file_t * f;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
@@ -122,7 +122,7 @@ static int uhfs_close(CFS_t * cfs, int fid)
 static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
 	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const size_t blksize = CALL(state->lfs, get_blocksize);
 	open_file_t * f;
 	size_t nblks;
@@ -189,7 +189,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	fdesc_t * fdesc;
 	uint32_t size_id = 0;
 	bool type = 0;
@@ -262,7 +262,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(cfs, 0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	open_file_t * f;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
@@ -316,7 +316,7 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	open_file_t * f;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
@@ -410,7 +410,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	open_file_t * f;
 	uint32_t i;
 	int nbytes_read = 0;
@@ -438,7 +438,7 @@ static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint
 
 static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 {
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool link_supported = lfs_feature_supported(state->lfs, name, KFS_feature_nlinks.id);
 	int i, r;
 	uint32_t nlinks, nblocks;
@@ -496,7 +496,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 static int uhfs_unlink(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
 	fdesc_t * f;
 	size_t data_len;
@@ -531,7 +531,7 @@ static int uhfs_unlink(CFS_t * cfs, const char * name)
 static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	fdesc_t * oldf, * newf, * f;
 	const bool type_supported = lfs_feature_supported(state->lfs, oldname, KFS_feature_filetype.id);
 	uint32_t oldtype;
@@ -590,7 +590,7 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
@@ -604,7 +604,7 @@ static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
 static int uhfs_mkdir(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	fdesc_t * f;
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
@@ -640,7 +640,7 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 static int uhfs_rmdir(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
 	fdesc_t * f;
 	struct dirent entry;
@@ -686,7 +686,7 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
 	return CALL(state->lfs, get_num_features, name);
 }
@@ -694,7 +694,7 @@ static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
 static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
 	Dprintf("\"%s\", 0x%x)\n", __FUNCTION__, name, num);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
    return CALL(state->lfs, get_feature, name, num);
 }
@@ -702,7 +702,7 @@ static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t
 static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
 	return CALL(state->lfs, get_metadata_name, name, id, size, data);
 }
@@ -710,7 +710,7 @@ static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t
 static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(\"%s\", 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, name, id, size, data);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
@@ -724,21 +724,21 @@ static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t
 static int uhfs_sync(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
 	return CALL(state->lfs, sync, name);
 }
 
 static int uhfs_destroy(CFS_t * cfs)
 {
-	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_lfs(state->lfs, cfs);
 
 	hash_map_destroy(state->open_files);
-	free(cfs->instance);
+	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
 
@@ -758,7 +758,7 @@ CFS_t * uhfs(LFS_t * lfs)
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_uhfs;
-	cfs->instance = state;
+	OBJLOCAL(cfs) = state;
 
 	OBJFLAGS(cfs) = 0;
 	OBJMAGIC(cfs) = UHFS_MAGIC;

@@ -18,7 +18,7 @@ struct partition_info {
 static int partition_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct partition_info * info = (struct partition_info *) bd->instance;
+	struct partition_info * info = (struct partition_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -43,22 +43,22 @@ static int partition_bd_get_status(void * object, int level, char * string, size
 
 static uint32_t partition_bd_get_numblocks(BD_t * object)
 {
-	return ((struct partition_info *) object->instance)->length;
+	return ((struct partition_info *) OBJLOCAL(object))->length;
 }
 
 static uint16_t partition_bd_get_blocksize(BD_t * object)
 {
-	return ((struct partition_info *) object->instance)->blocksize;
+	return ((struct partition_info *) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t partition_bd_get_atomicsize(BD_t * object)
 {
-	return CALL(((struct partition_info *) object->instance)->bd, get_atomicsize);
+	return CALL(((struct partition_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct partition_info * info = (struct partition_info *) object->instance;
+	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
@@ -86,7 +86,7 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct partition_info * info = (struct partition_info *) object->instance;
+	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	uint32_t refs = block->refs;
 	int value;
 	
@@ -133,7 +133,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int partition_bd_sync(BD_t * object, bdesc_t * block)
 {
-	struct partition_info * info = (struct partition_info *) object->instance;
+	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	uint32_t refs;
 	int value;
 	
@@ -177,8 +177,8 @@ static int partition_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct partition_info *) bd->instance)->bd, bd);
-	free(bd->instance);
+	modman_dec_bd(((struct partition_info *) OBJLOCAL(bd))->bd, bd);
+	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	return 0;
@@ -197,7 +197,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

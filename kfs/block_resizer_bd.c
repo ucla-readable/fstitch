@@ -25,7 +25,7 @@ struct resize_info {
 static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct resize_info * info = (struct resize_info *) bd->instance;
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -50,22 +50,22 @@ static int block_resizer_bd_get_status(void * object, int level, char * string, 
 
 static uint32_t block_resizer_bd_get_numblocks(BD_t * object)
 {
-	return ((struct resize_info *) object->instance)->block_count;
+	return ((struct resize_info *) OBJLOCAL(object))->block_count;
 }
 
 static uint16_t block_resizer_bd_get_blocksize(BD_t * object)
 {
-	return ((struct resize_info *) object->instance)->converted_size;
+	return ((struct resize_info *) OBJLOCAL(object))->converted_size;
 }
 
 static uint16_t block_resizer_bd_get_atomicsize(BD_t * object)
 {
-	return ((struct resize_info *) object->instance)->atomic_size;
+	return ((struct resize_info *) OBJLOCAL(object))->atomic_size;
 }
 
 static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct resize_info * info = (struct resize_info *) object->instance;
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	uint32_t i;
 	
@@ -95,7 +95,7 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
 
 static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct resize_info * info = (struct resize_info *) object->instance;
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	uint32_t i, number;
 	
 	/* make sure this is the right block device */
@@ -141,7 +141,7 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 {
-	struct resize_info * info = (struct resize_info *) object->instance;
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	uint32_t i, number;
 	
 	if(!block)
@@ -180,9 +180,9 @@ static int block_resizer_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct resize_info *) bd->instance)->bd, bd);
+	modman_dec_bd(((struct resize_info *) OBJLOCAL(bd))->bd, bd);
 	
-	free(bd->instance);
+	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	
@@ -213,7 +213,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

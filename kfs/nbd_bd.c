@@ -22,7 +22,7 @@ struct nbd_info {
 static int nbd_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct nbd_info * info = (struct nbd_info *) bd->instance;
+	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -47,22 +47,22 @@ static int nbd_bd_get_status(void * object, int level, char * string, size_t len
 
 static uint32_t nbd_bd_get_numblocks(BD_t * object)
 {
-	return ((struct nbd_info *) object->instance)->length;
+	return ((struct nbd_info *) OBJLOCAL(object))->length;
 }
 
 static uint16_t nbd_bd_get_blocksize(BD_t * object)
 {
-	return ((struct nbd_info *) object->instance)->blocksize;
+	return ((struct nbd_info *) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t nbd_bd_get_atomicsize(BD_t * object)
 {
-	return ((struct nbd_info *) object->instance)->blocksize;
+	return ((struct nbd_info *) OBJLOCAL(object))->blocksize;
 }
 
 static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct nbd_info * info = (struct nbd_info *) object->instance;
+	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	uint8_t command = 0;
 	bdesc_t * bdesc;
 	
@@ -88,7 +88,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 
 static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct nbd_info * info = (struct nbd_info *) object->instance;
+	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	uint8_t command = 1;
 	uint32_t number;
 	
@@ -125,7 +125,7 @@ static int nbd_bd_sync(BD_t * object, bdesc_t * block)
 
 static int nbd_bd_destroy(BD_t * bd)
 {
-	struct nbd_info * info = (struct nbd_info *) bd->instance;
+	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -150,7 +150,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

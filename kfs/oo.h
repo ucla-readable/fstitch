@@ -3,7 +3,7 @@
 
 #include <inc/types.h>
 
-#define OBJECT(interface) object_t uniform; int (*__destroy_type)(interface * object)
+#define OBJECT(interface) struct object uniform; int (*__destroy_type)(interface * object)
 #define DECLARE(interface, type, method, args...) type (*_##method)(interface * object, ##args)
 
 #define ASSIGN(object, module, method) (object)->_##method = module##_##method
@@ -16,6 +16,7 @@
 #define OBJCALL(object, method, args...) ((object)->uniform._##method(object, ##args))
 #define OBJFLAGS(object) (object)->uniform.flags
 #define OBJMAGIC(object) (object)->uniform.magic
+#define OBJLOCAL(object) (object)->uniform.local
 
 /* values for OBJFLAGS */
 #define OBJ_PERSISTENT 0x01
@@ -33,8 +34,9 @@ struct object {
 	DECLARE(void, int, get_config, int level, char * string, size_t length);
 	DECLARE(void, int, get_status, int level, char * string, size_t length);
 	int (*__destroy)(void * object);
+	void * local;
 };
-typedef struct object object_t;
+typedef struct { struct object uniform; } object_t;
 
 // DESTROY_LOCAL is only for use outside of KFSD
 #ifndef KFSD

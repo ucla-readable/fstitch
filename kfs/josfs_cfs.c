@@ -92,7 +92,7 @@ static int josfs_cfs_get_status(void * object, int level, char * string, size_t 
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != JOSFS_CFS_MAGIC)
 		return -E_INVAL;
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
 	return 0;
@@ -101,7 +101,7 @@ static int josfs_cfs_get_status(void * object, int level, char * string, size_t 
 static int josfs_cfs_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	int fd, fid;
 	open_file_t * f;
 	int r;
@@ -131,7 +131,7 @@ static int josfs_cfs_open(CFS_t * cfs, const char * name, int mode)
 static int josfs_cfs_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	open_file_t * f;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
@@ -144,7 +144,7 @@ static int josfs_cfs_close(CFS_t * cfs, int fid)
 static int josfs_cfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(cfs, 0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	open_file_t * f;
 	int fd;
 	int r;
@@ -162,7 +162,7 @@ static int josfs_cfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, ui
 static int josfs_cfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	open_file_t * f;
 	int fd;
 	int r;
@@ -180,7 +180,7 @@ static int josfs_cfs_write(CFS_t * cfs, int fid, const void * data, uint32_t off
 static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	open_file_t * f;
 	int fd, r;
 	int nbytes_read = 0;
@@ -244,7 +244,7 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 static int josfs_cfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
 	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	open_file_t * f;
 	int fd;
 
@@ -372,13 +372,13 @@ static int josfs_cfs_sync(CFS_t * cfs, const char * name)
 
 static int josfs_cfs_destroy(CFS_t * cfs)
 {
-	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 
 	hash_map_destroy(state->open_files);
-	free(cfs->instance);
+	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
 	return 0;
@@ -397,7 +397,7 @@ CFS_t * josfs_cfs(void)
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_josfs_cfs;
-	cfs->instance = state;
+	OBJLOCAL(cfs) = state;
 
 	OBJFLAGS(cfs) = 0;
 	OBJMAGIC(cfs) = JOSFS_CFS_MAGIC;

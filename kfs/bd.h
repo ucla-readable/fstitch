@@ -20,7 +20,6 @@ struct BD {
 	DECLARE(BD_t, struct bdesc *, read_block, uint32_t number);
 	DECLARE(BD_t, int, write_block, struct bdesc * block);
 	DECLARE(BD_t, int, sync, struct bdesc * block);
-	void * instance;
 };
 
 #endif /* __KUDOS_KFS_BD_H */

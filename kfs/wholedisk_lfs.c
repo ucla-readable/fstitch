@@ -42,12 +42,12 @@ static int wholedisk_get_status(void * object, int level, char * string, size_t 
 
 static uint32_t wholedisk_get_blocksize(LFS_t * object)
 {
-	return ((struct wd_info *) object->instance)->blocksize;
+	return ((struct wd_info *) OBJLOCAL(object))->blocksize;
 }
 
 static BD_t * wholedisk_get_blockdev(LFS_t * object)
 {
-	return ((struct wd_info *) object->instance)->bd;
+	return ((struct wd_info *) OBJLOCAL(object))->bd;
 }
 
 static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
@@ -60,7 +60,7 @@ static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int pur
 
 static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number, uint32_t offset, uint32_t size)
 {
-	return CALL(((struct wd_info *) object->instance)->bd, read_block, number);
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, read_block, number);
 }
 
 static fdesc_t * wholedisk_lookup_name(LFS_t * object, const char * name)
@@ -78,18 +78,18 @@ static void wholedisk_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 
 static uint32_t wholedisk_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
-	return CALL(((struct wd_info *) object->instance)->bd, get_numblocks);
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, get_numblocks);
 }
 
 static uint32_t wholedisk_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
-	return offset / ((struct wd_info *) object->instance)->blocksize;
+	return offset / ((struct wd_info *) OBJLOCAL(object))->blocksize;
 }
 
 static bdesc_t * wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
-	offset /= ((struct wd_info *) object->instance)->blocksize;
-	return CALL(((struct wd_info *) object->instance)->bd, read_block, offset);
+	offset /= ((struct wd_info *) OBJLOCAL(object))->blocksize;
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, read_block, offset);
 }
 
 static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -147,7 +147,7 @@ static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** 
 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	struct wd_info * info = (struct wd_info *) object->instance;
+	struct wd_info * info = (struct wd_info *) OBJLOCAL(object);
 	
 	if (head && tail)
 		*head = *tail = NULL;
@@ -178,7 +178,7 @@ static const feature_t * wholedisk_get_feature(LFS_t * object, const char * name
 
 static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, void ** data)
 {
-	struct wd_info * state = (struct wd_info *) object->instance;
+	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
 
 	if (id == KFS_feature_size.id)
 	{
@@ -233,7 +233,7 @@ static int wholedisk_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 
 static int wholedisk_sync(LFS_t * object, const char * name)
 {
-	CALL(((struct wd_info *) object->instance)->bd, sync, NULL);
+	CALL(((struct wd_info *) OBJLOCAL(object))->bd, sync, NULL);
 	return 0;
 }
 
@@ -242,9 +242,9 @@ static int wholedisk_destroy(LFS_t * lfs)
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct wd_info *) lfs->instance)->bd, lfs);
+	modman_dec_bd(((struct wd_info *) OBJLOCAL(lfs))->bd, lfs);
 	
-	free(lfs->instance);
+	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
 	
@@ -265,7 +265,7 @@ LFS_t * wholedisk(BD_t * bd)
 		free(lfs);
 		return NULL;
 	}
-	lfs->instance = info;
+	OBJLOCAL(lfs) = info;
 
 	OBJFLAGS(lfs) = 0;
 	OBJMAGIC(lfs) = WHOLEDISK_MAGIC;

@@ -102,7 +102,7 @@ static int kic_cfs_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	const envid_t fsid = find_fs();
-	const uint32_t id = (uint32_t) cfs->instance;
+	const uint32_t id = (uint32_t) OBJLOCAL(cfs);
 	int r;
 
 	INIT_PG(DESTROY_CFS, destroy_cfs);
@@ -124,7 +124,7 @@ static int kic_lfs_destroy(LFS_t * lfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, lfs);
 	const envid_t fsid = find_fs();
-	const uint32_t id = (uint32_t) lfs->instance;
+	const uint32_t id = (uint32_t) OBJLOCAL(lfs);
 	int r;
 
 	INIT_PG(DESTROY_LFS, destroy_lfs);
@@ -146,7 +146,7 @@ static int kic_bd_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
 	const envid_t fsid = find_fs();
-	const uint32_t id = (uint32_t) bd->instance;
+	const uint32_t id = (uint32_t) OBJLOCAL(bd);
 	int r;
 
 	INIT_PG(DESTROY_BD, destroy_bd);
@@ -179,7 +179,7 @@ static CFS_t * create_cfs(uint32_t id)
 	cfs = get_obj_ptr(id);
 	if (cfs)
 	{
-		assert((uint32_t) cfs->instance == id);
+		assert((uint32_t) OBJLOCAL(cfs) == id);
 		return cfs;
 	}
 
@@ -212,7 +212,7 @@ static CFS_t * create_cfs(uint32_t id)
 
 	DESTRUCTOR(cfs, kic_cfs, destroy);
 
-	cfs->instance = (void *) id;
+	OBJLOCAL(cfs) = (void *) id;
 	add_obj(id, cfs);
 
 	return cfs;
@@ -229,7 +229,7 @@ LFS_t * create_lfs(uint32_t id)
 	lfs = get_obj_ptr(id);
 	if (lfs)
 	{
-		assert((uint32_t) lfs->instance == id);
+		assert((uint32_t) OBJLOCAL(lfs) == id);
 		return lfs;
 	}
 
@@ -269,7 +269,7 @@ LFS_t * create_lfs(uint32_t id)
 
 	DESTRUCTOR(lfs, kic_lfs, destroy);
 
-	lfs->instance = (void *) id;
+	OBJLOCAL(lfs) = (void *) id;
 	add_obj(id, lfs);
 
 	return lfs;
@@ -286,7 +286,7 @@ BD_t * create_bd(uint32_t id)
 	bd = get_obj_ptr(id);
 	if (bd)
 	{
-		assert((uint32_t) bd->instance == id);
+		assert((uint32_t) OBJLOCAL(bd) == id);
 		return bd;
 	}
 
@@ -308,7 +308,7 @@ BD_t * create_bd(uint32_t id)
 
 	DESTRUCTOR(bd, kic_bd, destroy);
 
-	bd->instance = (void *) id;
+	OBJLOCAL(bd) = (void *) id;
 	add_obj(id, bd);
 
 	return bd;
@@ -339,8 +339,8 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 
 	INIT_PG(TABLE_CLASSIFIER_CFS_ADD, table_classifier_cfs_add);
 
-	pg->cfs = (uint32_t) cfs->instance;
-	pg->path_cfs = (uint32_t) path_cfs->instance;
+	pg->cfs = (uint32_t) OBJLOCAL(cfs);
+	pg->path_cfs = (uint32_t) OBJLOCAL(path_cfs);
 	strncpy(pg->path, path, MIN(SKFS_MAX_NAMELEN, strlen(path)));
 
 	SEND_PG();
@@ -355,7 +355,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
 
 	INIT_PG(TABLE_CLASSIFIER_CFS_REMOVE, table_classifier_cfs_remove);
 
-	pg->cfs = (uint32_t) cfs->instance;
+	pg->cfs = (uint32_t) OBJLOCAL(cfs);
 	strncpy(pg->path, path, MIN(SKFS_MAX_NAMELEN, strlen(path)));
 
 	SEND_PG();
@@ -372,7 +372,7 @@ CFS_t * uhfs(LFS_t * lfs)
 
 	INIT_PG(UHFS, uhfs);
 
-	pg->lfs = (uint32_t) lfs->instance;
+	pg->lfs = (uint32_t) OBJLOCAL(lfs);
 
 	SEND_PG();
 	cfs_id = RECV_PG();
@@ -393,9 +393,9 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 
 	INIT_PG(JOURNAL_LFS, journal_lfs);
 
-	pg->journal_lfs = (uint32_t) journal->instance;
-	pg->fs_lfs = (uint32_t) fs->instance;
-	pg->fs_queue_bd = (uint32_t) fs_queue->instance;
+	pg->journal_lfs = (uint32_t) OBJLOCAL(journal);
+	pg->fs_lfs = (uint32_t) OBJLOCAL(fs);
+	pg->fs_queue_bd = (uint32_t) OBJLOCAL(fs_queue);
 
 	SEND_PG();
 	lfs_id = RECV_PG();
@@ -409,7 +409,7 @@ size_t journal_lfs_max_bandwidth(const LFS_t * journal)
 
 	INIT_PG(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
 
-	pg->journal_lfs = (uint32_t) journal->instance;
+	pg->journal_lfs = (uint32_t) OBJLOCAL(journal);
 
 	SEND_PG();
 	return RECV_PG();
@@ -423,7 +423,7 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 
 	INIT_PG(JOSFS_BASE, josfs_base);
 
-	pg->bd = (uint32_t) block_device->instance;
+	pg->bd = (uint32_t) OBJLOCAL(block_device);
 	pg->do_fsck = do_fsck ? *do_fsck : 0;
 
 	SEND_PG();
@@ -440,7 +440,7 @@ LFS_t * wholedisk(BD_t * bd)
 
 	INIT_PG(WHOLEDISK, wholedisk);
 
-	pg->bd = (uint32_t) bd->instance;
+	pg->bd = (uint32_t) OBJLOCAL(bd);
 
 	SEND_PG();
 	lfs_id = RECV_PG();
@@ -460,7 +460,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 
 	INIT_PG(LOOP_BD, loop_bd);
 
-	pg->lfs = (uint32_t) lfs->instance;
+	pg->lfs = (uint32_t) OBJLOCAL(lfs);
 	strncpy(pg->file, file, MIN(SKFS_MAX_NAMELEN, strlen(file)));
 
 	SEND_PG();
@@ -494,7 +494,7 @@ BD_t * journal_queue_bd(BD_t * disk)
 
 	INIT_PG(JOURNAL_QUEUE_BD, journal_queue_bd);
 
-	pg->bd = (uint32_t) disk->instance;
+	pg->bd = (uint32_t) OBJLOCAL(disk);
 
 	SEND_PG();
 	bd_id = RECV_PG();
@@ -510,7 +510,7 @@ BD_t * order_preserver_bd(BD_t * disk)
 
 	INIT_PG(ORDER_PRESERVER_BD, order_preserver_bd);
 
-	pg->bd = (uint32_t) disk->instance;
+	pg->bd = (uint32_t) OBJLOCAL(disk);
 
 	SEND_PG();
 	bd_id = RECV_PG();
@@ -526,7 +526,7 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 
 	INIT_PG(CHDESC_STRIPPER_BD, chdesc_stripper_bd);
 
-	pg->bd = (uint32_t) disk->instance;
+	pg->bd = (uint32_t) OBJLOCAL(disk);
 
 	SEND_PG();
 	bd_id = RECV_PG();
@@ -542,7 +542,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 
 	INIT_PG(WB_CACHE_BD, wb_cache_bd);
 
-	pg->bd = (uint32_t) disk->instance;
+	pg->bd = (uint32_t) OBJLOCAL(disk);
 	pg->blocks = blocks;
 
 	SEND_PG();
@@ -559,7 +559,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 
 	INIT_PG(WT_CACHE_BD, wt_cache_bd);
 
-	pg->bd = (uint32_t) disk->instance;
+	pg->bd = (uint32_t) OBJLOCAL(disk);
 	pg->blocks = blocks;
 
 	SEND_PG();
@@ -576,7 +576,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 
 	INIT_PG(BLOCK_RESIZER_BD, block_resizer_bd);
 
-	pg->bd = (uint32_t) disk->instance;
+	pg->bd = (uint32_t) OBJLOCAL(disk);
 	pg->blocksize = blocksize;
 
 	SEND_PG();
@@ -593,8 +593,8 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 
 	INIT_PG(MD_BD, md_bd);
 
-	pg->disk0 = (uint32_t) disk0->instance;
-	pg->disk1 = (uint32_t) disk1->instance;
+	pg->disk0 = (uint32_t) OBJLOCAL(disk0);
+	pg->disk1 = (uint32_t) OBJLOCAL(disk1);
 
 	SEND_PG();
 	bd_id = RECV_PG();
@@ -610,8 +610,8 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 
 	INIT_PG(MIRROR_BD, mirror_bd);
 
-	pg->disk0 = (uint32_t) disk0->instance;
-	pg->disk1 = (uint32_t) disk1->instance;
+	pg->disk0 = (uint32_t) OBJLOCAL(disk0);
+	pg->disk1 = (uint32_t) OBJLOCAL(disk1);
 	pg->stride = stride;
 
 	SEND_PG();
@@ -656,7 +656,7 @@ uint8_t ipc_recv_page[2*PGSIZE];
 #define MODMAN_LOOKUP(typel, typeu, skfs_modman_type)					\
 const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 {																		\
-	Dprintf("%s(0x%08x, id 0x%08x)\n", __FUNCTION__, t, t->instance);	\
+	Dprintf("%s(0x%08x, id 0x%08x)\n", __FUNCTION__, t, OBJLOCAL(t));	\
 	const envid_t fsid = find_fs();										\
 	Skfs_modman_return_lookup_t * lookup = (Skfs_modman_return_lookup_t *) ROUNDUP32(ipc_recv_page, PGSIZE); \
 	Skfs_modman_return_lookup_user_t * lookup_user = (Skfs_modman_return_lookup_user_t *) ROUNDUP32(ipc_recv_page, PGSIZE);	\
@@ -679,7 +679,7 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 	/* request the lookup */											\
 	INIT_PG(MODMAN_REQUEST_LOOKUP, modman_request_lookup);				\
 	pg->type = skfs_modman_type;										\
-	pg->id = (uint32_t) t->instance;									\
+	pg->id = (uint32_t) OBJLOCAL(t);									\
 	SEND_PG();															\
 																		\
 	/* receive the lookup page */										\

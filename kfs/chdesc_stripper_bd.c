@@ -91,7 +91,7 @@ static int chdesc_stripper_get_status(void * object, int level, char * string, s
 static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	chdesc_t * block_chdesc, * cur_chdesc;
 	uint32_t refs;
 	int r;
@@ -152,7 +152,7 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 static int chdesc_stripper_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -172,7 +172,7 @@ static int chdesc_stripper_destroy(BD_t * bd)
 
 static bdesc_t * chdesc_stripper_read_block(BD_t * bd, uint32_t number)
 {
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	bdesc_t * bdesc;
 	int r;
 
@@ -192,7 +192,7 @@ static bdesc_t * chdesc_stripper_read_block(BD_t * bd, uint32_t number)
 
 static int chdesc_stripper_sync(BD_t * bd, bdesc_t * block)
 {
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	uint32_t refs;
 	int r;
 
@@ -222,19 +222,19 @@ static int chdesc_stripper_sync(BD_t * bd, bdesc_t * block)
 
 static uint32_t chdesc_stripper_get_numblocks(BD_t * bd)
 {
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	return CALL(state->bd, get_numblocks);
 }
 
 static uint16_t chdesc_stripper_get_blocksize(BD_t * bd)
 {
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	return CALL(state->bd, get_blocksize);
 }
 
 static uint16_t chdesc_stripper_get_atomicsize(BD_t * bd)
 {
-	stripper_info_t * state = (stripper_info_t *) bd->instance;
+	stripper_info_t * state = (stripper_info_t *) OBJLOCAL(bd);
 	return CALL(state->bd, get_atomicsize);
 }
 
@@ -254,7 +254,7 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_bd;
-	bd->instance = state;
+	OBJLOCAL(bd) = state;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

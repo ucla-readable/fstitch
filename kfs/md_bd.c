@@ -17,7 +17,7 @@ struct md_info {
 static int md_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct md_info * info = (struct md_info *) bd->instance;
+	struct md_info * info = (struct md_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -42,22 +42,22 @@ static int md_bd_get_status(void * object, int level, char * string, size_t leng
 
 static uint32_t md_bd_get_numblocks(BD_t * object)
 {
-	return ((struct md_info *) object->instance)->numblocks;
+	return ((struct md_info *) OBJLOCAL(object))->numblocks;
 }
 
 static uint16_t md_bd_get_blocksize(BD_t * object)
 {
-	return ((struct md_info *) object->instance)->blocksize;
+	return ((struct md_info *) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t md_bd_get_atomicsize(BD_t * object)
 {
-	return ((struct md_info *) object->instance)->atomicsize;
+	return ((struct md_info *) OBJLOCAL(object))->atomicsize;
 }
 
 static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct md_info * info = (struct md_info *) object->instance;
+	struct md_info * info = (struct md_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
@@ -85,7 +85,7 @@ static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number)
 
 static int md_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct md_info * info = (struct md_info *) object->instance;
+	struct md_info * info = (struct md_info *) OBJLOCAL(object);
 	uint32_t refs = block->refs, number = block->number;
 	int value;
 	
@@ -132,7 +132,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int md_bd_sync(BD_t * object, bdesc_t * block)
 {
-	struct md_info * info = (struct md_info *) object->instance;
+	struct md_info * info = (struct md_info *) OBJLOCAL(object);
 	uint32_t refs, number;
 	int value;
 	
@@ -186,9 +186,9 @@ static int md_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct md_info *) bd->instance)->bd[1], bd);
-	modman_dec_bd(((struct md_info *) bd->instance)->bd[0], bd);
-	free(bd->instance);
+	modman_dec_bd(((struct md_info *) OBJLOCAL(bd))->bd[1], bd);
+	modman_dec_bd(((struct md_info *) OBJLOCAL(bd))->bd[0], bd);
+	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	return 0;
@@ -218,7 +218,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

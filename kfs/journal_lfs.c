@@ -668,7 +668,7 @@ static int journal_get_status(void * object, int level, char * string, size_t le
 
 static fdesc_t * journal_lookup_name(LFS_t * lfs, const char * name)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	/* hide the journal file */
 	if(!strcmp(name, journal_filename))
 		return NULL;
@@ -677,7 +677,7 @@ static fdesc_t * journal_lookup_name(LFS_t * lfs, const char * name)
 
 static int journal_get_dirent(LFS_t * lfs, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int value = CALL(state->fs, get_dirent, file, entry, size, basep);
 	const char * hide = (journal_filename[0] == '/') ? &journal_filename[1] : journal_filename;
 	/* hide the journal filename - slight hack, hides it from all directories */
@@ -692,7 +692,7 @@ static int journal_get_dirent(LFS_t * lfs, fdesc_t * file, struct dirent * entry
 
 static int journal_sync(LFS_t * lfs, const char * name)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r, fs_r;
 
 	r = transaction_stop(state);
@@ -712,7 +712,7 @@ static int journal_sync(LFS_t * lfs, const char * name)
 
 static int journal_destroy(LFS_t * lfs)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 
 	r = transaction_stop(state);
@@ -742,7 +742,7 @@ static int journal_destroy(LFS_t * lfs)
 			chdesc_weak_release(&state->commit_chdesc[r]);
 	free(state->commit_chdesc);
 
-	free(lfs->instance);
+	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
 	return 0;
@@ -770,7 +770,7 @@ static void eat_chdesc_graph(chdesc_t * c)
 
 static bdesc_t * journal_allocate_block(LFS_t * lfs, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	bdesc_t * val;
 	val = CALL(state->fs, allocate_block, size, purpose, head, tail);
 	eat_chdesc_graph(*head);
@@ -780,7 +780,7 @@ static bdesc_t * journal_allocate_block(LFS_t * lfs, uint32_t size, int purpose,
 
 static int journal_append_file_block(LFS_t * lfs, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, append_file_block, file, block, head, tail);
 	eat_chdesc_graph(*head);
@@ -790,7 +790,7 @@ static int journal_append_file_block(LFS_t * lfs, fdesc_t * file, bdesc_t * bloc
 
 static fdesc_t * journal_allocate_name(LFS_t * lfs, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	fdesc_t * val;
 	val = CALL(state->fs, allocate_name, name, type, link, head, tail);
 	eat_chdesc_graph(*head);
@@ -800,7 +800,7 @@ static fdesc_t * journal_allocate_name(LFS_t * lfs, const char * name, uint8_t t
 
 static int journal_rename(LFS_t * lfs, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	/* hide the journal file */
 	if(!strcmp(oldname, journal_filename))
@@ -815,7 +815,7 @@ static int journal_rename(LFS_t * lfs, const char * oldname, const char * newnam
 
 static bdesc_t * journal_truncate_file_block(LFS_t * lfs, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	bdesc_t * val;
 	val = CALL(state->fs, truncate_file_block, file, head, tail);
 	eat_chdesc_graph(*head);
@@ -825,7 +825,7 @@ static bdesc_t * journal_truncate_file_block(LFS_t * lfs, fdesc_t * file, chdesc
 
 static int journal_free_block(LFS_t * lfs, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, free_block, block, head, tail);
 	eat_chdesc_graph(*head);
@@ -835,7 +835,7 @@ static int journal_free_block(LFS_t * lfs, bdesc_t * block, chdesc_t ** head, ch
 
 static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	/* hide the journal file */
 	if(!strcmp(name, journal_filename))
@@ -848,7 +848,7 @@ static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head,
 
 static int journal_write_block(LFS_t * lfs, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, write_block, block, offset, size, data, head, tail);
 	eat_chdesc_graph(*head);
@@ -858,7 +858,7 @@ static int journal_write_block(LFS_t * lfs, bdesc_t * block, uint32_t offset, ui
 
 static int journal_set_metadata_name(LFS_t * lfs, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	/* hide the journal file */
 	if(!strcmp(name, journal_filename))
@@ -871,7 +871,7 @@ static int journal_set_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 
 static int journal_set_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, set_metadata_fdesc, file, id, size, data, head, tail);
 	eat_chdesc_graph(*head);
@@ -885,62 +885,62 @@ static int journal_set_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_
 
 static uint32_t journal_get_blocksize(LFS_t * lfs)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return state->blocksize;
 }
 
 static BD_t * journal_get_blockdev(LFS_t * lfs)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_blockdev);
 }
 
 static bdesc_t * journal_lookup_block(LFS_t * lfs, uint32_t number, uint32_t offset, uint32_t size)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, lookup_block, number, offset, size);
 }
 
 static void journal_free_fdesc(LFS_t * lfs, fdesc_t * fdesc)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, free_fdesc, fdesc);
 }
 
 static uint32_t journal_get_file_numblocks(LFS_t * lfs, fdesc_t * file)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_file_numblocks, file);
 
 }
 
 static uint32_t journal_get_file_block_num(LFS_t * lfs, fdesc_t * file, uint32_t offset)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_file_block_num, file, offset);
 }
 
 static bdesc_t * journal_get_file_block(LFS_t * lfs, fdesc_t * file, uint32_t offset)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_file_block, file, offset);
 }
 
 static size_t journal_get_num_features(LFS_t * lfs, const char * name)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_num_features, name);
 }
 
 static const feature_t * journal_get_feature(LFS_t * lfs, const char * name, size_t num)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_feature, name, num);
 }
 
 static int journal_get_metadata_name(LFS_t * lfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	/* hide the journal file */
 	if(!strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
@@ -949,7 +949,7 @@ static int journal_get_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 
 static int journal_get_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
 {
-	journal_state_t * state = (journal_state_t *) lfs->instance;
+	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	return CALL(state->fs, get_metadata_fdesc, file, id, size, data);
 }
 
@@ -994,7 +994,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_lfs;
-	lfs->instance = state;
+	OBJLOCAL(lfs) = state;
 
 	OBJFLAGS(lfs) = 0;
 	OBJMAGIC(lfs) = JOURNAL_MAGIC;
@@ -1095,7 +1095,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 
 size_t journal_lfs_max_bandwidth(const LFS_t * lfs)
 {
-	const journal_state_t * state = (const journal_state_t *) lfs->instance;
+	const journal_state_t * state = (const journal_state_t *) OBJLOCAL(lfs);
 	if(OBJMAGIC(lfs) == JOURNAL_MAGIC)
 	{
 		size_t bytes_per_slot = TRANSACTION_SIZE - state->blocksize * (trans_number_block_count(state->blocksize) + 1);

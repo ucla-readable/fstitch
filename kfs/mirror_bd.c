@@ -25,7 +25,7 @@ struct mirror_info {
 static int mirror_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct mirror_info * info = (struct mirror_info *) bd->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -44,7 +44,7 @@ static int mirror_bd_get_config(void * object, int level, char * string, size_t 
 static int mirror_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct mirror_info * info = (struct mirror_info *) bd->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case STATUS_VERBOSE:
@@ -62,22 +62,22 @@ static int mirror_bd_get_status(void * object, int level, char * string, size_t 
 
 static uint32_t mirror_bd_get_numblocks(BD_t * object)
 {
-	return ((struct mirror_info *) object->instance)->numblocks;
+	return ((struct mirror_info *) OBJLOCAL(object))->numblocks;
 }
 
 static uint16_t mirror_bd_get_blocksize(BD_t * object)
 {
-	return ((struct mirror_info *) object->instance)->blocksize;
+	return ((struct mirror_info *) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t mirror_bd_get_atomicsize(BD_t * object)
 {
-	return ((struct mirror_info *) object->instance)->atomicsize;
+	return ((struct mirror_info *) OBJLOCAL(object))->atomicsize;
 }
 
 static void label_drive_bad(BD_t * object, int disk)
 {
-	struct mirror_info * info = (struct mirror_info *) object->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	if (disk != 0 && disk != 1) // Should never happen...
 		return;
 
@@ -90,7 +90,7 @@ static void label_drive_bad(BD_t * object, int disk)
 
 static bdesc_t * try_read(BD_t * object, uint32_t number, int disk)
 {
-	struct mirror_info * info = (struct mirror_info *) object->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	if (disk != 0 && disk != 1) // Should never happen...
 		return NULL;
@@ -106,7 +106,7 @@ static bdesc_t * try_read(BD_t * object, uint32_t number, int disk)
 
 static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct mirror_info * info = (struct mirror_info *) object->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	int diskno = (number >> info->stride) & 1;
 	bdesc_t * bdesc = NULL;
 	
@@ -150,7 +150,7 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number)
 
 static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct mirror_info * info = (struct mirror_info *) object->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	uint32_t refs = block->refs;
 	int value0 = -1, value1 = -1;
 	
@@ -225,7 +225,7 @@ static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int mirror_bd_sync(BD_t * object, bdesc_t * block)
 {
-	struct mirror_info * info = (struct mirror_info *) object->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	uint32_t refs, number;
 	int value0 = -1, value1 = -1;
 	
@@ -317,7 +317,7 @@ static int mirror_bd_sync(BD_t * object, bdesc_t * block)
 
 static int mirror_bd_destroy(BD_t * bd)
 {
-	struct mirror_info * info = (struct mirror_info *) bd->instance;
+	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -325,7 +325,7 @@ static int mirror_bd_destroy(BD_t * bd)
 		modman_dec_bd(info->bd[1], bd);
 	if (info->bd[0])
 		modman_dec_bd(info->bd[0], bd);
-	free(bd->instance);
+	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	return 0;
@@ -386,7 +386,7 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

@@ -113,7 +113,7 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 static int ide_pio_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct ide_info * info = (struct ide_info *) bd->instance;
+	struct ide_info * info = (struct ide_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -138,7 +138,7 @@ static int ide_pio_bd_get_status(void * object, int level, char * string, size_t
 
 static uint32_t ide_pio_bd_get_numblocks(BD_t * object)
 {
-	return ((struct ide_info *) object->instance)->length;
+	return ((struct ide_info *) OBJLOCAL(object))->length;
 }
 
 static uint16_t ide_pio_bd_get_blocksize(BD_t * object)
@@ -153,11 +153,11 @@ static uint16_t ide_pio_bd_get_atomicsize(BD_t * object)
 
 static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 {
-	struct ide_info * info = (struct ide_info *) object->instance;
+	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
-	if(number >= ((struct ide_info *) object->instance)->length)
+	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
 	bdesc = bdesc_alloc(object, number, 0, SECTSIZE);
@@ -173,7 +173,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 
 static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct ide_info * info = (struct ide_info *) object->instance;
+	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
@@ -184,7 +184,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */
-	if(block->number >= ((struct ide_info *) object->instance)->length)
+	if(block->number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return -E_INVAL;
 	
 	/* write it */
@@ -210,7 +210,7 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	free(bd->instance);
+	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	return 0;
@@ -242,7 +242,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 		free(bd);
 		return NULL;
 	}
-	bd->instance = info;
+	OBJLOCAL(bd) = info;
 	
 	OBJFLAGS(bd) = 0;
 	OBJMAGIC(bd) = 0;

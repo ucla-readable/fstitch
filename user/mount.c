@@ -154,7 +154,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks)
 		}
 
 		if (verbose)
-			printf("uhfs made, u->instance = 0x%08x\n", u->instance);
+			printf("uhfs made, OBJLOCAL(u) = 0x%08x\n", OBJLOCAL(u));
 		return u;
 	}
 
