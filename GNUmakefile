@@ -74,7 +74,7 @@ CTAGS	:= ctags
 # Compiler flags
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -O2 -fno-builtin -I$(TOP) -MD -Wall -Wno-format -ggdb
+CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-format -ggdb
 CFLAGS   := $(CFLAGS) -O2
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
 
