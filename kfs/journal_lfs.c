@@ -706,6 +706,11 @@ static int journal_destroy(LFS_t * lfs)
 		transaction_start(state);
 		return r;
 	}
+
+	r = sched_unregister(timer_callback);
+	if (r < 0)
+		fprintf(STDERR_FILENO, "%s(): WARNING: sched_unregister(): %e\n", r);
+
 	modman_dec_bd(state->queue, lfs);
 	modman_dec_lfs(state->fs, lfs);
 	modman_dec_lfs(state->journal, lfs);
