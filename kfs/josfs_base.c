@@ -1,4 +1,4 @@
-#include <inc/lib.h>
+/* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
 #include <inc/types.h>
 #include <inc/x86.h>
 #include <inc/malloc.h>
@@ -17,68 +17,67 @@ int write_bitmap(LFS_t * object, uint32_t blockno, bool value);
 struct lfs_info
 {
     BD_t * ubd;
+    bdesc_t * super_block;
     struct JOS_Super * super;
 };
 
 // Equivalent to JOS's read_super
-struct JOS_Super * check_super(LFS_t * object)
+int check_super(LFS_t * object)
 {
     struct lfs_info * info = (struct lfs_info *) object->instance;
-    struct JOS_Super* super;
     uint32_t numblocks;
-    bdesc_t * bdesc;
 
-    if (CALL(info->ubd, get_blocksize) != BLKSIZE) {
+    /* make sure we have the block size we expect */
+    if (CALL(info->ubd, get_blocksize) != JOS_BLKSIZE) {
         printf("Block device size is not BLKSIZE!\n");
-        return NULL;
+        return -1;
     }
 
-    bdesc = CALL(info->ubd, read_block, 0);
+    /* the superblock is in block 1 */
+    info->super_block = CALL(info->ubd, read_block, 1);
+    bdesc_retain(&info->super_block);
 
-    if (bdesc->length < sizeof(struct JOS_Super)) {
-        printf("josfs_base: Didn't read back enough data\n");
-        return NULL;
-    }
-
-    super = (struct JOS_Super*)(bdesc->data + bdesc->offset);
-    if (super->s_magic != FS_MAGIC) {
+    info->super = (struct JOS_Super*) info->super_block->data;
+    if (info->super->s_magic != JOS_FS_MAGIC) {
         printf("josfs_base: bad file system magic number\n");
-        return NULL;
+	bdesc_release(&info->super_block);
+        return -1;
     }
 
     numblocks = CALL(info->ubd, get_numblocks);
 
-    if (super->s_nblocks > numblocks) {
+    if (info->super->s_nblocks > numblocks) {
         printf("josfs_base: file system is too large\n");
-        return NULL;
+	bdesc_release(&info->super_block);
+        return -1;
     }
 
-    return super;
+    return 0;
 }
 
 // Equivalent to JOS's read_bitmap
 int check_bitmap(LFS_t * object)
 {
-    int i;
-    int blocks_to_read;
+    struct lfs_info * info = (struct lfs_info *) object->instance;
+    int i, blocks_to_read;
 
-    blocks_to_read = ((struct lfs_info *) object->instance)->super->s_nblocks / BLKBITSIZE;
+    blocks_to_read = info->super->s_nblocks / JOS_BLKBITSIZE;
 
-    if (((struct lfs_info *) object->instance)->super->s_nblocks % BLKBITSIZE) {
+    if (info->super->s_nblocks % JOS_BLKBITSIZE) {
         blocks_to_read++;
     }
 
     // Make sure the reserved and root blocks are marked in-use.
     if (block_is_free(object, 0) || block_is_free(object, 1)) {
         printf("josfs_base: Boot Sector or Parition Table marked free!\n");
-        return 1;
+        return -1;
     }
 
     // Make sure that the bitmap blocks are marked in-use.
     for (i = 0; i < blocks_to_read; i++) {
         if (block_is_free(object, 2+i)) {
             printf("josfs_base: Free Block Bitmap block %d marked free!\n");
-            return 1;
+            return -1;
         }
     }
 
@@ -92,11 +91,11 @@ int read_bitmap(LFS_t * object, uint32_t blockno)
     int target;
     uint32_t * ptr;
 
-    target = 2 + (blockno / (BLKSIZE*8));
+    target = 2 + (blockno / (JOS_BLKBITSIZE));
 
     bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
 
-    if (bdesc->length != BLKSIZE) {
+    if (bdesc->length != JOS_BLKSIZE) {
         printf("josfs_base: trouble reading bitmap!\n");
         return -1;
     }
@@ -120,11 +119,11 @@ int write_bitmap(LFS_t * object, uint32_t blockno, bool value)
         return -1;
     }
 
-    target = 2 + (blockno / (BLKSIZE*8));
+    target = 2 + (blockno / (JOS_BLKBITSIZE));
 
     bdesc = CALL(info->ubd, read_block, target);
 
-    if (bdesc->length != BLKSIZE) {
+    if (bdesc->length != JOS_BLKSIZE) {
         printf("josfs_base: trouble reading bitmap!\n");
         return -1;
     }
@@ -150,16 +149,16 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
     int s_nblocks;
 
     s_nblocks = info->super->s_nblocks;
-    bitmap_size = s_nblocks / BLKBITSIZE;
+    bitmap_size = s_nblocks / JOS_BLKBITSIZE;
 
-    if (s_nblocks % BLKBITSIZE) {
+    if (s_nblocks % JOS_BLKBITSIZE) {
         bitmap_size++;
     }
 
     for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
         if (block_is_free(object, blockno) == 1) {
             write_bitmap(object, blockno, 0);
-            return bdesc_alloc(info->ubd, blockno, 0, BLKSIZE);
+            return bdesc_alloc(info->ubd, blockno, 0, JOS_BLKSIZE);
         }
     }
 
@@ -168,10 +167,10 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number, uint32_t offset, uint32_t size)
 {
-    if (offset != 0 || size != BLKSIZE)
+    if (offset != 0 || size != JOS_BLKSIZE)
         return NULL;
     
-    return bdesc_alloc(((struct lfs_info *) object->instance)->ubd, number, 0, BLKSIZE);
+    return bdesc_alloc(((struct lfs_info *) object->instance)->ubd, number, 0, JOS_BLKSIZE);
 }
 
 // TODO
@@ -256,7 +255,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
     int r;
     struct lfs_info * info = (struct lfs_info *) object->instance;
 
-    if (offset + size > BLKSIZE) {
+    if (offset + size > JOS_BLKSIZE) {
         return -1;
     }
 
@@ -326,8 +325,6 @@ static int josfs_destroy(LFS_t * lfs)
 
 LFS_t * josfs(BD_t * block_device)
 {
-    bool b;
-    struct JOS_Super * s;
     struct lfs_info * info;
     LFS_t * lfs = malloc(sizeof(*lfs));
 
@@ -363,21 +360,17 @@ LFS_t * josfs(BD_t * block_device)
     ASSIGN_DESTROY(lfs, josfs, destroy);
 
     info->ubd = block_device;
-    s = check_super(lfs);
-    if (s == NULL) {
+    if (check_super(lfs)) {
         free(info);
         free(lfs);
         return NULL;
     }
 
-    b = check_bitmap(lfs);
-    if (b == 1) {
+    if (check_bitmap(lfs)) {
         free(info);
         free(lfs);
         return NULL;
     }
-
-    info->super = s;
 
     return lfs;
 }
