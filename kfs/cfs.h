@@ -1,7 +1,10 @@
-#include <inc/types.h>
-#include <kfs/oo.h>
+#ifndef __KUDOS_KFS_CFS_H
+#define __KUDOS_KFS_CFS_H
 
-struct feature;
+#include <inc/types.h>
+
+#include <kfs/oo.h>
+#include <kfs/feature.h>
 
 struct CFS;
 typedef struct CFS CFS_t;
@@ -18,9 +21,11 @@ struct CFS {
 	DECLARE(CFS_t, int, rename, const char * oldname, const char * newname);
 	DECLARE(CFS_t, int, mkdir, const char * name);
 	DECLARE(CFS_t, int, rmdir, const char * name);
-	DECLARE(CFS_t, const struct feature *, get_features);
+	DECLARE(CFS_t, const feature_t *, get_features);
 	DECLARE(CFS_t, int, get_metadata, int fid, uint32_t id, ...);
 	DECLARE(CFS_t, int, set_metadata, int fid, uint32_t id, ...);
 	DECLARE(CFS_t, int, sync, int fid);
 	void * instance;
 };
+
+#endif /* __KUDOS_KFS_CFS_H */

@@ -1,6 +1,10 @@
+#ifndef __KUDOS_KFS_BD_H
+#define __KUDOS_KFS_BD_H
+
 #include <inc/types.h>
 #include <kfs/oo.h>
 
+/* struct bdesc needs BD, so we avoid the cycle */
 struct bdesc;
 
 struct BD;
@@ -15,3 +19,5 @@ struct BD {
 	DECLARE(BD_t, int, sync, struct bdesc * block);
 	void * instance;
 };
+
+#endif /* __KUDOS_KFS_BD_H */

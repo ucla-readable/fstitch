@@ -1,10 +1,18 @@
+#ifndef __KUDOS_KFS_CHDESC_H
+#define __KUDOS_KFS_CHDESC_H
+
 #include <inc/types.h>
 
-struct bdesc;
+#include <kfs/bdesc.h>
+
+struct chdesc;
+typedef struct chdesc chdesc_t;
+
 struct chmetadesc;
+typedef struct chmetadesc chmetadesc_t;
 
 struct chdesc {
-	struct bdesc * block;
+	bdesc_t * block;
 	enum {BIT, BYTE} type;
 	union {
 		struct {
@@ -18,14 +26,13 @@ struct chdesc {
 			uint8_t * newdata;
 		} byte;
 	} data;
-	struct chmetadesc * dependencies;
-	struct chmetadesc * dependents;
+	chmetadesc_t * dependencies;
+	chmetadesc_t * dependents;
 };
 
 struct chmetadesc {
-	struct chdesc * desc;
-	struct chmetadesc * next;
+	chdesc_t * desc;
+	chmetadesc_t * next;
 };
 
-typedef struct chdesc chdesc_t;
-typedef struct chmetadesc chmetadesc_t;
+#endif /* __KUDOS_KFS_CHDESC_H */
