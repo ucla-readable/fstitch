@@ -57,6 +57,18 @@ int kpl_open(const char* path, int mode)
 	}
 	/*store the file name for this file descriptor */
 	strncpy(namecopy, path, SCFSMAXNAMELEN);
+
+	if (mode & O_MKDIR)
+	{
+		r = cfs_mkdir(path);
+		if(r < 0)
+		{
+			sys_page_unmap(0, namecopy);
+			sys_page_unmap(0, fd);
+			return r;
+		}
+		mode &= ~(O_MKDIR | O_CREAT);
+	}
 	
 	r = cfs_open(path, mode, fd);
 	if(r < 0)
