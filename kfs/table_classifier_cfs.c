@@ -145,7 +145,7 @@ static int fid_table_del(table_classifier_state_t * state, int fid)
 // mount_table_t functions
 
 // Find the index into mount_table of the given mount-point's path
-int mount_lookup(vector_t * mount_table, const char * path)
+static int mount_lookup(vector_t * mount_table, const char * path)
 {
 	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, mount_table, path);
 	const size_t mount_table_size = vector_size(mount_table);
