@@ -27,6 +27,8 @@ static BD_t * wholedisk_get_blockdev(LFS_t * object)
 
 static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	/* always fail - no free blocks */
 	return NULL;
 }
@@ -64,31 +66,43 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 
 static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return -E_INVAL;
 }
 
 static fdesc_t * wholedisk_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return NULL;
 }
 
 static int wholedisk_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return -E_INVAL;
 }
 
 static bdesc_t * wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return NULL;
 }
 
 static int wholedisk_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return -E_INVAL;
 }
 
 static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return -E_INVAL;
 }
 
@@ -96,6 +110,9 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offse
 {
 	struct wd_info * info = (struct wd_info *) object->instance;
 	int value;
+	
+	if (head && tail)
+		*head = *tail = NULL;
 	
 	/* have to test all three of these because of the possibility of wrapping */
 	if(offset >= info->blocksize || size > info->blocksize || offset + size > info->blocksize)
@@ -163,6 +180,8 @@ static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 
 static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
+	if (head && tail)
+		*head = *tail = NULL;
 	return -E_INVAL;
 }
 
