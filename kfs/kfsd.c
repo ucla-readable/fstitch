@@ -194,7 +194,6 @@ void umain(int argc, char * argv[])
 {
 	int r;
 
-	printf("Kfsd [0x%08x]\n", env->env_id);
 	if(!argc)
 	{
 		binaryname = "kfsd";
