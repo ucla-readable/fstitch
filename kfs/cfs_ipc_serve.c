@@ -36,7 +36,7 @@ typedef struct prev_serve_recv prev_serve_recv_t;
 static prev_serve_recv_t * prev_serve_recvs[NENV];
 
 
-static void serve();
+static void serve(void);
 
 
 static CFS_t * frontend_cfs = NULL;
@@ -63,7 +63,7 @@ static void cfs_ipc_serve_shutdown(void * arg)
 }
 
 // Return like a constructor would, 0 for fail
-int cfs_ipc_serve()
+int cfs_ipc_serve(void)
 {
 	int r;
 
@@ -77,7 +77,7 @@ int cfs_ipc_serve()
 	return 1;
 }
 
-void cfs_ipc_serve_run()
+void cfs_ipc_serve_run(void)
 {
 	serve();
 }
@@ -312,7 +312,7 @@ static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 }
 
 
-static void serve()
+static void serve(void)
 {
 	uint32_t whom;
 	int type;
