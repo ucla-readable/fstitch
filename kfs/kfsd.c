@@ -197,17 +197,21 @@ void umain(int argc, char * argv[])
 	if(!argc)
 	{
 		binaryname = "kfsd";
-		sys_env_set_name(0, "kfsd");
+		if((r = sys_env_set_name(0, "kfsd")) < 0)
+		{
+			printf("Failed to set env name: %e\n", r);
+			return;
+		}
 	}
 	
-	if(sys_grant_io(0))
+	if((r = sys_grant_io(0)) < 0)
 	{
-		printf("Failed to get I/O priveleges.\n");
+		printf("Failed to get I/O priveleges: %e\n", r);
 		return;
 	}
-	if(depman_init())
+	if((r = depman_init()) < 0)
 	{
-		printf("Failed to initialized DEP MAN!\n");
+		printf("Failed to initialized DEP MAN: %e\n", r);
 		return;
 	}
 	if((r = sys_env_set_priority(0, ENV_MAX_PRIORITY)) < 0)
