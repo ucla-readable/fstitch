@@ -152,7 +152,10 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 		/* Now free the block */
 		r = CALL(state->lfs, free_block, block, &prev_head, &tail);
 		if (r < 0)
+		{
+			chdesc_weak_release(&save_head);
 			return r;
+		}
 
 		prev_head = save_head;
 		chdesc_weak_release(&save_head);
