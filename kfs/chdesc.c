@@ -4,6 +4,7 @@
 
 #include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
+#include <kfs/depman.h>
 
 chdesc_t * chdesc_create_noop(bdesc_t * block)
 {
@@ -36,9 +37,13 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor)
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
 	
+	/* make sure it is dependent upon any pre-existing chdescs in depman */
+	if(chdesc_overlap_multiattach(chdesc, block))
+		goto destroy;
+	
 	/* make sure it applies cleanly */
 	if(chdesc_apply(chdesc))
-		chdesc_destroy(&chdesc);
+		destroy: chdesc_destroy(&chdesc);
 	
 	return chdesc;
 }
@@ -83,16 +88,17 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void *
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
 		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
-		{
-			chdesc_destroy(&chdescs[i]);
-			break;
-		}
+			goto destroy;
+		
+		/* make sure it is dependent upon any pre-existing chdescs in depman */
+		if(chdesc_overlap_multiattach(chdescs[i], block))
+			goto destroy;
 		
 		copied += chdescs[i]->byte.length;
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
 		{
-			chdesc_destroy(&chdescs[i]);
+			destroy: chdesc_destroy(&chdescs[i]);
 			break;
 		}
 	}
@@ -168,14 +174,15 @@ int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
 		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
-		{
-			chdesc_destroy(&chdescs[i]);
-			break;
-		}
+			goto destroy;
+		
+		/* make sure it is dependent upon any pre-existing chdescs in depman */
+		if(chdesc_overlap_multiattach(chdescs[i], block))
+			goto destroy;
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
 		{
-			chdesc_destroy(&chdescs[i]);
+			destroy: chdesc_destroy(&chdescs[i]);
 			break;
 		}
 	}
@@ -249,14 +256,15 @@ int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t 
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
 		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
-		{
-			chdesc_destroy(&chdescs[i]);
-			break;
-		}
+			goto destroy;
+		
+		/* make sure it is dependent upon any pre-existing chdescs in depman */
+		if(chdesc_overlap_multiattach(chdescs[i], block))
+			goto destroy;
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
 		{
-			chdesc_destroy(&chdescs[i]);
+			destroy: chdesc_destroy(&chdescs[i]);
 			break;
 		}
 	}
@@ -294,6 +302,72 @@ int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t 
 	
 	*head = chdescs[count - 1];
 	*tail = chdescs[0];
+	
+	return 0;
+}
+
+/* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
+/* note that we don't check to see if these chdescs are for the same bdesc or not */
+int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
+{
+	uint16_t r_start, r_len;
+	uint16_t o_start, o_len;
+	uint32_t start, end, tag;
+	
+	/* if either is a NOOP chdesc, they don't conflict */
+	if(recent->type == NOOP || original->type == NOOP)
+	{
+		printf("Unexpected NOOP chdesc in %s()\n", __FUNCTION__);
+		return 0;
+	}
+	/* two bit chdescs can't conflict due to xor representation */
+	if(recent->type == BIT && original->type == BIT)
+		return 0;
+	
+	if(recent->type == BIT)
+	{
+		r_len = sizeof(recent->bit.xor);
+		r_start = recent->bit.offset * r_len;
+	}
+	else
+	{
+		r_len = recent->byte.length;
+		r_start = recent->byte.offset;
+	}
+	if(original->type == BIT)
+	{
+		o_len = sizeof(original->bit.xor);
+		o_start = original->bit.offset * o_len;
+	}
+	else
+	{
+		o_len = original->byte.length;
+		o_start = original->byte.offset;
+	}
+	
+	start = o_start;
+	end = start + o_len + r_len;
+	tag = r_start + r_len;
+	if(tag <= start || tag > end)
+		return 0;
+	
+	return chdesc_add_depend(recent, original);
+}
+
+int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
+{
+	chmetadesc_t * scan;
+	const chdesc_t * deps = depman_get_deps(block);
+	
+	if(!deps)
+		return 0;
+	
+	for(scan = deps->dependencies; scan; scan = scan->next)
+	{
+		int r = chdesc_overlap_attach(chdesc, scan->desc);
+		if(r < 0)
+			return r;
+	}
 	
 	return 0;
 }
@@ -528,8 +602,12 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 
 int chdesc_destroy(chdesc_t ** chdesc)
 {
-	if((*chdesc)->dependencies || (*chdesc)->dependents)
+	if((*chdesc)->dependents)
 		return -E_INVAL;
+	
+	while((*chdesc)->dependencies)
+		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);
+	
 	chdesc_weak_collect(*chdesc);
 	
 	switch((*chdesc)->type)

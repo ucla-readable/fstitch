@@ -1,5 +1,3 @@
-/* This file contains the magic DEP MAN! */
-
 #include <inc/error.h>
 #include <inc/stdio.h>
 #include <inc/assert.h>
@@ -7,6 +5,14 @@
 
 #include <kfs/depman.h>
 #include <kfs/bdesc.h>
+
+#define DEPMAN_DEBUG 0
+
+#if DEPMAN_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
 
 /* Internally, the dependency manager keeps a hash table that maps block
  * descriptors to change descriptors. The entry in the hash table for each block
@@ -33,26 +39,47 @@ int depman_init(void)
 int depman_forward_chdesc(bdesc_t * from, bdesc_t * to)
 {
 	chdesc_t * value;
-	int r;
+	chdesc_t * dest;
 	
 	if(from == to)
 	{
 		/* do we need to do anything here? */
-		printf("DEP MAN NOTIFY: bdesc 0x%08x -> 0x%08x\n", from, to);
+		Dprintf("DEP MAN NOTIFY: bdesc 0x%08x -> 0x%08x\n", from, to);
 		return 0;
 	}
-	printf("DEP MAN FORWARD: bdesc 0x%08x -> 0x%08x\n", from, to);
+	Dprintf("DEP MAN FORWARD: bdesc 0x%08x -> 0x%08x\n", from, to);
 	
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, from);
+	dest = (chdesc_t *) hash_map_find_val(bdesc_hash, to);
 	if(value)
 	{
-		chmetadesc_t * scan;
-		r = hash_map_change_key(bdesc_hash, from, to);
-		if(r < 0)
-			return r;
-		value->block = to;
-		for(scan = value->dependencies; scan; scan = scan->next)
-			scan->desc->block = to;
+		if(dest)
+		{
+			/* already chdescs for the new bdesc */
+			while(value->dependencies)
+			{
+				chdesc_t * desc = value->dependencies->desc;
+				desc->block = to;
+				/* FIXME check for errors here? */
+				chdesc_overlap_multiattach(desc, dest->block);
+				/* FIXME reuse the memory for the metadesc? */
+				/* chdesc_move_depend(value, dest, desc); */
+				chdesc_remove_depend(value, desc);
+				chdesc_add_depend(dest, desc);
+			}
+			hash_map_erase(bdesc_hash, value->block);
+			chdesc_destroy(&value);
+		}
+		else
+		{
+			chmetadesc_t * scan;
+			int r = hash_map_change_key(bdesc_hash, from, to);
+			if(r < 0)
+				return r;
+			value->block = to;
+			for(scan = value->dependencies; scan; scan = scan->next)
+				scan->desc->block = to;
+		}
 	}
 	
 	return 0;
@@ -97,10 +124,10 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 	if(from == to)
 	{
 		/* do we need to do anything here? */
-		printf("DEP MAN NOTIFY RANGE: bdesc 0x%08x -> 0x%08x, offset %d, size %d\n", from, to, offset, size);
+		Dprintf("DEP MAN NOTIFY RANGE: bdesc 0x%08x -> 0x%08x, offset %d, size %d\n", from, to, offset, size);
 		return 0;
 	}
-	printf("DEP MAN TRANSLATE: bdesc 0x%08x -> 0x%08x, offset %d, size %d\n", from, to, offset, size);
+	Dprintf("DEP MAN TRANSLATE: bdesc 0x%08x -> 0x%08x, offset %d, size %d\n", from, to, offset, size);
 	
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, from);
 	if(value)
@@ -111,7 +138,8 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 		chmetadesc_t * scan = *list;
 		while(scan)
 		{
-			if(chdesc_in_range(scan->desc, offset, size))
+			chdesc_t * desc = scan->desc;
+			if(chdesc_in_range(desc, offset, size))
 			{
 				if(!dest)
 				{
@@ -124,24 +152,26 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 						return r;
 					}
 				}
-				scan->desc->block = to;
-				switch(scan->desc->type)
+				desc->block = to;
+				switch(desc->type)
 				{
 					case BIT:
-						scan->desc->bit.offset -= offset / sizeof(scan->desc->bit.xor);
+						desc->bit.offset -= offset / sizeof(desc->bit.xor);
 						break;
 					case BYTE:
-						scan->desc->byte.offset -= offset;
+						desc->byte.offset -= offset;
 						break;
 					case NOOP:
 						break;
 					default:
-						printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, scan->desc->type);
+						printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, desc->type);
 				}
+				/* FIXME check for errors here? */
+				chdesc_overlap_multiattach(desc, dest->block);
 				/* FIXME reuse the memory for the metadesc? */
-				/* chdesc_move_depend(value, dest, scan->desc); */
-				chdesc_remove_depend(value, scan->desc);
-				chdesc_add_depend(dest, scan->desc);
+				/* chdesc_move_depend(value, dest, desc); */
+				chdesc_remove_depend(value, desc);
+				chdesc_add_depend(dest, desc);
 			}
 			else
 				list = &scan->next;
