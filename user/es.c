@@ -32,7 +32,7 @@ print_envs(envid_t root_envid)
 {
 	int i;
 
-	printf("    envid     parent  S   pri   d(last)      runs   TSC util  name\n");
+	printf("    envid     parent  S   pri  d(last)     runs   TSC  util  name\n");
 
 	for(i=0; i < NENV; i++)
 	{
@@ -42,8 +42,10 @@ print_envs(envid_t root_envid)
 		if(root_envid != e->env_id && !is_descendent(root_envid, e->env_id))
 			continue;
 
+		/* envid, parent */
 		printf("[%08x] [%08x] ", e->env_id, e->env_parent_id);
 
+		/* S */
 		switch(e->env_status)
 		{
 			case(ENV_RUNNABLE):     printf("r"); break;
@@ -52,15 +54,20 @@ print_envs(envid_t root_envid)
 			default:                printf("?");
 		}
 
+		/* pri */
 		printf(" %02d/%02d", e->env_epriority, e->env_rpriority);
 
-		printf(" %9d", env->env_jiffies - e->env_jiffies);
+		/* d(last) */
+		printf(" %8x", env->env_jiffies - e->env_jiffies);
 
-		printf(" %9d %5d", e->env_runs, (uint32_t) (e->env_tsc >> 26));
+		/* runs, TSC */
+		printf(" %8x %5x", e->env_runs, (uint32_t) (e->env_tsc >> 26));
+		/* util */
 		if(e->env_runs)
-			printf(" %4d", (uint32_t) ((e->env_tsc / e->env_runs) >> 8));
+			printf(" %5x", (uint32_t) ((e->env_tsc / e->env_runs) >> 8));
 		else
-			printf("   --");
+			printf("    --");
+		/* name */
 		printf(" %c%s\n", (e->env_id == env->env_id) ? '*' : ' ', e->env_name);
 	}
 }
