@@ -117,15 +117,18 @@ int kfsd_init(void)
 		}
 	}
 
-	// josfs_cfs
-	if (! (josfscfs = josfs_cfs()) )
-		kfsd_shutdown();
-
 	// table_classifier_cfs
 	if (! (table_class = table_classifier_cfs(NULL, NULL, 0)) )
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
+
+	// josfs_cfs
+	if (! (josfscfs = josfs_cfs()) )
+		kfsd_shutdown();
+	r = table_classifier_cfs_add(table_class, josfspath, josfscfs);
+	if (r < 0)
+		kfsd_shutdown();
 
 	// Mount the uhfs modules
 	for (i=0; i < sizeof(uhfses)/sizeof(uhfses[0]); i++)
@@ -142,7 +145,7 @@ int kfsd_init(void)
 	{
 		BD_t * nbd;
 		BD_t * cache;
-		LFS_t * wd;
+		LFS_t * fs;
 		CFS_t * net;
 
 		/* delay kfsd startup slightly for netd to start */
@@ -151,30 +154,25 @@ int kfsd_init(void)
 		nbd = nbd_bd("192.168.4.15", 2492);
 		if(!nbd)
 			goto a;
-		cache = wt_cache_bd(nbd, 8);
+		cache = wt_cache_bd(nbd, 192);
 		if(!cache)
 			goto b;
-		wd = wholedisk(cache);
-		if(!wd)
+		fs = josfs(cache);
+		if(!fs)
 			goto c;
-		net = uhfs(wd);
+		net = uhfs(fs);
 		if(!net)
 			goto d;
 
 		if(table_classifier_cfs_add(table_class, "/net", net))
 		{
 			DESTROY(net);
-			d: DESTROY(wd);
+			d: DESTROY(fs);
 			c: DESTROY(cache);
 			b: DESTROY(nbd);
 			a: (void) 0;
 		}
 	}
-
-	// mount josfs_cfs last, so that it gets priority over no other mounts
-	r = table_classifier_cfs_add(table_class, josfspath, josfscfs);
-	if (r < 0)
-		kfsd_shutdown();
 
 	// fidprotector
 	if (! (fidprotector = fidprotector_cfs(get_frontend_cfs())) )
