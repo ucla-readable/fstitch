@@ -1,3 +1,4 @@
+#include <inc/lib.h>
 #include <inc/malloc.h>
 #include <inc/error.h>
 #include <inc/vector.h>
@@ -114,6 +115,12 @@ void vector_erase(vector_t * v, size_t i)
 void vector_clear(vector_t * v)
 {
 	v->size = 0;
+}
+
+void vector_sort(vector_t *v, int (*compar)(const void *a, const void *b))
+{
+	if (v->size < 2) return;
+	qsort(v->elts, v->size, sizeof(void*), compar);
 }
 
 
