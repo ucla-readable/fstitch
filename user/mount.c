@@ -1,5 +1,6 @@
 #include <kfs/ide_pio_bd.h>
 #include <kfs/nbd_bd.h>
+#include <kfs/loop_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/chdesc_stripper_bd.h>
@@ -18,7 +19,7 @@
 static bool verbose = 0;
 
 
-static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks)
+static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, bool stripper)
 {
 //	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -88,10 +89,13 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks)
 			}
 		}
 
-		if (! (cache = chdesc_stripper_bd(cache)) )
+		if (stripper)
 		{
-			fprintf(STDERR_FILENO, "chdesc_stripper_bd() failed\n");
-			exit();
+			if (! (cache = chdesc_stripper_bd(cache)) )
+			{
+				fprintf(STDERR_FILENO, "chdesc_stripper_bd() failed\n");
+				exit();
+			}
 		}
 
 		if (enable_journal)
@@ -167,6 +171,7 @@ static void print_usage(const char * bin)
 	printf("  <device> is one of:\n");
 	printf("    ide <controller> <diskno>\n");
 	printf("    nbd <host> [-p <port>]\n");
+	printf("    loop <lfs_name> <lfs filename>\n");
 }
 
 static void parse_options(int argc, const char ** argv, bool * journal, uint32_t * cache_num_blocks)
@@ -195,7 +200,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, uint32_t
 		*cache_num_blocks = strtol(cache_num_blocks_str, NULL, 10);
 }
 
-static BD_t * create_disk(int argc, const char ** argv)
+static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 {
 	int device_index;
 	BD_t * disk = NULL;
@@ -258,6 +263,44 @@ static BD_t * create_disk(int argc, const char ** argv)
 			return NULL;
 		}
 	}
+	else if (!strcmp("loop", argv[device_index]))
+	{
+		const char * filename;
+		const char * lfs_name;
+		modman_it_t * it;
+		LFS_t * lfs;
+
+		if (device_index + 2 >= argc)
+		{
+			fprintf(STDERR_FILENO, "Insufficient parameters for loop\n");
+			print_usage(argv[0]);
+			exit();
+		}
+
+		lfs_name = argv[device_index+1];
+		filename = argv[device_index+2];
+		
+		it = modman_it_create_lfs();
+		assert(it);
+		while ((lfs = modman_it_next_lfs(it)))
+		{
+			if (!strcmp(modman_name_lfs(lfs), lfs_name))
+				break;
+		}
+		if (!lfs)
+		{
+			fprintf(STDERR_FILENO, "Unable to find LFS %s\n", lfs_name);
+			return NULL;
+		}
+
+		if (! (disk = loop_bd(lfs, filename)) )
+		{
+			fprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
+			return NULL;
+		}
+
+		*stripper = 0;
+	}
 	else
 	{
 		fprintf(STDERR_FILENO, "Unknown device type \"%s\"\n", argv[device_index]);
@@ -278,6 +321,7 @@ void umain(int argc, const char ** argv)
 	CFS_t * cfs;
 	bool journal = 0;
 	uint32_t cache_num_blocks = 128;
+	bool stripper = 1;
 	CFS_t * tclass;
 	int r;
 
@@ -297,11 +341,11 @@ void umain(int argc, const char ** argv)
 
 	parse_options(argc, argv, &journal, &cache_num_blocks);
 
-	disk = create_disk(argc, argv);
+	disk = create_disk(argc, argv, &stripper);
 	if (!disk)
 		exit();
 
-	cfs = build_uhfs(disk, journal, cache_num_blocks);
+	cfs = build_uhfs(disk, journal, cache_num_blocks, stripper);
 	if (!cfs)
 		exit();
 
