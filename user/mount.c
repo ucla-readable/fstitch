@@ -11,6 +11,7 @@
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/modman.h>
 
+#include <inc/kfs_uses.h>
 #include <arch/simple.h>
 #include <inc/stdio.h>
 
@@ -160,33 +161,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks)
 	return NULL;
 }
 
-static CFS_t * get_table_classifier()
-{
-	modman_it_t * it;
-	CFS_t * c;
-
-	it = modman_it_create_cfs();
-	if (!it)
-	{
-		fprintf(STDERR_FILENO, "modman_it_create_cfs() failed\n");
-		return NULL;
-	}
-
-	while ((c = modman_it_next_cfs(it)))
-	{
-		const char * name = modman_name_cfs(c);
-		if (name && !strncmp("table_classifier_cfs-", name, strlen("table_classifier_cfs-")))
-		{
-			if (verbose)
-				printf("Mounting to %s\n", name);
-			return c;
-		}
-	}
-
-	return NULL;
-}
-
-
 static void print_usage(const char * bin)
 {
 	printf("Usage: %s -d <device> -m <mount_point> [-j <on|off>] [-$ <num_blocks>] [-v]\n", bin);
@@ -195,7 +169,7 @@ static void print_usage(const char * bin)
 	printf("    nbd <host> [-p <port>]\n");
 }
 
-void parse_options(int argc, const char ** argv, bool * journal, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
 	const char * cache_num_blocks_str;
@@ -221,7 +195,7 @@ void parse_options(int argc, const char ** argv, bool * journal, uint32_t * cach
 		*cache_num_blocks = strtol(cache_num_blocks_str, NULL, 10);
 }
 
-BD_t * create_disk(int argc, const char ** argv)
+static BD_t * create_disk(int argc, const char ** argv)
 {
 	int device_index;
 	BD_t * disk = NULL;
