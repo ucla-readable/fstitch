@@ -376,7 +376,6 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 	bool result;
 
 	target = 2 + (blockno / (JOSFS_BLKBITSIZE));
-
 	bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
 
 	if (bdesc->length != JOSFS_BLKSIZE) {
@@ -385,7 +384,8 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 		return -1;
 	}
 
-	ptr = ((uint32_t *) bdesc->ddesc->data) + (blockno / 32);
+	ptr = ((uint32_t *) bdesc->ddesc->data) + ((blockno % JOSFS_BLKBITSIZE) / 32);
+
 	result = *ptr & (1 << (blockno % 32));
 	bdesc_drop(&bdesc);
 
@@ -794,7 +794,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 
 	blockno = *basep / JOSFS_BLKFILES;
 
-	if (blockno > josfs_get_file_numblocks(object, file))
+	if (blockno >= josfs_get_file_numblocks(object, file))
 		return -E_UNSPECIFIED;
 
 	dirblock = josfs_get_file_block(object, file, blockno * JOSFS_BLKSIZE);
