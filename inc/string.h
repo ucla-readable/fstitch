@@ -16,6 +16,7 @@ long		strtol(const char *s, char **endptr, int base);
 void *		memset(void *dest, int, size_t len);
 void *		memcpy(void *dest, const void *src, size_t len);
 void *		memmove(void *dest, const void *src, size_t len);
+void *		memchr(const void *s, int c, size_t n);
 
 int      isnum(char c);
 
