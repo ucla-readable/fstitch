@@ -15,6 +15,9 @@
  * manager is queried, it can simply return these NOOP change descriptors, which
  * are effectively the roots of the DAG subgraphs that the block depends on. */
 
+/* FIXME - work out details of reference counting and
+ * chdesc freeing, in particular with NOOP chdescs */
+
 static hash_map_t * bdesc_hash = NULL;
 
 /* initialize the dependency manager */
@@ -55,11 +58,81 @@ int depman_forward_chdesc(bdesc_t * from, bdesc_t * to)
 	return 0;
 }
 
+static bool chdesc_in_range(chdesc_t * chdesc, uint32_t offset, uint32_t size)
+{
+	uint32_t chd_offset, chd_end;
+	/* note that we require that change descriptors do not cross the atomic disk unit
+	 * size boundary, so that we will never have to fragment a change descriptor */
+	switch(chdesc->type)
+	{
+		case BIT:
+			chd_offset = chdesc->bit.offset * sizeof(chdesc->bit.xor);
+			chd_end = chd_offset + sizeof(chdesc->bit.xor);
+			break;
+		case BYTE:
+			chd_offset = chdesc->byte.offset;
+			chd_end = chd_offset + chdesc->byte.length;
+			break;
+		case NOOP:
+			printf("%s(): translating NOOP chdesc\n", __FUNCTION__);
+			/* assume in range */
+			return 1;
+		default:
+			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			return 0;
+	}
+	if(offset <= chdesc->byte.offset && chdesc->byte.offset + chdesc->byte.length <= offset + size)
+		return 1;
+	if(offset <= chdesc->byte.offset + chdesc->byte.length || chdesc->byte.offset <= offset + size)
+		printf("%s(): (%s:%d): invalid inter-atomic block change descriptor!\n", __FUNCTION__, __FILE__, __LINE__);
+	return 0;
+}
+
 /* explicitly translate a chdesc when necessary, like for block size alterations that do not happen automatically in bdesc_retain() */
 int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint32_t size)
 {
+	chdesc_t * value;
+	int r;
+	
+	if(from == to)
+	{
+		/* do we need to do anything here? */
+		printf("DEP MAN NOTIFY RANGE: bdesc 0x%08x -> 0x%08x, offset %d, size %d\n", from, to, offset, size);
+		return 0;
+	}
 	printf("DEP MAN TRANSLATE: bdesc 0x%08x -> 0x%08x, offset %d, size %d\n", from, to, offset, size);
-	return -1;
+	
+	value = (chdesc_t *) hash_map_find_val(bdesc_hash, from);
+	if(value)
+	{
+		/* this code interacts in a complicated way with the chdesc functions it calls... */
+		chdesc_t * dest = (chdesc_t *) hash_map_find_val(bdesc_hash, to);
+		chmetadesc_t ** list = &value->dependencies;
+		chmetadesc_t * scan = *list;
+		while(scan)
+		{
+			if(chdesc_in_range(scan->desc, offset, size))
+			{
+				if(!dest)
+				{
+					dest = chdesc_alloc(to);
+					if(!dest)
+						return -E_NO_MEM;
+					if((r = hash_map_insert(bdesc_hash, to, dest)) < 0)
+						return r;
+				}
+				/* FIXME reuse the memory for the metadesc? */
+				/* chdesc_move_depend(value, dest, scan->desc); */
+				chdesc_remove_depend(value, scan->desc);
+				chdesc_add_depend(dest, scan->desc);
+			}
+			else
+				list = &scan->next;
+			scan = *list;
+		}
+	}
+	
+	return 0;
 }
 
 /* add a chdesc subgraph to the dependency manager - this and all reachable chdescs with reference count 0 */
@@ -74,6 +147,8 @@ int depman_add_chdesc(chdesc_t * root)
 			if((r = depman_add_chdesc(scan->desc)) < 0)
 				return r;
 	
+	if(!root->block)
+		_panic(__FILE__, __LINE__, "Unhandled NOOP chdesc.\n");
 	value = (chdesc_t *) hash_map_find_val(bdesc_hash, root->block);
 	if(!value)
 	{

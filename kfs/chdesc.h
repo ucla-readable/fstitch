@@ -17,10 +17,12 @@ struct chdesc {
 	enum {BIT, BYTE, NOOP} type;
 	union {
 		struct {
+			/* offset is in units of 32-bit words */
 			uint32_t offset;
 			uint32_t xor;
 		} bit;
 		struct {
+			/* offset is in bytes */
 			uint32_t offset;
 			uint32_t length;
 			uint8_t * olddata;

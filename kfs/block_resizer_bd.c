@@ -5,6 +5,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/depman.h>
 #include <kfs/block_resizer_bd.h>
 
 /* This simple size converter can only convert up in size (i.e. aggregate blocks
@@ -97,7 +98,8 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 			return -1;
 		bdesc_touch(sub);
 		memcpy(sub->ddesc->data, &block->ddesc->data[i * info->original_size], info->original_size);
-		/* FIXME explicitly forward change descriptors here */
+		/* explicitly forward change descriptors */
+		depman_translate_chdesc(block, sub, i * info->original_size, info->original_size);
 		CALL(info->bd, write_block, sub);
 	}
 	
