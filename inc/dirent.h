@@ -14,6 +14,6 @@ struct dirent {
 };
 typedef struct dirent dirent_t;
 
-int getdirentries(int fd, char * buf, int nbytes, long * basep);
+// int getdirentries(int fd, char * buf, int nbytes, long * basep);
 
 #endif /* __KUDOS_KFS_DIRENT_H */
