@@ -683,6 +683,7 @@ sys_vga_set_mode_320(uintptr_t address)
 		{
 			while(page--)
 				page_remove(curenv->env_pgdir, address + (page << PGSHIFT));
+			vga_set_mode_text();
 			return -E_NO_MEM;
 		}
 	}
