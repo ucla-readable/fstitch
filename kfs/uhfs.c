@@ -1,5 +1,6 @@
 #include <inc/lib.h>
 #include <inc/malloc.h>
+#include <inc/fd.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
@@ -21,7 +22,7 @@
 
 struct open_file {
 	int fid;
-	void * page;
+	struct Fd * page;
 	fdesc_t * fdesc;
 };
 typedef struct open_file open_file_t;
@@ -64,7 +65,7 @@ static void open_file_gc(LFS_t * lfs, struct open_file f[])
 static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
-	uint8_t * cache;
+	void * cache;
 	int r, index;
 	
 	open_file_gc(state->lfs, state->open_file);
@@ -83,7 +84,10 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 	if(cache == UHFS_FD_END)
 		return -E_MAX_OPEN;
 	
-	/* remap the client's page */
+	/* store the index in the client's page */
+	((struct Fd *) page)->fd_kpl.index = index;
+	
+	/* remap the client's page read-only in its new home */
 	r = sys_page_map(0, page, 0, cache, PTE_U | PTE_P);
 	if(r < 0)
 		return r;
