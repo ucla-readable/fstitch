@@ -9,6 +9,7 @@
 #include <kfs/ide_pio_bd.h>
 
 static const uint16_t ide_base[2] = {0x1F0, 0x170};
+static const char * ide_names[2][2] = {{"hda", "hdb"}, {"hdc", "hdd"}};
 
 struct ide_info {
 	uint8_t controller;
@@ -22,8 +23,9 @@ static int ide_notbusy(uint8_t controller)
 	int start_jiffies = env->env_jiffies;
 	/* wait for disk not busy */
 	while((inb(base + 7) & 0xC0) != 0x40)
-		if (env->env_jiffies == start_jiffies + 1000) {
-			printf("Warning: ide operation timed out on controller %d\n", controller);
+		if(1000 <= env->env_jiffies - start_jiffies)
+		{
+			printf("Warning: IDE operation timed out on controller %d\n", controller);
 			return -1;
 		}
 	return 0;
@@ -35,7 +37,7 @@ static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * ds
 {
 	uint16_t base = ide_base[controller];
 	
-	if (ide_notbusy(controller) == -1)
+	if(ide_notbusy(controller) == -1)
 		return -1;
 	
 	outb(base + 2, count);
@@ -48,7 +50,7 @@ static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * ds
 	
 	while(count--)
 	{
-		if (ide_notbusy(controller) == -1)
+		if(ide_notbusy(controller) == -1)
 			return -1;
 		
 		insl(base + 0, dst, SECTSIZE / 4);
@@ -61,7 +63,7 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 {
 	uint16_t base = ide_base[controller];
 	
-	if (ide_notbusy(controller) == -1)
+	if(ide_notbusy(controller) == -1)
 		return -1;
 	
 	outb(base + 2, count);
@@ -74,7 +76,7 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 	
 	while(count--)
 	{
-		if (ide_notbusy(controller) == -1)
+		if(ide_notbusy(controller) == -1)
 			return -1;
 	
 		outsl(base + 0, src, SECTSIZE / 4);
@@ -88,14 +90,14 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 	uint16_t base = ide_base[controller];
 	uint16_t id[SECTSIZE / 2];
 	
-	if (ide_notbusy(controller) == -1)
+	if(ide_notbusy(controller) == -1)
 		return -1;
 	
 	outb(base + 6, 0xE0 | ((disk & 1) << 4));
 	/* command 0xEC means identify drive */
 	outb(base + 7, 0xEC);
 	
-	if (ide_notbusy(controller) == -1)
+	if(ide_notbusy(controller) == -1)
 		return -1;
 	insl(base + 0, id, SECTSIZE / 4);
 	
@@ -131,7 +133,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	
 	/* read it */
-	if (ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
+	if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
 		return NULL;
 	
 	return bdesc;
@@ -154,7 +156,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* write it */
-	if (ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1)
+	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1)
 		return -E_TIMEOUT;
 	
 	/* drop the hot potato */
@@ -195,7 +197,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 		return NULL;
 	
 	length = ide_size(controller, disk);
-	if (length == -1)
+	if(length == -1)
 		return NULL;
 
 	bd = malloc(sizeof(*bd));
@@ -222,7 +224,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	info->disk = disk;
 	info->length = length;
 	
-	if(modman_add_anon_bd(bd, __FUNCTION__))
+	if(modman_add_bd(bd, ide_names[controller][disk]))
 	{
 		DESTROY(bd);
 		return NULL;
