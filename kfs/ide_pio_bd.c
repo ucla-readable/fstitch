@@ -132,6 +132,8 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int ide_pio_bd_sync(BD_t * object, bdesc_t * block)
 {
+	/* drop the hot potato */
+	bdesc_drop(&block);
 	return 0;
 }
 
