@@ -11,7 +11,7 @@ typedef struct CFS CFS_t;
 
 struct CFS {
 	DESTRUCTOR(CFS_t);
-	DECLARE(CFS_t, int, open, const char * name, int mode);
+	DECLARE(CFS_t, int, open, const char * name, int mode, void * page);
 	DECLARE(CFS_t, int, close, int fid);
 	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);

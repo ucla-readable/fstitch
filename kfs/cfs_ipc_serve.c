@@ -75,7 +75,8 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 {
 	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->path, req->mode);
 	int r;
-	r = CALL(frontend_cfs, open, req->path, req->mode);
+#warning FIXME Chris
+	r = CALL(frontend_cfs, open, req->path, req->mode, 0);
 	ipc_send(envid, r, NULL, 0);
 }
 

@@ -1,17 +1,21 @@
+#include <inc/lib.h>
+#include <inc/malloc.h>
+
 #include <kfs/lfs.h>
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
 
-#include <inc/malloc.h>
-#include <inc/string.h>
-#include <inc/stdio.h>
-#include <inc/error.h>
+#define MAX_OPEN 256
 
 struct uhfs_state {
+	struct {
+		int fid;
+		void * page;
+		fdesc_t * fdesc;
+	} open_file[MAX_OPEN];
 };
 
-
-static int uhfs_open(CFS_t * cfs, const char * name, int mode)
+static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
 	printf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
@@ -109,19 +113,20 @@ static int uhfs_destroy(CFS_t * cfs)
 	return 0;
 }
 
-
-CFS_t * uhfs()
+CFS_t * uhfs(void)
 {
+	struct uhfs_state * state;
 	CFS_t * cfs;
-
+	
 	cfs = malloc(sizeof(*cfs));
-	if (!cfs)
+	if(!cfs)
 		return NULL;
-
-	cfs->instance = malloc(sizeof(struct uhfs_state));
-	if (!cfs->instance)
+	
+	state = malloc(sizeof(*state));
+	if(!state)
 		goto error_uhfs;
-
+	cfs->instance = state;
+	
 	ASSIGN(cfs, uhfs, open);
 	ASSIGN(cfs, uhfs, close);
 	ASSIGN(cfs, uhfs, read);
@@ -138,9 +143,9 @@ CFS_t * uhfs()
 	ASSIGN(cfs, uhfs, set_metadata);
 	ASSIGN(cfs, uhfs, sync);
 	ASSIGN_DESTROY(cfs, uhfs, destroy);
-
+	
 	return cfs;
-
+	
  error_uhfs:
 	free(cfs);
 	return NULL;
