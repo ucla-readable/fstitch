@@ -1,7 +1,7 @@
 #include <kfs/cfs.h>
 #include <inc/serial_cfs.h>
 #include <kfs/kfsd.h>
-#include <kfs/fidman_cfs.h> // for FIDMAN_CFS_FD_MAP
+#include <kfs/fidfairy_cfs.h> // for FIDFAIRY_CFS_FD_MAP
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -21,7 +21,7 @@
 
 // VA at which to receive page mappings containing client reqs.
 // Just before the range used by the UHFS module for mapping client pages.
-#define REQVA (FIDMAN_CFS_FD_MAP - PGSIZE)
+#define REQVA (FIDFAIRY_CFS_FD_MAP - PGSIZE)
 #define PAGESNDVA (REQVA - PGSIZE)
 
 
