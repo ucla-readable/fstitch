@@ -50,6 +50,7 @@ static int open_file_free(open_file_t * f)
 
 	sys_page_unmap(0, (void*) f->page);
 	f->page = NULL;
+	f->fid = 0;
 	f->fd = -1;
 	return 0;
 }
