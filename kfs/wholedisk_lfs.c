@@ -1,6 +1,7 @@
 #include <inc/types.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
+#include <inc/error.h>
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
@@ -117,7 +118,12 @@ static const feature_t * wholedisk_get_feature(LFS_t * object, const char * name
 
 static int wholedisk_get_metadata(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	return -1;
+	struct wd_info * state = (struct wd_info *) object->instance;
+
+	if (id == KFS_feature_size.id)
+		return state->blocksize * CALL(state->bd, get_numblocks);
+	else
+		return -E_INVAL;
 }
 
 static int wholedisk_set_metadata(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
