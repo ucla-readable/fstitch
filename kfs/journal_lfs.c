@@ -879,6 +879,12 @@ static uint32_t journal_get_file_numblocks(LFS_t * lfs, fdesc_t * file)
 
 }
 
+static uint32_t journal_get_file_block_num(LFS_t * lfs, fdesc_t * file, uint32_t offset)
+{
+	journal_state_t * state = (journal_state_t *) lfs->instance;
+	return CALL(state->fs, get_file_block_num, file, offset);
+}
+
 static bdesc_t * journal_get_file_block(LFS_t * lfs, fdesc_t * file, uint32_t offset)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
@@ -962,6 +968,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	ASSIGN(lfs, journal, lookup_name);
 	ASSIGN(lfs, journal, free_fdesc);
 	ASSIGN(lfs, journal, get_file_numblocks);
+	ASSIGN(lfs, journal, get_file_block_num);
 	ASSIGN(lfs, journal, get_file_block);
 	ASSIGN(lfs, journal, get_dirent);
 	ASSIGN(lfs, journal, append_file_block);

@@ -56,6 +56,11 @@ static uint32_t wholedisk_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	return CALL(((struct wd_info *) object->instance)->bd, get_numblocks);
 }
 
+static uint32_t wholedisk_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset)
+{
+	return offset / ((struct wd_info *) object->instance)->blocksize;
+}
+
 static bdesc_t * wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	offset /= ((struct wd_info *) object->instance)->blocksize;
@@ -238,6 +243,7 @@ LFS_t * wholedisk(BD_t * bd)
 	ASSIGN(lfs, wholedisk, lookup_name);
 	ASSIGN(lfs, wholedisk, free_fdesc);
 	ASSIGN(lfs, wholedisk, get_file_numblocks);
+	ASSIGN(lfs, wholedisk, get_file_block_num);
 	ASSIGN(lfs, wholedisk, get_file_block);
 	ASSIGN(lfs, wholedisk, get_dirent);
 	ASSIGN(lfs, wholedisk, append_file_block);

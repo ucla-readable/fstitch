@@ -759,6 +759,11 @@ static bdesc_t * get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset,
 	return NULL;
 }
 
+static uint32_t josfs_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset)
+{
+	return -1; /* FIXME Lei - get block number without reading it */
+}
+
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	return get_file_block(object, file, offset, NULL);
@@ -1751,6 +1756,7 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 	ASSIGN(lfs, josfs, lookup_name);
 	ASSIGN(lfs, josfs, free_fdesc);
 	ASSIGN(lfs, josfs, get_file_numblocks);
+	ASSIGN(lfs, josfs, get_file_block_num);
 	ASSIGN(lfs, josfs, get_file_block);
 	ASSIGN(lfs, josfs, get_dirent);
 	ASSIGN(lfs, josfs, append_file_block);
