@@ -40,7 +40,8 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/vector.c \
 			lib/hash_map.c \
-			lib/hash_set.c
+			lib/hash_set.c \
+			lib/fixed_heap.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/kpl.c \

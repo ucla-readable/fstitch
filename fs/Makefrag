@@ -46,7 +46,8 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/testfpu \
 			$(OBJDIR)/user/testkpl \
 			$(OBJDIR)/user/uptime \
-			$(OBJDIR)/user/volume
+			$(OBJDIR)/user/volume \
+			$(OBJDIR)/user/heaptest
 
 FSIMGTXTFILES :=	fs/404.html \
 			fs/favicon.ico \
