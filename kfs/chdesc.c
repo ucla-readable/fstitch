@@ -48,7 +48,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor)
 	return chdesc;
 }
 
-int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
 	uint16_t init_offset = offset % atomic_size;

@@ -54,7 +54,7 @@ struct chrefdesc {
 /* create new chdescs */
 chdesc_t * chdesc_create_noop(bdesc_t * block);
 chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor);
-int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t ** tail);
 
