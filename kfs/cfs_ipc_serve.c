@@ -56,7 +56,9 @@ int cfs_ipc_serve()
 	int r;
 
 	if (get_pte((void*) REQVA) & PTE_P)
-		panic("cfsipc: REQVA already mapped");
+		panic("cfs_ipc_serve: REQVA already mapped");
+	if (get_pte((void*) PAGESNDVA) & PTE_P)
+		panic("cfs_ipc_serve: PAGESNDVA already mapped");
 
 	if ((r = kfsd_register_shutdown_module(cfs_ipc_serve_shutdown, NULL)) < 0)
 		return r;
