@@ -5,20 +5,59 @@
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
 
+#define UHFS_DEBUG 1
+
+
+#if UHFS_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
+#define FIDX(fid) ((uint32_t) (fid) & ~0xFFF)
+
+
+struct open_file {
+	int fid;
+	void * page;
+	fdesc_t * fdesc;
+};
+typedef struct open_file open_file_t;
+
 struct uhfs_state {
 	LFS_t * lfs;
-	struct {
-		int fid;
-		void * page;
-		fdesc_t * fdesc;
-	} open_file[UHFS_MAX_OPEN];
+	open_file_t open_file[UHFS_MAX_OPEN];
 };
 
+
 /* Is this virtual address mapped? */
-int va_is_mapped(void * va)
+static int va_is_mapped(void * va)
 {
 	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
 }
+
+static void open_file_close(LFS_t * lfs, open_file_t * f)
+{
+	sys_page_unmap(0, f->page);
+	CALL(lfs, free_fdesc, f->fdesc);
+	f->page = NULL;
+	f->fdesc = NULL;
+}
+
+// Scan through f[] and close f's no longer in use by other envs
+static void open_file_gc(LFS_t * lfs, struct open_file f[])
+{
+	size_t i;
+	for (i=0; i < UHFS_MAX_OPEN; i++)
+	{
+		if (!f->page)
+			continue;
+
+		if (((struct Page*) UPAGES)[PTX(f->page )].pp_ref == 1)
+			open_file_close(lfs, f);
+	}
+}
+
 
 static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
@@ -26,6 +65,8 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 	uint8_t * cache;
 	int r, index;
 	
+	open_file_gc(state->lfs, state->open_file);
+
 	/* find an available index */
 	for(index = 0; index != UHFS_MAX_OPEN; index++)
 		if(!state->open_file[index].page)
@@ -68,91 +109,135 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 
 static int uhfs_close(CFS_t * cfs, int fid)
 {
-	printf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	Dprintf("%s()\n", __FUNCTION__);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	open_file_t * f;
+
+	if (0 < FIDX(fid) || FIDX(fid) >= UHFS_MAX_OPEN)
+		return -E_INVAL;
+
+	f = &state->open_file[FIDX(fid)];
+	if (!f->page)
+		return -E_INVAL;
+	assert(f->fdesc);
+
+
+	open_file_close(state->lfs, f);
+	
+	return 0;
 }
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	printf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	Dprintf("%s()\n", __FUNCTION__);
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	open_file_t * f;
+	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
+	const uint32_t blockoffset = offset - (offset % blocksize);
+	uint32_t dataoffset = blockoffset;
+	bdesc_t * bd;
+	uint32_t size_read = 0;
+
+	if (0 < FIDX(fid) || FIDX(fid) >= UHFS_MAX_OPEN)
+		return -E_INVAL;
+
+	f = &state->open_file[FIDX(fid)];
+	if (!f->page)
+		return -E_INVAL;
+	assert(f->fdesc);
+
+
+	while (size_read < size)
+	{
+		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + size_read);
+		if (!bd)
+			return size_read;
+
+		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, bd->length - dataoffset);
+		dataoffset = 0; /* dataoffset only needed for first block */
+		size_read += bd->length;
+
+		bdesc_drop(&bd);
+	}
+
+	return size_read;
 }
 
 static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep, uint32_t offset)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t size)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_unlink(CFS_t * cfs, const char * name)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_mkdir(CFS_t * cfs, const char * name)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_rmdir(CFS_t * cfs, const char * name)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return 0;
 }
 
 static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return NULL;
 }
 
 static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
 static int uhfs_sync(CFS_t * cfs, const char * name)
 {
-	printf("%s()\n", __FUNCTION__);
+	Dprintf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;
 }
 
