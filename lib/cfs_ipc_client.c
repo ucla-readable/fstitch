@@ -53,7 +53,7 @@ cfs_open(const char *fname, int mode, void *refpg)
    	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_OPEN;
 	pg->mode = mode;
-	strcpy(pg->path, fname);
+	strncpy(pg->path, fname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -223,7 +223,7 @@ cfs_unlink(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_UNLINK;
-	strcpy(pg->name, name);
+	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -249,8 +249,8 @@ cfs_link(const char *oldname, const char *newname)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_LINK;
-	strcpy(pg->oldname, oldname);
-	strcpy(pg->newname, newname);
+	strncpy(pg->oldname, oldname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	strncpy(pg->newname, newname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -276,8 +276,8 @@ cfs_rename(const char *oldname, const char *newname)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_RENAME;
-	strcpy(pg->oldname, oldname);
-	strcpy(pg->newname, newname);
+	strncpy(pg->oldname, oldname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
+	strncpy(pg->newname, newname, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -303,7 +303,7 @@ cfs_mkdir(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_MKDIR;
-	strcpy(pg->path, name);
+	strncpy(pg->path, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -329,7 +329,7 @@ cfs_rmdir(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_RMDIR;
-	strcpy(pg->path, name);
+	strncpy(pg->path, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -355,7 +355,7 @@ cfs_get_num_features(char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_NUM_FEATURES;
-	strcpy(pg->name, name);
+	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -381,7 +381,7 @@ cfs_get_feature(char *name, int num, char *dump)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_FEATURE;
-	strcpy(pg->name, name);
+	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 	pg->num = num;
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
@@ -415,7 +415,7 @@ cfs_get_metadata(const char *name, int id, struct Scfs_metadata *md)
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_METADATA;
 	pg->id = id;
-	strcpy(pg->name, name);
+	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -448,7 +448,7 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_SET_METADATA;
-	strcpy(pg->name, name);
+	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
@@ -483,7 +483,7 @@ cfs_sync(const char *name)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_SYNC;
-	strcpy(pg->name, name);
+	strncpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
