@@ -34,6 +34,14 @@ void * hash_map_find_val(const hash_map_t * hm, const void * k);
 // Return hte key and val associated with k.
 hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k);
 
+// Return the number of buckets currently allocated.
+size_t hash_map_bucket_count(const hash_map_t * hm);
+// Increase the number of buckets to at least n.
+// Implement if useful.
+/*
+bool   hash_map_resize(hash_map_t * hm, size_t n);
+*/
+
 // Implement if useful
 /*
 hash_map_elt_t hash_map_elt_begin(hash_map_t * hm);

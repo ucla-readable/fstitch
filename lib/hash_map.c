@@ -211,6 +211,16 @@ hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k)
 	return hme;
 }
 
+
+//
+// Resizing
+
+size_t hash_map_bucket_count(const hash_map_t * hm)
+{
+	return vector_size(hm->tbl);
+}
+
+
 //
 // Element access
 
