@@ -5,6 +5,10 @@
 // CFS requests through only when the requesting env sent the capability
 // associated with the given fid.
 
+// fidprotector is a fidfairy:
+// Modules don't know of fidfairies, but they are there behind the scenes
+// helping CFS modules out.
+
 #include <kfs/cfs.h>
 
 CFS_t * fidprotector_cfs(CFS_t * frontend_cfs);
