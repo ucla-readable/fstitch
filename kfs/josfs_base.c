@@ -1609,7 +1609,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			return -E_NO_MEM;
 
 		*size = sizeof(int);
-		free_space = count_free_space(object);
+		free_space = count_free_space(object) * JOSFS_BLKSIZE / 1024;
 		memcpy(*data, &free_space, sizeof(uint32_t));
 	}
 

@@ -13,11 +13,12 @@ int
 convert_unit(int num, int scale)
 {
 	int i;
-	if (scale > 0) {
-		num *= BLKSIZE;
+	if (scale >= 0) {
 		for (i = 0; i < scale; i++)
 			num /= 1024;
 	}
+	else if (scale < 0)
+		num = 1024 * num / BLKSIZE;
 	return num;
 }
 
@@ -28,13 +29,13 @@ umain(int argc, char **argv)
 	typedef uint32_t avail_t;
 	const char *print_str = "%d%s\n";
 #else
-	typedef double   avail_t;
+	typedef double avail_t;
 	const char *print_str = "%.1f%s\n";
 #endif
 
 	avail_t reported = 0;
-	int  scale = 1;
-	char   * reported_unit = "K";
+	int scale = 0;
+	char * reported_unit = "K";
 	int i, avail;
 
 	ARGBEGIN{
@@ -42,15 +43,15 @@ umain(int argc, char **argv)
 		print_usage(argv[0]);
 		exit();
 	case 'k':
-		scale = 1;
+		scale = 0;
 		reported_unit = "K";
 		break;
 	case 'm':
-		scale = 2;
+		scale = 1;
 		reported_unit = "M";
 		break;
 	case 'p':
-		scale = 0;
+		scale = -1;
 		reported_unit = " pages";
 		break;
 	}ARGEND
