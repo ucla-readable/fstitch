@@ -87,7 +87,7 @@ static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t
 	return NULL;
 }
 
-static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void * data)
+static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
 	printf("%s()\n", __FUNCTION__);
 	return -E_UNSPECIFIED;

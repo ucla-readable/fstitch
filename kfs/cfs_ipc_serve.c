@@ -216,12 +216,22 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 {
 	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
 	struct Scfs_metadata *md = (struct Scfs_metadata*) PAGESNDVA;
+	void * data;
 	int r;
 
 	if ((r = sys_page_alloc(0, md, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
 	md->id = req->id;
-	r = CALL(frontend_cfs, get_metadata, req->name, req->id, &md->size, md->data);
+
+	r = CALL(frontend_cfs, get_metadata, req->name, req->id, &md->size, &data);
+
+	assert((md->size > 0 && data) || (!md->size && !data));
+	if (data)
+	{
+		if (md->size > sizeof(md->data))
+			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: CFS->get_metadata() returned more data (%d) than serial_cfs allows (%d), truncating.\n", md->size, sizeof(md->data));
+		memcpy(md->data, data, MIN(md->size, sizeof(md->data)));
+	}
 	ipc_send(envid, r, (void*) md, PTE_P|PTE_U);
 }
 
@@ -297,6 +307,12 @@ static void serve()
 		type = prevrecv->type;
 	else
 		type = *((int*) REQVA);
+
+	if (!frontend_cfs && type != SCFS_SHUTDOWN)
+	{
+		fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Received request but there is no registered frontend CFS object.\n");
+		return; // just leave it hanging...
+	}
 
 	switch (type) {
 		case SCFS_OPEN:
