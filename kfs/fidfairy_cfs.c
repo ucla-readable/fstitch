@@ -30,7 +30,7 @@ static bool fidfairy_cfs_exists = 0;
 
 struct open_file {
 	int fid;
-	struct Fd * page;
+	const struct Fd * page;
 };
 typedef struct open_file open_file_t;
 
@@ -43,7 +43,7 @@ struct fidfairy_state {
 typedef struct fidfairy_state fidfairy_state_t;
 
 
-static bool va_is_mapped(void * va)
+static bool va_is_mapped(const void * va)
 {
 	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
 }
@@ -52,7 +52,7 @@ static bool va_is_mapped(void * va)
 //
 // open_file_t functions
 
-static open_file_t * open_file_create(int fid, void * page)
+static open_file_t * open_file_create(int fid, const void * page)
 {
 	open_file_t * of = malloc(sizeof(*of));
 	if (!of)
