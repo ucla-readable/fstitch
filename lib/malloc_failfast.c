@@ -10,7 +10,7 @@ void * malloc(size_t size)
 {
 	void * memory = (void *) next_addr;
 	
-	if(next_addr >= 0x40000000)
+	if(next_addr >= 0x80000000)
 		panic("out of address space");
 	
 	size = ROUNDUP32(size, PGSIZE);
@@ -32,11 +32,19 @@ void * calloc(size_t count, size_t size)
 	return malloc(count * size);
 }
 
+static bool va_is_mapped(const void * va)
+{
+	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
+}
+
 void free(void * ptr)
 {
-	int r;
-	r = sys_page_unmap(0, ptr);
-	assert(r >= 0);
+	while(va_is_mapped(ptr))
+	{
+		int r = sys_page_unmap(0, ptr);
+		assert(r >= 0);
+		ptr += PGSIZE;
+	}
 }
 
 void malloc_stats(void)
