@@ -21,8 +21,8 @@ find_fs()
 	{
 		for (i = 0; i < NENV; i++)
 		{
-			if (envs[i].env_status != ENV_FREE)
-				printf("find_fs: name: [%s]\n", envs[i].env_name);
+			//if (envs[i].env_status != ENV_FREE)
+			//	printf("find_fs: name: [%s]\n", envs[i].env_name);
 			if (envs[i].env_status != ENV_FREE &&
 				(!strncmp(envs[i].env_name, kfsd_name_sh, strlen(kfsd_name_sh))
 				 || !strncmp(envs[i].env_name, kfsd_name_kern, strlen(kfsd_name_kern))))
