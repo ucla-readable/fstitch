@@ -774,6 +774,7 @@ int mon_env_priority(int argc, char ** argv, struct Trapframe * tf)
 	}
 	
 	sched_update(e, priority);
+	e->env_rpriority = priority;
 	
 	return 0;
 }
