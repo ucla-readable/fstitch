@@ -58,5 +58,5 @@ umain(int argc, char *argv[])
 void
 usage(char *s)
 {
-	printf("usage: %s [existing filename|devicename]");
+	printf("usage: %s [existing filename|devicename]\n");
 }
