@@ -42,7 +42,7 @@ typedef struct journal_state journal_state_t;
 //          | k = trans_number_block_count()
 // k+1..end | the journal data blocks
 
-#define TRANSACTION_SIZE (64*4096)
+#define TRANSACTION_SIZE (4*4096)
 //(100*1024)
 static const char journal_filename[] = "/.journal";
 
@@ -221,11 +221,12 @@ static int transaction_start(journal_state_t * state)
 typedef struct {
 	bdesc_t * bdesc;
 	commit_record_t * cr;
+	chdesc_t * chdesc;
 } commit_record_holder_t;
 
 static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_t next_slot, uint16_t type, bdesc_t **data_bdescs, size_t ndatabdescs, commit_record_holder_t * crh)
 {
-	Dprintf("%s(slot %u, next_slot %u, type %u)\n", __FUNCTION__, slot, next_slot, type);
+	Dprintf("%s(nblocks %u, slot %u, next_slot %u, type %u)\n", __FUNCTION__, ndatabdescs, slot, next_slot, type);
 	size_t file_offset;
 	bdesc_t * bdesc;
 	size_t i;
@@ -413,7 +414,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	}
 
 
-	// Mark as invalidated
+	// Prepare to mark as invalidated, caller will do the actual write
 
 	commit.type = CREMPTY;
 
@@ -429,9 +430,12 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	r = chdesc_weak_retain(prev_head, &state->commit_chdesc[slot]);
 	assert(r >= 0); // TODO: handle error
 
-	// save the bdesc and commit record for later marking as invalidated
-	crh->bdesc = bdesc;
+	// save to later mark as invalidated
+	crh->bdesc = bdesc; // no need to retain since we've not written it
 	crh->cr = &commit;
+	crh->chdesc = NULL;
+	r = chdesc_weak_retain(prev_head, &crh->chdesc);
+	assert(r >= 0); // TODO: handle error
 
 	return 0;
 }
@@ -464,7 +468,7 @@ static size_t use_next_trans_slot(journal_state_t * state)
 
 static int transaction_stop(journal_state_t * state)
 {
-	Dprintf("%s() [transaction slot %u]\n", __FUNCTION__, state->next_trans_slot);
+	Dprintf("%s()\n", __FUNCTION__);
 	bdesc_t ** data_bdescs;
 	size_t ndatabdescs;
 	bdesc_t * bdesc;
@@ -523,10 +527,29 @@ static int transaction_stop(journal_state_t * state)
 	size_t prev_slot = -1;
 
 	if (num_subtransactions > state->ncommit_records)
-		panic("num_subtransactions (%u) > state->ncommit_records (%u), death!", num_subtransactions, state->ncommit_records);
+	{
+		fprintf(STDERR_FILENO, "WARNING: Journal queue larger than journal, writing and syncing fs... ");
 
-	chrs = malloc(num_subtransactions * sizeof(chrs[0]));
+		r = journal_queue_release(state->queue);
+		if (r < 0)
+		{
+			fprintf(STDERR_FILENO, "error releasing journal queue, your future looks dark.\n");
+			free(data_bdescs);
+			return r;
+		}
+
+		CALL(state->journal, sync, NULL);
+
+		fprintf(STDERR_FILENO, "success.\n");
+
+		free(data_bdescs);
+		return 0;
+	}
+
+	chrs = malloc(num_subtransactions * sizeof(*chrs));
 	assert(chrs); // TODO: handle error
+	for (i=0; i < num_subtransactions; i++)
+		chrs[i].chdesc = NULL;
 
 	for (i=0; i < ndatabdescs; i += max_datablks_per_trans)
 	{
@@ -550,6 +573,9 @@ static int transaction_stop(journal_state_t * state)
 		if (r < 0)
 		{
 			free(data_bdescs);
+			for (i=0; i < num_subtransactions; i++)
+					 chdesc_weak_release(&chrs[i].chdesc);
+			free(chrs);
 			return r;
 		}
 
@@ -567,12 +593,21 @@ static int transaction_stop(journal_state_t * state)
 	if (r < 0)
 	{
 		free(data_bdescs);
+		for (i=0; i < num_subtransactions; i++)
+				 chdesc_weak_release(&chrs[i].chdesc);
 		free(chrs);
 		return r;
 	}
 
 	for (i=0; i < num_subtransactions; i++)
 	{
+		if (i+1 < num_subtransactions)
+		{
+			r = chdesc_add_depend(chrs[num_subtransactions-1].chdesc, chrs[i].chdesc);
+			assert(r >= 0); // TODO: handle error
+		}
+		chdesc_weak_release(&chrs[i].chdesc);
+
 		chdesc_t * lfs_head = NULL;
 		chdesc_t * lfs_tail = NULL;
 		r = CALL(state->journal, write_block, chrs[i].bdesc, 0, sizeof(chrs[i].cr), &chrs[i].cr, &lfs_head, &lfs_tail);
