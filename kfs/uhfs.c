@@ -351,7 +351,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			if (!bd)
 				return size_written;
 			bdesc_retain(&bd);
-			r = CALL(state->lfs, append_file_block, f->fdesc, bd, NULL, NULL); // FIXME chdesc
+			r = CALL(state->lfs, append_file_block, f->fdesc, bd, &prevhead, &tail);
 			if (r < 0) {
 				bdesc_release(&bd);
 				return size_written;
@@ -377,7 +377,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	if (f->size_id) {
 		if (offset + size_written > target_size) {
 			target_size = offset + size_written;
-			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, NULL, NULL); // FIXME chdesc
+			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, &prevhead, &tail);
 			if (r < 0)
 				return r;
 		}
@@ -422,6 +422,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 	uint32_t nlinks, nblocks;
 	size_t data_len;
 	void * data;
+	chdesc_t * prev_head = NULL, * tail;
 	bdesc_t * blk;
 
 	if (link_supported) {
@@ -437,19 +438,22 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 
 		if (nlinks > 1) {
 			CALL(state->lfs, free_fdesc, f);
-			return CALL(state->lfs, remove_name, name, NULL, NULL); // FIXME chdesc
+			return CALL(state->lfs, remove_name, name, &prev_head, &tail);
 		}
 	}
 
 	nblocks = CALL(state->lfs, get_file_numblocks, f);
 	for (i = 0 ; i < nblocks; i++) {
-		blk = CALL(state->lfs, truncate_file_block, f, NULL, NULL); // FIXME chdesc
+		// TODO: for chdescs, does this need to depend on remove_name above?
+		// Does each iteration of this loop need to depend on the prev it?
+		// For now, we play it safe and make this dependencies.
+		blk = CALL(state->lfs, truncate_file_block, f, &prev_head, &tail);
 		if (!blk) {
 			CALL(state->lfs, free_fdesc, f);
 			return -E_INVAL;
 		}
 
-		r = CALL(state->lfs, free_block, blk, NULL, NULL); // FIXME chdesc
+		r = CALL(state->lfs, free_block, blk, &prev_head, &tail);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
@@ -457,7 +461,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 	}
 
 	CALL(state->lfs, free_fdesc, f);
-	return CALL(state->lfs, remove_name, name, NULL, NULL); // FIXME chdesc
+	return CALL(state->lfs, remove_name, name, &prev_head, &tail);
 }
 
 static int uhfs_unlink(CFS_t * cfs, const char * name)
