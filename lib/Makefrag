@@ -38,6 +38,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/serial.c \
 			lib/netclient.c \
 			lib/hwclock.c \
+			lib/textbar.c \
 			lib/sleep_cs.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \

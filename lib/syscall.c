@@ -196,6 +196,12 @@ sys_vga_set_palette(uint8_t * palette, uint8_t dim)
 }
 
 int
+sys_vga_map_text(uintptr_t address)
+{
+	return syscall(SYS_vga_map_text, address, 0, 0, 0, 0);
+}
+
+int
 sys_net_ioctl(int req, int ival1, void * pval, int ival2)
 {
 	return syscall(SYS_net_ioctl, req, ival1, (uintptr_t) pval, ival2, 0);

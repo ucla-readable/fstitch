@@ -30,6 +30,7 @@ enum
 	SYS_vga_set_mode_320,
 	SYS_vga_set_mode_text,
 	SYS_vga_set_palette,
+	SYS_vga_map_text,
 
 	SYS_net_ioctl,
 

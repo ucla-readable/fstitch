@@ -680,12 +680,13 @@ sys_vga_set_mode_320(uintptr_t address)
 	/* FIXME: this mapping won't be undone! */
 	for(page = 0; page != 16; page++)
 	{
-		if(page_insert(curenv->env_pgdir, &pages[(VGA_PMEM >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P))
+		r = page_insert(curenv->env_pgdir, &pages[(VGA_PMEM >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P);
+		if(r < 0)
 		{
 			while(page--)
 				page_remove(curenv->env_pgdir, address + (page << PGSHIFT));
 			vga_set_mode_text();
-			return -E_NO_MEM;
+			return r;
 		}
 	}
 	
@@ -708,6 +709,28 @@ sys_vga_set_palette(uint8_t * palette, uint8_t dim)
 	page_fault_mode = old_fault_mode;
 	
 	return 0;
+}
+
+static int
+sys_vga_map_text(uintptr_t address)
+{
+	int page;
+	
+	if(address > UTOP - (4 << PGSHIFT) || address != PTE_ADDR(address))
+		return -E_INVAL;
+	
+	for(page = 0; page != 4; page++)
+	{
+		int r = page_insert(curenv->env_pgdir, &pages[(0xB8000 >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P);
+		if(r < 0)
+		{
+			while(page--)
+				page_remove(curenv->env_pgdir, address + (page << PGSHIFT));
+			return r;
+		}
+	}
+	
+	return CRT_ROWS;
 }
 
 /* Until the NE2K driver is fully ported to the way we do NICs in KudOS, we
@@ -969,19 +992,21 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_vga_set_mode_text();
 		case SYS_vga_set_palette:
 			return sys_vga_set_palette((uint8_t *) a1, a2);
+		case SYS_vga_map_text:
+			return sys_vga_map_text(a1);
 		case SYS_net_ioctl:
 			return sys_net_ioctl(a1, a2, (void *) a3, a4);
 		case SYS_reboot:
 			return sys_reboot();
-		case(SYS_set_symtbls):
+		case SYS_set_symtbls:
 			return sys_set_symtbls(a1, (struct Sym*)a2, a3, (char*)a4, a5);
-		case(SYS_reg_serial):
+		case SYS_reg_serial:
 			return sys_reg_serial(a1, a2);
-		case(SYS_unreg_serial):
+		case SYS_unreg_serial:
 			return sys_unreg_serial(a1);
-		case(SYS_grant_io):
+		case SYS_grant_io:
 			return sys_grant_io(a1);
-		case(SYS_get_hw_time):
+		case SYS_get_hw_time:
 			return sys_get_hw_time((int*)a1, (int*)a2, (int*)a3, (int*)a4, (int*)a5);
 		default:
 			return -E_INVAL;
