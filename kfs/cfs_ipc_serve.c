@@ -112,10 +112,9 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 	{
 		// Second of two recvs
 		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
-		void * fdpage = req;
 		int r;
 		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
-		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void*) fdpage);
+		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void *) req);
 		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
