@@ -54,5 +54,6 @@ struct JOSFS_Super {
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, uint32_t index, struct dirent * entry, uint16_t size, uint32_t * basep);
 static bdesc_t * josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
+static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
 
 #endif /* __KUDOS_KFS_JOSFS_BASE_H */
