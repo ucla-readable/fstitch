@@ -403,8 +403,11 @@ int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 
 int chdesc_apply(chdesc_t * chdesc)
 {
+	int r;
 	if(!(chdesc->flags & CHDESC_ROLLBACK))
 		return -E_INVAL;
+	if(chdesc->block && (r = bdesc_touch(chdesc->block)) < 0)
+		return r;
 	switch(chdesc->type)
 	{
 		case BIT:
@@ -428,8 +431,11 @@ int chdesc_apply(chdesc_t * chdesc)
 
 int chdesc_rollback(chdesc_t * chdesc)
 {
+	int r;
 	if(chdesc->flags & CHDESC_ROLLBACK)
 		return -E_INVAL;
+	if(chdesc->block && (r = bdesc_touch(chdesc->block)) < 0)
+		return r;
 	switch(chdesc->type)
 	{
 		case BIT:
