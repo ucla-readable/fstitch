@@ -72,9 +72,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	 * bdesc_retain() to notify the dependency manager of the change. In the
 	 * case where translated = 1 and refs = 0, bdesc_retain simply clears
 	 * the translated flag. */
-	if(block->translated)
-		printf("%s(): (%s:%d): block already translated!\n", __FUNCTION__, __FILE__, __LINE__);
-	block->translated = 1;
+	block->translated++;
 	block->bd = info->bd;
 	block->number += info->start;
 	
@@ -85,7 +83,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	{
 		block->bd = object;
 		block->number -= info->start;
-		block->translated = 0;
+		block->translated--;
 	}
 	
 	return value;

@@ -87,16 +87,14 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		bdesc_release(&info->blocks[index]);
 	info->blocks[index] = block;
 	
-	if(block->translated)
-		printf("%s(): (%s:%d): block already translated!\n", __FUNCTION__, __FILE__, __LINE__);
-	block->translated = 1;
+	block->translated++;
 	block->bd = info->bd;
 	
 	/* write it */
 	value = CALL(block->bd, write_block, block);
 	
 	block->bd = object;
-	block->translated = 0;
+	block->translated--;
 	
 	return value;
 }
