@@ -36,7 +36,7 @@ int    hash_map_change_key(hash_map_t * hm, void * oldk, void * newk);
 void   hash_map_clear(hash_map_t * hm);
 // Return the val associated with k.
 void * hash_map_find_val(const hash_map_t * hm, const void * k);
-// Return hte key and val associated with k.
+// Return the key and val associated with k.
 hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k);
 
 // Return the number of buckets currently allocated.
