@@ -202,6 +202,12 @@ int kpl_link(const char * oldname, const char * newname)
 	return cfs_link(oldname, newname);
 }
 
+int
+rename(const char* oldname, const char* newname)
+{
+	return kpl_rename(oldname, newname);
+}
+
 int kpl_rename(const char * oldname, const char * newname)
 {
 	return cfs_rename(oldname, newname);
