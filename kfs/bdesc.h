@@ -3,6 +3,8 @@
 
 #include <inc/types.h>
 
+#include <kfs/bd.h>
+
 /* struct BD needs bdesc, so we avoid the cycle */
 struct BD;
 
@@ -21,7 +23,7 @@ struct bdesc {
 	struct BD * bd;
 	uint32_t number, refs;
 	uint16_t offset, length;
-	struct datadesc * ddesc;
+	datadesc_t * ddesc;
 	/* this field is very likely binary */
 	uint16_t translated;
 };

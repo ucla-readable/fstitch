@@ -2,7 +2,9 @@
 #define __KUDOS_KFS_BD_H
 
 #include <inc/types.h>
+
 #include <kfs/oo.h>
+#include <kfs/bdesc.h>
 
 /* struct bdesc needs BD, so we avoid the cycle */
 struct bdesc;
