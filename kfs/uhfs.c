@@ -302,7 +302,7 @@ static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint
 
 static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
-	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, size);
+	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
 	const size_t blksize = CALL(state->lfs, get_blocksize);
 	const int file_idx = fid_idx(fid, state->open_file);
