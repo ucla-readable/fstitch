@@ -205,7 +205,7 @@ int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 	}
 	
 	for(i = 0; i != count; i++)
-		if(chdesc_apply(chdescs[0]))
+		if(chdesc_apply(chdescs[i]))
 			break;
 	
 	/* failed to apply the chdescs */
