@@ -114,7 +114,7 @@ void	close_all(void);
 ssize_t	readn(int fd, void* buf, size_t nbytes);
 int	dup(int oldfd, int newfd);
 int	dup2env_send(int fdnum, envid_t envid);
-int	dup2env_recv();
+int	dup2env_recv(void);
 int	ftruncate(int fd, off_t size);
 int	fstat(int fd, struct Stat*);
 int	stat(const char* path, struct Stat*);
@@ -141,7 +141,7 @@ int	fsipc_dirty(int fileid, off_t offset);
 int	fsipc_remove(const char* path);
 int	fsipc_sync(void);
 uint32_t fsipc_avail_space(void);
-int   fsipc_shutdown();
+int   fsipc_shutdown(void);
 
 // pageref.c
 int	pageref(void*);

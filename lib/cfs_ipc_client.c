@@ -6,7 +6,7 @@ const char kfsd_name_sh[] = "/kfsd";
 const char kfsd_name_kern[] = "kfsd";
 
 static envid_t
-find_fs()
+find_fs(void)
 {
 	size_t ntries;
 	size_t i;

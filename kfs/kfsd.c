@@ -51,7 +51,7 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 }
 
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
-void kfsd_shutdown()
+void kfsd_shutdown(void)
 {
 	int i;
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)

@@ -251,7 +251,7 @@ dup2env_send(int fdnum, envid_t envid)
 // dup2env_send().
 // Returns the new fd, or <0 if failure to allocate a fd.
 int
-dup2env_recv()
+dup2env_recv(void)
 {
 	int i, r;
 	uint8_t* va;

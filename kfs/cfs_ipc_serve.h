@@ -3,7 +3,7 @@
 
 int register_frontend_cfs(CFS_t * cfs);
 
-int cfs_ipc_serve();
-void cfs_ipc_serve_run();
+int cfs_ipc_serve(void);
+void cfs_ipc_serve_run(void);
 
 #endif // not __KUDOS_KFS_CFS_IPC_SERVE_H

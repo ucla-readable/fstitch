@@ -14,7 +14,7 @@ struct chain_elt {
 };
 typedef struct chain_elt chain_elt_t;
 
-static chain_elt_t * chain_elt_create();
+static chain_elt_t * chain_elt_create(void);
 static void          chain_elt_destroy(chain_elt_t * elt);
 static chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k);
 
@@ -74,7 +74,7 @@ static size_t hash_ptr(const void * k, size_t tbl_size)
 //
 // Construction/destruction
 
-hash_map_t * hash_map_create()
+hash_map_t * hash_map_create(void)
 {
 	return hash_map_create_size(INIT_NUM_BUCKETS, 1);
 }
@@ -303,7 +303,7 @@ hash_map_elt_t hash_map_elt_next(hash_map_t * hm, hash_map_elt_t elt);
 //
 // Chains
 
-static chain_elt_t * chain_elt_create()
+static chain_elt_t * chain_elt_create(void)
 {
 	chain_elt_t * elt = malloc(sizeof(*elt));
 	elt->elt.key = NULL;

@@ -12,7 +12,7 @@ static bool    vector_grow(vector_t * v);
 //
 // Construction/destruction
 
-vector_t * vector_create()
+vector_t * vector_create(void)
 {
 	// Create a vector with no elements, but with a capacity.
 

@@ -24,7 +24,7 @@ env_is_netd_ipcrecv(const struct Env *e)
 }
 
 static envid_t
-find_netd_ipcrecv()
+find_netd_ipcrecv(void)
 {
 	size_t ntries;
 	size_t i;
