@@ -11,6 +11,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
+#include <kfs/depman.h>
 #include <kfs/josfs_base.h>
 
 #define JOSFS_BASE_DEBUG 0
@@ -1077,6 +1078,8 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 			bdesc_drop(&block);
 			return r;
 		}
+		r = depman_add_chdesc(*head);
+		assert(r >= 0); // TODO: handle error
 	}
 	else {
 		bdesc_touch(block);
