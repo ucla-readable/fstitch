@@ -65,6 +65,7 @@ mark_clean(BD_t * object, uint16_t idx)
 	info->dirty_bits[course] &= ~(1<<fine);
 }
 
+/*
 static unsigned short
 blk_checksum(bdesc_t *blk)
 {
@@ -72,6 +73,7 @@ blk_checksum(bdesc_t *blk)
 	unsigned short len = blk->length;
 	return inet_chksum(dataptr, len);
 }
+*/
 
 static int
 wb_cache_bd_get_config(void * object, int level, char * string, size_t length)
@@ -256,7 +258,6 @@ void
 print_chdescs_gv(chdesc_t *ch, int num)
 {
 	chmetadesc_t *p;
-	int i;
 
 	if (num == 0) {
 		printf("digraph chdescs\n{\nnodesep=0.15;\nranksep=0.15;\n"
@@ -632,6 +633,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block, int idx)
 	return 0;
 }
 
+/*
 static void
 dump_data(char *data, int len)
 {
@@ -688,6 +690,7 @@ backup_check(BD_t *object, bdesc_t *blk)
 	}
 	return 0;
 }
+*/
 
 static bdesc_t *
 wb_cache_bd_read_block(BD_t * object, uint32_t number)
