@@ -18,11 +18,7 @@
 #include <inc/stdio.h>
 
 static bool verbose = 0;
-
-#define USE_WB_CACHE
-#ifndef USE_WB_CACHE
-#define wb_cache_bd wt_cache_bd
-#endif
+static bool use_wb_cache = 1;
 
 
 static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, bool stripper)
@@ -78,9 +74,13 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 		if (!partitions[i])
 			continue;
 
-		if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
+		if (use_wb_cache)
+			cache = wb_cache_bd(partitions[i], cache_nblks);
+		else
+			cache = wt_cache_bd(partitions[i], cache_nblks);
+		if (!cache)
 		{
-			fprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
+			fprintf(STDERR_FILENO, "w%c_cache_bd() failed\n", use_wb_cache ? 'b' : 't');
 			exit();
 		}
 
@@ -95,8 +95,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 			}
 		}
 
-#ifndef USE_WB_CACHE
-		if (stripper)
+		if (!use_wb_cache && stripper)
 		{
 			if (! (cache = chdesc_stripper_bd(cache)) )
 			{
@@ -104,7 +103,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 				exit();
 			}
 		}
-#endif
 
 		if (enable_journal)
 		{
@@ -175,7 +173,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, uint32_t cache_nblks, 
 
 static void print_usage(const char * bin)
 {
-	printf("Usage: %s -d <device> -m <mount_point> [-j <on|off>] [-$ <num_blocks>] [-v]\n", bin);
+	printf("Usage: %s -d <device> -m <mount_point> [-j <on|off>] [-$ <num_blocks>] [-v] [-wb|-wt]\n", bin);
 	printf("  <device> is one of:\n");
 	printf("    ide <controller> <diskno>\n");
 	printf("    nbd <host> [-p <port>]\n");
@@ -206,6 +204,11 @@ static void parse_options(int argc, const char ** argv, bool * journal, uint32_t
 
 	if ((cache_num_blocks_str = get_arg_val(argc, argv, "-$")))
 		*cache_num_blocks = strtol(cache_num_blocks_str, NULL, 10);
+
+	if (get_arg_idx(argc, argv, "-wb"))
+		use_wb_cache = 1;
+	else if (get_arg_idx(argc, argv, "-wt"))
+		use_wb_cache = 0;
 }
 
 static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
