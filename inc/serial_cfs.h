@@ -97,7 +97,7 @@ struct Scfs_get_features {
 
 struct Scfs_get_metadata {
 	SCFS_TYPE;
-	uint32_t type;
+	uint32_t id;
 	char name[SCFSMAXNAMELEN];
 	
 };
@@ -121,7 +121,7 @@ struct Scfs_shutdown {
 // CFS "data-page-blobs"
 
 struct Scfs_metdata {
-	uint32_t type;
+	uint32_t id;
 	size_t size;
 	uint8_t data[PGSIZE - sizeof(int) - sizeof(uint32_t)];
 };
