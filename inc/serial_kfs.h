@@ -115,7 +115,7 @@ typedef struct {
 	uint32_t journal_lfs;
 	uint32_t fs_lfs;
 	uint32_t fs_queue_bd;
-} Skfs_journal_lfs;
+} Skfs_journal_lfs_t;
 
 typedef struct {
 	SKFS_TYPE;
@@ -170,11 +170,13 @@ typedef struct {
 typedef struct {
 	SKFS_TYPE;
 	uint32_t bd;
+	uint32_t blocks;
 } Skfs_wt_cache_bd_t;
 
 typedef struct {
 	SKFS_TYPE;
 	uint32_t bd;
+	uint16_t blocksize;
 } Skfs_block_resizer_bd_t;
 
 // TODO: partition_bd
