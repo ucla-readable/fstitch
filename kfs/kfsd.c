@@ -1,4 +1,81 @@
+#include <kfs/uhfs.h>
+#include <kfs/kfsd.h>
 #include <inc/lib.h>
+
+// Init kfsd modules.
+int kfsd_init(int argc, char * argv[])
+{
+	int r;
+
+	if ((r = uhfs_init(argc, argv)) < 0)
+		kfsd_shutdown();
+
+	return 0;
+}
+
+
+struct module_shutdown {
+	kfsd_shutdown_module shutdown;
+	void * arg;
+};
+
+static struct module_shutdown module_shutdowns[10];
+
+int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
+{
+	int i;
+	for (i = 0; i < sizeof(module_shutdowns); i++)
+	{
+		if (!module_shutdowns[i].shutdown)
+		{
+			module_shutdowns[i].shutdown = fn;
+			module_shutdowns[i].arg = arg;
+			return 0;
+		}
+	}
+
+	return -E_NO_MEM;
+}
+
+// Shutdown kfsd: inform modules of impending shutdown, then exit.
+void kfsd_shutdown()
+{
+	int i;
+	for (i = 0; i < sizeof(module_shutdowns); i++)
+	{
+		if (module_shutdowns[i].shutdown)
+		{
+			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
+			module_shutdowns[i].shutdown = NULL;
+			module_shutdowns[i].arg = NULL;
+		}
+	}
+	exit();
+}
+
+// This function will schedule and run requests.
+// For now we use only write-through caches, and so simply call cfsipc().
+void kfsd_loop()
+{
+	extern void cfsipc();
+	for (;;)
+		cfsipc();
+}
+
+void umain(int argc, char * argv[])
+{
+	int r;
+
+	if ((r = kfsd_init(argc, argv)) < 0)
+		exit();
+
+	kfsd_loop();
+}
+
+
+//
+// BD testing
+
 #include <inc/partition.h>
 
 #include <kfs/bdesc.h>
@@ -17,7 +94,7 @@ static uint32_t bdesc_sum(bdesc_t * bdesc)
 	return sum;
 }
 
-void umain(int argc, char * argv[])
+void bd_test(int argc, char * argv[])
 {
 	BD_t * bd;
 	BD_t * part = NULL;
