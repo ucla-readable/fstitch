@@ -170,6 +170,23 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 	}
 }
 
+static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
+{
+	int r;
+	struct Scfs_getdirentries_return * resp = (struct Scfs_getdirentries_return*) PAGESNDVA;
+	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->basep);
+
+	if (get_pte(resp) & PTE_P)
+		panic("resp (PAGESNDVA = 0x%08x) already mapped", resp);
+	if ((r = sys_page_alloc(0, resp, PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+
+	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, sizeof(resp->buf), &req->basep);
+	resp->nbytes_read = r;
+	resp->basep = req->basep;
+	ipc_send(envid, r, resp, PTE_P|PTE_U);
+}
+
 static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 {
 	int r;
@@ -377,6 +394,9 @@ static void serve(void)
 			break;
 		case SCFS_WRITE:
 			serve_write(whom, (struct Scfs_write*) REQVA);
+			break;
+		case SCFS_GETDIRENTRIES:
+			serve_getdirentries(whom, (struct Scfs_getdirentries*) REQVA);
 			break;
 		case SCFS_TRUNCATE:
 			serve_truncate(whom, (struct Scfs_truncate*) REQVA);
