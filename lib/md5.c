@@ -34,6 +34,7 @@
 //#include "ppp.h"
 #include <inc/md5.h>
 //#include "pppdebug.h"
+#include <inc/string.h>
 
 typedef uint32_t u32_t;
 
