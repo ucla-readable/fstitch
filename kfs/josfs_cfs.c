@@ -8,6 +8,7 @@
 
 #include <kfs/fidman.h>
 #include <kfs/chdesc.h>
+#include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <inc/dirent.h>
 #include <kfs/josfs_cfs.h>
@@ -350,6 +351,9 @@ static int josfs_cfs_sync(CFS_t * cfs, const char * name)
 static int josfs_cfs_destroy(CFS_t * cfs)
 {
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	int r = modman_rem_cfs(cfs);
+	if(r < 0)
+		return r;
 
 	hash_map_destroy(state->open_files);
 	free(cfs->instance);
@@ -394,6 +398,12 @@ CFS_t * josfs_cfs(void)
 	state->open_files = hash_map_create();
 	if (!state->open_files)
 		goto error_state;
+
+	if(modman_add_anon_cfs(cfs, __FUNCTION__))
+	{
+		DESTROY(cfs);
+		return NULL;
+	}
 
 	return cfs;
 

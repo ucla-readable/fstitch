@@ -9,9 +9,10 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
-#include <kfs/wb_cache_bd.h>
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
+#include <kfs/wb_cache_bd.h>
 
 struct cache_info {
 	BD_t * bd;
@@ -545,7 +546,11 @@ static int wb_cache_bd_destroy(BD_t * bd)
 {
 	struct cache_info * info = (struct cache_info *) bd->instance;
 	uint32_t block;
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 	
+	/* FIXME a write-back cache should probably sync these blocks in case they are dirty */
 	for(block = 0; block != info->size; block++)
 		if(info->blocks[block])
 			bdesc_release(&info->blocks[block]);
@@ -593,6 +598,12 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	info->bd = disk;
 	info->size = blocks;
 	info->blocksize = CALL(disk, get_blocksize);
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

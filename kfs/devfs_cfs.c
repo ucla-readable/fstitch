@@ -7,6 +7,7 @@
 #include <kfs/fidman.h>
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/bd.h>
 #include <kfs/devfs_cfs.h>
@@ -478,6 +479,9 @@ static int devfs_sync(CFS_t * cfs, const char * name)
 static int devfs_destroy(CFS_t * cfs)
 {
 	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	int r = modman_rem_cfs(cfs);
+	if(r < 0)
+		return r;
 	
 	hash_map_destroy(state->fid_map);
 	vector_destroy(state->bd_table);
@@ -539,6 +543,12 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 		if((r = devfs_bd_add(cfs, names[i], bds[i])) < 0)
 			goto error_bd_table;
 	
+	if(modman_add_anon_cfs(cfs, __FUNCTION__))
+	{
+		DESTROY(cfs);
+		return NULL;
+	}
+	
 	return cfs;
 	
 error_bd_table:
@@ -577,7 +587,6 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 		return r;
 	}
 	
-	fprintf(STDERR_FILENO, "devfs_cfs: new device %s\n", name);
 	return 0;
 }
 
@@ -597,7 +606,6 @@ BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 		return NULL;
 	bde = (bd_entry_t *) vector_elt(state->bd_table, i);
 	
-	fprintf(STDERR_FILENO, "devfs_cfs: removed device %s\n", name);
 	if(bde->fid != -1)
 	{
 		bde_unmap_fid(state, bde);

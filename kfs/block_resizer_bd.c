@@ -6,6 +6,7 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/block_resizer_bd.h>
 
 /* This simple size converter can only convert up in size (i.e. aggregate blocks
@@ -150,6 +151,9 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 
 static int block_resizer_bd_destroy(BD_t * bd)
 {
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 	free(bd->instance);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -194,6 +198,12 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	info->merge_count = blocksize / original_size;
 	info->atomic_size = CALL(disk, get_atomicsize);
 	info->block_count = CALL(disk, get_numblocks) / info->merge_count;
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

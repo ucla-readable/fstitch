@@ -6,6 +6,7 @@
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/feature.h>
+#include <kfs/modman.h>
 #include <kfs/wholedisk_lfs.h>
 
 struct wd_info {
@@ -214,6 +215,9 @@ static int wholedisk_sync(LFS_t * object, const char * name)
 
 static int wholedisk_destroy(LFS_t * lfs)
 {
+	int r = modman_rem_lfs(lfs);
+	if(r < 0)
+		return r;
 	free(lfs->instance);
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
@@ -264,6 +268,12 @@ LFS_t * wholedisk(BD_t * bd)
 	
 	info->bd = bd;
 	info->blocksize = CALL(bd, get_blocksize);
+	
+	if(modman_add_anon_lfs(lfs, __FUNCTION__))
+	{
+		DESTROY(lfs);
+		return NULL;
+	}
 	
 	return lfs;
 }

@@ -199,6 +199,10 @@ int kfsd_init(void)
 		uhfses = NULL;
 	}
 
+	r = table_classifier_cfs_add(table_class, "/dev", modman_devfs);
+	if (r < 0)
+		kfsd_shutdown();
+
 	//
 	// fidfairies
 
@@ -217,7 +221,7 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
-	const bool enable_internal_journaling = 0;
+	const bool enable_internal_journaling = 1;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;

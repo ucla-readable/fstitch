@@ -9,6 +9,7 @@
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/josfs_base.h>
 
 #define JOSFS_BASE_DEBUG 0
@@ -1758,6 +1759,9 @@ static int josfs_sync(LFS_t * object, const char * name)
 
 static int josfs_destroy(LFS_t * lfs)
 {
+	int r = modman_rem_lfs(lfs);
+	if(r < 0)
+		return r;
 	free(lfs->instance);
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
@@ -1826,6 +1830,11 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 		if (*do_fsck)
 			*do_fsck = fsck(lfs);
 
+	if(modman_add_anon_lfs(lfs, __FUNCTION__))
+	{
+		DESTROY(lfs);
+		return NULL;
+	}
+
 	return lfs;
 }
-

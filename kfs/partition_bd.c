@@ -5,6 +5,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/modman.h>
 #include <kfs/partition_bd.h>
 
 struct partition_info {
@@ -147,6 +148,9 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 
 static int partition_bd_destroy(BD_t * bd)
 {
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 	free(bd->instance);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -180,6 +184,12 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	info->start = start;
 	info->length = length;
 	info->blocksize = CALL(disk, get_blocksize);
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

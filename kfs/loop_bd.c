@@ -4,6 +4,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
+#include <kfs/modman.h>
 #include <kfs/loop_bd.h>
 
 
@@ -135,6 +136,9 @@ static int loop_destroy(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	loop_state_t * state = (loop_state_t *) bd->instance;
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 
 	CALL(state->lfs, free_fdesc, state->file);
 	free((char *) state->filename);
@@ -187,6 +191,12 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 		goto error_filename;
 
 	state->blocksize = CALL(state->lfs, get_blocksize);
+
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 
 	return bd;
 

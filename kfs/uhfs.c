@@ -4,6 +4,7 @@
 #include <inc/fd.h>
 
 #include <kfs/fidman.h>
+#include <kfs/modman.h>
 #include <kfs/chdesc.h>
 #include <kfs/lfs.h>
 #include <kfs/cfs.h>
@@ -702,6 +703,9 @@ static int uhfs_sync(CFS_t * cfs, const char * name)
 static int uhfs_destroy(CFS_t * cfs)
 {
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	int r = modman_rem_cfs(cfs);
+	if(r < 0)
+		return r;
 	hash_map_destroy(state->open_files);
 	free(cfs->instance);
 	memset(cfs, 0, sizeof(*cfs));
@@ -748,6 +752,12 @@ CFS_t * uhfs(LFS_t * lfs)
 	if (!state->open_files)
 		goto error_state;
 
+	if(modman_add_anon_cfs(cfs, __FUNCTION__))
+	{
+		DESTROY(cfs);
+		return NULL;
+	}
+	
 	return cfs;
 
   error_state:

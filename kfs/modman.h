@@ -5,12 +5,19 @@
 #include <kfs/cfs.h>
 #include <kfs/lfs.h>
 
+extern CFS_t * modman_devfs;
+
 int modman_init(void);
 
 /* Add a module to modman, and give it zero usage count. */
 int modman_add_bd(BD_t * bd, const char * name);
 int modman_add_cfs(CFS_t * cfs, const char * name);
 int modman_add_lfs(LFS_t * lfs, const char * name);
+
+/* Add an unnamed module to modman, and give it zero usage count. */
+int modman_add_anon_bd(BD_t * bd, const char * function);
+int modman_add_anon_cfs(CFS_t * cfs, const char * function);
+int modman_add_anon_lfs(LFS_t * lfs, const char * function);
 
 /* Increment the usage count and return the new value. */
 uint32_t modman_inc_bd(BD_t * bd);

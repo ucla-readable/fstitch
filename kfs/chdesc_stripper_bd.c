@@ -2,6 +2,7 @@
 
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/chdesc_stripper_bd.h>
 
 
@@ -137,6 +138,9 @@ static int chdesc_stripper_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
 	chdesc_stripper_state_t * state = (chdesc_stripper_state_t *) bd->instance;
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 
 	memset(state, 0, sizeof(*state));
 	free(state);
@@ -245,6 +249,12 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 	ASSIGN_DESTROY(bd, chdesc_stripper, destroy);
 
 	state->bd = disk;
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 

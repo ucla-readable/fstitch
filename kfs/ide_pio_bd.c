@@ -5,6 +5,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/modman.h>
 #include <kfs/ide_pio_bd.h>
 
 static const uint16_t ide_base[2] = {0x1F0, 0x170};
@@ -156,6 +157,9 @@ static int ide_pio_bd_sync(BD_t * object, bdesc_t * block)
 
 static int ide_pio_bd_destroy(BD_t * bd)
 {
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 	free(bd->instance);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -196,6 +200,12 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	info->controller = controller;
 	info->disk = disk;
 	info->length = ide_size(controller, disk);
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

@@ -2,6 +2,7 @@
 
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/order_preserver_bd.h>
 
 #define ORDER_PRESERVER_DEBUG 0
@@ -99,6 +100,9 @@ static int order_preserver_destroy(BD_t * bd)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, bd);
 	order_preserver_state_t * state = (order_preserver_state_t *) bd->instance;
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 
 	if (state->prev_head)
 		chdesc_weak_release(&state->prev_head);
@@ -208,9 +212,15 @@ BD_t * order_preserver_bd(BD_t * disk)
 	ASSIGN(bd, order_preserver, write_block);
 	ASSIGN(bd, order_preserver, sync);
 	ASSIGN_DESTROY(bd, order_preserver, destroy);
-
+	
 	state->bd = disk;
 	state->prev_head = NULL;
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 

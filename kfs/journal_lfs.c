@@ -5,6 +5,7 @@
 #include <kfs/fdesc.h>
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
+#include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/journal_queue_bd.h>
 #include <kfs/journal_lfs.h>
@@ -693,7 +694,9 @@ static int journal_sync(LFS_t * lfs, const char * name)
 static int journal_destroy(LFS_t * lfs)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
-	int r;
+	int r = modman_rem_lfs(lfs);
+	if(r < 0)
+		return r;
 
 	r = transaction_stop(state);
 	if (r < 0)
@@ -1024,6 +1027,12 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	r = sched_register(timer_callback, state, TRANSACTION_PERIOD*100);
 	if (r < 0)
 		goto error_chdescs;
+
+	if(modman_add_anon_lfs(lfs, __FUNCTION__))
+	{
+		DESTROY(lfs);
+		return NULL;
+	}
 
 	return lfs;
 

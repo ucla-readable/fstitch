@@ -440,6 +440,9 @@ static int table_classifier_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
+	int r = modman_rem_cfs(cfs);
+	if(r < 0)
+		return r;
 
 	hash_map_destroy(state->open_files);
 	vector_destroy(state->mount_table);
@@ -493,13 +496,14 @@ CFS_t * table_classifier_cfs(void)
 	if (!state->mount_table)
 		goto error_open_files;
 
-	if (modman_add_cfs(cfs, __FUNCTION__) < 0)
-		goto error_mounts;
+	if (modman_add_anon_cfs(cfs, __FUNCTION__))
+	{
+		DESTROY(cfs);
+		return NULL;
+	}
 
 	return cfs;
 
-  error_mounts:
-	vector_destroy(state->mount_table);
   error_open_files:
 	hash_map_destroy(state->open_files);
   error_state:

@@ -5,6 +5,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/modman.h>
 #include <kfs/wt_cache_bd.h>
 
 struct cache_info {
@@ -156,6 +157,9 @@ static int wt_cache_bd_destroy(BD_t * bd)
 {
 	struct cache_info * info = (struct cache_info *) bd->instance;
 	uint32_t block;
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 	
 	for(block = 0; block != info->size; block++)
 		if(info->blocks[block])
@@ -204,6 +208,12 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	info->bd = disk;
 	info->size = blocks;
 	info->blocksize = CALL(disk, get_blocksize);
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

@@ -6,6 +6,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/modman.h>
 #include <kfs/journal_queue_bd.h>
 
 /* "JnlQ" */
@@ -188,13 +189,16 @@ static int journal_queue_bd_sync(BD_t * object, bdesc_t * block)
 static int journal_queue_bd_destroy(BD_t * bd)
 {
 	struct queue_info * info = (struct queue_info *) bd->instance;
+	int r;
 	
 	if(info->state == HOLD || info->state == PASSTHROUGH)
-	{
-		int r;
 		if((r = journal_queue_release(bd)) < 0)
 			return r;
-	}
+	
+	r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
+	
 	hash_map_destroy(info->bdesc_hash);
 	free(info);
 	
@@ -239,6 +243,12 @@ BD_t * journal_queue_bd(BD_t * disk)
 	info->bd = disk;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->state = RELEASE;
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }

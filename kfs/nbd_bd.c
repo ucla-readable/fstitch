@@ -8,6 +8,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/modman.h>
 #include <kfs/nbd_bd.h>
 
 struct nbd_info {
@@ -99,6 +100,9 @@ static int nbd_bd_sync(BD_t * object, bdesc_t * block)
 static int nbd_bd_destroy(BD_t * bd)
 {
 	struct nbd_info * info = (struct nbd_info *) bd->instance;
+	int r = modman_rem_bd(bd);
+	if(r < 0)
+		return r;
 	close(info->fd[0]);
 	close(info->fd[1]);
 	free(info);
@@ -151,6 +155,12 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	/* switch to host byte order */
 	info->length = ntohl(info->length);
 	info->blocksize = ntohs(info->blocksize);
+	
+	if(modman_add_anon_bd(bd, __FUNCTION__))
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	return bd;
 }
