@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/fd.h>
 #include <inc/cfs_ipc_client.h>
 #include <kfs/feature.h>
 #include <kfs/lfs.h>
@@ -26,6 +27,7 @@ struct Dev devkpl =
 int kpl_open(const char* path, int mode)
 {
 	struct Fd * fd;
+	char * namecopy;
 	int i, r;
 	
 	i = fd_alloc(&fd);
@@ -35,13 +37,27 @@ int kpl_open(const char* path, int mode)
 	/* unlike the original JOS filesystem server, which allocates the page
 	 * for the struct Fd and sends it to the client, we allocate the page
 	 * in the client and send it to the server */
+	/* FIXME? this opens the way for us to send the same page to the file server
+	 * for different open requests, thus preventing the file server from ever
+	 * cleaning the data up as the reference count will always be > 1 */
 	r = sys_page_alloc(0, fd, PTE_SHARE | PTE_U | PTE_W | PTE_P);
 	if(r)
 		return r;
 	
+	namecopy = (char *) fd2data(fd);
+	r = sys_page_alloc(0, namecopy, PTE_SHARE | PTE_U | PTE_W | PTE_P);
+	if(r)
+	{
+		sys_page_unmap(0, fd);
+		return r;
+	}
+	/*store the file name for this file descriptor */
+	strncpy(namecopy, path, SCFSMAXNAMELEN);
+	
 	r = cfs_open(path, mode, fd);
 	if(r < 0)
 	{
+		sys_page_unmap(0, namecopy);
 		sys_page_unmap(0, fd);
 		return r;
 	}
@@ -58,11 +74,8 @@ int kpl_open(const char* path, int mode)
 // This function is called by fd_close.
 static int kpl_close(struct Fd* fd)
 {
-	int r;
-	r = cfs_close(fd->fd_kpl.fid);
-	if (r >= 0)
-		sys_page_unmap(0, fd);
-	return r;
+	sys_page_unmap(0, fd2data(fd));
+	return cfs_close(fd->fd_kpl.fid);
 }
 
 // Read 'n' bytes from 'fd' at the current seek position into 'buf'.
@@ -83,8 +96,8 @@ static int kpl_stat(struct Fd* fd, struct Stat* st)
 {
 	int r;
 
-	/* KPL can't give us the name */
-	st->st_name[0] = 0;
+	/* use the stored file name for this file descriptor */
+	strncpy(st->st_name, fd2data(fd), MIN(SCFSMAXNAMELEN, MAXNAMELEN));
 	r = cfs_get_metadata(st->st_name, KFS_feature_size.id, &kpl_stat_md);
 	if (r < 0) return r;
 	st->st_size = *(off_t *) &kpl_stat_md.data;
