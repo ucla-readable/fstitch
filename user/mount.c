@@ -204,6 +204,7 @@ static void print_usage(const char * bin)
 	printf("    ide  <controllerno> <diskno>\n");
 	printf("    nbd  <host> [-p <port>]\n");
 	printf("    loop <file>\n");
+	printf("    bd   <bd_name>\n");
 }
 
 static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, bool * fsck, uint32_t * cache_num_blocks)
@@ -386,6 +387,33 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 		}
 
 		*stripper = 0;
+	}
+	else if (!strcmp("bd", argv[device_index]))
+	{
+		const char * bd_name;
+		modman_it_t * it;
+
+		if (device_index + 1 >= argc)
+		{
+			fprintf(STDERR_FILENO, "Insufficient parameters for bd\n");
+			print_usage(argv[0]);
+			exit();
+		}
+
+		bd_name = argv[device_index+1];
+
+		it = modman_it_create_bd();
+		assert(it);
+		while ((disk = modman_it_next_bd(it)))
+			if (!strcmp(bd_name, modman_name_bd(disk)))
+				break;
+		modman_it_destroy(it);
+
+		if (!disk)
+		{
+			fprintf(STDERR_FILENO, "Unable to find BD %s\n", bd_name);
+			return NULL;
+		}
 	}
 	else
 	{
