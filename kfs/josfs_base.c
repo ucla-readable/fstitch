@@ -481,6 +481,17 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	return r;
 }
 
+int count_free_space(LFS_t * object) {
+	struct lfs_info * info = (struct lfs_info *) object->instance;
+    const uint32_t s_nblocks = super->s_nblocks;
+	int i, count = 0;
+
+	for (i = 0; i < s_nblocks; i++)
+		if (read_bitmap(object, i))
+			count++;
+	return count;
+}
+
 // Skip over slashes.
 static inline const char* skip_slash(const char* p)
 {
@@ -1555,7 +1566,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 
 static size_t josfs_get_num_features(LFS_t * object, const char * name)
 {
-	return 2;
+	return 3;
 }
 
 static const feature_t * josfs_get_feature(LFS_t * object, const char * name, size_t num)
@@ -1565,6 +1576,8 @@ static const feature_t * josfs_get_feature(LFS_t * object, const char * name, si
 		return &KFS_feature_size;
 	else if (num == 1)
 		return &KFS_feature_filetype;
+	else if (num == 2)
+		return &KFS_feature_freespace;
 	return NULL;
 }
 
@@ -1589,6 +1602,16 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		Dprintf("JOSFSDEBUG: josfs_get_metadata %s is type %d\n", f->file->f_name, f->file->f_type);
 		memcpy(*data, &(f->file->f_type), sizeof(uint32_t));
 	}
+	else if (id == KFS_feature_freespace.id) {
+		int free_space;
+		*data = malloc(sizeof(int));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(int);
+		free_space = count_free_space(object);
+		memcpy(*data, &free_space, sizeof(uint32_t));
+	}
 
 	return 0;
 }
@@ -1599,7 +1622,7 @@ static int josfs_get_metadata_name(LFS_t * object, const char * name, uint32_t i
 	int r;
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
 	if (!f)
-		return -E_INVAL;
+		return -E_NOT_FOUND;
 	r = josfs_get_metadata(object, f, id, size, data);
 	josfs_free_fdesc(object, (fdesc_t *) f);
 	return r;

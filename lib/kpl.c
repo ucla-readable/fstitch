@@ -197,6 +197,17 @@ int kpl_rmdir(const char * name)
 	return cfs_rmdir(name);
 }
 
+/* warning: not multithread safe! */
+static struct Scfs_metadata kpl_freespace_md;
+int kpl_disk_avail_space(const char* path)
+{
+	int r;
+
+	r = cfs_get_metadata(path, KFS_feature_freespace.id, &kpl_freespace_md);
+	if (r < 0) return r;
+	return *(int *) &kpl_freespace_md.data;
+}
+
 // External filesystem functions
 int open(const char* path, int mode)
 {
@@ -231,4 +242,9 @@ int fs_shutdown(void)
 	/* wait for shutdown to complete */
 	sleep(100);
 	return jfs_shutdown();
+}
+
+int disk_avail_space(const char* path)
+{
+	return kpl_disk_avail_space(path);
 }

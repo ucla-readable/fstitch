@@ -131,12 +131,13 @@ int	rename(const char* oldname, const char* newname);
 int	sync(void);
 int	fs_shutdown(void);
 int	rename(const char* oldname, const char* newname);
+int disk_avail_space(const char *path);
 
 // file.c
 int	jfs_open(const char* path, int mode);
 int	jfs_remove(const char* path);
 int	jfs_sync(void);
-uint32_t disk_avail_space(void);
+uint32_t jfs_disk_avail_space(void);
 int	jfs_shutdown(void);
 
 // fprintf.c

@@ -293,7 +293,7 @@ jfs_sync(void)
 }
 
 uint32_t
-disk_avail_space(void)
+jfs_disk_avail_space(void)
 {
 	return fsipc_avail_space();
 }
