@@ -23,6 +23,8 @@
 #define Dprintf(x...)
 #endif
 
+// "JOSFSMG"
+#define JOSFS_CFS_MAGIC 0x705CF535
 
 struct open_file {
 	int fid;
@@ -75,6 +77,26 @@ static int open_file_close(open_file_t * f)
 }
 
 
+static int josfs_cfs_get_config(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != JOSFS_CFS_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int josfs_cfs_get_status(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != JOSFS_CFS_MAGIC)
+		return -E_INVAL;
+	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
+	
+	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	return 0;
+}
 
 static int josfs_cfs_open(CFS_t * cfs, const char * name, int mode)
 {
@@ -377,6 +399,10 @@ CFS_t * josfs_cfs(void)
 		goto error_josfs_cfs;
 	cfs->instance = state;
 
+	OBJFLAGS(cfs) = 0;
+	OBJMAGIC(cfs) = JOSFS_CFS_MAGIC;
+	OBJASSIGN(cfs, josfs_cfs, get_config);
+	OBJASSIGN(cfs, josfs_cfs, get_status);
 	ASSIGN(cfs, josfs_cfs, open);
 	ASSIGN(cfs, josfs_cfs, close);
 	ASSIGN(cfs, josfs_cfs, read);

@@ -14,6 +14,8 @@
 #define Dprintf(x...)
 #endif
 
+// "FIDPROTR"
+#define FIDPROTECTOR_MAGIC 0xF1D78078
 
 struct open_file {
 	int fid;
@@ -79,6 +81,27 @@ static int check_capability_fid(const fidprotector_state_t * state, int fid)
 
 //
 // Intercepted (but not capability checked) CFS_t functions
+
+static int fidprotector_get_config(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != FIDPROTECTOR_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int fidprotector_get_status(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != FIDPROTECTOR_MAGIC)
+		return -E_INVAL;
+	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
+	
+	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	return 0;
+}
 
 static int fidprotector_open(CFS_t * cfs, const char * name, int mode)
 {
@@ -272,6 +295,10 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 	if (!cfs)
 		return NULL;
 
+	OBJFLAGS(cfs) = 0;
+	OBJMAGIC(cfs) = FIDPROTECTOR_MAGIC;
+	OBJASSIGN(cfs, fidprotector, get_config);
+	OBJASSIGN(cfs, fidprotector, get_status);
 	ASSIGN(cfs, fidprotector, open);
 	ASSIGN(cfs, fidprotector, close);
 	ASSIGN(cfs, fidprotector, read);

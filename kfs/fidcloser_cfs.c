@@ -28,6 +28,8 @@
 // mupltiple fidclosers aren't something we want. so possibility 2 it is:
 static bool fidcloser_cfs_exists = 0;
 
+// "FIDCLOSE"
+#define FIDCLOSER_MAGIC 0xF1DC105E
 
 struct open_file {
 	int fid;
@@ -165,6 +167,27 @@ static void open_file_gc(fidcloser_state_t * state)
 
 //
 // Intercepted CFS_t functions
+
+static int fidcloser_get_config(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != FIDCLOSER_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int fidcloser_get_status(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != FIDCLOSER_MAGIC)
+		return -E_INVAL;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
+	
+	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	return 0;
+}
 
 static int fidcloser_open(CFS_t * cfs, const char * name, int mode)
 {
@@ -369,6 +392,10 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 	if (!cfs)
 		return NULL;
 
+	OBJFLAGS(cfs) = 0;
+	OBJMAGIC(cfs) = FIDCLOSER_MAGIC;
+	OBJASSIGN(cfs, fidcloser, get_config);
+	OBJASSIGN(cfs, fidcloser, get_status);
 	ASSIGN(cfs, fidcloser, open);
 	ASSIGN(cfs, fidcloser, close);
 	ASSIGN(cfs, fidcloser, read);

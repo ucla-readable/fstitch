@@ -28,6 +28,9 @@ struct open_file {
 };
 typedef struct open_file open_file_t;
 
+// "LEET0CFS" (because uhfs is leet)
+#define UHFS_MAGIC 0x1EE70CF5
+
 struct uhfs_state {
 	LFS_t * lfs;
 	hash_map_t * open_files;
@@ -79,6 +82,27 @@ static void open_file_close(LFS_t * lfs, open_file_t * f)
 }
 
 
+
+static int uhfs_get_config(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != UHFS_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int uhfs_get_status(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != UHFS_MAGIC)
+		return -E_INVAL;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	
+	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	return 0;
+}
 
 static int uhfs_close(CFS_t * cfs, int fid)
 {
@@ -736,6 +760,10 @@ CFS_t * uhfs(LFS_t * lfs)
 		goto error_uhfs;
 	cfs->instance = state;
 
+	OBJFLAGS(cfs) = 0;
+	OBJMAGIC(cfs) = UHFS_MAGIC;
+	OBJASSIGN(cfs, uhfs, get_config);
+	OBJASSIGN(cfs, uhfs, get_status);
 	ASSIGN(cfs, uhfs, open);
 	ASSIGN(cfs, uhfs, close);
 	ASSIGN(cfs, uhfs, read);

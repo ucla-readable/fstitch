@@ -31,7 +31,6 @@ typedef struct bd_entry bd_entry_t;
 #define DEVFS_MAGIC 0xBDACCE55
 
 struct devfs_state {
-	uint32_t magic;
 	vector_t * bd_table;
 	hash_map_t * fid_map;
 	int root_fid, open_count;
@@ -111,6 +110,27 @@ static int bde_lookup_index(devfs_state_t * state, const char * name)
 	return -E_NOT_FOUND;
 }
 
+
+static int devfs_get_config(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int devfs_get_status(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
+		return -E_INVAL;
+	devfs_state_t * state = (devfs_state_t *) cfs->instance;
+	
+	snprintf(string, length, "devices: %u", hash_map_size(state->fid_map));
+	return 0;
+}
 
 static int devfs_open(CFS_t * cfs, const char * name, int mode)
 {
@@ -492,7 +512,6 @@ static int devfs_destroy(CFS_t * cfs)
 	return 0;
 }
 
-
 CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 {
 	devfs_state_t * state;
@@ -509,6 +528,10 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 		goto error_cfs;
 	cfs->instance = state;
 	
+	OBJFLAGS(cfs) = 0;
+	OBJMAGIC(cfs) = DEVFS_MAGIC;
+	OBJASSIGN(cfs, devfs, get_config);
+	OBJASSIGN(cfs, devfs, get_status);
 	ASSIGN(cfs, devfs, open);
 	ASSIGN(cfs, devfs, close);
 	ASSIGN(cfs, devfs, read);
@@ -527,7 +550,6 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	ASSIGN(cfs, devfs, sync);
 	DESTRUCTOR(cfs, devfs, destroy);
 	
-	state->magic = DEVFS_MAGIC;
 	state->root_fid = -1;
 	state->open_count = 0;
 	
@@ -570,7 +592,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	int r;
 	
 	/* make sure this is really a device FS */
-	if(state->magic != DEVFS_MAGIC)
+	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
 		return -E_INVAL;
 	
 	/* don't allow / in names */
@@ -609,7 +631,7 @@ BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 	int i;
 	
 	/* make sure this is really a device FS */
-	if(state->magic != DEVFS_MAGIC)
+	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
 		return NULL;
 	
 	i = bde_lookup_index(state, name);

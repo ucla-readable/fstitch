@@ -203,6 +203,27 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 //
 // table_classifier_cfs
 
+static int table_classifier_get_config(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
+		return -E_INVAL;
+
+	snprintf(string, length, "");
+	return 0;
+}
+
+static int table_classifier_get_status(void * object, int level, char * string, size_t length)
+{
+	CFS_t * cfs = (CFS_t *) object;
+	if(OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
+		return -E_INVAL;
+	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
+	
+	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	return 0;
+}
+
 static int table_classifier_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
@@ -469,6 +490,10 @@ CFS_t * table_classifier_cfs(void)
 		goto error_cfs;
 	cfs->instance = state;
 	
+	OBJFLAGS(cfs) = 0;
+	OBJMAGIC(cfs) = TABLE_CLASSIFIER_MAGIC;
+	OBJASSIGN(cfs, table_classifier, get_config);
+	OBJASSIGN(cfs, table_classifier, get_status);
 	ASSIGN(cfs, table_classifier, open);
 	ASSIGN(cfs, table_classifier, close);
 	ASSIGN(cfs, table_classifier, read);
@@ -521,7 +546,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 	int r;
 
 	/* make sure this is really a table classifier */
-	if (state->magic != TABLE_CLASSIFIER_MAGIC)
+	if (OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
 		return -E_INVAL;
 	
 	/* force paths to start with / */
@@ -561,7 +586,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	CFS_t * path_cfs = NULL;
 
 	/* make sure this is really a table classifier */
-	if (state->magic != TABLE_CLASSIFIER_MAGIC)
+	if (OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
 		return NULL;
 
 	int idx = mount_lookup(state->mount_table, path);
