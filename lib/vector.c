@@ -38,6 +38,7 @@ vector_t * vector_create_size(size_t n)
 		free(v);
 		return NULL;
 	}
+	memset(v->elts, 0, n*sizeof(v->elts));
 	v->capacity = n;
 
 	return v;
