@@ -116,15 +116,20 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 
 
 	fid = create_fid();
-	if (fid < 0)
+	if (fid < 0) {
+		CALL(state->lfs, free_fdesc, fdesc);
 		return fid;
+	}
 	f = open_file_create(fid, fdesc, size_id, type);
-	if (!f)
+	if (!f) {
+		CALL(state->lfs, free_fdesc, fdesc);
 		return -E_NO_MEM;
+	}
 	r = hash_map_insert(state->open_files, (void*) fid, f);
 	if (r < 0)
 	{
 		open_file_destroy(f);
+		CALL(state->lfs, free_fdesc, fdesc);
 		return -E_NO_MEM;
 	}
 
@@ -347,7 +352,7 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
 	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
-	fdesc_t * oldf, * newf;
+	fdesc_t * oldf, * newf, * f;
 	const bool type_supported = lfs_feature_supported(state->lfs, oldname, KFS_feature_filetype.id);
 	int oldtype;
 	chdesc_t * prevhead;
@@ -365,29 +370,42 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 		void * data;
 		size_t data_len;
 		r= CALL(state->lfs, get_metadata_fdesc, oldf, KFS_feature_filetype.id, &data_len, &data);
-		if (r < 0)
+		if (r < 0) {
+			CALL(state->lfs, free_fdesc, oldf);
 			return r;
+		}
 
 		assert(data_len == sizeof(oldtype));
 		oldtype = *(int *) data;
 		free(data);
 	}
 
-	if (CALL(state->lfs, lookup_name, newname))
+	if ((f = CALL(state->lfs, lookup_name, newname))) {
+		CALL(state->lfs, free_fdesc, f);
+		CALL(state->lfs, free_fdesc, oldf);
 		return -E_FILE_EXISTS;
+	}
+	CALL(state->lfs, free_fdesc, f);
 
 	tail = NULL;
 	newf = CALL(state->lfs, allocate_name, newname, oldtype, oldf, &prevhead, &tail);
-	if (!newf)
+	if (!newf) {
+		CALL(state->lfs, free_fdesc, oldf);
 		return -E_UNSPECIFIED;
+	}
 
 	if (type_supported)
 	{
 		tail = NULL;
 		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &prevhead, &tail);
-		if (r < 0)
+		if (r < 0) {
+			CALL(state->lfs, free_fdesc, oldf);
+			CALL(state->lfs, free_fdesc, newf);
 			return r;
+		}
 	}
+	CALL(state->lfs, free_fdesc, oldf);
+	CALL(state->lfs, free_fdesc, newf);
 
 	return 0;
 }
@@ -415,8 +433,10 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 	chdesc_t * tail;
 	int r;
 
-	if (CALL(state->lfs, lookup_name, name))
+	if ((f = CALL(state->lfs, lookup_name, name))) {
+		CALL(state->lfs, free_fdesc, f);
 		return -E_FILE_EXISTS;
+	}
 
 	tail = NULL;
 	f = CALL(state->lfs, allocate_name, name, TYPE_DIR, NULL, &prevhead, &tail);
@@ -433,10 +453,13 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 		{
 			/* ignore remove_name() error in favor of the real error */
 			tail = NULL;
+			CALL(state->lfs, free_fdesc, f);
 			(void) CALL(state->lfs, remove_name, name, &prevhead, &tail);
 			return r;
 		}
 	}
+
+	CALL(state->lfs, free_fdesc, f);
 
 	return 0;
 }
