@@ -200,10 +200,11 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		return 0;
 		
 	error:
-		bdesc_drop(&block);
 		sleep(tries * 5);
 		nbd_bd_reset(object);
 	}
+	
+	bdesc_drop(&block);
 	
 	fprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	return r;
