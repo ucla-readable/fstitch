@@ -126,6 +126,7 @@ int	wait_fd(int fdnum, size_t nrefs);
 // kpl.c
 int	open(const char* path, int mode);
 int	remove(const char* path);
+int	rename(const char* oldname, const char* newname);
 int	sync(void);
 int	fs_shutdown(void);
 

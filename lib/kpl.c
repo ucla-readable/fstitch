@@ -1,5 +1,6 @@
 #include <inc/lib.h>
 #include <inc/fd.h>
+#include <inc/kpl.h>
 #include <inc/cfs_ipc_client.h>
 #include <kfs/feature.h>
 #include <kfs/lfs.h>
@@ -86,12 +87,6 @@ int kpl_open(const char* path, int mode)
 	return i;
 }
 
-int
-open(const char* path, int mode)
-{
-	return kpl_open(path, mode);
-}
-
 // Clean up a file-server file descriptor.
 // This function is called by fd_close.
 static int kpl_close(struct Fd* fd)
@@ -166,9 +161,9 @@ int kpl_remove(const char* path)
 	return cfs_unlink(path);
 }
 
-int remove(const char* path)
+int kpl_rename(const char * oldname, const char * newname)
 {
-	return kpl_remove(path);
+	return cfs_rename(oldname, newname);
 }
 
 // Synchronize disk with buffer cache
@@ -177,40 +172,14 @@ int kpl_sync(void)
 	return cfs_sync(NULL);
 }
 
-int sync(void)
-{
-	return kpl_sync();
-}
-
 int kpl_shutdown(void)
 {
 	return cfs_shutdown();
 }
 
-int fs_shutdown(void)
-{
-	int r = kpl_shutdown();
-	if(r < 0)
-		return r;
-	/* wait for shutdown to complete */
-	sleep(100);
-	return jfs_shutdown();
-}
-
 int kpl_link(const char * oldname, const char * newname)
 {
 	return cfs_link(oldname, newname);
-}
-
-int
-rename(const char* oldname, const char* newname)
-{
-	return kpl_rename(oldname, newname);
-}
-
-int kpl_rename(const char * oldname, const char * newname)
-{
-	return cfs_rename(oldname, newname);
 }
 
 int kpl_mkdir(const char * name)
@@ -221,4 +190,35 @@ int kpl_mkdir(const char * name)
 int kpl_rmdir(const char * name)
 {
 	return cfs_rmdir(name);
+}
+
+// External filesystem functions
+int open(const char* path, int mode)
+{
+	return kpl_open(path, mode);
+}
+
+int remove(const char* path)
+{
+	return kpl_remove(path);
+}
+
+int rename(const char* oldname, const char* newname)
+{
+	return kpl_rename(oldname, newname);
+}
+
+int sync(void)
+{
+	return kpl_sync();
+}
+
+int fs_shutdown(void)
+{
+	int r = kpl_shutdown();
+	if(r < 0)
+		return r;
+	/* wait for shutdown to complete */
+	sleep(100);
+	return jfs_shutdown();
 }
