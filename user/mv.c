@@ -11,6 +11,6 @@ umain(int argc, char **argv)
 
 	r = rename(argv[1], argv[2]);
 	if(r) {
-		printf("%s: %e\n", argv[0], r);
+		printf("%s: %e\n", argv[1], r);
 	}
 }
