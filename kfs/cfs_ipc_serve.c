@@ -210,7 +210,11 @@ static void serve()
 		return; // just leave it hanging...
 	}
 
-	type = *((int*) REQVA);
+	const struct prev_serve_recv *prevrecv = &prev_serve_recvs[ENVX(whom)];
+	if (prevrecv->type && prevrecv->envid == whom)
+		type = prevrecv->type;
+	else
+		type = *((int*) REQVA);
 
 	switch (type) {
 		case SCFS_OPEN:
@@ -258,6 +262,8 @@ static void serve()
 		case SCFS_SHUTDOWN:
 			serve_shutdown(whom, (struct Scfs_shutdown*) REQVA);
 			break;
+		default:
+			fprintf(STDERR_FILENO, "kfsd : Unknown type %d\n", __FUNCTION__, type);
 	}
 	sys_page_unmap(0, (void*) REQVA);
 }
