@@ -13,4 +13,8 @@ void cfs_ipc_serve_run(void);
 // NULL on error.
 void * cfs_ipc_serve_cur_page(void);
 
+// Return the capability page's physical address associated with the current
+// request.
+uint32_t cfs_ipc_serve_cur_cappa(void);
+
 #endif // not __KUDOS_KFS_CFS_IPC_SERVE_H

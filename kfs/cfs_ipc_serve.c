@@ -58,6 +58,14 @@ void * cfs_ipc_serve_cur_page(void)
 }
 
 
+static uint32_t cur_cappa = -1;
+
+uint32_t cfs_ipc_serve_cur_cappa(void)
+{
+	return cur_cappa;
+}
+
+
 static void serve(void);
 
 static void cfs_ipc_serve_shutdown(void * arg)
@@ -371,7 +379,7 @@ static void serve(void)
 	int perm = 0;
 	uint32_t r;
 
-	r = ipc_recv(0, &whom, (void*) REQVA, &perm, NULL, IPC_RECV_TIMEOUT);
+	r = ipc_recv(0, &whom, (void*) REQVA, &perm, &cur_cappa, IPC_RECV_TIMEOUT);
 	if (!whom && !perm)
 	{
 		if (r != -E_TIMEOUT)
@@ -460,4 +468,5 @@ static void serve(void)
 		panic("sys_page_unmap: %e", r);
 	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
 		panic("sys_page_unmap: %e", r);
+	cur_cappa = -1;
 }
