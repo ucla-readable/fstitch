@@ -89,6 +89,8 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 		int r;
 		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void*) fdpage);
 		ipc_send(envid, r, NULL, 0);
+		prevrecv->envid = 0;
+		prevrecv->type  = 0;
 	}
 }
 
