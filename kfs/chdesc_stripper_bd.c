@@ -20,6 +20,53 @@ struct chdesc_stripper_state {
 typedef struct chdesc_stripper_state chdesc_stripper_state_t;
 
 
+static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_t * c)
+{
+	chmetadesc_t ** list = &c->dependencies;
+	chmetadesc_t * scan;
+	int r;
+
+	while ((scan = *list))
+	{
+		chdesc_t * desc = scan->desc;
+
+		if (desc->type == NOOP)
+		{
+			r = satisfy_external_deps(bd, block,desc);
+			if (r < 0)
+			{
+				chdesc_weak_release(&c);
+				return r;
+			}
+
+			// satisfy_external_deps(bd, desc) satisfied all the external-BD
+			// deps. if desc does have any deps, they are only to this block.
+			r = depman_remove_chdesc(desc);
+			assert(r >= 0);
+		}
+		else if (desc->block->bd != bd)
+		{
+			r = CALL(desc->block->bd, sync, desc->block);
+			if (r < 0)
+			{
+				fprintf(STDERR_FILENO, "%s: BD write errored: %e\n", __FUNCTION__, r);
+				chdesc_weak_release(&c);
+				return r;
+			}
+		}
+		else
+		{
+			// Nothing needs to be done for intra-BD deps
+			assert(desc->block == block);
+
+			list = &scan->next;
+		}
+	}
+
+	return 0;
+}
+
+
 //
 // Intercepted BD_t functions
 
@@ -43,23 +90,13 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 
 	assert(!block_chdesc || !block_chdesc->dependents); // no one should depend on block
 
-	// Satisfy inter-BD deps
+	// Satisfy block's chdesc's inter-BD deps
 
-	while (block_chdesc && block_chdesc->dependencies
-		   && (cur_chdesc = block_chdesc->dependencies->desc))
-	{
-		assert(cur_chdesc->block->bd != bd); // no intra-BD deps should remain
+	r = satisfy_external_deps(bd, block, block_chdesc);
+	if (r < 0)
+		return r;
 
-		r = CALL(cur_chdesc->block->bd, sync, cur_chdesc->block);
-		if (r < 0)
-		{
-			fprintf(STDERR_FILENO, "%s: while stripping, a BD write errored: %e\n", __FUNCTION__, r);
-			chdesc_weak_release(&block_chdesc);
-			return r;
-		}
-	}
-
-	// Write the block
+	// Write block
 
 	refs = block->refs;
 	block->translated++;
@@ -73,21 +110,23 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 		block->translated--;
 	}
 
-	if (r >= 0)
-	{
-		if (block_chdesc)
-		{
-			int s = depman_remove_chdesc(block_chdesc);
-			assert(s >= 0);
-		}
-	}
-	else
+	if (r < 0)
 	{
 		if (block_chdesc)
 			chdesc_weak_release(&block_chdesc);
+		return r;
 	}
 
-	return r;
+	// Satisfy block's chdescs
+
+	while (block_chdesc && block_chdesc->dependencies
+		   && (cur_chdesc = block_chdesc->dependencies->desc))
+	{
+		r = depman_remove_chdesc(cur_chdesc);
+		assert(r >= 0);
+	}
+
+	return 0;
 }
 
 static int chdesc_stripper_destroy(BD_t * bd)
