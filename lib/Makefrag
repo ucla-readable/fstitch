@@ -35,6 +35,9 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/hwclock.c \
 			lib/sleep_cs.c
 
+LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/cfs_ipc_client.c
+
 include lib/net/Makefrag
 
 LIB_OBJFILES := $(patsubst lib/%.c, $(OBJDIR)/user/%.o, $(LIB_SRCFILES))
