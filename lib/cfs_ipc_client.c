@@ -172,8 +172,11 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data)
 			assert(from == fsid);
 			if (from == 0) panic("cfs_write::ipc_recv\n");
 		} while (from != fsid);
+		assert(r == MIN(size - i, PGSIZE));
+		if ((r >= 0) && (r < MIN(size - i, PGSIZE)))
+			return i+r;
 	}
-	return r;
+	return size;
 }
 
 int
