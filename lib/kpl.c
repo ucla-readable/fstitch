@@ -74,8 +74,12 @@ int kpl_open(const char* path, int mode)
 // This function is called by fd_close.
 static int kpl_close(struct Fd* fd)
 {
+	int fid = fd->fd_kpl.fid;
+	/* we must unmap the Fd page before calling cfs_close so that the server will
+	 * be able to detect if we were the last environment with this file open */
+	sys_page_unmap(0, fd);
 	sys_page_unmap(0, fd2data(fd));
-	return cfs_close(fd->fd_kpl.fid);
+	return cfs_close(fid);
 }
 
 // Read 'n' bytes from 'fd' at the current seek position into 'buf'.

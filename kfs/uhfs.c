@@ -19,7 +19,7 @@
 
 struct open_file {
 	int fid;
-	const struct Fd * page;
+	struct Fd * page;
 	fdesc_t * fdesc;
 };
 typedef struct open_file open_file_t;
@@ -48,7 +48,9 @@ static int open_file_free(LFS_t * lfs, open_file_t * f)
 /* returns 0 if it is closed in all clients, 1 if it is still open somewhere */
 static int open_file_close(LFS_t * lfs, open_file_t * f)
 {
-	if (f->page && ((struct Page *) UPAGES)[PTX(f->page)].pp_ref == 1)
+	if (!f->page)
+		return -E_INVAL;
+	if (pageref(f->page) == 1)
 		return open_file_free(lfs, f);
 	return 1;
 }
