@@ -168,6 +168,12 @@ void umain(int argc, char * argv[])
 {
 	int r;
 	
+	if(!argc)
+	{
+		binaryname = "kfsd";
+		sys_env_set_name(0, "kfsd");
+	}
+	
 	if(sys_grant_io(0))
 	{
 		printf("Failed to get I/O priveleges.\n");
