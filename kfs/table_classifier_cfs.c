@@ -167,6 +167,8 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 {
 	Dprintf("%s(0x%08x, \"%s\", 0x%08x)\n", __FUNCTION__, mount_table, name, transformed_name);
 	const size_t mount_table_size = vector_size(mount_table);
+	size_t longest_match = 0;
+	CFS_t * best_match = NULL;
 	int i;
 
 	for (i = 0; i < mount_table_size; i++)
@@ -174,19 +176,18 @@ static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char *
 		const mount_entry_t *me = (mount_entry_t *) vector_elt(mount_table, i);
 		const size_t mount_len = strlen(me->path);
 
-		if (!strncmp(me->path, name, mount_len))
+		if(mount_len <= longest_match)
+			continue;
+
+		if(!strncmp(me->path, name, mount_len))
 		{
-			*transformed_name = (char *)name + mount_len;
-			return me->cfs;
-		}
-		else if ((me->path[0] == '/') && !strncmp(me->path+1, name, mount_len-1))
-		{
-			*transformed_name = (char *)name + mount_len - 1;
-			return me->cfs;
+			longest_match = mount_len;
+			best_match = me->cfs;
 		}
 	}
 
-	return NULL;
+	*transformed_name = (char *) &name[longest_match];
+	return best_match;
 }
 
 
@@ -510,6 +511,10 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 
 	/* make sure this is really a table classifier */
 	if (state->magic != TABLE_CLASSIFIER_MAGIC)
+		return -E_INVAL;
+	
+	/* force paths to start with / */
+	if (path[0] != '/')
 		return -E_INVAL;
 
 	const int already_mounted = mount_lookup(state->mount_table, path);
