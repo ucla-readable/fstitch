@@ -401,6 +401,7 @@ void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
 
 		if (!it->elt)
 			return NULL; // no elts in the hash map
+		return it->elt->elt.val;
 	}
 
 	// If there are more elts in this chain, return the next
