@@ -34,14 +34,18 @@ struct fd_entry {
 };
 typedef struct fd_entry fd_entry_t;
 
+/* "TBLCLASS" */
+#define TABLE_CLASSIFIER_MAGIC 0x7B1C1A55
+
 struct table_classifier_state {
+	uint32_t magic;
 	vector_t * mount_table;
 	fd_entry_t fd_table[UHFS_MAX_OPEN];
 };
 typedef struct table_classifier_state table_classifier_state_t;
 
 
-mount_entry_t * mount_entry()
+static mount_entry_t * mount_entry(void)
 {
 	mount_entry_t * me = malloc(sizeof(*me));
 	if (!me)
@@ -52,7 +56,7 @@ mount_entry_t * mount_entry()
 	return me;
 }
 
-void fd_entry_init(fd_entry_t * fe)
+static void fd_entry_init(fd_entry_t * fe)
 {
 	fe->fd = -1;
 	fe->cfs = NULL;
@@ -402,6 +406,7 @@ CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_e
 	if (!state)
 		goto error_cfs;
 	cfs->instance = state;
+	state->magic = TABLE_CLASSIFIER_MAGIC;
 	
 	ASSIGN(cfs, table_classifier, open);
 	ASSIGN(cfs, table_classifier, close);
@@ -450,6 +455,10 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 	int r;
 
+	/* make sure this is really a table classifier */
+	if (state->magic != TABLE_CLASSIFIER_MAGIC)
+		return -E_INVAL;
+
 	const int already_mounted = mount_lookup(state->mount_table, path);
 	if (0 <= already_mounted)
 		return -E_INVAL;
@@ -475,6 +484,10 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, path);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 	CFS_t * path_cfs = NULL;
+
+	/* make sure this is really a table classifier */
+	if (state->magic != TABLE_CLASSIFIER_MAGIC)
+		return NULL;
 
 	int idx = mount_lookup(state->mount_table, path);
 	if (idx < 0)
