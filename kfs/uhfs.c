@@ -5,20 +5,65 @@
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
 
-#define MAX_OPEN 256
-
 struct uhfs_state {
+	LFS_t * lfs;
 	struct {
 		int fid;
 		void * page;
 		fdesc_t * fdesc;
-	} open_file[MAX_OPEN];
+	} open_file[UHFS_MAX_OPEN];
 };
+
+/* Is this virtual address mapped? */
+int va_is_mapped(void * va)
+{
+	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
+}
 
 static int uhfs_open(CFS_t * cfs, const char * name, int mode, void * page)
 {
-	printf("%s()\n", __FUNCTION__);
-	return -E_UNSPECIFIED;
+	struct uhfs_state * state = (struct uhfs_state *) cfs->instance;
+	uint8_t * cache;
+	int r, index;
+	
+	/* find an available index */
+	for(index = 0; index != UHFS_MAX_OPEN; index++)
+		if(!state->open_file[index].page)
+			break;
+	if(index == UHFS_MAX_OPEN)
+		return -E_MAX_OPEN;
+	
+	/* find a free page */
+	for(cache = UHFS_FD_MAP; cache != UHFS_FD_END; cache += PGSIZE)
+		if(!va_is_mapped(cache))
+			break;
+	if(cache == UHFS_FD_END)
+		return -E_MAX_OPEN;
+	
+	/* remap the client's page */
+	r = sys_page_map(0, page, 0, cache, PTE_U | PTE_P);
+	if(r < 0)
+		return r;
+	sys_page_unmap(0, page);
+	
+	/* now look up the name */
+	state->open_file[index].fdesc = CALL(state->lfs, lookup_name, name);
+	if(!state->open_file[index].fdesc)
+	{
+		sys_page_unmap(0, cache);
+		return -E_NOT_FOUND;
+	}
+	
+	/* good to go, save the client page... */
+	state->open_file[index].page = cache;
+	
+	/* ...and make up a new ID */
+	r = state->open_file[index].fid + 1;
+	r &= PGSIZE - 1;
+	r |= 0x7FFFFFFF & (int) cache;
+	state->open_file[index].fid = r;
+	
+	return r;
 }
 
 static int uhfs_close(CFS_t * cfs, int fid)
@@ -119,7 +164,7 @@ static int uhfs_destroy(CFS_t * cfs)
 	return 0;
 }
 
-CFS_t * uhfs(void)
+CFS_t * uhfs(LFS_t * lfs)
 {
 	struct uhfs_state * state;
 	CFS_t * cfs;
@@ -150,6 +195,9 @@ CFS_t * uhfs(void)
 	ASSIGN(cfs, uhfs, set_metadata);
 	ASSIGN(cfs, uhfs, sync);
 	ASSIGN_DESTROY(cfs, uhfs, destroy);
+	
+	state->lfs = lfs;
+	memset(state->open_file, 0, sizeof(state->open_file));
 	
 	return cfs;
 	

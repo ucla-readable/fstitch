@@ -1,6 +1,7 @@
 #include <kfs/cfs.h>
 #include <inc/serial_cfs.h>
 #include <kfs/kfsd.h>
+#include <kfs/uhfs.h>
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -18,9 +19,9 @@
 #define Dprintf(x...)
 #endif
 
-// Va at which to receive page mappings containing client reqs.
-// This is the same va as serv.c's, why not.
-#define REQVA (0x10000000 - PGSIZE)
+// VA at which to receive page mappings containing client reqs.
+// Just before the range used by the UHFS module for mapping client pages.
+#define REQVA (UHFS_FD_MAP - PGSIZE)
 #define PAGESNDVA (REQVA - PGSIZE)
 
 // Previous message store for two-part message methods.

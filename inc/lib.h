@@ -64,8 +64,8 @@ int	sys_reboot(void);
 int	sys_set_symtbls(envid_t envid, void *symtbl, size_t symtbl_size, void *symstrtbl, size_t symstrtbl_size);
 int	sys_reg_serial(int port, void *buffer_pg);
 int	sys_unreg_serial(int port);
-int sys_grant_io(envid_t envid);
-int sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon);
+int	sys_grant_io(envid_t envid);
+int	sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon);
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t sys_exofork(void) __attribute__((always_inline));
@@ -113,20 +113,20 @@ int	seek(int fd, off_t offset);
 void	close_all(void);
 ssize_t	readn(int fd, void* buf, size_t nbytes);
 int	dup(int oldfd, int newfd);
-int   dup2env_send(int fdnum, envid_t envid);
-int   dup2env_recv();
+int	dup2env_send(int fdnum, envid_t envid);
+int	dup2env_recv();
+int	ftruncate(int fd, off_t size);
 int	fstat(int fd, struct Stat*);
 int	stat(const char* path, struct Stat*);
-int   wait_fd(int fdnum, size_t nrefs);
+int	wait_fd(int fdnum, size_t nrefs);
 
 // file.c
 int	open(const char* path, int mode);
 int	read_map(int fd, off_t offset, void** blk);
 int	remove(const char* path);
-int	ftruncate(int fd, off_t size);
 int	sync(void);
 uint32_t disk_avail_space(void);
-int   fs_shutdown();
+int	fs_shutdown(void);
 
 // fprintf.c
 int	fprintf(int fd, const char* format, ...);

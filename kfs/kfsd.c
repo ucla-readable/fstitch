@@ -21,7 +21,8 @@ int kfsd_init(int argc, char * argv[])
 	if (!cfs_ipc_serve())
 		kfsd_shutdown();
 
-	if (! (frontend_cfs = uhfs()) )
+#warning FIXME this NULL will cause a page fault eventually
+	if (! (frontend_cfs = uhfs(NULL)) )
 		kfsd_shutdown();
 
 	if (register_frontend_cfs(frontend_cfs) < 0)

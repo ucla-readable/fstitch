@@ -123,6 +123,7 @@ static struct Dev* devtab[] =
 	&devfile,
 	&devpipe,
 	&devcons,
+	&devkpl,
 	0
 };
 

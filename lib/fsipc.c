@@ -154,7 +154,8 @@ fsipc_avail_space(void)
 int
 fsipc_shutdown(void)
 {
+	/* we must use ipc_send() directly instead of fsipc() because
+	 * the file server does not respond to shutdown requests */
 	ipc_send(find_fs(), FSREQ_SHUTDOWN, fsipcbuf, PTE_P | PTE_W | PTE_U);
 	return 0;
-	//return fsipc(FSREQ_SHUTDOWN, fsipcbuf, 0, 0);
 }

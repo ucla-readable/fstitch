@@ -1,7 +1,6 @@
 #include <inc/lib.h>
 #include <inc/serial_cfs.h>
-
-#include "cfs_ipc_client.h"
+#include <inc/cfs_ipc_client.h>
 
 const char kfsd_name_sh[] = "/kfsd";
 const char kfsd_name_kern[] = "kfsd";
@@ -39,7 +38,7 @@ find_fs()
 static char ipc_page[PGSIZE * 2];
 
 int
-cfs_open(char *fname, int mode, void *refpg)
+cfs_open(const char *fname, int mode, void *refpg)
 {
 	int r;
 	envid_t fsid;
@@ -200,7 +199,7 @@ cfs_truncate(int fid, uint32_t size)
 }
 
 int
-cfs_unlink(char *name)
+cfs_unlink(const char *name)
 {
 	int r;
 	envid_t fsid;
@@ -225,7 +224,7 @@ cfs_unlink(char *name)
 }
 
 int
-cfs_link(char *oldname, char *newname)
+cfs_link(const char *oldname, const char *newname)
 {
 	int r;
 	envid_t fsid;
@@ -251,7 +250,7 @@ cfs_link(char *oldname, char *newname)
 }
 
 int
-cfs_rename(char *oldname, char *newname)
+cfs_rename(const char *oldname, const char *newname)
 {
 	int r;
 	envid_t fsid;
@@ -277,7 +276,7 @@ cfs_rename(char *oldname, char *newname)
 }
 
 int
-cfs_mkdir(char *name)
+cfs_mkdir(const char *name)
 {
 	int r;
 	envid_t fsid;
@@ -302,7 +301,7 @@ cfs_mkdir(char *name)
 }
 
 int
-cfs_rmdir(char *name)
+cfs_rmdir(const char *name)
 {
 	int r;
 	envid_t fsid;
@@ -383,7 +382,7 @@ cfs_get_feature(char *name, int num, char *dump)
 }
 
 int
-cfs_get_metadata(char *name, int id, struct Scfs_metadata *md)
+cfs_get_metadata(const char *name, int id, struct Scfs_metadata *md)
 {
 	int r;
 	envid_t fsid;
@@ -416,7 +415,7 @@ cfs_get_metadata(char *name, int id, struct Scfs_metadata *md)
 }
 
 int
-cfs_set_metadata(char *name, struct Scfs_metadata *md)
+cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 {
 	int r;
 	envid_t fsid;
@@ -451,7 +450,7 @@ cfs_set_metadata(char *name, struct Scfs_metadata *md)
 }
 
 int
-cfs_sync(char *name)
+cfs_sync(const char *name)
 {
 	int r;
 	envid_t fsid;

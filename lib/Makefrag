@@ -36,6 +36,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/sleep_cs.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/kpl.c \
 			lib/cfs_ipc_client.c
 
 include lib/net/Makefrag
