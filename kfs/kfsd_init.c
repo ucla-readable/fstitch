@@ -31,6 +31,11 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
+#define USE_WB_CACHE
+#ifndef USE_WB_CACHE
+#define wb_cache_bd wt_cache_bd
+#endif
+
 // Init kfsd modules.
 int kfsd_init(void)
 {
@@ -114,8 +119,10 @@ int kfsd_init(void)
 
 		if (! (j_bd = construct_cacheing(j_bd, 32)) )
 			kfsd_shutdown();
+#ifndef USE_WB_CACHE
 		if (! (j_bd = chdesc_stripper_bd(j_bd)) )
 			kfsd_shutdown();
+#endif
 
 		if (! (data_bd = ide_pio_bd(0, 0)) )
 		{
@@ -126,8 +133,10 @@ int kfsd_init(void)
 			OBJFLAGS(data_bd) |= OBJ_PERSISTENT;
 		if (! (data_bd = construct_cacheing(data_bd, 32)) )
 			kfsd_shutdown();
+#ifndef USE_WB_CACHE
 		if (! (data_bd = chdesc_stripper_bd(data_bd)) )
 			kfsd_shutdown();
+#endif
 
 		if (! (u = construct_journaled_uhfs(j_bd, data_bd, &journal)) )
 			kfsd_shutdown();
@@ -295,8 +304,10 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 		}
 
+#ifndef USE_WB_CACHE
 		if (! (cache = chdesc_stripper_bd(cache)) )
 			kfsd_shutdown();
+#endif
 
 		if (enable_internal_journaling)
 		{
