@@ -32,7 +32,7 @@ find_fs(int *pdiskno, uint32_t *ppart_length, uint32_t *fs_offset)
 	}
 	if(*pdiskno == 2)
 		panic("no valid filesystems found");
-	printf("using filesystem on disk %d\n", *pdiskno);
+	printf("Using filesystem on disk %d\n", *pdiskno);
 
 	//check_write_block();
 	//read_bitmap();
