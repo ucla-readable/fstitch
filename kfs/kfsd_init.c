@@ -15,6 +15,7 @@
 #include <kfs/journal_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
+#include <kfs/mirror_bd.h>
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/fidprotector_cfs.h>
 #include <kfs/fidcloser_cfs.h>
@@ -31,6 +32,7 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
+// #define USE_MIRROR
 #define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
@@ -235,6 +237,10 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
+
+#ifdef USE_MIRROR
+	bd = mirror_bd(bd, NULL, 4);
+#endif
 
 	/* discover partitions */
 	ptbl = pc_ptable_init(bd);

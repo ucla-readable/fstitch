@@ -32,6 +32,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/lsfd \
 			$(OBJDIR)/user/mario \
 			$(OBJDIR)/user/md5sum \
+			$(OBJDIR)/user/mirror \
 			$(OBJDIR)/user/mkdir \
 			$(OBJDIR)/user/mkjosfs \
 			$(OBJDIR)/user/more \
