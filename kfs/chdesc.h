@@ -29,11 +29,19 @@ struct chdesc {
 	} data;
 	chmetadesc_t * dependencies;
 	chmetadesc_t * dependents;
+	/* marker for graph traversal */
+	uint8_t marked;
 };
 
 struct chmetadesc {
 	chdesc_t * desc;
 	chmetadesc_t * next;
 };
+
+/* add a dependency to a change descriptor */
+int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
+
+/* satisfy a change descriptor, i.e. remove it from all others that depend on it */
+int chdesc_satisfy(chdesc_t * chdesc);
 
 #endif /* __KUDOS_KFS_CHDESC_H */
