@@ -51,12 +51,12 @@ struct chrefdesc {
 	chrefdesc_t * next;
 };
 
-/* create a new chdescs */
+/* create new chdescs */
 chdesc_t * chdesc_create_noop(bdesc_t * block);
-int chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor);
-int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data);
-int chdesc_create_init(bdesc_t * block);
-int chdesc_create_full(bdesc_t * block, void * data);
+chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor);
+int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t ** tail);
 
 /* add a dependency to a change descriptor without checking for cycles */
 int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);

@@ -15,15 +15,78 @@ chdesc_t * chdesc_create_noop(bdesc_t * block)
 	chdesc->dependencies = NULL;
 	chdesc->dependents = NULL;
 	chdesc->weak_refs = NULL;
+	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
 	return chdesc;
 }
 
-/* FIXME */
-int chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor);
-int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data);
-int chdesc_create_init(bdesc_t * block);
-int chdesc_create_full(bdesc_t * block, void * data);
+chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor)
+{
+	chdesc_t * chdesc = malloc(sizeof(*chdesc));
+	if(!chdesc)
+		return NULL;
+	chdesc->block = block;
+	chdesc->type = BIT;
+	chdesc->bit.offset = offset;
+	chdesc->bit.xor = xor;
+	chdesc->dependencies = NULL;
+	chdesc->dependents = NULL;
+	chdesc->weak_refs = NULL;
+	
+	/* start rolled back so we can apply it */
+	chdesc->flags = CHDESC_ROLLBACK;
+	
+	/* make sure it applies cleanly */
+	if(chdesc_apply(chdesc))
+	{
+		free(chdesc);
+		return NULL;
+	}
+	
+	return chdesc;
+}
+
+#if 0
+int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
+	uint16_t init_offset = offset % atomic_size;
+	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
+	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
+	int i;
+	
+	for(i = 0; i != count; i++)
+	{
+		chdescs[i] = malloc(sizeof(*chdescs[i]));
+		if(!chdescs[i])
+			break;
+	}
+	
+	/* failed */
+	if(i != count)
+	{
+		while(i--)
+			chdesc_destroy(&chdescs[i]);
+		free(chdescs);
+		return -E_NO_MEM;
+	}
+	
+	/* ... */
+	
+	*head = chdescs[0];
+	*tail = chdescs[count - 1];
+	
+	return 0;
+}
+
+int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+{
+}
+
+int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+}
+#endif
 
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
@@ -128,9 +191,55 @@ int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
-/* FIXME */
-int chdesc_apply(chdesc_t * chdesc);
-int chdesc_rollback(chdesc_t * chdesc);
+int chdesc_apply(chdesc_t * chdesc)
+{
+	if(!(chdesc->flags & CHDESC_ROLLBACK))
+		return -E_INVAL;
+	switch(chdesc->type)
+	{
+		case BIT:
+			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			break;
+		case BYTE:
+			if(!chdesc->byte.newdata)
+				return -E_INVAL;
+			memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.newdata, chdesc->byte.length);
+			break;
+		case NOOP:
+			printf("%s(): applying NOOP chdesc\n", __FUNCTION__);
+			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			return -E_INVAL;
+	}
+	chdesc->flags &= ~CHDESC_ROLLBACK;
+	return 0;
+}
+
+int chdesc_rollback(chdesc_t * chdesc)
+{
+	if(chdesc->flags & CHDESC_ROLLBACK)
+		return -E_INVAL;
+	switch(chdesc->type)
+	{
+		case BIT:
+			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			break;
+		case BYTE:
+			if(!chdesc->byte.olddata)
+				return -E_INVAL;
+			memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.olddata, chdesc->byte.length);
+			break;
+		case NOOP:
+			printf("%s(): rolling back NOOP chdesc\n", __FUNCTION__);
+			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			return -E_INVAL;
+	}
+	chdesc->flags |= CHDESC_ROLLBACK;
+	return 0;
+}
 
 /* satisfy a change descriptor, i.e. remove it from all others that depend on it */
 /* WARNING: this function should not be called (except by the dependency
@@ -219,6 +328,8 @@ int chdesc_destroy(chdesc_t ** chdesc)
 			break;
 		case NOOP:
 			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 	}
 	
 	memset(*chdesc, 0, sizeof(**chdesc));
