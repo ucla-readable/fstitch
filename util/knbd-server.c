@@ -81,12 +81,28 @@ static int serve_client(int bd)
 	sin.sin_addr.s_addr = INADDR_ANY;
 	
 	incoming = socket(PF_INET, SOCK_STREAM, 0);
-	setsockopt(incoming, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-	bind(incoming, (struct sockaddr *) &sin, len);
-	listen(incoming, 3);
+	if(incoming == -1)
+		return -1;
+	if(setsockopt(incoming, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)))
+	{
+		close(incoming);
+		return -1;
+	}
+	if(bind(incoming, (struct sockaddr *) &sin, len))
+	{
+		close(incoming);
+		return -1;
+	}
+	if(listen(incoming, 3))
+	{
+		close(incoming);
+		return -1;
+	}
 	
 	client = accept(incoming, (struct sockaddr *) &sin, &len);
 	close(incoming);
+	if(client == -1)
+		return -1;
 	serve_loop(bd, client);
 	close(client);
 	
