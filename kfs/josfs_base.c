@@ -1627,21 +1627,18 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 	return 0;
 }
 
+static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_filetype, &KFS_feature_file_lfs, &KFS_feature_file_lfs_name};
+
 static size_t josfs_get_num_features(LFS_t * object, const char * name)
 {
-	return 3;
+	return sizeof(josfs_features) / sizeof(josfs_features[0]);
 }
 
 static const feature_t * josfs_get_feature(LFS_t * object, const char * name, size_t num)
 {
-	Dprintf("JOSFSDEBUG: josfs_get_feature %s\n", name);
-	if (num == 0)
-		return &KFS_feature_size;
-	else if (num == 1)
-		return &KFS_feature_filetype;
-	else if (num == 2)
-		return &KFS_feature_freespace;
-	return NULL;
+	if(num < 0 || num >= sizeof(josfs_features) / sizeof(josfs_features[0]))
+		return NULL;
+	return josfs_features[num];
 }
 
 static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t * size, void ** data)
@@ -1675,6 +1672,17 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		free_space = count_free_space(object) * JOSFS_BLKSIZE / 1024;
 		memcpy(*data, &free_space, sizeof(uint32_t));
 	}
+	else if (id == KFS_feature_file_lfs.id) {
+		*data = malloc(sizeof(object));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(object);
+		memcpy(*data, &object, sizeof(object));
+		printf("%s wrote: 0x%08x\n", __FUNCTION__, *data);
+	}
+	else
+		return -E_INVAL;
 
 	return 0;
 }
@@ -1686,7 +1694,22 @@ static int josfs_get_metadata_name(LFS_t * object, const char * name, uint32_t i
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
 	if (!f)
 		return -E_NOT_FOUND;
-	r = josfs_get_metadata(object, f, id, size, data);
+
+	if (id == KFS_feature_file_lfs_name.id) {
+		// Implement KFS_feature_file_lfs_name here because we need name
+		*data = strdup(name);
+		if (!*data) {
+			r = -E_NO_MEM;
+			goto exit;
+		}
+
+		*size = strlen(*data);
+		r = 0;
+	}
+	else
+		r = josfs_get_metadata(object, f, id, size, data);
+
+  exit:
 	josfs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
