@@ -25,6 +25,8 @@
 
 #define JOSFS_MAXFILESIZE	(JOSFS_NINDIRECT * JOSFS_BLKSIZE)
 
+typedef struct JOSFS_File JOSFS_File_t;
+
 struct JOSFS_File {
 	char f_name[JOSFS_MAXNAMELEN];	// filename
 	off_t f_size;			// file size in bytes

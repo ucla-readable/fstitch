@@ -25,8 +25,6 @@
 #define super ((struct JOSFS_Super *) info->super_block->ddesc->data)
 #define isvalid(x) (x >= reserved && x < s_nblocks)
 
-typedef struct JOSFS_File JOSFS_File_t;
-
 struct lfs_info
 {
 	BD_t * ubd;
@@ -48,7 +46,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 static void get_parent_path(const char * path, char * parent);
 
 static int read_bitmap(LFS_t * object, uint32_t blockno);
-static int write_bitmap(LFS_t * object, uint32_t blockno, bool value);
+static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
 static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS_File_t** file, bdesc_t** dirb, int *index);
 
 // Equivalent to JOS's read_super
@@ -217,14 +215,11 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 			target += i % (JOSFS_BLKSIZE / sizeof(JOSFS_File_t));
 			memcpy(temp_file, target, sizeof(JOSFS_File_t));
 			bdesc_drop(&dirblock);
-			r = fsck_file(object, *temp_file, reserved, fbmap, ubmap, blist);
-			if (r < 0)
+			if ((r = fsck_file(object, *temp_file, reserved, fbmap, ubmap, blist)) < 0)
 				goto fsck_dir_cleanup;
 
 			if (entry.d_type == TYPE_DIR) {
-				printf("adding %x\n", temp_file);
-				r = hash_set_insert(hsdirs, temp_file);
-				if (r < 0) {
+				if ((r = hash_set_insert(hsdirs, temp_file)) < 0) {
 					printf("error with hash_set_insert()\n");
 					goto fsck_dir_cleanup;
 				}
@@ -296,7 +291,6 @@ static int fsck(LFS_t * object)
 				hash_set_it_destroy(hsitr);
 
 				if (dirfile) {
-					printf("dirfile is %x\n", dirfile);
 					hash_set_erase(hsdirs, dirfile);
 					temp_fdesc.file = dirfile;
 				}
@@ -361,7 +355,8 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 	return 0;
 }
 
-static int write_bitmap(LFS_t * object, uint32_t blockno, bool value)
+// FIXME chdesc
+static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: write_bitmap\n");
 	struct lfs_info * info = (struct lfs_info *) object->instance;
@@ -566,7 +561,7 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 
 	for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
 		if (block_is_free(object, blockno) == 1) {
-			write_bitmap(object, blockno, 0);
+			write_bitmap(object, blockno, 0, head, tail);
 			return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
 		}
 	}
@@ -754,6 +749,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		return -E_INVAL;
 	}
 	else if (nblocks > JOSFS_NDIRECT) {
+		// FIXME chdesc
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
 			bdesc_touch(indirect);
@@ -764,8 +760,10 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
+		// FIXME chdesc
 		indirect = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, NULL, NULL);
 		if (indirect) {
+			// FIXME chdesc
 			bdesc_touch(f->dirb);
 			dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 			dirfile->f_indirect = indirect->number;
@@ -774,6 +772,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 				return r;
 			}
 
+			// FIXME chdesc
 			bdesc_retain(&indirect);
 			bdesc_touch(indirect);
 			f->file->f_indirect = indirect->number;
@@ -786,6 +785,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 		}
 	}
 	else {
+		// FIXME chdesc
 		bdesc_touch(f->dirb);
 		dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 		dirfile->f_direct[nblocks] = block->number;
@@ -851,6 +851,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 							strcpy(f[j].f_name, filename);
 							f[j].f_type = type;
 
+							// FIXME chdesc
 							if ((r = CALL(info->ubd, write_block, blk)) >= 0) {
 								new_fdesc->file = malloc(sizeof(JOSFS_File_t));
 								memcpy(new_fdesc->file, &f[j], sizeof(JOSFS_File_t));
@@ -872,9 +873,11 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 					bdesc_drop(&blk);
 				}
 				// No empty slots, gotta allocate a new block
+				// FIXME chdesc
 				if ((blk = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, NULL, NULL)) != NULL) {
 					bdesc_retain(&blk);
 					dir->f_size += JOSFS_BLKSIZE;
+					// FIXME chdesc
 					r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &(dir->f_size), NULL, NULL);
 
 					bdesc_touch(blk);
@@ -883,7 +886,9 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 					strcpy(f[0].f_name, filename);
 					f[0].f_type = type;
 
+					// FIXME chdesc
 					if ((r = josfs_append_file_block(object, pdir_fdesc, blk, NULL, NULL)) >= 0) {
+						// FIXME chdesc
 						if ((r = CALL(info->ubd, write_block, blk)) >= 0) {
 							new_fdesc->file = malloc(sizeof(JOSFS_File_t));
 							memcpy(new_fdesc->file, &f[0], sizeof(JOSFS_File_t));
@@ -894,6 +899,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 							return (fdesc_t *) new_fdesc;
 						}
 					}
+					// FIXME chdesc
 					josfs_free_block(object, blk, NULL, NULL);
 				}
 				josfs_free_fdesc(object, pdir_fdesc);
@@ -919,6 +925,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	oldfdesc = josfs_lookup_name(object, oldname);
 	if (oldfdesc) {
 		old = (struct josfs_fdesc *) oldfdesc;
+		// FIXME chdesc
 		newfdesc = josfs_allocate_name(object, newname, old->file->f_type, NULL, NULL, NULL);
 		if (newfdesc) {
 			new = (struct josfs_fdesc *) newfdesc;
@@ -933,12 +940,14 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 			memcpy(newfile, oldfile, sizeof(JOSFS_File_t));
 			strcpy(newfile->f_name, new->file->f_name);
 			josfs_free_fdesc(object, oldfdesc);
+			// FIXME chdesc
 			if ((r = CALL(info->ubd, write_block, new->dirb)) < 0) {
 				josfs_free_fdesc(object, newfdesc);
 				return r;
 			}
 			josfs_free_fdesc(object, newfdesc);
 
+			// FIXME chdesc
 			if (josfs_remove_name(object, oldname, NULL, NULL) == 0)
 				return 0;
 			else
@@ -969,6 +978,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 			bdesc_touch(indirect);
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 			*((uint32_t *) (indirect->ddesc->data) + nblocks - 1) = 0;
+			// FIXME chdesc
 			if ((r = CALL(info->ubd, write_block, indirect)) < 0) {
 				bdesc_drop(&indirect);
 				return NULL;
@@ -980,10 +990,12 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
 			blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
+			// FIXME chdesc
 			if (josfs_free_block(object, indirect, NULL, NULL) == 0) {
 				bdesc_touch(f->dirb);
 				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_indirect = 0;
+				// FIXME chdesc
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0) {
 					bdesc_drop(&indirect);
 					return NULL;
@@ -1000,6 +1012,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 		bdesc_touch(f->dirb);
 		dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 		dirfile->f_direct[nblocks - 1] = 0;
+		// FIXME chdesc
 		if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
 			return NULL;
 
@@ -1016,7 +1029,7 @@ static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, c
 
 	if (!block || block->number == 0)
 		return -E_INVAL;
-	write_bitmap(object, block->number, 1);
+	write_bitmap(object, block->number, 1, head, tail);
 	bdesc_drop(&block);
 	return 0;
 }
@@ -1039,6 +1052,7 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	bdesc_touch(f->dirb);
 	dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 	dirfile->f_name[0] = '\0';
+	// FIXME chdesc
 	if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
 		return r;
 
@@ -1057,7 +1071,17 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 	if (offset + size > JOSFS_BLKSIZE)
 		return -E_INVAL;
 
-	bdesc_touch(block);
+	if (head && tail) {
+		r = chdesc_create_full(block, data, head, tail);
+		if (r < 0) {
+			bdesc_drop(&block);
+			return r;
+		}
+	}
+	else {
+		bdesc_touch(block);
+	}
+
 	memcpy(&block->ddesc->data[offset], data, size);
 	if ((r = CALL(info->ubd, write_block, block)) < 0) {
 		bdesc_drop(&block);
@@ -1138,6 +1162,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 				bdesc_touch(f->dirb);
 				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_size = *((off_t *) data);
+				// FIXME chdesc
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
 					return r;
 				f->file->f_size = *((off_t *) data);
@@ -1151,6 +1176,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 				bdesc_touch(f->dirb);
 				dirfile = ((JOSFS_File_t *) f->dirb->ddesc->data) + f->index;
 				dirfile->f_type = *((uint32_t *) data);
+				// FIXME chdesc
 				if ((r = CALL(info->ubd, write_block, f->dirb)) < 0)
 					return r;
 				f->file->f_type = *((uint32_t *) data);
