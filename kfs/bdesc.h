@@ -4,7 +4,7 @@
 /* RULES FOR USING BDESCS:
  *
  * 1. When a bdesc is returned or passed to you, you do not need to
- *    retain it to use it.  However, you must do one of three things:
+ *    retain it to use it. However, you must do one of three things:
  *
  *     a) Retain it (bdesc_retain) and store it to release it (bdesc_release) later.
  *     b) Return or pass it to another module via CALL.
@@ -14,7 +14,7 @@
  *    b. However, b and c are mutually exclusive.
  *
  * 2. If you want to write to the data in a bdesc, you must call
- *    bdesc_touch() first.  Note that this may create a copy of the data,
+ *    bdesc_touch() first. Note that this may create a copy of the data,
  *    so you must do this before saving any pointers to write to.
  *
  * 3. Since the data descriptor in a bdesc may be copied by someone
@@ -23,7 +23,7 @@
  *    descriptor.
  *
  * 4. To alter the structure of a bdesc (i.e. change any fields other
- *    than data), you must call bdesc_alter().  You should not call
+ *    than data), you must call bdesc_alter(). You should not call
  *    bdesc_retain() before using bdesc_alter(). Exception to this rule:
  *    if you will pass the bdesc to a function and then regain control
  *    when it returns, you may instead increase the "translated" field in
@@ -35,14 +35,18 @@
  *    not use it, just as though you had called bdesc_drop().
  * 
  * These rules guarantee the following conditions:
- * 1. The memory associated with bdescs and their data will be freed when it is no longer used.
- * 2. The data in a bdesc can only be changed by somebody with the same bdesc pointer, not a different one
- *    sharing the data.
- * 3. Except for the data, nothing else in a bdesc will change while you have a reference to it.
+ * 1. The memory associated with bdescs and their data will be freed when
+ *    it is no longer used.
+ * 2. The data in a bdesc can only be changed by somebody with the same
+ *    bdesc pointer, not a different one sharing the data.
+ * 3. Except for the data, nothing else in a bdesc will change while you
+ *    have a reference to it.
  * */
 
-/* NOTE on rules 1b+c above - we need to work out what the behavior is if you pass a bdesc to a
- * function which then fails for some reason. Is it still responsible for dropping the bdesc? */
+/* NOTE on rules 1b+c above - we need to work out what the behavior is if you
+ * pass a bdesc to a function which then fails for some reason. Is it still
+ * responsible for dropping the bdesc? (Answer: it should be, but currently we
+ * do not generally honor this.) */
 
 #include <inc/types.h>
 
@@ -87,6 +91,9 @@ void bdesc_drop(bdesc_t ** bdesc);
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc);
+
+/* a function for caches and cache-like modules to use for bdesc overwriting */
+int bdesc_overwrite(bdesc_t * cached, bdesc_t * written);
 
 /* compares two bdescs' blocknos for qsort */
 int bdesc_blockno_compare(const void * b1, const void * b2);
