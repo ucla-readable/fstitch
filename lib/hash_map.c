@@ -8,6 +8,13 @@
 //
 // Implement hash_map.h using a chaining hash table.
 
+// Since we are storing only a pointer in each entry it might make more
+// sense to use open addressing with the same amount of memory used than
+// chaining, since each chain entry needs two ptrs for the chain and each
+// bucket uses one pointer to point to the chain. TAOCP page 545 lightly
+// discusses this.
+
+
 struct chain_elt {
 	hash_map_elt_t elt;
 	struct chain_elt * next;
