@@ -43,31 +43,20 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 
 	assert(!block_chdesc || !block_chdesc->dependents); // no one should depend on block
 
-	// Satisfy inter-BD deps and remove intra-BD deps
+	// Satisfy inter-BD deps
 
 	while (block_chdesc && block_chdesc->dependencies
 		   && (cur_chdesc = block_chdesc->dependencies->desc))
 	{
-		if (cur_chdesc->block->bd == bd)
-		{
-			r = depman_remove_chdesc(cur_chdesc);
-			assert(r >= 0);
-		}
-		else
-		{
-			r = CALL(cur_chdesc->block->bd, sync, cur_chdesc->block);
-			if (r < 0)
-			{
-				fprintf(STDERR_FILENO, "%s: while stripping, a BD write errored: %e\n", __FUNCTION__, r);
-				return r;
-			}
-		}
-	}
+		assert(cur_chdesc->block->bd != bd); // no intra-BD deps should remain
 
-	if (block_chdesc)
-	{
-		r = depman_remove_chdesc(block_chdesc);
-		assert(r >= 0);
+		r = CALL(cur_chdesc->block->bd, sync, cur_chdesc->block);
+		if (r < 0)
+		{
+			fprintf(STDERR_FILENO, "%s: while stripping, a BD write errored: %e\n", __FUNCTION__, r);
+			chdesc_weak_release(&block_chdesc);
+			return r;
+		}
 	}
 
 	// Write the block
@@ -82,6 +71,20 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 	{
 		block->bd = bd;
 		block->translated--;
+	}
+
+	if (r >= 0)
+	{
+		if (block_chdesc)
+		{
+			int s = depman_remove_chdesc(block_chdesc);
+			assert(s >= 0);
+		}
+	}
+	else
+	{
+		if (block_chdesc)
+			chdesc_weak_release(&block_chdesc);
 	}
 
 	return r;
