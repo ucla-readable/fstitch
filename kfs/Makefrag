@@ -12,7 +12,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 			$(OBJDIR)/kfs/kfsd.o \
-			$(OBJDIR)/kfs/part_classifier.o
+			$(OBJDIR)/kfs/dos_classifier.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
 	@echo + ld $@
