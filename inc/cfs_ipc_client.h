@@ -3,7 +3,7 @@
 
 #include <inc/serial_cfs.h>
 
-int cfs_open(char *fname, int mode);
+int cfs_open(char *fname, int mode, void *refpg);
 int cfs_close(int fid);
 int cfs_read(int fid, uint32_t offset, uint32_t size, char *data);
 int cfs_write(int fid, uint32_t offset, uint32_t size, char *data);

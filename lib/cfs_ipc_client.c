@@ -39,7 +39,7 @@ find_fs()
 static char ipc_page[PGSIZE * 2];
 
 int
-cfs_open(char *fname, int mode)
+cfs_open(char *fname, int mode, void *refpg)
 {
 	int r;
 	envid_t fsid;
@@ -58,11 +58,14 @@ cfs_open(char *fname, int mode)
 
 	ipc_send(fsid, 0, pg, PTE_U|PTE_P);
 
+	ipc_send(fsid, 0, refpg, PTE_U|PTE_P);
+
 	//if (get_pte((void*) REQVA) & PTE_P)
 	//	panic("kpl ipcrecv: REQVA already mapped\n");
 
 	do {
 		r = ipc_recv(&from, 0, &perm, 0);
+		assert(from == fsid);
 		if (from == 0) panic("cfs_open::ipc_recv\n");
 	} while (from != fsid);
 	return r;
