@@ -11,6 +11,7 @@
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/table_classifier_cfs.h>
+#include <kfs/fidprotector_cfs.h>
 #include <kfs/fidfairy_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/depman.h>
@@ -30,6 +31,7 @@ int kfsd_init(void)
 	CFS_t * uhfses[2] = {NULL};
 	CFS_t * josfscfs = NULL;
 	CFS_t * table_class = NULL;
+	CFS_t * fidprotector = NULL;
 	CFS_t * fidfairy = NULL;
 	uint32_t i;
 	int r;
@@ -173,6 +175,12 @@ int kfsd_init(void)
 	r = table_classifier_cfs_add(table_class, josfspath, josfscfs);
 	if (r < 0)
 		kfsd_shutdown();
+
+	// fidprotector
+	if (! (fidprotector = fidprotector_cfs(get_frontend_cfs())) )
+		kfsd_shutdown();
+	// Uncomment when cfs_ipc_client supports capabilities:
+	//set_frontend_cfs(fidprotector);
 
 	// fidfairy
 	if (! (fidfairy = fidfairy_cfs(get_frontend_cfs())) )
