@@ -528,9 +528,11 @@ httpd_serve(struct httpd_state *hs)
  
 	if (hs->file.fd >= 0)
 	{
+		uint8_t * buf;
 		int nbytes;
-		hs->file.data = malloc(PGSIZE);
-		if (!hs->file.data)
+
+		buf = malloc(PGSIZE);
+		if (!buf)
 		{
 			fprintf(STDERR_FILENO, "%s:%d malloc failed\n", __FILE__, __LINE__);
 			close_conn_and_exit(hs);
@@ -538,27 +540,24 @@ httpd_serve(struct httpd_state *hs)
 
 		for (i=0; i < hs->file.len; i += PGSIZE)
 		{
-			r = nbytes = read(hs->file.fd, hs->file.data, PGSIZE);
+			r = nbytes = read(hs->file.fd, buf, PGSIZE);
 			if (r < 0)
 			{
 				fprintf(STDERR_FILENO, "%s:%d read: %e\n", __FILE__, __LINE__, r);
-				free(hs->file.data);
-				hs->file.data = NULL;
+				free(buf);
 				close_conn_and_exit(hs);
 			}
 
-			r = write(hs->net[1], hs->file.data, nbytes);
+			r = write(hs->net[1], buf, nbytes);
 			if (r != nbytes)
 			{
 				fprintf(STDERR_FILENO, "%s:%d write: %e\n", __FILE__, __LINE__, r);
-				free(hs->file.data);
-				hs->file.data = NULL;
+				free(buf);
 				close_conn_and_exit(hs);
 			}
 		}
 
-		free(hs->file.data);
-		hs->file.data = NULL;
+		free(buf);
 	}
 	else
 	{
