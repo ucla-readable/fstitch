@@ -9,9 +9,10 @@
 #include <kfs/josfs_base.h>
 #include <kfs/josfs_fdesc.h>
 
-int block_is_free(LFS_t * object, uint32_t blockno);
+#define block_is_free read_bitmap
+
 int read_bitmap(LFS_t * object, uint32_t blockno);
-int write_bitmap(LFS_t * object, uint32_t blockno);
+int write_bitmap(LFS_t * object, uint32_t blockno, bool value);
 
 struct lfs_info
 {
@@ -78,30 +79,18 @@ int check_bitmap(LFS_t * object)
     return 0;
 }
 
-int block_is_free(LFS_t * object, uint32_t blockno)
-{
-    int r;
-    if ((r = read_bitmap(object, blockno)) == -1) {
-        return -1;
-    }
-
-    return !r;
-}
-
-// Return 1 if block is in use
+// Return 1 if block is free
 int read_bitmap(LFS_t * object, uint32_t blockno)
 {
-    // FIXME gotta figure out how to extract the bit
     bdesc_t * bdesc;
     int blocksize;
     int target;
-//    int int32_offset;
-//    int bit_offset;
-//    uint32_t * ptr;
+    int int32_offset;
+    int bit_offset;
+    uint32_t * ptr;
 
     blocksize = CALL(((struct lfs_info *) object->instance)->ubd, get_blocksize);
     target = (8192 + blockno) / (blocksize*8);
-//    int32_offset = (8192 + blockno) % (blocksize*8);
 
     bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
 
@@ -110,18 +99,79 @@ int read_bitmap(LFS_t * object, uint32_t blockno)
         return -1;
     }
 
+    int32_offset = ((8192 + blockno) % (blocksize*8)) / 32;
+    bit_offset = (8192 + blockno) % 32;
+
+    ptr = ((uint32_t *)bdesc->data) + int32_offset;
+    if (*ptr & (1 << bit_offset))
+        return 1;
     return 0;
 }
 
-int write_bitmap(LFS_t * object, uint32_t blockno)
+int write_bitmap(LFS_t * object, uint32_t blockno, bool value)
 {
-    // Fix me
+    bdesc_t * bdesc;
+    int blocksize;
+    int target;
+    int int32_offset;
+    int bit_offset;
+    int r;
+    uint32_t * ptr;
+
+    if (blockno == 0) {
+        printf("josfs_base: attempted to free zero block!\n");
+        return -1;
+    }
+
+    blocksize = CALL(((struct lfs_info *) object->instance)->ubd, get_blocksize);
+    target = (8192 + blockno) / (blocksize*8);
+
+    bdesc = CALL(((struct lfs_info *) object->instance)->ubd, read_block, target);
+
+    if (bdesc->length != blocksize) {
+        printf("josfs_base: trouble reading bitmap!\n");
+        return -1;
+    }
+
+    int32_offset = ((8192 + blockno) % (blocksize*8)) / 32;
+    bit_offset = (8192 + blockno) % 32;
+
+    ptr = ((uint32_t *)bdesc->data) + int32_offset;
+    if (value)
+        *ptr |= (1 << bit_offset);
+    else
+        *ptr &= ~(1 << bit_offset);
+
+
+    if ((r = CALL(((struct lfs_info *) object->instance)->ubd, write_block, bdesc)) < 0)
+        return r;
+
     return 0;
 }
 
 static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose)
 {
-    return 0;
+    int blockno;
+    int bitmap_size;
+    int s_nblocks;
+    int blocksize;
+
+    blocksize = CALL(((struct lfs_info *) object->instance)->ubd, get_blocksize);
+    s_nblocks = ((struct lfs_info *) object->instance)->super->s_nblocks;
+    bitmap_size = s_nblocks / BLKBITSIZE;
+
+    if (s_nblocks % BLKBITSIZE) {
+        bitmap_size++;
+    }
+
+    for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
+        if (block_is_free(object, blockno) == 1) {
+            write_bitmap(object, blockno, 0);
+            return bdesc_alloc(((struct lfs_info *) object->instance)->ubd, blockno, 0, blocksize);
+        }
+    }
+
+    return NULL;
 }
 
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number, uint32_t offset, uint32_t size)
