@@ -4,6 +4,7 @@
 #include <kfs/uhfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/kfsd.h>
+#include <kfs/depman.h>
 #include <inc/lib.h>
 
 struct module_shutdown {
@@ -98,6 +99,11 @@ void umain(int argc, char * argv[])
 	if(sys_grant_io(0))
 	{
 		printf("Failed to get I/O priveleges.\n");
+		return;
+	}
+	if(depman_init())
+	{
+		printf("Failed to initialized DEP MAN!\n");
 		return;
 	}
 	
