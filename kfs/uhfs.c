@@ -71,7 +71,13 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 	return -E_UNSPECIFIED;
 }
 
-static const feature_t * uhfs_get_features(CFS_t * cfs, const char * name)
+static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
+{
+	printf("%s()\n", __FUNCTION__);
+	return 0;
+}
+
+static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
 	printf("%s()\n", __FUNCTION__);
 	return NULL;
@@ -126,7 +132,8 @@ CFS_t * uhfs()
 	ASSIGN(cfs, uhfs, rename);
 	ASSIGN(cfs, uhfs, mkdir);
 	ASSIGN(cfs, uhfs, rmdir);
-	ASSIGN(cfs, uhfs, get_features);
+	ASSIGN(cfs, uhfs, get_num_features);
+	ASSIGN(cfs, uhfs, get_feature);
 	ASSIGN(cfs, uhfs, get_metadata);
 	ASSIGN(cfs, uhfs, set_metadata);
 	ASSIGN(cfs, uhfs, sync);
