@@ -25,13 +25,14 @@ static uint32_t partition_bd_get_blocksize(BD_t * object)
 
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 {
+	struct partition_info * info = (struct partition_info *) object->instance;
 	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
-	if(number >= ((struct partition_info *) object->instance)->length)
+	if(number >= info->length)
 		return NULL;
 	
-	bdesc = CALL(((struct partition_info *) object->instance)->bd, read_block, ((struct partition_info *) object->instance)->start + number);
+	bdesc = CALL(info->bd, read_block, info->start + number);
 	
 	/* FIXME bdesc_alter() can fail */
 	
@@ -47,6 +48,7 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
+	struct partition_info * info = (struct partition_info *) object->instance;
 	int value;
 	
 	/* make sure this is the right block device */
@@ -54,18 +56,18 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 		return -1;
 	
 	/* make sure it's a valid block */
-	if(block->number >= ((struct partition_info *) object->instance)->length)
+	if(block->number >= info->length)
 		return -1;
 	
 	block->translated++;
-	block->bd = ((struct partition_info *) object->instance)->bd;
-	block->number -= ((struct partition_info *) object->instance)->start;
+	block->bd = info->bd;
+	block->number -= info->start;
 	
 	/* write it */
 	value = CALL(block->bd, write_block, block);
 	
 	block->bd = object;
-	block->number += ((struct partition_info *) object->instance)->start;
+	block->number += info->start;
 	block->translated--;
 	
 	return value;
@@ -73,28 +75,29 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int partition_bd_sync(BD_t * object, bdesc_t * block)
 {
+	struct partition_info * info = (struct partition_info *) object->instance;
 	int value;
 	
 	if(!block)
-		return CALL(((struct partition_info *) object->instance)->bd, sync, NULL);
+		return CALL(info->bd, sync, NULL);
 	
 	/* make sure this is the right block device */
 	if(block->bd != object)
 		return -1;
 	
 	/* make sure it's a valid block */
-	if(block->number >= ((struct partition_info *) object->instance)->length)
+	if(block->number >= info->length)
 		return -1;
 	
 	block->translated++;
-	block->bd = ((struct partition_info *) object->instance)->bd;
-	block->number -= ((struct partition_info *) object->instance)->start;
+	block->bd = info->bd;
+	block->number -= info->start;
 	
 	/* sync it */
 	value = CALL(block->bd, sync, block);
 	
 	block->bd = object;
-	block->number += ((struct partition_info *) object->instance)->start;
+	block->number += info->start;
 	block->translated--;
 	
 	return value;
