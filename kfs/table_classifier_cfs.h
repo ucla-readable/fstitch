@@ -3,7 +3,7 @@
 
 #include <kfs/cfs.h>
 
-CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_entries);
+CFS_t * table_classifier_cfs(void);
 int     table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs);
 CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path);
 

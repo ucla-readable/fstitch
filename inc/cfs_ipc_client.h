@@ -2,6 +2,9 @@
 #define _CFS_IPC_CLIENT_H_
 
 #include <inc/serial_cfs.h>
+#include <inc/env.h>
+
+envid_t find_fs(void);
 
 int cfs_open(const char *fname, int mode, void *refpg, const void * cappg);
 int cfs_close(int fid, const void * cappg);

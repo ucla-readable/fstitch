@@ -1,14 +1,12 @@
 #include <kfs/cfs.h>
-#include <inc/serial_cfs.h>
 #include <kfs/kfsd.h>
-#include <kfs/fidcloser_cfs.h> // for FIDCLOSER_CFS_FD_MAP
+#include <kfs/ipc_serve.h> // for IPCSERVE_REQVA
+#include <inc/serial_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
 #include <inc/malloc.h>
 #include <inc/env.h>
-
-#define IPC_RECV_TIMEOUT 100
 
 #define CFS_IPC_SERVE_DEBUG 0
 
@@ -19,10 +17,7 @@
 #define Dprintf(x...)
 #endif
 
-// VA at which to receive page mappings containing client reqs.
-// Just before the range used by the UHFS module for mapping client pages.
-#define REQVA (FIDCLOSER_CFS_FD_MAP - PGSIZE)
-#define PAGESNDVA (REQVA - PGSIZE)
+#define PAGESNDVA (IPCSERVE_REQVA - PGSIZE)
 
 
 // Previous message store for two-part message methods.
@@ -71,8 +66,6 @@ void cfs_ipc_serve_set_cur_cappa(uint32_t x)
 }
 
 
-static void serve(void);
-
 static void cfs_ipc_serve_shutdown(void * arg)
 {
 	int i;
@@ -93,8 +86,6 @@ int cfs_ipc_serve_init(void)
 {
 	int r;
 
-	if (get_pte((void*) REQVA) & PTE_P)
-		panic("cfs_ipc_serve: REQVA already mapped");
 	if (get_pte((void*) PAGESNDVA) & PTE_P)
 		panic("cfs_ipc_serve: PAGESNDVA already mapped");
 
@@ -102,12 +93,6 @@ int cfs_ipc_serve_init(void)
 		return r;
 	return 1;
 }
-
-void cfs_ipc_serve_run(void)
-{
-	serve();
-}
-
 
 static void alloc_prevrecv(envid_t envid, prev_serve_recv_t ** prevrecv)
 {
@@ -381,20 +366,10 @@ static void serve_debug(envid_t envid, struct Scfs_debug * req)
 }
 
 
-static void serve(void)
+void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 {
-	uint32_t whom;
 	int type;
-	int perm = 0;
-	uint32_t r;
-
-	r = ipc_recv(0, &whom, (void*) REQVA, &perm, &cur_cappa, IPC_RECV_TIMEOUT);
-	if (!whom && !perm)
-	{
-		if (r != -E_TIMEOUT)
-			fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);
-		return;
-	}
+	int r;
 
 	// All requests must contain an argument page
 	if ((!perm & PTE_P))
@@ -407,7 +382,7 @@ static void serve(void)
 	if (prevrecv && prevrecv->type && prevrecv->envid == whom)
 		type = prevrecv->type;
 	else
-		type = *((int*) REQVA);
+		type = *((int*) pg);
 
 	if (!frontend_cfs && type != SCFS_SHUTDOWN)
 	{
@@ -417,64 +392,62 @@ static void serve(void)
 
 	switch (type) {
 		case SCFS_OPEN:
-			serve_open(whom, (struct Scfs_open*) REQVA);
+			serve_open(whom, (struct Scfs_open*) pg);
 			break;
 		case SCFS_CLOSE:
-			serve_close(whom, (struct Scfs_close*) REQVA);
+			serve_close(whom, (struct Scfs_close*) pg);
 			break;
 		case SCFS_READ:
-			serve_read(whom, (struct Scfs_read*) REQVA);
+			serve_read(whom, (struct Scfs_read*) pg);
 			break;
 		case SCFS_WRITE:
-			serve_write(whom, (struct Scfs_write*) REQVA);
+			serve_write(whom, (struct Scfs_write*) pg);
 			break;
 		case SCFS_GETDIRENTRIES:
-			serve_getdirentries(whom, (struct Scfs_getdirentries*) REQVA);
+			serve_getdirentries(whom, (struct Scfs_getdirentries*) pg);
 			break;
 		case SCFS_TRUNCATE:
-			serve_truncate(whom, (struct Scfs_truncate*) REQVA);
+			serve_truncate(whom, (struct Scfs_truncate*) pg);
 			break;
 		case SCFS_UNLINK:
-			serve_unlink(whom, (struct Scfs_unlink*) REQVA);
+			serve_unlink(whom, (struct Scfs_unlink*) pg);
 			break;
 		case SCFS_LINK:
-			serve_link(whom, (struct Scfs_link*) REQVA);
+			serve_link(whom, (struct Scfs_link*) pg);
 			break;
 		case SCFS_RENAME:
-			serve_rename(whom, (struct Scfs_rename*) REQVA);
+			serve_rename(whom, (struct Scfs_rename*) pg);
 			break;
 		case SCFS_MKDIR:
-			serve_mkdir(whom, (struct Scfs_mkdir*) REQVA);
+			serve_mkdir(whom, (struct Scfs_mkdir*) pg);
 			break;
 		case SCFS_RMDIR:
-			serve_rmdir(whom, (struct Scfs_rmdir*) REQVA);
+			serve_rmdir(whom, (struct Scfs_rmdir*) pg);
 			break;
 		case SCFS_GET_NUM_FEATURES:
-			serve_get_num_features(whom, (struct Scfs_get_num_features*) REQVA);
+			serve_get_num_features(whom, (struct Scfs_get_num_features*) pg);
 			break;
 		case SCFS_GET_FEATURE:
-			serve_get_feature(whom, (struct Scfs_get_feature*) REQVA);
+			serve_get_feature(whom, (struct Scfs_get_feature*) pg);
 			break;
 		case SCFS_GET_METADATA:
-			serve_get_metadata(whom, (struct Scfs_get_metadata*) REQVA);
+			serve_get_metadata(whom, (struct Scfs_get_metadata*) pg);
 			break;
 		case SCFS_SET_METADATA:
-			serve_set_metadata(whom, (struct Scfs_set_metadata*) REQVA);
+			serve_set_metadata(whom, (struct Scfs_set_metadata*) pg);
 			break;
 		case SCFS_SYNC:
-			serve_sync(whom, (struct Scfs_sync*) REQVA);
+			serve_sync(whom, (struct Scfs_sync*) pg);
 			break;
 		case SCFS_SHUTDOWN:
-			serve_shutdown(whom, (struct Scfs_shutdown*) REQVA);
+			serve_shutdown(whom, (struct Scfs_shutdown*) pg);
 			break;
 		case SCFS_DEBUG:
-			serve_debug(whom, (struct Scfs_debug*) REQVA);
+			serve_debug(whom, (struct Scfs_debug*) pg);
 			break;
 		default:
 			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Unknown type %d\n", type);
 	}
-	if ((r = sys_page_unmap(0, (void*) REQVA)) < 0)
-		panic("sys_page_unmap: %e", r);
 	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
 		panic("sys_page_unmap: %e", r);
 	cur_cappa = 0;

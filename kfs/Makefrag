@@ -7,6 +7,7 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc_stripper_bd.o \
 			$(OBJDIR)/kfs/order_preserver_bd.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
+			$(OBJDIR)/kfs/wb_cache_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
 			$(OBJDIR)/kfs/journal_queue_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
@@ -24,11 +25,12 @@ KFSOFILES := 		$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/fidprotector_cfs.o \
 			$(OBJDIR)/kfs/fidcloser_cfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
+			$(OBJDIR)/kfs/kfs_ipc_serve.o \
+			$(OBJDIR)/kfs/ipc_serve.o \
 			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o \
-			$(OBJDIR)/kfs/kfsd_init.o \
-			$(OBJDIR)/kfs/wb_cache_bd.o \
+			$(OBJDIR)/kfs/kfsd_init.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
 	@echo + ld $@

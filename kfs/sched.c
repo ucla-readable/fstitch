@@ -2,7 +2,7 @@
 #include <inc/error.h>
 #include <inc/malloc.h>
 
-#include <kfs/cfs_ipc_serve.h>
+#include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
 
 struct fn_entry {
@@ -84,7 +84,7 @@ void sched_loop()
 		fn_entry_t * fe;
 
 		// Run cvs_ipc_serve each loop (which will sleep for a bit)
-		cfs_ipc_serve_run();
+		ipc_serve_run();
 
 		// Run other fes scheduled to have ran by now
 		cur_ncs = env->env_jiffies;

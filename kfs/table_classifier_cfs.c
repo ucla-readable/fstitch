@@ -8,6 +8,7 @@
 #include <inc/vector.h>
 
 #include <kfs/fidman.h>
+#include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/table_classifier_cfs.h>
 
@@ -437,6 +438,7 @@ static int table_classifier_sync(CFS_t * cfs, const char * name)
 
 static int table_classifier_destroy(CFS_t * cfs)
 {
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	table_classifier_state_t * state = (table_classifier_state_t *) cfs->instance;
 
 	hash_map_destroy(state->open_files);
@@ -449,12 +451,10 @@ static int table_classifier_destroy(CFS_t * cfs)
 }
 
 
-CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_entries)
+CFS_t * table_classifier_cfs(void)
 {
 	table_classifier_state_t * state;
 	CFS_t * cfs;
-	size_t i;
-	int r;
 	
 	cfs = malloc(sizeof(*cfs));
 	if (!cfs)
@@ -493,13 +493,12 @@ CFS_t * table_classifier_cfs(const char * paths[], CFS_t * cfses[], size_t num_e
 	if (!state->mount_table)
 		goto error_open_files;
 
-	for (i = 0; i < num_entries; i++)
-		if ((r = table_classifier_cfs_add(cfs, paths[i], cfses[i])) < 0)
-			goto error_mount_table;
+	if (modman_add_cfs(cfs, __FUNCTION__) < 0)
+		goto error_mounts;
 
 	return cfs;
 
-  error_mount_table:
+  error_mounts:
 	vector_destroy(state->mount_table);
   error_open_files:
 	hash_map_destroy(state->open_files);

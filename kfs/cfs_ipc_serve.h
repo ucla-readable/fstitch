@@ -2,12 +2,13 @@
 #define __KUDOS_KFS_CFS_IPC_SERVE_H
 
 #include <kfs/cfs.h>
+#include <inc/env.h>
 
 void    set_frontend_cfs(CFS_t * cfs);
 CFS_t * get_frontend_cfs(void);
 
 int  cfs_ipc_serve_init(void);
-void cfs_ipc_serve_run(void);
+void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa);
 
 // Return a ptr to the current page associated with the open() call.
 // NULL on error.

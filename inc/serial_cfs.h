@@ -4,6 +4,8 @@
 #include <inc/types.h>
 #include <inc/mmu.h>
 
+#define SCFS_VAL 1
+
 //
 // CFS Methods
 
