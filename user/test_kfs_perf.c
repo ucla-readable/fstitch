@@ -20,7 +20,7 @@ void umain(int argc, const char ** argv)
 	if (argc >= 3)
 		size = strtol(argv[2], NULL, 10);
 
-	time = perf_test(0, size, file);
+	time = perf_test(0, file, size);
 	if (time > 0)
 		printf("%u kBps\n", 4*1024 / (time / 100));
 	else
