@@ -2,6 +2,7 @@
 #include <inc/partition.h>
 #include <kfs/pc_ptable_bd.h>
 #include <kfs/wt_cache_bd.h>
+#include <kfs/block_resizer_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/dos_classifier.h>
@@ -68,11 +69,21 @@ int kfsd_init(int argc, char * argv[])
 	for (i=0; i < 2; i++)
 	{
 		BD_t * cache;
+		BD_t * resizer;
 		LFS_t * lfs;
 
 		if (!partitions[i])
 			continue;
 
+		/* create a cache below the resizer */
+		if (! (cache = wt_cache_bd(partitions[i], 32)) )
+			kfsd_shutdown();
+
+		/* create a resizer */
+		if (! (resizer = block_resizer_bd(cache, 4096)) )
+			kfsd_shutdown();
+
+		/* create a cache above the resizer */
 		if (! (cache = wt_cache_bd(partitions[i], 4)) )
 			kfsd_shutdown();
 
