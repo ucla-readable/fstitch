@@ -90,6 +90,7 @@ $(OBJDIR)/fs/fs: $(FSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
 		-L$(OBJDIR)/user -luser $(GCC_LIB) \
 		 -b binary $(SYMTBL) $(SYMSTRTBL)
 	$(V)$(OBJDUMP) -S $@ >$@.asm
+	$(V)$(STRIP) $@
 
 # How to build the file system image
 $(OBJDIR)/fs/fsformat: fs/fsformat.c

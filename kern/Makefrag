@@ -79,6 +79,7 @@ $(OBJDIR)/kern/kernel: $(KERN_OBJFILES) $(KERN_BINFILES) $(OBJDIR)/util/$(ELFDUM
 	$(V)rm -f $(SYMTBL) $(SYMSTRTBL)
 	$(V)$(OBJDUMP) -S $@ > $@.asm
 	$(V)$(NM) -n $@ > $@.sym
+	$(V)$(STRIP) $@
 
 # How to build the Bochs disk image
 $(OBJDIR)/kern/bochs.img: $(OBJDIR)/kern/kernel $(OBJDIR)/boot/boot $(OBJDIR)/boot/stage2
