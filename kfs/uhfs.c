@@ -36,26 +36,29 @@ static int va_is_mapped(void * va)
 	return (vpd[PDX(va)] & PTE_P) && (vpt[VPN(va)] & PTE_P);
 }
 
-static void open_file_close(LFS_t * lfs, open_file_t * f)
+static int open_file_free(LFS_t * lfs, open_file_t * f)
 {
 	sys_page_unmap(0, (void*) f->page);
 	CALL(lfs, free_fdesc, f->fdesc);
 	f->page = NULL;
 	f->fdesc = NULL;
+	return 0;
+}
+
+/* returns 0 if it is closed in all clients, 1 if it is still open somewhere */
+static int open_file_close(LFS_t * lfs, open_file_t * f)
+{
+	if (f->page && ((struct Page *) UPAGES)[PTX(f->page)].pp_ref == 1)
+		return open_file_free(lfs, f);
+	return 1;
 }
 
 // Scan through f[] and close f's no longer in use by other envs
 static void open_file_gc(LFS_t * lfs, open_file_t f[])
 {
 	size_t i;
-	for (i=0; i < UHFS_MAX_OPEN; i++)
-	{
-		if (!f[i].page)
-			continue;
-
-		if (((struct Page*) UPAGES)[PTX(f[i].page)].pp_ref == 1)
-			open_file_close(lfs, &f[i]);
-	}
+	for (i = 0; i < UHFS_MAX_OPEN; i++)
+		open_file_close(lfs, &f[i]);
 }
 
 static int fid_idx(int fid, open_file_t f[])
@@ -72,10 +75,10 @@ static int fid_idx(int fid, open_file_t f[])
 
 	idx = fd->fd_kpl.index;
 	if (idx <0 || UHFS_MAX_OPEN <= idx)
-		return -E_INVAL-1;
+		return -E_INVAL;
 
 	if (f[idx].fid != fid)
-		return -E_INVAL-2;
+		return -E_INVAL;
 
 	assert(f[idx].page && f[idx].fid);
 
@@ -146,9 +149,7 @@ static int uhfs_close(CFS_t * cfs, int fid)
 		return idx;
 	f = &state->open_file[idx];
 
-	open_file_close(state->lfs, f);
-	
-	return 0;
+	return open_file_close(state->lfs, f);
 }
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)

@@ -58,6 +58,8 @@ static int class_open(CFS_t * cfs, const char * name, int mode, void * page)
 	int r;
 	int fd;
 	struct class_state * state = (struct class_state *) cfs->instance;
+	if (name[0] == '/')
+		name++;
 	if (!strncmp(name, "A:", 2)) {
 		fd = CALL(state->cfs1, open, name+2, mode, page);
 		if (fd < 0) return fd;
@@ -89,11 +91,13 @@ static int class_close(CFS_t * cfs, int fid)
 	int side = get(fid);
 	if (side == 0) {
 		r = CALL(state->cfs1, close, fid);
-		del(fid);
+		if(!r)
+			del(fid);
 		return r;
 	} else if (side == 1) {
 		r = CALL(state->cfs2, close, fid);
-		del(fid);
+		if(!r)
+			del(fid);
 		return r;
 	}
 	return -E_NOT_FOUND;

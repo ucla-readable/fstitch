@@ -92,7 +92,7 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offse
 	int value;
 	
 	/* have to test all three of these because of the possibility of wrapping */
-	if(offset >= info->blocksize || size >= info->blocksize || offset + size >= info->blocksize)
+	if(offset >= info->blocksize || size > info->blocksize || offset + size > info->blocksize)
 		return -1;
 	
 	bdesc_touch(block);

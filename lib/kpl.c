@@ -1,6 +1,7 @@
 #include <inc/lib.h>
 #include <inc/cfs_ipc_client.h>
 #include <kfs/feature.h>
+#include <kfs/lfs.h>
 
 static int kpl_close(struct Fd* fd);
 static ssize_t kpl_read(struct Fd* fd, void* buf, size_t n, off_t offset);
@@ -76,19 +77,20 @@ static ssize_t kpl_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 	return cfs_write(fd->fd_kpl.fid, offset, n, buf);
 }
 
+/* warning: not multithread safe! */
+static struct Scfs_metadata kpl_stat_md;
 static int kpl_stat(struct Fd* fd, struct Stat* st)
 {
 	int r;
-	struct Scfs_metadata md;
 
-	strcpy(st->st_name, fd->fd_file.file.f_name);
-	r = cfs_get_metadata(st->st_name, KFS_feature_size.id, &md);
+	/* KPL can't give us the name */
+	st->st_name[0] = 0;
+	r = cfs_get_metadata(st->st_name, KFS_feature_size.id, &kpl_stat_md);
 	if (r < 0) return r;
-	memcpy(&st->st_size, md.data, 4);
-	r = cfs_get_metadata(st->st_name, KFS_feature_getfiletype.id, &md);
+	st->st_size = *(off_t *) &kpl_stat_md.data;
+	r = cfs_get_metadata(st->st_name, KFS_feature_filetype.id, &kpl_stat_md);
 	if (r < 0) return r;
-	memcpy(&st->st_isdir, md.data, 4);
-	if (st->st_isdir != 1) st->st_isdir = 0;
+	st->st_isdir = (*(int *) &kpl_stat_md.data == TYPE_DIR);
 	return 0;
 }
 
