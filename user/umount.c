@@ -28,6 +28,9 @@ int destroy_nodes(hash_set_t * nodes)
 
 	while ((node = hash_set_next(nodes, it)))
 	{
+		if (OBJFLAGS((object_t *) node->obj) & OBJ_PERSISTENT)
+			continue;
+
 		switch (node->type)
 		{
 			case NCFS:
