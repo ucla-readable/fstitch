@@ -122,7 +122,7 @@ void umain(int argc, const char ** argv)
 	int ndestroyed, i;
 
 	// Parse arguments
-	if (get_arg_idx(argc, argv, "-h") || argc > 3)
+	if (get_arg_idx(argc, argv, "-h") || argc < 2 || argc > 3)
 	{
 		print_usage(argv[0]);
 		exit();
