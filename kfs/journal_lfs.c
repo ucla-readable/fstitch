@@ -24,6 +24,8 @@ struct journal_state {
 	LFS_t * journal;
 	fdesc_t * jfdesc;
 	LFS_t * fs;
+	chdesc_t ** commit_chdesc;
+	uint16_t commit_records, blocksize;
 };
 typedef struct journal_state journal_state_t;
 
@@ -34,12 +36,18 @@ typedef struct journal_state journal_state_t;
 #define TRANSACTION_SIZE (1024*1024)
 static const char journal_filename[] = "/.journal";
 
+/* "SAFEDATA" */
+#define JOURNAL_MAGIC 0x5AFEDA7A
+
+#define CREMPTY     0
+#define CRSUBCOMMIT 1
+#define CRCOMMIT    2
+
+// This structure will be used on disk, so we use all exact size types
 struct commit_record {
-	enum {CREMPTY, CRSUBCOMMIT, CRCOMMIT} type;
-	size_t nblocks;
-	bool commit;
-	bool invalid;
-	// struct commit_record * next; // TODO: not yet supported
+	uint32_t magic;
+	uint16_t type, next; // TODO: next not yet supported
+	uint32_t nblocks;
 };
 typedef struct commit_record commit_record_t;
 
@@ -48,6 +56,8 @@ typedef struct commit_record commit_record_t;
 static int ensure_journal_exists(journal_state_t * state)
 {
 	Dprintf("%s()\n", __FUNCTION__);
+	if (state->jfdesc)
+		return -E_FILE_EXISTS;
 	state->jfdesc = CALL(state->journal, lookup_name, journal_filename);
 	if (!state->jfdesc)
 	{
@@ -75,7 +85,6 @@ static int transaction_stop(journal_state_t * state)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	size_t file_offset;
-	const size_t journal_blocksize = CALL(state->journal, get_blocksize);
 	bdesc_t ** data_bdescs;
 	size_t ndatabdescs;
 	bdesc_t * bdesc;
@@ -89,9 +98,17 @@ static int transaction_stop(journal_state_t * state)
 	{
 		size_t transaction_slot;
 
-		// For now, always use transaction_slot 0
+		// For now, always use transaction_slot 0 - later, search for an available chdesc slot
 		transaction_slot = 0;
 		file_offset = transaction_slot * TRANSACTION_SIZE;
+		
+		if (state->commit_chdesc[transaction_slot])
+		{
+			bdesc = state->commit_chdesc[transaction_slot]->block;
+			/* FIXME check for errors? */
+			CALL(bdesc->bd, sync, bdesc);
+			assert(!state->commit_chdesc[transaction_slot]);
+		}
 
 		// TODO: Make this transaction's commit record dependent on
 		// the non-synced transaction's invalid chdesc.
@@ -124,7 +141,7 @@ static int transaction_stop(journal_state_t * state)
 
 		ndatabdescs = hash_map_size(data_bdescs_map);
 
-		transaction_size = (1 + ndatabdescs) * journal_blocksize;
+		transaction_size = (1 + ndatabdescs) * state->blocksize;
 		if (transaction_size > TRANSACTION_SIZE)
 		{
 			// TODO: break up into multiple transactions.
@@ -157,12 +174,10 @@ static int transaction_stop(journal_state_t * state)
 	// Create and write journal transaction entries.
 	//
 	// Dependencies:
-	// - journal data -> commit record
-	// - commit -> journal data
-	// - fs data -> commit
-	// - invalid -> fs data
+	// - commit record -> journal data
+	// - fs data -> commit record
+	// - commit invalidation -> fs data
 
-	BD_t * journal_bd;
 	// jdata_chdescs will depend on all journal data chdescs
 	chdesc_t * jdata_chdescs;
 	// fsdata_chdescs will depend on all fs data chdescs
@@ -172,11 +187,6 @@ static int transaction_stop(journal_state_t * state)
 	// lfs_head/tail used to check that no metadata changes upon journal writes
 	chdesc_t * lfs_head = NULL, * lfs_tail;
 	chdesc_t * prev_head, * tail;
-
-	journal_bd = CALL(state->journal, get_blockdev);
-	assert(journal_bd);
-
-	assert(sizeof(commit) <= CALL(journal_bd, get_atomicsize));
 
 	jdata_chdescs = chdesc_create_noop(NULL);
 	if (!jdata_chdescs)
@@ -188,7 +198,7 @@ static int transaction_stop(journal_state_t * state)
 	fsdata_chdescs = chdesc_create_noop(NULL); 
 	if (!fsdata_chdescs)
 	{
-		free(jdata_chdescs);
+		chdesc_destroy(&jdata_chdescs);
 		free(data_bdescs);
 		return -E_NO_MEM;
 	}
@@ -196,8 +206,8 @@ static int transaction_stop(journal_state_t * state)
 	r = depman_add_chdesc(jdata_chdescs);
 	if (r < 0)
 	{
-		free(fsdata_chdescs);
-		free(jdata_chdescs);
+		chdesc_destroy(&fsdata_chdescs);
+		chdesc_destroy(&jdata_chdescs);
 		free(data_bdescs);
 		return r;
 	}
@@ -207,8 +217,7 @@ static int transaction_stop(journal_state_t * state)
 	{
 		// Ignore possible depman error
 		(void) depman_remove_chdesc(jdata_chdescs);
-		free(fsdata_chdescs);
-		free(jdata_chdescs);
+		chdesc_destroy(&fsdata_chdescs);
 		free(data_bdescs);
 		return r;
 	}
@@ -216,42 +225,18 @@ static int transaction_stop(journal_state_t * state)
 	r = journal_queue_passthrough(state->queue);
 	assert(r >= 0);
 
-
-	// Create commit record
-
-	commit.type = CRCOMMIT; // TODO: support sub-commit
-	commit.nblocks = ROUND32(ndatabdescs, journal_blocksize)/journal_blocksize;
-	commit.commit = 0;
-	commit.invalid = 0;
-	// commit.next = NULL; // TODO: not yet supported
-
+	// Save space for the commit record */
 	commit_offset = file_offset;
-
-	bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
-	assert(bdesc); // TODO: handle error
-
-	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
-	assert(r >= 0); // TODO: handle error
-	r = depman_add_chdesc(prev_head);
-	assert(r >= 0); // TODO: handle error
-
-	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
-	assert(r >= 0); // TODO: handle error
-	assert(!lfs_head && !lfs_tail);
-
-	file_offset += journal_blocksize;
-
+	file_offset += state->blocksize;
 
 	// Create journal data
 
-	chdesc_t * commit_rec_chdesc = prev_head;
-
-	for (i=0; i < ndatabdescs; i++, file_offset += journal_blocksize)
+	for (i=0; i < ndatabdescs; i++, file_offset += state->blocksize)
 	{
 		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 		assert(bdesc); // TODO: handle error
 
-		prev_head = commit_rec_chdesc;
+		prev_head = NULL;
 		r = chdesc_create_full(bdesc, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
 		r = depman_add_chdesc(prev_head);
@@ -266,9 +251,12 @@ static int transaction_stop(journal_state_t * state)
 	}
 
 
-	// Mark as commit
+	// Create commit record
 
-	commit.commit = 1;
+	commit.magic = JOURNAL_MAGIC;
+	commit.type = CRCOMMIT; // TODO: support sub-commit
+	// commit.next = -1; // TODO: not yet supported
+	commit.nblocks = ROUND32(ndatabdescs, state->blocksize) / state->blocksize;
 
 	bdesc = CALL(state->journal, get_file_block, state->jfdesc, commit_offset);
 	assert(bdesc); // TODO: handle error
@@ -279,12 +267,11 @@ static int transaction_stop(journal_state_t * state)
 	r = depman_add_chdesc(prev_head);
 	assert(r >= 0); // TODO: handle error
 
+	// this single line atomically commits this transaction to disk
 	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
 	assert(r >= 0); // TODO: handle error
 	assert(!lfs_head && !lfs_tail);
 
-
-	// Mark as invalid
 
 	chdesc_t * commit_chdesc = prev_head;
 
@@ -302,12 +289,15 @@ static int transaction_stop(journal_state_t * state)
 		assert(r >= 0); // TODO: handle error
 	}
 
-	commit.invalid = 1;
+
+	// Mark as invalidated
+
+	commit.type = CREMPTY;
 
 	bdesc = CALL(state->journal, get_file_block, state->jfdesc, commit_offset);
 	assert(bdesc); // TODO: handle error
 
-	// TODO: invalid should depend on fs data
+	prev_head = fsdata_chdescs;
 	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
 	r = depman_add_chdesc(prev_head);
@@ -385,6 +375,11 @@ static int journal_destroy(LFS_t * lfs)
 
 	CALL(state->journal, free_fdesc, state->jfdesc);
 	state->jfdesc = NULL;
+
+	for(r = 0; r < state->commit_records; r++)
+		if(state->commit_chdesc[r])
+			chdesc_weak_release(&state->commit_chdesc[r]);
+	free(state->commit_chdesc);
 
 	free(lfs->instance);
 	memset(lfs, 0, sizeof(*lfs));
@@ -515,7 +510,7 @@ static int journal_set_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_
 static uint32_t journal_get_blocksize(LFS_t * lfs)
 {
 	journal_state_t * state = (journal_state_t *) lfs->instance;
-	return CALL(state->fs, get_blocksize);
+	return state->blocksize;
 }
 
 static BD_t * journal_get_blockdev(LFS_t * lfs)
@@ -593,6 +588,8 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 {
 	LFS_t * lfs;
 	journal_state_t * state;
+	uint16_t blocksize;
+	BD_t * journal_bd;
 	int r;
 
 	if (!journal || !fs || !fs_queue)
@@ -606,6 +603,17 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	if (!journal_queue_detect(fs_queue))
 		return NULL;
 
+	// Make sure the journal device has the same block size as the
+	// filesystem, for better performance
+	blocksize = CALL(fs, get_blocksize);
+	if (blocksize != CALL(journal, get_blocksize))
+		return NULL;
+
+	// Make sure the atomic size of the journal device is big enough
+	journal_bd = CALL(journal, get_blockdev);
+	if (sizeof(commit_record_t) > CALL(journal_bd, get_atomicsize))
+		return NULL;
+
 	lfs = malloc(sizeof(*lfs));
 	if (!lfs)
 		return NULL;
@@ -614,6 +622,11 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	if (!state)
 		goto error_lfs;
 	lfs->instance = state;
+
+	state->commit_records = 1;
+	state->commit_chdesc = calloc(state->commit_records, sizeof(*state->commit_chdesc));
+	if (!state->commit_chdesc)
+		goto error_state;
 
 	ASSIGN(lfs, journal, get_blocksize);
 	ASSIGN(lfs, journal, get_blockdev);
@@ -644,25 +657,28 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	state->journal = journal;
 	state->jfdesc = NULL;
 	state->fs = fs;
+	state->blocksize = blocksize;
 
 	r = ensure_journal_exists(state);
 	if (r < 0)
-		goto error_state;
+		goto error_chdescs;
 
 	r = replay_journal(state);
 	if (r < 0)
-		goto error_state;
+		goto error_chdescs;
 
 	r = transaction_start(state);
 	if (r < 0)
-		goto error_state;
+		goto error_chdescs;
 
 	r = sched_register(timer_callback, state, 5*100);
 	if (r < 0)
-		goto error_state;
+		goto error_chdescs;
 
 	return lfs;
 
+  error_chdescs:
+	free(state->commit_chdesc);
   error_state:
 	free(state);
   error_lfs:
