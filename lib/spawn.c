@@ -55,7 +55,7 @@ binary_page_alloc(envid_t dst_env, const char* name,
 		if(last_binary_fd >= 0)
 			close(last_binary_fd);
 		
-		last_binary_fd = jfs_open(name, O_RDONLY);
+		last_binary_fd = open(name, O_RDONLY);
 		if(last_binary_fd < 0)
 			return last_binary_fd;
 		
@@ -141,7 +141,7 @@ spawn(const char* prog, const char** argv)
 	if(child < 0)
 		return child;
 	
-	sys_env_set_name(child, "");
+	sys_env_set_name(child, prog);
 	
 	child_tf = envs[ENVX(child)].env_tf;
 	child_tf.tf_eip = elf->e_entry;
