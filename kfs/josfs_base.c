@@ -881,13 +881,6 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 				// this should add both changes at once, because they are linked
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
-
-				if (oldhead) {
-					if ((chdesc_add_depend(*tail, oldhead)) < 0) {
-						bdesc_drop(&indirect);
-						return r;
-					}
-				}
 			}
 			else {
 				bdesc_touch(indirect);
@@ -1055,9 +1048,10 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 					}
 					bdesc_drop(&blk);
 				}
+
 				// No empty slots, gotta allocate a new block
-				// FIXME chdesc
-				if ((blk = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, NULL, NULL)) != NULL) {
+				//BLAH
+				if ((blk = josfs_allocate_block(object, JOSFS_BLKSIZE, 0, head, tail)) != NULL) {
 					bdesc_retain(&blk);
 					dir->f_size += JOSFS_BLKSIZE;
 					// FIXME chdesc
@@ -1141,13 +1135,6 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
-
-				if (oldhead) {
-					if ((r = chdesc_add_depend(*tail, oldhead)) < 0) {
-						josfs_free_fdesc(object, newfdesc);
-						return r;
-					}
-				}
 			}
 			else {
 				bdesc_touch(new->dirb);
