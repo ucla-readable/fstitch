@@ -133,8 +133,11 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data)
 		if (r < 0) return r;
 		memcpy(data + i, (void*)REQVA, MIN(size-i, PGSIZE));
 		sys_page_unmap(0, (void*)REQVA);
+		assert(r == MIN(size - i, PGSIZE));
+		if ((r >= 0) && (r < MIN(size - i, PGSIZE)))
+			return i+r;
 	}
-	return r;
+	return size;
 }
 
 int
