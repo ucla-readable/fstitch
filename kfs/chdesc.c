@@ -368,7 +368,13 @@ int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	
 	for(scan = deps->dependencies; scan; scan = scan->next)
 	{
-		int r = chdesc_overlap_attach(chdesc, scan->desc);
+		int r;
+		/* skip marked chdescs - they have just been added to this block during a
+		 * depman_translate_chdesc() and already have proper overlap dependency
+		 * information with respect to the chdesc now arriving */
+		if(!(scan->desc->flags & CHDESC_MARKED))
+			continue;
+		r = chdesc_overlap_attach(chdesc, scan->desc);
 		if(r < 0)
 			return r;
 	}
