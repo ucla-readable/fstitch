@@ -233,6 +233,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			bd = CALL(state->lfs, allocate_block, blocksize, type, &prevhead, &tail);
 			if (!bd)
 				return size_written;
+			// TODO allocated block needs to be appended to a file
 		}
 
 		/* write the data to the block */
