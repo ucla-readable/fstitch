@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 
-#include <kfs/cfs_ipc_serve.h>
+#include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
@@ -46,14 +46,6 @@ void kfsd_shutdown(void)
 	exit();
 }
 
-// This function will schedule and run requests.
-// For now we use only write-through caches, and so simply call
-// cfs_ipc_serve_run().
-void kfsd_loop()
-{
-	for (;;)
-		cfs_ipc_serve_run();
-}
 
 void umain(int argc, char * argv[])
 {
@@ -85,5 +77,5 @@ void umain(int argc, char * argv[])
 	if ((r = kfsd_init()) < 0)
 		exit();
 
-	kfsd_loop();
+	sched_loop();
 }

@@ -15,6 +15,7 @@
 #include <kfs/fidfairy_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/depman.h>
+#include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
@@ -43,6 +44,9 @@ int kfsd_init(void)
 	}
 
 	if (!cfs_ipc_serve_init())
+		kfsd_shutdown();
+
+	if (sched_init() < 0)
 		kfsd_shutdown();
 
 
