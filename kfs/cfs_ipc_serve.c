@@ -172,6 +172,7 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 
 static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 {
+	int nbytes;
 	int r;
 	struct Scfs_getdirentries_return * resp = (struct Scfs_getdirentries_return*) PAGESNDVA;
 	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->basep);
@@ -181,8 +182,11 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 	if ((r = sys_page_alloc(0, resp, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
 	resp->basep = req->basep;
+	nbytes = req->nbytes;
+	if (nbytes > sizeof(resp->buf))
+		nbytes = sizeof(resp->buf);
 
-	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, sizeof(resp->buf), &resp->basep);
+	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, nbytes, &resp->basep);
 	resp->nbytes_read = r;
 	ipc_send(envid, r, resp, PTE_P|PTE_U);
 }
