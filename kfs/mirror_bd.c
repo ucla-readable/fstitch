@@ -12,7 +12,7 @@ struct mirror_info {
 	BD_t * bd[2];
 	uint32_t numblocks;
 	uint16_t blocksize, atomicsize;
-	uint32_t stride; // Disk reads/writes alternate every 512 * pow(2,stride) bytes
+	uint32_t stride; // Disk reads alternate every 512 * pow(2,stride) bytes
 };
 
 static uint32_t mirror_bd_get_numblocks(BD_t * object)
