@@ -11,10 +11,14 @@ void cfs_ipc_serve_run(void);
 
 // Return a ptr to the current page associated with the open() call.
 // NULL on error.
-void * cfs_ipc_serve_cur_page(void);
+const void * cfs_ipc_serve_cur_page(void);
+
 
 // Return the capability page's physical address associated with the current
-// request.
+// request. 0 indicates intra-kfsd privilege.
 uint32_t cfs_ipc_serve_cur_cappa(void);
+
+void cfs_ipc_serve_set_cur_cappa(uint32_t);
+
 
 #endif // not __KUDOS_KFS_CFS_IPC_SERVE_H

@@ -57,7 +57,7 @@ static void open_file_close(open_file_t * of)
 // have the Fd page for the request fid.
 static int check_capability(const open_file_t * of)
 {
-	if (cfs_ipc_serve_cur_cappa() != of->cappa)
+	if (cfs_ipc_serve_cur_cappa() != of->cappa && cfs_ipc_serve_cur_cappa())
 	{
 		fprintf(STDERR_FILENO, "fidprotector %s: FAILURE for fid %d. fid's cappa = 0x%08x, request's cappa = 0x%08x.\n", __FUNCTION__, of->fid, of->cappa, cfs_ipc_serve_cur_cappa());
 		return -E_IPC_FAILED_CAP;

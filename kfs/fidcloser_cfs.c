@@ -126,6 +126,7 @@ static void open_file_gc(fidcloser_state_t * state)
 
 	// Gc fids
 	// (remove the fids after this, else we would mess up hm_it)
+
 	while ((of = hash_map_val_next(state->open_files, hm_it)))
 	{
 		assert(of->page && va_is_mapped(of->page));
@@ -141,6 +142,12 @@ static void open_file_gc(fidcloser_state_t * state)
 
 
 	// Remove gced open files
+	// (set the current cappa to indicate kfsd is closing internally,
+	//  rather than using whatever happens to be the current cappa)
+
+	const uint32_t cur_cappa = cfs_ipc_serve_cur_cappa();
+	cfs_ipc_serve_set_cur_cappa(0);
+
 	const size_t nofs_to_erase = vector_size(ofs_to_erase);
 	size_t i;
 	for (i=0; i < nofs_to_erase; i++)
@@ -149,6 +156,8 @@ static void open_file_gc(fidcloser_state_t * state)
 		if (r < 0)
 			fprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %e\n", r);
 	}
+
+	cfs_ipc_serve_set_cur_cappa(cur_cappa);
 	vector_destroy(ofs_to_erase);
 }
 

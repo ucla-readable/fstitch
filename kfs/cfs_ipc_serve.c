@@ -1,7 +1,7 @@
 #include <kfs/cfs.h>
 #include <inc/serial_cfs.h>
 #include <kfs/kfsd.h>
-#include <kfs/fidfairy_cfs.h> // for FIDFAIRY_CFS_FD_MAP
+#include <kfs/fidcloser_cfs.h> // for FIDCLOSER_CFS_FD_MAP
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -21,7 +21,7 @@
 
 // VA at which to receive page mappings containing client reqs.
 // Just before the range used by the UHFS module for mapping client pages.
-#define REQVA (FIDFAIRY_CFS_FD_MAP - PGSIZE)
+#define REQVA (FIDCLOSER_CFS_FD_MAP - PGSIZE)
 #define PAGESNDVA (REQVA - PGSIZE)
 
 
@@ -50,19 +50,24 @@ CFS_t * get_frontend_cfs(void)
 }
 
 
-static void * cur_page = NULL;
+static const void * cur_page = NULL;
 
-void * cfs_ipc_serve_cur_page(void)
+const void * cfs_ipc_serve_cur_page(void)
 {
 	return cur_page;
 }
 
 
-static uint32_t cur_cappa = -1;
+static uint32_t cur_cappa = 0;
 
 uint32_t cfs_ipc_serve_cur_cappa(void)
 {
 	return cur_cappa;
+}
+
+void cfs_ipc_serve_set_cur_cappa(uint32_t x)
+{
+	cur_cappa = x;
 }
 
 
@@ -472,5 +477,5 @@ static void serve(void)
 		panic("sys_page_unmap: %e", r);
 	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
 		panic("sys_page_unmap: %e", r);
-	cur_cappa = -1;
+	cur_cappa = 0;
 }
