@@ -724,9 +724,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 	pg->newdevice = (uint32_t) OBJLOCAL(newdevice);
 
 	SEND_PG();
-	bd_id = RECV_PG();
-
-	return bd_id;
+	return RECV_PG();
 }
 
 int mirror_bd_remove_device(BD_t * bd, int diskno)
@@ -740,9 +738,7 @@ int mirror_bd_remove_device(BD_t * bd, int diskno)
 	pg->diskno = diskno;
 
 	SEND_PG();
-	bd_id = RECV_PG();
-
-	return bd_id;
+	return RECV_PG();
 }
 
 #include <kfs/ide_pio_bd.h>
