@@ -752,7 +752,7 @@ CFS_t * uhfs(LFS_t * lfs)
 	ASSIGN(cfs, uhfs, get_metadata);
 	ASSIGN(cfs, uhfs, set_metadata);
 	ASSIGN(cfs, uhfs, sync);
-	ASSIGN_DESTROY(cfs, uhfs, destroy);
+	DESTRUCTOR(cfs, uhfs, destroy);
 
 	state->lfs = lfs;
 

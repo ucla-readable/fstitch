@@ -1,14 +1,26 @@
 #ifndef __KUDOS_KFS_OO_H
 #define __KUDOS_KFS_OO_H
 
+#define OBJECT(interface) object_t uniform; int (*__destroy_type)(interface * object)
 #define DECLARE(interface, type, method, args...) type (*_##method)(interface * object, ##args)
-#define DESTRUCTOR(interface) int (*__destroy)(interface * object)
 
 #define ASSIGN(object, module, method) (object)->_##method = module##_##method
-#define ASSIGN_DESTROY(object, module, method) (object)->__destroy = module##_##method
+#define OBJASSIGN(object, module, method) (object)->uniform._##method = module##_##method
+#define DESTRUCTOR(object, module, method) (object)->uniform.__destroy = (int (*)(void *)) ((object)->__destroy_type = module##_##method)
 
 #define CALL(object, method, args...) ((object)->_##method(object, ##args))
-#define DESTROY(object) ((object)->__destroy(object))
+#define DESTROY(object) ((object)->uniform.__destroy(object))
+
+#define OBJCALL(object, method, args...) ((object)->uniform._##method(object, ##args))
+#define OBJFLAGS(object) (object)->uniform.flags
+#define OBJMAGIC(object) (object)->uniform.magic
+
+struct object {
+	uint32_t flags, magic;
+	DECLARE(void, int, get_status, int level, char * string, int length);
+	int (*__destroy)(void * object);
+};
+typedef struct object object_t;
 
 // DESTROY_LOCAL is only for use outside of KFSD
 #ifndef KFSD

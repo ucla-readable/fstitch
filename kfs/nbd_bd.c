@@ -132,7 +132,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	ASSIGN(bd, nbd_bd, read_block);
 	ASSIGN(bd, nbd_bd, write_block);
 	ASSIGN(bd, nbd_bd, sync);
-	ASSIGN_DESTROY(bd, nbd_bd, destroy);
+	DESTRUCTOR(bd, nbd_bd, destroy);
 	
 	if(inet_atoip(address, &info->ip) != 1)
 	{

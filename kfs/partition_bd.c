@@ -179,7 +179,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	ASSIGN(bd, partition_bd, read_block);
 	ASSIGN(bd, partition_bd, write_block);
 	ASSIGN(bd, partition_bd, sync);
-	ASSIGN_DESTROY(bd, partition_bd, destroy);
+	DESTRUCTOR(bd, partition_bd, destroy);
 	
 	info->bd = disk;
 	info->start = start;

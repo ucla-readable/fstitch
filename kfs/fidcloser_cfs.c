@@ -242,9 +242,7 @@ static int fidcloser_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
-	int r;
-
-	r = modman_rem_cfs(cfs);
+	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_cfs(state->frontend_cfs, cfs);
@@ -387,7 +385,7 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 	ASSIGN(cfs, fidcloser, get_metadata);
 	ASSIGN(cfs, fidcloser, set_metadata);
 	ASSIGN(cfs, fidcloser, sync);
-	ASSIGN_DESTROY(cfs, fidcloser, destroy);
+	DESTRUCTOR(cfs, fidcloser, destroy);
 
 
 	state = malloc(sizeof(*state));

@@ -179,7 +179,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	ASSIGN(bd, loop, read_block);
 	ASSIGN(bd, loop, write_block);
 	ASSIGN(bd, loop, sync);
-	ASSIGN_DESTROY(bd, loop, destroy);
+	DESTRUCTOR(bd, loop, destroy);
 
 	state->lfs = lfs;
 

@@ -267,7 +267,7 @@ LFS_t * wholedisk(BD_t * bd)
 	ASSIGN(lfs, wholedisk, set_metadata_name);
 	ASSIGN(lfs, wholedisk, set_metadata_fdesc);
 	ASSIGN(lfs, wholedisk, sync);
-	ASSIGN_DESTROY(lfs, wholedisk, destroy);
+	DESTRUCTOR(lfs, wholedisk, destroy);
 	
 	info->bd = bd;
 	info->blocksize = CALL(bd, get_blocksize);

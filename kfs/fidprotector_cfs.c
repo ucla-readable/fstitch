@@ -115,9 +115,7 @@ static int fidprotector_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	fidprotector_state_t * state = (fidprotector_state_t *) cfs->instance;
-	int r;
-
-	r = modman_rem_cfs(cfs);
+	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_cfs(state->frontend_cfs, cfs);
@@ -290,7 +288,7 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 	ASSIGN(cfs, fidprotector, get_metadata);
 	ASSIGN(cfs, fidprotector, set_metadata);
 	ASSIGN(cfs, fidprotector, sync);
-	ASSIGN_DESTROY(cfs, fidprotector, destroy);
+	DESTRUCTOR(cfs, fidprotector, destroy);
 
 
 	state = malloc(sizeof(*state));

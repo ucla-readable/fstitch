@@ -212,7 +212,7 @@ BD_t * order_preserver_bd(BD_t * disk)
 	ASSIGN(bd, order_preserver, read_block);
 	ASSIGN(bd, order_preserver, write_block);
 	ASSIGN(bd, order_preserver, sync);
-	ASSIGN_DESTROY(bd, order_preserver, destroy);
+	DESTRUCTOR(bd, order_preserver, destroy);
 	
 	state->bd = disk;
 	state->prev_head = NULL;

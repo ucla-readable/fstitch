@@ -393,7 +393,7 @@ CFS_t * josfs_cfs(void)
 	ASSIGN(cfs, josfs_cfs, get_metadata);
 	ASSIGN(cfs, josfs_cfs, set_metadata);
 	ASSIGN(cfs, josfs_cfs, sync);
-	ASSIGN_DESTROY(cfs, josfs_cfs, destroy);
+	DESTRUCTOR(cfs, josfs_cfs, destroy);
 
 	state->open_files = hash_map_create();
 	if (!state->open_files)

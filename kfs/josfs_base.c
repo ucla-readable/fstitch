@@ -1861,7 +1861,7 @@ LFS_t * josfs(BD_t * block_device, int * do_fsck)
 	ASSIGN(lfs, josfs, set_metadata_name);
 	ASSIGN(lfs, josfs, set_metadata_fdesc);
 	ASSIGN(lfs, josfs, sync);
-	ASSIGN_DESTROY(lfs, josfs, destroy);
+	DESTRUCTOR(lfs, josfs, destroy);
 
 	info->ubd = block_device;
 	info->bitmap_cache = NULL;

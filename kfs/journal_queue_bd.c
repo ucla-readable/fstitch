@@ -238,7 +238,7 @@ BD_t * journal_queue_bd(BD_t * disk)
 	ASSIGN(bd, journal_queue_bd, read_block);
 	ASSIGN(bd, journal_queue_bd, write_block);
 	ASSIGN(bd, journal_queue_bd, sync);
-	ASSIGN_DESTROY(bd, journal_queue_bd, destroy);
+	DESTRUCTOR(bd, journal_queue_bd, destroy);
 
 	info->magic = JOURNAL_QUEUE_MAGIC;
 	info->bd = disk;

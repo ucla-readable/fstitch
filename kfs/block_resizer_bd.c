@@ -195,7 +195,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	ASSIGN(bd, block_resizer_bd, read_block);
 	ASSIGN(bd, block_resizer_bd, write_block);
 	ASSIGN(bd, block_resizer_bd, sync);
-	ASSIGN_DESTROY(bd, block_resizer_bd, destroy);
+	DESTRUCTOR(bd, block_resizer_bd, destroy);
 	
 	info->bd = disk;
 	info->original_size = original_size;

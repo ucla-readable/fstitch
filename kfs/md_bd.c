@@ -200,7 +200,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	ASSIGN(bd, md_bd, read_block);
 	ASSIGN(bd, md_bd, write_block);
 	ASSIGN(bd, md_bd, sync);
-	ASSIGN_DESTROY(bd, md_bd, destroy);
+	DESTRUCTOR(bd, md_bd, destroy);
 	
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;

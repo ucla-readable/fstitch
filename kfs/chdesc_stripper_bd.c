@@ -247,7 +247,7 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 	ASSIGN(bd, chdesc_stripper, read_block);
 	ASSIGN(bd, chdesc_stripper, write_block);
 	ASSIGN(bd, chdesc_stripper, sync);
-	ASSIGN_DESTROY(bd, chdesc_stripper, destroy);
+	DESTRUCTOR(bd, chdesc_stripper, destroy);
 
 	state->bd = disk;
 	

@@ -13,7 +13,7 @@ struct BD;
 typedef struct BD BD_t;
 
 struct BD {
-	DESTRUCTOR(BD_t);
+	OBJECT(BD_t);
 	DECLARE(BD_t, uint32_t, get_numblocks);
 	DECLARE(BD_t, uint16_t, get_blocksize);
 	DECLARE(BD_t, uint16_t, get_atomicsize);

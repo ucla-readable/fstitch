@@ -485,7 +485,7 @@ CFS_t * table_classifier_cfs(void)
 	ASSIGN(cfs, table_classifier, get_metadata);
 	ASSIGN(cfs, table_classifier, set_metadata);
 	ASSIGN(cfs, table_classifier, sync);
-	ASSIGN_DESTROY(cfs, table_classifier, destroy);
+	DESTRUCTOR(cfs, table_classifier, destroy);
 
 	state->magic = TABLE_CLASSIFIER_MAGIC;
 

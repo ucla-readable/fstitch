@@ -151,7 +151,7 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		if (! (bd = ide_pio_bd(0, 0)) )
-			fprintf(STDERR_FILENO, "ide_pio_bd(0) failed\n");
+			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0) failed\n");
 
 		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)
 			kfsd_shutdown();
@@ -162,7 +162,7 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		if (! (bd = ide_pio_bd(0, 1)) )
-			fprintf(STDERR_FILENO, "ide_pio_bd(1) failed\n");
+			fprintf(STDERR_FILENO, "ide_pio_bd(0, 1) failed\n");
 
 		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)		
 			kfsd_shutdown();

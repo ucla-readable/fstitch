@@ -10,7 +10,7 @@ struct CFS;
 typedef struct CFS CFS_t;
 
 struct CFS {
-	DESTRUCTOR(CFS_t);
+	OBJECT(CFS_t);
 	DECLARE(CFS_t, int, open, const char * name, int mode);
 	DECLARE(CFS_t, int, close, int fid);
 	DECLARE(CFS_t, void, closed, int fid); // fid was passively closed

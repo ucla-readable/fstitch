@@ -33,7 +33,7 @@ typedef struct LFS LFS_t;
  * tail will be made to depend on it. tail is output only, it outputs the new tail. */
 
 struct LFS {
-	DESTRUCTOR(LFS_t);
+	OBJECT(LFS_t);
 	DECLARE(LFS_t, uint32_t, get_blocksize);
 	DECLARE(LFS_t, BD_t *, get_blockdev);
 	DECLARE(LFS_t, bdesc_t *, allocate_block, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail);

@@ -356,7 +356,7 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 	ASSIGN(bd, mirror_bd, read_block);
 	ASSIGN(bd, mirror_bd, write_block);
 	ASSIGN(bd, mirror_bd, sync);
-	ASSIGN_DESTROY(bd, mirror_bd, destroy);
+	DESTRUCTOR(bd, mirror_bd, destroy);
 	
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;

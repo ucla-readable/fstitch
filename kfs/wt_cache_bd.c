@@ -204,7 +204,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	ASSIGN(bd, wt_cache_bd, read_block);
 	ASSIGN(bd, wt_cache_bd, write_block);
 	ASSIGN(bd, wt_cache_bd, sync);
-	ASSIGN_DESTROY(bd, wt_cache_bd, destroy);
+	DESTRUCTOR(bd, wt_cache_bd, destroy);
 	
 	info->bd = disk;
 	info->size = blocks;

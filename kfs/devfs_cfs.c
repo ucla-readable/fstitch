@@ -525,7 +525,7 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	ASSIGN(cfs, devfs, get_metadata);
 	ASSIGN(cfs, devfs, set_metadata);
 	ASSIGN(cfs, devfs, sync);
-	ASSIGN_DESTROY(cfs, devfs, destroy);
+	DESTRUCTOR(cfs, devfs, destroy);
 	
 	state->magic = DEVFS_MAGIC;
 	state->root_fid = -1;

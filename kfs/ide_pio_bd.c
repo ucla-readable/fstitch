@@ -9,7 +9,8 @@
 #include <kfs/ide_pio_bd.h>
 
 static const uint16_t ide_base[2] = {0x1F0, 0x170};
-static const char * ide_names[2][2] = {{"hda", "hdb"}, {"hdc", "hdd"}};
+static const uint16_t ide_reset[2] = {0x3F6, 0x376};
+static const char * ide_names[2][2] = {{"ide_pio_hda", "ide_pio_hdb"}, {"ide_pio_hdc", "ide_pio_hdd"}};
 
 struct ide_info {
 	uint8_t controller;
@@ -23,9 +24,14 @@ static int ide_notbusy(uint8_t controller)
 	int start_jiffies = env->env_jiffies;
 	/* wait for disk not busy */
 	while((inb(base + 7) & 0xC0) != 0x40)
-		if(1000 <= env->env_jiffies - start_jiffies)
+		if(800 <= env->env_jiffies - start_jiffies)
 		{
+			uint16_t reset = ide_reset[controller];
 			printf("Warning: IDE operation timed out on controller %d\n", controller);
+			/* reset the drive */
+			outb(reset, 0x0E);
+			sleep(2);
+			outb(reset, 0x0A);
 			return -1;
 		}
 	return 0;
@@ -218,7 +224,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	ASSIGN(bd, ide_pio_bd, read_block);
 	ASSIGN(bd, ide_pio_bd, write_block);
 	ASSIGN(bd, ide_pio_bd, sync);
-	ASSIGN_DESTROY(bd, ide_pio_bd, destroy);
+	DESTRUCTOR(bd, ide_pio_bd, destroy);
 	
 	info->controller = controller;
 	info->disk = disk;

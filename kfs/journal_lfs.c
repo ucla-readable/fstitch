@@ -1001,7 +1001,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	ASSIGN(lfs, journal, set_metadata_name);
 	ASSIGN(lfs, journal, set_metadata_fdesc);
 	ASSIGN(lfs, journal, sync);
-	ASSIGN_DESTROY(lfs, journal, destroy);
+	DESTRUCTOR(lfs, journal, destroy);
 
 	state->magic = JOURNAL_MAGIC;
 	state->queue = fs_queue;
