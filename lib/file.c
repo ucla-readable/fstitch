@@ -1,6 +1,7 @@
 #include <inc/fs.h>
 #include <inc/string.h>
 #include <inc/lib.h>
+#include <inc/dirent.h>
 
 #define debug 0
 
@@ -8,6 +9,7 @@ static int file_close(struct Fd* fd);
 static ssize_t file_read(struct Fd* fd, void* buf, size_t n, off_t offset);
 static int file_read_map(struct Fd* fd, off_t offset, void** blk);
 static ssize_t file_write(struct Fd* fd, const void* buf, size_t n, off_t offset);
+static ssize_t file_getdirentries(struct Fd* fd, void* buf, int nbytes, uint32_t* basep);
 static int file_stat(struct Fd* fd, struct Stat* stat);
 static int file_trunc(struct Fd* fd, off_t newsize);
 
@@ -19,7 +21,7 @@ struct Dev devfile =
 	.dev_read_nb =	file_read,
 	.dev_read_map =	file_read_map,
 	.dev_write =	file_write,
-	.dev_getdirentries = NULL,
+	.dev_getdirentries = file_getdirentries,
 	.dev_close =	file_close,
 	.dev_stat =	file_stat,
 	.dev_trunc =	file_trunc
@@ -134,6 +136,62 @@ file_write(struct Fd* fd, const void* buf, size_t n, off_t offset)
 	// write the data
 	memcpy(fd2data(fd) + offset, buf, n);
 	return n;
+}
+
+static ssize_t
+file_getdirentries(struct Fd* fd, void* buf, int nbytes, uint32_t* basep)
+{
+	int r = 0, nbytes_read = 0;
+
+	fd->fd_offset = *basep;
+
+	while (nbytes_read < nbytes)
+	{
+		int i;
+		struct File f;
+		uint16_t namelen, reclen;
+		dirent_t * ent = (dirent_t *) (buf + nbytes_read);
+
+		// Read a dirent
+		if ((r = file_read(fd, &f, sizeof(struct File), fd->fd_offset)) <= 0)
+			break;
+		assert(r == sizeof(struct File));
+		fd->fd_offset += sizeof(struct File);
+		if (!f.f_name[0])
+		{
+			*basep += sizeof(struct File);
+			continue;
+		}
+
+		namelen = strlen(f.f_name);
+		namelen = MIN(namelen, sizeof(ent->d_name) - 1);
+		reclen = sizeof(*ent) - sizeof(ent->d_name) + namelen + 1;
+		
+		// Make sure it's not too long
+		if(nbytes_read + reclen > nbytes)
+			break;
+		
+		// Pseudo unique fileno generator
+		ent->d_fileno = 0;
+		for (i = 0; f.f_name[i]; i++)
+		{
+			ent->d_fileno *= 5;
+			ent->d_fileno += f.f_name[i];
+		}
+
+		// Store the dirent into *ent
+		ent->d_filesize = f.f_size;
+		ent->d_reclen = reclen;
+		ent->d_type = f.f_type;
+		ent->d_namelen = namelen;
+		strncpy(ent->d_name, f.f_name, sizeof(ent->d_name));
+
+		// Update position variables
+		nbytes_read += reclen;
+		*basep += sizeof(struct File);
+	}
+
+	return nbytes_read ? nbytes_read : (r < 0) ? r : 0;
 }
 
 static int
