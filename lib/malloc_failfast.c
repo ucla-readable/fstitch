@@ -3,12 +3,20 @@
 
 #ifdef USE_FAILFAST_MALLOC /* [ */
 
+#define FAILFAST_ALIGN_END 0
+
 /* Use a different start address than the default malloc... */
 static size_t next_addr = 0x20000000;
+static size_t used_memory = 0;
 
 void * malloc(size_t size)
 {
 	void * memory = (void *) next_addr;
+#if FAILFAST_ALIGN_END
+	size_t offset = PGSIZE - (size % PGSIZE);
+	if(offset == PGSIZE)
+		offset = 0;
+#endif
 	
 	if(next_addr >= 0x80000000)
 		panic("out of address space");
@@ -20,11 +28,16 @@ void * malloc(size_t size)
 		assert(r >= 0);
 		next_addr += PGSIZE;
 		size -= PGSIZE;
+		used_memory += PGSIZE;
 	}
 	
 	next_addr += PGSIZE;
 	
+#if FAILFAST_ALIGN_END
+	return memory + offset;
+#else
 	return memory;
+#endif
 }
 
 void * calloc(size_t count, size_t size)
@@ -39,17 +52,21 @@ static bool va_is_mapped(const void * va)
 
 void free(void * ptr)
 {
+#if FAILFAST_ALIGN_END
+	ptr = (void *) ROUNDDOWN32(ptr, PGSIZE);
+#endif
 	while(va_is_mapped(ptr))
 	{
 		int r = sys_page_unmap(0, ptr);
 		assert(r >= 0);
 		ptr += PGSIZE;
+		used_memory -= PGSIZE;
 	}
 }
 
 void malloc_stats(void)
 {
-	printf("(no malloc stats available)\n");
+	printf("used failfast malloc memory = %d\n", used_memory);
 }
 
 #endif /* ] USE_FAILFAST_MALLOC */
