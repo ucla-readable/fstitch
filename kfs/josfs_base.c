@@ -1377,7 +1377,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	uint32_t nblocks = josfs_get_file_numblocks(object, file);
-	bdesc_t * indirect = NULL, *dirblock = NULL, * retval = NULL;
+	bdesc_t * indirect = NULL, *dirblock = NULL;
 	JOSFS_File_t * dirfile;
 	uint32_t blockno;
 	int r, offset;
@@ -1423,11 +1423,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 			if (r < 0)
 				goto truncate_file_block_failed;
 
-			weak_retain_pair(head, tail);
-			retval = CALL(info->ubd, read_block, blockno);
-			weak_forget_pair(head, tail);
-
-			return retval;
+			return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
@@ -1478,11 +1474,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 				bdesc_release(&indirect);
 
-				weak_retain_pair(head, tail);
-				retval = CALL(info->ubd, read_block, blockno);
-				weak_forget_pair(head, tail);
-
-				return retval;
+				return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
 			}
 			bdesc_release(&indirect);
 		}
@@ -1522,11 +1514,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 			f->file->f_direct[nblocks - 1] = 0;
 
-			weak_retain_pair(head, tail);
-			retval = CALL(info->ubd, read_block, blockno);
-			weak_forget_pair(head, tail);
-
-			return retval;
+			return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
 		}
 	}
 
@@ -1537,7 +1525,7 @@ truncate_file_block_failed:
 		bdesc_release(&indirect);
 	if (dirblock)
 		bdesc_drop(&dirblock);
-	return retval;
+	return NULL;
 }
 
 static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)

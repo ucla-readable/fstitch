@@ -49,7 +49,7 @@ void kfsd_shutdown(void)
 
 void umain(int argc, char * argv[])
 {
-	int r;
+	int r, i;
 
 	if(!argc)
 	{
@@ -73,7 +73,14 @@ void umain(int argc, char * argv[])
 	}*/
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
-	
+
+	// Allocate more pages for the stack because we sometimes need it (for chdesc graph traversal)
+	for(i = 2; i != 33; i++)
+	{
+		r = sys_page_alloc(0, (void *) (USTACKTOP - i * PGSIZE), PTE_U | PTE_W | PTE_P);
+		assert(r >= 0);
+	}
+
 	if ((r = kfsd_init()) < 0)
 		exit();
 

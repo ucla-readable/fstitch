@@ -47,6 +47,7 @@ struct LFS {
 	DECLARE(LFS_t, int, append_file_block, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, fdesc_t *, allocate_name, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, rename, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail);
+	/* truncate_file_block is not required to return the actual data that was truncated */
 	DECLARE(LFS_t, bdesc_t *, truncate_file_block, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, free_block, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, remove_name, const char * name, chdesc_t ** head, chdesc_t ** tail);
