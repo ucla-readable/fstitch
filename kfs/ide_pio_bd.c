@@ -142,16 +142,18 @@ static int ide_pio_bd_destroy(BD_t * bd)
 
 BD_t * ide_pio_bd(uint32_t disk)
 {
+	struct ide_info * info;
 	BD_t * bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
 	
-	bd->instance = malloc(sizeof(struct ide_info));
-	if(!bd->instance)
+	info = malloc(sizeof(*info));
+	if(!info)
 	{
 		free(bd);
 		return NULL;
 	}
+	bd->instance = info;
 	
 	ASSIGN(bd, ide_pio_bd, get_numblocks);
 	ASSIGN(bd, ide_pio_bd, get_blocksize);
@@ -160,9 +162,9 @@ BD_t * ide_pio_bd(uint32_t disk)
 	ASSIGN(bd, ide_pio_bd, sync);
 	ASSIGN_DESTROY(bd, ide_pio_bd, destroy);
 	
-	((struct ide_info *) bd->instance)->controller = 0;
-	((struct ide_info *) bd->instance)->disk = disk;
-	((struct ide_info *) bd->instance)->length = ide_size(disk);
+	info->controller = 0;
+	info->disk = disk;
+	info->length = ide_size(disk);
 	
 	return bd;
 }

@@ -62,6 +62,8 @@ void kfsd_loop()
 		cfsipc();
 }
 
+void bd_test(int argc, char * argv[]);
+
 void umain(int argc, char * argv[])
 {
 	int r;
@@ -70,6 +72,7 @@ void umain(int argc, char * argv[])
 		exit();
 
 	kfsd_loop();
+	//bd_test(argc, argv);
 }
 
 
@@ -81,6 +84,7 @@ void umain(int argc, char * argv[])
 #include <kfs/bdesc.h>
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable_bd.h>
+#include <kfs/wt_cache_bd.h>
 
 static uint32_t bdesc_sum(bdesc_t * bdesc)
 {
@@ -97,6 +101,7 @@ static uint32_t bdesc_sum(bdesc_t * bdesc)
 void bd_test(int argc, char * argv[])
 {
 	BD_t * bd;
+	BD_t * cbd;
 	BD_t * part = NULL;
 	void * ptbl;
 	uint32_t i;
@@ -107,8 +112,9 @@ void bd_test(int argc, char * argv[])
 		return;
 	}
 	
-	bd = ide_pio_bd(0);
-	ptbl = pc_ptable_init(bd);
+	bd = ide_pio_bd(1);
+	cbd = wt_cache_bd(bd, 4);
+	ptbl = pc_ptable_init(cbd);
 	if(ptbl)
 	{
 		uint32_t max = pc_ptable_count(ptbl);
@@ -125,7 +131,7 @@ void bd_test(int argc, char * argv[])
 	else
 	{
 		printf("Using whole disk.\n");
-		part = bd;
+		part = cbd;
 	}
 	
 	if(!part)
@@ -134,28 +140,42 @@ void bd_test(int argc, char * argv[])
 		exit();
 	}
 	
-	printf("BD block size is %d, block count is %d\n", CALL(bd, get_blocksize), CALL(bd, get_numblocks));
+	printf("BD   block size is %d, block count is %d\n", CALL(bd, get_blocksize), CALL(bd, get_numblocks));
+	printf("CBD  block size is %d, block count is %d\n", CALL(cbd, get_blocksize), CALL(cbd, get_numblocks));
 	printf("PART block size is %d, block count is %d\n", CALL(part, get_blocksize), CALL(part, get_numblocks));
 	
-	for(i = 0; i != 5; i++)
+	for(i = 0; i != 10; i++)
 	{
 		bdesc_t * bdesc;
+		uint8_t first;
 		
-		printf("Block %d sum", i);
+		printf("\n=== Block %d sum\n", i);
 		
 		bdesc = CALL(bd, read_block, i);
 		bdesc_retain(&bdesc);
-		printf(": BD 0x%08x", bdesc_sum(bdesc));
+		printf("    BD   0x%08x\n", bdesc_sum(bdesc));
+		bdesc_release(&bdesc);
+		
+		bdesc = CALL(cbd, read_block, i);
+		bdesc_retain(&bdesc);
+		printf("    CBD  0x%08x\n", bdesc_sum(bdesc));
 		bdesc_release(&bdesc);
 		
 		bdesc = CALL(part, read_block, i);
 		bdesc_retain(&bdesc);
-		printf(", PART 0x%08x", bdesc_sum(bdesc));
+		printf("    PART 0x%08x\n", bdesc_sum(bdesc));
+		bdesc_touch(&bdesc);
+		first = bdesc->data[0];
+		memmove(bdesc->data, bdesc->data + 1, CALL(part, get_blocksize) - 1);
+		bdesc->data[CALL(part, get_blocksize) - 1] = first;
+		printf("    PART 0x%08x\n", bdesc_sum(bdesc));
+		CALL(part, write_block, bdesc);
 		bdesc_release(&bdesc);
-		
-		printf("\n");
 	}
 	
-	DESTROY(part);
+	printf("\n");
+	if(part != cbd)
+		DESTROY(part);
+	DESTROY(cbd);
 	DESTROY(bd);
 }

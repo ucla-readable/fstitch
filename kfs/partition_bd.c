@@ -33,6 +33,8 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 	
 	bdesc = CALL(((struct partition_info *) object->instance)->bd, read_block, ((struct partition_info *) object->instance)->start + number);
 	
+	/* FIXME bdesc_alter() can fail */
+	
 	/* ensure we can alter the structure without conflict */
 	bdesc_alter(&bdesc);
 	
@@ -71,8 +73,31 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int partition_bd_sync(BD_t * object, bdesc_t * block)
 {
-	/* FIXME */
-	return 0;
+	int value;
+	
+	if(!block)
+		return CALL(((struct partition_info *) object->instance)->bd, sync, NULL);
+	
+	/* make sure this is the right block device */
+	if(block->bd != object)
+		return -1;
+	
+	/* make sure it's a valid block */
+	if(block->number >= ((struct partition_info *) object->instance)->length)
+		return -1;
+	
+	block->translated++;
+	block->bd = ((struct partition_info *) object->instance)->bd;
+	block->number -= ((struct partition_info *) object->instance)->start;
+	
+	/* sync it */
+	value = CALL(block->bd, sync, block);
+	
+	block->bd = object;
+	block->number += ((struct partition_info *) object->instance)->start;
+	block->translated--;
+	
+	return value;
 }
 
 static int partition_bd_destroy(BD_t * bd)
@@ -85,16 +110,18 @@ static int partition_bd_destroy(BD_t * bd)
 
 BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 {
+	struct partition_info * info;
 	BD_t * bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
 	
-	bd->instance = malloc(sizeof(struct partition_info));
-	if(!bd->instance)
+	info = malloc(sizeof(struct partition_info));
+	if(!info)
 	{
 		free(bd);
 		return NULL;
 	}
+	bd->instance = info;
 	
 	ASSIGN(bd, partition_bd, get_numblocks);
 	ASSIGN(bd, partition_bd, get_blocksize);
@@ -103,9 +130,9 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	ASSIGN(bd, partition_bd, sync);
 	ASSIGN_DESTROY(bd, partition_bd, destroy);
 	
-	((struct partition_info *) bd->instance)->bd = disk;
-	((struct partition_info *) bd->instance)->start = start;
-	((struct partition_info *) bd->instance)->length = length;
+	info->bd = disk;
+	info->start = start;
+	info->length = length;
 	
 	return bd;
 }

@@ -126,8 +126,6 @@ void bdesc_release(bdesc_t ** bdesc)
 {
 	Dprintf("<bdesc 0x%08x release>\n", *bdesc);
 	if(!--(*bdesc)->refs)
-	{
 		bdesc_free(*bdesc);
-		*bdesc = NULL;
-	}
+	*bdesc = NULL;
 }
