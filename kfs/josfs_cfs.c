@@ -204,10 +204,11 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) cfs->instance;
 	int idx;
 	int fd;
-	int i;
+	int i, j, k;
 	int nbytes_read = 0;
 	dirent_t ent;
 	int r = 0;
+	struct File f;
 
 	if ((idx = fid_idx(fid, state->open_file)) < 0)
 		return idx;
@@ -215,7 +216,21 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 
 	for (i=0; nbytes_read < nbytes; i++)
 	{
-		panic("TODO: set variable ent's fields");
+		r = read(fd, &f, sizeof(struct File));
+
+		// Pseudo unique fileno generator
+		ent.d_fileno = 0;
+		k = 1;
+		for (j = 0; j < strlen(f.f_name); j++) {
+			ent.d_fileno += j * k;
+			k = k * 2;
+		}
+
+		ent.d_type = f.f_type;
+		ent.d_reclen = sizeof(ent.d_fileno) + sizeof(ent.d_type) + sizeof(ent.d_reclen) + sizeof(ent.d_namelen) + strlen(f.f_name) + 1;
+		ent.d_namelen = strlen(f.f_name);
+		strcpy(ent.d_name, f.f_name);
+		
 		if (r < 0)
 			goto exit;
 
