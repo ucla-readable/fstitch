@@ -155,7 +155,7 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 	bdesc_t * indirect;
 	const uint32_t  s_nblocks = super->s_nblocks;
 	uint32_t * k;
-	int j;
+	int j, r = 1;
 
 	// Get block list
 	for (j = 0; j < JOSFS_NINDIRECT; j++)
@@ -166,6 +166,7 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 		if (isvalid(file.f_indirect)) {
 			if (fbmap[file.f_indirect]) {
 				printf("indirect block pointing to free block: %s\n", file.f_name);
+				r++;
 			}
 			else if (ubmap[file.f_indirect]) {
 				ubmap[file.f_indirect]--;
@@ -186,10 +187,12 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 			}
 			else {
 				printf("indirect block pointing to used block: %s, %d\n", file.f_name, file.f_indirect);
+				r++;
 			}
 		}
 		else {
 			printf("invalid indirect block number: %s, %d", file.f_name, file.f_indirect);
+			r++;
 		}
 	}
 
@@ -199,19 +202,29 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 		if (blist[j] == 0)
 			break;
 		else if (isvalid(blist[j]))
-			if (fbmap[blist[j]])
+			if (fbmap[blist[j]]) {
 				printf("file pointing to free block: %s\n", file.f_name);
+				r++;
+			}
 			else if (ubmap[blist[j]])
 				ubmap[blist[j]]--;
-			else
+			else {
 				printf("file pointing to used block: %s, %d -> %d\n", file.f_name, j, blist[j]);
-		else
+				r++;
+			}
+		else {
 			printf("file pointing to invalid block number: %s, %d -> %d\n", file.f_name, j, blist[j]);
+			r++;
+		}
 	}
 	DFprintf("%s is %d bytes, %d blocks\n", file.f_name, file.f_size, j);
-	if (ROUNDUP32(file.f_size, JOSFS_BLKSIZE) != j*JOSFS_BLKSIZE)
+	if (ROUNDUP32(file.f_size, JOSFS_BLKSIZE) != j*JOSFS_BLKSIZE) {
 		printf("Invalid file size: %s, %d bytes, %d blocks\n", file.f_name, file.f_size, j);
+		r++;
+	}
 
+	if (r > 1)
+		return r - 1;
 	return 0;
 }
 
@@ -220,7 +233,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	const uint32_t s_nblocks = super->s_nblocks;
 	struct josfs_fdesc * fdesc = (struct josfs_fdesc *) f;
-	int d, r, blockno;
+	int d, r, s = 0, blockno;
 	uint32_t basep = 0, i = 0;
 	struct dirent entry;
 	bdesc_t * dirblock;
@@ -266,8 +279,12 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 			target += i % JOSFS_BLKFILES;
 			memcpy(temp_file, target, sizeof(JOSFS_File_t));
 			bdesc_drop(&dirblock);
-			if ((r = fsck_file(object, *temp_file, reserved, fbmap, ubmap, blist)) < 0)
-				goto fsck_dir_cleanup;
+			if ((r = fsck_file(object, *temp_file, reserved, fbmap, ubmap, blist)) < 0) {
+				if (r < 0)
+					goto fsck_dir_cleanup;
+				else
+					s += r;
+			}
 
 			if (entry.d_type == TYPE_DIR) {
 				if ((r = hash_set_insert(hsdirs, temp_file)) < 0) {
@@ -285,6 +302,8 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 	}
 	while (d >= 0);
 
+	if (s > 0)
+		return s;
 	return 0;
 
 fsck_dir_cleanup:
@@ -308,7 +327,7 @@ int josfs_fsck(LFS_t * object)
 	hash_set_t * hsdirs = NULL;
 	hash_set_it_t * hsitr = NULL;
 	int reserved = 2 + (s_nblocks / JOSFS_BLKBITSIZE);
-	int d = 0, r = 0;
+	int d = 0, r = 0, errors = 0;
 	info->m = -1;
 	info->p = 5;
 	info->color = 10;
@@ -346,6 +365,8 @@ int josfs_fsck(LFS_t * object)
 
 			if (d < 0)
 				r = d;
+			if (d > 0)
+				errors += d;
 
 			hsitr = hash_set_it_create();
 			if (hsitr) {
@@ -390,7 +411,7 @@ int josfs_fsck(LFS_t * object)
 		r = -E_NO_MEM;
 	}
 
-	if (r < 0) {
+	if (r < 0 || errors) {
 		if (info->m >= 0) {
 			for (j = 0; j < 5; j++) {
 				sleep(75);
@@ -405,6 +426,9 @@ int josfs_fsck(LFS_t * object)
 	free(blocklist);
 	free(free_bitmap);
 	free(used_bitmap);
+
+	if (errors)
+		return errors;
 	return r;
 }
 
