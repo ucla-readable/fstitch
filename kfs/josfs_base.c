@@ -235,8 +235,11 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 
 		d = josfs_get_dirent(object, (fdesc_t *) fdesc, &entry, sizeof(struct dirent), &basep);
 
-		// FIXME potentially buggy, fsck may mistaken an unreadable... say, indirect block
-		// for "no more directory entries"
+		if (d == -E_NOT_FOUND) {
+			r = -2;
+			goto fsck_dir_cleanup;
+		}
+
 		if (d != 0) {
 			free(temp_file);
 			i++;
@@ -738,7 +741,7 @@ static uint32_t josfs_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_
 	bdesc_t * indirect;
 	uint32_t blockno, nblocks;
 
-	Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %d\n", f->file->f_name, offset);
+	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %d\n", f->file->f_name, offset);
 
 	nblocks = josfs_get_file_numblocks(object, file);
 	if (offset % JOSFS_BLKSIZE == 0 && offset < nblocks * JOSFS_BLKSIZE) {
@@ -784,52 +787,55 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	JOSFS_File_t * dirfile;
 	int blockno, i;
 	uint16_t namelen, reclen;
-	int retval = E_NOT_DIR;
 
 	// Make sure it's a directory and we can read from it
-	if (f->file->f_type == TYPE_DIR) {
-		blockno = *basep / JOSFS_BLKFILES;
-		dirblock = josfs_get_file_block(object, file, blockno * JOSFS_BLKSIZE);
-		if (dirblock) {
-			dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
+	if (f->file->f_type != TYPE_DIR)
+		return -E_NOT_DIR;
 
-			namelen = strlen(dirfile->f_name);
-			namelen = MIN(namelen, sizeof(entry->d_name) - 1);
+	blockno = *basep / JOSFS_BLKFILES;
 
-			// If the name length is 0 (or less?) then we assume it's an empty slot
-			if (namelen < 1) {
-				entry->d_reclen = 0;
-				bdesc_drop(&dirblock);
-				*basep += 1;
-				return 1;
-			}
+	if (blockno > josfs_get_file_numblocks(object, file))
+		return -E_UNSPECIFIED;
 
-			reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
+	dirblock = josfs_get_file_block(object, file, blockno * JOSFS_BLKSIZE);
+	if (dirblock) {
+		dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
 
-			if (size >= reclen) {
-				// Pseudo unique fileno generator
-				entry->d_fileno = 0;
-				for (i = 0; f->fullpath[i]; i++) {
-					entry->d_fileno *= 5;
-					entry->d_fileno += f->fullpath[i];
-				}
+		namelen = strlen(dirfile->f_name);
+		namelen = MIN(namelen, sizeof(entry->d_name) - 1);
 
-				entry->d_type = dirfile->f_type;
-				entry->d_filesize = dirfile->f_size;
-				entry->d_reclen = reclen;
-				entry->d_namelen = namelen;
-				strncpy(entry->d_name, dirfile->f_name, sizeof(entry->d_name));
-
-				bdesc_drop(&dirblock);
-				*basep += 1;
-				return 0;
-			}
+		// If the name length is 0 (or less?) then we assume it's an empty slot
+		if (namelen < 1) {
+			entry->d_reclen = 0;
 			bdesc_drop(&dirblock);
+			*basep += 1;
+			return 1;
 		}
-		retval = E_UNSPECIFIED;
-	}
 
-	return -retval;
+		reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
+
+		if (size >= reclen) {
+			// Pseudo unique fileno generator
+			entry->d_fileno = 0;
+			for (i = 0; f->fullpath[i]; i++) {
+				entry->d_fileno *= 5;
+				entry->d_fileno += f->fullpath[i];
+			}
+
+			entry->d_type = dirfile->f_type;
+			entry->d_filesize = dirfile->f_size;
+			entry->d_reclen = reclen;
+			entry->d_namelen = namelen;
+			strncpy(entry->d_name, dirfile->f_name, sizeof(entry->d_name));
+
+			bdesc_drop(&dirblock);
+			*basep += 1;
+			return 0;
+		}
+		bdesc_drop(&dirblock);
+		return -E_INVAL;
+	}
+	return -E_NOT_FOUND;
 }
 
 static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
