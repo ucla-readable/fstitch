@@ -399,7 +399,7 @@ void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
 			}
 		}
 
-		if (!it->bucket)
+		if (!it->elt)
 			return NULL; // no elts in the hash map
 	}
 
@@ -411,7 +411,7 @@ void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
 	}
 
 	// Find the next bucket with an elt
-	for (i=0; i < vector_size(hm->tbl); i++)
+	for (i=it->bucket+1; i < vector_size(hm->tbl); i++)
 	{
 		head = vector_elt(hm->tbl, i);
 		if (head)
