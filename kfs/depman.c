@@ -1,6 +1,6 @@
 /* This file contains the magic DEP MAN! */
 
-#include <inc/lib.h>
+#include <inc/stdio.h>
 
 #include <kfs/depman.h>
 #include <kfs/bdesc.h>
