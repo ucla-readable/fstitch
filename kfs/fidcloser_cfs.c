@@ -242,7 +242,9 @@ static int fidcloser_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
-	int r = modman_rem_cfs(cfs);
+	int r;
+
+	r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_cfs(state->frontend_cfs, cfs);
@@ -397,22 +399,20 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 	if (!state->open_files)
 		goto error_state;
 
-	if(modman_add_anon_cfs(cfs, __FUNCTION__))
-	{
-		DESTROY(cfs);
-		return NULL;
-	}
-	if(modman_inc_cfs(frontend_cfs, cfs, NULL) < 0)
-	{
-		modman_rem_cfs(cfs);
-		DESTROY(cfs);
-		return NULL;
-	}
-
 	fidcloser_cfs_exists = 1;
+
+	if(modman_add_anon_cfs(cfs, __FUNCTION__))
+		goto error_open_files;
+
+	if(modman_inc_cfs(frontend_cfs, cfs, NULL) < 0)
+		goto error_modman_add;
 
 	return cfs;
 
+  error_modman_add:
+	modman_rem_cfs(cfs);
+  error_open_files:
+	hash_map_destroy(state->open_files);
   error_state:
 	free(state);
 	cfs->instance = NULL;
