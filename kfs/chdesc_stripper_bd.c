@@ -32,12 +32,9 @@ static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_
 
 		if (desc->type == NOOP)
 		{
-			r = satisfy_external_deps(bd, block,desc);
+			r = satisfy_external_deps(bd, block, desc);
 			if (r < 0)
-			{
-				chdesc_weak_release(&c);
 				return r;
-			}
 
 			// satisfy_external_deps(bd, desc) satisfied all the external-BD
 			// deps. if desc does have any deps, they are only to this block.
@@ -50,7 +47,6 @@ static int satisfy_external_deps(const BD_t * bd, const bdesc_t * block, chdesc_
 			if (r < 0)
 			{
 				fprintf(STDERR_FILENO, "%s: BD write errored: %e\n", __FUNCTION__, r);
-				chdesc_weak_release(&c);
 				return r;
 			}
 		}
