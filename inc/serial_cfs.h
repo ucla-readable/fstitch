@@ -64,6 +64,7 @@ struct Scfs_write {
 struct Scfs_getdirentries {
 	SCFS_TYPE;
 	int fid;
+	int nbytes;
 	off_t basep;
 };
 
