@@ -2,6 +2,7 @@
 
 #include <inc/error.h>
 #include <inc/stdio.h>
+#include <inc/assert.h>
 #include <inc/hash_map.h>
 
 #include <kfs/depman.h>
@@ -19,6 +20,9 @@ static hash_map_t * bdesc_hash = NULL;
 /* initialize the dependency manager */
 int depman_init(void)
 {
+	/* check that depman_init() is not called more than once */
+	assert(!bdesc_hash);
+
 	bdesc_hash = hash_map_create_size(64, 1);
 	if(!bdesc_hash)
 		return -E_NO_MEM;
