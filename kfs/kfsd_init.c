@@ -32,7 +32,7 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
-// #define USE_MIRROR
+#define USE_MIRROR
 #define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
@@ -345,10 +345,12 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		{
 			printf("Fscking... ");
 			int r = josfs_fsck(josfs_lfs);
-			if (r >= 0)
+			if (r == 0)
 				printf("done.\n");
+			else if (r > 0)
+				printf("found %d errors\n", r);
 			else
-				printf("errors found: %e\n");
+				printf("critical error: %e\n", r);
 		}
 
 		if (lfs)

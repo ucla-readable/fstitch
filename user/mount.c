@@ -125,7 +125,9 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, boo
 						printf("Fscking pre-journal-replayed filesystem... ");
 					int r = josfs_fsck(lfs);
 					if (r < 0)
-						fprintf(STDERR_FILENO, "errors found: %e\n");
+						fprintf(STDERR_FILENO, "critical errors: %e\n", r);
+					else if (r > 0)
+						fprintf(STDERR_FILENO, "found %d errors\n", r);
 					else if (verbose)
 						printf("done.\n");
 				}
