@@ -89,6 +89,9 @@ int bdesc_retain(bdesc_t ** bdesc);
 /* free a bdesc if it has zero reference count */
 void bdesc_drop(bdesc_t ** bdesc);
 
+/* decrease the bdesc reference count but do not free it even if it reaches 0 */
+void bdesc_forget(bdesc_t ** bdesc);
+
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc);
 

@@ -157,12 +157,24 @@ void bdesc_drop(bdesc_t ** bdesc)
 	*bdesc = NULL;
 }
 
+/* decrease the bdesc reference count but do not free it even if it reaches 0 */
+void bdesc_forget(bdesc_t ** bdesc)
+{
+	Dprintf("<bdesc 0x%08x forget>\n", *bdesc);
+	if((*bdesc)->refs)
+	{
+		(*bdesc)->ddesc->refs--;
+		(*bdesc)->refs--;
+	}
+	else
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): forgetting long forgotten block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+}
+
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc)
 {
 	Dprintf("<bdesc 0x%08x release>\n", *bdesc);
-	(*bdesc)->ddesc->refs--;
-	(*bdesc)->refs--;
+	bdesc_forget(bdesc);
 	bdesc_drop(bdesc);
 }
 
