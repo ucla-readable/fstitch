@@ -131,14 +131,11 @@ static int fid_table_del(table_classifier_state_t * state, int fid)
 {
 	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
 	open_file_t * f;
-	int r;
 
-	f = hash_map_find_val(state->open_files, (void*) fid);
+	f = hash_map_erase(state->open_files, (void*) fid);
 	if (!f)
 		return -E_INVAL;
 
-	r = hash_map_erase(state->open_files, (void*) fid);
-	assert(0 <= r);
 	open_file_destroy(f);
 	return 0;
 }

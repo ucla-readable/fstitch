@@ -181,17 +181,18 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	return 0;
 }
 
-int hash_map_erase(hash_map_t * hm, const void * k)
+void * hash_map_erase(hash_map_t * hm, const void * k)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+	void * v;
 
 	if (!head)
-		return -E_NOT_FOUND;
+		return NULL;
 
 	chain_elt_t * k_chain = chain_search_key(head, k);
 	if (!k_chain)
-		return -E_NOT_FOUND;
+		return NULL;
 
 	if (k_chain->prev)
 		k_chain->prev->next = k_chain->next;
@@ -200,10 +201,12 @@ int hash_map_erase(hash_map_t * hm, const void * k)
 	if (k_chain->next)
 		k_chain->next->prev = k_chain->prev;
 
+	v = k_chain->elt.val;
+
 	chain_elt_destroy(k_chain);
 	hm->size--;
 
-	return 0;
+	return v;
 }
 
 int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)

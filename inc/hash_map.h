@@ -27,8 +27,8 @@ bool   hash_map_empty(const hash_map_t * hm);
 // Returns 0 or 1 on success, or -E_NO_MEM.
 int    hash_map_insert(hash_map_t * hm, void * k, void * v);
 // Remove the given key-val pair, does not destory key or val.
-// Returns 0 on success, or -E_NOT_FOUND.
-int    hash_map_erase(hash_map_t * hm, const void * k);
+// Returns k's value on success, NULL if k is not in the hash_map.
+void * hash_map_erase(hash_map_t * hm, const void * k);
 // Change the mapping from oldk->val to be newk->val.
 // Returns 0 on success, -E_FILE_EXISTS if newk exists, or -E_NOT_FOUND if oldk does not exist.
 int    hash_map_change_key(hash_map_t * hm, void * oldk, void * newk);

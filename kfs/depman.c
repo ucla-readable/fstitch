@@ -174,17 +174,18 @@ int depman_add_chdesc(chdesc_t * root)
 /* remove an individual chdesc from the dependency manager */
 int depman_remove_chdesc(chdesc_t * chdesc)
 {
-	int r;
-	chdesc_t * value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
+	chdesc_t * value;
+	chdesc_t * value_erase;
+
+	value = (chdesc_t *) hash_map_find_val(bdesc_hash, chdesc->block);
 	if(!value)
 		return -E_NOT_FOUND;
 	chdesc_satisfy(chdesc);
 	chdesc_release(&chdesc);
 	if(!value->dependencies)
 	{
-		r = hash_map_erase(bdesc_hash, value->block);
-		if(r < 0)
-			fprintf(STDERR_FILENO, "%s: hash_map_erase returned %e. TODO: do what?\n", __FUNCTION__, r);
+		value_erase = hash_map_erase(bdesc_hash, value->block);
+		assert(value == value_erase);
 		chdesc_release(&value);
 	}
 	return 0;
