@@ -287,7 +287,8 @@ modman_it_t * modman_it_create_##type(void) \
 #define MODMAN_IT_NEXT(type) \
 type##_t * modman_it_next_##type(modman_it_t * it) \
 { \
-	return (type##_t *) hash_map_val_next(type##_map, it); \
+	const modman_entry_##type##_t * me = hash_map_val_next(type##_map, it); \
+	return (type##_t *) me->type; \
 }
 
 MODMAN_IT_CREATE(bd);
