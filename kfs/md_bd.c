@@ -205,7 +205,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;
 	/* we can use minimum number of blocks and atomic size safely */
-	info->numblocks = MIN(numblocks0, numblocks1);
+	info->numblocks = 2 * MIN(numblocks0, numblocks1);
 	info->blocksize = blocksize;
 	info->atomicsize = MIN(atomicsize0, atomicsize1);
 	
