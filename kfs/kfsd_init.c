@@ -16,7 +16,7 @@
 #include <kfs/josfs_cfs.h>
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/fidprotector_cfs.h>
-#include <kfs/fidfairy_cfs.h>
+#include <kfs/fidcloser_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/depman.h>
 #include <kfs/sched.h>
@@ -42,7 +42,7 @@ int kfsd_init(void)
 	vector_t * uhfses = NULL;
 	CFS_t * table_class = NULL;
 	CFS_t * fidprotector = NULL;
-	CFS_t * fidfairy = NULL;
+	CFS_t * fidcloser = NULL;
 	int r;
 
 	if((r = depman_init()) < 0)
@@ -199,9 +199,9 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	set_frontend_cfs(fidprotector);
 
-	if (! (fidfairy = fidfairy_cfs(get_frontend_cfs())) )
+	if (! (fidcloser = fidcloser_cfs(get_frontend_cfs())) )
 		kfsd_shutdown();
-	set_frontend_cfs(fidfairy);
+	set_frontend_cfs(fidcloser);
 
 	return 0;
 }

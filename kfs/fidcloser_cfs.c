@@ -4,28 +4,28 @@
 #include <inc/lib.h>
 
 #include <kfs/cfs_ipc_serve.h>
-#include <kfs/fidfairy_cfs.h>
+#include <kfs/fidcloser_cfs.h>
 
 
-#define FIDFAIRY_DEBUG 0
+#define FIDCLOSER_DEBUG 0
 
-#if FIDFAIRY_DEBUG
+#if FIDCLOSER_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
 #endif
 
 
-// Because fidfairy_cfs decides when to close a fid based on the pageref
-// number for the struct Fd page, fidfairy_cfs would never close any
-// files in use by multiple fid fairies.
+// Because fidcloser_cfs decides when to close a fid based on the pageref
+// number for the struct Fd page, fidcloser_cfs would never close any
+// files in use by multiple fidclosers.
 // Three possibilities to keep this from happening:
 // 1- Assume this won't happen.
-// 2- Figure out if a given fid/page is already in use by another fidfairy.
-// 3- Allow at most one fidfairy to exist at a given time.
+// 2- Figure out if a given fid/page is already in use by another fidcloser.
+// 3- Allow at most one fidcloser to exist at a given time.
 // Possibility 3 is safe (1 is not), simpler than 2, and at least for now
-// mupltiple fidfairies aren't something we want. so possibility 2 it is:
-static bool fidfairy_cfs_exists = 0;
+// mupltiple fidclosers aren't something we want. so possibility 2 it is:
+static bool fidcloser_cfs_exists = 0;
 
 
 struct open_file {
@@ -34,11 +34,11 @@ struct open_file {
 };
 typedef struct open_file open_file_t;
 
-struct fidfairy_state {
+struct fidcloser_state {
 	hash_map_t * open_files;
 	CFS_t * frontend_cfs;
 };
-typedef struct fidfairy_state fidfairy_state_t;
+typedef struct fidcloser_state fidcloser_state_t;
 
 
 static bool va_is_mapped(const void * va)
@@ -79,7 +79,7 @@ static void open_file_destroy(open_file_t * of)
 	free(of);
 }
 
-static int open_file_close(fidfairy_state_t * state, open_file_t * of)
+static int open_file_close(fidcloser_state_t * state, open_file_t * of)
 {
 	open_file_t * of_erase;
 	int r;
@@ -89,11 +89,11 @@ static int open_file_close(fidfairy_state_t * state, open_file_t * of)
 	assert(1 <= pageref(of->page));
 	if (1 < pageref(of->page))
 	{
-		Dprintf("fidfairy_cfs %s: not closing fid %d, %d external refs\n", __FUNCTION__, of->fid, pageref(of->page)-1);
+		Dprintf("fidcloser_cfs %s: not closing fid %d, %d external refs\n", __FUNCTION__, of->fid, pageref(of->page)-1);
 		return 0;
 	}
 
-	Dprintf("fidfairy_cfs %s: sending close for fid %d\n", __FUNCTION__, of->fid);
+	Dprintf("fidcloser_cfs %s: sending close for fid %d\n", __FUNCTION__, of->fid);
 	r = CALL(state->frontend_cfs, close, of->fid);
 	if (r < 0)
 		return r;
@@ -105,7 +105,7 @@ static int open_file_close(fidfairy_state_t * state, open_file_t * of)
 	return 0;
 }
 
-static void open_file_gc(fidfairy_state_t * state)
+static void open_file_gc(fidcloser_state_t * state)
 {
 	hash_map_it_t * hm_it;
 	open_file_t * of;
@@ -116,7 +116,7 @@ static void open_file_gc(fidfairy_state_t * state)
 	hm_it = hash_map_it_create();
 	if (!ofs_to_erase || !hm_it)
 	{
-		fprintf(STDERR_FILENO, "fidfairy unable to malloc memory to gc\n");
+		fprintf(STDERR_FILENO, "fidcloser unable to malloc memory to gc\n");
 		if (ofs_to_erase)
 			vector_destroy(ofs_to_erase);
 		else if (hm_it)
@@ -133,11 +133,12 @@ static void open_file_gc(fidfairy_state_t * state)
 		r = vector_push_back(ofs_to_erase, of);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "fidfairy gc: vector_push_back: %e\n", r);
+			fprintf(STDERR_FILENO, "fidcloser gc: vector_push_back: %e\n", r);
 			break;
 		}
 	}
 	hash_map_it_destroy(hm_it);
+
 
 	// Remove gced open files
 	const size_t nofs_to_erase = vector_size(ofs_to_erase);
@@ -146,7 +147,7 @@ static void open_file_gc(fidfairy_state_t * state)
 	{
 		r = open_file_close(state, vector_elt(ofs_to_erase, i));
 		if (r < 0)
-			fprintf(STDERR_FILENO, "fidfairy gc: open_file_close: %e\n", r);
+			fprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %e\n", r);
 	}
 	vector_destroy(ofs_to_erase);
 }
@@ -155,12 +156,13 @@ static void open_file_gc(fidfairy_state_t * state)
 //
 // Intercepted CFS_t functions
 
-static int fidfairy_open(CFS_t * cfs, const char * name, int mode)
+static int fidcloser_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	int fid;
-	void * page, * cache;
+	const void * page;
+	const void * cache;
 	open_file_t * of;
 	int r;
 
@@ -176,17 +178,17 @@ static int fidfairy_open(CFS_t * cfs, const char * name, int mode)
 
 
 	// find a free slot to cache page
-	for(cache = FIDFAIRY_CFS_FD_MAP; cache != FIDFAIRY_CFS_FD_END; cache += PGSIZE)
+	for(cache = FIDCLOSER_CFS_FD_MAP; cache != FIDCLOSER_CFS_FD_END; cache += PGSIZE)
 		if(!va_is_mapped(cache))
 			break;
-	if(cache == FIDFAIRY_CFS_FD_END)
+	if(cache == FIDCLOSER_CFS_FD_END)
 	{
 		(void) CALL(state->frontend_cfs, close, fid);
 		return -E_MAX_OPEN;
 	}
 
-	// remap the client's page to fidfairy's cache
-	r = sys_page_map(0, page, 0, cache, PTE_U | PTE_P);
+	// remap the client's page to fidcloser's cache
+	r = sys_page_map(0, (void*) page, 0, (void*) cache, PTE_U | PTE_P);
 	if(r < 0)
 	{
 		(void) CALL(state->frontend_cfs, close, fid);
@@ -199,7 +201,7 @@ static int fidfairy_open(CFS_t * cfs, const char * name, int mode)
 	if (!of || ((r = hash_map_insert(state->open_files, (void*) fid, of)) < 0))
 	{
 		(void) CALL(state->frontend_cfs, close, fid);
-		int s = sys_page_unmap(0, cache);
+		int s = sys_page_unmap(0, (void*) cache);
 		assert(0 <= s);
 		if (r == 0)
 			return -E_NO_MEM;
@@ -210,10 +212,10 @@ static int fidfairy_open(CFS_t * cfs, const char * name, int mode)
 	return fid;
 }
 
-static int fidfairy_close(CFS_t * cfs, int fid)
+static int fidcloser_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	open_file_t * of;
 	int r;
 
@@ -226,10 +228,10 @@ static int fidfairy_close(CFS_t * cfs, int fid)
 	return 0;
 }
 
-static int fidfairy_destroy(CFS_t * cfs)
+static int fidcloser_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 
 	// TODO: open_file_gc() here? force close all files?
 
@@ -238,7 +240,7 @@ static int fidfairy_destroy(CFS_t * cfs)
 	hash_map_destroy(state->open_files);
 	state->open_files = NULL;
 
-	fidfairy_cfs_exists = 0;
+	fidcloser_cfs_exists = 0;
 
 	free(cfs->instance);
 	memset(cfs, 0, sizeof(*cfs));
@@ -250,87 +252,87 @@ static int fidfairy_destroy(CFS_t * cfs)
 //
 // Passthrough CFS_t functions
 
-static int fidfairy_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int fidcloser_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, read, fid, data, offset, size);
 }
 
-static int fidfairy_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int fidcloser_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, write, fid, data, offset, size);
 }
 
-static int fidfairy_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int fidcloser_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
 }
 
-static int fidfairy_truncate(CFS_t * cfs, int fid, uint32_t target_size)
+static int fidcloser_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, truncate, fid, target_size);
 }
 
-static int fidfairy_unlink(CFS_t * cfs, const char * name)
+static int fidcloser_unlink(CFS_t * cfs, const char * name)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, unlink, name);
 }
 
-static int fidfairy_link(CFS_t * cfs, const char * oldname, const char * newname)
+static int fidcloser_link(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, link, oldname, newname);
 }
 
-static int fidfairy_rename(CFS_t * cfs, const char * oldname, const char * newname)
+static int fidcloser_rename(CFS_t * cfs, const char * oldname, const char * newname)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, rename, oldname, newname);
 }
 
-static int fidfairy_mkdir(CFS_t * cfs, const char * name)
+static int fidcloser_mkdir(CFS_t * cfs, const char * name)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, mkdir, name);
 }
 
-static int fidfairy_rmdir(CFS_t * cfs, const char * name)
+static int fidcloser_rmdir(CFS_t * cfs, const char * name)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, rmdir, name);
 }
 
-static size_t fidfairy_get_num_features(CFS_t * cfs, const char * name)
+static size_t fidcloser_get_num_features(CFS_t * cfs, const char * name)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, get_num_features, name);
 }
 
-static const feature_t * fidfairy_get_feature(CFS_t * cfs, const char * name, size_t num)
+static const feature_t * fidcloser_get_feature(CFS_t * cfs, const char * name, size_t num)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, get_feature, name, num);
 }
 
-static int fidfairy_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
+static int fidcloser_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, get_metadata, name, id, size, data);
 }
 
-static int fidfairy_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
+static int fidcloser_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
 }
 
-static int fidfairy_sync(CFS_t * cfs, const char * name)
+static int fidcloser_sync(CFS_t * cfs, const char * name)
 {
-	fidfairy_state_t * state = (fidfairy_state_t *) cfs->instance;
+	fidcloser_state_t * state = (fidcloser_state_t *) cfs->instance;
 	return CALL(state->frontend_cfs, sync, name);
 }
 
@@ -338,13 +340,13 @@ static int fidfairy_sync(CFS_t * cfs, const char * name)
 //
 // CFS_t management
 
-CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
+CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 {
 	CFS_t * cfs;
-	fidfairy_state_t * state;
+	fidcloser_state_t * state;
 
-	if (fidfairy_cfs_exists)
-		panic("fidfairy can currently have at most one instance.");
+	if (fidcloser_cfs_exists)
+		panic("fidcloser can currently have at most one instance.");
 
 	if (!frontend_cfs)
 		return NULL;
@@ -353,23 +355,23 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
 	if (!cfs)
 		return NULL;
 
-	ASSIGN(cfs, fidfairy, open);
-	ASSIGN(cfs, fidfairy, close);
-	ASSIGN(cfs, fidfairy, read);
-	ASSIGN(cfs, fidfairy, write);
-	ASSIGN(cfs, fidfairy, getdirentries);
-	ASSIGN(cfs, fidfairy, truncate);
-	ASSIGN(cfs, fidfairy, unlink);
-	ASSIGN(cfs, fidfairy, link);
-	ASSIGN(cfs, fidfairy, rename);
-	ASSIGN(cfs, fidfairy, mkdir);
-	ASSIGN(cfs, fidfairy, rmdir);
-	ASSIGN(cfs, fidfairy, get_num_features);
-	ASSIGN(cfs, fidfairy, get_feature);
-	ASSIGN(cfs, fidfairy, get_metadata);
-	ASSIGN(cfs, fidfairy, set_metadata);
-	ASSIGN(cfs, fidfairy, sync);
-	ASSIGN_DESTROY(cfs, fidfairy, destroy);
+	ASSIGN(cfs, fidcloser, open);
+	ASSIGN(cfs, fidcloser, close);
+	ASSIGN(cfs, fidcloser, read);
+	ASSIGN(cfs, fidcloser, write);
+	ASSIGN(cfs, fidcloser, getdirentries);
+	ASSIGN(cfs, fidcloser, truncate);
+	ASSIGN(cfs, fidcloser, unlink);
+	ASSIGN(cfs, fidcloser, link);
+	ASSIGN(cfs, fidcloser, rename);
+	ASSIGN(cfs, fidcloser, mkdir);
+	ASSIGN(cfs, fidcloser, rmdir);
+	ASSIGN(cfs, fidcloser, get_num_features);
+	ASSIGN(cfs, fidcloser, get_feature);
+	ASSIGN(cfs, fidcloser, get_metadata);
+	ASSIGN(cfs, fidcloser, set_metadata);
+	ASSIGN(cfs, fidcloser, sync);
+	ASSIGN_DESTROY(cfs, fidcloser, destroy);
 
 
 	state = malloc(sizeof(*state));
@@ -381,7 +383,7 @@ CFS_t * fidfairy_cfs(CFS_t * frontend_cfs)
 	if (!state->open_files)
 		goto error_state;
 
-	fidfairy_cfs_exists = 1;
+	fidcloser_cfs_exists = 1;
 
 	return cfs;
 
