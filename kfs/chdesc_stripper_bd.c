@@ -5,7 +5,7 @@
 #include <kfs/chdesc_stripper_bd.h>
 
 
-#define CHDESC_STRIPPER_DEBUG 1
+#define CHDESC_STRIPPER_DEBUG 0
 
 #if CHDESC_STRIPPER_DEBUG
 #define Dprintf(x...) printf(x)
@@ -99,6 +99,15 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 			return r;
 	}
 
+	// Satisfy block's chdescs
+
+	while (block_chdesc && block_chdesc->dependencies
+		   && (cur_chdesc = block_chdesc->dependencies->desc))
+	{
+		r = depman_remove_chdesc(cur_chdesc);
+		assert(r >= 0);
+	}
+
 	// Write block
 
 	refs = block->refs;
@@ -115,19 +124,12 @@ static int chdesc_stripper_write_block(BD_t * bd, bdesc_t * block)
 
 	if (r < 0)
 	{
+		fprintf(STDERR_FILENO, "%s: Danger Will Robinson! BD::write_block() failed, recovering but chdescs already deleted.\n", __FUNCTION__);
 		if (block_chdesc)
 			chdesc_weak_release(&block_chdesc);
 		return r;
 	}
 
-	// Satisfy block's chdescs
-
-	while (block_chdesc && block_chdesc->dependencies
-		   && (cur_chdesc = block_chdesc->dependencies->desc))
-	{
-		r = depman_remove_chdesc(cur_chdesc);
-		assert(r >= 0);
-	}
 
 	return 0;
 }
