@@ -112,9 +112,9 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 	{
 		// Second of two recvs
 		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
-		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
 		void * fdpage = req;
 		int r;
+		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
 		r = CALL(frontend_cfs, open, scfs->path, scfs->mode, (void*) fdpage);
 		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
@@ -124,17 +124,17 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 static void serve_close(envid_t envid, struct Scfs_close * req)
 {
-	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
 	int r;
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
 	r = CALL(frontend_cfs, close, req->fid);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_read(envid_t envid, struct Scfs_read * req)
 {
-	Dprintf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 	int r;
 	void *buf = (uint8_t*) PAGESNDVA;
+	Dprintf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 
 	if (get_pte(buf) & PTE_P)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
@@ -162,8 +162,8 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 	{
 		// Second of two recvs
 		struct Scfs_write *scfs = (struct Scfs_write*) prevrecv->scfs;
-		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, scfs->fid, scfs->offset, scfs->size);
 		int r;
+		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, scfs->fid, scfs->offset, scfs->size);
 		r = CALL(frontend_cfs, write, scfs->fid, req, scfs->offset, scfs->size);
 		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
@@ -173,66 +173,66 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 
 static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 {
-	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
 	int r;
+	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
 	r = CALL(frontend_cfs, truncate, req->fid, req->size);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_unlink(envid_t envid, struct Scfs_unlink * req)
 {
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	int r;
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	r = CALL(frontend_cfs, unlink, req->name);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_link(envid_t envid, struct Scfs_link * req)
 {
-	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
 	int r;
+	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
 	r = CALL(frontend_cfs, link, req->oldname, req->newname);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_rename(envid_t envid, struct Scfs_rename * req)
 {
-	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
 	int r;
+	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
 	r = CALL(frontend_cfs, rename, req->oldname, req->newname);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 {
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
 	int r;
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
 	r = CALL(frontend_cfs, mkdir, req->path);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_rmdir(envid_t envid, struct Scfs_rmdir * req)
 {
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
 	int r;
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
 	r = CALL(frontend_cfs, rmdir, req->path);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_get_num_features(envid_t envid, struct Scfs_get_num_features * req)
 {
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	int r;
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	r = CALL(frontend_cfs, get_num_features, req->name);
 	ipc_send(envid, r, NULL, 0);
 }
 
 static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
 {
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	const feature_t *f;
 	void *buf = (uint8_t*) PAGESNDVA;
 	int r;
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 
 	if (get_pte(buf) & PTE_P)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
@@ -250,10 +250,10 @@ static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
 
 static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 {
-	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
 	struct Scfs_metadata *md = (struct Scfs_metadata*) PAGESNDVA;
 	void * data = NULL;
 	int r;
+	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
 
 	if (get_pte(md) & PTE_P)
 		panic("md (PAGESNDVA = 0x%08x) already mapped", md);
@@ -295,9 +295,9 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 	{
 		// Second of two recvs
 		struct Scfs_set_metadata *scfs = (struct Scfs_set_metadata*) prevrecv->scfs;
-		Dprintf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, scfs->name);
 		struct Scfs_metadata *md = (struct Scfs_metadata*) req;
 		int r;
+		Dprintf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, scfs->name);
 		r = CALL(frontend_cfs, set_metadata, scfs->name, md->id, md->size, md->data);
 		ipc_send(envid, r, NULL, 0);
 		prevrecv->envid = 0;
@@ -307,8 +307,8 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 
 static void serve_sync(envid_t envid, struct Scfs_sync * req)
 {
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	int r;
+	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 	r = CALL(frontend_cfs, sync, req->name);
 	ipc_send(envid, r, NULL, 0);
 }
@@ -318,6 +318,13 @@ static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 	Dprintf("%s: %08x\n", __FUNCTION__, envid);
 	ipc_send(envid, 0, NULL, 0);
 	kfsd_shutdown();
+}
+
+static void serve_debug(envid_t envid, struct Scfs_debug * req)
+{
+	Dprintf("%s: 0x%08x\n", __FUNCTION__, envid);
+	malloc_stats();
+	ipc_send(envid, 0, NULL, 0);
 }
 
 
@@ -407,6 +414,9 @@ static void serve(void)
 			break;
 		case SCFS_SHUTDOWN:
 			serve_shutdown(whom, (struct Scfs_shutdown*) REQVA);
+			break;
+		case SCFS_DEBUG:
+			serve_debug(whom, (struct Scfs_debug*) REQVA);
 			break;
 		default:
 			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Unknown type %d\n", type);

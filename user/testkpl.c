@@ -1,29 +1,41 @@
 #include <inc/lib.h>
 #include <inc/kpl.h>
+#include <inc/cfs_ipc_client.h>
 
 char data[2*PGSIZE];
 
 void
 umain(int argc, char **argv)
 {
-	uint32_t offset = 513;
-	int r;
-	int fd;
+	char * filename = argv[1];
+	char * write_data = argv[2];
 
-	if (argc != 3)
+	uint32_t length = 513;
+	int r, fd;
+
+	/* support debugging as a "hidden" feature... */
+	if(argc == 2 && !strcmp(argv[1], "--debug"))
+	{
+		cfs_debug();
+		exit();
+	}
+	if(argc == 2 && !strcmp(argv[1], "--shutdown"))
+	{
+		cfs_shutdown();
+		exit();
+	}
+
+	if(argc != 3)
 	{
 		fprintf(STDERR_FILENO, "Usage: %s <path> <text_to_write>\n", argv[0]);
 		exit();
 	}
 
-	char * filename = argv[1];
-	char * write_data = argv[2];
-
 	fd = kpl_open(filename, O_RDWR);
 	printf("kpl_open(\"/%s\", 0) = %e\n", filename, fd);
 
-	r = read(fd, data, offset);
-	printf("read(fd, data, 0x%x) = %e\n", offset, r);
+	r = read(fd, data, length);
+	printf("read(fd, data, 0x%x) = %e\n", length, r);
 	printf("data: [%s]\n", data);
 
 	r = seek(fd, 0);
@@ -35,12 +47,12 @@ umain(int argc, char **argv)
 	r = seek(fd, 0);
 	printf("seek(fd, 0) = %e\n", r);
 
-	r = read(fd, data, offset);
-	printf("read(fd, data, 0x%x) = %e\n", offset, r);
+	r = read(fd, data, length);
+	printf("read(fd, data, 0x%x) = %e\n", length, r);
 	printf("data: [%s]\n", data);
 
-	r = read(fd, data, offset);
-	printf("read(fd, data, 0x%x) = %e\n", offset, r);
+	r = read(fd, data, length);
+	printf("read(fd, data, 0x%x) = %e\n", length, r);
 	printf("data: [%s]\n", data);
 
 	r = close(fd);
