@@ -300,7 +300,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	uint32_t dataoffset = (offset % blocksize);
 	bdesc_t * bd;
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * prev_head = NULL, * tail, * save_head;
 	int r, allocated_block;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
@@ -333,14 +333,15 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 	while (size_written < size)
 	{
+		prev_head = NULL; /* no need to link with previous chains here */
 		allocated_block = 0;
 		/* get the block to write to - maybe just get a block number in the future, if we are writing the whole block? */
 		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (!bd)
 		{
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
-			prev_head = NULL; /* no need to link with previous chains here */
 			bd = CALL(state->lfs, allocate_block, blocksize, type, &prev_head, &tail);
+			save_head = prev_head;
 			if (!bd)
 				return size_written;
 			bdesc_retain(&bd);
@@ -349,6 +350,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 				bdesc_release(&bd);
 				return size_written;
 			}
+			prev_head = save_head;
 			allocated_block = 1;
 		}
 
