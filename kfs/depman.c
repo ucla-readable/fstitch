@@ -196,9 +196,10 @@ int depman_translate_chdesc(bdesc_t * from, bdesc_t * to, uint32_t offset, uint3
 			value->flags &= ~CHDESC_IN_DEPMAN;
 			chdesc_destroy(&value);
 		}
-		/* unmark all the chdescs marked above (the ones we just moved) */
-		for(scan = dest->dependencies; scan; scan = scan->next)
-			scan->desc->flags &= ~CHDESC_MARKED;
+		/* unmark all the chdescs marked above (the ones we just moved, if any) */
+		if(dest)
+			for(scan = dest->dependencies; scan; scan = scan->next)
+				scan->desc->flags &= ~CHDESC_MARKED;
 	}
 	
 	return 0;
