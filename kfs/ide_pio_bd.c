@@ -7,74 +7,82 @@
 #include <kfs/bdesc.h>
 #include <kfs/ide_pio_bd.h>
 
+static const uint16_t ide_base[2] = {0x1F0, 0x170};
+
 struct ide_info {
 	uint8_t controller;
 	uint8_t disk;
 	uint32_t length;
 };
 
-static void ide_notbusy(void)
+static void ide_notbusy(uint8_t controller)
 {
+	uint16_t base = ide_base[controller];
 	/* wait for disk not busy */
-	while((inb(0x1F7) & 0xC0) != 0x40);
+	while((inb(base + 7) & 0xC0) != 0x40);
 }
 
 #define SECTSIZE 512
 
-static void ide_read(uint32_t disk, uint32_t sector, void * dst, uint8_t count)
+static void ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * dst, uint8_t count)
 {
-	ide_notbusy();
+	uint16_t base = ide_base[controller];
 	
-	outb(0x1F2, count);
-	outb(0x1F3, sector & 0xFF);
-	outb(0x1F4, (sector >> 8) & 0xFF);
-	outb(0x1F5, (sector >> 16) & 0xFF);
-	outb(0x1F6, 0xE0 | ((disk & 1) << 4) | ((sector >> 24) & 0x0F));
+	ide_notbusy(controller);
+	
+	outb(base + 2, count);
+	outb(base + 3, sector & 0xFF);
+	outb(base + 4, (sector >> 8) & 0xFF);
+	outb(base + 5, (sector >> 16) & 0xFF);
+	outb(base + 6, 0xE0 | ((disk & 1) << 4) | ((sector >> 24) & 0x0F));
 	/* command 0x20 means read sector */
-	outb(0x1F7, 0x20);
+	outb(base + 7, 0x20);
 	
 	while(count--)
 	{
-		ide_notbusy();
+		ide_notbusy(controller);
 		
-		insl(0x1F0, dst, SECTSIZE / 4);
+		insl(base + 0, dst, SECTSIZE / 4);
 		dst += SECTSIZE;
 	}
 }
 
-static void ide_write(uint32_t disk, uint32_t sector, const void * src, uint8_t count)
+static void ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const void * src, uint8_t count)
 {
-	ide_notbusy();
+	uint16_t base = ide_base[controller];
 	
-	outb(0x1F2, count);
-	outb(0x1F3, sector & 0xFF);
-	outb(0x1F4, (sector >> 8) & 0xFF);
-	outb(0x1F5, (sector >> 16) & 0xFF);
-	outb(0x1F6, 0xE0 | ((disk & 1) << 4) | ((sector >> 24) & 0x0F));
+	ide_notbusy(controller);
+	
+	outb(base + 2, count);
+	outb(base + 3, sector & 0xFF);
+	outb(base + 4, (sector >> 8) & 0xFF);
+	outb(base + 5, (sector >> 16) & 0xFF);
+	outb(base + 6, 0xE0 | ((disk & 1) << 4) | ((sector >> 24) & 0x0F));
 	/* command 0x30 means write sector */
-	outb(0x1F7, 0x30);
+	outb(base + 7, 0x30);
 	
 	while(count--)
 	{
-		ide_notbusy();
+		ide_notbusy(controller);
 	
-		outsl(0x1F0, src, SECTSIZE / 4);
+		outsl(base + 0, src, SECTSIZE / 4);
 		src += SECTSIZE;
 	}
 }
 
-static uint32_t ide_size(uint32_t disk)
+static uint32_t ide_size(uint8_t controller, uint8_t disk)
 {
+	uint16_t base = ide_base[controller];
 	uint16_t id[SECTSIZE / 2];
 	
-	ide_notbusy();
+	ide_notbusy(controller);
 	
-	outb(0x1F6, 0xE0 | ((disk & 1) << 4));
+	outb(base + 6, 0xE0 | ((disk & 1) << 4));
 	/* command 0xEC means identify drive */
-	outb(0x1F7, 0xEC);
+	outb(base + 7, 0xEC);
 	
-	ide_notbusy();
-	insl(0x1F0, id, SECTSIZE / 4);
+	ide_notbusy(controller);
+	insl(base + 0, id, SECTSIZE / 4);
 	
 	return id[57] | (((uint32_t) id[58]) << 16);
 }
@@ -96,6 +104,7 @@ static uint16_t ide_pio_bd_get_atomicsize(BD_t * object)
 
 static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 {
+	struct ide_info * info = (struct ide_info *) object->instance;
 	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
@@ -107,13 +116,15 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	
 	/* read it */
-	ide_read(((struct ide_info *) object->instance)->disk, number, bdesc->ddesc->data, 1);
+	ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1);
 	
 	return bdesc;
 }
 
 static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 {
+	struct ide_info * info = (struct ide_info *) object->instance;
+	
 	/* make sure this is the right block device */
 	if(block->bd != object)
 		return -E_INVAL;
@@ -127,7 +138,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* write it */
-	ide_write(((struct ide_info *) object->instance)->disk, block->number, block->ddesc->data, 1);
+	ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1);
 	
 	/* drop the hot potato */
 	bdesc_drop(&block);
@@ -151,10 +162,18 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	return 0;
 }
 
-BD_t * ide_pio_bd(uint32_t disk)
+BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 {
 	struct ide_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	BD_t * bd;
+	
+	/* check for valid controller/disk values */
+	if(controller != 0 && controller != 1)
+		return NULL;
+	if(disk != 0 && disk != 1)
+		return NULL;
+	
+	bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
 	
@@ -174,9 +193,9 @@ BD_t * ide_pio_bd(uint32_t disk)
 	ASSIGN(bd, ide_pio_bd, sync);
 	ASSIGN_DESTROY(bd, ide_pio_bd, destroy);
 	
-	info->controller = 0;
+	info->controller = controller;
 	info->disk = disk;
-	info->length = ide_size(disk);
+	info->length = ide_size(controller, disk);
 	
 	return bd;
 }
