@@ -43,6 +43,9 @@ open(const char* path, int mode)
 	struct Fd * fd;
 	int i, r;
 	
+	if((path[0] == '/' && path[2] == ':') || path[1] == ':')
+		return kpl_open(path, mode);
+	
 	i = fd_alloc(&fd);
 	if(i < 0)
 		return i;
