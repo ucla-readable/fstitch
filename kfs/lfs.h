@@ -29,7 +29,8 @@ struct LFS {
 	DECLARE(LFS_t, int, apply_changes, chdesc_t * changes);
 	DECLARE(LFS_t, int, remove_name, const char * name);
 	DECLARE(LFS_t, int, write_block, bdesc_t * block, uint32_t offset, uint32_t size, void * data);
-	DECLARE(LFS_t, const feature_t *, get_features);
+	DECLARE(LFS_t, size_t, get_num_features, const char * name);
+	DECLARE(LFS_t, const feature_t *, get_feature, const char * name, size_t num);
 	DECLARE(LFS_t, int, get_metadata, const char * name, uint32_t id, size_t * size, void ** data);
 	DECLARE(LFS_t, int, set_metadata, const char * name, uint32_t id, size_t size, const void * data);
 	DECLARE(LFS_t, int, sync, const char * name);
