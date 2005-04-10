@@ -8,7 +8,7 @@ void swirl(int argc, char * argv[])
 {
 	int rows = sys_vga_map_text(0xB8000) & ~1;
 	short * b8 = (short *) 0xB8000;
-	short * b8buf = malloc(rows * 160 * sizeof(short));
+	short * b8buf = malloc(rows * 80 * sizeof(short));
 	
 	while(getchar_nb() == -1)
 	{
@@ -30,7 +30,7 @@ void swirl(int argc, char * argv[])
 				b8buf[offset] = b8[offset - 80];
 			}
 		}
-		memcpy(b8, b8buf, rows * 160);
+		memcpy(b8, b8buf, rows * 80 * sizeof(short));
 	}
 	
 	free(b8buf);

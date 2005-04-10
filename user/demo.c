@@ -12,6 +12,7 @@ int rand(int nseed)
 }
 
 void data(int argc, char * argv[]);
+void fall(int argc, char * argv[]);
 void fire(int argc, char * argv[]);
 void ladybug(int argc, char * argv[]);
 void life(int argc, char * argv[]);
@@ -24,6 +25,7 @@ static const struct {
 	void (*demo)(int, char *[]);
 } demos[] = {
 	{"data", data},
+	{"fall", fall},
 	{"fire", fire},
 	{"ladybug", ladybug},
 	{"life", life},
