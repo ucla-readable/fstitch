@@ -274,7 +274,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	}
 
 	// HACK
-	if (!partitions[0])
+	if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
 		partitions[0] = bd;
 
 	/* setup each partition's cache, basefs, and uhfs */
