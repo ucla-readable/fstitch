@@ -307,7 +307,7 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 		if (!bd)
 			return size_read ? size_read : -E_EOF;
 
-		limit = MIN(bd->length - dataoffset, size - size_read);
+		limit = MIN(bd->ddesc->length - dataoffset, size - size_read);
 		if (f->size_id)
 			if (offset + size_read + limit > file_size)
 				limit = file_size - offset - size_read;
@@ -395,7 +395,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		}
 
 		/* write the data to the block */
-		const uint32_t n = MIN(bd->length - dataoffset, size - size_written);
+		const uint32_t n = MIN(bd->ddesc->length - dataoffset, size - size_written);
 		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &prev_head, &tail);
 
 		if (allocated_block)

@@ -16,7 +16,7 @@
 #endif
 
 /* allocate a new bdesc */
-bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t offset, uint16_t length)
+bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t length)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
 	Dprintf("<bdesc 0x%08x alloc>\n", bdesc);
@@ -39,8 +39,7 @@ bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t offset, uint16_t leng
 	bdesc->bd = bd;
 	bdesc->number = number;
 	bdesc->refs = 0;
-	bdesc->offset = offset;
-	bdesc->length = length;
+	bdesc->ddesc->length = length;
 	bdesc->ddesc->refs = 0;
 	bdesc->translated = 0;
 	return bdesc;
@@ -59,13 +58,13 @@ int bdesc_touch(bdesc_t * bdesc)
 	if(!data)
 		return -E_NO_MEM;
 	Dprintf("<bdesc 0x%08x alloc data 0x%08x>\n", bdesc, data);
-	data->data = malloc(bdesc->length);
+	data->data = malloc(bdesc->ddesc->length);
 	if(!data->data)
 	{
 		free(data);
 		return -E_NO_MEM;
 	}
-	memcpy(data->data, bdesc->ddesc->data, bdesc->length);
+	memcpy(data->data, bdesc->ddesc->data, bdesc->ddesc->length);
 	data->refs = bdesc->refs;
 	/* bdesc->data->refs > bdesc->refs, so it won't reach 0 */
 	bdesc->ddesc->refs -= bdesc->refs;
@@ -195,7 +194,7 @@ int bdesc_overwrite(bdesc_t * cached, bdesc_t * written)
 			chdesc_rollback(scan->desc);
 	}
 	
-	if(memcmp(cached->ddesc->data, written->ddesc->data, cached->length))
+	if(memcmp(cached->ddesc->data, written->ddesc->data, cached->ddesc->length))
 	{
 		chdesc_t * head = NULL;
 		chdesc_t * tail = NULL;

@@ -117,7 +117,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	block->bd = CALL(info->lfs, get_blockdev);
 	block->number = lfs_number;
 
-	r =  CALL(info->lfs, write_block, block, block->offset, block->length, block->ddesc->data, &head, &tail);
+	r =  CALL(info->lfs, write_block, block, 0, block->ddesc->length, block->ddesc->data, &head, &tail);
 
 	if (refs)
 	{

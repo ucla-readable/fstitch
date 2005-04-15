@@ -107,7 +107,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a whole block */
-	if(block->offset || block->length != info->blocksize)
+	if(block->ddesc->length != info->blocksize)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */
@@ -157,7 +157,7 @@ static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a whole block */
-	if(block->offset || block->length != info->blocksize)
+	if(block->ddesc->length != info->blocksize)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */

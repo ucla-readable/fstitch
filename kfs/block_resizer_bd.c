@@ -73,7 +73,7 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
 	if(number >= info->block_count)
 		return NULL;
 	
-	bdesc = bdesc_alloc(object, number, 0, info->converted_size);
+	bdesc = bdesc_alloc(object, number, info->converted_size);
 	if(!bdesc)
 		return NULL;
 	
@@ -103,7 +103,7 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a whole block */
-	if(block->offset || block->length != info->converted_size)
+	if(block->ddesc->length != info->converted_size)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */
@@ -114,7 +114,7 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	for(i = 0; i != info->merge_count; i++)
 	{
 		/* synthesize a new bdesc to avoid having to read it */
-		bdesc_t * sub = bdesc_alloc(info->bd, number + i, 0, info->original_size);
+		bdesc_t * sub = bdesc_alloc(info->bd, number + i, info->original_size);
 		/* maybe we ran out of memory? */
 		if(!sub)
 			return -E_NO_MEM;
@@ -142,7 +142,7 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a whole block */
-	if(block->offset || block->length != info->converted_size)
+	if(block->ddesc->length != info->converted_size)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */

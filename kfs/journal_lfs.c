@@ -300,7 +300,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	{
 		uint32_t bdesc_number = CALL(state->journal, get_file_block_num, state->jfdesc, file_offset);
 		assert(bdesc_number != -1);
-		bdesc = bdesc_alloc(journal_bd, bdesc_number, 0, state->blocksize);
+		bdesc = bdesc_alloc(journal_bd, bdesc_number, state->blocksize);
 		assert(bdesc); // TODO: handle error
 
 		// TODO: does journal data need to depend on anything, in case of small cache?
@@ -314,7 +314,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 
 		lfs_head = NULL;
 		lfs_tail = NULL;
-		r = CALL(state->journal, write_block, bdesc, data_bdescs[i]->offset, data_bdescs[i]->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
+		r = CALL(state->journal, write_block, bdesc, 0, data_bdescs[i]->ddesc->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
 		assert(r >= 0); // TODO: handle error
 		//assert(!lfs_head && !lfs_tail);
 

@@ -64,18 +64,18 @@ typedef struct datadesc datadesc_t;
 struct datadesc {
 	uint8_t * data;
 	uint32_t refs;
+	uint16_t length;
 };
 
 struct bdesc {
 	struct BD * bd;
 	uint32_t number, refs;
-	uint16_t offset, length;
 	datadesc_t * ddesc;
 	uint16_t translated;
 };
 
 /* allocate a new bdesc */
-bdesc_t * bdesc_alloc(struct BD * bd, uint32_t number, uint16_t offset, uint16_t length);
+bdesc_t * bdesc_alloc(struct BD * bd, uint32_t number, uint16_t length);
 
 /* prepare a bdesc's data to be modified, copying its data if it is currently shared with another bdesc */
 int bdesc_touch(bdesc_t * bdesc);

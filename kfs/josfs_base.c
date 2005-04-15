@@ -451,7 +451,7 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 
 	if (! info->bitmap_cache) {
 		bdesc = CALL(info->ubd, read_block, target);
-		if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
+		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap!\n");
 			if (bdesc)
 				bdesc_drop(&bdesc);
@@ -499,7 +499,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		bdesc = CALL(info->ubd, read_block, target);
 		weak_forget_pair(head, tail);
 
-		if (!bdesc || bdesc->length != JOSFS_BLKSIZE) {
+		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap!\n");
 			if (bdesc)
 				bdesc_drop(&bdesc);
@@ -766,7 +766,7 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 			bdesc_t * bdesc;
 			write_bitmap(object, blockno, 0, head, tail);
 			assert(!block_is_free(object, blockno));
-			bdesc = bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
+			bdesc = bdesc_alloc(info->ubd, blockno, JOSFS_BLKSIZE);
 			/* FIXME maybe use chdescs? */
 			memset(bdesc->ddesc->data, 0, JOSFS_BLKSIZE);
 			return bdesc;
@@ -1447,7 +1447,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 			if (r < 0)
 				goto truncate_file_block_failed;
 
-			return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
+			return bdesc_alloc(info->ubd, blockno, JOSFS_BLKSIZE);
 		}
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
@@ -1498,7 +1498,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 				bdesc_release(&indirect);
 
-				return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
+				return bdesc_alloc(info->ubd, blockno, JOSFS_BLKSIZE);
 			}
 			bdesc_release(&indirect);
 		}
@@ -1538,7 +1538,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 			f->file->f_direct[nblocks - 1] = 0;
 
-			return bdesc_alloc(info->ubd, blockno, 0, JOSFS_BLKSIZE);
+			return bdesc_alloc(info->ubd, blockno, JOSFS_BLKSIZE);
 		}
 	}
 

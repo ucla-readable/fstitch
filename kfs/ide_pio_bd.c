@@ -160,7 +160,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(object, number, 0, SECTSIZE);
+	bdesc = bdesc_alloc(object, number, SECTSIZE);
 	if(!bdesc)
 		return NULL;
 	
@@ -180,7 +180,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a whole block */
-	if(block->offset || block->length != SECTSIZE)
+	if(block->ddesc->length != SECTSIZE)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */

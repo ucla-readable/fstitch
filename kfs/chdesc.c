@@ -149,7 +149,7 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, const 
 int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
 	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
-	uint16_t count = block->length / atomic_size;
+	uint16_t count = block->ddesc->length / atomic_size;
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
 	
@@ -231,7 +231,7 @@ int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
-	uint16_t count = block->length / atomic_size;
+	uint16_t count = block->ddesc->length / atomic_size;
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
 	

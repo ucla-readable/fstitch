@@ -124,7 +124,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		bdesc_t * bdesc;
 		int r;
 		
-		bdesc = bdesc_alloc(object, number, 0, info->blocksize);
+		bdesc = bdesc_alloc(object, number, info->blocksize);
 		if(!bdesc)
 			return NULL;
 		
@@ -166,7 +166,7 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a whole block */
-	if(block->offset || block->length != info->blocksize)
+	if(block->ddesc->length != info->blocksize)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */

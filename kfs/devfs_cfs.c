@@ -235,7 +235,7 @@ static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 			if(!bdesc)
 				return size_read ? size_read : -E_EOF;
 			
-			limit = MIN(bdesc->length - dataoffset, size - size_read);
+			limit = MIN(bdesc->ddesc->length - dataoffset, size - size_read);
 			memcpy((uint8_t *) data + size_read, bdesc->ddesc->data + dataoffset, limit);
 			size_read += limit;
 			/* dataoffset only needed for first block */
@@ -276,7 +276,7 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 			chdesc_t * tail;
 			
 			if(!dataoffset && limit == blocksize)
-				bdesc = bdesc_alloc(bde->bd, write_byte / blocksize, 0, blocksize);
+				bdesc = bdesc_alloc(bde->bd, write_byte / blocksize, blocksize);
 			else
 				bdesc = CALL(bde->bd, read_block, write_byte / blocksize);
 			if(!bdesc)
