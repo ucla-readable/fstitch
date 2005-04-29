@@ -19,6 +19,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/get \
 			$(OBJDIR)/user/grep \
 			$(OBJDIR)/user/hexdump \
+			$(OBJDIR)/user/host \
 			$(OBJDIR)/user/ifdown \
 			$(OBJDIR)/user/ifup \
 			$(OBJDIR)/user/init \

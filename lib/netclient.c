@@ -77,6 +77,43 @@ find_netd_net(void)
 uint8_t req_buf[2*PGSIZE];
 
 int
+gethostbyname(const char *name, struct ip_addr *ipaddr)
+{
+	int r;
+	envid_t netd_ipcrecv = 0, netd_net = 0;
+
+	netd_ipcrecv = find_netd_ipcrecv();
+	if (!netd_ipcrecv)
+	{
+		fprintf(STDERR_FILENO, "connect(): unable to find netd ipcrecv\n");
+		return -1;
+	}
+	netd_net = find_netd_net();
+	if (!netd_net)
+	{
+		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
+		return -1;
+	}
+
+	// Setup lookup request
+	struct Netreq_gethostbyname *req = (struct Netreq_gethostbyname*) ROUND32(req_buf, PGSIZE);
+	strncpy(req->name, name, DNS_NAME_MAXLEN-1);
+
+	// Send request
+	ipc_send(netd_ipcrecv, NETREQ_GETHOSTBYNAME, req, PTE_P|PTE_U, NULL);
+
+	// Determine whether the lookup succeded
+	if ((r = (int32_t) ipc_recv(netd_net, NULL, NULL, NULL, NULL, 0)) < 0)
+		return r;
+
+	// Receive the ip address
+	uint32_t ip = ipc_recv(netd_net, NULL, NULL, NULL, NULL, 0);
+	*ipaddr = *(struct ip_addr*) &ip;
+
+	return 0;
+}
+
+int
 connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 {
 	int r;

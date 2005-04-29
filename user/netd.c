@@ -9,6 +9,7 @@
 #include <inc/lib.h>
 #include <inc/net.h>
 #include <inc/malloc.h>
+#include <inc/hash_set.h>
 
 #include "lwip/debug.h"
 #include "lwip/stats.h"
@@ -19,6 +20,7 @@
 #define DEBUG_CONNSTATUS (1<<2)
 #define DEBUG_REQ        (1<<3)
 #define DEBUG_IPCRECV    (1<<4)
+#define DEBUG_DNS        (1<<5)
 
 bool quiet = 0;
 int  debug = 0;
@@ -585,6 +587,636 @@ netd_connect(void *arg, struct tcp_pcb *pcb, err_t err)
 
 	return ERR_OK;
 }
+
+/*---------------------------------------------------------------------------*/
+//
+// DNS resolver
+
+#define DNS_PORT 53
+
+#define DNS_TIMEOUT_MS 1000
+
+#define DNS_CLASS_IN 0x0001
+
+#define DNS_TYPE_A 0x0001
+
+#define DNS_FLAG_QR (1 << 0xF)
+#define DNS_FLAG_TC (1 << 0x9)
+#define DNS_FLAG_RD (1 << 0x8)
+#define DNS_FLAG_RA (1 << 0x7)
+#define DNS_FLAG_RCODE (0xF)
+#define DNS_FLAG_RCODE_VAL(x) (x & 0xF)
+
+#define DNS_RCODE_NAME 3
+
+typedef struct dns_header {
+	uint16_t id;
+	uint16_t flags;
+	uint16_t qdcount;
+	uint16_t ancount;
+	uint16_t nscount;
+	uint16_t arcount;
+} dns_header_t;
+
+typedef struct dns_query {
+	char    *qname;
+	uint16_t qtype;
+	uint16_t qclass;
+} dns_query_t;
+
+typedef struct dns_rr {
+	char    *name;
+	uint16_t type;
+	uint16_t class;
+	uint32_t ttl;
+	uint16_t rdlength;
+	uint8_t *rdata;
+} dns_rr_t;
+
+typedef struct dns_msg {
+	dns_header_t h;
+	dns_query_t *qds;
+	dns_rr_t    *ans;
+//	dns_authserv_t *nss; // not yet supported
+//	dns_addrec_t   *ars; // not yet supported
+} dns_msg_t;
+
+// +1 at the end is for the extra preceeding byte in a name
+#define DNS_REQ_SIZE(namelen) (sizeof(dns_header_t) + sizeof(dns_query_t) - sizeof(char*) + namelen + 1)
+
+typedef struct dns_state {
+	envid_t         envid;
+	struct udp_pcb *pcb;
+	struct dns_msg *req;
+	struct pbuf    *p_out;
+	uint16_t        p_out_len;
+	int32_t         expires; // when the last sent query expires
+	size_t          dnsserver_idx; // index of the dns server used for query
+	size_t          round_no;
+} dns_state_t;
+
+// global transaction identifer, must be unique for each request
+static uint16_t dns_xid = 0xABCD;
+
+
+static err_t
+dns_msg2raw(const dns_msg_t *dm, uint8_t *raw, size_t raw_len)
+{
+	size_t i, n = 0;
+
+	memset(raw, 0, raw_len);
+
+	// copy header
+
+	*(uint16_t*) &raw[n] = htons(dm->h.id);
+	n += sizeof(dm->h.id);
+
+	*(uint16_t*) &raw[n] = htons(dm->h.flags);
+	n += sizeof(dm->h.flags);
+
+	*(uint16_t*) &raw[n] = htons(dm->h.qdcount);
+	n += sizeof(dm->h.qdcount);
+
+	*(uint16_t*) &raw[n] = htons(dm->h.ancount);
+	n += sizeof(dm->h.ancount);
+
+	*(uint16_t*) &raw[n] = htons(dm->h.nscount);
+	n += sizeof(dm->h.nscount);
+
+	*(uint16_t*) &raw[n] = htons(dm->h.arcount);
+	n += sizeof(dm->h.arcount);
+
+
+	// copy query
+	for (i=0; i < dm->h.qdcount; i++)
+	{
+		const size_t name_len = strlen(dm->qds->qname) + 1;
+		char *x = &raw[n];
+		char *y = x;
+		raw[n] = '.';
+		n += 1;
+		strcpy(&raw[n], dm->qds[i].qname);		
+		n += name_len;
+		// mark end-of-string with '.' to make the below conversion easy:
+		raw[n-1] = '.';
+		raw[n] = 0; // ensure string is null-termed
+
+		// convert dots to indicate number of following characters in label:
+		while ((y = strchr(y+1, '.')))
+		{
+			*(uint8_t*) x = y - (x+1);
+			x = y;
+		}
+		raw[n-1] = 0; // revert end-of-string back to null character
+
+
+		*(uint16_t*) &raw[n] = htons(dm->qds[i].qtype);
+		n += sizeof(dm->qds[i].qtype);
+
+		*(uint16_t*) &raw[n] = htons(dm->qds[i].qclass);
+		n += sizeof(dm->qds[i].qclass);
+	}
+
+	// not yet supported:
+	assert(!dm->h.ancount);
+	assert(!dm->h.nscount);
+	assert(!dm->h.arcount);
+
+	assert(raw_len == n);
+}
+
+#define DNS_NAME_PTR_MASK 0xC0
+
+// Returns whether this dns-style label is a ptr or not.
+static bool
+dnsname_is_ptr(uint8_t x)
+{ return x & DNS_NAME_PTR_MASK; }
+
+// Returns the offset of the dns-style label ptr.
+static uint16_t
+dnsname_ptr(uint16_t x)
+{ return ntohs(x & ~DNS_NAME_PTR_MASK); }
+
+// strdup a raw dns-style name,
+// updates offset to point to the byte after the raw dnsname.
+// Convert label lens to dots and decompress dns-style string compression.
+static char *
+dnsname_raw2string(const uint8_t *raw, size_t *offset)
+{
+	char *name;
+	char *tmpname;
+	uint8_t ulen = 0; // length of uncompressed text
+	size_t off = *offset; // copy of original offset
+	bool contains_ptr = 0;
+	size_t coffset; // compressed ptr value
+	uint8_t c;
+	int i;
+
+	// determine ulen
+	for (i=0; ((c = *(uint8_t*) &raw[off+i]));)
+	{
+		if (dnsname_is_ptr(c))
+		{
+			coffset = dnsname_ptr(*(uint16_t*) &raw[off+i]);
+			contains_ptr = 1;
+			break;
+		}
+
+		const uint8_t label_len = c;
+		ulen += label_len + 1; // +1 for '.'
+		i += label_len + 1; // +1 to move to next label
+	}
+
+	if (!contains_ptr)
+		ulen++; // reserve room for '\0'
+	*offset = off + ulen;
+
+	if (contains_ptr)
+	{
+		if (i > 0)
+			ulen++; // reserve room for '.' (to preceed compressed labels)
+		*offset += 2; // skip over compression mark and offset
+	}
+
+	// dup the uncompressed portion of the name
+	if (!ulen)
+		tmpname = NULL;
+	else
+	{
+		tmpname = malloc(ulen);
+		assert(tmpname);
+		memcpy(tmpname, &raw[off], ulen);
+	}
+
+	// convert label_lens to dots
+	for (i=0; i < ulen;)
+	{
+		uint8_t label_len = *(uint8_t*) &tmpname[i];
+		tmpname[i] = '.';
+		i += label_len + 1;
+	}
+	if (!contains_ptr)
+		tmpname[ulen-1] = 0;
+
+	// append the compressed labels
+	if (contains_ptr)
+	{
+		if (ulen > 0)
+			tmpname[ulen-1] = '.';
+
+		char *cname = dnsname_raw2string(raw, &coffset); // compressed labels
+		assert(cname);
+		const size_t cname_len = strlen(cname) + 1;
+
+		char *tmpcname = malloc(ulen + cname_len); // tmpname + cname
+		memcpy(tmpcname, tmpname, ulen);
+		memcpy(tmpcname + ulen, cname, cname_len);
+		free(cname);
+		free(tmpname);
+		tmpname = tmpcname;
+	}
+
+	name = strdup(tmpname + (ulen ? 1 : 0) ); // +1 to skip over first '.'
+	free(tmpname);
+	return name;
+}
+
+// TODO: do some amount of malformed message checking, especially to prevent buffer overflows
+static dns_msg_t *
+dns_raw2msg(const uint8_t *raw)
+{
+	dns_msg_t *dm;
+	size_t i, n=0;
+
+	dm = malloc(sizeof(*dm));
+	if (!dm)
+		return NULL;
+	memset(dm, 0, sizeof(*dm));
+
+	// copy header
+
+	dm->h.id = ntohs(*(uint16_t*) &raw[n]);
+	n += sizeof(dm->h.id);
+
+	dm->h.flags = ntohs(*(uint16_t*) &raw[n]);
+	n += sizeof(dm->h.flags);
+
+	if (dm->h.flags & DNS_FLAG_TC)
+	{
+		fprintf(STDERR_FILENO, "netd: dns resolver received truncated answer\n");
+		free(dm);
+		return NULL;
+	}
+
+	dm->h.qdcount = ntohs(*(uint16_t*) &raw[n]);
+	n += sizeof(dm->h.qdcount);
+
+	dm->h.ancount = ntohs(*(uint16_t*) &raw[n]);
+	n += sizeof(dm->h.ancount);
+
+	dm->h.nscount = ntohs(*(uint16_t*) &raw[n]);
+	n += sizeof(dm->h.nscount);
+
+	dm->h.arcount = ntohs(*(uint16_t*) &raw[n]);
+	n += sizeof(dm->h.arcount);
+
+	// copy questions
+
+	dm->qds = malloc(dm->h.qdcount * sizeof(dns_query_t));
+	assert(dm->qds);
+	memset(dm->qds, 0, dm->h.qdcount * sizeof(dns_query_t));
+
+	for (i=0; i < dm->h.qdcount; i++)
+	{
+		dm->qds[i].qname = dnsname_raw2string(raw, &n);
+		assert(dm->qds[i].qname);
+
+		dm->qds[i].qtype = ntohs(*(uint16_t*) &raw[n]);
+		n += sizeof(dm->qds[i].qtype);
+
+		dm->qds[i].qclass = ntohs(*(uint16_t*) &raw[n]);
+		n += sizeof(dm->qds[i].qclass);
+		if (debug & DEBUG_DNS)
+			printf("question for %s, type %d, class %d\n",
+				   dm->qds[i].qname, dm->qds[i].qtype, dm->qds[i].qclass);
+	}
+
+	// copy rrs
+
+	dm->ans = malloc(dm->h.ancount * sizeof(dns_rr_t));
+	memset(dm->ans, 0, dm->h.ancount * sizeof(dns_rr_t));
+
+	for (i=0; i < dm->h.ancount; i++)
+	{
+		dm->ans[i].name = dnsname_raw2string(raw, &n);
+		assert(dm->ans[i].name);
+
+		dm->ans[i].type = ntohs(*(uint16_t*) &raw[n]);
+		n += sizeof(dm->ans[i].type);
+
+		dm->ans[i].class = ntohs(*(uint16_t*) &raw[n]);
+		n += sizeof(dm->ans[i].class);
+
+		dm->ans[i].ttl = ntohl(*(uint32_t*) &raw[n]);
+		n += sizeof(dm->ans[i].ttl);
+
+		dm->ans[i].rdlength = ntohs(*(uint16_t*) &raw[n]);
+		n += sizeof(dm->ans[i].rdlength);
+
+		// TODO: should we call dnsname_raw2string() if this RR is a CNAME?
+		dm->ans[i].rdata = memdup(&raw[n], dm->ans[i].rdlength);
+		assert(dm->ans[i].rdata);
+		n += dm->ans[i].rdlength;
+
+		if (debug & DEBUG_DNS)
+			printf("RR for %s, class %d, ttl %u, ",
+				   dm->ans[i].name, dm->ans[i].class, dm->ans[i].ttl);
+		if (dm->ans[i].type == 0x1)
+		{
+			struct ip_addr ip = *(struct ip_addr*) dm->ans[i].rdata;
+			if (debug & DEBUG_DNS)
+				printf("A: %s", inet_iptoa(ip));
+		}
+		else if (dm->ans[i].type == 0x5)
+		{
+			size_t offset = 0;
+			char *name = dnsname_raw2string((char*) dm->ans[i].rdata, &offset);
+			if (debug & DEBUG_DNS)
+				printf("CNAME: %s", name);
+			free(name);
+		}
+		else
+		{
+			if (debug & DEBUG_DNS)
+				printf("?%u, rdlen %u", dm->ans[i].type, dm->ans[i].rdlength);
+		}
+		if (debug & DEBUG_DNS)
+			printf("\n");
+	}
+
+	// ignore ns entries for now
+
+	// ignore ar entries for now
+
+	return dm;
+}
+
+// Init a dns_msg_t for querying
+static err_t
+dns_msg_init_query(dns_msg_t *dm, uint32_t xid, const char *name)
+{
+	memset(dm, 0, sizeof(*dm));
+
+	dm->h.id      = xid;
+	dm->h.flags   = DNS_FLAG_RD;
+	dm->h.qdcount = 1;
+	dm->h.ancount = 0;
+	dm->h.nscount = 0;
+	dm->h.arcount = 0;
+
+	dm->qds = malloc(1 * sizeof(dns_query_t));
+	if (!dm->qds)
+		return ERR_MEM;
+
+	dm->qds[0].qname  = strdup(name);
+	if (!dm->qds[0].qname)
+	{
+		free(dm->qds);
+		return ERR_MEM;
+	}
+	dm->qds[0].qtype  = DNS_TYPE_A;
+	dm->qds[0].qclass = DNS_CLASS_IN;
+
+	return ERR_OK;	
+}
+
+static void
+dns_msg_free(dns_msg_t *dm)
+{
+	int i;
+
+	for (i=0; i < dm->h.qdcount; i++)
+		free(dm->qds[i].qname);
+	free(dm->qds);
+
+	for (i=0; i < dm->h.ancount; i++)
+	{
+		free(dm->ans[i].name);
+		free(dm->ans[i].rdata);
+	}
+	free(dm->ans);
+
+	// ignore ns entries for now
+
+	// ignore ar entries for now
+
+	memset(dm, 0, sizeof(*dm));
+}
+
+static hash_set_t *pending_dns_queries = NULL;
+static int32_t next_dns_tmr = 0;
+
+static err_t
+dns_state_init(dns_state_t *ds, envid_t env, const char *name)
+{
+	const size_t name_len = strlen(name) + 1;
+	err_t err;
+	int r;
+
+	memset(ds, 0, sizeof(*ds));
+
+	ds->envid = env;
+
+	ds->p_out_len = DNS_REQ_SIZE(name_len);
+
+	ds->req = malloc(sizeof(*ds->req));
+	assert(ds->req);
+	err = dns_msg_init_query(ds->req, dns_xid, name);
+	assert(err == ERR_OK);
+
+	r = hash_set_insert(pending_dns_queries, ds);
+	assert(r >= 0);
+
+	return ERR_OK;
+}
+
+static void
+dns_state_free(dns_state_t *ds)
+{
+	if (!hash_set_erase(pending_dns_queries, ds))
+		fprintf(STDERR_FILENO, "netd %s(): dns_state was not in the pending_dns_queries\n", __FUNCTION__);
+
+	if (ds->pcb)
+		udp_remove(ds->pcb);
+	dns_msg_free(ds->req);
+	pbuf_free(ds->p_out);
+	memset(ds, 0, sizeof(*ds));
+	free(ds);
+}
+
+// Timeout expired dns requests
+void
+dns_tmr()
+{
+	const int32_t dns_tmr_interval = 20;
+	const size_t  max_rounds = 2;
+	hash_set_it_t *it;
+	dns_state_t *ds;
+
+	if (next_dns_tmr - env->env_jiffies > 0)
+		return;
+
+	it = hash_set_it_create();
+	assert(it);
+
+	while ((ds = hash_set_next(pending_dns_queries, it)))
+	{
+		if (ds->expires - env->env_jiffies > 0)
+			continue;
+
+		if (debug & DEBUG_DNS)
+			printf("dns lookup for %s round %d, server %d timed out\n",
+				   ds->req->qds[0].qname, ds->round_no, ds->dnsserver_idx);
+
+		ds->dnsserver_idx++;
+		if (ds->dnsserver_idx >= vector_size(get_dns_servers()))
+		{
+			ds->dnsserver_idx = 0;
+			ds->round_no++;
+		}
+
+		if (ds->round_no < max_rounds)
+		{
+			udp_disconnect(ds->pcb);
+			udp_remove(ds->pcb);
+			ds->pcb = NULL;
+			pbuf_free(ds->p_out);
+			ds->p_out = NULL;
+			static void start_dns_query(dns_state_t*);
+			start_dns_query(ds);
+		}
+		else
+		{
+			udp_disconnect(ds->pcb);
+			envid_t envid = ds->envid;
+			dns_state_free(ds);
+			ipc_send(envid, -E_TIMEOUT, NULL, 0, NULL);
+		}
+	}
+
+	next_dns_tmr = env->env_jiffies + dns_tmr_interval;
+}
+
+static void
+gethostbyname_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, struct ip_addr *addr, u16_t port)
+{
+	dns_state_t *ds = (dns_state_t *) arg;
+	struct ip_addr ip;
+	int i, r;
+
+	if (debug & DEBUG_DNS)
+		printf("dns reply from %s:%d\n", inet_iptoa(*addr), port);
+
+	dns_msg_t *ans = dns_raw2msg(p->payload);
+	if (!ans)
+	{
+		if (debug & DEBUG_DNS)
+			fprintf(STDERR_FILENO, "netd: dns_raw2msg() failed\n");
+		r = -E_UNSPECIFIED;
+		goto exit;
+	}
+
+	if (! (ans->h.flags & DNS_FLAG_QR) )
+	{
+		if (debug & DEBUG_DNS)
+			fprintf(STDERR_FILENO, "netd: reply's flags do not have QR set\n");
+		r = -E_UNSPECIFIED;
+		goto exit;
+	}
+
+	const uint8_t rcode = DNS_FLAG_RCODE_VAL(ans->h.flags);
+	if (rcode)
+	{
+		if (rcode == DNS_RCODE_NAME)
+			r = -E_NOT_FOUND;
+		else
+		{
+			fprintf(STDERR_FILENO, "netd: dns reply has rcode %d\n", rcode);
+			r = -E_UNSPECIFIED;
+		}
+		goto exit;
+	}
+
+	// find an A RR
+	r = -E_UNSPECIFIED;
+	for (i=0; i < ans->h.ancount; i++)
+	{
+		if (ans->ans[i].type == DNS_TYPE_A)
+		{
+			assert(ans->ans[i].rdlength == sizeof(ip));
+			ip = *(struct ip_addr*) ans->ans[i].rdata;
+			r = 0;
+			break;
+		}
+	}
+	if (r < 0 && (debug & DEBUG_DNS))
+		fprintf(STDERR_FILENO, "netd: dns reply has no A RR\n");
+
+  exit:
+	(void) pbuf_free(p);
+	if (ans)
+		dns_msg_free(ans);
+	envid_t envid = ds->envid;
+	dns_state_free(ds);
+	udp_disconnect(pcb);
+
+	ipc_send(envid, (uint32_t) r, NULL, 0, NULL);
+	if (r >= 0)
+		ipc_send(envid, *(uint32_t*) &ip, NULL, 0, NULL);
+}
+
+static void
+start_dns_query(dns_state_t *ds)
+{
+	err_t err;
+	vector_t *dns_servers;
+	struct ip_addr dns_server;
+
+	dns_servers = get_dns_servers();
+	if (!dns_servers || !vector_size(dns_servers))
+	{
+		fprintf(STDERR_FILENO, "netd: no known dns servers\n");
+		ipc_send(ds->envid, lwip_to_netclient_err(ERR_ABRT), NULL, 0, NULL);
+		return;
+	}
+
+	uint32_t ip = (uint32_t) vector_elt(dns_servers, ds->dnsserver_idx); 
+	dns_server = *(struct ip_addr*) &ip;
+	//inet_atoip("128.143.2.7", &dns_server); // force a UVa dns server, for testing
+	//inet_atoip("127.0.0.1", &dns_server); // force time out, for testing
+
+	// Setup ds
+
+	ds->pcb = udp_new();
+	assert(ds->pcb);
+
+	ds->p_out = pbuf_alloc(PBUF_TRANSPORT, ds->p_out_len, PBUF_RAM);
+	assert(ds->p_out);
+
+	ds->req->h.id = dns_xid++;
+
+	err = dns_msg2raw(ds->req, (uint8_t *) ds->p_out->payload, ds->p_out_len);
+	assert(err == ERR_OK);
+
+
+	// Setup udp and fire
+
+	udp_recv(ds->pcb, gethostbyname_recv, ds);
+
+	err = udp_bind(ds->pcb, IP_ADDR_ANY, 0);
+	if (err != ERR_OK)
+	{
+		ipc_send(ds->envid, lwip_to_netclient_err(err), NULL, 0, NULL);
+		return;
+	}
+
+	err = udp_connect(ds->pcb, &dns_server, DNS_PORT);
+	if (err != ERR_OK)
+	{
+		ipc_send(ds->envid, lwip_to_netclient_err(err), NULL, 0, NULL);
+		return;
+	}
+
+	ds->expires = env->env_jiffies + (DNS_TIMEOUT_MS / 10);
+
+	err = udp_send(ds->pcb, ds->p_out);
+	if (err != ERR_OK)
+	{
+		ipc_send(ds->envid, lwip_to_netclient_err(err), NULL, 0, NULL);
+		return;
+	}
+}
+
 /*---------------------------------------------------------------------------*/
 static void
 serve_connect(envid_t whom, struct Netreq_connect *req)
@@ -777,6 +1409,33 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 		exit();
 	}
 }
+
+static void
+serve_gethostbyname(envid_t whom, struct Netreq_gethostbyname *req)
+{
+	dns_state_t *ds;
+	err_t err;
+	
+	if (debug & DEBUG_REQ)
+		printf("netd net request: Get host by name\n");
+
+	ds = malloc(sizeof(*ds));
+	if (!ds)
+	{
+		ipc_send(whom, lwip_to_netclient_err(ERR_MEM), NULL, 0, NULL);
+		return;
+	}
+
+	err = dns_state_init(ds, whom, (const char*) req->name);
+	if (err != ERR_OK)
+	{
+		ipc_send(whom, lwip_to_netclient_err(err), NULL, 0, NULL);
+		return;
+	}
+
+	start_dns_query(ds);
+}
+
 /*---------------------------------------------------------------------------*/
 static size_t
 sizeof_netreq(uint32_t req)
@@ -793,6 +1452,8 @@ sizeof_netreq(uint32_t req)
 			return sizeof(struct Netreq_accept);
 		case NETREQ_STATS:
 			return sizeof(struct Netreq_stats);
+		case NETREQ_GETHOSTBYNAME:
+			return sizeof(struct Netreq_gethostbyname);
 		default:
 			return 0;
 	}
@@ -812,6 +1473,8 @@ netd_net_ipcrecv_comm(void)
 	struct Stat stat;
 	envid_t  whom;
 	uint32_t req;
+
+	dns_tmr();
 
 	if ((r = fstat(netd_net_ipcrecv.fd, &stat)) < 0)
 	{
@@ -856,6 +1519,9 @@ netd_net_ipcrecv_comm(void)
 		case NETREQ_STATS:
 			serve_stats(whom, (struct Netreq_stats*) req_pg);
 			break;
+		case NETREQ_GETHOSTBYNAME:
+			serve_gethostbyname(whom, (struct Netreq_gethostbyname*) req_pg);
+			break;
 		default:
 			fprintf(STDERR_FILENO, "netd net: Invalid request code %d from %08x\n", whom, req);
 			break;
@@ -877,6 +1543,8 @@ netd_net(envid_t ipcrecv, int fd, int argc, const char **argv)
 
 	netd_net_ipcrecv.envid = ipcrecv;
 	netd_net_ipcrecv.fd    = fd;
+	pending_dns_queries = hash_set_create();
+	assert(pending_dns_queries);
 
 	net_loop(nif, netd_net_ipcrecv_comm);
 
@@ -999,6 +1667,7 @@ print_usage(char *bin)
 	printf("  -q: be quiet, do not display startup messages\n");
 	printf("  -c: display network connects and disconnects\n");
 	printf("  -r: display requests\n");
+	printf("  -d: display dns resolves\n");
 	print_ip_addr_usage();
 }
 
@@ -1020,6 +1689,8 @@ umain(int argc, char **argv)
 		debug |= DEBUG_CONNSTATUS;
 	if (get_arg_idx(argc, (const char**) argv, "-r"))
 		debug |= DEBUG_REQ;
+	if (get_arg_idx(argc, (const char**) argv, "-d"))
+		debug |= DEBUG_DNS;
 	quiet = get_arg_idx(argc, (const char**) argv, "-q");
 
 	if (!quiet)

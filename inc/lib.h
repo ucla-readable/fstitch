@@ -215,6 +215,7 @@ void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, c
 #include "lwip/ip_addr.h"
 
 // netclient.c
+int   gethostbyname(const char *name, struct ip_addr *ipaddr);
 int   connect(struct ip_addr ipaddr, uint16_t port, int fd[2]);
 int   bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key);
 int   close_listen(uint32_t listen_key);

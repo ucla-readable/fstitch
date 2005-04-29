@@ -11,22 +11,31 @@
 #include "arch/simple.h"
 #include <inc/config.h>
 
-const char *default_ip_jn[3] =
-	{DEFAULT_IP_JOSNIC_ADDR, DEFAULT_IP_JOSNIC_NETMASK, DEFAULT_IP_JOSNIC_GW};
-const char *default_ip_sl[3] =
-	{DEFAULT_IP_SLIP_ADDR,   DEFAULT_IP_SLIP_NETMASK,   DEFAULT_IP_SLIP_GW};
-const char **default_ip[2] =
+static const char *default_ip_jn[4] =
+	{DEFAULT_IP_JOSNIC_ADDR, DEFAULT_IP_JOSNIC_NETMASK, DEFAULT_IP_JOSNIC_GW, DEFAULT_IP_JOSNIC_DNS};
+static const char *default_ip_sl[4] =
+	{DEFAULT_IP_SLIP_ADDR,   DEFAULT_IP_SLIP_NETMASK,   DEFAULT_IP_SLIP_GW,   DEFAULT_IP_SLIP_DNS};
+static const char **default_ip[2] =
 	{ default_ip_jn, default_ip_sl };
+
+
+static vector_t *dns_servers = NULL;
+
+vector_t *
+get_dns_servers()
+{
+	return dns_servers;
+}
 
 
 void
 print_ip_addr_usage()
 {
-	printf("Additional ip options: [-addr <ip_addr>] [-gw <ip_addr>] [-netmask <ip_addr>]\n");
+	printf("Additional ip options: [-addr <ip_addr>] [-gw <ip_addr>] [-netmask <ip_addr>] [-dns <ip_addr>\n");
 }
 
 void
-setup_ip_addrs(int argc, const char **argv, int jn_sl, bool *josnic_dhcp, struct ip_addr *addr, struct ip_addr *netmask, struct ip_addr *gw)
+setup_ip_addrs(int argc, const char **argv, int jn_sl, bool *josnic_dhcp, struct ip_addr *addr, struct ip_addr *netmask, struct ip_addr *gw, struct ip_addr *dns)
 {
 	const char *addr_str = get_arg_val(argc, argv, "-addr");
 
@@ -44,6 +53,11 @@ setup_ip_addrs(int argc, const char **argv, int jn_sl, bool *josnic_dhcp, struct
 		if(1 != inet_atoip(default_ip[jn_sl][2], gw))
 			panic("bad default ip gw \"%s\"", default_ip[jn_sl][2]);
 
+	const char *dns_str = get_arg_val(argc, argv, "-dns");
+	if(!dns_str || (1 != inet_atoip(dns_str, dns)))
+		if(1 != inet_atoip(default_ip[jn_sl][3], dns))
+			panic("bad default ip dns \"%s\"", default_ip[jn_sl][3]);
+
 	if (addr_str || netmask_str || gw_str)
 		*josnic_dhcp = 0;
 	else
@@ -53,7 +67,7 @@ setup_ip_addrs(int argc, const char **argv, int jn_sl, bool *josnic_dhcp, struct
 struct netif*
 setup_interface(int argc, const char **argv, struct netif *nif_stayaround)
 {
-	struct ip_addr ipaddr, netmask, gateway;
+	struct ip_addr ipaddr, netmask, gateway, dns;
 	struct netif *nif_jn = 0;
 	struct netif *nif_sl = 0;
 	bool josnic_dhcp;
@@ -61,14 +75,14 @@ setup_interface(int argc, const char **argv, struct netif *nif_stayaround)
 
 	if(ALLOW_JOSNIC)
 	{
-		setup_ip_addrs(argc, argv, 0, &josnic_dhcp, &ipaddr, &netmask, &gateway);
-		nif_jn = josnicif_setup(nif_stayaround, josnic_dhcp, ipaddr, netmask, gateway, quiet);
+		setup_ip_addrs(argc, argv, 0, &josnic_dhcp, &ipaddr, &netmask, &gateway, &dns);
+		nif_jn = josnicif_setup(nif_stayaround, josnic_dhcp, ipaddr, netmask, gateway, dns, quiet);
 	}
 
 	if(ALLOW_SLIP && !nif_jn)
 	{
-		setup_ip_addrs(argc, argv, 1, &josnic_dhcp, &ipaddr, &netmask, &gateway);
-		nif_sl = slipif_setup(nif_stayaround, ipaddr, netmask, gateway, quiet);
+		setup_ip_addrs(argc, argv, 1, &josnic_dhcp, &ipaddr, &netmask, &gateway, &dns);
+		nif_sl = slipif_setup(nif_stayaround, ipaddr, netmask, gateway, dns, quiet);
 	}
 
 	if(nif_jn)
@@ -109,7 +123,7 @@ net_init()
 }
 
 struct netif*
-slipif_setup(struct netif *netif, struct ip_addr ipaddr, struct ip_addr netmask, struct ip_addr gw, bool quiet)
+slipif_setup(struct netif *netif, struct ip_addr ipaddr, struct ip_addr netmask, struct ip_addr gw, struct ip_addr dns, bool quiet)
 {
 	struct netif *nif;
 	nif = netif_add(netif, &ipaddr, &netmask, &gw, NULL, slipif_init, ip_input);
@@ -118,6 +132,14 @@ slipif_setup(struct netif *netif, struct ip_addr ipaddr, struct ip_addr netmask,
 
 	netif_set_default(nif);
 	netif_set_up(nif);
+
+	if (!dns_servers)
+	{
+		dns_servers = vector_create_size(1);
+		if(!dns_servers)
+			return NULL; // TODO: free nif?
+	}
+	vector_elt_set(dns_servers, 0, (void*) *(uint32_t*) &dns);
 
 	if (!quiet)
 	{
@@ -142,11 +164,37 @@ josnicif_print_setup(struct netif *netif)
 }
 
 
-// Used by dhcp.c to know whether to print the configured ip address.
+// Used to know whether to print the configured ip address.
 bool dhcp_quiet;
 
+void
+josnicif_dhcp_completed(struct netif *netif)
+{
+	int i;
+
+	if (dns_servers)
+		vector_clear(dns_servers);
+	else
+	{
+		dns_servers = vector_create();//_size(netif->dhcp->dns_count);
+		if(!dns_servers)
+			fprintf(STDERR_FILENO, "%s(): vector_create_size() failed\n",
+					__FUNCTION__);
+	}
+
+	for (i=0; i < netif->dhcp->dns_count; i++)
+		vector_push_back(dns_servers, (void*) *(uint32_t*) &netif->dhcp->offered_dns_addr[i]);
+
+	if (!dhcp_quiet)
+	{
+		josnicif_print_setup(netif);
+		// Only print the first time:
+		dhcp_quiet = 1;
+	}
+}
+
 struct netif*
-josnicif_setup(struct netif *netif, bool dhcp, struct ip_addr ipaddr, struct ip_addr netmask, struct ip_addr gw, bool quiet)
+josnicif_setup(struct netif *netif, bool dhcp, struct ip_addr ipaddr, struct ip_addr netmask, struct ip_addr gw, struct ip_addr dns, bool quiet)
 {
 	struct netif *nif;
 
@@ -160,6 +208,14 @@ josnicif_setup(struct netif *netif, bool dhcp, struct ip_addr ipaddr, struct ip_
 	nif = netif_add(netif, &ipaddr, &netmask, &gw, NULL, josnicif_init, ip_input);
 	if(!nif)
 		return NULL;
+
+	if (!dns_servers)
+	{
+		dns_servers = vector_create_size(1);
+		if(!dns_servers)
+			return NULL; // TODO: free nif?
+	}
+	vector_elt_set(dns_servers, 0, (void*) *(uint32_t*) &dns);
 
 	dhcp_quiet = quiet;
 	if (ENABLE_JOSNIC_DHCP && dhcp)
