@@ -266,7 +266,7 @@ int
 parse_url(char *url,
 			 struct ip_addr *addr, u16_t *port, char **resource)
 {
-	char  addr_str[17]; // 16 is max length of an ip address, +1 for '\0'
+	char  addr_str[256]; // 255 is max length of an ip address, +1 for '\0'
 	char  port_str[6]; // 5 is max length of a 16bit port, +1 for '\0'
 	char *url_end;
 	char *addr_in_url;
