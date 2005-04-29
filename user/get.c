@@ -89,6 +89,7 @@ init_body_length_settings(struct http_state *hs)
 	hs->body_sofar_period = ROUNDUP32(hs->body_length, 80) / 80;
 	if (hs->body_length && !silent && !print_server_headers)
 		fprintf(status_fd, "Size: %d bytes\n", hs->body_length);
+/*
 	if (fileout_name && hs->body_length > MAXFILESIZE)
 	{
 		// FIXME: this size check does not check size of header!
@@ -97,6 +98,7 @@ init_body_length_settings(struct http_state *hs)
 					  "Requested file too large for our filesystem, exiting\n");
 		removeoutput_close_exit(hs);
 	}
+*/
 }
 
 void
@@ -272,6 +274,7 @@ parse_url(char *url,
 	char *port_in_url;
 	char *port_in_url_end;
 	char *resource_in_url;
+	int r;
 
 	if(!strncmp(http, url, strlen(http)))
 		url += strlen(http);
@@ -304,9 +307,10 @@ parse_url(char *url,
 		return -1;
 	}
 
-	if (inet_atoip(addr_str, addr) != 1)
+	r = gethostbyname(addr_str, addr);
+	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "Bad ip address string \"%s\"\n", addr_str);
+		fprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", addr_str, r);
 		return -1;
 	}
 
@@ -346,7 +350,7 @@ parse_url(char *url,
 void
 print_usage(char *bin)
 {
-	fprintf(STDERR_FILENO, "%s: [http://]<ip_addr>[:<port>][<resource>] [OPTIONS]\n", bin);
+	fprintf(STDERR_FILENO, "%s: [http://]<host>[:<port>][<resource>] [OPTIONS]\n", bin);
 	fprintf(STDERR_FILENO, "Options:\n");
 	fprintf(STDERR_FILENO, "  -o <file>: save to file\n");
 	fprintf(STDERR_FILENO, "  -q: turn off status output\n");

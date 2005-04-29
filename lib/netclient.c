@@ -79,8 +79,28 @@ uint8_t req_buf[2*PGSIZE];
 int
 gethostbyname(const char *name, struct ip_addr *ipaddr)
 {
-	int r;
+	const int name_len = strlen(name);
+	int i, r;
+	bool addr_name = 1; // 0 addr, 1 name
 	envid_t netd_ipcrecv = 0, netd_net = 0;
+
+	// Determine whether name is an ip address or hostname
+	for (i=0; i < name_len; i++)
+	{
+		if ( (!isnum(name[i]) && ('.' != name[i])) || i > 4 )
+		{
+			addr_name = 1;
+			break;
+		}
+		if ('.' == name[i])
+		{
+			addr_name = 0;
+			break;
+		}
+	}
+
+	if (addr_name == 0)
+		return (inet_atoip(name, ipaddr) == 1);
 
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
