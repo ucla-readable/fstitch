@@ -181,6 +181,12 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 				putch(ch, putdat);
 			break;
 
+		// binary 
+		case 'b':
+			num = getint(&ap, lflag);
+			base = 2;
+			goto number;
+
 		// (signed) decimal
 		case 'd':
 			num = getint(&ap, lflag);
