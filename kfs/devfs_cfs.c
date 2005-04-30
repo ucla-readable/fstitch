@@ -211,6 +211,7 @@ static int devfs_close(CFS_t * cfs, int fid)
 static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+#if 0
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = bde_lookup_fid(state, fid);
 	
@@ -246,6 +247,7 @@ static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 		
 		return size_read ? size_read : (size ? -E_EOF : 0);
 	}
+#endif
 	
 	return -E_INVAL;
 }
@@ -253,6 +255,7 @@ static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+#if 0
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = bde_lookup_fid(state, fid);
 	
@@ -303,6 +306,7 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 		
 		return size_written ? size_written : (size ? -E_EOF : 0);
 	}
+#endif
 	
 	return -E_INVAL;
 }
