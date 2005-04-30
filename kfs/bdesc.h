@@ -15,7 +15,7 @@ typedef struct datadesc datadesc_t;
 struct datadesc {
 	uint8_t * data;
 	uint32_t refs;
-	chdesc_t changes;
+	chdesc_t * changes;
 	uint16_t length;
 };
 
