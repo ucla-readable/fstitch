@@ -85,6 +85,7 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	ENV_CREATE(user_idle);
 
 	// Start kfsd and netd
+	ENV_CREATE(fs_fs);
 	ENV_CREATE(user_netd);
 	ENV_CREATE(kfs_kfsd);
 

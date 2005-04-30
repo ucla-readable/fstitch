@@ -54,7 +54,8 @@ KERN_BINFILES :=	user/idle \
 			user/initsh \
 			user/init \
 			user/netd \
-			kfs/kfsd
+			kfs/kfsd \
+			fs/fs
 
 KERN_SRCFILES +=	kern/appkernbin.c
 
