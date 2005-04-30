@@ -50,32 +50,29 @@
 
 #include <inc/types.h>
 
-#include <kfs/bd.h>
-
-/* struct BD needs bdesc, so we avoid the cycle */
-struct BD;
-
 struct bdesc;
 typedef struct bdesc bdesc_t;
 
 struct datadesc;
 typedef struct datadesc datadesc_t;
 
+#include <kfs/bd.h>
+#include <kfs/chdesc.h>
+
 struct datadesc {
 	uint8_t * data;
 	uint32_t refs;
+	chdesc_t changes;
 	uint16_t length;
 };
 
 struct bdesc {
-	struct BD * bd;
 	uint32_t number, refs;
 	datadesc_t * ddesc;
-	uint16_t translated;
 };
 
 /* allocate a new bdesc */
-bdesc_t * bdesc_alloc(struct BD * bd, uint32_t number, uint16_t length);
+bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t length);
 
 /* prepare a bdesc's data to be modified, copying its data if it is currently shared with another bdesc */
 int bdesc_touch(bdesc_t * bdesc);

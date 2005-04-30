@@ -3,13 +3,6 @@
 
 #include <inc/types.h>
 
-#include <kfs/bdesc.h>
-
-#define CHDESC_MARKED    0x01 /* marker for graph traversal */
-#define CHDESC_IN_DEPMAN 0x02 /* depman has a reference to it */
-#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
-#define CHDESC_PRMARKED  0x08 /* used for debugging */
-
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
@@ -19,7 +12,16 @@ typedef struct chmetadesc chmetadesc_t;
 struct chrefdesc;
 typedef struct chrefdesc chrefdesc_t;
 
+#include <kfs/bd.h>
+#include <kfs/bdesc.h>
+
+#define CHDESC_MARKED    0x01 /* marker for graph traversal */
+#define CHDESC_IN_DEPMAN 0x02 /* depman has a reference to it */
+#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
+#define CHDESC_PRMARKED  0x08 /* used for debugging */
+
 struct chdesc {
+	BD_t * owner;
 	bdesc_t * block;
 	enum {BIT, BYTE, NOOP} type;
 	union {
