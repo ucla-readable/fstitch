@@ -4,6 +4,8 @@
 #include <inc/serial_kfs.h>
 #include <kfs/kfs_ipc_serve.h>
 
+#define USE_THIRD_LEG 1
+
 #define KIS_DEBUG 0
 
 #if KIS_DEBUG
@@ -147,7 +149,7 @@ static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_class
 
 	RETURN_IPC;
 }
-
+#if !USE_THIRD_LEG
 // uhfs
 #include <kfs/uhfs.h>
 
@@ -417,7 +419,7 @@ static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 	uint32_t val = (uint32_t) ide_pio_bd(pg->controller, pg->disk);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
-
+#endif
 
 //
 // modman
@@ -644,7 +646,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(TABLE_CLASSIFIER_CFS,        table_classifier_cfs);
 		SERVE(TABLE_CLASSIFIER_CFS_ADD,    table_classifier_cfs_add);
 		SERVE(TABLE_CLASSIFIER_CFS_REMOVE, table_classifier_cfs_remove);
-
+#if !USE_THIRD_LEG
 		SERVE(UHFS, uhfs);
 
 		// LFS
@@ -672,7 +674,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(MIRROR_BD_ADD,          mirror_bd_add);
 		SERVE(MIRROR_BD_REMOVE,          mirror_bd_remove);
 		SERVE(IDE_PIO_BD,         ide_pio_bd);
-
+#endif
 		// modman
 
 		SERVE(MODMAN_REQUEST_LOOKUP, modman_request_lookup);

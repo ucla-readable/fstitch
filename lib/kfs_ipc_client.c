@@ -12,6 +12,8 @@
 #include <kfs/lfs.h>
 #include <kfs/bd.h>
 
+#define USE_THIRD_LEG 1
+
 #define KIC_DEBUG 0
 
 #if KIC_DEBUG
@@ -443,7 +445,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
 
 	return create_cfs(cfs_id);
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/uhfs.h>
 CFS_t * uhfs(LFS_t * lfs)
 {
@@ -755,7 +757,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 
 	return create_bd(bd_id);
 }
-
+#endif
 
 //
 // modman

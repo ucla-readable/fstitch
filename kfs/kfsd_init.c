@@ -26,21 +26,25 @@
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
+#define USE_THIRD_LEG 1
+
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal);
 BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
+#if !USE_THIRD_LEG
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
+#endif
 
-#define USE_MIRROR
+//#define USE_MIRROR
 #define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
 #endif
 
-// Init kfsd modules.
 int kfsd_init(void)
 {
+#if !USE_THIRD_LEG
 	const bool use_disk_0_extern_journal = 0;
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
@@ -49,17 +53,18 @@ int kfsd_init(void)
 	static_assert(!(use_disk_0_extern_journal && use_disk_0));
 
 	vector_t * uhfses = NULL;
+#endif
 	CFS_t * table_class = NULL;
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidcloser = NULL;
 	int r;
-
+#if !USE_THIRD_LEG
 	if((r = depman_init()) < 0)
 	{
 		fprintf(STDERR_FILENO, "depman_init: %e\n", r);
 		kfsd_shutdown();
 	}
-
+#endif
 	if((r = modman_init()) < 0)
 	{
 		fprintf(STDERR_FILENO, "modman_init: %e\n", r);
@@ -78,6 +83,7 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
+#if !USE_THIRD_LEG
 	//
 	// Setup uhfses
 
@@ -190,12 +196,17 @@ int kfsd_init(void)
 
 	//
 	// Mount uhfses
-
+#endif
 	if (! (table_class = table_classifier_cfs()) )
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
-
+#if USE_THIRD_LEG
+	CFS_t * josfscfs = josfs_cfs();
+	r = table_classifier_cfs_add(table_class, "/", josfscfs);
+	if (r < 0)
+		kfsd_shutdown();
+#else
 	{
 		const size_t uhfses_size = vector_size(uhfses);
 		size_t i;
@@ -213,6 +224,7 @@ int kfsd_init(void)
 	r = table_classifier_cfs_add(table_class, "/dev", modman_devfs);
 	if (r < 0)
 		kfsd_shutdown();
+#endif
 
 	//
 	// fidfairies
@@ -229,11 +241,12 @@ int kfsd_init(void)
 }
 
 
+#if !USE_THIRD_LEG
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
 	const bool enable_internal_journaling = 0;
-	const bool enable_fsck = 1;
+	const bool enable_fsck = 0;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
@@ -427,3 +440,4 @@ CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal)
 	*journal = data_lfs;
 	return u;
 }
+#endif
