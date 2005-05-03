@@ -1,6 +1,6 @@
 OBJDIRS += user
 
-DEMOS=$(OBJDIR)/user/fall.o $(OBJDIR)/user/fire.o $(OBJDIR)/user/ladybug.o $(OBJDIR)/user/life.o $(OBJDIR)/user/matrix.o $(OBJDIR)/user/pong.o $(OBJDIR)/user/textdemo.o
+DEMOS=$(OBJDIR)/user/fall.o $(OBJDIR)/user/fire.o $(OBJDIR)/user/ladybug.o $(OBJDIR)/user/life.o $(OBJDIR)/user/matrix.o $(OBJDIR)/user/pong.o $(OBJDIR)/user/textdemo.o $(OBJDIR)/user/wars.o
 
 $(OBJDIR)/user/demo: $(OBJDIR)/user/demo.o $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(DEMOS)
 	@echo + ld $@

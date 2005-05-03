@@ -19,6 +19,7 @@ void life(int argc, char * argv[]);
 void matrix(int argc, char * argv[]);
 void pong(int argc, char * argv[]);
 void swirl(int argc, char * argv[]);
+void wars(int argc, char * argv[]);
 
 static const struct {
 	const char * name;
@@ -31,7 +32,8 @@ static const struct {
 	{"life", life},
 	{"matrix", matrix},
 	{"pong", pong},
-	{"swirl", swirl}
+	{"swirl", swirl},
+	{"wars", wars}
 };
 
 #define DEMO_COUNT (sizeof(demos) / sizeof(demos[0]))
