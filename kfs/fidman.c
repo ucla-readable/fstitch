@@ -64,15 +64,16 @@ static int fid2fidtableidx(int fid)
 
 int create_fid(void)
 {
-	size_t i;
-	for (i=++last_fid_tbl_idx; i < MAX_OPEN_FIDS; i++)
+	size_t idx, count;
+	for (idx=++last_fid_tbl_idx, count=0; count<MAX_OPEN_FIDS; idx++, count++)
 	{
-		if (!fid_entry_is_inuse(i))
+		idx %= MAX_OPEN_FIDS;
+		if (!fid_entry_is_inuse(idx))
 		{
-			mark_fid_entry_usage(i, 1);
-			last_fid_tbl_idx = i;
-			Dprintf("%s() returning %d\n", __FUNCTION__, fidtableidx2fid(i));
-			return fidtableidx2fid(i);
+			mark_fid_entry_usage(idx, 1);
+			last_fid_tbl_idx = idx;
+			Dprintf("%s() returning %d\n", __FUNCTION__, fidtableidx2fid(idx));
+			return fidtableidx2fid(idx);
 		}
 	}
 
