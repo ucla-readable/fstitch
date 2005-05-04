@@ -163,6 +163,21 @@ static void wars_add_line(const char * line)
 	line_count++;
 }
 
+static int buffer_readchar(int fd, char * ch)
+{
+	static char ch_buffer[1024];
+	static int buffer_cursor = 0, buffer_fill = 0;
+	if(buffer_fill <= buffer_cursor)
+	{
+		buffer_cursor = 0;
+		buffer_fill = read(fd, ch_buffer, sizeof(ch_buffer));
+		if(buffer_fill <= 0)
+			return -E_EOF;
+	}
+	*ch = ch_buffer[buffer_cursor++];
+	return 1;
+}
+
 static int wars_init(const char * file)
 {
 	int i, fd = open(file, O_RDONLY);
@@ -175,7 +190,7 @@ static int wars_init(const char * file)
 	{
 		for(i = 0; i != 255; i++)
 		{
-			if(read(fd, &line[i], 1) != 1)
+			if(buffer_readchar(fd, &line[i]) != 1)
 			{
 				if(i)
 					break;
@@ -244,18 +259,29 @@ static void wars_kill(void)
 static unsigned char buffer[64000] = {0};
 static int text_offset = 0;
 
+#define FIXED_POINT 1024
+
 static void wars_draw_char(unsigned char ch, int x, int y, int z)
 {
+	/* This function used to use doubles, but it has been converted to use
+	 * fixed point arithmetic. The casts to int and the variables sx and sy
+	 * are left so that it is easier to see what's going on. */
 	int cx, cy;
+	int color = 255 - z / 2;
+	if(color > 255)
+		color = 255;
+	else if(color <= 0)
+		return;
 	for(cy = 0; cy != 24; cy++)
 	{
 		int sy;
-		double d3_y = y;
-		double d3_z = z + 24 - cy - 1;
+		int d3_y = y * FIXED_POINT;
+		int d3_z = (z + 24 - cy - 1) * FIXED_POINT;
 		
-		d3_z = d3_z / 200 + 1;
+		d3_z = d3_z / 200 + FIXED_POINT;
 		if(d3_z <= 0)
 			continue;
+		/* FIXED_POINT divides out */
 		d3_y /= d3_z;
 		
 		sy = (int) d3_y;
@@ -265,8 +291,9 @@ static void wars_draw_char(unsigned char ch, int x, int y, int z)
 		for(cx = 0; cx != 24; cx++)
 		{
 			int sx;
-			double d3_x = x + cx;
+			int d3_x = (x + cx) * FIXED_POINT;
 			
+			/* FIXED_POINT divides out */
 			d3_x /= d3_z;
 			d3_x += 160;
 			
@@ -278,9 +305,6 @@ static void wars_draw_char(unsigned char ch, int x, int y, int z)
 			{
 				int index = sy * 320 + sx;
 				unsigned char * pixel = &buffer[index];
-				int color = 255 - z / 2;
-				if(color > 255)
-					color = 255;
 				if(*pixel < color)
 					*pixel = color;
 			}
@@ -293,6 +317,8 @@ static void wars_display_line(char * line, int number)
 	int length = strlen(line);
 	number = number * 24 + text_offset;
 	length *= -12;
+	if(number < -24 || number >= 20 * 24)
+		return;
 	while(*line)
 	{
 		wars_draw_char(*line, length, 200, number);
