@@ -71,7 +71,7 @@ const static unsigned char font_map[256][8] = {
 
 #define PIXEL(ch, x, y) ((font_map[ch][y] >> (7 - (x))) & 1)
 
-#define SCALE 3
+#define SCALE 4
 #define CH_SIZE (SCALE * 8)
 #define SCALE_PIXEL(ch, x, y) PIXEL(ch, (x) / SCALE, (y) / SCALE)
 
@@ -197,7 +197,7 @@ static void wars_kill(void)
  * adjusting the screen x coordinate based on z.
  */
 
-static unsigned char buffer[64000] = {0};
+static unsigned char buffer[64000 * 5] = {0};
 
 #define FIXED_POINT 1024
 
@@ -207,7 +207,7 @@ static void wars_draw_char(unsigned char ch, int x, int y, int z)
 	 * fixed point arithmetic. The casts to int and the variables sx and sy
 	 * are left so that it is easier to see what's going on. */
 	int cx, cy;
-	int color = 255 - z / 2;
+	int color = 255 - z / (2 * 2);
 	if(color > 255)
 		color = 255;
 	else if(color <= 0)
@@ -218,15 +218,16 @@ static void wars_draw_char(unsigned char ch, int x, int y, int z)
 		int d3_y = y * FIXED_POINT;
 		int d3_z = (z + CH_SIZE - cy - 1) * FIXED_POINT;
 		
-		d3_z = d3_z / 200 + FIXED_POINT;
+		d3_z = d3_z / (200 * 2) + FIXED_POINT;
 		if(d3_z <= 0)
 			continue;
 		/* FIXED_POINT divides out */
 		d3_y /= d3_z;
 		
 		sy = (int) d3_y;
-		if(sy < 0 || sy >= 200)
+		if(sy < 0 || sy >= 200 * 2)
 			continue;
+		sy *= 320 * 2;
 		
 		for(cx = 0; cx != CH_SIZE; cx++)
 		{
@@ -235,15 +236,15 @@ static void wars_draw_char(unsigned char ch, int x, int y, int z)
 			
 			/* FIXED_POINT divides out */
 			d3_x /= d3_z;
-			d3_x += 160;
+			d3_x += 160 * 2;
 			
 			sx = (int) d3_x;
 			
-			if(sx < 0 || sx >= 320)
+			if(sx < 0 || sx >= 320 * 2)
 				continue;
 			if(SCALE_PIXEL(ch, cx, cy))
 			{
-				int index = sy * 320 + sx;
+				int index = sy + sx;
 				unsigned char * pixel = &buffer[index];
 				if(*pixel < color)
 					*pixel = color;
@@ -256,8 +257,26 @@ static void wars_display_line(char * line, int offset, int distance)
 {
 	for(; *line; line++)
 	{
-		wars_draw_char(*line, offset, 200, distance);
+		wars_draw_char(*line, offset, 200 * 2, distance);
 		offset += CH_SIZE;
+	}
+}
+
+static void wars_aa_scale(void)
+{
+	int x, y;
+	for(y = 0; y != 200; y++)
+	{
+		int yl = y * 320;
+		for(x = 0; x != 320; x++)
+		{
+			int offset = (yl * 2 + x) * 2;
+			int pixel = buffer[offset];
+			pixel += buffer[offset + 1];
+			pixel += buffer[offset + 640];
+			pixel += buffer[offset + 641];
+			buffer[64000 * 4 + yl + x] = pixel / 4;
+		}
 	}
 }
 
@@ -283,19 +302,19 @@ void wars(int argc, char * argv[])
 	
 	sys_vga_set_mode_320(0xA0000);
 	
-	i = -CH_SIZE * line_count + 1;
+	i = -CH_SIZE * line_count + SCALE;
 	while(getchar_nb() == -1)
 	{
 		const int frame_end = env->env_jiffies + 4;
 		int offset = 0, draw = 0;
 		struct LINE * line;
 		
-		memset(buffer, 0, 64000);
+		memset(buffer, 0, 64000 * 4);
 		
 		for(line = lines; line; line = line->next)
 		{
 			int distance = offset + i;
-			if(-CH_SIZE <= distance && distance < 480)
+			if(-CH_SIZE <= distance && distance < 512 * 2)
 			{
 				wars_display_line(line->line, line->offset, distance);
 				draw++;
@@ -303,9 +322,10 @@ void wars(int argc, char * argv[])
 			offset += CH_SIZE;
 		}
 		
-		i += 2;
+		i += SCALE;
 		
-		memcpy((void *) 0xA0000, buffer, 64000);
+		wars_aa_scale();
+		memcpy((void *) 0xA0000, &buffer[64000 * 4], 64000);
 		while(frame_end - env->env_jiffies > 0)
 			sys_yield();
 		if(!draw)
