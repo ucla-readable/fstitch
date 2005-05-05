@@ -13,12 +13,12 @@ OBJDIRS += kfs
 #			$(OBJDIR)/kfs/mirror_bd.o \
 #			$(OBJDIR)/kfs/journal_lfs.o \
 #			$(OBJDIR)/kfs/wholedisk_lfs.o \
-#			$(OBJDIR)/kfs/josfs_base.o \
 #			$(OBJDIR)/kfs/depman.o \
 
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc.o \
+			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/uhfs.o \
