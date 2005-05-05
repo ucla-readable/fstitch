@@ -13,6 +13,7 @@ struct cache_info {
 	uint32_t size;
 	bdesc_t ** blocks;
 	uint16_t blocksize;
+	uint16_t level;
 };
 
 static int wt_cache_bd_get_config(void * object, int level, char * string, size_t length)
@@ -125,6 +126,11 @@ static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 	return CALL(info->bd, sync, block);
 }
 
+static uint16_t wt_cache_bd_get_devlevel(BD_t * object)
+{
+	return ((struct cache_info *) OBJLOCAL(object))->level;
+}
+
 static int wt_cache_bd_destroy(BD_t * bd)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
@@ -177,6 +183,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	ASSIGN(bd, wt_cache_bd, get_numblocks);
 	ASSIGN(bd, wt_cache_bd, get_blocksize);
 	ASSIGN(bd, wt_cache_bd, get_atomicsize);
+	ASSIGN(bd, wt_cache_bd, get_devlevel);
 	ASSIGN(bd, wt_cache_bd, read_block);
 	ASSIGN(bd, wt_cache_bd, write_block);
 	ASSIGN(bd, wt_cache_bd, sync);
@@ -186,6 +193,8 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	info->size = blocks;
 	info->blocksize = CALL(disk, get_blocksize);
 	
+	info->level = CALL(disk, get_devlevel);
+
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);

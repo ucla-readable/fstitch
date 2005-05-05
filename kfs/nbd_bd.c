@@ -21,6 +21,7 @@ struct nbd_info {
 	uint32_t length;
 	uint16_t blocksize;
 	uint16_t port;
+	uint16_t level;
 	struct ip_addr ip;
 };
 
@@ -209,6 +210,11 @@ static int nbd_bd_sync(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
+static uint16_t nbd_bd_get_devlevel(BD_t * object)
+{
+	return ((struct nbd_info *) OBJLOCAL(object))->level;
+}
+
 static int nbd_bd_destroy(BD_t * bd)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(bd);
@@ -254,6 +260,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	ASSIGN(bd, nbd_bd, get_numblocks);
 	ASSIGN(bd, nbd_bd, get_blocksize);
 	ASSIGN(bd, nbd_bd, get_atomicsize);
+	ASSIGN(bd, nbd_bd, get_devlevel);
 	ASSIGN(bd, nbd_bd, read_block);
 	ASSIGN(bd, nbd_bd, write_block);
 	ASSIGN(bd, nbd_bd, sync);
@@ -278,6 +285,8 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	info->length = ntohl(info->length);
 	info->blocksize = ntohs(info->blocksize);
 	
+	info->level = 0;
+
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);

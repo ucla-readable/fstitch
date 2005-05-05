@@ -534,14 +534,8 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		*tail = ch;
 		*head = ch;
 	}
-	else {
-		bdesc_touch(bdesc);
-		ptr = ((uint32_t *) bdesc->ddesc->data) + ((blockno % JOSFS_BLKBITSIZE) / 32);
-		if (value)
-			*ptr |= (1 << (blockno % 32));
-		else
-			*ptr &= ~(1 << (blockno % 32));
-	}
+	else
+		panic("Hey, why aren't you using chdescs?\n");
 
 	weak_retain_pair(head, tail);
 	r = CALL(info->ubd, write_block, bdesc);
@@ -975,10 +969,11 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 	int r, offset;
 	chdesc_t *newtail, * curhead, *oldhead = NULL;
 
-	if (head && tail) {
-		oldhead = *head;
-		*tail = NULL;
-	}
+	if (!head || !tail)
+		panic("Hey, why aren't you using chdescs?\n");
+
+	oldhead = *head;
+	*tail = NULL;
 
 	num = block->number;
 	bdesc_drop(&block);
@@ -1056,15 +1051,8 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 					r = depman_add_chdesc(*head);
 					assert(r >= 0); // TODO: handle error
 				}
-				else {
-					bdesc_touch(indirect);
-					indirect_offset = ((uint32_t *) indirect->ddesc->data) + nblocks;
-					*indirect_offset = num;
-
-					bdesc_touch(dirblock);
-					dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-					dirfile->f_indirect = inum;
-				}
+				else
+					panic("Hey, why aren't you using chdescs?\n");
 
 				weak_retain_pair(head, tail);
 				/* FIXME handle the return values better? */
@@ -1100,11 +1088,8 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * blo
 						goto append_file_block_failed;
 				}
 			}
-			else {
-				bdesc_touch(dirblock);
-				dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-				dirfile->f_direct[nblocks] = num;
-			}
+			else
+				panic("Hey, why aren't you using chdescs?\n");
 
 			weak_retain_pair(head, tail);
 			r = CALL(info->ubd, write_block, dirblock);
@@ -1201,12 +1186,8 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 									}
 								}
 							}
-							else {
-								bdesc_touch(blk);
-								f = (JOSFS_File_t *) blk->ddesc->data; // reset ptr after bdesc_touch
-								memcpy(&f[j], &temp_file, sizeof(JOSFS_File_t));
-							}
-
+							else
+								panic("Hey, why aren't you using chdescs?\n");
 
 							// must retain before passing the hot potato...
 							r = bdesc_retain(&blk);
@@ -1266,11 +1247,8 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 							r = depman_add_chdesc(*head);
 							assert(r >= 0); // TODO: handle error
 						}
-						else {
-							bdesc_touch(blk);
-							f = (JOSFS_File_t *) blk->ddesc->data;
-							memcpy(&f[0], &temp_file, sizeof(JOSFS_File_t));
-						}
+						else
+							panic("Hey, why aren't you using chdescs?\n");
 
 						weak_retain_pair(head, tail);
 						r = CALL(info->ubd, write_block, blk);
@@ -1314,10 +1292,11 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	int i, r, offset;
 	chdesc_t * oldhead = NULL, * newtail, * curhead;
 
-	if (head && tail) {
-		oldhead = *head;
-		*tail = NULL;
-	}
+	if (!head || !tail)
+		panic("Hey, why aren't you using chdescs?\n");
+
+	oldhead = *head;
+	*tail = NULL;
 
 	oldfdesc = josfs_lookup_name(object, oldname);
 	if (oldfdesc) {
@@ -1369,11 +1348,8 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 				r = depman_add_chdesc(*head);
 				assert(r >= 0); // TODO: handle error
 			}
-			else {
-				bdesc_touch(dirblock);
-				newfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + new->index);
-				memcpy(newfile, &temp_file, sizeof(JOSFS_File_t));
-			}
+			else
+				panic("Hey, why aren't you using chdescs?\n");
 
 			weak_retain_pair(head, tail);
 			r = CALL(info->ubd, write_block, dirblock);
@@ -1408,10 +1384,11 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	uint32_t data = 0;
 	chdesc_t * oldhead = NULL;
 
-	if (head && tail) {
-		oldhead = *head;
-		*tail = NULL;
-	}
+	if (!head || !tail)
+		panic("Hey, why aren't you using chdescs?\n");
+
+	oldhead = *head;
+	*tail = NULL;
 
 	if (nblocks > JOSFS_NINDIRECT || nblocks < 1) {
 		return NULL;
@@ -1477,11 +1454,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 							goto truncate_file_block_failed;
 					}
 				}
-				else {
-					bdesc_touch(dirblock);
-					dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-					dirfile->f_indirect = 0;
-				}
+				else
+					panic("Hey, why aren't you using chdescs?\n");
 
 				weak_retain_pair(head, tail);
 				r = CALL(info->ubd, write_block, dirblock);
@@ -1523,11 +1497,8 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 						goto truncate_file_block_failed;
 				}
 			}
-			else {
-				bdesc_touch(dirblock);
-				dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-				dirfile->f_direct[nblocks - 1] = 0;
-			}
+			else
+				panic("Hey, why aren't you using chdescs?\n");
 
 			weak_retain_pair(head, tail);
 			r = CALL(info->ubd, write_block, dirblock);
@@ -1606,11 +1577,8 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 					goto remove_name_failed;
 			}
 		}
-		else {
-			bdesc_touch(dirblock);
-			dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-			dirfile->f_name[0] = '\0';
-		}
+		else
+			panic("Hey, why aren't you using chdescs?\n");
 
 		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, dirblock);
@@ -1666,10 +1634,8 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, u
 			}
 		}
 	}
-	else {
-		bdesc_touch(block);
-		memcpy(&block->ddesc->data[offset], data, size);
-	}
+	else
+		panic("Hey, why aren't you using chdescs?\n");
 
 	weak_retain_pair(head, tail);
 	r = CALL(info->ubd, write_block, block);
@@ -1809,11 +1775,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 								goto set_metadata_failed;
 						}
 					}
-					else {
-						bdesc_touch(dirblock);
-						dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-						dirfile->f_size = *((off_t *) data);
-					}
+					else
+						panic("Hey, why aren't you using chdescs?\n");
 
 					weak_retain_pair(head, tail);
 					r = CALL(info->ubd, write_block, dirblock);
@@ -1850,11 +1813,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 								goto set_metadata_failed;
 						}
 					}
-					else {
-						bdesc_touch(dirblock);
-						dirfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + f->index);
-						dirfile->f_type = *((uint32_t *) data);
-					}
+					else
+						panic("Hey, why aren't you using chdescs?\n");
 
 					weak_retain_pair(head, tail);
 					r = CALL(info->ubd, write_block, dirblock);
