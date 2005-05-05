@@ -82,41 +82,20 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
 	if(!info->blocks[index])
 		return NULL;
 	
-	/* FIXME bdesc_alter() and bdesc_retain() can fail */
-	
-	/* ensure we can alter the structure without conflict */
-	bdesc_alter(&info->blocks[index]);
-	
-	/* adjust the block descriptor to match the cache */
-	info->blocks[index]->bd = object;
-	
 	/* increase reference count */
-	bdesc_retain(&info->blocks[index]);
-	
-	return info->blocks[index];
+	return bdesc_retain(info->blocks[index]);
 }
 
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
-	int value;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
 	
 	/* make sure it's a valid block */
 	if(block->number >= CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
-	/* FIXME bdesc_retain() can fail */
-	/* increase reference count - do this before release, in case they are the same block */
-	bdesc_retain(&block);
+	bdesc_retain(block);
 	
 	index = block->number % info->size;
 	/* need to replace this cache entry? */
@@ -124,24 +103,13 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		bdesc_release(&info->blocks[index]);
 	info->blocks[index] = block;
 	
-	block->translated++;
-	block->bd = info->bd;
-	
 	/* write it */
-	value = CALL(block->bd, write_block, block);
-	
-	/* we know we can de-translate it because we retained it */
-	block->bd = object;
-	block->translated--;
-	
-	return value;
+	return CALL(info->bd, write_block, block);
 }
 
 static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	uint32_t refs;
-	int value;
 	
 	/* since this is a write-through cache, syncing is a no-op */
 	/* ...but we still have to pass the sync on correctly */
@@ -149,34 +117,12 @@ static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
 	if(!block)
 		return CALL(info->bd, sync, NULL);
 	
-	/* save reference count */
-	refs = block->refs;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
 	if(block->number >= CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
-	block->translated++;
-	block->bd = info->bd;
-	
 	/* sync it */
-	value = CALL(block->bd, sync, block);
-	
-	if(refs)
-	{
-		block->bd = object;
-		block->translated--;
-	}
-	
-	return value;
+	return CALL(info->bd, sync, block);
 }
 
 static int wt_cache_bd_destroy(BD_t * bd)
