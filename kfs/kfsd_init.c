@@ -27,17 +27,17 @@
 #include <kfs/kfsd_init.h>
 
 #define USE_THIRD_LEG 1
+#define USE_SIMPLE 1
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal);
 BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
-#if !USE_THIRD_LEG
-static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
-#endif
+static const char * fspaths[] = {//"/",
+"/k0", "/k1", "/k2", "/k3"};
 
 //#define USE_MIRROR
-#define USE_WB_CACHE
+//#define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
 #endif
@@ -48,12 +48,13 @@ int kfsd_init(void)
 	const bool use_disk_0_extern_journal = 0;
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
-	const bool use_net    = 0;
-
-	static_assert(!(use_disk_0_extern_journal && use_disk_0));
-
-	vector_t * uhfses = NULL;
 #endif
+	const bool use_net    = 1;
+#if !USE_THIRD_LEG
+	static_assert(!(use_disk_0_extern_journal && use_disk_0));
+#endif
+	vector_t * uhfses = NULL;
+
 	CFS_t * table_class = NULL;
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidcloser = NULL;
@@ -83,7 +84,6 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
-#if !USE_THIRD_LEG
 	//
 	// Setup uhfses
 
@@ -93,7 +93,7 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
-
+#if !USE_THIRD_LEG
 	if (use_disk_0_extern_journal)
 	{
 		const int jbd = 1; // 0 for nbd, 1 for ide(0, 1)
@@ -153,7 +153,8 @@ int kfsd_init(void)
 
 		printf("Using josfs [journaled on disk 1, %u kB/s max avg] on disk 0.\n", journal_lfs_max_bandwidth(journal));
 	}
-
+#endif
+#if (USE_SIMPLE || !USE_THIRD_LEG)
 	if (use_net)
 	{
 		BD_t * bd;
@@ -161,13 +162,14 @@ int kfsd_init(void)
 		/* delay kfsd startup slightly for netd to start */
 		sleep(200);
 
-		if (! (bd = nbd_bd("192.168.2.1", 2492)) )
+		if (! (bd = nbd_bd("192.168.4.43", 2492)) )
 			fprintf(STDERR_FILENO, "nbd_bd failed\n");
 
 		if (bd && (r = construct_uhfses(bd, 400, uhfses)) < 0)
 			kfsd_shutdown();
 	}
-
+#endif
+#if !USE_THIRD_LEG
 	if (use_disk_0)
 	{
 		BD_t * bd;
@@ -206,7 +208,7 @@ int kfsd_init(void)
 	r = table_classifier_cfs_add(table_class, "/", josfscfs);
 	if (r < 0)
 		kfsd_shutdown();
-#else
+#endif
 	{
 		const size_t uhfses_size = vector_size(uhfses);
 		size_t i;
@@ -214,13 +216,16 @@ int kfsd_init(void)
 		{
 			r = table_classifier_cfs_add(table_class, fspaths[i], vector_elt(uhfses, i));
 			if (r < 0)
+			{
+				fprintf(STDERR_FILENO, "table_classifier_cfs_add: %e\n", r);
 				kfsd_shutdown();
+			}
 		}
 
 		vector_destroy(uhfses);
 		uhfses = NULL;
 	}
-
+#if !USE_THIRD_LEG
 	r = table_classifier_cfs_add(table_class, "/dev", modman_devfs);
 	if (r < 0)
 		kfsd_shutdown();
@@ -241,7 +246,6 @@ int kfsd_init(void)
 }
 
 
-#if !USE_THIRD_LEG
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
@@ -255,6 +259,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	bd = mirror_bd(bd, NULL, 4);
 #endif
 
+#if 0
 	/* discover partitions */
 	ptbl = pc_ptable_init(bd);
 	if (ptbl)
@@ -285,7 +290,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		printf("Using whole disk.\n");
 		partitions[0] = bd;
 	}
-
+#endif
 	// HACK
 	if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
 		partitions[0] = bd;
@@ -311,8 +316,11 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 
 			/* create a resizer */
+			panic("block_resizer_bd not yet supported");
+#if 0
 			if (! (resizer = block_resizer_bd(cache, 4096)) )
 				kfsd_shutdown();
+#endif
 
 			/* create a cache above the resizer */
 			if (! (cache = wt_cache_bd(resizer, 16)) )
@@ -325,8 +333,10 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		}
 
 #ifndef USE_WB_CACHE
+#if !USE_SIMPLE
 		if (! (cache = chdesc_stripper_bd(cache)) )
 			kfsd_shutdown();
+#endif
 #endif
 
 		if (enable_internal_journaling)
@@ -368,10 +378,15 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (lfs)
 			printf("Using josfs");
+#if 0
 		else if ((lfs = wholedisk(cache)))
 			printf("Using wholedisk");
+#endif
 		else
+		{
+			fprintf(STDERR_FILENO, "\nlfs creation failed\n");
 			kfsd_shutdown();
+		}
 
 		if (journaling)
 			printf(" [journaled, %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
@@ -382,15 +397,21 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			printf(" on partition %d.\n", i);
 
 		if (! (u = uhfs(lfs)) )
+		{
+			fprintf(STDERR_FILENO, "uhfs() failed\n");
 			kfsd_shutdown();
+		}
 		if (vector_push_back(uhfses, u) < 0)
+		{
+			fprintf(STDERR_FILENO, "vector_push_back() failed\n");
 			kfsd_shutdown();
+		}
 	}
 
 	return 0;
 }
 
-
+#if !USE_THIRD_LEG
 BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 {
 	if (4096 != CALL(bd, get_blocksize))
