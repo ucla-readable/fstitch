@@ -61,15 +61,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
 
-/* perform overlap attachment */
-int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original);
-int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
-
 /* unmark a chdesc graph (i.e. clear CHDESC_MARKED) */
 void chdesc_unmark_graph(chdesc_t * root);
-
-/* add a dependency to a change descriptor without checking for cycles */
-int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 
 /* add a dependency to a change descriptor */
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
