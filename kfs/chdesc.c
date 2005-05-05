@@ -6,11 +6,12 @@
 #include <kfs/bdesc.h>
 #include <kfs/depman.h>
 
-chdesc_t * chdesc_create_noop(bdesc_t * block)
+chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
 	chdesc_t * chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
+	chdesc->owner = owner;
 	chdesc->block = block;
 	chdesc->type = NOOP;
 	chdesc->dependencies = NULL;
@@ -21,11 +22,12 @@ chdesc_t * chdesc_create_noop(bdesc_t * block)
 	return chdesc;
 }
 
-chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor)
+chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor)
 {
 	chdesc_t * chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
+	chdesc->owner = owner;
 	chdesc->block = block;
 	chdesc->type = BIT;
 	chdesc->bit.offset = offset;
@@ -48,9 +50,9 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, uint16_t offset, uint32_t xor)
 	return chdesc;
 }
 
-int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
+	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t init_offset = offset % atomic_size;
 	uint16_t index = offset / atomic_size;
 	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
@@ -66,7 +68,8 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, const 
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
 		if(!chdescs[i])
 			break;
-		
+
+		chdescs[i]->owner = owner;		
 		chdescs[i]->block = block;
 		chdescs[i]->type = BYTE;
 		chdescs[i]->byte.offset = (index + i) * atomic_size + (i ? 0 : init_offset);
@@ -146,9 +149,9 @@ int chdesc_create_byte(bdesc_t * block, uint16_t offset, uint16_t length, const 
 	return 0;
 }
 
-int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail)
 {
-	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
+	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
@@ -161,7 +164,8 @@ int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
 		if(!chdescs[i])
 			break;
-		
+
+		chdescs[i]->owner = owner;		
 		chdescs[i]->block = block;
 		chdescs[i]->type = BYTE;
 		chdescs[i]->byte.offset = i * atomic_size;
@@ -228,9 +232,9 @@ int chdesc_create_init(bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 	return 0;
 }
 
-int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	uint16_t atomic_size = CALL(block->bd, get_atomicsize);
+	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
 	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
 	int i;
@@ -244,6 +248,7 @@ int chdesc_create_full(bdesc_t * block, void * data, chdesc_t ** head, chdesc_t 
 		if(!chdescs[i])
 			break;
 		
+		chdescs[i]->owner = owner;
 		chdescs[i]->block = block;
 		chdescs[i]->type = BYTE;
 		chdescs[i]->byte.offset = i * atomic_size;
@@ -361,7 +366,8 @@ int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 {
 	chmetadesc_t * scan;
-	const chdesc_t * deps = depman_get_deps(block);
+	panic("TODO"); // was: const chdesc_t * deps = depman_get_deps(block);
+	const chdesc_t * deps = NULL;
 	
 	if(!deps)
 		return 0;
