@@ -317,7 +317,6 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 		/* dataoffset only needed for first block */
 		dataoffset = 0;
 
-		bdesc_drop(&bd);
 		if (!limit)
 			break;
 	}
@@ -383,7 +382,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 			if (!bd)
 				return size_written;
-			bdesc_retain(&bd);
+			bdesc_retain(bd);
 			r = CALL(state->lfs, append_file_block, f->fdesc, bd, &prev_head, &tail);
 			if (r < 0) {
 				bdesc_release(&bd);

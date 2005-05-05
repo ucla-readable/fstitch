@@ -15,13 +15,13 @@ OBJDIRS += kfs
 #			$(OBJDIR)/kfs/wholedisk_lfs.o \
 #			$(OBJDIR)/kfs/josfs_base.o \
 #			$(OBJDIR)/kfs/depman.o \
-#			$(OBJDIR)/kfs/uhfs.o \
 
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
+			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/modman.o \
 			$(OBJDIR)/kfs/josfs_cfs.o \
