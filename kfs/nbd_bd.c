@@ -11,6 +11,9 @@
 #include <kfs/modman.h>
 #include <kfs/nbd_bd.h>
 
+/* FIXME: this file needs unified block cache support. However, the only thing
+ * that will break without it will be /dev, so it is not done yet. */
+
 #define NBD_RETRIES 5
 
 struct nbd_info {
@@ -124,9 +127,10 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		bdesc_t * bdesc;
 		int r;
 		
-		bdesc = bdesc_alloc(object, number, info->blocksize);
+		bdesc = bdesc_alloc(number, info->blocksize);
 		if(!bdesc)
 			return NULL;
+		bdesc_autorelease(bdesc);
 		
 		/* switch to network byte order */
 		number = htonl(number);
@@ -147,7 +151,6 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		return bdesc;
 		
 	error:
-		bdesc_drop(&bdesc);
 		sleep(tries * 5);
 		nbd_bd_reset(object);
 	}
@@ -160,10 +163,6 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	int tries, r = -1;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
@@ -194,17 +193,12 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		if(r != info->blocksize)
 			goto error;
 		
-		/* drop the hot potato */
-		bdesc_drop(&block);
-		
 		return 0;
 		
 	error:
 		sleep(tries * 5);
 		nbd_bd_reset(object);
 	}
-	
-	bdesc_drop(&block);
 	
 	fprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	return r;

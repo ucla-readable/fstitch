@@ -4,6 +4,7 @@
 
 #include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
+#include <kfs/bdesc.h>
 
 struct fn_entry {
 	sched_callback fn;
@@ -86,7 +87,7 @@ void sched_loop()
 		// Run cvs_ipc_serve each loop (which will sleep for a bit)
 		ipc_serve_run();
 
-		// Run other fes scheduled to have ran by now
+		// Run other fes scheduled to have run by now
 		cur_ncs = env->env_jiffies;
 		for (i=0; i < fes_size; i++)
 		{
@@ -99,5 +100,8 @@ void sched_loop()
 				fe->next = cur_ncs + fe->period;
 			}
 		}
+
+		// Run bdesc autoreleasing at the end of the main loop
+		bdesc_run_autorelease();
 	}
 }

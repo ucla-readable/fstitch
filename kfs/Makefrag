@@ -8,7 +8,6 @@ OBJDIRS += kfs
 #			$(OBJDIR)/kfs/wb_cache_bd.o \
 #			$(OBJDIR)/kfs/block_resizer_bd.o \
 #			$(OBJDIR)/kfs/journal_queue_bd.o \
-#			$(OBJDIR)/kfs/nbd_bd.o \
 #			$(OBJDIR)/kfs/loop_bd.o \
 #			$(OBJDIR)/kfs/md_bd.o \
 #			$(OBJDIR)/kfs/mirror_bd.o \
@@ -22,6 +21,7 @@ OBJDIRS += kfs
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
+			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/modman.o \
 			$(OBJDIR)/kfs/josfs_cfs.o \
