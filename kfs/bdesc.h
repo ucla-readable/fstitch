@@ -14,7 +14,7 @@ typedef struct datadesc datadesc_t;
 
 struct datadesc {
 	uint8_t * data;
-	uint32_t refs;
+	uint32_t ref_count;
 	chdesc_t * changes;
 	uint16_t length;
 };
@@ -28,7 +28,7 @@ struct bdesc {
 };
 
 /* allocate a new bdesc */
-bdesc_t * bdesc_alloc(BD_t * bd, uint32_t number, uint16_t length);
+bdesc_t * bdesc_alloc(uint32_t number, uint16_t length);
 
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc);
