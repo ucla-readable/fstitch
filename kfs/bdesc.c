@@ -99,6 +99,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 /* run the scheduled bdesc autoreleases */
 void bdesc_run_autorelease(void)
 {
+	Dprintf("<bdesc run_autorelease>\n");
 	while(autorelease_list)
 	{
 		bdesc_t * head = autorelease_list;
