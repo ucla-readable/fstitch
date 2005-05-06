@@ -45,7 +45,6 @@ static int _detect_extended(struct ptable_info * info, uint32_t table_offset, ui
 	if(!table)
 		return -1;
 	condense_ptable((struct pc_ptable *) &table->ddesc->data[PTABLE_OFFSET], ptable);
-	bdesc_drop(&table);
 	
 	for(i = 0; i != 4; i++)
 	{
@@ -122,14 +121,12 @@ void * pc_ptable_init(BD_t * bd)
 	   mbr->ddesc->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
 	{
 		printf("No partition table found!\n");
-		bdesc_drop(&mbr);
 		goto error_mbr;
 	}
 	
 	info->bd = bd;
 	info->count = 0;
 	condense_ptable(ptable, info->primary);
-	bdesc_drop(&mbr);
 	
 	/* detect extended partitions */
 	if(detect_extended(info))

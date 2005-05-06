@@ -15,6 +15,7 @@ static const char * ide_names[2][2] = {{"ide_pio_hda", "ide_pio_hdb"}, {"ide_pio
 struct ide_info {
 	uint8_t controller;
 	uint8_t disk;
+	uint16_t level;
 	uint32_t length;
 };
 
@@ -195,6 +196,11 @@ static int ide_pio_bd_sync(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
+static uint16_t ide_pio_bd_get_devlevel(BD_t * object)
+{
+	return ((struct ide_info *) OBJLOCAL(object))->level;
+}
+
 static int ide_pio_bd_destroy(BD_t * bd)
 {
 	int r = modman_rem_bd(bd);
@@ -239,6 +245,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	OBJASSIGN(bd, ide_pio_bd, get_config);
 	OBJASSIGN(bd, ide_pio_bd, get_status);
 	ASSIGN(bd, ide_pio_bd, get_numblocks);
+	ASSIGN(bd, ide_pio_bd, get_devlevel);
 	ASSIGN(bd, ide_pio_bd, get_blocksize);
 	ASSIGN(bd, ide_pio_bd, get_atomicsize);
 	ASSIGN(bd, ide_pio_bd, read_block);
@@ -249,7 +256,8 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	info->controller = controller;
 	info->disk = disk;
 	info->length = length;
-	
+	info->level = 0;
+
 	if(modman_add_bd(bd, ide_names[controller][disk]))
 	{
 		DESTROY(bd);
