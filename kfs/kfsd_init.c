@@ -339,6 +339,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 #endif
 #endif
 
+#if !USE_THIRD_LEG
 		if (enable_internal_journaling)
 		{
 			BD_t * journal_queue;
@@ -362,6 +363,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				(void) DESTROY(journal_queue);			
 		}
 		else
+#endif
 			lfs = josfs_lfs = josfs(cache);
 
 		if (josfs_lfs && enable_fsck)
@@ -387,9 +389,10 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			fprintf(STDERR_FILENO, "\nlfs creation failed\n");
 			kfsd_shutdown();
 		}
-
+#if !USE_THIRD_LEG
 		if (journaling)
 			printf(" [journaled, %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
+#endif
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");

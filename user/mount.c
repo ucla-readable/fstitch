@@ -206,6 +206,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			exit();
 		}
 
+#if !USE_THIRD_LEG
 		if (journaling)
 		{
 			printf(" [journaled");
@@ -213,6 +214,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				printf(" external");
 			printf(", %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
 		}
+#endif
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
