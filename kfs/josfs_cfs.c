@@ -138,6 +138,7 @@ static int josfs_cfs_close(CFS_t * cfs, int fid)
 	if (!f)
 		return -E_INVAL;
 
+	hash_map_erase(state->open_files, (void*) fid);
 	return open_file_close(f);
 }
 
