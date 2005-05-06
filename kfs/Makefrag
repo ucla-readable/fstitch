@@ -34,7 +34,8 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o \
-			$(OBJDIR)/kfs/kfsd_init.o
+			$(OBJDIR)/kfs/kfsd_init.o \
+			$(OBJDIR)/kfs/revision.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
 	@echo + ld $@
