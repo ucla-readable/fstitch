@@ -164,6 +164,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	bdesc = bdesc_alloc(number, SECTSIZE);
 	if(!bdesc)
 		return NULL;
+	bdesc_autorelease(bdesc);
 	
 	/* read it */
 	if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
