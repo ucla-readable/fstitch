@@ -13,6 +13,7 @@ struct partition_info {
 	uint32_t start;
 	uint32_t length;
 	uint16_t blocksize;
+	uint16_t level;
 };
 
 static int partition_bd_get_config(void * object, int level, char * string, size_t length)
@@ -59,7 +60,7 @@ static uint16_t partition_bd_get_atomicsize(BD_t * object)
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	bdesc_t * bdesc;
+	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
 	if(number >= info->length)
@@ -70,29 +71,19 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 	if(!bdesc)
 		return NULL;
 	
-	/* ensure we can alter the structure without conflict */
-	if(bdesc_alter(&bdesc))
-	{
-		bdesc_drop(&bdesc);
+	new_bdesc = bdesc_clone(number, bdesc);
+	if (!new_bdesc)
 		return NULL;
-	}
+	bdesc_autorelease(new_bdesc);
 	
-	/* adjust the block descriptor to match the partition */
-	bdesc->bd = object;
-	bdesc->number = number;
-	
-	return bdesc;
+	return new_bdesc;
 }
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	uint32_t refs = block->refs;
+	bdesc_t * wblock;
 	int value;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
@@ -102,31 +93,14 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= info->length)
 		return -E_INVAL;
 	
-	/* Important logic:
-	 * If somebody has a reference to this bdesc (i.e. refs > 0), then that
-	 * entity must be above us. This is because all entities that have
-	 * references to a bdesc think it has the same BD (in this case, us),
-	 * and everybody below us uses a different BD. So, if there is a
-	 * reference to this bdesc, it will still exist after the call to
-	 * write_block below. If not, the principle of caller-drop applies to
-	 * the bdesc and we do not have to (nor can we) de-translate it.
-	 * However, we must still set the translated flag, as it is the cue to
-	 * bdesc_retain() to notify the dependency manager of the change. In the
-	 * case where translated = 1 and refs = 0, bdesc_retain simply clears
-	 * the translated flag. */
-	block->translated++;
-	block->bd = info->bd;
-	block->number += info->start;
-	
+	wblock = bdesc_clone(block->number + info->start, block);
+	if (!wblock)
+		return -E_UNSPECIFIED;
+
 	/* write it */
-	value = CALL(block->bd, write_block, block);
+	value = CALL(info->bd, write_block, wblock);
 	
-	if(refs)
-	{
-		block->bd = object;
-		block->number -= info->start;
-		block->translated--;
-	}
+	bdesc_release(&wblock);
 	
 	return value;
 }
@@ -134,18 +108,11 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 static int partition_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	uint32_t refs;
+	bdesc_t * wblock;
 	int value;
 	
 	if(!block)
 		return CALL(info->bd, sync, NULL);
-	
-	/* save reference count */
-	refs = block->refs;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
@@ -155,21 +122,21 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 	if(block->number >= info->length)
 		return -E_INVAL;
 	
-	block->translated++;
-	block->bd = info->bd;
-	block->number += info->start;
-	
+	wblock = bdesc_clone(block->number + info->start, block);
+	if (!wblock)
+		return -E_UNSPECIFIED;
+
 	/* sync it */
-	value = CALL(block->bd, sync, block);
+	value = CALL(info->bd, sync, wblock);
 	
-	if(refs)
-	{
-		block->bd = object;
-		block->number -= info->start;
-		block->translated--;
-	}
+	bdesc_release(&wblock);
 	
 	return value;
+}
+
+static uint16_t partition_bd_get_devlevel(BD_t * object)
+{
+	return ((struct partition_info *) OBJLOCAL(object))->level;
 }
 
 static int partition_bd_destroy(BD_t * bd)
@@ -204,6 +171,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	OBJASSIGN(bd, partition_bd, get_config);
 	OBJASSIGN(bd, partition_bd, get_status);
 	ASSIGN(bd, partition_bd, get_numblocks);
+	ASSIGN(bd, partition_bd, get_devlevel);
 	ASSIGN(bd, partition_bd, get_blocksize);
 	ASSIGN(bd, partition_bd, get_atomicsize);
 	ASSIGN(bd, partition_bd, read_block);
@@ -215,6 +183,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	info->start = start;
 	info->length = length;
 	info->blocksize = CALL(disk, get_blocksize);
+	info->level = CALL(disk, get_devlevel);
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
