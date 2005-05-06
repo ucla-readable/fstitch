@@ -52,8 +52,7 @@ static BD_t * wholedisk_get_blockdev(LFS_t * object)
 
 static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
 	return NULL;
 }
@@ -99,48 +98,42 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 
 static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - size immutable */
 	return -E_INVAL;
 }
 
 static fdesc_t * wholedisk_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return NULL;
 }
 
 static int wholedisk_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return -E_INVAL;
 }
 
 static bdesc_t * wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - size immutable */
 	return NULL;
 }
 
 static int wholedisk_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
 	return -E_INVAL;
 }
 
 static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return -E_INVAL;
 }
@@ -148,9 +141,17 @@ static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct wd_info * info = (struct wd_info *) OBJLOCAL(object);
-	
-	if (head && tail)
-		*head = *tail = NULL;
+
+	/* *head and *tail: */
+	assert(head && tail);
+	/* 1. Make *tail depend on *head as requested.
+	 * Since wholedisk does not change data, just set *tail = *head. */
+	*tail = *head;
+	/* 2. Then, make *head depend on *tail.
+	 * Since wholedisk does not change data there are no chdescs depending
+	 * on *tail. So *head could be set to a new noop chdesc that depends
+	 * solely on *tail, but equivalent is setting *head = *tail (which is
+	 * already the case, so do nothing). */
 	
 	/* have to test all three of these because of the possibility of wrapping */
 	if(offset >= info->blocksize || size > info->blocksize || offset + size > info->blocksize)
@@ -216,8 +217,7 @@ static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 
 static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	if (head && tail)
-		*head = *tail = NULL;
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	return -E_INVAL;
 }
 
