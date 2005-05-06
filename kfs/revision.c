@@ -4,6 +4,7 @@
 #include <kfs/chdesc.h>
 #include <kfs/depman.h>
 #include <kfs/modman.h>
+#include <kfs/revision.h>
 
 #define STRIPPER_DEBUG 0
 
@@ -77,7 +78,7 @@ number_chdescs(chdesc_t *ch, int num)
 	}
 }
 
-int bdesc_revision_tail_prepare(bdesc_t *block, BD_t *bd)
+int revision_tail_prepare(bdesc_t *block, BD_t *bd)
 {
 	chdesc_t *root;
 	chmetadesc_t *d;
@@ -123,7 +124,7 @@ int bdesc_revision_tail_prepare(bdesc_t *block, BD_t *bd)
 	return 0;
 }
 
-int bdesc_revision_tail_revert(bdesc_t *block, BD_t *bd)
+int revision_tail_revert(bdesc_t *block, BD_t *bd)
 {
 	chdesc_t *root;
 	chmetadesc_t *d;
@@ -169,7 +170,7 @@ int bdesc_revision_tail_revert(bdesc_t *block, BD_t *bd)
 	return 0;
 }
 
-int bdesc_revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
+int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 {
 	chdesc_t *root;
 	chmetadesc_t *d;

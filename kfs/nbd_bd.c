@@ -8,6 +8,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/revision.h>
 #include <kfs/modman.h>
 #include <kfs/nbd_bd.h>
 
@@ -173,6 +174,9 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= info->length)
 		return -E_INVAL;
 	
+	/* prepare the block for writing */
+	revision_tail_prepare(block, object);
+	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
 	{
 		uint8_t command = 1;
@@ -194,6 +198,8 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		if(r != info->blocksize)
 			goto error;
 		
+		/* acknowledge the write as successful */
+		revision_tail_acknowledge(block, object);
 		return 0;
 		
 	error:
@@ -201,6 +207,8 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		nbd_bd_reset(object);
 	}
 	
+	/* the write failed; don't remove any change descriptors... */
+	revision_tail_revert(block, object);
 	fprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	return r;
 }
