@@ -19,6 +19,12 @@
 #include <arch/simple.h>
 #include <inc/stdio.h>
 
+#define USE_THIRD_LEG 1
+
+#if USE_THIRD_LEG
+#define wb_cache_bd wt_cache_bd
+#endif
+
 static bool verbose = 0;
 static bool use_wb_cache = 1;
 
@@ -87,6 +93,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			exit();
 		}
 
+#if !USE_THIRD_LEG
 		/* create a resizer if needed */
 		if ((resizer = block_resizer_bd(cache, 4096)) )
 		{
@@ -97,18 +104,31 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				exit();
 			}
 		}
+#else
+		resizer = NULL; // satisfy compiler
+#endif
 
 		if (!use_wb_cache && stripper)
 		{
+#if USE_THIRD_LEG
+			fprintf(STDERR_FILENO, "chdesc_stripper_bd shouldn't be used\n");
+			exit();
+#else
 			if (! (cache = chdesc_stripper_bd(cache)) )
 			{
 				fprintf(STDERR_FILENO, "chdesc_stripper_bd() failed\n");
 				exit();
 			}
+#endif
 		}
 
 		if (enable_journal)
 		{
+#if USE_THIRD_LEG
+			fprintf(STDERR_FILENO, "journaling not yet supported\n");
+			exit();
+			lfs = josfs_lfs = NULL; // satisfy compiler
+#else
 			BD_t * journal_queue;
 
 			if (! (journal_queue = journal_queue_bd(cache)) )
@@ -158,6 +178,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				fprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
 				return NULL;
 			}
+#endif
 		}
 		else
 			lfs = josfs_lfs = josfs(cache);
@@ -175,8 +196,10 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 
 		if (lfs)
 			printf("Using josfs");
+#if !USE_THIRD_LEG
 		else if ((lfs = wholedisk(cache)))
 			printf("Using wholedisk");
+#endif
 		else
 		{
 			fprintf(STDERR_FILENO, "lfs creation failed\n");
@@ -347,6 +370,10 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 
 	if (!strcmp("ide", argv[device_index]))
 	{
+#if USE_THIRD_LEG
+		fprintf(STDERR_FILENO, "ide_pio_bd not yet supported\n");
+		exit();
+#else
 		uint8_t controllerno, diskno;
 
 		if (device_index + 2 >= argc)
@@ -364,6 +391,7 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 			fprintf(STDERR_FILENO, "ide_pio_bd(%d, %d) failed\n", controllerno, diskno);
 			return NULL;
 		}
+#endif
 	}
 	else if (!strcmp("nbd", argv[device_index]))
 	{
@@ -390,6 +418,10 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 	}
 	else if (!strcmp("loop", argv[device_index]))
 	{
+#if USE_THIRD_LEG
+		fprintf(STDERR_FILENO, "loop_bd not yet supported\n");
+		exit();
+#else
 		const char * filename;
 		const char * lfs_filename;
 		LFS_t * lfs;
@@ -442,6 +474,7 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 		}
 
 		*stripper = 0;
+#endif
 	}
 	else if (!strcmp("bd", argv[device_index]))
 	{

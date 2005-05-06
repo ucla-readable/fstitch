@@ -6,8 +6,6 @@ FSOFILES := 		$(OBJDIR)/fs/ide.o \
 			$(OBJDIR)/fs/serv.o \
 			$(OBJDIR)/fs/test.o \
 
-#			$(OBJDIR)/user/mount \
-# 			$(OBJDIR)/user/umount \
 #			$(OBJDIR)/user/mirror \
 
 USERAPPS :=		$(OBJDIR)/user/bless \
@@ -39,6 +37,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/mkdir \
 			$(OBJDIR)/user/mkjosfs \
 			$(OBJDIR)/user/more \
+			$(OBJDIR)/user/mount \
 			$(OBJDIR)/user/mv \
 			$(OBJDIR)/user/netstats \
 			$(OBJDIR)/user/null \
@@ -55,6 +54,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/testfpu \
 			$(OBJDIR)/user/test_kfs_perf \
 			$(OBJDIR)/user/testkpl \
+ 			$(OBJDIR)/user/umount \
 			$(OBJDIR)/user/uptime \
 			$(OBJDIR)/user/volume
 

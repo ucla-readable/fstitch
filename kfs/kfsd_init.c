@@ -49,7 +49,7 @@ int kfsd_init(void)
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
 #endif
-	const bool use_net    = 1;
+	const bool use_net    = 0;
 #if !USE_THIRD_LEG
 	static_assert(!(use_disk_0_extern_journal && use_disk_0));
 #endif

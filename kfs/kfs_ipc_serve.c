@@ -149,7 +149,7 @@ static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_class
 
 	RETURN_IPC;
 }
-#if !USE_THIRD_LEG
+
 // uhfs
 #include <kfs/uhfs.h>
 
@@ -169,7 +169,7 @@ static void kis_uhfs(envid_t whom, const Skfs_uhfs_t * pg)
 
 //
 // LFS
-
+#if !USE_THIRD_LEG
 // journal_lfs
 #include <kfs/journal_lfs.h>
 
@@ -200,7 +200,7 @@ static void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_m
 
 	RETURN_IPC;
 }
-
+#endif
 // josfs_base
 #include <kfs/josfs_base.h>
 
@@ -229,7 +229,7 @@ static void kis_josfs_fsck(envid_t whom, const Skfs_josfs_fsck_t * pg)
 
 	RETURN_IPC;
 }
-
+#if !USE_THIRD_LEG
 // wholedisk
 #include <kfs/wholedisk_lfs.h>
 
@@ -263,14 +263,14 @@ static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 
 	RETURN_IPC;
 }
-
+#endif
 #include <kfs/nbd_bd.h>
 static void kis_nbd_bd(envid_t whom, const Skfs_nbd_bd_t * pg)
 {
 	uint32_t val = (uint32_t) nbd_bd(pg->address, pg->port);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/journal_queue_bd.h>
 static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
 {
@@ -326,7 +326,7 @@ static void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 
 	RETURN_IPC;
 }
-
+#endif
 #include <kfs/wt_cache_bd.h>
 static void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 {
@@ -340,7 +340,7 @@ static void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 
 	RETURN_IPC;
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/block_resizer_bd.h>
 static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
 {
@@ -646,28 +646,33 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(TABLE_CLASSIFIER_CFS,        table_classifier_cfs);
 		SERVE(TABLE_CLASSIFIER_CFS_ADD,    table_classifier_cfs_add);
 		SERVE(TABLE_CLASSIFIER_CFS_REMOVE, table_classifier_cfs_remove);
-#if !USE_THIRD_LEG
 		SERVE(UHFS, uhfs);
 
 		// LFS
-
+#if !USE_THIRD_LEG
 		SERVE(JOURNAL_LFS,               journal_lfs);
 		SERVE(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
+#endif
 
 		SERVE(JOSFS_BASE, josfs_base);
 		SERVE(JOSFS_FSCK, josfs_fsck);
 
+#if !USE_THIRD_LEG
 		SERVE(WHOLEDISK, wholedisk);
 
 		// BD
 
 		SERVE(LOOP_BD,            loop_bd);
+#endif
 		SERVE(NBD_BD,             nbd_bd);
+#if !USE_THIRD_LEG
 		SERVE(JOURNAL_QUEUE_BD,   journal_queue_bd);
 		SERVE(ORDER_PRESERVER_BD, order_preserver_bd);
 		SERVE(CHDESC_STRIPPER_BD, chdesc_stripper_bd);
 		SERVE(WB_CACHE_BD,        wb_cache_bd);
+#endif
 		SERVE(WT_CACHE_BD,        wt_cache_bd);
+#if !USE_THIRD_LEG
 		SERVE(BLOCK_RESIZER_BD,   block_resizer_bd);
 		SERVE(MD_BD,              md_bd);
 		SERVE(MIRROR_BD,          mirror_bd);

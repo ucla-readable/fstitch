@@ -445,7 +445,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
 
 	return create_cfs(cfs_id);
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/uhfs.h>
 CFS_t * uhfs(LFS_t * lfs)
 {
@@ -465,7 +465,7 @@ CFS_t * uhfs(LFS_t * lfs)
 
 //
 // LFS
-
+#if !USE_THIRD_LEG
 #include <kfs/journal_lfs.h>
 
 LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
@@ -496,7 +496,7 @@ size_t journal_lfs_max_bandwidth(const LFS_t * journal)
 	SEND_PG();
 	return RECV_PG();
 }
-
+#endif
 #include <kfs/josfs_base.h>
 LFS_t * josfs(BD_t * block_device)
 {
@@ -524,7 +524,7 @@ int josfs_fsck(LFS_t * lfs)
 	SEND_PG();
 	return RECV_PG();
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/wholedisk_lfs.h>
 LFS_t * wholedisk(BD_t * bd)
 {
@@ -562,7 +562,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 
 	return create_bd(bd_id);
 }
-
+#endif
 #include <kfs/nbd_bd.h>
 BD_t * nbd_bd(const char * address, uint16_t port)
 {
@@ -580,7 +580,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 
 	return create_bd(bd_id);
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/journal_queue_bd.h>
 BD_t * journal_queue_bd(BD_t * disk)
 {
@@ -645,7 +645,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 
 	return create_bd(bd_id);
 }
-
+#endif
 #include <kfs/wt_cache_bd.h>
 BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 {
@@ -662,7 +662,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 
 	return create_bd(bd_id);
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/block_resizer_bd.h>
 BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 {
