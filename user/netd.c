@@ -723,6 +723,8 @@ dns_msg2raw(const dns_msg_t *dm, uint8_t *raw, size_t raw_len)
 	assert(!dm->h.arcount);
 
 	assert(raw_len == n);
+
+	return ERR_OK;
 }
 
 #define DNS_NAME_PTR_MASK 0xC0
