@@ -87,7 +87,7 @@ void bdesc_release(bdesc_t ** bdesc)
 /* schedule the bdesc to be released at the end of the current run loop */
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 {
-	Dprintf("<bdesc 0x%08x autorelease>\n", *bdesc);
+	Dprintf("<bdesc 0x%08x autorelease>\n", bdesc);
 	if(!bdesc->ar_count++)
 	{
 		bdesc->ar_next = autorelease_list;
