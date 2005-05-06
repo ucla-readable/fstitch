@@ -67,12 +67,11 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	
 	bdesc = CALL(info->bd, read_block, info->start + number);
-	
 	if(!bdesc)
 		return NULL;
 	
 	new_bdesc = bdesc_clone(number, bdesc);
-	if (!new_bdesc)
+	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
 	
@@ -94,13 +93,11 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	wblock = bdesc_clone(block->number + info->start, block);
-	if (!wblock)
+	if(!wblock)
 		return -E_UNSPECIFIED;
-
+	
 	/* write it */
 	value = CALL(info->bd, write_block, wblock);
-	
-	bdesc_release(&wblock);
 	
 	return value;
 }
@@ -123,13 +120,11 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	wblock = bdesc_clone(block->number + info->start, block);
-	if (!wblock)
+	if(!wblock)
 		return -E_UNSPECIFIED;
-
+	
 	/* sync it */
 	value = CALL(info->bd, sync, wblock);
-	
-	bdesc_release(&wblock);
 	
 	return value;
 }

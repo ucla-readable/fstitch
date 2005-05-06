@@ -93,10 +93,10 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	wblock = bdesc_clone(block->number >> 1, block);
 	if(!wblock)
 		return -E_UNSPECIFIED;
+	bdesc_autorelease(wblock);
 	
 	/* write it */
 	value = CALL(info->bd[block->number & 1], write_block, wblock);
-	bdesc_release(&wblock);
 	
 	return value;
 }
@@ -130,6 +130,7 @@ static int md_bd_sync(BD_t * object, bdesc_t * block)
 	wblock = bdesc_clone(block->number >> 1, block);
 	if(!wblock)
 		return -E_UNSPECIFIED;
+	bdesc_autorelease(wblock);
 	
 	/* sync it */
 	value = CALL(info->bd[block->number & 1], sync, wblock);
