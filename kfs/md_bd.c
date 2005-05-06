@@ -11,7 +11,7 @@
 struct md_info {
 	BD_t * bd[2];
 	uint32_t numblocks;
-	uint16_t blocksize, atomicsize;
+	uint16_t blocksize, atomicsize, level;
 };
 
 static int md_bd_get_config(void * object, int level, char * string, size_t length)
@@ -58,40 +58,29 @@ static uint16_t md_bd_get_atomicsize(BD_t * object)
 static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
-	bdesc_t * bdesc;
+	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
 	if(number >= info->numblocks)
 		return NULL;
 	
-	bdesc = CALL(info->bd[number & 1], read_block, number >> 1);
+	read_bdesc = CALL(info->bd[number & 1], read_block, number >> 1);
+	if(!read_bdesc)
+		return NULL;
 	
+	bdesc = bdesc_clone(number, read_bdesc);
 	if(!bdesc)
 		return NULL;
-	
-	/* ensure we can alter the structure without conflict */
-	if(bdesc_alter(&bdesc))
-	{
-		bdesc_drop(&bdesc);
-		return NULL;
-	}
-	
-	/* adjust the block descriptor to match the md */
-	bdesc->bd = object;
-	bdesc->number = number;
-	
+	bdesc_autorelease(bdesc);
+
 	return bdesc;
 }
 
 static int md_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
-	uint32_t refs = block->refs, number = block->number;
+	bdesc_t * wblock;
 	int value;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
@@ -101,31 +90,13 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= info->numblocks)
 		return -E_INVAL;
 	
-	/* Important logic:
-	 * If somebody has a reference to this bdesc (i.e. refs > 0), then that
-	 * entity must be above us. This is because all entities that have
-	 * references to a bdesc think it has the same BD (in this case, us),
-	 * and everybody below us uses a different BD. So, if there is a
-	 * reference to this bdesc, it will still exist after the call to
-	 * write_block below. If not, the principle of caller-drop applies to
-	 * the bdesc and we do not have to (nor can we) de-translate it.
-	 * However, we must still set the translated flag, as it is the cue to
-	 * bdesc_retain() to notify the dependency manager of the change. In the
-	 * case where translated = 1 and refs = 0, bdesc_retain simply clears
-	 * the translated flag. */
-	block->translated++;
-	block->bd = info->bd[number & 1];
-	block->number >>= 1;
+	wblock = bdesc_clone(block->number >> 1, block);
+	if(!wblock)
+		return -E_UNSPECIFIED;
 	
 	/* write it */
-	value = CALL(block->bd, write_block, block);
-	
-	if(refs)
-	{
-		block->bd = object;
-		block->number = number;
-		block->translated--;
-	}
+	value = CALL(info->bd[block->number & 1], write_block, wblock);
+	bdesc_release(&wblock);
 	
 	return value;
 }
@@ -133,7 +104,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 static int md_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
-	uint32_t refs, number;
+	bdesc_t * wblock;
 	int value;
 	
 	if(!block)
@@ -148,14 +119,6 @@ static int md_bd_sync(BD_t * object, bdesc_t * block)
 		return CALL(info->bd[1], sync, NULL);
 	}
 	
-	/* save reference count and number */
-	refs = block->refs;
-	number = block->number;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
 		return -E_INVAL;
@@ -164,21 +127,19 @@ static int md_bd_sync(BD_t * object, bdesc_t * block)
 	if(block->number >= info->numblocks)
 		return -E_INVAL;
 	
-	block->translated++;
-	block->bd = info->bd[number & 1];
-	block->number >>= 1;
+	wblock = bdesc_clone(block->number >> 1, block);
+	if(!wblock)
+		return -E_UNSPECIFIED;
 	
 	/* sync it */
-	value = CALL(block->bd, sync, block);
-	
-	if(refs)
-	{
-		block->bd = object;
-		block->number = number;
-		block->translated--;
-	}
+	value = CALL(info->bd[block->number & 1], sync, wblock);
 	
 	return value;
+}
+
+static uint16_t md_bd_get_devlevel(BD_t * object)
+{
+	return ((struct md_info *) OBJLOCAL(object))->level;
 }
 
 static int md_bd_destroy(BD_t * bd)
@@ -202,6 +163,8 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	uint16_t blocksize = CALL(disk0, get_blocksize);
 	uint16_t atomicsize0 = CALL(disk0, get_atomicsize);
 	uint16_t atomicsize1 = CALL(disk1, get_atomicsize);
+	uint16_t level0 = CALL(disk0, get_devlevel);
+	uint16_t level1 = CALL(disk1, get_devlevel);
 	BD_t * bd;
 	
 	/* block sizes must be the same */
@@ -225,6 +188,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	OBJASSIGN(bd, md_bd, get_config);
 	OBJASSIGN(bd, md_bd, get_status);
 	ASSIGN(bd, md_bd, get_numblocks);
+	ASSIGN(bd, md_bd, get_devlevel);
 	ASSIGN(bd, md_bd, get_blocksize);
 	ASSIGN(bd, md_bd, get_atomicsize);
 	ASSIGN(bd, md_bd, read_block);
@@ -239,6 +203,11 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	info->blocksize = blocksize;
 	info->atomicsize = MIN(atomicsize0, atomicsize1);
 	
+	if (level0 > level1)
+		info->level = level0;
+	else
+		info->level = level1;
+
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 		goto error_add;
 	if(modman_inc_bd(disk0, bd, "Disk 0") < 0)

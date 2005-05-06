@@ -115,6 +115,22 @@ void bdesc_run_autorelease(void)
 	}
 }
 
+/* make a new bdesc that shares a ddesc with another bdesc */
+bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original)
+{
+	bdesc_t * bdesc = malloc(sizeof(*bdesc));
+	Dprintf("<bdesc 0x%08x clone>\n", bdesc);
+	if(!bdesc)
+		return NULL;
+	bdesc->ddesc = original->ddesc;
+	bdesc->number = number;
+	bdesc->ref_count = 1;
+	bdesc->ar_count = 0;
+	bdesc->ar_next = NULL;
+	bdesc->ddesc->ref_count++;
+	return bdesc;
+}
+
 /* a function for caches and cache-like modules to use for bdesc overwriting */
 /* this may no longer be needed, but it is left commented just in case */
 #if 0

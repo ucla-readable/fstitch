@@ -42,6 +42,9 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc);
 /* run the scheduled bdesc autoreleases */
 void bdesc_run_autorelease(void);
 
+/* make a new bdesc that shares a ddesc with another bdesc */
+bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original);
+
 /* a function for caches and cache-like modules to use for bdesc overwriting */
 /* this may no longer be needed, but it is left commented just in case */
 //int bdesc_overwrite(bdesc_t * cached, bdesc_t * written);
