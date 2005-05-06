@@ -160,7 +160,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(object, number, SECTSIZE);
+	bdesc = bdesc_alloc(number, SECTSIZE);
 	if(!bdesc)
 		return NULL;
 	
@@ -175,10 +175,6 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != SECTSIZE)
 		return -E_INVAL;
@@ -191,17 +187,11 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1)
 		return -E_TIMEOUT;
 	
-	/* drop the hot potato */
-	bdesc_drop(&block);
-	
 	return 0;
 }
 
 static int ide_pio_bd_sync(BD_t * object, bdesc_t * block)
 {
-	/* drop the hot potato */
-	if(block)
-		bdesc_drop(&block);
 	return 0;
 }
 

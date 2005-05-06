@@ -1,6 +1,5 @@
 OBJDIRS += kfs
 
-#			$(OBJDIR)/kfs/ide_pio_bd.o \
 #			$(OBJDIR)/kfs/partition_bd.o \
 #			$(OBJDIR)/kfs/pc_ptable_bd.o \
 #			$(OBJDIR)/kfs/chdesc_stripper_bd.o \
@@ -20,6 +19,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/chdesc.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
+			$(OBJDIR)/kfs/ide_pio_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
