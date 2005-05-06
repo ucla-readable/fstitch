@@ -41,7 +41,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
-	bdesc->ddesc->ref_count = 0;
+	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->changes = NULL;
 	bdesc->ddesc->length = length;
 	return bdesc;
