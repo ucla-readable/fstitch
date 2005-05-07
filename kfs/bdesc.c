@@ -118,6 +118,7 @@ void bdesc_run_autorelease(void)
 /* make a new bdesc that shares a ddesc with another bdesc */
 bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original)
 {
+	assert(original);
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
 	Dprintf("<bdesc 0x%08x clone>\n", bdesc);
 	if(!bdesc)

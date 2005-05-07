@@ -5,7 +5,6 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/block_resizer_bd.h>
 
@@ -73,21 +72,18 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
 	if(number >= info->block_count)
 		return NULL;
 	
-	bdesc = bdesc_alloc(object, number, info->converted_size);
+	bdesc = bdesc_alloc(number, info->converted_size);
 	if(!bdesc)
 		return NULL;
+	bdesc_autorelease(bdesc);
 	
 	number *= info->merge_count;
 	for(i = 0; i != info->merge_count; i++)
 	{
 		bdesc_t * sub = CALL(info->bd, read_block, number + i);
 		if(!sub)
-		{
-			bdesc_drop(&bdesc);
 			return NULL;
-		}
 		memcpy(&bdesc->ddesc->data[i * info->original_size], sub->ddesc->data, info->original_size);
-		bdesc_drop(&sub);
 	}
 	
 	return bdesc;
@@ -97,10 +93,6 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	uint32_t i, number;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->converted_size)
@@ -114,17 +106,16 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	for(i = 0; i != info->merge_count; i++)
 	{
 		/* synthesize a new bdesc to avoid having to read it */
-		bdesc_t * sub = bdesc_alloc(info->bd, number + i, info->original_size);
+		bdesc_t * sub = bdesc_alloc(number + i, info->original_size);
 		/* maybe we ran out of memory? */
 		if(!sub)
 			return -E_NO_MEM;
+		bdesc_autorelease(sub);
 		memcpy(sub->ddesc->data, &block->ddesc->data[i * info->original_size], info->original_size);
 		/* explicitly forward change descriptors */
 		depman_translate_chdesc(block, sub, i * info->original_size, info->original_size);
 		CALL(info->bd, write_block, sub);
 	}
-	
-	bdesc_drop(&block);
 	
 	return 0;
 }
@@ -137,10 +128,6 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 	if(!block)
 		return CALL(info->bd, sync, NULL);
 	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->converted_size)
 		return -E_INVAL;
@@ -152,15 +139,15 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 	number = block->number * info->merge_count;
 	for(i = 0; i != info->merge_count; i++)
 	{
-		bdesc_t * sub = CALL(info->bd, read_block, number + i);
-		/* ran out of memory? */
+		/* synthesize a new bdesc to avoid having to read it */
+		bdesc_t * sub = bdesc_alloc(number + i, info->original_size);
+		/* maybe we ran out of memory? */
 		if(!sub)
-			return -E_INVAL;
+			return -E_NO_MEM;
+		bdesc_autorelease(sub);
 		/* FIXME check return value? */
 		CALL(info->bd, sync, sub);
 	}
-	
-	bdesc_drop(&block);
 	
 	return 0;
 }
