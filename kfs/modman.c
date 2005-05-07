@@ -68,7 +68,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 		/* usage count will have increased to 1, put it down to 0 again */
 		mod->usage = 0;
 		vector_pop_back(mod->users);
-		dev_name = vector_elt(mod->use_names, vector_size(mod->use_names));
+		dev_name = vector_elt(mod->use_names, vector_size(mod->use_names) - 1);
 		if(dev_name)
 			free(dev_name);
 		vector_pop_back(mod->use_names);
@@ -173,10 +173,7 @@ static int modman_rem(hash_map_t * map, void * module)
 	 * here in modman_rem(), rather than the macro-generated
 	 * function modman_rem_bd() below */
 	if(map == bd_map)
-	{
-		mod->usage = 1;
 		devfs_bd_remove(modman_devfs, mod->name);
-	}
 	
 	Dprintf("%s: removing module %s\n", __FUNCTION__, mod->name);
 	hash_map_erase(map, module);
