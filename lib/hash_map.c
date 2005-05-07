@@ -338,7 +338,10 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 {
 	int r;
 
-	if (n == vector_size(hm->tbl) || vector_size(hm->tbl) <= MIN_NUM_BUCKETS)
+	n = MAX(n, MIN_NUM_BUCKETS);
+
+	// Avoid unnecessary work when there is no change in the number of buckets
+	if (n == vector_size(hm->tbl))
 		return 1;
 
 	// Create new hash table
