@@ -1691,11 +1691,15 @@ static int josfs_sync(LFS_t * object, const char * name)
 
 static int josfs_destroy(LFS_t * lfs)
 {
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(lfs);
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct lfs_info *) OBJLOCAL(lfs))->ubd, lfs);
-	
+	modman_dec_bd(info->ubd, lfs);
+
+	bdesc_release(&info->super_block);
+	bdesc_release(&info->bitmap_cache);
+
 	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
