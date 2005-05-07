@@ -128,7 +128,10 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
+	{
+		bdesc_autorelease(bdesc);
 		return bdesc;
+	}
 	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
 	{
