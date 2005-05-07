@@ -232,6 +232,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	*head = chdescs[count - 1];
 	*tail = chdescs[0];
 	
+	free(chdescs);
+	
 	return 0;
 }
 
@@ -333,6 +335,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	
 	*head = chdescs[count - 1];
 	*tail = chdescs[0];
+	
+	free(chdescs);
 	
 	return 0;
 }
@@ -436,6 +440,8 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	
 	*head = chdescs[count - 1];
 	*tail = chdescs[0];
+	
+	free(chdescs);
 	
 	return 0;
 }
