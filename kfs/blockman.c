@@ -2,6 +2,7 @@
 #include <inc/malloc.h>
 #include <inc/hash_map.h>
 
+#include <kfs/bdesc.h>
 #include <kfs/blockman.h>
 
 #define BLOCKMAN_DEBUG 0
@@ -72,8 +73,13 @@ int blockman_managed_add(blockman_t * blockman, bdesc_t * bdesc)
 
 bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number)
 {
+	bdesc_t * bdesc;
 	datadesc_t * ddesc = blockman_lookup(blockman, number);
 	if(!ddesc)
 		return NULL;
-	return bdesc_wrap_ddesc(ddesc, number);
+	bdesc = bdesc_wrap_ddesc(ddesc, number);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+	return bdesc;
 }

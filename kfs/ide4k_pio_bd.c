@@ -179,10 +179,7 @@ static bdesc_t * ide4k_pio_bd_read_block(BD_t * object, uint32_t number)
 	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
-	{
-		bdesc_autorelease(bdesc);
 		return bdesc;
-	}
 	
 	bdesc = bdesc_alloc(number, SECTSIZE);
 	if(!bdesc)

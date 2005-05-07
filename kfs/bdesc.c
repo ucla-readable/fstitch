@@ -81,11 +81,11 @@ void bdesc_release(bdesc_t ** bdesc)
 	Dprintf("<bdesc 0x%08x release>\n", *bdesc);
 	(*bdesc)->ddesc->ref_count--;
 	(*bdesc)->ref_count--;
-	if((*bdesc)->ref_count < 0)
+	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
 	{
 		Dprintf("<bdesc 0x%08x negative reference count!>\n", *bdesc);
-		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count;
-		(*bdesc)->ref_count = 0;
+		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
+		(*bdesc)->ref_count = (*bdesc)->ar_count;
 	}
 	if(!(*bdesc)->ref_count)
 	{
@@ -110,6 +110,11 @@ void bdesc_release(bdesc_t ** bdesc)
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 {
 	Dprintf("<bdesc 0x%08x autorelease>\n", bdesc);
+	if(bdesc->ar_count == bdesc->ref_count)
+	{
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc 0x%08x autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
+		return bdesc;
+	}
 	if(!bdesc->ar_count++)
 	{
 		bdesc->ar_next = autorelease_list;

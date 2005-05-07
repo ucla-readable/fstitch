@@ -23,7 +23,7 @@
 #define Dprintf(x...)
 #endif
 
-// "JOSFSMG"
+// "JOSCFSMG"
 #define JOSFS_CFS_MAGIC 0x705CF535
 
 struct open_file {
