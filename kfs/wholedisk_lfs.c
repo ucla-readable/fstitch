@@ -141,25 +141,18 @@ static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct wd_info * info = (struct wd_info *) OBJLOCAL(object);
+	int r;
 
-	/* *head and *tail: */
 	assert(head && tail);
-	/* 1. Make *tail depend on *head as requested.
-	 * Since wholedisk does not change data, just set *tail = *head. */
-	*tail = *head;
-	/* 2. Then, make *head depend on *tail.
-	 * Since wholedisk does not change data there are no chdescs depending
-	 * on *tail. So *head could be set to a new noop chdesc that depends
-	 * solely on *tail, but equivalent is setting *head = *tail (which is
-	 * already the case, so do nothing). */
 	
 	/* have to test all three of these because of the possibility of wrapping */
 	if(offset >= info->blocksize || size > info->blocksize || offset + size > info->blocksize)
 		return -E_INVAL;
 	
-	bdesc_touch(block);
-	memcpy(&block->ddesc->data[offset], data, size);
-	/* pass our ownership of this bdesc on */
+	r = chdesc_create_byte(block, info->bd, offset, size, data, head, tail);
+	if(r < 0)
+		return r;
+	
 	return CALL(info->bd, write_block, block);
 }
 
