@@ -221,7 +221,7 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	if (hm->auto_resize && (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm) <= AUTO_SHRINK_LOAD)
 	{
 		// (safe to ignore failure)
-		(void) hash_map_resize(hm, 2*vector_size(hm->tbl));
+		(void) hash_map_resize(hm, vector_size(hm->tbl)/2);
 	}
 
 	return v;
