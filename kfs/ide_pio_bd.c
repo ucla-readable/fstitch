@@ -5,6 +5,8 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/blockman.h>
+#include <kfs/revision.h>
 #include <kfs/modman.h>
 #include <kfs/ide_pio_bd.h>
 
@@ -17,6 +19,7 @@ struct ide_info {
 	uint8_t disk;
 	uint16_t level;
 	uint32_t length;
+	blockman_t * blockman;
 };
 
 static int ide_notbusy(uint8_t controller)
@@ -176,6 +179,13 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		bdesc_autorelease(bdesc);
+		return bdesc;
+	}
+	
 	/* make sure it's a valid block */
 	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return NULL;
@@ -187,6 +197,10 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	
 	/* read it */
 	if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
+		return NULL;
+	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
 	return bdesc;
@@ -204,9 +218,18 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return -E_INVAL;
 	
+	/* prepare the block for writing */
+	revision_tail_prepare(block, object);
+	
 	/* write it */
-	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1)
+	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1) {
+		/* the write failed; don't remove any change descriptors... */
+		revision_tail_revert(block, object);
 		return -E_TIMEOUT;
+	}
+	
+	/* acknowledge the write as successful */
+	revision_tail_acknowledge(block, object);
 	
 	return 0;
 }
@@ -223,9 +246,12 @@ static uint16_t ide_pio_bd_get_devlevel(BD_t * object)
 
 static int ide_pio_bd_destroy(BD_t * bd)
 {
+	struct ide_info * info = (struct ide_info *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
+	
+	blockman_destroy(&info->blockman);
 	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -272,6 +298,13 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	ASSIGN(bd, ide_pio_bd, write_block);
 	ASSIGN(bd, ide_pio_bd, sync);
 	DESTRUCTOR(bd, ide_pio_bd, destroy);
+	
+	info->blockman = blockman_create();
+	if(!info->blockman) {
+		free(info);
+		free(bd);
+		return NULL;
+	}
 	
 	info->controller = controller;
 	info->disk = disk;
