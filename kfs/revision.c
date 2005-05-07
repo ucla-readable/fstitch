@@ -110,8 +110,10 @@ int revision_tail_prepare(bdesc_t *block, BD_t *bd)
 	if (heap == 0)
 		panic("out of memory\n");
 	d = root->dependencies;
-	while (d)
+	while (d) {
 		fixed_max_heap_insert(heap, d->desc, d->desc->distance);
+		d = d->next;
+	}
 	// pop & rollback
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
@@ -156,8 +158,10 @@ int revision_tail_revert(bdesc_t *block, BD_t *bd)
 	if (heap == 0)
 		panic("out of memory\n");
 	d = root->dependencies;
-	while (d)
+	while (d) {
 		fixed_max_heap_insert(heap, d->desc, d->desc->distance);
+		d = d->next;
+	}
 	// pop & rollforward
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
@@ -202,8 +206,10 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 	if (heap == 0)
 		panic("out of memory\n");
 	d = root->dependencies;
-	while (d)
+	while (d) {
 		fixed_max_heap_insert(heap, d->desc, d->desc->distance);
+		d = d->next;
+	}
 	// pop & rollforward
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
