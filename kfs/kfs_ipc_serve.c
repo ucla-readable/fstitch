@@ -270,6 +270,12 @@ static void kis_nbd_bd(envid_t whom, const Skfs_nbd_bd_t * pg)
 	uint32_t val = (uint32_t) nbd_bd(pg->address, pg->port);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
+#include <kfs/mem_bd.h>
+static void kis_mem_bd(envid_t whom, const Skfs_mem_bd_t * pg)
+{
+	uint32_t val = (uint32_t) mem_bd(pg->blocks, pg->blocksize);
+	ipc_send(whom, val, NULL, 0, NULL);
+}
 #if !USE_THIRD_LEG
 #include <kfs/journal_queue_bd.h>
 static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
@@ -668,6 +674,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(LOOP_BD,            loop_bd);
 #endif
 		SERVE(NBD_BD,             nbd_bd);
+		SERVE(MEM_BD,             mem_bd);
 #if !USE_THIRD_LEG
 		SERVE(JOURNAL_QUEUE_BD,   journal_queue_bd);
 		SERVE(ORDER_PRESERVER_BD, order_preserver_bd);

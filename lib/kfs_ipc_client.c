@@ -544,7 +544,6 @@ LFS_t * wholedisk(BD_t * bd)
 
 //
 // BD
-
 #include <kfs/loop_bd.h>
 BD_t * loop_bd(LFS_t * lfs, const char * file)
 {
@@ -563,6 +562,22 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	return create_bd(bd_id);
 }
 #endif
+#include <kfs/mem_bd.h>
+BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(MEM_BD, mem_bd);
+
+	pg->blocks = blocks;
+	pg->blocksize = blocksize;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
+}
 #include <kfs/nbd_bd.h>
 BD_t * nbd_bd(const char * address, uint16_t port)
 {

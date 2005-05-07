@@ -12,6 +12,7 @@
 #include <kfs/uhfs.h>
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/modman.h>
+#include <kfs/mem_bd.h>
 
 #include <inc/cfs_ipc_client.h>
 #include <inc/kfs_ipc_client.h>
@@ -244,6 +245,7 @@ static void print_usage(const char * bin)
 	printf("    nbd  <host> [-p <port>]\n");
 	printf("    loop <file>\n");
 	printf("    bd   <bd_name>\n");
+	printf("    mem  <blocksize> <blockcount>\n");
 }
 
 static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** external_journal, bool * fsck, uint32_t * cache_num_blocks)
@@ -415,6 +417,38 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 		if (! (disk = nbd_bd(host, port)) )
 		{
 			fprintf(STDERR_FILENO, "nbd_bd(%s, %d) failed\n", host, port);
+			return NULL;
+		}
+	}
+	else if (!strcmp("mem", argv[device_index]))
+	{
+		uint32_t block_count;
+		const char * block_count_str;
+		uint16_t blocksize;
+		const char * blocksize_str;
+
+		if (device_index + 2 >= argc)
+		{
+			fprintf(STDERR_FILENO, "Insufficient parameters for mem\n");
+			print_usage(argv[0]);
+			exit();
+		}
+
+		blocksize_str = argv[device_index + 1];
+		blocksize = strtol(blocksize_str, NULL, 10);
+		if (blocksize == 0) {
+			fprintf(STDERR_FILENO, "Bad block size for mem\n");
+		}
+
+		block_count_str = argv[device_index + 2];
+		block_count = strtol(block_count_str, NULL, 10);
+		if (block_count == 0) {
+			fprintf(STDERR_FILENO, "Bad block count for mem\n");
+		}
+
+		if (! (disk = mem_bd(block_count, blocksize)) )
+		{
+			fprintf(STDERR_FILENO, "mem_bd(%d, %d) failed\n", block_count, blocksize);
 			return NULL;
 		}
 	}
