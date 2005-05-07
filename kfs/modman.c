@@ -173,7 +173,10 @@ static int modman_rem(hash_map_t * map, void * module)
 	 * here in modman_rem(), rather than the macro-generated
 	 * function modman_rem_bd() below */
 	if(map == bd_map)
+	{
+		mod->usage = 1;
 		devfs_bd_remove(modman_devfs, mod->name);
+	}
 	
 	Dprintf("%s: removing module %s\n", __FUNCTION__, mod->name);
 	hash_map_erase(map, module);
