@@ -186,7 +186,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	if (hm->auto_resize && AUTO_GROW_LOAD <= (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm))
 	{
 		// (safe to ignore failure)
-		(void) hash_map_resize(hm, 2*vector_size(hm->tbl));
+		(void) hash_map_resize(hm, 2*hash_map_bucket_count(hm));
 	}
 
 	return 0;
@@ -221,7 +221,7 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	if (hm->auto_resize && (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm) <= AUTO_SHRINK_LOAD)
 	{
 		// (safe to ignore failure)
-		(void) hash_map_resize(hm, vector_size(hm->tbl)/2);
+		(void) hash_map_resize(hm, hash_map_bucket_count(hm)/2);
 	}
 
 	return v;
@@ -337,10 +337,9 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 {
 	int r;
 
-	n = MAX(n, MIN_NUM_BUCKETS);
-
 	// Avoid unnecessary work when there is no change in the number of buckets
-	if (n == vector_size(hm->tbl))
+	// and avoid making the hash table smaller than this implementation desires
+	if (n == hash_map_bucket_count(hm) || n <= MIN_NUM_BUCKETS)
 		return 1;
 
 	// Possible speedup if we could use one:
