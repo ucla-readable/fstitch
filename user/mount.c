@@ -481,7 +481,8 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 	else if (!strcmp("bd", argv[device_index]))
 	{
 		const char * bd_name;
-		modman_it_t * it;
+		modman_it_t it;
+		int r;
 
 		if (device_index + 1 >= argc)
 		{
@@ -492,12 +493,12 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 
 		bd_name = argv[device_index+1];
 
-		it = modman_it_create_bd();
-		assert(it);
-		while ((disk = modman_it_next_bd(it)))
+		r = modman_it_init_bd(&it);
+		assert(r >= 0);
+		while ((disk = modman_it_next_bd(&it)))
 			if (!strcmp(bd_name, modman_name_bd(disk)))
 				break;
-		modman_it_destroy(it);
+		modman_it_destroy(&it);
 
 		if (!disk)
 		{

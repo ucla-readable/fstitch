@@ -495,7 +495,7 @@ static int transaction_stop(journal_state_t * state)
 
 	{
 		const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
-		hash_map_it_t * it;
+		hash_map_it_t it;
 
 		data_bdescs_map = journal_queue_blocklist(state->queue);
 		if (!data_bdescs_map)
@@ -511,21 +511,14 @@ static int transaction_stop(journal_state_t * state)
 		if (!data_bdescs)
 			return -E_NO_MEM;
 
-		it = hash_map_it_create();
-		if (!it)
-		{
-			free(data_bdescs);
-			return -E_NO_MEM;
-		}
+		hash_map_it_init(&it);
 
 		i = 0;
-		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, it)))
+		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, &it)))
 			data_bdescs[i++] = bdesc;
 		assert(i == ndatabdescs);
 
 		qsort(data_bdescs, ndatabdescs, sizeof(*data_bdescs), bdesc_blockno_compare);
-
-		hash_map_it_destroy(it);
 	}
 
 

@@ -9,6 +9,9 @@ struct hash_map_elt {
 };
 typedef struct hash_map_elt hash_map_elt_t;
 
+struct chain_elt;
+typedef struct chain_elt chain_elt_t;
+
 struct hash_map;
 typedef struct hash_map hash_map_t;
 
@@ -48,11 +51,13 @@ int    hash_map_resize(hash_map_t * hm, size_t n);
 
 // Iteration
 
-struct hash_map_it;
+struct hash_map_it {
+	size_t bucket;
+	chain_elt_t * elt;
+};
 typedef struct hash_map_it hash_map_it_t;
 
-hash_map_it_t * hash_map_it_create();
-void hash_map_it_destroy(hash_map_it_t * it);
+void hash_map_it_init(hash_map_it_t * it);
 // Iterate through the hash map values using hm_it.
 // - Returns NULL when the end of the hash map is reached.
 // - Behavior is undefined begin iterating, modify hm, and then continue

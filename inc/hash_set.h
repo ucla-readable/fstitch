@@ -2,6 +2,7 @@
 #define KUDOS_INC_HASH_SET_H
 
 #include <inc/types.h>
+#include <inc/hash_map.h>
 
 struct hash_set;
 typedef struct hash_set hash_set_t;
@@ -37,11 +38,9 @@ int    hash_set_resize(hash_set_t * hs, size_t n);
 
 // Iteration
 
-struct hash_set_it;
-typedef struct hash_set_it hash_set_it_t;
+typedef hash_map_it_t hash_set_it_t;
 
-hash_set_it_t * hash_set_it_create();
-void hash_set_it_destroy(hash_set_it_t * it);
+void hash_set_it_init(hash_set_it_t * it);
 // Iterate through the hash set values using hs_it.
 // - Returns NULL when the end of the hash set is reached.
 // - Behavior is undefined begin iterating, modify hs, and then continue

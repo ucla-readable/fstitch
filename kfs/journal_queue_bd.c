@@ -306,16 +306,14 @@ int journal_queue_release(BD_t * bd)
 	if(info->state != RELEASE)
 	{
 		bdesc_t * bdesc;
-		hash_map_it_t * it;
+		hash_map_it_t it;
 #ifdef RELEASE_PROGRESS_ENABLED
 		const size_t bdesc_hash_size = hash_map_size(info->bdesc_hash);
 		size_t disp_period, disp_prev = 0, nbdescs_released = 0;
 		int disp_ncols, r;
 #endif
 
-		it = hash_map_it_create();
-		if(!it)
-			return -E_NO_MEM;
+		hash_map_it_init(&it);
 
 #ifdef RELEASE_PROGRESS_ENABLED
 		disp_ncols = textbar_init(-1);
@@ -323,7 +321,7 @@ int journal_queue_release(BD_t * bd)
 		disp_period = (bdesc_hash_size + disp_ncols - 1) / disp_ncols;
 #endif
 
-		while((bdesc = (bdesc_t *) hash_map_val_next(info->bdesc_hash, it)))
+		while((bdesc = (bdesc_t *) hash_map_val_next(info->bdesc_hash, &it)))
 		{
 			int value;
 			
@@ -336,10 +334,7 @@ int journal_queue_release(BD_t * bd)
 			bdesc->translated--;
 			
 			if(value < 0)
-			{
-				hash_map_it_destroy(it);
 				return value;
-			}
 			
 			/* note that resetting the value for a key already in the hash map does not break iteration */
 			hash_map_insert(info->bdesc_hash, (void *) bdesc->number, NULL);
@@ -354,7 +349,6 @@ int journal_queue_release(BD_t * bd)
 			}
 #endif
 		}
-		hash_map_it_destroy(it);
 		hash_map_clear(info->bdesc_hash);
 		/* FIXME maybe resize the hash map to be small? */
 

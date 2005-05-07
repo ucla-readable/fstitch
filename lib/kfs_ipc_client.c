@@ -762,7 +762,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 //
 // modman
 //
-// Supported: lookup, name, it_create, it_next, and it_destroy.
+// Supported: lookup, name, it_init, it_next, and it_destroy.
 // Not supported: init, add, add_anon, inc, dec, and rem.
 
 #include <kfs/modman.h>
@@ -888,48 +888,35 @@ MODMAN_NAME(bd,  BD);
 
 // modman iterators
 
-struct modman_it {
-	vector_t * v; // vector_t of uint32_t ids
-	size_t next;
-};
 
-
-modman_it_t * kic_modman_it_create(void)
+static int kic_modman_it_init(modman_it_t * it)
 {
-	modman_it_t * it = malloc(sizeof(*it));
-	if (!it)
-		return NULL;
 	it->v = vector_create();
 	if (!it->v)
-	{
-		free(it);
-		return NULL;
-	}
+		return -E_NO_MEM;
 	it->next = 0;
-	return it;
+	return 0;
 }
 
-void kic_modman_it_destroy(modman_it_t * it)
+static void kic_modman_it_destroy(modman_it_t * it)
 {
 	vector_destroy(it->v);
 	memset(it, 0, sizeof(*it));
-	free(it);
 }
 
 
-#define MODMAN_IT_CREATE(typel, typeu, skfs_modman_type)				\
-modman_it_t * modman_it_create_##typel(void)							\
+#define MODMAN_IT_INIT(typel, typeu, skfs_modman_type)					\
+int modman_it_init_##typel(modman_it_t * it)							\
 {																		\
 	const envid_t fsid = find_fs();										\
 	uint32_t perm;														\
 	uint32_t more_its;													\
 	Skfs_modman_return_it_t * rit = (Skfs_modman_return_it_t *) ROUNDUP32(ipc_recv_page, PGSIZE); \
-	modman_it_t * it;													\
 	int r;																\
 																		\
-	it = kic_modman_it_create();										\
-	if (!it)															\
-		return NULL;													\
+	r = kic_modman_it_init(it);											\
+	if (r < 0)															\
+		return r;														\
 																		\
 	/* request the iterators */											\
 	INIT_PG(MODMAN_REQUEST_ITS, modman_request_its);					\
@@ -944,12 +931,12 @@ modman_it_t * modman_it_create_##typel(void)							\
 		assert(r >= 0); /* TODO: handle error */						\
 	}																	\
 																		\
-	return it;															\
+	return 0;															\
 }
 
-MODMAN_IT_CREATE(cfs, CFS, 0);
-MODMAN_IT_CREATE(lfs, LFS, 1);
-MODMAN_IT_CREATE(bd,  BD,  2);
+MODMAN_IT_INIT(cfs, CFS, 0);
+MODMAN_IT_INIT(lfs, LFS, 1);
+MODMAN_IT_INIT(bd,  BD,  2);
 
 
 void modman_it_destroy(modman_it_t * it)

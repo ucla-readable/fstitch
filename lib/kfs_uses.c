@@ -40,11 +40,10 @@ kfs_use_t * use_create(kfs_node_t * node, const char * name)
 
 #define ADD_NODES(typel, typeu, typen)				\
 	do {											\
-		modman_it_t * mit;							\
 		typeu##_t * t;								\
-		mit = modman_it_create_##typel();			\
-		assert(mit);								\
-		while ((t = modman_it_next_##typel(mit)))	\
+		modman_it_t mit;							\
+		modman_it_init_##typel(&mit);				\
+		while ((t = modman_it_next_##typel(&mit)))	\
 		{											\
 			const modman_entry_##typel##_t * me;	\
 			kfs_node_t * n;							\
@@ -58,7 +57,7 @@ kfs_use_t * use_create(kfs_node_t * node, const char * name)
 			r = hash_map_insert(nodes, t, n);		\
 			assert(r >= 0);							\
 		}											\
-		modman_it_destroy(mit);						\
+		modman_it_destroy(&mit);					\
 	} while(0)
 
 #define ADD_USERS(typel, typeu)											\
@@ -94,12 +93,12 @@ hash_map_t * kfs_uses()
 
 	// Add use links
 	{
-		hash_map_it_t * it;
 		kfs_node_t * n;
-		it = hash_map_it_create();
-		assert(it);
+		hash_map_it_t it;
 
-		while ((n = hash_map_val_next(nodes, it)))
+		hash_map_it_init(&it);
+
+		while ((n = hash_map_val_next(nodes, &it)))
 		{
 			int i;
 			kfs_use_t * u;
@@ -111,8 +110,6 @@ hash_map_t * kfs_uses()
 				default: assert(0);
 			}
 		}
-
-		hash_map_it_destroy(it);
 	}
 
 	return nodes;
@@ -121,19 +118,20 @@ hash_map_t * kfs_uses()
 
 CFS_t * get_table_classifier()
 {
-	modman_it_t * it;
+	int r;
+	modman_it_t it;
 	CFS_t * c;
 	const char tcc_name[] = "table_classifier_cfs-"; 
 	const int tcc_name_len = strlen(tcc_name);
 
-	it = modman_it_create_cfs();
-	if (!it)
+	r = modman_it_init_cfs(&it);
+	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "modman_it_create_cfs() failed\n");
+		fprintf(STDERR_FILENO, "modman_it_init_cfs() failed\n");
 		return NULL;
 	}
 
-	while ((c = modman_it_next_cfs(it)))
+	while ((c = modman_it_next_cfs(&it)))
 	{
 		const char * name = modman_name_cfs(c);
 		if (name && !strncmp(name, tcc_name, tcc_name_len))

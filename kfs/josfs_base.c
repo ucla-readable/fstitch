@@ -318,7 +318,7 @@ int josfs_fsck(LFS_t * object)
 	JOSFS_File_t * dirfile = NULL;
 	uint32_t j;
 	hash_set_t * hsdirs = NULL;
-	hash_set_it_t * hsitr = NULL;
+	hash_set_it_t hsitr;
 	int reserved = 2 + (s_nblocks / JOSFS_BLKBITSIZE);
 	int d = 0, r = 0, errors = 0;
 	info->m = -1;
@@ -361,20 +361,12 @@ int josfs_fsck(LFS_t * object)
 			if (d > 0)
 				errors += d;
 
-			hsitr = hash_set_it_create();
-			if (hsitr) {
-				dirfile = (JOSFS_File_t *) hash_set_next(hsdirs, hsitr);
-				hash_set_it_destroy(hsitr);
+			hash_set_it_init(&hsitr);
+			dirfile = (JOSFS_File_t *) hash_set_next(hsdirs, &hsitr);
 
-				if (dirfile) {
-					hash_set_erase(hsdirs, dirfile);
-					temp_fdesc.file = dirfile;
-				}
-			}
-			else {
-				printf("hash_set_it_create failed!\n");
-				r = -E_NO_MEM;
-				break; // gonna leak mem, but if we're here, we're probably screwed
+			if (dirfile) {
+				hash_set_erase(hsdirs, dirfile);
+				temp_fdesc.file = dirfile;
 			}
 		}
 		while (dirfile);

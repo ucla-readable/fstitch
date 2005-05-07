@@ -29,7 +29,6 @@ struct chain_elt {
 	struct chain_elt * next;
 	struct chain_elt * prev;
 };
-typedef struct chain_elt chain_elt_t;
 
 static chain_elt_t * chain_elt_create(void);
 static void          chain_elt_destroy(chain_elt_t * elt);
@@ -383,27 +382,10 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 //
 // Iteration
 
-struct hash_map_it {
-	size_t bucket;
-	chain_elt_t * elt;
-};
-
-
-hash_map_it_t * hash_map_it_create()
-{
-	hash_map_it_t * it = malloc(sizeof(*it));
-	if (!it)
-		return NULL;
-	it->bucket = 0;
-	it->elt = NULL;
-	return it;
-}
-
-void hash_map_it_destroy(hash_map_it_t * it)
+void hash_map_it_init(hash_map_it_t * it)
 {
 	it->bucket = 0;
 	it->elt = NULL;
-	free(it);
 }
 
 void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)

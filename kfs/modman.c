@@ -284,10 +284,11 @@ MODMAN_OP(const char *, name, bd);
 MODMAN_OP(const char *, name, cfs);
 MODMAN_OP(const char *, name, lfs);
 
-#define MODMAN_IT_CREATE(type) \
-modman_it_t * modman_it_create_##type(void) \
+#define MODMAN_IT_INIT(type) \
+int modman_it_init_##type(modman_it_t * it) \
 { \
-	return hash_map_it_create(type##_map); \
+	hash_map_it_init(it); \
+	return 0; \
 }
 
 #define MODMAN_IT_NEXT(type) \
@@ -297,9 +298,9 @@ type##_t * modman_it_next_##type(modman_it_t * it) \
 	return me ? (type##_t *) me->type : NULL; \
 }
 
-MODMAN_IT_CREATE(bd);
-MODMAN_IT_CREATE(cfs);
-MODMAN_IT_CREATE(lfs);
+MODMAN_IT_INIT(bd);
+MODMAN_IT_INIT(cfs);
+MODMAN_IT_INIT(lfs);
 
 MODMAN_IT_NEXT(bd);
 MODMAN_IT_NEXT(cfs);

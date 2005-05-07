@@ -34,22 +34,27 @@ void print_usage(const char * bin)
 
 BD_t * find_bd(const char * mirror_name)
 {
-	modman_it_t * it;
+	modman_it_t it;
 	BD_t * c;
+	int r;
 
-	it = modman_it_create_bd();
-	if (!it)
+	r = modman_it_init_bd(&it);
+	if (r < 0)
 	{
-		panic("modman_it_create_bd() failed\n");
+		panic("modman_it_init_bd() failed\n");
 	}
 
-	while ((c = modman_it_next_bd(it)))
+	while ((c = modman_it_next_bd(&it)))
 	{
 		const char * name = modman_name_bd(c);
 		if (name && !strcmp(name, mirror_name))
+		{
+			modman_it_destroy(&it);
 			return c;
+		}
 	}
 
+	modman_it_destroy(&it);
 	return NULL;
 }
 

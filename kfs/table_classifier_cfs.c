@@ -594,21 +594,14 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	// Allow unmount only if there are no open fids on path.
 	// Only at this time because people above us may care and don't know
 	// who such users may be.
-	hash_map_it_t * it;
+	hash_map_it_t it;
 	open_file_t * of;
-	it = hash_map_it_create();
-	if (!it)
-		return NULL;
-	while ((of = hash_map_val_next(state->open_files, it)))
+	hash_map_it_init(&it);
+	while ((of = hash_map_val_next(state->open_files, &it)))
 	{
 		if (of->cfs == me->cfs)
-		{
-			hash_map_it_destroy(it);
 			return NULL;
-		}
 	}
-	hash_map_it_destroy(it);
-	it = NULL;
 
 	fprintf(STDERR_FILENO,"table_classifier_cfs: removed mount at %s\n", path);
 	vector_erase(state->mount_table, idx);

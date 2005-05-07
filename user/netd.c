@@ -1042,16 +1042,15 @@ dns_tmr()
 {
 	const int32_t dns_tmr_interval = 20;
 	const size_t  max_rounds = 2;
-	hash_set_it_t *it;
+	hash_set_it_t it;
 	dns_state_t *ds;
 
 	if (next_dns_tmr - env->env_jiffies > 0)
 		return;
 
-	it = hash_set_it_create();
-	assert(it);
+	hash_set_it_init(&it);
 
-	while ((ds = hash_set_next(pending_dns_queries, it)))
+	while ((ds = hash_set_next(pending_dns_queries, &it)))
 	{
 		if (ds->expires - env->env_jiffies > 0)
 			continue;

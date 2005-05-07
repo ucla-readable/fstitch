@@ -31,15 +31,14 @@ const char * color(int type)
 
 void output_graph_text(hash_map_t * nodes, int level)
 {
-	hash_map_it_t * it;
+	hash_map_it_t it;
 	kfs_node_t * n;
 	char tmp_str[100]; // 100 seems like a reasonable number
 	int r;
 
-	it = hash_map_it_create();
-	assert(it);
+	hash_map_it_init(&it);
 
-	while ((n = hash_map_val_next(nodes, it)))
+	while ((n = hash_map_val_next(nodes, &it)))
 	{
 		// output this node
 		printf("%s  %s", typename(n->type), n->name);
@@ -70,27 +69,24 @@ void output_graph_text(hash_map_t * nodes, int level)
 			}
 		}
 	}
-
-	hash_map_it_destroy(it);
 }
 
 void output_graph_dot(hash_map_t * nodes, int level)
 {
-	hash_map_it_t * it;
+	hash_map_it_t it;
 	kfs_node_t * n;
 	char tmp_strc[100]; // 100 seems like a reasonable number
 	char tmp_strs[100]; // 100 seems like a reasonable number
 	int r;
 
-	it = hash_map_it_create();
-	assert(it);
+	hash_map_it_init(&it);
 
 	printf("digraph kfs\n");
 	printf("{\n");
 	printf("nodesep=0.15;\nranksep=0.15;\n");
 	printf("node [shape=record,color=black];\n");
 
-	while ((n = hash_map_val_next(nodes, it)))
+	while ((n = hash_map_val_next(nodes, &it)))
 	{
 		// output this node
 		printf("n%u [", n);
@@ -123,8 +119,6 @@ void output_graph_dot(hash_map_t * nodes, int level)
 			}
 		}
 	}
-
-	hash_map_it_destroy(it);
 
 	printf("}\n");
 }

@@ -111,35 +111,12 @@ int hash_set_resize(hash_set_t * hs, size_t n)
 //
 // Iteration
 
-struct hash_set_it {
-	hash_map_it_t * hm_it;
-};
-
-
-hash_set_it_t * hash_set_it_create()
+void hash_set_it_init(hash_set_it_t * it)
 {
-	hash_set_it_t * it = malloc(sizeof(*it));
-	if (!it)
-		return NULL;
-
-	it->hm_it = hash_map_it_create();
-	if (!it->hm_it)
-	{
-		free(it);
-		return NULL;
-	}
-
-	return it;
-}
-
-void hash_set_it_destroy(hash_set_it_t * it)
-{
-	hash_map_it_destroy(it->hm_it);
-	it->hm_it = NULL;
-	free(it);
+	hash_map_it_init(it);
 }
 
 void * hash_set_next(hash_set_t * hs, hash_set_it_t * it)
 {
-	return hash_map_val_next(hs->hm, it->hm_it);
+	return hash_map_val_next(hs->hm, it);
 }

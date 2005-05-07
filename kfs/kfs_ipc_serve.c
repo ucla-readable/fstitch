@@ -508,13 +508,14 @@ static void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lo
 
 #define ITS_REQUEST_RETURN(typel, typeu)								\
 	do {																\
-		modman_it_t * it = modman_it_create_##typel();					\
+		modman_it_t it;													\
 		typeu##_t * t;													\
 		Skfs_modman_return_it_t * ri = (Skfs_modman_return_it_t *) ROUNDUP32(ipc_page, PGSIZE);	\
-		assert(it);														\
+		int r = modman_it_init_##typel(&it);							\
+		assert(r >= 0);													\
 																		\
 		/* Send a page for each iterator */								\
-		while ((t = modman_it_next_##typel(it)))						\
+		while ((t = modman_it_next_##typel(&it)))						\
 		{																\
 			memset(ri, 0, PGSIZE);										\
 			ri->skfs_type = SKFS_MODMAN_RETURN_IT;						\
@@ -530,6 +531,7 @@ static void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lo
 		ri->id = 0;														\
 																		\
 		ipc_send(whom, 0, ri, PTE_P|PTE_U, NULL);						\
+		modman_it_destroy(&it);											\
 	} while (0)
 		
 static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t * pg)
@@ -553,17 +555,18 @@ static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t
 static char test_data[4096];
 int perf_test_cfs(const Skfs_perf_test_t * pg)
 {
-	modman_it_t * it;
+	modman_it_t it;
 	CFS_t * cfs;
 	int fid;
 	int time_start, time_end;
 	int s, size, r;
 
-	it = modman_it_create_cfs();
-	assert(it);
-	while ((cfs = modman_it_next_cfs(it)))
+	r = modman_it_init_cfs(&it);
+	assert(r >= 0);
+	while ((cfs = modman_it_next_cfs(&it)))
 		if (!strncmp("table_classifier_cfs-", modman_name_cfs(cfs), strlen("table_classifier_cfs-")))
 			break;
+	modman_it_destroy(&it);
 	assert(cfs);
 
 	fid = CALL(cfs, open, pg->file, O_CREAT|O_WRONLY);

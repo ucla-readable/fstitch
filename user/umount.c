@@ -17,16 +17,14 @@ bool verbose = 0;
 // Return the number of nodes destroyed.
 int destroy_nodes(hash_set_t * nodes)
 {
-	hash_set_it_t * it;
+	hash_set_it_t it;
 	kfs_node_t * node;
 	int r;
 	int ndestroyed = 0;
 
-	it = hash_set_it_create();
-	if (!it)
-		return -E_NO_MEM;
+	hash_set_it_init(&it);
 
-	while ((node = hash_set_next(nodes, it)))
+	while ((node = hash_set_next(nodes, &it)))
 	{
 		if (OBJFLAGS((object_t *) node->obj) & OBJ_PERSISTENT)
 			continue;
@@ -63,7 +61,6 @@ int destroy_nodes(hash_set_t * nodes)
 		}
 	}
 
-	hash_set_it_destroy(it);
 	return ndestroyed;
 }
 
@@ -87,16 +84,15 @@ void create_nodes_used_graph(hash_map_t * orig_graph, hash_set_t * new_graph, kf
 void update_nodes_used_graph(hash_set_t * nodes_used, hash_set_t * updated_nodes_used)
 {
 	hash_map_t * nodes;
-	hash_set_it_t * it;
+	hash_set_it_t it;
 	kfs_node_t * node_used;
 	int r;
 
 	nodes = kfs_uses();
 	assert(nodes);
-	it = hash_set_it_create();
-	assert(it);
+	hash_set_it_init(&it);
 
-	while ((node_used = hash_set_next(nodes_used, it)))
+	while ((node_used = hash_set_next(nodes_used, &it)))
 	{
 		if (hash_map_find_val(nodes, node_used->obj))
 		{
@@ -104,8 +100,6 @@ void update_nodes_used_graph(hash_set_t * nodes_used, hash_set_t * updated_nodes
 			assert(r >= 0);
 		}
 	}
-
-	hash_set_it_destroy(it);
 }
 
 

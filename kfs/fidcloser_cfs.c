@@ -110,27 +110,23 @@ static int open_file_close(fidcloser_state_t * state, open_file_t * of)
 
 static void open_file_gc(fidcloser_state_t * state)
 {
-	hash_map_it_t * hm_it;
+	hash_map_it_t hm_it;
 	open_file_t * of;
 	vector_t * ofs_to_erase;
 	int r;
 
 	ofs_to_erase = vector_create();
-	hm_it = hash_map_it_create();
-	if (!ofs_to_erase || !hm_it)
+	hash_map_it_init(&hm_it);
+	if (!ofs_to_erase)
 	{
 		fprintf(STDERR_FILENO, "fidcloser unable to malloc memory to gc\n");
-		if (ofs_to_erase)
-			vector_destroy(ofs_to_erase);
-		else if (hm_it)
-			hash_map_it_destroy(hm_it);
 		return;
 	}
 
 	// Gc fids
 	// (remove the fids after this, else we would mess up hm_it)
 
-	while ((of = hash_map_val_next(state->open_files, hm_it)))
+	while ((of = hash_map_val_next(state->open_files, &hm_it)))
 	{
 		assert(of->page && va_is_mapped(of->page));
 
@@ -141,7 +137,6 @@ static void open_file_gc(fidcloser_state_t * state)
 			break;
 		}
 	}
-	hash_map_it_destroy(hm_it);
 
 
 	// Remove gced open files
