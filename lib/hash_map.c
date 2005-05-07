@@ -344,6 +344,9 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	if (n == vector_size(hm->tbl))
 		return 1;
 
+	// Possible speedup if we could use one:
+	// http://sources.redhat.com/ml/guile/1998-10/msg00864.html
+
 	// Create new hash table
 	hash_map_t * new_hm = hash_map_create_size(n, hm->auto_resize);
 	if (!new_hm)
