@@ -799,7 +799,7 @@ int chdesc_destroy(chdesc_t ** chdesc)
 	}
 	
 	/* if there are no more chdescs for this ddesc, remove the stub NOOP chdesc */
-	if(!(*chdesc)->block->ddesc->changes->dependencies && (*chdesc)->block->ddesc->changes->block)
+	if((*chdesc)->block && !(*chdesc)->block->ddesc->changes->dependencies)
 	{
 		/* can't fail */
 		const int r = chdesc_destroy(&((*chdesc)->block->ddesc->changes));
