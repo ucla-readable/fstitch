@@ -95,7 +95,7 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 static uint32_t ide_size(uint8_t controller, uint8_t disk)
 {
 	uint16_t base = ide_base[controller];
-	uint16_t id[SECTSIZE / 2];
+	uint16_t id[256];
 	
 	if(ide_notbusy(controller) == -1)
 		return -1;
@@ -109,6 +109,25 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 	insl(base + 0, id, SECTSIZE / 4);
 	
 	return id[57] | (((uint32_t) id[58]) << 16);
+}
+
+static uint32_t ide_pio_tune(uint8_t controller, uint8_t disk)
+{
+	uint16_t base = ide_base[controller];
+
+	if(ide_notbusy(controller) == -1)
+		return -1;
+
+	// PIO Mode 4 magic, needs refinement
+	outb(base + 2, 0x0C);
+	outb(base + 1, 0x03);
+	outb(base + 7, 0xEF);
+
+	if(ide_notbusy(controller) == -1)
+		printf("Error setting controller %d to PIO MODE 4\n", controller);
+
+
+	return 0;
 }
 
 static int ide_pio_bd_get_config(void * object, int level, char * string, size_t length)
@@ -258,6 +277,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	info->disk = disk;
 	info->length = length;
 	info->level = 0;
+	ide_pio_tune(controller, disk);
 
 	if(modman_add_bd(bd, ide_names[controller][disk]))
 	{

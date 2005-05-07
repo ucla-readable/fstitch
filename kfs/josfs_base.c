@@ -87,7 +87,7 @@ static int check_super(LFS_t * object)
 
 	/* make sure we have the block size we expect */
 	if (CALL(info->ubd, get_blocksize) != JOSFS_BLKSIZE) {
-		printf("Block device size is not BLKSIZE!\n");
+		printf("Block device size is not JOSFS_BLKSIZE!\n");
 		return -1;
 	}
 
