@@ -197,10 +197,8 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 
 		if (lfs)
 			printf("Using josfs");
-#if !USE_THIRD_LEG
 		else if ((lfs = wholedisk(cache)))
 			printf("Using wholedisk");
-#endif
 		else
 		{
 			fprintf(STDERR_FILENO, "lfs creation failed\n");
