@@ -177,6 +177,7 @@ static int modman_rem(hash_map_t * map, void * module)
 	
 	Dprintf("%s: removing module %s\n", __FUNCTION__, mod->name);
 	hash_map_erase(map, module);
+	vector_destroy(mod->use_names);
 	vector_destroy(mod->users);
 	free((char *) mod->name);
 	free(mod);
