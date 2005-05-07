@@ -744,7 +744,15 @@ static int uhfs_sync(CFS_t * cfs, const char * name)
 static int uhfs_destroy(CFS_t * cfs)
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	int r = modman_rem_cfs(cfs);
+	hash_map_it_t it;
+	open_file_t * f;
+	int r;
+
+	hash_map_it_init(&it);
+	while ((f = hash_map_val_next(state->open_files, &it)))
+		fprintf(STDERR_FILENO, "%s(%s): orphaning fid %u\n", __FUNCTION__, modman_name_cfs(cfs), f->fid);
+
+	r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_lfs(state->lfs, cfs);
