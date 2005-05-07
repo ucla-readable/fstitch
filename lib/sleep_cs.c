@@ -4,7 +4,7 @@ int
 sleep(int32_t centisecs)
 {
 	if (centisecs < 0)
-		return E_INVAL;
+		return -E_INVAL;
 
 	const int32_t wakeup = centisecs + env->env_jiffies;
 
@@ -15,5 +15,5 @@ sleep(int32_t centisecs)
 		sys_yield();
 	}
 
-	return E_UNSPECIFIED;
+	return -E_UNSPECIFIED;
 }
