@@ -68,7 +68,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 		/* usage count will have increased to 1, put it down to 0 again */
 		mod->usage = 0;
 		vector_pop_back(mod->users);
-		dev_name = vector_elt(mod->use_names, vector_size(mod->use_names));
+		dev_name = vector_elt(mod->use_names, vector_size(mod->use_names) - 1);
 		if(dev_name)
 			free(dev_name);
 		vector_pop_back(mod->use_names);
