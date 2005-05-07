@@ -121,7 +121,10 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 /* run the scheduled bdesc autoreleases */
 void bdesc_run_autorelease(void)
 {
-	Dprintf("<bdesc run_autorelease>\n");
+#if BDESC_DEBUG
+	if(autorelease_list)
+		Dprintf("<bdesc run_autorelease>\n");
+#endif
 	while(autorelease_list)
 	{
 		bdesc_t * head = autorelease_list;
@@ -141,7 +144,7 @@ bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original)
 {
 	assert(original);
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
-	Dprintf("<bdesc 0x%08x clone>\n", bdesc);
+	Dprintf("<bdesc 0x%08x clone from 0x%08x>\n", bdesc, original);
 	if(!bdesc)
 		return NULL;
 	bdesc->ddesc = original->ddesc;

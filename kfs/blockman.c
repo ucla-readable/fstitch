@@ -26,7 +26,7 @@ void blockman_destroy(blockman_t ** blockman)
 	hash_map_it_init(&it);
 	while((ddesc = hash_map_val_next(hash, &it)))
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning block descriptors for manager 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *blockman);
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning data descriptor 0x%08x (manager 0x%08x)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman);
 		ddesc->manager = NULL;
 	}
 	hash_map_destroy(hash);
