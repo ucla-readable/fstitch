@@ -41,8 +41,8 @@ hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k);
 
 // Return the number of buckets currently allocated.
 size_t hash_map_bucket_count(const hash_map_t * hm);
-// Increase the number of buckets to at least n.
-// Returns 0 on success, or -E_NO_MEM.
+// Resize the number of buckets to n.
+// Returns 0 on success, 1 on no resize needed, or -E_NO_MEM.
 int    hash_map_resize(hash_map_t * hm, size_t n);
 
 

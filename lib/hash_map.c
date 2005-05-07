@@ -45,11 +45,13 @@ struct hash_map {
 // No strong reason for 16, but do ensure this value should plays nicely
 // with the hash function.
 #define INIT_NUM_BUCKETS 16
+#define MIN_NUM_BUCKETS  INIT_NUM_BUCKETS
 
 // Expected time for successful and unsuccessful searches is Theta(1 + load),
 // given chaining hash tables and a uniform hash, CLR theorems 11.1 and 11.2.
-// 2.0 seems good, that is all.
-#define AUTO_RESIZE_LOAD 2.0
+// 2.0 and 0.5 seem good, that is all.
+#define AUTO_GROW_LOAD   2.0
+#define AUTO_SHRINK_LOAD 0.5
 
 static size_t hash_ptr(const void * k, size_t tbl_size);
 
@@ -182,7 +184,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	head->elt.val = v;
 	hm->size++;
 
-	if (hm->auto_resize && AUTO_RESIZE_LOAD <= (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm))
+	if (hm->auto_resize && AUTO_GROW_LOAD <= (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm))
 	{
 		// (safe to ignore failure)
 		(void) hash_map_resize(hm, 2*vector_size(hm->tbl));
@@ -216,6 +218,12 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 
 	chain_elt_destroy(k_chain);
 	hm->size--;
+
+	if (hm->auto_resize && (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm) <= AUTO_SHRINK_LOAD)
+	{
+		// (safe to ignore failure)
+		(void) hash_map_resize(hm, 2*vector_size(hm->tbl));
+	}
 
 	return v;
 }
@@ -330,10 +338,10 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 {
 	int r;
 
-	if (n <= vector_size(hm->tbl))
+	if (n == vector_size(hm->tbl) || vector_size(hm->tbl) <= MIN_NUM_BUCKETS)
 		return 1;
 
-	// Create larger hash table
+	// Create new hash table
 	hash_map_t * new_hm = hash_map_create_size(n, hm->auto_resize);
 	if (!new_hm)
 		return -E_NO_MEM;

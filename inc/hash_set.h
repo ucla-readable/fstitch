@@ -30,8 +30,8 @@ bool   hash_set_exists(const hash_set_t * hs, const void * elt);
 
 // Return the number of buckets currently allocated.
 size_t hash_set_bucket_count(const hash_set_t * hs);
-// Increase the number of buckets to at least n.
-// Returns 0 on success, or -E_NO_MEM.
+// Resize the number of buckets to n.
+// Returns 0 on success, 1 on no resize needed, or -E_NO_MEM.
 int    hash_set_resize(hash_set_t * hs, size_t n);
 
 
