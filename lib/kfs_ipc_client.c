@@ -524,7 +524,7 @@ int josfs_fsck(LFS_t * lfs)
 	SEND_PG();
 	return RECV_PG();
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/wholedisk_lfs.h>
 LFS_t * wholedisk(BD_t * bd)
 {
@@ -544,6 +544,7 @@ LFS_t * wholedisk(BD_t * bd)
 
 //
 // BD
+#if !USE_THIRD_LEG
 #include <kfs/loop_bd.h>
 BD_t * loop_bd(LFS_t * lfs, const char * file)
 {
