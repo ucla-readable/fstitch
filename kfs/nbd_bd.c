@@ -8,6 +8,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/blockman.h>
 #include <kfs/revision.h>
 #include <kfs/modman.h>
 #include <kfs/nbd_bd.h>
@@ -20,10 +21,11 @@
 struct nbd_info {
 	int fd[2];
 	uint32_t length;
+	blockman_t * blockman;
+	struct ip_addr ip;
 	uint16_t blocksize;
 	uint16_t port;
 	uint16_t level;
-	struct ip_addr ip;
 };
 
 static int nbd_bd_get_config(void * object, int level, char * string, size_t length)
@@ -117,16 +119,20 @@ static int nbd_bd_reset(BD_t * object)
 static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
 	int tries;
 	
 	/* make sure it's a valid block */
 	if(number >= info->length)
 		return NULL;
 	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+		return bdesc;
+	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
 	{
 		uint8_t command = 0;
-		bdesc_t * bdesc;
 		int r;
 		
 		bdesc = bdesc_alloc(number, info->blocksize);
@@ -149,6 +155,11 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		r = readn(info->fd[0], bdesc->ddesc->data, info->blocksize);
 		if(r != info->blocksize)
 			goto error;
+		
+		r = blockman_managed_add(info->blockman, bdesc);
+		if(r < 0)
+			/* kind of a waste of the read... but we have to do it */
+			return NULL;
 		
 		return bdesc;
 		
@@ -274,12 +285,16 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	ASSIGN(bd, nbd_bd, sync);
 	DESTRUCTOR(bd, nbd_bd, destroy);
 	
-	if(gethostbyname(address, &info->ip) < 0)
+	info->blockman = blockman_create();
+	if(!info->blockman)
 		goto error_info;
+	
+	if(gethostbyname(address, &info->ip) < 0)
+		goto error_blockman;
 	info->port = port;
 	
 	if(connect(info->ip, port, info->fd))
-		goto error_info;
+		goto error_blockman;
 	
 	r = read(info->fd[0], &info->length, sizeof(info->length));
 	if(r != sizeof(info->length))
@@ -306,6 +321,8 @@ BD_t * nbd_bd(const char * address, uint16_t port)
   error_connect:
 	close(info->fd[0]);
 	close(info->fd[1]);
+  error_blockman:
+	blockman_destroy(&info->blockman);
   error_info:
 	free(info);
   error_bd:

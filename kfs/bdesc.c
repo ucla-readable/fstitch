@@ -4,6 +4,7 @@
 #include <inc/string.h>
 
 #include <kfs/bd.h>
+#include <kfs/blockman.h>
 #include <kfs/bdesc.h>
 
 #define BDESC_DEBUG 0
@@ -43,7 +44,25 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 	bdesc->ar_next = NULL;
 	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->changes = NULL;
+	bdesc->ddesc->manager = NULL;
+	bdesc->ddesc->managed_number = 0;
 	bdesc->ddesc->length = length;
+	return bdesc;
+}
+
+/* wrap a ddesc in a new bdesc */
+bdesc_t * bdesc_wrap_ddesc(datadesc_t * ddesc, uint32_t number)
+{
+	bdesc_t * bdesc = malloc(sizeof(*bdesc));
+	Dprintf("<bdesc 0x%08x alloc/wrap ddesc 0x%08x>\n", bdesc, ddesc);
+	if(!bdesc)
+		return NULL;
+	bdesc->ddesc = ddesc;
+	bdesc->number = number;
+	bdesc->ref_count = 1;
+	bdesc->ar_count = 0;
+	bdesc->ar_next = NULL;
+	bdesc->ddesc->ref_count++;
 	return bdesc;
 }
 
@@ -76,6 +95,8 @@ void bdesc_release(bdesc_t ** bdesc)
 			Dprintf("<bdesc 0x%08x free data 0x%08x>\n", *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->changes)
 				fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+			if((*bdesc)->ddesc->manager)
+				blockman_remove((*bdesc)->ddesc);
 			free((*bdesc)->ddesc->data);
 			free((*bdesc)->ddesc);
 		}

@@ -11,11 +11,14 @@ typedef struct datadesc datadesc_t;
 
 #include <kfs/bd.h>
 #include <kfs/chdesc.h>
+#include <kfs/blockman.h>
 
 struct datadesc {
 	uint8_t * data;
 	uint32_t ref_count;
 	chdesc_t * changes;
+	blockman_t * manager;
+	uint32_t managed_number;
 	uint16_t length;
 };
 
@@ -29,6 +32,9 @@ struct bdesc {
 
 /* allocate a new bdesc */
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length);
+
+/* wrap a ddesc in a new bdesc */
+bdesc_t * bdesc_wrap_ddesc(datadesc_t * ddesc, uint32_t number);
 
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc);

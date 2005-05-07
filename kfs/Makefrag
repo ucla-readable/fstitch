@@ -15,6 +15,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/chdesc.o \
 			$(OBJDIR)/kfs/modman.o \
 			$(OBJDIR)/kfs/fidman.o \
+			$(OBJDIR)/kfs/blockman.o \
 			$(OBJDIR)/kfs/revision.o \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable_bd.o \
