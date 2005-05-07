@@ -243,6 +243,8 @@ static int nbd_bd_destroy(BD_t * bd)
 	if(val < 0)
 		return val;
 	
+	blockman_destroy(&info->blockman);
+	
 	r = close(info->fd[0]);
 	if(r < 0)
 		val = r;
