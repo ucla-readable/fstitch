@@ -70,6 +70,9 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
 /* remove a dependency from a change descriptor */
 int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
 
+/* push all change descriptors at this block device on a block (i.e. data) descriptor to a new block device and block */
+int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block);
+
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);
 int chdesc_rollback(chdesc_t * chdesc);

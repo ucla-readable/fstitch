@@ -6,6 +6,7 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
+#include <kfs/chdesc.h>
 #include <kfs/md_bd.h>
 
 struct md_info {
@@ -95,10 +96,13 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);
 	
-	/* write it */
-	value = CALL(info->bd[block->number & 1], write_block, wblock);
+	/* this should never fail */
+	value = chdesc_push_down(object, block, info->bd[block->number & 1], wblock);
+	if(value < 0)
+		return value;
 	
-	return value;
+	/* write it */
+	return CALL(info->bd[block->number & 1], write_block, wblock);
 }
 
 static int md_bd_sync(BD_t * object, bdesc_t * block)

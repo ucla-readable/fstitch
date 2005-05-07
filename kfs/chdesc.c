@@ -622,6 +622,28 @@ int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
+int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
+{
+	chdesc_t * root = current_block->ddesc->changes;
+	if(target_block->ddesc != current_block->ddesc)
+		return -E_INVAL;
+	if(root)
+	{
+		chmetadesc_t * scan = root->dependencies;
+		while(scan)
+		{
+			chdesc_t * chdesc = scan->desc;
+			if(chdesc->owner == current_bd)
+			{
+				chdesc->owner = target_bd;
+				chdesc->block = target_block;
+			}
+			scan = scan->next;
+		}
+	}
+	return 0;
+}
+
 int chdesc_apply(chdesc_t * chdesc)
 {
 	if(!(chdesc->flags & CHDESC_ROLLBACK))

@@ -6,6 +6,7 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
+#include <kfs/chdesc.h>
 #include <kfs/partition_bd.h>
 
 struct partition_info {
@@ -91,15 +92,19 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	/* make sure it's a valid block */
 	if(block->number >= info->length)
 		return -E_INVAL;
-	
+
 	wblock = bdesc_clone(block->number + info->start, block);
 	if(!wblock)
 		return -E_UNSPECIFIED;
+	bdesc_autorelease(wblock);
+	
+	/* this should never fail */
+	value = chdesc_push_down(object, block, info->bd, wblock);
+	if(value < 0)
+		return value;
 	
 	/* write it */
-	value = CALL(info->bd, write_block, wblock);
-	
-	return value;
+	return CALL(info->bd, write_block, wblock);
 }
 
 static int partition_bd_sync(BD_t * object, bdesc_t * block)
@@ -122,6 +127,7 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 	wblock = bdesc_clone(block->number + info->start, block);
 	if(!wblock)
 		return -E_UNSPECIFIED;
+	bdesc_autorelease(wblock);
 	
 	/* sync it */
 	value = CALL(info->bd, sync, wblock);

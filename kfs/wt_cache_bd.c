@@ -6,6 +6,7 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
+#include <kfs/chdesc.h>
 #include <kfs/wt_cache_bd.h>
 
 struct cache_info {
@@ -91,6 +92,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
+	int value;
 	
 	/* make sure it's a valid block */
 	if(block->number >= CALL(info->bd, get_numblocks))
@@ -103,6 +105,11 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	if(info->blocks[index])
 		bdesc_release(&info->blocks[index]);
 	info->blocks[index] = block;
+	
+	/* this should never fail */
+	value = chdesc_push_down(object, block, info->bd, block);
+	if(value < 0)
+		return value;
 	
 	/* write it */
 	return CALL(info->bd, write_block, block);
