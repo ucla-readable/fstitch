@@ -64,6 +64,7 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/favicon.ico \
 			fs/goomba.spr \
 			fs/index.html \
+			fs/indy.0 \
 			fs/init.sh \
 			fs/kbear.jpg \
 			fs/kfsgraphviz.sh \
