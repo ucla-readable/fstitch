@@ -20,7 +20,6 @@ void matrix(int argc, char * argv[]);
 void pong(int argc, char * argv[]);
 void swirl(int argc, char * argv[]);
 void wars(int argc, char * argv[]);
-void help(int argc, char * argv[]);
 
 static const struct {
 	const char * name;
@@ -34,9 +33,7 @@ static const struct {
 	{"matrix", matrix},
 	{"pong", pong},
 	{"swirl", swirl},
-	{"wars", wars},
-	{"-h", help},
-	{"--help", help}
+	{"wars", wars}
 };
 
 #define DEMO_COUNT (sizeof(demos) / sizeof(demos[0]))
@@ -45,7 +42,9 @@ void umain(int argc, char * argv[])
 {
 	int i;
 	
-	if(argc < 2)
+	if((argc < 2) ||
+	   !strcmp(argv[1], "-h") ||
+	   !strcmp(argv[1], "--help"))
 	{
 		printf("Usage: %s <demo>\n", argv[0]);
 		
@@ -65,13 +64,4 @@ void umain(int argc, char * argv[])
 		}
 	
 	printf("No such demo: %s\n", argv[1]);
-}
-
-void help(int argc, char * argv[])
-{
-	int i;
-	printf("possible options are:\n");
-	for (i = 0; i < DEMO_COUNT; i++) {
-		printf("\t%s\n", demos[i].name);
-	}
 }
