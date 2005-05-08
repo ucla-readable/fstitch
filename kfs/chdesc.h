@@ -16,9 +16,8 @@ typedef struct chrefdesc chrefdesc_t;
 #include <kfs/bdesc.h>
 
 #define CHDESC_MARKED    0x01 /* marker for graph traversal */
-#define CHDESC_IN_DEPMAN 0x02 /* depman has a reference to it */
-#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
-#define CHDESC_PRMARKED  0x08 /* used for debugging */
+#define CHDESC_ROLLBACK  0x02 /* chdesc is rolled back */
+#define CHDESC_PRMARKED  0x04 /* used for debugging */
 
 struct chdesc {
 	BD_t * owner;
