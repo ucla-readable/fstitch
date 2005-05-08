@@ -4,7 +4,6 @@
 #include <kfs/block_resizer_bd.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
-#include <kfs/chdesc_stripper_bd.h>
 #include <kfs/journal_queue_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
@@ -27,11 +26,14 @@
 #endif
 
 static bool verbose = 0;
-static bool use_wb_cache = 1;
+
+#define WB_CACHE 0
+#define WT_CACHE 1
+#define NO_CACHE 2
 
 static struct Scfs_metadata md;
 
-static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS_t * external_journal, bool enable_fsck, uint32_t cache_nblks, bool stripper)
+static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS_t * external_journal, bool enable_fsck, int cache_type, uint32_t cache_nblks)
 {
 //	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -77,26 +79,45 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		BD_t * resizer;
 		LFS_t * josfs_lfs;
 		LFS_t * lfs;
+#if !USE_THIRD_LEG
 		bool journaling = 0;
 		LFS_t * journal = NULL;
+#endif
 		CFS_t * u;
 			
 		if (!partitions[i])
 			continue;
 
-		if (use_wb_cache)
-			cache = wb_cache_bd(partitions[i], cache_nblks);
-		else
-			cache = wt_cache_bd(partitions[i], cache_nblks);
-		if (!cache)
+		switch (cache_type)
 		{
-			fprintf(STDERR_FILENO, "w%c_cache_bd() failed\n", use_wb_cache ? 'b' : 't');
-			exit();
+			case WB_CACHE:
+				cache = wb_cache_bd(partitions[i], cache_nblks);
+				if (!cache)
+				{
+					fprintf(STDERR_FILENO, "wb_cache_bd() failed\n");
+					exit();
+				}
+				break;
+			case WT_CACHE:
+				cache = wt_cache_bd(partitions[i], cache_nblks);
+				if (!cache)
+				{
+					fprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
+					exit();
+				}
+				break;
+			case NO_CACHE:
+				cache = partitions[i];
+				break;
+			default:
+				fprintf(STDERR_FILENO, "%s() does not know about cache type %d\n", __FUNCTION__, cache_type);
+				exit();
+				cache = NULL; // satisfy compiler
 		}
 
 #if !USE_THIRD_LEG
 		/* create a resizer if needed */
-		if ((resizer = block_resizer_bd(cache, 4096)) )
+		if ((resizer = block_resizer_bd(cache, 4096)) && cache_type != NO_CACHE)
 		{
 			/* create a cache above the resizer */
 			if (! (cache = wt_cache_bd(resizer, 16)) )
@@ -108,20 +129,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 #else
 		resizer = NULL; // satisfy compiler
 #endif
-
-		if (!use_wb_cache && stripper)
-		{
-#if USE_THIRD_LEG
-			fprintf(STDERR_FILENO, "chdesc_stripper_bd shouldn't be used\n");
-			exit();
-#else
-			if (! (cache = chdesc_stripper_bd(cache)) )
-			{
-				fprintf(STDERR_FILENO, "chdesc_stripper_bd() failed\n");
-				exit();
-			}
-#endif
-		}
 
 		if (enable_journal)
 		{
@@ -236,8 +243,8 @@ static void print_usage(const char * bin)
 {
 	printf("Usage:\n");
 	printf("%s -d <device> -m <mount_point> [-v]\n", bin);
-	printf("    [-j <on|extern_file|off*> [-jfsck <on|off*>]] [-fsck <on|off*>]\n");
-	printf("    [-$ <num_blocks>] [-wb*|-wt]\n");
+	printf("    [-j <on|<extern_file>|off*> [-jfsck <on|off*>]] [-fsck <on|off*>]\n");
+	printf("    [-$ <num_blocks>] [-c <wb*|wt|none>]\n");
 	printf("  <device> is one of:\n");
 	printf("    ide  <controllerno> <diskno>\n");
 	printf("    nbd  <host> [-p <port>]\n");
@@ -246,11 +253,12 @@ static void print_usage(const char * bin)
 	printf("    mem  <blocksize> <blockcount>\n");
 }
 
-static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** external_journal, bool * fsck, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** external_journal, bool * fsck, int * cache_type, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
 	const char * fsck_str;
 	const char * jfsck_str;
+	const char * cache_type_str;
 	const char * cache_num_blocks_str;
 
 	if (get_arg_idx(argc, argv, "-v"))
@@ -341,16 +349,27 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 		}
 	}
 
+	if ((cache_type_str = get_arg_val(argc, argv, "-c")))
+	{
+		if (!strcmp("wb", cache_type_str))
+			*cache_type = WB_CACHE;
+		else if (!strcmp("wt", cache_type_str))
+			*cache_type = WT_CACHE;
+		else if (!strcmp("none", cache_type_str))
+			*cache_type = NO_CACHE;
+		else
+		{
+			fprintf(STDERR_FILENO, "Illegal -c option \"%s\"\n", cache_type_str);
+			print_usage(argv[0]);
+			exit();
+		}
+	}
+
 	if ((cache_num_blocks_str = get_arg_val(argc, argv, "-$")))
 		*cache_num_blocks = strtol(cache_num_blocks_str, NULL, 10);
-
-	if (get_arg_idx(argc, argv, "-wb"))
-		use_wb_cache = 1;
-	else if (get_arg_idx(argc, argv, "-wt"))
-		use_wb_cache = 0;
 }
 
-static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
+static BD_t * create_disk(int argc, const char ** argv)
 {
 	int device_index;
 	BD_t * disk = NULL;
@@ -506,8 +525,6 @@ static BD_t * create_disk(int argc, const char ** argv, bool * stripper)
 			fprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
 			return NULL;
 		}
-
-		*stripper = 0;
 #endif
 	}
 	else if (!strcmp("bd", argv[device_index]))
@@ -559,8 +576,8 @@ void umain(int argc, const char ** argv)
 	CFS_t * cfs;
 	bool journal = 0;
 	bool fsck = 0, jfsck = 0;
+	int cache_type = WB_CACHE;
 	uint32_t cache_num_blocks = 128;
-	bool stripper = 1;
 	CFS_t * tclass;
 	int r;
 
@@ -578,13 +595,13 @@ void umain(int argc, const char ** argv)
 		exit();
 	}
 
-	parse_options(argc, argv, &journal, &jfsck, &external_journal, &fsck, &cache_num_blocks);
+	parse_options(argc, argv, &journal, &jfsck, &external_journal, &fsck, &cache_type, &cache_num_blocks);
 
-	disk = create_disk(argc, argv, &stripper);
+	disk = create_disk(argc, argv);
 	if (!disk)
 		exit();
 
-	cfs = build_uhfs(disk, journal, jfsck, external_journal, fsck, cache_num_blocks, stripper);
+	cfs = build_uhfs(disk, journal, jfsck, external_journal, fsck, cache_type, cache_num_blocks);
 	if (!cfs)
 		exit();
 
