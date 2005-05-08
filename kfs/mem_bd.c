@@ -22,6 +22,30 @@ struct mem_info {
 	blockman_t * blockman;
 };
 
+static int mem_bd_get_config(void * object, int level, char * string, size_t length)
+{
+	BD_t * bd = (BD_t *) object;
+	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
+	switch(level)
+	{
+		case CONFIG_BRIEF:
+			snprintf(string, length, "%d(%dblks)", info->blocksize, info->blockcount);
+			break;
+		case CONFIG_VERBOSE:
+		case CONFIG_NORMAL:
+		default:
+			snprintf(string, length, "%d bytes x %d blocks", info->blocksize, info->blockcount);
+	}
+	return 0;
+}
+
+static int mem_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	/* no status to report */
+	snprintf(string, length, "");
+	return 0;
+}
+
 static uint32_t mem_bd_get_numblocks(BD_t * object)
 {
 	return ((struct mem_info*)OBJLOCAL(object))->blockcount;
@@ -94,7 +118,7 @@ static int mem_bd_sync(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
-static uint16_t nbd_bd_get_devlevel(BD_t * object)
+static uint16_t mem_bd_get_devlevel(BD_t * object)
 {
 	return ((struct mem_info *) OBJLOCAL(object))->level;
 }
@@ -197,10 +221,14 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 
 	info->level = 0;
 
+	OBJFLAGS(bd) = 0;
+	OBJMAGIC(bd) = 0;
+	OBJASSIGN(bd, mem_bd, get_config);
+	OBJASSIGN(bd, mem_bd, get_status);
 	ASSIGN(bd, mem_bd, get_numblocks);
 	ASSIGN(bd, mem_bd, get_blocksize);
 	ASSIGN(bd, mem_bd, get_atomicsize);
-	ASSIGN(bd, nbd_bd, get_devlevel);
+	ASSIGN(bd, mem_bd, get_devlevel);
 	ASSIGN(bd, mem_bd, read_block);
 	ASSIGN(bd, mem_bd, write_block);
 	ASSIGN(bd, mem_bd, sync);
