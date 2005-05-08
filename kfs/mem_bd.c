@@ -6,6 +6,7 @@
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
+#include <kfs/blockman.h>
 #include <kfs/modman.h>
 #include <kfs/mem_bd.h>
 #include <kfs/revision.h>
@@ -18,6 +19,7 @@ struct mem_info {
 	uint32_t blockcount;
 	uint16_t blocksize;
 	uint16_t level;
+	blockman_t * blockman;
 };
 
 static uint32_t mem_bd_get_numblocks(BD_t * object)
@@ -39,8 +41,13 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
 	bdesc_t *ret;
+	int r;
 
 	if (number >= info->blockcount) return NULL;
+
+	ret = blockman_managed_lookup(info->blockman, number);
+	if (ret) return ret;
+
 	ret = bdesc_alloc(number, info->blocksize);
 	if (ret == NULL) return NULL;
 	bdesc_autorelease(ret);
@@ -48,6 +55,10 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number)
 	memcpy(ret->ddesc->data,
 	       &info->blocks[info->blocksize * number],
 	       info->blocksize);
+
+	r = blockman_managed_add(info->blockman, ret);
+	if (r < 0)
+		return NULL;
 	return ret;
 }
 
@@ -91,6 +102,8 @@ static uint16_t nbd_bd_get_devlevel(BD_t * object)
 static int mem_bd_destroy(BD_t * bd)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
+
+	blockman_destroy(&info->blockman);
 
 	free(info->blocks);
 	free(info);
@@ -147,6 +160,14 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
+	info->blockman = blockman_create();
+	if (!info->blockman) {
+		free(info->blocks);
+		free(info);
+		free(bd);
+		return NULL;
+	}
+
 	memset(info->blocks, 0, blocks * blocksize);
 
 	// Set up JOS fs on the mem device. in an ideal world this would
