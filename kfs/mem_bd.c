@@ -101,14 +101,20 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 
 	r = revision_tail_prepare(block, object);
-	if (r != 0) return r;
+	if (r != 0) {
+		panic("revision_tail_prepare gave: %e\n", r);
+		return r;
+	}
 
 	memcpy(&info->blocks[block->number * info->blocksize],
 	       block->ddesc->data,
 	       info->blocksize);
 
 	r = revision_tail_acknowledge(block, object);
-	if (r != 0) return r;
+	if (r != 0) {
+		panic("revision_tail_acknowledge gave error: %e\n", r);
+		return r;
+	}
 
 	return 0;
 }
@@ -126,6 +132,10 @@ static uint16_t mem_bd_get_devlevel(BD_t * object)
 static int mem_bd_destroy(BD_t * bd)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
+	int r;
+
+	r = modman_rem_bd(bd);
+	if (r < 0) return r;
 
 	blockman_destroy(&info->blockman);
 
