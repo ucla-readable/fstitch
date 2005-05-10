@@ -446,8 +446,16 @@ static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 		if (!me->name)													\
 			rl->name[0] = 0;											\
 		else															\
-			strncpy(rl->name, me->name, MIN(SKFS_MAX_NAMELEN, strlen(me->name))); \
-		rl->name[MIN(SKFS_MAX_NAMELEN, strlen(me->name))] = 0;			\
+		{																\
+			int len = strlen(me->name);									\
+			if (len+1 > SKFS_MAX_NAMELEN)								\
+			{															\
+				len = SKFS_MAX_NAMELEN;									\
+				fprintf(STDERR_FILENO, "%s(): serial kfs support limiting name \"%s\" to %u chars\n", __FUNCTION__, me->name, len); \
+			}															\
+			strncpy(rl->name, me->name, len);							\
+			rl->name[len] = 0;											\
+		}																\
 																		\
 		assert(vector_size(me->users) == vector_size(me->use_names));	\
 		users_remaining = vector_size((vector_t *) me->users);			\
@@ -483,8 +491,16 @@ static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 			if (!use_name)												\
 				ru->use_name[0] = 0;									\
 			else														\
-				strncpy(ru->use_name, use_name, MIN(SKFS_MAX_NAMELEN, strlen(use_name))); \
-			ru->use_name[MIN(SKFS_MAX_NAMELEN, strlen(me->name))] = 0;	\
+			{															\
+				int len = strlen(use_name);								\
+				if (len+1 > SKFS_MAX_NAMELEN)							\
+				{														\
+					len = SKFS_MAX_NAMELEN;								\
+					fprintf(STDERR_FILENO, "%s(): serial kfs support limiting use name \"%s\" to %u chars\n", __FUNCTION__, use_name, len); \
+				}														\
+				strncpy(ru->use_name, use_name, len);					\
+				ru->use_name[len] = 0;									\
+			}															\
 																		\
 			ipc_send(whom, users_remaining, ru, PTE_P|PTE_U, NULL);		\
 		}																\
