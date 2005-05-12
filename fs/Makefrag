@@ -16,6 +16,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/diskwrite \
 			$(OBJDIR)/user/echo \
 			$(OBJDIR)/user/es \
+			$(OBJDIR)/user/ex \
 			$(OBJDIR)/user/fourem \
 			$(OBJDIR)/user/free \
 			$(OBJDIR)/user/get \
