@@ -29,7 +29,7 @@ typedef struct {
 
 #define CMD_BEGIN '#'
 #define CMD_END   'z'
-#define CMDS_SIZE ((int) (CMD_END - CMD_BEGIN))
+#define CMDS_SIZE ((int)(CMD_END - CMD_BEGIN) + 1)
 static cmd_entry_t cmds[CMDS_SIZE];
 
 #define CMDX(c) ((int)(c - CMD_BEGIN))
@@ -411,8 +411,8 @@ static const char * parse_filename(const char * cmd)
 	if (!cmd[1])
 		return NULL;
 
-	while (*(++cmd) == ' ')
-		;
+	while (*cmd == ' ')
+		cmd++;
 	if (!*cmd)
 		return NULL;
 	return cmd;
@@ -423,7 +423,7 @@ static const char * parse_filename(const char * cmd)
 // File operations
 
 static char file_read_buf[PGSIZE];
-static int line_append_file(const char * file, int mode)
+static int file_insert(const char * file, int mode)
 {
 	int n, r;
 	// for multi-buf lines:
@@ -574,7 +574,7 @@ static int file_open(const char * file, int mode)
 	int fd, r;
 
 	assert(ex_file.fdnum == -1); // ex_file must be closed
-	fd = line_append_file(file, mode);
+	fd = file_insert(file, mode);
 	if (fd < 0)
 		return fd;
 	ex_file.fdnum = fd;
@@ -644,14 +644,14 @@ static void cmd_insert_file(size_t begin, size_t end, const char * cmd)
 		return;
 	}
 
-	file = parse_filename(cmd);
+	file = parse_filename(cmd+1);
 	if (!file)
 	{
 		fprintf(STDERR_FILENO, "No filename given\n");
 		return;
 	}
 
-	r = line_append_file(file, O_RDWR);
+	r = file_insert(file, O_RDWR);
 	if (r < 0)
 	{
 		fprintf(STDERR_FILENO, "Unable to insert file \"%s\": %e\n", file, r);
@@ -717,7 +717,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 		return;
 	}
 
-	file = parse_filename(cmd);
+	file = parse_filename(cmd+1);
 	if (!file)
 	{
 		if (cmd[1])
@@ -725,7 +725,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 			fprintf(STDERR_FILENO, "No filename given\n");
 			return;
 		}
-		file = ex_file.filename;
+		file = NULL;
 	}
 
 	r = write_file(file);
@@ -756,7 +756,7 @@ static void cmd_writequit(size_t begin, size_t end, const char * cmd)
 		return;
 	}
 
-	file = parse_filename(cmd);
+	file = parse_filename(cmd+1);
 	if (!file)
 	{
 		if (cmd[1])
@@ -1016,6 +1016,9 @@ static void cmd_change(size_t begin, size_t end, const char * cmd)
 static void cmd_help(size_t begin, size_t end, const char * cmd)
 {
 	size_t i;
+
+	printf("line numbers:\n  \"n\": n, +/-k: fwd/back k, \".\": current, \"$\": last in file, \"n,m\": [n,m]\n");
+
 	for (i=0; i<CMDS_SIZE; i++)
 	{
 		if (cmds[i].f)
