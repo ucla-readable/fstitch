@@ -829,17 +829,77 @@ static void cmd_get_lineno(size_t begin, size_t end, const char * cmd)
 	printf("line %u\n", ex_file.cur_lineno);
 }
 
+static void cmd_transfer(size_t begin, size_t end, const char * cmd)
+{
+	size_t target_begin, target_end;
+	const char * target_string = cmd + 1;
+	size_t i, j;
+	int r;
+
+	r = parse_linenos(&target_string, &target_begin, &target_end);
+	if (r < 0)
+	{
+		printf("Illegal target linenos: %e\n", r);
+		return;
+	}
+	if (target_begin != target_end)
+	{
+		printf("Transfer does not support transferring to ranges of lines\n");
+		return;
+	}
+
+	if (begin > ex_file.numlines)
+	{
+		printf("Lineno %u out of range (file %u lines)\n", begin, ex_file.numlines);
+		return;
+	}
+	if (end > ex_file.numlines)
+	{
+		printf("Lineno %u out of range (file %u lines)\n", end, ex_file.numlines);
+		return;
+	}
+	if (target_begin > ex_file.numlines)
+	{
+		printf("Lineno %u out of range (file %u lines)\n", target_begin, ex_file.numlines);
+		return;
+	}
+	if (target_end > ex_file.numlines)
+	{
+		printf("Lineno %u out of range (file %u lines)\n", target_end, ex_file.numlines);
+		return;
+	}
+
+	for (i=0,j=0; begin+i <= end; i++, j++)
+	{
+		char * text;
+
+		if (i>0 && target_begin < begin)
+			begin++;
+
+		r = line_goto(begin+j);
+		assert(r >= 0);
+		text = strdup(ex_file.cur_line->text);
+		assert(text);
+
+		r = line_goto(target_begin+j);
+		assert(r >= 0);
+		r = line_append(text);
+		if (r < 0)
+		{
+			printf("%s(): %s: %e\n", __FUNCTION__, "line_move", r);
+			return;
+		}
+	}
+
+	printf("%s\n", ex_file.cur_line->text);
+}
+
 static void cmd_move(size_t begin, size_t end, const char * cmd)
 {
 	size_t target_begin, target_end;
 	const char * target_string = cmd + 1;
+	size_t i, j;
 	int r;
-
-	if (begin != end)
-	{
-		printf("Move does not support moving ranges of lines\n");
-		return;
-	}
 
 	r = parse_linenos(&target_string, &target_begin, &target_end);
 	if (r < 0)
@@ -853,19 +913,42 @@ static void cmd_move(size_t begin, size_t end, const char * cmd)
 		return;
 	}
 
-	r = line_goto(begin);
-	if (r < 0)
+	if (begin > ex_file.numlines)
 	{
 		printf("Lineno %u out of range (file %u lines)\n", begin, ex_file.numlines);
 		return;
 	}
-
-	r = line_move(target_begin);
-	if (r < 0)
+	if (end > ex_file.numlines)
 	{
-		printf("%s(): %s: %e\n", __FUNCTION__, "line_move", r);
+		printf("Lineno %u out of range (file %u lines)\n", end, ex_file.numlines);
 		return;
 	}
+	if (target_begin > ex_file.numlines)
+	{
+		printf("Lineno %u out of range (file %u lines)\n", target_begin, ex_file.numlines);
+		return;
+	}
+	if (target_end > ex_file.numlines)
+	{
+		printf("Lineno %u out of range (file %u lines)\n", target_end, ex_file.numlines);
+		return;
+	}
+
+	for (i=0,j=0; begin+i <= end; i++, j++)
+	{
+		if (i>0 && begin < target_begin)
+			j--;
+
+		r = line_goto(begin+j);
+		assert(r >= 0);
+		r = line_move(target_begin+j);
+		if (r < 0)
+		{
+			printf("%s(): %s: %e\n", __FUNCTION__, "line_move", r);
+			return;
+		}
+	}
+
 	printf("%s\n", ex_file.cur_line->text);
 }
 
@@ -880,14 +963,11 @@ static void display_lines(size_t begin, size_t end, bool linenos)
 
 	l = ex_file.cur_line;
 
-	while (i++ <= end)
+	for (i=begin; i <= end; i++)
 	{
-		if (i-1 > begin && l == ex_file.cur_line)
-			printf("#\n");
-//		printf("= %u prev: \"%s\" next: \"%s\"\n", i-1, ex_file.cur_line->prev->text, ex_file.cur_line->next->text);
 		const size_t len = strlen(ex_file.cur_line->text);
 		if (linenos)
-			printf("\t%u ", i-1); // TODO: left align number
+			printf("\t%u ", i); // TODO: left align number
 		r = write(STDOUT_FILENO, ex_file.cur_line->text, len);
 		if (r < len)
 		{
@@ -899,7 +979,7 @@ static void display_lines(size_t begin, size_t end, bool linenos)
 		}
 		printf("\n");
 
-		if (i <= end)
+		if (i < end)
 		{
 			r = line_go(1);
 			assert(r >= 0);
@@ -1096,10 +1176,12 @@ static void register_commands()
 	COMMAND('a', cmd_append, "append line");
 	COMMAND('c', cmd_change, "change line");
 	COMMAND('d', cmd_delete, "delete line");
+	COMMAND('t', cmd_transfer, "transfer line");
 	COMMAND('m', cmd_move, "move line");
 
 /*
  * Maybe-implements:
+ * - 'dk', delete k lines, and other commands using k
  * - Navigating around open files ('e', 'n', etc)
  * - '!', this just needs parsing code
  * - undo
