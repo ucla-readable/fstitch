@@ -461,7 +461,7 @@ static int file_insert(const char * file, int mode)
 
 					// add l to line
 					r = vector_push_back(line, l);
-					assert(r);
+					assert(r >= 0);
 					line_len += i - line_begin;
 
 					// build complete line from the partial lines
@@ -492,7 +492,7 @@ static int file_insert(const char * file, int mode)
 				l[i - line_begin] = 0;
 
 				r = vector_push_back(line, l);
-				assert(r);
+				assert(r >= 0);
 
 				line_len += i - line_begin;
 			}
