@@ -702,7 +702,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 
 	return create_bd(bd_id);
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/block_resizer_bd.h>
 BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 {
@@ -719,7 +719,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 
 	return create_bd(bd_id);
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/md_bd.h>
 BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 {
@@ -780,7 +780,7 @@ int mirror_bd_remove_device(BD_t * bd, int diskno)
 	SEND_PG();
 	return RECV_PG();
 }
-
+#endif
 #include <kfs/ide_pio_bd.h>
 BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 {
@@ -797,7 +797,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 
 	return create_bd(bd_id);
 }
-#endif
+
 
 //
 // modman

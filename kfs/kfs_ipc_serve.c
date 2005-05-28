@@ -346,7 +346,7 @@ static void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 
 	RETURN_IPC;
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/block_resizer_bd.h>
 static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
 {
@@ -360,7 +360,7 @@ static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * p
 
 	RETURN_IPC;
 }
-
+#if !USE_THIRD_LEG
 #include <kfs/md_bd.h>
 static void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
 {
@@ -418,14 +418,14 @@ static void kis_mirror_bd_remove(envid_t whom, const Skfs_mirror_bd_remove_t * p
 
 	RETURN_IPC;
 }
-
+#endif
 #include <kfs/ide_pio_bd.h>
 static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 {
 	uint32_t val = (uint32_t) ide_pio_bd(pg->controller, pg->disk);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
-#endif
+
 
 //
 // modman
@@ -697,14 +697,15 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(WB_CACHE_BD,        wb_cache_bd);
 #endif
 		SERVE(WT_CACHE_BD,        wt_cache_bd);
-#if !USE_THIRD_LEG
 		SERVE(BLOCK_RESIZER_BD,   block_resizer_bd);
+#if !USE_THIRD_LEG
 		SERVE(MD_BD,              md_bd);
 		SERVE(MIRROR_BD,          mirror_bd);
 		SERVE(MIRROR_BD_ADD,          mirror_bd_add);
 		SERVE(MIRROR_BD_REMOVE,          mirror_bd_remove);
-		SERVE(IDE_PIO_BD,         ide_pio_bd);
 #endif
+		SERVE(IDE_PIO_BD,         ide_pio_bd);
+
 		// modman
 
 		SERVE(MODMAN_REQUEST_LOOKUP, modman_request_lookup);

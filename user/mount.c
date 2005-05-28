@@ -115,7 +115,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				cache = NULL; // satisfy compiler
 		}
 
-#if !USE_THIRD_LEG
 		/* create a resizer if needed */
 		if ((resizer = block_resizer_bd(cache, 4096)) && cache_type != NO_CACHE)
 		{
@@ -126,9 +125,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				exit();
 			}
 		}
-#else
-		resizer = NULL; // satisfy compiler
-#endif
 
 		if (enable_journal)
 		{
@@ -391,10 +387,6 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 	if (!strcmp("ide", argv[device_index]))
 	{
-#if USE_THIRD_LEG
-		fprintf(STDERR_FILENO, "ide_pio_bd not yet supported\n");
-		exit();
-#else
 		uint8_t controllerno, diskno;
 
 		if (device_index + 2 >= argc)
@@ -412,7 +404,6 @@ static BD_t * create_disk(int argc, const char ** argv)
 			fprintf(STDERR_FILENO, "ide_pio_bd(%d, %d) failed\n", controllerno, diskno);
 			return NULL;
 		}
-#endif
 	}
 	else if (!strcmp("nbd", argv[device_index]))
 	{
