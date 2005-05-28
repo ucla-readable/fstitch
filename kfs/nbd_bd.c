@@ -119,13 +119,13 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	bdesc_t * bdesc;
 	int tries;
 	
-	/* make sure it's a valid block */
-	if(number >= info->length)
-		return NULL;
-	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 		return bdesc;
+	
+	/* make sure it's a valid block */
+	if(number >= info->length)
+		return NULL;
 	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
 	{
@@ -167,6 +167,41 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	
 	fprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	return NULL;
+}
+
+static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		*synthetic = 0;
+		return bdesc;
+	}
+	
+	/* make sure it's a valid block */
+	if(number >= info->length)
+		return NULL;
+	
+	bdesc = bdesc_alloc(number, info->blocksize);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
+		return NULL;
+	
+	*synthetic = 1;
+	
+	return bdesc;
+}
+
+static int nbd_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	return 0;
 }
 
 static int nbd_bd_write_block(BD_t * object, bdesc_t * block)

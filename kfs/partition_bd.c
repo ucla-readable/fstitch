@@ -79,6 +79,38 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 	return new_bdesc;
 }
 
+static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	bdesc_t * bdesc, * new_bdesc;
+	
+	/* make sure it's a valid block */
+	if(number >= info->length)
+		return NULL;
+	
+	bdesc = CALL(info->bd, synthetic_read_block, info->start + number, synthetic);
+	if(!bdesc)
+		return NULL;
+	
+	new_bdesc = bdesc_clone(number, bdesc);
+	if(!new_bdesc)
+		return NULL;
+	bdesc_autorelease(new_bdesc);
+	
+	return new_bdesc;
+}
+
+static int partition_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	
+	/* make sure it's a valid block */
+	if(number >= info->length)
+		return -E_INVAL;
+	
+	return CALL(info->bd, cancel_block, number + info->start);
+}
+
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);

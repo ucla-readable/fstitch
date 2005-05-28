@@ -88,6 +88,56 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
 	return bdesc_retain(info->blocks[index]);
 }
 
+static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	uint32_t index;
+	
+	/* make sure it's a valid block */
+	if(number >= CALL(info->bd, get_numblocks))
+		return NULL;
+	
+	index = number % info->size;
+	if(info->blocks[index])
+	{
+		/* in the cache, use it */
+		if(info->blocks[index]->number == number)
+		{
+			*synthetic = 0;
+			return info->blocks[index];
+		}
+		
+		/* need to replace this cache entry */
+		bdesc_release(&info->blocks[index]);
+	}
+	
+	/* not in the cache, need to read it */
+	info->blocks[index] = CALL(info->bd, synthetic_read_block, number, synthetic);
+	
+	if(!info->blocks[index])
+		return NULL;
+	
+	/* increase reference count */
+	return bdesc_retain(info->blocks[index]);
+}
+
+static int wt_cache_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	uint32_t index;
+	
+	/* make sure it's a valid block */
+	if(number >= CALL(info->bd, get_numblocks))
+		return -E_INVAL;
+	
+	index = number % info->size;
+	if(info->blocks[index])
+		if(info->blocks[index]->number == number)
+			bdesc_release(&info->blocks[index]);
+	
+	return CALL(info->bd, cancel_block, number);
+}
+
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);

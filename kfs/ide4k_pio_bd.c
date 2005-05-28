@@ -173,13 +173,13 @@ static bdesc_t * ide4k_pio_bd_read_block(BD_t * object, uint32_t number)
 	struct ide4k_info * info = (struct ide4k_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	
-	/* make sure it's a valid block */
-	if(number >= ((struct ide4k_info *) OBJLOCAL(object))->length)
-		return NULL;
-	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 		return bdesc;
+	
+	/* make sure it's a valid block */
+	if(number >= ((struct ide4k_info *) OBJLOCAL(object))->length)
+		return NULL;
 	
 	bdesc = bdesc_alloc(number, SECTSIZE);
 	if(!bdesc)
@@ -195,6 +195,41 @@ static bdesc_t * ide4k_pio_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 
 	return bdesc;
+}
+
+static bdesc_t * ide4k_pio_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct ide4k_info * info = (struct ide4k_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		*synthetic = 0;
+		return bdesc;
+	}
+	
+	/* make sure it's a valid block */
+	if(number >= ((struct ide4k_info *) OBJLOCAL(object))->length)
+		return NULL;
+	
+	bdesc = bdesc_alloc(number, SECTSIZE);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
+		return NULL;
+	
+	*synthetic = 1;
+	
+	return bdesc;
+}
+
+static int ide4k_pio_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	return 0;
 }
 
 static int ide4k_pio_bd_write_block(BD_t * object, bdesc_t * block)

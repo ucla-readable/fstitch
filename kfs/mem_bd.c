@@ -64,26 +64,40 @@ static uint16_t mem_bd_get_atomicsize(BD_t * object)
 static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
-	bdesc_t *ret;
+	bdesc_t * ret;
 	int r;
 
-	if (number >= info->blockcount) return NULL;
+	if (number >= info->blockcount)
+		return NULL;
 
 	ret = blockman_managed_lookup(info->blockman, number);
-	if (ret) return ret;
+	if (ret)
+		return ret;
 
 	ret = bdesc_alloc(number, info->blocksize);
-	if (ret == NULL) return NULL;
+	if (ret == NULL)
+		return NULL;
 	bdesc_autorelease(ret);
 	
-	memcpy(ret->ddesc->data,
-	       &info->blocks[info->blocksize * number],
-	       info->blocksize);
+	memcpy(ret->ddesc->data, &info->blocks[info->blocksize * number], info->blocksize);
 
 	r = blockman_managed_add(info->blockman, ret);
 	if (r < 0)
 		return NULL;
 	return ret;
+}
+
+static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	bdesc_t * ret = mem_bd_read_block(object, number);
+	if(ret)
+		*synthetic = 0;
+	return ret;
+}
+
+static int mem_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	return 0;
 }
 
 static int mem_bd_write_block(BD_t * object, bdesc_t * block)

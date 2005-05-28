@@ -77,6 +77,38 @@ static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number)
 	return bdesc;
 }
 
+static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	bdesc_t * read_bdesc, * bdesc;
+	
+	/* make sure it's a valid block */
+	if(number >= info->numblocks)
+		return NULL;
+	
+	read_bdesc = CALL(info->bd[number & 1], synthetic_read_block, number >> 1, synthetic);
+	if(!read_bdesc)
+		return NULL;
+	
+	bdesc = bdesc_clone(number, read_bdesc);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+
+	return bdesc;
+}
+
+static int md_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	
+	/* make sure it's a valid block */
+	if(number >= info->numblocks)
+		return -E_INVAL;
+	
+	return CALL(info->bd[number & 1], cancel_block, number >> 1);
+}
+
 static int md_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
