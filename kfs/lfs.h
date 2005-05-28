@@ -62,4 +62,32 @@ struct LFS {
 	DECLARE(LFS_t, int, sync, const char * name);
 };
 
+#define LFS_INIT(lfs, module, info) { \
+	OBJ_INIT(lfs, module, info); \
+	ASSIGN(lfs, module, get_blocksize); \
+	ASSIGN(lfs, module, get_blockdev); \
+	ASSIGN(lfs, module, allocate_block); \
+	ASSIGN(lfs, module, lookup_block); \
+	ASSIGN(lfs, module, lookup_name); \
+	ASSIGN(lfs, module, free_fdesc); \
+	ASSIGN(lfs, module, get_file_numblocks); \
+	ASSIGN(lfs, module, get_file_block_num); \
+	ASSIGN(lfs, module, get_file_block); \
+	ASSIGN(lfs, module, get_dirent); \
+	ASSIGN(lfs, module, append_file_block); \
+	ASSIGN(lfs, module, allocate_name); \
+	ASSIGN(lfs, module, rename); \
+	ASSIGN(lfs, module, truncate_file_block); \
+	ASSIGN(lfs, module, free_block); \
+	ASSIGN(lfs, module, remove_name); \
+	ASSIGN(lfs, module, write_block); \
+	ASSIGN(lfs, module, get_num_features); \
+	ASSIGN(lfs, module, get_feature); \
+	ASSIGN(lfs, module, get_metadata_name); \
+	ASSIGN(lfs, module, get_metadata_fdesc); \
+	ASSIGN(lfs, module, set_metadata_name); \
+	ASSIGN(lfs, module, set_metadata_fdesc); \
+	ASSIGN(lfs, module, sync); \
+}
+
 #endif /* __KUDOS_KFS_LFS_H */

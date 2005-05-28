@@ -532,29 +532,9 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_cfs;
-	OBJLOCAL(cfs) = state;
-	
-	OBJFLAGS(cfs) = 0;
+
+	CFS_INIT(cfs, devfs, state);
 	OBJMAGIC(cfs) = DEVFS_MAGIC;
-	OBJASSIGN(cfs, devfs, get_config);
-	OBJASSIGN(cfs, devfs, get_status);
-	ASSIGN(cfs, devfs, open);
-	ASSIGN(cfs, devfs, close);
-	ASSIGN(cfs, devfs, read);
-	ASSIGN(cfs, devfs, write);
-	ASSIGN(cfs, devfs, getdirentries);
-	ASSIGN(cfs, devfs, truncate);
-	ASSIGN(cfs, devfs, unlink);
-	ASSIGN(cfs, devfs, link);
-	ASSIGN(cfs, devfs, rename);
-	ASSIGN(cfs, devfs, mkdir);
-	ASSIGN(cfs, devfs, rmdir);
-	ASSIGN(cfs, devfs, get_num_features);
-	ASSIGN(cfs, devfs, get_feature);
-	ASSIGN(cfs, devfs, get_metadata);
-	ASSIGN(cfs, devfs, set_metadata);
-	ASSIGN(cfs, devfs, sync);
-	DESTRUCTOR(cfs, devfs, destroy);
 	
 	state->root_fid = -1;
 	state->open_count = 0;

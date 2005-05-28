@@ -258,37 +258,9 @@ LFS_t * wholedisk(BD_t * bd)
 		free(lfs);
 		return NULL;
 	}
-	OBJLOCAL(lfs) = info;
 
-	OBJFLAGS(lfs) = 0;
+	LFS_INIT(lfs, wholedisk, info);
 	OBJMAGIC(lfs) = WHOLEDISK_MAGIC;
-	OBJASSIGN(lfs, wholedisk, get_config);
-	OBJASSIGN(lfs, wholedisk, get_status);
-	ASSIGN(lfs, wholedisk, get_blocksize);
-	ASSIGN(lfs, wholedisk, get_blockdev);
-	ASSIGN(lfs, wholedisk, allocate_block);
-	ASSIGN(lfs, wholedisk, lookup_block);
-	ASSIGN(lfs, wholedisk, lookup_name);
-	ASSIGN(lfs, wholedisk, free_fdesc);
-	ASSIGN(lfs, wholedisk, get_file_numblocks);
-	ASSIGN(lfs, wholedisk, get_file_block_num);
-	ASSIGN(lfs, wholedisk, get_file_block);
-	ASSIGN(lfs, wholedisk, get_dirent);
-	ASSIGN(lfs, wholedisk, append_file_block);
-	ASSIGN(lfs, wholedisk, allocate_name);
-	ASSIGN(lfs, wholedisk, rename);
-	ASSIGN(lfs, wholedisk, truncate_file_block);
-	ASSIGN(lfs, wholedisk, free_block);
-	ASSIGN(lfs, wholedisk, remove_name);
-	ASSIGN(lfs, wholedisk, write_block);
-	ASSIGN(lfs, wholedisk, get_num_features);
-	ASSIGN(lfs, wholedisk, get_feature);
-	ASSIGN(lfs, wholedisk, get_metadata_name);
-	ASSIGN(lfs, wholedisk, get_metadata_fdesc);
-	ASSIGN(lfs, wholedisk, set_metadata_name);
-	ASSIGN(lfs, wholedisk, set_metadata_fdesc);
-	ASSIGN(lfs, wholedisk, sync);
-	DESTRUCTOR(lfs, wholedisk, destroy);
 	
 	info->bd = bd;
 	info->blocksize = CALL(bd, get_blocksize);

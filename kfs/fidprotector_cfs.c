@@ -295,33 +295,13 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 	if (!cfs)
 		return NULL;
 
-	OBJFLAGS(cfs) = 0;
-	OBJMAGIC(cfs) = FIDPROTECTOR_MAGIC;
-	OBJASSIGN(cfs, fidprotector, get_config);
-	OBJASSIGN(cfs, fidprotector, get_status);
-	ASSIGN(cfs, fidprotector, open);
-	ASSIGN(cfs, fidprotector, close);
-	ASSIGN(cfs, fidprotector, read);
-	ASSIGN(cfs, fidprotector, write);
-	ASSIGN(cfs, fidprotector, getdirentries);
-	ASSIGN(cfs, fidprotector, truncate);
-	ASSIGN(cfs, fidprotector, unlink);
-	ASSIGN(cfs, fidprotector, link);
-	ASSIGN(cfs, fidprotector, rename);
-	ASSIGN(cfs, fidprotector, mkdir);
-	ASSIGN(cfs, fidprotector, rmdir);
-	ASSIGN(cfs, fidprotector, get_num_features);
-	ASSIGN(cfs, fidprotector, get_feature);
-	ASSIGN(cfs, fidprotector, get_metadata);
-	ASSIGN(cfs, fidprotector, set_metadata);
-	ASSIGN(cfs, fidprotector, sync);
-	DESTRUCTOR(cfs, fidprotector, destroy);
-
-
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_cfs;
-	OBJLOCAL(cfs) = state;
+
+	CFS_INIT(cfs, fidprotector, state);
+	OBJMAGIC(cfs) = FIDPROTECTOR_MAGIC;
+
 	state->frontend_cfs = frontend_cfs;
 	state->open_files = hash_map_create();
 	if (!state->open_files)

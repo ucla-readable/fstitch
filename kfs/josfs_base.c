@@ -1694,37 +1694,9 @@ LFS_t * josfs(BD_t * block_device)
 		free(lfs);
 		return NULL;
 	}
-	OBJLOCAL(lfs) = info;
 
-	OBJFLAGS(lfs) = 0;
+	LFS_INIT(lfs, josfs, info);
 	OBJMAGIC(lfs) = JOSFS_FS_MAGIC;
-	OBJASSIGN(lfs, josfs, get_config);
-	OBJASSIGN(lfs, josfs, get_status);
-	ASSIGN(lfs, josfs, get_blocksize);
-	ASSIGN(lfs, josfs, get_blockdev);
-	ASSIGN(lfs, josfs, allocate_block);
-	ASSIGN(lfs, josfs, lookup_block);
-	ASSIGN(lfs, josfs, lookup_name);
-	ASSIGN(lfs, josfs, free_fdesc);
-	ASSIGN(lfs, josfs, get_file_numblocks);
-	ASSIGN(lfs, josfs, get_file_block_num);
-	ASSIGN(lfs, josfs, get_file_block);
-	ASSIGN(lfs, josfs, get_dirent);
-	ASSIGN(lfs, josfs, append_file_block);
-	ASSIGN(lfs, josfs, allocate_name);
-	ASSIGN(lfs, josfs, rename);
-	ASSIGN(lfs, josfs, truncate_file_block);
-	ASSIGN(lfs, josfs, free_block);
-	ASSIGN(lfs, josfs, remove_name);
-	ASSIGN(lfs, josfs, write_block);
-	ASSIGN(lfs, josfs, get_num_features);
-	ASSIGN(lfs, josfs, get_feature);
-	ASSIGN(lfs, josfs, get_metadata_name);
-	ASSIGN(lfs, josfs, get_metadata_fdesc);
-	ASSIGN(lfs, josfs, set_metadata_name);
-	ASSIGN(lfs, josfs, set_metadata_fdesc);
-	ASSIGN(lfs, josfs, sync);
-	DESTRUCTOR(lfs, josfs, destroy);
 
 	info->ubd = block_device;
 	info->bitmap_cache = NULL;

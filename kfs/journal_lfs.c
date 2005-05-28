@@ -1063,37 +1063,9 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_lfs;
-	OBJLOCAL(lfs) = state;
 
-	OBJFLAGS(lfs) = 0;
+	LFS_INIT(lfs, journal, state);
 	OBJMAGIC(lfs) = JOURNAL_MAGIC;
-	OBJASSIGN(lfs, journal, get_config);
-	OBJASSIGN(lfs, journal, get_status);
-	ASSIGN(lfs, journal, get_blocksize);
-	ASSIGN(lfs, journal, get_blockdev);
-	ASSIGN(lfs, journal, allocate_block);
-	ASSIGN(lfs, journal, lookup_block);
-	ASSIGN(lfs, journal, lookup_name);
-	ASSIGN(lfs, journal, free_fdesc);
-	ASSIGN(lfs, journal, get_file_numblocks);
-	ASSIGN(lfs, journal, get_file_block_num);
-	ASSIGN(lfs, journal, get_file_block);
-	ASSIGN(lfs, journal, get_dirent);
-	ASSIGN(lfs, journal, append_file_block);
-	ASSIGN(lfs, journal, allocate_name);
-	ASSIGN(lfs, journal, rename);
-	ASSIGN(lfs, journal, truncate_file_block);
-	ASSIGN(lfs, journal, free_block);
-	ASSIGN(lfs, journal, remove_name);
-	ASSIGN(lfs, journal, write_block);
-	ASSIGN(lfs, journal, get_num_features);
-	ASSIGN(lfs, journal, get_feature);
-	ASSIGN(lfs, journal, get_metadata_name);
-	ASSIGN(lfs, journal, get_metadata_fdesc);
-	ASSIGN(lfs, journal, set_metadata_name);
-	ASSIGN(lfs, journal, set_metadata_fdesc);
-	ASSIGN(lfs, journal, sync);
-	DESTRUCTOR(lfs, journal, destroy);
 
 	state->queue = fs_queue;
 	state->journal = journal;

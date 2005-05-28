@@ -487,29 +487,9 @@ CFS_t * table_classifier_cfs(void)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_cfs;
-	OBJLOCAL(cfs) = state;
-	
-	OBJFLAGS(cfs) = 0;
+
+	CFS_INIT(cfs, table_classifier, state);
 	OBJMAGIC(cfs) = TABLE_CLASSIFIER_MAGIC;
-	OBJASSIGN(cfs, table_classifier, get_config);
-	OBJASSIGN(cfs, table_classifier, get_status);
-	ASSIGN(cfs, table_classifier, open);
-	ASSIGN(cfs, table_classifier, close);
-	ASSIGN(cfs, table_classifier, read);
-	ASSIGN(cfs, table_classifier, write);
-	ASSIGN(cfs, table_classifier, getdirentries);
-	ASSIGN(cfs, table_classifier, truncate);
-	ASSIGN(cfs, table_classifier, unlink);
-	ASSIGN(cfs, table_classifier, link);
-	ASSIGN(cfs, table_classifier, rename);
-	ASSIGN(cfs, table_classifier, mkdir);
-	ASSIGN(cfs, table_classifier, rmdir);
-	ASSIGN(cfs, table_classifier, get_num_features);
-	ASSIGN(cfs, table_classifier, get_feature);
-	ASSIGN(cfs, table_classifier, get_metadata);
-	ASSIGN(cfs, table_classifier, set_metadata);
-	ASSIGN(cfs, table_classifier, sync);
-	DESTRUCTOR(cfs, table_classifier, destroy);
 
 	state->open_files = hash_map_create();
 	if (!state->open_files)

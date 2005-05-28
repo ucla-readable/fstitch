@@ -398,29 +398,9 @@ CFS_t * josfs_cfs(void)
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_josfs_cfs;
-	OBJLOCAL(cfs) = state;
 
-	OBJFLAGS(cfs) = 0;
+	CFS_INIT(cfs, josfs_cfs, state);
 	OBJMAGIC(cfs) = JOSFS_CFS_MAGIC;
-	OBJASSIGN(cfs, josfs_cfs, get_config);
-	OBJASSIGN(cfs, josfs_cfs, get_status);
-	ASSIGN(cfs, josfs_cfs, open);
-	ASSIGN(cfs, josfs_cfs, close);
-	ASSIGN(cfs, josfs_cfs, read);
-	ASSIGN(cfs, josfs_cfs, write);
-	ASSIGN(cfs, josfs_cfs, getdirentries);
-	ASSIGN(cfs, josfs_cfs, truncate);
-	ASSIGN(cfs, josfs_cfs, unlink);
-	ASSIGN(cfs, josfs_cfs, link);
-	ASSIGN(cfs, josfs_cfs, rename);
-	ASSIGN(cfs, josfs_cfs, mkdir);
-	ASSIGN(cfs, josfs_cfs, rmdir);
-	ASSIGN(cfs, josfs_cfs, get_num_features);
-	ASSIGN(cfs, josfs_cfs, get_feature);
-	ASSIGN(cfs, josfs_cfs, get_metadata);
-	ASSIGN(cfs, josfs_cfs, set_metadata);
-	ASSIGN(cfs, josfs_cfs, sync);
-	DESTRUCTOR(cfs, josfs_cfs, destroy);
 
 	state->open_files = hash_map_create();
 	if (!state->open_files)

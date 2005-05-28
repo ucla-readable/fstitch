@@ -778,29 +778,9 @@ CFS_t * uhfs(LFS_t * lfs)
 	state = malloc(sizeof(*state));
 	if(!state)
 		goto error_uhfs;
-	OBJLOCAL(cfs) = state;
 
-	OBJFLAGS(cfs) = 0;
+	CFS_INIT(cfs, uhfs, state);
 	OBJMAGIC(cfs) = UHFS_MAGIC;
-	OBJASSIGN(cfs, uhfs, get_config);
-	OBJASSIGN(cfs, uhfs, get_status);
-	ASSIGN(cfs, uhfs, open);
-	ASSIGN(cfs, uhfs, close);
-	ASSIGN(cfs, uhfs, read);
-	ASSIGN(cfs, uhfs, write);
-	ASSIGN(cfs, uhfs, getdirentries);
-	ASSIGN(cfs, uhfs, truncate);
-	ASSIGN(cfs, uhfs, unlink);
-	ASSIGN(cfs, uhfs, link);
-	ASSIGN(cfs, uhfs, rename);
-	ASSIGN(cfs, uhfs, mkdir);
-	ASSIGN(cfs, uhfs, rmdir);
-	ASSIGN(cfs, uhfs, get_num_features);
-	ASSIGN(cfs, uhfs, get_feature);
-	ASSIGN(cfs, uhfs, get_metadata);
-	ASSIGN(cfs, uhfs, set_metadata);
-	ASSIGN(cfs, uhfs, sync);
-	DESTRUCTOR(cfs, uhfs, destroy);
 
 	state->lfs = lfs;
 

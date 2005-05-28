@@ -387,33 +387,13 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 	if (!cfs)
 		return NULL;
 
-	OBJFLAGS(cfs) = 0;
-	OBJMAGIC(cfs) = FIDCLOSER_MAGIC;
-	OBJASSIGN(cfs, fidcloser, get_config);
-	OBJASSIGN(cfs, fidcloser, get_status);
-	ASSIGN(cfs, fidcloser, open);
-	ASSIGN(cfs, fidcloser, close);
-	ASSIGN(cfs, fidcloser, read);
-	ASSIGN(cfs, fidcloser, write);
-	ASSIGN(cfs, fidcloser, getdirentries);
-	ASSIGN(cfs, fidcloser, truncate);
-	ASSIGN(cfs, fidcloser, unlink);
-	ASSIGN(cfs, fidcloser, link);
-	ASSIGN(cfs, fidcloser, rename);
-	ASSIGN(cfs, fidcloser, mkdir);
-	ASSIGN(cfs, fidcloser, rmdir);
-	ASSIGN(cfs, fidcloser, get_num_features);
-	ASSIGN(cfs, fidcloser, get_feature);
-	ASSIGN(cfs, fidcloser, get_metadata);
-	ASSIGN(cfs, fidcloser, set_metadata);
-	ASSIGN(cfs, fidcloser, sync);
-	DESTRUCTOR(cfs, fidcloser, destroy);
-
-
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_cfs;
-	OBJLOCAL(cfs) = state;
+
+	CFS_INIT(cfs, fidcloser, state);
+	OBJMAGIC(cfs) = FIDCLOSER_MAGIC;
+
 	state->frontend_cfs = frontend_cfs;
 	state->open_files = hash_map_create();
 	if (!state->open_files)

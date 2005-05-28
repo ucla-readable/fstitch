@@ -13,7 +13,6 @@ struct CFS {
 	OBJECT(CFS_t);
 	DECLARE(CFS_t, int, open, const char * name, int mode);
 	DECLARE(CFS_t, int, close, int fid);
-	DECLARE(CFS_t, void, closed, int fid); // fid was passively closed
 	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, getdirentries, int fid, char * buf, int nbytes, uint32_t * basep);
@@ -29,5 +28,25 @@ struct CFS {
 	DECLARE(CFS_t, int, set_metadata, const char * name, uint32_t id, size_t size, const void * data);
 	DECLARE(CFS_t, int, sync, const char * name);
 };
+
+#define CFS_INIT(cfs, module, info) { \
+	OBJ_INIT(cfs, module, info); \
+	ASSIGN(cfs, module, open); \
+	ASSIGN(cfs, module, close); \
+	ASSIGN(cfs, module, read); \
+	ASSIGN(cfs, module, write); \
+	ASSIGN(cfs, module, getdirentries); \
+	ASSIGN(cfs, module, truncate); \
+	ASSIGN(cfs, module, unlink); \
+	ASSIGN(cfs, module, link); \
+	ASSIGN(cfs, module, rename); \
+	ASSIGN(cfs, module, mkdir); \
+	ASSIGN(cfs, module, rmdir); \
+	ASSIGN(cfs, module, get_num_features); \
+	ASSIGN(cfs, module, get_feature); \
+	ASSIGN(cfs, module, get_metadata); \
+	ASSIGN(cfs, module, set_metadata); \
+	ASSIGN(cfs, module, sync); \
+}
 
 #endif /* __KUDOS_KFS_CFS_H */
