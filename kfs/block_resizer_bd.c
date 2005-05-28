@@ -6,6 +6,8 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
+#include <kfs/barrier.h>
+#include <kfs/blockman.h>
 #include <kfs/block_resizer_bd.h>
 
 /* This simple size converter can only convert up in size (i.e. aggregate blocks
@@ -19,6 +21,10 @@ struct resize_info {
 	uint16_t merge_count;
 	uint16_t atomic_size;
 	uint32_t block_count;
+	/* preallocate this array... */
+	partial_forward_t * forward_buffer;
+	blockman_t * blockman;
+	uint16_t level;
 };
 
 static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
@@ -68,6 +74,10 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
 	bdesc_t * bdesc;
 	uint32_t i;
 	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+		return bdesc;
+	
 	/* make sure it's a valid block */
 	if(number >= info->block_count)
 		return NULL;
@@ -86,7 +96,49 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number)
 		memcpy(&bdesc->ddesc->data[i * info->original_size], sub->ddesc->data, info->original_size);
 	}
 	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
+		return NULL;
+	
 	return bdesc;
+}
+
+/* note that because we are combining multiple results, we can't
+ * easily just pass multiple synthetic reads down below... */
+static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		*synthetic = 0;
+		return bdesc;
+	}
+	
+	/* make sure it's a valid block */
+	if(number >= info->block_count)
+		return NULL;
+	
+	bdesc = bdesc_alloc(number, info->converted_size);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
+		return NULL;
+	
+	*synthetic = 1;
+	
+	return bdesc;
+}
+
+static int block_resizer_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	/* we never pass synthetic reads down, so this is a no-op */
+	return 0;
 }
 
 static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
@@ -105,19 +157,13 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	number = block->number * info->merge_count;
 	for(i = 0; i != info->merge_count; i++)
 	{
-		/* synthesize a new bdesc to avoid having to read it */
-		bdesc_t * sub = bdesc_alloc(number + i, info->original_size);
-		/* maybe we ran out of memory? */
-		if(!sub)
-			return -E_NO_MEM;
-		bdesc_autorelease(sub);
-		memcpy(sub->ddesc->data, &block->ddesc->data[i * info->original_size], info->original_size);
-		/* explicitly forward change descriptors */
-		depman_translate_chdesc(block, sub, i * info->original_size, info->original_size);
-		CALL(info->bd, write_block, sub);
+		info->forward_buffer[i].target = info->bd;
+		info->forward_buffer[i].number = number + i;
+		info->forward_buffer[i].offset = i * info->original_size;
+		info->forward_buffer[i].size = info->original_size;
 	}
 	
-	return 0;
+	return barrier_partial_forward(info->forward_buffer, info->merge_count, object, block);
 }
 
 static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
@@ -140,6 +186,7 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 	for(i = 0; i != info->merge_count; i++)
 	{
 		/* synthesize a new bdesc to avoid having to read it */
+		/* FIXME: this is super-cheezy */
 		bdesc_t * sub = bdesc_alloc(number + i, info->original_size);
 		/* maybe we ran out of memory? */
 		if(!sub)
@@ -152,14 +199,21 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
+static uint16_t block_resizer_bd_get_devlevel(BD_t * object)
+{
+	return ((struct resize_info *) OBJLOCAL(object))->level;
+}
+
 static int block_resizer_bd_destroy(BD_t * bd)
 {
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
 	modman_dec_bd(((struct resize_info *) OBJLOCAL(bd))->bd, bd);
 	
-	free(OBJLOCAL(bd));
+	free(info->forward_buffer);
+	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	
@@ -199,6 +253,15 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	info->merge_count = blocksize / original_size;
 	info->atomic_size = CALL(disk, get_atomicsize);
 	info->block_count = CALL(disk, get_numblocks) / info->merge_count;
+	info->level = CALL(disk, get_devlevel);
+	
+	info->forward_buffer = malloc(info->merge_count * sizeof(*info->forward_buffer));
+	if(!info->forward_buffer)
+	{
+		free(info);
+		free(bd);
+		return NULL;
+	}
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
