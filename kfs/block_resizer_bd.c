@@ -213,6 +213,7 @@ static int block_resizer_bd_destroy(BD_t * bd)
 	modman_dec_bd(((struct resize_info *) OBJLOCAL(bd))->bd, bd);
 	
 	free(info->forward_buffer);
+	blockman_destroy(&info->blockman);
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -258,6 +259,15 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	info->forward_buffer = malloc(info->merge_count * sizeof(*info->forward_buffer));
 	if(!info->forward_buffer)
 	{
+		free(info);
+		free(bd);
+		return NULL;
+	}
+
+	info->blockman = blockman_create();
+	if(!info->blockman)
+	{
+		free(info->forward_buffer);
 		free(info);
 		free(bd);
 		return NULL;
