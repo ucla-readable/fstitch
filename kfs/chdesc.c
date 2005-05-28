@@ -15,19 +15,18 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 /* add a dependency to a change descriptor without checking for cycles */
 static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 
-
 static int ensure_bdesc_changes(bdesc_t * block)
 {
-	if (block->ddesc->changes)
+	if(block->ddesc->changes)
 	{
 		assert(block->ddesc->changes->type == NOOP);
 		return 0;
 	}
-
+	
 	block->ddesc->changes = malloc(sizeof(*block->ddesc->changes));
-	if (!block->ddesc->changes)
+	if(!block->ddesc->changes)
 		return -E_NO_MEM;
-
+	
 	block->ddesc->changes->owner = NULL;
 	block->ddesc->changes->block = NULL;
 	block->ddesc->changes->type = NOOP;
@@ -36,18 +35,18 @@ static int ensure_bdesc_changes(bdesc_t * block)
 	block->ddesc->changes->weak_refs = NULL;
 	/* NOOP chdescs start applied */
 	block->ddesc->changes->flags = 0;
-
+	
 	return 0;
 }
 
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
 	chdesc_t * chdesc;
-
+	
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
-
+	
 	chdesc->owner = owner;
 	chdesc->block = block;
 	chdesc->type = NOOP;
@@ -56,21 +55,25 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->weak_refs = NULL;
 	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
-
+	
 	/* add chdesc to block's dependencies */
-	if (ensure_bdesc_changes(block) < 0)
+	if(ensure_bdesc_changes(block) < 0)
 	{
 		free(chdesc);
 		return NULL;
 	}
-	if (chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
+	if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
 	{
 		const int r = chdesc_destroy(&block->ddesc->changes);
 		assert(r >= 0);
 		free(chdesc);
 		return NULL;
 	}
-
+	
+	/* make sure our block sticks around */
+	if(block)
+		bdesc_retain(block);
+	
 	return chdesc;
 }
 
@@ -78,11 +81,11 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 {
 	chdesc_t * chdesc;
 	int r;
-
+	
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
-
+	
 	chdesc->owner = owner;
 	chdesc->block = block;
 	chdesc->type = BIT;
@@ -94,7 +97,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
-
+	
 	/* make sure it is dependent upon any pre-existing chdescs */
 	if(chdesc_overlap_multiattach(chdesc, block))
 		goto error;
@@ -102,15 +105,18 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	/* make sure it applies cleanly */
 	if(chdesc_apply(chdesc))
 		goto error;
-
+	
 	/* add chdesc to block's dependencies */
-	if ((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_changes(block)) < 0)
 		goto error;
-	if ((r = chdesc_add_depend_fast(block->ddesc->changes, chdesc)) < 0)
+	if((r = chdesc_add_depend_fast(block->ddesc->changes, chdesc)) < 0)
 		goto error_ensure;
 	
+	/* make sure our block sticks around */
+	bdesc_retain(block);
+	
 	return chdesc;
-
+	
   error_ensure:
 	r = chdesc_destroy(&(block->ddesc->changes));
 	assert(r >= 0);
@@ -131,8 +137,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	
 	if(!chdescs)
 		return -E_NO_MEM;
-
-	if ((r = ensure_bdesc_changes(block)) < 0)
+	
+	if((r = ensure_bdesc_changes(block)) < 0)
 	{
 		free(chdescs);
 		return r;
@@ -143,7 +149,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
 		if(!chdescs[i])
 			break;
-
+		
 		chdescs[i]->owner = owner;		
 		chdescs[i]->block = block;
 		chdescs[i]->type = BYTE;
@@ -180,10 +186,11 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
 			goto destroy;
-
-		if ((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
+		
+		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-		 	destroy: chdesc_destroy(&chdescs[i]);
+		    destroy:
+			chdesc_destroy(&chdescs[i]);
 			break;
 		}
 	}
@@ -198,34 +205,43 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-
+		
 		r = chdesc_destroy(&(block->ddesc->changes));
 		assert(r >= 0);
-
+		
 		return -E_NO_MEM;
 	}
 	
 	assert(copied == length);
 	
 	for(i = 0; i != count; i++)
+	{
 		if(chdesc_apply(chdescs[i]))
 			break;
+		/* make sure our block sticks around */
+		bdesc_retain(block);
+	}
 	
 	/* failed to apply the chdescs */
 	if(i != count)
 	{
 		while(i--)
+		{
+			/* we don't need the block after all... */
+			bdesc_t * temp = block;
+			bdesc_release(&temp);
 			chdesc_rollback(chdescs[i]);
+		}
 		for(i = 0; i != count; i++)
 		{
 			chdesc_satisfy(chdescs[i]);
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-
+		
 		r = chdesc_destroy(&(block->ddesc->changes));
 		assert(r >= 0);
-
+		
 		return -E_INVAL;
 	}
 	
@@ -247,18 +263,18 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if ((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_changes(block)) < 0)
 	{
 		free(chdescs);
 		return r;
 	}
-
+	
 	for(i = 0; i != count; i++)
 	{
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
 		if(!chdescs[i])
 			break;
-
+		
 		chdescs[i]->owner = owner;		
 		chdescs[i]->block = block;
 		chdescs[i]->type = BYTE;
@@ -284,12 +300,13 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
 			goto destroy;
-
-		if ((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
+		
+		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
 			r = chdesc_destroy(&(block->ddesc->changes));
 			assert(r >= 0);
-		 	destroy: chdesc_destroy(&chdescs[i]);
+		    destroy:
+			chdesc_destroy(&chdescs[i]);
 			break;
 		}
 	}
@@ -304,32 +321,41 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-
+		
 		r = chdesc_destroy(&(block->ddesc->changes));
 		assert(r >= 0);
-
+		
 		return -E_NO_MEM;
 	}
 	
 	for(i = 0; i != count; i++)
+	{
 		if(chdesc_apply(chdescs[i]))
 			break;
+		/* make sure our block sticks around */
+		bdesc_retain(block);
+	}
 	
 	/* failed to apply the chdescs */
 	if(i != count)
 	{
 		while(i--)
+		{
+			/* we don't need the block after all... */
+			bdesc_t * temp = block;
+			bdesc_release(&temp);
 			chdesc_rollback(chdescs[i]);
+		}
 		for(i = 0; i != count; i++)
 		{
 			chdesc_satisfy(chdescs[i]);
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-
+		
 		r = chdesc_destroy(&(block->ddesc->changes));
 		assert(r >= 0);
-
+		
 		return -E_INVAL;
 	}
 	
@@ -351,12 +377,12 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if ((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_changes(block)) < 0)
 	{
 		free(chdescs);
 		return r;
 	}
-
+	
 	for(i = 0; i != count; i++)
 	{
 		chdescs[i] = malloc(sizeof(*chdescs[i]));
@@ -388,13 +414,14 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
 			goto destroy;
-
-		if ((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
+		
+		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
 			r = chdesc_destroy(&(block->ddesc->changes));
 			assert(r >= 0);
-
-		 	destroy: chdesc_destroy(&chdescs[i]);
+			
+		    destroy:
+			chdesc_destroy(&chdescs[i]);
 			break;
 		}
 	}
@@ -409,32 +436,41 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-
+		
 		r = chdesc_destroy(&(block->ddesc->changes));
 		assert(r >= 0);
-
+		
 		return -E_NO_MEM;
 	}
 	
 	for(i = 0; i != count; i++)
+	{
 		if(chdesc_apply(chdescs[i]))
 			break;
+		/* make sure our block sticks around */
+		bdesc_retain(block);
+	}
 	
 	/* failed to apply the chdescs */
 	if(i != count)
 	{
 		while(i--)
+		{
+			/* we don't need the block after all... */
+			bdesc_t * temp = block;
+			bdesc_release(&temp);
 			chdesc_rollback(chdescs[i]);
+		}
 		for(i = 0; i != count; i++)
 		{
 			chdesc_satisfy(chdescs[i]);
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-
+		
 		r = chdesc_destroy(&(block->ddesc->changes));
 		assert(r >= 0);
-
+		
 		return -E_INVAL;
 	}
 	
@@ -505,14 +541,11 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	for(scan = deps->dependencies; scan; scan = scan->next)
 	{
 		int r;
-		/* skip marked chdescs - they have just been added to this block during a
-		 * depman_translate_chdesc() and already have proper overlap dependency
+		/* skip moved chdescs - they have just been added to this block
+		 * by chdesc_move() and already have proper overlap dependency
 		 * information with respect to the chdesc now arriving */
-		/*
-		 * TODO: something like this will need to be done inbetween each barrier.
-		if(!(scan->desc->flags & CHDESC_MARKED))
+		if(!(scan->desc->flags & CHDESC_MOVED))
 			continue;
-		*/
 		r = chdesc_overlap_attach(chdesc, scan->desc);
 		if(r < 0)
 			return r;
@@ -544,6 +577,60 @@ void chdesc_unmark_graph(chdesc_t * root)
 	for(meta = root->dependencies; meta; meta = meta->next)
 		if(meta->desc->flags & CHDESC_MARKED)
 			chdesc_unmark_graph(meta->desc);
+}
+
+int chdesc_move(chdesc_t * chdesc, bdesc_t * destination)
+{
+	int r = ensure_bdesc_changes(destination);
+	if(r < 0)
+		return r;
+	
+	r = chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
+	if(r < 0)
+	{
+	    kill_stub:
+		if(!destination->ddesc->changes->dependencies)
+		{
+			/* can't fail */
+			const int s = chdesc_destroy(&(destination->ddesc->changes));
+			assert(s >= 0);
+		}
+		return r;
+	}
+	
+	r = chdesc_overlap_multiattach(chdesc, destination);
+	if(r < 0)
+	{
+		chdesc_remove_depend(destination->ddesc->changes, chdesc);
+		goto kill_stub;
+	}
+	
+	/* at this point we have succeeded in moving the chdesc */
+	
+	chdesc->flags |= CHDESC_MOVED;
+	if(chdesc->block)
+	{
+		/* shouldn't fail... */
+		r = chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
+		assert(r >= 0);
+		bdesc_release(&chdesc->block);
+	}
+	chdesc->block = destination;
+	
+	return 0;
+}
+
+void chdesc_finish_move(bdesc_t * destination)
+{
+	if(destination->ddesc->changes)
+	{
+		chmetadesc_t * scan = destination->ddesc->changes->dependencies;
+		while(scan)
+		{
+			scan->desc->flags &= ~CHDESC_MOVED;
+			scan = scan->next;
+		}
+	}
 }
 
 /* add a dependency to a change descriptor without checking for cycles */
@@ -642,6 +729,8 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 			if(chdesc->owner == current_bd)
 			{
 				chdesc->owner = target_bd;
+				assert(chdesc->block);
+				bdesc_release(&chdesc->block);
 				chdesc->block = target_block;
 			}
 			scan = scan->next;

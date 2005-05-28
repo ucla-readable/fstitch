@@ -16,8 +16,9 @@ typedef struct chrefdesc chrefdesc_t;
 #include <kfs/bdesc.h>
 
 #define CHDESC_MARKED    0x01 /* marker for graph traversal */
-#define CHDESC_ROLLBACK  0x02 /* chdesc is rolled back */
-#define CHDESC_PRMARKED  0x04 /* used for debugging */
+#define CHDESC_MOVED     0x02 /* indicator for moving chdescs */
+#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
+#define CHDESC_PRMARKED  0x08 /* used for debugging */
 
 struct chdesc {
 	BD_t * owner;
@@ -62,6 +63,10 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 
 /* unmark a chdesc graph (i.e. clear CHDESC_MARKED) */
 void chdesc_unmark_graph(chdesc_t * root);
+
+/* move a chdesc to a new bdesc (at a barrier) */
+int chdesc_move(chdesc_t * chdesc, bdesc_t * destination);
+void chdesc_finish_move(bdesc_t * destination);
 
 /* add a dependency to a change descriptor */
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
