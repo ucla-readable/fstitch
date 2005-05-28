@@ -18,6 +18,15 @@
 #define OBJMAGIC(object) (object)->uniform.magic
 #define OBJLOCAL(object) (object)->uniform.local
 
+#define OBJ_INIT(object, module, info) { \
+	OBJLOCAL(object) = info; \
+	OBJFLAGS(object) = 0; \
+	OBJMAGIC(object) = 0; \
+	OBJASSIGN(object, module, get_config); \
+	OBJASSIGN(object, module, get_status); \
+	DESTRUCTOR(object, module, destroy); \
+}
+
 /* values for OBJFLAGS */
 #define OBJ_PERSISTENT 0x01
 

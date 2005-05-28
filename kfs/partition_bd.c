@@ -165,20 +165,8 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, partition_bd, get_config);
-	OBJASSIGN(bd, partition_bd, get_status);
-	ASSIGN(bd, partition_bd, get_numblocks);
-	ASSIGN(bd, partition_bd, get_devlevel);
-	ASSIGN(bd, partition_bd, get_blocksize);
-	ASSIGN(bd, partition_bd, get_atomicsize);
-	ASSIGN(bd, partition_bd, read_block);
-	ASSIGN(bd, partition_bd, write_block);
-	ASSIGN(bd, partition_bd, sync);
-	DESTRUCTOR(bd, partition_bd, destroy);
+	BD_INIT(bd, partition_bd, info);
 	
 	info->bd = disk;
 	info->start = start;

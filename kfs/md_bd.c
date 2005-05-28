@@ -186,20 +186,8 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, md_bd, get_config);
-	OBJASSIGN(bd, md_bd, get_status);
-	ASSIGN(bd, md_bd, get_numblocks);
-	ASSIGN(bd, md_bd, get_devlevel);
-	ASSIGN(bd, md_bd, get_blocksize);
-	ASSIGN(bd, md_bd, get_atomicsize);
-	ASSIGN(bd, md_bd, read_block);
-	ASSIGN(bd, md_bd, write_block);
-	ASSIGN(bd, md_bd, sync);
-	DESTRUCTOR(bd, md_bd, destroy);
+	BD_INIT(bd, md_bd, info);
 	
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;

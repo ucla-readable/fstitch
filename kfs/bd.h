@@ -21,4 +21,15 @@ struct BD {
 	DECLARE(BD_t, int, sync, bdesc_t * block);
 };
 
+#define BD_INIT(bd, module, info) { \
+	OBJ_INIT(bd, module, info); \
+	ASSIGN(bd, module, get_numblocks); \
+	ASSIGN(bd, module, get_devlevel); \
+	ASSIGN(bd, module, get_blocksize); \
+	ASSIGN(bd, module, get_atomicsize); \
+	ASSIGN(bd, module, read_block); \
+	ASSIGN(bd, module, write_block); \
+	ASSIGN(bd, module, sync); \
+}
+
 #endif /* __KUDOS_KFS_BD_H */

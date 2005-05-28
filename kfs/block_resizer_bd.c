@@ -190,19 +190,8 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, block_resizer_bd, get_config);
-	OBJASSIGN(bd, block_resizer_bd, get_status);
-	ASSIGN(bd, block_resizer_bd, get_numblocks);
-	ASSIGN(bd, block_resizer_bd, get_blocksize);
-	ASSIGN(bd, block_resizer_bd, get_atomicsize);
-	ASSIGN(bd, block_resizer_bd, read_block);
-	ASSIGN(bd, block_resizer_bd, write_block);
-	ASSIGN(bd, block_resizer_bd, sync);
-	DESTRUCTOR(bd, block_resizer_bd, destroy);
+	BD_INIT(bd, block_resizer_bd, info);
 	
 	info->bd = disk;
 	info->original_size = original_size;

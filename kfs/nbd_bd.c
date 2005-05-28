@@ -269,20 +269,8 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	info = malloc(sizeof(struct nbd_info));
 	if(!info)
 		goto error_bd;
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, nbd_bd, get_config);
-	OBJASSIGN(bd, nbd_bd, get_status);
-	ASSIGN(bd, nbd_bd, get_numblocks);
-	ASSIGN(bd, nbd_bd, get_blocksize);
-	ASSIGN(bd, nbd_bd, get_atomicsize);
-	ASSIGN(bd, nbd_bd, get_devlevel);
-	ASSIGN(bd, nbd_bd, read_block);
-	ASSIGN(bd, nbd_bd, write_block);
-	ASSIGN(bd, nbd_bd, sync);
-	DESTRUCTOR(bd, nbd_bd, destroy);
+	BD_INIT(bd, nbd_bd, info);
 	
 	info->blockman = blockman_create();
 	if(!info->blockman)

@@ -172,7 +172,6 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
 	info->blocks = malloc(blocks * sizeof(*info->blocks));
 	if(!info->blocks)
@@ -183,18 +182,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	}
 	memset(info->blocks, 0, blocks * sizeof(*info->blocks));
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, wt_cache_bd, get_config);
-	OBJASSIGN(bd, wt_cache_bd, get_status);
-	ASSIGN(bd, wt_cache_bd, get_numblocks);
-	ASSIGN(bd, wt_cache_bd, get_blocksize);
-	ASSIGN(bd, wt_cache_bd, get_atomicsize);
-	ASSIGN(bd, wt_cache_bd, get_devlevel);
-	ASSIGN(bd, wt_cache_bd, read_block);
-	ASSIGN(bd, wt_cache_bd, write_block);
-	ASSIGN(bd, wt_cache_bd, sync);
-	DESTRUCTOR(bd, wt_cache_bd, destroy);
+	BD_INIT(bd, wt_cache_bd, info);
 	
 	info->bd = disk;
 	info->size = blocks;

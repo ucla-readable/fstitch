@@ -219,19 +219,8 @@ BD_t * order_preserver_bd(BD_t * disk)
 	info = malloc(sizeof(*info));
 	if (!info)
 		goto error_bd;
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, order_preserver, get_config);
-	OBJASSIGN(bd, order_preserver, get_status);
-	ASSIGN(bd, order_preserver, get_numblocks);
-	ASSIGN(bd, order_preserver, get_blocksize);
-	ASSIGN(bd, order_preserver, get_atomicsize);
-	ASSIGN(bd, order_preserver, read_block);
-	ASSIGN(bd, order_preserver, write_block);
-	ASSIGN(bd, order_preserver, sync);
-	DESTRUCTOR(bd, order_preserver, destroy);
+	BD_INIT(bd, order_preserver, info);
 	
 	info->bd = disk;
 	info->prev_head = NULL;

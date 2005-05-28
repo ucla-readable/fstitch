@@ -48,12 +48,12 @@ static int mem_bd_get_status(void * object, int level, char * string, size_t len
 
 static uint32_t mem_bd_get_numblocks(BD_t * object)
 {
-	return ((struct mem_info*)OBJLOCAL(object))->blockcount;
+	return ((struct mem_info*) OBJLOCAL(object))->blockcount;
 }
 
 static uint16_t mem_bd_get_blocksize(BD_t * object)
 {
-	return ((struct mem_info*)OBJLOCAL(object))->blocksize;
+	return ((struct mem_info*) OBJLOCAL(object))->blocksize;
 }
 
 static uint16_t mem_bd_get_atomicsize(BD_t * object)
@@ -183,7 +183,6 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
 	info->blockcount = blocks;
 	info->blocksize = blocksize;
@@ -206,7 +205,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 
 	// Set up JOS fs on the mem device. in an ideal world this would
 	// be done w/ mkjosfs
-	s = (struct Super *)&info->blocks[blocksize];
+	s = (struct Super *) &info->blocks[blocksize];
 	s->s_magic = FS_MAGIC;
 	s->s_nblocks = blocks;
 
@@ -230,19 +229,8 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	// done setting up JOS fs
 
 	info->level = 0;
-
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, mem_bd, get_config);
-	OBJASSIGN(bd, mem_bd, get_status);
-	ASSIGN(bd, mem_bd, get_numblocks);
-	ASSIGN(bd, mem_bd, get_blocksize);
-	ASSIGN(bd, mem_bd, get_atomicsize);
-	ASSIGN(bd, mem_bd, get_devlevel);
-	ASSIGN(bd, mem_bd, read_block);
-	ASSIGN(bd, mem_bd, write_block);
-	ASSIGN(bd, mem_bd, sync);
-	DESTRUCTOR(bd, mem_bd, destroy);
+	
+	BD_INIT(bd, mem_bd, info);
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

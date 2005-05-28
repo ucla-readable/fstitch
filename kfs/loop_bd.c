@@ -195,20 +195,8 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	info = malloc(sizeof(*info));
 	if(!info)
 		goto error_bd;
-
-	OBJLOCAL(bd) = info;
-
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, loop, get_config);
-	OBJASSIGN(bd, loop, get_status);
-	ASSIGN(bd, loop, get_numblocks);
-	ASSIGN(bd, loop, get_blocksize);
-	ASSIGN(bd, loop, get_atomicsize);
-	ASSIGN(bd, loop, read_block);
-	ASSIGN(bd, loop, write_block);
-	ASSIGN(bd, loop, sync);
-	DESTRUCTOR(bd, loop, destroy);
+	
+	BD_INIT(bd, loop, info);
 
 	info->lfs = lfs;
 

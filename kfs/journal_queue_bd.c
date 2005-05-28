@@ -250,7 +250,6 @@ BD_t * journal_queue_bd(BD_t * disk)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
 	info->bdesc_hash = hash_map_create();
 	if(!info->bdesc_hash)
@@ -260,18 +259,9 @@ BD_t * journal_queue_bd(BD_t * disk)
 		return NULL;
 	}
 	
-	OBJFLAGS(bd) = 0;
+	BD_INIT(bd, journal_queue_bd, info);
 	OBJMAGIC(bd) = JOURNAL_QUEUE_MAGIC;
-	OBJASSIGN(bd, journal_queue_bd, get_config);
-	OBJASSIGN(bd, journal_queue_bd, get_status);
-	ASSIGN(bd, journal_queue_bd, get_numblocks);
-	ASSIGN(bd, journal_queue_bd, get_blocksize);
-	ASSIGN(bd, journal_queue_bd, get_atomicsize);
-	ASSIGN(bd, journal_queue_bd, read_block);
-	ASSIGN(bd, journal_queue_bd, write_block);
-	ASSIGN(bd, journal_queue_bd, sync);
-	DESTRUCTOR(bd, journal_queue_bd, destroy);
-
+	
 	info->bd = disk;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->state = RELEASE;

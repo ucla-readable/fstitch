@@ -275,20 +275,8 @@ BD_t * ide4k_pio_bd(uint8_t controller, uint8_t disk)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, ide4k_pio_bd, get_config);
-	OBJASSIGN(bd, ide4k_pio_bd, get_status);
-	ASSIGN(bd, ide4k_pio_bd, get_numblocks);
-	ASSIGN(bd, ide4k_pio_bd, get_devlevel);
-	ASSIGN(bd, ide4k_pio_bd, get_blocksize);
-	ASSIGN(bd, ide4k_pio_bd, get_atomicsize);
-	ASSIGN(bd, ide4k_pio_bd, read_block);
-	ASSIGN(bd, ide4k_pio_bd, write_block);
-	ASSIGN(bd, ide4k_pio_bd, sync);
-	DESTRUCTOR(bd, ide4k_pio_bd, destroy);
+	BD_INIT(bd, ide4k_pio_bd, info);
 	
 	info->blockman = blockman_create();
 	if(!info->blockman) {

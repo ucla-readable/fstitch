@@ -254,19 +254,8 @@ BD_t * chdesc_stripper_bd(BD_t * disk)
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_bd;
-	OBJLOCAL(bd) = state;
 	
-	OBJFLAGS(bd) = 0;
-	OBJMAGIC(bd) = 0;
-	OBJASSIGN(bd, chdesc_stripper, get_config);
-	OBJASSIGN(bd, chdesc_stripper, get_status);
-	ASSIGN(bd, chdesc_stripper, get_numblocks);
-	ASSIGN(bd, chdesc_stripper, get_blocksize);
-	ASSIGN(bd, chdesc_stripper, get_atomicsize);
-	ASSIGN(bd, chdesc_stripper, read_block);
-	ASSIGN(bd, chdesc_stripper, write_block);
-	ASSIGN(bd, chdesc_stripper, sync);
-	DESTRUCTOR(bd, chdesc_stripper, destroy);
+	BD_INIT(bd, chdesc_stripper, state);
 
 	state->bd = disk;
 	

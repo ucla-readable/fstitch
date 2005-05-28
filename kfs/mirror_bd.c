@@ -394,19 +394,9 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 		free(bd);
 		return NULL;
 	}
-	OBJLOCAL(bd) = info;
 	
-	OBJFLAGS(bd) = 0;
+	BD_INIT(bd, mirror_bd, info);
 	OBJMAGIC(bd) = MIRROR_BD_MAGIC;
-	OBJASSIGN(bd, mirror_bd, get_config);
-	OBJASSIGN(bd, mirror_bd, get_status);
-	ASSIGN(bd, mirror_bd, get_numblocks);
-	ASSIGN(bd, mirror_bd, get_blocksize);
-	ASSIGN(bd, mirror_bd, get_atomicsize);
-	ASSIGN(bd, mirror_bd, read_block);
-	ASSIGN(bd, mirror_bd, write_block);
-	ASSIGN(bd, mirror_bd, sync);
-	DESTRUCTOR(bd, mirror_bd, destroy);
 	
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;
