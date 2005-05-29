@@ -935,6 +935,12 @@ sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon)
 	return 0xFF & mc146818_read(NULL, 9);
 }
 
+static int
+sys_print_backtrace()
+{
+	return print_backtrace(NULL, NULL, NULL);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 register_t
 syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a4, register_t a5)
@@ -1008,6 +1014,8 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_grant_io(a1);
 		case SYS_get_hw_time:
 			return sys_get_hw_time((int*)a1, (int*)a2, (int*)a3, (int*)a4, (int*)a5);
+		case SYS_print_backtrace:
+			return sys_print_backtrace();
 		default:
 			return -E_INVAL;
 	}

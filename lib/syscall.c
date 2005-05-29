@@ -247,3 +247,9 @@ sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon)
 {
         return syscall(SYS_get_hw_time, (int)sec, (int)min, (int)hour, (int)day, (int)mon);
 }
+
+int
+sys_print_backtrace()
+{
+	return syscall(SYS_print_backtrace, 0, 0, 0, 0, 0);
+}

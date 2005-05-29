@@ -45,6 +45,8 @@ enum
 
 	SYS_get_hw_time,
 
+	SYS_print_backtrace,
+
 	NSYSCALLS
 };
 

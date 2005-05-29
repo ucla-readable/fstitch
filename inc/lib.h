@@ -67,6 +67,7 @@ int	sys_reg_serial(int port, void *buffer_pg);
 int	sys_unreg_serial(int port);
 int	sys_grant_io(envid_t envid);
 int	sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon);
+int sys_print_backtrace();
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t sys_exofork(void) __attribute__((always_inline));
