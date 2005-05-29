@@ -102,7 +102,7 @@ detect_serial(void)
 	/* can't use KADDR yet */
 	ptraddr= (uint16_t*)(KERNBASE + 0x00000400);
 	
-	printf("COM port discovery:");
+	printf("Serial port discovery:");
 	for (a = 0; a <  4; a++)
 	{
 		address = *ptraddr;
