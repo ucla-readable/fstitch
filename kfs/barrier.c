@@ -48,14 +48,17 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	}
 
 	/* transfer the barrier's bottom chdescs on block to target_block */
-	for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
+	if (block->ddesc->changes)
 	{
-		chdesc_t * chdesc = chmetadesc->desc;
-		if (chdesc->owner == barrier)
+		for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
 		{
-			r = chdesc_move(chdesc, target_block, 0);
-			if (r < 0)
-				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			chdesc_t * chdesc = chmetadesc->desc;
+			if (chdesc->owner == barrier)
+			{
+				r = chdesc_move(chdesc, target_block, 0);
+				if (r < 0)
+					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			}
 		}
 	}
 	chdesc_finish_move(target_block);
@@ -144,14 +147,17 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 		}
 
 		/* transfer the barrier's bottom chdescs on block to target_block */
-		for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
+		if (block->ddesc->changes)
 		{
-			chdesc_t * chdesc = chmetadesc->desc;
-			if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
+			for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
 			{
-				r = chdesc_move(chdesc, target_block, forward->offset);
-				if (r < 0)
-					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+				chdesc_t * chdesc = chmetadesc->desc;
+				if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
+				{
+					r = chdesc_move(chdesc, target_block, forward->offset);
+					if (r < 0)
+						panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+				}
 			}
 		}
 		chdesc_finish_move(target_block);
