@@ -25,13 +25,23 @@
 int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block)
 {
 	bool synthetic;
+	bool chdescs_moved = 0;
 	bdesc_t * target_block;
 	chmetadesc_t * chmetadesc;
 	int r;
 
+	if (!block->ddesc->changes)
+		return 0;
+
 	target_block = CALL(target, synthetic_read_block, number, &synthetic);
 	if (!target_block)
 		return -E_UNSPECIFIED;
+
+	if (block == target_block)
+	{
+		Dprintf("%s(): block == target_block (0x%08x)\n", __FUNCTION__, block);
+		return 0;
+	}
 
 	/* prepare the block for chdesc forwarding */
 	/* TODO: revision_* can be avoided if !synthetic */
@@ -39,34 +49,39 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	if (r < 0)
 		return r;
 
-	if (synthetic)
-	{
-		/* initialize synthetic target_block with what [we believe] is on
-		 * the disk */
-		assert(target_block->ddesc->length == block->ddesc->length);
-		memcpy(target_block->ddesc->data, block->ddesc->data, block->ddesc->length);
-	}
-
 	/* transfer the barrier's bottom chdescs on block to target_block */
-	if (block->ddesc->changes)
+	for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
 	{
-		for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
+		chdesc_t * chdesc = chmetadesc->desc;
+		if (chdesc->owner == barrier)
 		{
-			chdesc_t * chdesc = chmetadesc->desc;
-			if (chdesc->owner == barrier)
-			{
-				r = chdesc_move(chdesc, target_block, 0);
-				if (r < 0)
-					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
-			}
+			chdescs_moved = 1;
+			r = chdesc_move(chdesc, target_block, 0);
+			if (r < 0)
+				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
 	}
-	chdesc_finish_move(target_block);
+	if (chdescs_moved)
+		chdesc_finish_move(target_block);
 
-	/* write the updated target_block */
-	r = CALL(target, write_block, target_block);
-	if (r < 0)
-		panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+	if (!chdescs_moved && synthetic)
+	{
+		/* With no changes for this synthetic target_block, we might as well cancel the block */
+		r = CALL(target, cancel_block, number);
+		if (r < 0)
+			panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+	}
+	else if (chdescs_moved)
+	{
+		/* Bring target_block's data blob up to date with the transferred chdescs */
+		assert(target_block->ddesc->length == block->ddesc->length);
+		memcpy(target_block->ddesc->data, block->ddesc->data, block->ddesc->length);
+
+		/* write the updated target_block */
+		r = CALL(target, write_block, target_block);
+		if (r < 0)
+			panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+	}
 
 	/* put block back into current state */
 	r = revision_tail_revert(block, barrier);
@@ -113,6 +128,9 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 {
 	int i, r;
 
+	if (!block->ddesc->changes)
+		return 0;
+
 	/* prepare the block for chdesc forwarding */
 	/* TODO: revision_* can be avoided if !synthetic */
 	r = revision_tail_prepare(block, barrier);
@@ -122,9 +140,15 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 	for (i=0; i < nforwards; i++)
 	{
 		bool synthetic;
+		bool chdescs_moved = 0;
 		bdesc_t * target_block;
 		chmetadesc_t * chmetadesc;
 		partial_forward_t * forward = &forwards[i];
+
+		/* block->ddesc->changes can become NULL after a chdesc_move(),
+		 * so check NULLness each iteration */
+		if (!block->ddesc->changes)
+			break;
 
 		target_block = CALL(forward->target, synthetic_read_block, forward->number, &synthetic);
 		if (!target_block)
@@ -136,36 +160,43 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			continue;
 		}
 
-		if (synthetic)
+		/* transfer the barrier's bottom chdescs on block to target_block */
+		for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
 		{
-			/* initialize synthetic target_block with what [we believe] is on
-			 * the disk */
+			chdesc_t * chdesc = chmetadesc->desc;
+			if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
+			{
+				chdescs_moved = 1;
+				r = chdesc_move(chdesc, target_block, forward->offset);
+				if (r < 0)
+					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			}
+		}
+		if (chdescs_moved)
+			chdesc_finish_move(target_block);
+
+		if (!chdescs_moved && synthetic)
+		{
+			/* With no changes for this synthetic target_block, we might as well cancel the block */
+			r = CALL(forward->target, cancel_block, forward->number);
+			if (r < 0)
+				panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			continue;
+		}
+
+		if (chdescs_moved)
+		{
+			/* Bring target_block's data blob up to date with the transferred chdescs */
 			assert(target_block->ddesc->length <= block->ddesc->length);
 			assert(forward->offset + forward->size <= block->ddesc->length);
 			assert(forward->size <= target_block->ddesc->length);
 			memcpy(target_block->ddesc->data, block->ddesc->data + forward->offset, forward->size);
-		}
 
-		/* transfer the barrier's bottom chdescs on block to target_block */
-		if (block->ddesc->changes)
-		{
-			for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
-			{
-				chdesc_t * chdesc = chmetadesc->desc;
-				if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
-				{
-					r = chdesc_move(chdesc, target_block, forward->offset);
-					if (r < 0)
-						panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
-				}
-			}
+			/* write the updated target_block */
+			r = CALL(forward->target, write_block, target_block);
+			if (r < 0)
+				panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
-		chdesc_finish_move(target_block);
-
-		/* write the updated target_block */
-		r = CALL(forward->target, write_block, target_block);
-		if (r < 0)
-			panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 	}
 
 	/* put block back into current state */
