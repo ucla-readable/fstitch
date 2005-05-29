@@ -644,6 +644,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset
 		bdesc_release(&chdesc->block);
 	}
 	chdesc->block = destination;
+	bdesc_retain(destination);
 	
 	return 0;
 }
@@ -760,6 +761,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 				assert(chdesc->block);
 				bdesc_release(&chdesc->block);
 				chdesc->block = target_block;
+				bdesc_retain(target_block);
 			}
 			scan = scan->next;
 		}
