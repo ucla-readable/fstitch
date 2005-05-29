@@ -8,6 +8,14 @@
 #include <kfs/revision.h>
 #include <kfs/barrier.h>
 
+#define BARRIER_DEBUG 0
+
+#if BARRIER_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
 /* barrier_simple_forward() is the single-case version of
  * barrier_partial_forward(). However, barrier_simple_forward() is able
  * to recover on BD::synthetic_read_block() failure and does slightly fewer
@@ -45,7 +53,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 		chdesc_t * chdesc = chmetadesc->desc;
 		if (chdesc->owner == barrier)
 		{
-			r = chdesc_move(chdesc, target_block);
+			r = chdesc_move(chdesc, target_block, 0);
 			if (r < 0)
 				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
@@ -119,12 +127,20 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 		if (!target_block)
 			panic("%s(): forward->target->synthetic_read_block() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 
+		if (block == target_block)
+		{
+			Dprintf("%s(): block == target_block (0x%08x), offset %d, size %d\n", __FUNCTION__, block, forward->offset, forward->size);
+			continue;
+		}
+
 		if (synthetic)
 		{
 			/* initialize synthetic target_block with what [we believe] is on
 			 * the disk */
-			assert(target_block->ddesc->length == block->ddesc->length);
-			memcpy(target_block->ddesc->data, block->ddesc->data, block->ddesc->length);
+			assert(target_block->ddesc->length <= block->ddesc->length);
+			assert(forward->offset + forward->size <= block->ddesc->length);
+			assert(forward->size <= target_block->ddesc->length);
+			memcpy(target_block->ddesc->data, block->ddesc->data + forward->offset, forward->size);
 		}
 
 		/* transfer the barrier's bottom chdescs on block to target_block */
@@ -133,7 +149,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			chdesc_t * chdesc = chmetadesc->desc;
 			if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
 			{
-				r = chdesc_move(chdesc, target_block);
+				r = chdesc_move(chdesc, target_block, forward->offset);
 				if (r < 0)
 					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			}
