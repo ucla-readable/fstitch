@@ -66,14 +66,16 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 
 	if (!chdescs_moved && synthetic)
 	{
-		/* With no changes for this synthetic target_block, we might as well cancel the block */
+		/* With no changes for this synthetic target_block, we might as well
+		 * cancel the block */
 		r = CALL(target, cancel_block, number);
 		if (r < 0)
 			panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 	}
 	else if (chdescs_moved)
 	{
-		/* Bring target_block's data blob up to date with the transferred chdescs */
+		/* Bring target_block's data blob up to date with the transferred
+		 * chdescs */
 		assert(target_block->ddesc->length == block->ddesc->length);
 		memcpy(target_block->ddesc->data, block->ddesc->data, block->ddesc->length);
 
@@ -94,8 +96,9 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 static bool chdesc_in_range(chdesc_t * chdesc, uint32_t offset, uint32_t size)
 {
 	uint32_t chd_offset, chd_end;
-	/* note that we require that change descriptors do not cross the atomic disk unit
-	 * size boundary, so that we will never have to fragment a change descriptor */
+	/* note that we require that change descriptors do not cross the
+	 * atomic disk unit size boundary, so that we will never have to
+	 * fragment a change descriptor */
 	switch(chdesc->type)
 	{
 		case BIT:
@@ -177,7 +180,8 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 		if (!chdescs_moved && synthetic)
 		{
-			/* With no changes for this synthetic target_block, we might as well cancel the block */
+			/* With no changes for this synthetic target_block, we might
+			 * as well cancel the block */
 			r = CALL(forward->target, cancel_block, forward->number);
 			if (r < 0)
 				panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
@@ -186,7 +190,8 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 		if (chdescs_moved)
 		{
-			/* Bring target_block's data blob up to date with the transferred chdescs */
+			/* Bring target_block's data blob up to date with the transferred
+			 * chdescs */
 			assert(target_block->ddesc->length <= block->ddesc->length);
 			assert(forward->offset + forward->size <= block->ddesc->length);
 			assert(forward->size <= target_block->ddesc->length);
