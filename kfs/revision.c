@@ -2,7 +2,6 @@
 #include <inc/malloc.h>
 
 #include <kfs/chdesc.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/revision.h>
 

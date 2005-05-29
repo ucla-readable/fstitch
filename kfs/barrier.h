@@ -12,8 +12,7 @@
 int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block);
 
 /* forward chdescs as above, but only those within the given range and to the
- * relative block offsets in the target block whose number is specified - very
- * much like the old depman_translate_chdesc(), which should be removed */
+ * relative block offsets in the target block whose number is specified */
 typedef struct partial_forward {
 	BD_t *   target;
 	uint32_t number;

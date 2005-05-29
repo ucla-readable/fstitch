@@ -7,7 +7,6 @@ OBJDIRS += kfs
 #			$(OBJDIR)/kfs/loop_bd.o \
 #			$(OBJDIR)/kfs/mirror_bd.o \
 #			$(OBJDIR)/kfs/journal_lfs.o \
-#			$(OBJDIR)/kfs/depman.o \
 
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \

@@ -20,7 +20,6 @@
 #include <kfs/fidprotector_cfs.h>
 #include <kfs/fidcloser_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>

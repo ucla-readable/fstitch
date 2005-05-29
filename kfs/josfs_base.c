@@ -8,7 +8,6 @@
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/josfs_base.h>
 

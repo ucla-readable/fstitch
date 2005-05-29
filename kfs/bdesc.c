@@ -161,55 +161,6 @@ bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original)
 	return bdesc;
 }
 
-/* a function for caches and cache-like modules to use for bdesc overwriting */
-/* this may no longer be needed, but it is left commented just in case */
-#if 0
-int bdesc_overwrite(bdesc_t * cached, bdesc_t * written)
-{
-	const chdesc_t * root;
-	
-	if(cached == written)
-		return 0;
-	
-	root = depman_get_deps(written);
-	
-	if(root)
-	{
-		chmetadesc_t * scan;
-		for(scan = root->dependencies; scan; scan = scan->next)
-			chdesc_rollback(scan->desc);
-	}
-	
-	if(memcmp(cached->ddesc->data, written->ddesc->data, cached->ddesc->length))
-	{
-		chdesc_t * head = NULL;
-		chdesc_t * tail = NULL;
-		/* FIXME check for errors */
-		chdesc_create_full(cached, written->ddesc->data, &head, &tail);
-		depman_add_chdesc(head);
-	}
-	
-	if(root)
-	{
-		chmetadesc_t * scan;
-		for(scan = root->dependencies; scan; scan = scan->next)
-			chdesc_apply(scan->desc);
-	}
-	
-	/* share the written bdesc's ddesc */
-	cached->ddesc->refs -= cached->refs;
-	if(cached->ddesc->refs <= 0)
-	{
-		free(cached->ddesc->data);
-		free(cached->ddesc);
-	}
-	cached->ddesc = written->ddesc;
-	cached->ddesc->refs += cached->refs;
-	
-	return depman_forward_chdesc(written, cached);
-}
-#endif
-
 int bdesc_blockno_compare(const void * a, const void * b)
 {
 	return (*(bdesc_t **) a)->number - (*(bdesc_t **) b)->number;

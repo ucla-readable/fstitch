@@ -6,7 +6,6 @@
 
 #include <kfs/fidman.h>
 #include <kfs/chdesc.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/bd.h>
