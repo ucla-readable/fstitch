@@ -641,6 +641,13 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset
 		/* shouldn't fail... */
 		r = chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
 		assert(r >= 0);
+		/* if there are no more chdescs for this ddesc, remove the stub NOOP chdesc */
+		if(!chdesc->block->ddesc->changes->dependencies)
+		{
+			/* can't fail */
+			r = chdesc_destroy(&chdesc->block->ddesc->changes);
+			assert(r >= 0);
+		}
 		bdesc_release(&chdesc->block);
 	}
 	chdesc->block = destination;
