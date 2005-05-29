@@ -579,9 +579,34 @@ void chdesc_unmark_graph(chdesc_t * root)
 			chdesc_unmark_graph(meta->desc);
 }
 
-int chdesc_move(chdesc_t * chdesc, bdesc_t * destination)
+int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset)
 {
-	int r = ensure_bdesc_changes(destination);
+	uint16_t * offset;
+	int r;
+	
+	/* source_offset is in bytes for all chdesc types */
+	switch(chdesc->type)
+	{
+		case BIT:
+			if(source_offset & 0x3)
+				return -E_INVAL;
+			source_offset >>= 2;
+			offset = &chdesc->bit.offset;
+			break;
+		case BYTE:
+			offset = &chdesc->byte.offset;
+			break;
+		case NOOP:
+			offset = NULL;
+			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			return -E_INVAL;
+	}
+	if(offset && source_offset > *offset)
+		return -E_INVAL;
+	
+	r = ensure_bdesc_changes(destination);
 	if(r < 0)
 		return r;
 	
@@ -606,6 +631,9 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination)
 	}
 	
 	/* at this point we have succeeded in moving the chdesc */
+	
+	if(offset)
+		*offset -= source_offset;
 	
 	chdesc->flags |= CHDESC_MOVED;
 	if(chdesc->block)

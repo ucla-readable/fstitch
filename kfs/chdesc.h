@@ -65,7 +65,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 void chdesc_unmark_graph(chdesc_t * root);
 
 /* move a chdesc to a new bdesc (at a barrier) */
-int chdesc_move(chdesc_t * chdesc, bdesc_t * destination);
+int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset);
 void chdesc_finish_move(bdesc_t * destination);
 
 /* add a dependency to a change descriptor */
