@@ -26,7 +26,7 @@
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
-#define USE_THIRD_LEG 1 // 1 -> mount josfs_cfs at '/'
+#define USE_THIRD_LEG 0 // 1 -> mount josfs_cfs at '/'
 #define INBS 0 // surrounds code that may not be in the brownsugar build yet
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);

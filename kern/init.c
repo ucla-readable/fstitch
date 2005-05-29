@@ -70,13 +70,12 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	kclock_init();
 	//pci_init(); // pci not in use for now
 
-	if (ENABLE_INKERNEL_INTS)
-	{
-		__asm__ __volatile__("sti");
+#if ENABLE_INKERNEL_INTS
+	__asm__ __volatile__("sti");
 
-		// Empty buffers to reset their interrupts
-		while (cons_getc() != -1);
-	}
+	// Empty buffers to reset their interrupts
+	while (cons_getc() != -1);
+#endif
 
 	sb16_init();
 	el3_init();
@@ -85,23 +84,14 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	ENV_CREATE(user_idle);
 
 	// Start kfsd and netd
-	ENV_CREATE(fs_fs);
 	ENV_CREATE(user_netd);
 	ENV_CREATE(kfs_kfsd);
 
 	// Start init
-#ifdef TEST
-	// Don't touch -- used by grading script!
-	ENV_CREATE2(TEST, TESTSIZE);
-#else
-	// Touch all you want.
 	ENV_CREATE(user_init);
-#endif	// TEST
-
 
 	// Schedule and run the first user environment!
 	sched_yield();
-
 
 	// Drop into the kernel monitor.
 	while (1)
