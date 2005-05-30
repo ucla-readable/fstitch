@@ -39,7 +39,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/netclient.c \
 			lib/hwclock.c \
 			lib/textbar.c \
-			lib/sleep_cs.c
+			lib/sleep.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/vector.c \
