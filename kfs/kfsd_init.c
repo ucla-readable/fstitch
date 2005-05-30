@@ -121,7 +121,7 @@ int kfsd_init(void)
 				OBJFLAGS(j_bd) |= OBJ_PERSISTENT;
 		}
 
-		if (! (j_bd = construct_cacheing(j_bd, 32)) )
+		if (! (j_bd = construct_cacheing(j_bd, 128)) )
 			kfsd_shutdown();
 #ifndef USE_WB_CACHE
 		if (! (j_bd = chdesc_stripper_bd(j_bd)) )
@@ -160,7 +160,7 @@ int kfsd_init(void)
 		if (! (bd = nbd_bd("192.168.0.2", 2492)) )
 			fprintf(STDERR_FILENO, "nbd_bd failed\n");
 
-		if (bd && (r = construct_uhfses(bd, 400, uhfses)) < 0)
+		if (bd && (r = construct_uhfses(bd, 512, uhfses)) < 0)
 			kfsd_shutdown();
 	}
 
@@ -173,7 +173,7 @@ int kfsd_init(void)
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
-		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)
+		if (bd && (r = construct_uhfses(bd, 128, uhfses)) < 0)
 			kfsd_shutdown();
 	}
 
@@ -186,7 +186,7 @@ int kfsd_init(void)
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
-		if (bd && (r = construct_uhfses(bd, 32, uhfses)) < 0)		
+		if (bd && (r = construct_uhfses(bd, 128, uhfses)) < 0)		
 			kfsd_shutdown();
 	}
 
@@ -307,16 +307,12 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (4096 != CALL(partitions[i], get_atomicsize))
 		{
-			/* create a cache below the resizer */
-			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
-				kfsd_shutdown();
-
 			/* create a resizer */
-			if (! (resizer = block_resizer_bd(cache, 4096)) )
+			if (! (resizer = block_resizer_bd(partitions[i], 4096)) )
 				kfsd_shutdown();
 
 			/* create a cache above the resizer */
-			if (! (cache = wt_cache_bd(resizer, 16)) )
+			if (! (cache = wb_cache_bd(resizer, cache_nblks)) )
 				kfsd_shutdown();
 		}
 		else
@@ -409,16 +405,12 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 {
 	if (4096 != CALL(bd, get_blocksize))
 	{
-		/* create a cache below the resizer */
-		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
-			kfsd_shutdown();
-
 		/* create a resizer */
 		if (! (bd = block_resizer_bd(bd, 4096)) )
 			kfsd_shutdown();
 
 		/* create a cache above the resizer */
-		if (! (bd = wt_cache_bd(bd, 16)) )
+		if (! (bd = wt_cache_bd(bd, cache_nblks)) )
 			kfsd_shutdown();
 	}
 	else
