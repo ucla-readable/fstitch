@@ -103,8 +103,8 @@ all: tags TAGS
 .DELETE_ON_ERROR:
 
 # make it so that no intermediate .o files are never deleted
-.PRECIOUS: %.o $(OBJDIR)/kern/%.o $(OBJDIR)/boot/%.o $(OBJDIR)/fs/%.o \
-	$(OBJDIR)/user/%.o
+.PRECIOUS: %.o $(OBJDIR)/kern/%.o $(OBJDIR)/boot/%.o \
+	$(OBJDIR)/lib/%.o $(OBJDIR)/kfs/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
 
 # inc/net for lwip, inc/ for string.h
 LIB_NET_CFLAGS := -I$(TOP)/inc/net/ -I$(TOP)/inc/net/ipv4 -I$(TOP)/inc/
@@ -146,33 +146,33 @@ $(OBJDIR)/user/%.o: user/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
-$(OBJDIR)/user/%.o: lib/%.raw
-	@echo + ld[USER] $<
+$(OBJDIR)/lib/%.o: lib/%.raw
+	@echo + ld[LIB] $<
 	@mkdir -p $(@D)
 	$(V)$(LD) -r -o $@ $(ULDFLAGS) $(LDFLAGS) -b binary $<
 
-$(OBJDIR)/user/net/%.o: lib/net/%.c
+$(OBJDIR)/lib/net/%.o: lib/net/%.c
 	@echo + cc[LIB/NET] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
-$(OBJDIR)/user/%.o: lib/%.c
-	@echo + cc[USER] $<
+$(OBJDIR)/lib/%.o: lib/%.c
+	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
-$(OBJDIR)/user/%.o: lib/%.S
-	@echo + as[USER] $<
+$(OBJDIR)/lib/%.o: lib/%.S
+	@echo + as[LIB] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/fs/%.o: fs/%.c
-	@echo + cc[USER] $<
+	@echo + cc[FS] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/kfs/%.o: kfs/%.c
-	@echo + cc[USER] $<
+	@echo + cc[KFS] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
