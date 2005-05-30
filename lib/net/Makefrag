@@ -1,0 +1,61 @@
+
+OBJDIRS += lib/net
+OBJDIRS += lib/net/api
+OBJDIRS += lib/net/core
+OBJDIRS += lib/net/core/ipv4
+OBJDIRS += lib/net/core/ipv6
+OBJDIRS += lib/net/arch
+OBJDIRS += lib/net/netif
+OBJDIRS += lib/net/netif/ppp
+
+LIB_SRCFILES += \
+		lib/net/api/err.c \
+		lib/net/core/tcp_in.c \
+		lib/net/core/dhcp.c \
+		lib/net/core/inet.c \
+		lib/net/core/mem.c \
+		lib/net/core/memp.c \
+		lib/net/core/netif.c \
+		lib/net/core/pbuf.c \
+		lib/net/core/raw.c \
+		lib/net/core/stats.c \
+		lib/net/core/sys.c \
+		lib/net/core/tcp.c \
+		lib/net/core/ipv4/ip_addr.c \
+		lib/net/core/ipv4/icmp.c \
+		lib/net/core/ipv4/ip.c \
+		lib/net/core/ipv4/ip_frag.c \
+		lib/net/core/tcp_out.c \
+		lib/net/core/udp.c \
+		lib/net/netif/etharp.c \
+ 		lib/net/netif/slipif.c \
+		lib/net/netif/loopif.c \
+		lib/net/arch/sio.c \
+		lib/net/netif/josnicif.c \
+		lib/net/arch/sys_arch.c \
+		lib/net/arch/simple.c
+
+# Add when adding ethernet interface: (breaks build until ready to use)
+#		lib/net/netif/ethernetif.c \
+
+# Add to use lwip's socket interface:
+#		lib/net/api/api_lib.c \
+#		lib/net/api/api_msg.c \
+#		lib/net/api/tcpip.c \
+#		lib/net/api/sockets.c \
+
+# Add if want ppp. (breaks build)
+#		lib/net/netif/ppp/auth.c \
+#		lib/net/netif/ppp/chap.c \
+#		lib/net/netif/ppp/chpms.c \
+#		lib/net/netif/ppp/fsm.c \
+#		lib/net/netif/ppp/ipcp.c \
+#		lib/net/netif/ppp/lcp.c \
+#		lib/net/netif/ppp/magic.c \
+#		lib/net/netif/ppp/md5.c \
+#		lib/net/netif/ppp/pap.c \
+#		lib/net/netif/ppp/ppp.c \
+#		lib/net/netif/ppp/randm.c \
+#		lib/net/netif/ppp/vj.c \
+
+# Add for ipv6 rather than ipv4: (ipv6 files...)
