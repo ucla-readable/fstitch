@@ -219,11 +219,10 @@ int kfsd_init(void)
 		vector_destroy(uhfses);
 		uhfses = NULL;
 	}
-#if INBS
+
 	r = table_classifier_cfs_add(table_class, "/dev", modman_devfs);
 	if (r < 0)
 		kfsd_shutdown();
-#endif
 
 	//
 	// fidfairies
