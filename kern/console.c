@@ -174,12 +174,14 @@ serial_init(void)
 		if(com[i].addr != 0) {
 			serial_init_port(com[i].addr, speed);
 
-			if(ENABLE_SERIAL_CONSOLE && !console_port_set)
+#if ENABLE_SERIAL_CONSOLE
+			if(!console_port_set)
 			{
 				com[i].user = ENVID_KERNEL;
 				console_port_set = 1;
 				printf("Serial console enabled for port %d.\n", i);
 			}
+#endif
 		}
 	}
 
@@ -368,8 +370,6 @@ lpt_putc(int c)
 	outb(0x378+2, 0x08|0x01);
 	outb(0x378+2, 0x08);
 }
-
-
 
 
 /***** Text-mode CGA/VGA display output *****/
@@ -688,8 +688,9 @@ cons_intr(int (*proc)(void))
 		
 		/* ^C */
 		if(c == 3 && curenv) {
-			if(ENABLE_INKERNEL_INTS)
-				__asm__ __volatile__("sti"); // this might be inside an interrupt
+#if ENABLE_INKERNEL_INTS
+			__asm__ __volatile__("sti"); // this might be inside an interrupt
+#endif
 			printf("[%08x] kill env %08x via ^C\n", curenv->env_id, curenv->env_id);
 			env_destroy(curenv);
 			/* env_destroy() does not return on curenv */
@@ -708,13 +709,14 @@ cons_getc(void)
 	int c;
 	register_t eflags = read_eflags();
 
-	if(ENABLE_INKERNEL_INTS)
-		__asm__ __volatile__("cli");
+#if ENABLE_INKERNEL_INTS
+	__asm__ __volatile__("cli");
+#endif
 
 	// poll for any pending input characters,
 	// so that this function works even when interrupts are disabled
 	// (e.g., when called from the kernel monitor).
-	if(ENABLE_SERIAL_CONSOLE)
+#if ENABLE_SERIAL_CONSOLE
 	{
 		const int cons_idx = console_port_idx();
 		if(cons_idx < NCOMS)
@@ -723,6 +725,7 @@ cons_getc(void)
 			serial_intr(cons_irq);
 		}
 	}
+#endif
 	kbd_intr(1);
 	write_eflags(eflags);
 
@@ -740,11 +743,13 @@ cons_getc(void)
 void
 cons_putc(int c)
 {
-	if(ENABLE_PARALLEL_CONSOLE_OUTPUT)
-		lpt_putc(c);
+#if ENABLE_PARALLEL_CONSOLE_OUTPUT
+	lpt_putc(c);
+#endif
 	cga_putc(c);
-	if(ENABLE_SERIAL_CONSOLE)
-		serial_putc_console(c);
+#if ENABLE_SERIAL_CONSOLE
+	serial_putc_console(c);
+#endif
 }
 
 // initialize the console devices
@@ -755,7 +760,6 @@ cons_init(void)
 	kbd_init();
 	serial_init();
 }
-
 
 
 // `High'-level console I/O.  Used by readline and printf.
@@ -771,8 +775,8 @@ getchar(void)
 {
 	int c;
 
-	while ((c = cons_getc()) == -1)
-		; // spin
+	while((c = cons_getc()) == -1);
+
 	return c;
 }
 
@@ -782,4 +786,3 @@ iscons(int fdnum)
 	// used by readline
 	return 1;
 }
-

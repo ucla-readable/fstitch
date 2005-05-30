@@ -16,6 +16,7 @@
 #include <kern/pci.h>
 #include <kern/sb16.h>
 #include <kern/3c509.h>
+#include <kern/ne.h>
 #include <kern/elf.h>
 #include <kern/breakpoints.h>
 #include <kern/version.h>
@@ -79,6 +80,7 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 
 	sb16_init();
 	el3_init();
+	ne_init();
 
 	// Should always have an idle process as first one.
 	ENV_CREATE(user_idle);

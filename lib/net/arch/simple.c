@@ -73,17 +73,18 @@ setup_interface(int argc, const char **argv, struct netif *nif_stayaround)
 	bool josnic_dhcp;
 	const bool quiet = get_arg_idx(argc, argv, "-q");
 
-	if(ALLOW_JOSNIC)
-	{
-		setup_ip_addrs(argc, argv, 0, &josnic_dhcp, &ipaddr, &netmask, &gateway, &dns);
-		nif_jn = josnicif_setup(nif_stayaround, josnic_dhcp, ipaddr, netmask, gateway, dns, quiet);
-	}
+#if ALLOW_JOSNIC
+	setup_ip_addrs(argc, argv, 0, &josnic_dhcp, &ipaddr, &netmask, &gateway, &dns);
+	nif_jn = josnicif_setup(nif_stayaround, josnic_dhcp, ipaddr, netmask, gateway, dns, quiet);
+#endif
 
-	if(ALLOW_SLIP && !nif_jn)
+#if ALLOW_SLIP
+	if(!nif_jn)
 	{
 		setup_ip_addrs(argc, argv, 1, &josnic_dhcp, &ipaddr, &netmask, &gateway, &dns);
 		nif_sl = slipif_setup(nif_stayaround, ipaddr, netmask, gateway, dns, quiet);
 	}
+#endif
 
 	if(nif_jn)
 		return nif_jn;
@@ -91,10 +92,14 @@ setup_interface(int argc, const char **argv, struct netif *nif_stayaround)
 		return nif_sl;
 	else
 	{
-		if(ALLOW_JOSNIC && !nif_jn)
+#if ALLOW_JOSNIC
+		if(!nif_jn)
 			fprintf(STDERR_FILENO, "Unable to allocate a josnic interface.\n");
-		if(ALLOW_SLIP && !nif_sl)
+#endif
+#if ALLOW_SLIP
+		if(!nif_sl)
 			fprintf(STDERR_FILENO, "Unable to allocate a slip interface.\n");
+#endif
 
 		return NULL;
 	}

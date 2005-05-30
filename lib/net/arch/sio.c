@@ -72,8 +72,9 @@ sio_recv(sio_fd_t fd)
 	}
 	else
 	{
-		if(SIO_FROST_DEBUG)
-			fprintf(1, "#");
+#if SIO_FROST_DEBUG
+		fprintf(1, "#");
+#endif
 		fd->sioread = 1;
 	}
 
@@ -87,8 +88,9 @@ sio_recv(sio_fd_t fd)
 void
 sio_send(u8_t c, sio_fd_t fd)
 {
-	if(SIO_FROST_DEBUG)
-		fprintf(1, "@");
+#if SIO_FROST_DEBUG
+	fprintf(1, "@");
+#endif
 	serial_sendc(c, fd->com_addr);
 }
 

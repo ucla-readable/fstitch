@@ -1,53 +1,4 @@
-/* 8390.c: A general NS8390 ethernet driver core for linux. */
-/*
-	Written 1992-94 by Donald Becker.
-  
-	Copyright 1993 United States Government as represented by the
-	Director, National Security Agency.
-
-	This software may be used and distributed according to the terms
-	of the GNU General Public License, incorporated herein by reference.
-
-	The author may be reached as becker@scyld.com, or C/O
-	Scyld Computing Corporation
-	410 Severn Ave., Suite 210
-	Annapolis MD 21403
-
-  
-  This is the chip-specific code for many 8390-based ethernet adaptors.
-  This is not a complete driver, it must be combined with board-specific
-  code such as ne.c, wd.c, 3c503.c, etc.
-
-  Seeing how at least eight drivers use this code, (not counting the
-  PCMCIA ones either) it is easy to break some card by what seems like
-  a simple innocent change. Please contact me or Donald if you think
-  you have found something that needs changing. -- PG
-
-
-  Changelog:
-
-  Paul Gortmaker	: remove set_bit lock, other cleanups.
-  Paul Gortmaker	: add ei_get_8390_hdr() so we can pass skb's to 
-			  ei_block_input() for eth_io_copy_and_sum().
-  Paul Gortmaker	: exchange static int ei_pingpong for a #define,
-			  also add better Tx error handling.
-  Paul Gortmaker	: rewrite Rx overrun handling as per NS specs.
-  Alexey Kuznetsov	: use the 8390's six bit hash multicast filter.
-  Paul Gortmaker	: tweak ANK's above multicast changes a bit.
-  Paul Gortmaker	: update packet statistics for v2.1.x
-  Alan Cox		: support arbitary stupid port mappings on the
-  			  68K Macintosh. Support >16bit I/O spaces
-  Paul Gortmaker	: add kmod support for auto-loading of the 8390
-			  module by all drivers that require it.
-  Alan Cox		: Spinlocking work, added 'BUG_83C690'
-  Paul Gortmaker	: Separate out Tx timeout code from Tx path.
-  Paul Gortmaker	: Remove old unused single Tx buffer code.
-  Hayato Fujiwara	: Add m32r support.
-
-  Sources:
-  The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
-
-  */
+/* kern/8390.c: derived from the Linux driver for the 8390 chipset, originally by Donald Becker et al. */
 
 #define NS8390_CORE
 #include <inc/x86.h>
@@ -61,30 +12,7 @@
 #include <kern/8390.h>
 #include <kern/trap.h>
 #include <kern/picirq.h>
-
-
-/* These are the operational function interfaces to board-specific
-   routines.
-	void reset_8390(struct net_device *dev)
-		Resets the board associated with DEV, including a hardware reset of
-		the 8390.  This is only called when there is a transmit timeout, and
-		it is always followed by 8390_init().
-	void block_output(struct net_device *dev, int count, const unsigned char *buf,
-					  int start_page)
-		Write the COUNT bytes of BUF to the packet buffer at START_PAGE.  The
-		"page" value uses the 8390's 256-byte pages.
-	void get_8390_hdr(struct net_device *dev, struct e8390_hdr *hdr, int ring_page)
-		Read the 4 byte, page aligned 8390 header. *If* there is a
-		subsequent read, it will be of the rest of the packet.
-	void block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring_offset)
-		Read COUNT bytes from the packet buffer into the skb data area. Start 
-		reading from RING_OFFSET, the address as the 8390 sees it.  This will always
-		follow the read of the 8390 header. 
-*/
-#define ei_reset_8390 (ei_local->reset_8390)
-#define ei_block_output (ei_local->block_output)
-#define ei_block_input (ei_local->block_input)
-#define ei_get_8390_hdr (ei_local->get_8390_hdr)
+#include <kern/josnic.h>
 
 #define ETH_ZLEN 60
 
@@ -96,78 +24,25 @@
 #define outb_back(data, port) outb(port, data)
 
 /* use 0 for production, 1 for verification, >2 for debug */
-#ifndef ei_debug
 int ei_debug = 1;
-#endif
 
-struct net_device theNetDev;
-
-#define MAX_8390_DEVS 1
-
-#define MAX_BUFFER_PACKETS 128
-#define PACKET_BUFFER_SIZE 8192
-
-static struct {
-	uint16_t pkt_free, pkt_ready;
-	struct { uint16_t offset, length; } pkt[MAX_BUFFER_PACKETS];
-	uint16_t pb_free, pb_ready;
-	/* rather than worry about wrapping packets that cross the border, just fudge the size */
-	uint8_t packet_buffer[PACKET_BUFFER_SIZE + 1536];
-} ns8390_pkb[MAX_8390_DEVS];
-
-#define pkt_free ns8390_pkb[0].pkt_free
-#define pkt_ready ns8390_pkb[0].pkt_ready
-#define ns8390_pkt ns8390_pkb[0].pkt
-#define pb_free ns8390_pkb[0].pb_free
-#define pb_ready ns8390_pkb[0].pb_ready
-#define packet_buffer ns8390_pkb[0].packet_buffer
-
-#define READY_PACKETS ((pkt_free - pkt_ready + MAX_BUFFER_PACKETS) % MAX_BUFFER_PACKETS)
-#define READY_BUFFER ((pb_free - pb_ready + PACKET_BUFFER_SIZE) % PACKET_BUFFER_SIZE)
-
-/* subtract 1 to keep the buffer from filling entirely and looking empty again */
-#define FREE_PACKETS ((MAX_BUFFER_PACKETS - pkt_free + pkt_ready - 1) % MAX_BUFFER_PACKETS)
-#define FREE_BUFFER ((PACKET_BUFFER_SIZE - pb_free + pb_ready - 1) % PACKET_BUFFER_SIZE)
+struct ns8390 ei_dev[MAX_8390_DEVS];
+int ei_devs = 0;
 
 /* Index to functions. */
-static void ei_tx_intr(struct net_device *dev);
-static void ei_tx_err(struct net_device *dev);
-void ei_tx_timeout(struct net_device *dev);
-static void ei_receive(struct net_device *dev);
-static void ei_rx_overrun(struct net_device *dev);
-static int ei_start_xmit(const char *data, int length, struct net_device *dev);
+static void ei_tx_intr(struct ns8390 *dev);
+static void ei_tx_err(struct ns8390 *dev);
+static void ei_tx_timeout(struct ns8390 *dev);
+static void ei_receive(int which);
+static void ei_rx_overrun(int which);
+static int ei_start_xmit(const char *data, int length, struct ns8390 *dev);
 static void ei_interrupt(int irq);
 
 /* Routines generic to NS8390-based boards. */
-static void NS8390_trigger_send(struct net_device *dev, unsigned int length, int start_page);
+static void NS8390_trigger_send(struct ns8390 *dev, unsigned int length, int start_page);
 
-/*
- *	SMP and the 8390 setup.
- *
- *	The 8390 isn't exactly designed to be multithreaded on RX/TX. There is
- *	a page register that controls bank and packet buffer access. We guard
- *	this with ei_local->page_lock. Nobody should assume or set the page other
- *	than zero when the lock is not held. Lock holders must restore page 0
- *	before unlocking. Even pure readers must take the lock to protect in 
- *	page 0.
- *
- *	To make life difficult the chip can also be very slow. We therefore can't
- *	just use spinlocks. For the longer lockups we disable the irq the device
- *	sits on and hold the lock. We must hold the lock because there is a dual
- *	processor case other than interrupts (get stats/set multicast list in
- *	parallel with each other and transmit).
- *
- *	Note: in theory we can just disable the irq on the card _but_ there is
- *	a latency on SMP irq delivery. So we can easily go "disable irq" "sync irqs"
- *	enter lock, take the queued irq. So we waddle instead of flying.
- *
- *	Finally by special arrangement for the purpose of being generally 
- *	annoying the transmit function is called bh atomic. That places
- *	restrictions on the user context callers as disable_irq won't save
- *	them.
- */
- 
-int ei_send_packet(struct net_device *dev, const void * data, int length)
+
+int ei_send_packet(int which, const void * data, int length)
 {
 	int i;
 	uint32_t sum = 0;
@@ -176,101 +51,48 @@ int ei_send_packet(struct net_device *dev, const void * data, int length)
 	for(i = 0; i < (length + 3) >> 2; i++)
 		sum += ((uint32_t *) data)[i];
 	
-	return ei_start_xmit(data, length, dev);
+	return ei_start_xmit(data, length, &ei_dev[which]);
 }
 
-int ei_tx_reset(struct net_device *dev)
+int ei_tx_reset(int which)
 {
-	ei_tx_timeout(dev);
+	ei_tx_timeout(&ei_dev[which]);
 	return 0;
 }
 
-int ei_get_address(struct net_device *dev, uint8_t * buffer)
+int ei_get_address(int which, uint8_t * buffer)
 {
-	memcpy(buffer, dev->dev_addr, 6);
+	memcpy(buffer, ei_dev[which].phys_addr, 6);
 	return 0;
 }
 
-int ei_query(struct net_device *dev)
+int ei_set_filter(int which, int flags)
 {
-	return READY_PACKETS;
+	if(which < 0)
+		return -E_INVAL;
+	if(ei_devs <= which)
+		return -E_NO_DEV;
+	
+	return -1;
 }
 
-int ei_get_packet(struct net_device *dev, void * buffer, int length)
+int ei_open(int which)
 {
-	if(!READY_PACKETS)
-		return -E_BUSY;
-	
-	if(ns8390_pkt[pkt_ready].length < length)
-		length = ns8390_pkt[pkt_ready].length;
-	
-	/* Note that "buffer" may be a userspace buffer, in which case we might fault... */
-	if(buffer)
-		memcpy(buffer, &packet_buffer[ns8390_pkt[pkt_ready].offset], length);
-	
-	length = (ns8390_pkt[pkt_ready].length + 3) & ~0x3;
-	
-	/* free the buffer */
-	//pb_ready = (pb_ready + length) % PACKET_BUFFER_SIZE;
-	if((pb_ready += length) >= PACKET_BUFFER_SIZE) pb_ready = 0; /* the size fudging allows us to do this */
-	length = ns8390_pkt[pkt_ready].length;
-	pkt_ready = (pkt_ready + 1) % MAX_BUFFER_PACKETS;
-	
-	return length;
-}
-
-
-/**
- * ei_open - Open/initialize the board.
- * @dev: network device to initialize
- *
- * This routine goes all-out, setting everything
- * up anew at each open, even though many of these registers should only
- * need to be set once at boot.
- */
-int ei_open(struct net_device *dev)
-{
-	int r;
-#warning fix hard-coded IRQ
-	dev->base_addr = 0x300;
-	dev->irq = 9;
-	dev->name = "eth0";
-
-	//unsigned long flags;
-	//struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
-
-	/* The card I/O part of the driver (e.g. 3c503) can hook a Tx timeout
-	    wrapper that does e.g. media check & then calls ei_tx_timeout. */
-	/*if(dev->tx_timeout == NULL)
-		 dev->tx_timeout = ei_tx_timeout;
-	if(dev->watchdog_timeo <= 0)
-	dev->watchdog_timeo = TX_TIMEOUT;*/
-    
-	if(request_irq(dev->irq, ei_interrupt))
+	if(request_irq(ei_dev[which].irq, ei_interrupt))
 		return -1;
-	irq_setmask_8259A(irq_mask_8259A & ~(1 << dev->irq));
-
-	r = ne_probe1(dev, dev->base_addr);
-	if(r < 0)
-	{
-		irq_setmask_8259A(irq_mask_8259A | (1 << dev->irq));
-		request_irq(dev->irq, NULL);
-		return r;
-	}
+	irq_setmask_8259A(irq_mask_8259A & ~(1 << ei_dev[which].irq));
 	
-	NS8390_init(dev, 1);
+	NS8390_init(&ei_dev[which], 1);
 	return 0;
 }
 
-/**
- * ei_tx_timeout - handle transmit time out condition
- * @dev: network device which has apparently fallen asleep
- *
- * Called by kernel when device never acknowledges a transmit has
- * completed (or failed) - i.e. never posted a Tx related interrupt.
- */
+int ei_close(int which)
+{
+	NS8390_init(&ei_dev[which], 0);
+	return 0;
+}
 
-void ei_tx_timeout(struct net_device *dev)
+static void ei_tx_timeout(struct ns8390 *dev)
 {
 	long e8390_base = dev->base_addr;
 	struct ei_device *ei_local = &dev->ei;
@@ -281,15 +103,7 @@ void ei_tx_timeout(struct net_device *dev)
 	txsr = inb(e8390_base+EN0_TSR);
 	isr = inb(e8390_base+EN0_ISR);
 
-	printf("%s: Tx timed out, %s TSR=%x, ISR=%x.\n",
-		dev->name, (txsr & ENTSR_ABT) ? "excess collisions." :
-		(isr) ? "lost interrupt?" : "cable problem?", txsr, isr);
-
-	if(!isr && !ei_local->stat.tx_packets) 
-	{
-		/* The 8390 probably hasn't gotten on the cable yet. */
-		ei_local->interface_num ^= 1;   /* Try a different xcvr.  */
-	}
+	printf("eth%d: Tx timed out, %s TSR=%x, ISR=%x.\n", dev->which, (txsr & ENTSR_ABT) ? "excess collisions." : isr ? "lost interrupt?" : "cable problem?", txsr, isr);
 
 	/* Ugly but a reset can be slow, yet must be protected */
 	//disable_irq_nosync(dev->irq);
@@ -301,14 +115,7 @@ void ei_tx_timeout(struct net_device *dev)
 	//enable_irq(dev->irq);
 }
     
-/**
- * ei_start_xmit - begin packet transmission
- * @skb: packet to be sent
- * @dev: network device to which packet is sent
- *
- * Sends a packet to an 8390 network device.
- */
-int ei_start_xmit(const char *data, int length, struct net_device *dev)
+int ei_start_xmit(const char *data, int length, struct ns8390 *dev)
 {
 	long e8390_base = dev->base_addr;
 	struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
@@ -320,9 +127,7 @@ int ei_start_xmit(const char *data, int length, struct net_device *dev)
 	outb_back_p(0x00, e8390_base + EN0_IMR);
 	
 	
-	/*
-	 *	Slow phase with lock held.
-	 */
+	/* Slow phase with lock held. */
 	 
 	//disable_irq_nosync(dev->irq);
 	
@@ -340,25 +145,22 @@ int ei_start_xmit(const char *data, int length, struct net_device *dev)
 	{
 		output_page = ei_local->tx_start_page;
 		ei_local->tx1 = send_length;
-		if(ei_debug  &&  ei_local->tx2 > 0)
-			printf( "%s: idle transmitter tx2=%d, lasttx=%d, txing=%d.\n",
-				dev->name, ei_local->tx2, ei_local->lasttx, ei_local->txing);
+		if(ei_debug && ei_local->tx2 > 0)
+			printf("eth%d: idle transmitter tx2=%d, lasttx=%d, txing=%d.\n", dev->which, ei_local->tx2, ei_local->lasttx, ei_local->txing);
 	}
 	else if(ei_local->tx2 == 0) 
 	{
 		output_page = ei_local->tx_start_page + TX_PAGES/2;
 		ei_local->tx2 = send_length;
-		if(ei_debug  &&  ei_local->tx1 > 0)
-			printf( "%s: idle transmitter, tx1=%d, lasttx=%d, txing=%d.\n",
-				dev->name, ei_local->tx1, ei_local->lasttx, ei_local->txing);
+		if(ei_debug && ei_local->tx1 > 0)
+			printf("eth%d: idle transmitter, tx1=%d, lasttx=%d, txing=%d.\n", dev->which, ei_local->tx1, ei_local->lasttx, ei_local->txing);
 	}
 	else
 	{	
 		return -E_BUSY;
 		/* We should never get here. 
 		if(ei_debug)
-			printf( "%s: No Tx buffers free! tx1=%d tx2=%d last=%d\n",
-				dev->name, ei_local->tx1, ei_local->tx2, ei_local->lasttx);
+			printf("eth%d: No Tx buffers free! tx1=%d tx2=%d last=%d\n", dev->which, ei_local->tx1, ei_local->tx2, ei_local->lasttx);
 		//netif_stop_queue(dev);
 		outb_back_p(ENISR_ALL, e8390_base + EN0_IMR);
 		//enable_irq(dev->irq);
@@ -415,43 +217,33 @@ int ei_start_xmit(const char *data, int length, struct net_device *dev)
 	return 0;
 }
 
-/**
- * ei_interrupt - handle the interrupts from an 8390
- * @irq: interrupt number
- * @dev_id: a pointer to the net_device
- * @regs: unused
- *
- * Handle the ether interface interrupts. We pull packets from
- * the 8390 via the card specific functions and fire them at the networking
- * stack. We also handle transmit completions and wake the transmit path if
- * necessary. We also update the counters and do other housekeeping as
- * needed.
- */
-
 static void ei_interrupt(int irq)
 {
-	struct net_device *dev = &theNetDev; //dev_id;
-	long e8390_base;
+	int e8390_base;
 	int interrupts, nr_serviced = 0;
 	struct ei_device *ei_local;
-
-	if(dev == NULL) 
+	int which;
+	
+	for(which = 0; which != ei_devs; which++)
+		if(ei_dev[which].irq == irq)
+			break;
+	
+	if(which == ei_devs)
 	{
-		printf("%s(): irq %d for unknown device.\n", __FUNCTION__, irq);
-		return;// 0; //IRQ_NONE;
+		printf("%s(): IRQ %d for unknown device\n", __FUNCTION__, irq);
+		return;
 	}
-    
-	e8390_base = dev->base_addr;
-	ei_local = &dev->ei;
+
+	e8390_base = ei_dev[which].base_addr;
+	ei_local = &ei_dev[which].ei;
 
 	/* Change to page 0 and read the intr status reg. */
 	outb_back_p(E8390_NODMA+E8390_PAGE0, e8390_base + E8390_CMD);
 	if(ei_debug > 3)
-		printf( "%s: interrupt(isr=%x).\n", dev->name, inb(e8390_base + EN0_ISR));  // inb_p
+		printf("eth%d: interrupt(isr=%x).\n", ei_dev[which].which, inb(e8390_base + EN0_ISR));  // inb_p
     
 	/* !!Assumption!! -- we stay in page 0.	 Don't break this. */
-	while((interrupts = inb(e8390_base + EN0_ISR)) != 0  // inb_p
-		   && ++nr_serviced < MAX_SERVICE) 
+	while((interrupts = inb(e8390_base + EN0_ISR)) != 0 && ++nr_serviced < MAX_SERVICE) 
 	{
 		/*if(!netif_running(dev)) {
 			printf( "%s: interrupt from stopped card\n", dev->name);
@@ -461,17 +253,17 @@ static void ei_interrupt(int irq)
 			break;
 		}*/
 		if(interrupts & ENISR_OVER) 
-			ei_rx_overrun(dev);
+			ei_rx_overrun(which);
 		else if(interrupts & (ENISR_RX+ENISR_RX_ERR)) 
 		{
 			/* Got a good (?) packet. */
-			ei_receive(dev);
+			ei_receive(which);
 		}
 		/* Push the next to-transmit packet through. */
 		if(interrupts & ENISR_TX)
-			ei_tx_intr(dev);
+			ei_tx_intr(&ei_dev[which]);
 		else if(interrupts & ENISR_TX_ERR)
-			ei_tx_err(dev);
+			ei_tx_err(&ei_dev[which]);
 
 		if(interrupts & ENISR_COUNTERS) 
 		{
@@ -483,9 +275,7 @@ static void ei_interrupt(int irq)
 		
 		/* Ignore any RDC interrupts that make it back to here. */
 		if(interrupts & ENISR_RDC) 
-		{
 			outb_back_p(ENISR_RDC, e8390_base + EN0_ISR);
-		}
 
 		outb_back_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
 	}
@@ -496,32 +286,20 @@ static void ei_interrupt(int irq)
 		if(nr_serviced >= MAX_SERVICE) 
 		{
 			/* 0xFF is valid for a card removal */
-			if(interrupts!=0xFF)
-				printf( "%s: Too much work at interrupt, status %#2.2x\n", dev->name, interrupts);
+			if(interrupts != 0xFF)
+				printf("eth%d: Too much work at interrupt, status %#2.2x\n", ei_dev[which].which, interrupts);
 			outb_back_p(ENISR_ALL, e8390_base + EN0_ISR); /* Ack. most intrs. */
-		} else {
-			printf( "%s: unknown interrupt %#2x\n", dev->name, interrupts);
+		}
+		else
+		{
+			printf("eth%d: unknown interrupt %#2x\n", ei_dev[which].which, interrupts);
 			outb_back_p(0xff, e8390_base + EN0_ISR); /* Ack. all intrs. */
 		}
 	}
-	return; // (nr_serviced > 0); //IRQ_RETVAL(nr_serviced > 0);
+	return;
 }
 
-/**
- * ei_tx_err - handle transmitter error
- * @dev: network device which threw the exception
- *
- * A transmitter error has happened. Most likely excess collisions (which
- * is a fairly normal condition). If the error is one where the Tx will
- * have been aborted, we try and send another one right away, instead of
- * letting the failed packet sit and collect dust in the Tx buffer. This
- * is a much better solution as it avoids kernel based Tx timeouts, and
- * an unnecessary card reset.
- *
- * Called with lock held.
- */
-
-static void ei_tx_err(struct net_device *dev)
+static void ei_tx_err(struct ns8390 *dev)
 {
 	long e8390_base = dev->base_addr;
 	struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
@@ -556,15 +334,7 @@ static void ei_tx_err(struct net_device *dev)
 	}
 }
 
-/**
- * ei_tx_intr - transmit interrupt handler
- * @dev: network device for which tx intr is handled
- *
- * We have finished a transmit: check for errors and then trigger the next
- * packet to be sent. Called with lock held.
- */
-
-static void ei_tx_intr(struct net_device *dev)
+static void ei_tx_intr(struct ns8390 *dev)
 {
 	long e8390_base = dev->base_addr;
 	struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
@@ -581,8 +351,7 @@ static void ei_tx_intr(struct net_device *dev)
 	if(ei_local->tx1 < 0) 
 	{
 		if(ei_local->lasttx != 1 && ei_local->lasttx != -1)
-			printf("%s: bogus last_tx_buffer %d, tx1=%d.\n",
-				ei_local->name, ei_local->lasttx, ei_local->tx1);
+			printf("%s: bogus last_tx_buffer %d, tx1=%d.\n", ei_local->name, ei_local->lasttx, ei_local->tx1);
 		ei_local->tx1 = 0;
 		if(ei_local->tx2 > 0) 
 		{
@@ -597,8 +366,7 @@ static void ei_tx_intr(struct net_device *dev)
 	else if(ei_local->tx2 < 0) 
 	{
 		if(ei_local->lasttx != 2  &&  ei_local->lasttx != -2)
-			printf("%s: bogus last_tx_buffer %d, tx2=%d.\n",
-				ei_local->name, ei_local->lasttx, ei_local->tx2);
+			printf("%s: bogus last_tx_buffer %d, tx2=%d.\n", ei_local->name, ei_local->lasttx, ei_local->tx2);
 		ei_local->tx2 = 0;
 		if(ei_local->tx1 > 0) 
 		{
@@ -611,8 +379,8 @@ static void ei_tx_intr(struct net_device *dev)
 		else
 			ei_local->lasttx = 10, ei_local->txing = 0;
 	}
-	else printf( "s: unexpected TX-done interrupt, lasttx=%d.\n",
-				 ei_local->lasttx);
+	else
+		printf( "s: unexpected TX-done interrupt, lasttx=%d.\n", ei_local->lasttx);
 
 	/* Minimize Tx latency: update the statistics after we restart TXing. */
 	if(status & ENTSR_COL)
@@ -639,16 +407,9 @@ static void ei_tx_intr(struct net_device *dev)
 	//netif_wake_queue(dev);
 }
 
-/**
- * ei_receive - receive some packets
- * @dev: network device with which receive will be run
- *
- * We have a good packet(s), get it/them out of the buffers. 
- * Called with lock held.
- */
-
-static void ei_receive(struct net_device *dev)
+static void ei_receive(int which)
 {
+	struct ns8390 * dev = &ei_dev[which];
 	long e8390_base = dev->base_addr;
 	struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
 	unsigned char rxing_page, this_frame, next_frame;
@@ -676,9 +437,8 @@ static void ei_receive(struct net_device *dev)
 		   Keep quiet if it looks like a card removal. One problem here
 		   is that some clones crash in roughly the same way.
 		 */
-		if(ei_debug > 0  &&  this_frame != ei_local->current_page && (this_frame!=0x0 || rxing_page!=0xFF))
-			printf( "%s: mismatched read page pointers %x vs %x.\n",
-				   dev->name, this_frame, ei_local->current_page);
+		if(ei_debug > 0 && this_frame != ei_local->current_page && (this_frame!=0x0 || rxing_page!=0xFF))
+			printf("eth%d: mismatched read page pointers %x vs %x.\n", dev->which, this_frame, ei_local->current_page);
 		
 		if(this_frame == rxing_page)	/* Read all the frames? */
 			break;				/* Done for now */
@@ -695,45 +455,30 @@ static void ei_receive(struct net_device *dev)
 		/* Check for bogosity warned by 3c503 book: the status byte is never
 		   written.  This happened a lot during testing! This code should be
 		   cleaned up someday. */
-		if(rx_frame.next != next_frame
-			&& rx_frame.next != next_frame + 1
-			&& rx_frame.next != next_frame - num_rx_pages
-			&& rx_frame.next != next_frame + 1 - num_rx_pages) {
+		if(rx_frame.next != next_frame &&
+		   rx_frame.next != next_frame + 1 &&
+		   rx_frame.next != next_frame - num_rx_pages &&
+		   rx_frame.next != next_frame + 1 - num_rx_pages)
+		{
 			ei_local->current_page = rxing_page;
 			outb_back(ei_local->current_page-1, e8390_base+EN0_BOUNDARY);
 			ei_local->stat.rx_errors++;
 			continue;
 		}
 
-		if(pkt_len < 60  ||  pkt_len > 1518) 
+		if(pkt_len < 60 || pkt_len > 1518) 
 		{
 			if(ei_debug)
-				printf("%s: bogus packet size: %d, status=%x nxpg=%x.\n",
-					   dev->name, rx_frame.count, rx_frame.status,
-					   rx_frame.next);
+				printf("eth%d: bogus packet size: %d, status=%x nxpg=%x.\n", dev->which, rx_frame.count, rx_frame.status, rx_frame.next);
 			ei_local->stat.rx_errors++;
 			ei_local->stat.rx_length_errors++;
 		}
 		else if((pkt_stat & 0x0F) == ENRSR_RXOK) 
 		{
-			int pkt_size = (pkt_len + 3) & ~0x3;
-			
-			if(!FREE_PACKETS || FREE_BUFFER < pkt_size)
+			void * buffer = josnic_async_push_packet(dev->which, pkt_len);
+			if(buffer)
 			{
-				if(ei_debug)
-					printf("%s: Dropping packet from queue to make room for incoming packet\n", dev->name);
-				ei_get_packet(dev, NULL, 0);
-			}
-			if(FREE_PACKETS && FREE_BUFFER >= pkt_size)
-			{
-				int pn = pkt_free;
-				pkt_free = (pkt_free + 1) % MAX_BUFFER_PACKETS;
-				ns8390_pkt[pn].offset = pb_free;
-				//pb_free = (pb_free + pkt_size) % PACKET_BUFFER_SIZE;
-				if((pb_free += pkt_size) > PACKET_BUFFER_SIZE) pb_free = 0; /* the size fudging allows us to to this */
-				ns8390_pkt[pn].length = pkt_len;
-				
-				ne_block_input(dev, pkt_len, &packet_buffer[ns8390_pkt[pn].offset], current_offset + sizeof(rx_frame));
+				ne_block_input(dev, pkt_len, buffer, current_offset + sizeof(rx_frame));
 				//dev->last_rx = jiffies;
 				
 				ei_local->stat.rx_packets++;
@@ -744,7 +489,7 @@ static void ei_receive(struct net_device *dev)
 			else
 			{
 				if(ei_debug)
-					printf("%s: Couldn't allocate a packet buffer of size %d\n", dev->name, pkt_len);
+					printf("eth%d: Couldn't allocate a packet buffer of size %d\n", dev->which, pkt_len);
 				ei_local->stat.rx_dropped++;
 				break;
 			}
@@ -752,9 +497,7 @@ static void ei_receive(struct net_device *dev)
 		else 
 		{
 			if(ei_debug)
-				printf("%s: bogus packet: status=%x nxpg=%x size=%d\n",
-					   dev->name, rx_frame.status, rx_frame.next,
-					   rx_frame.count);
+				printf("eth%d: bogus packet: status=%x nxpg=%x size=%d\n", dev->which, rx_frame.status, rx_frame.next, rx_frame.count);
 			ei_local->stat.rx_errors++;
 			/* NB: The NIC counts CRC, frame and missed errors. */
 			if(pkt_stat & ENRSR_FO)
@@ -763,9 +506,9 @@ static void ei_receive(struct net_device *dev)
 		next_frame = rx_frame.next;
 		
 		/* This _should_ never happen: it's here for avoiding bad clones. */
-		if(next_frame >= ei_local->stop_page) {
-			printf("%s: next frame inconsistency, %x\n", dev->name,
-				   next_frame);
+		if(next_frame >= ei_local->stop_page)
+		{
+			printf("eth%d: next frame inconsistency, %x\n", dev->which, next_frame);
 			next_frame = ei_local->rx_start_page;
 		}
 		ei_local->current_page = next_frame;
@@ -778,21 +521,9 @@ static void ei_receive(struct net_device *dev)
 	return;
 }
 
-/**
- * ei_rx_overrun - handle receiver overrun
- * @dev: network device which threw exception
- *
- * We have a receiver overrun: we have to kick the 8390 to get it started
- * again. Problem is that you have to kick it exactly as NS prescribes in
- * the updated datasheets, or "the NIC may act in an unpredictable manner."
- * This includes causing "the NIC to defer indefinitely when it is stopped
- * on a busy network."  Ugh.
- * Called with lock held. Don't call this with the interrupts off or your
- * computer will hate you - it takes 10ms or so. 
- */
-
-static void ei_rx_overrun(struct net_device *dev)
+static void ei_rx_overrun(int which)
 {
+	struct ns8390 * dev = &ei_dev[which];
 	long e8390_base = dev->base_addr;
 	unsigned char was_txing, must_resend = 0;
 	struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
@@ -805,7 +536,7 @@ static void ei_rx_overrun(struct net_device *dev)
 	outb_back_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base+E8390_CMD);
     
 	if(ei_debug > 1)
-		printf("%s: Receiver overrun.\n", dev->name);
+		printf("eth%d: Receiver overrun.\n", dev->which);
 	ei_local->stat.rx_over_errors++;
     
 	/* 
@@ -845,7 +576,7 @@ static void ei_rx_overrun(struct net_device *dev)
 	/*
 	 * Clear the Rx ring of all the debris, and ack the interrupt.
 	 */
-	ei_receive(dev);
+	ei_receive(which);
 	outb_back_p(ENISR_OVER, e8390_base+EN0_ISR);
 
 	/*
@@ -856,11 +587,7 @@ static void ei_rx_overrun(struct net_device *dev)
     		outb_back_p(E8390_NODMA + E8390_PAGE0 + E8390_START + E8390_TRANS, e8390_base + E8390_CMD);
 }
 
-/*
- *	Collect the stats. This is called unlocked and from several contexts.
- */
- 
- struct net_device_stats *get_stats(struct net_device *dev)
+struct ns8390_stats *get_stats(struct ns8390 *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct ei_device *ei_local = &dev->ei; //(struct ei_device *) netdev_priv(dev);
@@ -883,15 +610,7 @@ static void ei_rx_overrun(struct net_device *dev)
 /* This page of functions should be 8390 generic */
 /* Follow National Semi's recommendations for initializing the "NIC". */
 
-/**
- * NS8390_init - initialize 8390 hardware
- * @dev: network device to initialize
- * @startp: boolean.  non-zero value to initiate chip processing
- *
- *	Must be called with lock held.
- */
-
-void NS8390_init(struct net_device *dev, int startp)
+void NS8390_init(struct ns8390 *dev, int startp)
 {
 	long e8390_base = dev->base_addr;
 	int i;
@@ -902,7 +621,7 @@ void NS8390_init(struct net_device *dev, int startp)
 
 	//printf("initting something at 0x%x\n", e8390_base);
     
-	if(sizeof(struct e8390_pkt_hdr)!=4)
+	if(sizeof(struct e8390_pkt_hdr) != 4)
     		panic("8390.c: header struct mispacked\n");    
 	/* Follow National Semi's recommendations for initing the DP83902. */
 	outb_back_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base+E8390_CMD); /* 0x21 */
@@ -925,11 +644,11 @@ void NS8390_init(struct net_device *dev, int startp)
 	outb_back_p(0x00,  e8390_base + EN0_IMR);
     
 	/* Copy the station address into the DS8390 registers. */
-    outb_back_p(E8390_NODMA + E8390_PAGE1 + E8390_STOP, e8390_base+E8390_CMD); // * 0x61 *
+	outb_back_p(E8390_NODMA + E8390_PAGE1 + E8390_STOP, e8390_base+E8390_CMD); // * 0x61 *
 	for(i = 0; i < 6; i++) 
 	{
-		outb_back_p(dev->dev_addr[i], e8390_base + EN1_PHYS_SHIFT(i));
-		if(ei_debug > 1 && inb_p(e8390_base + EN1_PHYS_SHIFT(i))!=dev->dev_addr[i])
+		outb_back_p(dev->phys_addr[i], e8390_base + EN1_PHYS_SHIFT(i));
+		if(ei_debug > 1 && inb_p(e8390_base + EN1_PHYS_SHIFT(i))!=dev->phys_addr[i])
 			printf("Hw. address read/write mismap %d\n",i);
 	}
 
@@ -953,11 +672,7 @@ void NS8390_init(struct net_device *dev, int startp)
 	//printf("done initing a card!\n");
 }
 
-/* Trigger a transmit start, assuming the length is valid. 
-   Always called with the page lock held */
-   
-static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
-								int start_page)
+static void NS8390_trigger_send(struct ns8390 *dev, unsigned int length, int start_page)
 {
 	long e8390_base = dev->base_addr;
  	//struct ei_device *ei_local __attribute((unused)) = (struct ei_device *) netdev_priv(dev);
@@ -966,7 +681,7 @@ static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
     
 	if(inb_p(e8390_base) & E8390_TRANS) 
 	{
-		printf( "%s: trigger_send() called with the transmitter busy.\n", dev->name);
+		printf("eth%d: trigger_send() called with the transmitter busy.\n", dev->which);
 		return;
 	}
 	outb_back_p(length & 0xff, e8390_base + EN0_TCNTLO);

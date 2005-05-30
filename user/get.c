@@ -215,9 +215,8 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri)
 	int r;
 
 	if (!silent)
-		fprintf(status_fd,
-				  "http target: addr = %s, port = %d, resource = \"%s\"\n",
-				 inet_iptoa(addr), port, uri);
+		fprintf(status_fd, "http target: addr = %s, port = %d, resource = \"%s\"\n",
+		        inet_iptoa(addr), port, uri);
 
 	hs = &ghs;
 	// Initialize hs

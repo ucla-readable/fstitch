@@ -8,35 +8,31 @@
 #include <kern/8390.h>
 #include <kern/kclock.h>
 #include <kern/trap.h>
+#include <kern/josnic.h>
 
 static void delay(void)
 {
-	inb(0x84);
-	inb(0x84);
-	inb(0x84);
-	inb(0x84);
+	inb(0x84); inb(0x84);
+	inb(0x84); inb(0x84);
 }
 
-static void outb_back_p(uint8_t data, uint32_t port)
+static void outb_back_p(uint8_t data, uint16_t port)
 {
 	outb(port, data);
 	delay();
 }
 
-static uint8_t inb_p(uint32_t port)
+static uint8_t inb_p(uint16_t port)
 {
-	uint8_t retVal = inb(port);
+	uint8_t value = inb(port);
 	delay();
-	return retVal;
+	return value;
 }
+
+#define ei_status (dev->ei)
 
 #define outb_back(data, port) outb(port, data)
 
-#define KERN_INFO
-#define KERN_DEBUG
-#define KERN_WARNING
-#define KERN_EMERG
-#define le16_to_cpus(num) do { } while(0)
 
 /* Some defines that people can play with if so inclined. */
 
@@ -50,11 +46,7 @@ static uint8_t inb_p(uint32_t port)
 /* #define PACKETBUF_MEMSIZE	0x40 */
 
 /* A zero-terminated list of I/O addresses to be probed at boot. */
-static unsigned int netcard_portlist[] = {
-	0x300, 0x280, 0x320, 0x340, 0x360, 0x380, 0
-};
-
-/* ---- No user-serviceable parts below ---- */
+static unsigned int netcard_portlist[] = {0x300, 0x280, 0x320, 0x340, 0x360, 0x380, 0};
 
 #define NE_BASE	(dev->base_addr)
 #define NE_CMD	 	0x00
@@ -67,12 +59,6 @@ static unsigned int netcard_portlist[] = {
 #define NESM_START_PG	0x40	/* First page of TX buffer */
 #define NESM_STOP_PG	0x80	/* Last page +1 of RX ring */
 
-int ne_probe(struct net_device *dev);
-
-//static int ne_open(struct net_device *dev);
-//static int ne_close(struct net_device *dev);
-
-
 /*  Probe for various non-shared-memory ethercards.
 
    NEx000-clone boards have a Station Address PROM (SAPROM) in the packet
@@ -83,9 +69,6 @@ int ne_probe(struct net_device *dev);
    Reading the SAPROM from a word-wide card with the 8390 set in byte-wide
    mode results in doubled values, which can be detected and compensated for.
 
-   The probe is also responsible for initializing the card and filling
-   in the 'dev' and 'ei_status' structures.
-
    We use the minimum memory size for some ethercard product lines, iff we can't
    distinguish models.  You can increase the packet buffer size by setting
    PACKETBUF_MEMSIZE.  Reported Cabletron packet buffer locations are:
@@ -94,28 +77,7 @@ int ne_probe(struct net_device *dev);
 	E2010	 starts at 0x100 and ends at 0x4000.
 	E2010-x starts at 0x100 and ends at 0xffff.  */
 
-int ne_probe(struct net_device *dev)
-{
-	unsigned int base_addr = dev->base_addr;
-
-	/* First check any supplied i/o locations. User knows best. <cough> */
-	if(base_addr > 0x1ff)	/* Check a single specified location. */
-		return ne_probe1(dev, base_addr);
-	else if(base_addr != 0)	/* Don't probe at all. */
-		return -E_NO_DEV;
-
-	/* Last resort. The semi-risky ISA auto-probe. */
-	for(base_addr = 0; netcard_portlist[base_addr] != 0; base_addr++)
-	{
-		int ioaddr = netcard_portlist[base_addr];
-		if(ne_probe1(dev, ioaddr) == 0)
-			return 0;
-	}
-
-	return -E_NO_DEV;
-}
-
-int ne_probe1(struct net_device *dev, int ioaddr)
+static int ne_probe1(struct ns8390 *dev, int ioaddr, const struct josnic * nic)
 {
 	int i;
 	unsigned char SA_prom[32];
@@ -258,16 +220,14 @@ int ne_probe1(struct net_device *dev, int ioaddr)
 
 	if(dev->irq < 2)
 	{
-		//unsigned long cookie = probe_irq_on();
-		outb_back_p(0x50, ioaddr + EN0_IMR);	/* Enable one interrupt. */
+		probe_irq_on();
+		outb_back_p(0x50, ioaddr + EN0_IMR);           /* Enable one interrupt. */
 		outb_back_p(0x00, ioaddr + EN0_RCNTLO);
 		outb_back_p(0x00, ioaddr + EN0_RCNTHI);
-		outb_back_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
-#warning add IRQ detection here
-		panic("add IRQ detection here");
-		//mdelay(10);		/* wait 10ms for interrupt to propagate */
-		outb_back_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
-		//dev->irq = probe_irq_off(cookie);
+		outb_back_p(E8390_RREAD+E8390_START, ioaddr);  /* Trigger it... */
+		kclock_delay(1);                               /* wait 10ms for interrupt to propagate */
+		outb_back_p(0x00, ioaddr + EN0_IMR);           /* Mask it again. */
+		dev->irq = probe_irq_off();
 		if(ei_debug > 2)
 			printf(" autoirq is %d\n", dev->irq);
 	}
@@ -276,39 +236,31 @@ int ne_probe1(struct net_device *dev, int ioaddr)
 		   or don't know which one to set. */
 		dev->irq = 9;
 
-	if(!dev->irq)
+	if(dev->irq <= 0)
 	{
 		printf(" failed to detect IRQ line.\n");
 		ret = -E_NO_DEV;
 		goto err_out;
 	}
 
-	/* Allocate dev->priv and fill in 8390 specific dev fields. */
-	/*if(ethdev_init(dev))
-	{
-        	printf(" unable to get memory for dev->priv.\n");
-        	ret = -E_NO_MEM;
-		goto err_out;
-	}*/
-
-	/* Snarf the interrupt now.  There's no point in waiting since we cannot
-	   share and the board will usually be enabled. */
-	//ret = request_irq(dev->irq, ei_interrupt);
-	if(ret)
-	{
-		printf(" unable to get IRQ %d (errno=%d).\n", dev->irq, ret);
-		goto err_out_kfree;
-	}
-
 	dev->base_addr = ioaddr;
-
-	for(i = 0; i < ETHER_ADDR_LEN; i++)
+	dev->which = josnic_register(nic, ei_devs);
+	if(dev->which < 0)
 	{
-		printf(" %x", SA_prom[i]);
-		dev->dev_addr[i] = SA_prom[i];
+		printf(" detected, but cannot register!\n");
+		return -E_BUSY;
 	}
 
-	printf("\n%s: %s found at 0x%x, using IRQ %d.\n", dev->name, name, ioaddr, dev->irq);
+	for(i = 0; i != 6; i++)
+	{
+		printf("%c%x", i ? ':' : ' ', SA_prom[i]);
+		dev->phys_addr[i] = SA_prom[i];
+	}
+
+	printf("\neth%d: %s found at 0x%x, using IRQ %d.\n", dev->which, name, ioaddr, dev->irq);
+
+	/* mark it as valid, as 3c509 does? */
+	ei_devs++;
 
 	ei_status.name = name;
 	ei_status.tx_start_page = start_page;
@@ -325,38 +277,45 @@ int ne_probe1(struct net_device *dev, int ioaddr)
 	ei_status.block_input = &ne_block_input;
 	ei_status.block_output = &ne_block_output;
 	ei_status.get_8390_hdr = &ne_get_8390_hdr;*/
-	ei_status.priv = 0;
 	//dev->open = &ne_open;
 	//dev->stop = &ne_close;
 	NS8390_init(dev, 0);
 	return 0;
 
-err_out_kfree:
-	//kfree(dev->priv);
-	//dev->priv = NULL;
 err_out:
 	//release_region(ioaddr, NE_IO_EXTENT);
 	return ret;
 }
 
-/*static int ne_open(struct net_device *dev)
+static int ne_probe(const struct josnic * nic)
 {
-	ei_open(dev);
-	return 0;
-}
+	struct ns8390 * dev = &ei_dev[ei_devs];
+	unsigned int base_addr = dev->base_addr;
 
-static int ne_close(struct net_device *dev)
-{
-	if(ei_debug > 1)
-		printf( "%s: Shutting down ethercard.\n", dev->name);
-	ei_close(dev);
-	return 0;
-}*/
+	/* First check any supplied i/o locations. User knows best. <cough> */
+	if(base_addr > 0x1ff)	/* Check a single specified location. */
+		return ne_probe1(dev, base_addr, nic);
+	else if(base_addr != 0)	/* Don't probe at all. */
+		return -E_NO_DEV;
+
+	/* Last resort. The semi-risky ISA auto-probe. */
+	for(base_addr = 0; netcard_portlist[base_addr] != 0; base_addr++)
+	{
+		int i, ioaddr = netcard_portlist[base_addr];
+		for(i = 0; i != ei_devs; i++)
+			if(ioaddr == ei_dev[i].base_addr)
+				break;
+		if(i == ei_devs && ne_probe1(dev, ioaddr, nic) == 0)
+			return 0;
+	}
+
+	return -E_NO_DEV;
+}
 
 /* Hard reset the card.  This used to pause for the same period that a
    8390 reset command required, but that shouldn't be necessary. */
 
-void ne_reset_8390(struct net_device *dev)
+void ne_reset_8390(struct ns8390 *dev)
 {
 	unsigned long reset_start_time = jiffies;
 
@@ -373,7 +332,7 @@ void ne_reset_8390(struct net_device *dev)
 	while((inb_p(NE_BASE+EN0_ISR) & ENISR_RESET) == 0)
 		if(jiffies - reset_start_time > 2)
 		{
-			printf("%s: ne_reset_8390() did not complete.\n", dev->name);
+			printf("eth%d: %s() did not complete.\n", dev->which, __FUNCTION__);
 			break;
 		}
 	outb_back_p(ENISR_RESET, NE_BASE + EN0_ISR);	/* Ack intr. */
@@ -383,7 +342,7 @@ void ne_reset_8390(struct net_device *dev)
    we don't need to be concerned with ring wrap as the header will be at
    the start of a page, so we optimize accordingly. */
 
-void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+void ne_get_8390_hdr(struct ns8390 *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	int nic_base = dev->base_addr;
 
@@ -391,7 +350,7 @@ void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring
 
 	if(ei_status.dmaing)
 	{
-		printf("%s: DMAing conflict in ne_get_8390_hdr [DMAstat:%d][irqlock:%d].\n", dev->name, ei_status.dmaing, ei_status.irqlock);
+		printf("eth%d: DMAing conflict in %s() [DMAstat:%d][irqlock:%d].\n", dev->which, __FUNCTION__, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 
@@ -410,9 +369,6 @@ void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring
 
 	outb_back_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
 	ei_status.dmaing &= ~0x01;
-
-	//printf("\noeuoeu: %x, %x, %x, %d\n", ring_page, hdr->status, hdr->next, hdr->count);
-	le16_to_cpus(&hdr->count);
 }
 
 /* Block input and output, similar to the Crynwr packet driver.  If you
@@ -420,7 +376,7 @@ void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr, int ring
    The NEx000 doesn't share the on-board packet memory -- you have to put
    the packet out through the "remote DMA" dataport using outb. */
 
-void ne_block_input(struct net_device *dev, int count, char *buf, int ring_offset)
+void ne_block_input(struct ns8390 *dev, int count, char *buf, int ring_offset)
 {
 #ifdef NE_SANITY_CHECK
 	int xfer_count = count;
@@ -430,9 +386,7 @@ void ne_block_input(struct net_device *dev, int count, char *buf, int ring_offse
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 	if(ei_status.dmaing)
 	{
-		printf("%s: DMAing conflict in ne_block_input "
-			"[DMAstat:%d][irqlock:%d].\n",
-			dev->name, ei_status.dmaing, ei_status.irqlock);
+		printf("eth%d: DMAing conflict in %s() [DMAstat:%d][irqlock:%d].\n", dev->which, __FUNCTION__, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 	ei_status.dmaing |= 0x01;
@@ -476,15 +430,14 @@ void ne_block_input(struct net_device *dev, int count, char *buf, int ring_offse
 				break;
 		} while(--tries > 0);
 	 	if(tries <= 0)
-			printf("%s: RX transfer address mismatch, %x (expected) vs. %x (actual).\n", dev->name, ring_offset + xfer_count, addr);
+			printf("eth%d: RX transfer address mismatch, %x (expected) vs. %x (actual).\n", dev->which, ring_offset + xfer_count, addr);
 	}
 #endif
 	outb_back_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
 	ei_status.dmaing &= ~0x01;
 }
 
-void ne_block_output(struct net_device *dev, int count,
-		const unsigned char *buf, const int start_page)
+void ne_block_output(struct ns8390 *dev, int count, const unsigned char *buf, const int start_page)
 {
 	int nic_base = NE_BASE;
 	unsigned long dma_start;
@@ -502,7 +455,7 @@ void ne_block_output(struct net_device *dev, int count,
 	/* This *shouldn't* happen. If it does, it's the last thing you'll see */
 	if(ei_status.dmaing)
 	{
-		printf("%s: DMAing conflict in ne_block_output. [DMAstat:%d][irqlock:%d]\n", dev->name, ei_status.dmaing, ei_status.irqlock);
+		printf("eth%d: DMAing conflict in ne_block_output. [DMAstat:%d][irqlock:%d]\n", dev->which, ei_status.dmaing, ei_status.irqlock);
 		return;
 	}
 	ei_status.dmaing |= 0x01;
@@ -562,7 +515,7 @@ retry:
 
 		if(tries <= 0)
 		{
-			printf("%s: Tx packet transfer address mismatch, %x (expected) vs. %x (actual).\n", dev->name, (start_page << 8) + count, addr);
+			printf("eth%d: Tx packet transfer address mismatch, %x (expected) vs. %x (actual).\n", dev->which, (start_page << 8) + count, addr);
 			if(retries++ == 0)
 				goto retry;
 		}
@@ -572,7 +525,7 @@ retry:
 	while((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
 		if(jiffies - dma_start > 2) // 20ms
 		{
-			printf("%s: timeout waiting for Tx RDC.\n", dev->name);
+			printf("eth%d: timeout waiting for Tx RDC.\n", dev->which);
 			ne_reset_8390(dev);
 			NS8390_init(dev,1);
 			break;
@@ -583,3 +536,18 @@ retry:
 	return;
 }
 
+static const struct josnic ne_nic = {open: ei_open, close: ei_close, address: ei_get_address, transmit: ei_send_packet, filter: ei_set_filter, reset: ei_tx_reset};
+
+int ne_init(void)
+{
+	int i;
+	for(i = 0; i != MAX_8390_DEVS; i++)
+	{
+		ei_dev[i].base_addr = 0;
+		ei_dev[i].irq = 0;
+		if(ne_probe(&ne_nic) == -E_NO_DEV)
+			break;
+	}
+	printf("ne2k: detected %d cards\n", ei_devs);
+	return i ? 0 : -E_NO_DEV;
+}

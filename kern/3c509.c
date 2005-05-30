@@ -8,6 +8,7 @@
 #include <kern/trap.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
+#include <kern/josnic.h>
 
 static int el3_debug = 2;
 
@@ -75,40 +76,13 @@ enum RxFilter
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
 #define MAX_INTERRUPT_WORK 10
 
-struct el3 {
+static struct {
 	uint16_t valid:1, enabled:1, ready:1;
 	uint8_t phys_addr[6];
-	int base_addr, irq, if_port;
-	int trans_start, last_rx;
-};
-
-static struct el3 el3_dev[MAX_EL3_DEVS];
+	int base_addr, irq;
+	int if_port, which;
+} el3_dev[MAX_EL3_DEVS];
 static int el3_devs = 0;
-
-#define MAX_BUFFER_PACKETS 128
-#define PACKET_BUFFER_SIZE 8192
-
-static struct {
-	uint16_t pkt_free, pkt_ready;
-	struct { uint16_t offset, length; } pkt[MAX_BUFFER_PACKETS];
-	uint16_t pb_free, pb_ready;
-	/* rather than worry about wrapping packets that cross the border, just fudge the size */
-	uint8_t packet_buffer[PACKET_BUFFER_SIZE + 1536];
-} el3_pkb[MAX_EL3_DEVS];
-
-#define pkt_free el3_pkb[which].pkt_free
-#define pkt_ready el3_pkb[which].pkt_ready
-#define el3_pkt el3_pkb[which].pkt
-#define pb_free el3_pkb[which].pb_free
-#define pb_ready el3_pkb[which].pb_ready
-#define packet_buffer el3_pkb[which].packet_buffer
-
-#define READY_PACKETS ((pkt_free - pkt_ready + MAX_BUFFER_PACKETS) % MAX_BUFFER_PACKETS)
-#define READY_BUFFER ((pb_free - pb_ready + PACKET_BUFFER_SIZE) % PACKET_BUFFER_SIZE)
-
-/* subtract 1 to keep the buffer from filling entirely and looking empty again */
-#define FREE_PACKETS ((MAX_BUFFER_PACKETS - pkt_free + pkt_ready - 1) % MAX_BUFFER_PACKETS)
-#define FREE_BUFFER ((PACKET_BUFFER_SIZE - pb_free + pb_ready - 1) % PACKET_BUFFER_SIZE)
 
 /* Read a word from the EEPROM when in the ISA ID probe state. */
 static uint16_t id_read_eeprom(int id_port, int index)
@@ -131,7 +105,7 @@ static uint16_t id_read_eeprom(int id_port, int index)
 	return word;
 }
 
-static int el3_probe(void)
+static int el3_probe(const struct josnic * nic)
 {
 	static int current_tag = 0;
 	/* Start with 0x110 to avoid new sound cards. */
@@ -140,11 +114,10 @@ static int el3_probe(void)
 	short lrs_state = 0xFF, i;
 	int ioaddr;
 
-	if (!ENABLE_INKERNEL_INTS)
-	{
-		printf("3c509: not probing, require in-kernel interrupts\n");
-		return -E_NO_DEV;
-	}
+#if !ENABLE_INKERNEL_INTS
+	printf("3c509: not probing, requires in-kernel interrupts\n");
+	return -E_NO_DEV;
+#else
 	
 	/* Select an open I/O location at 0x1*0 to do contention select. */
 	for(; id_port < 0x200; id_port += 0x10)
@@ -212,6 +185,10 @@ static int el3_probe(void)
 	/* Free the interrupt so that some other card can use it. */
 	outw(ioaddr + WN0_IRQ, 0x0F00);
 	
+	el3_dev[el3_devs].which = josnic_register(nic, el3_devs);
+	if(el3_dev[el3_devs].which < 0)
+		return -E_BUSY;
+	
 	{
 		const char * if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
 		printf("eth%d: 3c509 at 0x%03x, %s port, address", el3_devs, el3_dev[el3_devs].base_addr, if_names[el3_dev[el3_devs].if_port & 0x03]);
@@ -225,6 +202,7 @@ static int el3_probe(void)
 	el3_dev[el3_devs++].valid = 1;
 	
 	return 0;
+#endif
 }
 
 /* Read a word from the EEPROM using the regular EEPROM access register.
@@ -271,7 +249,7 @@ static void el3_up(int which)
 		net_diag = inw(ioaddr + WN4_NETDIAG);
 		/* temporarily assume full-duplex will be set */
 		net_diag |= FD_ENABLE;
-		printf("eth%d: ", which);
+		printf("eth%d: ", el3_dev[which].which);
 		switch(el3_dev[which].if_port & 0x0C)
 		{
 			case 12:
@@ -298,7 +276,7 @@ static void el3_up(int which)
 		outw(ioaddr + WN4_NETDIAG, net_diag);
 		printf(" if_port: %d, sw_info: 0x%04x\n", el3_dev[which].if_port, sw_info);
 		if(el3_debug > 3)
-			printf("eth%d: 3c509 net diag word is now: 0x%04x\n", which, net_diag);
+			printf("eth%d: 3c509 net diag word is now: 0x%04x\n", el3_dev[which].which, net_diag);
 		/* Enable link beat and jabber check. */
 		outw(ioaddr + WN4_MEDIA, inw(ioaddr + WN4_MEDIA) | MEDIA_TP);
 	}
@@ -335,7 +313,7 @@ static int el3_start_xmit(int which, const void * data, int length)
 	int ioaddr = el3_dev[which].base_addr;
 	
 	if(el3_debug > 4)
-		printf("eth%d: el3_start_xmit(length = %u) called, status 0x%04x\n", which, length, inw(ioaddr + EL3_STATUS));
+		printf("eth%d: %s(length = %u) called, status 0x%04x\n", el3_dev[which].which, __FUNCTION__, length, inw(ioaddr + EL3_STATUS));
 	
 	if(!el3_dev[which].ready)
 		return -E_BUSY;
@@ -346,7 +324,6 @@ static int el3_start_xmit(int which, const void * data, int length)
 	/* ... and the packet rounded to a doubleword. */
 	outsl(ioaddr + TX_FIFO, data, (length + 3) >> 2);
 	
-	el3_dev[which].trans_start = jiffies;
 	if(inw(ioaddr + TX_FREE) <= 1536)
 	{
 		/* Interrupt us when the FIFO has room for max-sized packet. */
@@ -417,48 +394,30 @@ static int el3_rx(int which)
 		else
 		{
 			short pkt_len = rx_status & 0x7FF;
-			short pkt_size = (pkt_len + 3) & ~0x3;
+			void * buffer;
 			
 			//lp->stats.rx_bytes += pkt_len;
 			if(el3_debug > 4)
 				printf("Receiving packet size %d status 0x%04x\n", pkt_len, rx_status);
 			
-			/* If this were a while loop, we could guarantee success below...
-			 * but this way there is no chance of an infinite loop, and we
-			 * won't drop fully received packets as often */
-			if(!FREE_PACKETS || FREE_BUFFER < pkt_size)
+			buffer = josnic_async_push_packet(el3_dev[which].which, pkt_len);
+			if(buffer)
 			{
-				if(el3_debug)
-					printf("eth%d: Dropping packet from queue to make room for incoming packet\n", which);
-				el3_get_packet(which, NULL, 0);
-			}
-			if(FREE_PACKETS && FREE_BUFFER >= pkt_size)
-			{
-				int pn = pkt_free;
-				pkt_free = (pkt_free + 1) % MAX_BUFFER_PACKETS;
-				el3_pkt[pn].offset = pb_free;
-				//pb_free = (pb_free + pkt_size) % PACKET_BUFFER_SIZE;
-				if((pb_free += pkt_size) >= PACKET_BUFFER_SIZE) pb_free = 0; /* the size fudging allows us to do this */
-				el3_pkt[pn].length = pkt_len;
-				
-				insl(ioaddr + RX_FIFO, &packet_buffer[el3_pkt[pn].offset], (pkt_len + 3) >> 2);
-				
+				insl(ioaddr + RX_FIFO, buffer, (pkt_len + 3) >> 2);
 				/* Pop top Rx packet. */
 				outw(ioaddr + EL3_CMD, RxDiscard);
-				
-				el3_dev[which].last_rx = jiffies;
-				//lp->stats.rx_packets++;
 				continue;
 			}
+			
 			outw(ioaddr + EL3_CMD, RxDiscard);
 			//lp->stats.rx_dropped++;
 			if(el3_debug)
-				printf("eth%d: Couldn't allocate a packet buffer of size %d\n", which, pkt_len);
+				printf("eth%d: Couldn't allocate a packet buffer of size %d\n", el3_dev[which].which, pkt_len);
 		}
 		/* Delay. */
 		inw(ioaddr + EL3_STATUS);
 		while(inw(ioaddr + EL3_STATUS) & 0x1000)
-			printf("eth%d: Waiting for 3c509 to discard packet, status 0x%04x\n", which, inw(ioaddr + EL3_STATUS));
+			printf("eth%d: Waiting for 3c509 to discard packet, status 0x%04x\n", el3_dev[which].which, inw(ioaddr + EL3_STATUS));
 	}
 	
 	return 0;
@@ -473,7 +432,7 @@ static void update_stats(int which)
 	int ioaddr = el3_dev[which].base_addr;
 	
 	if(el3_debug > 5)
-		printf("eth%d: Updating the statistics\n", which);
+		printf("eth%d: Updating the statistics\n", el3_dev[which].which);
 	/* Turn off statistics updates while reading. */
 	outw(ioaddr + EL3_CMD, StatsDisable);
 	/* Switch to the stats window, and read everything. */
@@ -508,7 +467,7 @@ static void el3_intr(int irq)
 	
 	if(which == el3_devs)
 	{
-		printf("el3_intr(): IRQ %d for unknown device\n", irq);
+		printf("%s(): IRQ %d for unknown device\n", __FUNCTION__, irq);
 		return;
 	}
 	
@@ -517,7 +476,7 @@ static void el3_intr(int irq)
 	if(el3_debug > 4)
 	{
 		status = inw(ioaddr + EL3_STATUS);
-		printf("eth%d: interrupt, status 0x%04x\n", which, status);
+		printf("eth%d: interrupt, status 0x%04x\n", el3_dev[which].which, status);
 	}
 	
 	while((status = inw(ioaddr + EL3_STATUS)) & (IntLatch | RxComplete | StatsFull))
@@ -578,7 +537,7 @@ static void el3_intr(int irq)
 		
 		if(--i < 0)
 		{
-			printf("eth%d: Infinite loop in interrupt, status 0x%04x\n", which, status);
+			printf("eth%d: Infinite loop in interrupt, status 0x%04x\n", el3_dev[which].which, status);
 			/* Clear all interrupts. */
 			outw(ioaddr + EL3_CMD, AckIntr | 0xFF);
 			break;
@@ -588,7 +547,7 @@ static void el3_intr(int irq)
 	}
 	
 	if(el3_debug > 4)
-		printf("eth%d: exiting interrupt, status 0x%04x\n", which, inw(ioaddr + EL3_STATUS));
+		printf("eth%d: exiting interrupt, status 0x%04x\n", el3_dev[which].which, inw(ioaddr + EL3_STATUS));
 }
 
 static int el3_open(int which)
@@ -605,12 +564,12 @@ static int el3_open(int which)
 	
 	EL3WINDOW(0);
 	if(el3_debug > 3)
-		printf("eth%d: Opening, IRQ %d status@%x 0x%04x\n", which, el3_dev[which].irq, ioaddr + EL3_STATUS, inw(ioaddr + EL3_STATUS));
+		printf("eth%d: Opening, IRQ %d status@%x 0x%04x\n", el3_dev[which].which, el3_dev[which].irq, ioaddr + EL3_STATUS, inw(ioaddr + EL3_STATUS));
 	
 	el3_up(which);
 	
 	if(el3_debug > 3)
-		printf("eth%d: Opened 3c509 IRQ %d status 0x%04x\n", which, el3_dev[which].irq, inw(ioaddr + EL3_STATUS));
+		printf("eth%d: Opened 3c509 IRQ %d status 0x%04x\n", el3_dev[which].which, el3_dev[which].irq, inw(ioaddr + EL3_STATUS));
 	
 	return 0;
 }
@@ -646,7 +605,7 @@ static int el3_close(int which)
 	int ioaddr = el3_dev[which].base_addr;
 	
 	if(el3_debug > 2)
-		printf("eth%d: Shutting down ethercard\n", which);
+		printf("eth%d: Shutting down ethercard\n", el3_dev[which].which);
 	
 	el3_down(which);
 	
@@ -681,54 +640,10 @@ static int el3_link_ok(int which)
 	return tmp & (1 << 11);
 }
 
-static void el3_tx_timeout(int which)
+static int el3_tx_timeout(int which)
 {
-	int ioaddr = el3_dev[which].base_addr;
+	int ioaddr;
 	
-	/* Transmitter timeout, serious problems. */
-	printf("eth%d: transmit timed out, Tx_status 0x%02x status 0x%04x Tx FIFO room %d\n", which, inb(ioaddr + TX_STATUS), inw(ioaddr + EL3_STATUS), inw(ioaddr + TX_FREE));
-	//lp->stats.tx_errors++;
-	el3_dev[which].trans_start = jiffies;
-	/* Issue TX_RESET and TX_START commands. */
-	outw(ioaddr + EL3_CMD, TxReset);
-	outw(ioaddr + EL3_CMD, TxEnable);
-	el3_dev[which].ready = 1;
-}
-
-int el3_init(void)
-{
-	int i;
-	for(i = 0; i != MAX_EL3_DEVS; i++)
-		if(el3_probe() == -E_NO_DEV)
-			break;
-	printf("3c509: detected %d cards\n", el3_devs);
-	return i ? 0 : -E_NO_DEV;
-}
-
-int el3_allocate(int which)
-{
-	if(which != -1)
-	{
-		if(which < 0)
-			return -E_INVAL;
-		if(el3_devs <= which || !el3_dev[which].valid)
-			return -E_NO_DEV;
-		if(el3_dev[which].enabled)
-			return -E_BUSY;
-		
-		return el3_open(which);
-	}
-	
-	for(which = 0; which != el3_devs; which++)
-		if(el3_dev[which].valid && !el3_dev[which].enabled)
-			if(!el3_open(which))
-				return which;
-	
-	return -E_NO_DEV;
-}
-
-int el3_release(int which)
-{
 	if(which < 0)
 		return -E_INVAL;
 	if(el3_devs <= which || !el3_dev[which].valid)
@@ -736,10 +651,22 @@ int el3_release(int which)
 	if(!el3_dev[which].enabled)
 		return -E_BUSY;
 	
-	return el3_close(which);
+	ioaddr = el3_dev[which].base_addr;
+	
+	/* Transmitter timeout, serious problems. */
+	printf("eth%d: transmit timed out, Tx_status 0x%02x status 0x%04x Tx FIFO room %d\n", el3_dev[which].which, inb(ioaddr + TX_STATUS), inw(ioaddr + EL3_STATUS), inw(ioaddr + TX_FREE));
+	
+	//lp->stats.tx_errors++;
+	
+	/* Issue TX_RESET and TX_START commands. */
+	outw(ioaddr + EL3_CMD, TxReset);
+	outw(ioaddr + EL3_CMD, TxEnable);
+	el3_dev[which].ready = 1;
+	
+	return 0;
 }
 
-int el3_get_address(int which, uint8_t * buffer)
+static int el3_get_address(int which, uint8_t * buffer)
 {
 	if(which < 0)
 		return -E_INVAL;
@@ -752,7 +679,7 @@ int el3_get_address(int which, uint8_t * buffer)
 	return 0;
 }
 
-int el3_set_filter(int which, int flags)
+static int el3_set_filter(int which, int flags)
 {
 	if(which < 0)
 		return -E_INVAL;
@@ -764,78 +691,16 @@ int el3_set_filter(int which, int flags)
 	return -1;
 }
 
-int el3_tx_reset(int which)
-{
-	if(which < 0)
-		return -E_INVAL;
-	if(el3_devs <= which || !el3_dev[which].valid)
-		return -E_NO_DEV;
-	if(!el3_dev[which].enabled)
-		return -E_BUSY;
-	
-	el3_tx_timeout(which);
-	return 0;
-}
+static const struct josnic el3_nic = {open: el3_open, close: el3_close, address: el3_get_address, transmit: el3_start_xmit, filter: el3_set_filter, reset: el3_tx_timeout};
 
-int el3_send_packet(int which, const void * data, int length)
+int el3_init(void)
 {
 	int i;
-	uint32_t sum = 0;
-	
-	if(which < 0)
-		return -E_INVAL;
-	if(el3_devs <= which || !el3_dev[which].valid)
-		return -E_NO_DEV;
-	if(!el3_dev[which].enabled)
-		return -E_BUSY;
-	
-	/* pre-read the buffer to catch any user faults before sending the packet */
-	for(i = 0; i < (length + 3) >> 2; i++)
-		sum += ((uint32_t *) data)[i];
-	
-	return el3_start_xmit(which, data, length);
-}
-
-int el3_query(int which)
-{
-	if(which < 0)
-		return -E_INVAL;
-	if(el3_devs <= which || !el3_dev[which].valid)
-		return -E_NO_DEV;
-	if(!el3_dev[which].enabled)
-		return -E_BUSY;
-	
-	return READY_PACKETS;
-}
-
-int el3_get_packet(int which, void * buffer, int length)
-{
-	if(which < 0)
-		return -E_INVAL;
-	if(el3_devs <= which || !el3_dev[which].valid)
-		return -E_NO_DEV;
-	if(!el3_dev[which].enabled)
-		return -E_BUSY;
-	
-	if(!READY_PACKETS)
-		return -E_BUSY;
-	
-	if(el3_pkt[pkt_ready].length < length)
-		length = el3_pkt[pkt_ready].length;
-	
-	/* Note that "buffer" may be a userspace buffer, in which case we might fault... */
-	if(buffer)
-		memcpy(buffer, &packet_buffer[el3_pkt[pkt_ready].offset], length);
-	
-	length = (el3_pkt[pkt_ready].length + 3) & ~0x3;
-	
-	/* free the buffer */
-	//pb_ready = (pb_ready + length) % PACKET_BUFFER_SIZE;
-	if((pb_ready += length) >= PACKET_BUFFER_SIZE) pb_ready = 0; /* the size fudging allows us to do this */
-	length = el3_pkt[pkt_ready].length;
-	pkt_ready = (pkt_ready + 1) % MAX_BUFFER_PACKETS;
-	
-	return length;
+	for(i = 0; i != MAX_EL3_DEVS; i++)
+		if(el3_probe(&el3_nic) == -E_NO_DEV)
+			break;
+	printf("3c509: detected %d cards\n", el3_devs);
+	return i ? 0 : -E_NO_DEV;
 }
 
 

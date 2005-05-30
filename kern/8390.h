@@ -1,36 +1,18 @@
-/* Generic NS8390 register definitions. */
-/* This file is part of Donald Becker's 8390 drivers, and is distributed
-   under the same license. Auto-loading of 8390.o only in v2.2 - Paul G.
-   Some of these names and comments originated from the Crynwr
-   packet drivers, which are distributed under the GPL. */
-
-#ifndef _8390_h
-#define _8390_h
+#ifndef KUDOS_KERN_8390_H
+#define KUDOS_KERN_8390_H
 
 #define TX_PAGES 12	/* Two Tx slots */
 
-#define ETHER_ADDR_LEN 6
-
 /* The 8390 specific per-packet-header format. */
 struct e8390_pkt_hdr {
-  unsigned char status; /* status */
-  unsigned char next;   /* pointer to next packet. */
-  unsigned short count; /* header + packet length in bytes */
+	uint8_t status; /* status */
+	uint8_t next;   /* pointer to next packet. */
+	uint16_t count; /* header + packet length in bytes */
 };
 
-#ifdef notdef
 extern int ei_debug;
-#else
-#define ei_debug 1
-#endif
 
-#ifdef CONFIG_NET_POLL_CONTROLLER
-extern void ei_poll(struct net_device *dev);
-#endif
-
-extern struct net_device theNetDev;
-
-struct net_device_stats {
+struct ns8390_stats {
 	uint32_t tx_errors;
 	uint32_t tx_packets;
 	uint32_t tx_bytes;
@@ -55,207 +37,142 @@ struct net_device_stats {
 	uint32_t multicast;
 };
 
-/* You have one of these per-board */
+/* You have one of these per board */
 struct ei_device {
-	const char *name;
-	/*	void (*reset_8390)(struct net_device *);
-	void (*get_8390_hdr)(struct net_device *, struct e8390_pkt_hdr *, int);
-	void (*block_output)(struct net_device *, int, const unsigned char *, int);
-	void (*block_input)(struct net_device *, int, struct sk_buff *, int);*/
+	const char * name;
 	unsigned long rmem_start;
 	unsigned long rmem_end;
-	unsigned char mcfilter[8];
-	unsigned open:1;
-	unsigned word16:1;  		/* We have the 16-bit (vs 8-bit) version of the card. */
-	unsigned bigendian:1;		/* 16-bit big endian mode. Do NOT */
+	uint8_t word16:1;  		/* We have the 16-bit (vs 8-bit) version of the card. */
+	uint8_t bigendian:1;		/* 16-bit big endian mode. Do NOT */
 					/* set this on random 8390 clones! */
-	unsigned txing:1;		/* Transmit Active */
-	unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
-	unsigned dmaing:1;		/* Remote DMA Active */
-	unsigned char tx_start_page, rx_start_page, stop_page;
-	unsigned char current_page;	/* Read pointer in buffer  */
-	unsigned char interface_num;	/* Net port (AUI, 10bT.) to use. */
-	unsigned char txqueue;		/* Tx Packet buffer queue length. */
+	uint8_t txing:1;		/* Transmit Active */
+	uint8_t irqlock:1;		/* 8390's intrs disabled when '1'. */
+	uint8_t dmaing:1;		/* Remote DMA Active */
+	uint8_t tx_start_page, rx_start_page, stop_page;
+	uint8_t current_page;		/* Read pointer in buffer  */
+	uint8_t txqueue;		/* Tx Packet buffer queue length. */
 	short tx1, tx2;			/* Packet lengths for ping-pong tx. */
 	short lasttx;			/* Alpha version consistency check. */
-	unsigned char reg0;		/* Register '0' in a WD8013 */
-	unsigned char reg5;		/* Register '5' in a WD8013 */
-	unsigned char saved_irq;	/* Original dev->irq value. */
-	struct net_device_stats stat;	/* The new statistics table. */
-	uint32_t *reg_offset;		/* Register mapping table */
-	//spinlock_t page_lock;		/* Page register locks */
-	unsigned long priv;		/* Private field to store bus IDs etc. */
+	struct ns8390_stats stat;	/* The new statistics table. */
 };
 
-struct net_device {
-	long base_addr;
-	int irq;
-	char dev_addr[6];
-	char *name;
+struct ns8390 {
+	int base_addr, irq;
+	uint8_t phys_addr[6];
 	struct ei_device ei;
-	uint32_t trans_start;
-	uint32_t last_rx;
+	int which;
 };
 
-int ne_probe1(struct net_device *dev, int ioaddr);
-void ne_reset_8390(struct net_device *dev);
-void ne_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
-			  int ring_page);
-void ne_block_input(struct net_device *dev, int count,
-			  char *buf, int ring_offset);
-void ne_block_output(struct net_device *dev, const int count,
-		const unsigned char *buf, const int start_page);
+#define MAX_8390_DEVS 1
 
-/*
-void ne2k_pci_get_8390_hdr(struct net_device *dev, struct e8390_pkt_hdr *hdr,
-int ring_page);
-void ne2k_pci_block_input(struct net_device *dev, int count,
-char *buf, int ring_offset);
-void ne2k_pci_block_output(struct net_device *dev, const int count,
-const unsigned char *buf, const int start_page);*/
-int ei_open(struct net_device *dev);
-//void ei_close(struct net_device *dev);
-void NS8390_init(struct net_device *dev, int startp);
-int ei_send_packet(struct net_device *dev, const void * data, int length);
-int ei_tx_reset(struct net_device *dev);
-int ei_get_address(struct net_device *dev, uint8_t * buffer);
-int ei_query(struct net_device *dev);
-int ei_get_packet(struct net_device *dev, void * buffer, int length);
+extern struct ns8390 ei_dev[MAX_8390_DEVS];
+extern int ei_devs;
+
+void ne_reset_8390(struct ns8390 *dev);
+void ne_get_8390_hdr(struct ns8390 *dev, struct e8390_pkt_hdr *hdr, int ring_page);
+void ne_block_input(struct ns8390 *dev, int count, char *buf, int ring_offset);
+void ne_block_output(struct ns8390 *dev, const int count, const unsigned char *buf, const int start_page);
+
+int ei_open(int which);
+int ei_close(int which);
+void NS8390_init(struct ns8390 *dev, int startp);
+int ei_send_packet(int which, const void * data, int length);
+int ei_tx_reset(int which);
+int ei_get_address(int which, uint8_t * buffer);
+int ei_set_filter(int which, int flags);
 
 
 /* The maximum number of 8390 interrupt service routines called per IRQ. */
 #define MAX_SERVICE 12
 
-/* The maximum time waited (in jiffies) before assuming a Tx failed. (20ms) */
-#define TX_TIMEOUT (20*HZ/100)
-
-#define ei_status (dev->ei)
-
 /* Some generic ethernet register configurations. */
-#define E8390_TX_IRQ_MASK	0xa	/* For register EN0_ISR */
-#define E8390_RX_IRQ_MASK	0x5
-#define E8390_RXCONFIG		0x4	/* EN0_RXCR: broadcasts, no multicast,errors */
-#define E8390_RXOFF		0x20	/* EN0_RXCR: Accept no packets */
-#define E8390_TXCONFIG		0x00	/* EN0_TXCR: Normal transmit mode */
-#define E8390_TXOFF		0x02	/* EN0_TXCR: Transmitter off */
+#define E8390_TX_IRQ_MASK 0xa	/* For register EN0_ISR */
+#define E8390_RX_IRQ_MASK 0x5
+#define E8390_RXCONFIG    0x4	/* EN0_RXCR: broadcasts, no multicast,errors */
+#define E8390_RXOFF       0x20	/* EN0_RXCR: Accept no packets */
+#define E8390_TXCONFIG    0x00	/* EN0_TXCR: Normal transmit mode */
+#define E8390_TXOFF       0x02	/* EN0_TXCR: Transmitter off */
 
 /*  Register accessed at EN_CMD, the 8390 base addr.  */
-#define E8390_STOP	0x01	/* Stop and reset the chip */
-#define E8390_START	0x02	/* Start the chip, clear reset */
-#define E8390_TRANS	0x04	/* Transmit a frame */
-#define E8390_RREAD	0x08	/* Remote read */
-#define E8390_RWRITE	0x10	/* Remote write  */
-#define E8390_NODMA	0x20	/* Remote DMA */
-#define E8390_PAGE0	0x00	/* Select page chip registers */
-#define E8390_PAGE1	0x40	/* using the two high-order bits */
-#define E8390_PAGE2	0x80	/* Page 3 is invalid. */
+#define E8390_STOP     0x01	/* Stop and reset the chip */
+#define E8390_START    0x02	/* Start the chip, clear reset */
+#define E8390_TRANS    0x04	/* Transmit a frame */
+#define E8390_RREAD    0x08	/* Remote read */
+#define E8390_RWRITE   0x10	/* Remote write  */
+#define E8390_NODMA    0x20	/* Remote DMA */
+#define E8390_PAGE0    0x00	/* Select page chip registers */
+#define E8390_PAGE1    0x40	/* using the two high-order bits */
+#define E8390_PAGE2    0x80	/* Page 3 is invalid. */
 
-/*
- *	Only generate indirect loads given a machine that needs them.
- *      - removed AMIGA_PCMCIA from this list, handled as ISA io now
- */
- 
-#if defined(CONFIG_MAC) ||  \
-    defined(CONFIG_ZORRO8390) || defined(CONFIG_ZORRO8390_MODULE) || \
-    defined(CONFIG_HYDRA) || defined(CONFIG_HYDRA_MODULE)
-#define EI_SHIFT(x)	(ei_local->reg_offset[x])
-#undef inb
-#undef inb_p
-#undef outb
-#undef outb_p
-
-#define inb(port)   in_8(port)
-#define outb(val,port)  out_8(port,val)
-#define inb_p(port)   in_8(port)
-#define outb_p(val,port)  out_8(port,val)
-
-#elif defined(CONFIG_ARM_ETHERH) || defined(CONFIG_ARM_ETHERH_MODULE)
-#define EI_SHIFT(x)	(ei_local->reg_offset[x])
-#undef inb
-#undef inb_p
-#undef outb
-#undef outb_p
-
-#define inb(_p)		readb(_p)
-#define outb(_v,_p)	writeb(_v,_p)
-#define inb_p(_p)	inb(_p)
-#define outb_p(_v,_p)	outb(_v,_p)
-
-#elif defined(CONFIG_NET_CBUS) || defined(CONFIG_NE_H8300) || defined(CONFIG_NE_H8300_MODULE)
-#define EI_SHIFT(x)	(ei_local->reg_offset[x])
-#else
-#define EI_SHIFT(x)	(x)
-#endif
-
-#define E8390_CMD	EI_SHIFT(0x00)  /* The command register (for all pages) */
+#define E8390_CMD      0x00	/* The command register (for all pages) */
 /* Page 0 register offsets. */
-#define EN0_CLDALO	EI_SHIFT(0x01)	/* Low byte of current local dma addr  RD */
-#define EN0_STARTPG	EI_SHIFT(0x01)	/* Starting page of ring bfr WR */
-#define EN0_CLDAHI	EI_SHIFT(0x02)	/* High byte of current local dma addr  RD */
-#define EN0_STOPPG	EI_SHIFT(0x02)	/* Ending page +1 of ring bfr WR */
-#define EN0_BOUNDARY	EI_SHIFT(0x03)	/* Boundary page of ring bfr RD WR */
-#define EN0_TSR		EI_SHIFT(0x04)	/* Transmit status reg RD */
-#define EN0_TPSR	EI_SHIFT(0x04)	/* Transmit starting page WR */
-#define EN0_NCR		EI_SHIFT(0x05)	/* Number of collision reg RD */
-#define EN0_TCNTLO	EI_SHIFT(0x05)	/* Low  byte of tx byte count WR */
-#define EN0_FIFO	EI_SHIFT(0x06)	/* FIFO RD */
-#define EN0_TCNTHI	EI_SHIFT(0x06)	/* High byte of tx byte count WR */
-#define EN0_ISR		EI_SHIFT(0x07)	/* Interrupt status reg RD WR */
-#define EN0_CRDALO	EI_SHIFT(0x08)	/* low byte of current remote dma address RD */
-#define EN0_RSARLO	EI_SHIFT(0x08)	/* Remote start address reg 0 */
-#define EN0_CRDAHI	EI_SHIFT(0x09)	/* high byte, current remote dma address RD */
-#define EN0_RSARHI	EI_SHIFT(0x09)	/* Remote start address reg 1 */
-#define EN0_RCNTLO	EI_SHIFT(0x0a)	/* Remote byte count reg WR */
-#define EN0_RCNTHI	EI_SHIFT(0x0b)	/* Remote byte count reg WR */
-#define EN0_RSR		EI_SHIFT(0x0c)	/* rx status reg RD */
-#define EN0_RXCR	EI_SHIFT(0x0c)	/* RX configuration reg WR */
-#define EN0_TXCR	EI_SHIFT(0x0d)	/* TX configuration reg WR */
-#define EN0_COUNTER0	EI_SHIFT(0x0d)	/* Rcv alignment error counter RD */
-#define EN0_DCFG	EI_SHIFT(0x0e)	/* Data configuration reg WR */
-#define EN0_COUNTER1	EI_SHIFT(0x0e)	/* Rcv CRC error counter RD */
-#define EN0_IMR		EI_SHIFT(0x0f)	/* Interrupt mask reg WR */
-#define EN0_COUNTER2	EI_SHIFT(0x0f)	/* Rcv missed frame error counter RD */
+#define EN0_CLDALO     0x01	/* Low byte of current local dma addr  RD */
+#define EN0_STARTPG    0x01	/* Starting page of ring bfr WR */
+#define EN0_CLDAHI     0x02	/* High byte of current local dma addr  RD */
+#define EN0_STOPPG     0x02	/* Ending page +1 of ring bfr WR */
+#define EN0_BOUNDARY   0x03	/* Boundary page of ring bfr RD WR */
+#define EN0_TSR        0x04	/* Transmit status reg RD */
+#define EN0_TPSR       0x04	/* Transmit starting page WR */
+#define EN0_NCR        0x05	/* Number of collision reg RD */
+#define EN0_TCNTLO     0x05	/* Low  byte of tx byte count WR */
+#define EN0_FIFO       0x06	/* FIFO RD */
+#define EN0_TCNTHI     0x06	/* High byte of tx byte count WR */
+#define EN0_ISR        0x07	/* Interrupt status reg RD WR */
+#define EN0_CRDALO     0x08	/* low byte of current remote dma address RD */
+#define EN0_RSARLO     0x08	/* Remote start address reg 0 */
+#define EN0_CRDAHI     0x09	/* high byte, current remote dma address RD */
+#define EN0_RSARHI     0x09	/* Remote start address reg 1 */
+#define EN0_RCNTLO     0x0a	/* Remote byte count reg WR */
+#define EN0_RCNTHI     0x0b	/* Remote byte count reg WR */
+#define EN0_RSR        0x0c	/* rx status reg RD */
+#define EN0_RXCR       0x0c	/* RX configuration reg WR */
+#define EN0_TXCR       0x0d	/* TX configuration reg WR */
+#define EN0_COUNTER0   0x0d	/* Rcv alignment error counter RD */
+#define EN0_DCFG       0x0e	/* Data configuration reg WR */
+#define EN0_COUNTER1   0x0e	/* Rcv CRC error counter RD */
+#define EN0_IMR        0x0f	/* Interrupt mask reg WR */
+#define EN0_COUNTER2   0x0f	/* Rcv missed frame error counter RD */
 
 /* Bits in EN0_ISR - Interrupt status register */
-#define ENISR_RX	0x01	/* Receiver, no error */
-#define ENISR_TX	0x02	/* Transmitter, no error */
-#define ENISR_RX_ERR	0x04	/* Receiver, with error */
-#define ENISR_TX_ERR	0x08	/* Transmitter, with error */
-#define ENISR_OVER	0x10	/* Receiver overwrote the ring */
-#define ENISR_COUNTERS	0x20	/* Counters need emptying */
-#define ENISR_RDC	0x40	/* remote dma complete */
-#define ENISR_RESET	0x80	/* Reset completed */
-#define ENISR_ALL	0x3f	/* Interrupts we will enable */
+#define ENISR_RX       0x01	/* Receiver, no error */
+#define ENISR_TX       0x02	/* Transmitter, no error */
+#define ENISR_RX_ERR   0x04	/* Receiver, with error */
+#define ENISR_TX_ERR   0x08	/* Transmitter, with error */
+#define ENISR_OVER     0x10	/* Receiver overwrote the ring */
+#define ENISR_COUNTERS 0x20	/* Counters need emptying */
+#define ENISR_RDC      0x40	/* remote dma complete */
+#define ENISR_RESET    0x80	/* Reset completed */
+#define ENISR_ALL      0x3f	/* Interrupts we will enable */
 
 /* Bits in EN0_DCFG - Data config register */
-#define ENDCFG_WTS	0x01	/* word transfer mode selection */
-#define ENDCFG_BOS	0x02	/* byte order selection */
+#define ENDCFG_WTS 0x01	/* word transfer mode selection */
+#define ENDCFG_BOS 0x02	/* byte order selection */
 
 /* Page 1 register offsets. */
-#define EN1_PHYS   EI_SHIFT(0x01)	/* This board's physical enet addr RD WR */
-#define EN1_PHYS_SHIFT(i)  EI_SHIFT(i+1) /* Get and set mac address */
-#define EN1_CURPAG EI_SHIFT(0x07)	/* Current memory page RD WR */
-#define EN1_MULT   EI_SHIFT(0x08)	/* Multicast filter mask array (8 bytes) RD WR */
-#define EN1_MULT_SHIFT(i)  EI_SHIFT(8+i) /* Get and set multicast filter */
+#define EN1_PHYS   0x01	/* This board's physical enet addr RD WR */
+#define EN1_CURPAG 0x07	/* Current memory page RD WR */
+#define EN1_MULT   0x08	/* Multicast filter mask array (8 bytes) RD WR */
+#define EN1_PHYS_SHIFT(i) (i+1)	/* Get and set mac address */
+#define EN1_MULT_SHIFT(i) (8+i)	/* Get and set multicast filter */
 
 /* Bits in received packet status byte and EN0_RSR*/
-#define ENRSR_RXOK	0x01	/* Received a good packet */
-#define ENRSR_CRC	0x02	/* CRC error */
-#define ENRSR_FAE	0x04	/* frame alignment error */
-#define ENRSR_FO	0x08	/* FIFO overrun */
-#define ENRSR_MPA	0x10	/* missed pkt */
-#define ENRSR_PHY	0x20	/* physical/multicast address */
-#define ENRSR_DIS	0x40	/* receiver disable. set in monitor mode */
-#define ENRSR_DEF	0x80	/* deferring */
+#define ENRSR_RXOK 0x01	/* Received a good packet */
+#define ENRSR_CRC  0x02	/* CRC error */
+#define ENRSR_FAE  0x04	/* frame alignment error */
+#define ENRSR_FO   0x08	/* FIFO overrun */
+#define ENRSR_MPA  0x10	/* missed pkt */
+#define ENRSR_PHY  0x20	/* physical/multicast address */
+#define ENRSR_DIS  0x40	/* receiver disable. set in monitor mode */
+#define ENRSR_DEF  0x80	/* deferring */
 
 /* Transmitted packet status, EN0_TSR. */
-#define ENTSR_PTX 0x01	/* Packet transmitted without error */
-#define ENTSR_ND  0x02	/* The transmit wasn't deferred. */
-#define ENTSR_COL 0x04	/* The transmit collided at least once. */
-#define ENTSR_ABT 0x08  /* The transmit collided 16 times, and was deferred. */
-#define ENTSR_CRS 0x10	/* The carrier sense was lost. */
-#define ENTSR_FU  0x20  /* A "FIFO underrun" occurred during transmit. */
-#define ENTSR_CDH 0x40	/* The collision detect "heartbeat" signal was lost. */
-#define ENTSR_OWC 0x80  /* There was an out-of-window collision. */
+#define ENTSR_PTX  0x01	/* Packet transmitted without error */
+#define ENTSR_ND   0x02	/* The transmit wasn't deferred. */
+#define ENTSR_COL  0x04	/* The transmit collided at least once. */
+#define ENTSR_ABT  0x08	/* The transmit collided 16 times, and was deferred. */
+#define ENTSR_CRS  0x10	/* The carrier sense was lost. */
+#define ENTSR_FU   0x20	/* A "FIFO underrun" occurred during transmit. */
+#define ENTSR_CDH  0x40	/* The collision detect "heartbeat" signal was lost. */
+#define ENTSR_OWC  0x80	/* There was an out-of-window collision. */
 
-#endif /* _8390_h */
+#endif /* !KUDOS_KERN_8390_H */

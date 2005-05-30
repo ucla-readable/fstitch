@@ -5,7 +5,7 @@
 void
 umain()
 {
-	uint8_t buffer[1024];
+	uint8_t buffer[2048];
 
 	while(read(STDIN_FILENO, buffer, sizeof(buffer)));
 }

@@ -498,15 +498,12 @@ env_run(struct Env* e)
 	curenv->env_jiffies = jiffies;
 	env_tsc = read_tsc();
 	lcr3(e->env_cr3);
-	if (ENABLE_INKERNEL_INTS)
-	{
-		/* env_pop_tf() resets %esp, so we need it to be a
-		 * valid stack location in case of an interrupt */
-		*UTF = e->env_tf;
-		env_pop_tf(UTF);
-	}
-	else
-	{
-		env_pop_tf(&e->env_tf);
-	}
+#if ENABLE_INKERNEL_INTS
+	/* env_pop_tf() resets %esp, so we need it to be a
+	 * valid stack location in case of an interrupt */
+	*UTF = e->env_tf;
+	env_pop_tf(UTF);
+#else
+	env_pop_tf(&e->env_tf);
+#endif
 }

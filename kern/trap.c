@@ -218,6 +218,8 @@ print_trapframe(struct Trapframe *tf)
 }
 
 static irq_handler_t irq_handlers[MAX_IRQS] = {NULL};
+static int last_unexpected_irq = 0;
+static uint16_t irq_mask_backup;
 
 int
 request_irq(int irq, irq_handler_t handler)
@@ -229,6 +231,24 @@ request_irq(int irq, irq_handler_t handler)
 		return -1;
 	irq_handlers[irq] = handler;
 	return 0;
+}
+
+void
+probe_irq_on(void)
+{
+	if(!last_unexpected_irq)
+		irq_mask_backup = irq_mask_8259A;
+	last_unexpected_irq = -1;
+	irq_setmask_8259A_quiet(0);
+}
+
+int
+probe_irq_off(void)
+{
+	int irq = last_unexpected_irq;
+	irq_setmask_8259A_quiet(irq_mask_backup);
+	last_unexpected_irq = 0;
+	return irq;
 }
 
 void
@@ -262,9 +282,13 @@ trap(struct Trapframe *tf)
 			goto out;
 		}
 		
-		// just ignore spurious interrupts
-		printf("spurious interrupt on IRQ %d\n", irq);
-		//print_trapframe(tf);
+		if(!last_unexpected_irq)
+		{
+			printf("spurious interrupt on IRQ %d\n", irq);
+			//print_trapframe(tf);
+		}
+		else
+			last_unexpected_irq = irq;
 		goto out;
 	}
 	
