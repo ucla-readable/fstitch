@@ -63,7 +63,15 @@ LD	:= $(GCCPREFIX)ld
 OBJCOPY	:= $(GCCPREFIX)objcopy
 OBJDUMP	:= $(GCCPREFIX)objdump
 NM	:= $(GCCPREFIX)nm
+
+ifdef USE_STABS
+# Strip nothing for now, but it would be nice to strip the unnecessary symtab
+# and strtab sections.
+STRIP   := true
+CFLAGS  := $(CFLAGS) -DUSE_STABS
+else
 STRIP	:= $(GCCPREFIX)strip
+endif
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
@@ -75,12 +83,12 @@ CTAGS	:= ctags
 # Compiler flags
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-format -g
-CFLAGS	:= $(CFLAGS) -O2
+CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-format -gstabs
+#CFLAGS	:= $(CFLAGS) -O2
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
 
 # Linker flags for user programs
-ULDFLAGS := -Ttext 0x800020
+ULDFLAGS := -T user/user.ld
 
 # Lists that the */Makefrag makefile fragments will add to
 OBJDIRS :=

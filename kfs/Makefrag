@@ -40,7 +40,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/kfsd_init.o \
 			$(OBJDIR)/kfs/mem_bd.o
 
-$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a user/user.ld
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
 	$(V)echo "" > $(SYMTBL)
@@ -58,4 +58,4 @@ $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/user/entry.o $(OBJDIR)/user/libuser.a
 		-L$(OBJDIR)/user -luser $(GCC_LIB) \
 		 -b binary $(SYMTBL) $(SYMSTRTBL)
 	$(V)$(OBJDUMP) -S $@ >$@.asm
-	$(V)$(STRIP) $@
+	$(V)$(STRIP) $(STRIPFLAGS) $@

@@ -49,6 +49,8 @@ static_make_sizeof_tf_fp(void)
 }
 #endif
 
+#include <kern/stabs.h>
+#define USE_STABS 1
 
 static const char *trapname(int trapno)
 {
@@ -210,7 +212,8 @@ print_trapframe(struct Trapframe *tf)
 		envid = ENVID_KERNEL;
 		printf("%c:", 'k');
 	}
-	printf("%s\n", get_symbol_name(envid, eip_to_fnsym(envid, tf->tf_eip)));
+	print_location(tf->tf_eip, 1);
+	printf("\n");
 #endif
 }
 

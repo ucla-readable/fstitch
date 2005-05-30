@@ -93,7 +93,8 @@ breakpoints_print(struct Trapframe *tf)
 			envid = ENVID_KERNEL;
 			printf("%c:", 'k');
 		}
-		printf("%s(), ",get_symbol_name(envid, eip_to_fnsym(envid, tf->tf_eip)));
+		print_location(tf->tf_eip, 1);
+		printf(", ");
 
 		if(T_DEBUG == tf->tf_trapno)
 		{

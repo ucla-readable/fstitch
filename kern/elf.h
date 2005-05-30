@@ -32,6 +32,8 @@ int get_symtbl(envid_t envid,
 
 int  print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip);
 
+void print_location(uintptr_t eip, bool first_frame);
+
 
 //
 // Set symbol tables

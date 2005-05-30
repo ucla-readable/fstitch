@@ -80,6 +80,15 @@ strstr(const char *big, const char *little)
 	return NULL;
 }
 
+char *
+strfind(const char *s, char c)
+{
+	for (; *s; s++)
+		if (*s == c)
+			break;
+	return (char *) s;
+}
+
 #ifndef KUDOS_KERNEL
 char *
 strdup(const char *src)

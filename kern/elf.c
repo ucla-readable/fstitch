@@ -6,6 +6,7 @@
 
 #include <kern/env.h>
 #include <kern/elf.h>
+#include <kern/stabs.h>
 #include <kern/trap.h>
 
 const char locn_syntax[] = "[k:|<envnum>:]<laddr|symname>";
@@ -92,7 +93,6 @@ set_kernel_symtbls(void)
 	set_symtbls(ENVID_KERNEL,
 					(struct Sym*)_binary_symtbl_start, (size_t)_binary_symtbl_size,
 					(char*)_binary_symstrtbl_start, (size_t)_binary_symstrtbl_size);
-
 }
 
 int set_symtbls(envid_t envid,
@@ -403,7 +403,6 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 
 	while(prev_ebp)
 	{
-		struct Sym * sym;
 		uint32_t ebp = prev_ebp;
 		uint32_t eip = ret_eip;
 		prev_ebp = read_uint(ebp, 0);
@@ -424,10 +423,10 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 
 		/* all frames other than the first were (very likely)
 		 * created by a call instruction, which is length 5 */
-		sym = eip_to_fnsym(envid, first_frame ? eip : eip - 5);
+		print_location(eip, first_frame);
+		printf(": ");
 		if(first_frame)
 			first_frame = 0;
-		printf("%s: ", get_symbol_name(envid, sym));
 
 		printf(" eip 0x%08x", eip);
 		printf("  ebp 0x%08x", ebp);
@@ -448,4 +447,17 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 		stack_depth++;
 	}
 	return 0;
+}
+
+void
+print_location(uintptr_t eip, bool first_frame)
+{
+#if USE_STABS
+	eipinfo_t info;
+	if (stab_eip(eip, &info) >= 0)
+		printf("%s:%d %.*s+%x", info.eip_file, info.eip_line, info.eip_fnlen, info.eip_fn, eip - info.eip_fnaddr);
+#else
+	struct Sym * sym = eip_to_fnsym(envid, first_frame ? eip : eip - 5);
+	printf("%s", get_symbol_name(envid, sym);
+#endif
 }

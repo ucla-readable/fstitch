@@ -23,6 +23,7 @@ static char *error_string[MAXERROR+1] =
 	"unspecified error",
 	"bad environment",
 	"invalid parameter",
+	"memory fault",
 	"out of memory",
 	"out of environments",
 	"env is not recving",
@@ -107,7 +108,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 	register char *p;
 	register int ch, err;
 	unsigned long long num;
-	int base, lflag, width;
+	int base, lflag, width, precision;
 	char padc;
 
 	for (;;) {
@@ -119,7 +120,8 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
 		// Process a %-escape sequence
 		padc = ' ';
-		width = 0;
+		width = -1;
+		precision = -1;
 		lflag = 0;
 	reswitch:
 		switch (ch = *(unsigned char *) fmt++) {
@@ -139,12 +141,26 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		case '7':
 		case '8':
 		case '9':
-			for (width = 0;; ++fmt) {
-				width = width * 10 + ch - '0';
+			for (precision = 0;; ++fmt) {
+				precision = precision * 10 + ch - '0';
 				ch = *fmt;
 				if (ch < '0' || ch > '9')
 					break;
 			}
+			goto process_precision;
+
+		case '*':
+			precision = va_arg(ap, int);
+			goto process_precision;
+
+		case '.':
+			if (width < 0)
+				width = 0;
+			goto reswitch;
+
+		process_precision:
+			if (width < 0)
+				width = precision, precision = -1;
 			goto reswitch;
 
 		// long flag (doubled for long long)
@@ -177,13 +193,13 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 		case 's':
 			if ((p = va_arg(ap, char *)) == NULL)
 					p = "(null)";
-			while ((ch = *p++) != '\0')
+			while ((ch = *p++) != '\0' && (precision < 0 || --precision >= 0))
 				putch(ch, putdat);
 			break;
 
 		// binary 
 		case 'b':
-			num = getint(&ap, lflag);
+			num = getuint(&ap, lflag);
 			base = 2;
 			goto number;
 
@@ -205,7 +221,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
 		// (unsigned) octal
 		case 'o':
-			num = getint(&ap, lflag);
+			num = getuint(&ap, lflag);
 			base = 8;
 			goto number;
 
@@ -223,7 +239,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			num = getuint(&ap, lflag);
 			base = 16;
 		number:
-			printnum(putch, putdat, num, base, width, padc);
+			printnum(putch, putdat, num, base, MAX(width, 0), padc);
 			break;
 
 		// unrecognized escape sequence - just print it literally

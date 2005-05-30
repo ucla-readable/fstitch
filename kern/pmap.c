@@ -438,7 +438,43 @@ check_va2pa(pde_t* pgdir, uintptr_t va)
 		return ~0;
 	return PTE_ADDR(p[PTX(va)]);
 }
-		
+
+int
+check_user_access(struct Env *env, const void *ptr, size_t len, pte_t pte_bits)
+{
+	uintptr_t addr = (uintptr_t) ptr;
+	uintptr_t end_addr = addr + len - 1;
+
+	if (end_addr >= ULIM || addr > end_addr + 1)
+		return -E_FAULT;
+
+	while (addr <= end_addr)
+	{
+		pde_t pde = env->env_pgdir[PDX(addr)];
+		pte_t *pgtbl, *end_pgtbl;
+
+		if ((pde & (PTE_P | PTE_U)) != (PTE_P | PTE_U)
+		    || (pte_bits && (pde & pte_bits) == 0))
+			return -E_FAULT;
+
+		pgtbl = (pte_t *) KADDR(PTE_ADDR(pde)) + PTX(addr);
+		end_pgtbl = (pte_t *) KADDR(PTE_ADDR(pde));
+		if (PDX(addr) == PDX(end_addr))
+			end_pgtbl += PTX(end_addr) + 1;
+		else
+			end_pgtbl += NPTENTRIES;
+
+		for (; pgtbl != end_pgtbl; ++pgtbl)
+			if ((*pgtbl & (PTE_P | PTE_U)) != (PTE_P | PTE_U)
+			    || (pte_bits && (*pgtbl & pte_bits) == 0))
+				return -E_FAULT;
+
+		addr = ROUNDUP32(addr + 1, PTSIZE);
+	}
+
+	return 0;
+}
+
 // --------------------------------------------------------------
 // Tracking of physical pages.
 // The 'pages' array has one 'struct Page' entry per physical page.

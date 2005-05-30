@@ -7,7 +7,7 @@
 
 OBJDIRS += kern
 
-KERN_LDFLAGS := $(LDFLAGS) -Ttext F0100000 -nostdlib
+KERN_LDFLAGS := $(LDFLAGS) -T kern/kernel.ld -nostdlib
 
 
 INIT=init
@@ -25,6 +25,7 @@ KERN_SRCFILES :=	kern/entry.S \
 			kern/monitor.c \
 			kern/breakpoints.c \
 			kern/elf.c \
+			kern/stabs.c \
 			kern/$(PMAP).c \
 			kern/$(ENV).c \
 			kern/kclock.c \
@@ -68,7 +69,7 @@ KERN_BINFILES := $(patsubst %, $(OBJDIR)/%, $(KERN_BINFILES))
 $(OBJDIR)/kern/version.o: $(KERN_SRCFILES) $(KERN_BINFILES)
 
 # How to build the kernel itself
-$(OBJDIR)/kern/kernel: $(KERN_OBJFILES) $(KERN_BINFILES) $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
+$(OBJDIR)/kern/kernel: $(KERN_OBJFILES) $(KERN_BINFILES) kern/kernel.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
 	@echo + ld $@
 	$(V)echo "" > $(SYMTBL)
 	$(V)echo "" > $(SYMSTRTBL)
