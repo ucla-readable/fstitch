@@ -9,7 +9,7 @@ void umain(int argc, const char ** argv)
 	int size = 4*1024*1024;
 	int time;
 
-	if (get_arg_idx(argc, argv, "-h"))
+	if (argc < 2 || get_arg_idx(argc, argv, "-h"))
 	{
 		printf("Usage: %s [test_file] [size]\n", argv[0]);
 		exit();
@@ -22,7 +22,7 @@ void umain(int argc, const char ** argv)
 
 	time = perf_test(0, file, size);
 	if (time > 0)
-		printf("%u kBps\n", 4*1024 / (time / 100));
+		printf("%u kBps\n", (unsigned) (4*1024 / ((double)time / 100)));
 	else
 		printf("perf_test: %e\n", time);
 }
