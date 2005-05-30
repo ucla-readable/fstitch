@@ -372,6 +372,15 @@ read_eip(void)
 	return read_uint(read_ebp(), sizeof(uintptr_t));
 }
 
+static void
+print_backtrace_location(envid_t envid, uint32_t eip)
+{
+	if(curenv && eip < KERNBASE)
+		printf("%08x (%s)", envid, curenv->env_name);
+	else
+		printf("kernel");
+}
+
 int
 print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 {
@@ -379,8 +388,7 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 	uint32_t stack_depth = 0;
 	uint32_t prev_ebp, ret_eip;
 	int first_frame = 1;
-
-	printf("Backtrace: \n");
+	bool bt_kernel;
 
 	// really, these are the current ebp/eip,name prev to make while loop easier
 	if(ebp != NULL && eip != NULL)
@@ -401,6 +409,11 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 		ret_eip = read_eip();
 	}
 
+	bt_kernel = curenv && ret_eip < KERNBASE;
+	printf("Backtrace in ");
+	print_backtrace_location(bt_kernel ? ENVID_KERNEL : curenv->env_id, ret_eip);
+	printf(":\n");
+
 	while(prev_ebp)
 	{
 		uint32_t ebp = prev_ebp;
@@ -408,41 +421,36 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 		prev_ebp = read_uint(ebp, 0);
 		ret_eip = read_uint(ebp, sizeof(uintptr_t));
 
-		printf("[%u] ", stack_depth);
-		envid_t envid;
-		if(curenv && eip < KERNBASE)
+		if (bt_kernel != (curenv && eip < KERNBASE))
 		{
-			envid = curenv->env_id;
-			printf("%d:", ENVX(envid));
-		} 
-		else
-		{
-			envid = ENVID_KERNEL;
-			printf("%c:", 'k');
+			printf("= Stack changes to ");
+			print_backtrace_location(bt_kernel ? ENVID_KERNEL : curenv->env_id, eip);
+			printf("\n");
+			bt_kernel = !bt_kernel;
 		}
+
+		printf("[%u] ", stack_depth);
 
 		/* all frames other than the first were (very likely)
 		 * created by a call instruction, which is length 5 */
 		print_location(eip, first_frame);
-		printf(": ");
 		if(first_frame)
 			first_frame = 0;
+		printf("\n");
 
-		printf(" eip 0x%08x", eip);
-		printf("  ebp 0x%08x", ebp);
-		printf("\n     ");
 		printf(" args");
-
 		int i;
 		for(i=0; i<max_bt_args; i++)
 		{
 			uint32_t *arg_addr = ((uint32_t*) ebp) + 2+i;
 			if(USTACKTOP <= (uintptr_t)arg_addr && (uintptr_t)arg_addr < USTACKTOP+PGSIZE)
-				printf(" ----------"); // this region is not mapped
+				printf(" --------"); // this region is not mapped
 			else
-				printf(" 0x%08x", *arg_addr);
+				printf(" %08x", *arg_addr);
 		}
 
+		printf("  eip %08x", eip);
+		printf("  ebp %08x", ebp);
 		printf("\n");
 		stack_depth++;
 	}
@@ -455,7 +463,7 @@ print_location(uintptr_t eip, bool first_frame)
 #if USE_STABS
 	eipinfo_t info;
 	if (stab_eip(eip, &info) >= 0)
-		printf("%s:%d %.*s+%x", info.eip_file, info.eip_line, info.eip_fnlen, info.eip_fn, eip - info.eip_fnaddr);
+		printf("%.*s+%u  %s:%d", info.eip_fnlen, info.eip_fn, eip - info.eip_fnaddr, info.eip_file, info.eip_line);
 #else
 	struct Sym * sym = eip_to_fnsym(envid, first_frame ? eip : eip - 5);
 	printf("%s", get_symbol_name(envid, sym);
