@@ -58,4 +58,4 @@ $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a u
 		-L$(OBJDIR)/lib -luser $(GCC_LIB) \
 		 -b binary $(SYMTBL) $(SYMSTRTBL)
 	$(V)$(OBJDUMP) -S $@ >$@.asm
-	$(V)$(STRIP) $(STRIPFLAGS) $@
+	$(V)$(STRIP) $@
