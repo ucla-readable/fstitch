@@ -247,9 +247,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	const bool enable_internal_journaling = 0;
 #endif
 	const bool enable_fsck = 0;
-#if INBS
 	void * ptbl = NULL;
-#endif
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
 
@@ -257,7 +255,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	bd = mirror_bd(bd, NULL, 4);
 #endif
 
-#if INBS
 	/* discover partitions */
 	ptbl = pc_ptable_init(bd);
 	if (ptbl)
@@ -288,7 +285,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		printf("Using whole disk.\n");
 		partitions[0] = bd;
 	}
-#endif
+
 	// HACK
 	if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
 		partitions[0] = bd;
