@@ -374,10 +374,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (lfs)
 			printf("Using josfs");
-#if INBS
 		else if ((lfs = wholedisk(cache)))
 			printf("Using wholedisk");
-#endif
 		else
 		{
 			fprintf(STDERR_FILENO, "\nlfs creation failed\n");
