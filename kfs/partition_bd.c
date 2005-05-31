@@ -142,7 +142,6 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 static int partition_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	bdesc_t * wblock;
 	int value;
 	
 	if(block == SYNC_FULL_DEVICE)
