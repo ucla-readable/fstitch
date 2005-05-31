@@ -41,7 +41,8 @@ static int ide4k_notbusy(uint8_t controller)
 	return 0;
 }
 
-#define SECTSIZE 4096
+#define SECTSIZE 512
+#define BLOCKSIZE 4096
 
 static int ide4k_read(uint8_t controller, uint8_t disk, uint32_t sector, void * dst, uint8_t count)
 {
@@ -59,10 +60,14 @@ static int ide4k_read(uint8_t controller, uint8_t disk, uint32_t sector, void * 
 	/* command 0x20 means read sector */
 	outb(base + 7, 0x20);
 	
-	if(ide4k_notbusy(controller) == -1)
-		return -1;
+	while(count--)
+	{
+		if(ide4k_notbusy(controller) == -1)
+			return -1;
 		
-	insl(base + 0, dst, count * SECTSIZE / 4);
+		insl(base + 0, dst, SECTSIZE / 4);
+		dst += SECTSIZE;
+	}
 	return 0;
 }
 
@@ -82,10 +87,14 @@ static int ide4k_write(uint8_t controller, uint8_t disk, uint32_t sector, const 
 	/* command 0x30 means write sector */
 	outb(base + 7, 0x30);
 	
-	if(ide4k_notbusy(controller) == -1)
-		return -1;
-
-	outsl(base + 0, src, count * SECTSIZE / 4);
+	while(count--)
+	{
+		if(ide4k_notbusy(controller) == -1)
+			return -1;
+	
+		outsl(base + 0, src, SECTSIZE / 4);
+		src += SECTSIZE;
+	}
 	return 0;
 }
 
@@ -160,12 +169,12 @@ static uint32_t ide4k_pio_bd_get_numblocks(BD_t * object)
 
 static uint16_t ide4k_pio_bd_get_blocksize(BD_t * object)
 {
-	return SECTSIZE;
+	return BLOCKSIZE;
 }
 
 static uint16_t ide4k_pio_bd_get_atomicsize(BD_t * object)
 {
-	return SECTSIZE;
+	return BLOCKSIZE;
 }
 
 static bdesc_t * ide4k_pio_bd_read_block(BD_t * object, uint32_t number)
@@ -181,13 +190,13 @@ static bdesc_t * ide4k_pio_bd_read_block(BD_t * object, uint32_t number)
 	if(number >= ((struct ide4k_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, SECTSIZE);
+	bdesc = bdesc_alloc(number, BLOCKSIZE);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
 	/* read it */
-	if(ide4k_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
+	if(ide4k_read(info->controller, info->disk, number, bdesc->ddesc->data, 8) == -1)
 		return NULL;
 	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
@@ -213,7 +222,7 @@ static bdesc_t * ide4k_pio_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(number >= ((struct ide4k_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, SECTSIZE);
+	bdesc = bdesc_alloc(number, BLOCKSIZE);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -237,7 +246,7 @@ static int ide4k_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	struct ide4k_info * info = (struct ide4k_info *) OBJLOCAL(object);
 	
 	/* make sure it's a whole block */
-	if(block->ddesc->length != SECTSIZE)
+	if(block->ddesc->length != BLOCKSIZE)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */
@@ -248,7 +257,7 @@ static int ide4k_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_tail_prepare(block, object);
 	
 	/* write it */
-	if(ide4k_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1) {
+	if(ide4k_write(info->controller, info->disk, block->number, block->ddesc->data, 8) == -1) {
 		/* the write failed; don't remove any change descriptors... */
 		revision_tail_revert(block, object);
 		return -E_TIMEOUT;
