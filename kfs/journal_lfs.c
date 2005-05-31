@@ -23,11 +23,11 @@
 
 
 struct journal_state {
-	BD_t * queue;
-	LFS_t * journal;
-	fdesc_t * jfdesc;
-	LFS_t * fs;
-	chdesc_t ** commit_chdesc;
+	BD_t * queue; // the journal_queue_bd
+	LFS_t * journal; // the LFS containing the journal file
+	fdesc_t * jfdesc; // the fdesc for the journal file
+	LFS_t * fs; // the LFS being journaled
+	chdesc_t ** commit_chdesc; // ptrs to each record's commit chdesc
 	uint16_t ncommit_records, next_trans_slot;
 	uint16_t blocksize;
 #ifdef JOURNAL_PROGRESS_ENABLED
@@ -112,7 +112,7 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 	bdesc_t * commit_block = CALL(state->journal, get_file_block, state->jfdesc, transaction_start * state->blocksize);
 	if(!commit_block)
 		return -E_UNSPECIFIED;
-	bdesc_retain(&commit_block);
+	bdesc_retain(commit_block);
 	
 	cr = (struct commit_record *) commit_block->ddesc->data;
 	if(cr->magic != JOURNAL_MAGIC || cr->type != expected_type)
@@ -150,7 +150,7 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 			bdesc_release(&commit_block);
 			return -E_UNSPECIFIED;
 		}
-		bdesc_retain(&number_block);
+		bdesc_retain(number_block);
 		
 		numbers = (uint32_t *) number_block->ddesc->data;
 		for(index = 0; index != max; index++)
@@ -160,7 +160,7 @@ static int replay_single_transaction(journal_state_t * state, uint32_t transacti
 			bdesc_t * data_block = CALL(state->journal, get_file_block, state->jfdesc, db++ * state->blocksize);
 			if(!data_block)
 				goto data_error;
-			bdesc_retain(&data_block);
+			bdesc_retain(data_block);
 			
 			output = CALL(state->queue, read_block, numbers[index]);
 			if(!output)
@@ -258,33 +258,18 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	chdesc_t * prev_head;
 	chdesc_t * tail;
 	BD_t * journal_bd = CALL(state->journal, get_blockdev);
+	BD_t * fs_bd      = CALL(state->fs, get_blockdev);
 
-	jdata_chdescs = chdesc_create_noop(NULL);
+	// TODO: should journal_bd be passed here?
+	jdata_chdescs = chdesc_create_noop(NULL, journal_bd);
 	if (!jdata_chdescs)
 		return -E_NO_MEM;
 
-	fsdata_chdescs = chdesc_create_noop(NULL); 
+	fsdata_chdescs = chdesc_create_noop(NULL, fs_bd); 
 	if (!fsdata_chdescs)
 	{
 		chdesc_destroy(&jdata_chdescs);
 		return -E_NO_MEM;
-	}
-
-	r = depman_add_chdesc(jdata_chdescs);
-	if (r < 0)
-	{
-		chdesc_destroy(&fsdata_chdescs);
-		chdesc_destroy(&jdata_chdescs);
-		return r;
-	}
-
-	r = depman_add_chdesc(fsdata_chdescs);
-	if (r < 0)
-	{
-		// Ignore possible depman error
-		(void) depman_remove_chdesc(jdata_chdescs);
-		chdesc_destroy(&fsdata_chdescs);
-		return r;
 	}
 
 	r = journal_queue_passthrough(state->queue);
@@ -300,14 +285,12 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	{
 		uint32_t bdesc_number = CALL(state->journal, get_file_block_num, state->jfdesc, file_offset);
 		assert(bdesc_number != -1);
-		bdesc = bdesc_alloc(journal_bd, bdesc_number, state->blocksize);
+		bdesc = bdesc_alloc(bdesc_number, state->blocksize);
 		assert(bdesc); // TODO: handle error
 
 		// TODO: does journal data need to depend on anything, in case of small cache?
 		prev_head = NULL;
-		r = chdesc_create_full(bdesc, data_bdescs[i]->ddesc->data, &prev_head, &tail);
-		assert(r >= 0); // TODO: handle error
-		r = depman_add_chdesc(prev_head);
+		r = chdesc_create_full(bdesc, journal_bd, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
 		r = chdesc_add_depend(jdata_chdescs, prev_head);
 		assert(r >= 0); // TODO: handle error
@@ -356,9 +339,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 			assert(bdesc); // TODO: handle error
 
 			prev_head = NULL;
-			r = chdesc_create_full(bdesc, num_block, &prev_head, &tail);
-			assert(r >= 0); // TODO: handle error
-			r = depman_add_chdesc(prev_head);
+			r = chdesc_create_full(bdesc, journal_bd, num_block, &prev_head, &tail);
 			assert(r >= 0); // TODO: handle error
 			r = chdesc_add_depend(jdata_chdescs, prev_head);
 			assert(r >= 0); // TODO: handle error
@@ -393,9 +374,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	assert(bdesc); // TODO: handle error
 
 	prev_head = jdata_chdescs;
-	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
-	assert(r >= 0); // TODO: handle error
-	r = depman_add_chdesc(prev_head);
+	r = chdesc_create_byte(bdesc, journal_bd, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
 
 	// retain for creating fsdata_chdescs
@@ -418,9 +397,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 		prev_head = commit_chdesc;
 		// TODO: this copies each bdescs' data. All we really want to
 		// to make dependencies:
-		r = chdesc_create_full(data_bdescs[i], data_bdescs[i]->ddesc->data, &prev_head, &tail);
-		assert(r >= 0); // TODO: handle error
-		r = depman_add_chdesc(prev_head);
+		r = chdesc_create_full(data_bdescs[i], fs_bd, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
 		r = chdesc_add_depend(fsdata_chdescs, prev_head);
 		assert(r >= 0); // TODO: handle error
@@ -435,9 +412,7 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	assert(bdesc); // TODO: handle error
 
 	prev_head = fsdata_chdescs;
-	r = chdesc_create_byte(bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
-	assert(r >= 0); // TODO: handle error
-	r = depman_add_chdesc(prev_head);
+	r = chdesc_create_byte(bdesc, fs_bd, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
 
 	r = chdesc_weak_retain(prev_head, &state->commit_chdesc[slot]);
@@ -471,7 +446,7 @@ static size_t use_next_trans_slot(journal_state_t * state)
 
 		bdesc = state->commit_chdesc[slot]->block;
 			
-		r = CALL(bdesc->bd, sync, bdesc);
+		r = CALL(state->commit_chdesc[slot]->owner, sync, bdesc);
 		assert(r >= 0); // TODO: handle error
 		assert(!state->commit_chdesc[slot]);
 	}
@@ -785,7 +760,6 @@ static int journal_destroy(LFS_t * lfs)
 static void eat_chdesc_graph(chdesc_t * c)
 {
 	chmetadesc_t * scan;
-	int r;
 
 	// eat_chdesc_graph() can be passed NULL, watch out:
 	if (!c)
@@ -794,8 +768,9 @@ static void eat_chdesc_graph(chdesc_t * c)
 	while ((scan = c->dependencies))
 		eat_chdesc_graph(scan->desc);
 
-	r = depman_remove_chdesc(c);
-	assert(r >= 0);
+	// TOOD: what should we do here?
+	//r = depman_remove_chdesc(c);
+	//assert(r >= 0);
 }
 
 static bdesc_t * journal_allocate_block(LFS_t * lfs, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
