@@ -31,6 +31,7 @@ parport1: enabled=1, file="/dev/stdout"
 # bochs-term)
 
 #display_library: x
+#display_library: sdl
 
 # nogui can still be useful because you can see the output on the
 # parport1 from above
