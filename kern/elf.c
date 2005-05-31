@@ -373,10 +373,10 @@ read_eip(void)
 }
 
 static void
-print_backtrace_location(envid_t envid, uint32_t eip)
+print_backtrace_location(uint32_t eip)
 {
 	if(curenv && eip < KERNBASE)
-		printf("%08x (%s)", envid, curenv->env_name);
+		printf("%08x (%s)", curenv->env_id, curenv->env_name);
 	else
 		printf("kernel");
 }
@@ -388,7 +388,7 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 	uint32_t stack_depth = 0;
 	uint32_t prev_ebp, ret_eip;
 	int first_frame = 1;
-	bool bt_kernel;
+	bool bt_user;
 
 	// really, these are the current ebp/eip,name prev to make while loop easier
 	if(ebp != NULL && eip != NULL)
@@ -409,9 +409,9 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 		ret_eip = read_eip();
 	}
 
-	bt_kernel = curenv && ret_eip < KERNBASE;
+	bt_user = curenv && ret_eip < KERNBASE;
 	printf("Backtrace in ");
-	print_backtrace_location(bt_kernel ? ENVID_KERNEL : curenv->env_id, ret_eip);
+	print_backtrace_location(ret_eip);
 	printf(":\n");
 
 	while(prev_ebp)
@@ -421,12 +421,12 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 		prev_ebp = read_uint(ebp, 0);
 		ret_eip = read_uint(ebp, sizeof(uintptr_t));
 
-		if (bt_kernel != (curenv && eip < KERNBASE))
+		if (bt_user != (curenv && eip < KERNBASE))
 		{
 			printf("= Stack changes to ");
-			print_backtrace_location(bt_kernel ? ENVID_KERNEL : curenv->env_id, eip);
+			print_backtrace_location(eip);
 			printf("\n");
-			bt_kernel = !bt_kernel;
+			bt_user = !bt_user;
 		}
 
 		printf("[%u] ", stack_depth);
@@ -465,7 +465,7 @@ print_location(uintptr_t eip, bool first_frame)
 	if (stab_eip(eip, &info) >= 0)
 		printf("%.*s+%u  %s:%d", info.eip_fnlen, info.eip_fn, eip - info.eip_fnaddr, info.eip_file, info.eip_line);
 #else
-	struct Sym * sym = eip_to_fnsym(envid, first_frame ? eip : eip - 5);
-	printf("%s", get_symbol_name(envid, sym);
+	struct Sym * sym = eip_to_fnsym(curenv->env_id, first_frame ? eip : eip - 5);
+	printf("%s", get_symbol_name(curenv->env_id, sym));
 #endif
 }
