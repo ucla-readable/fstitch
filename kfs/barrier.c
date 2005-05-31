@@ -27,7 +27,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	bool synthetic;
 	bool chdescs_moved = 0;
 	bdesc_t * target_block;
-	chmetadesc_t * chmetadesc;
+	chmetadesc_t ** chmetadesc;
 	int r;
 
 	if (!block->ddesc->changes)
@@ -49,10 +49,12 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	if (r < 0)
 		return r;
 
-	/* transfer the barrier's bottom chdescs on block to target_block */
-	for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
+	/* transfer the barrier's bottom chdescs on block to target_block.
+	 * this loop makes use of knowledge of how chdesc_move operates. */
+	chmetadesc = &block->ddesc->changes->dependencies;
+	while (block->ddesc->changes && *chmetadesc)
 	{
-		chdesc_t * chdesc = chmetadesc->desc;
+		chdesc_t * chdesc = (*chmetadesc)->desc;
 		if (chdesc->owner == barrier)
 		{
 			chdescs_moved = 1;
@@ -60,6 +62,8 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 			if (r < 0)
 				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
+		else
+			chmetadesc = &(*chmetadesc)->next;
 	}
 	if (chdescs_moved)
 		chdesc_finish_move(target_block);
@@ -145,7 +149,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 		bool synthetic;
 		bool chdescs_moved = 0;
 		bdesc_t * target_block;
-		chmetadesc_t * chmetadesc;
+		chmetadesc_t ** chmetadesc;
 		partial_forward_t * forward = &forwards[i];
 
 		/* block->ddesc->changes can become NULL after a chdesc_move(),
@@ -163,10 +167,12 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			continue;
 		}
 
-		/* transfer the barrier's bottom chdescs on block to target_block */
-		for (chmetadesc = block->ddesc->changes->dependencies; chmetadesc; chmetadesc = chmetadesc->next)
+		/* transfer the barrier's bottom chdescs on block to target_block.
+		 * this loop makes use of knowledge of how chdesc_move operates. */
+		chmetadesc = &block->ddesc->changes->dependencies;
+		while (block->ddesc->changes && *chmetadesc)
 		{
-			chdesc_t * chdesc = chmetadesc->desc;
+			chdesc_t * chdesc = (*chmetadesc)->desc;
 			if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
 			{
 				chdescs_moved = 1;
@@ -174,6 +180,8 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 				if (r < 0)
 					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			}
+			else
+				chmetadesc = &(*chmetadesc)->next;
 		}
 		if (chdescs_moved)
 			chdesc_finish_move(target_block);
