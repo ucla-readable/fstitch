@@ -175,6 +175,10 @@ static int wt_cache_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 	if(block == SYNC_FULL_DEVICE)
 		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
 	
+	/* make sure it's a valid block */
+	if(block >= CALL(info->bd, get_numblocks))
+		return -E_INVAL;
+
 	/* sync it */
 	return CALL(info->bd, sync, block, ch);
 }
