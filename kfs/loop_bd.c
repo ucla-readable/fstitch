@@ -96,10 +96,21 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 
 static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * synthetic)
 {
+	// This call goes around info->lfs to do a synthetic_read_block on the
+	// info->lfs's BD. This seems simpler than adding synthetic_read_block
+	// support to LFS and it seems this going-around behavior is acceptable.
+
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, number);
 	loop_info_t * info = (struct loop_info_t *) OBJLOCAL(bd);
+	uint32_t loop_number, lfs_number;
 	bdesc_t * bdesc, * new_bdesc;
-	
-	bdesc = CALL(info->lfs_bd, synthetic_read_block, number * info->blocksize, synthetic);
+
+	loop_number = number;
+	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
+	if(lfs_number == -1)
+		return NULL;
+
+	bdesc = CALL(info->lfs_bd, synthetic_read_block, lfs_number * info->blocksize, synthetic);
 	if(!bdesc)
 		return NULL;
 	
@@ -113,6 +124,11 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * sy
 
 static int loop_cancel_block(BD_t * bd, uint32_t number)
 {
+	// This call goes around info->lfs to do a synthetic_read_block on the
+	// info->lfs's BD. This seems simpler than adding synthetic_read_block
+	// support to LFS and it seems this going-around behavior is acceptable.
+
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);	
 	return CALL(info->lfs_bd, cancel_block, number * info->blocksize);
 }
