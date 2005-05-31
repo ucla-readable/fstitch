@@ -116,7 +116,7 @@ int revision_tail_prepare(bdesc_t *block, BD_t *bd)
 	// pop & rollback
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
-		if (c->block == block) continue;		
+		if (c->owner == bd) continue;		
 		r = chdesc_rollback(c);
 		if (r != 0)
 			panic("can't rollback!\n");
@@ -164,7 +164,7 @@ int revision_tail_revert(bdesc_t *block, BD_t *bd)
 	// pop & rollforward
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
-		if (c->block == block) continue;		
+		if (c->owner == bd) continue;		
 		r = chdesc_apply(c);
 		if (r != 0)
 			panic("can't rollforward!\n");
@@ -212,7 +212,7 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 	// pop & rollforward
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
-		if (c->block == block) {
+		if (c->owner == bd) {
 			chdesc_satisfy(c);
 			chdesc_destroy(&c);
 			continue;
