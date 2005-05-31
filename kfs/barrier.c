@@ -58,7 +58,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 		if (chdesc->owner == barrier)
 		{
 			chdescs_moved = 1;
-			r = chdesc_move(chdesc, target_block, 0);
+			r = chdesc_move(chdesc, target_block, target, 0);
 			if (r < 0)
 				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
@@ -162,10 +162,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			panic("%s(): forward->target->synthetic_read_block() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 
 		if (block == target_block)
-		{
-			Dprintf("%s(): block == target_block (0x%08x), offset %d, size %d\n", __FUNCTION__, block, forward->offset, forward->size);
-			continue;
-		}
+			panic("%s(): block == target_block (0x%08x), offset %d, size %d", __FUNCTION__, block, forward->offset, forward->size);
 
 		/* transfer the barrier's bottom chdescs on block to target_block.
 		 * this loop makes use of knowledge of how chdesc_move operates. */
@@ -176,7 +173,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
 			{
 				chdescs_moved = 1;
-				r = chdesc_move(chdesc, target_block, forward->offset);
+				r = chdesc_move(chdesc, target_block, forward->target, forward->offset);
 				if (r < 0)
 					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			}

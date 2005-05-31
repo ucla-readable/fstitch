@@ -586,7 +586,7 @@ void chdesc_unmark_graph(chdesc_t * root)
 			chdesc_unmark_graph(meta->desc);
 }
 
-int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset)
+int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	uint16_t * offset;
 	int r;
@@ -650,6 +650,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset
 		assert(r >= 0);
 		bdesc_release(&chdesc->block);
 	}
+	chdesc->owner = target_bd;
 	chdesc->block = destination;
 	bdesc_retain(destination);
 	
