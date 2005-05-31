@@ -269,7 +269,7 @@ static int ide4k_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
-static int ide4k_pio_bd_sync(BD_t * object, bdesc_t * block)
+static int ide4k_pio_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	return 0;
 }
