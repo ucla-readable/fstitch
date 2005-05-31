@@ -242,7 +242,7 @@ static void print_usage(const char * bin)
 	printf("    [-j <on|<extern_file>|off*> [-jfsck <on|off*>]] [-fsck <on|off*>]\n");
 	printf("    [-$ <num_blocks>] [-c <wb*|wt|none>]\n");
 	printf("  <device> is one of:\n");
-	printf("    ide  <controllerno> <diskno>\n");
+	printf("    ide  <controllerno> <diskno> <readahead>\n");
 	printf("    nbd  <host> [-p <port>]\n");
 	printf("    loop <file>\n");
 	printf("    bd   <bd_name>\n");
@@ -387,9 +387,9 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 	if (!strcmp("ide", argv[device_index]))
 	{
-		uint8_t controllerno, diskno;
+		uint8_t controllerno, diskno, readahead;
 
-		if (device_index + 2 >= argc)
+		if (device_index + 3 >= argc)
 		{
 			fprintf(STDERR_FILENO, "Insufficient parameters for ide\n");
 			print_usage(argv[0]);
@@ -398,10 +398,11 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		controllerno = strtol(argv[device_index+1], NULL, 10);
 		diskno = strtol(argv[device_index+2], NULL, 10);
+		readahead = strtol(argv[device_index+3], NULL, 10);
 
-		if (! (disk = ide_pio_bd(controllerno, diskno)) )
+		if (! (disk = ide_pio_bd(controllerno, diskno, readahead)) )
 		{
-			fprintf(STDERR_FILENO, "ide_pio_bd(%d, %d) failed\n", controllerno, diskno);
+			fprintf(STDERR_FILENO, "ide_pio_bd(%d, %d, %d) failed\n", controllerno, diskno);
 			return NULL;
 		}
 	}

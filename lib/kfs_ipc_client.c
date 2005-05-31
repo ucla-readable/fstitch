@@ -782,7 +782,7 @@ int mirror_bd_remove_device(BD_t * bd, int diskno)
 }
 #endif
 #include <kfs/ide_pio_bd.h>
-BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
+BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 {
 	const envid_t fsid = find_fs();
 	uint32_t bd_id;
@@ -791,6 +791,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 
 	pg->controller = controller;
 	pg->disk = disk;
+	pg->readahead = readahead;
 
 	SEND_PG();
 	bd_id = RECV_PG();

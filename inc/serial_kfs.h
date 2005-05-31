@@ -284,6 +284,7 @@ typedef struct {
 	SKFS_TYPE;
 	uint8_t controller;
 	uint8_t disk;
+	uint8_t readahead;
 } Skfs_ide_pio_bd_t;
 
 

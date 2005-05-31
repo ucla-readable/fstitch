@@ -168,8 +168,8 @@ int kfsd_init(void)
 	{
 		BD_t * bd;
 
-		if (! (bd = ide_pio_bd(0, 0)) )
-			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0) failed\n");
+		if (! (bd = ide_pio_bd(0, 0, 0)) )
+			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
@@ -181,8 +181,8 @@ int kfsd_init(void)
 	{
 		BD_t * bd;
 
-		if (! (bd = ide_pio_bd(0, 1)) )
-			fprintf(STDERR_FILENO, "ide_pio_bd(0, 1) failed\n");
+		if (! (bd = ide_pio_bd(0, 1, 0)) )
+			fprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 

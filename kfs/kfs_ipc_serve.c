@@ -422,7 +422,7 @@ static void kis_mirror_bd_remove(envid_t whom, const Skfs_mirror_bd_remove_t * p
 #include <kfs/ide_pio_bd.h>
 static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 {
-	uint32_t val = (uint32_t) ide_pio_bd(pg->controller, pg->disk);
+	uint32_t val = (uint32_t) ide_pio_bd(pg->controller, pg->disk, pg->readahead);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 

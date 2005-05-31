@@ -20,6 +20,9 @@ struct ide_info {
 	uint16_t level;
 	uint32_t length;
 	blockman_t * blockman;
+	uint8_t ra_count;
+	uint32_t ra_sector;
+	uint8_t * ra_cache;
 };
 
 static int ide_notbusy(uint8_t controller)
@@ -178,6 +181,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
+	int need_to_read = 0;
 	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
@@ -192,9 +196,39 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
-	/* read it */
-	if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
-		return NULL;
+	if (info->ra_count == 0) {
+		/* read it */
+		if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
+			return NULL;
+	}
+	else { // read ahead
+		if(info->ra_sector != 0) { // we have something in the cache
+			if(info->ra_sector <= number && number < info->ra_sector+info->ra_count) { // cache hit
+				memcpy(bdesc->ddesc->data, info->ra_cache + SECTSIZE * (number - info->ra_sector), SECTSIZE);
+			}
+			else { // cache miss
+				need_to_read = 1;
+			}
+		}
+		else{ // nothing in the cache
+			need_to_read = 1;
+		}
+		
+		if(need_to_read) {
+			if(number == 0) {
+				info->ra_sector = 0;
+				if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
+					return NULL;
+			}
+			else{
+				/* read it */
+				if(ide_read(info->controller, info->disk, number, info->ra_cache, info->ra_count) == -1)
+					return NULL;
+				memcpy(bdesc->ddesc->data, info->ra_cache, SECTSIZE);
+				info->ra_sector = number;
+			}
+		}
+	}
 	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		/* kind of a waste of the read... but we have to do it */
@@ -283,6 +317,7 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	
+	free(info->ra_cache);
 	blockman_destroy(&info->blockman);
 	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
@@ -290,7 +325,7 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	return 0;
 }
 
-BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
+BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 {
 	struct ide_info * info;
 	BD_t * bd;
@@ -317,10 +352,20 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 		return NULL;
 	}
 	
+	info->ra_count = readahead;
+	info->ra_cache = malloc(SECTSIZE * info->ra_count);
+	if(!info->ra_cache)
+	{
+		free(info);
+		free(bd);
+		return NULL;
+	}
+	
 	BD_INIT(bd, ide_pio_bd, info);
 	
 	info->blockman = blockman_create();
 	if(!info->blockman) {
+		free(info->ra_cache);
 		free(info);
 		free(bd);
 		return NULL;
@@ -330,8 +375,9 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk)
 	info->disk = disk;
 	info->length = length;
 	info->level = 0;
+	info->ra_sector = 0;
 	ide_pio_tune(controller, disk);
-
+	
 	if(modman_add_bd(bd, ide_names[controller][disk]))
 	{
 		DESTROY(bd);
