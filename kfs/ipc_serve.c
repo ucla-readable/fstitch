@@ -33,7 +33,7 @@ void ipc_serve_run(void)
 	if (!whom && !perm)
 	{
 		if (r != -E_TIMEOUT)
-			fprintf(STDERR_FILENO, "kfsd %s:%s: ipc_recv: %e\n", __FILE__, __FUNCTION__, (int) r);
+			fprintf(STDERR_FILENO, "kfsd %s: ipc_recv: %e\n", __FUNCTION__, (int) r);
 		return;
 	}
 
