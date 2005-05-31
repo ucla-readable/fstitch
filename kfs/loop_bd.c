@@ -86,7 +86,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 	if (!block_lfs)
 		return NULL;
 
-	block = bdesc_clone(number, block_lfs);
+	block = bdesc_alloc_clone(block_lfs, number);
 	if (!block)
 		return NULL;
 	bdesc_autorelease(block);
@@ -103,7 +103,7 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * sy
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_clone(number, bdesc);
+	new_bdesc = bdesc_alloc_clone(bdesc, number);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -132,7 +132,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	if(lfs_number == -1)
 		return -E_INVAL;
 
-	wblock = bdesc_clone(lfs_number, block);
+	wblock = bdesc_alloc_clone(block, lfs_number);
 	if(!wblock)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);
@@ -159,7 +159,7 @@ static int loop_sync(BD_t * bd, bdesc_t * block)
 	if(lfs_number == -1)
 		return -E_INVAL;
 
-	wblock = bdesc_clone(lfs_number, block);
+	wblock = bdesc_alloc_clone(block, lfs_number);
 	if(!wblock)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);
