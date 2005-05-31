@@ -71,7 +71,7 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_clone(number, bdesc);
+	new_bdesc = bdesc_alloc_clone(bdesc, number);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -92,7 +92,7 @@ static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_clone(number, bdesc);
+	new_bdesc = bdesc_alloc_clone(bdesc, number);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -125,7 +125,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= info->length)
 		return -E_INVAL;
 
-	wblock = bdesc_clone(block->number + info->start, block);
+	wblock = bdesc_alloc_clone(block, block->number + info->start);
 	if(!wblock)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);
@@ -156,7 +156,7 @@ static int partition_bd_sync(BD_t * object, bdesc_t * block)
 	if(block->number >= info->length)
 		return -E_INVAL;
 	
-	wblock = bdesc_clone(block->number + info->start, block);
+	wblock = bdesc_alloc_clone(block, block->number + info->start);
 	if(!wblock)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);

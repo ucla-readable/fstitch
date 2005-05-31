@@ -34,7 +34,10 @@ struct bdesc {
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length);
 
 /* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_wrap_ddesc(datadesc_t * ddesc, uint32_t number);
+bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number);
+
+/* make a new bdesc that shares a ddesc with another bdesc */
+bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number);
 
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc);
@@ -47,9 +50,6 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc);
 
 /* run the scheduled bdesc autoreleases */
 void bdesc_run_autorelease(void);
-
-/* make a new bdesc that shares a ddesc with another bdesc */
-bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original);
 
 /* a function for caches and cache-like modules to use for bdesc overwriting */
 /* this may no longer be needed, but it is left commented just in case */

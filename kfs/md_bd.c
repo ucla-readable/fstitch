@@ -69,7 +69,7 @@ static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number)
 	if(!read_bdesc)
 		return NULL;
 	
-	bdesc = bdesc_clone(number, read_bdesc);
+	bdesc = bdesc_alloc_clone(read_bdesc, number);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -90,7 +90,7 @@ static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, bool
 	if(!read_bdesc)
 		return NULL;
 	
-	bdesc = bdesc_clone(number, read_bdesc);
+	bdesc = bdesc_alloc_clone(read_bdesc, number);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -123,7 +123,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	if(block->number >= info->numblocks)
 		return -E_INVAL;
 	
-	wblock = bdesc_clone(block->number >> 1, block);
+	wblock = bdesc_alloc_clone(block, block->number >> 1);
 	if(!wblock)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);
@@ -163,7 +163,7 @@ static int md_bd_sync(BD_t * object, bdesc_t * block)
 	if(block->number >= info->numblocks)
 		return -E_INVAL;
 	
-	wblock = bdesc_clone(block->number >> 1, block);
+	wblock = bdesc_alloc_clone(block, block->number >> 1);
 	if(!wblock)
 		return -E_UNSPECIFIED;
 	bdesc_autorelease(wblock);

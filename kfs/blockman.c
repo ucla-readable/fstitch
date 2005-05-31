@@ -77,7 +77,7 @@ bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number)
 	datadesc_t * ddesc = blockman_lookup(blockman, number);
 	if(!ddesc)
 		return NULL;
-	bdesc = bdesc_wrap_ddesc(ddesc, number);
+	bdesc = bdesc_alloc_wrap(ddesc, number);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);

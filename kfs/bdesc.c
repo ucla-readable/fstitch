@@ -51,7 +51,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 }
 
 /* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_wrap_ddesc(datadesc_t * ddesc, uint32_t number)
+bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
 	Dprintf("<bdesc 0x%08x alloc/wrap ddesc 0x%08x>\n", bdesc, ddesc);
@@ -64,6 +64,12 @@ bdesc_t * bdesc_wrap_ddesc(datadesc_t * ddesc, uint32_t number)
 	bdesc->ar_next = NULL;
 	bdesc->ddesc->ref_count++;
 	return bdesc;
+}
+
+/* make a new bdesc that shares a ddesc with another bdesc */
+bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number)
+{
+	return bdesc_alloc_wrap(original->ddesc, number);
 }
 
 /* increase the reference count of a bdesc, copying it if it is currently translated (but sharing the data) */
@@ -142,23 +148,6 @@ void bdesc_run_autorelease(void)
 			bdesc_release(&release);
 		}
 	}
-}
-
-/* make a new bdesc that shares a ddesc with another bdesc */
-bdesc_t * bdesc_clone(uint32_t number, bdesc_t * original)
-{
-	assert(original);
-	bdesc_t * bdesc = malloc(sizeof(*bdesc));
-	Dprintf("<bdesc 0x%08x clone from 0x%08x>\n", bdesc, original);
-	if(!bdesc)
-		return NULL;
-	bdesc->ddesc = original->ddesc;
-	bdesc->number = number;
-	bdesc->ref_count = 1;
-	bdesc->ar_count = 0;
-	bdesc->ar_next = NULL;
-	bdesc->ddesc->ref_count++;
-	return bdesc;
 }
 
 int bdesc_blockno_compare(const void * a, const void * b)
