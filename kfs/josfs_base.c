@@ -701,10 +701,9 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 {
 	Dprintf("JOSFSDEBUG: josfs_allocate_block\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	int blockno;
-	int bitmap_size;
-	int s_nblocks;
+	int blockno, bitmap_size, s_nblocks, r;
 	bool synthetic = 0;
+	chdesc_t *newtail, *curhead;
 
 	if (!head || !tail || size != JOSFS_BLKSIZE)
 		return NULL;
@@ -717,14 +716,25 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 	for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
 		if (block_is_free(object, blockno)) {
 			bdesc_t * bdesc;
-			write_bitmap(object, blockno, 0, head, tail);
+
+			r = write_bitmap(object, blockno, 0, head, tail);
+			if (r < 0)
+				return NULL;
+
 			assert(!block_is_free(object, blockno));
 			bdesc = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
 			if (!bdesc)
 				return NULL;
 
-			/* FIXME maybe use chdescs? */
-			memset(bdesc->ddesc->data, 0, JOSFS_BLKSIZE);
+			// FIXME error checks
+			curhead = *head;
+			r = chdesc_create_init(bdesc, info->ubd, head, &newtail);
+			r |= chdesc_add_depend(newtail, curhead);
+
+			weak_retain_pair(head, tail);
+			r |= CALL(info->ubd, write_block, bdesc);
+			weak_forget_pair(head, tail);
+			assert(r>=0);
 			return bdesc;
 		}
 	}
@@ -1360,8 +1370,7 @@ static int josfs_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, c
 	if (!block || block->number == 0)
 		return -E_INVAL;
 	number = block->number;
-	write_bitmap(object, number, 1, head, tail);
-	return 0;
+	return write_bitmap(object, number, 1, head, tail);
 }
 
 static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
