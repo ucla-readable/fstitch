@@ -704,6 +704,7 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 	int blockno;
 	int bitmap_size;
 	int s_nblocks;
+	bool synthetic = 0;
 
 	if (!head || !tail || size != JOSFS_BLKSIZE)
 		return NULL;
@@ -718,10 +719,9 @@ static bdesc_t * josfs_allocate_block(LFS_t * object, uint32_t size, int purpose
 			bdesc_t * bdesc;
 			write_bitmap(object, blockno, 0, head, tail);
 			assert(!block_is_free(object, blockno));
-			bdesc = bdesc_alloc(blockno, JOSFS_BLKSIZE);
+			bdesc = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
 			if (!bdesc)
 				return NULL;
-			bdesc_autorelease(bdesc);
 
 			/* FIXME maybe use chdescs? */
 			memset(bdesc->ddesc->data, 0, JOSFS_BLKSIZE);
@@ -1249,6 +1249,7 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 	int r, offset;
 	uint32_t data = 0;
 	chdesc_t * oldhead = NULL;
+	bool synthetic = 0;
 
 	if (!head || !tail || nblocks > JOSFS_NINDIRECT || nblocks < 1)
 		return NULL;
@@ -1276,9 +1277,9 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 		r = CALL(info->ubd, write_block, indirect);
 		weak_forget_pair(head, tail);
 
-		if (r < 0 || !(bdesc = bdesc_alloc(blockno, JOSFS_BLKSIZE)))
+		if (r < 0 || !(bdesc = CALL(info->ubd, synthetic_read_block, blockno, &synthetic)))
 			return NULL;
-		return bdesc_autorelease(bdesc);
+		return bdesc;
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
 		weak_retain_pair(head, tail);
@@ -1314,9 +1315,9 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 		f->file->f_indirect = 0;
 		r = josfs_free_block(object, indirect, head, tail);
 
-		if (r < 0 || !(bdesc = bdesc_alloc(blockno, JOSFS_BLKSIZE)))
+		if (r < 0 || !(bdesc = CALL(info->ubd, synthetic_read_block, blockno, &synthetic)))
 			return NULL;
-		return bdesc_autorelease(bdesc);
+		return bdesc;
 	}
 	else {
 		blockno = f->file->f_direct[nblocks - 1];
@@ -1344,10 +1345,10 @@ static bdesc_t * josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdes
 
 		f->file->f_direct[nblocks - 1] = 0;
 
-		bdesc = bdesc_alloc(blockno, JOSFS_BLKSIZE);
+		bdesc = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
 		if (!bdesc)
 			return NULL;
-		return bdesc_autorelease(bdesc);
+		return bdesc;
 	}
 }
 
