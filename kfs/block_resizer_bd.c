@@ -170,6 +170,7 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	uint32_t i, number;
+	bool synthetic = 0;
 	
 	if(!block)
 		return CALL(info->bd, sync, NULL);
@@ -186,8 +187,7 @@ static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
 	for(i = 0; i != info->merge_count; i++)
 	{
 		/* synthesize a new bdesc to avoid having to read it */
-		/* FIXME: this is super-cheezy */
-		bdesc_t * sub = bdesc_alloc(number + i, info->original_size);
+		bdesc_t * sub = CALL(info->bd, synthetic_read_block, number + i, &synthetic);
 		/* maybe we ran out of memory? */
 		if(!sub)
 			return -E_NO_MEM;
