@@ -1158,7 +1158,7 @@ static void run_loop()
 //
 // Startup 
 
-#define COMMAND(c,_f,_d) do { cmds[CMDX(c)].f = _f; cmds[CMDX(c)].description = _d;  } while(0)
+#define COMMAND(c,_f,_d) do { cmds[CMDX(c)].f = _f; cmds[CMDX(c)].description = _d; } while(0)
 
 static void register_commands()
 {
@@ -1186,7 +1186,6 @@ static void register_commands()
  * - '!', this just needs parsing code
  * - undo
  * - 'j', join, njm, j! to not insert space
- * - 't', transfer, ntm
  * - yank/paste, [x,y]y<a-zA-Z>, yank into buffer, cap to append
  * - search, support ^ and #, reverse search
  */
