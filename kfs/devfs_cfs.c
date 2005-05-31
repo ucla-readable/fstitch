@@ -210,7 +210,6 @@ static int devfs_close(CFS_t * cfs, int fid)
 static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-#if 0
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = bde_lookup_fid(state, fid);
 	
@@ -240,13 +239,10 @@ static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 			size_read += limit;
 			/* dataoffset only needed for first block */
 			dataoffset = 0;
-			
-			bdesc_drop(&bdesc);
 		}
 		
 		return size_read ? size_read : (size ? -E_EOF : 0);
 	}
-#endif
 	
 	return -E_INVAL;
 }
