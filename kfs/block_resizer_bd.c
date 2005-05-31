@@ -166,35 +166,21 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	return barrier_partial_forward(info->forward_buffer, info->merge_count, object, block);
 }
 
-static int block_resizer_bd_sync(BD_t * object, bdesc_t * block)
+static int block_resizer_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	uint32_t i, number;
-	bool synthetic = 0;
 	
-	if(!block)
-		return CALL(info->bd, sync, NULL);
-	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->converted_size)
-		return -E_INVAL;
+	if(block == SYNC_FULL_DEVICE)
+		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
 	
 	/* make sure it's a valid block */
-	if(block->number >= info->block_count)
+	if(block >= info->block_count)
 		return -E_INVAL;
 	
-	number = block->number * info->merge_count;
+	number = block * info->merge_count;
 	for(i = 0; i != info->merge_count; i++)
-	{
-		/* synthesize a new bdesc to avoid having to read it */
-		bdesc_t * sub = CALL(info->bd, synthetic_read_block, number + i, &synthetic);
-		/* maybe we ran out of memory? */
-		if(!sub)
-			return -E_NO_MEM;
-		bdesc_autorelease(sub);
-		/* FIXME check return value? */
-		CALL(info->bd, sync, sub);
-	}
+		CALL(info->bd, sync, i, ch);
 	
 	return 0;
 }

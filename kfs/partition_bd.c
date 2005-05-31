@@ -139,30 +139,21 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	return CALL(info->bd, write_block, wblock);
 }
 
-static int partition_bd_sync(BD_t * object, bdesc_t * block)
+static int partition_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	bdesc_t * wblock;
 	int value;
 	
-	if(!block)
-		return CALL(info->bd, sync, NULL);
-	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
+	if(block == SYNC_FULL_DEVICE)
+		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
 	
 	/* make sure it's a valid block */
-	if(block->number >= info->length)
+	if(block >= info->length)
 		return -E_INVAL;
 	
-	wblock = bdesc_alloc_clone(block, block->number + info->start);
-	if(!wblock)
-		return -E_UNSPECIFIED;
-	bdesc_autorelease(wblock);
-	
 	/* sync it */
-	value = CALL(info->bd, sync, wblock);
+	value = CALL(info->bd, sync, block + info->start, ch);
 	
 	return value;
 }

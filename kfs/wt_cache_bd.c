@@ -165,22 +165,18 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	return CALL(info->bd, write_block, block);
 }
 
-static int wt_cache_bd_sync(BD_t * object, bdesc_t * block)
+static int wt_cache_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	
 	/* since this is a write-through cache, syncing is a no-op */
 	/* ...but we still have to pass the sync on correctly */
 	
-	if(!block)
-		return CALL(info->bd, sync, NULL);
-	
-	/* make sure it's a valid block */
-	if(block->number >= CALL(info->bd, get_numblocks))
-		return -E_INVAL;
+	if(block == SYNC_FULL_DEVICE)
+		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
 	
 	/* sync it */
-	return CALL(info->bd, sync, block);
+	return CALL(info->bd, sync, block, ch);
 }
 
 static uint16_t wt_cache_bd_get_devlevel(BD_t * object)

@@ -224,3 +224,70 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 	fixed_max_heap_free(heap);
 	return 0;
 }
+
+/*
+ * precondition: CHDESC_MARKED is set to 0 for each chdesc in graph.
+ *
+ * postconditions: CHDESC_MAKRED is set to 1 for each chdesc in a
+ * connected subgraph. One of the nodes in the subgraph will be the
+ * node you pass. Thus, you can run reset_marks() on 'ch' to reset all
+ * the marks.
+ *
+ * return value: a chdesc on a remote BD, or NULL if there is none.
+ */
+static chdesc_t *
+get_external_dep(chdesc_t *ch, BD_t *home_bd)
+{
+	chmetadesc_t *p;
+	chdesc_t *ret;
+	if (ch->flags & CHDESC_MARKED) return NULL;
+	ch->flags |= CHDESC_MARKED;
+
+	if (ch->owner != home_bd) return ch;
+
+	p = ch->dependencies;
+	while (p) {
+		ret = get_external_dep(p->desc, home_bd);
+		if (ret) return ret;
+		p = p->next;
+	}
+	return NULL;
+}
+
+int
+commit_chdesc(chdesc_t *ch)
+{
+	bool is_noop = 0;
+	chdesc_t * monitor = (chdesc_t*)1;
+	if (ch->type == NOOP) {
+		assert(chdesc_weak_retain(ch, &monitor) >= 0);
+		is_noop = 1;
+	}
+
+	for (;;) {
+		chmetadesc_t * dep;
+		if (monitor == 0) return 0;
+		dep = ch->dependencies;
+		if (dep) {
+			assert(commit_chdesc(dep->desc) >= 0);
+		} else
+			break;
+	}
+		
+	// write back this ch desc
+	assert(is_noop == 0);
+	assert(CALL(ch->owner, sync, ch->block->number, ch) >= 0);
+	return 0;
+}
+
+int
+revision_satisfy_external_deps(bdesc_t *block, BD_t *bd)
+{
+	chdesc_t *ext_dep;
+	for (;;) {
+		ext_dep = get_external_dep(block->ddesc->changes, bd);
+		reset_marks(block->ddesc->changes);
+		if (ext_dep == NULL) return 0;
+		assert(CALL(ext_dep->owner, sync, ext_dep->block->number, ext_dep) >= 0);
+	}
+}

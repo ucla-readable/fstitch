@@ -482,7 +482,7 @@ static int devfs_sync(CFS_t * cfs, const char * name)
 		
 		/* FIXME save return values? */
 		for(i = 0; i < bd_table_size; i++)
-			CALL(((bd_entry_t *) vector_elt(state->bd_table, i))->bd, sync, NULL);
+			CALL(((bd_entry_t *) vector_elt(state->bd_table, i))->bd, sync, SYNC_FULL_DEVICE, NULL);
 		
 		return 0;
 	}
@@ -494,7 +494,7 @@ static int devfs_sync(CFS_t * cfs, const char * name)
 	if(!bde)
 		return -E_NOT_FOUND;
 	
-	return CALL(bde->bd, sync, NULL);
+	return CALL(bde->bd, sync, SYNC_FULL_DEVICE, NULL);
 }
 
 static int devfs_destroy(CFS_t * cfs)

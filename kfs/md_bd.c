@@ -137,39 +137,29 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	return CALL(info->bd[block->number & 1], write_block, wblock);
 }
 
-static int md_bd_sync(BD_t * object, bdesc_t * block)
+static int md_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
-	bdesc_t * wblock;
 	int value;
 	
-	if(!block)
+	if(block == SYNC_FULL_DEVICE)
 	{
-		int r = CALL(info->bd[0], sync, NULL);
+		int r = CALL(info->bd[0], sync, SYNC_FULL_DEVICE, NULL);
 		if(r < 0)
 		{
 			/* for reliability, do bd[1] anyway */
-			CALL(info->bd[1], sync, NULL);
+			CALL(info->bd[1], sync, SYNC_FULL_DEVICE, NULL);
 			return r;
 		}
-		return CALL(info->bd[1], sync, NULL);
+		return CALL(info->bd[1], sync, SYNC_FULL_DEVICE, NULL);
 	}
 	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= info->numblocks)
+	if(block >= info->numblocks)
 		return -E_INVAL;
-	
-	wblock = bdesc_alloc_clone(block, block->number >> 1);
-	if(!wblock)
-		return -E_UNSPECIFIED;
-	bdesc_autorelease(wblock);
 	
 	/* sync it */
-	value = CALL(info->bd[block->number & 1], sync, wblock);
+	value = CALL(info->bd[block & 1], sync, block, ch);
 	
 	return value;
 }

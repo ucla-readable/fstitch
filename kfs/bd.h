@@ -8,7 +8,10 @@
 struct BD;
 typedef struct BD BD_t;
 
+#include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
+
+#define SYNC_FULL_DEVICE 0xffffffff
 
 struct BD {
 	OBJECT(BD_t);
@@ -29,7 +32,7 @@ struct BD {
 	 * block by a subsequent read_block call. */
 	DECLARE(BD_t, int, cancel_block, uint32_t number);
 	DECLARE(BD_t, int, write_block, bdesc_t * block);
-	DECLARE(BD_t, int, sync, bdesc_t * block);
+	DECLARE(BD_t, int, sync, uint32_t block, chdesc_t * ch);
 };
 
 #define BD_INIT(bd, module, info) { \

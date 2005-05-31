@@ -1649,7 +1649,7 @@ static int josfs_sync(LFS_t * object, const char * name)
 	char * parent;
 
 	if(!name || !name[0])
-		return CALL(info->ubd, sync, NULL);
+		return CALL(info->ubd, sync, SYNC_FULL_DEVICE, NULL);
 
 	f = josfs_lookup_name(object, name);
 	if (!f)
@@ -1657,7 +1657,7 @@ static int josfs_sync(LFS_t * object, const char * name)
 
 	nblocks = josfs_get_file_numblocks(object, f);
 	for (i = 0 ; i < nblocks; i++)
-		if ((r = CALL(info->ubd, sync, josfs_get_file_block(object, f, i * JOSFS_BLKSIZE))) < 0)
+		if ((r = CALL(info->ubd, sync, josfs_get_file_block_num(object, f, i * JOSFS_BLKSIZE), NULL)) < 0)
 			return r;
 
 	if (strcmp(name, "/") == 0)

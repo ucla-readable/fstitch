@@ -160,27 +160,21 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	return CALL(info->lfs, write_block, wblock, 0, wblock->ddesc->length, wblock->ddesc->data, &head, &tail);
 }
 
-static int loop_sync(BD_t * bd, bdesc_t * block)
+static int loop_sync(BD_t * bd, uint32_t block, chdesc_t * ch)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	uint32_t loop_number, lfs_number;
-	bdesc_t * wblock;
 
-	if (!block)
+	if (block == SYNC_FULL_DEVICE)
 		return CALL(info->lfs, sync, info->filename);
 
-	loop_number = block->number;
+	loop_number = block;
 	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
 	if(lfs_number == -1)
 		return -E_INVAL;
 
-	wblock = bdesc_alloc_clone(block, lfs_number);
-	if(!wblock)
-		return -E_UNSPECIFIED;
-	bdesc_autorelease(wblock);
-
-	return CALL(info->lfs_bd, sync, wblock);
+	return CALL(info->lfs_bd, sync, lfs_number, ch);
 }
 
 static uint16_t loop_get_devlevel(BD_t * bd)
