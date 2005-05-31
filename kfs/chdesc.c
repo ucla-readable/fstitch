@@ -36,6 +36,13 @@ static int ensure_bdesc_changes(bdesc_t * block)
 	/* NOOP chdescs start applied */
 	block->ddesc->changes->flags = 0;
 	
+	if(chdesc_weak_retain(block->ddesc->changes, &block->ddesc->changes))
+	{
+		free(block->ddesc->changes);
+		block->ddesc->changes = NULL;
+		return -E_NO_MEM;
+	}
+	
 	return 0;
 }
 
@@ -641,13 +648,6 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, uint16_t source_offset
 		/* shouldn't fail... */
 		r = chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
 		assert(r >= 0);
-		/* if there are no more chdescs for this ddesc, remove the stub NOOP chdesc */
-		if(!chdesc->block->ddesc->changes->dependencies)
-		{
-			/* can't fail */
-			r = chdesc_destroy(&chdesc->block->ddesc->changes);
-			assert(r >= 0);
-		}
 		bdesc_release(&chdesc->block);
 	}
 	chdesc->block = destination;
@@ -748,6 +748,9 @@ int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chdesc_meta_remove(&dependent->dependencies, dependency);
 	chdesc_meta_remove(&dependency->dependents, dependent);
+	if(dependent->type == NOOP && !dependent->dependencies)
+		/* we just removed the last dependency of a NOOP chdesc, so free it */
+		chdesc_destroy(&dependent);
 	return 0;
 }
 
@@ -832,9 +835,13 @@ int chdesc_satisfy(chdesc_t * chdesc)
 	while(chdesc->dependents)
 	{
 		chmetadesc_t * meta = chdesc->dependents;
+		chdesc_t * dependent = meta->desc;
 		chdesc->dependents = meta->next;
 		chdesc_meta_remove(&meta->desc->dependencies, chdesc);
 		free(meta);
+		if(dependent->type == NOOP && !dependent->dependencies)
+			/* we just removed the last dependency of a NOOP chdesc, so free it */
+			chdesc_destroy(&dependent);
 	}
 	return 0;
 }
@@ -930,14 +937,6 @@ int chdesc_destroy(chdesc_t ** chdesc)
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 	}
 	
-	/* if there are no more chdescs for this ddesc, remove the stub NOOP chdesc */
-	if((*chdesc)->block && !(*chdesc)->block->ddesc->changes->dependencies)
-	{
-		/* can't fail */
-		const int r = chdesc_destroy(&((*chdesc)->block->ddesc->changes));
-		assert(r >= 0);
-	}
-
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
 	*chdesc = NULL;
