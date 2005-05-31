@@ -556,7 +556,7 @@ LFS_t * wholedisk(BD_t * bd)
 
 //
 // BD
-#if !USE_THIRD_LEG
+
 #include <kfs/loop_bd.h>
 BD_t * loop_bd(LFS_t * lfs, const char * file)
 {
@@ -580,7 +580,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 
 	return create_bd(bd_id);
 }
-#endif
+
 #include <kfs/mem_bd.h>
 BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 {

@@ -462,10 +462,6 @@ static BD_t * create_disk(int argc, const char ** argv)
 	}
 	else if (!strcmp("loop", argv[device_index]))
 	{
-#if USE_THIRD_LEG
-		fprintf(STDERR_FILENO, "loop_bd not yet supported\n");
-		exit();
-#else
 		const char * filename;
 		const char * lfs_filename;
 		LFS_t * lfs;
@@ -516,7 +512,6 @@ static BD_t * create_disk(int argc, const char ** argv)
 			fprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
 			return NULL;
 		}
-#endif
 	}
 	else if (!strcmp("bd", argv[device_index]))
 	{

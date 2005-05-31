@@ -3,6 +3,7 @@
 #include <inc/string.h>
 
 #include <kfs/bd.h>
+#include <kfs/bdesc.h>
 #include <kfs/lfs.h>
 #include <kfs/modman.h>
 #include <kfs/loop_bd.h>
@@ -19,6 +20,8 @@
 
 struct loop_info {
 	LFS_t * lfs;
+	BD_t * lfs_bd;
+	uint16_t level;
 	fdesc_t * file;
 	const char * filename;
 	uint16_t blocksize;
@@ -62,99 +65,111 @@ static uint16_t loop_get_blocksize(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	return CALL(info->lfs, get_blocksize);
+	return info->blocksize;
 }
 
 static uint16_t loop_get_atomicsize(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	BD_t * lfs_bd = CALL(info->lfs, get_blockdev);
-	return CALL(lfs_bd, get_atomicsize);
+	return CALL(info->lfs_bd, get_atomicsize);
 }
 
 static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	bdesc_t * bdesc;
+	bdesc_t * block_lfs;
+	bdesc_t * block;
 
-	bdesc = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
-	if (!bdesc)
+	block_lfs = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
+	if (!block_lfs)
 		return NULL;
 
-	// adjust bdesc to match this bd
-	if (bdesc_alter(&bdesc) < 0)
-	{
-		bdesc_drop(&bdesc);
+	block = bdesc_clone(number, block_lfs);
+	if (!block)
 		return NULL;
-	}
-	bdesc->bd = bd;
-	bdesc->number = number;
+	bdesc_autorelease(block);
 
-	return bdesc;
+	return block;
+}
+
+static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * synthetic)
+{
+	loop_info_t * info = (struct loop_info_t *) OBJLOCAL(bd);
+	bdesc_t * bdesc, * new_bdesc;
+	
+	bdesc = CALL(info->lfs_bd, synthetic_read_block, number * info->blocksize, synthetic);
+	if(!bdesc)
+		return NULL;
+	
+	new_bdesc = bdesc_clone(number, bdesc);
+	if(!new_bdesc)
+		return NULL;
+	bdesc_autorelease(new_bdesc);
+	
+	return new_bdesc;
+}
+
+static int loop_cancel_block(BD_t * bd, uint32_t number)
+{
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);	
+	return CALL(info->lfs_bd, cancel_block, number * info->blocksize);
 }
 
 static int loop_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	uint32_t refs, loop_number, lfs_number;
+	uint32_t loop_number, lfs_number;
+	bdesc_t * wblock;
 	chdesc_t * head = NULL;
 	chdesc_t * tail;
 	int r;
-
-	if(block->bd != bd)
-		return -E_INVAL;
 
 	loop_number = block->number;
 	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
 	if(lfs_number == -1)
 		return -E_INVAL;
 
-	refs = block->refs;
-	block->translated++;
-	block->bd = CALL(info->lfs, get_blockdev);
-	block->number = lfs_number;
+	wblock = bdesc_clone(lfs_number, block);
+	if(!wblock)
+		return -E_UNSPECIFIED;
+	bdesc_autorelease(wblock);
 
-	r =  CALL(info->lfs, write_block, block, 0, block->ddesc->length, block->ddesc->data, &head, &tail);
+	r = chdesc_push_down(bd, block, info->lfs_bd, wblock);
+	if(r < 0)
+		return r;
 
-	if (refs)
-	{
-		block->bd = bd;
-		block->number = loop_number;
-		block->translated--;
-	}
-
-	return r;
+	return CALL(info->lfs, write_block, wblock, 0, wblock->ddesc->length, wblock->ddesc->data, &head, &tail);
 }
 
 static int loop_sync(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	BD_t * lfs_bd = CALL(info->lfs, get_blockdev);
-	uint32_t refs;
-	int r;
+	uint32_t loop_number, lfs_number;
+	bdesc_t * wblock;
 
 	if (!block)
 		return CALL(info->lfs, sync, info->filename);
 
-	assert(block->bd == bd);
+	loop_number = block->number;
+	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
+	if(lfs_number == -1)
+		return -E_INVAL;
 
-	refs = block->refs;
-	block->translated++;
-	block->bd = lfs_bd;
+	wblock = bdesc_clone(lfs_number, block);
+	if(!wblock)
+		return -E_UNSPECIFIED;
+	bdesc_autorelease(wblock);
 
-	r = CALL(lfs_bd, sync, block);
+	return CALL(info->lfs_bd, sync, wblock);
+}
 
-	if (refs)
-	{
-		block->bd = bd;
-		block->translated--;
-	}
-
-	return r;
+static uint16_t loop_get_devlevel(BD_t * bd)
+{
+	return ((loop_info_t *) OBJLOCAL(bd))->level;
 }
 
 static int loop_destroy(BD_t * bd)
@@ -199,6 +214,8 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	BD_INIT(bd, loop, info);
 
 	info->lfs = lfs;
+	info->lfs_bd = CALL(info->lfs, get_blockdev);
+	info->level = CALL(info->lfs_bd, get_devlevel);
 
 	info->filename = strdup(file);
 	if (!info->filename)

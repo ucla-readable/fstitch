@@ -249,7 +249,7 @@ static void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
 
 //
 // BD
-#if !USE_THIRD_LEG
+
 #include <kfs/loop_bd.h>
 static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 {
@@ -263,7 +263,7 @@ static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 
 	RETURN_IPC;
 }
-#endif
+
 #include <kfs/nbd_bd.h>
 static void kis_nbd_bd(envid_t whom, const Skfs_nbd_bd_t * pg)
 {
@@ -685,9 +685,8 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(WHOLEDISK, wholedisk);
 
 		// BD
-#if !USE_THIRD_LEG
+
 		SERVE(LOOP_BD,            loop_bd);
-#endif
 		SERVE(NBD_BD,             nbd_bd);
 		SERVE(MEM_BD,             mem_bd);
 #if !USE_THIRD_LEG
