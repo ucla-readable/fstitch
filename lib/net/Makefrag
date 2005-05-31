@@ -29,14 +29,13 @@ LIB_SRCFILES += \
 		lib/net/core/udp.c \
 		lib/net/netif/etharp.c \
  		lib/net/netif/slipif.c \
-		lib/net/netif/loopif.c \
 		lib/net/arch/sio.c \
 		lib/net/netif/josnicif.c \
 		lib/net/arch/sys_arch.c \
 		lib/net/arch/simple.c
 
-# Add when adding ethernet interface: (breaks build until ready to use)
-#		lib/net/netif/ethernetif.c \
+# loopif does not yet work
+#		lib/net/netif/loopif.c \
 
 # Add to use lwip's socket interface:
 #		lib/net/api/api_lib.c \

@@ -1434,6 +1434,7 @@ static u8_t dhcp_get_option_byte(u8_t *ptr)
  *
  * @return byte value at the given address.
  */
+/* Frost: this furnction is not used, commented out to remove compiler warning.
 static u16_t dhcp_get_option_short(u8_t *ptr)
 {
   u16_t value;
@@ -1442,6 +1443,7 @@ static u16_t dhcp_get_option_short(u8_t *ptr)
   LWIP_DEBUGF(DHCP_DEBUG, ("option short value=%u\n", value));
   return value;
 }
+*/
 
 /**
  * Return the 32-bit value of DHCP option data.
