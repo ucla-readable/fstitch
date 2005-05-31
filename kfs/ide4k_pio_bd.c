@@ -51,8 +51,8 @@ static int ide4k_read(uint8_t controller, uint8_t disk, uint32_t sector, void * 
 	if(ide4k_notbusy(controller) == -1)
 		return -1;
 	
-	sector *= 8;
-	outb(base + 2, count*8);
+	sector *= count;
+	outb(base + 2, count);
 	outb(base + 3, sector & 0xFF);
 	outb(base + 4, (sector >> 8) & 0xFF);
 	outb(base + 5, (sector >> 16) & 0xFF);
@@ -78,8 +78,8 @@ static int ide4k_write(uint8_t controller, uint8_t disk, uint32_t sector, const 
 	if(ide4k_notbusy(controller) == -1)
 		return -1;
 	
-	sector *= 8;
-	outb(base + 2, count*8);
+	sector *= count;
+	outb(base + 2, count);
 	outb(base + 3, sector & 0xFF);
 	outb(base + 4, (sector >> 8) & 0xFF);
 	outb(base + 5, (sector >> 16) & 0xFF);
