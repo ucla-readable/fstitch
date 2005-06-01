@@ -460,12 +460,13 @@ print_backtrace(struct Trapframe *tf, register_t *ebp, register_t *eip)
 void
 print_location(uintptr_t eip, bool first_frame)
 {
-#if USE_STABS
 	eipinfo_t info;
 	if (stab_eip(eip, &info) >= 0)
 		printf("%.*s+%u  %s:%d", info.eip_fnlen, info.eip_fn, eip - info.eip_fnaddr, info.eip_file, info.eip_line);
-#else
-	struct Sym * sym = eip_to_fnsym(curenv->env_id, first_frame ? eip : eip - 5);
-	printf("%s", get_symbol_name(curenv->env_id, sym));
-#endif
+	else
+	{
+		envid_t envid = (eip < KERNBASE) ? curenv->env_id : ENVID_KERNEL;
+		struct Sym * sym = eip_to_fnsym(envid, first_frame ? eip : eip - 5);
+		printf("%s", get_symbol_name(envid, sym));
+	}
 }

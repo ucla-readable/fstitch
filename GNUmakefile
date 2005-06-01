@@ -117,7 +117,7 @@ $(OBJDIR)/%.ld: %.ld conf/env.mk
 	@mkdir -p $(@D)
 	$(V)$(CPP) $(LD_CPPFLAGS) $< $@
 
-$(OBJDIR)/kern/stabs.o $(OBJDIR)/kern/elf.o: conf/env.mk
+$(OBJDIR)/kern/stabs.o: conf/env.mk
 
 
 # inc/net for lwip, inc/ for string.h

@@ -13,11 +13,13 @@ typedef struct stab {
 	uintptr_t n_value; // value of symbol
 } stab_t;
 
-#ifdef USE_STABS
+
 #define STABS_INFO 0x200000
 
+#if USE_STABS
 extern const struct stab_t __STAB_BEGIN__[], __STAB_END__[];
 extern const char __STABSTR_BEGIN__[], __STABSTR_END__[];
+#endif
 
 static void stab_binsearch(const stab_t *stabs, uintptr_t addr, int *lx, int *rx, int type)
 {
@@ -56,14 +58,18 @@ int stab_eip(uintptr_t addr, eipinfo_t *info)
 	info->eip_fnaddr = addr;
 
 	if (addr >= KERNBASE) {
+#if USE_STABS
 		stabs = (stab_t *) __STAB_BEGIN__;
 		stab_end = (stab_t *) __STAB_END__;
 		stabstr = (char *)  __STABSTR_BEGIN__;
 		stabstr_end = (char *) __STABSTR_END__;
+#else
+		return -E_UNSPECIFIED;
+#endif
 	} else {
 		const void **thing = (const void **) STABS_INFO;
 		if (check_user_page_access(curenv, thing, 0) < 0)
-			return -1;
+			return -E_FAULT;
 		stabs = ((const stab_t **) thing)[0];
 		stab_end = ((const stab_t **) thing)[1];
 		stabstr = ((const char **) thing)[2];
@@ -72,13 +78,13 @@ int stab_eip(uintptr_t addr, eipinfo_t *info)
 		    || check_user_access(curenv, stabstr, stabstr_end - stabstr, 0) < 0
 		    || stabstr_end == stabstr
 		    || stabstr_end[-1])
-			return -1;
+			return -E_FAULT;
 	}
 
 	lfile = 0, rfile = stab_end - stabs - 1;
 	stab_binsearch(stabs, addr, &lfile, &rfile, N_SO);
 	if (lfile == 0)
-		return -1;
+		return -E_UNSPECIFIED;
 
 	lfun = lfile, rfun = rfile;
 	stab_binsearch(stabs, addr, &lfun, &rfun, N_FUN);
@@ -100,7 +106,7 @@ int stab_eip(uintptr_t addr, eipinfo_t *info)
 	/* Search for the line number */
 	stab_binsearch(stabs, addr, &lline, &rline, N_SLINE);
 	if (lline == 0)
-		return -1;
+		return -E_UNSPECIFIED;
 
 	/* Found line number, store it and search backwards for filename */
 	info->eip_line = stabs[lline].n_desc;
@@ -111,9 +117,3 @@ int stab_eip(uintptr_t addr, eipinfo_t *info)
 	
 	return 0;
 }
-#else
-int stab_eip(uintptr_t addr, eipinfo_t *info)
-{
-	return -E_UNSPECIFIED;
-}
-#endif
