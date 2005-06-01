@@ -7,7 +7,7 @@
 
 OBJDIRS += kern
 
-KERN_LDFLAGS := $(LDFLAGS) -T kern/kernel.ld -nostdlib
+KERN_LDFLAGS := $(LDFLAGS) -T $(OBJDIR)/kern/kernel.ld -nostdlib
 
 
 INIT=init
@@ -70,7 +70,7 @@ KERN_BINFILES := $(patsubst %, $(OBJDIR)/%, $(KERN_BINFILES))
 $(OBJDIR)/kern/version.o: $(KERN_SRCFILES) $(KERN_BINFILES)
 
 # How to build the kernel itself
-$(OBJDIR)/kern/kernel: $(KERN_OBJFILES) $(KERN_BINFILES) kern/kernel.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
+$(OBJDIR)/kern/kernel: $(KERN_OBJFILES) $(KERN_BINFILES) $(OBJDIR)/kern/kernel.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
 	@echo + ld $@
 	$(V)echo "" > $(SYMTBL)
 	$(V)echo "" > $(SYMSTRTBL)

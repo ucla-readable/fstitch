@@ -2,7 +2,7 @@ OBJDIRS += user
 
 DEMOS=$(OBJDIR)/user/fall.o $(OBJDIR)/user/fire.o $(OBJDIR)/user/ladybug.o $(OBJDIR)/user/life.o $(OBJDIR)/user/matrix.o $(OBJDIR)/user/pong.o $(OBJDIR)/user/textdemo.o $(OBJDIR)/user/wars.o
 
-$(OBJDIR)/user/demo: $(OBJDIR)/user/demo.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a user/user.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(DEMOS)
+$(OBJDIR)/user/demo: $(OBJDIR)/user/demo.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(DEMOS)
 	@echo + ld $@
 	$(V)echo "" > $(SYMTBL)
 	$(V)echo "" > $(SYMSTRTBL)
@@ -17,7 +17,7 @@ $(OBJDIR)/user/demo: $(OBJDIR)/user/demo.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/l
 	$(V)$(NM) -n $@ > $@.sym
 	$(V)$(STRIP) $@
 
-$(OBJDIR)/user/diskwrite: $(OBJDIR)/user/diskwrite.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a user/user.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(OBJDIR)/fs/fs.o $(OBJDIR)/fs/ide.o
+$(OBJDIR)/user/diskwrite: $(OBJDIR)/user/diskwrite.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(OBJDIR)/fs/fs.o $(OBJDIR)/fs/ide.o
 	@echo + ld $@
 	$(V)echo "" > $(SYMTBL)
 	$(V)echo "" > $(SYMSTRTBL)
@@ -32,7 +32,7 @@ $(OBJDIR)/user/diskwrite: $(OBJDIR)/user/diskwrite.o $(OBJDIR)/lib/entry.o $(OBJ
 	$(V)$(NM) -n $@ > $@.sym
 	$(V)$(STRIP) $@
 
-$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a user/user.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
+$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld $(OBJDIR)/util/$(ELFDUMP_SYMTAB)
 	@echo + ld $@
 	$(V)echo "" > $(SYMTBL)
 	$(V)echo "" > $(SYMSTRTBL)

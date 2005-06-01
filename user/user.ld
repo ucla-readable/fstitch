@@ -44,6 +44,7 @@ SECTIONS
 
 	PROVIDE(end = .);
 
+#ifdef USE_STABS
 	.stab_info 0x200000 : {
 		LONG(__STAB_BEGIN__);
 		LONG(__STAB_END__);
@@ -64,6 +65,7 @@ SECTIONS
 		__STABSTR_END__ = DEFINED(__STABSTR_END__) ? __STABSTR_END__ : .;
 		BYTE(0)		/* Convince linker to allocate */
 	}
+#endif
 
 	/DISCARD/ : {
 		*(.eh_frame .note.GNU-stack)

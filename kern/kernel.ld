@@ -20,6 +20,7 @@ SECTIONS
 		*(.rodata .rodata.* .gnu.linkonce.r.*)
 	}
 
+#ifdef USE_STABS
 	.stab : {		/* Include debugging info */
 		PROVIDE(__STAB_BEGIN__ = .);
 		*(.stab);
@@ -33,6 +34,7 @@ SECTIONS
 		PROVIDE(__STABSTR_END__ = .);
 		BYTE(0)		/* Convince linker to allocate */
 	}
+#endif
 
 	/* Adjust the address for the data segment to the next page */
 	. = ALIGN(0x1000);

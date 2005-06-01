@@ -40,7 +40,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/kfsd_init.o \
 			$(OBJDIR)/kfs/mem_bd.o
 
-$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a user/user.ld
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
 	$(V)echo "" > $(SYMTBL)

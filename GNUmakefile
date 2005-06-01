@@ -56,6 +56,7 @@ SYMSTRTBL      := symstrtbl
 #
 
 CC	:= $(GCCPREFIX)gcc -pipe
+CPP	:= $(GCCPREFIX)cpp
 GCC_LIB := $(shell $(CC) -print-libgcc-file-name)
 AS	:= $(GCCPREFIX)as
 AR	:= $(GCCPREFIX)ar
@@ -69,13 +70,14 @@ ifdef USE_STABS
 # and strtab sections.
 STRIP   := true
 CFLAGS  := $(CFLAGS) -DUSE_STABS
+LD_CPPFLAGS := $(CPPFLAGS) -DUSE_STABS
 else
 STRIP	:= $(GCCPREFIX)strip
 endif
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
-NCPP	:= g++ $(CC_VER) -pipe
+NCXX	:= g++ $(CC_VER) -pipe
 TAR	:= gtar
 PERL	:= perl
 CTAGS	:= ctags
@@ -87,8 +89,10 @@ CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-form
 CFLAGS	:= $(CFLAGS) -O2
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
 
+LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
+
 # Linker flags for user programs
-ULDFLAGS := -T user/user.ld
+ULDFLAGS := -T $(OBJDIR)/user/user.ld
 
 # Lists that the */Makefrag makefile fragments will add to
 OBJDIRS :=
@@ -105,6 +109,16 @@ all: tags TAGS
 # make it so that no intermediate .o files are never deleted
 .PRECIOUS: %.o $(OBJDIR)/kern/%.o $(OBJDIR)/boot/%.o \
 	$(OBJDIR)/lib/%.o $(OBJDIR)/kfs/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
+
+
+# Rules for building linker scripts and dealing with on/off STABS support
+$(OBJDIR)/%.ld: %.ld conf/env.mk
+	@echo + cpp $<
+	@mkdir -p $(@D)
+	$(V)$(CPP) $(LD_CPPFLAGS) $< $@
+
+$(OBJDIR)/kern/stabs.o $(OBJDIR)/kern/elf.o: conf/env.mk
+
 
 # inc/net for lwip, inc/ for string.h
 LIB_NET_CFLAGS := -I$(TOP)/inc/net/ -I$(TOP)/inc/net/ipv4 -I$(TOP)/inc/

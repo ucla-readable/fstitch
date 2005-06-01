@@ -82,7 +82,7 @@ FSIMGTXTFILES :=	fs/.journal \
 
 FSIMGFILES := $(FSIMGTXTFILES) $(USERAPPS)
 
-$(OBJDIR)/fs/fs: $(FSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a user/user.ld
+$(OBJDIR)/fs/fs: $(FSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
 	$(V)echo "" > $(SYMTBL)

@@ -13,6 +13,7 @@ typedef struct stab {
 	uintptr_t n_value; // value of symbol
 } stab_t;
 
+#ifdef USE_STABS
 #define STABS_INFO 0x200000
 
 extern const struct stab_t __STAB_BEGIN__[], __STAB_END__[];
@@ -110,3 +111,9 @@ int stab_eip(uintptr_t addr, eipinfo_t *info)
 	
 	return 0;
 }
+#else
+int stab_eip(uintptr_t addr, eipinfo_t *info)
+{
+	return -E_UNSPECIFIED;
+}
+#endif

@@ -19,7 +19,4 @@ HANDIN_EMAIL = kohler@cs.ucla.edu
 # backtraces. Define to enable, do not define to disable.
 # Stabs use is optional because the stabs sections substantially increase
 # a binary's size.
-# NOTE: disabling stabs does not yet work, it looks like we need to find a way
-# to change kernel.ld and user.ld, remove the stabs loadable segment, or
-# mark the stabs segment as non-loadable.
 USE_STABS = 1
