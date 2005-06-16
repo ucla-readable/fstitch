@@ -426,7 +426,6 @@ netd_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 	if (err == ERR_OK && p != NULL)
 	{
 		struct pbuf *q;
-		size_t len_ack;
 		for (q = p; q; q = q->next)
 		{
 			data = q->payload;
@@ -448,9 +447,7 @@ netd_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 			}
 		}
 
-		len_ack = MIN(TCP_WND, pipefree(cs->to_client)) - pcb->rcv_wnd;
-		len_ack = MIN(len_ack, p->tot_len);
-		tcp_recved(pcb, len_ack);
+		tcp_recved(pcb, MIN(TCP_WND, pipefree(cs->to_client)) - pcb->rcv_wnd);
 		(void) pbuf_free(p);
 	}
 	else if (err == ERR_OK && p == NULL)
