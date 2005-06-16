@@ -2,7 +2,6 @@
 // netd - Network Daemon
 
 // TODO:
-// - See if we can only write to pipes that have free space (see TODO)
 // - Support more than one bind_listen() in an environment
 // - Optimize buffer sizes/poll period for speed
 
@@ -369,6 +368,13 @@ netd_poll(void *arg, struct tcp_pcb *pcb)
 	}
 	else
 	{
+		// ACK data read from the pipe since when originally written if
+		// it allows the receive window to increase
+		const size_t pipe_free = pipefree(cs->to_client);
+		const size_t space_free = MIN(TCP_WND, pipe_free);
+		if (pcb->rcv_wnd < space_free)
+			tcp_recved(pcb, space_free - pcb->rcv_wnd);
+
 		if (cs->send_buf.left == 0)
 			return netd_queue_send(cs, pcb);
 		else
@@ -421,34 +427,31 @@ netd_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 	if (err == ERR_OK && p != NULL)
 	{
 		struct pbuf *q;
+		size_t len_ack;
 		for (q = p; q; q = q->next)
 		{
 			data = q->payload;
 			q_len_remaining = q->len;
 			while (q_len_remaining > 0)
 			{
-				// TODO: can we only write however much is allowed by the pipe
-				// space and tcp_recved() this amount?
-				// To see how often this is a problem, do a stat and report
-				// when write() will likely block:
-				if (!quiet)
-				{
-					struct Stat stat;
-					if ((r = fstat(cs->to_client, &stat)) < 0)
-						panic("fstat: %e", r);
-					const size_t pipe_size = 16*PGSIZE - 2*sizeof(off_t);
-					if (pipe_size - stat.st_size < q_len_remaining)
-						printf("netd net contention: cs->to_client pipe full\n");
-				}
-
+				// This write assumes there is enough space in the pipe
+				// if the rcv_wnd was large enough. This is true in
+				// general except that the rcv_wnd starts out at TCP_WND.
+				// To remove the need for this relative size assumption
+				// we would need to check at every write. However,
+				// it doesn't seem useful at this time to allow PIPEBUFSIZ
+				// < TCP_WND, so we simply statically assert this requirement.
+				static_assert(PIPEBUFSIZ >= TCP_WND);
 				if ((r = write(cs->to_client, data, q_len_remaining)) < 0)
 					panic("write: %e", r);
 				data += r;
 				q_len_remaining -= r;
 			}
 		}
-		
-		tcp_recved(pcb, p->tot_len);
+
+		len_ack = MIN(TCP_WND, pipefree(cs->to_client)) - pcb->rcv_wnd;
+		len_ack = MIN(len_ack, p->tot_len);
+		tcp_recved(pcb, len_ack);
 		(void) pbuf_free(p);
 	}
 	else if (err == ERR_OK && p == NULL)

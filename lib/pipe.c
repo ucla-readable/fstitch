@@ -21,9 +21,6 @@ struct Dev devpipe =
 	.dev_stat=	pipestat,
 };
 
-#define PIPEBUFPAGES 16
-#define PIPEBUFSIZ (PIPEBUFPAGES * PGSIZE - 2 * sizeof(off_t))
-
 struct Pipe {
 	off_t p_rpos;		// read position
 	off_t p_wpos;		// write position
@@ -37,7 +34,7 @@ pipe(int pfd[2])
 	struct Fd *fd0, *fd1;
 	uint8_t * va;
 
-	/* make sure the PIPEBUFSIZE arithmetic is correct */
+	/* make sure the PIPEBUFSIZ arithmetic is correct */
 	static_assert(sizeof(struct Pipe) == PIPEBUFPAGES * PGSIZE);
 	
 	// allocate the file descriptor table entries
@@ -114,6 +111,16 @@ pipeisclosed(int fdnum)
 		return r;
 	p = (struct Pipe*) fd2data(fd);
 	return _pipeisclosed(fd, p);
+}
+
+size_t
+pipefree(int fdnum)
+{
+	struct Stat stat;
+	int r;
+	if ((r = fstat(fdnum, &stat)) < 0)
+		panic("fstat: %e", r);
+	return PIPEBUFSIZ - stat.st_size;
 }
 
 static int

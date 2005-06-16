@@ -8,6 +8,7 @@
 #define KUDOS_INC_LIB_H
 
 #include <inc/types.h>
+#include <inc/mmu.h>
 #include <inc/stdio.h>
 #include <inc/stdarg.h>
 #include <inc/string.h>
@@ -173,8 +174,11 @@ int textbar_close(void);
 int textbar_set_progress(int progress, uint8_t color);
 
 // pipe.c
+#define PIPEBUFPAGES 16
+#define PIPEBUFSIZ (PIPEBUFPAGES * PGSIZE - 2 * sizeof(off_t))
 int	pipe(int pipefd[2]);
 int	pipeisclosed(int pipefd);
+size_t pipefree(int pipefd);
 
 int	socket(int socketfd[2]);
 int	socketisclosed(int socketfd);
