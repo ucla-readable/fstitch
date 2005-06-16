@@ -370,8 +370,7 @@ netd_poll(void *arg, struct tcp_pcb *pcb)
 	{
 		// ACK data read from the pipe since when originally written if
 		// it allows the receive window to increase
-		const size_t pipe_free = pipefree(cs->to_client);
-		const size_t space_free = MIN(TCP_WND, pipe_free);
+		const size_t space_free = MIN(TCP_WND, pipefree(cs->to_client));
 		if (pcb->rcv_wnd < space_free)
 			tcp_recved(pcb, space_free - pcb->rcv_wnd);
 
