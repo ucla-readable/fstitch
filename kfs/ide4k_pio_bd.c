@@ -238,6 +238,10 @@ static bdesc_t * ide4k_pio_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int ide4k_pio_bd_cancel_block(BD_t * object, uint32_t number)
 {
+	struct ide4k_info * info = (struct ide4k_info *) OBJLOCAL(object);
+	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
+	if(ddesc)
+		blockman_remove(ddesc);
 	return 0;
 }
 
@@ -257,7 +261,8 @@ static int ide4k_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_tail_prepare(block, object);
 	
 	/* write it */
-	if(ide4k_write(info->controller, info->disk, block->number, block->ddesc->data, 8) == -1) {
+	if(ide4k_write(info->controller, info->disk, block->number, block->ddesc->data, 8) == -1)
+	{
 		/* the write failed; don't remove any change descriptors... */
 		revision_tail_revert(block, object);
 		return -E_TIMEOUT;
@@ -287,7 +292,7 @@ static int ide4k_pio_bd_destroy(BD_t * bd)
 		return r;
 	
 	blockman_destroy(&info->blockman);
-	free(OBJLOCAL(bd));
+	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	return 0;
@@ -323,7 +328,8 @@ BD_t * ide4k_pio_bd(uint8_t controller, uint8_t disk)
 	BD_INIT(bd, ide4k_pio_bd, info);
 	
 	info->blockman = blockman_create();
-	if(!info->blockman) {
+	if(!info->blockman)
+	{
 		free(info);
 		free(bd);
 		return NULL;

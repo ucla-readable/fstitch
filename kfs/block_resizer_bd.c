@@ -137,7 +137,10 @@ static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t n
 
 static int block_resizer_bd_cancel_block(BD_t * object, uint32_t number)
 {
-	/* we never pass synthetic reads down, so this is a no-op */
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
+	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
+	if(ddesc)
+		blockman_remove(ddesc);
 	return 0;
 }
 

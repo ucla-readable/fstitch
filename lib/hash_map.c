@@ -65,7 +65,7 @@ static size_t hash_ptr(const void * k, size_t tbl_size);
 // NOTE: rotating hashes don't hash well, this could be improved.
 static size_t hash_ptr(const void * k, size_t tbl_size)
 {
-	const uint8_t const * key = (uint8_t*) &k;
+	const uint8_t * const key = (uint8_t*) &k;
 	size_t hash = sizeof(k);
 	size_t i;
 

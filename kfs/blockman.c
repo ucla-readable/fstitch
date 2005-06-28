@@ -56,7 +56,10 @@ int blockman_remove(datadesc_t * ddesc)
 {
 	Dprintf("<blockman 0x%08x remove %u: ddesc 0x%08x>\n", blockman, ddesc->managed_number, ddesc);
 	if(ddesc->manager)
+	{
 		hash_map_erase(ddesc->manager, (void *) ddesc->managed_number);
+		ddesc->manager = NULL;
+	}
 	return 0;
 }
 

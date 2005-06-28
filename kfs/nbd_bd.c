@@ -201,6 +201,10 @@ static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, boo
 
 static int nbd_bd_cancel_block(BD_t * object, uint32_t number)
 {
+	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
+	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
+	if(ddesc)
+		blockman_remove(ddesc);
 	return 0;
 }
 

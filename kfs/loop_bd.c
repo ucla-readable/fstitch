@@ -101,7 +101,7 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * sy
 	// support to LFS and it seems this going-around behavior is acceptable.
 
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, number);
-	loop_info_t * info = (struct loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	uint32_t loop_number, lfs_number;
 	bdesc_t * bdesc, * new_bdesc;
 

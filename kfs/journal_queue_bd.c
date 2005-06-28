@@ -7,6 +7,8 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
+#include <kfs/barrier.h>
+#include <kfs/blockman.h>
 #include <kfs/journal_queue_bd.h>
 
 #define RELEASE_PROGRESS_ENABLED
@@ -18,8 +20,9 @@
 struct queue_info {
 	BD_t * bd;
 	hash_map_t * bdesc_hash;
-	uint16_t blocksize;
+	uint16_t blocksize, level;
 	enum {RELEASE, HOLD, PASSTHROUGH} state;
+	blockman_t * blockman;
 };
 
 static int journal_queue_bd_get_config(void * object, int level, char * string, size_t length)
@@ -67,40 +70,85 @@ static bdesc_t * journal_queue_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
 	bdesc_t * block;
+	bdesc_t * orig;
+	
+	block = blockman_managed_lookup(info->blockman, number);
+	if(block)
+		return block;
 	
 	/* make sure it's a valid block */
 	if(number >= CALL(info->bd, get_numblocks))
 		return NULL;
 	
+	/* is this necessary anymore? probably the blockman
+	 * lookup will always work if this would work... */
 	block = hash_map_find_val(info->bdesc_hash, (void *) number);
 	if(block)
 		return block;
 	
 	/* not in the queue, need to read it */
-	block = CALL(info->bd, read_block, number);
-	
+	block = bdesc_alloc(number, info->blocksize);
 	if(!block)
 		return NULL;
+	bdesc_autorelease(block);
 	
-	/* FIXME bdesc_alter() can fail */
+	orig = CALL(info->bd, read_block, number);
+	if(!orig)
+		return NULL;
 	
-	/* ensure we can alter the structure without conflict */
-	bdesc_alter(&block);
+	memcpy(block->ddesc->data, orig->ddesc->data, info->blocksize);
 	
-	/* adjust the block descriptor to match the queue */
-	block->bd = object;
+	if(blockman_managed_add(info->blockman, block) < 0)
+		/* kind of a waste of the read... but we have to do it */
+		return NULL;
 	
 	return block;
+}
+
+/* we are a barrier, so just synthesize it if it's not already in this zone */
+static bdesc_t * journal_queue_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		*synthetic = 0;
+		return bdesc;
+	}
+	
+	/* make sure it's a valid block */
+	if(number >= CALL(info->bd, get_numblocks))
+		return NULL;
+	
+	bdesc = bdesc_alloc(number, info->blocksize);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
+		return NULL;
+	
+	*synthetic = 1;
+	
+	return bdesc;
+}
+
+static int journal_queue_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
+	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
+	if(ddesc)
+		blockman_remove(ddesc);
+	return 0;
 }
 
 static int journal_queue_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
 	int value = 0;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
 	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
@@ -112,106 +160,61 @@ static int journal_queue_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	switch(info->state)
 	{
-		bdesc_t * bdesc;
-		uint32_t refs;
 		case HOLD:
-			bdesc = (bdesc_t *) hash_map_find_val(info->bdesc_hash, (void *) block->number);
-			if(bdesc)
+			if(!hash_map_find_val(info->bdesc_hash, (void *) block->number))
 			{
-				overwrite:
-				if(bdesc != block)
-				{
-					value = bdesc_overwrite(bdesc, block);
-					bdesc_drop(&block);
-				}
-				/* don't need to drop if bdesc == block, because we know its reference count is > 0 */
-			}
-			else
-			{
-				bdesc_retain(&block);
+				bdesc_retain(block);
 				if((value = hash_map_insert(info->bdesc_hash, (void *) block->number, block)) < 0)
 					bdesc_release(&block);
 				/* ... and return below */
 			}
 			break;
 		case PASSTHROUGH:
-			bdesc = (bdesc_t *) hash_map_find_val(info->bdesc_hash, (void *) block->number);
 			/* write of existing blocked block? */
-			if(bdesc)
-				goto overwrite;
+			if(hash_map_find_val(info->bdesc_hash, (void *) block->number))
+				break;
 			/* fall through */
 		case RELEASE:
-			refs = block->refs;
-			block->translated++;
-			block->bd = info->bd;
-			
-			/* write it */
-			value = CALL(block->bd, write_block, block);
-			
-			if(refs)
-			{
-				block->bd = object;
-				block->translated--;
-			}
+			value = barrier_simple_forward(info->bd, block->number, object, block);
 	}
 	
 	/* note that value is assigned on every path above */
 	return value;
 }
 
-static int journal_queue_bd_sync(BD_t * object, bdesc_t * block)
+static int journal_queue_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct queue_info * info = (struct queue_info *) OBJLOCAL(object);
-	uint32_t refs;
-	int value;
 	
 	/* can't sync in the HOLD state at all */
 	if(info->state == HOLD)
-		return -E_INVAL;
+		return -E_BUSY;
 	
-	if(!block)
+	if(block == SYNC_FULL_DEVICE)
 	{
 		/* can't sync the whole device except in RELEASE state */
 		if(info->state != RELEASE)
-			return -E_INVAL;
-		return CALL(info->bd, sync, NULL);
+			return -E_BUSY;
+		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
 	}
 	
-	/* save reference count */
-	refs = block->refs;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= CALL(info->bd, get_numblocks))
+	if(block >= CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
 	if(info->state == PASSTHROUGH)
 	{
 		/* can't sync a held block */
-		if(hash_map_find_val(info->bdesc_hash, (void *) block->number))
-			return -E_INVAL;
+		if(hash_map_find_val(info->bdesc_hash, (void *) block))
+			return -E_BUSY;
 	}
 	
-	block->translated++;
-	block->bd = info->bd;
-	
-	/* sync it */
-	value = CALL(block->bd, sync, block);
-	
-	if(refs)
-	{
-		block->bd = object;
-		block->translated--;
-	}
-	
-	return value;
+	return CALL(info->bd, sync, block, ch);
+}
+
+static uint16_t journal_queue_bd_get_devlevel(BD_t * object)
+{
+	return ((struct queue_info *) OBJLOCAL(object))->level;
 }
 
 static int journal_queue_bd_destroy(BD_t * bd)
@@ -228,6 +231,7 @@ static int journal_queue_bd_destroy(BD_t * bd)
 		return r;
 	modman_dec_bd(info->bd, bd);
 	
+	blockman_destroy(&info->blockman);
 	hash_map_destroy(info->bdesc_hash);
 	free(info);
 	
@@ -259,12 +263,24 @@ BD_t * journal_queue_bd(BD_t * disk)
 		return NULL;
 	}
 	
+	info->blockman = blockman_create();
+	if(!info->blockman)
+	{
+		hash_map_destroy(info->bdesc_hash);
+		free(info);
+		free(bd);
+		return NULL;
+	}
+	
 	BD_INIT(bd, journal_queue_bd, info);
 	OBJMAGIC(bd) = JOURNAL_QUEUE_MAGIC;
 	
 	info->bd = disk;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->state = RELEASE;
+	
+	/* we might delay blocks, so our level goes up */
+	info->level = CALL(disk, get_devlevel) + 1;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
@@ -315,13 +331,7 @@ int journal_queue_release(BD_t * bd)
 		{
 			int value;
 			
-			bdesc->translated++;
-			bdesc->bd = info->bd;
-			
-			value = CALL(info->bd, write_block, bdesc);
-			
-			bdesc->bd = bd;
-			bdesc->translated--;
+			value = barrier_simple_forward(info->bd, bdesc->number, bd, bdesc);
 			
 			if(value < 0)
 				return value;
@@ -331,7 +341,7 @@ int journal_queue_release(BD_t * bd)
 			bdesc_release(&bdesc);
 
 #ifdef RELEASE_PROGRESS_ENABLED
-			if (++nbdescs_released >= disp_prev + disp_period)
+			if(++nbdescs_released >= disp_prev + disp_period)
 			{
 				r = textbar_set_progress(nbdescs_released * disp_ncols / bdesc_hash_size, RELEASE_PROGRESS_COLOR);
 				assert(r >= 0);

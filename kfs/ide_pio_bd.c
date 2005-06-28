@@ -196,31 +196,39 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
-	if (info->ra_count == 0) {
+	if(info->ra_count == 0)
+	{
 		/* read it */
 		if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
 			return NULL;
 	}
-	else { // read ahead
-		if(info->ra_sector != 0) { // we have something in the cache
-			if(info->ra_sector <= number && number < info->ra_sector+info->ra_count) { // cache hit
+	else
+	{
+		/* read ahead */
+		if(info->ra_sector != 0)
+		{
+			/* we have something in the cache */
+			if(info->ra_sector <= number && number < info->ra_sector+info->ra_count)
+				/* cache hit */
 				memcpy(bdesc->ddesc->data, info->ra_cache + SECTSIZE * (number - info->ra_sector), SECTSIZE);
-			}
-			else { // cache miss
+			else
+				/* cache miss */
 				need_to_read = 1;
-			}
 		}
-		else{ // nothing in the cache
+		else
+			/* nothing in the cache */
 			need_to_read = 1;
-		}
 		
-		if(need_to_read) {
-			if(number == 0) {
+		if(need_to_read)
+		{
+			if(number == 0)
+			{
 				info->ra_sector = 0;
 				if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
 					return NULL;
 			}
-			else{
+			else
+			{
 				/* read it */
 				if(ide_read(info->controller, info->disk, number, info->ra_cache, info->ra_count) == -1)
 					return NULL;
@@ -269,6 +277,10 @@ static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number,
 
 static int ide_pio_bd_cancel_block(BD_t * object, uint32_t number)
 {
+	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
+	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
+	if(ddesc)
+		blockman_remove(ddesc);
 	return 0;
 }
 
@@ -288,7 +300,8 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_tail_prepare(block, object);
 	
 	/* write it */
-	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1) {
+	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1)
+	{
 		/* the write failed; don't remove any change descriptors... */
 		revision_tail_revert(block, object);
 		return -E_TIMEOUT;
@@ -319,7 +332,7 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	
 	free(info->ra_cache);
 	blockman_destroy(&info->blockman);
-	free(OBJLOCAL(bd));
+	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 	return 0;
@@ -364,7 +377,8 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	BD_INIT(bd, ide_pio_bd, info);
 	
 	info->blockman = blockman_create();
-	if(!info->blockman) {
+	if(!info->blockman)
+	{
 		free(info->ra_cache);
 		free(info);
 		free(bd);

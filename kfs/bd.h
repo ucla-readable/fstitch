@@ -11,7 +11,7 @@ typedef struct BD BD_t;
 #include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
 
-#define SYNC_FULL_DEVICE 0xffffffff
+#define SYNC_FULL_DEVICE 0xFFFFFFFF
 
 struct BD {
 	OBJECT(BD_t);
