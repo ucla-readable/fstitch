@@ -11,6 +11,7 @@
 //   too.)
 
 #include <inc/lib.h>
+#include <inc/malloc.h>
 
 
 int   fileout_fd           = STDOUT_FILENO;
@@ -209,7 +210,7 @@ http_read_body(struct http_state *hs)
 }
 
 void
-http_get(struct ip_addr addr, uint16_t port, const char *uri)
+http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 {
 	struct http_state *hs = NULL;
 	int r;
@@ -239,7 +240,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri)
 		fprintf(status_fd, "Connected\n");
 
 	// Send the request
-	fprintf(hs->net[1], "GET %s HTTP/1.0\r\n\r\n", uri);
+	fprintf(hs->net[1], "GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", uri, host);
 	if (!silent)
 		fprintf(status_fd, "Sending request... ");
 
@@ -262,8 +263,7 @@ const char root[] = "/";
 const char http[] = "http://";
 
 int
-parse_url(char *url,
-			 struct ip_addr *addr, u16_t *port, char **resource)
+parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **host)
 {
 	char  addr_str[256]; // 255 is max length of a host name, +1 for '\0'
 	char  port_str[6]; // 5 is max length of a 16bit port, +1 for '\0'
@@ -297,8 +297,7 @@ parse_url(char *url,
 	//
 	// Parse address
 
-	memcpy(addr_str, addr_in_url, MIN(addr_in_url_end - addr_in_url,
-												 sizeof(addr_str)));
+	memcpy(addr_str, addr_in_url, MIN(addr_in_url_end - addr_in_url, sizeof(addr_str)));
 	addr_str[MIN(addr_in_url_end - addr_in_url, sizeof(addr_str))] = 0;
 	if (addr_in_url_end - addr_in_url > sizeof(addr_str))
 	{
@@ -319,8 +318,7 @@ parse_url(char *url,
 	if (port_in_url)
 	{
 		port_in_url++; // skip over the ':'
-		memcpy(port_str, port_in_url, MIN(port_in_url_end - port_in_url,
-													 sizeof(port_str)));
+		memcpy(port_str, port_in_url, MIN(port_in_url_end - port_in_url, sizeof(port_str)));
 		port_str[MIN(port_in_url_end - port_in_url, sizeof(port_str))] = 0;
 		if(port_in_url_end - port_in_url > sizeof(port_str)) {
 			fprintf(STDERR_FILENO, "port string too long: \"%s\"\n", port_str);
@@ -330,9 +328,7 @@ parse_url(char *url,
 		*port = (u16_t) strtol(port_str, NULL, 10);
 	}
 	else
-	{
 		*port = 80;
-	}
 
 	//
 	// Parse resource
@@ -341,6 +337,11 @@ parse_url(char *url,
 		*resource = resource_in_url;
 	else
 		*resource = (char*) root;
+
+	//
+	// Copy host string
+
+	*host = strdup(addr_str);
 
 	return 0;
 }
@@ -381,9 +382,7 @@ umain(int argc, char **argv)
 		fileout_name = filename;
 	}
 	else
-	{
 		fileout_fd = STDOUT_FILENO;
-	}
 
 	silent               = get_arg_idx(argc, (const char**) argv, "-q");
 	print_server_headers = get_arg_idx(argc, (const char**) argv, "-S");
@@ -397,11 +396,13 @@ umain(int argc, char **argv)
 	struct ip_addr addr;
 	u16_t port;
 	char *uri = NULL;
-	if ((r = parse_url(url, &addr, &port, &uri)) < 0)
+	char *host = NULL;
+	if ((r = parse_url(url, &addr, &port, &uri, &host)) < 0)
 	{
 		fprintf(STDERR_FILENO, "parse_url: %e\n", r);
 		exit();
 	}
 
-	http_get(addr, port, uri);
+	http_get(addr, port, uri, host);
+	free(host);
 }
