@@ -748,8 +748,8 @@ static int uhfs_destroy(CFS_t * cfs)
 	open_file_t * f;
 	int r;
 
-	hash_map_it_init(&it);
-	while ((f = hash_map_val_next(state->open_files, &it)))
+	hash_map_it_init(&it, state->open_files);
+	while ((f = hash_map_val_next(&it)))
 		fprintf(STDERR_FILENO, "%s(%s): orphaning fid %u\n", __FUNCTION__, modman_name_cfs(cfs), f->fid);
 
 	r = modman_rem_cfs(cfs);

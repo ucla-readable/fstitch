@@ -52,16 +52,17 @@ int    hash_map_resize(hash_map_t * hm, size_t n);
 // Iteration
 
 struct hash_map_it {
+	hash_map_t * hm;
 	size_t bucket;
 	chain_elt_t * elt;
 };
 typedef struct hash_map_it hash_map_it_t;
 
-void hash_map_it_init(hash_map_it_t * it);
+void hash_map_it_init(hash_map_it_t * it, hash_map_t * hm);
 // Iterate through the hash map values using hm_it.
 // - Returns NULL when the end of the hash map is reached.
 // - Behavior is undefined begin iterating, modify hm, and then continue
 //   iterating using the old hm_it.
-void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * hm_it);
+void * hash_map_val_next(hash_map_it_t * it);
 
 #endif /* !KUDOS_INC_HASH_MAP_H */

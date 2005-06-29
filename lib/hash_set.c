@@ -111,12 +111,12 @@ int hash_set_resize(hash_set_t * hs, size_t n)
 //
 // Iteration
 
-void hash_set_it_init(hash_set_it_t * it)
+void hash_set_it_init(hash_set_it_t * it, hash_set_t * hs)
 {
-	hash_map_it_init(it);
+	hash_map_it_init(it, hs->hm);
 }
 
-void * hash_set_next(hash_set_t * hs, hash_set_it_t * it)
+void * hash_set_next(hash_set_it_t * it)
 {
-	return hash_map_val_next(hs->hm, it);
+	return hash_map_val_next(it);
 }

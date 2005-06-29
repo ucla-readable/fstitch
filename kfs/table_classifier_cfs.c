@@ -576,8 +576,8 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	// who such users may be.
 	hash_map_it_t it;
 	open_file_t * of;
-	hash_map_it_init(&it);
-	while ((of = hash_map_val_next(state->open_files, &it)))
+	hash_map_it_init(&it, state->open_files);
+	while ((of = hash_map_val_next(&it)))
 	{
 		if (of->cfs == me->cfs)
 			return NULL;

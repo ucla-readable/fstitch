@@ -360,8 +360,8 @@ int josfs_fsck(LFS_t * object)
 			if (d > 0)
 				errors += d;
 
-			hash_set_it_init(&hsitr);
-			dirfile = (JOSFS_File_t *) hash_set_next(hsdirs, &hsitr);
+			hash_set_it_init(&hsitr, hsdirs);
+			dirfile = (JOSFS_File_t *) hash_set_next(&hsitr);
 
 			if (dirfile) {
 				hash_set_erase(hsdirs, dirfile);

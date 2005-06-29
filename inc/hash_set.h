@@ -40,11 +40,11 @@ int    hash_set_resize(hash_set_t * hs, size_t n);
 
 typedef hash_map_it_t hash_set_it_t;
 
-void hash_set_it_init(hash_set_it_t * it);
+void hash_set_it_init(hash_set_it_t * it, hash_set_t * hs);
 // Iterate through the hash set values using hs_it.
 // - Returns NULL when the end of the hash set is reached.
 // - Behavior is undefined begin iterating, modify hs, and then continue
 //   iterating using the old hs_it.
-void * hash_set_next(hash_set_t * hs, hash_set_it_t * hs_it);
+void * hash_set_next(hash_set_it_t * it);
 
 #endif /* !KUDOS_INC_HASH_SET_H */

@@ -319,7 +319,7 @@ int journal_queue_release(BD_t * bd)
 		int disp_ncols, r;
 #endif
 
-		hash_map_it_init(&it);
+		hash_map_it_init(&it, info->bdesc_hash);
 
 #ifdef RELEASE_PROGRESS_ENABLED
 		disp_ncols = textbar_init(-1);
@@ -327,7 +327,7 @@ int journal_queue_release(BD_t * bd)
 		disp_period = (bdesc_hash_size + disp_ncols - 1) / disp_ncols;
 #endif
 
-		while((bdesc = (bdesc_t *) hash_map_val_next(info->bdesc_hash, &it)))
+		while((bdesc = (bdesc_t *) hash_map_val_next(&it)))
 		{
 			int value;
 			

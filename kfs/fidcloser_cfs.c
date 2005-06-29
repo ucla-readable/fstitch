@@ -116,7 +116,7 @@ static void open_file_gc(fidcloser_state_t * state)
 	int r;
 
 	ofs_to_erase = vector_create();
-	hash_map_it_init(&hm_it);
+	hash_map_it_init(&hm_it, state->open_files);
 	if (!ofs_to_erase)
 	{
 		fprintf(STDERR_FILENO, "fidcloser unable to malloc memory to gc\n");
@@ -126,7 +126,7 @@ static void open_file_gc(fidcloser_state_t * state)
 	// Gc fids
 	// (remove the fids after this, else we would mess up hm_it)
 
-	while ((of = hash_map_val_next(state->open_files, &hm_it)))
+	while ((of = hash_map_val_next(&hm_it)))
 	{
 		assert(of->page && va_is_mapped(of->page));
 

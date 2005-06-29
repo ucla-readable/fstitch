@@ -96,9 +96,9 @@ hash_map_t * kfs_uses()
 		kfs_node_t * n;
 		hash_map_it_t it;
 
-		hash_map_it_init(&it);
+		hash_map_it_init(&it, nodes);
 
-		while ((n = hash_map_val_next(nodes, &it)))
+		while ((n = hash_map_val_next(&it)))
 		{
 			int i;
 			kfs_use_t * u;

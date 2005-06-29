@@ -1047,9 +1047,9 @@ dns_tmr()
 	if (next_dns_tmr - env->env_jiffies > 0)
 		return;
 
-	hash_set_it_init(&it);
+	hash_set_it_init(&it, pending_dns_queries);
 
-	while ((ds = hash_set_next(pending_dns_queries, &it)))
+	while ((ds = hash_set_next(&it)))
 	{
 		if (ds->expires - env->env_jiffies > 0)
 			continue;

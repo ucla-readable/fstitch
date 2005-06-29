@@ -22,9 +22,9 @@ int destroy_nodes(hash_set_t * nodes)
 	int r;
 	int ndestroyed = 0;
 
-	hash_set_it_init(&it);
+	hash_set_it_init(&it, nodes);
 
-	while ((node = hash_set_next(nodes, &it)))
+	while ((node = hash_set_next(&it)))
 	{
 		if (OBJFLAGS((object_t *) node->obj) & OBJ_PERSISTENT)
 			continue;
@@ -90,9 +90,9 @@ void update_nodes_used_graph(hash_set_t * nodes_used, hash_set_t * updated_nodes
 
 	nodes = kfs_uses();
 	assert(nodes);
-	hash_set_it_init(&it);
+	hash_set_it_init(&it, nodes_used);
 
-	while ((node_used = hash_set_next(nodes_used, &it)))
+	while ((node_used = hash_set_next(&it)))
 	{
 		if (hash_map_find_val(nodes, node_used->obj))
 		{

@@ -381,13 +381,14 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 //
 // Iteration
 
-void hash_map_it_init(hash_map_it_t * it)
+void hash_map_it_init(hash_map_it_t * it, hash_map_t * hm)
 {
+	it->hm = hm;
 	it->bucket = 0;
 	it->elt = NULL;
 }
 
-void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
+void * hash_map_val_next(hash_map_it_t * it)
 {
 	size_t i;
 	chain_elt_t * head;
@@ -397,9 +398,9 @@ void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
 		// New iterator
 
 		// Set it to the first elt
-		for (i=0; i < vector_size(hm->tbl); i++)
+		for (i=0; i < vector_size(it->hm->tbl); i++)
 		{
-			head = vector_elt(hm->tbl, i);
+			head = vector_elt(it->hm->tbl, i);
 			if (head)
 			{
 				it->bucket = i;
@@ -421,9 +422,9 @@ void * hash_map_val_next(hash_map_t * hm, hash_map_it_t * it)
 	}
 
 	// Find the next bucket with an elt
-	for (i=it->bucket+1; i < vector_size(hm->tbl); i++)
+	for (i=it->bucket+1; i < vector_size(it->hm->tbl); i++)
 	{
-		head = vector_elt(hm->tbl, i);
+		head = vector_elt(it->hm->tbl, i);
 		if (head)
 		{
 			it->bucket = i;

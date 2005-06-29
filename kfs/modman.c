@@ -288,14 +288,14 @@ MODMAN_OP(const char *, name, lfs);
 #define MODMAN_IT_INIT(type) \
 int modman_it_init_##type(modman_it_t * it) \
 { \
-	hash_map_it_init(it); \
+	hash_map_it_init(it, type##_map); \
 	return 0; \
 }
 
 #define MODMAN_IT_NEXT(type) \
 type##_t * modman_it_next_##type(modman_it_t * it) \
 { \
-	modman_entry_##type##_t * me = hash_map_val_next(type##_map, it); \
+	modman_entry_##type##_t * me = hash_map_val_next(it); \
 	return me ? (type##_t *) me->type : NULL; \
 }
 
