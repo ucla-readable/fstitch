@@ -4,7 +4,6 @@
 #include <kfs/bdesc.h>
 #include <kfs/fdesc.h>
 #include <kfs/chdesc.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/journal_queue_bd.h>
@@ -442,11 +441,9 @@ static size_t use_next_trans_slot(journal_state_t * state)
 		// transaction's invalid chdesc.
 		// For now, sync this transaction slot.
 		// NOTE: if we do update this to depend rather than sync,
-		bdesc_t * bdesc;
-
-		bdesc = state->commit_chdesc[slot]->block;
-			
-		r = CALL(state->commit_chdesc[slot]->owner, sync, bdesc);
+		uint32_t number = state->commit_chdesc[slot]->block->number;
+		
+		r = CALL(state->commit_chdesc[slot]->owner, sync, number, NULL);
 		assert(r >= 0); // TODO: handle error
 		assert(!state->commit_chdesc[slot]);
 	}
@@ -486,10 +483,10 @@ static int transaction_stop(journal_state_t * state)
 		if (!data_bdescs)
 			return -E_NO_MEM;
 
-		hash_map_it_init(&it);
+		hash_map_it_init(&it, (hash_map_t *) data_bdescs_map);
 
 		i = 0;
-		while ((bdesc = hash_map_val_next((hash_map_t *) data_bdescs_map, &it)))
+		while ((bdesc = hash_map_val_next(&it)))
 			data_bdescs[i++] = bdesc;
 		assert(i == ndatabdescs);
 
