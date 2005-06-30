@@ -1,6 +1,5 @@
 OBJDIRS += kfs
 
-#			$(OBJDIR)/kfs/chdesc_stripper_bd.o \
 #			$(OBJDIR)/kfs/order_preserver_bd.o \
 #			$(OBJDIR)/kfs/wb_cache_bd.o \
 #			$(OBJDIR)/kfs/mirror_bd.o \

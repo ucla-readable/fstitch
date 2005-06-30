@@ -4,7 +4,6 @@
 #include <kfs/block_resizer_bd.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
-#include <kfs/chdesc_stripper_bd.h>
 #include <kfs/journal_queue_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/mirror_bd.h>

@@ -4,7 +4,6 @@
 
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable_bd.h>
-#include <kfs/chdesc_stripper_bd.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
@@ -123,10 +122,6 @@ int kfsd_init(void)
 
 		if (! (j_bd = construct_cacheing(j_bd, 128)) )
 			kfsd_shutdown();
-#ifndef USE_WB_CACHE
-		if (! (j_bd = chdesc_stripper_bd(j_bd)) )
-			kfsd_shutdown();
-#endif
 
 		if (! (data_bd = ide_pio_bd(0, 0)) )
 		{
@@ -137,10 +132,6 @@ int kfsd_init(void)
 			OBJFLAGS(data_bd) |= OBJ_PERSISTENT;
 		if (! (data_bd = construct_cacheing(data_bd, 32)) )
 			kfsd_shutdown();
-#ifndef USE_WB_CACHE
-		if (! (data_bd = chdesc_stripper_bd(data_bd)) )
-			kfsd_shutdown();
-#endif
 
 		if (! (u = construct_journaled_uhfs(j_bd, data_bd, &journal)) )
 			kfsd_shutdown();
@@ -320,13 +311,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
 				kfsd_shutdown();
 		}
-
-#ifndef USE_WB_CACHE
-#if INBS
-		if (! (cache = chdesc_stripper_bd(cache)) )
-			kfsd_shutdown();
-#endif
-#endif
 
 #if INBS
 		if (enable_internal_journaling)
