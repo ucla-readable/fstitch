@@ -10,7 +10,6 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
-#include <kfs/depman.h>
 #include <kfs/modman.h>
 #include <kfs/wb_cache_bd.h>
 
@@ -18,9 +17,9 @@
 #define WB_CACHE_DEBUG_TREE 1
 
 #if WB_CACHE_DEBUG
-#define printd(x...) printf(x)
+#define Dprintf(x...) printf(x)
 #else
-#define printd(x...)
+#define Dprintf(x...)
 #endif
 
 #define DEBUG_BACKUP_CACHE_SIZE 20
@@ -29,10 +28,10 @@ struct cache_info {
 	BD_t * bd;
 	uint32_t size;
 	bdesc_t ** blocks;
-	uint32_t *dirty_bits;
-	uint16_t blocksize;
+	uint32_t * dirty_bits;
+	uint16_t blocksize, level;
 	int viz_enabled;
-	char *debug_cache[DEBUG_BACKUP_CACHE_SIZE];
+	char * debug_cache[DEBUG_BACKUP_CACHE_SIZE];
 	int debug_dirty[DEBUG_BACKUP_CACHE_SIZE];
 	int debug_blkno[DEBUG_BACKUP_CACHE_SIZE];
 };
@@ -220,29 +219,24 @@ print_chdescs(chdesc_t *ch, int num)
 		printf("  ");
 	switch (ch->type) {
 	case BIT:
-		//printf("bit.\n");
-		//printf("0x%08x\n", ch);
-		//printf("0x%08x\n", ch->distance);
-		//printf("0x%08x\n", ch->block->number);
-		//printf("0x%08x\n", ch->byte.length);
-		printf("ch: 0x%08x BIT dist %d block %d off 0x%x",
+		Dprintf("ch: 0x%08x BIT dist %d block %d off 0x%x",
 			   ch, ch->distance,
 			   ch->block->number, ch->bit.offset);
 		break;
 	case BYTE:
-		printf("ch: 0x%08x BYTE dist %d block %d off 0x%x len %d",
+		Dprintf("ch: 0x%08x BYTE dist %d block %d off 0x%x len %d",
 			   ch, ch->distance, ch->block->number,
 			   ch->byte.offset, ch->byte.length);
 		break;
 	case NOOP:
-		printf("ch: 0x%08x NOOP dist %d", ch, ch->distance);
+		Dprintf("ch: 0x%08x NOOP dist %d", ch, ch->distance);
 		break;
 	default:
-		printf("ch: 0x%08x UNKNOWN TYPE!! type: 0x%x", ch, ch->type);
+		Dprintf("ch: 0x%08x UNKNOWN TYPE!! type: 0x%x", ch, ch->type);
 	}
 
 	if (ch->flags & CHDESC_PRMARKED) {
-		printf(" (repeat)\n");
+		Dprintf(" (repeat)\n");
 		return;
 	} else
 		printf("\n");
@@ -627,7 +621,7 @@ wb_cache_bd_evict_block(BD_t *object, bdesc_t *block, int idx)
  end:
 	mark_clean(object, idx);
 	root = (chdesc_t*)depman_get_deps(block); // shedding const
-											  // intentionally b/c of
+											  // intentionally due to
 											  // CHDESC_MARKED flag.
 	if (root != NULL) {
 		printf("problem tree?\n");
@@ -697,8 +691,7 @@ backup_check(BD_t *object, bdesc_t *blk)
 }
 */
 
-static bdesc_t *
-wb_cache_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
@@ -711,37 +704,27 @@ wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	if(info->blocks[index])
 	{
 		/* in the cache, use it */
-		if(info->blocks[index]->number == number) {
+		if(info->blocks[index]->number == number)
 			return info->blocks[index];
-		}
 		
 		// evict this cache entry
 		//printf("evicting block 0x%08x (no. %d) at index %d\n",
 		//	   info->blocks[index], number, index);
 		wb_cache_bd_evict_block(object, info->blocks[index], index);
-	} else {
-
 	}
+	
 	/* not in the cache, need to read it */
 	info->blocks[index] = CALL(info->bd, read_block, number);
 	assert(number == info->blocks[index]->number);
 	//printf("read in block 0x%08x (no. %d) to index %d\n",
 	//	   info->blocks[index], number, index);
 	
-	if(!info->blocks[index]) {
-		printf("failed to read block number %d from lower level!\n",
-			   number);
+	if(!info->blocks[index])
+	{
+		fprintf(STDERR_FILENO, "wb_cache: failed to read block number %d from lower level!\n", number);
 		return NULL;
 	}
 	
-	/* FIXME bdesc_alter() and bdesc_retain() can fail */
-	
-	/* ensure we can alter the structure without conflict */
-	bdesc_alter(&info->blocks[index]);
-	
-	/* adjust the block descriptor to match the cache */
-	info->blocks[index]->bd = object;
-
 	/*
 	if (backup_check(object, info->blocks[index]) != 0) {
 		panic("read block %d failed!!\n", info->blocks[index]->number);
@@ -749,21 +732,78 @@ wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	*/
 	
 	/* increase reference count */
-	bdesc_retain(&info->blocks[index]);
+	return bdesc_retain(info->blocks[index]);
+}
+
+static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	uint32_t index;
 	
-	return info->blocks[index];
+	/* make sure it's a valid block */
+	if(number >= CALL(info->bd, get_numblocks))
+		return NULL;
+	
+	index = number % info->size;
+	if(info->blocks[index])
+	{
+		/* in the cache, use it */
+		if(info->blocks[index]->number == number)
+		{
+			*synthetic = 0;
+			return info->blocks[index];
+		}
+		
+		// evict this cache entry
+		//printf("evicting block 0x%08x (no. %d) at index %d\n",
+		//	   info->blocks[index], number, index);
+		wb_cache_bd_evict_block(object, info->blocks[index], index);
+	}
+	
+	/* not in the cache, need to read it */
+	info->blocks[index] = CALL(info->bd, synthetic_read_block, number, synthetic);
+	assert(number == info->blocks[index]->number);
+	//printf("read in block 0x%08x (no. %d) to index %d\n",
+	//	   info->blocks[index], number, index);
+	
+	if(!info->blocks[index])
+	{
+		fprintf(STDERR_FILENO, "wb_cache: failed to read block number %d from lower level!\n", number);
+		return NULL;
+	}
+	
+	/*
+	if (backup_check(object, info->blocks[index]) != 0) {
+		panic("read block %d failed!!\n", info->blocks[index]->number);
+	}
+	*/
+	
+	/* increase reference count */
+	return bdesc_retain(info->blocks[index]);
+}
+
+static int wb_cache_bd_cancel_block(BD_t * object, uint32_t number)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	uint32_t index;
+	
+	/* make sure it's a valid block */
+	if(number >= CALL(info->bd, get_numblocks))
+		return -E_INVAL;
+	
+	index = number % info->size;
+	if(info->blocks[index])
+		if(info->blocks[index]->number == number)
+			bdesc_release(&info->blocks[index]);
+	
+	return CALL(info->bd, cancel_block, number);
 }
 
 static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
-	int value = 0;
 
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
 	/* make sure it's a whole block */
 	if(block->ddesc->length != info->blocksize)
 		return -E_INVAL;
@@ -776,86 +816,83 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	//printf("got a write for block %d\n", block->number);
 	
 	index = block->number % info->size;
-	if (info->blocks[index]->number == block->number) {
-		// overwrite existing block
-		//printf("calling bdesc overwrite for block %d\n", block->number);
-		value = bdesc_overwrite(info->blocks[index], block);
-		if (value < 0)
-			panic("bdesc_overwrite: %e\n", value);
-		bdesc_drop(&block);
-	} else {
+	if(!info->blocks || info->blocks[index]->number != block->number)
+	{
 		// evict old block and write a new one
-		printd("cache conflict or miss. maybe evicting.\n");
-		if (info->blocks[index])
-			value = wb_cache_bd_evict_block(object, info->blocks[index], index);
-		bdesc_retain(&block);
+		Dprintf("cache conflict or miss. maybe evicting.\n");
+		if(info->blocks[index])
+		{
+			int value = wb_cache_bd_evict_block(object, info->blocks[index], index);
+			if(value < 0)
+				return value;
+		}
+		bdesc_retain(block);
 		info->blocks[index] = block;
 	}
 	mark_dirty(object, index);
 
-	return value;
+	return 0;
 }
 
-static int wb_cache_bd_sync(BD_t * object, bdesc_t * block)
+static int wb_cache_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	uint32_t refs;
 	int value = 0;
 	int i;
 	
-	/* since this is a write-through cache, syncing is a no-op */
-	/* ...but we still have to pass the sync on correctly */
-	
-	//printf("sync not supported yet. sorry.\n");
-	//return CALL(info->bd, sync, NULL);
-	if(!block) {
-		// whole device sync!
-		for (i = 0; i < info->size; i++) {
-			if (is_dirty(object, i)) {
+	if(block == SYNC_FULL_DEVICE)
+	{
+		/* whole device sync! */
+		for(i = 0; i < info->size; i++)
+		{
+			if(info->blocks[i] && is_dirty(object, i))
+			{
 				value = wb_cache_bd_evict_block(object, info->blocks[i], i);
-				if (value < 0) {
-					printf("sync of device failed!\n");
+				if(value < 0)
+				{
+					fprintf(STDERR_FILENO, "wb_cache: sync of device 0x%08x failed!\n", object);
 					return value;
 				}
 			}
 		}
-		return 0;
+		return CALL(info->bd, sync, SYNC_FULL_DEVICE, ch);
 	}
 	
-	/* save reference count */
-	refs = block->refs;
-	
-	/* make sure this is the right block device */
-	if(block->bd != object)
-		return -E_INVAL;
-	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= CALL(info->bd, get_numblocks))
+	if(block >= CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
-	for (i = 0; i < info->size; i++) {
-		if (info->blocks[i] && is_dirty(object, i)) {
-			value = wb_cache_bd_evict_block(object, info->blocks[i], i);
+	if(info->blocks[i] && is_dirty(object, i))
+	{
+		value = wb_cache_bd_evict_block(object, info->blocks[i], i);
+		if(value < 0)
+		{
+			fprintf(STDERR_FILENO, "wb_cache: sync of block %d on device 0x%08x failed!\n", block, object);
+			return value;
 		}
 	}
 	
-	return value;
+	return CALL(info->bd, sync, block, ch);
+}
+
+static uint16_t wb_cache_bd_get_devlevel(BD_t * object)
+{
+	return ((struct cache_info *) OBJLOCAL(object))->level;
 }
 
 static int wb_cache_bd_destroy(BD_t * bd)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
 	uint32_t block;
-	int r = modman_rem_bd(bd);
+	int r = CALL(bd, sync, SYNC_FULL_DEVICE, NULL);
+	if(r < 0)
+		return r;
+	
+	r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->bd, bd);
 	
-	/* FIXME a write-back cache should probably sync these blocks in case they are dirty */
 	for(block = 0; block != info->size; block++)
 		if(info->blocks[block])
 			bdesc_release(&info->blocks[block]);
@@ -867,8 +904,6 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	
 	return 0;
 }
-
-BD_t *static_wb_cache = 0;
 
 BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 {
@@ -922,6 +957,9 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	info->bd = disk;
 	info->size = blocks;
 	
+	/* we generally delay blocks, so our level goes up */
+	info->level = CALL(disk, get_devlevel) + 1;
+	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);
@@ -935,10 +973,6 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	}
 	
 	info->viz_enabled = 0;
-	if (static_wb_cache == 0)
-		static_wb_cache = bd;
-	else
-		printf("I'm not the first wb cache\n");
 
 	return bd;
 }
@@ -948,10 +982,9 @@ wb_cache_bd_viz_enable(BD_t * object, int on)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	info->viz_enabled = on;
-	if (on) {
-		printf("viz enabled\n");
-	} else {
-		printf("viz disabled\n");
-	}
+	if (on)
+		Dprintf("viz enabled\n");
+	else
+		Dprintf("viz disabled\n");
 	return 0;
 }
