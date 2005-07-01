@@ -6,6 +6,7 @@ OBJDIRS += kfs
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc.o \
+			$(OBJDIR)/kfs/chdesc_util.o \
 			$(OBJDIR)/kfs/modman.o \
 			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/blockman.o \

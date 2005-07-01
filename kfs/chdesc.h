@@ -61,9 +61,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
 
-/* unmark a chdesc graph (i.e. clear CHDESC_MARKED) */
-void chdesc_unmark_graph(chdesc_t * root);
-
 /* move a chdesc to a new bdesc (at a barrier) */
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset);
 void chdesc_finish_move(bdesc_t * destination);
@@ -73,9 +70,6 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
 
 /* remove a dependency from a change descriptor */
 int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
-
-/* push all change descriptors at this block device on a block (i.e. data) descriptor to a new block device and block */
-int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block);
 
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);

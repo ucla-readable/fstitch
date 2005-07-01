@@ -577,15 +577,6 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
-void chdesc_unmark_graph(chdesc_t * root)
-{
-	chmetadesc_t * meta;
-	root->flags &= ~CHDESC_MARKED;
-	for(meta = root->dependencies; meta; meta = meta->next)
-		if(meta->desc->flags & CHDESC_MARKED)
-			chdesc_unmark_graph(meta->desc);
-}
-
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	uint16_t * offset;
@@ -752,31 +743,6 @@ int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 	if(dependent->type == NOOP && !dependent->dependencies)
 		/* we just removed the last dependency of a NOOP chdesc, so free it */
 		chdesc_destroy(&dependent);
-	return 0;
-}
-
-int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
-{
-	chdesc_t * root = current_block->ddesc->changes;
-	if(target_block->ddesc != current_block->ddesc)
-		return -E_INVAL;
-	if(root)
-	{
-		chmetadesc_t * scan = root->dependencies;
-		while(scan)
-		{
-			chdesc_t * chdesc = scan->desc;
-			if(chdesc->owner == current_bd)
-			{
-				chdesc->owner = target_bd;
-				assert(chdesc->block);
-				bdesc_release(&chdesc->block);
-				chdesc->block = target_block;
-				bdesc_retain(target_block);
-			}
-			scan = scan->next;
-		}
-	}
 	return 0;
 }
 
