@@ -291,20 +291,6 @@ static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * p
 	RETURN_IPC;
 }
 
-#include <kfs/order_preserver_bd.h>
-static void kis_order_preserver_bd(envid_t whom, const Skfs_order_preserver_bd_t * pg)
-{
-	BD_t * bd = (BD_t *) pg->bd;
-	uint32_t val;
-	
-	if (!modman_name_bd(bd))
-		RETURN_IPC_INVAL;
-
-	val = (uint32_t) order_preserver_bd(bd);
-
-	RETURN_IPC;
-}
-
 #include <kfs/wb_cache_bd.h>
 static void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 {
@@ -677,7 +663,6 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(MEM_BD,             mem_bd);
 #if !USE_THIRD_LEG
 		SERVE(JOURNAL_QUEUE_BD,   journal_queue_bd);
-		SERVE(ORDER_PRESERVER_BD, order_preserver_bd);
 		SERVE(WB_CACHE_BD,        wb_cache_bd);
 #endif
 		SERVE(WT_CACHE_BD,        wt_cache_bd);

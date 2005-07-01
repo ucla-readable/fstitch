@@ -43,27 +43,26 @@
 #define SKFS_NBD_BD 18
 #define SKFS_MEM_BD 19
 #define SKFS_JOURNAL_QUEUE_BD 20
-#define SKFS_ORDER_PRESERVER_BD 21
-#define SKFS_WB_CACHE_BD 22
-#define SKFS_WT_CACHE_BD 23
-#define SKFS_BLOCK_RESIZER_BD 24
-#define SKFS_MD_BD 25
-#define SKFS_MIRROR_BD 26
-#define SKFS_MIRROR_BD_ADD 27
-#define SKFS_MIRROR_BD_REMOVE 28
-#define SKFS_PARTITION_BD 29
-#define SKFS_PC_PTABLE_BD 30
-#define SKFS_IDE_PIO_BD 31
+#define SKFS_WB_CACHE_BD 21
+#define SKFS_WT_CACHE_BD 22
+#define SKFS_BLOCK_RESIZER_BD 23
+#define SKFS_MD_BD 24
+#define SKFS_MIRROR_BD 25
+#define SKFS_MIRROR_BD_ADD 26
+#define SKFS_MIRROR_BD_REMOVE 27
+#define SKFS_PARTITION_BD 28
+#define SKFS_PC_PTABLE_BD 29
+#define SKFS_IDE_PIO_BD 30
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 32
-#define SKFS_MODMAN_RETURN_LOOKUP  33
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 34
-#define SKFS_MODMAN_REQUEST_ITS    35
-#define SKFS_MODMAN_RETURN_IT      36
+#define SKFS_MODMAN_REQUEST_LOOKUP 31
+#define SKFS_MODMAN_RETURN_LOOKUP  32
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 33
+#define SKFS_MODMAN_REQUEST_ITS    34
+#define SKFS_MODMAN_RETURN_IT      35
 
-#define SKFS_PERF_TEST 37
+#define SKFS_PERF_TEST 36
 
 
 #define SKFS_TYPE int skfs_type
@@ -222,11 +221,6 @@ typedef struct {
 	SKFS_TYPE;
 	uint32_t bd;
 } Skfs_journal_queue_bd_t;
-
-typedef struct {
-	SKFS_TYPE;
-	uint32_t bd;
-} Skfs_order_preserver_bd_t;
 
 typedef struct {
 	SKFS_TYPE;

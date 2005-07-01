@@ -637,22 +637,6 @@ BD_t * journal_queue_bd(BD_t * disk)
 	return create_bd(bd_id);
 }
 
-#include <kfs/order_preserver_bd.h>
-BD_t * order_preserver_bd(BD_t * disk)
-{
-	const envid_t fsid = find_fs();
-	uint32_t bd_id;
-
-	INIT_PG(ORDER_PRESERVER_BD, order_preserver_bd);
-
-	pg->bd = (uint32_t) OBJLOCAL(disk);
-
-	SEND_PG();
-	bd_id = RECV_PG();
-
-	return create_bd(bd_id);
-}
-
 #include <kfs/wb_cache_bd.h>
 BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 {
