@@ -4,8 +4,6 @@
 #include <inc/serial_kfs.h>
 #include <kfs/kfs_ipc_serve.h>
 
-#define USE_THIRD_LEG 1
-
 #define KIS_DEBUG 0
 
 #if KIS_DEBUG
@@ -169,7 +167,7 @@ static void kis_uhfs(envid_t whom, const Skfs_uhfs_t * pg)
 
 //
 // LFS
-#if !USE_THIRD_LEG
+
 // journal_lfs
 #include <kfs/journal_lfs.h>
 
@@ -200,7 +198,7 @@ static void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_m
 
 	RETURN_IPC;
 }
-#endif
+
 // josfs_base
 #include <kfs/josfs_base.h>
 
@@ -270,13 +268,14 @@ static void kis_nbd_bd(envid_t whom, const Skfs_nbd_bd_t * pg)
 	uint32_t val = (uint32_t) nbd_bd(pg->address, pg->port);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
+
 #include <kfs/mem_bd.h>
 static void kis_mem_bd(envid_t whom, const Skfs_mem_bd_t * pg)
 {
 	uint32_t val = (uint32_t) mem_bd(pg->blocks, pg->blocksize);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/journal_queue_bd.h>
 static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
 {
@@ -300,11 +299,12 @@ static void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) wb_cache_bd(bd, pg->blocks);
+	val = 0; //(uint32_t) wb_cache_bd(bd, pg->blocks);
+	fprintf(STDERR_FILENO, "kfsd: warning: not constructing wb_cache_bd!\n");
 
 	RETURN_IPC;
 }
-#endif
+
 #include <kfs/wt_cache_bd.h>
 static void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 {
@@ -332,7 +332,7 @@ static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * p
 
 	RETURN_IPC;
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/md_bd.h>
 static void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
 {
@@ -358,7 +358,8 @@ static void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
 	if (!modman_name_bd(disk0) || !modman_name_bd(disk1))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) mirror_bd(disk0, disk1, pg->stride);
+	val = 0; //(uint32_t) mirror_bd(disk0, disk1, pg->stride);
+	fprintf(STDERR_FILENO, "kfsd: warning: not constructing mirror_bd!\n");
 
 	RETURN_IPC;
 }
@@ -372,7 +373,7 @@ static void kis_mirror_bd_add(envid_t whom, const Skfs_mirror_bd_add_t * pg)
 	if (!modman_name_bd(bd) || !modman_name_bd(newdevice))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) mirror_bd_add_device(bd, newdevice);
+	val = -1; //(uint32_t) mirror_bd_add_device(bd, newdevice);
 
 	RETURN_IPC;
 }
@@ -386,11 +387,11 @@ static void kis_mirror_bd_remove(envid_t whom, const Skfs_mirror_bd_remove_t * p
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) mirror_bd_remove_device(bd, diskno);
+	val = -1; //(uint32_t) mirror_bd_remove_device(bd, diskno);
 
 	RETURN_IPC;
 }
-#endif
+
 #include <kfs/ide_pio_bd.h>
 static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 {
@@ -646,10 +647,9 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(UHFS, uhfs);
 
 		// LFS
-#if !USE_THIRD_LEG
+
 		SERVE(JOURNAL_LFS,               journal_lfs);
 		SERVE(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
-#endif
 
 		SERVE(JOSFS_BASE, josfs_base);
 		SERVE(JOSFS_FSCK, josfs_fsck);
@@ -661,18 +661,14 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(LOOP_BD,            loop_bd);
 		SERVE(NBD_BD,             nbd_bd);
 		SERVE(MEM_BD,             mem_bd);
-#if !USE_THIRD_LEG
 		SERVE(JOURNAL_QUEUE_BD,   journal_queue_bd);
 		SERVE(WB_CACHE_BD,        wb_cache_bd);
-#endif
 		SERVE(WT_CACHE_BD,        wt_cache_bd);
 		SERVE(BLOCK_RESIZER_BD,   block_resizer_bd);
-#if !USE_THIRD_LEG
 		SERVE(MD_BD,              md_bd);
 		SERVE(MIRROR_BD,          mirror_bd);
-		SERVE(MIRROR_BD_ADD,          mirror_bd_add);
-		SERVE(MIRROR_BD_REMOVE,          mirror_bd_remove);
-#endif
+		SERVE(MIRROR_BD_ADD,      mirror_bd_add);
+		SERVE(MIRROR_BD_REMOVE,   mirror_bd_remove);
 		SERVE(IDE_PIO_BD,         ide_pio_bd);
 
 		// modman

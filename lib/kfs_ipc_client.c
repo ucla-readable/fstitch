@@ -12,8 +12,6 @@
 #include <kfs/lfs.h>
 #include <kfs/bd.h>
 
-#define USE_THIRD_LEG 1
-
 #define KIC_DEBUG 0
 
 #if KIC_DEBUG
@@ -25,9 +23,9 @@
 static uint8_t ipcpage[2*PGSIZE];
 static uint8_t ipc_recv_page[2*PGSIZE];
 
-#define INIT_PG(typem, type)											\
-	Skfs_##type##_t * pg = (Skfs_##type##_t *) ROUNDUP32(ipcpage, PGSIZE); \
-	memset(pg, 0, PGSIZE);												\
+#define INIT_PG(typem, type)												\
+	Skfs_##type##_t * pg = (Skfs_##type##_t *) ROUNDUP32(ipcpage, PGSIZE);	\
+	memset(pg, 0, PGSIZE);													\
 	pg->skfs_type = SKFS_##typem
 
 #define SEND_PG() ipc_send(fsid, SKFS_VAL, pg, PTE_P|PTE_U, NULL)
@@ -256,26 +254,6 @@ CFS_t * create_cfs(uint32_t id)
 
 	memset(cfs, 0, sizeof(*cfs));
 
-	/* not supported by kic */
-	/*
-	ASSIGN(cfs, table_classifier, open);
-	ASSIGN(cfs, table_classifier, close);
-	ASSIGN(cfs, table_classifier, read);
-	ASSIGN(cfs, table_classifier, write);
-	ASSIGN(cfs, table_classifier, getdirentries);
-	ASSIGN(cfs, table_classifier, truncate);
-	ASSIGN(cfs, table_classifier, unlink);
-	ASSIGN(cfs, table_classifier, link);
-	ASSIGN(cfs, table_classifier, rename);
-	ASSIGN(cfs, table_classifier, mkdir);
-	ASSIGN(cfs, table_classifier, rmdir);
-	ASSIGN(cfs, table_classifier, get_num_features);
-	ASSIGN(cfs, table_classifier, get_feature);
-	ASSIGN(cfs, table_classifier, get_metadata);
-	ASSIGN(cfs, table_classifier, set_metadata);
-	ASSIGN(cfs, table_classifier, sync);
-	*/
-
 	OBJLOCAL(cfs) = (void *) id;
 	r = kic_get_flags_magic((object_t *) cfs);
 	assert(r >= 0); // TODO: handle error
@@ -310,34 +288,6 @@ LFS_t * create_lfs(uint32_t id)
 
 	memset(lfs, 0, sizeof(*lfs));
 
-	/* not supported by kic */
-	/*
-	ASSIGN(lfs, journal, get_blocksize);
-	ASSIGN(lfs, journal, get_blockdev);
-	ASSIGN(lfs, journal, allocate_block);
-	ASSIGN(lfs, journal, lookup_block);
-	ASSIGN(lfs, journal, lookup_name);
-	ASSIGN(lfs, journal, free_fdesc);
-	ASSIGN(lfs, journal, get_file_numblocks);
-	ASSIGN(lfs, journal, get_file_block_num);
-	ASSIGN(lfs, journal, get_file_block);
-	ASSIGN(lfs, journal, get_dirent);
-	ASSIGN(lfs, journal, append_file_block);
-	ASSIGN(lfs, journal, allocate_name);
-	ASSIGN(lfs, journal, rename);
-	ASSIGN(lfs, journal, truncate_file_block);
-	ASSIGN(lfs, journal, free_block);
-	ASSIGN(lfs, journal, remove_name);
-	ASSIGN(lfs, journal, write_block);
-	ASSIGN(lfs, journal, get_num_features);
-	ASSIGN(lfs, journal, get_feature);
-	ASSIGN(lfs, journal, get_metadata_name);
-	ASSIGN(lfs, journal, get_metadata_fdesc);
-	ASSIGN(lfs, journal, set_metadata_name);
-	ASSIGN(lfs, journal, set_metadata_fdesc);
-	ASSIGN(lfs, journal, sync);
-	*/
-
 	OBJLOCAL(lfs) = (void *) id;
 	r = kic_get_flags_magic((object_t *) lfs);
 	assert(r >= 0); // TODO: handle error
@@ -371,16 +321,6 @@ BD_t * create_bd(uint32_t id)
 		return NULL;
 
 	memset(bd, 0, sizeof(*bd));
-
-	/* not supported by kic */
-	/*
-	ASSIGN(bd, wt_cache_bd, get_numblocks);
-	ASSIGN(bd, wt_cache_bd, get_blocksize);
-	ASSIGN(bd, wt_cache_bd, get_atomicsize);
-	ASSIGN(bd, wt_cache_bd, read_block);
-	ASSIGN(bd, wt_cache_bd, write_block);
-	ASSIGN(bd, wt_cache_bd, sync);
-	*/
 
 	OBJLOCAL(bd) = (void *) id;
 	r = kic_get_flags_magic((object_t *) bd);
@@ -477,7 +417,7 @@ CFS_t * uhfs(LFS_t * lfs)
 
 //
 // LFS
-#if !USE_THIRD_LEG
+
 #include <kfs/journal_lfs.h>
 
 LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
@@ -508,8 +448,9 @@ size_t journal_lfs_max_bandwidth(const LFS_t * journal)
 	SEND_PG();
 	return RECV_PG();
 }
-#endif
+
 #include <kfs/josfs_base.h>
+
 LFS_t * josfs(BD_t * block_device)
 {
 	const envid_t fsid = find_fs();
@@ -597,6 +538,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 
 	return create_bd(bd_id);
 }
+
 #include <kfs/nbd_bd.h>
 BD_t * nbd_bd(const char * address, uint16_t port)
 {
@@ -620,7 +562,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 
 	return create_bd(bd_id);
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/journal_queue_bd.h>
 BD_t * journal_queue_bd(BD_t * disk)
 {
@@ -653,7 +595,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 
 	return create_bd(bd_id);
 }
-#endif
+
 #include <kfs/wt_cache_bd.h>
 BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 {
@@ -687,7 +629,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 
 	return create_bd(bd_id);
 }
-#if !USE_THIRD_LEG
+
 #include <kfs/md_bd.h>
 BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 {
@@ -706,6 +648,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 }
 
 #include <kfs/mirror_bd.h>
+
 BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
 {
 	const envid_t fsid = find_fs();
@@ -748,7 +691,7 @@ int mirror_bd_remove_device(BD_t * bd, int diskno)
 	SEND_PG();
 	return RECV_PG();
 }
-#endif
+
 #include <kfs/ide_pio_bd.h>
 BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 {
