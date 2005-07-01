@@ -2,19 +2,16 @@
 #include <inc/malloc.h>
 #include <inc/string.h>
 
-#include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
-
-/* ensure bdesc->ddesc->changes has a noop chdesc */
-static int ensure_bdesc_changes(bdesc_t * block);
+#include <kfs/chdesc.h>
 
 /* perform overlap attachment */
-static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original);
 static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 
 /* add a dependency to a change descriptor without checking for cycles */
 static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 
+/* ensure bdesc->ddesc->changes has a noop chdesc */
 static int ensure_bdesc_changes(bdesc_t * block)
 {
 	if(block->ddesc->changes)
