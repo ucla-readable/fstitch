@@ -86,7 +86,7 @@ int revision_tail_prepare(bdesc_t *block, BD_t *bd)
 	int count;
 
 	root = block->ddesc->changes;
-	if (root == 0) {
+	if (!root) {
 		// XXX handle this?
 		return 0;
 	}
@@ -106,7 +106,7 @@ int revision_tail_prepare(bdesc_t *block, BD_t *bd)
 
 	// heapify
 	heap = fixed_max_heap_create(count);
-	if (heap == 0)
+	if (!heap)
 		panic("out of memory\n");
 	d = root->dependencies;
 	while (d) {
@@ -134,7 +134,7 @@ int revision_tail_revert(bdesc_t *block, BD_t *bd)
 	int count;
 
 	root = block->ddesc->changes;
-	if (root == 0) {
+	if (!root) {
 		// XXX handle this?
 		return 0;
 	}
@@ -154,7 +154,7 @@ int revision_tail_revert(bdesc_t *block, BD_t *bd)
 
 	// heapify
 	heap = fixed_max_heap_create(count);
-	if (heap == 0)
+	if (!heap)
 		panic("out of memory\n");
 	d = root->dependencies;
 	while (d) {
@@ -182,7 +182,7 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 	int count;
 
 	root = block->ddesc->changes;
-	if (root == 0) {
+	if (!root) {
 		// XXX handle this?
 		return 0;
 	}
@@ -202,7 +202,7 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 
 	// heapify
 	heap = fixed_max_heap_create(count);
-	if (heap == 0)
+	if (!heap)
 		panic("out of memory\n");
 	d = root->dependencies;
 	while (d) {
@@ -258,7 +258,7 @@ int
 commit_chdesc(chdesc_t *ch)
 {
 	bool is_noop = 0;
-	chdesc_t * monitor = (chdesc_t*)1;
+	chdesc_t * monitor = (chdesc_t *) 1;
 	if (ch->type == NOOP) {
 		assert(chdesc_weak_retain(ch, &monitor) >= 0);
 		is_noop = 1;
@@ -266,11 +266,12 @@ commit_chdesc(chdesc_t *ch)
 
 	for (;;) {
 		chmetadesc_t * dep;
-		if (monitor == 0) return 0;
+		if (!monitor)
+			return 0;
 		dep = ch->dependencies;
-		if (dep) {
+		if (dep)
 			assert(commit_chdesc(dep->desc) >= 0);
-		} else
+		else
 			break;
 	}
 		
