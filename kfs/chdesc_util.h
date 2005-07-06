@@ -3,6 +3,9 @@
 
 #include <kfs/chdesc.h>
 
+/* mark a chdesc graph (i.e. set CHDESC_MARKED) */
+void chdesc_mark_graph(chdesc_t * root);
+
 /* unmark a chdesc graph (i.e. clear CHDESC_MARKED) */
 void chdesc_unmark_graph(chdesc_t * root);
 

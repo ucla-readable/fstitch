@@ -16,9 +16,10 @@ typedef struct chrefdesc chrefdesc_t;
 #include <kfs/bdesc.h>
 
 #define CHDESC_MARKED    0x01 /* marker for graph traversal */
-#define CHDESC_MOVED     0x02 /* indicator for moving chdescs */
-#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
-#define CHDESC_PRMARKED  0x08 /* used for debugging */
+#define CHDESC_INSET     0x02 /* indicator for set membership */
+#define CHDESC_MOVED     0x04 /* flag for moving chdescs */
+#define CHDESC_ROLLBACK  0x08 /* chdesc is rolled back */
+#define CHDESC_PRMARKED  0x10 /* used for debugging */
 
 struct chdesc {
 	BD_t * owner;
