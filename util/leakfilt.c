@@ -81,29 +81,39 @@ static void process_line(char * line)
 		record_malloc = 1;
 }
 
-static void _display_leaks(struct allocation * scan)
+static void _display_leaks(int all, struct allocation * scan)
 {
 	if(scan)
 	{
-		_display_leaks(scan->next);
-		printf("#%d, 0x%08x: size %d, allocated by 0x%08x, freed by 0x%08x\n", scan->number, scan->addr, scan->size, scan->allocator, scan->freer);
+		_display_leaks(all, scan->next);
+		if(all)
+			printf("#%d, 0x%08x: size %d, allocated by 0x%08x, freed by 0x%08x\n", scan->number, scan->addr, scan->size, scan->allocator, scan->freer);
+		else if(!scan->freer)
+			printf("#%d, 0x%08x: size %d, allocated by 0x%08x\n", scan->number, scan->addr, scan->size, scan->allocator);
 	}
 }
 
-static void display_leaks(void)
+static void display_leaks(int all)
 {
-	_display_leaks(allocations);
+	_display_leaks(all, allocations);
 }
 
-int main(void)
+int main(int argc, char * argv[])
 {
 	char line[256];
+	int all = 0;
+	
+	if(argc > 1)
+		all = !strcmp(argv[1], "--all");
+	
 	fgets(line, sizeof(line), stdin);
 	while(!feof(stdin))
 	{
 		process_line(line);
 		fgets(line, sizeof(line), stdin);
 	}
-	display_leaks();
+	
+	display_leaks(all);
+	
 	return 0;
 }
