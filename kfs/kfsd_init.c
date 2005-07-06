@@ -25,7 +25,6 @@
 #include <kfs/kfsd_init.h>
 
 #define USE_THIRD_LEG 0 // 1 -> mount josfs_cfs at '/'
-#define INBS 0 // surrounds code that may not be in the brownsugar build yet
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal);
@@ -45,15 +44,11 @@ static const char * fspaths[] = {
 
 int kfsd_init(void)
 {
-#if INBS
 	const bool use_disk_0_extern_journal = 0;
-#endif
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
 	const bool use_net    = 0;
-#if INBS
-	static_assert(!(use_disk_0_extern_journal && use_disk_0));
-#endif
+//	static_assert(!(use_disk_0_extern_journal && use_disk_0));
 	vector_t * uhfses = NULL;
 
 	CFS_t * table_class = NULL;
@@ -88,7 +83,6 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
-#if IN_BS
 	if (use_disk_0_extern_journal)
 	{
 		const int jbd = 1; // 0 for nbd, 1 for ide(0, 1)
@@ -111,7 +105,7 @@ int kfsd_init(void)
 		}
 		else
 		{
-			if (! (j_bd = ide_pio_bd(0, 1)) )
+			if (! (j_bd = ide_pio_bd(0, 1, 0)) )
 			{
 				fprintf(STDERR_FILENO, "ide_pio_bd(0, 1) failed\n");
 				kfsd_shutdown();
@@ -123,7 +117,7 @@ int kfsd_init(void)
 		if (! (j_bd = construct_cacheing(j_bd, 128)) )
 			kfsd_shutdown();
 
-		if (! (data_bd = ide_pio_bd(0, 0)) )
+		if (! (data_bd = ide_pio_bd(0, 0, 0)) )
 		{
 			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0) failed\n");
 			kfsd_shutdown();
@@ -140,7 +134,7 @@ int kfsd_init(void)
 
 		printf("Using josfs [journaled on disk 1, %u kB/s max avg] on disk 0.\n", journal_lfs_max_bandwidth(journal));
 	}
-#endif
+
 	if (use_net)
 	{
 		BD_t * bd;
@@ -233,9 +227,7 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
-#if INBS
 	const bool enable_internal_journaling = 0;
-#endif
 	const bool enable_fsck = 0;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -287,10 +279,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		BD_t * resizer;
 		LFS_t * josfs_lfs;
 		LFS_t * lfs;
-#if INBS
 		bool journaling = 0;
 		LFS_t * journal = NULL;
-#endif
 		CFS_t * u;
 			
 		if (!partitions[i])
@@ -312,7 +302,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 		}
 
-#if INBS
 		if (enable_internal_journaling)
 		{
 			BD_t * journal_queue;
@@ -336,7 +325,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				(void) DESTROY(journal_queue);			
 		}
 		else
-#endif
 			lfs = josfs_lfs = josfs(cache);
 
 		if (josfs_lfs && enable_fsck)
@@ -360,10 +348,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			fprintf(STDERR_FILENO, "\nlfs creation failed\n");
 			kfsd_shutdown();
 		}
-#if INBS
 		if (journaling)
 			printf(" [journaled, %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
-#endif
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
@@ -405,7 +391,7 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 
 	return bd;
 }
-#if INBS
+
 CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal)
 {
 	BD_t * journal_queue;
@@ -430,4 +416,3 @@ CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal)
 	*journal = data_lfs;
 	return u;
 }
-#endif

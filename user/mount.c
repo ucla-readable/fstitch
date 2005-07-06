@@ -19,8 +19,6 @@
 #include <arch/simple.h>
 #include <inc/stdio.h>
 
-#define USE_THIRD_LEG 1
-
 #if USE_THIRD_LEG
 #define wb_cache_bd wt_cache_bd
 #endif
@@ -79,10 +77,8 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		BD_t * resizer;
 		LFS_t * josfs_lfs;
 		LFS_t * lfs;
-#if !USE_THIRD_LEG
 		bool journaling = 0;
 		LFS_t * journal = NULL;
-#endif
 		CFS_t * u;
 			
 		if (!partitions[i])
@@ -128,11 +124,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 
 		if (enable_journal)
 		{
-#if USE_THIRD_LEG
-			fprintf(STDERR_FILENO, "journaling not yet supported\n");
-			exit();
-			lfs = josfs_lfs = NULL; // satisfy compiler
-#else
 			BD_t * journal_queue;
 
 			if (! (journal_queue = journal_queue_bd(cache)) )
@@ -182,7 +173,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				fprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
 				return NULL;
 			}
-#endif
 		}
 		else
 			lfs = josfs_lfs = josfs(cache);
@@ -208,7 +198,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			exit();
 		}
 
-#if !USE_THIRD_LEG
 		if (journaling)
 		{
 			printf(" [journaled");
@@ -216,7 +205,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				printf(" external");
 			printf(", %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
 		}
-#endif
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
