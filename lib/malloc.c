@@ -61,11 +61,10 @@
 #include <inc/stdio.h>
 
 /* When tracking down memory leaks it may be helpful to track where memory is
- * allocated, how much is allocated, and the address of the allocated
- * memory and where this memory is freed. Set DEBUG_MEM_LEAK to 1 and
- * then at runtime set malloc_debug = 1 in the env you wish to track
- * to have malloc print this information.
- */
+ * allocated, how much is allocated, and the address of the allocated memory and
+ * where this memory is freed. Set DEBUG_MEM_LEAK to 1 and then at runtime set
+ * malloc_debug = 1 in the env you wish to track to have malloc print this
+ * information. */
 #define DEBUG_MEM_LEAK 0
 
 #if DEBUG_MEM_LEAK
@@ -82,8 +81,7 @@ void * malloc(size_t s)
 		printf("malloc(%u) = 0x%08x, from 0x%08x\n", s, x, __builtin_return_address(0));
 		/* It may be helpful to insert code here that int3's to get a
 		 * full backtrace. You may find it wise to selectively int3 based
-		 * on the return address, s, x, ...
-		 */
+		 * on the return address, s, x, etc. */
 	}
 	return x;
 }

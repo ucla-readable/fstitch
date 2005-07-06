@@ -531,6 +531,12 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(tag <= start || end <= tag)
 		return 0;
 	
+	if(original->flags & CHDESC_ROLLBACK)
+	{
+		/* it's not clear what to do in this case... just fail with a warning for now */
+		fprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
+		return -E_BUSY;
+	}
 	return chdesc_add_depend(recent, original);
 }
 
@@ -900,6 +906,9 @@ int chdesc_destroy(chdesc_t ** chdesc)
 		default:
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 	}
+	
+	if((*chdesc)->block)
+		bdesc_release(&(*chdesc)->block);
 	
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
