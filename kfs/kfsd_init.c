@@ -48,7 +48,12 @@ int kfsd_init(void)
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
 	const bool use_net    = 0;
-//	static_assert(!(use_disk_0_extern_journal && use_disk_0));
+#ifdef __OPTIMIZE__
+	/* Ensure the below tautology. When compiling without opts gcc
+	 * will not allow the consts to propate, so only check when using opts.
+	 */
+	static_assert(!(use_disk_0_extern_journal && use_disk_0));
+#endif
 	vector_t * uhfses = NULL;
 
 	CFS_t * table_class = NULL;
