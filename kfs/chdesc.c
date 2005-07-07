@@ -12,8 +12,10 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 
 /* ensure bdesc->ddesc->changes has a noop chdesc */
-static int ensure_bdesc_changes(bdesc_t * block)
+static int ensure_bdesc_has_changes(bdesc_t * block)
 {
+	assert(block);
+
 	if(block->ddesc->changes)
 	{
 		assert(block->ddesc->changes->type == NOOP);
@@ -60,22 +62,24 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
 	
-	/* add chdesc to block's dependencies */
-	if(ensure_bdesc_changes(block) < 0)
-	{
-		free(chdesc);
-		return NULL;
-	}
-	if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
-	{
-		chdesc_destroy(&block->ddesc->changes);
-		free(chdesc);
-		return NULL;
-	}
-	
-	/* make sure our block sticks around */
 	if(block)
+	{
+		/* add chdesc to block's dependencies */
+		if(ensure_bdesc_has_changes(block) < 0)
+		{
+			free(chdesc);
+			return NULL;
+		}
+		if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
+		{
+			chdesc_destroy(&block->ddesc->changes);
+			free(chdesc);
+			return NULL;
+		}
+		
+		/* make sure our block sticks around */
 		bdesc_retain(block);
+	}
 	
 	return chdesc;
 }
@@ -110,7 +114,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 		goto error;
 	
 	/* add chdesc to block's dependencies */
-	if((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_has_changes(block)) < 0)
 		goto error;
 	if((r = chdesc_add_depend_fast(block->ddesc->changes, chdesc)) < 0)
 		goto error_ensure;
@@ -140,7 +144,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
 		free(chdescs);
 		return r;
@@ -260,7 +264,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
 		free(chdescs);
 		return r;
@@ -369,7 +373,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if((r = ensure_bdesc_changes(block)) < 0)
+	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
 		free(chdescs);
 		return r;
@@ -590,7 +594,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	if(offset && source_offset > *offset)
 		return -E_INVAL;
 	
-	r = ensure_bdesc_changes(destination);
+	r = ensure_bdesc_has_changes(destination);
 	if(r < 0)
 		return r;
 	
