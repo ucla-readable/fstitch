@@ -13,7 +13,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/revision.o \
 			$(OBJDIR)/kfs/barrier.o \
 			$(OBJDIR)/kfs/partition_bd.o \
-			$(OBJDIR)/kfs/pc_ptable_bd.o \
+			$(OBJDIR)/kfs/pc_ptable.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/ide_pio_bd.o \
 			$(OBJDIR)/kfs/ide4k_pio_bd.o \

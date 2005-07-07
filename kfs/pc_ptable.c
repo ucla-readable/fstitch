@@ -8,7 +8,7 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/partition_bd.h>
-#include <kfs/pc_ptable_bd.h>
+#include <kfs/pc_ptable.h>
 
 struct partition {
 	uint32_t start, length;

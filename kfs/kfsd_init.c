@@ -3,7 +3,7 @@
 #include <inc/partition.h>
 
 #include <kfs/ide_pio_bd.h>
-#include <kfs/pc_ptable_bd.h>
+#include <kfs/pc_ptable.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
