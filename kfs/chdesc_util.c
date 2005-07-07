@@ -47,7 +47,6 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 	return 0;
 }
 
-/* chdesc_rollback_collection */
 /* Roll back a collection of change descriptors on the same block. They will be
  * rolled back in proper dependency order. */
 int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
@@ -55,7 +54,6 @@ int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 	return -1;
 }
 
-/* chdesc_apply_collection */
 /* Apply a collection of change descriptors on the same block. They will be
  * applied in proper dependency order. */
 int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
@@ -63,7 +61,6 @@ int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
 	return -1;
 }
 
-/* chdesc_detach_dependencies */
 /* Split a change descriptor into two change descriptors, such that the original
  * change descriptor depends only on a new NOOP change descriptor which has all
  * the dependencies of the original change descriptor. */
@@ -97,7 +94,6 @@ int chdesc_detach_dependencies(chdesc_t * chdesc)
 	return 0;
 }
 
-/* chdesc_detach_dependents */
 /* Split a change descriptor into two change descriptors, such that the orignal
  * change descriptor is depended on only by a new NOOP change descriptor which
  * has all the dependents of the original change descriptor. */
@@ -144,7 +140,6 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 	return 0;
 }
 
-/* chdesc_duplicate */
 /* Duplicate a change descriptor to two or more blocks. The original change
  * descriptor will be turned into a NOOP change descriptor which depends on all
  * the duplicates, each of which will be applied to a different block. */
@@ -157,16 +152,27 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 	return -1;
 }
 
-/* chdesc_split */
+/* chdesc_morph */
+/* Morph a change descriptor while moving it from one barrier zone to another.
+ * The expected use of this function is after a chdesc_merge() in barrier
+ * modules that change the data as it passes through them, like encryption. */
+
 /* Split a change descriptor into two or more change descriptors. The original
  * change descriptor will be turned into a NOOP change descriptor which depends
  * on all the fragments, the first of which will represent the original change
  * while the others are just NOOP change descriptors. If this function fails,
  * the change descriptor graph may be left altered in a form which is
  * semantically equivalent to the original state. */
+/*  From:      To:                    Or:
+ *   -> X       -> M \      -> X            -> X
+ *  /          /      \    /               /
+ * W -> Y     w -> n ---> p -> Y     W -> p -> Y
+ *  \          \      /    \               \
+ *   -> Z       -> o /      -> Z            -> Z
+ * */
 int chdesc_split(chdesc_t * original, int count)
 {
-	int i;
+	int i, r;
 	chdesc_t ** descs;
 	chdesc_t * tail;
 	
@@ -177,46 +183,55 @@ int chdesc_split(chdesc_t * original, int count)
 	if(!descs)
 		return -E_NO_MEM;
 	
-	tail = chdesc_create_noop(original->block, original->owner);
-	if(!tail)
+	/* First detach the dependencies of the original change descriptor */
+	r = chdesc_detach_dependencies(original);
+	if(r < 0)
 	{
 		free(descs);
-		return -E_NO_MEM;
+		return r;
 	}
+	
+	/* this always exists - we just detached the dependencies */
+	tail = original->dependencies->desc;
+	
+	/* Now we want to insert the fragments between "original" and "tail" */
 	
 	for(i = 0; i != count; i++)
 	{
-		int r;
 		descs[i] = chdesc_create_noop(original->block, original->owner);
 		if(!descs[i])
 		{
-			while(i--)
-				chdesc_destroy(&descs[i]);
-			chdesc_destroy(&tail);
-			free(descs);
-			return -E_NO_MEM;
+			r = -E_NO_MEM;
+			goto fail;
 		}
 		r = chdesc_add_depend(original, descs[i]);
+		if(r >= 0)
+			r = chdesc_add_depend(descs[i], tail);
 		if(r < 0)
 		{
 			chdesc_destroy(&descs[i]);
+		fail:
 			while(i--)
 				chdesc_destroy(&descs[i]);
+			free(descs);
 			return r;
 		}
 	}
 	
+	r = chdesc_remove_depend(original, tail);
+	assert(r >= 0);
+	
+	/* Last we want to switch the original with the first fragment */
 	descs[0]->type = original->type;
 	/* "byte" is larger than "bit" */
 	descs[0]->byte = original->byte;
 	
-	/* FIXME not done yet... */
+	original->type = NOOP;
+	
 	free(descs);
 	return 0;
-#warning finish this
 }
 
-/* chdesc_merge */
 /* Merge many change descriptors into a small, nonoverlapping set of new ones.
  * The change descriptors must all be on the same block and have the same owner,
  * which should also be at the bottom of a barrier zone. The resulting change
@@ -302,11 +317,12 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	if(r < 0)
 		return r;
 	
-	r = chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, tail);
+	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, tail, 1);
 	if(r < 0)
 	{
 		/* roll forward */
 		chdesc_apply_collection(count, chdescs, NULL);
+		/* FIXME remove CHDESC_MOVED... */
 		return r;
 	}
 	

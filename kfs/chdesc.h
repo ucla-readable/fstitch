@@ -19,7 +19,8 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_INSET     0x02 /* indicator for set membership */
 #define CHDESC_MOVED     0x04 /* flag for moving chdescs */
 #define CHDESC_ROLLBACK  0x08 /* chdesc is rolled back */
-#define CHDESC_PRMARKED  0x10 /* used for debugging */
+#define CHDESC_FREEING   0x10 /* this chdesc is being freed */
+#define CHDESC_PRMARKED  0x20 /* used for debugging */
 
 struct chdesc {
 	BD_t * owner;
@@ -61,6 +62,10 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
+
+/* hidden functions for use in chdesc_util.c */
+int __ensure_bdesc_has_changes(bdesc_t * block);
+int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under);
 
 /* move a chdesc to a new bdesc (at a barrier) */
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset);

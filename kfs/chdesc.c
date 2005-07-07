@@ -7,6 +7,7 @@
 
 /* perform overlap attachment */
 static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
+static int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block, bool slip_under);
 
 /* add a dependency to a change descriptor without checking for cycles */
 static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
@@ -44,6 +45,8 @@ static int ensure_bdesc_has_changes(bdesc_t * block)
 	
 	return 0;
 }
+
+int __ensure_bdesc_has_changes(bdesc_t * block) __attribute__ ((alias("ensure_bdesc_has_changes")));
 
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
@@ -363,7 +366,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	return 0;
 }
 
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
+int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
@@ -405,7 +408,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 			goto destroy;
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach(chdescs[i], block))
+		if(__chdesc_overlap_multiattach(chdescs[i], block, slip_under))
 			goto destroy;
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
@@ -472,6 +475,11 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return 0;
 }
 
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
+{
+	return __chdesc_create_full(block, owner, data, head, tail, 0);
+}
+
 /* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
 /* note that we don't check to see if these chdescs are for the same ddesc or not */
 static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
@@ -526,7 +534,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	return chdesc_add_depend(recent, original);
 }
 
-static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
+static int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block, bool slip_under)
 {
 	chmetadesc_t * scan;
 	const chdesc_t * deps = block->ddesc->changes;
@@ -542,12 +550,24 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 		 * information with respect to the chdesc now arriving */
 		if(!(scan->desc->flags & CHDESC_MOVED))
 			continue;
-		r = chdesc_overlap_attach(chdesc, scan->desc);
+		/* "Slip Under" allows us to create change descriptors
+		 * underneath existing ones. (That is, existing chdescs will
+		 * depend on the new one, not the other way around.) This is a
+		 * hidden feature for internal use only. */
+		if(slip_under)
+			r = chdesc_overlap_attach(scan->desc, chdesc);
+		else
+			r = chdesc_overlap_attach(chdesc, scan->desc);
 		if(r < 0)
 			return r;
 	}
 	
 	return 0;
+}
+
+static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
+{
+	return __chdesc_overlap_multiattach(chdesc, block, 0);
 }
 
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
@@ -566,7 +586,6 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
-#warning chdesc_move() is a crazy function and I think it should be tested
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	uint16_t * offset;
@@ -866,6 +885,11 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 
 void chdesc_destroy(chdesc_t ** chdesc)
 {
+	/* were we recursively called by chdesc_remove_depend()? */
+	if((*chdesc)->flags & CHDESC_FREEING)
+		return;
+	(*chdesc)->flags |= CHDESC_FREEING;
+	
 	if((*chdesc)->dependents)
 		chdesc_satisfy(*chdesc);
 	
