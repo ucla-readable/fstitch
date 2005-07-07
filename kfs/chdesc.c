@@ -68,8 +68,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	}
 	if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
 	{
-		const int r = chdesc_destroy(&block->ddesc->changes);
-		assert(r >= 0);
+		chdesc_destroy(&block->ddesc->changes);
 		free(chdesc);
 		return NULL;
 	}
@@ -122,8 +121,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	return chdesc;
 	
   error_ensure:
-	r = chdesc_destroy(&(block->ddesc->changes));
-	assert(r >= 0);
+	chdesc_destroy(&(block->ddesc->changes));
   error:
 	chdesc_destroy(&chdesc);
 	return NULL;
@@ -210,8 +208,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		}
 		free(chdescs);
 		
-		r = chdesc_destroy(&(block->ddesc->changes));
-		assert(r >= 0);
+		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_NO_MEM;
 	}
@@ -237,14 +234,10 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			chdesc_rollback(chdescs[i]);
 		}
 		for(i = 0; i != count; i++)
-		{
-			chdesc_satisfy(chdescs[i]);
 			chdesc_destroy(&chdescs[i]);
-		}
 		free(chdescs);
 		
-		r = chdesc_destroy(&(block->ddesc->changes));
-		assert(r >= 0);
+		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_INVAL;
 	}
@@ -307,8 +300,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			r = chdesc_destroy(&(block->ddesc->changes));
-			assert(r >= 0);
+			chdesc_destroy(&(block->ddesc->changes));
+			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
@@ -326,8 +319,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		}
 		free(chdescs);
 		
-		r = chdesc_destroy(&(block->ddesc->changes));
-		assert(r >= 0);
+		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_NO_MEM;
 	}
@@ -351,14 +343,10 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 			chdesc_rollback(chdescs[i]);
 		}
 		for(i = 0; i != count; i++)
-		{
-			chdesc_satisfy(chdescs[i]);
 			chdesc_destroy(&chdescs[i]);
-		}
 		free(chdescs);
 		
-		r = chdesc_destroy(&(block->ddesc->changes));
-		assert(r >= 0);
+		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_INVAL;
 	}
@@ -421,8 +409,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			r = chdesc_destroy(&(block->ddesc->changes));
-			assert(r >= 0);
+			chdesc_destroy(&(block->ddesc->changes));
 			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
@@ -441,8 +428,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 		}
 		free(chdescs);
 		
-		r = chdesc_destroy(&(block->ddesc->changes));
-		assert(r >= 0);
+		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_NO_MEM;
 	}
@@ -466,14 +452,10 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 			chdesc_rollback(chdescs[i]);
 		}
 		for(i = 0; i != count; i++)
-		{
-			chdesc_satisfy(chdescs[i]);
 			chdesc_destroy(&chdescs[i]);
-		}
 		free(chdescs);
 		
-		r = chdesc_destroy(&(block->ddesc->changes));
-		assert(r >= 0);
+		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_INVAL;
 	}
@@ -580,6 +562,7 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
+#warning chdesc_move() is a crazy function and I think it should be tested
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	uint16_t * offset;
@@ -616,11 +599,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	{
 	    kill_stub:
 		if(!destination->ddesc->changes->dependencies)
-		{
-			/* can't fail */
-			const int s = chdesc_destroy(&(destination->ddesc->changes));
-			assert(s >= 0);
-		}
+			chdesc_destroy(&(destination->ddesc->changes));
 		return r;
 	}
 	
@@ -881,10 +860,10 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 	}
 }
 
-int chdesc_destroy(chdesc_t ** chdesc)
+void chdesc_destroy(chdesc_t ** chdesc)
 {
 	if((*chdesc)->dependents)
-		return -E_INVAL;
+		chdesc_satisfy(*chdesc);
 	
 	while((*chdesc)->dependencies)
 		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);
@@ -913,6 +892,4 @@ int chdesc_destroy(chdesc_t ** chdesc)
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
 	*chdesc = NULL;
-
-	return 0;
 }

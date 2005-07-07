@@ -85,7 +85,7 @@ void chdesc_weak_forget(chdesc_t ** location);
 void chdesc_weak_release(chdesc_t ** location);
 
 /* destroy a chdesc */
-int chdesc_destroy(chdesc_t ** chdesc);
+void chdesc_destroy(chdesc_t ** chdesc);
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>

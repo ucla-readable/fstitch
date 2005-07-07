@@ -213,7 +213,6 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd)
 	for (i = 0; i < count; i++) {
 		chdesc_t *c = (chdesc_t*)fixed_max_heap_pop(heap);
 		if (c->owner == bd) {
-			chdesc_satisfy(c);
 			chdesc_destroy(&c);
 			continue;
 		}
