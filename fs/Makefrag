@@ -42,7 +42,6 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/mv \
 			$(OBJDIR)/user/netstats \
 			$(OBJDIR)/user/null \
-			$(OBJDIR)/user/psb16 \
 			$(OBJDIR)/user/reboot \
 			$(OBJDIR)/user/rm \
 			$(OBJDIR)/user/rmdir \
