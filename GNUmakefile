@@ -237,9 +237,6 @@ include kfs/Makefrag
 include util/Makefrag
 
 
-bochs: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/fs.img
-	bochs-nogui
-
 # For deleting the build
 fsclean:
 	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
@@ -253,28 +250,6 @@ realclean: clean
 distclean: realclean
 	rm -rf conf/gcc.mk
 
-grade: $(LABSETUP)grade.sh
-	$(V)$(MAKE) clean >/dev/null 2>/dev/null
-	$(MAKE) all
-	sh $(LABSETUP)grade.sh
-
-HANDIN_CMD = tar cf - . | gzip | uuencode lab$(LAB).tar.gz | mail $(HANDIN_EMAIL)
-handin: realclean
-	$(HANDIN_CMD)
-tarball: realclean
-	tar cf - `ls -a | grep -v '^\.*$$' | grep -v '^lab$(LAB)\.tar\.gz'` | gzip > lab$(LAB).tar.gz
-
-# For test runs
-run-%:
-	$(V)rm -f $(OBJDIR)/kern/init.o $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/fs.img
-	$(V)$(MAKE) "DEFS=-DTEST=_binary_obj_user_$*_start -DTESTSIZE=_binary_obj_user_$*_size" $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/fs.img
-	bochs -q 'display_library: nogui'
-
-xrun-%:
-	$(V)rm -f $(OBJDIR)/kern/init.o $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/fs.img
-	$(V)$(MAKE) "DEFS=-DTEST=_binary_obj_user_$*_start -DTESTSIZE=_binary_obj_user_$*_size" $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/fs.img
-	bochs -q
-
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,
@@ -286,56 +261,7 @@ $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 
 -include $(OBJDIR)/.deps
 
-# Create a patch from ../lab$(LAB).tar.gz.
-patch-extract-tarball:
-	@test -r ../lab$(LAB).tar.gz || (echo "***" 1>&2; \
-	echo "*** Can't find '../lab$(LAB).tar.gz'.  Download it" 1>&2; \
-	echo "*** into my parent directory and try again." 1>&2; \
-	echo "***" 1>&2; false)
-	(gzcat ../lab$(LAB).tar.gz 2>/dev/null || zcat ../lab$(LAB).tar.gz) | tar xf -
-
-patch-check-date: patch-extract-tarball
-	@pkgdate=`grep PACKAGEDATE lab$(LAB)/conf/lab.mk | sed 's/.*=//'`; \
-	test "$(PACKAGEDATE)" = "$$pkgdate" || (echo "***" 1>&2; \
-	echo "*** The ../lab$(LAB).tar.gz tarball was created on $$pkgdate," 1>&2; \
-	echo "*** but your work directory was expanded from a tarball created" 1>&2; \
-	echo "*** on $(PACKAGEDATE)!  I can't tell the difference" 1>&2; \
-	echo "*** between your changes and the changes between the tarballs," 1>&2; \
-	echo "*** so I won't create an automatic patch." 1>&2; \
-	echo "***" 1>&2; false)
-
-patch.diff: patch-extract-tarball always
-	@rm -f patch.diff
-	@for f in `cd lab$(LAB) && find . -type f -print`; do \
-	if diff -u lab$(LAB)/$$f $$f >patch.diffpart || [ $$f = ./boot/lab.mk ]; then :; else \
-	echo "*** $$f differs; appending to patch.diff" 1>&2; \
-	echo diff -u lab$(LAB)/$$f $$f >>patch.diff; \
-	cat patch.diffpart >>patch.diff; \
-	fi; done
-	@for f in `find . -name lab$(LAB) -prune -o '(' -name '*.[ch]' -o -name '*.cpp' ')' -print`; do \
-	if [ '(' '!' -f lab$(LAB)/$$f ')' -a '(' "$$f" != ./kern/appkernbin.c ')' ]; then \
-	echo "*** $$f is new; appending to patch.diff" 1>&2; \
-	echo diff -u lab$(LAB)/$$f $$f >>patch.diff; \
-	echo '--- lab$(LAB)/'$$f >>patch.diff; \
-	echo '+++ '$$f >>patch.diff; \
-	echo '@@ -0,0 +1,'`wc -l <$$f | tr -d ' 	'`' @@' >>patch.diff; \
-	cat $$f | sed 's/^/+/' >>patch.diff; \
-	fi; done
-	@test -n patch.diff || echo "*** No differences found" 1>&2
-	@rm -rf lab$(LAB) patch.diffpart
-
-patch: patch-check-date patch.diff
-
-apply-patch:
-	@test -r patch.diff || (echo "***" 1>&2; \
-	echo "*** No 'patch.diff' file found!  Did you remember to" 1>&2; \
-	echo "*** run 'make patch'?" 1>&2; \
-	echo "***" 1>&2; false)
-	patch -p0 <patch.diff
-
 always:
 	@:
 
-.PHONY: all always patch apply-patch \
-	_patch-extract-tarball _patch-check-date _patch-make-diff \
-	handin tarball clean realclean clean-labsetup distclean grade labsetup
+.PHONY: all always clean realclean distclean
