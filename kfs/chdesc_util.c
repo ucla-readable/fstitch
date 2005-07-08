@@ -74,24 +74,30 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	if(offset && source_offset > *offset)
 		return -E_INVAL;
 	
-	r = __ensure_bdesc_has_changes(destination);
-	if(r < 0)
-		return r;
+	if(!destination && chdesc->type != NOOP)
+		return -E_INVAL;
 	
-	r = __chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
-	if(r < 0)
+	if(destination)
 	{
-	    kill_stub:
-		if(!destination->ddesc->changes->dependencies)
-			chdesc_destroy(&(destination->ddesc->changes));
-		return r;
-	}
-	
-	r = __chdesc_overlap_multiattach(chdesc, destination);
-	if(r < 0)
-	{
-		chdesc_remove_depend(destination->ddesc->changes, chdesc);
-		goto kill_stub;
+		r = __ensure_bdesc_has_changes(destination);
+		if(r < 0)
+			return r;
+		
+		r = __chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
+		if(r < 0)
+		{
+		    kill_stub:
+			if(!destination->ddesc->changes->dependencies)
+				chdesc_destroy(&(destination->ddesc->changes));
+			return r;
+		}
+		
+		r = __chdesc_overlap_multiattach(chdesc, destination);
+		if(r < 0)
+		{
+			chdesc_remove_depend(destination->ddesc->changes, chdesc);
+			goto kill_stub;
+		}
 	}
 	
 	/* at this point we have succeeded in moving the chdesc */
@@ -102,14 +108,13 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	chdesc->flags |= CHDESC_MOVED;
 	if(chdesc->block)
 	{
-		/* shouldn't fail... */
-		r = chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
-		assert(r >= 0);
+		chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
 		bdesc_release(&chdesc->block);
 	}
 	chdesc->owner = target_bd;
 	chdesc->block = destination;
-	bdesc_retain(destination);
+	if(destination)
+		bdesc_retain(destination);
 	
 	return 0;
 }
@@ -127,10 +132,40 @@ void chdesc_finish_move(bdesc_t * destination)
 	}
 }
 
+int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
+{
+	if(noop->type != NOOP)
+		return -E_INVAL;
+	if(block)
+	{
+		int r = __ensure_bdesc_has_changes(block);
+		if(r < 0)
+			return r;
+		
+		r = __chdesc_add_depend_fast(block->ddesc->changes, noop);
+		if(r < 0)
+		{
+			if(!block->ddesc->changes->dependencies)
+				chdesc_destroy(&(block->ddesc->changes));
+			return r;
+		}
+	}
+	if(noop->block)
+	{
+		chdesc_remove_depend(noop->block->ddesc->changes, noop);
+		bdesc_release(&noop->block);
+	}
+	noop->block = block;
+	if(block)
+		bdesc_retain(block);
+	return 0;
+}
+
 /* Roll back a collection of change descriptors on the same block. They will be
  * rolled back in proper dependency order. */
 int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 {
+#warning finish this
 	return -1;
 }
 
@@ -138,6 +173,7 @@ int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
  * applied in proper dependency order. */
 int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
 {
+#warning finish this
 	return -1;
 }
 
@@ -222,20 +258,127 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 
 /* Duplicate a change descriptor to two or more blocks. The original change
  * descriptor will be turned into a NOOP change descriptor which depends on all
- * the duplicates, each of which will be applied to a different block. */
+ * the duplicates, each of which will be applied to a different block. If this
+ * function fails, the change descriptor graph may be left altered in a form
+ * which is semantically equivalent to the original state. It is assumed by this
+ * function that the caller has verified that the atomic sizes will work out. */
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 {
-	/* first use chdesc_detach_dependencies, and set the tail's block to NULL (chdesc_move) */
+	int i, r;
+	chdesc_t * tail;
+	chdesc_t ** descs;
+	
+	if(count < 2)
+		return -E_INVAL;
+	
+	/* if the original is a NOOP, we don't need to duplicate it...
+	 * just make sure it has no block and return successfully */
+	if(original->type == NOOP)
+	{
+		chdesc_noop_reassign(original, NULL);
+		return 0;
+	}
+	
+	/* make sure the blocks are all the same size */
+	for(i = 0; i != count; i++)
+		if(blocks[i]->ddesc->length != original->block->ddesc->length)
+			return -E_INVAL;
+	
+	descs = malloc(sizeof(*descs) * count);
+	if(!descs)
+		return -E_NO_MEM;
+	
+	/* first detach the dependencies */
+	r = chdesc_detach_dependencies(original);
+	if(r < 0)
+	{
+		free(descs);
+		return r;
+	}
+	
+	tail = original->dependencies->desc;
+	
+	/* can't fail when assigning to NULL */
+	r = chdesc_noop_reassign(tail, NULL);
+	assert(r >= 0);
+	
 	/* then create duplicates, depended on by the original and depending on the tail */
-	/* then unhook the original from the tail */
-	/* finally change the original to a NOOP with no block */
-	return -1;
+	switch(original->type)
+	{
+		case BIT:
+			for(i = 0; i != count; i++)
+			{
+				descs[i] = chdesc_create_bit(blocks[i], original->owner, original->bit.xor, original->bit.offset);
+				if(!descs[i])
+				{
+					r = -E_NO_MEM;
+					goto fail_create;
+				}
+				r = chdesc_add_depend(original, descs[i]);
+				if(r < 0)
+					goto fail_connect;
+				r = chdesc_add_depend(descs[i], tail);
+				if(r < 0)
+					goto fail_connect;
+			}
+			/* change the original to a NOOP with no block */
+			original->type = NOOP;
+			r = chdesc_noop_reassign(original, NULL);
+			assert(r >= 0);
+			break;
+		case BYTE:
+			for(i = 0; i != count; i++)
+			{
+				chdesc_t * head = NULL;
+				chdesc_t * tail = NULL;
+				r = chdesc_create_byte(blocks[i], original->owner, original->byte.offset, original->byte.length, original->byte.newdata, &head, &tail);
+				if(r < 0)
+					goto fail_create;
+				assert(head == tail);
+				assert(head);
+				descs[i] = head;
+				r = chdesc_add_depend(original, descs[i]);
+				if(r < 0)
+					goto fail_connect;
+				r = chdesc_add_depend(descs[i], tail);
+				if(r < 0)
+					goto fail_connect;
+			}
+			/* change the original to a NOOP with no block */
+			if(original->byte.olddata)
+				free(original->byte.olddata);
+			if(original->byte.newdata)
+				free(original->byte.newdata);
+			original->type = NOOP;
+			r = chdesc_noop_reassign(original, NULL);
+			assert(r >= 0);
+			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, original->type);
+			free(descs);
+			return -E_INVAL;
+	fail_create:
+			while(i--)
+			{
+	fail_connect:
+				chdesc_rollback(descs[i]);
+				chdesc_destroy(&descs[i]);
+			}
+			free(descs);
+			return r;
+	}
+	
+	/* finally unhook the original from the tail */
+	chdesc_remove_depend(original, tail);
+	
+	return 0;
 }
 
 /* chdesc_morph */
 /* Morph a change descriptor while moving it from one barrier zone to another.
  * The expected use of this function is after a chdesc_merge() in barrier
  * modules that change the data as it passes through them, like encryption. */
+#warning finish this
 
 /* Split a change descriptor into two or more change descriptors. The original
  * change descriptor will be turned into a NOOP change descriptor which depends
@@ -298,8 +441,7 @@ int chdesc_split(chdesc_t * original, int count)
 		}
 	}
 	
-	r = chdesc_remove_depend(original, tail);
-	assert(r >= 0);
+	chdesc_remove_depend(original, tail);
 	
 	/* Last we want to switch the original with the first fragment */
 	descs[0]->type = original->type;

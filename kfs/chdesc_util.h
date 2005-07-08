@@ -16,4 +16,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset);
 void chdesc_finish_move(bdesc_t * destination);
 
+/* reassign the block pointer in a NOOP chdesc */
+int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block);
+
 #endif /* __KUDOS_KFS_CHDESC_UTIL_H */

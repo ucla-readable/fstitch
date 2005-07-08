@@ -67,7 +67,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
 
 /* remove a dependency from a change descriptor */
-int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
+void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
 
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);

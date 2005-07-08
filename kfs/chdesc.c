@@ -656,14 +656,13 @@ static void chdesc_meta_remove(chmetadesc_t ** list, chdesc_t * chdesc)
 	}
 }
 
-int chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
+void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chdesc_meta_remove(&dependent->dependencies, dependency);
 	chdesc_meta_remove(&dependency->dependents, dependent);
 	if(dependent->type == NOOP && !dependent->dependencies)
 		/* we just removed the last dependency of a NOOP chdesc, so free it */
 		chdesc_destroy(&dependent);
-	return 0;
 }
 
 int chdesc_apply(chdesc_t * chdesc)
