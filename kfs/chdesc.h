@@ -63,14 +63,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
 
-/* hidden functions for use in chdesc_util.c */
-int __ensure_bdesc_has_changes(bdesc_t * block);
-int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under);
-
-/* move a chdesc to a new bdesc (at a barrier) */
-int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset);
-void chdesc_finish_move(bdesc_t * destination);
-
 /* add a dependency to a change descriptor */
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
 
@@ -91,6 +83,12 @@ void chdesc_weak_release(chdesc_t ** location);
 
 /* destroy a chdesc */
 void chdesc_destroy(chdesc_t ** chdesc);
+
+/* hidden functions for use in chdesc_util.c */
+int __ensure_bdesc_has_changes(bdesc_t * block);
+int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under);
+int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
+int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>

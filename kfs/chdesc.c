@@ -5,13 +5,6 @@
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 
-/* perform overlap attachment */
-static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
-static int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block, bool slip_under);
-
-/* add a dependency to a change descriptor without checking for cycles */
-static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
-
 /* ensure bdesc->ddesc->changes has a noop chdesc */
 static int ensure_bdesc_has_changes(bdesc_t * block)
 {
@@ -46,7 +39,128 @@ static int ensure_bdesc_has_changes(bdesc_t * block)
 	return 0;
 }
 
+/* add a dependency to a change descriptor without checking for cycles */
+static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
+{
+	chmetadesc_t * meta;
+	
+	/* add the dependency to the dependent */
+	meta = malloc(sizeof(*meta));
+	if(!meta)
+		return -E_NO_MEM;
+	meta->desc = dependency;
+	meta->next = dependent->dependencies;
+	dependent->dependencies = meta;
+	
+	/* add the dependent to the dependency */
+	meta = malloc(sizeof(*meta));
+	if(!meta)
+	{
+		meta = dependent->dependencies;
+		dependent->dependencies = meta->next;
+		free(meta);
+		return -E_NO_MEM;
+	}
+	meta->desc = dependent;
+	meta->next = dependency->dependents;
+	dependency->dependents = meta;
+	
+	return 0;
+}
+
+/* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
+/* note that we don't check to see if these chdescs are for the same ddesc or not */
+static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
+{
+	uint16_t r_start, r_len;
+	uint16_t o_start, o_len;
+	uint32_t start, end, tag;
+	
+	/* if either is a NOOP chdesc, they don't conflict */
+	if(recent->type == NOOP || original->type == NOOP)
+	{
+		printf("Unexpected NOOP chdesc in %s()\n", __FUNCTION__);
+		return 0;
+	}
+	/* two bit chdescs can't conflict due to xor representation */
+	if(recent->type == BIT && original->type == BIT)
+		return 0;
+	
+	if(recent->type == BIT)
+	{
+		r_len = sizeof(recent->bit.xor);
+		r_start = recent->bit.offset * r_len;
+	}
+	else
+	{
+		r_len = recent->byte.length;
+		r_start = recent->byte.offset;
+	}
+	if(original->type == BIT)
+	{
+		o_len = sizeof(original->bit.xor);
+		o_start = original->bit.offset * o_len;
+	}
+	else
+	{
+		o_len = original->byte.length;
+		o_start = original->byte.offset;
+	}
+	
+	start = o_start;
+	end = start + o_len + r_len;
+	tag = r_start + r_len;
+	if(tag <= start || end <= tag)
+		return 0;
+	
+	if(original->flags & CHDESC_ROLLBACK)
+	{
+		/* it's not clear what to do in this case... just fail with a warning for now */
+		fprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
+		return -E_BUSY;
+	}
+	return chdesc_add_depend(recent, original);
+}
+
+static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, bool slip_under)
+{
+	chmetadesc_t * scan;
+	const chdesc_t * deps = block->ddesc->changes;
+	
+	if(!deps)
+		return 0;
+	
+	for(scan = deps->dependencies; scan; scan = scan->next)
+	{
+		int r;
+		/* skip moved chdescs - they have just been added to this block
+		 * by chdesc_move() and already have proper overlap dependency
+		 * information with respect to the chdesc now arriving */
+		if(!(scan->desc->flags & CHDESC_MOVED))
+			continue;
+		/* "Slip Under" allows us to create change descriptors
+		 * underneath existing ones. (That is, existing chdescs will
+		 * depend on the new one, not the other way around.) This is a
+		 * hidden feature for internal use only. */
+		if(slip_under)
+			r = chdesc_overlap_attach(scan->desc, chdesc);
+		else
+			r = chdesc_overlap_attach(chdesc, scan->desc);
+		if(r < 0)
+			return r;
+	}
+	
+	return 0;
+}
+
+static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
+{
+	return chdesc_overlap_multiattach_slip(chdesc, block, 0);
+}
+
 int __ensure_bdesc_has_changes(bdesc_t * block) __attribute__ ((alias("ensure_bdesc_has_changes")));
+int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency) __attribute__((alias("chdesc_add_depend_fast")));
+int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block) __attribute__((alias("chdesc_overlap_multiattach")));
 
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
@@ -408,7 +522,7 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 			goto destroy;
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
-		if(__chdesc_overlap_multiattach(chdescs[i], block, slip_under))
+		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
 			goto destroy;
 		
 		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
@@ -480,96 +594,6 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return __chdesc_create_full(block, owner, data, head, tail, 0);
 }
 
-/* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
-/* note that we don't check to see if these chdescs are for the same ddesc or not */
-static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
-{
-	uint16_t r_start, r_len;
-	uint16_t o_start, o_len;
-	uint32_t start, end, tag;
-	
-	/* if either is a NOOP chdesc, they don't conflict */
-	if(recent->type == NOOP || original->type == NOOP)
-	{
-		printf("Unexpected NOOP chdesc in %s()\n", __FUNCTION__);
-		return 0;
-	}
-	/* two bit chdescs can't conflict due to xor representation */
-	if(recent->type == BIT && original->type == BIT)
-		return 0;
-	
-	if(recent->type == BIT)
-	{
-		r_len = sizeof(recent->bit.xor);
-		r_start = recent->bit.offset * r_len;
-	}
-	else
-	{
-		r_len = recent->byte.length;
-		r_start = recent->byte.offset;
-	}
-	if(original->type == BIT)
-	{
-		o_len = sizeof(original->bit.xor);
-		o_start = original->bit.offset * o_len;
-	}
-	else
-	{
-		o_len = original->byte.length;
-		o_start = original->byte.offset;
-	}
-	
-	start = o_start;
-	end = start + o_len + r_len;
-	tag = r_start + r_len;
-	if(tag <= start || end <= tag)
-		return 0;
-	
-	if(original->flags & CHDESC_ROLLBACK)
-	{
-		/* it's not clear what to do in this case... just fail with a warning for now */
-		fprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
-		return -E_BUSY;
-	}
-	return chdesc_add_depend(recent, original);
-}
-
-static int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block, bool slip_under)
-{
-	chmetadesc_t * scan;
-	const chdesc_t * deps = block->ddesc->changes;
-	
-	if(!deps)
-		return 0;
-	
-	for(scan = deps->dependencies; scan; scan = scan->next)
-	{
-		int r;
-		/* skip moved chdescs - they have just been added to this block
-		 * by chdesc_move() and already have proper overlap dependency
-		 * information with respect to the chdesc now arriving */
-		if(!(scan->desc->flags & CHDESC_MOVED))
-			continue;
-		/* "Slip Under" allows us to create change descriptors
-		 * underneath existing ones. (That is, existing chdescs will
-		 * depend on the new one, not the other way around.) This is a
-		 * hidden feature for internal use only. */
-		if(slip_under)
-			r = chdesc_overlap_attach(scan->desc, chdesc);
-		else
-			r = chdesc_overlap_attach(chdesc, scan->desc);
-		if(r < 0)
-			return r;
-	}
-	
-	return 0;
-}
-
-static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
-{
-	return __chdesc_overlap_multiattach(chdesc, block, 0);
-}
-
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
@@ -583,115 +607,6 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 				return 1;
 	}
 	/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
-	return 0;
-}
-
-int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
-{
-	uint16_t * offset;
-	int r;
-	
-	/* source_offset is in bytes for all chdesc types */
-	switch(chdesc->type)
-	{
-		case BIT:
-			if(source_offset & 0x3)
-				return -E_INVAL;
-			source_offset >>= 2;
-			offset = &chdesc->bit.offset;
-			break;
-		case BYTE:
-			offset = &chdesc->byte.offset;
-			break;
-		case NOOP:
-			offset = NULL;
-			break;
-		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
-			return -E_INVAL;
-	}
-	if(offset && source_offset > *offset)
-		return -E_INVAL;
-	
-	r = ensure_bdesc_has_changes(destination);
-	if(r < 0)
-		return r;
-	
-	r = chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
-	if(r < 0)
-	{
-	    kill_stub:
-		if(!destination->ddesc->changes->dependencies)
-			chdesc_destroy(&(destination->ddesc->changes));
-		return r;
-	}
-	
-	r = chdesc_overlap_multiattach(chdesc, destination);
-	if(r < 0)
-	{
-		chdesc_remove_depend(destination->ddesc->changes, chdesc);
-		goto kill_stub;
-	}
-	
-	/* at this point we have succeeded in moving the chdesc */
-	
-	if(offset)
-		*offset -= source_offset;
-	
-	chdesc->flags |= CHDESC_MOVED;
-	if(chdesc->block)
-	{
-		/* shouldn't fail... */
-		r = chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
-		assert(r >= 0);
-		bdesc_release(&chdesc->block);
-	}
-	chdesc->owner = target_bd;
-	chdesc->block = destination;
-	bdesc_retain(destination);
-	
-	return 0;
-}
-
-void chdesc_finish_move(bdesc_t * destination)
-{
-	if(destination->ddesc->changes)
-	{
-		chmetadesc_t * scan = destination->ddesc->changes->dependencies;
-		while(scan)
-		{
-			scan->desc->flags &= ~CHDESC_MOVED;
-			scan = scan->next;
-		}
-	}
-}
-
-/* add a dependency to a change descriptor without checking for cycles */
-static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
-{
-	chmetadesc_t * meta;
-	
-	/* add the dependency to the dependent */
-	meta = malloc(sizeof(*meta));
-	if(!meta)
-		return -E_NO_MEM;
-	meta->desc = dependency;
-	meta->next = dependent->dependencies;
-	dependent->dependencies = meta;
-	
-	/* add the dependent to the dependency */
-	meta = malloc(sizeof(*meta));
-	if(!meta)
-	{
-		meta = dependent->dependencies;
-		dependent->dependencies = meta->next;
-		free(meta);
-		return -E_NO_MEM;
-	}
-	meta->desc = dependent;
-	meta->next = dependency->dependents;
-	dependency->dependents = meta;
-	
 	return 0;
 }
 

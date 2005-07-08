@@ -47,6 +47,86 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 	return 0;
 }
 
+int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
+{
+	uint16_t * offset;
+	int r;
+	
+	/* source_offset is in bytes for all chdesc types */
+	switch(chdesc->type)
+	{
+		case BIT:
+			if(source_offset & 0x3)
+				return -E_INVAL;
+			source_offset >>= 2;
+			offset = &chdesc->bit.offset;
+			break;
+		case BYTE:
+			offset = &chdesc->byte.offset;
+			break;
+		case NOOP:
+			offset = NULL;
+			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			return -E_INVAL;
+	}
+	if(offset && source_offset > *offset)
+		return -E_INVAL;
+	
+	r = __ensure_bdesc_has_changes(destination);
+	if(r < 0)
+		return r;
+	
+	r = __chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
+	if(r < 0)
+	{
+	    kill_stub:
+		if(!destination->ddesc->changes->dependencies)
+			chdesc_destroy(&(destination->ddesc->changes));
+		return r;
+	}
+	
+	r = __chdesc_overlap_multiattach(chdesc, destination);
+	if(r < 0)
+	{
+		chdesc_remove_depend(destination->ddesc->changes, chdesc);
+		goto kill_stub;
+	}
+	
+	/* at this point we have succeeded in moving the chdesc */
+	
+	if(offset)
+		*offset -= source_offset;
+	
+	chdesc->flags |= CHDESC_MOVED;
+	if(chdesc->block)
+	{
+		/* shouldn't fail... */
+		r = chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
+		assert(r >= 0);
+		bdesc_release(&chdesc->block);
+	}
+	chdesc->owner = target_bd;
+	chdesc->block = destination;
+	bdesc_retain(destination);
+	
+	return 0;
+}
+
+void chdesc_finish_move(bdesc_t * destination)
+{
+	if(destination->ddesc->changes)
+	{
+		chmetadesc_t * scan = destination->ddesc->changes->dependencies;
+		while(scan)
+		{
+			scan->desc->flags &= ~CHDESC_MOVED;
+			scan = scan->next;
+		}
+	}
+}
+
 /* Roll back a collection of change descriptors on the same block. They will be
  * rolled back in proper dependency order. */
 int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
@@ -70,7 +150,7 @@ int chdesc_detach_dependencies(chdesc_t * chdesc)
 	chdesc_t * tail = chdesc_create_noop(chdesc->block, chdesc->owner);
 	if(!tail)
 		return -E_NO_MEM;
-	r = chdesc_add_depend(chdesc, tail);
+	r = __chdesc_add_depend_fast(chdesc, tail);
 	if(r < 0)
 	{
 		chdesc_destroy(&tail);
@@ -107,7 +187,7 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 	chdesc_t * head = chdesc_create_noop(chdesc->block, chdesc->owner);
 	if(!head)
 		return -E_NO_MEM;
-	r = chdesc_add_depend(head, chdesc);
+	r = __chdesc_add_depend_fast(head, chdesc);
 	if(r < 0)
 	{
 		chdesc_destroy(&head);
@@ -204,9 +284,9 @@ int chdesc_split(chdesc_t * original, int count)
 			r = -E_NO_MEM;
 			goto fail;
 		}
-		r = chdesc_add_depend(original, descs[i]);
+		r = __chdesc_add_depend_fast(original, descs[i]);
 		if(r >= 0)
-			r = chdesc_add_depend(descs[i], tail);
+			r = __chdesc_add_depend_fast(descs[i], tail);
 		if(r < 0)
 		{
 			chdesc_destroy(&descs[i]);
