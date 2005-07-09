@@ -163,18 +163,34 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 
 /* Roll back a collection of change descriptors on the same block. They will be
  * rolled back in proper dependency order. */
+/* If "order" is non-null, and it is a pointer to NULL, it will be filled in
+ * with a pointer to information which can be used by chdesc_apply_collection()
+ * to apply the same change descriptors again without having to recompute the
+ * proper order. If it is non-null and a pointer to non-null, the order
+ * specified will be used by chdesc_rollback_collection() itself. To free the
+ * memory used by the structure, use chdesc_order_destroy(). When "order" is
+ * NULL, the structure will be computed internally and freed automatically. */
 int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 {
-#warning finish this
+#warning write this
 	return -1;
 }
 
 /* Apply a collection of change descriptors on the same block. They will be
  * applied in proper dependency order. */
+/* See the comment above about chdesc_rollback_collection() for a description of
+ * the "order" parameter. It behaves in the same way for this function. */
 int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
 {
-#warning finish this
+#warning write this
 	return -1;
+}
+
+void chdesc_order_destroy(void ** order)
+{
+#warning finish this
+	free(*order);
+	*order = NULL;
 }
 
 /* Split a change descriptor into two change descriptors, such that the original
@@ -378,7 +394,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 /* Morph a change descriptor while moving it from one barrier zone to another.
  * The expected use of this function is after a chdesc_merge() in barrier
  * modules that change the data as it passes through them, like encryption. */
-#warning finish this
+#warning write this
 
 /* Split a change descriptor into two or more change descriptors. The original
  * change descriptor will be turned into a NOOP change descriptor which depends
@@ -456,12 +472,15 @@ int chdesc_split(chdesc_t * original, int count)
 
 /* Merge many change descriptors into a small, nonoverlapping set of new ones.
  * The change descriptors must all be on the same block and have the same owner,
- * which should also be at the bottom of a barrier zone. The resulting change
- * descriptors will be byte change descriptors for the entire block. */
+ * which should also be at the bottom of a barrier zone. It is expected that the
+ * change descriptors being merged have no eventual dependencies on any other
+ * change descriptors on the same block. The resulting change descriptors will
+ * be byte change descriptors for the entire block. */
 int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** tail)
 {
 	int i, r;
 	void * data;
+	chmetadesc_t * meta;
 	
 	/* we need at least 2 change descriptors */
 	if(count < 1)
@@ -469,6 +488,8 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	if(count == 1)
 		return 0;
 	
+	/* FIXME allow NOOP change descriptors with different blocks */
+	/* FIXME allow all NOOP change descriptors? (just merge them) */
 	/* make sure the change descriptors are all on the same block */
 	for(i = 1; i != count; i++)
 		if(chdescs[i - 1]->block->ddesc != chdescs[i]->block->ddesc)
@@ -509,6 +530,15 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	for(i = 0; i != count; i++)
 		if(chdescs[i]->flags & CHDESC_MARKED)
 			break;
+	/* check all change descriptors on the block, to make sure the underlap
+	 * below will not create a cycle */
+	for(meta = chdescs[0]->block->ddesc->changes->dependencies; meta; meta = meta->next)
+		if(meta->desc->flags & CHDESC_MARKED)
+		{
+			/* cause the error check below to catch this */
+			i = 0;
+			break;
+		}
 	if(i != count)
 	{
 		/* loop detected... unmark everything and fail */
@@ -531,24 +561,142 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		chdesc_unmark_graph(chdescs[i]);
 	}
 	
+	/* weak retain all the change descriptors, so that when we destroy them
+	 * later we won't choke on NOOP chdescs that get automatically freed */
+	for(i = 0; i != count; i++)
+	{
+		r = chdesc_weak_retain(chdescs[i], &chdescs[i]);
+		if(r < 0)
+		{
+			while(i--)
+				chdesc_weak_forget(&chdescs[i]);
+			return r;
+		}
+	}
+	
 	/* copy the new data */
 	data = memdup(chdescs[0]->block->ddesc->data, chdescs[0]->block->ddesc->length);
+	if(!data)
+	{
+		for(i = 0; i != count; i++)
+			chdesc_weak_forget(&chdescs[i]);
+		return -E_NO_MEM;
+	}
 	
 	/* now roll back the change descriptors */
 	r = chdesc_rollback_collection(count, chdescs, NULL);
 	if(r < 0)
+	{
+		for(i = 0; i != count; i++)
+			chdesc_weak_forget(&chdescs[i]);
+		free(data);
 		return r;
+	}
 	
+	/* use the hidden "slip under" feature */
 	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, tail, 1);
+	free(data);
 	if(r < 0)
 	{
 		/* roll forward */
 		chdesc_apply_collection(count, chdescs, NULL);
-		/* FIXME remove CHDESC_MOVED... */
+		for(i = 0; i != count; i++)
+		{
+			chdescs[i]->flags &= ~CHDESC_MOVED;
+			chdesc_weak_forget(&chdescs[i]);
+		}
 		return r;
 	}
 	
-	/* FIXME not done yet... */
+	assert(*head);
+	assert(*tail);
+	
+	/* we have now finished all operations that could potentially fail */
+	
+	/* now add all the dependencies of the input descriptors to the tail, and the dependents of the input descriptors to the head */
+	for(i = 0; i != count; i++)
+	{
+		chmetadesc_t ** scan;
+		
+		/* add the dependencies to tail */
+		while(chdescs[i]->dependencies)
+		{
+			for(meta = (*tail)->dependencies; meta; meta = meta->next)
+				if(meta->desc == chdescs[i]->dependencies->desc)
+					break;
+			if(meta)
+				/* we already have this dependency, so free the duplicate */
+				chdesc_remove_depend(chdescs[i], chdescs[i]->dependencies->desc);
+			else
+			{
+				/* move the dependency pointer */
+				meta = chdescs[i]->dependencies;
+				chdescs[i]->dependencies = meta->next;
+				meta->next = (*tail)->dependencies;
+				(*tail)->dependencies = meta;
+				/* move the dependent pointer */
+				for(meta = meta->desc->dependents; meta; meta = meta->next)
+					if(meta->desc == chdescs[i])
+					{
+						meta->desc = *tail;
+						break;
+					}
+			}
+			
+		}
+		
+		/* add the dependents to head */
+		scan = &chdescs[i]->dependents;
+		while(*scan)
+		{
+			if((*scan)->desc == chdescs[i]->block->ddesc->changes)
+				scan = &(*scan)->next;
+			else
+			{
+#warning look over this section and make sure it is right - just copied and translated from above
+				for(meta = (*head)->dependents; meta; meta = meta->next)
+					if(meta->desc == (*scan)->desc)
+						break;
+				if(meta)
+					/* we already have this dependent, so free the duplicate */
+					chdesc_remove_depend((*scan)->desc, chdescs[i]);
+				else
+				{
+					/* move the dependent pointer */
+					meta = *scan;
+					*scan = meta->next;
+					meta->next = (*head)->dependents;
+					(*head)->dependents = meta;
+					/* move the dependency pointer */
+					for(meta = meta->desc->dependencies; meta; meta = meta->next)
+						if(meta->desc == chdescs[i])
+						{
+							meta->desc = *head;
+							break;
+						}
+				}
+			}
+		}
+		
+		/* add all the weak references to head (except our own, which is the first) */
+		assert(chdescs[0]->weak_refs);
+		assert(chdescs[0]->weak_refs->desc == &chdescs[i]);
+		while(chdescs[0]->weak_refs->next)
+		{
+			chrefdesc_t * ref = chdescs[0]->weak_refs->next;
+			chdescs[0]->weak_refs->next = ref->next;
+			/* this test should not really be necessary, but for safety... */
+			if(*ref->desc == chdescs[0])
+				*ref->desc = *head;
+			ref->next = (*head)->weak_refs;
+			(*head)->weak_refs = ref;
+		}
+	}
+	
+	/* finally delete the original change descriptors */
+	for(i = 0; i != count; i++)
+		if(chdescs[i])
+			chdesc_destroy(&chdescs[i]);
+	
 	return 0;
-#warning finish this
 }
