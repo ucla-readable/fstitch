@@ -19,9 +19,7 @@
 #include <arch/simple.h>
 #include <inc/stdio.h>
 
-#if USE_THIRD_LEG
 #define wb_cache_bd wt_cache_bd
-#endif
 
 static bool verbose = 0;
 
