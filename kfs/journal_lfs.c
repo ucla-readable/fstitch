@@ -259,10 +259,14 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	BD_t * journal_bd = CALL(state->journal, get_blockdev);
 	BD_t * fs_bd      = CALL(state->fs, get_blockdev);
 
-	// TODO: should journal_bd be passed here?
 	jdata_chdescs = chdesc_create_noop(NULL, journal_bd);
 	if (!jdata_chdescs)
 		return -E_NO_MEM;
+
+	// retain so that "add_depend() will often segfault if we don't" doesn't break.
+	// TODO: why is this retain needed?
+	r = chdesc_weak_retain(jdata_chdescs, &jdata_chdescs);
+	assert(r >= 0);
 
 	fsdata_chdescs = chdesc_create_noop(NULL, fs_bd); 
 	if (!fsdata_chdescs)
@@ -334,12 +338,14 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 			for (i=0; i < blknos_per_block && bdescno < ndatabdescs; i++, bdescno++, cur_blkno_entry++)
 				*cur_blkno_entry = data_bdescs[bdescno]->number;
 
+			// TODO: remove this need to read the block, it is immediately overwriten
 			bdesc = CALL(state->journal, get_file_block, state->jfdesc, blknos_begin + blkno * state->blocksize);
 			assert(bdesc); // TODO: handle error
 
 			prev_head = NULL;
 			r = chdesc_create_full(bdesc, journal_bd, num_block, &prev_head, &tail);
 			assert(r >= 0); // TODO: handle error
+			// this chdesc_add_depend() will often segfault if we don't retain jdata_chdescs
 			r = chdesc_add_depend(jdata_chdescs, prev_head);
 			assert(r >= 0); // TODO: handle error
 
@@ -379,6 +385,8 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	// retain for creating fsdata_chdescs
 	r = chdesc_weak_retain(prev_head, &prev_head);
 	assert(r >= 0); // TODO: handle error
+
+	chdesc_weak_release(&jdata_chdescs);
 
 	lfs_head = NULL;
 	lfs_tail = NULL;
@@ -763,11 +771,22 @@ static void eat_chdesc_graph(chdesc_t * c)
 		return;
 
 	while ((scan = c->dependencies))
+	{
 		eat_chdesc_graph(scan->desc);
 
-	// TOOD: what should we do here?
-	//r = depman_remove_chdesc(c);
-	//assert(r >= 0);
+		if (c->owner == scan->desc->owner)
+			chdesc_remove_depend(c, scan->desc);
+		else
+		{
+			// TODO:
+			// - decide whether this is the correct behavior, as fprintf() states.
+			// - this test actually tests for inter-device deps rather than just cross-device,
+			//   correct this.
+			fprintf(STDERR_FILENO, "%s:%s: encountered cross-device dependency, is leaving this dep in place the desired behavior?\n", __FILE__, __FUNCTION__);
+		}
+	}
+
+	// TODO: should this function do anything else?
 }
 
 static bdesc_t * journal_allocate_block(LFS_t * lfs, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
@@ -776,7 +795,6 @@ static bdesc_t * journal_allocate_block(LFS_t * lfs, uint32_t size, int purpose,
 	bdesc_t * val;
 	val = CALL(state->fs, allocate_block, size, purpose, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return val;
 }
 
@@ -786,7 +804,6 @@ static int journal_append_file_block(LFS_t * lfs, fdesc_t * file, bdesc_t * bloc
 	int r;
 	r = CALL(state->fs, append_file_block, file, block, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
@@ -796,7 +813,6 @@ static fdesc_t * journal_allocate_name(LFS_t * lfs, const char * name, uint8_t t
 	fdesc_t * val;
 	val = CALL(state->fs, allocate_name, name, type, link, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return val;
 }
 
@@ -811,7 +827,6 @@ static int journal_rename(LFS_t * lfs, const char * oldname, const char * newnam
 		return -E_INVAL;
 	r = CALL(state->fs, rename, oldname, newname, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
@@ -821,7 +836,6 @@ static bdesc_t * journal_truncate_file_block(LFS_t * lfs, fdesc_t * file, chdesc
 	bdesc_t * val;
 	val = CALL(state->fs, truncate_file_block, file, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return val;
 }
 
@@ -831,7 +845,6 @@ static int journal_free_block(LFS_t * lfs, bdesc_t * block, chdesc_t ** head, ch
 	int r;
 	r = CALL(state->fs, free_block, block, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
@@ -844,7 +857,6 @@ static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head,
 		return -E_NOT_FOUND;
 	r = CALL(state->fs, remove_name, name, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
@@ -854,7 +866,6 @@ static int journal_write_block(LFS_t * lfs, bdesc_t * block, uint32_t offset, ui
 	int r;
 	r = CALL(state->fs, write_block, block, offset, size, data, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
@@ -867,7 +878,6 @@ static int journal_set_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 		return -E_NOT_FOUND;
 	r = CALL(state->fs, set_metadata_name, name, id, size, data, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
@@ -877,7 +887,6 @@ static int journal_set_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_
 	int r;
 	r = CALL(state->fs, set_metadata_fdesc, file, id, size, data, head, tail);
 	eat_chdesc_graph(*head);
-	*head = *tail = NULL;
 	return r;
 }
 
