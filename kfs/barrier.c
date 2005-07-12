@@ -45,10 +45,13 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	}
 
 	/* prepare the block for chdesc forwarding */
-	/* TODO: revision_* can be avoided if !synthetic: wait, how? - mike */
 	r = revision_tail_prepare(block, barrier);
 	if (r < 0)
+	{
+		if(synthetic)
+			CALL(target, cancel_block, number);
 		return r;
+	}
 
 	/* transfer the barrier's bottom chdescs on block to target_block.
 	 * this loop makes use of knowledge of how chdesc_move operates. */
@@ -140,7 +143,6 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 		return 0;
 
 	/* prepare the block for chdesc forwarding */
-	/* TODO: revision_* can be avoided if !synthetic */
 	r = revision_tail_prepare(block, barrier);
 	if (r < 0)
 		return r;
@@ -220,13 +222,14 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block)
 {
-#if 0
-	/* use chdesc_duplicate() */
 	bool * synthetic;
 	bool chdescs_moved = 0;
-	bdesc_t * target_block;
+	bdesc_t ** target_block;
 	chmetadesc_t ** chmetadesc;
 	int i, r;
+	
+	if(nforwards < 2)
+		return -E_INVAL;
 	
 	if(!block->ddesc->changes)
 		return 0;
@@ -242,73 +245,87 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 		return -E_NO_MEM;
 	}
 	
-	...
-	target_block = CALL(target, synthetic_read_block, number, &synthetic);
-	if(!target_block)
+	for(i = 0; i != nforwards; i++)
 	{
-		free(target_block);
-		free(synthetic);
-		return -E_UNSPECIFIED;
-	}
-	
-	if(block == target_block)
-	{
-		Dprintf("%s(): block == target_block (0x%08x)\n", __FUNCTION__, block);
-		return 0;
+		target_block[i] = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, &synthetic[i]);
+		if(!target_block[i])
+		{
+			while(i--)
+				if(synthetic[i])
+					CALL(forwards[i].target, cancel_block, forwards[i].number);
+			free(target_block);
+			free(synthetic);
+			return -E_UNSPECIFIED;
+		}
+		if(block == target_block[i])
+			panic("%s(): block == target_block[%d] (0x%08x)", __FUNCTION__, i, block);
 	}
 	
 	/* prepare the block for chdesc forwarding */
-	/* TODO: revision_* can be avoided if !synthetic: wait, how? - mike */
 	r = revision_tail_prepare(block, barrier);
 	if(r < 0)
+	{
+		for(i = 0; i != nforwards; i++)
+			if(synthetic[i])
+				CALL(forwards[i].target, cancel_block, forwards[i].number);
+		free(target_block);
+		free(synthetic);
 		return r;
+	}
 	
 	/* transfer the barrier's bottom chdescs on block to target_block.
-	 * this loop makes use of knowledge of how chdesc_move operates. */
+	 * this loop makes use of knowledge of how chdesc_duplicate operates. */
 	chmetadesc = &block->ddesc->changes->dependencies;
-	while (block->ddesc->changes && *chmetadesc)
+	while(block->ddesc->changes && *chmetadesc)
 	{
 		chdesc_t * chdesc = (*chmetadesc)->desc;
-		if (chdesc->owner == barrier)
+		if(chdesc->owner == barrier)
 		{
 			chdescs_moved = 1;
-			r = chdesc_move(chdesc, target_block, target, 0);
+			r = chdesc_duplicate(chdesc, nforwards, target_block);
 			if (r < 0)
-				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+				panic("%s(): chdesc_duplicate() failed (%e), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
 		}
 		else
 			chmetadesc = &(*chmetadesc)->next;
 	}
-	if (chdescs_moved)
-		chdesc_finish_move(target_block);
-
-	if (!chdescs_moved && synthetic)
+	if(chdescs_moved)
 	{
-		/* With no changes for this synthetic target_block, we might as well
-		 * cancel the block */
-		r = CALL(target, cancel_block, number);
-		if (r < 0)
-			panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+		for(i = 0; i != nforwards; i++)
+		{
+			chdesc_finish_move(target_block[i]);
+			
+			/* Bring the target_block's data blob up to date with the
+			 * duplicated chdescs */
+			assert(target_block[i]->ddesc->length == block->ddesc->length);
+			memcpy(target_block[i]->ddesc->data, block->ddesc->data, block->ddesc->length);
+			
+			/* write the updated target_block */
+			r = CALL(forwards[i].target, write_block, target_block[i]);
+			if (r < 0)
+				panic("%s(): target->write_block() failed (%e), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
+		}
 	}
-	else if (chdescs_moved)
+	else
 	{
-		/* Bring target_block's data blob up to date with the transferred
-		 * chdescs */
-		assert(target_block->ddesc->length == block->ddesc->length);
-		memcpy(target_block->ddesc->data, block->ddesc->data, block->ddesc->length);
-
-		/* write the updated target_block */
-		r = CALL(target, write_block, target_block);
-		if (r < 0)
-			panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+		/* With no changes for a synthetic target_block, we might as
+		 * well cancel the block */
+		for(i = 0; i != nforwards; i++)
+			if(synthetic[i])
+			{
+				r = CALL(forwards[i].target, cancel_block, forwards[i].number);
+				if (r < 0)
+					panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
+			}
 	}
-
+	
+	free(target_block);
+	free(synthetic);
+	
 	/* put block back into current state */
 	r = revision_tail_revert(block, barrier);
-	if (r < 0)
+	if(r < 0)
 		panic("%s(): revision_tail_revert() failed (%e), but this function does not know what to do in case of failure", __FUNCTION__, r);
 
 	return 0;
-#endif
-	return -1;
 }

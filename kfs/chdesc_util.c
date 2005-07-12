@@ -47,6 +47,12 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 	return 0;
 }
 
+/* Move a change descriptor from one block to another, with the target block
+ * having a different data descriptor than the source block. This is intended
+ * for use at barriers, by the barrier code. The target block's data is not
+ * updated to reflect the presence of the change descriptor, and must be copied
+ * manually from the source data descriptor. Also, the CHDESC_MOVED flag will be
+ * set on the change descriptor. */
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	uint16_t * offset;
@@ -276,10 +282,13 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 
 /* Duplicate a change descriptor to two or more blocks. The original change
  * descriptor will be turned into a NOOP change descriptor which depends on all
- * the duplicates, each of which will be applied to a different block. If this
- * function fails, the change descriptor graph may be left altered in a form
- * which is semantically equivalent to the original state. It is assumed by this
- * function that the caller has verified that the atomic sizes will work out. */
+ * the duplicates, each of which will be attached to a different block. Just as
+ * in chdesc_move(), the data descriptors will not be updated to reflect this
+ * addition, and the CHDESC_MOVED flag will be set on the duplicate change
+ * descriptors. If this function fails, the change descriptor graph may be left
+ * altered in a form which is semantically equivalent to the original state. It
+ * is assumed by this function that the caller has verified that the atomic
+ * sizes will work out. */
 /*  From:      To:                    Or:
  *   -> X       -> M1 \      -> X            -> X
  *  /          /       \    /               /
@@ -333,18 +342,25 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		case BIT:
 			for(i = 0; i != count; i++)
 			{
-				descs[i] = chdesc_create_bit(blocks[i], original->owner, original->bit.xor, original->bit.offset);
+				descs[i] = chdesc_create_noop(blocks[i], original->owner);
 				if(!descs[i])
 				{
 					r = -E_NO_MEM;
-					goto fail_create;
+					goto fail_first;
 				}
+				descs[i]->bit.xor = original->bit.xor;
+				descs[i]->bit.offset = original->bit.offset;
+				descs[i]->type = BIT;
+				r = __chdesc_overlap_multiattach(descs[i], blocks[i]);
+				if(r < 0)
+					goto fail_later;
+				descs[i]->flags |= CHDESC_MOVED;
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
-					goto fail_connect;
+					goto fail_later;
 				r = chdesc_add_depend(descs[i], tail);
 				if(r < 0)
-					goto fail_connect;
+					goto fail_later;
 			}
 			/* change the original to a NOOP with no block */
 			original->type = NOOP;
@@ -354,20 +370,48 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		case BYTE:
 			for(i = 0; i != count; i++)
 			{
-				chdesc_t * head = NULL;
-				chdesc_t * tail = NULL;
-				r = chdesc_create_byte(blocks[i], original->owner, original->byte.offset, original->byte.length, original->byte.newdata, &head, &tail);
+				descs[i] = chdesc_create_noop(blocks[i], original->owner);
+				if(!descs[i])
+				{
+					r = -E_NO_MEM;
+					goto fail_first;
+				}
+				descs[i]->byte.offset = original->byte.offset;
+				descs[i]->byte.length = original->byte.length;
+				if(original->byte.olddata)
+				{
+					descs[i]->byte.olddata = memdup(original->byte.olddata, original->byte.length);
+					if(!descs[i]->byte.olddata)
+					{
+						r = -E_NO_MEM;
+						goto fail_later;
+					}
+				}
+				else
+					descs[i]->byte.olddata = NULL;
+				if(original->byte.newdata)
+				{
+					descs[i]->byte.newdata = memdup(original->byte.newdata, original->byte.length);
+					if(!descs[i]->byte.newdata)
+					{
+						free(descs[i]->byte.olddata);
+						r = -E_NO_MEM;
+						goto fail_later;
+					}
+				}
+				else
+					descs[i]->byte.newdata = NULL;
+				descs[i]->type = BYTE;
+				r = __chdesc_overlap_multiattach(descs[i], blocks[i]);
 				if(r < 0)
-					goto fail_create;
-				assert(head == tail);
-				assert(head);
-				descs[i] = head;
+					goto fail_later;
+				descs[i]->flags |= CHDESC_MOVED;
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
-					goto fail_connect;
+					goto fail_later;
 				r = chdesc_add_depend(descs[i], tail);
 				if(r < 0)
-					goto fail_connect;
+					goto fail_later;
 			}
 			/* change the original to a NOOP with no block */
 			if(original->byte.olddata)
@@ -382,13 +426,10 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, original->type);
 			free(descs);
 			return -E_INVAL;
-	fail_create:
+		fail_first:
 			while(i--)
-			{
-	fail_connect:
-				chdesc_rollback(descs[i]);
+			    fail_later:
 				chdesc_destroy(&descs[i]);
-			}
 			free(descs);
 			return r;
 	}
