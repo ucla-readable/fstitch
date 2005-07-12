@@ -173,6 +173,7 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 {
 #warning write this
+	/* a lot of the code for this should be similar to code in revision.c */
 	return -1;
 }
 
@@ -183,6 +184,7 @@ int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
 {
 #warning write this
+	/* a lot of the code for this should be similar to code in revision.c */
 	return -1;
 }
 
@@ -278,6 +280,13 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
  * function fails, the change descriptor graph may be left altered in a form
  * which is semantically equivalent to the original state. It is assumed by this
  * function that the caller has verified that the atomic sizes will work out. */
+/*  From:      To:                    Or:
+ *   -> X       -> M1 \      -> X            -> X
+ *  /          /       \    /               /
+ * W -> Y     w -> M2 ---> p -> Y     W -> p -> Y
+ *  \          \       /    \               \
+ *   -> Z       -> M3 /      -> Z            -> Z
+ * */
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 {
 	int i, r;
@@ -653,7 +662,6 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 				scan = &(*scan)->next;
 			else
 			{
-#warning look over this section and make sure it is right - just copied and translated from above
 				for(meta = (*head)->dependents; meta; meta = meta->next)
 					if(meta->desc == (*scan)->desc)
 						break;
