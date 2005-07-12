@@ -11,15 +11,24 @@
  * blocks to avoid unnecessary reads */
 int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block);
 
-/* forward chdescs as above, but only those within the given range and to the
- * relative block offsets in the target block whose number is specified */
-typedef struct partial_forward {
+typedef struct {
 	BD_t *   target;
 	uint32_t number;
 	uint32_t offset;
 	uint32_t size;
 } partial_forward_t;
 
+/* forward chdescs as above, but only those within the given range and to the
+ * relative block offsets in the target block whose number is specified */
 int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block);
+
+typedef struct {
+	BD_t *   target;
+	uint32_t number;
+} multiple_forward_t;
+
+/* forward chdescs as in barrier_simple_forward(), but now copy change
+ * descriptors with chdesc_duplicate() and write them to multiple blocks */
+int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block);
 
 #endif /* __KUDOS_KFS_BARRIER_H */
