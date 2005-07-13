@@ -299,6 +299,7 @@ static void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
+#warning add wb_cache here
 	val = 0; //(uint32_t) wb_cache_bd(bd, pg->blocks);
 	fprintf(STDERR_FILENO, "kfsd: warning: not constructing wb_cache_bd!\n");
 
@@ -358,7 +359,7 @@ static void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
 	if (!modman_name_bd(disk0) || !modman_name_bd(disk1))
 		RETURN_IPC_INVAL;
 
-	val = 0; //(uint32_t) mirror_bd(disk0, disk1, pg->stride);
+	val = (uint32_t) mirror_bd(disk0, disk1, pg->stride);
 	fprintf(STDERR_FILENO, "kfsd: warning: not constructing mirror_bd!\n");
 
 	RETURN_IPC;
@@ -373,7 +374,7 @@ static void kis_mirror_bd_add(envid_t whom, const Skfs_mirror_bd_add_t * pg)
 	if (!modman_name_bd(bd) || !modman_name_bd(newdevice))
 		RETURN_IPC_INVAL;
 
-	val = -1; //(uint32_t) mirror_bd_add_device(bd, newdevice);
+	val = (uint32_t) mirror_bd_add_device(bd, newdevice);
 
 	RETURN_IPC;
 }
@@ -387,7 +388,7 @@ static void kis_mirror_bd_remove(envid_t whom, const Skfs_mirror_bd_remove_t * p
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-	val = -1; //(uint32_t) mirror_bd_remove_device(bd, diskno);
+	val = (uint32_t) mirror_bd_remove_device(bd, diskno);
 
 	RETURN_IPC;
 }
