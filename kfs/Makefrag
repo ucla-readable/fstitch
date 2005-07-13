@@ -1,7 +1,6 @@
 OBJDIRS += kfs
 
 #			$(OBJDIR)/kfs/wb_cache_bd.o \
-#			$(OBJDIR)/kfs/mirror_bd.o \
 
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
@@ -21,6 +20,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/journal_queue_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \
+			$(OBJDIR)/kfs/mirror_bd.o \
 			$(OBJDIR)/kfs/loop_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \

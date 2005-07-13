@@ -250,7 +250,7 @@ typedef struct {
 	SKFS_TYPE;
 	uint32_t disk0;
 	uint32_t disk1;
-	uint32_t stride;
+	uint8_t stride;
 } Skfs_mirror_bd_t;
 
 typedef struct {

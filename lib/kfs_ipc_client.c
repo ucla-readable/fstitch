@@ -649,7 +649,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 
 #include <kfs/mirror_bd.h>
 
-BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint32_t stride)
+BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 {
 	const envid_t fsid = find_fs();
 	uint32_t bd_id;
