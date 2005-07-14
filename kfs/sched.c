@@ -103,6 +103,7 @@ void sched_loop()
 
 		// Run bdesc autoreleasing at the end of the main loop
 		bdesc_autorelease_pool_pop();
+		assert(!bdesc_autorelease_pool_depth());
 		r = bdesc_autorelease_pool_push();
 		assert(r >= 0);
 	}

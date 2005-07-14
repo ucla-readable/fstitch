@@ -54,6 +54,9 @@ int bdesc_autorelease_pool_push(void);
 /* pop an autorelease pool off the stack */
 void bdesc_autorelease_pool_pop(void);
 
+/* get the depth of the autorelease pool stack */
+int bdesc_autorelease_pool_depth(void);
+
 /* compares two bdescs' blocknos for qsort */
 int bdesc_blockno_compare(const void * a, const void * b);
 

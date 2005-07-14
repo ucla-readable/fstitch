@@ -177,6 +177,15 @@ void bdesc_autorelease_pool_pop(void)
 	free(pool);
 }
 
+int bdesc_autorelease_pool_depth(void)
+{
+	int depth = 0;
+	struct auto_pool * pool;
+	for(pool = autorelease_stack; pool; pool = pool->next)
+		depth++;
+	return depth;
+}
+
 int bdesc_blockno_compare(const void * a, const void * b)
 {
 	return (*(bdesc_t **) a)->number - (*(bdesc_t **) b)->number;
