@@ -1,0 +1,33 @@
+#
+# Makefile fragment for the KudOS kernel.
+# This is NOT a complete makefile;
+# you must run GNU make in the top-level directory
+# where the GNUmakefile is located.
+#
+
+OBJDIRS += boot
+
+BOOT_OBJS := $(OBJDIR)/boot/boot.o $(OBJDIR)/boot/main.o
+STAGE2_OBJS := $(OBJDIR)/boot/entry2.o $(OBJDIR)/boot/stage2.o
+
+$(OBJDIR)/boot/%.o: boot/%.c
+	@echo + cc -Os -fomit-frame-pointer $<
+	$(V)$(CC) -nostdinc $(BOOTLOADER_CFLAGS) -Os -fomit-frame-pointer -c -o $@ $<
+
+$(OBJDIR)/boot/boot: $(BOOT_OBJS)
+	@echo + ld boot/boot
+	$(V)$(LD) -N -e start -Ttext 0x7C00 -o $@.out $^
+	$(V)$(OBJDUMP) -S $@.out >$@.asm
+	$(V)$(OBJCOPY) -S -O binary $@.out $@
+	$(V)perl boot/sign.pl $@
+
+$(OBJDIR)/boot/stage2: $(STAGE2_OBJS)
+	@echo + ld boot/stage2
+	$(V)$(LD) -N -e start -Ttext 0x7E00 -o $@.out $^
+	$(V)$(OBJDUMP) -S $@.out >$@.asm
+	$(V)$(OBJCOPY) -S -O binary $@.out $@
+	$(V)perl boot/check.pl $@
+
+$(OBJDIR)/boot/mbr: boot/mbr.hex $(OBJDIR)/util/$(HEX2BIN)
+	@echo + $(HEX2BIN) boot/mbr.hex
+	$(V)$(OBJDIR)/util/$(HEX2BIN) boot/mbr.hex > $@
