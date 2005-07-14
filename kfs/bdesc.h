@@ -48,12 +48,11 @@ void bdesc_release(bdesc_t ** bdesc);
 /* schedule the bdesc to be released at the end of the current run loop */
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc);
 
-/* run the scheduled bdesc autoreleases */
-void bdesc_run_autorelease(void);
+/* push an autorelease pool onto the stack */
+int bdesc_autorelease_pool_push(void);
 
-/* a function for caches and cache-like modules to use for bdesc overwriting */
-/* this may no longer be needed, but it is left commented just in case */
-//int bdesc_overwrite(bdesc_t * cached, bdesc_t * written);
+/* pop an autorelease pool off the stack */
+void bdesc_autorelease_pool_pop(void);
 
 /* compares two bdescs' blocknos for qsort */
 int bdesc_blockno_compare(const void * a, const void * b);

@@ -83,7 +83,7 @@ void umain(int argc, const char ** argv)
 		else if (!strcmp(argv[3], "disk")) {
 			int controller = strtol(argv[4], NULL, 10);
 			int diskno = strtol(argv[5], NULL, 10);
-			disk = ide_pio_bd(controller, diskno);
+			disk = ide_pio_bd(controller, diskno, 0);
 		}
 
 		if (!disk)
@@ -111,7 +111,7 @@ void umain(int argc, const char ** argv)
 		else if (!strcmp(argv[2], "disk")) {
 			int controller = strtol(argv[3], NULL, 10);
 			int diskno = strtol(argv[4], NULL, 10);
-			disk = ide_pio_bd(controller, diskno);
+			disk = ide_pio_bd(controller, diskno, 0);
 		}
 
 		int stride = strtol(argv[5], NULL, 10);

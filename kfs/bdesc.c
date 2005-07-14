@@ -15,7 +15,12 @@
 #define Dprintf(x...)
 #endif
 
-static bdesc_t * autorelease_list = NULL;
+struct auto_pool {
+	bdesc_t * list;
+	struct auto_pool * next;
+};
+
+static struct auto_pool * autorelease_stack = NULL;
 
 /* allocate a new bdesc */
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
@@ -123,24 +128,44 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 	}
 	if(!bdesc->ar_count++)
 	{
-		bdesc->ar_next = autorelease_list;
-		autorelease_list = bdesc;
+		if(!autorelease_stack)
+			panic("%s() called with no current autorelease pool!", __FUNCTION__);
+		bdesc->ar_next = autorelease_stack->list;
+		autorelease_stack->list = bdesc;
 	}
 	return bdesc;
 }
 
-/* run the scheduled bdesc autoreleases */
-void bdesc_run_autorelease(void)
+/* push an autorelease pool onto the stack */
+int bdesc_autorelease_pool_push(void)
 {
-#if BDESC_DEBUG
-	if(autorelease_list)
-		Dprintf("<bdesc run_autorelease>\n");
-#endif
-	while(autorelease_list)
+	struct auto_pool * pool = malloc(sizeof(*pool));
+	if(!pool)
+		return -E_NO_MEM;
+	pool->list = NULL;
+	pool->next = autorelease_stack;
+	autorelease_stack = pool;
+	return 0;
+}
+
+/* pop an autorelease pool off the stack */
+void bdesc_autorelease_pool_pop(void)
+{
+	struct auto_pool * pool = autorelease_stack;
+	if(!pool)
 	{
-		bdesc_t * head = autorelease_list;
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
+		return;
+	}
+#if BDESC_DEBUG
+	if(pool->list)
+		Dprintf("<bdesc autorelease_pool pop>\n");
+#endif
+	while(pool->list)
+	{
+		bdesc_t * head = pool->list;
 		int i = head->ar_count;
-		autorelease_list = head->ar_next;
+		pool->list = head->ar_next;
 		head->ar_count = 0;
 		while(i-- > 0)
 		{
@@ -148,6 +173,8 @@ void bdesc_run_autorelease(void)
 			bdesc_release(&release);
 		}
 	}
+	autorelease_stack = pool->next;
+	free(pool);
 }
 
 int bdesc_blockno_compare(const void * a, const void * b)

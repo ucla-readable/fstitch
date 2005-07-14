@@ -516,7 +516,14 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 
 	printf("mirror_bd: disk looks good, syncing...\n");
 
-#warning This loop will allocate lots of blocks that will not be freed until the end of this run loop... fix with autorelease pools
+	/* push a new autorelease pool */
+	r = bdesc_autorelease_pool_push();
+	if(r < 0)
+	{
+		modman_dec_bd(newdevice, bd);
+		return r;
+	}
+	
 	for(i = 0; i < info->numblocks; i++)
 	{
 		bool synthetic;
@@ -525,10 +532,23 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		chdesc_t * head = NULL;
 		chdesc_t * tail = NULL;
 		
+		/* periodically pop/push the autorelease pool */
+		if(!(i & 255) && i)
+		{
+			bdesc_autorelease_pool_pop();
+			r = bdesc_autorelease_pool_push();
+			if(r < 0)
+			{
+				modman_dec_bd(newdevice, bd);
+				return r;
+			}
+		}
+		
 		source = CALL(info->bd[good_disk], read_block, i);
 		if(!source)
 		{
 			printf("mirror_bd: uh oh, erroring reading block %d on sync\n", i);
+			modman_dec_bd(newdevice, bd);
 			return -E_UNSPECIFIED;
 		}
 
@@ -536,6 +556,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		if(!destination)
 		{
 			printf("mirror_bd: uh oh, erroring getting block %d on sync\n", i);
+			modman_dec_bd(newdevice, bd);
 			return -E_UNSPECIFIED;
 		}
 		
@@ -544,6 +565,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		{
 			if(synthetic)
 				CALL(newdevice, cancel_block, i);
+			modman_dec_bd(newdevice, bd);
 			return r;
 		}
 		
@@ -551,16 +573,26 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		if(r < 0)
 		{
 			printf("mirror_bd: uh oh, erroring writing block %d on sync\n", i);
+			modman_dec_bd(newdevice, bd);
 			return r;
 		}
 	}
 	
+	/* pop the local autorelease pool */
+	bdesc_autorelease_pool_pop();
+	
 	r = CALL(info->bd[good_disk], sync, SYNC_FULL_DEVICE, NULL);
 	if(r < 0)
+	{
+		modman_dec_bd(newdevice, bd);
 		return r;
+	}
 	r = CALL(newdevice, sync, SYNC_FULL_DEVICE, NULL);
 	if(r < 0)
+	{
+		modman_dec_bd(newdevice, bd);
 		return r;
+	}
 
 	info->bd[info->bad_disk] = newdevice;
 	info->bad_disk = -1;

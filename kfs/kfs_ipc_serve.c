@@ -360,7 +360,6 @@ static void kis_mirror_bd(envid_t whom, const Skfs_mirror_bd_t * pg)
 		RETURN_IPC_INVAL;
 
 	val = (uint32_t) mirror_bd(disk0, disk1, pg->stride);
-	fprintf(STDERR_FILENO, "kfsd: warning: not constructing mirror_bd!\n");
 
 	RETURN_IPC;
 }

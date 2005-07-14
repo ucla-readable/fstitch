@@ -80,9 +80,9 @@ void sched_loop()
 	for (;;)
 	{
 		int32_t cur_ncs;
-		size_t fes_size = vector_size(fes);
-		size_t i;
+		size_t i, fes_size = vector_size(fes);
 		fn_entry_t * fe;
+		int r;
 
 		// Run cvs_ipc_serve each loop (which will sleep for a bit)
 		ipc_serve_run();
@@ -102,6 +102,8 @@ void sched_loop()
 		}
 
 		// Run bdesc autoreleasing at the end of the main loop
-		bdesc_run_autorelease();
+		bdesc_autorelease_pool_pop();
+		r = bdesc_autorelease_pool_push();
+		assert(r >= 0);
 	}
 }

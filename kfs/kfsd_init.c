@@ -79,6 +79,12 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
+	if ((r = bdesc_autorelease_pool_push()) < 0)
+	{
+		fprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %e\n");
+		kfsd_shutdown();
+	}
+	
 	//
 	// Setup uhfses
 
