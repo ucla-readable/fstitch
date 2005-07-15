@@ -1,4 +1,5 @@
 #include <inc/stdio.h>
+#include <inc/error.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
 
@@ -248,6 +249,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	return NULL;
 }
 
+#warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
@@ -480,6 +482,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	return 0;
 }
 
+#warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
 int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);

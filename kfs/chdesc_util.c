@@ -1,8 +1,10 @@
 #include <inc/stdio.h>
+#include <inc/error.h>
 #include <inc/malloc.h>
+#include <inc/string.h>
 
+#include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
-#include <kfs/chdesc_util.h>
 
 void chdesc_mark_graph(chdesc_t * root)
 {

@@ -28,9 +28,6 @@ struct open_file {
 };
 typedef struct open_file open_file_t;
 
-// "LEET0CFS" (because uhfs is leet)
-#define UHFS_MAGIC 0x1EE70CF5
-
 struct uhfs_state {
 	LFS_t * lfs;
 	hash_map_t * open_files;
@@ -258,7 +255,8 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 		return -E_NO_MEM;
 	}
 
-	if (mode & O_TRUNC)
+	/* HACK: don't do this for wholedisk LFS modules */
+	if (mode & O_TRUNC && OBJMAGIC(state->lfs) != WHOLEDISK_MAGIC)
 	{
 		r = uhfs_truncate(cfs, fid, 0);
 		if (r < 0)

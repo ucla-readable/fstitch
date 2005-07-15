@@ -1,3 +1,4 @@
+#include <inc/lib.h>
 #include <inc/malloc.h>
 #include <inc/md5.h>
 

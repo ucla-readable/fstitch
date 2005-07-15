@@ -1,4 +1,5 @@
 #include <inc/stdio.h>
+#include <inc/error.h>
 #include <inc/types.h>
 #include <inc/malloc.h>
 #include <inc/string.h>

@@ -3,6 +3,8 @@
 
 #include <inc/types.h>
 
+#include <kfs/magic.h>
+
 #define OBJECT(interface) struct object uniform; int (*__destroy_type)(interface * object)
 #define DECLARE(interface, type, method, args...) type (*_##method)(interface * object, ##args)
 

@@ -190,7 +190,7 @@ void	wait(envid_t env);
 int get_arg_idx(int argc, const char **argv, const char *arg_name);
 const char* get_arg_val(int argc, const char **argv, const char *arg_name);
 
-// sleep_cs.c
+// sleep.c
 int sleep(int32_t centisecs);
 
 // hwclock.c

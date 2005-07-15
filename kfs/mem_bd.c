@@ -1,8 +1,8 @@
 #include <inc/stdio.h>
+#include <inc/error.h>
 #include <inc/types.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
-#include <inc/fs.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -10,9 +10,12 @@
 #include <kfs/modman.h>
 #include <kfs/mem_bd.h>
 #include <kfs/revision.h>
+#include <kfs/josfs_base.h>
 
-/* FIXME: this file needs unified block cache support. However, the only thing
- * that will break without it will be /dev, so it is not done yet. */
+/* We can remove this part once we no longer format as JOS by default */
+#ifdef KUDOS_INC_FS_H
+#error inc/fs.h got included in mem_bd.c
+#endif
 
 struct mem_info {
 	uint8_t *blocks;
@@ -185,8 +188,8 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 {
 	struct mem_info * info;
 	BD_t * bd = malloc(sizeof(*bd));
-	struct File *f;
-	struct Super *s;
+	struct JOSFS_File *f;
+	struct JOSFS_Super *s;
 	int i;
 	
 	if (blocks < 1)
@@ -223,27 +226,25 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 
 	// Set up JOS fs on the mem device. in an ideal world this would
 	// be done w/ mkjosfs
-	s = (struct Super *) &info->blocks[blocksize];
-	s->s_magic = FS_MAGIC;
+	s = (struct JOSFS_Super *) &info->blocks[blocksize];
+	s->s_magic = JOSFS_FS_MAGIC;
 	s->s_nblocks = blocks;
 
 	f = &s->s_root;
 	strcpy(f->f_name, "/");
 	f->f_size = 0;
-	f->f_type = FTYPE_DIR;
-	for (i = 0; i < NDIRECT; i++)
+	f->f_type = JOSFS_TYPE_DIR;
+	for (i = 0; i < JOSFS_NDIRECT; i++)
 		f->f_direct[i] = 0;
 	f->f_indirect = 0;
 	f->f_dir = 0;
 
-	for (i = 0; i < blocks; i++) {
+	for (i = 0; i < blocks; i++)
 		mark_block_free(&info->blocks[blocksize * 2], i);
-	}
 	mark_block_used(&info->blocks[blocksize * 2], 0);
 	mark_block_used(&info->blocks[blocksize * 2], 1);
-	for (i = 0; i < ((blocks/blocksize) + ((blocks % blocksize) != 0)); i++) {
+	for (i = 0; i < ((blocks/blocksize) + ((blocks % blocksize) != 0)); i++)
 		mark_block_used(&info->blocks[blocksize * 2], i + 2);
-	}
 	// done setting up JOS fs
 
 	info->level = 0;

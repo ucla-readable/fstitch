@@ -36,9 +36,6 @@ struct open_file {
 };
 typedef struct open_file open_file_t;
 
-/* "TBLCLASS" */
-#define TABLE_CLASSIFIER_MAGIC 0x7B1C1A55
-
 struct table_classifier_state {
 	vector_t * mount_table;
 	hash_map_t * open_files;

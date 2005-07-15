@@ -1,4 +1,5 @@
 #include <inc/stdio.h>
+#include <inc/error.h>
 #include <inc/types.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
@@ -16,8 +17,6 @@
 #define disk1_good (info->bad_disk != 1)
 #define both_good (info->bad_disk == -1)
 #define disk_bad (info->bad_disk != -1)
-
-#define MIRROR_BD_MAGIC 0x888BDA1D
 
 /* The mirror device must be a barrier. We will use barrier_multiple_forward(). */
 

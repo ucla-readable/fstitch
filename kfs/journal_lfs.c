@@ -1,4 +1,6 @@
+#include <inc/lib.h>
 #include <inc/malloc.h>
+#include <inc/string.h>
 #include <inc/hash_map.h>
 
 #include <kfs/bdesc.h>
@@ -50,9 +52,6 @@ typedef struct journal_state journal_state_t;
 #define TRANSACTION_PERIOD 5
 #define TRANSACTION_SIZE (64*4096)
 static const char journal_filename[] = "/.journal";
-
-/* "SAFEDATA" */
-#define JOURNAL_MAGIC 0x5AFEDA7A
 
 #define CREMPTY     0
 #define CRSUBCOMMIT 1

@@ -1,3 +1,4 @@
+#include <inc/lib.h>
 #include <inc/stdio.h>
 #include <inc/types.h>
 #include <inc/malloc.h>
@@ -13,9 +14,6 @@
 
 #define RELEASE_PROGRESS_ENABLED
 #define RELEASE_PROGRESS_COLOR 9
-
-/* "JnlQ" */
-#define JOURNAL_QUEUE_MAGIC 0x4A6E6C51
 
 struct queue_info {
 	BD_t * bd;

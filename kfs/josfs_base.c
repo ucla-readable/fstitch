@@ -1,15 +1,26 @@
 /* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
 #include <inc/types.h>
+#include <inc/error.h>
 #include <inc/x86.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
 #include <inc/error.h>
 #include <inc/hash_set.h>
 
+/* textbar, sleep from inc/lib.h */
+int sleep(int32_t centisecs);
+int textbar_init(int use_line);
+int textbar_close(void);
+int textbar_set_progress(int progress, uint8_t color);
+
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/modman.h>
 #include <kfs/josfs_base.h>
+
+#ifdef KUDOS_INC_FS_H
+#error inc/fs.h got included in josfs_base.c
+#endif
 
 #define JOSFS_BASE_DEBUG 0
 #define JOSFS_BASE_DEBUG_FSCK 0
@@ -104,7 +115,7 @@ static int check_super(LFS_t * object)
 
 	numblocks = CALL(info->ubd, get_numblocks);
 
-	printf("JOS Filesystem size: %d blocks (%dMB)\n", super->s_nblocks, super->s_nblocks / (1024 * 1024 / BLKSIZE));
+	printf("JOS Filesystem size: %d blocks (%dMB)\n", super->s_nblocks, super->s_nblocks / (1024 * 1024 / JOSFS_BLKSIZE));
 	if (super->s_nblocks > numblocks) {
 		printf("josfs_base: file system is too large\n");
 		return -1;
@@ -278,7 +289,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 					s += r;
 			}
 
-			if (entry.d_type == TYPE_DIR) {
+			if (entry.d_type == JOSFS_TYPE_DIR) {
 				if ((r = hash_set_insert(hsdirs, temp_file)) < 0) {
 					printf("error with hash_set_insert()\n");
 					goto fsck_dir_cleanup;
@@ -645,7 +656,7 @@ static int walk_path(LFS_t * object, const char* path, JOSFS_File_t** pdir, JOSF
 		name[path - p] = '\0';
 		path = skip_slash(path);
 
-		if (dir->f_type != TYPE_DIR)
+		if (dir->f_type != JOSFS_TYPE_DIR)
 			return -E_NOT_FOUND;
 
 		if ((r = dir_lookup(object, dir, name, &file, dirb, index)) < 0) {
@@ -809,7 +820,7 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
 		if (indirect) {
 			uint32_t * j = (uint32_t *) indirect->ddesc->data;
-			for (i = JOSFS_NDIRECT; i < NINDIRECT; i++) {
+			for (i = JOSFS_NDIRECT; i < JOSFS_NINDIRECT; i++) {
 				if (!j[i])
 					break;
 				nblocks++;
@@ -874,7 +885,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	uint16_t namelen, reclen;
 
 	// Make sure it's a directory and we can read from it
-	if (f->file->f_type != TYPE_DIR)
+	if (f->file->f_type != JOSFS_TYPE_DIR)
 		return -E_NOT_DIR;
 
 	blockno = *basep / JOSFS_BLKFILES;
@@ -909,7 +920,17 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		entry->d_fileno += f->fullpath[i];
 	}
 
-	entry->d_type = dirfile->f_type;
+	switch(dirfile->f_type)
+	{
+		case JOSFS_TYPE_FILE:
+			entry->d_type = TYPE_FILE;
+			break;
+		case JOSFS_TYPE_DIR:
+			entry->d_type = TYPE_DIR;
+			break;
+		default:
+			entry->d_type = TYPE_INVAL;
+	}
 	entry->d_filesize = dirfile->f_size;
 	entry->d_reclen = reclen;
 	entry->d_namelen = namelen;
@@ -1485,7 +1506,17 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			return -E_NO_MEM;
 
 		*size = sizeof(uint32_t);
-		memcpy(*data, &(f->file->f_type), sizeof(uint32_t));
+		switch(f->file->f_type)
+		{
+			case JOSFS_TYPE_FILE:
+				*((uint32_t *) *data) = TYPE_FILE;
+				break;
+			case JOSFS_TYPE_DIR:
+				*((uint32_t *) *data) = TYPE_DIR;
+				break;
+			default:
+				*((uint32_t *) *data) = TYPE_INVAL;
+		}
 	}
 	else if (id == KFS_feature_freespace.id) {
 		int free_space;
@@ -1588,10 +1619,20 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		return 0;
 	}
 	else if (id == KFS_feature_filetype.id) {
+		uint32_t fs_type;
 		if (sizeof(uint32_t) != size)
 			return -E_INVAL;
-		if (*((uint32_t *) data) != TYPE_FILE && *((uint32_t *) data) != TYPE_DIR)
-			return -E_INVAL;
+		switch(*((uint32_t *) data))
+		{
+			case TYPE_FILE:
+				fs_type = JOSFS_TYPE_FILE;
+				break;
+			case TYPE_DIR:
+				fs_type = JOSFS_TYPE_DIR;
+				break;
+			default:
+				return -E_INVAL;
+		}
 
 		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
@@ -1602,7 +1643,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		oldhead = *head;
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_type;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), data, head, tail)) < 0)
+		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), &fs_type, head, tail)) < 0)
 			return r;
 
 		if (oldhead)
@@ -1616,7 +1657,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		if (r < 0)
 			return r;
 
-		f->file->f_type = *((uint32_t *) data);
+		f->file->f_type = fs_type;
 		return 0;
 	}
 

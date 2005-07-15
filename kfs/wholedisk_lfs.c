@@ -9,9 +9,6 @@
 #include <kfs/modman.h>
 #include <kfs/wholedisk_lfs.h>
 
-// "WOLEDISC"
-#define WHOLEDISK_MAGIC 0x301ED15C
-
 struct wd_info {
 	BD_t * bd;
 	uint32_t blocksize;

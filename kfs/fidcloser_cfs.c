@@ -28,9 +28,6 @@
 // mupltiple fidclosers aren't something we want. so possibility 2 it is:
 static bool fidcloser_cfs_exists = 0;
 
-// "FIDCLOSE"
-#define FIDCLOSER_MAGIC 0xF1DC105E
-
 struct open_file {
 	int fid;
 	const struct Fd * page;

@@ -1,3 +1,4 @@
+#include <inc/string.h>
 #include <inc/vector.h>
 #include <inc/hash_map.h>
 #include <inc/assert.h>

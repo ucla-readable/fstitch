@@ -1,3 +1,5 @@
+#include <inc/error.h>
+#include <inc/string.h>
 #include <inc/hash_map.h>
 #include <inc/malloc.h>
 
@@ -13,9 +15,6 @@
 #else
 #define Dprintf(x...)
 #endif
-
-// "FIDPROTR"
-#define FIDPROTECTOR_MAGIC 0xF1D78078
 
 struct open_file {
 	int fid;

@@ -9,7 +9,6 @@
 
 #include <inc/types.h>
 #include <inc/assert.h>
-#include <inc/lib.h>
 
 /* SVID2/XPG mallinfo structure */
 struct mallinfo {

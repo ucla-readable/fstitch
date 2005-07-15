@@ -1,3 +1,4 @@
+#include <inc/lib.h>
 #include <inc/types.h>
 #include <inc/x86.h>
 #include <inc/malloc.h>

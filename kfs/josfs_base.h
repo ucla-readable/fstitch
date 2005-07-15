@@ -47,6 +47,9 @@ struct JOSFS_File {
 	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4*JOSFS_NDIRECT - 4 - sizeof(struct JOSFS_File*)];
 };
 
+#define JOSFS_TYPE_FILE 0
+#define JOSFS_TYPE_DIR 1
+
 #define JOSFS_FS_MAGIC	0x4A0530AE	  // related vaguely to 'J\0S!'
 #define JOSFS_BLKFILES       (JOSFS_BLKSIZE / sizeof(struct JOSFS_File))
 

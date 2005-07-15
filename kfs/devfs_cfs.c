@@ -26,9 +26,6 @@ struct bd_entry {
 };
 typedef struct bd_entry bd_entry_t;
 
-/* "BDACCESS" */
-#define DEVFS_MAGIC 0xBDACCE55
-
 struct devfs_state {
 	vector_t * bd_table;
 	hash_map_t * fid_map;

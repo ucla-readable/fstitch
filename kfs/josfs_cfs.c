@@ -23,9 +23,6 @@
 #define Dprintf(x...)
 #endif
 
-// "JOSCFSMG"
-#define JOSFS_CFS_MAGIC 0x705CF535
-
 struct open_file {
 	int fid;
 	int fd;
@@ -228,9 +225,19 @@ static int josfs_cfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes,
 		}
 
 		// Store the dirent into *ent
+		switch(f.f_type)
+		{
+			case FTYPE_REG:
+				ent->d_type = TYPE_FILE;
+				break;
+			case FTYPE_DIR:
+				ent->d_type = TYPE_DIR;
+				break;
+			default:
+				ent->d_type = TYPE_INVAL;
+		}
 		ent->d_filesize = f.f_size;
 		ent->d_reclen = reclen;
-		ent->d_type = f.f_type;
 		ent->d_namelen = namelen;
 		strncpy(ent->d_name, f.f_name, sizeof(ent->d_name));
 
@@ -348,7 +355,7 @@ static int josfs_cfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, s
 		if (!*data)
 			return -E_NO_MEM;
 		*size = sizeof(s.st_isdir);
-		**(int **) data = s.st_isdir;
+		**(int **) data = s.st_isdir ? TYPE_DIR : TYPE_FILE;
 	}
 	else
 		return -E_INVAL;

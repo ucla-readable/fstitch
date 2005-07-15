@@ -1,3 +1,4 @@
+#include <inc/lib.h>
 #include <inc/vector.h>
 #include <inc/error.h>
 #include <inc/malloc.h>

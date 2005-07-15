@@ -59,6 +59,7 @@
 #include <inc/malloc.h>
 #include <inc/types.h>
 #include <inc/stdio.h>
+#include <inc/lib.h>
 
 /* When tracking down memory leaks it may be helpful to track where memory is
  * allocated, how much is allocated, and the address of the allocated memory and
