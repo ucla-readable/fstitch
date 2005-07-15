@@ -18,10 +18,11 @@ extern const feature_t KFS_feature_freespace;
 extern const feature_t KFS_feature_file_lfs;
 extern const feature_t KFS_feature_file_lfs_name;
 
-/* filetype values */
-#define TYPE_FILE 0
-#define TYPE_DIR 1
-#define TYPE_SYMLINK 2
-#define TYPE_DEVICE 3
+/* filetype values - large to avoid conflict with on-disk values */
+#define TYPE_FILE    0x80
+#define TYPE_DIR     0x81
+#define TYPE_SYMLINK 0x82
+#define TYPE_DEVICE  0x83
+#define TYPE_INVAL   (-1)
 
 #endif /* __KUDOS_KFS_FEATURE_H */
