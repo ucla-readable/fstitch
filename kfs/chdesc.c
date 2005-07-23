@@ -3,6 +3,7 @@
 #include <inc/malloc.h>
 #include <inc/string.h>
 
+#include <kfs/debug.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 
@@ -20,6 +21,7 @@ static int ensure_bdesc_has_changes(bdesc_t * block)
 	block->ddesc->changes = malloc(sizeof(*block->ddesc->changes));
 	if(!block->ddesc->changes)
 		return -E_NO_MEM;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, block->ddesc->changes, NULL, NULL);
 	
 	block->ddesc->changes->owner = NULL;
 	block->ddesc->changes->block = NULL;
@@ -32,6 +34,7 @@ static int ensure_bdesc_has_changes(bdesc_t * block)
 	
 	if(chdesc_weak_retain(block->ddesc->changes, &block->ddesc->changes))
 	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, block->ddesc->changes);
 		free(block->ddesc->changes);
 		block->ddesc->changes = NULL;
 		return -E_NO_MEM;
@@ -49,6 +52,7 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	meta = malloc(sizeof(*meta));
 	if(!meta)
 		return -E_NO_MEM;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, dependent, dependency);
 	meta->desc = dependency;
 	meta->next = dependent->dependencies;
 	dependent->dependencies = meta;
@@ -57,11 +61,13 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	meta = malloc(sizeof(*meta));
 	if(!meta)
 	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, dependent, dependency);
 		meta = dependent->dependencies;
 		dependent->dependencies = meta->next;
 		free(meta);
 		return -E_NO_MEM;
 	}
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, dependency, dependent);
 	meta->desc = dependent;
 	meta->next = dependency->dependents;
 	dependency->dependents = meta;
@@ -76,6 +82,8 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	uint16_t r_start, r_len;
 	uint16_t o_start, o_len;
 	uint32_t start, end, tag;
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_ATTACH, recent, original);
 	
 	/* if either is a NOOP chdesc, they don't conflict */
 	if(recent->type == NOOP || original->type == NOOP)
@@ -128,6 +136,8 @@ static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, b
 	chmetadesc_t * scan;
 	const chdesc_t * deps = block->ddesc->changes;
 	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block, slip_under);
+	
 	if(!deps)
 		return 0;
 	
@@ -170,6 +180,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, block, owner);
 	
 	chdesc->owner = owner;
 	chdesc->block = block;
@@ -210,6 +221,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
 	
 	chdesc->owner = owner;
 	chdesc->block = block;
@@ -299,6 +311,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
 		
 		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
 			goto destroy;
@@ -411,6 +425,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
+		
 		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
 			goto destroy;
 		
@@ -521,6 +537,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
+		
 		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
 			goto destroy;
 		
@@ -600,6 +618,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, dependent, CHDESC_MARKED);
 	dependent->flags |= CHDESC_MARKED;
 	for(meta = dependent->dependencies; meta; meta = meta->next)
 	{
@@ -661,8 +680,12 @@ static void chdesc_meta_remove(chmetadesc_t ** list, chdesc_t * chdesc)
 
 void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, dependent, dependency);
 	chdesc_meta_remove(&dependent->dependencies, dependency);
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, dependency, dependent);
 	chdesc_meta_remove(&dependency->dependents, dependent);
+	
 	if(dependent->type == NOOP && !dependent->dependencies)
 		/* we just removed the last dependency of a NOOP chdesc, so free it */
 		chdesc_destroy(&dependent);
@@ -690,6 +713,7 @@ int chdesc_apply(chdesc_t * chdesc)
 			return -E_INVAL;
 	}
 	chdesc->flags &= ~CHDESC_ROLLBACK;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
 	return 0;
 }
 
@@ -715,6 +739,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 			return -E_INVAL;
 	}
 	chdesc->flags |= CHDESC_ROLLBACK;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ROLLBACK, chdesc);
 	return 0;
 }
 
@@ -726,7 +751,11 @@ int chdesc_satisfy(chdesc_t * chdesc)
 		chmetadesc_t * meta = chdesc->dependents;
 		chdesc_t * dependent = meta->desc;
 		chdesc->dependents = meta->next;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, chdesc, meta->desc);
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->desc, chdesc);
 		chdesc_meta_remove(&meta->desc->dependencies, chdesc);
+		
 		free(meta);
 		if(dependent->type == NOOP && !dependent->dependencies)
 			/* we just removed the last dependency of a NOOP chdesc, so free it */
@@ -746,6 +775,7 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 		ref->desc = location;
 		ref->next = chdesc->weak_refs;
 		chdesc->weak_refs = ref;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, location);
 	}
 	
 	if(*location && *location != chdesc)
@@ -773,6 +803,7 @@ void chdesc_weak_forget(chdesc_t ** location)
 		}
 		*prev = scan->next;
 		free(scan);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, *location, location);
 	}
 }
 
@@ -784,6 +815,7 @@ void chdesc_weak_release(chdesc_t ** location)
 
 static void chdesc_weak_collect(chdesc_t * chdesc)
 {
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_WEAK_COLLECT, chdesc);
 	while(chdesc->weak_refs)
 	{
 		/* in theory, this is all that is necessary... */
@@ -806,6 +838,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	if((*chdesc)->flags & CHDESC_FREEING)
 		return;
 	(*chdesc)->flags |= CHDESC_FREEING;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, *chdesc);
 	
 	if((*chdesc)->dependents)
 		chdesc_satisfy(*chdesc);

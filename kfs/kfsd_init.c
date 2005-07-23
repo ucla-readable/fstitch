@@ -22,6 +22,7 @@
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
+#include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 
 #define USE_THIRD_LEG 0 // 1 -> mount josfs_cfs at '/'
@@ -60,6 +61,12 @@ int kfsd_init(void)
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidcloser = NULL;
 	int r;
+
+	if((r = KFS_DEBUG_INIT()) < 0)
+	{
+		fprintf(STDERR_FILENO, "kfs_debug_init: %e\n", r);
+		kfsd_shutdown();
+	}
 
 	if((r = modman_init()) < 0)
 	{

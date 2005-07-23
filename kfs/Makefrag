@@ -22,6 +22,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/md_bd.o \
 			$(OBJDIR)/kfs/mirror_bd.o \
 			$(OBJDIR)/kfs/loop_bd.o \
+			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/journal_lfs.o \
@@ -37,7 +38,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o \
 			$(OBJDIR)/kfs/kfsd_init.o \
-			$(OBJDIR)/kfs/mem_bd.o
+			$(OBJDIR)/kfs/debug.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld
 	@echo + ld $@

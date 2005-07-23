@@ -3,6 +3,7 @@
 #include <inc/malloc.h>
 #include <inc/string.h>
 
+#include <kfs/debug.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 
@@ -10,6 +11,7 @@ void chdesc_mark_graph(chdesc_t * root)
 {
 	chmetadesc_t * meta;
 	root->flags |= CHDESC_MARKED;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, root, CHDESC_MARKED);
 	for(meta = root->dependencies; meta; meta = meta->next)
 		if(!(meta->desc->flags & CHDESC_MARKED))
 			chdesc_mark_graph(meta->desc);
@@ -19,6 +21,7 @@ void chdesc_unmark_graph(chdesc_t * root)
 {
 	chmetadesc_t * meta;
 	root->flags &= ~CHDESC_MARKED;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, root, CHDESC_MARKED);
 	for(meta = root->dependencies; meta; meta = meta->next)
 		if(meta->desc->flags & CHDESC_MARKED)
 			chdesc_unmark_graph(meta->desc);
@@ -35,6 +38,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 		while(scan)
 		{
 			chdesc_t * chdesc = scan->desc;
+#warning this should not push down rolled-back chdescs
 			if(chdesc->owner == current_bd)
 			{
 				chdesc->owner = target_bd;
@@ -134,6 +138,7 @@ void chdesc_finish_move(bdesc_t * destination)
 		chmetadesc_t * scan = destination->ddesc->changes->dependencies;
 		while(scan)
 		{
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, scan->desc, CHDESC_MOVED);
 			scan->desc->flags &= ~CHDESC_MOVED;
 			scan = scan->next;
 		}
@@ -223,8 +228,14 @@ int chdesc_detach_dependencies(chdesc_t * chdesc)
 	{
 		chmetadesc_t * meta = chdesc->dependencies->next;
 		chdesc->dependencies->next = meta->next;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, chdesc, meta->desc);
+		
 		meta->next = tail->dependencies;
 		tail->dependencies = meta;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, tail, meta->desc);
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, meta->desc, chdesc);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, meta->desc, tail);
 		for(meta = meta->desc->dependents; meta; meta = meta->next)
 			if(meta->desc == chdesc)
 			{

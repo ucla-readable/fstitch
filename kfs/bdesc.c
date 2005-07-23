@@ -7,14 +7,7 @@
 #include <kfs/bd.h>
 #include <kfs/blockman.h>
 #include <kfs/bdesc.h>
-
-#define BDESC_DEBUG 0
-
-#if BDESC_DEBUG
-#define Dprintf(x...) printf(x)
-#else
-#define Dprintf(x...)
-#endif
+#include <kfs/debug.h>
 
 struct auto_pool {
 	bdesc_t * list;
@@ -27,7 +20,6 @@ static struct auto_pool * autorelease_stack = NULL;
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
-	Dprintf("<bdesc 0x%08x alloc>\n", bdesc);
 	if(!bdesc)
 		return NULL;
 	bdesc->ddesc = malloc(sizeof(*bdesc->ddesc));
@@ -36,7 +28,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 		free(bdesc);
 		return NULL;
 	}
-	Dprintf("<bdesc 0x%08x alloc data 0x%08x>\n", bdesc, bdesc->ddesc);
 	bdesc->ddesc->data = malloc(length);
 	if(!bdesc->ddesc->data)
 	{
@@ -44,6 +35,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 		free(bdesc);
 		return NULL;
 	}
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number);
 	bdesc->number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
@@ -60,9 +52,9 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
-	Dprintf("<bdesc 0x%08x alloc/wrap ddesc 0x%08x>\n", bdesc, ddesc);
 	if(!bdesc)
 		return NULL;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number);
 	bdesc->ddesc = ddesc;
 	bdesc->number = number;
 	bdesc->ref_count = 1;
@@ -78,33 +70,33 @@ bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number)
 	return bdesc_alloc_wrap(original->ddesc, number);
 }
 
-/* increase the reference count of a bdesc, copying it if it is currently translated (but sharing the data) */
+/* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
-	Dprintf("<bdesc 0x%08x retain>\n", bdesc);
 	bdesc->ref_count++;
 	bdesc->ddesc->ref_count++;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc->ddesc, bdesc->ref_count, bdesc->ar_count, bdesc->ddesc->ref_count);
 	return bdesc;
 }
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc)
 {
-	Dprintf("<bdesc 0x%08x release>\n", *bdesc);
 	(*bdesc)->ddesc->ref_count--;
 	(*bdesc)->ref_count--;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ddesc->ref_count);
 	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
 	{
-		Dprintf("<bdesc 0x%08x negative reference count!>\n", *bdesc);
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): block 0x%08x had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
 		(*bdesc)->ref_count = (*bdesc)->ar_count;
 	}
 	if(!(*bdesc)->ref_count)
 	{
-		Dprintf("<bdesc 0x%08x free>\n", *bdesc);
+		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, *bdesc, (*bdesc)->ddesc);
 		if(!(*bdesc)->ddesc->ref_count)
 		{
-			Dprintf("<bdesc 0x%08x free data 0x%08x>\n", *bdesc, (*bdesc)->ddesc);
+			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->changes)
 				fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			if((*bdesc)->ddesc->manager)
@@ -121,7 +113,6 @@ void bdesc_release(bdesc_t ** bdesc)
 /* schedule the bdesc to be released at the end of the current run loop */
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 {
-	Dprintf("<bdesc 0x%08x autorelease>\n", bdesc);
 	if(bdesc->ar_count == bdesc->ref_count)
 	{
 		fprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc 0x%08x autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
@@ -134,6 +125,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 		bdesc->ar_next = autorelease_stack->list;
 		autorelease_stack->list = bdesc;
 	}
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AUTORELEASE, bdesc, bdesc->ddesc, bdesc->ref_count, bdesc->ar_count, bdesc->ddesc->ref_count);
 	return bdesc;
 }
 
@@ -146,6 +138,7 @@ int bdesc_autorelease_pool_push(void)
 	pool->list = NULL;
 	pool->next = autorelease_stack;
 	autorelease_stack = pool;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_PUSH, bdesc_autorelease_pool_depth());
 	return 0;
 }
 
@@ -158,10 +151,7 @@ void bdesc_autorelease_pool_pop(void)
 		fprintf(STDERR_FILENO, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
 		return;
 	}
-#if BDESC_DEBUG
-	if(pool->list)
-		Dprintf("<bdesc autorelease_pool pop>\n");
-#endif
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_POP, bdesc_autorelease_pool_depth() - 1);
 	while(pool->list)
 	{
 		bdesc_t * head = pool->list;
