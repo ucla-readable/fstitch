@@ -57,6 +57,9 @@ void bdesc_autorelease_pool_pop(void);
 /* get the number of autorelease pools on the stack */
 int bdesc_autorelease_pool_depth(void);
 
+/* scan the autorelease pool stack and return the total ar_count of a ddesc */
+int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc);
+
 /* compares two bdescs' blocknos for qsort */
 int bdesc_blockno_compare(const void * a, const void * b);
 
