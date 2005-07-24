@@ -147,7 +147,7 @@ static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, b
 		/* skip moved chdescs - they have just been added to this block
 		 * by chdesc_move() and already have proper overlap dependency
 		 * information with respect to the chdesc now arriving */
-		if(!(scan->desc->flags & CHDESC_MOVED))
+		if(scan->desc->flags & CHDESC_MOVED)
 			continue;
 		/* "Slip Under" allows us to create change descriptors
 		 * underneath existing ones. (That is, existing chdescs will
