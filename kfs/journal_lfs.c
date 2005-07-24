@@ -22,6 +22,73 @@
 #define Dprintf(x...)
 #endif
 
+/*
+ * precondition: CHDESC_PRMARKED is set to 0 for each chdesc in graph.
+ *
+ * postconditions: CHDESC_PRMAKRED is set to 1 for each chdesc in graph.
+ *
+ * printf() out all the dependencies.
+ *
+ * Imported from wb_cache_bd.c (currently not in the build).
+ */
+static void
+print_chdescs(chdesc_t *ch, int num)
+{
+	chmetadesc_t *p;
+	int i;
+
+	for (i = 0; i < num; i++)
+		printf("  ");
+	switch (ch->type) {
+	case BIT:
+		printf("ch: 0x%08x BIT dist %d block %d off 0x%x",
+			   ch, ch->distance,
+			   ch->block->number, ch->bit.offset);
+		break;
+	case BYTE:
+		printf("ch: 0x%08x BYTE dist %d block %d off 0x%x len %d",
+			   ch, ch->distance, ch->block->number,
+			   ch->byte.offset, ch->byte.length);
+		break;
+	case NOOP:
+		printf("ch: 0x%08x NOOP dist %d", ch, ch->distance);
+		break;
+	default:
+		printf("ch: 0x%08x UNKNOWN TYPE!! type: 0x%x", ch, ch->type);
+	}
+
+	if (ch->flags & CHDESC_PRMARKED) {
+		printf(" (repeat)\n");
+		return;
+	} else
+		printf("\n");
+	ch->flags |= CHDESC_PRMARKED;
+
+	p = ch->dependencies;
+	while (p) {
+		print_chdescs(p->desc, num+1);
+		p = p->next;
+	}
+}
+
+/*
+ * precondition: CHDESC_PRMARKED is set to 1 for each chdesc in graph.
+ * postcondition: CHDESC_PRMARKED is set to 0 for each chdesc in graph.
+ *
+ * Imported from wb_cache_bd.c (currently not in the build).
+ */
+static void
+reset_prmarks(chdesc_t *ch)
+{
+	chmetadesc_t *p;
+	if (!(ch->flags & CHDESC_PRMARKED)) return;
+	ch->flags &= ~CHDESC_PRMARKED;
+	p = ch->dependencies;
+	while (p) {
+		reset_prmarks(p->desc);
+		p = p->next;
+	}
+}
 
 struct journal_state {
 	BD_t * queue; // the journal_queue_bd
@@ -250,9 +317,6 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	chdesc_t * fsdata_chdescs;
 	commit_record_t commit;
 	size_t commit_offset;
-	// lfs_head/tail used to check that no metadata changes upon journal writes
-	chdesc_t * lfs_head;
-	chdesc_t * lfs_tail;
 	chdesc_t * prev_head;
 	chdesc_t * tail;
 	BD_t * journal_bd = CALL(state->journal, get_blockdev);
@@ -285,23 +349,27 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 
 	for (i=0; i < ndatabdescs; i++, file_offset += state->blocksize)
 	{
-		uint32_t bdesc_number = CALL(state->journal, get_file_block_num, state->jfdesc, file_offset);
-		assert(bdesc_number != -1);
-		bdesc = bdesc_alloc(bdesc_number, state->blocksize);
+		//uint32_t bdesc_number = CALL(state->journal, get_file_block_num, state->jfdesc, file_offset);
+		//assert(bdesc_number != -1);
+		//bdesc = bdesc_alloc(bdesc_number, state->blocksize);
+		bdesc = CALL(state->journal, get_file_block, state->jfdesc, file_offset);
 		assert(bdesc); // TODO: handle error
 
 		// TODO: does journal data need to depend on anything, in case of small cache?
 		prev_head = NULL;
+/*
 		r = chdesc_create_full(bdesc, journal_bd, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
+*/
+
+		r = CALL(state->journal, write_block, bdesc, 0, data_bdescs[i]->ddesc->length, data_bdescs[i]->ddesc->data, &prev_head, &tail);
+		assert(r >= 0); // TODO: handle error
+		//assert(!lfs_head && !lfs_tail);
+
 		r = chdesc_add_depend(jdata_chdescs, prev_head);
 		assert(r >= 0); // TODO: handle error
 
-		lfs_head = NULL;
-		lfs_tail = NULL;
-		r = CALL(state->journal, write_block, bdesc, 0, data_bdescs[i]->ddesc->length, data_bdescs[i]->ddesc->data, &lfs_head, &lfs_tail);
-		assert(r >= 0); // TODO: handle error
-		//assert(!lfs_head && !lfs_tail);
+		// TODO: push down/move jdata_chdescs too?
 
 #ifdef JOURNAL_PROGRESS_ENABLED
 		if (++state->njbdescs_released >= state->disp_prev + state->disp_period)
@@ -342,23 +410,23 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 			assert(bdesc); // TODO: handle error
 
 			prev_head = NULL;
+/*
 			r = chdesc_create_full(bdesc, journal_bd, num_block, &prev_head, &tail);
-			assert(r >= 0); // TODO: handle error
-			// this chdesc_add_depend() will often segfault if we don't retain jdata_chdescs
-			r = chdesc_add_depend(jdata_chdescs, prev_head);
 			assert(r >= 0); // TODO: handle error
 
 			// retain for commit record
 			r = chdesc_weak_retain(prev_head, &prev_head);
 			assert(r >= 0); // TODO: handle error
-
-			lfs_head = NULL;
-			lfs_tail = NULL;
-			r = CALL(state->journal, write_block, bdesc, 0, state->blocksize, num_block, &lfs_head, &lfs_tail);
+*/
+			r = CALL(state->journal, write_block, bdesc, 0, state->blocksize, num_block, &prev_head, &tail);
 			assert(r >= 0); // TODO: handle error
 			//assert(!lfs_head && !lfs_tail);
 
+			r = chdesc_add_depend(jdata_chdescs, prev_head);
+			assert(r >= 0); // TODO: handle error
+/*
 			chdesc_weak_forget(&prev_head);
+*/
 		}
 
 		free(num_block);
@@ -378,35 +446,44 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	assert(bdesc); // TODO: handle error
 
 	prev_head = jdata_chdescs;
+/*
 	r = chdesc_create_byte(bdesc, journal_bd, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
 
 	// retain for creating fsdata_chdescs
 	r = chdesc_weak_retain(prev_head, &prev_head);
 	assert(r >= 0); // TODO: handle error
+*/
 
-	chdesc_weak_release(&jdata_chdescs);
-
-	lfs_head = NULL;
-	lfs_tail = NULL;
 	// this single line atomically commits this transaction to disk
-	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &lfs_head, &lfs_tail);
+	r = CALL(state->journal, write_block, bdesc, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
 	//assert(!lfs_head && !lfs_tail);
 
-	chdesc_t * commit_chdesc = prev_head;
-	chdesc_weak_forget(&prev_head);
+	chdesc_weak_release(&jdata_chdescs);
 
+	chdesc_t * commit_chdesc = prev_head;
+/*
+	chdesc_weak_forget(&prev_head);
+*/
 	// create fsdata_chdescs
 	for (i=0; i < ndatabdescs; i++)
 	{
+/*
 		prev_head = commit_chdesc;
+
 		// TODO: this copies each bdescs' data. All we really want to
 		// to make dependencies:
 		r = chdesc_create_full(data_bdescs[i], fs_bd, data_bdescs[i]->ddesc->data, &prev_head, &tail);
 		assert(r >= 0); // TODO: handle error
 		r = chdesc_add_depend(fsdata_chdescs, prev_head);
 		assert(r >= 0); // TODO: handle error
+*/
+/*
+		To replace the previous:
+		- add commit_chdesc as dependency for data_bdescs[i] 
+		- add data_bdescs[i] as dependency for fsdata_chdescs
+*/
 	}
 
 
@@ -418,18 +495,25 @@ static int transaction_stop_slot(journal_state_t * state, uint16_t slot, uint16_
 	assert(bdesc); // TODO: handle error
 
 	prev_head = fsdata_chdescs;
+/*
 	r = chdesc_create_byte(bdesc, fs_bd, 0, sizeof(commit), &commit, &prev_head, &tail);
 	assert(r >= 0); // TODO: handle error
-
+*/
+/*
 	r = chdesc_weak_retain(prev_head, &state->commit_chdesc[slot]);
 	assert(r >= 0); // TODO: handle error
+*/
+	state->commit_chdesc[slot] = NULL;
 
 	// save to later mark as invalidated
 	crh->bdesc = bdesc; // no need to retain since we've not written it
 	crh->cr = &commit;
 	crh->chdesc = NULL;
+/*
 	r = chdesc_weak_retain(prev_head, &crh->chdesc);
 	assert(r >= 0); // TODO: handle error
+*/
+	crh->chdesc = NULL;
 
 	return 0;
 }
@@ -463,16 +547,18 @@ static int transaction_stop(journal_state_t * state)
 	Dprintf("%s()\n", __FUNCTION__);
 	bdesc_t ** data_bdescs;
 	size_t ndatabdescs;
+#ifndef JOURNAL_QUEUE_VECTOR
 	bdesc_t * bdesc;
+#endif
 	size_t i;
 	int r;
-
 
 	//
 	// Sort the data_bdescs, allowing for faster disk access.
 	// TODO: it'd be nice if this also sorted journal_queue's copy.
 
 	{
+#ifndef JOURNAL_QUEUE_VECTOR
 		const hash_map_t * data_bdescs_map; // blockno -> bdesc_t *
 		hash_map_it_t it;
 
@@ -498,9 +584,26 @@ static int transaction_stop(journal_state_t * state)
 		assert(i == ndatabdescs);
 
 		qsort(data_bdescs, ndatabdescs, sizeof(*data_bdescs), bdesc_blockno_compare);
+#else
+		const vector_t * data_bdescs_vec = journal_queue_blocklist(state->queue);
+		if (!data_bdescs_vec)
+			return 0;
+
+		ndatabdescs = vector_size(data_bdescs_vec);
+
+		if (!ndatabdescs)
+			return 0;
+
+		data_bdescs = malloc(ndatabdescs * sizeof(*data_bdescs));
+		if (!data_bdescs)
+			return -E_NO_MEM;
+
+		for (i=0; i < ndatabdescs; i++)
+			data_bdescs[i] = vector_elt((vector_t *) data_bdescs_vec, i);
+#endif
 	}
 
-
+#ifdef DO_JOURNALING
 	//
 	// Perform the journaling.
 	// When breaking this transaction into subtransactions, link them
@@ -581,7 +684,119 @@ static int transaction_stop(journal_state_t * state)
 	r = textbar_close();
 	assert(r >= 0);
 #endif
+#endif // DO_JOURNALING
 
+	// Remove all inter-ddesc dependencies to allow the journal_queue to write blocks
+	// in an arbitrary order.
+	// This code will later be enhanced to do more useful, journaling dependency manipulation,
+	// but this inter-ddesc dep removeal is a solid first step.
+
+	{
+		Dprintf("//== BEGIN REMOVE EXTERN DEPS\n");
+		const hash_map_t * map = journal_queue_blocklist(state->queue);
+		hash_map_it_t it;
+		hash_map_it_init(&it, (hash_map_t *) map);
+		bdesc_t * bdesc;
+
+		while ((bdesc = hash_map_val_next(&it)))
+		{
+			chdesc_t * changes = bdesc->ddesc->changes;
+			chmetadesc_t * scan;
+			size_t deps_len = 0;
+
+			Dprintf("/--- %d before\n", bdesc->number);
+#if JOURNAL_DEBUG
+			print_chdescs(bdesc->ddesc->changes, 0);
+			reset_prmarks(bdesc->ddesc->changes);
+#endif
+
+			for (scan = changes->dependencies; scan; scan = scan->next)
+			{
+				if (bdesc->ddesc != scan->desc->block->ddesc)
+				{
+					if (state->queue == scan->desc->owner)
+						assert(0);
+					else
+						Dprintf("+");
+				}
+				else
+				{
+					chmetadesc_t * s;
+					for (s = scan->desc->dependencies; s; s = s->next)
+					{
+						if (bdesc->ddesc != s->desc->block->ddesc)
+						{
+							assert(scan->desc->owner); // haven't thought this case out
+							if (state->queue == scan->desc->owner)
+								deps_len++;
+							else
+								Dprintf("=");
+						}
+					}
+				}
+			}
+
+			Dprintf("= %d deps to remove\n", deps_len);
+			deps_len *= 2;
+			chdesc_t ** deps = malloc(deps_len*sizeof(*deps));
+			assert(deps);
+			memset(deps, 0, deps_len*sizeof(*deps)); // zero for chdesc_weak_retain()
+			size_t i = 0;
+
+			for (scan = changes->dependencies; scan; scan = scan->next)
+			{
+				if (bdesc->ddesc != scan->desc->block->ddesc)
+				{
+					if (state->queue == scan->desc->owner)
+						assert(0);
+				}
+				else
+				{
+					chmetadesc_t * s;
+					for (s = scan->desc->dependencies; s; s = s->next)
+					{
+						if (bdesc->ddesc != s->desc->block->ddesc)
+						{
+							if (state->queue == scan->desc->owner)
+							{
+								Dprintf("remember chdesc 0x%08x <- 0x%08x, block %d\n", s->desc, scan->desc, s->desc->block->number);
+								assert(i+1 < deps_len);
+								r = chdesc_weak_retain(scan->desc, &deps[i++]);
+								assert(r >= 0);
+								r = chdesc_weak_retain(s->desc, &deps[i++]);
+								assert(r >= 0);
+							}
+							else
+								Dprintf("not remembering 0x%08x <- 0x%08x, block %d\n", s->desc, scan->desc, s->desc->block->number);
+						}
+					}
+				}
+			}
+			assert(i == deps_len);
+
+			for (i=0; i < deps_len && changes; i += 2)
+			{
+				chdesc_weak_forget(&deps[i]);
+				chdesc_weak_forget(&deps[i+1]);
+				if (deps[i] && deps[i+1])
+				{
+					Dprintf("remove chdesc 0x%08x <- 0x%08x, block %d\n", deps[i+1], deps[i], deps[i+1]->block->number);
+					chdesc_remove_depend(deps[i], deps[i+1]);
+				}
+				else
+				{
+					Dprintf("not removing, dept 0x%08x, depy 0x%08x\n", deps[i], deps[i+1]);
+				}
+			}
+			free(deps);
+
+			Dprintf("|--- %d removed\n", bdesc->number);
+#if JOURNAL_DEBUG
+			print_chdescs(bdesc->ddesc->changes, 0);
+			reset_prmarks(bdesc->ddesc->changes);
+#endif
+		}
+	}
 
 	//
 	// Release the data bdescs and mark the commit records as invalidated
@@ -593,13 +808,16 @@ static int transaction_stop(journal_state_t * state)
 	r = journal_queue_release(state->queue);
 	if (r < 0)
 	{
+/*
 		free(data_bdescs);
 		for (i=0; i < num_subtransactions; i++)
-				 chdesc_weak_release(&chrs[i].chdesc);
+			chdesc_weak_release(&chrs[i].chdesc);
 		free(chrs);
+*/
+		printf("%s:%s(): journal_queue_release(): %e\n", __FILE__, __FUNCTION__, r);
 		return r;
 	}
-
+/*
 	for (i=0; i < num_subtransactions; i++)
 	{
 		if (i+1 < num_subtransactions)
@@ -609,7 +827,7 @@ static int transaction_stop(journal_state_t * state)
 		}
 		chdesc_weak_release(&chrs[i].chdesc);
 
-		chdesc_t * lfs_head = NULL;
+		chdesc_t * lfs_head = NULL; // FIXME
 		chdesc_t * lfs_tail = NULL;
 		r = CALL(state->journal, write_block, chrs[i].bdesc, 0, sizeof(chrs[i].cr), &chrs[i].cr, &lfs_head, &lfs_tail);
 		assert(r >= 0); // TODO: handle error
@@ -619,7 +837,7 @@ static int transaction_stop(journal_state_t * state)
 
 	free(data_bdescs);
 	free(chrs);
-
+*/
 	return 0;
 }
 
@@ -635,11 +853,11 @@ static void timer_callback(void * arg)
 
 	r = transaction_stop(state);
 	if (r < 0)
-		fprintf(STDERR_FILENO, "%s:%s: transaction_stop: %e\n", __FILE__, __FUNCTION__, r);
+		fprintf(STDERR_FILENO, "%s:%s(): transaction_stop(): %e\n", __FILE__, __FUNCTION__, r);
 
 	r = transaction_start(state);
 	if (r < 0)
-		fprintf(STDERR_FILENO, "%s:%s: transaction_start: %e\n", __FILE__, __FUNCTION__, r);
+		fprintf(STDERR_FILENO, "%s:%s(): transaction_start(): %e\n", __FILE__, __FUNCTION__, r);
 }
 
 
@@ -761,39 +979,14 @@ static int journal_destroy(LFS_t * lfs)
 //
 // Passthrough LFS_t functions using chdescs
 
-static void eat_chdesc_graph(chdesc_t * c)
-{
-	chmetadesc_t * scan;
-
-	// eat_chdesc_graph() can be passed NULL, watch out:
-	if (!c)
-		return;
-
-	while ((scan = c->dependencies))
-	{
-		eat_chdesc_graph(scan->desc);
-
-		if (c->owner == scan->desc->owner)
-			chdesc_remove_depend(c, scan->desc);
-		else
-		{
-			// TODO:
-			// - decide whether this is the correct behavior, as fprintf() states.
-			// - this test actually tests for inter-device deps rather than just cross-device,
-			//   correct this.
-			fprintf(STDERR_FILENO, "%s:%s: encountered cross-device dependency, is leaving this dep in place the desired behavior?\n", __FILE__, __FUNCTION__);
-		}
-	}
-
-	// TODO: should this function do anything else?
-}
+// TODO: should these functions set *head to anything?
+// (perhaps the commit record or invalidation?)
 
 static bdesc_t * journal_allocate_block(LFS_t * lfs, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	bdesc_t * val;
 	val = CALL(state->fs, allocate_block, size, purpose, head, tail);
-	eat_chdesc_graph(*head);
 	return val;
 }
 
@@ -802,7 +995,6 @@ static int journal_append_file_block(LFS_t * lfs, fdesc_t * file, bdesc_t * bloc
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, append_file_block, file, block, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
@@ -811,7 +1003,6 @@ static fdesc_t * journal_allocate_name(LFS_t * lfs, const char * name, uint8_t t
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	fdesc_t * val;
 	val = CALL(state->fs, allocate_name, name, type, link, head, tail);
-	eat_chdesc_graph(*head);
 	return val;
 }
 
@@ -825,7 +1016,6 @@ static int journal_rename(LFS_t * lfs, const char * oldname, const char * newnam
 	if(state->journal == state->fs && !strcmp(newname, journal_filename))
 		return -E_INVAL;
 	r = CALL(state->fs, rename, oldname, newname, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
@@ -834,7 +1024,6 @@ static bdesc_t * journal_truncate_file_block(LFS_t * lfs, fdesc_t * file, chdesc
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	bdesc_t * val;
 	val = CALL(state->fs, truncate_file_block, file, head, tail);
-	eat_chdesc_graph(*head);
 	return val;
 }
 
@@ -843,7 +1032,6 @@ static int journal_free_block(LFS_t * lfs, bdesc_t * block, chdesc_t ** head, ch
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, free_block, block, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
@@ -855,7 +1043,6 @@ static int journal_remove_name(LFS_t * lfs, const char * name, chdesc_t ** head,
 	if(state->journal == state->fs && !strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
 	r = CALL(state->fs, remove_name, name, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
@@ -864,7 +1051,6 @@ static int journal_write_block(LFS_t * lfs, bdesc_t * block, uint32_t offset, ui
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, write_block, block, offset, size, data, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
@@ -876,7 +1062,6 @@ static int journal_set_metadata_name(LFS_t * lfs, const char * name, uint32_t id
 	if(state->journal == state->fs && !strcmp(name, journal_filename))
 		return -E_NOT_FOUND;
 	r = CALL(state->fs, set_metadata_name, name, id, size, data, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
@@ -885,7 +1070,6 @@ static int journal_set_metadata_fdesc(LFS_t * lfs, const fdesc_t * file, uint32_
 	journal_state_t * state = (journal_state_t *) OBJLOCAL(lfs);
 	int r;
 	r = CALL(state->fs, set_metadata_fdesc, file, id, size, data, head, tail);
-	eat_chdesc_graph(*head);
 	return r;
 }
 
