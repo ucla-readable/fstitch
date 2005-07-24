@@ -59,7 +59,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	while (block->ddesc->changes && *chmetadesc)
 	{
 		chdesc_t * chdesc = (*chmetadesc)->desc;
-		if (chdesc->owner == barrier)
+		if (chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK))
 		{
 			chdescs_moved = 1;
 			r = chdesc_move(chdesc, target_block, target, 0);
@@ -173,7 +173,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 		while (block->ddesc->changes && *chmetadesc)
 		{
 			chdesc_t * chdesc = (*chmetadesc)->desc;
-			if (chdesc->owner == barrier && chdesc_in_range(chdesc, forward->offset, forward->size))
+			if (chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK) && chdesc_in_range(chdesc, forward->offset, forward->size))
 			{
 				chdescs_moved = 1;
 				r = chdesc_move(chdesc, target_block, forward->target, forward->offset);
@@ -279,7 +279,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	while(block->ddesc->changes && *chmetadesc)
 	{
 		chdesc_t * chdesc = (*chmetadesc)->desc;
-		if(chdesc->owner == barrier)
+		if(chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK))
 		{
 			chdescs_moved = 1;
 			r = chdesc_duplicate(chdesc, nforwards, target_block);
