@@ -464,7 +464,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 	uint32_t numblocks;
 	uint16_t blocksize, atomicsize, devlevel;
 	int8_t good_disk = 1 - info->bad_disk;
-	int i, r;
+	int i, r, percentage = 0;
 
 	if(OBJMAGIC(bd) != MIRROR_BD_MAGIC)
 		return -E_INVAL;
@@ -574,6 +574,12 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 			printf("mirror_bd: uh oh, erroring writing block %d on sync\n", i);
 			modman_dec_bd(newdevice, bd);
 			return r;
+		}
+
+		if(i == info->numblocks * percentage / 10)
+		{
+			printf(".");
+			percentage++;
 		}
 	}
 	

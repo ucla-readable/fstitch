@@ -35,5 +35,6 @@ umain(int argc, char *argv[])
 void
 usage(char *s)
 {
-	printf("usage: %s filename\n");
+	printf("usage: %s filename\n", s);
+	exit();
 }
