@@ -58,7 +58,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
  * for use at barriers, by the barrier code. The target block's data is not
  * updated to reflect the presence of the change descriptor, and must be copied
  * manually from the source data descriptor. Also, the CHDESC_MOVED flag will be
- * set on the change descriptor. */
+ * set on the change descriptor if the destination block is non-NULL. */
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	uint16_t * offset;
@@ -104,9 +104,12 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 			return r;
 		}
 		
+		/* set CHDESC_MOVED here to prevent trying to overlap attach to ourselves */
+		chdesc->flags |= CHDESC_MOVED;
 		r = __chdesc_overlap_multiattach(chdesc, destination);
 		if(r < 0)
 		{
+			chdesc->flags &= ~CHDESC_MOVED;
 			chdesc_remove_depend(destination->ddesc->changes, chdesc);
 			goto kill_stub;
 		}
@@ -117,7 +120,6 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	if(offset)
 		*offset -= source_offset;
 	
-	chdesc->flags |= CHDESC_MOVED;
 	if(chdesc->block)
 	{
 		chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
