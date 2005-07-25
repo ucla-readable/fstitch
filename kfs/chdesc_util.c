@@ -66,6 +66,8 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	uint16_t * offset;
 	int r;
 	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_MOVE, chdesc, destination, target_bd, source_offset);
+	
 	/* source_offset is in bytes for all chdesc types */
 	switch(chdesc->type)
 	{
@@ -196,6 +198,7 @@ int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 {
 #warning write this
 	/* a lot of the code for this should be similar to code in revision.c */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_ROLLBACK_COLLECTION, count, chdescs, order);
 	return -1;
 }
 
@@ -207,12 +210,14 @@ int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
 {
 #warning write this
 	/* a lot of the code for this should be similar to code in revision.c */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_APPLY_COLLECTION, count, chdescs, order);
 	return -1;
 }
 
 void chdesc_order_destroy(void ** order)
 {
 #warning finish this
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_ORDER_DESTROY, order);
 	free(*order);
 	*order = NULL;
 }

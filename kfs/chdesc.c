@@ -746,6 +746,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 /* satisfy a change descriptor, i.e. remove it from all others that depend on it */
 int chdesc_satisfy(chdesc_t * chdesc)
 {
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, chdesc);
 	while(chdesc->dependents)
 	{
 		chmetadesc_t * meta = chdesc->dependents;
