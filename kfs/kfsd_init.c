@@ -67,6 +67,7 @@ int kfsd_init(void)
 		fprintf(STDERR_FILENO, "kfs_debug_init: %e\n", r);
 		kfsd_shutdown();
 	}
+	KFS_DEBUG_IGNORE(KDB_MODULE_BDESC);
 
 	if((r = modman_init()) < 0)
 	{

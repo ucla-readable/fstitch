@@ -18,13 +18,13 @@ struct param {
 };
 
 struct opcode {
-	uint32_t opcode;
+	uint16_t opcode;
 	const char * name;
 	const struct param ** params;
 };
 
 struct module {
-	uint32_t module;
+	uint16_t module;
 	const struct opcode ** opcodes;
 };
 
@@ -347,94 +347,96 @@ int kfs_debug_init(const char * host, uint16_t port)
 	return 0;
 }
 
-int kfs_debug_send(const char * file, int line, const char * function, uint32_t module, uint32_t opcode, ...)
+int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
-	int m, o, p, r = 0;
+	int m, o = 0, r = 0;
 	va_list ap;
-	va_start(ap, opcode);
+	va_start(ap, function);
+	
+	/* look up the right module and opcode indices */
+	for(m = 0; modules[m].opcodes; m++)
+		if(modules[m].module == module)
+		{
+			if(modules_ignore[m])
+				return 0;
+			for(o = 0; modules[m].opcodes[o]->params; o++)
+				if(modules[m].opcodes[o]->opcode == opcode)
+					break;
+			break;
+		}
 	
 	fprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
 	
-	for(m = 0; !r && modules[m].opcodes; m++)
-	{
-		if(modules[m].module == module)
-		{
-			for(o = 0; !r && modules[m].opcodes[o]->params; o++)
-			{
-				if(modules[m].opcodes[o]->opcode == opcode)
-				{
-					for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
-					{
-						if(p)
-							fprintf(debug_socket[1], ", ");
-						switch(modules[m].opcodes[o]->params[p]->type)
-						{
-							case INT32:
-							{
-								int32_t param = va_arg(ap, int32_t);
-								fprintf(debug_socket[1], "%d", param);
-								break;
-							}
-							case UINT32:
-							{
-								uint32_t param = va_arg(ap, uint32_t);
-								fprintf(debug_socket[1], "%u", param);
-								break;
-							}
-							case UHEX32:
-							{
-								uint32_t param = va_arg(ap, uint32_t);
-								fprintf(debug_socket[1], "0x%08x", param);
-								break;
-							}
-							case INT16:
-							{
-								int16_t param = va_arg(ap, int16_t);
-								fprintf(debug_socket[1], "%d", param);
-								break;
-							}
-							case UINT16:
-							{
-								uint16_t param = va_arg(ap, uint16_t);
-								fprintf(debug_socket[1], "%u", param);
-								break;
-							}
-							case UHEX16:
-							{
-								uint16_t param = va_arg(ap, uint16_t);
-								fprintf(debug_socket[1], "0x%04x", param);
-								break;
-							}
-							case BOOL:
-							{
-								bool param = va_arg(ap, bool);
-								fprintf(debug_socket[1], param ? "true" : "false");
-								break;
-							}
-							default:
-								/* unknown type */
-								fprintf(debug_socket[1], "!type");
-								r = -E_INVAL;
-								break;
-						}
-					}
-					break;
-				}
-			}
-			if(!r && !modules[m].opcodes[o]->params)
-			{
-				/* unknown opcode */
-				fprintf(debug_socket[1], "!opcode");
-				r = -E_INVAL;
-			}
-			break;
-		}
-	}
-	if(!r && !modules[m].opcodes)
+	if(!modules[m].opcodes)
 	{
 		/* unknown module */
 		fprintf(debug_socket[1], "!module");
 		r = -E_INVAL;
+	}
+	else if(!modules[m].opcodes[o]->params)
+	{
+		/* unknown opcode */
+		fprintf(debug_socket[1], "!opcode");
+		r = -E_INVAL;
+	}
+	else
+	{
+		int p;
+		for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
+		{
+			if(p)
+				fprintf(debug_socket[1], ", ");
+			switch(modules[m].opcodes[o]->params[p]->type)
+			{
+				case INT32:
+				{
+					int32_t param = va_arg(ap, int32_t);
+					fprintf(debug_socket[1], "%d", param);
+					break;
+				}
+				case UINT32:
+				{
+					uint32_t param = va_arg(ap, uint32_t);
+					fprintf(debug_socket[1], "%u", param);
+					break;
+				}
+				case UHEX32:
+				{
+					uint32_t param = va_arg(ap, uint32_t);
+					fprintf(debug_socket[1], "0x%08x", param);
+					break;
+				}
+				case INT16:
+				{
+					int16_t param = va_arg(ap, int16_t);
+					fprintf(debug_socket[1], "%d", param);
+					break;
+				}
+				case UINT16:
+				{
+					uint16_t param = va_arg(ap, uint16_t);
+					fprintf(debug_socket[1], "%u", param);
+					break;
+				}
+				case UHEX16:
+				{
+					uint16_t param = va_arg(ap, uint16_t);
+					fprintf(debug_socket[1], "0x%04x", param);
+					break;
+				}
+				case BOOL:
+				{
+					bool param = va_arg(ap, bool);
+					fprintf(debug_socket[1], param ? "true" : "false");
+					break;
+				}
+				default:
+					/* unknown type */
+					fprintf(debug_socket[1], "!type");
+					r = -E_INVAL;
+					break;
+			}
+		}
 	}
 	
 	fprintf(debug_socket[1], "\n");
@@ -449,6 +451,18 @@ int kfs_debug_send(const char * file, int line, const char * function, uint32_t 
 		exit();
 	}
 	return r;
+}
+
+int kfs_debug_ignore(uint16_t module, bool ignore)
+{
+	int m;
+	for(m = 0; modules[m].opcodes; m++)
+		if(modules[m].module == module)
+		{
+			modules_ignore[m] = ignore;
+			break;
+		}
+	return modules[m].opcodes ? 0 : -E_INVAL;
 }
 
 #endif
