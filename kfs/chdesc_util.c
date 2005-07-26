@@ -342,6 +342,8 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 	if(count < 2)
 		return -E_INVAL;
 	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DUPLICATE, original, count, blocks);
+	
 	/* if the original is a NOOP, we don't need to duplicate it...
 	 * just make sure it has no block and return successfully */
 	if(original->type == NOOP)
@@ -385,13 +387,15 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 					r = -E_NO_MEM;
 					goto fail_first;
 				}
-				descs[i]->bit.xor = original->bit.xor;
 				descs[i]->bit.offset = original->bit.offset;
+				descs[i]->bit.xor = original->bit.xor;
 				descs[i]->type = BIT;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BIT, descs[i], descs[i]->bit.offset, descs[i]->bit.xor);
 				r = __chdesc_overlap_multiattach(descs[i], blocks[i]);
 				if(r < 0)
 					goto fail_later;
 				descs[i]->flags |= CHDESC_MOVED;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, descs[i], CHDESC_MOVED);
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
@@ -401,6 +405,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 			}
 			/* change the original to a NOOP with no block */
 			original->type = NOOP;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, original);
 			r = chdesc_noop_reassign(original, NULL);
 			assert(r >= 0);
 			break;
@@ -439,10 +444,12 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				else
 					descs[i]->byte.newdata = NULL;
 				descs[i]->type = BYTE;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, descs[i], descs[i]->byte.offset, descs[i]->byte.length);
 				r = __chdesc_overlap_multiattach(descs[i], blocks[i]);
 				if(r < 0)
 					goto fail_later;
 				descs[i]->flags |= CHDESC_MOVED;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, descs[i], CHDESC_MOVED);
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
@@ -456,6 +463,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 			if(original->byte.newdata)
 				free(original->byte.newdata);
 			original->type = NOOP;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, original);
 			r = chdesc_noop_reassign(original, NULL);
 			assert(r >= 0);
 			break;
@@ -509,6 +517,8 @@ int chdesc_split(chdesc_t * original, int count)
 	if(!descs)
 		return -E_NO_MEM;
 	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SPLIT, original, count);
+	
 	/* First detach the dependencies of the original change descriptor */
 	r = chdesc_detach_dependencies(original);
 	if(r < 0)
@@ -550,6 +560,26 @@ int chdesc_split(chdesc_t * original, int count)
 	descs[0]->type = original->type;
 	/* "byte" is larger than "bit" */
 	descs[0]->byte = original->byte;
+	static_assert(sizeof(original->byte) > sizeof(original->bit));
+	
+#if KFS_DEBUG
+	switch(descs[0]->type)
+	{
+		case NOOP:
+			/* we switched it with another noop, so there is nothing to report */
+			break;
+		case BIT:
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BIT, descs[0], descs[0]->bit.offset, descs[0]->bit.xor);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, original);
+			break;
+		case BYTE:
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, descs[0], descs[0]->byte.offset, descs[0]->byte.length);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, original);
+			break;
+		default:
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, descs[0]->type);
+	}
+#endif
 	
 	original->type = NOOP;
 	
@@ -575,6 +605,8 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	if(count == 1)
 		return 0;
 	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_MERGE, count, chdescs, head, tail);
+	
 	/* FIXME allow NOOP change descriptors with different blocks */
 	/* FIXME allow all NOOP change descriptors? (just merge them) */
 	/* make sure the change descriptors are all on the same block */
@@ -595,7 +627,10 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	
 	/* mark all the roots as in the set */
 	for(i = 0; i != count; i++)
+	{
 		chdescs[i]->flags |= CHDESC_INSET;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdescs[i], CHDESC_INSET);
+	}
 	
 	/* start marking change descriptors at the roots */
 	for(i = 0; i != count; i++)
@@ -633,7 +668,9 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		for(i = 0; i != count; i++)
 		{
 			chdescs[i]->flags &= ~CHDESC_INSET;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdescs[i], CHDESC_INSET);
 			chdescs[i]->flags |= CHDESC_MARKED;
+			/* we are just about to unmark chdescs[i], so elide reporting it */
 			chdesc_unmark_graph(chdescs[i]);
 		}
 		return -E_INVAL;
@@ -642,9 +679,11 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	for(i = 0; i != count; i++)
 	{
 		chdescs[i]->flags &= ~CHDESC_INSET;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdescs[i], CHDESC_INSET);
 		/* mark the roots as moved so that the create_full below will
 		 * not create dependencies on them */
 		chdescs[i]->flags |= CHDESC_MARKED | CHDESC_MOVED;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdescs[i], CHDESC_MOVED);
 		chdesc_unmark_graph(chdescs[i]);
 	}
 	
@@ -690,6 +729,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		for(i = 0; i != count; i++)
 		{
 			chdescs[i]->flags &= ~CHDESC_MOVED;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdescs[i], CHDESC_MOVED);
 			chdesc_weak_forget(&chdescs[i]);
 		}
 		return r;
@@ -719,9 +759,13 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 				/* move the dependency pointer */
 				meta = chdescs[i]->dependencies;
 				chdescs[i]->dependencies = meta->next;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, chdescs[i], meta->desc);
 				meta->next = (*tail)->dependencies;
 				(*tail)->dependencies = meta;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, *tail, meta->desc);
 				/* move the dependent pointer */
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, meta->desc, chdescs[i]);
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, meta->desc, *tail);
 				for(meta = meta->desc->dependents; meta; meta = meta->next)
 					if(meta->desc == chdescs[i])
 					{
@@ -751,9 +795,13 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 					/* move the dependent pointer */
 					meta = *scan;
 					*scan = meta->next;
+					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, chdescs[i], meta->desc);
 					meta->next = (*head)->dependents;
 					(*head)->dependents = meta;
+					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, *head, meta->desc);
 					/* move the dependency pointer */
+					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->desc, chdescs[i]);
+					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, meta->desc, *head);
 					for(meta = meta->desc->dependencies; meta; meta = meta->next)
 						if(meta->desc == chdescs[i])
 						{
@@ -765,17 +813,19 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		}
 		
 		/* add all the weak references to head (except our own, which is the first) */
-		assert(chdescs[0]->weak_refs);
-		assert(chdescs[0]->weak_refs->desc == &chdescs[i]);
-		while(chdescs[0]->weak_refs->next)
+		assert(chdescs[i]->weak_refs);
+		assert(chdescs[i]->weak_refs->desc == &chdescs[i]);
+		while(chdescs[i]->weak_refs->next)
 		{
-			chrefdesc_t * ref = chdescs[0]->weak_refs->next;
-			chdescs[0]->weak_refs->next = ref->next;
+			chrefdesc_t * ref = chdescs[i]->weak_refs->next;
+			chdescs[i]->weak_refs->next = ref->next;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, chdescs[i], ref->desc);
 			/* this test should not really be necessary, but for safety... */
-			if(*ref->desc == chdescs[0])
+			if(*ref->desc == chdescs[i])
 				*ref->desc = *head;
 			ref->next = (*head)->weak_refs;
 			(*head)->weak_refs = ref;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, *head, ref->desc);
 		}
 	}
 	

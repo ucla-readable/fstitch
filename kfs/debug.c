@@ -111,6 +111,18 @@ static const struct param * params_chdesc_create_byte[] = {
 	&param_length,
 	&last_param
 };
+static const struct param * params_chdesc_convert_bit[] = {
+	&param_chdesc,
+	&param_offset,
+	&param_xor,
+	&last_param
+};
+static const struct param * params_chdesc_convert_byte[] = {
+	&param_chdesc,
+	&param_offset,
+	&param_length,
+	&last_param
+};
 static const struct param * params_chdesc_connect[] = {
 	&param_source,
 	&param_target,
@@ -203,6 +215,9 @@ static const struct opcode
 	opcode_chdesc_create_noop =         OPCODE(KDB_CHDESC_CREATE_NOOP,         params_chdesc_create_noop),
 	opcode_chdesc_create_bit =          OPCODE(KDB_CHDESC_CREATE_BIT,          params_chdesc_create_bit),
 	opcode_chdesc_create_byte =         OPCODE(KDB_CHDESC_CREATE_BYTE,         params_chdesc_create_byte),
+	opcode_chdesc_convert_noop =        OPCODE(KDB_CHDESC_CONVERT_NOOP,        params_chdesc_only),
+	opcode_chdesc_convert_bit =         OPCODE(KDB_CHDESC_CONVERT_BIT,         params_chdesc_convert_bit),
+	opcode_chdesc_convert_byte =        OPCODE(KDB_CHDESC_CONVERT_BYTE,        params_chdesc_convert_byte),
 	opcode_chdesc_add_dependency =      OPCODE(KDB_CHDESC_ADD_DEPENDENCY,      params_chdesc_connect),
 	opcode_chdesc_add_dependent =       OPCODE(KDB_CHDESC_ADD_DEPENDENT,       params_chdesc_connect),
 	opcode_chdesc_rem_dependency =      OPCODE(KDB_CHDESC_REM_DEPENDENCY,      params_chdesc_connect),
@@ -248,6 +263,9 @@ static const struct opcode * opcodes_chdesc_alter[] = {
 	&opcode_chdesc_create_noop,
 	&opcode_chdesc_create_bit,
 	&opcode_chdesc_create_byte,
+	&opcode_chdesc_convert_noop,
+	&opcode_chdesc_convert_bit,
+	&opcode_chdesc_convert_byte,
 	&opcode_chdesc_apply,
 	&opcode_chdesc_rollback,
 	&opcode_chdesc_set_flags,
@@ -287,6 +305,7 @@ static const struct module modules[] = {
 	 {KDB_MODULE_CHDESC_INFO, opcodes_chdesc_info},
 	 {0, NULL}
 };
+static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
 static int debug_socket[2];
 
