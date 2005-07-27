@@ -7,6 +7,8 @@
 
 #if KFS_DEBUG
 
+#define KFS_DEBUG_BINARY 1
+
 #include <kfs/debug_opcode.h>
 
 #define KFS_DEBUG_HOST "timbuktu.cs.ucla.edu"

@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/josnic.h> /* for htons, htonl */
 #include <kfs/debug.h>
 
 #if KFS_DEBUG
@@ -6,8 +7,9 @@
 /* structure definitions */
 struct param {
 	const char * name;
+	/* keep this in sync with the array below */
 	enum {
-		INT32,
+		INT32 = 0,
 		UINT32,
 		UHEX32,
 		INT16,
@@ -29,6 +31,9 @@ struct module {
 };
 
 /* data declarations */
+
+/* keep this in sync with the enum above */
+const uint8_t type_sizes[] = {4, 4, 4, 2, 2, 2, 1};
 
 /* all parameters */
 static const struct param
@@ -309,10 +314,88 @@ static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
 static int debug_socket[2];
 
+#if KFS_DEBUG_BINARY
+
+#define LIT_8 (-1)
+#define LIT_16 (-2)
+#define LIT_32 (-4)
+#define STRING (-3)
+#define END 0
+
+/* This function is used like a binary version of fprintf(). It takes a file
+ * descriptor, and then a series of pairs of (size, pointer) of data to write to
+ * it. The list is terminated by a 0 size. Also accepted are the special sizes
+ * -1, -2, and -4, which indicate that the data is to be extracted from the
+ * stack as a uint8_t, uint16_t, or uint32_t, respectively, and changed to
+ * network byte order. Finally, the special size -3 means to write a
+ * null-terminated string, whose size will be determined with strlen(). The
+ * total number of bytes written is returned, or a negative value on error when
+ * no bytes have been written. Note that an error may cause the number of bytes
+ * written to be smaller than requested. */
+static int kfs_debug_write(int fd, ...)
+{
+	int bytes = 0;
+	va_list ap;
+	va_start(ap, fd);
+	
+	for(;;)
+	{
+		int result, size = va_arg(ap, int);
+		
+		if(size > 0)
+		{
+			void * data = va_arg(ap, void *);
+			result = write(fd, data, size);
+		}
+		else if(size < 0)
+		{
+			/* negative size means on stack */
+			size = -size;
+			if(size == 1)
+			{
+				uint8_t data = va_arg(ap, uint8_t);
+				result = write(fd, &data, 1);
+			}
+			else if(size == 2)
+			{
+				uint16_t data = htons(va_arg(ap, uint16_t));
+				result = write(fd, &data, 2);
+			}
+			else if(size == 4)
+			{
+				uint32_t data = htonl(va_arg(ap, uint32_t));
+				result = write(fd, &data, 4);
+			}
+			else if(size == 3)
+			{
+				/* string */
+				char * string = va_arg(ap, char *);
+				int length = strlen(string);
+				size = length + 1;
+				result = write(fd, string, size);
+			}
+			else
+				/* restricted to 1, 2, and 4 bytes, or strings */
+				return bytes ? bytes : -E_INVAL;
+		}
+		else
+			break;
+		
+		if(result < 0)
+			return bytes ? bytes : result;
+		bytes += result;
+		if(result != size)
+			break;
+	}
+	
+	return bytes;
+}
+#endif
+
 int kfs_debug_init(const char * host, uint16_t port)
 {
 	struct ip_addr addr;
-	int m, o, p, r;
+	int m, o, r;
 	
 	printf("Initializing KFS debugging interface...\n");
 	r = gethostbyname(host, &addr);
@@ -332,15 +415,33 @@ int kfs_debug_init(const char * host, uint16_t port)
 			return r;
 	}
 	
+#if KFS_DEBUG_BINARY
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
+			int p;
+			kfs_debug_write(debug_socket[1], LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, STRING, modules[m].opcodes[o]->name, END);
+			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
+			{
+				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
+				/* FIXME: maybe write the logical data type here as well */
+				kfs_debug_write(debug_socket[1], LIT_8, size, STRING, modules[m].opcodes[o]->params[p]->name, END);
+			}
+			kfs_debug_write(debug_socket[1], LIT_16, 0, END);
+		}
+	kfs_debug_write(debug_socket[1], LIT_32, 0, END);
+#else
+	for(m = 0; modules[m].opcodes; m++)
+		for(o = 0; modules[m].opcodes[o]->params; o++)
+		{
+			int p;
 			fprintf(debug_socket[1], "[%04x:%04x] %s", modules[m].module, modules[m].opcodes[o]->opcode, modules[m].opcodes[o]->name);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 				fprintf(debug_socket[1], "%s%s", p ? ", " : " (", modules[m].opcodes[o]->params[p]->name);
 			fprintf(debug_socket[1], ")\n");
 		}
 	fprintf(debug_socket[1], "\n");
+#endif
 	
 	printf("Debugging interface initialized OK\n");
 	
@@ -365,6 +466,54 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			break;
 		}
 	
+#if KFS_DEBUG_BINARY
+	kfs_debug_write(debug_socket[1], STRING, file, LIT_32, line, STRING, function, LIT_16, module, LIT_16, opcode, END);
+	
+	if(!modules[m].opcodes)
+	{
+		/* unknown module */
+		kfs_debug_write(debug_socket[1], LIT_8, 0, LIT_8, 1, END);
+		r = -E_INVAL;
+	}
+	else if(!modules[m].opcodes[o]->params)
+	{
+		/* unknown opcode */
+		kfs_debug_write(debug_socket[1], LIT_8, 0, LIT_8, 2, END);
+		r = -E_INVAL;
+	}
+	else
+	{
+		int p;
+		for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
+		{
+			/* FIXME: we don't actually have to write the size for each parameter... */
+			uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
+			if(size == 4)
+			{
+				uint32_t param = va_arg(ap, uint32_t);
+				kfs_debug_write(debug_socket[1], LIT_8, 4, LIT_32, param, END);
+			}
+			else if(size == 2)
+			{
+				uint16_t param = va_arg(ap, uint16_t);
+				kfs_debug_write(debug_socket[1], LIT_8, 2, LIT_16, param, END);
+			}
+			else if(size == 1)
+			{
+				uint8_t param = va_arg(ap, uint8_t);
+				kfs_debug_write(debug_socket[1], LIT_8, 1, LIT_8, param, END);
+			}
+			else
+			{
+				/* unknown type */
+				kfs_debug_write(debug_socket[1], LIT_8, 0, LIT_8, 3, END);
+				r = -E_INVAL;
+			}
+		}
+	}
+	
+	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
+#else
 	fprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
 	
 	if(!modules[m].opcodes)
@@ -440,6 +589,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	}
 	
 	fprintf(debug_socket[1], "\n");
+#endif
 	
 	va_end(ap);
 	
