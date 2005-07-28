@@ -424,12 +424,12 @@ int kfs_debug_init(const char * host, uint16_t port)
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
-				/* FIXME: maybe write the logical data type here as well */
+				/* TODO: maybe write the logical data type here as well */
 				kfs_debug_write(debug_socket[1], LIT_8, size, STRING, modules[m].opcodes[o]->params[p]->name, END);
 			}
-			kfs_debug_write(debug_socket[1], LIT_16, 0, END);
+			kfs_debug_write(debug_socket[1], LIT_8, 0, END);
 		}
-	kfs_debug_write(debug_socket[1], LIT_32, 0, END);
+	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
 #else
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
@@ -486,7 +486,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		int p;
 		for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
 		{
-			/* FIXME: we don't actually have to write the size for each parameter... */
+			/* TODO: we don't actually have to write the size for each parameter... */
 			uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
 			if(size == 4)
 			{
