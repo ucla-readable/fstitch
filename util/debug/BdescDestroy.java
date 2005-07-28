@@ -1,35 +1,17 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class BdescDestroyFactory extends ModuleOpcodeFactory
-{
-	public BdescDestroyFactory(DataInput input)
-	{
-		super(input, KDB_BDESC_DESTROY, "KDB_BDESC_DESTROY");
-		addParameter("block", 4);
-		addParameter("ddesc", 4);
-	}
-	
-	public BdescDestroy readBdescDestroy() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readBdescDestroy();
-	}
-}
-
 public class BdescDestroy extends Opcode
 {
-	public BdescDestroy(DataInput input)
+	public BdescDestroy(int block, int ddesc)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new BdescDestroyFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_DESTROY, "KDB_BDESC_DESTROY", BdescDestroy.class);
+		factory.addParameter("block", 4);
+		factory.addParameter("ddesc", 4);
+		return factory;
 	}
 }

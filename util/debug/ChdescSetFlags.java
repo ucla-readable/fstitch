@@ -1,35 +1,17 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class ChdescSetFlagsFactory extends ModuleOpcodeFactory
-{
-	public ChdescSetFlagsFactory(DataInput input)
-	{
-		super(input, KDB_CHDESC_SET_FLAGS, "KDB_CHDESC_SET_FLAGS");
-		addParameter("chdesc", 4);
-		addParameter("flags", 4);
-	}
-	
-	public ChdescSetFlags readChdescSetFlags() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readChdescSetFlags();
-	}
-}
-
 public class ChdescSetFlags extends Opcode
 {
-	public ChdescSetFlags(DataInput input)
+	public ChdescSetFlags(int chdesc, int flags)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new ChdescSetFlagsFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_FLAGS, "KDB_CHDESC_SET_FLAGS", ChdescSetFlags.class);
+		factory.addParameter("chdesc", 4);
+		factory.addParameter("flags", 4);
+		return factory;
 	}
 }

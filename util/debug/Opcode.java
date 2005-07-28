@@ -1,4 +1,4 @@
-public abstract class Opcode
+public abstract class Opcode implements Constants
 {
 	public static String render(short opcodeNumber)
 	{

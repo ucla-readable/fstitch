@@ -28,9 +28,8 @@ public abstract class Module extends OpcodeFactory
 	
 	void addFactory(ModuleOpcodeFactory factory) throws BadInputException, IOException
 	{
-		short number = factory.getOpcodeNumber();
-		//Short key = Short.valueOf(number);
-		Short key = new Short(number);
+		//Short key = Short.valueOf(factory.opcodeNumber);
+		Short key = new Short(factory.opcodeNumber);
 		if(factories.containsKey(key))
 			throw new RuntimeException("Duplicate factory registered!");
 		factories.put(key, factory);
@@ -49,7 +48,6 @@ public abstract class Module extends OpcodeFactory
 		ModuleOpcodeFactory factory = (ModuleOpcodeFactory) factories.get(key);
 		if(factory == null)
 			throw new UnexpectedOpcodeException(number);
-		System.out.print("[" + factory.getOpcodeName() + "] ");
 		return factory.readOpcode();
 	}
 	

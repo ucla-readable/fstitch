@@ -1,34 +1,16 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class BdescARPoolPushFactory extends ModuleOpcodeFactory
-{
-	public BdescARPoolPushFactory(DataInput input)
-	{
-		super(input, KDB_BDESC_AR_POOL_PUSH, "KDB_BDESC_AR_POOL_PUSH");
-		addParameter("depth", 4);
-	}
-	
-	public BdescARPoolPush readBdescARPoolPush() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readBdescARPoolPush();
-	}
-}
-
 public class BdescARPoolPush extends Opcode
 {
-	public BdescARPoolPush(DataInput input)
+	public BdescARPoolPush(int depth)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new BdescARPoolPushFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_AR_POOL_PUSH, "KDB_BDESC_AR_POOL_PUSH", BdescARPoolPush.class);
+		factory.addParameter("depth", 4);
+		return factory;
 	}
 }

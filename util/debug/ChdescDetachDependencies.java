@@ -1,34 +1,16 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class ChdescDetachDependenciesFactory extends ModuleOpcodeFactory
-{
-	public ChdescDetachDependenciesFactory(DataInput input)
-	{
-		super(input, KDB_CHDESC_DETACH_DEPENDENCIES, "KDB_CHDESC_DETACH_DEPENDENCIES");
-		addParameter("chdesc", 4);
-	}
-	
-	public ChdescDetachDependencies readChdescDetachDependencies() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readChdescDetachDependencies();
-	}
-}
-
 public class ChdescDetachDependencies extends Opcode
 {
-	public ChdescDetachDependencies(DataInput input)
+	public ChdescDetachDependencies(int chdesc)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new ChdescDetachDependenciesFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_DETACH_DEPENDENCIES, "KDB_CHDESC_DETACH_DEPENDENCIES", ChdescDetachDependencies.class);
+		factory.addParameter("chdesc", 4);
+		return factory;
 	}
 }

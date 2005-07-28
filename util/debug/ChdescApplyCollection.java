@@ -1,36 +1,18 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class ChdescApplyCollectionFactory extends ModuleOpcodeFactory
-{
-	public ChdescApplyCollectionFactory(DataInput input)
-	{
-		super(input, KDB_CHDESC_APPLY_COLLECTION, "KDB_CHDESC_APPLY_COLLECTION");
-		addParameter("count", 4);
-		addParameter("chdescs", 4);
-		addParameter("order", 4);
-	}
-	
-	public ChdescApplyCollection readChdescApplyCollection() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readChdescApplyCollection();
-	}
-}
-
 public class ChdescApplyCollection extends Opcode
 {
-	public ChdescApplyCollection(DataInput input)
+	public ChdescApplyCollection(int count, int chdescs, int order)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new ChdescApplyCollectionFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_APPLY_COLLECTION, "KDB_CHDESC_APPLY_COLLECTION", ChdescApplyCollection.class);
+		factory.addParameter("count", 4);
+		factory.addParameter("chdescs", 4);
+		factory.addParameter("order", 4);
+		return factory;
 	}
 }

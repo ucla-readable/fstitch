@@ -1,38 +1,20 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class BdescAutoReleaseFactory extends ModuleOpcodeFactory
-{
-	public BdescAutoReleaseFactory(DataInput input)
-	{
-		super(input, KDB_BDESC_AUTORELEASE, "KDB_BDESC_AUTORELEASE");
-		addParameter("block", 4);
-		addParameter("ddesc", 4);
-		addParameter("ref_count", 4);
-		addParameter("ar_count", 4);
-		addParameter("dd_count", 4);
-	}
-	
-	public BdescAutoRelease readBdescAutoRelease() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readBdescAutoRelease();
-	}
-}
-
 public class BdescAutoRelease extends Opcode
 {
-	public BdescAutoRelease(DataInput input)
+	public BdescAutoRelease(int block, int ddesc, int ref_count, int ar_count, int dd_count)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new BdescAutoReleaseFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_AUTORELEASE, "KDB_BDESC_AUTORELEASE", BdescAutoRelease.class);
+		factory.addParameter("block", 4);
+		factory.addParameter("ddesc", 4);
+		factory.addParameter("ref_count", 4);
+		factory.addParameter("ar_count", 4);
+		factory.addParameter("dd_count", 4);
+		return factory;
 	}
 }

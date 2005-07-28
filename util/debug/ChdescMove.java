@@ -1,37 +1,19 @@
 import java.io.DataInput;
 import java.io.IOException;
 
-class ChdescMoveFactory extends ModuleOpcodeFactory
-{
-	public ChdescMoveFactory(DataInput input)
-	{
-		super(input, KDB_CHDESC_MOVE, "KDB_CHDESC_MOVE");
-		addParameter("chdesc", 4);
-		addParameter("destination", 4);
-		addParameter("target", 4);
-		addParameter("offset", 2);
-	}
-	
-	public ChdescMove readChdescMove() throws UnexpectedOpcodeException, IOException
-	{
-		/* ... */
-		return null;
-	}
-	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
-	{
-		return readChdescMove();
-	}
-}
-
 public class ChdescMove extends Opcode
 {
-	public ChdescMove(DataInput input)
+	public ChdescMove(int chdesc, int destination, int target, short offset)
 	{
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
-		return new ChdescMoveFactory(input);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_MOVE, "KDB_CHDESC_MOVE", ChdescMove.class);
+		factory.addParameter("chdesc", 4);
+		factory.addParameter("destination", 4);
+		factory.addParameter("target", 4);
+		factory.addParameter("offset", 2);
+		return factory;
 	}
 }
