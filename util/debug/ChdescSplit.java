@@ -5,16 +5,9 @@ class ChdescSplitFactory extends ModuleOpcodeFactory
 {
 	public ChdescSplitFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_SPLIT);
+		super(input, KDB_CHDESC_SPLIT, "KDB_CHDESC_SPLIT");
 		addParameter("original", 4);
 		addParameter("count", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_SPLIT"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescSplit readChdescSplit() throws UnexpectedOpcodeException, IOException

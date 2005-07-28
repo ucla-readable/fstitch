@@ -5,16 +5,9 @@ class ChdescClearFlagsFactory extends ModuleOpcodeFactory
 {
 	public ChdescClearFlagsFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_CLEAR_FLAGS);
+		super(input, KDB_CHDESC_CLEAR_FLAGS, "KDB_CHDESC_CLEAR_FLAGS");
 		addParameter("chdesc", 4);
 		addParameter("flags", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_CLEAR_FLAGS"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescClearFlags readChdescClearFlags() throws UnexpectedOpcodeException, IOException

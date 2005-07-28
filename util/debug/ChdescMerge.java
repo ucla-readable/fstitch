@@ -5,18 +5,11 @@ class ChdescMergeFactory extends ModuleOpcodeFactory
 {
 	public ChdescMergeFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_MERGE);
+		super(input, KDB_CHDESC_MERGE, "KDB_CHDESC_MERGE");
 		addParameter("count", 4);
 		addParameter("chdescs", 4);
 		addParameter("head", 4);
 		addParameter("tail", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_MERGE"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescMerge readChdescMerge() throws UnexpectedOpcodeException, IOException

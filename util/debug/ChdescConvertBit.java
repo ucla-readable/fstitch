@@ -5,17 +5,10 @@ class ChdescConvertBitFactory extends ModuleOpcodeFactory
 {
 	public ChdescConvertBitFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_CONVERT_BIT);
+		super(input, KDB_CHDESC_CONVERT_BIT, "KDB_CHDESC_CONVERT_BIT");
 		addParameter("chdesc", 4);
 		addParameter("offset", 2);
 		addParameter("xor", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_CONVERT_BIT"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescConvertBit readChdescConvertBit() throws UnexpectedOpcodeException, IOException

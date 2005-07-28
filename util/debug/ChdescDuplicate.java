@@ -5,17 +5,10 @@ class ChdescDuplicateFactory extends ModuleOpcodeFactory
 {
 	public ChdescDuplicateFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_DUPLICATE);
+		super(input, KDB_CHDESC_DUPLICATE, "KDB_CHDESC_DUPLICATE");
 		addParameter("original", 4);
 		addParameter("count", 4);
 		addParameter("blocks", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_DUPLICATE"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescDuplicate readChdescDuplicate() throws UnexpectedOpcodeException, IOException

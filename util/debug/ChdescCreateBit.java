@@ -5,19 +5,12 @@ class ChdescCreateBitFactory extends ModuleOpcodeFactory
 {
 	public ChdescCreateBitFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_CREATE_BIT);
+		super(input, KDB_CHDESC_CREATE_BIT, "KDB_CHDESC_CREATE_BIT");
 		addParameter("chdesc", 4);
 		addParameter("block", 4);
 		addParameter("owner", 4);
 		addParameter("offset", 2);
 		addParameter("xor", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_CREATE_BIT"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescCreateBit readChdescCreateBit() throws UnexpectedOpcodeException, IOException

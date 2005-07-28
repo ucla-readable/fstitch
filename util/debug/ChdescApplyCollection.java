@@ -5,17 +5,10 @@ class ChdescApplyCollectionFactory extends ModuleOpcodeFactory
 {
 	public ChdescApplyCollectionFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_APPLY_COLLECTION);
+		super(input, KDB_CHDESC_APPLY_COLLECTION, "KDB_CHDESC_APPLY_COLLECTION");
 		addParameter("count", 4);
 		addParameter("chdescs", 4);
 		addParameter("order", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_APPLY_COLLECTION"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescApplyCollection readChdescApplyCollection() throws UnexpectedOpcodeException, IOException

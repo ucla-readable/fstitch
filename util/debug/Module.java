@@ -41,7 +41,7 @@ public abstract class Module extends OpcodeFactory
 		factory.verifyParameters();
 	}
 	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
+	public Opcode readOpcode() throws BadInputException, IOException
 	{
 		short number = input.readShort();
 		//Short key = Short.valueOf(number);
@@ -49,6 +49,7 @@ public abstract class Module extends OpcodeFactory
 		ModuleOpcodeFactory factory = (ModuleOpcodeFactory) factories.get(key);
 		if(factory == null)
 			throw new UnexpectedOpcodeException(number);
+		System.out.print("[" + factory.getOpcodeName() + "] ");
 		return factory.readOpcode();
 	}
 	

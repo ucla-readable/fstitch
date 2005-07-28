@@ -5,16 +5,9 @@ class ChdescOverlapAttachFactory extends ModuleOpcodeFactory
 {
 	public ChdescOverlapAttachFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_OVERLAP_ATTACH);
+		super(input, KDB_CHDESC_OVERLAP_ATTACH, "KDB_CHDESC_OVERLAP_ATTACH");
 		addParameter("recent", 4);
 		addParameter("original", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_OVERLAP_ATTACH"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescOverlapAttach readChdescOverlapAttach() throws UnexpectedOpcodeException, IOException

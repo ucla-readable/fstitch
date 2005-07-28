@@ -5,16 +5,9 @@ class BdescDestroyFactory extends ModuleOpcodeFactory
 {
 	public BdescDestroyFactory(DataInput input)
 	{
-		super(input, KDB_BDESC_DESTROY);
+		super(input, KDB_BDESC_DESTROY, "KDB_BDESC_DESTROY");
 		addParameter("block", 4);
 		addParameter("ddesc", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_BDESC_DESTROY"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public BdescDestroy readBdescDestroy() throws UnexpectedOpcodeException, IOException

@@ -5,16 +5,9 @@ class ChdescSetBlockFactory extends ModuleOpcodeFactory
 {
 	public ChdescSetBlockFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_SET_BLOCK);
+		super(input, KDB_CHDESC_SET_BLOCK, "KDB_CHDESC_SET_BLOCK");
 		addParameter("chdesc", 4);
 		addParameter("block", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_SET_BLOCK"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescSetBlock readChdescSetBlock() throws UnexpectedOpcodeException, IOException

@@ -5,15 +5,8 @@ class ChdescApplyFactory extends ModuleOpcodeFactory
 {
 	public ChdescApplyFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_APPLY);
+		super(input, KDB_CHDESC_APPLY, "KDB_CHDESC_APPLY");
 		addParameter("chdesc", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_APPLY"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescApply readChdescApply() throws UnexpectedOpcodeException, IOException

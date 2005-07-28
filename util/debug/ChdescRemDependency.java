@@ -5,16 +5,9 @@ class ChdescRemDependencyFactory extends ModuleOpcodeFactory
 {
 	public ChdescRemDependencyFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_REM_DEPENDENCY);
+		super(input, KDB_CHDESC_REM_DEPENDENCY, "KDB_CHDESC_REM_DEPENDENCY");
 		addParameter("source", 4);
 		addParameter("target", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_REM_DEPENDENCY"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescRemDependency readChdescRemDependency() throws UnexpectedOpcodeException, IOException

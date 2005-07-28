@@ -5,15 +5,8 @@ class ChdescConvertNoopFactory extends ModuleOpcodeFactory
 {
 	public ChdescConvertNoopFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_CONVERT_NOOP);
+		super(input, KDB_CHDESC_CONVERT_NOOP, "KDB_CHDESC_CONVERT_NOOP");
 		addParameter("chdesc", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_CONVERT_NOOP"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescConvertNoop readChdescConvertNoop() throws UnexpectedOpcodeException, IOException

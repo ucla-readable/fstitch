@@ -5,15 +5,8 @@ class ChdescRollbackFactory extends ModuleOpcodeFactory
 {
 	public ChdescRollbackFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_ROLLBACK);
+		super(input, KDB_CHDESC_ROLLBACK, "KDB_CHDESC_ROLLBACK");
 		addParameter("chdesc", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_ROLLBACK"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescRollback readChdescRollback() throws UnexpectedOpcodeException, IOException

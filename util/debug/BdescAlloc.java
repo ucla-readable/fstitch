@@ -5,17 +5,10 @@ class BdescAllocFactory extends ModuleOpcodeFactory
 {
 	public BdescAllocFactory(DataInput input)
 	{
-		super(input, KDB_BDESC_ALLOC);
+		super(input, KDB_BDESC_ALLOC, "KDB_BDESC_ALLOC");
 		addParameter("block", 4);
 		addParameter("ddesc", 4);
 		addParameter("number", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_BDESC_ALLOC"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public BdescAlloc readBdescAlloc() throws UnexpectedOpcodeException, IOException

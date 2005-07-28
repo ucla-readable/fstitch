@@ -5,16 +5,9 @@ class ChdescSetOwnerFactory extends ModuleOpcodeFactory
 {
 	public ChdescSetOwnerFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_SET_OWNER);
+		super(input, KDB_CHDESC_SET_OWNER, "KDB_CHDESC_SET_OWNER");
 		addParameter("chdesc", 4);
 		addParameter("owner", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_SET_OWNER"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescSetOwner readChdescSetOwner() throws UnexpectedOpcodeException, IOException

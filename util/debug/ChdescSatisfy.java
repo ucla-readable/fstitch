@@ -5,15 +5,8 @@ class ChdescSatisfyFactory extends ModuleOpcodeFactory
 {
 	public ChdescSatisfyFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_SATISFY);
+		super(input, KDB_CHDESC_SATISFY, "KDB_CHDESC_SATISFY");
 		addParameter("chdesc", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_SATISFY"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescSatisfy readChdescSatisfy() throws UnexpectedOpcodeException, IOException

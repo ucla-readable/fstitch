@@ -1,17 +1,20 @@
-import java.io.*;
+import java.io.DataInput;
+import java.io.IOException;
 import java.util.Vector;
 
 public abstract class ModuleOpcodeFactory extends OpcodeFactory
 {
 	protected final short opcodeNumber;
+	protected final String opcodeName;
 	private final Vector parameterNames;
 	private final Vector parameterSizes;
 	private int parameterCount;
 	
-	protected ModuleOpcodeFactory(DataInput input, short opcodeNumber)
+	protected ModuleOpcodeFactory(DataInput input, short opcodeNumber, String opcodeName)
 	{
 		super(input);
 		this.opcodeNumber = opcodeNumber;
+		this.opcodeName = opcodeName;
 		parameterNames = new Vector();
 		parameterSizes = new Vector();
 		parameterCount = 0;
@@ -22,24 +25,17 @@ public abstract class ModuleOpcodeFactory extends OpcodeFactory
 		return opcodeNumber;
 	}
 	
+	public String getOpcodeName()
+	{
+		return opcodeName;
+	}
+	
 	protected void addParameter(String name, int size)
 	{
 		parameterNames.add(name);
 		//parameterSizes.add(Integer.valueOf(size));
 		parameterSizes.add(new Integer(size));
 		parameterCount++;
-	}
-	
-	protected String readString() throws IOException
-	{
-		ByteArrayOutputStream string = new ByteArrayOutputStream();
-		byte b = input.readByte();
-		while(b != 0)
-		{
-			string.write(b);
-			b = input.readByte();
-		}
-		return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(string.toByteArray()))).readLine();
 	}
 	
 	public void verifyOpcode() throws UnexpectedOpcodeException, IOException
@@ -49,7 +45,12 @@ public abstract class ModuleOpcodeFactory extends OpcodeFactory
 			throw new UnexpectedOpcodeException(number);
 	}
 	
-	public abstract void verifyName() throws UnexpectedNameException, IOException;
+	public void verifyName() throws UnexpectedNameException, IOException
+	{
+		String name = readString();
+		if(!name.equals(opcodeName))
+			throw new UnexpectedNameException(name);
+	}
 	
 	private boolean checkParameter(int index, String name, int size)
 	{

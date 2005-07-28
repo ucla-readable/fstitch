@@ -5,16 +5,9 @@ class ChdescWeakRetainFactory extends ModuleOpcodeFactory
 {
 	public ChdescWeakRetainFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_WEAK_RETAIN);
+		super(input, KDB_CHDESC_WEAK_RETAIN, "KDB_CHDESC_WEAK_RETAIN");
 		addParameter("chdesc", 4);
 		addParameter("location", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_WEAK_RETAIN"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescWeakRetain readChdescWeakRetain() throws UnexpectedOpcodeException, IOException

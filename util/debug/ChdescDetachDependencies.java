@@ -5,15 +5,8 @@ class ChdescDetachDependenciesFactory extends ModuleOpcodeFactory
 {
 	public ChdescDetachDependenciesFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_DETACH_DEPENDENCIES);
+		super(input, KDB_CHDESC_DETACH_DEPENDENCIES, "KDB_CHDESC_DETACH_DEPENDENCIES");
 		addParameter("chdesc", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_DETACH_DEPENDENCIES"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescDetachDependencies readChdescDetachDependencies() throws UnexpectedOpcodeException, IOException

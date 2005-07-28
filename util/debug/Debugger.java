@@ -31,12 +31,22 @@ public class Debugger extends OpcodeFactory
 		modules.put(key, module);
 	}
 	
-	public Opcode readOpcode() throws UnexpectedOpcodeException, IOException
+	public Opcode readOpcode() throws BadInputException, IOException
 	{
-		throw new EOFException("Fake EOF");
+		/* FIXME store file, line, and function information */
+		String file = readString();
+		int line = input.readInt();
+		String function = readString();
+		short number = input.readShort();
+		//Short key = Short.valueOf(number);
+		Short key = new Short(number);
+		Module module = (Module) modules.get(key);
+		if(module == null)
+			throw new UnexpectedModuleException(number);
+		return module.readOpcode();
 	}
 	
-	public void readOpcodes() throws UnexpectedOpcodeException, IOException
+	public void readOpcodes() throws BadInputException, IOException
 	{
 		try {
 			for(;;)

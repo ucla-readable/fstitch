@@ -5,15 +5,8 @@ class BdescARPoolPopFactory extends ModuleOpcodeFactory
 {
 	public BdescARPoolPopFactory(DataInput input)
 	{
-		super(input, KDB_BDESC_AR_POOL_POP);
+		super(input, KDB_BDESC_AR_POOL_POP, "KDB_BDESC_AR_POOL_POP");
 		addParameter("depth", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_BDESC_AR_POOL_POP"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public BdescARPoolPop readBdescARPoolPop() throws UnexpectedOpcodeException, IOException

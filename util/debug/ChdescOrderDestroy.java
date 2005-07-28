@@ -5,15 +5,8 @@ class ChdescOrderDestroyFactory extends ModuleOpcodeFactory
 {
 	public ChdescOrderDestroyFactory(DataInput input)
 	{
-		super(input, KDB_CHDESC_ORDER_DESTROY);
+		super(input, KDB_CHDESC_ORDER_DESTROY, "KDB_CHDESC_ORDER_DESTROY");
 		addParameter("order", 4);
-	}
-	
-	public void verifyName() throws UnexpectedNameException, IOException
-	{
-		String name = readString();
-		if(!name.equals("KDB_CHDESC_ORDER_DESTROY"))
-			throw new UnexpectedNameException(name);
 	}
 	
 	public ChdescOrderDestroy readChdescOrderDestroy() throws UnexpectedOpcodeException, IOException
