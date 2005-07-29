@@ -158,6 +158,7 @@ void bdesc_autorelease_pool_pop(void)
 		int i = head->ar_count;
 		pool->list = head->ar_next;
 		head->ar_count = 0;
+		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_RESET, head, head->ddesc, head->ref_count, head->ar_count, head->ddesc->ref_count);
 		while(i-- > 0)
 		{
 			bdesc_t * release = head;

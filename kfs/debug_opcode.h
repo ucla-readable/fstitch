@@ -16,8 +16,9 @@
 #define KDB_BDESC_DESTROY          105
 #define KDB_BDESC_FREE_DDESC       106
 #define KDB_BDESC_AUTORELEASE      107
-#define KDB_BDESC_AR_POOL_PUSH     108
-#define KDB_BDESC_AR_POOL_POP      109
+#define KDB_BDESC_AR_RESET         108
+#define KDB_BDESC_AR_POOL_PUSH     109
+#define KDB_BDESC_AR_POOL_POP      110
 
 /* chdesc alter (2xx) */
 #define KDB_CHDESC_CREATE_NOOP     201

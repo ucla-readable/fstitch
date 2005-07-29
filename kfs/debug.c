@@ -215,6 +215,7 @@ static const struct opcode
 	opcode_bdesc_destroy =              OPCODE(KDB_BDESC_DESTROY,              params_bdesc_destroy),
 	opcode_bdesc_free_ddesc =           OPCODE(KDB_BDESC_FREE_DDESC,           params_bdesc_free_ddesc),
 	opcode_bdesc_autorelease =          OPCODE(KDB_BDESC_AUTORELEASE,          params_bdesc_retain_release),
+	opcode_bdesc_ar_reset =             OPCODE(KDB_BDESC_AR_RESET,             params_bdesc_retain_release),
 	opcode_bdesc_ar_pool_push =         OPCODE(KDB_BDESC_AR_POOL_PUSH,         params_bdesc_ar_push_pop),
 	opcode_bdesc_ar_pool_pop =          OPCODE(KDB_BDESC_AR_POOL_POP,          params_bdesc_ar_push_pop),
 	opcode_chdesc_create_noop =         OPCODE(KDB_CHDESC_CREATE_NOOP,         params_chdesc_create_noop),
@@ -260,6 +261,7 @@ static const struct opcode * opcodes_bdesc[] = {
 	&opcode_bdesc_destroy,
 	&opcode_bdesc_free_ddesc,
 	&opcode_bdesc_autorelease,
+	&opcode_bdesc_ar_reset,
 	&opcode_bdesc_ar_pool_push,
 	&opcode_bdesc_ar_pool_pop,
 	&last_opcode

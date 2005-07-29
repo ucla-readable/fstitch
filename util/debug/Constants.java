@@ -12,8 +12,9 @@ public interface Constants
 	public static final short KDB_BDESC_DESTROY = 105;
 	public static final short KDB_BDESC_FREE_DDESC = 106;
 	public static final short KDB_BDESC_AUTORELEASE = 107;
-	public static final short KDB_BDESC_AR_POOL_PUSH = 108;
-	public static final short KDB_BDESC_AR_POOL_POP = 109;
+	public static final short KDB_BDESC_AR_RESET = 108;
+	public static final short KDB_BDESC_AR_POOL_PUSH = 109;
+	public static final short KDB_BDESC_AR_POOL_POP = 110;
 	
 	public static final short KDB_CHDESC_CREATE_NOOP = 201;
 	public static final short KDB_CHDESC_CREATE_BIT = 202;

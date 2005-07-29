@@ -14,6 +14,7 @@ public class BdescModule extends Module
 		addFactory(BdescDestroy.getFactory(input));
 		addFactory(BdescFreeDdesc.getFactory(input));
 		addFactory(BdescAutoRelease.getFactory(input));
+		addFactory(BdescARReset.getFactory(input));
 		addFactory(BdescARPoolPush.getFactory(input));
 		addFactory(BdescARPoolPop.getFactory(input));
 	}
