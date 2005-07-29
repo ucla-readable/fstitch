@@ -1,6 +1,5 @@
 import java.io.*;
-import java.util.HashMap;
-import java.util.Vector;
+import java.util.*;
 
 public class Debugger extends OpcodeFactory
 {
@@ -63,6 +62,17 @@ public class Debugger extends OpcodeFactory
 		}
 	}
 	
+	public void replayAll()
+	{
+		SystemState state = new SystemState();
+		Iterator i = opcodes.iterator();
+		while(i.hasNext())
+		{
+			Opcode opcode = (Opcode) i.next();
+			opcode.applyTo(state);
+		}
+	}
+	
 	public static void main(String args[])
 	{
 		if(args.length != 1)
@@ -82,6 +92,10 @@ public class Debugger extends OpcodeFactory
 			
 			System.out.print("Reading debugging output... ");
 			dbg.readOpcodes();
+			System.out.println("OK!");
+			
+			System.out.print("Replaying log... ");
+			dbg.replayAll();
 			System.out.println("OK!");
 		}
 		catch(BadInputException e)

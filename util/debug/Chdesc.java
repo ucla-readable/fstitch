@@ -156,4 +156,29 @@ public class Chdesc
 	{
 		return dependents.iterator();
 	}
+	
+	public String toString()
+	{
+		String value = "[chdesc " + SystemState.render(address) + ": block " + SystemState.render(block) + ", owner " + SystemState.render(owner) + ", ";
+		switch(type)
+		{
+			case TYPE_NOOP:
+				value += "NOOP";
+				break;
+			case TYPE_BIT:
+				value += "BIT, offset " + offset + ", xor " + SystemState.render(xor);
+				break;
+			case TYPE_BYTE:
+				value += "BYTE, offset " + offset + ", length " + length;
+				break;
+			case TYPE_DESTROY:
+				value += "DESTROYED";
+				break;
+			default:
+				value += "UNKNOWN TYPE";
+				break;
+		}
+		value += "]";
+		return value;
+	}
 }

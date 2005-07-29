@@ -17,6 +17,7 @@ public class ChdescCreateBit extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		state.addChdesc(new Chdesc(chdesc, block, owner, offset, xor));
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
