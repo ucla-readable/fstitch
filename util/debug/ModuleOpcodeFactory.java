@@ -1,6 +1,7 @@
 import java.io.DataInput;
 import java.io.IOException;
 import java.util.Vector;
+import java.lang.reflect.InvocationTargetException;
 
 public class ModuleOpcodeFactory extends OpcodeFactory
 {
@@ -75,7 +76,7 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 	}
 	
 	private Opcode readGenericOpcode() throws UnexpectedParameterException, MissingParameterException, IOException, NoSuchMethodException,
-	                                          InstantiationException, IllegalAccessException, java.lang.reflect.InvocationTargetException
+	                                          InstantiationException, IllegalAccessException, InvocationTargetException
 	{
 		int index = 0;
 		Vector parameters = new Vector();
@@ -129,19 +130,19 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 		}
 		catch(NoSuchMethodException e)
 		{
-			throw new IOException(e.toString());
+			throw new BadInputException("Internal opcode class parameter error", e);
 		}
 		catch(InstantiationException e)
 		{
-			throw new IOException(e.toString());
+			throw new BadInputException("Internal opcode class attribute error", e);
 		}
 		catch(IllegalAccessException e)
 		{
-			throw new IOException(e.toString());
+			throw new BadInputException("Internal opcode class protection error", e);
 		}
-		catch(java.lang.reflect.InvocationTargetException e)
+		catch(InvocationTargetException e)
 		{
-			throw new IOException(e.toString());
+			throw new BadInputException(e.getTargetException());
 		}
 	}
 }

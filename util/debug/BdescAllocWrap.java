@@ -3,7 +3,16 @@ import java.io.IOException;
 
 public class BdescAllocWrap extends Opcode
 {
+	private final int block, ddesc, number;
+	
 	public BdescAllocWrap(int block, int ddesc, int number)
+	{
+		this.block = block;
+		this.ddesc = ddesc;
+		this.number = number;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

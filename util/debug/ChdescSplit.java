@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescSplit extends Opcode
 {
+	private final int original, count;
+	
 	public ChdescSplit(int original, int count)
+	{
+		this.original = original;
+		this.count = count;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

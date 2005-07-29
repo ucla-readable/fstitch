@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescRollback extends Opcode
 {
+	private final int chdesc;
+	
 	public ChdescRollback(int chdesc)
+	{
+		this.chdesc = chdesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

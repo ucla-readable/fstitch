@@ -33,17 +33,22 @@ public class Debugger extends OpcodeFactory
 	
 	public Opcode readOpcode() throws BadInputException, IOException
 	{
-		/* FIXME store file, line, and function information */
 		String file = readString();
 		int line = input.readInt();
 		String function = readString();
+		
 		short number = input.readShort();
 		//Short key = Short.valueOf(number);
 		Short key = new Short(number);
 		Module module = (Module) modules.get(key);
 		if(module == null)
 			throw new UnexpectedModuleException(number);
-		return module.readOpcode();
+		
+		Opcode opcode = module.readOpcode();
+		opcode.setFile(file);
+		opcode.setLine(line);
+		opcode.setFunction(function);
+		return opcode;
 	}
 	
 	public void readOpcodes() throws BadInputException, IOException

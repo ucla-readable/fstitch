@@ -3,7 +3,16 @@ import java.io.IOException;
 
 public class ChdescApplyCollection extends Opcode
 {
+	private final int count, chdescs, order;
+	
 	public ChdescApplyCollection(int count, int chdescs, int order)
+	{
+		this.count = count;
+		this.chdescs = chdescs;
+		this.order = order;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

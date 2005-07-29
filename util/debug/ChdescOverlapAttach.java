@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescOverlapAttach extends Opcode
 {
+	private final int recent, original;
+	
 	public ChdescOverlapAttach(int recent, int original)
+	{
+		this.recent = recent;
+		this.original = original;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

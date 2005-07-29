@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescDetachDependencies extends Opcode
 {
+	private final int chdesc;
+	
 	public ChdescDetachDependencies(int chdesc)
+	{
+		this.chdesc = chdesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

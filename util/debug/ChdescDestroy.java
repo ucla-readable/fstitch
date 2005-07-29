@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescDestroy extends Opcode
 {
+	private final int chdesc;
+	
 	public ChdescDestroy(int chdesc)
+	{
+		this.chdesc = chdesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

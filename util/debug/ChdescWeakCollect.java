@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescWeakCollect extends Opcode
 {
+	private final int chdesc;
+	
 	public ChdescWeakCollect(int chdesc)
+	{
+		this.chdesc = chdesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

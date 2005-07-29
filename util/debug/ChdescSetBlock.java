@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescSetBlock extends Opcode
 {
+	private final int chdesc, block;
+	
 	public ChdescSetBlock(int chdesc, int block)
+	{
+		this.chdesc = chdesc;
+		this.block = block;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

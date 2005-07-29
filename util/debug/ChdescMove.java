@@ -3,7 +3,18 @@ import java.io.IOException;
 
 public class ChdescMove extends Opcode
 {
+	private final int chdesc, destination, target;
+	private final short offset;
+	
 	public ChdescMove(int chdesc, int destination, int target, short offset)
+	{
+		this.chdesc = chdesc;
+		this.destination = destination;
+		this.target = target;
+		this.offset = offset;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

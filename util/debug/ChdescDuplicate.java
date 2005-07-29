@@ -3,7 +3,16 @@ import java.io.IOException;
 
 public class ChdescDuplicate extends Opcode
 {
+	private final int original, count, blocks;
+	
 	public ChdescDuplicate(int original, int count, int blocks)
+	{
+		this.original = original;
+		this.count = count;
+		this.blocks = blocks;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

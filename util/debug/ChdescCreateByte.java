@@ -3,7 +3,19 @@ import java.io.IOException;
 
 public class ChdescCreateByte extends Opcode
 {
+	private final int chdesc, block, owner;
+	private final short offset, length;
+	
 	public ChdescCreateByte(int chdesc, int block, int owner, short offset, short length)
+	{
+		this.chdesc = chdesc;
+		this.block = block;
+		this.owner = owner;
+		this.offset = offset;
+		this.length = length;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

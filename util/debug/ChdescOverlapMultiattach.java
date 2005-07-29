@@ -3,7 +3,17 @@ import java.io.IOException;
 
 public class ChdescOverlapMultiattach extends Opcode
 {
+	private final int chdesc, block;
+	private final boolean slip_under;
+	
 	public ChdescOverlapMultiattach(int chdesc, int block, byte slip_under)
+	{
+		this.chdesc = chdesc;
+		this.block = block;
+		this.slip_under = slip_under != 0;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

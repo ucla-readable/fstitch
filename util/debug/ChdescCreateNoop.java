@@ -3,7 +3,16 @@ import java.io.IOException;
 
 public class ChdescCreateNoop extends Opcode
 {
+	private final int chdesc, block, owner;
+	
 	public ChdescCreateNoop(int chdesc, int block, int owner)
+	{
+		this.chdesc = chdesc;
+		this.block = block;
+		this.owner = owner;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

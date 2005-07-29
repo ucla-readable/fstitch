@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescClearFlags extends Opcode
 {
+	private final int chdesc, flags;
+	
 	public ChdescClearFlags(int chdesc, int flags)
+	{
+		this.chdesc = chdesc;
+		this.flags = flags;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

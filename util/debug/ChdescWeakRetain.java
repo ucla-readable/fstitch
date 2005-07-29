@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescWeakRetain extends Opcode
 {
+	private final int chdesc, location;
+	
 	public ChdescWeakRetain(int chdesc, int location)
+	{
+		this.chdesc = chdesc;
+		this.location = location;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

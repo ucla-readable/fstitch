@@ -3,7 +3,17 @@ import java.io.IOException;
 
 public class ChdescMerge extends Opcode
 {
+	private final int count, chdescs, head, tail;
+	
 	public ChdescMerge(int count, int chdescs, int head, int tail)
+	{
+		this.count = count;
+		this.chdescs = chdescs;
+		this.head = head;
+		this.tail = tail;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

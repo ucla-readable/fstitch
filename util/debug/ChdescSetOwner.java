@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescSetOwner extends Opcode
 {
+	private final int chdesc, owner;
+	
 	public ChdescSetOwner(int chdesc, int owner)
+	{
+		this.chdesc = chdesc;
+		this.owner = owner;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

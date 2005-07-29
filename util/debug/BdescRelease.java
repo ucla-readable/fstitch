@@ -3,7 +3,18 @@ import java.io.IOException;
 
 public class BdescRelease extends Opcode
 {
+	private final int block, ddesc, ref_count, ar_count, dd_count;
+	
 	public BdescRelease(int block, int ddesc, int ref_count, int ar_count, int dd_count)
+	{
+		this.block = block;
+		this.ddesc = ddesc;
+		this.ref_count = ref_count;
+		this.ar_count = ar_count;
+		this.dd_count = dd_count;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

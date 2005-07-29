@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class ChdescAddDependency extends Opcode
 {
+	private final int source, target;
+	
 	public ChdescAddDependency(int source, int target)
+	{
+		this.source = source;
+		this.target = target;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

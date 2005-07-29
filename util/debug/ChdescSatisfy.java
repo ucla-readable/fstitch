@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescSatisfy extends Opcode
 {
+	private final int chdesc;
+	
 	public ChdescSatisfy(int chdesc)
+	{
+		this.chdesc = chdesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

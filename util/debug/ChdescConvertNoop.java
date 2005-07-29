@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescConvertNoop extends Opcode
 {
+	private final int chdesc;
+	
 	public ChdescConvertNoop(int chdesc)
+	{
+		this.chdesc = chdesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

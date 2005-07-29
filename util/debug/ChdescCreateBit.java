@@ -3,7 +3,19 @@ import java.io.IOException;
 
 public class ChdescCreateBit extends Opcode
 {
+	private final int chdesc, block, owner, xor;
+	private final short offset;
+	
 	public ChdescCreateBit(int chdesc, int block, int owner, short offset, int xor)
+	{
+		this.chdesc = chdesc;
+		this.block = block;
+		this.owner = owner;
+		this.offset = offset;
+		this.xor = xor;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

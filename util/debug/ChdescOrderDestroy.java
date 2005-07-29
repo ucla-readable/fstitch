@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class ChdescOrderDestroy extends Opcode
 {
+	private final int order;
+	
 	public ChdescOrderDestroy(int order)
+	{
+		this.order = order;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

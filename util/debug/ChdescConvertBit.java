@@ -3,7 +3,17 @@ import java.io.IOException;
 
 public class ChdescConvertBit extends Opcode
 {
+	private final int chdesc, xor;
+	private final short offset;
+	
 	public ChdescConvertBit(int chdesc, short offset, int xor)
+	{
+		this.chdesc = chdesc;
+		this.offset = offset;
+		this.xor = xor;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

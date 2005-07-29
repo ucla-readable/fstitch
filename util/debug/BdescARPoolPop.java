@@ -3,7 +3,14 @@ import java.io.IOException;
 
 public class BdescARPoolPop extends Opcode
 {
+	private final int depth;
+	
 	public BdescARPoolPop(int depth)
+	{
+		this.depth = depth;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	

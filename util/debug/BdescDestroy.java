@@ -3,7 +3,15 @@ import java.io.IOException;
 
 public class BdescDestroy extends Opcode
 {
+	private final int block, ddesc;
+	
 	public BdescDestroy(int block, int ddesc)
+	{
+		this.block = block;
+		this.ddesc = ddesc;
+	}
+	
+	public void applyTo(SystemState state)
 	{
 	}
 	
