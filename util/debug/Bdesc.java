@@ -8,4 +8,9 @@ public class Bdesc
 		this.address = address;
 		this.ddesc = ddesc;
 	}
+	
+	public String toString()
+	{
+		return "[bdesc " + SystemState.hex(address) + ": ddesc " + SystemState.hex(ddesc) + "]";
+	}
 }

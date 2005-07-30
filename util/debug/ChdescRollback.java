@@ -12,6 +12,9 @@ public class ChdescRollback extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.setFlags(Chdesc.FLAG_ROLLBACK);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

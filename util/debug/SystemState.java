@@ -1,14 +1,17 @@
 import java.util.HashMap;
+import java.util.Iterator;
+import java.io.Writer;
+import java.io.IOException;
 
 public class SystemState
 {
 	private HashMap bdescs;
-	private HashMap chdescs;
+	public final ChdescCollection chdescs;
 	
 	public SystemState()
 	{
 		bdescs = new HashMap();
-		chdescs = new HashMap();
+		chdescs = new ChdescCollection("registered");
 	}
 	
 	public void addBdesc(Bdesc bdesc)
@@ -28,40 +31,53 @@ public class SystemState
 		return (Bdesc) bdescs.get(key);
 	}
 	
-	public void remBdesc(int bdesc)
+	public Bdesc remBdesc(int bdesc)
 	{
 		//Integer key = Integer.valueOf(bdesc);
 		Integer key = new Integer(bdesc);
 		//System.out.println("Destroy " + lookupBdesc(bdesc));
-		bdescs.remove(key);
+		return (Bdesc) bdescs.remove(key);
+	}
+	
+	public Iterator getBdescs()
+	{
+		return new HashMapValueIterator(bdescs);
 	}
 	
 	public void addChdesc(Chdesc chdesc)
 	{
-		//Integer key = Integer.valueOf(chdesc.address);
-		Integer key = new Integer(chdesc.address);
-		if(chdescs.containsKey(key))
-			throw new RuntimeException("Duplicate chdesc registered!");
-		//System.out.println("Add " + chdesc);
-		chdescs.put(key, chdesc);
+		chdescs.add(chdesc);
 	}
 	
 	public Chdesc lookupChdesc(int chdesc)
 	{
-		//Integer key = Integer.valueOf(chdesc);
-		Integer key = new Integer(chdesc);
-		return (Chdesc) chdescs.get(key);
+		return chdescs.lookup(chdesc);
 	}
 	
-	public void remChdesc(int chdesc)
+	public Chdesc remChdesc(int chdesc)
 	{
-		//Integer key = Integer.valueOf(chdesc);
-		Integer key = new Integer(chdesc);
-		//System.out.println("Destroy " + lookupChdesc(chdesc));
-		chdescs.remove(key);
+		return chdescs.remove(chdesc);
 	}
 	
-	public static String render(int address)
+	public Iterator getChdescs()
+	{
+		return chdescs.iterator();
+	}
+	
+	public void render(Writer output) throws IOException
+	{
+		output.write("digraph chdescs\n{\nnodesep=0.15;\nranksep=0.15;\norientation=L;\nnode [shape=circle,color=black];\n");
+		Iterator i = chdescs.iterator();
+		while(i.hasNext())
+		{
+			Chdesc chdesc = (Chdesc) i.next();
+			output.write("ch" + hex(chdesc.address) + " [label=\"" + chdesc + "\",fillcolor=slateblue1,style=filled]\n");
+		}
+		output.write("}\n");
+		output.flush();
+	}
+	
+	public static String hex(int address)
 	{
 		String hex = Integer.toHexString(address);
 		while(hex.length() < 8)

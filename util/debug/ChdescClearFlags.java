@@ -13,6 +13,9 @@ public class ChdescClearFlags extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.clearFlags(flags);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

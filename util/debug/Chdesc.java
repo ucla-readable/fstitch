@@ -1,4 +1,4 @@
-import java.util.Vector;
+import java.util.HashSet;
 import java.util.Iterator;
 
 public class Chdesc
@@ -7,6 +7,7 @@ public class Chdesc
 	public static final int TYPE_BIT = 1;
 	public static final int TYPE_BYTE = 2;
 	public static final int TYPE_DESTROY = 3;
+	public static final int TYPE_DANGLING = 4;
 	
 	/* these flags must be kept in sync with kfs/chdesc.h */
 	public static final int FLAG_MARKED = 0x01;
@@ -25,16 +26,23 @@ public class Chdesc
 	private int xor; /* for bit */
 	private short length; /* for byte */
 	
-	private Vector dependencies, dependents;
+	private ChdescCollection dependencies, dependents;
+	private HashSet locations;
+	
+	public Chdesc(int address)
+	{
+		this.address = address;
+		type = TYPE_DANGLING;
+	}
 	
 	public Chdesc(int address, int block, int owner)
 	{
 		this.address = address;
 		this.block = block;
 		this.owner = owner;
-		flags = FLAG_ROLLBACK;
-		dependencies = new Vector();
-		dependents = new Vector();
+		dependencies = new ChdescCollection("added to dependencies");
+		dependents = new ChdescCollection("added to dependents");
+		locations = new HashSet();
 		changeToNoop();
 	}
 	
@@ -42,12 +50,16 @@ public class Chdesc
 	{
 		this(address, block, owner);
 		changeToBit(offset, xor);
+		/* BIT chdescs start rolled back */
+		setFlags(FLAG_ROLLBACK);
 	}
 	
 	public Chdesc(int address, int block, int owner, short offset, short length)
 	{
 		this(address, block, owner);
 		changeToByte(offset, length);
+		/* BYTE chdescs start rolled back */
+		setFlags(FLAG_ROLLBACK);
 	}
 	
 	public int getType()
@@ -55,18 +67,29 @@ public class Chdesc
 		return type;
 	}
 	
+	public boolean isValid()
+	{
+		return type == TYPE_NOOP || type == TYPE_BIT || type == TYPE_BYTE;
+	}
+	
 	public int getBlock()
 	{
+		if(!isValid())
+			throw new RuntimeException("Query for block of invalid chdesc!");
 		return block;
 	}
 	
 	public int getOwner()
 	{
+		if(!isValid())
+			throw new RuntimeException("Query for owner of invalid chdesc!");
 		return owner;
 	}
 	
 	public int getFlags()
 	{
+		if(!isValid())
+			throw new RuntimeException("Query for flags of invalid chdesc!");
 		return flags;
 	}
 	
@@ -93,31 +116,43 @@ public class Chdesc
 	
 	public void setBlock(int block)
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to set block of invalid chdesc!");
 		this.block = block;
 	}
 	
 	public void setOwner(int owner)
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to set owner of invalid chdesc!");
 		this.owner = owner;
 	}
 	
 	public void setFlags(int flags)
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to set flags of invalid chdesc!");
 		this.flags |= flags;
 	}
 	
 	public void clearFlags(int flags)
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to clear flags of invalid chdesc!");
 		this.flags &= ~flags;
 	}
 	
 	public void changeToNoop()
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to change type of invalid chdesc!");
 		type = TYPE_NOOP;
 	}
 	
 	public void changeToBit(short offset, int xor)
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to change type of invalid chdesc!");
 		type = TYPE_BIT;
 		this.offset = offset;
 		this.xor = xor;
@@ -125,6 +160,8 @@ public class Chdesc
 	
 	public void changeToByte(short offset, short length)
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to change type of invalid chdesc!");
 		type = TYPE_BYTE;
 		this.offset = offset;
 		this.length = length;
@@ -132,47 +169,97 @@ public class Chdesc
 	
 	public void destroy()
 	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to destroy invalid chdesc!");
 		type = TYPE_DESTROY;
 	}
 	
-	public void addDependency(int dependency)
+	public void addDependency(Chdesc dependency)
 	{
-		//dependencies.add(Integer.valueOf(dependency));
-		dependencies.add(new Integer(dependency));
+		if(!isValid())
+			throw new RuntimeException("Attempt to add dependency to invalid chdesc!");
+		dependencies.add(dependency);
 	}
 	
-	public void addDependent(int dependent)
+	public void addDependent(Chdesc dependent)
 	{
-		//dependents.add(Integer.valueOf(dependent));
-		dependents.add(new Integer(dependent));
+		if(!isValid())
+			throw new RuntimeException("Attempt to add dependent to invalid chdesc!");
+		dependents.add(dependent);
+	}
+	
+	public void remDependency(int dependency)
+	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to remove dependency from invalid chdesc!");
+		dependencies.remove(dependency);
+	}
+	
+	public void remDependent(int dependent)
+	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to remove dependent from invalid chdesc!");
+		dependents.remove(dependent);
 	}
 	
 	public Iterator getDependencies()
 	{
+		if(!isValid())
+			throw new RuntimeException("Query for dependencies of invalid chdesc!");
 		return dependencies.iterator();
 	}
 	
 	public Iterator getDependents()
 	{
+		if(!isValid())
+			throw new RuntimeException("Query for dependents of invalid chdesc!");
 		return dependents.iterator();
+	}
+	
+	public void weakRetain(int location)
+	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to weak retain an invalid chdesc!");
+		//locations.add(Integer.valueOf(location));
+		locations.add(new Integer(location));
+	}
+	
+	public void weakForget(int location)
+	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to weak forget an invalid chdesc!");
+		//locations.remove(Integer.valueOf(location));
+		locations.remove(new Integer(location));
+	}
+	
+	public Iterator getLocations()
+	{
+		if(!isValid())
+			throw new RuntimeException("Query for weak references to invalid chdesc!");
+		return locations.iterator();
 	}
 	
 	public String toString()
 	{
-		String value = "[chdesc " + SystemState.render(address) + ": block " + SystemState.render(block) + ", owner " + SystemState.render(owner) + ", ";
+		String value = "[chdesc " + SystemState.hex(address) + ": ";
+		if(type <= TYPE_BYTE)
+			value += "block " + SystemState.hex(block) + ", owner " + SystemState.hex(owner) + ", ";
 		switch(type)
 		{
 			case TYPE_NOOP:
 				value += "NOOP";
 				break;
 			case TYPE_BIT:
-				value += "BIT, offset " + offset + ", xor " + SystemState.render(xor);
+				value += "BIT, offset " + offset + ", xor " + SystemState.hex(xor);
 				break;
 			case TYPE_BYTE:
 				value += "BYTE, offset " + offset + ", length " + length;
 				break;
 			case TYPE_DESTROY:
 				value += "DESTROYED";
+				break;
+			case TYPE_DANGLING:
+				value += "DANGLING";
 				break;
 			default:
 				value += "UNKNOWN TYPE";

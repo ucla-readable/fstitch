@@ -15,6 +15,9 @@ public class ChdescConvertByte extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.changeToByte(offset, length);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

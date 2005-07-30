@@ -62,7 +62,7 @@ public class Debugger extends OpcodeFactory
 		}
 	}
 	
-	public void replayAll()
+	public SystemState replayAll()
 	{
 		SystemState state = new SystemState();
 		Iterator i = opcodes.iterator();
@@ -71,23 +71,39 @@ public class Debugger extends OpcodeFactory
 			Opcode opcode = (Opcode) i.next();
 			opcode.applyTo(state);
 		}
+		return state;
+	}
+	
+	public SystemState replaySome(int count)
+	{
+		SystemState state = new SystemState();
+		Iterator i = opcodes.iterator();
+		while(i.hasNext() && count-- > 0)
+		{
+			Opcode opcode = (Opcode) i.next();
+			opcode.applyTo(state);
+		}
+		return state;
 	}
 	
 	public static void main(String args[])
 	{
-		if(args.length != 1)
+		if(args.length != 1 && args.length != 2)
 		{
-			System.out.println("Usage: java Debugger <file>");
+			System.out.println("Usage: java Debugger <file> [count]");
 			return;
 		}
 		
 		try {
+			Debugger dbg;
+			SystemState state;
+			
 			File file = new File(args[0]);
 			InputStream input = new FileInputStream(file);
 			DataInput data = new DataInputStream(input);
 			
 			System.out.print("Reading debug signature... ");
-			Debugger dbg = new Debugger(data);
+			dbg = new Debugger(data);
 			System.out.println("OK!");
 			
 			System.out.print("Reading debugging output... ");
@@ -95,8 +111,16 @@ public class Debugger extends OpcodeFactory
 			System.out.println("OK!");
 			
 			System.out.print("Replaying log... ");
-			dbg.replayAll();
+			if(args.length == 1)
+				state = dbg.replayAll();
+			else
+				state = dbg.replaySome(Integer.parseInt(args[1]));
 			System.out.println("OK!");
+			
+			Iterator i = state.getChdescs();
+			while(i.hasNext())
+				System.out.println(i.next());
+			state.render(new OutputStreamWriter(System.err));
 		}
 		catch(BadInputException e)
 		{

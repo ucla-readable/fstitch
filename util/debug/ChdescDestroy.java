@@ -12,7 +12,9 @@ public class ChdescDestroy extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
-		state.remChdesc(chdesc);
+		Chdesc chdesc = state.remChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.destroy();
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

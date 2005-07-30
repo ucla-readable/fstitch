@@ -13,6 +13,9 @@ public class ChdescRemDependent extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc source = state.lookupChdesc(this.source);
+		if(source != null)
+			source.remDependent(target);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

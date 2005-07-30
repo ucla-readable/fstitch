@@ -12,6 +12,9 @@ public class ChdescApply extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.clearFlags(Chdesc.FLAG_ROLLBACK);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

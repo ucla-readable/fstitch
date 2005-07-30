@@ -13,6 +13,9 @@ public class ChdescSetOwner extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.setOwner(owner);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

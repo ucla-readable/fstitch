@@ -13,6 +13,9 @@ public class ChdescSetBlock extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.setBlock(block);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)

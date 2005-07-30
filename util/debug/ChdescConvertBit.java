@@ -15,6 +15,9 @@ public class ChdescConvertBit extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
+		Chdesc chdesc = state.lookupChdesc(this.chdesc);
+		if(chdesc != null)
+			chdesc.changeToBit(offset, xor);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
