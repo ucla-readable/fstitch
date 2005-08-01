@@ -66,12 +66,12 @@ public class SystemState
 	
 	public void render(Writer output) throws IOException
 	{
-		output.write("digraph chdescs\n{\nnodesep=0.15;\nranksep=0.15;\norientation=L;\nnode [shape=circle,color=black];\n");
+		output.write("digraph chdescs\n{\nsize=\"11,8.5\";\nnodesep=0.25;\nranksep=0.25;\norientation=L;\nnode [shape=circle,color=black];\n");
 		Iterator i = chdescs.iterator();
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
-			output.write("ch" + hex(chdesc.address) + " [label=\"" + chdesc + "\",fillcolor=slateblue1,style=filled]\n");
+			output.write(chdesc.render());
 		}
 		output.write("}\n");
 		output.flush();

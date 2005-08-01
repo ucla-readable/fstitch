@@ -4,7 +4,7 @@ public class UnexpectedOpcodeException extends BadInputException
 	
 	public UnexpectedOpcodeException(short opcodeNumber)
 	{
-		super("Unexpected opcode: " + Opcode.render(opcodeNumber));
+		super("Unexpected opcode: " + Opcode.hex(opcodeNumber));
 		this.opcodeNumber = opcodeNumber;
 	}
 	

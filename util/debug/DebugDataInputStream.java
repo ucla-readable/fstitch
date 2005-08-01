@@ -22,7 +22,7 @@ public class DebugDataInputStream implements DataInput
 	public byte readByte() throws IOException
 	{
 		byte output = input.readByte();
-		System.out.println("readByte() = " + render(output));
+		System.out.println("readByte() = " + hex(output));
 		return output;
 	}
 	
@@ -54,7 +54,7 @@ public class DebugDataInputStream implements DataInput
 	public int readInt() throws IOException
 	{
 		int output = input.readInt();
-		System.out.println("readInt() = " + render(output));
+		System.out.println("readInt() = " + hex(output));
 		return output;
 	}
 	
@@ -72,7 +72,7 @@ public class DebugDataInputStream implements DataInput
 	public short readShort() throws IOException
 	{
 		short output = input.readShort();
-		System.out.println("readShort() = " + render(output));
+		System.out.println("readShort() = " + hex(output));
 		return output;
 	}
 	
@@ -96,22 +96,22 @@ public class DebugDataInputStream implements DataInput
 		return input.skipBytes(n);
 	}
 	
-	public static String render(byte b)
+	public static String hex(byte b)
 	{
-		return render(b, 2);
+		return hex(b, 2);
 	}
 	
-	public static String render(short s)
+	public static String hex(short s)
 	{
-		return render(s, 4);
+		return hex(s, 4);
 	}
 	
-	public static String render(int i)
+	public static String hex(int i)
 	{
-		return render(i, 8);
+		return hex(i, 8);
 	}
 	
-	public static String render(int i, int pad)
+	public static String hex(int i, int pad)
 	{
 		String hex = Integer.toHexString(i);
 		while(hex.length() < pad)

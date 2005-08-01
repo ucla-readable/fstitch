@@ -51,8 +51,8 @@ public abstract class Module extends OpcodeFactory
 		return factory.readOpcode();
 	}
 	
-	public static String render(short moduleNumber)
+	public static String hex(short moduleNumber)
 	{
-		return Opcode.render(moduleNumber);
+		return Opcode.hex(moduleNumber);
 	}
 }

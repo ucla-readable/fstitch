@@ -88,9 +88,9 @@ public class Debugger extends OpcodeFactory
 	
 	public static void main(String args[])
 	{
-		if(args.length != 1 && args.length != 2)
+		if(args.length != 1 && args.length != 2 && args.length != 3)
 		{
-			System.out.println("Usage: java Debugger <file> [count]");
+			System.out.println("Usage: java Debugger <file> [outfile [count]]");
 			return;
 		}
 		
@@ -102,25 +102,25 @@ public class Debugger extends OpcodeFactory
 			InputStream input = new FileInputStream(file);
 			DataInput data = new DataInputStream(input);
 			
-			System.out.print("Reading debug signature... ");
+			System.err.print("Reading debug signature... ");
 			dbg = new Debugger(data);
-			System.out.println("OK!");
+			System.err.println("OK!");
 			
-			System.out.print("Reading debugging output... ");
+			System.err.print("Reading debugging output... ");
 			dbg.readOpcodes();
-			System.out.println("OK!");
+			System.err.println("OK!");
 			
-			System.out.print("Replaying log... ");
-			if(args.length == 1)
+			System.err.print("Replaying log... ");
+			if(args.length == 1 || args.length == 2)
 				state = dbg.replayAll();
 			else
-				state = dbg.replaySome(Integer.parseInt(args[1]));
-			System.out.println("OK!");
+				state = dbg.replaySome(Integer.parseInt(args[2]));
+			System.err.println("OK!");
 			
-			Iterator i = state.getChdescs();
-			while(i.hasNext())
-				System.out.println(i.next());
-			state.render(new OutputStreamWriter(System.err));
+			if(args.length == 1)
+				state.render(new OutputStreamWriter(System.out));
+			else
+				state.render(new FileWriter(new File(args[1])));
 		}
 		catch(BadInputException e)
 		{

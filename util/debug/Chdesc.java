@@ -268,4 +268,66 @@ public class Chdesc
 		value += "]";
 		return value;
 	}
+	
+	public String renderName()
+	{
+		return "\"ch" + SystemState.hex(address) + "-hc" + SystemState.hex(hashCode()) + "\"";
+	}
+	
+	private String renderBlockOwner()
+	{
+		return "\\non " + SystemState.hex(block) + "\\nat " + SystemState.hex(owner);
+	}
+	
+	public String render()
+	{
+		String name = renderName();
+		
+		String links = name + " [label=\"" + SystemState.hex(address);
+		switch(type)
+		{
+			case TYPE_NOOP:
+				links += "\"";
+				break;
+			case TYPE_BIT:
+				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner() + "\",fillcolor=green,style=filled";
+				break;
+			case TYPE_BYTE:
+				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner() + "\",fillcolor=slateblue1,style=filled";
+				break;
+			case TYPE_DESTROY:
+				links += "\",fillcolor=orange,style=filled";
+				break;
+			case TYPE_DANGLING:
+				links += "\",fillcolor=red,style=filled";
+				break;
+		}
+		links += "]\n";
+		
+		Iterator i = dependencies.iterator();
+		while(i.hasNext())
+		{
+			Chdesc chdesc = (Chdesc) i.next();
+			/* we say we depend on you: black arrows */
+			links += name + " -> " + chdesc.renderName() + " [color=black]\n";
+		}
+		i = dependents.iterator();
+		while(i.hasNext())
+		{
+			Chdesc chdesc = (Chdesc) i.next();
+			/* we say you depend on us: blue arrows */
+			links += chdesc.renderName() + " -> " + name + " [color=blue]\n";
+		}
+		i = locations.iterator();
+		while(i.hasNext())
+		{
+			Integer address = (Integer) i.next();
+			/* weak references: yellow boxes, green arrows */
+			String location = "\"" + SystemState.hex(address.intValue()) + "\"";
+			links += location + " [shape=box,fillcolor=yellow,style=filled]\n";
+			links += location + " -> " + name + " [color=green]\n";
+		}
+		
+		return links;
+	}
 }
