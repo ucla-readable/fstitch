@@ -2,11 +2,15 @@
 #define KUDOS_KFS_DEBUG_OPCODE_H
 
 /* modules */
+#define KDB_MODULE_INFO              1
 #define KDB_MODULE_BDESC           100
 #define KDB_MODULE_CHDESC_ALTER    200
 #define KDB_MODULE_CHDESC_INFO     300
 
 /* opcodes */
+
+/* info (0xx) */
+#define KDB_INFO_MARK                0
 
 /* bdesc (1xx) */
 #define KDB_BDESC_ALLOC            101

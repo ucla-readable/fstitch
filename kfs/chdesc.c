@@ -839,7 +839,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	if((*chdesc)->flags & CHDESC_FREEING)
 		return;
 	(*chdesc)->flags |= CHDESC_FREEING;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, *chdesc);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_FREEING);
 	
 	if((*chdesc)->dependents)
 		chdesc_satisfy(*chdesc);
@@ -848,6 +848,8 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);
 	
 	chdesc_weak_collect(*chdesc);
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, *chdesc);
 	
 	switch((*chdesc)->type)
 	{

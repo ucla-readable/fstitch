@@ -51,6 +51,7 @@ static const struct param
 	param_head =        {"head",        UHEX32},
 	param_length =      {"length",      UINT16},
 	param_location =    {"location",    UHEX32},
+	param_module =      {"module",      UHEX16},
 	param_number =      {"number",      UINT32},
 	param_offset =      {"offset",      UINT16},
 	param_order =       {"order",       UHEX32},
@@ -66,6 +67,10 @@ static const struct param
 	last_param = {NULL, 0};
 
 /* parameter combinations */
+static const struct param * params_info_mark[] = {
+	&param_module,
+	&last_param
+};
 static const struct param * params_bdesc_alloc[] = {
 	&param_block,
 	&param_ddesc,
@@ -208,6 +213,7 @@ static const struct param * params_chdesc_merge[] = {
 
 /* all opcodes */
 static const struct opcode
+	opcode_info_mark =                  OPCODE(KDB_INFO_MARK,                  params_info_mark),
 	opcode_bdesc_alloc =                OPCODE(KDB_BDESC_ALLOC,                params_bdesc_alloc),
 	opcode_bdesc_alloc_wrap =           OPCODE(KDB_BDESC_ALLOC_WRAP,           params_bdesc_alloc),
 	opcode_bdesc_retain =               OPCODE(KDB_BDESC_RETAIN,               params_bdesc_retain_release),
@@ -253,6 +259,10 @@ static const struct opcode
 	last_opcode = {0, NULL, NULL};
 
 /* opcode combinations */
+static const struct opcode * opcodes_info[] = {
+	&opcode_info_mark,
+	&last_opcode
+};
 static const struct opcode * opcodes_bdesc[] = {
 	&opcode_bdesc_alloc,
 	&opcode_bdesc_alloc_wrap,
@@ -307,10 +317,11 @@ static const struct opcode * opcodes_chdesc_info[] = {
 
 /* modules */
 static const struct module modules[] = {
-	 {KDB_MODULE_BDESC, opcodes_bdesc},
-	 {KDB_MODULE_CHDESC_ALTER, opcodes_chdesc_alter},
-	 {KDB_MODULE_CHDESC_INFO, opcodes_chdesc_info},
-	 {0, NULL}
+	{KDB_MODULE_INFO, opcodes_info},
+	{KDB_MODULE_BDESC, opcodes_bdesc},
+	{KDB_MODULE_CHDESC_ALTER, opcodes_chdesc_alter},
+	{KDB_MODULE_CHDESC_INFO, opcodes_chdesc_info},
+	{0, NULL}
 };
 static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
@@ -450,11 +461,56 @@ int kfs_debug_init(const char * host, uint16_t port)
 	return 0;
 }
 
+void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int line, const char * function)
+{
+	switch(command)
+	{
+		case KFS_DEBUG_MARK:
+			printf("Sent mark [%04x] from %s() at %s:%d\n", module, function, file, line);
+			kfs_debug_send(KDB_MODULE_INFO, KDB_INFO_MARK, file, line, function, module);
+			break;
+		case KFS_DEBUG_DISABLE:
+		{
+			int m;
+			for(m = 0; modules[m].opcodes; m++)
+				if(modules[m].module == module)
+				{
+					printf("Disabled debugging for module [%04x] from %s() at %s:%d\n", module, function, file, line);
+					modules_ignore[m] = 1;
+					break;
+				}
+			break;
+		}
+		case KFS_DEBUG_ENABLE:
+		{
+			int m;
+			for(m = 0; modules[m].opcodes; m++)
+				if(modules[m].module == module)
+				{
+					printf("Enabled debugging for module [%04x] from %s() at %s:%d\n", module, function, file, line);
+					modules_ignore[m] = 0;
+					break;
+				}
+			break;
+		}
+	}
+}
+
+void kfs_debug_net_command(void)
+{
+	uint16_t command[2];
+	int bytes = read_nb(debug_socket[0], &command, 4);
+	if(bytes == 4)
+		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
+}
+
 int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
 	int m, o = 0, r = 0;
 	va_list ap;
 	va_start(ap, function);
+	
+	kfs_debug_net_command();
 	
 	/* look up the right module and opcode indices */
 	for(m = 0; modules[m].opcodes; m++)
@@ -514,6 +570,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		}
 	}
 	
+	/* TODO: not technically necessary, see above */
 	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
 #else
 	fprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
@@ -603,18 +660,6 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		exit();
 	}
 	return r;
-}
-
-int kfs_debug_ignore(uint16_t module, bool ignore)
-{
-	int m;
-	for(m = 0; modules[m].opcodes; m++)
-		if(modules[m].module == module)
-		{
-			modules_ignore[m] = ignore;
-			break;
-		}
-	return modules[m].opcodes ? 0 : -E_INVAL;
 }
 
 #endif
