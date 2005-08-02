@@ -1,9 +1,12 @@
 public interface Constants
 {
 	/* These constants should be kept in sync with the ones in kfs/debug_opcodes.h */
+	public static final short KDB_MODULE_INFO = 1;
 	public static final short KDB_MODULE_BDESC = 100;
 	public static final short KDB_MODULE_CHDESC_ALTER = 200;
 	public static final short KDB_MODULE_CHDESC_INFO = 300;
+	
+	public static final short KDB_INFO_MARK = 0;
 	
 	public static final short KDB_BDESC_ALLOC = 101;
 	public static final short KDB_BDESC_ALLOC_WRAP = 102;

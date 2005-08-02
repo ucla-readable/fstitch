@@ -1,17 +1,27 @@
 import java.io.*;
 import java.util.*;
 
+import command.*;
+
 public class Debugger extends OpcodeFactory
 {
+	public final String name;
+	
 	private HashMap modules;
 	private Vector opcodes;
+	private SystemState state;
+	private int applied;
 	
-	public Debugger(DataInput input) throws BadInputException, IOException
+	public Debugger(String name, DataInput input) throws BadInputException, IOException
 	{
 		super(input);
+		this.name = name;
 		modules = new HashMap();
 		opcodes = new Vector();
+		state = new SystemState();
+		applied = 0;
 		
+		addModule(new InfoModule(input));
 		addModule(new BdescModule(input));
 		addModule(new ChdescAlterModule(input));
 		addModule(new ChdescInfoModule(input));
@@ -62,77 +72,98 @@ public class Debugger extends OpcodeFactory
 		}
 	}
 	
-	public SystemState replayAll()
+	public void readOpcodes(int count) throws BadInputException, IOException
 	{
-		SystemState state = new SystemState();
-		Iterator i = opcodes.iterator();
-		while(i.hasNext())
+		try {
+			while(count-- > 0)
+				opcodes.add(readOpcode());
+		}
+		catch(EOFException e)
 		{
-			Opcode opcode = (Opcode) i.next();
+			/* this is OK, we expect the end of the file sooner or later */
+		}
+	}
+	
+	public void replayAll()
+	{
+		while(applied < opcodes.size())
+		{
+			Opcode opcode = (Opcode) opcodes.get(applied++);
 			opcode.applyTo(state);
 		}
+	}
+	
+	public void replay(int count)
+	{
+		while(applied < opcodes.size() && count-- > 0)
+		{
+			Opcode opcode = (Opcode) opcodes.get(applied++);
+			opcode.applyTo(state);
+		}
+	}
+	
+	public void resetState()
+	{
+		state = new SystemState();
+		applied = 0;
+	}
+	
+	public SystemState getState()
+	{
 		return state;
 	}
 	
-	public SystemState replaySome(int count)
+	public int getApplied()
 	{
-		SystemState state = new SystemState();
-		Iterator i = opcodes.iterator();
-		while(i.hasNext() && count-- > 0)
-		{
-			Opcode opcode = (Opcode) i.next();
-			opcode.applyTo(state);
-		}
-		return state;
+		return applied;
+	}
+	
+	public String toString()
+	{
+		return "Debugging " + name + ", read " + opcodes.size() + " opcodes, applied " + applied;
 	}
 	
 	public static void main(String args[])
 	{
-		if(args.length != 1 && args.length != 2 && args.length != 3)
+		if(args.length != 0 && args.length != 1 && args.length != 2)
 		{
-			System.out.println("Usage: java Debugger <file> [outfile [count]]");
+			System.err.println("Usage: java Debugger [file [count]]");
 			return;
 		}
 		
 		try {
-			Debugger dbg;
-			SystemState state;
+			CommandInterpreter interpreter = new CommandInterpreter();
+			Debugger dbg = null;
 			
-			File file = new File(args[0]);
-			InputStream input = new FileInputStream(file);
-			DataInput data = new DataInputStream(input);
+			interpreter.addCommand(new CloseCommand());
+			interpreter.addCommand(new LoadCommand());
+			interpreter.addCommand(new RenderCommand());
+			interpreter.addCommand(new ResetCommand());
+			interpreter.addCommand(new RunCommand());
+			interpreter.addCommand(new StatusCommand());
+			interpreter.addCommand(new StepCommand());
 			
-			System.err.print("Reading debug signature... ");
-			dbg = new Debugger(data);
-			System.err.println("OK!");
+			/* "built-in" commands */
+			interpreter.addCommand(new HelpCommand());
+			interpreter.addCommand(new QuitCommand());
 			
-			System.err.print("Reading debugging output... ");
-			dbg.readOpcodes();
-			System.err.println("OK!");
+			if(args.length != 0)
+			{
+				String line = "load " + args[0];
+				if(args.length != 1)
+					line += " " + args[1];
+				dbg = (Debugger) interpreter.runCommandLine(line, null);
+			}
 			
-			System.err.print("Replaying log... ");
-			if(args.length == 1 || args.length == 2)
-				state = dbg.replayAll();
-			else
-				state = dbg.replaySome(Integer.parseInt(args[2]));
-			System.err.println("OK!");
-			
-			if(args.length == 1)
-				state.render(new OutputStreamWriter(System.out));
-			else
-				state.render(new FileWriter(new File(args[1])));
-		}
-		catch(BadInputException e)
-		{
-			System.out.println(e);
-		}
-		catch(EOFException e)
-		{
-			System.out.println("EOF!");
+			interpreter.runStdinCommands("debug> ", dbg);
 		}
 		catch(IOException e)
 		{
-			System.out.println(e);
+			System.err.println(e);
+		}
+		catch(CommandException e)
+		{
+			System.err.println(e);
 		}
 	}
 }
