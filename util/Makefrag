@@ -22,6 +22,11 @@ $(OBJDIR)/util/$(KNBD_SERVER) : util/$(KNBD_SERVER).c
 	@mkdir -p $(@D)
 	$(V)$(NCC) -Wall -pedantic -o $@ $<
 
+$(OBJDIR)/util/$(KDB_SERVER) : util/$(KDB_SERVER).c
+	@echo + cc[UTIL] $<
+	@mkdir -p $(@D)
+	$(V)$(NCC) -Wall -pedantic -o $@ $<
+
 $(OBJDIR)/util/$(HEX2BIN) : util/$(HEX2BIN).c
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)

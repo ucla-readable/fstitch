@@ -39,6 +39,7 @@ TOP = .
 ELFDUMP_SYMTAB := elfdump_symtab
 PTYPAIR        := ptypair
 KNBD_SERVER    := knbd-server
+KDB_SERVER     := kdb-server
 HEX2BIN        := hex2bin
 
 # Elf symbol and symbol string tables
