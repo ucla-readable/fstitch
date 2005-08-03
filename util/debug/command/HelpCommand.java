@@ -55,8 +55,8 @@ public class HelpCommand implements Command
 		while(iterator.hasNext())
 		{
 			Command command = (Command) iterator.next();
-			System.out.println("\t" + command.getName());
-			System.out.println("\t\t" + command.getHelp());
+			System.out.println("  " + command.getName());
+			System.out.println("    " + command.getHelp());
 		}
 		return data;
 	}
