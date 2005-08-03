@@ -18,7 +18,7 @@
 		depends="kdb-jar,kdb-doc"
 		description="Build the KFS Debugger and javadocs"/>
 
-	<target name="kdb-jar" depends="kdb" description="Build kdb.jar">
+	<target name="kdb-jar" depends="kdb-classes" description="Build kdb.jar">
 		<jar jarfile="${basedir}/kdb.jar" basedir="${classes}">
 			<manifest>
 				<attribute name="Built-By" value="${user.name}"/>
