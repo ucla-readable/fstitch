@@ -445,11 +445,11 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 					descs[i]->byte.newdata = NULL;
 				descs[i]->type = BYTE;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, descs[i], descs[i]->byte.offset, descs[i]->byte.length);
+				descs[i]->flags |= CHDESC_MOVED;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, descs[i], CHDESC_MOVED);
 				r = __chdesc_overlap_multiattach(descs[i], blocks[i]);
 				if(r < 0)
 					goto fail_later;
-				descs[i]->flags |= CHDESC_MOVED;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, descs[i], CHDESC_MOVED);
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
