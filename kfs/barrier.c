@@ -299,6 +299,8 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 			 * duplicated chdescs */
 			assert(target_block[i]->ddesc->length == block->ddesc->length);
 			memcpy(target_block[i]->ddesc->data, block->ddesc->data, block->ddesc->length);
+			r = chdesc_push_down(barrier, target_block[i], forwards[i].target, target_block[i]);
+			assert(r >= 0);
 			
 			/* write the updated target_block */
 			r = CALL(forwards[i].target, write_block, target_block[i]);
