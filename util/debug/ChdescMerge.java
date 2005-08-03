@@ -17,6 +17,16 @@ public class ChdescMerge extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_MERGE: count = " + count + ", chdescs = " + SystemState.hex(chdescs) + ", head = " + SystemState.hex(head) + ", tail = " + SystemState.hex(tail);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_MERGE, "KDB_CHDESC_MERGE", ChdescMerge.class);

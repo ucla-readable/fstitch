@@ -14,6 +14,16 @@ public class BdescARPoolPop extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_BDESC_AR_POOL_POP: depth = " + depth;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_AR_POOL_POP, "KDB_BDESC_AR_POOL_POP", BdescARPoolPop.class);

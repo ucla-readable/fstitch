@@ -14,6 +14,16 @@ public class ChdescDetachDependencies extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_DETACH_DEPENDENCIES: chdesc = " + SystemState.hex(chdesc);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_DETACH_DEPENDENCIES, "KDB_CHDESC_DETACH_DEPENDENCIES", ChdescDetachDependencies.class);

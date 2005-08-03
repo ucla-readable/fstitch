@@ -18,6 +18,16 @@ public class ChdescMove extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_MOVE: chdesc = " + SystemState.hex(chdesc) + ", destination = " + SystemState.hex(destination) + ", target = " + SystemState.hex(target) + ", offset = " + offset;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_MOVE, "KDB_CHDESC_MOVE", ChdescMove.class);

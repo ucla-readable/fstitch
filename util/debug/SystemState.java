@@ -64,15 +64,23 @@ public class SystemState
 		return chdescs.iterator();
 	}
 	
-	public void render(Writer output) throws IOException
+	public void render(Writer output, boolean landscape) throws IOException
 	{
-		output.write("digraph chdescs\n{\nsize=\"11,8.5\";\nnodesep=0.25;\nranksep=0.25;\norientation=L;\nnode [shape=circle,color=black];\n");
+		output.write("digraph chdescs\n{\nsize=\"11,8.5\";\nnodesep=0.25;\nranksep=0.25;\norientation=" + (landscape ? 'L' : 'P') + ";\n");
+		output.write("node [shape=circle,color=black];\n");
 		Iterator i = chdescs.iterator();
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
 			output.write(chdesc.render());
 		}
+		/*output.write("node [shape=box,color=black];\n");
+		i = bdescs.iterator();
+		while(i.hasNext())
+		{
+			Bdesc bdesc = (Bdesc) i.next();
+			output.write(bdesc.render());
+		}*/
 		output.write("}\n");
 		output.flush();
 	}

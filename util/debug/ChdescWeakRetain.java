@@ -18,6 +18,16 @@ public class ChdescWeakRetain extends Opcode
 			chdesc.weakRetain(location);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_WEAK_RETAIN: chdesc = " + SystemState.hex(chdesc) + ", location = " + SystemState.hex(location);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_WEAK_RETAIN, "KDB_CHDESC_WEAK_RETAIN", ChdescWeakRetain.class);

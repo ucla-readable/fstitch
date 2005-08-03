@@ -18,6 +18,16 @@ public class ChdescRemDependent extends Opcode
 			source.remDependent(target);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_REM_DEPENDENT: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_REM_DEPENDENT, "KDB_CHDESC_REM_DEPENDENT", ChdescRemDependent.class);

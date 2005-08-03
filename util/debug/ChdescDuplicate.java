@@ -16,6 +16,16 @@ public class ChdescDuplicate extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_DUPLICATE: original = " + SystemState.hex(original) + ", count = " + count + ", blocks = " + SystemState.hex(blocks);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_DUPLICATE, "KDB_CHDESC_DUPLICATE", ChdescDuplicate.class);

@@ -15,6 +15,16 @@ public class ChdescSplit extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_SPLIT: original = " + SystemState.hex(original) + ", count = " + count;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SPLIT, "KDB_CHDESC_SPLIT", ChdescSplit.class);

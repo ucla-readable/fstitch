@@ -17,6 +17,16 @@ public class ChdescConvertNoop extends Opcode
 			chdesc.changeToNoop();
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_CONVERT_NOOP: chdesc = " + SystemState.hex(chdesc);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CONVERT_NOOP, "KDB_CHDESC_CONVERT_NOOP", ChdescConvertNoop.class);

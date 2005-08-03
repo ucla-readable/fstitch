@@ -16,6 +16,16 @@ public class BdescAlloc extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_BDESC_ALLOC: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc) + ", number = " + number;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_ALLOC, "KDB_BDESC_ALLOC", BdescAlloc.class);

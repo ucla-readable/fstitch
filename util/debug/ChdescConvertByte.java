@@ -20,6 +20,16 @@ public class ChdescConvertByte extends Opcode
 			chdesc.changeToByte(offset, length);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_CONVERT_BYTE: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset + ", length = " + length;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CONVERT_BYTE, "KDB_CHDESC_CONVERT_BYTE", ChdescConvertByte.class);

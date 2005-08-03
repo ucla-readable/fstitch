@@ -17,6 +17,16 @@ public class ChdescOverlapMultiattach extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_OVERLAP_MULTIATTACH: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block) + ", slip_under = " + slip_under;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_OVERLAP_MULTIATTACH, "KDB_CHDESC_OVERLAP_MULTIATTACH", ChdescOverlapMultiattach.class);

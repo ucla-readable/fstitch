@@ -16,6 +16,16 @@ public class BdescAllocWrap extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_BDESC_ALLOC_WRAP: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc) + ", number = " + number;
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_ALLOC_WRAP, "KDB_BDESC_ALLOC_WRAP", BdescAllocWrap.class);

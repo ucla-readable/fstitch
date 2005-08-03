@@ -20,6 +20,16 @@ public class ChdescConvertBit extends Opcode
 			chdesc.changeToBit(offset, xor);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_CONVERT_BIT: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset + ", xor = " + SystemState.hex(xor);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CONVERT_BIT, "KDB_CHDESC_CONVERT_BIT", ChdescConvertBit.class);

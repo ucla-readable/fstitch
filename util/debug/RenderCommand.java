@@ -21,10 +21,12 @@ public class RenderCommand implements Command
 		if(dbg != null)
 		{
 			try {
+				Writer writer;
 				if(args.length != 0)
-					dbg.getState().render(new FileWriter(new File(args[0])));
+					writer = new FileWriter(new File(args[0]));
 				else
-					dbg.getState().render(new OutputStreamWriter(System.out));
+					writer = new OutputStreamWriter(System.out);
+				dbg.getState().render(writer, true);
 			}
 			catch(IOException e)
 			{

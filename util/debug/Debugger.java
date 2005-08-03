@@ -118,6 +118,16 @@ public class Debugger extends OpcodeFactory
 		return applied;
 	}
 	
+	public int getOpcodeCount()
+	{
+		return opcodes.size();
+	}
+	
+	public Opcode getOpcode(int opcode)
+	{
+		return (Opcode) opcodes.get(opcode);
+	}
+	
 	public String toString()
 	{
 		return "Debugging " + name + ", read " + opcodes.size() + " opcodes, applied " + applied;
@@ -136,12 +146,14 @@ public class Debugger extends OpcodeFactory
 			Debugger dbg = null;
 			
 			interpreter.addCommand(new CloseCommand());
+			interpreter.addCommand(new ListCommand());
 			interpreter.addCommand(new LoadCommand());
 			interpreter.addCommand(new RenderCommand());
 			interpreter.addCommand(new ResetCommand());
 			interpreter.addCommand(new RunCommand());
 			interpreter.addCommand(new StatusCommand());
 			interpreter.addCommand(new StepCommand());
+			interpreter.addCommand(new ViewCommand());
 			
 			/* "built-in" commands */
 			interpreter.addCommand(new HelpCommand());

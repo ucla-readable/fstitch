@@ -18,6 +18,16 @@ public class ChdescSetBlock extends Opcode
 			chdesc.setBlock(block);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_SET_BLOCK: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_BLOCK, "KDB_CHDESC_SET_BLOCK", ChdescSetBlock.class);

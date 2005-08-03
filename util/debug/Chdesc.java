@@ -330,4 +330,29 @@ public class Chdesc
 		
 		return links;
 	}
+	
+	public String renderFlags()
+	{
+		/* use getFlags() for the type testing */
+		return renderFlags(getFlags());
+	}
+	
+	public static String renderFlags(int flags)
+	{
+		String names = "";
+		if((flags & FLAG_MARKED) != 0)
+			names += " | MARKED";
+		if((flags & FLAG_INSET) != 0)
+			names += " | INSET";
+		if((flags & FLAG_MOVED) != 0)
+			names += " | MOVED";
+		if((flags & FLAG_ROLLBACK) != 0)
+			names += " | ROLLBACK";
+		if((flags & FLAG_FREEING) != 0)
+			names += " | FREEING";
+		if((flags & FLAG_PRMARKED) != 0)
+			names += " | PRMARKED";
+		names += " = " + SystemState.hex(flags);
+		return names.substring(3);
+	}
 }

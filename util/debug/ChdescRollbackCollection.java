@@ -16,6 +16,16 @@ public class ChdescRollbackCollection extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_ROLLBACK_COLLECTION: count = " + count + ", chdescs = " + SystemState.hex(chdescs) + ", order = " + SystemState.hex(order);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_ROLLBACK_COLLECTION, "KDB_CHDESC_ROLLBACK_COLLECTION", ChdescRollbackCollection.class);

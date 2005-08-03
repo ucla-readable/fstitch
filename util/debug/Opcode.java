@@ -27,6 +27,10 @@ public abstract class Opcode implements Constants
 	
 	public abstract void applyTo(SystemState state);
 	
+	public abstract boolean hasEffect();
+	
+	public abstract String toString();
+	
 	public static String hex(short opcodeNumber)
 	{
 		String hex = Integer.toHexString(opcodeNumber);

@@ -27,6 +27,16 @@ public class ChdescAddDependent extends Opcode
 		}
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_ADD_DEPENDENT: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_ADD_DEPENDENT, "KDB_CHDESC_ADD_DEPENDENT", ChdescAddDependent.class);

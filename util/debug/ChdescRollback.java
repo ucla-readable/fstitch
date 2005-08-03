@@ -17,6 +17,16 @@ public class ChdescRollback extends Opcode
 			chdesc.setFlags(Chdesc.FLAG_ROLLBACK);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_ROLLBACK: chdesc = " + SystemState.hex(chdesc);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_ROLLBACK, "KDB_CHDESC_ROLLBACK", ChdescRollback.class);

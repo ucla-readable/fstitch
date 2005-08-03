@@ -15,6 +15,16 @@ public class BdescDestroy extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_BDESC_DESTROY: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_DESTROY, "KDB_BDESC_DESTROY", BdescDestroy.class);

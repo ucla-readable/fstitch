@@ -17,6 +17,16 @@ public class ChdescApply extends Opcode
 			chdesc.clearFlags(Chdesc.FLAG_ROLLBACK);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_APPLY: chdesc = " + SystemState.hex(chdesc);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_APPLY, "KDB_CHDESC_APPLY", ChdescApply.class);

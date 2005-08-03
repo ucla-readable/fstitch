@@ -18,6 +18,16 @@ public class ChdescSetFlags extends Opcode
 			chdesc.setFlags(flags);
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_SET_FLAGS: chdesc = " + SystemState.hex(chdesc) + ", flags = " + Chdesc.renderFlags(flags);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_FLAGS, "KDB_CHDESC_SET_FLAGS", ChdescSetFlags.class);

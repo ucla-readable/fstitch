@@ -14,6 +14,16 @@ public class InfoMark extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_INFO_MARK: module = " + hex(module);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_INFO_MARK, "KDB_INFO_MARK", InfoMark.class);

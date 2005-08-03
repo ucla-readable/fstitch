@@ -15,6 +15,16 @@ public class BdescFreeDdesc extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public String toString()
+	{
+		return "KDB_BDESC_FREE_DDESC: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_FREE_DDESC, "KDB_BDESC_FREE_DDESC", BdescFreeDdesc.class);

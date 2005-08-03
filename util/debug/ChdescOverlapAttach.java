@@ -15,6 +15,16 @@ public class ChdescOverlapAttach extends Opcode
 	{
 	}
 	
+	public boolean hasEffect()
+	{
+		return false;
+	}
+	
+	public String toString()
+	{
+		return "KDB_CHDESC_OVERLAP_ATTACH: recent = " + SystemState.hex(recent) + ", original = " + SystemState.hex(original);
+	}
+	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_OVERLAP_ATTACH, "KDB_CHDESC_OVERLAP_ATTACH", ChdescOverlapAttach.class);
