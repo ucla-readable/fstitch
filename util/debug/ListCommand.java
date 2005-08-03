@@ -6,8 +6,9 @@ public class ListCommand implements Command
 {
 	public static final String escseq = ((char) 27) + "[";
 	public static final String bold = escseq + "1m";
-	public static final String dim = escseq + "30m" + bold;
 	public static final String normal = escseq + "0m";
+	public static final String blue = escseq + "34m";
+	public static final String yellow = escseq + "33m" + bold;
 	
 	public String getName()
 	{
@@ -23,8 +24,10 @@ public class ListCommand implements Command
 	{
 		if(opcode.hasEffect())
 			System.out.println("#" + number + " " + opcode);
+		else if(opcode instanceof InfoMark)
+			System.out.println(yellow + "#" + number + " " + opcode + normal);
 		else
-			System.out.println(dim + "#" + number + " " + opcode + normal);
+			System.out.println(blue + "#" + number + " " + opcode + normal);
 	}
 	
 	public Object runCommand(String args[], Object data, CommandInterpreter interpreter) throws CommandException
