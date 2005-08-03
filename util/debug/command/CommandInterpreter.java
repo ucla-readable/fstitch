@@ -16,15 +16,31 @@ public class CommandInterpreter
 	private boolean quit;
 	private TokenizerFactory factory;
 	
-	private Command findCommand(String name) throws NoSuchCommandException
+	private Command findCommand(String name, boolean prefix) throws NoSuchCommandException
 	{
 		Iterator iterator = commands.iterator();
+		Command best = null;
+		int length = 0;
 		while(iterator.hasNext())
 		{
 			Command command = (Command) iterator.next();
-			if(name.equals(command.getName()))
+			String match = command.getName();
+			if(name.equals(match))
 				return command;
+			if(match.startsWith(name))
+			{
+				int size = name.length();
+				if(size > length)
+				{
+					best = command;
+					length = size;
+				}
+				else if(size == length)
+					best = null;
+			}
 		}
+		if(prefix && best != null)
+			return best;
 		throw new NoSuchCommandException();
 	}
 	
@@ -61,7 +77,7 @@ public class CommandInterpreter
 	public void addCommand(Command command) throws DuplicateCommandException
 	{
 		try {
-			findCommand(command.getName());
+			findCommand(command.getName(), false);
 			throw new DuplicateCommandException();
 		}
 		catch(NoSuchCommandException e)
@@ -80,7 +96,7 @@ public class CommandInterpreter
 	 * */
 	public void removeCommand(String name) throws NoSuchCommandException
 	{
-		commands.remove(findCommand(name));
+		commands.remove(findCommand(name, false));
 	}
 	
 	/**
@@ -123,16 +139,17 @@ public class CommandInterpreter
 	 *
 	 * @param line The command line to be run.
 	 * @param data The state data to be passed to the command.
+	 * @param prefix Whether or not to allow unique prefixes of command names.
 	 * @return The return state data from the command, or the input object if the line was empty.
 	 * @throws CommandException If any sort of CommandException occurs while parsing the command line or executing the command.
 	 * */
-	public Object runCommandLine(String line, Object data) throws CommandException
+	public Object runCommandLine(String line, Object data, boolean prefix) throws CommandException
 	{
 		CommandTokenizer tokenizer = factory.createTokenizer(line);
 		if(tokenizer.hasMoreTokens())
 		{
 			String name = tokenizer.nextToken().toLowerCase();
-			Command command = findCommand(name);
+			Command command = findCommand(name, prefix);
 			String args[] = new String[tokenizer.countTokens()];
 			for(int i = 0; tokenizer.hasMoreTokens(); i++)
 				args[i] = tokenizer.nextToken();
@@ -153,11 +170,12 @@ public class CommandInterpreter
 	 *
 	 * @param prompt The prompt to display on standard output before reading each line.
 	 * @param data The state data to be passed to the first command.
+	 * @param prefix Whether or not to allow unique prefixes of command names.
 	 * @return The return state data from the last command.
 	 * @throws CommandException If any sort of CommandException occurs while parsing an input line or executing a command.
 	 * @throws IOException If any sort of I/O error occurs while reading standard input.
 	 * */
-	public Object runStdinCommands(String prompt, Object data) throws CommandException, IOException
+	public Object runStdinCommands(String prompt, Object data, boolean prefix) throws CommandException, IOException
 	{
 		BufferedReader stdin = new BufferedReader(new InputStreamReader(System.in));
 		while(!quit)
@@ -171,7 +189,7 @@ public class CommandInterpreter
 				break;
 			}
 			try {
-				data = runCommandLine(input, data);
+				data = runCommandLine(input, data, prefix);
 			}
 			catch(NoSuchCommandException e)
 			{

@@ -154,6 +154,7 @@ public class Debugger extends OpcodeFactory
 			Debugger dbg = null;
 			
 			interpreter.addCommand(new CloseCommand());
+			interpreter.addCommand(new JumpCommand());
 			interpreter.addCommand(new ListCommand());
 			interpreter.addCommand(new LoadCommand());
 			interpreter.addCommand(new RenderCommand());
@@ -172,10 +173,10 @@ public class Debugger extends OpcodeFactory
 				String line = "load " + args[0];
 				if(args.length != 1)
 					line += " " + args[1];
-				dbg = (Debugger) interpreter.runCommandLine(line, null);
+				dbg = (Debugger) interpreter.runCommandLine(line, null, false);
 			}
 			
-			interpreter.runStdinCommands("debug> ", dbg);
+			interpreter.runStdinCommands("debug> ", dbg, true);
 		}
 		catch(IOException e)
 		{
