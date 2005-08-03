@@ -24,8 +24,10 @@ public class StepCommand implements Command
 				if(args.length != 0)
 					count = Integer.parseInt(args[0]);
 				System.out.print("Replaying log... ");
-				dbg.replay(count);
-				System.out.println(dbg.getApplied() + " opcodes OK!");
+				if(dbg.replay(count))
+					System.out.println(dbg.getApplied() + " opcodes OK!");
+				else
+					System.out.println(dbg.getApplied() + " opcodes OK, no change.");
 			}
 			catch(NumberFormatException e)
 			{

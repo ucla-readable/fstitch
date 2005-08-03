@@ -66,7 +66,11 @@ public class SystemState
 	
 	public void render(Writer output, boolean landscape) throws IOException
 	{
-		output.write("digraph chdescs\n{\nsize=\"11,8.5\";\nnodesep=0.25;\nranksep=0.25;\norientation=" + (landscape ? 'L' : 'P') + ";\n");
+		output.write("digraph chdescs\n{\nsize=\"11,8.5\";\nnodesep=0.25;\nranksep=0.25;\n");
+		if(landscape)
+			output.write("rankdir=TB;\norientation=L;\n");
+		else
+			output.write("rankdir=LR;\norientation=P;\n");
 		output.write("node [shape=circle,color=black];\n");
 		Iterator i = chdescs.iterator();
 		while(i.hasNext())

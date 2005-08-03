@@ -58,16 +58,21 @@ public class ViewCommand implements Command
 				array = stream.toByteArray();
 				stream = null;
 				
-				/* this GUI code is not quite correct: you must make sure to close the
-				 * previous image before trying to open a new one, or this code fails */
-				ImageIcon icon = new ImageIcon(array);
-				JFrame frame = new JFrame(dbg.toString());
-				frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-				
-				frame.getContentPane().add(new JLabel(icon));
-				
-				frame.pack();
-				frame.setVisible(true);
+				final ImageIcon icon = new ImageIcon(array);
+				runnable = new Runnable()
+				{
+					public void run()
+					{
+						JFrame frame = new JFrame(dbg.toString());
+						frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+						
+						frame.getContentPane().add(new JLabel(icon));
+						
+						frame.pack();
+						frame.setVisible(true);
+					}
+				};
+				SwingUtilities.invokeLater(runnable);
 			}
 			catch(IOException e)
 			{

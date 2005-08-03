@@ -84,22 +84,30 @@ public class Debugger extends OpcodeFactory
 		}
 	}
 	
-	public void replayAll()
+	public boolean replayAll()
 	{
+		boolean change = false;
 		while(applied < opcodes.size())
 		{
 			Opcode opcode = (Opcode) opcodes.get(applied++);
 			opcode.applyTo(state);
+			if(opcode.hasEffect())
+				change = true;
 		}
+		return change;
 	}
 	
-	public void replay(int count)
+	public boolean replay(int count)
 	{
+		boolean change = false;
 		while(applied < opcodes.size() && count-- > 0)
 		{
 			Opcode opcode = (Opcode) opcodes.get(applied++);
 			opcode.applyTo(state);
+			if(opcode.hasEffect())
+				change = true;
 		}
+		return change;
 	}
 	
 	public void resetState()
