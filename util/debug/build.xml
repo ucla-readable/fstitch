@@ -1,0 +1,52 @@
+<project name="debug" default="all" basedir=".">
+
+	<description>
+		KFS Debugger build file
+	</description>
+
+	<property name="src" value="${basedir}"/>
+	<property name="classes" location="${basedir}/classes"/>
+	<property name="javadoc" location="${basedir}/javadoc"/>
+
+	<target name="init">
+		<tstamp/>
+		<mkdir dir="${classes}"/>
+		<mkdir dir="${javadoc}"/>
+	</target>
+
+	<target name="all" depends="kdb-jar" description="Build the KFS Debugger"/>
+
+	<target name="kdb-jar" depends="kdb" description="Build kdb.jar">
+		<jar jarfile="${basedir}/kdb.jar" basedir="${classes}">
+			<manifest>
+				<attribute name="Built-By" value="${user.name}"/>
+				<attribute name="Main-Class" value="Debugger"/>
+			</manifest>
+		</jar>
+	</target>
+
+	<target name="kdb" depends="init" description="Build kdb's class files">
+		<javac
+			srcdir="${src}"
+			destdir="${classes}"
+			debug="on"
+			includes="**/*.java"
+			excludes="**/.svn/**"/>
+	</target>
+
+	<target name="kdb-doc" depends="init" description="Build javadocs for kdb">
+		<javadoc destdir="${javadoc}" author="true" version="true">
+			<fileset dir="${src}" defaultexcludes="yes">
+				<include name="**/*.java"/>
+				<exclude name="**/.svn/**"/>
+			</fileset>
+		</javadoc>
+	</target>
+
+	<target name="clean" depends="init" description="Remove built files">
+		<delete file="${basedir}/kdb.jar"/>
+		<delete dir="${classes}"/>
+		<delete dir="${javadoc}"/>
+	</target>
+
+</project>
