@@ -1,7 +1,7 @@
-<project name="debug" default="all" basedir=".">
+<project name="debug" default="kdb-jar" basedir=".">
 
 	<description>
-		KFS Debugger build file
+		KFS Debugger
 	</description>
 
 	<property name="src" value="${basedir}"/>
@@ -14,7 +14,9 @@
 		<mkdir dir="${javadoc}"/>
 	</target>
 
-	<target name="all" depends="kdb-jar" description="Build the KFS Debugger"/>
+	<target name="all"
+		depends="kdb-jar,kdb-doc"
+		description="Build the KFS Debugger and javadocs"/>
 
 	<target name="kdb-jar" depends="kdb" description="Build kdb.jar">
 		<jar jarfile="${basedir}/kdb.jar" basedir="${classes}">
@@ -25,7 +27,9 @@
 		</jar>
 	</target>
 
-	<target name="kdb" depends="init" description="Build kdb's class files">
+	<target name="kdb-classes"
+			depends="init"
+			description="Build class files for kdb">
 		<javac
 			srcdir="${src}"
 			destdir="${classes}"
