@@ -224,12 +224,16 @@ void chdesc_order_destroy(void ** order)
 
 /* Split a change descriptor into two change descriptors, such that the original
  * change descriptor depends only on a new NOOP change descriptor which has all
- * the dependencies of the original change descriptor. */
+ * the dependencies of the original change descriptor. If the original change
+ * descriptor has no dependencies, or only one dependency, this function does
+ * nothing. */
 int chdesc_detach_dependencies(chdesc_t * chdesc)
 {
 	int r;
 	chdesc_t * tail;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_DEPENDENCIES, chdesc);
+	if(!chdesc->dependencies || !chdesc->dependencies->next)
+		return 0;
 	tail = chdesc_create_noop(chdesc->block, chdesc->owner);
 	if(!tail)
 		return -E_NO_MEM;
@@ -336,7 +340,7 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 {
 	int i, r;
-	chdesc_t * tail;
+	chdesc_t * tail = NULL;
 	chdesc_t ** descs;
 	
 	if(count < 2)
@@ -369,11 +373,13 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		return r;
 	}
 	
-	tail = original->dependencies->desc;
-	
-	/* can't fail when assigning to NULL */
-	r = chdesc_noop_reassign(tail, NULL);
-	assert(r >= 0);
+	if(original->dependencies)
+	{
+		tail = original->dependencies->desc;
+		/* can't fail when assigning to NULL */
+		r = chdesc_noop_reassign(tail, NULL);
+		assert(r >= 0);
+	}
 	
 	/* then create duplicates, depended on by the original and depending on the tail */
 	switch(original->type)
@@ -399,9 +405,12 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
-				r = chdesc_add_depend(descs[i], tail);
-				if(r < 0)
-					goto fail_later;
+				if(tail)
+				{
+					r = chdesc_add_depend(descs[i], tail);
+					if(r < 0)
+						goto fail_later;
+				}
 			}
 			/* change the original to a NOOP with no block */
 			original->type = NOOP;
@@ -453,9 +462,12 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
-				r = chdesc_add_depend(descs[i], tail);
-				if(r < 0)
-					goto fail_later;
+				if(tail)
+				{
+					r = chdesc_add_depend(descs[i], tail);
+					if(r < 0)
+						goto fail_later;
+				}
 			}
 			/* change the original to a NOOP with no block */
 			if(original->byte.olddata)
@@ -480,7 +492,8 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 	}
 	
 	/* finally unhook the original from the tail */
-	chdesc_remove_depend(original, tail);
+	if(tail)
+		chdesc_remove_depend(original, tail);
 	
 	return 0;
 }
@@ -507,8 +520,8 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 int chdesc_split(chdesc_t * original, int count)
 {
 	int i, r;
+	chdesc_t * tail = NULL;
 	chdesc_t ** descs;
-	chdesc_t * tail;
 	
 	if(count < 2)
 		return -E_INVAL;
@@ -527,8 +540,8 @@ int chdesc_split(chdesc_t * original, int count)
 		return r;
 	}
 	
-	/* this always exists - we just detached the dependencies */
-	tail = original->dependencies->desc;
+	if(original->dependencies)
+		tail = original->dependencies->desc;
 	
 	/* Now we want to insert the fragments between "original" and "tail" */
 	
@@ -541,7 +554,7 @@ int chdesc_split(chdesc_t * original, int count)
 			goto fail;
 		}
 		r = __chdesc_add_depend_fast(original, descs[i]);
-		if(r >= 0)
+		if(r >= 0 && tail)
 			r = __chdesc_add_depend_fast(descs[i], tail);
 		if(r < 0)
 		{
@@ -554,7 +567,8 @@ int chdesc_split(chdesc_t * original, int count)
 		}
 	}
 	
-	chdesc_remove_depend(original, tail);
+	if(tail)
+		chdesc_remove_depend(original, tail);
 	
 	/* Last we want to switch the original with the first fragment */
 	descs[0]->type = original->type;
