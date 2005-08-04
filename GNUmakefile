@@ -91,6 +91,8 @@ CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-form
 CFLAGS	:= $(CFLAGS) -O2
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
 
+CTAGSFLAGS := --extra=+q --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
+
 LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
 
 # Linker flags for user programs
@@ -199,12 +201,12 @@ tags: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/util/$(PTYPAI
 	@echo + ctags [VI]
 	$(V)find . -type f \
 		| grep -v /CVS/ | grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
-		| $(CTAGS) -L - --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
+		| $(CTAGS) $(CTAGSFLAGS) -L -
 TAGS: $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/util/$(PTYPAIR) $(OBJDIR)/util/$(ELFDUMP_SYMTAB) $(OBJDIR)/util/$(KNBD_SERVER) $(OBJDIR)/util/$(KDB_SERVER)
 	@echo + ctags [EMACS]
 	$(V)find . -type f \
 		| grep -v /CVS/ | grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
-		| $(CTAGS) -L - -e --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
+		| $(CTAGS) $(CTAGSFLAGS) -L - -e 
 
 
 # try to infer the correct GCCPREFIX
