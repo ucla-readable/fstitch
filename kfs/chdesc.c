@@ -29,6 +29,8 @@ static int ensure_bdesc_has_changes(bdesc_t * block)
 	block->ddesc->changes->dependencies = NULL;
 	block->ddesc->changes->dependents = NULL;
 	block->ddesc->changes->weak_refs = NULL;
+	block->ddesc->changes->stamps = 0;
+	
 	/* NOOP chdescs start applied */
 	block->ddesc->changes->flags = 0;
 	
@@ -188,6 +190,8 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->dependencies = NULL;
 	chdesc->dependents = NULL;
 	chdesc->weak_refs = NULL;
+	chdesc->stamps = 0;
+	
 	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
 	
@@ -231,6 +235,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->dependencies = NULL;
 	chdesc->dependents = NULL;
 	chdesc->weak_refs = NULL;
+	chdesc->stamps = 0;
 	
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
@@ -308,6 +313,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
+		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -421,6 +427,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
+		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -533,6 +540,7 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
+		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -873,4 +881,29 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
 	*chdesc = NULL;
+}
+
+static BD_t * stamps[32] = {0};
+
+uint32_t chdesc_register_stamp(BD_t * bd)
+{
+	int i;
+	for(i = 0; i != 32; i++)
+		if(!stamps[i])
+		{
+			stamps[i] = bd;
+			return 1 << i;
+		}
+	return 0;
+}
+
+void chdesc_release_stamp(uint32_t stamp)
+{
+	if(stamp)
+	{
+		int i;
+		for(i = -1; stamp; i++)
+			stamp >>= 1;
+		stamps[i] = NULL;
+	}
 }

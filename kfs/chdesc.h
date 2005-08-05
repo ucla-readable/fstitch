@@ -44,6 +44,7 @@ struct chdesc {
 	chmetadesc_t * dependents;
 	chrefdesc_t * weak_refs;
 	uint16_t flags, distance;
+	uint32_t stamps;
 };
 
 struct chmetadesc {
@@ -89,6 +90,21 @@ int __ensure_bdesc_has_changes(bdesc_t * block);
 int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under);
 int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
+
+uint32_t chdesc_register_stamp(BD_t * bd);
+void chdesc_release_stamp(uint32_t stamp);
+
+static __inline void chdesc_stamp(chdesc_t * chdesc, uint32_t stamp) __attribute__((always_inline));
+static __inline void chdesc_stamp(chdesc_t * chdesc, uint32_t stamp)
+{
+	chdesc->stamps |= stamp;
+}
+
+static __inline int chdesc_has_stamp(chdesc_t * chdesc, uint32_t stamp) __attribute__((always_inline));
+static __inline int chdesc_has_stamp(chdesc_t * chdesc, uint32_t stamp)
+{
+	return chdesc->stamps & stamp;
+}
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>
