@@ -261,7 +261,7 @@ distclean: realclean
 # See 'mergedep.pl' for more information.
 $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 	@mkdir -p $(@D)
-	@$(PERL) mergedep.pl $@ $^
+	@$(PERL) util/mergedep.pl $@ $^
 
 -include $(OBJDIR)/.deps
 
