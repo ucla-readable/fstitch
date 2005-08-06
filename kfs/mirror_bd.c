@@ -464,7 +464,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 	uint32_t numblocks;
 	uint16_t blocksize, atomicsize, devlevel;
 	int8_t good_disk = 1 - info->bad_disk;
-	int i, r, percentage = 0;
+	int i, r, progress = 0;
 
 	if(OBJMAGIC(bd) != MIRROR_BD_MAGIC)
 		return -E_INVAL;
@@ -546,7 +546,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		source = CALL(info->bd[good_disk], read_block, i);
 		if(!source)
 		{
-			printf("mirror_bd: uh oh, erroring reading block %d on sync\n", i);
+			printf("\nmirror_bd: uh oh, error reading block %d on sync\n", i);
 			modman_dec_bd(newdevice, bd);
 			return -E_UNSPECIFIED;
 		}
@@ -554,7 +554,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		destination = CALL(newdevice, synthetic_read_block, i, &synthetic);
 		if(!destination)
 		{
-			printf("mirror_bd: uh oh, erroring getting block %d on sync\n", i);
+			printf("\nmirror_bd: uh oh, error getting block %d on sync\n", i);
 			modman_dec_bd(newdevice, bd);
 			return -E_UNSPECIFIED;
 		}
@@ -571,17 +571,19 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		r = CALL(newdevice, write_block, destination);
 		if(r < 0)
 		{
-			printf("mirror_bd: uh oh, erroring writing block %d on sync\n", i);
+			printf("\nmirror_bd: uh oh, error writing block %d on sync\n", i);
 			modman_dec_bd(newdevice, bd);
 			return r;
 		}
 
-		if(i == info->numblocks * percentage / 10)
+		/* TODO: maybe use the textbar library here instead? */
+		if(i == info->numblocks * progress / 78)
 		{
-			printf(".");
-			percentage++;
+			printf(i ? "\b*O" : "O");
+			progress++;
 		}
 	}
+	printf("\b*\n");
 	
 	/* pop the local autorelease pool */
 	bdesc_autorelease_pool_pop();

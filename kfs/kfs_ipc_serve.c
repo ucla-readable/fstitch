@@ -181,7 +181,9 @@ static void kis_journal_lfs(envid_t whom, const Skfs_journal_lfs_t * pg)
 	if (!modman_name_lfs(journal) || !modman_name_lfs(fs) || !modman_name_bd(fs_queue))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) journal_lfs(journal, fs, fs_queue);
+#warning add journal_lfs here
+	val = 0; //(uint32_t) journal_lfs(journal, fs, fs_queue);
+	fprintf(STDERR_FILENO, "kfsd: warning: not constructing journal_lfs!\n");
 
 	RETURN_IPC;
 }
@@ -194,7 +196,8 @@ static void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_m
 	if (!modman_name_lfs(journal))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) journal_lfs_max_bandwidth(journal);
+#warning add journal_lfs_max_bandwidth here
+	val = -1; //(uint32_t) journal_lfs_max_bandwidth(journal);
 
 	RETURN_IPC;
 }

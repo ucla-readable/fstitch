@@ -205,7 +205,8 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 		}
 		if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
 		{
-			chdesc_destroy(&block->ddesc->changes);
+			if(!block->ddesc->changes->dependencies)
+				chdesc_destroy(&block->ddesc->changes);
 			free(chdesc);
 			return NULL;
 		}
@@ -260,7 +261,8 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	return chdesc;
 	
   error_ensure:
-	chdesc_destroy(&(block->ddesc->changes));
+	if(!block->ddesc->changes->dependencies)
+		chdesc_destroy(&(block->ddesc->changes));
   error:
 	chdesc_destroy(&chdesc);
 	return NULL;
@@ -329,15 +331,19 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		
 		copied += chdescs[i]->byte.length;
 		
-		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
-			goto destroy;
-		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
+			if(!block->ddesc->changes->dependencies)
+				chdesc_destroy(&(block->ddesc->changes));
+			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
+		
+		/* FIXME: change this to _fast, but split apart the *head case */
+		if((i || *head) && chdesc_add_depend(chdescs[i], i ? chdescs[i - 1] : *head))
+			goto destroy;
 	}
 	
 	/* failed to create the chdescs */
@@ -346,7 +352,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		while(i--)
 		{
 			if(chdescs[i]->dependencies)
-				chdesc_remove_depend(chdescs[i], chdescs[i - 1]);
+				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
@@ -441,17 +447,19 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		if(chdesc_overlap_multiattach(chdescs[i], block))
 			goto destroy;
 		
-		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
-			goto destroy;
-		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			chdesc_destroy(&(block->ddesc->changes));
+			if(!block->ddesc->changes->dependencies)
+				chdesc_destroy(&(block->ddesc->changes));
 			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
+		
+		/* FIXME: change this to _fast, but split apart the *head case */
+		if((i || *head) && chdesc_add_depend(chdescs[i], i ? chdescs[i - 1] : *head))
+			goto destroy;
 	}
 	
 	/* failed to create the chdescs */
@@ -460,7 +468,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		while(i--)
 		{
 			if(chdescs[i]->dependencies)
-				chdesc_remove_depend(chdescs[i], chdescs[i - 1]);
+				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
@@ -554,17 +562,19 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
 			goto destroy;
 		
-		if(i && chdesc_add_depend(chdescs[i], chdescs[i - 1]))
-			goto destroy;
-		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			chdesc_destroy(&(block->ddesc->changes));
+			if(!block->ddesc->changes->dependencies)
+				chdesc_destroy(&(block->ddesc->changes));
 			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
+		
+		/* FIXME: change this to _fast, but split apart the *head case */
+		if((i || *head) && chdesc_add_depend(chdescs[i], i ? chdescs[i - 1] : *head))
+			goto destroy;
 	}
 	
 	/* failed to create the chdescs */
@@ -573,7 +583,7 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		while(i--)
 		{
 			if(chdescs[i]->dependencies)
-				chdesc_remove_depend(chdescs[i], chdescs[i - 1]);
+				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);

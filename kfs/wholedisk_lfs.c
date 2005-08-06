@@ -16,7 +16,6 @@ struct wd_info {
 
 static fdesc_t fdesc;
 
-
 static int wholedisk_get_config(void * object, int level, char * string, size_t length)
 {
 	LFS_t * lfs = (LFS_t *) object;
@@ -47,16 +46,26 @@ static BD_t * wholedisk_get_blockdev(LFS_t * object)
 	return ((struct wd_info *) OBJLOCAL(object))->bd;
 }
 
-static bdesc_t * wholedisk_allocate_block(LFS_t * object, uint32_t size, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t wholedisk_allocate_block(LFS_t * object, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
-	return NULL;
+	return INVALID_BLOCK;
 }
 
-static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number, uint32_t offset, uint32_t size)
+static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number)
 {
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, read_block, number);
+}
+
+static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+{
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, synthetic_read_block, number, synthetic);
+}
+
+static int wholedisk_cancel_synthetic_block(LFS_t * object, uint32_t number)
+{
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, cancel_block, number);
 }
 
 static fdesc_t * wholedisk_lookup_name(LFS_t * object, const char * name)
@@ -77,15 +86,9 @@ static uint32_t wholedisk_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, get_numblocks);
 }
 
-static uint32_t wholedisk_get_file_block_num(LFS_t * object, fdesc_t * file, uint32_t offset)
+static uint32_t wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	return offset / ((struct wd_info *) OBJLOCAL(object))->blocksize;
-}
-
-static bdesc_t * wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
-{
-	offset /= ((struct wd_info *) OBJLOCAL(object))->blocksize;
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, read_block, offset);
 }
 
 static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -93,7 +96,7 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 	return -E_INVAL;
 }
 
-static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - size immutable */
@@ -114,14 +117,14 @@ static int wholedisk_rename(LFS_t * object, const char * oldname, const char * n
 	return -E_INVAL;
 }
 
-static bdesc_t * wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - size immutable */
-	return NULL;
+	return INVALID_BLOCK;
 }
 
-static int wholedisk_free_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_free_block(LFS_t * object, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
@@ -135,22 +138,10 @@ static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** 
 	return -E_INVAL;
 }
 
-static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
 {
-	struct wd_info * info = (struct wd_info *) OBJLOCAL(object);
-	int r;
-
-	assert(head && tail);
-	
-	/* have to test all three of these because of the possibility of wrapping */
-	if(offset >= info->blocksize || size > info->blocksize || offset + size > info->blocksize)
-		return -E_INVAL;
-	
-	r = chdesc_create_byte(block, info->bd, offset, size, data, head, tail);
-	if(r < 0)
-		return r;
-	
-	return CALL(info->bd, write_block, block);
+	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, write_block, block);
 }
 
 static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype};

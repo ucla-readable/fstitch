@@ -267,7 +267,7 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 		{
 			const uint32_t limit = MIN(blocksize - dataoffset, size - size_written);
 			const uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
-			chdesc_t * head;
+			chdesc_t * head = NULL;
 			chdesc_t * tail;
 			
 			if(!dataoffset && limit == blocksize)

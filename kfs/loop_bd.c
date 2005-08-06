@@ -80,14 +80,18 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	bdesc_t * block_lfs;
+	uint32_t lfs_bno;
 	bdesc_t * block;
 
-	block_lfs = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
-	if (!block_lfs)
+	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
+	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	block = bdesc_alloc_clone(block_lfs, number);
+	block = CALL(info->lfs, lookup_block, lfs_bno);
+	if (!block)
+		return NULL;
+
+	block = bdesc_alloc_clone(block, number);
 	if (!block)
 		return NULL;
 	bdesc_autorelease(block);
@@ -97,41 +101,42 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 
 static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * synthetic)
 {
-	// This call goes around info->lfs to do a synthetic_read_block on the
-	// info->lfs's BD. This seems simpler than adding synthetic_read_block
-	// support to LFS and it seems this going-around behavior is acceptable.
-
-	Dprintf("%s(0x%08x)\n", __FUNCTION__, number);
+	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	uint32_t loop_number, lfs_number;
-	bdesc_t * bdesc, * new_bdesc;
+	uint32_t lfs_bno;
+	bdesc_t * block;
 
-	loop_number = number;
-	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
-	if(lfs_number == -1)
+	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
+	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	bdesc = CALL(info->lfs_bd, synthetic_read_block, lfs_number * info->blocksize, synthetic);
-	if(!bdesc)
+	block = CALL(info->lfs, synthetic_lookup_block, lfs_bno, synthetic);
+	if (!block)
 		return NULL;
-	
-	new_bdesc = bdesc_alloc_clone(bdesc, number);
-	if(!new_bdesc)
+
+	block = bdesc_alloc_clone(block, number);
+	if (!block)
+	{
+		if(*synthetic)
+			CALL(info->lfs, cancel_synthetic_block, lfs_bno);
 		return NULL;
-	bdesc_autorelease(new_bdesc);
-	
-	return new_bdesc;
+	}
+	bdesc_autorelease(block);
+
+	return block;
 }
 
 static int loop_cancel_block(BD_t * bd, uint32_t number)
 {
-	// This call goes around info->lfs to do a synthetic_read_block on the
-	// info->lfs's BD. This seems simpler than adding synthetic_read_block
-	// support to LFS and it seems this going-around behavior is acceptable.
+	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	uint32_t lfs_bno;
 
-	Dprintf("%s(0x%08x)\n", __FUNCTION__, number);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);	
-	return CALL(info->lfs_bd, cancel_block, number * info->blocksize);
+	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
+	if (lfs_bno == INVALID_BLOCK)
+		return -E_INVAL;
+
+	return CALL(info->lfs, cancel_synthetic_block, lfs_bno);
 }
 
 static int loop_write_block(BD_t * bd, bdesc_t * block)
@@ -145,7 +150,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	int r;
 
 	loop_number = block->number;
-	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
+	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * info->blocksize);
 	if(lfs_number == -1)
 		return -E_INVAL;
 
@@ -158,7 +163,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	if(r < 0)
 		return r;
 
-	return CALL(info->lfs, write_block, wblock, 0, wblock->ddesc->length, wblock->ddesc->data, &head, &tail);
+	return CALL(info->lfs, write_block, wblock, &head, &tail);
 }
 
 static int loop_sync(BD_t * bd, uint32_t block, chdesc_t * ch)
@@ -171,7 +176,7 @@ static int loop_sync(BD_t * bd, uint32_t block, chdesc_t * ch)
 		return CALL(info->lfs, sync, info->filename);
 
 	loop_number = block;
-	lfs_number = CALL(info->lfs, get_file_block_num, info->file, loop_number * info->blocksize);
+	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * info->blocksize);
 	if(lfs_number == -1)
 		return -E_INVAL;
 

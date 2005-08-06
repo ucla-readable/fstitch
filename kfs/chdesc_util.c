@@ -326,10 +326,11 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
  * the duplicates, each of which will be attached to a different block. Just as
  * in chdesc_move(), the data descriptors will not be updated to reflect this
  * addition, and the CHDESC_MOVED flag will be set on the duplicate change
- * descriptors. If this function fails, the change descriptor graph may be left
- * altered in a form which is semantically equivalent to the original state. It
- * is assumed by this function that the caller has verified that the atomic
- * sizes will work out. */
+ * descriptors. Note that the calling BD still owns the duplicate change
+ * descriptors, and must push them to the appropriate new owners itself. If this
+ * function fails, the change descriptor graph may be left altered in a form
+ * which is semantically equivalent to the original state. It is assumed by this
+ * function that the caller has verified that the atomic sizes will work out. */
 /*  From:      To:                    Or:
  *   -> X       -> M1 \      -> X            -> X
  *  /          /       \    /               /

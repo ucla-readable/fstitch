@@ -122,9 +122,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const size_t blksize = CALL(state->lfs, get_blocksize);
 	open_file_t * f;
-	size_t nblks;
-	size_t target_nblks = ROUNDUP32(target_size, blksize) / blksize;
-	bdesc_t * block;
+	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
 	chdesc_t * prev_head = NULL, * tail, * save_head;
 	int r;
 
@@ -138,8 +136,8 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	for (; target_nblks < nblks; nblks--)
 	{
 		/* Truncate the block */
-		block = CALL(state->lfs, truncate_file_block, f->fdesc, &prev_head, &tail);
-		if (!block)
+		uint32_t block = CALL(state->lfs, truncate_file_block, f->fdesc, &prev_head, &tail);
+		if (block == INVALID_BLOCK)
 			return -E_UNSPECIFIED;
 
 		save_head = prev_head;
@@ -277,7 +275,6 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
-	bdesc_t * bd;
 	uint32_t size_read = 0;
 	uint32_t file_size = -1;
 
@@ -299,18 +296,21 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 	}
 	while (size_read < size)
 	{
-		uint32_t limit;
+		uint32_t limit, number;
+		bdesc_t * block = NULL;
 
-		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_read);
-		if (!bd)
+		number = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_read);
+		if (number != INVALID_BLOCK)
+			block = CALL(state->lfs, lookup_block, number);
+		if (!block)
 			return size_read ? size_read : -E_EOF;
 
-		limit = MIN(bd->ddesc->length - dataoffset, size - size_read);
+		limit = MIN(block->ddesc->length - dataoffset, size - size_read);
 		if (f->size_id)
 			if (offset + size_read + limit > file_size)
 				limit = file_size - offset - size_read;
 
-		memcpy((uint8_t*)data + size_read, bd->ddesc->data + dataoffset, limit);
+		memcpy((uint8_t*)data + size_read, block->ddesc->data + dataoffset, limit);
 		size_read += limit;
 		/* dataoffset only needed for first block */
 		dataoffset = 0;
@@ -327,13 +327,13 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	open_file_t * f;
+	BD_t * const bd = CALL(state->lfs, get_blockdev);
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
-	bdesc_t * bd;
 	uint32_t size_written = 0, filesize = 0, target_size;
 	chdesc_t * prev_head = NULL, * tail, * save_head;
-	int r, allocated_block;
+	int r;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
 	if (!f)
@@ -361,47 +361,57 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		return -E_UNSPECIFIED;
 	}
 
-	// do we really want to just return size_written if an operation failed???
-	// also, if something fails, do we still update filesize?
+	// do we really want to just return size_written if an operation failed?
+	// - yes, so that the caller knows what did get done successfully
+	// also, if something fails, do we still update filesize? - we should
 
 	while (size_written < size)
 	{
-		allocated_block = 0;
-		/* get the block to write to - maybe just get a block number in the future, if we are writing the whole block? */
-		bd = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
-		if (!bd)
+		uint32_t number;
+		bdesc_t * block;
+
+		number = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
+		if (number == INVALID_BLOCK)
 		{
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
 			prev_head = NULL; /* no need to link with previous chains here */
-			bd = CALL(state->lfs, allocate_block, blocksize, type, &prev_head, &tail);
+			number = CALL(state->lfs, allocate_block, type, &prev_head, &tail);
+			if (number == INVALID_BLOCK)
+				return size_written;
+
 			save_head = prev_head;
 			r = chdesc_weak_retain(save_head, &save_head);
 			assert(r >= 0); // TODO: handle error
 
-			if (!bd)
-				return size_written;
-			bdesc_retain(bd);
-			r = CALL(state->lfs, append_file_block, f->fdesc, bd, &prev_head, &tail);
+			r = CALL(state->lfs, append_file_block, f->fdesc, number, &prev_head, &tail);
 			if (r < 0) {
-				bdesc_release(&bd);
+				chdesc_weak_release(&save_head);
 				return size_written;
 			}
 			prev_head = save_head;
 			chdesc_weak_release(&save_head);
-			allocated_block = 1;
 		}
+		/* get the block to write to - maybe a synthetic block in the future, if we are writing the whole block? */
+		block = CALL(state->lfs, lookup_block, number);
+		if (!block)
+			return size_written;
 
 		/* write the data to the block */
-		const uint32_t n = MIN(bd->ddesc->length - dataoffset, size - size_written);
-		r = CALL(state->lfs, write_block, bd, dataoffset, n, (uint8_t*)data + size_written, &prev_head, &tail);
-
-		if (allocated_block)
-			bdesc_release(&bd);
-
+		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
+		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head, &tail);
 		if (r < 0)
 			return size_written;
 
-		size_written += n;
+		save_head = prev_head;
+		r = chdesc_weak_retain(save_head, &save_head);
+		assert(r >= 0);
+
+		r = CALL(state->lfs, write_block, block, &prev_head, &tail);
+		assert(r >= 0);
+		prev_head = save_head;
+		chdesc_weak_release(&save_head);
+
+		size_written += length;
 		dataoffset = 0; /* dataoffset only needed for first block */
 	}
 
@@ -455,7 +465,6 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 	size_t data_len;
 	void * data;
 	chdesc_t * prev_head = NULL, * tail, * save_head;
-	bdesc_t * blk;
 
 	if (link_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, &data_len, &data);
@@ -476,8 +485,8 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 
 	nblocks = CALL(state->lfs, get_file_numblocks, f);
 	for (i = 0 ; i < nblocks; i++) {
-		blk = CALL(state->lfs, truncate_file_block, f, &prev_head, &tail);
-		if (!blk) {
+		uint32_t number = CALL(state->lfs, truncate_file_block, f, &prev_head, &tail);
+		if (number == INVALID_BLOCK) {
 			CALL(state->lfs, free_fdesc, f);
 			return -E_INVAL;
 		}
@@ -486,7 +495,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 		r = chdesc_weak_retain(save_head, &save_head);
 		assert(r >= 0); // TODO: handle error
 
-		r = CALL(state->lfs, free_block, blk, &prev_head, &tail);
+		r = CALL(state->lfs, free_block, number, &prev_head, &tail);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
