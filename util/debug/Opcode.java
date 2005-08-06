@@ -25,6 +25,21 @@ public abstract class Opcode implements Constants
 		this.function = function;
 	}
 	
+	public String getFile()
+	{
+		return file;
+	}
+	
+	public int getLine()
+	{
+		return line;
+	}
+	
+	public String getFunction()
+	{
+		return function;
+	}
+	
 	public abstract void applyTo(SystemState state);
 	
 	public abstract boolean hasEffect();

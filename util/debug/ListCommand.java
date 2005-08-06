@@ -28,6 +28,7 @@ public class ListCommand implements Command
 			System.out.println(yellow + "#" + number + " " + opcode + normal);
 		else
 			System.out.println(blue + "#" + number + " " + opcode + normal);
+		System.out.println("    from " + opcode.getFunction() + "() at " + opcode.getFile() + ":" + opcode.getLine());
 	}
 	
 	public Object runCommand(String args[], Object data, CommandInterpreter interpreter) throws CommandException

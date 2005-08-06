@@ -23,6 +23,7 @@ public class LoadCommand implements Command
 		else if(dbg == null)
 		{
 			try {
+				int count;
 				File file = new File(args[0]);
 				InputStream input = new FileInputStream(file);
 				DataInput stream = new DataInputStream(input);
@@ -34,15 +35,15 @@ public class LoadCommand implements Command
 				if(args.length == 1)
 				{
 					System.out.print("Reading debugging output... ");
-					dbg.readOpcodes();
-					System.out.println("OK!");
+					count = dbg.readOpcodes();
+					System.out.println(count + " opcodes OK!");
 				}
 				else
 					try {
-						int count = Integer.parseInt(args[1]);
+						count = Integer.parseInt(args[1]);
 						System.out.print("Reading debugging output...");
-						dbg.readOpcodes(count);
-						System.out.println("OK!");
+						count = dbg.readOpcodes(count);
+						System.out.println(count + " opcodes OK!");
 					}
 					catch(NumberFormatException e)
 					{

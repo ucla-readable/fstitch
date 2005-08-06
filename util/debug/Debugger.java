@@ -60,7 +60,7 @@ public class Debugger extends OpcodeFactory
 		return opcode;
 	}
 	
-	public void readOpcodes() throws BadInputException, IOException
+	public int readOpcodes() throws BadInputException, IOException
 	{
 		try {
 			for(;;)
@@ -70,9 +70,10 @@ public class Debugger extends OpcodeFactory
 		{
 			/* this is OK, we expect the end of the file sooner or later */
 		}
+		return opcodes.size();
 	}
 	
-	public void readOpcodes(int count) throws BadInputException, IOException
+	public int readOpcodes(int count) throws BadInputException, IOException
 	{
 		try {
 			while(count-- > 0)
@@ -82,6 +83,7 @@ public class Debugger extends OpcodeFactory
 		{
 			/* this is OK, we expect the end of the file sooner or later */
 		}
+		return opcodes.size();
 	}
 	
 	public boolean replayAll()
