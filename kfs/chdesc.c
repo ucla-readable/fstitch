@@ -93,9 +93,15 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 		printf("Unexpected NOOP chdesc in %s()\n", __FUNCTION__);
 		return 0;
 	}
-	/* two bit chdescs can't conflict due to xor representation */
+	
+	/* two bit chdescs can't conflict due to xor representation... */
 	if(recent->type == BIT && original->type == BIT)
+	{
+		/* ...but make sure they depend if they modify the same bits */
+		if(recent->bit.offset == original->bit.offset && (recent->bit.xor & original->bit.xor))
+			chdesc_add_depend(recent, original);
 		return 0;
+	}
 	
 	if(recent->type == BIT)
 	{
