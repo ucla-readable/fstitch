@@ -17,7 +17,7 @@ struct fn_entry {
 typedef struct fn_entry fn_entry_t;
 
 
-vector_t * fes = NULL;
+static vector_t * fes = NULL;
 
 
 int sched_register(const sched_callback fn, void * arg, int32_t freq_centisecs)
@@ -44,7 +44,7 @@ int sched_register(const sched_callback fn, void * arg, int32_t freq_centisecs)
 	return 0;
 }
 
-int sched_unregister(const sched_callback fn)
+int sched_unregister(const sched_callback fn, void * arg)
 {
 	size_t fes_size = vector_size(fes);
 	size_t i;
@@ -53,7 +53,7 @@ int sched_unregister(const sched_callback fn)
 	for (i=0; i < fes_size; i++)
 	{
 		fe = vector_elt(fes, i);
-		if (fn == fe->fn)
+		if (fn == fe->fn && arg == fe->arg)
 		{
 			free(fe);
 			vector_erase(fes, i);
@@ -65,7 +65,7 @@ int sched_unregister(const sched_callback fn)
 }
 
 
-int sched_init()
+int sched_init(void)
 {
 	// Check that sched_init is not called multiple times
 	assert(!fes);
@@ -77,12 +77,12 @@ int sched_init()
 	return 0;
 }
 
-void sched_loop()
+void sched_loop(void)
 {
 	for (;;)
 	{
 		int32_t cur_ncs;
-		size_t i, fes_size = vector_size(fes);
+		size_t i, fes_size;
 		fn_entry_t * fe;
 		int r;
 
@@ -91,6 +91,7 @@ void sched_loop()
 
 		// Run other fes scheduled to have run by now
 		cur_ncs = env->env_jiffies;
+		fes_size = vector_size(fes);
 		for (i=0; i < fes_size; i++)
 		{
 			fe = vector_elt(fes, i);
@@ -99,7 +100,9 @@ void sched_loop()
 				fe->fn(fe->arg);
 
 				cur_ncs = env->env_jiffies;
-				fe->next = cur_ncs + fe->period;
+				// Set up the next callback time based on when the timer
+				// should have gone off, and not necessarily when it did
+				fe->next += fe->period;
 			}
 		}
 

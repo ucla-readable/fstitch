@@ -953,7 +953,7 @@ static int journal_destroy(LFS_t * lfs)
 		return r;
 	}
 
-	r = sched_unregister(timer_callback);
+	r = sched_unregister(timer_callback, state);
 	if (r < 0)
 		fprintf(STDERR_FILENO, "%s(): WARNING: sched_unregister(): %e\n", r);
 
