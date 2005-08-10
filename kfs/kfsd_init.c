@@ -38,7 +38,7 @@ static const char * fspaths[] = {
 "/k0", "/k1", "/k2", "/k3"};
 
 //#define USE_MIRROR
-//#define USE_WB_CACHE
+#define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
 #endif

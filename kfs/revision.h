@@ -28,10 +28,17 @@ int revision_tail_revert(bdesc_t *block, BD_t *bd);
 // BD, it calls chdesc_apply() on them.
 int revision_tail_acknowledge(bdesc_t *block, BD_t *bd);
 
-// revision_satisfy_external_deps loops. Each iteration it finds an
-// external dependency and, if there is one, it tells the owner to
-// sync the block containing that chdesc. When there are no external
-// deps, it returns.
-int revision_satisfy_external_deps(bdesc_t *block, BD_t *bd);
+typedef struct revision_slice {
+	BD_t * owner;
+	BD_t * target;
+	int full_size, ready_size;
+	chdesc_t ** full;
+	chdesc_t ** ready;
+} revision_slice_t;
+
+revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target);
+void revision_slice_push_down(revision_slice_t * slice);
+void revision_slice_pull_up(revision_slice_t * slice);
+void revision_slice_destroy(revision_slice_t * slice);
 
 #endif // not _REVISION_H

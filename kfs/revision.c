@@ -179,48 +179,213 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	return 0;
 }
 
-/*
- * precondition: CHDESC_MARKED is set to 0 for each chdesc in graph.
- *
- * postconditions: CHDESC_MARKED is set to 1 for each chdesc in a
- * connected subgraph. One of the nodes in the subgraph will be the
- * node you pass. Thus, you can run chdesc_unmark_graph() on 'ch' to
- * reset all the marks.
- *
- * return value: a chdesc on a remote BD, or NULL if there is none.
- */
-static chdesc_t * get_external_dep(chdesc_t * ch, BD_t * home_bd)
+
+/* ---- Revision slices: library functions for use inside barrier zones ---- */
+
+/* Unless we use chdesc stamps, of which there are a limited number, we don't
+ * know whether chdescs that we don't own are above or below us. But that's OK,
+ * because we don't need to. Hence there is no revision_slice_prepare()
+ * function, because we don't need to apply or roll back any chdescs to use
+ * revision slices. Basically a revision slice is a set of change descriptors at
+ * a particular time, organized in a nice way so that we can figure out which
+ * ones are ready to be written down and which ones are not. */
+
+/* A chdesc that is ready has one of these properties:
+ * 1. It has no dependencies.
+ * 2. It only has dependencies whose levels are less than or equal to its target level.
+ * 3. It only has dependencies which are on the same block and which are ready.
+ * 4. It only has dependencies as in #2 and #3 above. */
+static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdesc_t * block, uint16_t target_level)
 {
-	chmetadesc_t * p;
+	/* assume ready until we find evidence to the contrary */
+	bool ready = 1;
+	chmetadesc_t * meta;
 	
-	if(ch->flags & CHDESC_MARKED)
-		return NULL;
-	ch->flags |= CHDESC_MARKED;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, ch, CHDESC_MARKED);
+	if(chdesc->flags & CHDESC_READY)
+		return 1;
 	
-	if(ch->owner != home_bd)
-		return ch;
+	assert(!chdesc->block || chdesc->owner);
 	
-	for(p = ch->dependencies; p; p = p->next)
+	for(meta = chdesc->dependencies; meta; meta = meta->next)
 	{
-		chdesc_t * ret = get_external_dep(p->desc, home_bd);
-		if(ret)
-			return ret;
+		chdesc_t * dep = meta->desc;
+		bool recurse = 0;
+		
+		/* handle NOOP properly: it can have NULL block and owner */
+		
+		if(!dep->owner && !dep->block)
+			/* unmanaged NOOP: always recurse */
+			recurse = 1;
+		else if(!dep->block)
+		{
+			/* managed NOOP: just check level */
+			if(CALL(dep->owner, get_devlevel) > target_level)
+			{
+				ready = 0;
+				break;
+			}
+		}
+		else
+		{
+			/* normal chdesc or on-block NOOP: recurse when
+			 * owner and block match, otherwise check level */
+			if(dep->owner == owner && dep->block->ddesc == block->ddesc)
+				recurse = 1;
+			else if(CALL(dep->owner, get_devlevel) > target_level)
+			{
+				ready = 0;
+				break;
+			}
+		}
+		
+		if(recurse && !revision_slice_chdesc_is_ready(dep, owner, block, target_level))
+		{
+			ready = 0;
+			break;
+		}
 	}
 	
-	return NULL;
+	if(ready && chdesc->block)
+	{
+		/* only set CHDESC_READY if we know it will get cleared by revision_slice_push_down */
+		assert(chdesc->block->ddesc == block->ddesc);
+		
+		chdesc->flags |= CHDESC_READY;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_READY);
+	}
+	return ready;
 }
 
-int revision_satisfy_external_deps(bdesc_t * block, BD_t * bd)
+revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target)
 {
-	for(;;)
+	int i = 0, j = 0;
+	chmetadesc_t * meta;
+	uint16_t target_level = CALL(target, get_devlevel);
+	revision_slice_t * slice = malloc(sizeof(*slice));
+	if(!slice)
+		return NULL;
+	
+	slice->owner = owner;
+	slice->target = target;
+	slice->full_size = 0;
+	slice->ready_size = 0;
+	if(!block->ddesc->changes)
 	{
-		int r;
-		chdesc_t * ext_dep = get_external_dep(block->ddesc->changes, bd);
-		chdesc_unmark_graph(block->ddesc->changes);
-		if(!ext_dep)
-			return 0;
-		r = CALL(ext_dep->owner, sync, ext_dep->block->number, ext_dep);
-		assert(r >= 0);
+		slice->full = NULL;
+		slice->ready = NULL;
+		return slice;
 	}
+	
+	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+		if(meta->desc->owner == owner)
+		{
+			slice->full_size++;
+			if(revision_slice_chdesc_is_ready(meta->desc, owner, block, target_level))
+				slice->ready_size++;
+		}
+	
+	if(slice->full_size)
+	{
+		slice->full = calloc(slice->full_size, sizeof(*slice->full));
+		if(!slice->full)
+		{
+			/* no need to clear CHDESC_READY: anything ready
+			 * now will still be ready until it's written */
+			free(slice);
+			return NULL;
+		}
+		if(slice->ready_size)
+		{
+			slice->ready = calloc(slice->ready_size, sizeof(*slice->ready));
+			if(!slice->ready)
+			{
+				/* see comment above */
+				free(slice->full);
+				free(slice);
+				return NULL;
+			}
+		}
+	}
+	
+	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+		if(meta->desc->owner == owner)
+		{
+			if(chdesc_weak_retain(meta->desc, &slice->full[i++]) < 0)
+			{
+				revision_slice_destroy(slice);
+				return NULL;
+			}
+			if(meta->desc->flags & CHDESC_READY)
+				if(chdesc_weak_retain(meta->desc, &slice->ready[j++]))
+				{
+					revision_slice_destroy(slice);
+					return NULL;
+				}
+		}
+	assert(i == slice->full_size);
+	assert(j == slice->ready_size);
+	
+	return slice;
+}
+
+void revision_slice_push_down(revision_slice_t * slice)
+{
+	/* like chdesc_push_down, but without block reassignment (only needed
+	 * for things changing block numbers) and for slices instead of all
+	 * chdescs: it only pushes down the ready part of the slice */
+	/* CLEAR CHDESC_READY */
+	int i;
+	for(i = 0; i != slice->ready_size; i++)
+	{
+		if(!slice->ready[i])
+			continue;
+		if(slice->ready[i]->owner == slice->owner)
+		{
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
+			slice->ready[i]->owner = slice->target;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, slice->ready[i], CHDESC_READY);
+			slice->ready[i]->flags &= ~CHDESC_READY;
+		}
+		else
+			fprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
+	}
+}
+
+void revision_slice_pull_up(revision_slice_t * slice)
+{
+	/* the reverse of revision_slice_push_down, in case write() fails */
+	/* SET CHDESC_READY */
+	int i;
+	for(i = 0; i != slice->ready_size; i++)
+	{
+		if(!slice->ready[i])
+			continue;
+		if(slice->ready[i]->owner == slice->target)
+		{
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
+			slice->ready[i]->owner = slice->owner;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, slice->ready[i], CHDESC_READY);
+			slice->ready[i]->flags |= CHDESC_READY;
+		}
+		else
+			fprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
+	}
+}
+
+void revision_slice_destroy(revision_slice_t * slice)
+{
+	int i;
+	if(slice->full)
+	{
+		for(i = 0; i != slice->full_size; i++)
+			chdesc_weak_release(&slice->full[i]);
+		free(slice->full);
+	}
+	if(slice->ready)
+	{
+		for(i = 0; i != slice->ready_size; i++)
+			chdesc_weak_release(&slice->ready[i]);
+		free(slice->ready);
+	}
+	free(slice);
 }

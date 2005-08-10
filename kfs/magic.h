@@ -28,8 +28,11 @@
 /* "TBLCLASS" */
 #define TABLE_CLASSIFIER_MAGIC 0x7B1C1A55
 
-// "LEET0CFS" (because uhfs is leet)
+/* "LEET0CFS" (because UHFS is leet) */
 #define UHFS_MAGIC 0x1EE70CF5
+
+/* "DATADELA" */
+#define WB_CACHE_MAGIC 0xDA7ADE1A
 
 /* "WOLEDISC" */
 #define WHOLEDISK_MAGIC 0x301ED15C

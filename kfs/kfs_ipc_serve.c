@@ -302,9 +302,7 @@ static void kis_wb_cache_bd(envid_t whom, const Skfs_wb_cache_bd_t * pg)
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-#warning add wb_cache here
-	val = 0; //(uint32_t) wb_cache_bd(bd, pg->blocks);
-	fprintf(STDERR_FILENO, "kfsd: warning: not constructing wb_cache_bd!\n");
+	val = (uint32_t) wb_cache_bd(bd, pg->blocks);
 
 	RETURN_IPC;
 }
