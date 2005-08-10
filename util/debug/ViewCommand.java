@@ -66,7 +66,7 @@ public class ViewCommand implements Command
 						JFrame frame = new JFrame(dbg.toString());
 						frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 						
-						frame.getContentPane().add(new JLabel(icon));
+						frame.getContentPane().add(new JScrollPane(new JLabel(icon)));
 						
 						frame.pack();
 						frame.setVisible(true);

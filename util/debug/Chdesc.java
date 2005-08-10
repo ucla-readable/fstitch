@@ -14,8 +14,9 @@ public class Chdesc
 	public static final int FLAG_INSET = 0x02;
 	public static final int FLAG_MOVED = 0x04;
 	public static final int FLAG_ROLLBACK = 0x08;
-	public static final int FLAG_FREEING = 0x10;
-	public static final int FLAG_PRMARKED = 0x20;
+	public static final int FLAG_READY = 0x10;
+	public static final int FLAG_FREEING = 0x20;
+	public static final int FLAG_PRMARKED = 0x40;
 	
 	public final int address;
 	
@@ -287,21 +288,26 @@ public class Chdesc
 		switch(type)
 		{
 			case TYPE_NOOP:
-				links += "\"";
+				links += "\",style=\"";
 				break;
 			case TYPE_BIT:
-				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner() + "\",fillcolor=green,style=filled";
+				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner() + "\",fillcolor=green,style=\"filled";
 				break;
 			case TYPE_BYTE:
-				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner() + "\",fillcolor=slateblue1,style=filled";
+				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner() + "\",fillcolor=slateblue1,style=\"filled";
 				break;
 			case TYPE_DESTROY:
-				links += "\",fillcolor=orange,style=filled";
+				links += "\",fillcolor=orange,style=\"filled";
 				break;
 			case TYPE_DANGLING:
-				links += "\",fillcolor=red,style=filled";
+				links += "\",fillcolor=red,style=\"filled";
 				break;
 		}
+		if((flags & FLAG_ROLLBACK) != 0)
+			links += ",dashed,bold";
+		links += "\"";
+		if((flags & FLAG_MARKED) != 0)
+			links += ",color=red";
 		links += "]\n";
 		
 		Iterator i = dependencies.iterator();
@@ -348,6 +354,8 @@ public class Chdesc
 			names += " | MOVED";
 		if((flags & FLAG_ROLLBACK) != 0)
 			names += " | ROLLBACK";
+		if((flags & FLAG_READY) != 0)
+			names += " | READY";
 		if((flags & FLAG_FREEING) != 0)
 			names += " | FREEING";
 		if((flags & FLAG_PRMARKED) != 0)
