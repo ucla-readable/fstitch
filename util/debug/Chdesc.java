@@ -308,6 +308,8 @@ public class Chdesc
 		links += "\"";
 		if((flags & FLAG_MARKED) != 0)
 			links += ",color=red";
+		if((flags & FLAG_FREEING) != 0)
+			links += ",fontcolor=red";
 		links += "]\n";
 		
 		Iterator i = dependencies.iterator();
