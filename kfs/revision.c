@@ -305,7 +305,11 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 				return NULL;
 			}
 		}
+		else
+			slice->ready = NULL;
 	}
+	else
+		slice->full = NULL;
 	
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
 		if(meta->desc->owner == owner)
