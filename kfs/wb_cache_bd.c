@@ -113,6 +113,7 @@ static uint32_t push_block(struct cache_info * info, bdesc_t * block)
 	info->blocks[0].free_index = info->blocks[index].next_index;
 	info->blocks[index].prev = &info->blocks[0];
 	info->blocks[index].next = info->blocks[0].mru;
+	
 	/* this will set blocks[0].lru if this is the first block */
 	info->blocks[0].mru->prev = &info->blocks[index];
 	info->blocks[0].mru = &info->blocks[index];
@@ -128,14 +129,36 @@ static void pop_block(struct cache_info * info, uint32_t number, uint32_t index)
 	assert(info->blocks[index].block->number == number);
 	
 	bdesc_release(&info->blocks[index].block);
+	
 	/* this will set blocks[0].lru/mru as necessary */
 	info->blocks[index].prev->next = info->blocks[index].next;
 	info->blocks[index].next->prev = info->blocks[index].prev;
+	
+	/* now it's a free slot */
 	info->blocks[index].next_index = info->blocks[0].free_index;
 	info->blocks[index].next = &info->blocks[info->blocks[0].free_index];
 	info->blocks[0].free_index = index;
 	
 	hash_map_erase(info->block_map, (void *) number);
+}
+
+static void touch_block(struct cache_info * info, uint32_t index)
+{
+	assert(info->blocks[index].block);
+	
+	if(info->blocks[0].mru != &info->blocks[index])
+	{
+		/* this will set blocks[0].lru/mru as necessary */
+		info->blocks[index].prev->next = info->blocks[index].next;
+		info->blocks[index].next->prev = info->blocks[index].prev;
+		
+		info->blocks[index].prev = &info->blocks[0];
+		info->blocks[index].next = info->blocks[0].mru;
+		
+		/* this will set blocks[0].lru if this is the first block */
+		info->blocks[0].mru->prev = &info->blocks[index];
+		info->blocks[0].mru = &info->blocks[index];
+	}
 }
 
 static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
@@ -208,8 +231,11 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
 	if(index)
+	{
 		/* in the cache, use it */
+		touch_block(info, index);
 		return info->blocks[index].block;
+	}
 	
 	if(hash_map_size(info->block_map) == info->size)
 		if(evict_block(object) < 0)
@@ -246,6 +272,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(index)
 	{
 		/* in the cache, use it */
+		touch_block(info, index);
 		*synthetic = 0;
 		return info->blocks[index].block;
 	}
@@ -301,6 +328,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	{
 		/* already have this block, just check for deadlock */
 		assert(info->blocks[index].block->ddesc == block->ddesc);
+		touch_block(info, index);
 		
 #warning wb_cache_bd_write_block() check for deadlock (old written block)
 		
