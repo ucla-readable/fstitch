@@ -1207,7 +1207,7 @@ start_dns_query(dns_state_t *ds)
 		return;
 	}
 
-	ds->expires = env->env_jiffies + (DNS_TIMEOUT_MS / 10);
+	ds->expires = env->env_jiffies + (DNS_TIMEOUT_MS * HZ / 1000);
 
 	err = udp_send(ds->pcb, ds->p_out);
 	if (err != ERR_OK)

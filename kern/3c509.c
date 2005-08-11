@@ -68,7 +68,7 @@ enum RxFilter
 #define FD_ENABLE	0x8000		/* Enable full-duplex ("external loopback") */  
 
 /* Time in jiffies before concluding the transmitter is hung. */
-#define TX_TIMEOUT 40
+#define TX_TIMEOUT (40 * HZ / 100)
 
 /* Number of 3c509 cards supported by this driver. */
 #define MAX_EL3_DEVS 4

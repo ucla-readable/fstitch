@@ -260,19 +260,20 @@ net_loop(struct netif *nif, void (* poll)(void))
 	//
 	// Call timers and don't exit
 
-	const int32_t fast_interval        = TCP_FAST_INTERVAL / 10;
-	const int32_t slow_interval        = TCP_SLOW_INTERVAL / 10;
-	const int32_t etharp_interval      = ARP_TMR_INTERVAL / 10;
-	const int32_t dhcp_fine_interval   = DHCP_FINE_TIMER_MSECS / 10;
-	const int32_t dhcp_coarse_interval = DHCP_COARSE_TIMER_SECS * 100;
+	// LWIP interval macros are measured in milliseconds
+	const int32_t fast_interval        = TCP_FAST_INTERVAL * HZ / 1000;
+	const int32_t slow_interval        = TCP_SLOW_INTERVAL * HZ / 1000;
+	const int32_t etharp_interval      = ARP_TMR_INTERVAL * HZ / 1000;
+	const int32_t dhcp_fine_interval   = DHCP_FINE_TIMER_MSECS * HZ / 1000;
+	const int32_t dhcp_coarse_interval = DHCP_COARSE_TIMER_SECS * HZ;
 
-	// ncs: num of centi (0.01) secs
-	int32_t cur_ncs          = env->env_jiffies;
-	int32_t next_ncs_slow    = cur_ncs;
-	int32_t next_ncs_fast    = cur_ncs;
-	int32_t next_etharp      = cur_ncs;
-	int32_t next_dhcp_fine   = cur_ncs;
-	int32_t next_dhcp_coarse = cur_ncs;
+	// njs: number of jiffies
+	int32_t cur_njs          = env->env_jiffies;
+	int32_t next_njs_slow    = cur_njs;
+	int32_t next_njs_fast    = cur_njs;
+	int32_t next_etharp      = cur_njs;
+	int32_t next_dhcp_fine   = cur_njs;
+	int32_t next_dhcp_coarse = cur_njs;
 
 	for(;;)
 	{
@@ -297,33 +298,33 @@ net_loop(struct netif *nif, void (* poll)(void))
 			panic("No handling for other ifaces yet");
 		}
 
-		cur_ncs = env->env_jiffies;
-		if (next_ncs_fast - cur_ncs <= 0)
+		cur_njs = env->env_jiffies;
+		if (next_njs_fast - cur_njs <= 0)
 		{
 			tcp_fasttmr();
-			next_ncs_fast = cur_ncs + fast_interval;
+			next_njs_fast = cur_njs + fast_interval;
 		}
-		if (next_ncs_slow - cur_ncs <= 0)
+		if (next_njs_slow - cur_njs <= 0)
 		{
 			tcp_slowtmr();
-			next_ncs_slow = cur_ncs + slow_interval;
+			next_njs_slow = cur_njs + slow_interval;
 		}
-		if (jn_sl == 0 && next_etharp - cur_ncs <= 0)
+		if (jn_sl == 0 && next_etharp - cur_njs <= 0)
 		{
 			etharp_tmr();
-			next_etharp = cur_ncs + etharp_interval;
+			next_etharp = cur_njs + etharp_interval;
 		}
 		if (ENABLE_JOSNIC_DHCP && jn_sl == 0)
 		{
-			if (next_dhcp_coarse - cur_ncs <= 0)
+			if (next_dhcp_coarse - cur_njs <= 0)
 			{
 				dhcp_coarse_tmr();
-				next_dhcp_coarse = cur_ncs + dhcp_coarse_interval;
+				next_dhcp_coarse = cur_njs + dhcp_coarse_interval;
 			}
-			if (next_dhcp_fine - cur_ncs <= 0)
+			if (next_dhcp_fine - cur_njs <= 0)
 			{
 				dhcp_fine_tmr();
-				next_dhcp_fine = cur_ncs + dhcp_fine_interval;
+				next_dhcp_fine = cur_njs + dhcp_fine_interval;
 			}
 		}
 

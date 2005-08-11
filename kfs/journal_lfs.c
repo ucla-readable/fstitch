@@ -1264,7 +1264,7 @@ LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
 	if (r < 0)
 		goto error_chdescs;
 
-	r = sched_register(timer_callback, state, TRANSACTION_PERIOD*100);
+	r = sched_register(timer_callback, state, TRANSACTION_PERIOD * HZ);
 	if (r < 0)
 		goto error_chdescs;
 

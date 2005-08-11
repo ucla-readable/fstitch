@@ -20,7 +20,7 @@ typedef struct fn_entry fn_entry_t;
 static vector_t * fes = NULL;
 
 
-int sched_register(const sched_callback fn, void * arg, int32_t freq_centisecs)
+int sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies)
 {
 	int r;
 	fn_entry_t * fe = malloc(sizeof(*fe));
@@ -31,8 +31,8 @@ int sched_register(const sched_callback fn, void * arg, int32_t freq_centisecs)
 
 	fe->fn = fn;
 	fe->arg = arg;
-	fe->period = freq_centisecs;
-	fe->next = env->env_jiffies + freq_centisecs;
+	fe->period = freq_jiffies;
+	fe->next = env->env_jiffies + freq_jiffies;
 
 	r = vector_push_back(fes, fe);
 	if (r < 0)

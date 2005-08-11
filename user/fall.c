@@ -69,7 +69,7 @@ void fall(int argc, char * argv[])
 				column = -1;
 		}
 		
-		sleep(5);
+		sleep(HZ / 20);
 	}
 	
 	memcpy(b8, b8orig, rows * 80 * sizeof(short));

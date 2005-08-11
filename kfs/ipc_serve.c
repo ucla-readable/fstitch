@@ -8,7 +8,7 @@
 #include <inc/env.h>
 #include <inc/lib.h> // for get_pte()
 
-#define IPC_RECV_TIMEOUT 100
+#define IPC_RECV_TIMEOUT HZ
 
 
 int ipc_serve_init(void)

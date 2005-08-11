@@ -4,6 +4,7 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inc/env.h>
 
 #include <kern/8390.h>
 #include <kern/kclock.h>
@@ -133,7 +134,7 @@ static int ne_probe1(struct ns8390 *dev, int ioaddr, const struct josnic * nic)
 		outb_back(inb(ioaddr + NE_RESET), ioaddr + NE_RESET);
 
 		while((inb_p(ioaddr + EN0_ISR) & ENISR_RESET) == 0)
-			if(jiffies - reset_start_time > 2)
+			if(jiffies - reset_start_time > 2 * HZ / 100)
 			{
 				if(bad_card)
 				{
@@ -330,7 +331,7 @@ void ne_reset_8390(struct ns8390 *dev)
 
 	/* This check _should_not_ be necessary, omit eventually. */
 	while((inb_p(NE_BASE+EN0_ISR) & ENISR_RESET) == 0)
-		if(jiffies - reset_start_time > 2)
+		if(jiffies - reset_start_time > 2 * HZ / 100)
 		{
 			printf("eth%d: %s() did not complete.\n", dev->which, __FUNCTION__);
 			break;
@@ -523,7 +524,7 @@ retry:
 #endif
 
 	while((inb_p(nic_base + EN0_ISR) & ENISR_RDC) == 0)
-		if(jiffies - dma_start > 2) // 20ms
+		if(jiffies - dma_start > 2 * HZ / 100) // 20ms
 		{
 			printf("eth%d: timeout waiting for Tx RDC.\n", dev->which);
 			ne_reset_8390(dev);

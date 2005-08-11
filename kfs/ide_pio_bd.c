@@ -32,7 +32,7 @@ static int ide_notbusy(uint8_t controller)
 	int start_jiffies = env->env_jiffies;
 	/* wait for disk not busy */
 	while((inb(base + 7) & 0xC0) != 0x40)
-		if(800 <= env->env_jiffies - start_jiffies)
+		if(8 * HZ <= env->env_jiffies - start_jiffies)
 		{
 			uint16_t reset = ide_reset[controller];
 			printf("Warning: IDE operation timed out on controller %d\n", controller);

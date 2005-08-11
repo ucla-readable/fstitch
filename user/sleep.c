@@ -11,9 +11,9 @@ umain(int argc, char **argv)
 		exit();
 	}
 
-	const int32_t centisecs = 100*strtol(argv[1], NULL, 10);
+	const int32_t jiffies = HZ*strtol(argv[1], NULL, 10);
 
-	if ((r = sleep(centisecs)) < 0)
+	if ((r = sleep(jiffies)) < 0)
 	{
 		fprintf(STDERR_FILENO, "sleep: %e\n", r);
 		exit();

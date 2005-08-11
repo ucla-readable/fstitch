@@ -191,7 +191,7 @@ int get_arg_idx(int argc, const char **argv, const char *arg_name);
 const char* get_arg_val(int argc, const char **argv, const char *arg_name);
 
 // sleep.c
-int sleep(int32_t centisecs);
+int sleep(int32_t jiffies);
 
 // hwclock.c
 int hwclock_time(int *t);

@@ -66,7 +66,7 @@ static int sb16_reset(void)
 	kclock_delay(1);
 	outb(RESET_PORT, 0);
 	
-	limit = jiffies + 3;
+	limit = jiffies + 3 * HZ / 100;
 	while(limit - jiffies > 0)
 		/* unroll sb16_read so we can time out */
 		if(inb(POLL_PORT) & 0x80)
@@ -151,7 +151,7 @@ void sb16_init(void)
 	sb_interrupted = 0;
 	sb16_write(0xF2);
 	
-	i = jiffies + 10;
+	i = jiffies + HZ / 10;
 	while(i - jiffies > 0)
 		if(sb_interrupted)
 		{

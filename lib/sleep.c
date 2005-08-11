@@ -1,12 +1,12 @@
 #include <inc/lib.h>
 
 int
-sleep(int32_t centisecs)
+sleep(int32_t jiffies)
 {
-	if (centisecs < 0)
-		return -E_INVAL;
+	const int32_t wakeup = jiffies + env->env_jiffies;
 
-	const int32_t wakeup = centisecs + env->env_jiffies;
+	if (jiffies < 0)
+		return -E_INVAL;
 
 	for (;;)
 	{
@@ -14,6 +14,4 @@ sleep(int32_t centisecs)
 			return 0;
 		sys_yield();
 	}
-
-	return -E_UNSPECIFIED;
 }

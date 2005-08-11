@@ -22,7 +22,7 @@ void umain(int argc, const char ** argv)
 
 	time = perf_test(0, file, size);
 	if (time > 0)
-		printf("%u kBps\n", (unsigned) (4*1024 / ((double)time / 100)));
+		printf("%u kBps\n", (unsigned) (4*1024 / ((double)time / HZ)));
 	else
 		printf("perf_test: %e\n", time);
 }

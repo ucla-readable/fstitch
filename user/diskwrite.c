@@ -73,7 +73,7 @@ umain(int argc, char **argv)
 	// Wait a bit before starting (and stopping the fs) in case we were
 	// started "diskwrite < fs.img", so that the shell has a chance to
 	// close its fds:
-	if ((r = sleep(50)) < 0)
+	if ((r = sleep(HZ / 2)) < 0)
 		fprintf(STDERR_FILENO, "sleep: %e\n");
 
 	for (;; blockno++)
@@ -127,7 +127,7 @@ umain(int argc, char **argv)
 		if (!iscons(STDOUT_FILENO))
 			printf_c(reboot_msg);
 
-		if ((r = sleep(2*100)) < 0)
+		if ((r = sleep(2 * HZ)) < 0)
 			fprintf(STDERR_FILENO, "sleep: %e\n", r);
 		sys_reboot();
 	}

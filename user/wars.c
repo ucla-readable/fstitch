@@ -305,7 +305,7 @@ void wars(int argc, char * argv[])
 	i = -CH_SIZE * line_count + SCALE;
 	while(getchar_nb() == -1)
 	{
-		const int frame_end = env->env_jiffies + 4;
+		const int frame_end = env->env_jiffies + 4 * HZ / 100;
 		int offset = 0, draw = 0;
 		struct LINE * line;
 		

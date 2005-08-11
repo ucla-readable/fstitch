@@ -1,3 +1,4 @@
+#include <inc/env.h>
 #include <inc/stdio.h>
 #include <inc/error.h>
 #include <inc/types.h>
@@ -498,7 +499,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	info->level = CALL(disk, get_devlevel) + 1;
 	
 	/* ten second callback */
-	if(sched_register(wb_cache_bd_callback, bd, 1000) < 0)
+	if(sched_register(wb_cache_bd_callback, bd, 10 * HZ) < 0)
 	{
 		DESTROY(bd);
 		return NULL;

@@ -73,7 +73,7 @@ static void playpong(int child)
 			exit();
 		}
 		
-		sleep(child ? 2 : 1);
+		sleep(child ? (HZ / 50) : (HZ / 100));
 	}
 }
 
