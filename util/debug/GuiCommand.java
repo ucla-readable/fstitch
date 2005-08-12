@@ -24,68 +24,86 @@ public class GuiCommand implements Command
 		final GuiCommand shell = this;
 		if(dbg != null)
 		{
-			final WindowListener listenerW = new WindowAdapter()
-			{
-				public void windowClosed(WindowEvent e)
-				{
-					synchronized(shell)
-					{
-						shell.notify();
-					}
-				}
-			};
-			final ActionListener listenerB = new ActionListener()
-			{
-				public void actionPerformed(ActionEvent e)
-				{
-					try
-					{
-						String command = e.getActionCommand();
-						interpreter.runCommandLine(command, dbg, false);
-						if(!"view new".equals(command))
-							interpreter.runCommandLine("view", dbg, false);
-					}
-					catch(CommandException ex)
-					{
-					}
-				}
-			};
 			Runnable runnable = new Runnable()
 			{
 				public void run()
 				{
-					JFrame frame = new JFrame("Debugger GUI");
+					final JFrame frame = new JFrame("Debugger GUI");
 					Container pane = frame.getContentPane();
 					JButton button;
 					
 					frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-					frame.addWindowListener(listenerW);
+					frame.addWindowListener(new WindowAdapter()
+					{
+						public void windowClosed(WindowEvent e)
+						{
+							synchronized(shell)
+							{
+								shell.notify();
+							}
+						}
+						/* this has the annoying side effect of always keeping
+						 * it on top, not just bringing it back after a button
+						 * has been pressed and another window shows up */
+						/*public void windowDeactivated(WindowEvent e)
+						{
+							frame.toFront();
+						}*/
+					});
+					
+					ActionListener listener = new ActionListener()
+					{
+						public void actionPerformed(ActionEvent e)
+						{
+							try
+							{
+								String command = e.getActionCommand();
+								interpreter.runCommandLine(command, dbg, false);
+								if(!"view new".equals(command))
+									interpreter.runCommandLine("view", dbg, false);
+								
+								/* even though we're already in the event thread,
+								 * we need this to happen after the invokeLater()
+								 * that results from the view command above */
+								SwingUtilities.invokeLater(new Runnable()
+								{
+									public void run()
+									{
+										frame.toFront();
+									}
+								});
+							}
+							catch(CommandException ex)
+							{
+							}
+						}
+					};
 					
 					pane.setLayout(new GridLayout(1, 5));
 					
 					button = new JButton("Start");
 					button.setActionCommand("reset");
-					button.addActionListener(listenerB);
+					button.addActionListener(listener);
 					pane.add(button);
 					
 					button = new JButton(new ArrowIcon(SwingConstants.LEFT));
 					button.setActionCommand("step -1");
-					button.addActionListener(listenerB);
+					button.addActionListener(listener);
 					pane.add(button);
 					
 					button = new JButton("New");
 					button.setActionCommand("view new");
-					button.addActionListener(listenerB);
+					button.addActionListener(listener);
 					pane.add(button);
 					
 					button = new JButton(new ArrowIcon(SwingConstants.RIGHT));
 					button.setActionCommand("step");
-					button.addActionListener(listenerB);
+					button.addActionListener(listener);
 					pane.add(button);
 					
 					button = new JButton("End");
 					button.setActionCommand("run");
-					button.addActionListener(listenerB);
+					button.addActionListener(listener);
 					pane.add(button);
 					
 					frame.pack();

@@ -305,9 +305,10 @@ public class Chdesc
 		}
 		if((flags & FLAG_ROLLBACK) != 0)
 			links += ",dashed,bold";
-		links += "\"";
 		if((flags & FLAG_MARKED) != 0)
-			links += ",color=red";
+			links += ",bold\",,color=red";
+		else
+			links += "\"";
 		if((flags & FLAG_FREEING) != 0)
 			links += ",fontcolor=red";
 		links += "]\n";

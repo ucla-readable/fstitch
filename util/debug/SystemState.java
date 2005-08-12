@@ -70,7 +70,7 @@ public class SystemState
 		if(landscape)
 			output.write("rankdir=TB;\norientation=L;\nsize=\"8.5,11\";\n");
 		else
-			output.write("rankdir=LR;\norientation=P;\nsize=\"18,12\";\n");
+			output.write("rankdir=LR;\norientation=P;\nsize=\"16,10\";\n");
 		output.write("node [shape=circle,color=black];\n");
 		Iterator i = chdescs.iterator();
 		while(i.hasNext())
