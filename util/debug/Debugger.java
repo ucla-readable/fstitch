@@ -156,6 +156,7 @@ public class Debugger extends OpcodeFactory
 			Debugger dbg = null;
 			
 			interpreter.addCommand(new CloseCommand());
+			interpreter.addCommand(new GuiCommand());
 			interpreter.addCommand(new JumpCommand());
 			interpreter.addCommand(new ListCommand());
 			interpreter.addCommand(new LoadCommand());
