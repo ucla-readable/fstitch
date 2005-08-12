@@ -40,8 +40,10 @@ public class GuiCommand implements Command
 				{
 					try
 					{
-						interpreter.runCommandLine(e.getActionCommand(), dbg, false);
-						interpreter.runCommandLine("view", dbg, false);
+						String command = e.getActionCommand();
+						interpreter.runCommandLine(command, dbg, false);
+						if(!"view new".equals(command))
+							interpreter.runCommandLine("view", dbg, false);
 					}
 					catch(CommandException ex)
 					{
@@ -71,8 +73,8 @@ public class GuiCommand implements Command
 					button.addActionListener(listenerB);
 					pane.add(button);
 					
-					button = new JButton("View");
-					button.setActionCommand("");
+					button = new JButton("New");
+					button.setActionCommand("view new");
 					button.addActionListener(listenerB);
 					pane.add(button);
 					

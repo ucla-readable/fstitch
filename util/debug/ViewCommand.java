@@ -1,11 +1,15 @@
 import java.util.*;
 import java.io.*;
 import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
 
 import command.*;
 
 public class ViewCommand implements Command
 {
+	private JFrame lastFrame = null;
+	
 	public String getName()
 	{
 		return "view";
@@ -13,7 +17,7 @@ public class ViewCommand implements Command
 	
 	public String getHelp()
 	{
-		return "View system state graphically.";
+		return "View system state graphically, optionally in a new window.";
 	}
 	
 	public Object runCommand(String args[], Object data, CommandInterpreter interpreter) throws CommandException
@@ -58,18 +62,48 @@ public class ViewCommand implements Command
 				array = stream.toByteArray();
 				stream = null;
 				
+				if(args.length > 0 && "new".equals(args[0]) && lastFrame != null)
+				{
+					final JFrame oldFrame = lastFrame;
+					SwingUtilities.invokeLater(new Runnable()
+					{
+						public void run()
+						{
+							oldFrame.setTitle(oldFrame.getTitle().substring(2));
+						}
+					});
+					lastFrame = null;
+				}
+				
 				final ImageIcon icon = new ImageIcon(array);
 				runnable = new Runnable()
 				{
 					public void run()
 					{
-						JFrame frame = new JFrame(dbg.toString());
-						frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+						if(lastFrame == null)
+						{
+							final JFrame frame = new JFrame();
+							frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+							frame.addWindowListener(new WindowAdapter()
+							{
+								public void windowClosed(WindowEvent e)
+								{
+									if(lastFrame == frame)
+										lastFrame = null;
+								}
+							});
+							lastFrame = frame;
+						}
 						
-						frame.getContentPane().add(new JScrollPane(new JLabel(icon)));
+						JScrollPane image = new JScrollPane(new JLabel(icon));
+						Container pane = lastFrame.getContentPane();
 						
-						frame.pack();
-						frame.setVisible(true);
+						pane.removeAll();
+						lastFrame.setTitle("* " + dbg);
+						pane.add(image);
+						
+						lastFrame.pack();
+						lastFrame.setVisible(true);
 					}
 				};
 				SwingUtilities.invokeLater(runnable);
