@@ -866,7 +866,11 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_FREEING);
 	
 	if((*chdesc)->dependents)
+	{
+		if((*chdesc)->dependencies)
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
 		chdesc_satisfy(*chdesc);
+	}
 	
 	while((*chdesc)->dependencies)
 		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);

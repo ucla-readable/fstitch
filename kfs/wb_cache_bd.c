@@ -178,7 +178,8 @@ static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
 	if(!meta)
 		return 0;
 	
-	slice = revision_slice_create(slot->block, object, info->bd);
+	/* honor external dependencies: 1 for the last parameter here */
+	slice = revision_slice_create(slot->block, object, info->bd, 1);
 	if(!slice)
 		return -E_NO_MEM;
 	

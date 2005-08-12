@@ -190,12 +190,15 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
  * a particular time, organized in a nice way so that we can figure out which
  * ones are ready to be written down and which ones are not. */
 
-/* A chdesc that is ready has one of these properties:
- * 1. It has no dependencies.
- * 2. It only has dependencies whose levels are less than or equal to its target level.
- * 3. It only has dependencies which are on the same block and which are ready.
- * 4. It only has dependencies as in #2 and #3 above. */
-static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdesc_t * block, uint16_t target_level)
+/* A chdesc that is externally ready has one of these properties:
+ *   1. It has no dependencies.
+ *   2. It only has dependencies whose levels are less than or equal to its target level.
+ *   3. It only has dependencies which are on the same block and which are ready.
+ *   4. It only has dependencies as in #2 and #3 above.
+ * A chdesc that is internally ready need not satisfy as much: dependencies on
+ * chdescs owned by other block devices are ignored. Note that this causes
+ * indirect dependencies on chdescs owned by this block device to be missed. */
+static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdesc_t * block, uint16_t target_level, bool external)
 {
 	/* assume ready until we find evidence to the contrary */
 	bool ready = 1;
@@ -216,6 +219,8 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdes
 		if(!dep->owner && !dep->block)
 			/* unmanaged NOOP: always recurse */
 			recurse = 1;
+		else if(!external && dep->owner != owner)
+			continue;
 		else if(!dep->block)
 		{
 			/* managed NOOP: just check level */
@@ -231,14 +236,23 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdes
 			 * owner and block match, otherwise check level */
 			if(dep->owner == owner && dep->block->ddesc == block->ddesc)
 				recurse = 1;
-			else if(CALL(dep->owner, get_devlevel) > target_level)
+			/* here the !external case is both an optimization and a
+			 * way to make sure the right semantics are preserved:
+			 * we know !external means dep->owner == owner, and
+			 * presumably the level of owner is greater than the
+			 * target level... however, they can be equal, as they
+			 * would be when revision_slice_create() is called from
+			 * the block resizer, and we want that to cause
+			 * unreadiness since this dependency is on a different
+			 * block than the one we are examining right now */
+			else if(!external || CALL(dep->owner, get_devlevel) > target_level)
 			{
 				ready = 0;
 				break;
 			}
 		}
 		
-		if(recurse && !revision_slice_chdesc_is_ready(dep, owner, block, target_level))
+		if(recurse && !revision_slice_chdesc_is_ready(dep, owner, block, target_level, external))
 		{
 			ready = 0;
 			break;
@@ -256,7 +270,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdes
 	return ready;
 }
 
-revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target)
+revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, bool external)
 {
 	int i = 0, j = 0;
 	chmetadesc_t * meta;
@@ -280,7 +294,7 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 		if(meta->desc->owner == owner)
 		{
 			slice->full_size++;
-			if(revision_slice_chdesc_is_ready(meta->desc, owner, block, target_level))
+			if(revision_slice_chdesc_is_ready(meta->desc, owner, block, target_level, external))
 				slice->ready_size++;
 		}
 	
