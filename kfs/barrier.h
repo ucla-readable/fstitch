@@ -12,10 +12,10 @@
 int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block);
 
 typedef struct {
-	BD_t *   target;
+	BD_t * target;
 	uint32_t number;
-	uint32_t offset;
-	uint32_t size;
+	bdesc_t * block;
+	uint16_t offset, size;
 } partial_forward_t;
 
 /* forward chdescs as above, but only those within the given range and to the

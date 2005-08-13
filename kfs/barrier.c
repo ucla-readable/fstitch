@@ -101,9 +101,9 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	return 0;
 }
 
-static bool chdesc_in_range(chdesc_t * chdesc, uint32_t offset, uint32_t size)
+static bool chdesc_in_range(chdesc_t * chdesc, uint16_t offset, uint16_t size)
 {
-	uint32_t chd_offset, chd_end;
+	uint16_t chd_offset, chd_end;
 	/* note that we require that change descriptors do not cross the
 	 * atomic disk unit size boundary, so that we will never have to
 	 * fragment a change descriptor */
@@ -133,8 +133,9 @@ static bool chdesc_in_range(chdesc_t * chdesc, uint32_t offset, uint32_t size)
 	return 0;
 }
 
-/* This function is almost exactly the function barrier_simple_forward().
- * See its comment. */
+/* This function is similar to the function barrier_simple_forward(), but it has
+ * provisions for handling dependencies between the new sub-blocks that weren't
+ * a problem with a single block. */
 int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block)
 {
 	int i, r;
@@ -149,16 +150,18 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 	for (i=0; i < nforwards; i++)
 	{
-		bool synthetic;
-		bool chdescs_moved = 0;
+		bool synthetic, chdescs_moved = 0;
 		bdesc_t * target_block;
 		chmetadesc_t ** chmetadesc;
 		partial_forward_t * forward = &forwards[i];
-
+		
 		/* block->ddesc->changes can become NULL after a chdesc_move(),
 		 * so check NULLness each iteration */
 		if (!block->ddesc->changes)
-			break;
+		{
+			forward->block = NULL;
+			continue;
+		}
 
 		target_block = CALL(forward->target, synthetic_read_block, forward->number, &synthetic);
 		if (!target_block)
@@ -176,7 +179,8 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			if (chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK) && chdesc_in_range(chdesc, forward->offset, forward->size))
 			{
 				chdescs_moved = 1;
-				r = chdesc_move(chdesc, target_block, forward->target, forward->offset);
+				/* keep it at the barrier for a bit... we need this to create the revision_slice */
+				r = chdesc_move(chdesc, target_block, barrier, forward->offset);
 				if (r < 0)
 					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			}
@@ -193,6 +197,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			r = CALL(forward->target, cancel_block, forward->number);
 			if (r < 0)
 				panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			forward->block = NULL;
 			continue;
 		}
 
@@ -204,12 +209,41 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			assert(forward->offset + forward->size <= block->ddesc->length);
 			assert(forward->size <= target_block->ddesc->length);
 			memcpy(target_block->ddesc->data, block->ddesc->data + forward->offset, forward->size);
-
-			/* write the updated target_block */
-			r = CALL(forward->target, write_block, target_block);
-			if (r < 0)
-				panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
+		forward->block = bdesc_retain(target_block);
+	}
+
+	for (;;)
+	{
+		bool again = 0;
+		for (i=0; i < nforwards; i++)
+		{
+			partial_forward_t * forward = &forwards[i];
+			bdesc_t * target_block = forward->block;
+
+			if (forward->block)
+			{
+				/* create an internal slice */
+				revision_slice_t * slice = revision_slice_create(forward->block, barrier, forward->target, 0);
+				if (!slice)
+					panic("%s(): revision_slice_create() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__);
+
+				revision_slice_push_down(slice);
+
+				/* write the updated target_block */
+				r = CALL(forward->target, write_block, target_block);
+				if (r < 0)
+					panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+
+				if (slice->ready_size == slice->full_size)
+					forward->block = NULL;
+				else
+					again = 1;
+				revision_slice_destroy(slice);
+			}
+		}
+		if (!again)
+			break;
 	}
 
 	/* put block back into current state */
