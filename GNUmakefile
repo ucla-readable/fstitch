@@ -87,10 +87,15 @@ endif
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
 NCXX	:= g++ $(CC_VER) -pipe
-ANT := ant
+ANT	:= ant
 TAR	:= gtar
 PERL	:= perl
 CTAGS	:= ctags
+
+# Native command flags
+NCFLAGS	:= -Wall -pedantic
+NCXXFLAGS	:= $(NCFLAGS)
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
 
 # Compiler flags
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
@@ -98,8 +103,6 @@ CTAGS	:= ctags
 CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-format -gstabs
 CFLAGS	:= $(CFLAGS) -O2
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
-
-CTAGSFLAGS := --extra=+q --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
 
 LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
 
