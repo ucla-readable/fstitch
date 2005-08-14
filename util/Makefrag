@@ -31,3 +31,8 @@ $(OBJDIR)/util/$(HEX2BIN) : util/$(HEX2BIN).c
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(NCC) -Wall -pedantic -o $@ $<
+
+$(OBJDIR)/util/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/*.java)
+	@echo + ant[UTIL/DEBUG]
+	@mkdir -p $(@D)
+	$(V)ant -f util/debug/build.xml

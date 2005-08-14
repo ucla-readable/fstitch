@@ -5,8 +5,9 @@
 	</description>
 
 	<property name="src" value="${basedir}"/>
-	<property name="classes" location="${basedir}/classes"/>
-	<property name="javadoc" location="${basedir}/javadoc"/>
+	<property name="obj" location="${basedir}/../../obj/util/"/>
+	<property name="classes" location="${obj}/debug/classes"/>
+	<property name="javadoc" location="${obj}/debug/javadoc"/>
 
 	<target name="init">
 		<tstamp/>
@@ -19,7 +20,7 @@
 		description="Build the KFS Debugger and javadocs"/>
 
 	<target name="kdb-jar" depends="kdb-classes" description="Build kdb.jar">
-		<jar jarfile="${basedir}/kdb.jar" basedir="${classes}">
+		<jar jarfile="${obj}/kdb.jar" basedir="${classes}">
 			<manifest>
 				<attribute name="Built-By" value="${user.name}"/>
 				<attribute name="Main-Class" value="Debugger"/>
@@ -48,7 +49,7 @@
 	</target>
 
 	<target name="clean" depends="init" description="Remove built files">
-		<delete file="${basedir}/kdb.jar"/>
+		<delete file="${obj}/kdb.jar"/>
 		<delete dir="${classes}"/>
 		<delete dir="${javadoc}"/>
 	</target>
