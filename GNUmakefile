@@ -87,6 +87,7 @@ endif
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
 NCXX	:= g++ $(CC_VER) -pipe
+ANT := ant
 TAR	:= gtar
 PERL	:= perl
 CTAGS	:= ctags
