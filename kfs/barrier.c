@@ -236,7 +236,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 					panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 
 				if (slice->ready_size == slice->full_size)
-					bdesc_release(forward->block);
+					bdesc_release(&forward->block);
 				else
 					again = 1;
 				revision_slice_destroy(slice);
