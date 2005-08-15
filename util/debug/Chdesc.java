@@ -16,7 +16,6 @@ public class Chdesc
 	public static final int FLAG_ROLLBACK = 0x08;
 	public static final int FLAG_READY = 0x10;
 	public static final int FLAG_FREEING = 0x20;
-	public static final int FLAG_PRMARKED = 0x40;
 	
 	public final int address;
 	
@@ -361,8 +360,6 @@ public class Chdesc
 			names += " | READY";
 		if((flags & FLAG_FREEING) != 0)
 			names += " | FREEING";
-		if((flags & FLAG_PRMARKED) != 0)
-			names += " | PRMARKED";
 		names += " = " + SystemState.hex(flags);
 		return names.substring(3);
 	}

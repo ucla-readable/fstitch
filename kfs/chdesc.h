@@ -21,7 +21,6 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_ROLLBACK  0x08 /* chdesc is rolled back */
 #define CHDESC_READY     0x10 /* chdesc is ready to be written */
 #define CHDESC_FREEING   0x20 /* this chdesc is being freed */
-#define CHDESC_PRMARKED  0x40 /* used for debugging */
 
 struct chdesc {
 	BD_t * owner;
