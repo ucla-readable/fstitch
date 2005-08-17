@@ -38,7 +38,6 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 		while(scan)
 		{
 			chdesc_t * chdesc = scan->desc;
-#warning this should not push down rolled-back chdescs
 			if(chdesc->owner == current_bd)
 			{
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
@@ -101,12 +100,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 		
 		r = __chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
 		if(r < 0)
-		{
-		    kill_stub:
-			if(!destination->ddesc->changes->dependencies)
-				chdesc_destroy(&(destination->ddesc->changes));
 			return r;
-		}
 		
 		/* set CHDESC_MOVED here to prevent trying to overlap attach to ourselves */
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_MOVED);
@@ -117,7 +111,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_MOVED);
 			chdesc->flags &= ~CHDESC_MOVED;
 			chdesc_remove_depend(destination->ddesc->changes, chdesc);
-			goto kill_stub;
+			return r;
 		}
 	}
 	
@@ -167,11 +161,7 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 		
 		r = __chdesc_add_depend_fast(block->ddesc->changes, noop);
 		if(r < 0)
-		{
-			if(!block->ddesc->changes->dependencies)
-				chdesc_destroy(&(block->ddesc->changes));
 			return r;
-		}
 	}
 	if(noop->block)
 	{
@@ -702,34 +692,17 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		chdesc_unmark_graph(chdescs[i]);
 	}
 	
-	/* weak retain all the change descriptors, so that when we destroy them
-	 * later we won't choke on NOOP chdescs that get automatically freed */
-	for(i = 0; i != count; i++)
-	{
-		r = chdesc_weak_retain(chdescs[i], &chdescs[i]);
-		if(r < 0)
-		{
-			while(i--)
-				chdesc_weak_forget(&chdescs[i]);
-			return r;
-		}
-	}
-	
 	/* copy the new data */
 	data = memdup(chdescs[0]->block->ddesc->data, chdescs[0]->block->ddesc->length);
 	if(!data)
-	{
-		for(i = 0; i != count; i++)
-			chdesc_weak_forget(&chdescs[i]);
+#warning unset MOVED?
 		return -E_NO_MEM;
-	}
 	
 	/* now roll back the change descriptors */
 	r = chdesc_rollback_collection(count, chdescs, NULL);
 	if(r < 0)
 	{
-		for(i = 0; i != count; i++)
-			chdesc_weak_forget(&chdescs[i]);
+#warning unset MOVED?
 		free(data);
 		return r;
 	}
@@ -743,9 +716,8 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		chdesc_apply_collection(count, chdescs, NULL);
 		for(i = 0; i != count; i++)
 		{
-			chdescs[i]->flags &= ~CHDESC_MOVED;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdescs[i], CHDESC_MOVED);
-			chdesc_weak_forget(&chdescs[i]);
+			chdescs[i]->flags &= ~CHDESC_MOVED;
 		}
 		return r;
 	}
@@ -844,9 +816,10 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		}
 	}
 	
+#warning FIXME we may not know about all pointers to these, so make them all NOOPs that depend on the new merged chdesc: note that this can fail, so we have to move it up...
 	/* finally delete the original change descriptors */
 	for(i = 0; i != count; i++)
-		if(chdescs[i])
+		if(!(chdescs[i]->flags & CHDESC_WRITTEN))
 			chdesc_destroy(&chdescs[i]);
 	
 	return 0;

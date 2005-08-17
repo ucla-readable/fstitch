@@ -26,5 +26,8 @@ public class ChdescAlterModule extends Module
 		addFactory(ChdescWeakForget.getFactory(input));
 		addFactory(ChdescSetBlock.getFactory(input));
 		addFactory(ChdescSetOwner.getFactory(input));
+		addFactory(ChdescSetFreePrev.getFactory(input));
+		addFactory(ChdescSetFreeNext.getFactory(input));
+		addFactory(ChdescSetFreeHead.getFactory(input));
 	}
 }

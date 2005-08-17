@@ -48,6 +48,8 @@ static const struct param
 	param_depth =       {"depth",       UINT32},
 	param_destination = {"destination", UHEX32},
 	param_flags =       {"flags",       UHEX32},
+	param_free_next =   {"free_next",   UHEX32},
+	param_free_prev =   {"free_prev",   UHEX32},
 	param_head =        {"head",        UHEX32},
 	param_length =      {"length",      UINT16},
 	param_location =    {"location",    UHEX32},
@@ -162,6 +164,16 @@ static const struct param * params_chdesc_set_owner[] = {
 	&param_owner,
 	&last_param
 };
+static const struct param * params_chdesc_set_free_prev[] = {
+	&param_chdesc,
+	&param_free_prev,
+	&last_param
+};
+static const struct param * params_chdesc_set_free_next[] = {
+	&param_chdesc,
+	&param_free_next,
+	&last_param
+};
 static const struct param * params_chdesc_move[] = {
 	&param_chdesc,
 	&param_destination,
@@ -243,6 +255,9 @@ static const struct opcode
 	opcode_chdesc_weak_forget =         OPCODE(KDB_CHDESC_WEAK_FORGET,         params_chdesc_weak_retain_release),
 	opcode_chdesc_set_block =           OPCODE(KDB_CHDESC_SET_BLOCK,           params_chdesc_set_block),
 	opcode_chdesc_set_owner =           OPCODE(KDB_CHDESC_SET_OWNER,           params_chdesc_set_owner),
+	opcode_chdesc_set_free_prev =       OPCODE(KDB_CHDESC_SET_FREE_PREV,       params_chdesc_set_free_prev),
+	opcode_chdesc_set_free_next =       OPCODE(KDB_CHDESC_SET_FREE_NEXT,       params_chdesc_set_free_next),
+	opcode_chdesc_set_free_head =       OPCODE(KDB_CHDESC_SET_FREE_HEAD,       params_chdesc_only),
 	opcode_chdesc_move =                OPCODE(KDB_CHDESC_MOVE,                params_chdesc_move),
 	opcode_chdesc_satisfy =             OPCODE(KDB_CHDESC_SATISFY,             params_chdesc_only),
 	opcode_chdesc_weak_collect =        OPCODE(KDB_CHDESC_WEAK_COLLECT,        params_chdesc_only),
@@ -296,6 +311,9 @@ static const struct opcode * opcodes_chdesc_alter[] = {
 	&opcode_chdesc_weak_forget,
 	&opcode_chdesc_set_block,
 	&opcode_chdesc_set_owner,
+	&opcode_chdesc_set_free_prev,
+	&opcode_chdesc_set_free_next,
+	&opcode_chdesc_set_free_head,
 	&last_opcode
 };
 static const struct opcode * opcodes_chdesc_info[] = {

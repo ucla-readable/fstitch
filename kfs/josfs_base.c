@@ -68,27 +68,6 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 static int read_bitmap(LFS_t * object, uint32_t blockno);
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
 
-/* these two "pair" functions will help when we use CALL and might lose chdescs unless they are weak retained */
-static int weak_retain_pair(chdesc_t ** head, chdesc_t ** tail)
-{
-	int i = 0, j = 0;
-	if(head && tail)
-	{
-		i = chdesc_weak_retain(*head, head);
-		j = chdesc_weak_retain(*tail, tail);
-	}
-	return (i < 0) ? i : j;
-}
-
-static void weak_forget_pair(chdesc_t ** head, chdesc_t ** tail)
-{
-	if(head && tail)
-	{
-		chdesc_weak_forget(head);
-		chdesc_weak_forget(tail);
-	}
-}
-
 // Equivalent to JOS's read_super
 static int check_super(LFS_t * object)
 {
@@ -484,9 +463,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	else {
 		bdesc_release(&info->bitmap_cache);
 		info->bitmap_cache = NULL;
-		weak_retain_pair(head, tail);
 		bdesc = CALL(info->ubd, read_block, target);
-		weak_forget_pair(head, tail);
 
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap!\n");
@@ -513,9 +490,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	*tail = ch;
 	*head = ch;
 
-	weak_retain_pair(head, tail);
 	r = CALL(info->ubd, write_block, bdesc);
-	weak_forget_pair(head, tail);
 
 	return r;
 }
@@ -748,9 +723,7 @@ static uint32_t josfs_allocate_block(LFS_t * object, int purpose, chdesc_t ** he
 			r = chdesc_create_init(bdesc, info->ubd, head, &newtail);
 			r |= chdesc_add_depend(newtail, curhead);
 
-			weak_retain_pair(head, tail);
 			r |= CALL(info->ubd, write_block, bdesc);
-			weak_forget_pair(head, tail);
 			assert(r >= 0);
 			return blockno;
 		}
@@ -958,9 +931,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	*tail = NULL;
 
 	if (nblocks > JOSFS_NDIRECT) {
-		weak_retain_pair(head, tail);
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
-		weak_forget_pair(head, tail);
 		if (!indirect)
 			return -E_NO_DISK;
 
@@ -972,11 +943,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 			if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
 				return r;
 
-		weak_retain_pair(head, tail);
-		r = CALL(info->ubd, write_block, indirect);
-		weak_forget_pair(head, tail);
-
-		return r;
+		return CALL(info->ubd, write_block, indirect);
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
 		uint32_t inumber = josfs_allocate_block(object, 0, head, tail);
@@ -986,9 +953,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		indirect = josfs_lookup_block(object, inumber);
 
 		// Initialize the structure, then point to it
-		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
-		weak_forget_pair(head, tail);
 		if (!dirblock)
 			return -E_NO_DISK;
 
@@ -1010,11 +975,9 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		if ((r = chdesc_add_depend(newtail, curhead)) < 0)
 			return r;
 
-		weak_retain_pair(head, tail);
 		/* FIXME handle the return values better? */
 		r = CALL(info->ubd, write_block, indirect);
 		r |= CALL(info->ubd, write_block, dirblock);
-		weak_forget_pair(head, tail);
 
 		if (r >= 0)
 			f->file->f_indirect = inumber;
@@ -1022,9 +985,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		return r;
 	}
 	else {
-		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
-		weak_forget_pair(head, tail);
 		if (!dirblock)
 			return -E_NO_DISK;
 
@@ -1037,9 +998,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 			if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
 				return r;
 
-		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, dirblock);
-		weak_forget_pair(head, tail);
 		if (r < 0)
 			return r;
 
@@ -1125,9 +1084,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 					}
 				}
 
-				weak_retain_pair(head, tail);
 				r = CALL(info->ubd, write_block, blk);
-				weak_forget_pair(head, tail);
 
 				if (r < 0) {
 					free(new_fdesc);
@@ -1171,9 +1128,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	if ((r = chdesc_add_depend(newtail, curhead)) < 0)
 		goto allocate_name_exit2;
 
-	weak_retain_pair(head, tail);
 	r = CALL(info->ubd, write_block, blk);
-	weak_forget_pair(head, tail);
 
 	if (r < 0)
 		goto allocate_name_exit2;
@@ -1220,9 +1175,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 		return -E_NOT_FOUND;
 
 	old = (struct josfs_fdesc *) oldfdesc;
-	weak_retain_pair(head, tail);
 	dirblock = CALL(info->ubd, read_block, old->dirb);
-	weak_forget_pair(head, tail);
 	if (!dirblock) {
 		josfs_free_fdesc(object, oldfdesc);
 		return -E_INVAL;
@@ -1243,9 +1196,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	for (i = 0; i < JOSFS_NDIRECT; i++)
 		new->file->f_direct[i] = temp_file.f_direct[i];
 
-	weak_retain_pair(head, tail);
 	dirblock = CALL(info->ubd, read_block, new->dirb);
-	weak_forget_pair(head, tail);
 	if (!dirblock) {
 		josfs_free_fdesc(object, newfdesc);
 		return -E_INVAL;
@@ -1263,9 +1214,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 		return r;
 	}
 
-	weak_retain_pair(head, tail);
 	r = CALL(info->ubd, write_block, dirblock);
-	weak_forget_pair(head, tail);
 	josfs_free_fdesc(object, newfdesc);
 
 	if (r < 0)
@@ -1296,9 +1245,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 	*tail = NULL;
 
 	if (nblocks > JOSFS_NDIRECT + 1) {
-		weak_retain_pair(head, tail);
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
-		weak_forget_pair(head, tail);
 		if (!indirect)
 			return INVALID_BLOCK;
 
@@ -1311,24 +1258,18 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 			if (chdesc_add_depend(*tail, oldhead) < 0)
 				return INVALID_BLOCK;
 
-		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, indirect);
-		weak_forget_pair(head, tail);
 
 		return blockno;
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
-		weak_retain_pair(head, tail);
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
-		weak_forget_pair(head, tail);
 		if (!indirect)
 			return INVALID_BLOCK;
 
 		blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 
-		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
-		weak_forget_pair(head, tail);
 		if (!dirblock)
 			return INVALID_BLOCK;
 
@@ -1341,9 +1282,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 			if (chdesc_add_depend(*tail, oldhead) < 0)
 				return INVALID_BLOCK;
 
-		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, dirblock);
-		weak_forget_pair(head, tail);
 
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -1355,9 +1294,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 	}
 	else {
 		blockno = f->file->f_direct[nblocks - 1];
-		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
-		weak_forget_pair(head, tail);
 		if (!dirblock)
 			return INVALID_BLOCK;
 
@@ -1370,9 +1307,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 			if (chdesc_add_depend(*tail, oldhead) < 0)
 				return INVALID_BLOCK;
 
-		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, dirblock);
-		weak_forget_pair(head, tail);
 
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -1410,9 +1345,7 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	f = (struct josfs_fdesc *) file;
 	*tail = NULL;
 
-	weak_retain_pair(head, tail);
 	dirblock = CALL(info->ubd, read_block, f->dirb);
-	weak_forget_pair(head, tail);
 	if (!dirblock) {
 		r = -E_NO_DISK;
 		goto remove_name_exit;
@@ -1428,9 +1361,7 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 		if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
 			goto remove_name_exit;
 
-	weak_retain_pair(head, tail);
 	r = CALL(info->ubd, write_block, dirblock);
-	weak_forget_pair(head, tail);
 
 	if (r >= 0)
 		f->file->f_name[0] = '\0';
@@ -1574,9 +1505,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		if (sizeof(off_t) != size || *((off_t *) data) < 0 || *((off_t *) data) >= JOSFS_MAXFILESIZE)
 			return -E_INVAL;
 
-		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
-		weak_forget_pair(head, tail);
 		if (!dirblock)
 			return -E_INVAL;
 
@@ -1590,9 +1519,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
 				return r;
 
-		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, dirblock);
-		weak_forget_pair(head, tail);
 
 		if (r < 0)
 			return r;
@@ -1616,9 +1543,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 				return -E_INVAL;
 		}
 
-		weak_retain_pair(head, tail);
 		dirblock = CALL(info->ubd, read_block, f->dirb);
-		weak_forget_pair(head, tail);
 		if (!dirblock)
 			return -E_INVAL;
 
@@ -1632,9 +1557,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			if ((r = chdesc_add_depend(*tail, oldhead)) < 0)
 				return r;
 
-		weak_retain_pair(head, tail);
 		r = CALL(info->ubd, write_block, dirblock);
-		weak_forget_pair(head, tail);
 
 		if (r < 0)
 			return r;

@@ -15,7 +15,8 @@ public class Chdesc
 	public static final int FLAG_MOVED = 0x04;
 	public static final int FLAG_ROLLBACK = 0x08;
 	public static final int FLAG_READY = 0x10;
-	public static final int FLAG_FREEING = 0x20;
+	public static final int FLAG_WRITTEN = 0x20;
+	public static final int FLAG_FREEING = 0x40;
 	
 	public final int address;
 	
@@ -25,6 +26,8 @@ public class Chdesc
 	private short offset; /* for bit, byte */
 	private int xor; /* for bit */
 	private short length; /* for byte */
+	
+	private Chdesc free_prev, free_next;
 	
 	private ChdescCollection dependencies, dependents;
 	private HashSet locations;
@@ -114,6 +117,20 @@ public class Chdesc
 		return length;
 	}
 	
+	public Chdesc getFreePrev()
+	{
+		if(!isValid())
+			throw new RuntimeException("Query for free_prev of invalid chdesc!");
+		return free_prev;
+	}
+	
+	public Chdesc getFreeNext()
+	{
+		if(!isValid())
+			throw new RuntimeException("Query for free_next of invalid chdesc!");
+		return free_next;
+	}
+	
 	public void setBlock(int block)
 	{
 		if(!isValid())
@@ -140,6 +157,20 @@ public class Chdesc
 		if(!isValid())
 			throw new RuntimeException("Attempt to clear flags of invalid chdesc!");
 		this.flags &= ~flags;
+	}
+	
+	public void setFreePrev(Chdesc free_prev)
+	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to set free_prev of invalid chdesc!");
+		this.free_prev = free_prev;
+	}
+	
+	public void setFreeNext(Chdesc free_next)
+	{
+		if(!isValid())
+			throw new RuntimeException("Attempt to set free_next of invalid chdesc!");
+		this.free_next = free_next;
 	}
 	
 	public void changeToNoop()
@@ -279,7 +310,7 @@ public class Chdesc
 		return "\\non " + SystemState.hex(block) + "\\nat " + SystemState.hex(owner);
 	}
 	
-	public String render()
+	public String render(boolean renderFree)
 	{
 		String name = renderName();
 		
@@ -305,11 +336,13 @@ public class Chdesc
 		if((flags & FLAG_ROLLBACK) != 0)
 			links += ",dashed,bold";
 		if((flags & FLAG_MARKED) != 0)
-			links += ",bold\",,color=red";
+			links += ",bold\",color=red";
 		else
 			links += "\"";
 		if((flags & FLAG_FREEING) != 0)
 			links += ",fontcolor=red";
+		else if((flags & FLAG_WRITTEN) != 0)
+			links += ",fontcolor=blue";
 		links += "]\n";
 		
 		Iterator i = dependencies.iterator();
@@ -335,6 +368,12 @@ public class Chdesc
 			links += location + " [shape=box,fillcolor=yellow,style=filled]\n";
 			links += location + " -> " + name + " [color=green]\n";
 		}
+		if(free_prev != null)
+			/* we say you are prev: orange arrows */
+			links += free_prev.renderName() + " -> " + name + " [color=orange]\n";
+		if(free_next != null && renderFree)
+			/* we say you are next: red arrows */
+			links += name + " -> " + free_next.renderName() + " [color=red]\n";
 		
 		return links;
 	}
@@ -358,6 +397,8 @@ public class Chdesc
 			names += " | ROLLBACK";
 		if((flags & FLAG_READY) != 0)
 			names += " | READY";
+		if((flags & FLAG_WRITTEN) != 0)
+			names += " | WRITTEN";
 		if((flags & FLAG_FREEING) != 0)
 			names += " | FREEING";
 		names += " = " + SystemState.hex(flags);

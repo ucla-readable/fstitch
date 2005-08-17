@@ -7,40 +7,85 @@
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 
+static chdesc_t * free_head = NULL;
+
+static void chdesc_free_push(chdesc_t * chdesc)
+{
+	assert(free_head != chdesc && !chdesc->free_prev);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_NEXT, chdesc, free_head);
+	chdesc->free_next = free_head;
+	if(free_head)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_PREV, free_head, chdesc);
+		free_head->free_prev = chdesc;
+	}
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_HEAD, chdesc);
+	free_head = chdesc;
+}
+
+static void chdesc_free_remove(chdesc_t * chdesc)
+{
+	assert(chdesc->free_prev || free_head == chdesc);
+	if(chdesc->free_prev)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_NEXT, chdesc->free_prev, chdesc->free_next);
+		chdesc->free_prev->free_next = chdesc->free_next;
+	}
+	else
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_HEAD, chdesc->free_next);
+		free_head = chdesc->free_next;
+	}
+	if(chdesc->free_next)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_PREV, chdesc->free_next, chdesc->free_prev);
+		chdesc->free_next->free_prev = chdesc->free_prev;
+	}
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_PREV, chdesc, NULL);
+	chdesc->free_prev = NULL;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_NEXT, chdesc, NULL);
+	chdesc->free_next = NULL;
+}
+
 /* ensure bdesc->ddesc->changes has a noop chdesc */
 static int ensure_bdesc_has_changes(bdesc_t * block)
 {
+	chdesc_t * chdesc;
+	
 	assert(block);
-
+	
 	if(block->ddesc->changes)
 	{
 		assert(block->ddesc->changes->type == NOOP);
 		return 0;
 	}
 	
-	block->ddesc->changes = malloc(sizeof(*block->ddesc->changes));
-	if(!block->ddesc->changes)
+	chdesc = malloc(sizeof(*chdesc));
+	if(!chdesc)
 		return -E_NO_MEM;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, block->ddesc->changes, NULL, NULL);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, NULL, NULL);
 	
-	block->ddesc->changes->owner = NULL;
-	block->ddesc->changes->block = NULL;
-	block->ddesc->changes->type = NOOP;
-	block->ddesc->changes->dependencies = NULL;
-	block->ddesc->changes->dependents = NULL;
-	block->ddesc->changes->weak_refs = NULL;
-	block->ddesc->changes->stamps = 0;
+	chdesc->owner = NULL;
+	chdesc->block = NULL;
+	chdesc->type = NOOP;
+	chdesc->dependencies = NULL;
+	chdesc->dependents = NULL;
+	chdesc->weak_refs = NULL;
+	chdesc->free_prev = NULL;
+	chdesc->free_next = NULL;
+	chdesc->stamps = 0;
 	
 	/* NOOP chdescs start applied */
-	block->ddesc->changes->flags = 0;
+	chdesc->flags = 0;
 	
-	if(chdesc_weak_retain(block->ddesc->changes, &block->ddesc->changes))
+	if(chdesc_weak_retain(chdesc, &block->ddesc->changes))
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, block->ddesc->changes);
-		free(block->ddesc->changes);
-		block->ddesc->changes = NULL;
+		free(chdesc);
 		return -E_NO_MEM;
 	}
+	
+	chdesc_free_push(chdesc);
 	
 	return 0;
 }
@@ -74,6 +119,14 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	meta->next = dependency->dependents;
 	dependency->dependents = meta;
 	
+	/* virgin NOOP chdesc getting its first dependency */
+	if(free_head == dependent || dependent->free_prev)
+	{
+		assert(dependent->type == NOOP);
+		assert(!(dependent->flags & CHDESC_WRITTEN));
+		chdesc_free_remove(dependent);
+	}
+	
 	return 0;
 }
 
@@ -90,7 +143,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	/* if either is a NOOP chdesc, they don't conflict */
 	if(recent->type == NOOP || original->type == NOOP)
 	{
-		printf("Unexpected NOOP chdesc in %s()\n", __FUNCTION__);
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
@@ -196,6 +249,8 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->dependencies = NULL;
 	chdesc->dependents = NULL;
 	chdesc->weak_refs = NULL;
+	chdesc->free_prev = NULL;
+	chdesc->free_next = NULL;
 	chdesc->stamps = 0;
 	
 	/* NOOP chdescs start applied */
@@ -211,8 +266,6 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 		}
 		if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
 		{
-			if(!block->ddesc->changes->dependencies)
-				chdesc_destroy(&block->ddesc->changes);
 			free(chdesc);
 			return NULL;
 		}
@@ -220,6 +273,8 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 		/* make sure our block sticks around */
 		bdesc_retain(block);
 	}
+	
+	chdesc_free_push(chdesc);
 	
 	return chdesc;
 }
@@ -242,6 +297,8 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->dependencies = NULL;
 	chdesc->dependents = NULL;
 	chdesc->weak_refs = NULL;
+	chdesc->free_prev = NULL;
+	chdesc->free_next = NULL;
 	chdesc->stamps = 0;
 	
 	/* start rolled back so we can apply it */
@@ -259,16 +316,13 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	if((r = ensure_bdesc_has_changes(block)) < 0)
 		goto error;
 	if((r = chdesc_add_depend_fast(block->ddesc->changes, chdesc)) < 0)
-		goto error_ensure;
+		goto error;
 	
 	/* make sure our block sticks around */
 	bdesc_retain(block);
 	
 	return chdesc;
 	
-  error_ensure:
-	if(!block->ddesc->changes->dependencies)
-		chdesc_destroy(&(block->ddesc->changes));
   error:
 	chdesc_destroy(&chdesc);
 	return NULL;
@@ -321,6 +375,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
+		chdescs[i]->free_prev = NULL;
+		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
@@ -339,9 +395,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			if(!block->ddesc->changes->dependencies)
-				chdesc_destroy(&(block->ddesc->changes));
-			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
@@ -362,8 +415,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-		
-		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_NO_MEM;
 	}
@@ -391,8 +442,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		for(i = 0; i != count; i++)
 			chdesc_destroy(&chdescs[i]);
 		free(chdescs);
-		
-		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_INVAL;
 	}
@@ -439,6 +488,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
+		chdescs[i]->free_prev = NULL;
+		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
@@ -455,9 +506,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			if(!block->ddesc->changes->dependencies)
-				chdesc_destroy(&(block->ddesc->changes));
-			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
@@ -478,8 +526,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-		
-		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_NO_MEM;
 	}
@@ -505,8 +551,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		for(i = 0; i != count; i++)
 			chdesc_destroy(&chdescs[i]);
 		free(chdescs);
-		
-		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_INVAL;
 	}
@@ -554,6 +598,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
+		chdescs[i]->free_prev = NULL;
+		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
@@ -570,9 +616,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
-			if(!block->ddesc->changes->dependencies)
-				chdesc_destroy(&(block->ddesc->changes));
-			
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
@@ -593,8 +636,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 			chdesc_destroy(&chdescs[i]);
 		}
 		free(chdescs);
-		
-		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_NO_MEM;
 	}
@@ -620,8 +661,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		for(i = 0; i != count; i++)
 			chdesc_destroy(&chdescs[i]);
 		free(chdescs);
-		
-		chdesc_destroy(&(block->ddesc->changes));
 		
 		return -E_INVAL;
 	}
@@ -663,9 +702,23 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	
 	/* compensate for Heisenberg's uncertainty principle */
 	if(!dependent || !dependency)
+	{
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
+		return 0;
+	}
+	
+	/* make sure we're not fiddling with chdescs that are already written */
+	if(dependent->flags & CHDESC_WRITTEN)
+	{
+		if(dependency->flags & CHDESC_WRITTEN)
+			return 0;
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): Attempt to add dependency to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
+		return -E_INVAL;
+	}
+	if(dependency->flags & CHDESC_WRITTEN)
 		return 0;
 	
-	/* first make sure it's not already there */
+	/* make sure it's not already there */
 	for(meta = dependent->dependencies; meta; meta = meta->next)
 		if(meta->desc == dependency)
 			return 0;
@@ -673,7 +726,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	/* avoid creating a dependency loop */
 	if(dependent == dependency || chdesc_has_dependency(dependency, dependent))
 	{
-		printf("%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -E_INVAL;
 	}
 	/* chdesc_has_dependency() marks the DAG rooted at "dependency" so we must unmark it */
@@ -711,8 +764,8 @@ void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 	chdesc_meta_remove(&dependency->dependents, dependent);
 	
 	if(dependent->type == NOOP && !dependent->dependencies)
-		/* we just removed the last dependency of a NOOP chdesc, so free it */
-		chdesc_destroy(&dependent);
+		/* we just removed the last dependency of a NOOP chdesc, so satisfy it */
+		chdesc_satisfy(&dependent);
 }
 
 int chdesc_apply(chdesc_t * chdesc)
@@ -730,7 +783,7 @@ int chdesc_apply(chdesc_t * chdesc)
 			memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.newdata, chdesc->byte.length);
 			break;
 		case NOOP:
-			printf("%s(): applying NOOP chdesc\n", __FUNCTION__);
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 			break;
 		default:
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
@@ -756,7 +809,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 			memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.olddata, chdesc->byte.length);
 			break;
 		case NOOP:
-			printf("%s(): rolling back NOOP chdesc\n", __FUNCTION__);
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 			break;
 		default:
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
@@ -767,25 +820,93 @@ int chdesc_rollback(chdesc_t * chdesc)
 	return 0;
 }
 
-/* satisfy a change descriptor, i.e. remove it from all others that depend on it */
-int chdesc_satisfy(chdesc_t * chdesc)
+static void chdesc_weak_collect(chdesc_t * chdesc)
 {
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, chdesc);
-	while(chdesc->dependents)
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_WEAK_COLLECT, chdesc);
+	while(chdesc->weak_refs)
 	{
-		chmetadesc_t * meta = chdesc->dependents;
-		chdesc_t * dependent = meta->desc;
-		chdesc->dependents = meta->next;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, chdesc, meta->desc);
-		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->desc, chdesc);
-		chdesc_meta_remove(&meta->desc->dependencies, chdesc);
-		
-		free(meta);
-		if(dependent->type == NOOP && !dependent->dependencies)
-			/* we just removed the last dependency of a NOOP chdesc, so free it */
-			chdesc_destroy(&dependent);
+		/* in theory, this is all that is necessary... */
+		if(*chdesc->weak_refs->desc == chdesc)
+			chdesc_weak_release(chdesc->weak_refs->desc);
+		else
+		{
+			/* ...but check for this anyway */
+			chrefdesc_t * next = chdesc->weak_refs;
+			fprintf(STDERR_FILENO, "%s: (%s:%d): dangling chdesc weak reference!\n", __FUNCTION__, __FILE__, __LINE__);
+			chdesc->weak_refs = next->next;
+			free(next);
+		}
 	}
+}
+
+/* satisfy a change descriptor, i.e. remove it from all others that depend on it and add it to the list of written chdescs */
+int chdesc_satisfy(chdesc_t ** chdesc)
+{
+	if((*chdesc)->flags & CHDESC_WRITTEN)
+	{
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): satisfaction of already satisfied chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		return 0;
+	}
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, *chdesc);
+	
+	if((*chdesc)->dependencies)
+	{
+		/* We are trying to satisfy a chdesc with dependencies, which
+		 * can happen if we have modules generating out-of-order chdescs
+		 * but no write-back caches. We need to convert it to a NOOP so
+		 * that any of its dependents will still have the indirect
+		 * dependencies on the dependencies of this chdesc. However, we
+		 * still need to collect any weak references to it in case
+		 * anybody was watching it to see when it got satisfied. */
+		if((*chdesc)->type != NOOP)
+			fprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc with dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
+		switch((*chdesc)->type)
+		{
+			case BYTE:
+				if((*chdesc)->byte.olddata)
+					free((*chdesc)->byte.olddata);
+				if((*chdesc)->byte.newdata)
+					free((*chdesc)->byte.newdata);
+				/* fall through */
+			case NOOP:
+			case BIT:
+				(*chdesc)->type = NOOP;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
+				break;
+			default:
+				fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
+				return -E_INVAL;
+		}
+		
+	}
+	else
+	{
+		while((*chdesc)->dependents)
+		{
+			chmetadesc_t * meta = (*chdesc)->dependents;
+			chdesc_t * dependent = meta->desc;
+			(*chdesc)->dependents = meta->next;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, *chdesc, meta->desc);
+			
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->desc, *chdesc);
+			chdesc_meta_remove(&meta->desc->dependencies, *chdesc);
+			
+			free(meta);
+			if(dependent->type == NOOP && !dependent->dependencies)
+				/* we just removed the last dependency of a NOOP chdesc, so free it */
+				chdesc_satisfy(&dependent);
+		}
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_WRITTEN);
+		(*chdesc)->flags |= CHDESC_WRITTEN;
+		
+		assert(!(*chdesc)->free_prev && !(*chdesc)->free_next);
+		chdesc_free_push(*chdesc);
+	}
+	
+	chdesc_weak_collect(*chdesc);
+	
+	*chdesc = NULL;
 	return 0;
 }
 
@@ -823,7 +944,7 @@ void chdesc_weak_forget(chdesc_t ** location)
 		}
 		if(!scan)
 		{
-			fprintf(STDERR_FILENO, "%s: weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__);
+			fprintf(STDERR_FILENO, "%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
 			return;
 		}
 		*prev = scan->next;
@@ -838,25 +959,6 @@ void chdesc_weak_release(chdesc_t ** location)
 	*location = NULL;
 }
 
-static void chdesc_weak_collect(chdesc_t * chdesc)
-{
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_WEAK_COLLECT, chdesc);
-	while(chdesc->weak_refs)
-	{
-		/* in theory, this is all that is necessary... */
-		if(*chdesc->weak_refs->desc == chdesc)
-			chdesc_weak_release(chdesc->weak_refs->desc);
-		else
-		{
-			/* ...but check for this anyway */
-			chrefdesc_t * next = chdesc->weak_refs;
-			fprintf(STDERR_FILENO, "%s: dangling chdesc weak reference!\n", __FUNCTION__);
-			chdesc->weak_refs = next->next;
-			free(next);
-		}
-	}
-}
-
 void chdesc_destroy(chdesc_t ** chdesc)
 {
 	/* were we recursively called by chdesc_remove_depend()? */
@@ -865,15 +967,27 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	(*chdesc)->flags |= CHDESC_FREEING;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_FREEING);
 	
-	if((*chdesc)->dependents)
+	if((*chdesc)->flags & CHDESC_WRITTEN)
 	{
-		if((*chdesc)->dependencies)
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
-		chdesc_satisfy(*chdesc);
+		assert(!(*chdesc)->dependents && !(*chdesc)->dependencies);
+		if(free_head == *chdesc || (*chdesc)->free_prev)
+			chdesc_free_remove(*chdesc);
 	}
+	else
+		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
 	
+	if((*chdesc)->dependencies && (*chdesc)->dependents)
+		fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
+	/* remove dependencies first, so chdesc_satisfy() won't just turn it to a NOOP */
 	while((*chdesc)->dependencies)
 		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);
+	if((*chdesc)->dependents)
+	{
+		/* chdesc_satisfy will set it to NULL */
+		chdesc_t * desc = *chdesc;
+		chdesc_satisfy(&desc);
+	}
 	
 	chdesc_weak_collect(*chdesc);
 	
@@ -881,15 +995,14 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	
 	switch((*chdesc)->type)
 	{
-		case BIT:
-			break;
 		case BYTE:
 			if((*chdesc)->byte.olddata)
 				free((*chdesc)->byte.olddata);
 			if((*chdesc)->byte.newdata)
 				free((*chdesc)->byte.newdata);
-			break;
+			/* fall through */
 		case NOOP:
+		case BIT:
 			break;
 		default:
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
@@ -901,6 +1014,16 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
 	*chdesc = NULL;
+}
+
+void chdesc_reclaim_written(void)
+{
+	while(free_head)
+	{
+		chdesc_t * first = free_head;
+		chdesc_free_remove(first);
+		chdesc_destroy(&first);
+	}
 }
 
 static BD_t * stamps[32] = {0};

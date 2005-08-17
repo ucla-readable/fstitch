@@ -44,6 +44,9 @@
 #define KDB_CHDESC_WEAK_FORGET     217
 #define KDB_CHDESC_SET_BLOCK       218
 #define KDB_CHDESC_SET_OWNER       219
+#define KDB_CHDESC_SET_FREE_PREV   220
+#define KDB_CHDESC_SET_FREE_NEXT   221
+#define KDB_CHDESC_SET_FREE_HEAD   222
 
 /* chdesc info (3xx) */
 #define KDB_CHDESC_MOVE                 301

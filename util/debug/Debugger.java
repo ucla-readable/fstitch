@@ -11,6 +11,7 @@ public class Debugger extends OpcodeFactory
 	private Vector opcodes;
 	private SystemState state;
 	private int applied;
+	private boolean renderFree;
 	
 	public Debugger(String name, DataInput input) throws BadInputException, IOException
 	{
@@ -20,6 +21,7 @@ public class Debugger extends OpcodeFactory
 		opcodes = new Vector();
 		state = new SystemState();
 		applied = 0;
+		renderFree = false;
 		
 		addModule(new InfoModule(input));
 		addModule(new BdescModule(input));
@@ -138,6 +140,21 @@ public class Debugger extends OpcodeFactory
 		return (Opcode) opcodes.get(opcode);
 	}
 	
+	public boolean getRenderFree()
+	{
+		return renderFree;
+	}
+	
+	public void setRenderFree(boolean renderFree)
+	{
+		this.renderFree = renderFree;
+	}
+	
+	public void render(Writer output, boolean landscape) throws IOException
+	{
+		state.render(output, renderFree, landscape);
+	}
+	
 	public String toString()
 	{
 		return "Debugging " + name + ", read " + opcodes.size() + " opcodes, applied " + applied;
@@ -156,6 +173,7 @@ public class Debugger extends OpcodeFactory
 			Debugger dbg = null;
 			
 			interpreter.addCommand(new CloseCommand());
+			interpreter.addCommand(new FreeCommand());
 			interpreter.addCommand(new GuiCommand());
 			interpreter.addCommand(new JumpCommand());
 			interpreter.addCommand(new ListCommand());

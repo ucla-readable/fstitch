@@ -20,7 +20,8 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_MOVED     0x04 /* flag for moving chdescs */
 #define CHDESC_ROLLBACK  0x08 /* chdesc is rolled back */
 #define CHDESC_READY     0x10 /* chdesc is ready to be written */
-#define CHDESC_FREEING   0x20 /* this chdesc is being freed */
+#define CHDESC_WRITTEN   0x20 /* chdesc has been written to disk */
+#define CHDESC_FREEING   0x40 /* chdesc is being freed */
 
 struct chdesc {
 	BD_t * owner;
@@ -34,8 +35,10 @@ struct chdesc {
 		} bit;
 		struct {
 			/* offset is in bytes */
-			uint16_t offset;
-			uint16_t length;
+			uint16_t offset, length;
+			/* we can eliminate one of these by
+			 * swapping the block contents with
+			 * the data in a single pointer... */
 			uint8_t * olddata;
 			uint8_t * newdata;
 		} byte;
@@ -43,6 +46,8 @@ struct chdesc {
 	chmetadesc_t * dependencies;
 	chmetadesc_t * dependents;
 	chrefdesc_t * weak_refs;
+	chdesc_t * free_prev;
+	chdesc_t * free_next;
 	uint16_t flags, distance;
 	uint32_t stamps;
 };
@@ -74,16 +79,19 @@ void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
 int chdesc_apply(chdesc_t * chdesc);
 int chdesc_rollback(chdesc_t * chdesc);
 
-/* satisfy a change descriptor, i.e. remove it from all others that depend on it */
-int chdesc_satisfy(chdesc_t * chdesc);
+/* satisfy a change descriptor, i.e. remove it from all others that depend on it and add it to the list of written chdescs */
+int chdesc_satisfy(chdesc_t ** chdesc);
 
 /* create and remove weak references to a chdesc */
 int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location);
 void chdesc_weak_forget(chdesc_t ** location);
 void chdesc_weak_release(chdesc_t ** location);
 
-/* destroy a chdesc */
+/* destroy a chdesc, actually freeing it - be careful calling this function */
 void chdesc_destroy(chdesc_t ** chdesc);
+
+/* reclaim written chdescs, by chdesc_destroy() on them */
+void chdesc_reclaim_written(void);
 
 /* hidden functions for use in chdesc_util.c */
 int __ensure_bdesc_has_changes(bdesc_t * block);

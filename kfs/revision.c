@@ -167,7 +167,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 		chdesc_t * c = (chdesc_t *) fixed_max_heap_pop(heap);
 		if(c->owner == bd)
 		{
-			chdesc_destroy(&c);
+			chdesc_satisfy(&c);
 			continue;
 		}
 		r = chdesc_apply(c);
@@ -328,17 +328,9 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
 		if(meta->desc->owner == owner)
 		{
-			if(chdesc_weak_retain(meta->desc, &slice->full[i++]) < 0)
-			{
-				revision_slice_destroy(slice);
-				return NULL;
-			}
+			slice->full[i++] = meta->desc;
 			if(meta->desc->flags & CHDESC_READY)
-				if(chdesc_weak_retain(meta->desc, &slice->ready[j++]))
-				{
-					revision_slice_destroy(slice);
-					return NULL;
-				}
+				slice->ready[j++] = meta->desc;
 		}
 	assert(i == slice->full_size);
 	assert(j == slice->ready_size);
@@ -392,18 +384,9 @@ void revision_slice_pull_up(revision_slice_t * slice)
 
 void revision_slice_destroy(revision_slice_t * slice)
 {
-	int i;
 	if(slice->full)
-	{
-		for(i = 0; i != slice->full_size; i++)
-			chdesc_weak_release(&slice->full[i]);
 		free(slice->full);
-	}
 	if(slice->ready)
-	{
-		for(i = 0; i != slice->ready_size; i++)
-			chdesc_weak_release(&slice->ready[i]);
 		free(slice->ready);
-	}
 	free(slice);
 }

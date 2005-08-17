@@ -141,19 +141,13 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 			return -E_UNSPECIFIED;
 
 		save_head = prev_head;
-		r = chdesc_weak_retain(save_head, &save_head);
-		assert(r >= 0); // TODO: handle error
 
 		/* Now free the block */
 		r = CALL(state->lfs, free_block, block, &prev_head, &tail);
 		if (r < 0)
-		{
-			chdesc_weak_release(&save_head);
 			return r;
-		}
 
 		prev_head = save_head;
-		chdesc_weak_release(&save_head);
 	}
 
 	/* Update the file's size as recorded by lfs, which also updates
@@ -380,16 +374,12 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 				return size_written;
 
 			save_head = prev_head;
-			r = chdesc_weak_retain(save_head, &save_head);
-			assert(r >= 0); // TODO: handle error
 
 			r = CALL(state->lfs, append_file_block, f->fdesc, number, &prev_head, &tail);
-			if (r < 0) {
-				chdesc_weak_release(&save_head);
+			if (r < 0)
 				return size_written;
-			}
+
 			prev_head = save_head;
-			chdesc_weak_release(&save_head);
 		}
 		/* get the block to write to - maybe a synthetic block in the future, if we are writing the whole block? */
 		block = CALL(state->lfs, lookup_block, number);
@@ -403,13 +393,11 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			return size_written;
 
 		save_head = prev_head;
-		r = chdesc_weak_retain(save_head, &save_head);
-		assert(r >= 0);
 
 		r = CALL(state->lfs, write_block, block, &prev_head, &tail);
 		assert(r >= 0);
+
 		prev_head = save_head;
-		chdesc_weak_release(&save_head);
 
 		size_written += length;
 		dataoffset = 0; /* dataoffset only needed for first block */
@@ -492,22 +480,17 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 		}
 
 		save_head = prev_head;
-		r = chdesc_weak_retain(save_head, &save_head);
-		assert(r >= 0); // TODO: handle error
 
 		r = CALL(state->lfs, free_block, number, &prev_head, &tail);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
 		}
+
 		prev_head = save_head;
-		chdesc_weak_release(&save_head);
 	}
 
-	r = chdesc_weak_retain(prev_head, &prev_head);
-	assert(r >= 0); // TODO: handle error
 	CALL(state->lfs, free_fdesc, f);
-	chdesc_weak_release(&prev_head);
 
 	return CALL(state->lfs, remove_name, name, &prev_head, &tail);
 }

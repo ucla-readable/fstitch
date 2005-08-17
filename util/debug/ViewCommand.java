@@ -37,7 +37,7 @@ public class ViewCommand implements Command
 					{
 						try {
 							OutputStream out = dot.getOutputStream();
-							dbg.getState().render(new OutputStreamWriter(out), false);
+							dbg.render(new OutputStreamWriter(out), false);
 							out.close();
 						}
 						catch(IOException e)

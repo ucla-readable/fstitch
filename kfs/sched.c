@@ -6,6 +6,7 @@
 #include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
 #include <kfs/bdesc.h>
+#include <kfs/chdesc.h>
 #include <kfs/debug.h>
 
 struct fn_entry {
@@ -111,6 +112,9 @@ void sched_loop(void)
 		assert(!bdesc_autorelease_pool_depth());
 		r = bdesc_autorelease_pool_push();
 		assert(r >= 0);
+
+		// Run chdesc reclamation at the end of the main loop
+		chdesc_reclaim_written();
 
 		// Also run debug command processing
 		KFS_DEBUG_NET_COMMAND();

@@ -26,7 +26,7 @@ public class RenderCommand implements Command
 					writer = new FileWriter(new File(args[0]));
 				else
 					writer = new OutputStreamWriter(System.out);
-				dbg.getState().render(writer, true);
+				dbg.render(writer, true);
 			}
 			catch(IOException e)
 			{
