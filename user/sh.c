@@ -20,7 +20,7 @@ static int stdin_stash = 0;
 // gettoken(s, 0) prepares gettoken for subsequent calls and returns 0.
 // gettoken(0, token) parses a shell token from the previously set string,
 // null-terminates that token, stores the token pointer in '*token',
-// and returns a token ID (0, '<', '>', '|', or 'w').
+// and returns a token ID (0, '<', '>', '|', '&', ';', '(', ')', or 'w').
 // Subsequent calls to 'gettoken(0, token)' will return subsequent
 // tokens from the string.
 int gettoken(char* s, char** token);
@@ -192,12 +192,19 @@ again:
 			// Do nothing here, we detected '&' at the beginning of this fn
 			break;
 
+		case ';':
+		case '(':
+		case ')':
+			printf("Unsupported shell token: %c\n", c);
+			exit();
+			break;
+
 		case 0:		// String is complete
 			// Run the current command!
 			goto runit;
 			
 		default:
-			panic("bad return %d from gettoken", c);
+			printf("Unexpected shell token! (%c)\n", c);
 			break;
 			
 		}
