@@ -416,10 +416,12 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	sched_unregister(wb_cache_bd_callback, bd);
 	
 	hash_map_destroy(info->block_map);
+	
+	/* the blocks are all clean, because we checked above - just release them */
 	for(block = 1; block <= info->size; block++)
 		if(info->blocks[block].block)
-#warning wb_cache_bd_destroy() we may need to write blocks, and they may have unmet dependencies...
 			bdesc_release(&info->blocks[block].block);
+	
 	free(info->blocks);
 	free(info);
 	
