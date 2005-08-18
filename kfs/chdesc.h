@@ -90,6 +90,11 @@ void chdesc_weak_release(chdesc_t ** location);
 /* destroy a chdesc, actually freeing it - be careful calling this function */
 void chdesc_destroy(chdesc_t ** chdesc);
 
+/* remove a new NOOP chdesc from the free list without adding a dependency */
+void chdesc_claim_noop(chdesc_t * chdesc);
+/* add a NOOP chdesc with no dependencies back to the free list */
+void chdesc_autorelease_noop(chdesc_t * chdesc);
+
 /* reclaim written chdescs, by chdesc_destroy() on them */
 void chdesc_reclaim_written(void);
 

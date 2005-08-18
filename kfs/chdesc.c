@@ -974,8 +974,15 @@ void chdesc_destroy(chdesc_t ** chdesc)
 			chdesc_free_remove(*chdesc);
 	}
 	else
+	{
 		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
 		fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		if((*chdesc)->type == NOOP && (free_head == *chdesc || (*chdesc)->free_prev))
+		{
+			assert(!(*chdesc)->dependencies);
+			chdesc_free_remove(*chdesc);
+		}
+	}
 	
 	if((*chdesc)->dependencies && (*chdesc)->dependents)
 		fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
@@ -1014,6 +1021,20 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
 	*chdesc = NULL;
+}
+
+void chdesc_claim_noop(chdesc_t * chdesc)
+{
+	assert(chdesc->type == NOOP && !chdesc->dependencies);
+	if(chdesc->free_prev || free_head == chdesc)
+		chdesc_free_remove(chdesc);
+}
+
+void chdesc_autorelease_noop(chdesc_t * chdesc)
+{
+	assert(chdesc->type == NOOP && !(chdesc->flags & CHDESC_WRITTEN));
+	if(!chdesc->free_prev && free_head != chdesc)
+		chdesc_free_push(chdesc);
 }
 
 void chdesc_reclaim_written(void)
