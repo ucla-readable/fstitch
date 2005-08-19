@@ -54,6 +54,7 @@ public class LoadCommand implements Command
 			catch(BadInputException e)
 			{
 				System.out.println("Bad input while reading " + args[0]);
+				System.out.println("(Maybe it is an old trace file that does not match this debugger version?)");
 				dbg = null;
 			}
 			catch(IOException e)
