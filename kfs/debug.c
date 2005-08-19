@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/string.h>
 #include <inc/josnic.h> /* for htons, htonl */
 #include <kfs/debug.h>
 
@@ -427,6 +428,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 {
 	struct ip_addr addr;
 	int m, o, r;
+	int32_t debug_rev, debug_opcode_rev;
 	
 	printf("Initializing KFS debugging interface...\n");
 	r = gethostbyname(host, &addr);
@@ -446,7 +448,12 @@ int kfs_debug_init(const char * host, uint16_t port)
 			return r;
 	}
 	
+	debug_rev = svnrevtol("$Rev$");
+	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
+
 #if KFS_DEBUG_BINARY
+	kfs_debug_write(debug_socket[1], LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
+
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
@@ -462,6 +469,9 @@ int kfs_debug_init(const char * host, uint16_t port)
 		}
 	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
 #else
+	fprintf(debug_socket[1], "DEBUG %d\n", debug_rev);
+	fprintf(debug_socket[1], "DEBUG_OPCODE %d\n", debug_opcode_rev);
+
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{

@@ -12,6 +12,8 @@ public class Debugger extends OpcodeFactory
 	private SystemState state;
 	private int applied;
 	private boolean renderFree;
+	private int debug_rev;
+	private int debug_opcode_rev;
 	
 	public Debugger(String name, DataInput input) throws BadInputException, IOException
 	{
@@ -22,6 +24,9 @@ public class Debugger extends OpcodeFactory
 		state = new SystemState();
 		applied = 0;
 		renderFree = false;
+
+		debug_rev = input.readInt();
+		debug_opcode_rev = input.readInt();
 		
 		addModule(new InfoModule(input));
 		addModule(new BdescModule(input));

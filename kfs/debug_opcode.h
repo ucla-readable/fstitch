@@ -1,6 +1,8 @@
 #ifndef KUDOS_KFS_DEBUG_OPCODE_H
 #define KUDOS_KFS_DEBUG_OPCODE_H
 
+#define DEBUG_OPCODE_REV           "$Rev$"
+
 /* modules */
 #define KDB_MODULE_INFO              1
 #define KDB_MODULE_BDESC           100
