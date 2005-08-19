@@ -25,4 +25,6 @@ int		memcmp(const void *p, const void *q, size_t len);
 
 int      isnum(char c);
 
+long 	svnrevtol(const char *rev_str);
+
 #endif /* not KUDOS_INC_STRING_H */
