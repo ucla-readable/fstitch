@@ -12,8 +12,8 @@ public class Debugger extends OpcodeFactory
 	private SystemState state;
 	private int applied;
 	private boolean renderFree;
-	private int debug_rev;
-	private int debug_opcode_rev;
+	private int debugRev;
+	private int debugOpcodeRev;
 	
 	public Debugger(String name, DataInput input) throws BadInputException, IOException
 	{
@@ -25,9 +25,10 @@ public class Debugger extends OpcodeFactory
 		applied = 0;
 		renderFree = false;
 
-		debug_rev = input.readInt();
-		debug_opcode_rev = input.readInt();
-		
+		debugRev = input.readInt();
+		debugOpcodeRev = input.readInt();
+		ensureSupportedRevision();
+
 		addModule(new InfoModule(input));
 		addModule(new BdescModule(input));
 		addModule(new ChdescAlterModule(input));
@@ -38,6 +39,14 @@ public class Debugger extends OpcodeFactory
 			throw new UnexpectedModuleException(module);
 	}
 	
+	private void ensureSupportedRevision()
+		throws UnsupportedStreamRevisionException
+	{
+		/* before the days of stream revision data */
+		if (debugRev == 65536 && debugOpcodeRev == 1262764639)
+			throw new UnsupportedStreamRevisionException(0, 0, 1288);
+	}
+
 	public void addModule(Module module)
 	{
 		//Short key = Short.valueOf(module.getModuleNumber());
