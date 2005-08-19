@@ -19,6 +19,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/ide4k_pio_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
 			$(OBJDIR)/kfs/journal_queue_bd.o \
+			$(OBJDIR)/kfs/journal_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \
 			$(OBJDIR)/kfs/mirror_bd.o \
