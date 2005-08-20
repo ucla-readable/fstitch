@@ -1,0 +1,41 @@
+This file contains information about the diagrams produced by the debugger.
+
+Change descriptors are denoted by circles. The color of the circle denotes the
+type of the change descriptor: white for NOOP, green for BIT, and blue for BYTE.
+Information about the change descriptor is written inside the circle; what
+information is there depends on the type.
+
+All change descriptors have an address. NOOP change descriptors may have a block
+or an owner, but they are not required to. BIT and BYTE change descriptors
+always have both. (A change descriptor is "on a block, at an owner.") BYTE
+change descriptors have an offset and length; BIT change descriptors have an
+offset and a bitmask. These are denoted as colon-separated values inside square
+brackets.
+
+The color of the text is also significant. Black text is normal; blue text
+indicates that the change descriptor has been written (i.e. the CHDESC_WRITTEN
+flag is set). Red text indicates that the change descriptor is being freed.
+
+The outline of a change descriptor may be black, green, or red. Black is normal;
+green indicates that it is ready to be written (i.e. the CHDESC_READY flag is
+set), and red indicates that it is marked. A change descriptor that is both
+ready and marked appears red. The outline may also be dashed, in addition to
+having a color. When the outline is dashed, it means that the change descriptor
+is rolled back.
+
+The arrows between change descriptors can be any of four colors. Black and blue
+arrows are for dependencies; red and orange arrows are for free list pointers. A
+black arrow from A to B means that A has a dependency on B. A blue arrow from A
+to B means that B has A as a dependent. A red arrow from A to B means that the
+next change descriptor in the free list after A is B. An orange arrow from A to
+B means that the previous change descriptor in the free list before B is A.
+
+There may also be yellow boxes with green arrows pointing at change descriptors.
+These represent weak references. The value in the yellow box is the address of
+the weak reference.
+
+Usually, the free list is collapsed into just the head of the list, which is
+displayed inside a dashed red box with a label indicating how many additional
+change descriptors are in the free list. Displaying the whole free list is
+optional, and when enabled the entire free list appears inside the dashed red
+box.
