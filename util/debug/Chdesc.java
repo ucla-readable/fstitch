@@ -305,9 +305,14 @@ public class Chdesc
 		return "\"ch" + SystemState.hex(address) + "-hc" + SystemState.hex(hashCode()) + "\"";
 	}
 	
-	private String renderBlockOwner()
+	private String renderBlockOwner(boolean showNull)
 	{
-		return "\\non " + SystemState.hex(block) + "\\nat " + SystemState.hex(owner);
+		String info = "";
+		if(showNull || block != 0)
+			info += "\\non " + SystemState.hex(block);
+		if(showNull || owner != 0)
+			info += "\\nat " + SystemState.hex(owner);
+		return info;
 	}
 	
 	public String render(boolean renderFree)
@@ -318,13 +323,13 @@ public class Chdesc
 		switch(type)
 		{
 			case TYPE_NOOP:
-				links += "\",style=\"";
+				links += renderBlockOwner(false) + "\",style=\"";
 				break;
 			case TYPE_BIT:
-				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner() + "\",fillcolor=green,style=\"filled";
+				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner(true) + "\",fillcolor=springgreen1,style=\"filled";
 				break;
 			case TYPE_BYTE:
-				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner() + "\",fillcolor=slateblue1,style=\"filled";
+				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner(true) + "\",fillcolor=slateblue1,style=\"filled";
 				break;
 			case TYPE_DESTROY:
 				links += "\",fillcolor=orange,style=\"filled";
@@ -337,6 +342,8 @@ public class Chdesc
 			links += ",dashed,bold";
 		if((flags & FLAG_MARKED) != 0)
 			links += ",bold\",color=red";
+		else if((flags & FLAG_READY) != 0)
+			links += ",bold\",color=green3";
 		else
 			links += "\"";
 		if((flags & FLAG_FREEING) != 0)
