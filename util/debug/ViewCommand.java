@@ -26,7 +26,7 @@ public class ViewCommand implements Command
 		if(dbg != null)
 		{
 			try {
-				final Process dot = Runtime.getRuntime().exec(new String[] {"dot", "-Tpng"});
+				final Process dot = Runtime.getRuntime().exec(new String[] {"dot", "-Tgif"});
 				
 				/* We could just execute the code in run() below directly, but then we
 				 * could block trying to write if dot writes back to us as we write to it.
