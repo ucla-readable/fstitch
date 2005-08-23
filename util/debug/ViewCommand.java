@@ -9,6 +9,7 @@ import command.*;
 public class ViewCommand implements Command
 {
 	private JFrame lastFrame = null;
+	private Dimension lastSize = null;
 	
 	public String getName()
 	{
@@ -73,6 +74,7 @@ public class ViewCommand implements Command
 						}
 					});
 					lastFrame = null;
+					lastSize = null;
 				}
 				
 				final ImageIcon icon = new ImageIcon(array);
@@ -80,6 +82,9 @@ public class ViewCommand implements Command
 				{
 					public void run()
 					{
+						boolean created = false;
+						Dimension size;
+						
 						if(lastFrame == null)
 						{
 							final JFrame frame = new JFrame();
@@ -89,11 +94,17 @@ public class ViewCommand implements Command
 								public void windowClosed(WindowEvent e)
 								{
 									if(lastFrame == frame)
+									{
 										lastFrame = null;
+										lastSize = null;
+									}
 								}
 							});
 							lastFrame = frame;
+							created = true;
 						}
+						
+						size = lastFrame.getSize();
 						
 						JScrollPane image = new JScrollPane(new JLabel(icon));
 						Container pane = lastFrame.getContentPane();
@@ -102,7 +113,11 @@ public class ViewCommand implements Command
 						lastFrame.setTitle("* " + dbg);
 						pane.add(image);
 						
-						lastFrame.pack();
+						if(created || size.equals(lastSize))
+						{
+							lastFrame.pack();
+							lastSize = lastFrame.getSize();
+						}
 						lastFrame.setVisible(true);
 					}
 				};
