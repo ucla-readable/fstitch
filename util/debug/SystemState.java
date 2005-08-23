@@ -69,7 +69,7 @@ public class SystemState
 		this.free_head = free_head;
 	}
 	
-	public void render(Writer output, boolean renderFree, boolean landscape) throws IOException
+	public void render(Writer output, String title, boolean renderFree, boolean landscape) throws IOException
 	{
 		int free = 0;
 		
@@ -78,6 +78,7 @@ public class SystemState
 			output.write("rankdir=TB;\norientation=L;\nsize=\"10,7.5\";\n");
 		else
 			output.write("rankdir=LR;\norientation=P;\nsize=\"16,10\";\n");
+		output.write("subgraph clusterAll {\nlabel=\"" + title + "\";\ncolor=white;\n");
 		output.write("node [shape=circle,color=black];\n");
 		
 		Iterator i = chdescs.iterator();
@@ -137,7 +138,7 @@ public class SystemState
 			Bdesc bdesc = (Bdesc) i.next();
 			output.write(bdesc.render());
 		}*/
-		output.write("}\n");
+		output.write("}\n}\n");
 		output.flush();
 	}
 	

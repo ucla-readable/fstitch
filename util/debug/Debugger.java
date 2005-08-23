@@ -166,7 +166,10 @@ public class Debugger extends OpcodeFactory
 	
 	public void render(Writer output, boolean landscape) throws IOException
 	{
-		state.render(output, renderFree, landscape);
+		String title = "";
+		if(applied > 0)
+			title = opcodes.get(applied - 1).toString();
+		state.render(output, title, renderFree, landscape);
 	}
 	
 	public String toString()
