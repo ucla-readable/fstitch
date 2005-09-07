@@ -4,26 +4,109 @@
 #include <inc/types.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
+#include <inc/hash_map.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
 #include <kfs/sched.h>
+#include <kfs/debug.h>
+#include <kfs/revision.h>
 #include <kfs/journal_bd.h>
+
+/* Theory of operation:
+ * 
+ * Basically, as chdescs pass through the journal_bd module, we copy their
+ * blocks into a journal and add a dependency to each of the chdescs to keep
+ * them from being written to disk. Then, when the transaction is over, we write
+ * some bookkeeping stuff to the journal, hook it up to the waiting dependency
+ * of all the data, and watch the cache do all our dirty work as it sorts out
+ * the chdescs.
+ * 
+ * We break the journal area up into slots. Each slot begins with a commit
+ * record followed by block number lists, then actual data blocks. The commit
+ * record stores the number of blocks stored in this slot (up to the slot's
+ * capacity, which depends on how large the journal is), as well as the slot
+ * number of the "next" commit record in this "chain" of commit records. If a
+ * single slot is not large enough for a transaction, only one of them will be
+ * marked as an active commit record (the others will be "subcommit" records),
+ * and each record will store the slot number of the next. The chain is
+ * terminated by a record that points to itself.
+ * 
+ * At runtime, to keep track of which slots are busy (i.e. they have not been
+ * completely written to disk), we weak retain the last chdesc in a transaction
+ * in an array of chdescs whose indices correspond to slot numbers. Because we
+ * can have "chained" slots, we have a special NOOP chdesc that represents the
+ * whole transaction (since the commit record cancellation chdesc will not be
+ * created until the end of the transaction, and we need to do the weak retains
+ * as we claim slots for use during transaction).
+ * 
+ * We keep track of which slot we are currently filling as we are creating a
+ * transaction. If and when we fill it, we write a subcommit record, find a new
+ * slot, and continue. In this way, when the whole transaction is done, we will
+ * be able to do a relatively small amount of work to complete the picture. Note
+ * that when subcommit records are written, we must weak retain "done" in their
+ * slot so that we won't reuse those slots until after the entire transaction is
+ * finished.
+ * 
+ * Here is the chdesc structure of a transaction:
+ * 
+ *   +-------------+------ NOOPs --------+---------------------+---------------------+
+ *   |             |                     |                     |                     |
+ *   v             |                     |                     |                     |
+ * "keep" <--+     |                     |                     |                     |
+ *           |     v                     v                     v                     v
+ * jrdata <--+-- "wait" <-- commit <-- "hold" <-- fsdata <-- "safe" <-- cancel <-- "done"
+ *           |                ^          ^                                ^
+ * subcmt <--+                |          |                                |
+ *                            |          +--- Managed chdesc              |
+ *                            |                                           |
+ *                            +------ Created at end of transaction ------+
+ * 
+ * Purposes of various NOOP chdescs:
+ * keep:
+ *   keep "wait" from becoming satisfied as the jrdata (journal data) chdescs
+ *   are written to disk and satisfied (all the other NOOPs depend on things
+ *   that won't get satisfied until we send the whole transaction off into
+ *   the cache)
+ * wait:
+ *   allow the commit record to easily be hooked up to everything written to
+ *   the journal so far, since it will not be created until the end of the
+ *   transaction
+ * hold:
+ *   prevent the actual filesystem changes from being written until we have
+ *   hooked up all the necessary dependencies for the transaction
+ * safe:
+ *   allow the cancellation to easily be hooked up to all the fsdata (filesystem
+ *   data) chdescs that are part of the transaction
+ * done"
+ *   provide a single chdesc that exists at the beginning of the transaction
+ *   which represents the whole transaction, so we can weak retain it to claim
+ *   slots in the journal
+ * */
 
 struct journal_info {
 	BD_t * bd;
 	BD_t * journal;
 	uint16_t blocksize, length;
 	uint16_t level, cr_count;
-	bool recursion;
-	chdesc_t * hold;
-	chdesc_t ** cr_commit;
+	uint32_t trans_total_blocks;
+	uint32_t trans_data_blocks;
 	uint32_t stamp;
+	/* state information below */
+	chdesc_t * keep;
+	chdesc_t * wait;
+	chdesc_t * hold;
+	chdesc_t * safe;
+	chdesc_t * done;
+	uint16_t trans_slot, prev_slot;
+	chdesc_t ** cr_retain;
+	/* map from FS block number -> journal block number (note 0 is invalid) */
+	hash_map_t * block_map;
 };
 
-#define TRANSACTION_PERIOD (5 * HZ)
+#define TRANSACTION_PERIOD (15 * HZ)
 #define TRANSACTION_SIZE (64 * 4096)
 
 #define CREMPTY     0
@@ -46,7 +129,7 @@ static uint16_t numbers_per_block(uint16_t blocksize)
 static uint32_t trans_number_block_count(uint16_t blocksize)
 {
 	const uint16_t npb = numbers_per_block(blocksize);
-	const uint32_t bpt = TRANSACTION_SIZE / blocksize;
+	const uint32_t bpt = (TRANSACTION_SIZE + blocksize - 1) / blocksize;
 	return (bpt - 1 + npb) / (npb + 1);
 }
 
@@ -124,42 +207,257 @@ static int journal_bd_cancel_block(BD_t * object, uint32_t number)
 	return CALL(info->bd, cancel_block, number);
 }
 
+static int journal_bd_grab_slot(BD_t * object)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	uint16_t scan = info->trans_slot;
+	do {
+		if(!info->cr_retain[scan])
+		{
+			int r = chdesc_weak_retain(info->done, &info->cr_retain[scan]);
+			if(r < 0)
+				return r;
+			info->prev_slot = info->trans_slot;
+			info->trans_slot = scan;
+			return 0;
+		}
+		if(++scan == info->cr_count)
+			scan = 0;
+	} while(scan != info->trans_slot);
+	
+	return -E_BUSY;
+}
+
+static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	uint32_t number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
+	
+	if(!number)
+	{
+		chdesc_t * head = NULL;
+		chdesc_t * tail = NULL;
+		bdesc_t * number_block;
+		size_t blocks = hash_map_size(info->block_map);
+		size_t last = blocks % info->trans_data_blocks;
+		uint32_t data;
+		int r;
+		
+		if(blocks && !last)
+		{
+			/* we need to allocate a new transaction slot */
+			struct commit_record commit;
+			bdesc_t * record = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks);
+			if(!record)
+				return INVALID_BLOCK;
+			
+			/* first write the subcommit record */
+			commit.magic = JOURNAL_MAGIC;
+			commit.type = CRSUBCOMMIT;
+			commit.next = info->prev_slot;
+			commit.nblocks = info->trans_data_blocks;
+			r = chdesc_create_byte(record, info->journal, 0, sizeof(commit), &commit, &head, &tail);
+			assert(r >= 0);
+			assert(head == tail);
+			r = chdesc_add_depend(info->wait, head);
+			assert(r >= 0);
+			head = NULL;
+			tail = NULL;
+			r = CALL(info->journal, write_block, record);
+			assert(r >= 0);
+			
+			/* then grab a new slot */
+			r = journal_bd_grab_slot(object);
+			assert(r >= 0);
+		}
+		
+		/* get next journal block, write block number to journal block number map */
+		number = info->trans_slot * info->trans_total_blocks + 1;
+		number_block = CALL(info->journal, read_block, number + last / numbers_per_block(info->blocksize));
+		assert(number_block);
+		number += trans_number_block_count(info->blocksize);
+		number += last;
+		
+		data = block->number;
+		r = chdesc_create_byte(number_block, info->journal, last * sizeof(uint32_t), sizeof(uint32_t), &data, &head, &tail);
+		assert(r >= 0);
+		r = chdesc_add_depend(info->wait, head);
+		assert(r >= 0);
+		r = CALL(info->journal, write_block, number_block);
+		assert(r >= 0);
+		
+		/* add the journal block number to the map */
+		r = hash_map_insert(info->block_map, (void *) block->number, (void *) number);
+		assert(r >= 0);
+	}
+	
+	return number;
+}
+
+static int journal_bd_start_transaction(BD_t * object)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	int r = -E_NO_MEM;
+
+#define CREATE_NOOP(name, fail_label, owner) do { \
+	info->name = chdesc_create_noop(NULL, owner); \
+	if(!info->name) \
+		goto fail_##fail_label; \
+	chdesc_claim_noop(info->name); } while(0)
+	
+	/* this order is important due to the error recovery code */
+	CREATE_NOOP(keep, 1, NULL);
+	CREATE_NOOP(wait, 2, NULL);
+	CREATE_NOOP(hold, 3, object); /* this one is managed */
+	CREATE_NOOP(safe, 4, NULL);
+	CREATE_NOOP(done, 5, NULL);
+	
+	r = chdesc_add_depend(info->wait, info->keep);
+	if(r < 0)
+		goto fail_6;
+	
+	r = journal_bd_grab_slot(object);
+	if(r < 0)
+		goto fail_6;
+	
+	/* terminate the chain */
+	info->prev_slot = info->trans_slot;
+	
+	return 0;
+	
+fail_6:
+	chdesc_destroy(&info->done);
+fail_5:
+	chdesc_destroy(&info->safe);
+fail_4:
+	chdesc_destroy(&info->hold);
+fail_3:
+	chdesc_destroy(&info->wait);
+fail_2:
+	chdesc_destroy(&info->keep);
+fail_1:
+	return r;
+}
+
+static int journal_bd_stop_transaction(BD_t * object)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct commit_record commit;
+	bdesc_t * block;
+	chdesc_t * head;
+	chdesc_t * tail;
+	int r;
+	
+	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks);
+	if(!block)
+		return -E_UNSPECIFIED;
+	
+	commit.magic = JOURNAL_MAGIC;
+	commit.type = CRCOMMIT;
+	commit.next = info->prev_slot;
+	commit.nblocks = hash_map_size(info->block_map) % info->trans_data_blocks;
+	
+	/* create commit record, make it depend on wait */
+	head = info->wait;
+	tail = NULL;
+	r = chdesc_create_byte(block, object, 0, sizeof(commit), &commit, &head, &tail);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	assert(head == tail);
+	/* ...and make hold depend on it */
+	r = chdesc_add_depend(info->hold, head);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	
+	/* create cancellation, make it depend on safe */
+	commit.type = CREMPTY;
+	head = info->safe;
+	tail = NULL;
+	r = chdesc_create_byte(block, object, 0, sizeof(commit), &commit, &head, &tail);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	assert(head == tail);
+	/* ...and make done depend on it */
+	r = chdesc_add_depend(info->done, head);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	
+	/* unmanage the hold NOOP */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, info->hold, NULL);
+	info->hold->owner = NULL;
+	
+	/* ...and finally write the commit record */
+	r = CALL(info->journal, write_block, block);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	
+	hash_map_clear(info->block_map);
+	
+	info->keep = NULL;
+	info->wait = NULL;
+	info->hold = NULL;
+	info->safe = NULL;
+	info->done = NULL;
+	
+	return 0;
+}
+
 static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	bdesc_t * journal_block;
+	chmetadesc_t * meta;
+	chdesc_t * head = NULL;
+	chdesc_t * tail = NULL;
+	uint32_t number;
+	int r;
 	
 	/* make sure it's a valid block */
 	if(block->number >= info->length)
 		return -E_INVAL;
 	
-	if(!info->hold)
+	/* why write a block with no changes? */
+	if(!block->ddesc->changes)
+		return 0;
+	
+	if(!info->keep)
 	{
-		int r;
-		info->hold = chdesc_create_noop(NULL, object);
-		if(!info->hold)
-			return -E_NO_MEM;
-		r = chdesc_weak_retain(info->hold, &info->hold);
+		r = journal_bd_start_transaction(object);
 		if(r < 0)
-		{
-			chdesc_destroy(&info->hold);
 			return r;
-		}
-		/* claim it so it won't get satisfied since it has no dependencies */
-		chdesc_claim_noop(info->hold);
 	}
 	
-	if(block->ddesc->changes)
-	{
-		chmetadesc_t * meta;
-		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
-			if(meta->desc->owner == object)
-			{
-				int r = chdesc_add_depend(meta->desc, info->hold);
-				if(r < 0)
-					panic("Holy Mackerel!");
-				chdesc_stamp(meta->desc, info->stamp);
-			}
-	}
+	/* add our stamp to all chdescs passing through */
+	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+		if(meta->desc->owner == object)
+		{
+			int r = chdesc_add_depend(meta->desc, info->hold);
+			if(r < 0)
+				panic("Holy Mackerel!");
+			r = chdesc_add_depend(info->safe, meta->desc);
+			if(r < 0)
+				panic("Holy Mackerel!");
+			chdesc_stamp(meta->desc, info->stamp);
+		}
+	
+	number = journal_bd_lookup_block(object, block);
+	assert(number != INVALID_BLOCK);
+	journal_block = CALL(info->journal, read_block, number);
+	assert(journal_block);
+	
+	/* rewind the data to the state that is (now) below us... */
+	r = revision_tail_prepare_stamp(block, info->stamp);
+	assert(r >= 0);
+	/* ...and copy it to the journal */
+	r = chdesc_create_full(journal_block, info->journal, block->ddesc->data, &head, &tail);
+	assert(r >= 0);
+	r = revision_tail_revert_stamp(block, info->stamp);
+	assert(r >= 0);
+	r = chdesc_add_depend(info->wait, head);
+	assert(r >= 0);
+	
+	r = CALL(info->journal, write_block, journal_block);
+	assert(r >= 0);
 	
 	chdesc_push_down(object, block, info->bd, block);
 	
@@ -181,28 +479,45 @@ static void journal_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	//printf("Journal test: satisfying control NOOP!\n");
-	if(info->hold)
-		chdesc_satisfy(&info->hold);
+	if(info->keep)
+	{
+		int r = journal_bd_stop_transaction(object);
+		if(r < 0)
+			panic("Holy Mackerel!");
+	}
 }
 
 static int journal_bd_destroy(BD_t * bd)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
-	int i, r = modman_rem_bd(bd);
+	int i, r;
+	
+	if(info->keep)
+	{
+		r = journal_bd_stop_transaction(bd);
+		if(r < 0)
+			return r;
+	}
+	
+	r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->bd, bd);
 	modman_dec_bd(info->journal, bd);
+	
 	sched_unregister(journal_bd_callback, bd);
 	chdesc_release_stamp(info->stamp);
+	hash_map_destroy(info->block_map);
+	
 	for(i = 0; i != info->cr_count; i++)
-		if(info->cr_commit[i])
-			chdesc_weak_release(&info->cr_commit[i]);
-	free(info->cr_commit);
+		if(info->cr_retain[i])
+			chdesc_weak_release(&info->cr_retain[i]);
+	
+	free(info->cr_retain);
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
+	
 	return 0;
 }
 
@@ -216,8 +531,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	int r;
 	
 	const uint32_t bnpb = numbers_per_block(info->blocksize);
-	const uint32_t transaction_blocks = TRANSACTION_SIZE / info->blocksize;
-	const uint32_t transaction_number = transaction_start / transaction_blocks;
+	const uint32_t transaction_number = transaction_start / info->trans_total_blocks;
 	
 	uint32_t block, bnb, db;
 	struct commit_record * cr;
@@ -235,7 +549,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	}
 	
 	/* check for chained transaction */
-	block = cr->next * transaction_blocks;
+	block = cr->next * info->trans_total_blocks;
 	if(block != transaction_start)
 	{
 		/* expect a CRSUBCOMMIT as the next element */
@@ -325,13 +639,14 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		head = all;
 		chdesc_create_byte(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head, &tail);
 		assert(head == tail);
-		r = chdesc_weak_retain(head, &info->cr_commit[transaction_start / transaction_blocks]);
+		r = chdesc_weak_retain(head, &info->cr_retain[transaction_start / info->trans_total_blocks]);
 		if(r < 0)
 			panic("Holy Mackerel!");
 		chdesc_satisfy(&keep);
 		r = CALL(info->journal, write_block, commit_block);
 		if(r < 0)
 			panic("Holy Mackerel!");
+#warning need to hook these up to avoid reusing chains before they are properly written
 	}
 	else
 		chdesc_satisfy(&keep);
@@ -344,12 +659,12 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 static int replay_journal(BD_t * bd)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
-	uint32_t transaction, transaction_blocks = TRANSACTION_SIZE / info->blocksize;
+	uint32_t transaction;
 	
 	for(transaction = 0; transaction < info->cr_count; transaction++)
 	{
 		/* FIXME this may need attention when we finally fix the transaction ordering bug */
-		int r = replay_single_transaction(bd, transaction * transaction_blocks, CRCOMMIT);
+		int r = replay_single_transaction(bd, transaction * info->trans_total_blocks, CRCOMMIT);
 		if(r < 0)
 			return r;
 	}
@@ -401,17 +716,28 @@ BD_t * journal_bd(BD_t * disk, BD_t * journal)
 	info->journal = journal;
 	info->blocksize = blocksize;
 	info->length = CALL(disk, get_numblocks);
-	info->recursion = 0;
+	info->trans_total_blocks = (TRANSACTION_SIZE + blocksize - 1) / blocksize;
+	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(blocksize);
+	info->keep = NULL;
+	info->wait = NULL;
 	info->hold = NULL;
+	info->safe = NULL;
+	info->done = NULL;
+	info->trans_slot = 0;
+	info->prev_slot = 0;
 	
 	info->level = CALL(disk, get_devlevel);
 	
-	info->cr_count = CALL(journal, get_numblocks) / (TRANSACTION_SIZE / blocksize);
+	info->block_map = hash_map_create();
+	if(!info->block_map)
+		panic("Holy Mackerel!");
+	
+	info->cr_count = CALL(journal, get_numblocks) / info->trans_total_blocks;
 	if(!info->cr_count)
 		panic("Holy Mackerel!");
 	
-	info->cr_commit = calloc(info->cr_count, sizeof(*info->cr_commit));
-	if(!info->cr_commit)
+	info->cr_retain = calloc(info->cr_count, sizeof(*info->cr_retain));
+	if(!info->cr_retain)
 		panic("Holy Mackerel!");
 	
 	replay_journal(bd);
