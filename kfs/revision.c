@@ -49,7 +49,19 @@ static void calculate_distance(chdesc_t * ch, int num)
 		calculate_distance(p->desc, num + 1);
 }
 
-int revision_tail_prepare(bdesc_t * block, BD_t * bd)
+typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
+
+static bool revision_barrier_decider(chdesc_t * chdesc, void * data)
+{
+	return chdesc->owner == (BD_t *) data;
+}
+
+static bool revision_stamp_decider(chdesc_t * chdesc, void * data)
+{
+	return chdesc_has_stamp(chdesc, (uint32_t) data);
+}
+
+static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, void * data)
 {
 	chdesc_t * root;
 	chmetadesc_t * d;
@@ -81,8 +93,8 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 	for(i = 0; i < count; i++)
 	{
 		chdesc_t * c = (chdesc_t *) fixed_max_heap_pop(heap);
-		if(c->owner == bd)
-			continue;		
+		if(decider(c, data))
+			continue;
 		r = chdesc_rollback(c);
 		if(r < 0)
 			panic("can't rollback!\n");
@@ -92,7 +104,17 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 	return 0;
 }
 
-int revision_tail_revert(bdesc_t * block, BD_t * bd)
+int revision_tail_prepare(bdesc_t * block, BD_t * bd)
+{
+	return _revision_tail_prepare(block, revision_barrier_decider, bd);
+}
+
+int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp)
+{
+	return _revision_tail_prepare(block, revision_stamp_decider, (void *) stamp);
+}
+
+static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, void * data)
 {
 	chdesc_t * root;
 	chmetadesc_t * d;
@@ -123,7 +145,7 @@ int revision_tail_revert(bdesc_t * block, BD_t * bd)
 	for(i = 0; i < count; i++)
 	{
 		chdesc_t * c = (chdesc_t *) fixed_max_heap_pop(heap);
-		if(c->owner == bd)
+		if(decider(c, data))
 			continue;
 		r = chdesc_apply(c);
 		if(r < 0)
@@ -132,6 +154,16 @@ int revision_tail_revert(bdesc_t * block, BD_t * bd)
 	fixed_max_heap_free(heap);
 	
 	return 0;
+}
+
+int revision_tail_revert(bdesc_t * block, BD_t * bd)
+{
+	return _revision_tail_revert(block, revision_barrier_decider, bd);
+}
+
+int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp)
+{
+	return _revision_tail_revert(block, revision_stamp_decider, (void *) stamp);
 }
 
 int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)

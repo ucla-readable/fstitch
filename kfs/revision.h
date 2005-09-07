@@ -14,12 +14,14 @@
 // You should be careful, because this function can rollback chdescs without
 // rolling back their dependents.
 int revision_tail_prepare(bdesc_t *block, BD_t *bd);
+int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp);
 
 // revision_tail_revert undoes all of the rollbacks from
 // revision_tail_prepare. Specifically, it makes a DAG of all chdescs
 // on the block (and their dependencies, recursively) specified and
 // rolls all chdescs forward that are not on the specified BD.
 int revision_tail_revert(bdesc_t *block, BD_t *bd);
+int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp);
 
 // revision_tail_acknowledge commits all the chdescs that were rolled
 // back with revision_tail_prepare. Specifically, it makes a DAG of
