@@ -8,10 +8,9 @@
 #include <kfs/wb_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
-#include <kfs/journal_queue_bd.h>
+#include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
-#include <kfs/journal_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
@@ -28,7 +27,6 @@
 #define USE_THIRD_LEG 0 // 1 -> mount josfs_cfs at '/'
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
-CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal);
 BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
 
 static const char * fspaths[] = {
@@ -45,16 +43,9 @@ static const char * fspaths[] = {
 
 int kfsd_init(void)
 {
-	const bool use_disk_0_extern_journal = 0;
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
 	const bool use_net    = 0;
-#ifdef __OPTIMIZE__
-	/* Ensure the below tautology. When compiling without opts gcc will not
-	 * allow the consts to propagate, so only check when compiling with opts.
-	 */
-	static_assert(!(use_disk_0_extern_journal && use_disk_0));
-#endif
 	vector_t * uhfses = NULL;
 
 	CFS_t * table_class = NULL;
@@ -100,58 +91,6 @@ int kfsd_init(void)
 	{
 		fprintf(STDERR_FILENO, "OOM, vector_create\n");
 		kfsd_shutdown();
-	}
-
-	if (use_disk_0_extern_journal)
-	{
-		const int jbd = 1; // 0 for nbd, 1 for ide(0, 1)
-
-		BD_t * j_bd;
-		BD_t * data_bd;
-		LFS_t * journal;
-		CFS_t * u;
-
-		if (jbd == 0)
-		{
-			/* delay kfsd startup slightly for netd to start */
-			sleep(200);
-
-			if (! (j_bd = nbd_bd("192.168.2.1", 2492)) )
-			{
-				fprintf(STDERR_FILENO, "nbd_bd failed\n");
-				kfsd_shutdown();
-			}
-		}
-		else
-		{
-			if (! (j_bd = ide_pio_bd(0, 1, 0)) )
-			{
-				fprintf(STDERR_FILENO, "ide_pio_bd(0, 1) failed\n");
-				kfsd_shutdown();
-			}
-			if (j_bd)
-				OBJFLAGS(j_bd) |= OBJ_PERSISTENT;
-		}
-
-		if (! (j_bd = construct_cacheing(j_bd, 128)) )
-			kfsd_shutdown();
-
-		if (! (data_bd = ide_pio_bd(0, 0, 0)) )
-		{
-			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0) failed\n");
-			kfsd_shutdown();
-		}
-		if (data_bd)
-			OBJFLAGS(data_bd) |= OBJ_PERSISTENT;
-		if (! (data_bd = construct_cacheing(data_bd, 32)) )
-			kfsd_shutdown();
-
-		if (! (u = construct_journaled_uhfs(j_bd, data_bd, &journal)) )
-			kfsd_shutdown();
-		r = vector_push_back(uhfses, u);
-		assert(r >= 0);
-
-		//printf("Using josfs [journaled on disk 1, %u kB/s max avg] on disk 0.\n", journal_lfs_max_bandwidth(journal));
 	}
 
 	if (use_net)
@@ -246,7 +185,6 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
-	const bool enable_internal_journaling = 0;
 	const bool enable_fsck = 0;
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -298,8 +236,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		BD_t * resizer;
 		LFS_t * josfs_lfs;
 		LFS_t * lfs;
-		bool journaling = 0;
-		LFS_t * journal = NULL;
 		CFS_t * u;
 			
 		if (!partitions[i])
@@ -321,32 +257,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 		}
 
-#if 0
-		if (enable_internal_journaling)
-		{
-			BD_t * journal_queue;
-
-			if (! (journal_queue = journal_queue_bd(cache)) )
-				kfsd_shutdown();
-			if ((lfs = josfs_lfs = josfs(journal_queue)))
-			{
-				if ((journal = journal_lfs(lfs, lfs, journal_queue)))
-				{
-					lfs = journal;
-					journaling = 1;
-				}
-				else
-				{
-					(void) DESTROY(lfs);
-					(void) DESTROY(journal_queue);
-				}
-			}
-			else
-				(void) DESTROY(journal_queue);			
-		}
-		else
-#endif
-			lfs = josfs_lfs = josfs(cache);
+		lfs = josfs_lfs = josfs(cache);
 
 		if (josfs_lfs && enable_fsck)
 		{
@@ -369,8 +280,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			fprintf(STDERR_FILENO, "\nlfs creation failed\n");
 			kfsd_shutdown();
 		}
-		//if (journaling)
-		//	printf(" [journaled, %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
@@ -411,29 +320,4 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 	}
 
 	return bd;
-}
-
-CFS_t * construct_journaled_uhfs(BD_t * j_bd, BD_t * data_bd, LFS_t ** journal)
-{
-	BD_t * journal_queue;
-	LFS_t * j_lfs;
-	LFS_t * data_lfs;
-	CFS_t * u;
-
-	if (! (j_lfs = wholedisk(j_bd)) )
-		kfsd_shutdown();
-
-	if (! (journal_queue = data_bd = journal_queue_bd(data_bd)) )
-		kfsd_shutdown();
-	if (! (data_lfs = josfs(data_bd)) )
-		kfsd_shutdown();
-
-//	if (! (data_lfs = journal_lfs(j_lfs, data_lfs, journal_queue)) )
-//		kfsd_shutdown();
-
-	if (! (u = uhfs(data_lfs)) )
-		kfsd_shutdown();
-
-	*journal = data_lfs;
-	return u;
 }

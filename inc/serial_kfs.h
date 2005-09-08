@@ -29,40 +29,38 @@
 
 // LFS
 
-#define SKFS_JOURNAL_LFS 12
-#define SKFS_JOURNAL_LFS_MAX_BANDWIDTH 13
+#define SKFS_JOSFS_BASE 12
+#define SKFS_JOSFS_FSCK 13
 
-#define SKFS_JOSFS_BASE 14
-#define SKFS_JOSFS_FSCK 15
-
-#define SKFS_WHOLEDISK 16
+#define SKFS_WHOLEDISK 14
 
 // BD
 
-#define SKFS_LOOP_BD 17
-#define SKFS_NBD_BD 18
-#define SKFS_MEM_BD 19
-#define SKFS_JOURNAL_QUEUE_BD 20
-#define SKFS_WB_CACHE_BD 21
-#define SKFS_WT_CACHE_BD 22
-#define SKFS_BLOCK_RESIZER_BD 23
-#define SKFS_MD_BD 24
-#define SKFS_MIRROR_BD 25
-#define SKFS_MIRROR_BD_ADD 26
-#define SKFS_MIRROR_BD_REMOVE 27
-#define SKFS_PARTITION_BD 28
-#define SKFS_PC_PTABLE_BD 29
-#define SKFS_IDE_PIO_BD 30
+#define SKFS_LOOP_BD 15
+#define SKFS_NBD_BD 16
+#define SKFS_MEM_BD 17
+#define SKFS_JOURNAL_BD 18
+#define SKFS_JOURNAL_BD_SET_JOURNAL 19
+#define SKFS_WB_CACHE_BD 20
+#define SKFS_WT_CACHE_BD 21
+#define SKFS_BLOCK_RESIZER_BD 22
+#define SKFS_MD_BD 23
+#define SKFS_MIRROR_BD 24
+#define SKFS_MIRROR_BD_ADD 25
+#define SKFS_MIRROR_BD_REMOVE 26
+#define SKFS_PARTITION_BD 27
+#define SKFS_PC_PTABLE_BD 28
+#define SKFS_IDE_PIO_BD 29
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 31
-#define SKFS_MODMAN_RETURN_LOOKUP  32
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 33
-#define SKFS_MODMAN_REQUEST_ITS    34
-#define SKFS_MODMAN_RETURN_IT      35
+#define SKFS_MODMAN_REQUEST_LOOKUP 30
+#define SKFS_MODMAN_RETURN_LOOKUP  31
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 32
+#define SKFS_MODMAN_REQUEST_ITS    33
+#define SKFS_MODMAN_RETURN_IT      34
 
-#define SKFS_PERF_TEST 36
+#define SKFS_PERF_TEST 35
 
 
 #define SKFS_TYPE int skfs_type
@@ -162,20 +160,6 @@ typedef struct {
 //
 // LFS
 
-// journal_lfs
-
-typedef struct {
-	SKFS_TYPE;
-	uint32_t journal_lfs;
-	uint32_t fs_lfs;
-	uint32_t fs_queue_bd;
-} Skfs_journal_lfs_t;
-
-typedef struct {
-	SKFS_TYPE;
-	uint32_t journal_lfs;
-} Skfs_journal_lfs_max_bandwidth_t;
-
 // josfs_base
 
 typedef struct {
@@ -220,7 +204,13 @@ typedef struct {
 typedef struct {
 	SKFS_TYPE;
 	uint32_t bd;
-} Skfs_journal_queue_bd_t;
+} Skfs_journal_bd_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t bd;
+	uint32_t journal;
+} Skfs_journal_bd_set_journal_t;
 
 typedef struct {
 	SKFS_TYPE;

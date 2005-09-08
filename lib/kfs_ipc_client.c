@@ -418,37 +418,6 @@ CFS_t * uhfs(LFS_t * lfs)
 //
 // LFS
 
-#include <kfs/journal_lfs.h>
-
-LFS_t * journal_lfs(LFS_t * journal, LFS_t * fs, BD_t * fs_queue)
-{
-	const envid_t fsid = find_fs();
-	uint32_t lfs_id;
-
-	INIT_PG(JOURNAL_LFS, journal_lfs);
-
-	pg->journal_lfs = (uint32_t) OBJLOCAL(journal);
-	pg->fs_lfs = (uint32_t) OBJLOCAL(fs);
-	pg->fs_queue_bd = (uint32_t) OBJLOCAL(fs_queue);
-
-	SEND_PG();
-	lfs_id = RECV_PG();
-
-	return create_lfs(lfs_id);
-}
-
-size_t journal_lfs_max_bandwidth(const LFS_t * journal)
-{
-	const envid_t fsid = find_fs();
-
-	INIT_PG(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
-
-	pg->journal_lfs = (uint32_t) OBJLOCAL(journal);
-
-	SEND_PG();
-	return RECV_PG();
-}
-
 #include <kfs/josfs_base.h>
 
 LFS_t * josfs(BD_t * block_device)
@@ -563,13 +532,13 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	return create_bd(bd_id);
 }
 
-#include <kfs/journal_queue_bd.h>
-BD_t * journal_queue_bd(BD_t * disk)
+#include <kfs/journal_bd.h>
+BD_t * journal_bd(BD_t * disk)
 {
 	const envid_t fsid = find_fs();
 	uint32_t bd_id;
 
-	INIT_PG(JOURNAL_QUEUE_BD, journal_queue_bd);
+	INIT_PG(JOURNAL_BD, journal_bd);
 
 	pg->bd = (uint32_t) OBJLOCAL(disk);
 
@@ -577,6 +546,20 @@ BD_t * journal_queue_bd(BD_t * disk)
 	bd_id = RECV_PG();
 
 	return create_bd(bd_id);
+}
+
+int journal_bd_set_journal(BD_t * bd, BD_t * journal)
+{
+	const envid_t fsid = find_fs();
+
+	INIT_PG(JOURNAL_BD_SET_JOURNAL, journal_bd_set_journal);
+
+	pg->bd = (uint32_t) OBJLOCAL(bd);
+	pg->journal = (uint32_t) OBJLOCAL(journal);
+
+	SEND_PG();
+
+	return RECV_PG();
 }
 
 #include <kfs/wb_cache_bd.h>

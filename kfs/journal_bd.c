@@ -298,7 +298,11 @@ static int journal_bd_start_transaction(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	int r = -E_NO_MEM;
-
+	
+	/* do we have a journal yet? */
+	if(!info->journal)
+		return -E_INVAL;
+	
 #define CREATE_NOOP(name, fail_label, owner) do { \
 	info->name = chdesc_create_noop(NULL, owner); \
 	if(!info->name) \
@@ -490,7 +494,7 @@ static void journal_bd_callback(void * arg)
 static int journal_bd_destroy(BD_t * bd)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
-	int i, r;
+	int r;
 	
 	if(info->keep)
 	{
@@ -503,17 +507,22 @@ static int journal_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->bd, bd);
-	modman_dec_bd(info->journal, bd);
+	if(info->journal)
+		modman_dec_bd(info->journal, bd);
 	
 	sched_unregister(journal_bd_callback, bd);
 	chdesc_release_stamp(info->stamp);
 	hash_map_destroy(info->block_map);
 	
-	for(i = 0; i != info->cr_count; i++)
-		if(info->cr_retain[i])
-			chdesc_weak_release(&info->cr_retain[i]);
-	
-	free(info->cr_retain);
+	if(info->cr_retain)
+	{
+		int i;
+		for(i = 0; i != info->cr_count; i++)
+			if(info->cr_retain[i])
+				chdesc_weak_release(&info->cr_retain[i]);
+		
+		free(info->cr_retain);
+	}
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -672,25 +681,10 @@ static int replay_journal(BD_t * bd)
 	return 0;
 }
 
-BD_t * journal_bd(BD_t * disk, BD_t * journal)
+BD_t * journal_bd(BD_t * disk)
 {
-	uint16_t blocksize;
 	struct journal_info * info;
-	BD_t * bd;
-	
-	if(!disk || !journal)
-		return NULL;
-	
-	/* make sure the journal device has the same blocksize as the disk */
-	blocksize = CALL(disk, get_blocksize);
-	if(blocksize != CALL(journal, get_blocksize))
-		return NULL;
-	
-	/* make sure the atomic size of the journal device is big enough */
-	if(sizeof(struct commit_record) > CALL(journal, get_atomicsize))
-		return NULL;
-	
-	bd = malloc(sizeof(*bd));
+	BD_t * bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
 	
@@ -713,11 +707,11 @@ BD_t * journal_bd(BD_t * disk, BD_t * journal)
 	OBJMAGIC(bd) = JOURNAL_MAGIC;
 	
 	info->bd = disk;
-	info->journal = journal;
-	info->blocksize = blocksize;
+	info->journal = NULL;
+	info->blocksize = CALL(disk, get_blocksize);
 	info->length = CALL(disk, get_numblocks);
-	info->trans_total_blocks = (TRANSACTION_SIZE + blocksize - 1) / blocksize;
-	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(blocksize);
+	info->trans_total_blocks = (TRANSACTION_SIZE + info->blocksize - 1) / info->blocksize;
+	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(info->blocksize);
 	info->keep = NULL;
 	info->wait = NULL;
 	info->hold = NULL;
@@ -732,15 +726,8 @@ BD_t * journal_bd(BD_t * disk, BD_t * journal)
 	if(!info->block_map)
 		panic("Holy Mackerel!");
 	
-	info->cr_count = CALL(journal, get_numblocks) / info->trans_total_blocks;
-	if(!info->cr_count)
-		panic("Holy Mackerel!");
-	
-	info->cr_retain = calloc(info->cr_count, sizeof(*info->cr_retain));
-	if(!info->cr_retain)
-		panic("Holy Mackerel!");
-	
-	replay_journal(bd);
+	info->cr_count = 0;
+	info->cr_retain = NULL;
 	
 	/* set up transaction callback */
 	if(sched_register(journal_bd_callback, bd, TRANSACTION_PERIOD) < 0)
@@ -760,13 +747,45 @@ BD_t * journal_bd(BD_t * disk, BD_t * journal)
 		DESTROY(bd);
 		return NULL;
 	}
-	if(modman_inc_bd(journal, bd, NULL) < 0)
-	{
-		modman_dec_bd(disk, bd);
-		modman_rem_bd(bd);
-		DESTROY(bd);
-		return NULL;
-	}
 	
 	return bd;
+}
+
+int journal_bd_set_journal(BD_t * bd, BD_t * journal)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	
+	if(OBJMAGIC(bd) != JOURNAL_MAGIC)
+		return -E_INVAL;
+	
+	/* we can only set the journal once */
+	if(info->journal)
+		return -E_INVAL;
+	
+	/* make sure the journal device has the same blocksize as the disk */
+	if(info->blocksize != CALL(journal, get_blocksize))
+		return -E_INVAL;
+	
+	/* make sure the atomic size of the journal device is big enough */
+	if(sizeof(struct commit_record) > CALL(journal, get_atomicsize))
+		return -E_INVAL;
+	
+	/*CALL(journal, get_devlevel);*/
+	
+	if(modman_inc_bd(journal, bd, NULL) < 0)
+		return -E_INVAL;
+	
+	info->journal = journal;
+	
+	info->cr_count = CALL(journal, get_numblocks) / info->trans_total_blocks;
+	if(!info->cr_count)
+		panic("Holy Mackerel!");
+	
+	info->cr_retain = calloc(info->cr_count, sizeof(*info->cr_retain));
+	if(!info->cr_retain)
+		panic("Holy Mackerel!");
+	
+	replay_journal(bd);
+	
+	return 0;
 }

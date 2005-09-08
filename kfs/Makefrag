@@ -1,7 +1,5 @@
 OBJDIRS += kfs
 
-#			$(OBJDIR)/kfs/journal_lfs.o \
-
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc.o \
@@ -18,7 +16,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/ide_pio_bd.o \
 			$(OBJDIR)/kfs/ide4k_pio_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
-			$(OBJDIR)/kfs/journal_queue_bd.o \
 			$(OBJDIR)/kfs/journal_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \

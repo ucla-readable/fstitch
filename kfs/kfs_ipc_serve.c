@@ -168,40 +168,6 @@ static void kis_uhfs(envid_t whom, const Skfs_uhfs_t * pg)
 //
 // LFS
 
-// journal_lfs
-#include <kfs/journal_lfs.h>
-
-static void kis_journal_lfs(envid_t whom, const Skfs_journal_lfs_t * pg)
-{
-	LFS_t * journal = (LFS_t *) pg->journal_lfs;
-	LFS_t * fs = (LFS_t *) pg->fs_lfs;
-	BD_t * fs_queue = (BD_t *) pg->fs_queue_bd;
-	uint32_t val;
-
-	if (!modman_name_lfs(journal) || !modman_name_lfs(fs) || !modman_name_bd(fs_queue))
-		RETURN_IPC_INVAL;
-
-#warning add journal_lfs here
-	val = 0; //(uint32_t) journal_lfs(journal, fs, fs_queue);
-	fprintf(STDERR_FILENO, "kfsd: warning: not constructing journal_lfs!\n");
-
-	RETURN_IPC;
-}
-
-static void kis_journal_lfs_max_bandwidth(envid_t whom, const Skfs_journal_lfs_max_bandwidth_t * pg)
-{
-	LFS_t * journal = (LFS_t *) pg->journal_lfs;
-	uint32_t val;
-
-	if (!modman_name_lfs(journal))
-		RETURN_IPC_INVAL;
-
-#warning add journal_lfs_max_bandwidth here
-	val = -1; //(uint32_t) journal_lfs_max_bandwidth(journal);
-
-	RETURN_IPC;
-}
-
 // josfs_base
 #include <kfs/josfs_base.h>
 
@@ -279,8 +245,8 @@ static void kis_mem_bd(envid_t whom, const Skfs_mem_bd_t * pg)
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
-#include <kfs/journal_queue_bd.h>
-static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * pg)
+#include <kfs/journal_bd.h>
+static void kis_journal_bd(envid_t whom, const Skfs_journal_bd_t * pg)
 {
 	BD_t * bd = (BD_t *) pg->bd;
 	uint32_t val;
@@ -288,7 +254,23 @@ static void kis_journal_queue_bd(envid_t whom, const Skfs_journal_queue_bd_t * p
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) journal_queue_bd(bd);
+	val = (uint32_t) journal_bd(bd);
+
+	RETURN_IPC;
+}
+
+static void kis_journal_bd_set_journal(envid_t whom, const Skfs_journal_bd_set_journal_t * pg)
+{
+	BD_t * bd = (BD_t *) pg->bd;
+	BD_t * journal = (BD_t *) pg->journal;
+	uint32_t val;
+
+	if (!modman_name_bd(bd))
+		RETURN_IPC_INVAL;
+	if (!modman_name_bd(journal))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) journal_bd_set_journal(bd, journal);
 
 	RETURN_IPC;
 }
@@ -649,9 +631,6 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 
 		// LFS
 
-		SERVE(JOURNAL_LFS,               journal_lfs);
-		SERVE(JOURNAL_LFS_MAX_BANDWIDTH, journal_lfs_max_bandwidth);
-
 		SERVE(JOSFS_BASE, josfs_base);
 		SERVE(JOSFS_FSCK, josfs_fsck);
 
@@ -659,18 +638,19 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 
 		// BD
 
-		SERVE(LOOP_BD,            loop_bd);
-		SERVE(NBD_BD,             nbd_bd);
-		SERVE(MEM_BD,             mem_bd);
-		SERVE(JOURNAL_QUEUE_BD,   journal_queue_bd);
-		SERVE(WB_CACHE_BD,        wb_cache_bd);
-		SERVE(WT_CACHE_BD,        wt_cache_bd);
-		SERVE(BLOCK_RESIZER_BD,   block_resizer_bd);
-		SERVE(MD_BD,              md_bd);
-		SERVE(MIRROR_BD,          mirror_bd);
-		SERVE(MIRROR_BD_ADD,      mirror_bd_add);
-		SERVE(MIRROR_BD_REMOVE,   mirror_bd_remove);
-		SERVE(IDE_PIO_BD,         ide_pio_bd);
+		SERVE(LOOP_BD,                loop_bd);
+		SERVE(NBD_BD,                 nbd_bd);
+		SERVE(MEM_BD,                 mem_bd);
+		SERVE(JOURNAL_BD,             journal_bd);
+		SERVE(JOURNAL_BD_SET_JOURNAL, journal_bd_set_journal);
+		SERVE(WB_CACHE_BD,            wb_cache_bd);
+		SERVE(WT_CACHE_BD,            wt_cache_bd);
+		SERVE(BLOCK_RESIZER_BD,       block_resizer_bd);
+		SERVE(MD_BD,                  md_bd);
+		SERVE(MIRROR_BD,              mirror_bd);
+		SERVE(MIRROR_BD_ADD,          mirror_bd_add);
+		SERVE(MIRROR_BD_REMOVE,       mirror_bd_remove);
+		SERVE(IDE_PIO_BD,             ide_pio_bd);
 
 		// modman
 

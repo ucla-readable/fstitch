@@ -4,10 +4,9 @@
 #include <kfs/block_resizer_bd.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
-#include <kfs/journal_queue_bd.h>
+#include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
-#include <kfs/journal_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/modman.h>
@@ -76,7 +75,6 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		LFS_t * josfs_lfs;
 		LFS_t * lfs;
 		bool journaling = 0;
-		LFS_t * journal = NULL;
 		CFS_t * u;
 			
 		if (!partitions[i])
@@ -110,7 +108,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		}
 
 		/* create a resizer if needed */
-		if ((resizer = block_resizer_bd(cache, 4096)) && cache_type != NO_CACHE)
+		if ((resizer = block_resizer_bd(cache, JOSFS_BLKSIZE)) && cache_type != NO_CACHE)
 		{
 			/* create a cache above the resizer */
 			if (! (cache = wt_cache_bd(resizer, 16)) )
@@ -122,18 +120,16 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 
 		if (enable_journal)
 		{
-			BD_t * journal_queue;
+			BD_t * journal;
 
-			if (! (journal_queue = journal_queue_bd(cache)) )
+			if (! (journal = journal_bd(cache)) )
 			{
-				fprintf(STDERR_FILENO, "journal_queue_bd() failed\n");
+				fprintf(STDERR_FILENO, "journal_bd() failed\n");
 				exit();
 			}
 
-			if ((lfs = josfs_lfs = josfs(journal_queue)))
+			if ((lfs = josfs_lfs = josfs(journal)))
 			{
-				LFS_t * fs_journal;
-
 				if (enable_jfsck)
 				{
 					if (verbose)
@@ -147,27 +143,20 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 						printf("done.\n");
 				}
 
-				if (external_journal)
-					fs_journal = external_journal;
-				else
-					fs_journal = lfs;
-
-				if ((journal = journal_lfs(fs_journal, lfs, journal_queue)))
-				{
-					lfs = journal;
+#warning FIXME use journal_bd_set_journal
+				if (0)
 					journaling = 1;
-				}
 				else
 				{
 					(void) DESTROY(lfs);
-					(void) DESTROY(journal_queue);
-					fprintf(STDERR_FILENO, "%s: journal_lfs() failed\n", __FUNCTION__);
+					(void) DESTROY(journal);
+					fprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed\n", __FUNCTION__);
 					return NULL;
 				}
 			}
 			else
 			{
-				(void) DESTROY(journal_queue);
+				(void) DESTROY(journal);
 				fprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
 				return NULL;
 			}
@@ -197,12 +186,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		}
 
 		if (journaling)
-		{
-			printf(" [journaled");
-			if (external_journal)
-				printf(" external");
-			printf(", %u kB/s max avg]", journal_lfs_max_bandwidth(journal));
-		}
+			printf(" [journaled%s]", external_journal ? " external" : "");
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
