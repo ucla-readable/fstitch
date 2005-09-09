@@ -2,6 +2,7 @@
 #define __KUDOS_KFS_OO_H
 
 #include <inc/types.h>
+#include <inc/malloc.h>
 
 #include <kfs/magic.h>
 
@@ -52,7 +53,7 @@ typedef struct { struct object uniform; } object_t;
 // DESTROY_LOCAL is only for use outside of KFSD
 #ifndef KFSD
 extern void delete_obj(uint32_t id);
-#define DESTROY_LOCAL(object) do { delete_obj((uint32_t) object->instance); free(object); } while(0)
+#define DESTROY_LOCAL(object) do { delete_obj((uint32_t) object->uniform.local); free(object); } while(0)
 #else
 #define DESTROY_LOCAL(object) static_assert(0)
 #endif
