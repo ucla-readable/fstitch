@@ -2,12 +2,12 @@
 #include <inc/dirent.h>
 #include <kfs/lfs.h>
 
-int flag[256];
+static int flag[256];
 
-void lsdir(const char*, const char*);
-void ls1(const char*, bool, off_t, const char*);
+static void lsdir(const char*, const char*);
+static void ls1(const char*, bool, off_t, const char*);
 
-void
+static void
 ls(const char *path, const char *prefix)
 {
 	int r;
@@ -23,7 +23,7 @@ ls(const char *path, const char *prefix)
 		ls1(0, st.st_isdir, st.st_size, path);
 }
 
-void
+static void
 lsdir(const char *path, const char *prefix)
 {
 	int fd;
@@ -49,7 +49,7 @@ lsdir(const char *path, const char *prefix)
 	}
 }
 
-void
+static void
 ls1(const char *prefix, bool isdir, off_t size, const char *name)
 {
 	char *sep;
@@ -69,7 +69,7 @@ ls1(const char *prefix, bool isdir, off_t size, const char *name)
 	fprintf(1, "\n");
 }
 
-void
+static void
 usage(void)
 {
 	fprintf(1, "usage: ls [-dFl] [file...]\n");
@@ -98,4 +98,3 @@ umain(int argc, char **argv)
 			ls(argv[i], argv[i]);
 	}
 }
-

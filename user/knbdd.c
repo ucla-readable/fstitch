@@ -7,7 +7,7 @@
 #define KNBD_PORT 2492
 #define BLOCK_SIZE 4096
 
-struct knbd_state {
+static struct knbd_state {
 	struct ip_addr remote_ip;
 	int16_t remote_port;
 	int net[2];

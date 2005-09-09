@@ -39,7 +39,7 @@ find_fs(int *pdiskno, uint32_t *ppart_length, uint32_t *fs_offset)
 }
 
 
-uint8_t blk[BLKSIZE];
+static uint8_t blk[BLKSIZE];
 
 void
 umain(int argc, char **argv)

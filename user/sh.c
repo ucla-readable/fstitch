@@ -8,7 +8,7 @@
 
 
 #define BUFSIZ 1024		/* Find the buffer overrun bug! */
-int debug = 0;
+static int debug = 0;
 
 
 // A place to stash a dup of stdin for cases when sh wants to make stdin
@@ -23,7 +23,7 @@ static int stdin_stash = 0;
 // and returns a token ID (0, '<', '>', '|', '&', ';', '(', ')', or 'w').
 // Subsequent calls to 'gettoken(0, token)' will return subsequent
 // tokens from the string.
-int gettoken(char* s, char** token);
+static int gettoken(char* s, char** token);
 
 
 // Parse a shell command from string 's' and execute it.
@@ -31,7 +31,7 @@ int gettoken(char* s, char** token);
 // runcmd() is called in a forked child,
 // so it's OK to manipulate file descriptor state.
 #define MAXARGS 16
-void
+static void
 runcmd(char* s)
 {
 	char *argv[MAXARGS], *t, argv0buf[BUFSIZ];
@@ -305,7 +305,7 @@ runit:
 #define WHITESPACE " \t\r\n"
 #define SYMBOLS "<|>&;()"
 
-int
+static int
 _gettoken(char* s, char** p1, char** p2)
 {
 	int t;
@@ -351,7 +351,7 @@ _gettoken(char* s, char** p1, char** p2)
 	return 'w';
 }
 
-int
+static int
 gettoken(char* s, char** p1)
 {
 	static int c, nc;
@@ -368,7 +368,7 @@ gettoken(char* s, char** p1)
 }
 
 
-void
+static void
 usage(void)
 {
 	printf("usage: sh [-dix] [command-file]\n");
@@ -457,4 +457,3 @@ umain(int argc, char** argv)
 		}
 	}
 }
-

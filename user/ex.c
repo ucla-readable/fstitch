@@ -47,7 +47,7 @@ typedef struct {
 
 static ex_file_t ex_file;
 
-void ex_file_init(ex_file_t * f)
+static void ex_file_init(ex_file_t * f)
 {
 	f->fdnum      = -1;
 	f->filename   = NULL;
@@ -62,7 +62,7 @@ void ex_file_init(ex_file_t * f)
 //
 // Line use
 
-line_t * line_create(char * text, line_t * prev)
+static line_t * line_create(char * text, line_t * prev)
 {
 	line_t * l = malloc(sizeof(*l));
 	if (!l)
@@ -83,7 +83,7 @@ line_t * line_create(char * text, line_t * prev)
 	return l;
 }
 
-size_t mmod(int x, size_t y)
+static size_t mmod(int x, size_t y)
 {
 	int z = x % (int)y;
 	while (z < 0)
@@ -240,7 +240,7 @@ static int line_append(char * text)
 	return 0;
 }
 
-static void line_delete()
+static void line_delete(void)
 {
 	line_t * l = ex_file.cur_line;
 	if (!l)
@@ -504,7 +504,7 @@ static int file_insert(const char * file, int mode)
 	return fd;
 }
 
-static int file_save()
+static int file_save(void)
 {
 	line_t * l = ex_file.first_line;
 	bool first = 1;
@@ -549,7 +549,7 @@ static int file_save()
 	return 0;
 }
 
-static int file_close()
+static int file_close(void)
 {
 	int r;
 
@@ -1112,7 +1112,7 @@ static void cmd_help(size_t begin, size_t end, const char * cmd)
 //
 //
 
-static void run_loop()
+static void run_loop(void)
 {
 	while (1)
 	{
@@ -1160,7 +1160,7 @@ static void run_loop()
 
 #define COMMAND(c,_f,_d) do { cmds[CMDX(c)].f = _f; cmds[CMDX(c)].description = _d; } while(0)
 
-static void register_commands()
+static void register_commands(void)
 {
 	COMMAND('h', cmd_help, "show implemented commands");
 	COMMAND('s', cmd_shell, "shell"); // this should be "sh", but 's' it is for now

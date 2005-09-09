@@ -62,7 +62,7 @@
 #include <inc/lib.h>
 
 
-bool display_conns = 0;
+static bool display_conns = 0;
 
 
 struct httpd_state_data {
@@ -71,7 +71,7 @@ struct httpd_state_data {
 	int    fd; // -1 if no associated fd
 };
 
-struct httpd_state {
+static struct httpd_state {
 	struct ip_addr remote_ip;
 	uint16_t remote_port;
 	int net[2];
@@ -110,14 +110,14 @@ struct fs_file {
 	u32_t len;
 };
 
-char cgi_output[128*1024];
-const char* cgi_bin = "/cgi-bin/";
-const char* server_bin = "/server/";
+static char cgi_output[128*1024];
+static const char* cgi_bin = "/cgi-bin/";
+static const char* server_bin = "/server/";
 
-int run_cgi(char *bin_name, struct fs_file *file);
-int server(char *bin_name, struct fs_file *file);
+static int run_cgi(char *bin_name, struct fs_file *file);
+static int server(char *bin_name, struct fs_file *file);
 
-int
+static int
 fs_open(char *filename, struct fs_file *file)
 {
 	int r;
@@ -163,10 +163,8 @@ fs_open(char *filename, struct fs_file *file)
 // Run the function display_fn() and send its output to file.
 // NOTE: this is implemented by fork()ing and running display_fn() in the
 // fork child.
-int
-fd_display(void (*display_fn)(void *),
-						void *arg,
-						struct fs_file *file)
+static int
+fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 {
 	int fork_child;
 	int p[2];
@@ -265,7 +263,7 @@ fd_display(void (*display_fn)(void *),
 //
 // CGI support
 
-int
+static int
 parse_argv(char *bin_name, char **argv, size_t argv_len)
 {
 	int i = 0;
@@ -304,7 +302,7 @@ parse_argv(char *bin_name, char **argv, size_t argv_len)
 	return 0;
 }
 
-void
+static void
 spawn_cgi(void *arg)
 {
 	int r;
@@ -330,7 +328,7 @@ spawn_cgi(void *arg)
 	wait(spawn_child);
 }
 
-int
+static int
 run_cgi(char *bin_name, struct fs_file *file)
 {
 	// Strip "/cgi-bin" from the filename
@@ -343,13 +341,13 @@ run_cgi(char *bin_name, struct fs_file *file)
 //
 // Server support
 
-void
+static void
 stats_display_noarg(void *arg)
 {
 	printf("<html><body>stats has moved to <a href=\"/cgi-bin/netstats\">/cgi-bin/netstats</a>.</body></html>");
 }
 
-int
+static int
 server(char *request, struct fs_file *file)
 {
 	// Strip "/server/" from the filename
@@ -378,7 +376,7 @@ server(char *request, struct fs_file *file)
 //
 // httpd
 
-void
+static void
 send_http_header(struct httpd_state *hs, int http_status)
 {
 	const char *status_str;
@@ -425,7 +423,7 @@ send_http_header(struct httpd_state *hs, int http_status)
 }
 
 
-char request_pg[PGSIZE];
+static char request_pg[PGSIZE];
 
 static int
 httpd_serve(struct httpd_state *hs)
@@ -601,7 +599,7 @@ httpd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
 	return 0;
 }
 
-void
+static void
 httpd_listen(void)
 {
 	uint32_t listen_key;
@@ -654,7 +652,7 @@ httpd_listen(void)
 }
 
 /*---------------------------------------------------------------------------*/
-void
+static void
 print_usage(char *bin)
 {
 	printf("%s\n", bin);

@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 
-void
+static void
 usage(void)
 {
 	printf("usage: lsfd [-1|-2]\n");

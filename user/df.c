@@ -3,13 +3,13 @@
 // TODO:
 // - handle overflow in our unit conversions
 
-void
+static void
 print_usage(char *bin)
 {
 	printf("%s: [-kmp] [file...]\n", bin);
 }
 
-int
+static int
 convert_unit(int num, int scale)
 {
 	int i;

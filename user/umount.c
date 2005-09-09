@@ -10,12 +10,12 @@
 #include <inc/assert.h>
 #include <inc/stdio.h>
 
-bool verbose = 0;
+static bool verbose = 0;
 
 
 // Attempt to destroy every object in the map of nodes.
 // Return the number of nodes destroyed.
-int destroy_nodes(hash_set_t * nodes)
+static int destroy_nodes(hash_set_t * nodes)
 {
 	hash_set_it_t it;
 	kfs_node_t * node;
@@ -65,7 +65,7 @@ int destroy_nodes(hash_set_t * nodes)
 }
 
 // Create a copy of orig_graph that contains only nodes reachable from root.
-void create_nodes_used_graph(hash_map_t * orig_graph, hash_set_t * new_graph, kfs_node_t * root)
+static void create_nodes_used_graph(hash_map_t * orig_graph, hash_set_t * new_graph, kfs_node_t * root)
 {
 	int r;
 	size_t i;
@@ -81,7 +81,7 @@ void create_nodes_used_graph(hash_map_t * orig_graph, hash_set_t * new_graph, kf
 }
 
 // Copy nodes in nodes_used that are still alive into updated_nodes_used.
-void update_nodes_used_graph(hash_set_t * nodes_used, hash_set_t * updated_nodes_used)
+static void update_nodes_used_graph(hash_set_t * nodes_used, hash_set_t * updated_nodes_used)
 {
 	hash_map_t * nodes;
 	hash_set_it_t it;

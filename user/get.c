@@ -14,15 +14,15 @@
 #include <inc/malloc.h>
 
 
-int   fileout_fd           = STDOUT_FILENO;
-const char *fileout_name   = NULL;
-int   status_fd            = STDOUT_FILENO;
-int   silent               = 0;
-int   print_server_headers = 0; // print the headers sent by the server
-int   save_server_headers  = 0; // save  the headers sent by the server
+static int   fileout_fd           = STDOUT_FILENO;
+static const char *fileout_name   = NULL;
+static int   status_fd            = STDOUT_FILENO;
+static int   silent               = 0;
+static int   print_server_headers = 0; // print the headers sent by the server
+static int   save_server_headers  = 0; // save  the headers sent by the server
 
 
-struct http_state {
+static struct http_state {
 	int net[2];
 
 	uint8_t buf[PGSIZE];
@@ -67,7 +67,7 @@ close_conn(struct http_state *hs)
 	exit();
 }
 
-void
+static void
 removeoutput_close_exit(struct http_state *hs)
 {
 	if (!silent)
@@ -84,7 +84,7 @@ removeoutput_close_exit(struct http_state *hs)
 	exit();
 }
 /*---------------------------------------------------------------------------*/
-void
+static void
 init_body_length_settings(struct http_state *hs)
 {
 	hs->body_sofar_period = ROUNDUP32(hs->body_length, 80) / 80;
@@ -102,7 +102,7 @@ init_body_length_settings(struct http_state *hs)
 */
 }
 
-void
+static void
 update_body_length_display(struct http_state *hs)
 {
 	if (!hs->body_length)
@@ -118,10 +118,10 @@ update_body_length_display(struct http_state *hs)
 
 /*---------------------------------------------------------------------------*/
 // http header keys
-const char hk_http[]   = "HTTP";
-const char hk_length[] = "Content-Length: ";
+static const char hk_http[]   = "HTTP";
+static const char hk_length[] = "Content-Length: ";
 
-int
+static int
 http_read_header(struct http_state *hs)
 {
 	char c;
@@ -190,7 +190,7 @@ http_read_header(struct http_state *hs)
 	return -1;
 }
 
-int
+static int
 http_read_body(struct http_state *hs)
 {
 	int r;
@@ -209,7 +209,7 @@ http_read_body(struct http_state *hs)
 	return 0;
 }
 
-void
+static void
 http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 {
 	struct http_state *hs = NULL;
@@ -259,10 +259,10 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 	close_conn(hs);
 }
 /*---------------------------------------------------------------------------*/
-const char root[] = "/";
-const char http[] = "http://";
+static const char root[] = "/";
+static const char http[] = "http://";
 
-int
+static int
 parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **host)
 {
 	char  addr_str[256]; // 255 is max length of a host name, +1 for '\0'
@@ -347,7 +347,7 @@ parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **
 }
 
 /*---------------------------------------------------------------------------*/
-void
+static void
 print_usage(char *bin)
 {
 	fprintf(STDERR_FILENO, "%s: [http://]<host>[:<port>][<resource>] [OPTIONS]\n", bin);

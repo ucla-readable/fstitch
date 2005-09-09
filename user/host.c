@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 
-void
+static void
 print_usage(char *bin)
 {
 	fprintf(STDERR_FILENO, "%s: <hostname>\n", bin);

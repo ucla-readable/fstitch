@@ -21,8 +21,8 @@
 #define DEBUG_IPCRECV    (1<<4)
 #define DEBUG_DNS        (1<<5)
 
-bool quiet = 0;
-int  debug = 0;
+static bool quiet = 0;
+static int  debug = 0;
 
 //
 // The netd network process
@@ -36,7 +36,7 @@ struct listen_state {
 };
 
 // Statically allocate these so that we can find expired listens
-struct listen_state listen_states[NENV];
+static struct listen_state listen_states[NENV];
 
 // This value should probably be about the size you find you need pipes to
 // have, to get good throughput.
@@ -1036,7 +1036,7 @@ dns_state_free(dns_state_t *ds)
 }
 
 // Timeout expired dns requests
-void
+static void
 dns_tmr()
 {
 	const int32_t dns_tmr_interval = 20;
@@ -1253,7 +1253,7 @@ serve_connect(envid_t whom, struct Netreq_connect *req)
 		panic("tcp_connect: %s", lwip_strerr(err));
 }
 
-void
+static void
 serve_bind_listen(envid_t whom, struct Netreq_bind_listen *req)
 {
 	struct listen_state* ls;
@@ -1464,7 +1464,7 @@ struct {
 	int     fd;
 } netd_net_ipcrecv;
 
-uint8_t req_pg[PGSIZE];
+static uint8_t req_pg[PGSIZE];
 
 static void
 netd_net_ipcrecv_comm(void)

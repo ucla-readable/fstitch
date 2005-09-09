@@ -21,10 +21,10 @@
 #include <inc/lib.h>
 
 
-bool display_conns = 0;
-bool display_cmds  = 0; // print telnet cmds (doesn't print options, for now)
+static bool display_conns = 0;
+static bool display_cmds  = 0; // print telnet cmds (doesn't print options, for now)
 
-struct telnetd_state {
+static struct telnetd_state {
 	struct ip_addr remote_ip;
 	uint16_t remote_port;
 
@@ -358,7 +358,7 @@ telnetd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
 	}
 }
 /*---------------------------------------------------------------------------*/
-void
+static void
 telnetd_listen(void)
 {
 	uint32_t listen_key;
@@ -406,7 +406,7 @@ telnetd_listen(void)
 }
 
 /*---------------------------------------------------------------------------*/
-void
+static void
 print_usage(char *bin)
 {
 	printf("%s\n", bin);

@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 
-void
+static void
 print_usage(char *bin)
 {
 	printf("%s: <dir> [<dir> ...]\n", bin);

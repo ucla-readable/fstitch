@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 
-int
+static int
 is_descendent(envid_t e, envid_t descendent)
 {
 	const envid_t descendent_parent = envs[ENVX(descendent)].env_parent_id;
@@ -27,7 +27,7 @@ is_descendent(envid_t e, envid_t descendent)
 	return 0;
 }
 	
-void
+static void
 print_envs(envid_t root_envid)
 {
 	int i;
@@ -72,7 +72,7 @@ print_envs(envid_t root_envid)
 	}
 }
 
-void
+static void
 print_usage(const char *bin)
 {
 	printf("Usage: %s [root envid]\n", bin);

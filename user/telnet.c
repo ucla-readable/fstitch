@@ -17,10 +17,10 @@
 #include <inc/lib.h>
 
 
-bool display_cmds  = 0; // print telnet cmds (doesn't print options, for now)
+static bool display_cmds  = 0; // print telnet cmds (doesn't print options, for now)
 
 
-struct telnet_state {
+static struct telnet_state {
 	int     net[2];
 	bool    reached_eof;
 
@@ -209,7 +209,7 @@ telnet_poll(struct telnet_state *ts)
 }
 
 /*---------------------------------------------------------------------------*/
-void
+static void
 print_usage(char *bin)
 {
 	printf("%s: <host> <port>\n", bin);

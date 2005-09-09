@@ -1,7 +1,12 @@
 #include <inc/lib.h>
 #include <inc/fs.h>
 
-void usage(char *);
+static void
+usage(char *s)
+{
+	printf("usage: %s [existing filename|devicename]\n", s);
+	exit();
+}
 
 void
 umain(int argc, char *argv[])
@@ -53,11 +58,4 @@ umain(int argc, char *argv[])
 	}
 	close(fd);
 	printf("Success. New filesystem has %d blocks.\n", s.s_nblocks);
-}
-
-void
-usage(char *s)
-{
-	printf("usage: %s [existing filename|devicename]\n", s);
-	exit();
 }

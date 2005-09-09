@@ -2,7 +2,7 @@
 #include <inc/kpl.h>
 #include <inc/cfs_ipc_client.h>
 
-char data[2*PGSIZE];
+static char data[2*PGSIZE];
 
 void
 umain(int argc, char **argv)
@@ -58,4 +58,3 @@ umain(int argc, char **argv)
 	r = close(fd);
 	printf("close(fd) = %e\n", r);
 }
-

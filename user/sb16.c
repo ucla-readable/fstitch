@@ -19,7 +19,7 @@ static int next_block(int fd, int block)
 	return 0;
 }
 
-int pipe_play(char * name)
+static int pipe_play(char * name)
 {
 	int error, fd = 0, block;
 	
@@ -54,7 +54,7 @@ int pipe_play(char * name)
 	return 0;
 }
 
-int file_play(char * prefix)
+static int file_play(char * prefix)
 {
 	int error, i, fd[10], number, block;
 	char filename[MAXNAMELEN];

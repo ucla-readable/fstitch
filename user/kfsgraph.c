@@ -7,7 +7,7 @@
 #include <kfs/modman.h>
 
 
-const char * typename(int type)
+static const char * typename(int type)
 {
 	switch (type)
 	{
@@ -18,7 +18,7 @@ const char * typename(int type)
 	}
 }
 
-const char * color(int type)
+static const char * color(int type)
 {
 	switch (type)
 	{
@@ -29,7 +29,7 @@ const char * color(int type)
 	}
 }
 
-void output_graph_text(hash_map_t * nodes, int level)
+static void output_graph_text(hash_map_t * nodes, int level)
 {
 	hash_map_it_t it;
 	kfs_node_t * n;
@@ -71,7 +71,7 @@ void output_graph_text(hash_map_t * nodes, int level)
 	}
 }
 
-void output_graph_dot(hash_map_t * nodes, int level)
+static void output_graph_dot(hash_map_t * nodes, int level)
 {
 	hash_map_it_t it;
 	kfs_node_t * n;
@@ -124,7 +124,7 @@ void output_graph_dot(hash_map_t * nodes, int level)
 }
 
 
-void print_usage(const char * binname)
+static void print_usage(const char * binname)
 {
 	fprintf(STDERR_FILENO, "Usage: %s: [-t|-d] [-l <level>]\n", binname);
 }

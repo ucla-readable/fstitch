@@ -2,9 +2,14 @@
 #include <inc/malloc.h>
 #include <inc/md5.h>
 
-void usage(char *);
-
 static unsigned char buf[4096];
+
+static void
+usage(char *s)
+{
+	printf("usage: %s filename\n", s);
+	exit();
+}
 
 void
 umain(int argc, char *argv[])
@@ -30,11 +35,4 @@ umain(int argc, char *argv[])
 	for (i = 0; i < 16; i++)
 		printf("%02x", out[i]);
 	printf(" %s\n", argv[1]);
-}
-
-void
-usage(char *s)
-{
-	printf("usage: %s filename\n", s);
-	exit();
 }
