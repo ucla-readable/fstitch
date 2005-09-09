@@ -1,13 +1,6 @@
 #include <kfs/ide_pio_bd.h>
 #include <kfs/nbd_bd.h>
-#include <kfs/loop_bd.h>
-#include <kfs/block_resizer_bd.h>
-#include <kfs/wt_cache_bd.h>
-#include <kfs/wb_cache_bd.h>
-#include <kfs/wholedisk_lfs.h>
 #include <kfs/mirror_bd.h>
-#include <kfs/josfs_base.h>
-#include <kfs/uhfs.h>
 #include <kfs/modman.h>
 
 #include <inc/cfs_ipc_client.h>
@@ -16,7 +9,7 @@
 #include <arch/simple.h>
 #include <inc/stdio.h>
 
-void print_usage(const char * bin)
+static void print_usage(const char * bin)
 {
 	printf("Usage:\n");
 	printf("%s create disk <controller> <diskno> <stride>\n", bin);
@@ -25,11 +18,11 @@ void print_usage(const char * bin)
 	printf("%s add <mirror_bd> disk <controller> <diskno>\n", bin);
 	printf("%s add <mirror_bd> net <ip> <port>\n", bin);
 	printf("%s add <mirror_bd> bd <bd_name>\n", bin);
-	printf("%s remove mirror_bd <diskno>\n", bin);
+	printf("%s remove <mirror_bd> <diskno>\n", bin);
 	exit();
 }
 
-BD_t * find_bd(const char * mirror_name)
+static BD_t * find_bd(const char * mirror_name)
 {
 	modman_it_t it;
 	BD_t * c;
@@ -133,6 +126,8 @@ void umain(int argc, const char ** argv)
 		if (mirror)
 			printf("Mirror created\n");
 	}
+	else
+		printf("Invalid options.\n");
 
 	return;
 }
