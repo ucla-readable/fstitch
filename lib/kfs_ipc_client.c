@@ -555,7 +555,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	INIT_PG(JOURNAL_BD_SET_JOURNAL, journal_bd_set_journal);
 
 	pg->bd = (uint32_t) OBJLOCAL(bd);
-	pg->journal = (uint32_t) OBJLOCAL(journal);
+	pg->journal = journal ? (uint32_t) OBJLOCAL(journal) : 0;
 
 	SEND_PG();
 

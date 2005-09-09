@@ -267,7 +267,7 @@ static void kis_journal_bd_set_journal(envid_t whom, const Skfs_journal_bd_set_j
 
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
-	if (!modman_name_bd(journal))
+	if (journal && !modman_name_bd(journal))
 		RETURN_IPC_INVAL;
 
 	val = (uint32_t) journal_bd_set_journal(bd, journal);

@@ -498,9 +498,9 @@ static int journal_bd_destroy(BD_t * bd)
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
 	int r;
 	
-	if(info->keep)
+	if(info->journal)
 	{
-		r = journal_bd_stop_transaction(bd);
+		r = journal_bd_set_journal(bd, NULL);
 		if(r < 0)
 			return r;
 	}
@@ -509,22 +509,11 @@ static int journal_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->bd, bd);
-	if(info->journal)
-		modman_dec_bd(info->journal, bd);
 	
 	sched_unregister(journal_bd_callback, bd);
 	chdesc_release_stamp(info->stamp);
 	hash_map_destroy(info->block_map);
 	
-	if(info->cr_retain)
-	{
-		int i;
-		for(i = 0; i != info->cr_count; i++)
-			if(info->cr_retain[i])
-				chdesc_weak_release(&info->cr_retain[i]);
-		
-		free(info->cr_retain);
-	}
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -760,7 +749,32 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	if(OBJMAGIC(bd) != JOURNAL_MAGIC)
 		return -E_INVAL;
 	
-	/* we can only set the journal once */
+	/* allow disabling the journal */
+	if(!journal)
+	{
+		if(info->journal)
+		{
+			int i;
+			if(info->keep)
+			{
+				int r = journal_bd_stop_transaction(bd);
+				if(r < 0)
+					return r;
+			}
+			modman_dec_bd(info->journal, bd);
+			info->journal = NULL;
+			for(i = 0; i != info->cr_count; i++)
+				if(info->cr_retain[i])
+					chdesc_weak_release(&info->cr_retain[i]);
+			free(info->cr_retain);
+			info->cr_retain = NULL;
+			info->cr_count = 0;
+		}
+		
+		return 0;
+	}
+	
+	/* make sure there is no current journal */
 	if(info->journal)
 		return -E_INVAL;
 	
