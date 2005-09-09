@@ -17,6 +17,7 @@ public class Chdesc
 	public static final int FLAG_READY = 0x10;
 	public static final int FLAG_WRITTEN = 0x20;
 	public static final int FLAG_FREEING = 0x40;
+	public static final int FLAG_DATA = 0x80;
 	
 	public final int address;
 	
@@ -408,6 +409,8 @@ public class Chdesc
 			names += " | WRITTEN";
 		if((flags & FLAG_FREEING) != 0)
 			names += " | FREEING";
+		if((flags & FLAG_DATA) != 0)
+			names += " | DATA";
 		names += " = " + SystemState.hex(flags);
 		return names.substring(3);
 	}

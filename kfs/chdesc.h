@@ -22,6 +22,7 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_READY     0x10 /* chdesc is ready to be written */
 #define CHDESC_WRITTEN   0x20 /* chdesc has been written to disk */
 #define CHDESC_FREEING   0x40 /* chdesc is being freed */
+#define CHDESC_DATA      0x80 /* user data change (not metadata) */
 
 struct chdesc {
 	BD_t * owner;

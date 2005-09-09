@@ -6,6 +6,7 @@
 #include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
+#include <kfs/debug.h>
 #include <kfs/lfs.h>
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
@@ -316,6 +317,22 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 	return size_read ? size_read : (size ? -E_EOF : 0);
 }
 
+static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
+{
+	chmetadesc_t * meta;
+	if(head->flags & CHDESC_DATA)
+		return;
+	if(head->type != NOOP)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
+		head->flags |= CHDESC_DATA;
+	}
+	if(head == tail)
+		return;
+	for(meta = head->dependencies; meta; meta = meta->next)
+		uhfs_mark_data(meta->desc, tail);
+}
+
 static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
@@ -391,6 +408,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head, &tail);
 		if (r < 0)
 			return size_written;
+		uhfs_mark_data(prev_head, tail);
 
 		save_head = prev_head;
 

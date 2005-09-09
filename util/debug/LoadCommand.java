@@ -53,11 +53,10 @@ public class LoadCommand implements Command
 			}
 			catch(BadInputException e)
 			{
-				System.out.println("Bad input while reading " + args[0]);
-				if (e instanceof UnsupportedStreamRevisionException)
+				if(e instanceof UnsupportedStreamRevisionException)
 					System.out.println(e);
 				else
-					System.out.println("(Maybe it is an old trace file that does not match this debugger version?)");
+					System.out.println("Bad input while reading " + args[0]);
 				dbg = null;
 			}
 			catch(IOException e)

@@ -1,20 +1,17 @@
 /**
- * An exception thrown when the debug stream's revision is unsupported by
- * this version of kdb.
- * */
+ * This exception is thrown when the input file's revision
+ * number is unsupported by this version of the debugger.
+ **/
 
 public class UnsupportedStreamRevisionException extends BadInputException
 {
-	private int debugRev;
-	private int debugOpcodeRev;
-	private int revToUse;
-
-	public UnsupportedStreamRevisionException(int debugRev,
-	                                          int debugOpcodeRev,
-	                                          int revToUse)
+	private final int debugRev;
+	private final int debugOpcodeRev;
+	private final int revToUse;
+	
+	public UnsupportedStreamRevisionException(int debugRev, int debugOpcodeRev, int revToUse)
 	{
-		super("Debug stream revision (" + debugRev + "," + debugOpcodeRev +
-		      ") unsupported, use kdb " + revToUse + " or earlier.");
+		super("Input file revision (" + debugRev + "," + debugOpcodeRev + ") unsupported, use debugger version " + revToUse + " or earlier.");
 		this.debugRev = debugRev;
 		this.debugOpcodeRev = debugOpcodeRev;
 		this.revToUse = revToUse;
@@ -24,12 +21,12 @@ public class UnsupportedStreamRevisionException extends BadInputException
 	{
 		return debugRev;
 	}
-
+	
 	public int getDebugOpcodeRev()
 	{
 		return debugOpcodeRev;
 	}
-
+	
 	public int getRevToUse()
 	{
 		return revToUse;
