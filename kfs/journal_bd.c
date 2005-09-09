@@ -364,7 +364,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	/* create commit record, make it depend on wait */
 	head = info->wait;
 	tail = NULL;
-	r = chdesc_create_byte(block, object, 0, sizeof(commit), &commit, &head, &tail);
+	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head, &tail);
 	if(r < 0)
 		panic("Holy Mackerel!");
 	assert(head == tail);
@@ -377,7 +377,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	commit.type = CREMPTY;
 	head = info->safe;
 	tail = NULL;
-	r = chdesc_create_byte(block, object, 0, sizeof(commit), &commit, &head, &tail);
+	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head, &tail);
 	if(r < 0)
 		panic("Holy Mackerel!");
 	assert(head == tail);
@@ -389,6 +389,8 @@ static int journal_bd_stop_transaction(BD_t * object)
 	/* unmanage the hold NOOP */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, info->hold, NULL);
 	info->hold->owner = NULL;
+	/* satisfy the keep NOOP */
+	chdesc_satisfy(&info->keep);
 	
 	/* ...and finally write the commit record */
 	r = CALL(info->journal, write_block, block);
