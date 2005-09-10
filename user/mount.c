@@ -28,7 +28,7 @@ static bool verbose = 0;
 
 static struct Scfs_metadata md;
 
-static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS_t * external_journal, bool enable_fsck, int cache_type, uint32_t cache_nblks)
+static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS_t * journal_lfs, const char * journal_lfs_file, bool enable_fsck, int cache_type, uint32_t cache_nblks)
 {
 //	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -121,6 +121,8 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		if (enable_journal)
 		{
 			BD_t * journal;
+			BD_t * journalbd;
+			int r;
 
 			if (! (journal = journal_bd(cache)) )
 			{
@@ -128,37 +130,46 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				exit();
 			}
 
-			if ((lfs = josfs_lfs = josfs(journal)))
-			{
-				if (enable_jfsck)
-				{
-					if (verbose)
-						printf("Fscking pre-journal-replayed filesystem... ");
-					int r = josfs_fsck(lfs);
-					if (r < 0)
-						fprintf(STDERR_FILENO, "critical errors: %e\n", r);
-					else if (r > 0)
-						fprintf(STDERR_FILENO, "found %d errors\n", r);
-					else if (verbose)
-						printf("done.\n");
-				}
-
-#warning FIXME use journal_bd_set_journal
-				if (0)
-					journaling = 1;
-				else
-				{
-					(void) DESTROY(lfs);
-					(void) DESTROY(journal);
-					fprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed\n", __FUNCTION__);
-					return NULL;
-				}
-			}
-			else
+			lfs = josfs_lfs = josfs(journal);
+			if (!lfs)
 			{
 				(void) DESTROY(journal);
 				fprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
 				return NULL;
+			}
+
+			if (!journal_lfs) // internal journal
+				journal_lfs = lfs;
+
+			journalbd = loop_bd(journal_lfs, journal_lfs_file);
+			if (!journalbd)
+			{
+				(void) DESTROY(lfs);
+				(void) DESTROY(journal);
+				fprintf(STDERR_FILENO, "%s: loop_bd(journal_lfs, \"%s\") failed\n", __FUNCTION__, journal_lfs_file);
+				return NULL;
+			}
+			if ((r = journal_bd_set_journal(journal, journalbd)) >= 0)
+				journaling = 1;
+			else
+			{
+				(void) DESTROY(lfs);
+				(void) DESTROY(journal);
+				fprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed: %e\n", __FUNCTION__, r);
+				return NULL;
+			}
+
+			if (enable_jfsck)
+			{
+				if (verbose)
+					printf("Fscking pre-journal-replayed filesystem... ");
+				int r = josfs_fsck(lfs);
+				if (r < 0)
+					fprintf(STDERR_FILENO, "critical errors: %e\n", r);
+				else if (r > 0)
+					fprintf(STDERR_FILENO, "found %d errors\n", r);
+				else if (verbose)
+					printf("done.\n");
 			}
 		}
 		else
@@ -186,7 +197,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		}
 
 		if (journaling)
-			printf(" [journaled%s]", external_journal ? " external" : "");
+			printf(" [journaled%s]", (lfs == journal_lfs) ? "" : " external");
 
 		if (i == 0 && partitions[0] == bd)
 			printf(" on disk.\n");
@@ -219,7 +230,7 @@ static void print_usage(const char * bin)
 	printf("    mem  <blocksize> <blockcount>\n");
 }
 
-static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** external_journal, bool * fsck, int * cache_type, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** journal_lfs, char ** journal_lfs_file, bool * fsck, int * cache_type, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
 	const char * fsck_str;
@@ -232,23 +243,25 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 
 	if ((journal_str = get_arg_val(argc, argv, "-j")))
 	{
-		if (!strcmp("on", journal_str))
-		{
-			*journal = 1;
-			*external_journal = NULL;
-		}
-		else if (!strcmp("off", journal_str))
+		if (!strcmp("off", journal_str))
 		{
 			*journal = 0;
-			*external_journal = NULL;
+			*journal_lfs = NULL;
+			*journal_lfs_file = NULL;
+		}
+		else if (!strcmp("on", journal_str)) 
+		{
+			*journal = 1;
+			*journal_lfs = NULL;
+			*journal_lfs_file = "/.journal";
 		}
 		else
 		{
 			const char * extjournal_file = journal_str;
-			const char * extjournal_lfs_file;
 			int r;
 
 			// Find the lfs for extjournal_file
+			// TODO: support devfs_cfs's files (for now now, cfs_get_metadata(KFS_feature_file_lfs) will fail)
 			memset(&md, 0, sizeof(md));
 			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs.id, &md);
 			if (r < 0)
@@ -256,9 +269,8 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 				fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", extjournal_file, r);
 				exit();
 			}
-			*external_journal = create_lfs(*(uint32_t *) md.data);
-
-			if (!*external_journal)
+			*journal_lfs = create_lfs(*(uint32_t *) md.data);
+			if (!*journal_lfs)
 			{
 				fprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", extjournal_file);
 				exit();
@@ -272,13 +284,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 				fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", extjournal_file, r);
 				exit();
 			}
-			extjournal_lfs_file = (char *) md.data;
-			if (strcmp(extjournal_lfs_file, "/.journal"))
-			{
-				fprintf(STDERR_FILENO, "journal_lfs can journal only to files named /.journal, you requested %s.\n", extjournal_lfs_file);
-				exit();
-			}
-
+			*journal_lfs_file = strdup((char *) md.data);
 			*journal = 1;
 		}
 	}
@@ -529,7 +535,8 @@ void umain(int argc, const char ** argv)
 {
 	const char * mount_point;
 	BD_t * disk;
-	LFS_t * external_journal = NULL;
+	LFS_t * journal_lfs = NULL;
+	char * journal_lfs_file = NULL;
 	CFS_t * cfs;
 	bool journal = 0;
 	bool fsck = 0, jfsck = 0;
@@ -552,13 +559,13 @@ void umain(int argc, const char ** argv)
 		exit();
 	}
 
-	parse_options(argc, argv, &journal, &jfsck, &external_journal, &fsck, &cache_type, &cache_num_blocks);
+	parse_options(argc, argv, &journal, &jfsck, &journal_lfs, &journal_lfs_file, &fsck, &cache_type, &cache_num_blocks);
 
 	disk = create_disk(argc, argv);
 	if (!disk)
 		exit();
 
-	cfs = build_uhfs(disk, journal, jfsck, external_journal, fsck, cache_type, cache_num_blocks);
+	cfs = build_uhfs(disk, journal, jfsck, journal_lfs, journal_lfs_file, fsck, cache_type, cache_num_blocks);
 	if (!cfs)
 		exit();
 
