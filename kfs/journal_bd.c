@@ -104,6 +104,7 @@ struct journal_info {
 	chdesc_t ** cr_retain;
 	/* map from FS block number -> journal block number (note 0 is invalid) */
 	hash_map_t * block_map;
+	bool recursion;
 };
 
 #define TRANSACTION_PERIOD (15 * HZ)
@@ -263,7 +264,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			assert(r >= 0);
 			head = NULL;
 			tail = NULL;
+			info->recursion = 1;
 			r = CALL(info->journal, write_block, record);
+			info->recursion = 0;
 			assert(r >= 0);
 			
 			/* then grab a new slot */
@@ -283,7 +286,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		assert(r >= 0);
 		r = chdesc_add_depend(info->wait, head);
 		assert(r >= 0);
+		info->recursion = 1;
 		r = CALL(info->journal, write_block, number_block);
+		info->recursion = 0;
 		assert(r >= 0);
 		
 		/* add the journal block number to the map */
@@ -393,7 +398,9 @@ static int journal_bd_stop_transaction(BD_t * object)
 	chdesc_satisfy(&info->keep);
 	
 	/* ...and finally write the commit record */
+	info->recursion = 1;
 	r = CALL(info->journal, write_block, block);
+	info->recursion = 0;
 	if(r < 0)
 		panic("Holy Mackerel!");
 	
@@ -421,6 +428,12 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	/* make sure it's a valid block */
 	if(block->number >= info->length)
 		return -E_INVAL;
+	
+	if(info->recursion)
+	{
+		chdesc_push_down(object, block, info->bd, block);
+		return CALL(info->bd, write_block, block);
+	}
 	
 	/* why write a block with no changes? */
 	if(!block->ddesc->changes)
@@ -462,7 +475,9 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	r = chdesc_add_depend(info->wait, head);
 	assert(r >= 0);
 	
+	info->recursion = 1;
 	r = CALL(info->journal, write_block, journal_block);
+	info->recursion = 0;
 	assert(r >= 0);
 	
 	chdesc_push_down(object, block, info->bd, block);
@@ -643,7 +658,9 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		if(r < 0)
 			panic("Holy Mackerel!");
 		chdesc_satisfy(&keep);
+		info->recursion = 1;
 		r = CALL(info->journal, write_block, commit_block);
+		info->recursion = 0;
 		if(r < 0)
 			panic("Holy Mackerel!");
 #warning need to hook these up to avoid reusing chains before they are properly written
@@ -675,7 +692,14 @@ static int replay_journal(BD_t * bd)
 BD_t * journal_bd(BD_t * disk)
 {
 	struct journal_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	uint16_t level;
+	BD_t * bd;
+	
+	level = CALL(disk, get_devlevel);
+	if(!level)
+		return NULL;
+	
+	bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
 	
@@ -701,6 +725,7 @@ BD_t * journal_bd(BD_t * disk)
 	info->journal = NULL;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->length = CALL(disk, get_numblocks);
+	info->level = level;
 	info->trans_total_blocks = (TRANSACTION_SIZE + info->blocksize - 1) / info->blocksize;
 	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(info->blocksize);
 	info->keep = NULL;
@@ -711,14 +736,13 @@ BD_t * journal_bd(BD_t * disk)
 	info->trans_slot = 0;
 	info->prev_slot = 0;
 	
-	info->level = CALL(disk, get_devlevel);
-	
 	info->block_map = hash_map_create();
 	if(!info->block_map)
 		panic("Holy Mackerel!");
 	
 	info->cr_count = 0;
 	info->cr_retain = NULL;
+	info->recursion = 0;
 	
 	/* set up transaction callback */
 	if(sched_register(journal_bd_callback, bd, TRANSACTION_PERIOD) < 0)
@@ -732,7 +756,7 @@ BD_t * journal_bd(BD_t * disk)
 		DESTROY(bd);
 		return NULL;
 	}
-	if(modman_inc_bd(disk, bd, NULL) < 0)
+	if(modman_inc_bd(disk, bd, "data") < 0)
 	{
 		modman_rem_bd(bd);
 		DESTROY(bd);
@@ -745,6 +769,7 @@ BD_t * journal_bd(BD_t * disk)
 int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	uint16_t level;
 	
 	if(OBJMAGIC(bd) != JOURNAL_MAGIC)
 		return -E_INVAL;
@@ -786,9 +811,11 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	if(sizeof(struct commit_record) > CALL(journal, get_atomicsize))
 		return -E_INVAL;
 	
-	/*CALL(journal, get_devlevel);*/
+	level = CALL(journal, get_devlevel);
+	if(!level || level > info->level)
+		return -E_INVAL;
 	
-	if(modman_inc_bd(journal, bd, NULL) < 0)
+	if(modman_inc_bd(journal, bd, "journal") < 0)
 		return -E_INVAL;
 	
 	info->journal = journal;
