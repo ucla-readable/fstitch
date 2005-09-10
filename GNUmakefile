@@ -49,6 +49,7 @@ SYMSTRTBL      := symstrtbl
 UTILS := \
 	$(OBJDIR)/util/$(PTYPAIR) \
 	$(OBJDIR)/util/$(ELFDUMP_SYMTAB) \
+	$(OBJDIR)/util/$(HEX2BIN) \
 	$(OBJDIR)/util/$(KNBD_SERVER) \
 	$(OBJDIR)/util/$(KDB_SERVER) \
 	$(OBJDIR)/util/kdb.jar
