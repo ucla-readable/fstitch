@@ -41,7 +41,7 @@ public class LoadCommand implements Command
 				else
 					try {
 						count = Integer.parseInt(args[1]);
-						System.out.print("Reading debugging output...");
+						System.out.print("Reading debugging output... ");
 						count = dbg.readOpcodes(count);
 						System.out.println(count + " opcodes OK!");
 					}

@@ -106,10 +106,18 @@ public class Debugger extends OpcodeFactory
 		boolean change = false;
 		while(applied < opcodes.size())
 		{
-			Opcode opcode = (Opcode) opcodes.get(applied++);
-			opcode.applyTo(state);
+			Opcode opcode = (Opcode) opcodes.get(applied);
+			try {
+				opcode.applyTo(state);
+			}
+			catch(RuntimeException e)
+			{
+				System.out.println("interrupted! (" + applied + " opcodes OK)");
+				throw e;
+			}
 			if(opcode.hasEffect())
 				change = true;
+			applied++;
 		}
 		return change;
 	}
