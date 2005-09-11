@@ -59,6 +59,8 @@ static int destroy_nodes(hash_set_t * nodes)
 			if (verbose)
 				printf("destroyed %s\n", node->name);
 		}
+		else if (r != -E_BUSY)
+			fprintf(STDERR_FILENO, "Unexpected DESTROY(%s) error: %e\n", node->name, r);
 	}
 
 	return ndestroyed;
@@ -76,7 +78,8 @@ static void create_nodes_used_graph(hash_map_t * orig_graph, hash_set_t * new_gr
 	for (i=0; i < vector_size(root->uses); i++)
 	{
 		kfs_use_t * use = vector_elt(root->uses, i);
-		create_nodes_used_graph(orig_graph, new_graph, use->node);
+		if (!hash_set_exists(new_graph, use->node)) // cycles are possible
+			create_nodes_used_graph(orig_graph, new_graph, use->node);
 	}
 }
 
