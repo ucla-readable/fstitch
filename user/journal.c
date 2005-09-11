@@ -97,9 +97,9 @@ void umain(int argc, const char ** argv)
 		if(journal_bd)
 		{
 			const bool destroy_journalbd = argc == 4 && !strcmp(argv[3], "-d");
-			kfs_node_t * journalbd_node;
+			kfs_node_t * journalbd_node = NULL;
 			int r;
-
+			
 			if(destroy_journalbd)
 			{
 				kfs_node_t * journal_node = hash_map_find_val(kfs_uses(), journal_bd);
@@ -115,17 +115,17 @@ void umain(int argc, const char ** argv)
 				}
 				journalbd_node = journalbd_use->node;
 			}
-
+			
 			r = journal_bd_set_journal(journal_bd, NULL);
 			if(r < 0)
 				printf("%e\n", r);
-
+			
 			if(destroy_journalbd)
 			{
 				r = DESTROY((BD_t*) journalbd_node->obj);
 				if(r < 0)
 				{
-					fprintf(STDERR_FILENO, "DESTROY(%s): %e\n", journalbd_node->name, r);
+					fprintf(STDERR_FILENO, "Could not destroy %s: %e\n", journalbd_node->name, r);
 					exit();
 				}
 			}
