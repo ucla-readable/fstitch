@@ -8,6 +8,7 @@
 #include <inc/kfs_uses.h>
 #include <arch/simple.h>
 #include <inc/stdio.h>
+#include <inc/hash_map.h>
 
 static BD_t * find_bd(const char * name)
 {
@@ -38,7 +39,7 @@ void umain(int argc, const char ** argv)
 	{
 		printf("Usage:\n");
 		printf("%s start <journal_bd> [$]<journal> [new_size]\n", argv[0]);
-		printf("%s stop <journal_bd>\n", argv[0]);
+		printf("%s stop <journal_bd> [-d]\n", argv[0]);
 	}
 	else if((argc == 4 || argc == 5) && !strcmp(argv[1], "start"))
 	{
@@ -90,14 +91,44 @@ void umain(int argc, const char ** argv)
 			}
 		}
 	}
-	else if(argc == 3 && !strcmp(argv[1], "stop"))
+	else if((argc == 3 || argc == 4) && !strcmp(argv[1], "stop"))
 	{
 		BD_t * journal_bd = find_bd(argv[2]);
 		if(journal_bd)
 		{
-			int r = journal_bd_set_journal(journal_bd, NULL);
+			const bool destroy_journalbd = argc == 4 && !strcmp(argv[3], "-d");
+			kfs_node_t * journalbd_node;
+			int r;
+
+			if(destroy_journalbd)
+			{
+				kfs_node_t * journal_node = hash_map_find_val(kfs_uses(), journal_bd);
+				assert(journal_node);
+				kfs_use_t * journalbd_use;
+				assert(vector_size(journal_node->uses) == 2);
+				journalbd_use = vector_elt(journal_node->uses, 0);
+				if(strcmp(journalbd_use->name, "journal"))
+				{
+					journalbd_use = vector_elt(journal_node->uses, 1);
+					if (strcmp(journalbd_use->name, "journal"))
+						assert(0);
+				}
+				journalbd_node = journalbd_use->node;
+			}
+
+			r = journal_bd_set_journal(journal_bd, NULL);
 			if(r < 0)
 				printf("%e\n", r);
+
+			if(destroy_journalbd)
+			{
+				r = DESTROY((BD_t*) journalbd_node->obj);
+				if(r < 0)
+				{
+					fprintf(STDERR_FILENO, "DESTROY(%s): %e\n", journalbd_node->name, r);
+					exit();
+				}
+			}
 		}
 	}
 	else
