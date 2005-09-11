@@ -156,15 +156,11 @@ static void remove_cycles(kfs_node_t * root, hash_map_t * uses_graph)
 
 		// Zero out and free memory to more easily catch someone still holding a ref
 		// journalbd_use->node
-		memset(journalbd_use->node->name, 0, strlen(journalbd_use->node->name));
-		free(journalbd_use->node->name);
 		memset(journalbd_use->node->uses, 0, sizeof(*journalbd_use->node->uses));
 		vector_destroy(journalbd_use->node->uses);
 		memset(journalbd_use->node, 0, sizeof(*journalbd_use->node));
 		free(journalbd_use->node);
 		// journalbd_use
-		memset(journalbd_use->name, 0, strlen(journalbd_use->name));
-		free(journalbd_use->name);
 		memset(journalbd_use, 0, sizeof(*journalbd_use));
 		free(journalbd_use);
 	}
