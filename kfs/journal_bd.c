@@ -513,9 +513,9 @@ static int journal_bd_destroy(BD_t * bd)
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
 	int r;
 	
-	if(info->journal)
+	if(info->keep)
 	{
-		r = journal_bd_set_journal(bd, NULL);
+		r = journal_bd_stop_transaction(bd);
 		if(r < 0)
 			return r;
 	}
@@ -524,6 +524,13 @@ static int journal_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->bd, bd);
+	
+	if(info->journal)
+	{
+		r = journal_bd_set_journal(bd, NULL);
+		/* should not fail; we just stopped the transaction */
+		assert(r >= 0);
+	}
 	
 	sched_unregister(journal_bd_callback, bd);
 	chdesc_release_stamp(info->stamp);
