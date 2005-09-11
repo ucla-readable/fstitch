@@ -1,5 +1,7 @@
 #include <inc/kfs_uses.h>
+#include <kfs/modman.h>
 #include <kfs/table_classifier_cfs.h>
+#include <kfs/journal_bd.h>
 #include <kfs/cfs.h>
 #include <kfs/lfs.h>
 #include <kfs/bd.h>
@@ -12,6 +14,7 @@
 
 static bool verbose = 0;
 
+#define JOURNAL_BD_NAME "journal_bd-"
 
 // Attempt to destroy every object in the map of nodes.
 // Return the number of nodes destroyed.
@@ -105,6 +108,82 @@ static void update_nodes_used_graph(hash_set_t * nodes_used, hash_set_t * update
 	}
 }
 
+static void remove_cycles(kfs_node_t * root, hash_map_t * uses_graph)
+{
+	const int journal_bd_name_len = strlen(JOURNAL_BD_NAME);
+	const int num_uses = vector_size(root->uses);
+	int r;
+
+	if (root->type == NBD && num_uses == 2 && !strncmp(JOURNAL_BD_NAME, root->name, journal_bd_name_len))
+	{
+		BD_t * journal = root->obj;
+		size_t uses_index;
+		kfs_use_t * journalbd_use;
+
+		// Find the journalbd node
+		uses_index = 0;
+		journalbd_use = vector_elt(root->uses, uses_index);
+		if (strcmp(journalbd_use->name, "journal"))
+		{
+			uses_index = 1;
+			journalbd_use = vector_elt(root->uses, uses_index);
+			if (strcmp(journalbd_use->name, "journal"))
+			{
+				fprintf(STDERR_FILENO, "%s: %s does not use a \"journal\", I don't understand\n", __FUNCTION__, root->name);
+				exit();
+			}
+		}
+
+		// NOTE: we could avoid destroying here when there is not a cycle,
+		// but this would take work to detect and doesn't seem like
+		// it'd be of any benefit.
+
+		// Unset and destroy the journalbd
+		// (destroy now because no one will be using it after this)
+		r = journal_bd_set_journal(journal, NULL);
+		if (r < 0)
+			fprintf(STDERR_FILENO, "%s: journal_bd_set_journal(%s, NULL): %e", __FUNCTION__, root->name, r);
+		r = DESTROY((BD_t*) journalbd_use->node->obj);
+		if (r < 0)
+			fprintf(STDERR_FILENO, "%s: DESTROY(%s): %e\n", __FUNCTION__, journalbd_use->node->name, r);
+
+		if (verbose)
+			printf("destroyed %s (to break possible cycle)\n", journalbd_use->node->name);
+
+		// Remove journalbd from our root and uses_graph
+		vector_erase(root->uses, uses_index);
+		hash_map_erase(uses_graph, journalbd_use->node->obj);
+
+		// Zero out and free memory to more easily catch someone still holding a ref
+		// journalbd_use->node
+		memset(journalbd_use->node->name, 0, strlen(journalbd_use->node->name));
+		free(journalbd_use->node->name);
+		memset(journalbd_use->node->uses, 0, sizeof(*journalbd_use->node->uses));
+		vector_destroy(journalbd_use->node->uses);
+		memset(journalbd_use->node, 0, sizeof(*journalbd_use->node));
+		free(journalbd_use->node);
+		// journalbd_use
+		memset(journalbd_use->name, 0, strlen(journalbd_use->name));
+		free(journalbd_use->name);
+		memset(journalbd_use, 0, sizeof(*journalbd_use));
+		free(journalbd_use);
+	}
+	else if (num_uses >= 1)
+	{
+		// Support >1 use when it becomes necessary. For now, no need.
+		assert(num_uses == 1);
+
+		kfs_node_t * child = ((kfs_use_t*) vector_elt(root->uses, 0))->node;
+
+		// heuristic to check that we are not descending another mount point:
+		// type does not increase
+		if (root->type == NCFS
+			|| (root->type == NLFS && child->type != NCFS)
+			|| (root->type == NBD && child->type == NBD))
+			remove_cycles(child, uses_graph);
+	}
+}
+
 
 static void print_usage(const char * bin_name)
 {
@@ -173,7 +252,8 @@ void umain(int argc, const char ** argv)
 	if (verbose)
 		printf("unmounted from table_classifier_cfs\n");
 
-	
+	remove_cycles(node, uses_graph);
+
 	// DESTROY the objects used by this mount point
 
 	hash_set_t * nodes_used = hash_set_create();
