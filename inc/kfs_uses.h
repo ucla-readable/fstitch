@@ -17,7 +17,7 @@ struct kfs_node {
 	enum {NCFS, NLFS, NBD} type;
 	void * obj;
 	const char * name;
-	vector_t * uses; // vector of kfs_use_t
+	vector_t * uses; // vector of kfs_use_t*
 };
 
 // Return a hash_map of <CFS/LFS/BD_t *, kfs_node_t *> for kfsd's configuration
