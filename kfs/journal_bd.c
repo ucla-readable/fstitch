@@ -532,7 +532,8 @@ static int journal_bd_destroy(BD_t * bd)
 		assert(r >= 0);
 	}
 	
-	sched_unregister(journal_bd_callback, bd);
+	r = sched_unregister(journal_bd_callback, bd);
+	assert(r >= 0); // should not fail
 	chdesc_release_stamp(info->stamp);
 	hash_map_destroy(info->block_map);
 	
@@ -760,12 +761,14 @@ BD_t * journal_bd(BD_t * disk)
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
+		sched_unregister(journal_bd_callback, bd);
 		DESTROY(bd);
 		return NULL;
 	}
 	if(modman_inc_bd(disk, bd, "data") < 0)
 	{
 		modman_rem_bd(bd);
+		sched_unregister(journal_bd_callback, bd);
 		DESTROY(bd);
 		return NULL;
 	}
