@@ -549,9 +549,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
 	chdesc_t * head = NULL;
 	chdesc_t * tail = NULL;
-	chdesc_t * keep = NULL;
-	chdesc_t * all = NULL;
-	int r;
+	int r = -E_NO_MEM;
 	
 	const uint32_t bnpb = numbers_per_block(info->blocksize);
 	const uint32_t transaction_number = transaction_start / info->trans_total_blocks;
@@ -562,13 +560,39 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	
 	if(!commit_block)
 		return -E_UNSPECIFIED;
-	bdesc_retain(commit_block);
 	
 	cr = (struct commit_record *) commit_block->ddesc->data;
 	if(cr->magic != JOURNAL_MAGIC || cr->type != expected_type)
-	{
-		bdesc_release(&commit_block);
 		return 0;
+	
+	/* make sure our block doesn't go anywhere for a while */
+	bdesc_autorelease(bdesc_retain(commit_block));
+	
+	if(expected_type == CRCOMMIT)
+	{
+		/* create the three NOOPs we will need for this chain */
+		info->keep = chdesc_create_noop(NULL, NULL);
+		if(!info->keep)
+			goto error_1;
+		chdesc_claim_noop(info->keep);
+		info->safe = chdesc_create_noop(NULL, NULL);
+		if(!info->safe)
+			goto error_2;
+		info->done = chdesc_create_noop(NULL, NULL);
+		chdesc_claim_noop(info->done);
+		if(!info->done)
+			goto error_3;
+		r = chdesc_add_depend(info->safe, info->keep);
+		if(r < 0)
+		{
+			chdesc_destroy(&info->done);
+		error_3:
+			chdesc_destroy(&info->safe);
+		error_2:
+			chdesc_destroy(&info->keep);
+		error_1:
+			return r;
+		}
 	}
 	
 	/* check for chained transaction */
@@ -578,24 +602,10 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		/* expect a CRSUBCOMMIT as the next element */
 		r = replay_single_transaction(bd, block, CRSUBCOMMIT);
 		if(r < 0)
-		{
-			bdesc_release(&commit_block);
 			return r;
-		}
 	}
 	
 	printf("%s(): recovering journal transaction %d (%u data blocks)\n", __FUNCTION__, transaction_number, cr->nblocks);
-	
-	keep = chdesc_create_noop(NULL, bd);
-	if(!keep)
-		panic("Holy Mackerel!");
-	chdesc_claim_noop(keep);
-	all = chdesc_create_noop(NULL, NULL);
-	if(!all)
-		panic("Holy Mackerel!");
-	r = chdesc_add_depend(all, keep);
-	if(r < 0)
-		panic("Holy Mackerel!");
 	
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
@@ -607,10 +617,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		uint32_t * numbers;
 		bdesc_t * number_block = CALL(info->journal, read_block, bnb);
 		if(!number_block)
-		{
-			bdesc_release(&commit_block);
 			return -E_UNSPECIFIED;
-		}
 		bdesc_retain(number_block);
 		
 		numbers = (uint32_t *) number_block->ddesc->data;
@@ -632,7 +639,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			r = chdesc_create_full(output, info->bd, data_block->ddesc->data, &head, &tail);
 			if(r < 0)
 				goto output_error;
-			r = chdesc_add_depend(all, head);
+			r = chdesc_add_depend(info->safe, head);
 			if(r < 0)
 				goto chdesc_error;
 			r = CALL(info->bd, write_block, output);
@@ -648,35 +655,37 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			bdesc_release(&data_block);
 		data_error:
 			bdesc_release(&number_block);
-			bdesc_release(&commit_block);
 			return r;
 		}
 		
 		bdesc_release(&number_block);
 	}
 	
+	r = chdesc_weak_retain(info->done, &info->cr_retain[transaction_start / info->trans_total_blocks]);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	
 	/* only CRCOMMIT records need to be cancelled */
 	if(cr->type == CRCOMMIT)
 	{
 		typeof(cr->type) empty = CREMPTY;
-		head = all;
+		head = info->safe;
 		chdesc_create_byte(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head, &tail);
 		assert(head == tail);
-		r = chdesc_weak_retain(head, &info->cr_retain[transaction_start / info->trans_total_blocks]);
+		r = chdesc_add_depend(info->done, head);
 		if(r < 0)
 			panic("Holy Mackerel!");
-		chdesc_satisfy(&keep);
+		/* clean up the transaction state */
+		chdesc_satisfy(&info->keep);
+		info->safe = NULL;
+		info->done = NULL;
+		/* and write it to disk */
 		info->recursion = 1;
 		r = CALL(info->journal, write_block, commit_block);
 		info->recursion = 0;
 		if(r < 0)
 			panic("Holy Mackerel!");
-#warning need to hook these up to avoid reusing chains before they are properly written
 	}
-	else
-		chdesc_satisfy(&keep);
-	
-	bdesc_release(&commit_block);
 	
 	return 0;
 }
@@ -691,7 +700,18 @@ static int replay_journal(BD_t * bd)
 		/* FIXME this may need attention when we finally fix the transaction ordering bug */
 		int r = replay_single_transaction(bd, transaction * info->trans_total_blocks, CRCOMMIT);
 		if(r < 0)
+		{
+			if(info->keep)
+			{
+				chdesc_satisfy(&info->keep);
+				info->safe = NULL;
+				if(!info->done->dependencies)
+					chdesc_satisfy(&info->done);
+				else
+					info->done = NULL;
+			}
 			return r;
+		}
 	}
 	
 	return 0;
