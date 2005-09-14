@@ -3,6 +3,9 @@
 
 #include <inc/types.h>
 
+/* values: 0 (disable), 1 (enable), 2 (paranoid) */
+#define CHDESC_BYTE_SUM 1
+
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
@@ -42,11 +45,10 @@ struct chdesc {
 		struct {
 			/* offset is in bytes */
 			uint16_t offset, length;
-			/* we can eliminate one of these by
-			 * swapping the block contents with
-			 * the data in a single pointer... */
-			uint8_t * olddata;
-			uint8_t * newdata;
+			uint8_t * data;
+#if CHDESC_BYTE_SUM
+			uint16_t old_sum, new_sum;
+#endif
 		} byte;
 	};
 	chmetadesc_t * dependencies;

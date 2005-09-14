@@ -420,29 +420,17 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				}
 				descs[i]->byte.offset = original->byte.offset;
 				descs[i]->byte.length = original->byte.length;
-				if(original->byte.olddata)
+				if(original->byte.data)
 				{
-					descs[i]->byte.olddata = memdup(original->byte.olddata, original->byte.length);
-					if(!descs[i]->byte.olddata)
+					descs[i]->byte.data = memdup(original->byte.data, original->byte.length);
+					if(!descs[i]->byte.data)
 					{
 						r = -E_NO_MEM;
 						goto fail_later;
 					}
 				}
 				else
-					descs[i]->byte.olddata = NULL;
-				if(original->byte.newdata)
-				{
-					descs[i]->byte.newdata = memdup(original->byte.newdata, original->byte.length);
-					if(!descs[i]->byte.newdata)
-					{
-						free(descs[i]->byte.olddata);
-						r = -E_NO_MEM;
-						goto fail_later;
-					}
-				}
-				else
-					descs[i]->byte.newdata = NULL;
+					descs[i]->byte.data = NULL;
 				descs[i]->type = BYTE;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, descs[i], descs[i]->byte.offset, descs[i]->byte.length);
 				descs[i]->flags |= CHDESC_MOVED;
@@ -461,10 +449,11 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				}
 			}
 			/* change the original to a NOOP with no block */
-			if(original->byte.olddata)
-				free(original->byte.olddata);
-			if(original->byte.newdata)
-				free(original->byte.newdata);
+			if(original->byte.data)
+			{
+				free(original->byte.data);
+				original->byte.data = NULL;
+			}
 			original->type = NOOP;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, original);
 			r = chdesc_noop_reassign(original, NULL);
@@ -565,7 +554,7 @@ int chdesc_split(chdesc_t * original, int count)
 	descs[0]->type = original->type;
 	/* "byte" is larger than "bit" */
 	descs[0]->byte = original->byte;
-	static_assert(sizeof(original->byte) > sizeof(original->bit));
+	static_assert(sizeof(original->byte) >= sizeof(original->bit));
 	
 #if KFS_DEBUG
 	switch(descs[0]->type)

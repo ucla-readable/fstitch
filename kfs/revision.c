@@ -106,6 +106,16 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 {
+#if CHDESC_BYTE_SUM > 1
+	/* be paranoid and rollback/reapply all chdescs to check their sums */
+	if(bd)
+	{
+		int r = revision_tail_prepare(block, NULL);
+		assert(r >= 0);
+		r = revision_tail_revert(block, NULL);
+		assert(r >= 0);
+	}
+#endif
 	return _revision_tail_prepare(block, revision_barrier_decider, bd);
 }
 

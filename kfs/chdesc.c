@@ -328,6 +328,21 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	return NULL;
 }
 
+#if CHDESC_BYTE_SUM
+/* stupid little checksum, just to try and make sure we get the same data */
+static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
+{
+	uint16_t sum = 0x5AFE;
+	while(length-- > 0)
+	{
+		/* ROL 3 */
+		sum = (sum << 3) | (sum >> 13);
+		sum ^= *(data++);
+	}
+	return sum;
+}
+#endif
+
 #warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
@@ -369,9 +384,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		else
 			chdescs[i]->byte.length = atomic_size - (i ? 0 : init_offset);
 		
-		chdescs[i]->byte.olddata = memdup(&block->ddesc->data[chdescs[i]->byte.offset], chdescs[i]->byte.length);
-		chdescs[i]->byte.newdata = memdup(&((uint8_t *) data)[copied], chdescs[i]->byte.length);
-		
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
@@ -382,10 +394,15 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
-		
-		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
+		chdescs[i]->byte.data = memdup(&((uint8_t *) data)[copied], chdescs[i]->byte.length);
+		if(!chdescs[i]->byte.data)
 			goto destroy;
+#if CHDESC_BYTE_SUM
+		chdescs[i]->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdescs[i]->byte.offset], chdescs[i]->byte.length);
+		chdescs[i]->byte.new_sum = chdesc_byte_sum(chdescs[i]->byte.data, chdescs[i]->byte.length);
+#endif
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
 		if(chdesc_overlap_multiattach(chdescs[i], block))
@@ -482,9 +499,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		chdescs[i]->byte.offset = i * atomic_size;
 		chdescs[i]->byte.length = atomic_size;
 		
-		chdescs[i]->byte.olddata = memdup(&block->ddesc->data[i * atomic_size], atomic_size);
-		chdescs[i]->byte.newdata = calloc(1, atomic_size);
-		
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
@@ -495,10 +509,15 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
-		
-		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
+		chdescs[i]->byte.data = calloc(1, atomic_size);
+		if(!chdescs[i]->byte.data)
 			goto destroy;
+#if CHDESC_BYTE_SUM
+		chdescs[i]->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdescs[i]->byte.offset], atomic_size);
+		chdescs[i]->byte.new_sum = chdesc_byte_sum(chdescs[i]->byte.data, atomic_size);
+#endif
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
 		if(chdesc_overlap_multiattach(chdescs[i], block))
@@ -592,9 +611,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->byte.offset = i * atomic_size;
 		chdescs[i]->byte.length = atomic_size;
 		
-		chdescs[i]->byte.olddata = memdup(&block->ddesc->data[i * atomic_size], atomic_size);
-		chdescs[i]->byte.newdata = memdup(&((uint8_t *) data)[i * atomic_size], atomic_size);
-		
 		chdescs[i]->dependencies = NULL;
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->weak_refs = NULL;
@@ -605,10 +621,15 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
-		
-		if(!chdescs[i]->byte.olddata || !chdescs[i]->byte.newdata)
+		chdescs[i]->byte.data = memdup(&((uint8_t *) data)[i * atomic_size], atomic_size);
+		if(!chdescs[i]->byte.data)
 			goto destroy;
+#if CHDESC_BYTE_SUM
+		chdescs[i]->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdescs[i]->byte.offset], atomic_size);
+		chdescs[i]->byte.new_sum = chdesc_byte_sum(chdescs[i]->byte.data, atomic_size);
+#endif
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
 		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
@@ -768,6 +789,34 @@ void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 		chdesc_satisfy(&dependent);
 }
 
+static void memxchg(void * p, void * q, size_t n)
+{
+	/* align at least p on 32-bit boundary */
+	while((uint32_t) p % 4 && n > 0)
+	{
+		uint8_t c = *(uint8_t *) p;
+		*(uint8_t *) p++ = *(uint8_t *) q;
+		*(uint8_t *) q++ = c;
+		n--;
+	}
+	while(n > 3)
+	{
+		uint32_t d = *(uint32_t *) p;
+		*(uint32_t *) p = *(uint32_t *) q;
+		*(uint32_t *) q = d;
+		p += 4;
+		q += 4;
+		n -= 4;
+	}
+	while(n > 0)
+	{
+		uint8_t c = *(uint8_t *) p;
+		*(uint8_t *) p++ = *(uint8_t *) q;
+		*(uint8_t *) q++ = c;
+		n--;
+	}
+}
+
 int chdesc_apply(chdesc_t * chdesc)
 {
 	if(!(chdesc->flags & CHDESC_ROLLBACK))
@@ -778,9 +827,13 @@ int chdesc_apply(chdesc_t * chdesc)
 			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
 			break;
 		case BYTE:
-			if(!chdesc->byte.newdata)
+			if(!chdesc->byte.data)
 				return -E_INVAL;
-			memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.newdata, chdesc->byte.length);
+			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+#if CHDESC_BYTE_SUM
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
+				fprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+#endif
 			break;
 		case NOOP:
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
@@ -804,9 +857,13 @@ int chdesc_rollback(chdesc_t * chdesc)
 			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
 			break;
 		case BYTE:
-			if(!chdesc->byte.olddata)
+			if(!chdesc->byte.data)
 				return -E_INVAL;
-			memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.olddata, chdesc->byte.length);
+			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+#if CHDESC_BYTE_SUM
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
+				fprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+#endif
 			break;
 		case NOOP:
 			fprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
@@ -864,10 +921,11 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		switch((*chdesc)->type)
 		{
 			case BYTE:
-				if((*chdesc)->byte.olddata)
-					free((*chdesc)->byte.olddata);
-				if((*chdesc)->byte.newdata)
-					free((*chdesc)->byte.newdata);
+				if((*chdesc)->byte.data)
+				{
+					free((*chdesc)->byte.data);
+					(*chdesc)->byte.data = NULL;
+				}
 				/* fall through */
 			case NOOP:
 			case BIT:
@@ -899,6 +957,14 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		}
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_WRITTEN);
 		(*chdesc)->flags |= CHDESC_WRITTEN;
+		
+		/* we don't need the data in byte change descriptors anymore */
+		if((*chdesc)->type == BYTE)
+			if((*chdesc)->byte.data)
+			{
+				free((*chdesc)->byte.data);
+				(*chdesc)->byte.data = NULL;
+			}
 		
 		assert(!(*chdesc)->free_prev && !(*chdesc)->free_next);
 		chdesc_free_push(*chdesc);
@@ -1003,10 +1069,8 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	switch((*chdesc)->type)
 	{
 		case BYTE:
-			if((*chdesc)->byte.olddata)
-				free((*chdesc)->byte.olddata);
-			if((*chdesc)->byte.newdata)
-				free((*chdesc)->byte.newdata);
+			if((*chdesc)->byte.data)
+				free((*chdesc)->byte.data);
 			/* fall through */
 		case NOOP:
 		case BIT:
