@@ -15,6 +15,8 @@
 #include <kfs/revision.h>
 #include <kfs/journal_bd.h>
 
+#define JOURNAL_COMMIT_DBWAIT 0
+
 /* Theory of operation:
  * 
  * Basically, as chdescs pass through the journal_bd module, we copy their
@@ -390,6 +392,11 @@ static int journal_bd_stop_transaction(BD_t * object)
 	r = chdesc_add_depend(info->done, head);
 	if(r < 0)
 		panic("Holy Mackerel!");
+#if KFS_DEBUG && JOURNAL_COMMIT_DBWAIT
+	/* for debugging, add DBWAIT to the cancellation */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DBWAIT);
+	head->flags |= CHDESC_DBWAIT;
+#endif
 	
 	/* unmanage the hold NOOP */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, info->hold, NULL);

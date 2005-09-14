@@ -1,6 +1,8 @@
 #include <inc/lib.h>
 #include <inc/string.h>
 #include <inc/josnic.h> /* for htons, htonl */
+
+#include <kfs/chdesc.h>
 #include <kfs/debug.h>
 
 #if KFS_DEBUG
@@ -532,6 +534,15 @@ void kfs_debug_net_command(void)
 		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
 }
 
+static void kfs_debug_wait(void)
+{
+	uint16_t command[2];
+	int bytes = 0;
+	while(bytes != 4)
+		bytes = read(debug_socket[0], &command, 4);
+	kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
+}
+
 int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
 	int m, o = 0, r = 0;
@@ -688,6 +699,24 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		exit();
 	}
 	return r;
+}
+
+void kfs_debug_dbwait(const char * function, bdesc_t * block)
+{
+	if(block->ddesc->changes)
+	{
+		chmetadesc_t * meta;
+		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+		{
+			const uint16_t flags = meta->desc->flags;
+			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
+			{
+				printf("%s(): waiting for debug mark... (0x%08x has DBWAIT)\n", function, meta->desc);
+				kfs_debug_wait();
+				break;
+			}
+		}
+	}
 }
 
 #endif

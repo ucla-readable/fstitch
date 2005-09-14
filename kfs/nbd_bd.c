@@ -11,6 +11,7 @@
 #include <kfs/blockman.h>
 #include <kfs/revision.h>
 #include <kfs/modman.h>
+#include <kfs/debug.h>
 #include <kfs/nbd_bd.h>
 
 #define NBD_RETRIES 5
@@ -223,6 +224,8 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* prepare the block for writing */
 	revision_tail_prepare(block, object);
+	
+	KFS_DEBUG_DBWAIT(block);
 	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
 	{
