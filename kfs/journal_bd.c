@@ -158,7 +158,18 @@ static int journal_bd_get_config(void * object, int level, char * string, size_t
 static int journal_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL((BD_t *) object);
-	snprintf(string, length, "held: %d", hash_map_size(info->block_map));
+	switch(level)
+	{
+		case STATUS_VERBOSE:
+			snprintf(string, length, "held: %d, slot: %d", hash_map_size(info->block_map), info->trans_slot);
+			break;
+		case STATUS_BRIEF:
+			snprintf(string, length, "held: %d", hash_map_size(info->block_map));
+			break;
+		case STATUS_NORMAL:
+		default:
+			snprintf(string, length, "held: %d", hash_map_size(info->block_map));
+	}
 	return 0;
 }
 
@@ -418,6 +429,10 @@ static int journal_bd_stop_transaction(BD_t * object)
 	info->hold = NULL;
 	info->safe = NULL;
 	info->done = NULL;
+	
+	/* increment the transaction slot so we use them all fairly */
+	if(++info->trans_slot == info->cr_count)
+		info->trans_slot = 0;
 	
 	return 0;
 }
