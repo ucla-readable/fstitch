@@ -437,13 +437,17 @@ static int table_classifier_sync(CFS_t * cfs, const char * name)
 	if(!name || !name[0])
 	{
 		const size_t mount_table_size = vector_size(state->mount_table);
-		int i;
+		int i, r = 0;
 		
-		/* FIXME save return values? */
 		for(i = 0; i < mount_table_size; i++)
-			CALL(((mount_entry_t *) vector_elt(state->mount_table, i))->cfs, sync, NULL);
+		{
+			int e = CALL(((mount_entry_t *) vector_elt(state->mount_table, i))->cfs, sync, NULL);
+			/* keep only the first error... but continue the sync */
+			if(e < 0 && !r)
+				r = e;
+		}
 		
-		return 0;
+		return r;
 	}
 
 	selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);

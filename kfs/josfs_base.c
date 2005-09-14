@@ -1599,7 +1599,7 @@ static int josfs_sync(LFS_t * object, const char * name)
 
 	f = josfs_lookup_name(object, name);
 	if (!f)
-		return -E_INVAL;
+		return -E_NOT_FOUND;
 
 	nblocks = josfs_get_file_numblocks(object, f);
 	for (i = 0 ; i < nblocks; i++)
