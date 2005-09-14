@@ -64,22 +64,21 @@ static int wb_cache_bd_get_config(void * object, int level, char * string, size_
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, size: %d, contention: x%d, dirty: %d", info->blocksize, info->size, (CALL(info->bd, get_numblocks) + info->size - 1) / info->size, wb_cache_dirty_count(bd));
+			snprintf(string, length, "blocksize: %d, size: %d, contention: x%d", info->blocksize, info->size, (CALL(info->bd, get_numblocks) + info->size - 1) / info->size);
 			break;
 		case CONFIG_BRIEF:
 			snprintf(string, length, "%d x %d", info->blocksize, info->size);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "blocksize: %d, size: %d, dirty: %d", info->blocksize, info->size, wb_cache_dirty_count(bd));
+			snprintf(string, length, "blocksize: %d, size: %d", info->blocksize, info->size);
 	}
 	return 0;
 }
 
 static int wb_cache_bd_get_status(void * object, int level, char * string, size_t length)
 {
-	/* no status to report */
-	snprintf(string, length, "");
+	snprintf(string, length, "dirty: %d", wb_cache_dirty_count((BD_t *) object));
 	return 0;
 }
 

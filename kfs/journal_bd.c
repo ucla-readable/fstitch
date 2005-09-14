@@ -138,27 +138,27 @@ static uint32_t trans_number_block_count(uint16_t blocksize)
 
 static int journal_bd_get_config(void * object, int level, char * string, size_t length)
 {
-	/* no configuration of interest */
-	snprintf(string, length, "");
-	return 0;
-}
-
-static int journal_bd_get_status(void * object, int level, char * string, size_t length)
-{
 	BD_t * bd = (BD_t *) object;
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case STATUS_VERBOSE:
-			snprintf(string, length, "verbose: BD 0x%08x, JBD 0x%08x, blocksize %d, length %d, level %d", info->bd, info->journal, info->blocksize, info->length, info->level);
+			snprintf(string, length, "blocksize: %d, length: %d, level: %d", info->blocksize, info->length, info->level);
 			break;
 		case STATUS_BRIEF:
-			snprintf(string, length, "brief: blocksize %d", info->blocksize);
+			snprintf(string, length, "blocksize: %d", info->blocksize);
 			break;
 		case STATUS_NORMAL:
 		default:
-			snprintf(string, length, "normal: BD 0x%08x, JBD 0x%08x, blocksize %d", info->bd, info->journal, info->blocksize);
+			snprintf(string, length, "blocksize: %d, length: %d", info->blocksize, info->length);
 	}
+	return 0;
+}
+
+static int journal_bd_get_status(void * object, int level, char * string, size_t length)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL((BD_t *) object);
+	snprintf(string, length, "held: %d", hash_map_size(info->block_map));
 	return 0;
 }
 
