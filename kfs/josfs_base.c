@@ -1187,7 +1187,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 
 	newfdesc = josfs_allocate_name(object, newname, temp_file.f_type, NULL, head, tail);
 	if (!newfdesc)
-		return -E_NOT_FOUND;
+		return -E_FILE_EXISTS;
 
 	new = (struct josfs_fdesc *) newfdesc;
 	strcpy(temp_file.f_name, new->file->f_name);
