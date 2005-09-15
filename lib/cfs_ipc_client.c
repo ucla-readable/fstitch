@@ -164,8 +164,9 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data, const void 
 		ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, cappg);
 
 		r = ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
-		if (r < MIN(size - i, PGSIZE))
-			return i+r;
+		/* have to cast to int for signed comparisons */
+		if (r < (int) MIN(size - i, PGSIZE))
+			return i ? ((r < 0) ? i : i + r) : r;
 	}
 	return size;
 }

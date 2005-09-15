@@ -9,7 +9,7 @@ cat(int f, char *s, bool term)
 	int r;
 
 	while((n = (term ? read : readn)(f, buf, sizeof(buf))) > 0)
-		if((r = write(1, buf, n)) != n)
+		if((r = write(STDOUT_FILENO, buf, n)) != n)
 			return (r < 0) ? r : -E_NO_DISK;
 	if(n < 0)
 		panic("error reading %s: %e", s, n);

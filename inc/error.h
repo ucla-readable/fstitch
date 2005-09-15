@@ -13,7 +13,7 @@
 #define E_NO_FREE_ENV   6       // Attempt to create a new environment beyond
 				// the maximum allowed
 #define E_IPC_NOT_RECV  7	// Attempt to send to env that is not recving
-#define E_IPC_FAILED_CAP 7	// Sent-to-env responded that the sent capability is bad
+#define E_IPC_FAILED_CAP 8	// Sent-to-env responded that the sent capability is bad
 
 #define E_EOF		9	// Unexpected end of file
 #define	E_NO_DISK	10	// No free space left on disk
@@ -23,7 +23,7 @@
 #define E_FILE_EXISTS	14	// File already exists
 #define E_NOT_EXEC	15	// File not a valid executable
 #define E_NOT_DIR	16	// File is not a directory
-#define E_NOT_EMPTY 17 // Directory not empty
+#define E_NOT_EMPTY	17 // Directory not empty
 
 #define E_BUSY		18	// Device is busy
 #define E_NO_DEV	19	// No such device
