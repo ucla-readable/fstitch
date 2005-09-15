@@ -247,7 +247,6 @@ static int devfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32
 static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-#if 0
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = bde_lookup_fid(state, fid);
 	
@@ -258,7 +257,18 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 		const uint32_t file_size = blocksize * CALL(bde->bd, get_numblocks);
 		uint32_t size_written = 0, dataoffset = (offset % blocksize);
 		bdesc_t * bdesc;
+		int i, r = 0;
 		
+		/* first check that we can write to this BD */
+		const modman_entry_bd_t * entry = modman_lookup_bd(bde->bd);
+		for(i = 0; i != vector_size(entry->users); i++)
+			if(modman_lookup_bd(vector_elt(entry->users, i)))
+				break;
+		/* don't allow writing to a BD that is used by another BD */
+		if(i != vector_size(entry->users))
+			return -E_BUSY;
+		
+		/* now do the actual write */
 		if(file_size <= offset)
 			return -E_EOF;
 		if(offset + size > file_size)
@@ -269,36 +279,36 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 			const uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
 			chdesc_t * head = NULL;
 			chdesc_t * tail;
+			bool synthetic = 0;
 			
 			if(!dataoffset && limit == blocksize)
-				bdesc = bdesc_alloc(bde->bd, write_byte / blocksize, blocksize);
+				/* we can do a synthetic read in this case */
+				bdesc = CALL(bde->bd, synthetic_read_block, write_byte / blocksize, &synthetic);
 			else
 				bdesc = CALL(bde->bd, read_block, write_byte / blocksize);
 			if(!bdesc)
 				return size_written ? size_written : -E_EOF;
-			
-			if(chdesc_create_byte(bdesc, dataoffset, limit, (uint8_t *) data + size_written, &head, &tail))
+			r = chdesc_create_byte(bdesc, bde->bd, dataoffset, limit, (uint8_t *) data + size_written, &head, &tail);
+			if(r < 0)
 			{
-				bdesc_drop(&bdesc);
+				if(synthetic)
+					CALL(bde->bd, cancel_block, bdesc->number);
 				break;
 			}
-			if(depman_add_chdesc(head))
+			r = CALL(bde->bd, write_block, bdesc);
+			if(r < 0)
 			{
-				/* FIXME kill change descriptors */
-				bdesc_drop(&bdesc);
+				/* FIXME clean up chdescs, synthetic block */
 				break;
 			}
-			if(CALL(bde->bd, write_block, bdesc))
-				break;
 			
 			size_written += limit;
 			/* dataoffset only needed for first block */
 			dataoffset = 0;
 		}
 		
-		return size_written ? size_written : (size ? -E_EOF : 0);
+		return size_written ? size_written : (size ? ((r < 0) ? r : -E_EOF) : 0);
 	}
-#endif
 	
 	return -E_INVAL;
 }
