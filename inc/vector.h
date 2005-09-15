@@ -45,7 +45,7 @@ void   vector_sort(vector_t *v, int (*compar)(const void *a, const void *b));
 
 // Return the elt at position i.
 static __inline
-void * vector_elt(vector_t * v, size_t i) __attribute__((always_inline));
+void * vector_elt(const vector_t * v, size_t i) __attribute__((always_inline));
 // Set the elt at position i.
 static __inline
 void   vector_elt_set(vector_t * v, size_t i, void * elt) __attribute__((always_inline));
@@ -87,7 +87,7 @@ void vector_pop_back(vector_t * v)
 }
 
 static __inline
-void * vector_elt(vector_t * v, size_t i)
+void * vector_elt(const vector_t * v, size_t i)
 {
 	return v->elts[i];
 }
