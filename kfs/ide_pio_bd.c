@@ -100,10 +100,21 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 	return 0;
 }
 
+static char * ide_string(char * string, const uint16_t * ide, int length)
+{
+	uint16_t * string_u16 = (uint16_t *) string;
+	string[length] = 0;
+	length /= 2;
+	while(length-- > 0)
+		string_u16[length] = (ide[length] << 8) | (ide[length] >> 8);
+	return string;
+}
+
 static uint32_t ide_size(uint8_t controller, uint8_t disk)
 {
 	uint16_t base = ide_base[controller];
 	uint16_t id[256];
+	char string[41];
 	
 	if(ide_notbusy(controller) == -1)
 		return -1;
@@ -116,7 +127,33 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 		return -1;
 	insl(base + 0, id, SECTSIZE / 4);
 	
-	return id[57] | (((uint32_t) id[58]) << 16);
+	/* print out some drive information */
+	printf("ATA %s %s:", controller ? "secondary" : "primary", disk ? "slave" : "master");
+	printf(" %s\n", ide_string(string, &id[27], 40));
+	printf("  %d cylinders, %d heads, %d sectors\n", id[1], id[3], id[6]);
+	printf("  Serial number: %s\n", ide_string(string, &id[10], 20));
+	printf("  Firmware revision: %s\n", ide_string(string, &id[23], 8));
+	printf("  DMA supported: %s", ((id[49] >> 8) & 1) ? "yes" : "no");
+	printf("  LBA supported: ");
+	if((id[49] >> 9) & 1)
+	{
+		uint32_t lba_sectors = id[60] | (((uint32_t) id[61]) << 16);
+		/* in QEMU, this value is the size of the filesystem image
+		 * and not necessarily that of the configured disk geometry */
+		printf("yes\n  LBA sectors: %d\n", lba_sectors);
+	}
+	else
+		printf("no\n");
+	
+	if(id[53] & 1)
+	{
+		/* id[54-58] are valid */
+		printf("  Total sectors: %d\n", id[57] | (((uint32_t) id[58]) << 16));
+		return id[57] | (((uint32_t) id[58]) << 16);
+	}
+	
+	printf("  Total sectors (CHS): %d\n", (uint32_t) id[1] * (uint32_t) id[3] * (uint32_t) id[6]);
+	return (uint32_t) id[1] * (uint32_t) id[3] * (uint32_t) id[6];
 }
 
 static uint32_t ide_pio_tune(uint8_t controller, uint8_t disk)
