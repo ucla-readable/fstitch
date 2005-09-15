@@ -128,6 +128,16 @@ static int devfs_get_status(void * object, int level, char * string, size_t leng
 	return 0;
 }
 
+static bool devfs_bd_in_use(BD_t * bd)
+{
+	int i;
+	const modman_entry_bd_t * entry = modman_lookup_bd(bd);
+	for(i = 0; i != vector_size(entry->users); i++)
+		if(modman_lookup_bd(vector_elt(entry->users, i)))
+			break;
+	return i != vector_size(entry->users);
+}
+
 static int devfs_open(CFS_t * cfs, const char * name, int mode)
 {
 	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
@@ -153,6 +163,11 @@ static int devfs_open(CFS_t * cfs, const char * name, int mode)
 	bde = bde_lookup_name(state, name);
 	if(!bde)
 		return -E_NOT_FOUND;
+	
+	/* don't allow writing to a BD that is used by another BD */
+	if((mode & O_ACCMODE) != O_RDONLY)
+		if(devfs_bd_in_use(bde->bd))
+			return -E_PERM;
 	
 	if(bde->fid == -1)
 	{
@@ -257,16 +272,11 @@ static int devfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset,
 		const uint32_t file_size = blocksize * CALL(bde->bd, get_numblocks);
 		uint32_t size_written = 0, dataoffset = (offset % blocksize);
 		bdesc_t * bdesc;
-		int i, r = 0;
+		int r = 0;
 		
-		/* first check that we can write to this BD */
-		const modman_entry_bd_t * entry = modman_lookup_bd(bde->bd);
-		for(i = 0; i != vector_size(entry->users); i++)
-			if(modman_lookup_bd(vector_elt(entry->users, i)))
-				break;
 		/* don't allow writing to a BD that is used by another BD */
-		if(i != vector_size(entry->users))
-			return -E_BUSY;
+		if(devfs_bd_in_use(bde->bd))
+			return -E_PERM;
 		
 		/* now do the actual write */
 		if(file_size <= offset)
