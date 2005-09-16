@@ -455,6 +455,11 @@ static int table_classifier_sync(CFS_t * cfs, const char * name)
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
+	/* some special rules for syncing mount points (i.e. whole filesystems) */
+	if(!strcmp(name, "/") && !strcmp(newname, "/"))
+		newname = NULL;
+	else if(!strcmp(name, "//") && !strcmp(newname, "//"))
+		newname++;
 	return CALL(selected_cfs, sync, newname);
 }
 
