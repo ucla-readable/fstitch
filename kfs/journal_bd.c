@@ -15,7 +15,13 @@
 #include <kfs/revision.h>
 #include <kfs/journal_bd.h>
 
+/* if set and debugging is on, mark cancellation records for debug waiting */
 #define JOURNAL_COMMIT_DBWAIT 0
+
+/* transaction period of 15 seconds */
+#define TRANSACTION_PERIOD (15 * HZ)
+/* transaction slot size of 64 x 4K */
+#define TRANSACTION_SIZE (64 * 4096)
 
 /* Theory of operation:
  * 
@@ -103,14 +109,12 @@ struct journal_info {
 	chdesc_t * safe;
 	chdesc_t * done;
 	uint16_t trans_slot, prev_slot;
+	chdesc_t * prev_cr;
 	chdesc_t ** cr_retain;
 	/* map from FS block number -> journal block number (note 0 is invalid) */
 	hash_map_t * block_map;
 	bool recursion;
 };
-
-#define TRANSACTION_PERIOD (15 * HZ)
-#define TRANSACTION_SIZE (64 * 4096)
 
 #define CREMPTY     0
 #define CRSUBCOMMIT 1
@@ -337,6 +341,14 @@ static int journal_bd_start_transaction(BD_t * object)
 	r = chdesc_add_depend(info->wait, info->keep);
 	if(r < 0)
 		goto fail_6;
+	/* make the new commit record (via wait) depend on the previous */
+	/* FIXME: this can be improved! often it is not necessary... */
+	if(info->prev_cr)
+	{
+		r = chdesc_add_depend(info->wait, info->prev_cr);
+		if(r < 0)
+			goto fail_6;
+	}
 	
 	r = journal_bd_grab_slot(object);
 	if(r < 0)
@@ -388,6 +400,10 @@ static int journal_bd_stop_transaction(BD_t * object)
 	assert(head == tail);
 	/* ...and make hold depend on it */
 	r = chdesc_add_depend(info->hold, head);
+	if(r < 0)
+		panic("Holy Mackerel!");
+	/* set the new previous commit record */
+	r = chdesc_weak_retain(head, &info->prev_cr);
 	if(r < 0)
 		panic("Holy Mackerel!");
 	
@@ -785,6 +801,7 @@ BD_t * journal_bd(BD_t * disk)
 	info->done = NULL;
 	info->trans_slot = 0;
 	info->prev_slot = 0;
+	info->prev_cr = NULL;
 	
 	info->block_map = hash_map_create();
 	if(!info->block_map)
