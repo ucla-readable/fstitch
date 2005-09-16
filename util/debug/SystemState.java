@@ -75,7 +75,7 @@ public class SystemState
 		
 		output.write("digraph chdescs\n{\nnodesep=0.25;\nranksep=0.25;\n");
 		if(landscape)
-			output.write("rankdir=TB;\norientation=L;\nsize=\"10,7.5\";\n");
+			output.write("rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
 		else
 			output.write("rankdir=LR;\norientation=P;\nsize=\"16,10\";\n");
 		output.write("subgraph clusterAll {\nlabel=\"" + title + "\";\ncolor=white;\n");
