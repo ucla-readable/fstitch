@@ -564,7 +564,11 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		}
 	
 #if KFS_DEBUG_BINARY
+#if KFS_OMIT_FILE_FUNC
+	kfs_debug_write(debug_socket[1], STRING, "", LIT_32, line, STRING, "", LIT_16, module, LIT_16, opcode, END);
+#else
 	kfs_debug_write(debug_socket[1], STRING, file, LIT_32, line, STRING, function, LIT_16, module, LIT_16, opcode, END);
+#endif
 	
 	if(!modules[m].opcodes)
 	{
@@ -612,7 +616,11 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	/* TODO: not technically necessary, see above */
 	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
 #else
+#if KFS_OMIT_FILE_FUNC
+	fprintf(debug_socket[1], "Line %d, type [%04x:%04x] ", line, module, opcode);
+#else
 	fprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
+#endif
 	
 	if(!modules[m].opcodes)
 	{

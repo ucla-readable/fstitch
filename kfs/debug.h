@@ -9,7 +9,9 @@
 
 #if KFS_DEBUG
 
+/* For a lean and mean debug output stream, set both of these to 1. */
 #define KFS_DEBUG_BINARY 1
+#define KFS_OMIT_FILE_FUNC 0
 
 #include <kfs/debug_opcode.h>
 
