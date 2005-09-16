@@ -14,6 +14,9 @@
 #include <kfs/revision.h>
 #include <kfs/wb_cache_bd.h>
 
+/* try to flush every 10 seconds */
+#define FLUSH_PERIOD (10 * HZ)
+
 /* This file implements the first whack at our new WB cache. It's an LRU cache,
  * and it allows you to give it chdescs with unsatisfied dependencies. However,
  * it will fill up and deadlock if you give it too many. Also sync() is a bit
@@ -500,8 +503,8 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	/* we generally delay blocks, so our level goes up */
 	info->level = CALL(disk, get_devlevel) + 1;
 	
-	/* ten second callback */
-	if(sched_register(wb_cache_bd_callback, bd, 10 * HZ) < 0)
+	/* set up the callback */
+	if(sched_register(wb_cache_bd_callback, bd, FLUSH_PERIOD) < 0)
 	{
 		DESTROY(bd);
 		return NULL;
