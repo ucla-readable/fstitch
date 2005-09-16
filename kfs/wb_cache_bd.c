@@ -362,19 +362,23 @@ static int wb_cache_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 
-#warning fixme sync is broken
-	return -E_HOLYMACKEREL;
+#warning FIXME sync is (fundamentally) broken
 	
 	if(block == SYNC_FULL_DEVICE)
 	{
+		if(wb_cache_dirty_count(object))
+		{
 #warning flush the dirty blocks, make sure we are 100% clean... what about failures here?
+			return -E_HOLYMACKEREL;
+		}
 		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
 	}
 	
 	/* make sure it's a valid block */
 	if(block >= CALL(info->bd, get_numblocks))
 		return -E_INVAL;
-
+	
+	return -E_HOLYMACKEREL;
 	/* sync it */
 	return CALL(info->bd, sync, block, ch);
 }
