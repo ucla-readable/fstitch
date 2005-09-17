@@ -102,15 +102,15 @@ void umain(int argc, const char ** argv)
 			
 			if(destroy_journalbd)
 			{
+				kfs_use_t * journalbd_use;
 				kfs_node_t * journal_node = hash_map_find_val(kfs_uses(), journal_bd);
 				assert(journal_node);
-				kfs_use_t * journalbd_use;
 				assert(vector_size(journal_node->uses) == 2);
 				journalbd_use = vector_elt(journal_node->uses, 0);
 				if(strcmp(journalbd_use->name, "journal"))
 				{
 					journalbd_use = vector_elt(journal_node->uses, 1);
-					if (strcmp(journalbd_use->name, "journal"))
+					if(strcmp(journalbd_use->name, "journal"))
 						assert(0);
 				}
 				journalbd_node = journalbd_use->node;
