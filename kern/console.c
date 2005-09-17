@@ -16,7 +16,8 @@
 #include <kern/env.h>
 #include <kern/serial.h>
 
-void cons_intr(int (*proc)(void));
+static void cons_intr(int (*proc)(void));
+static void serial_intr(int irq);
 
 
 /***** Serial I/O code *****/
@@ -73,7 +74,7 @@ Com_irq(uint8_t port)
 
 
 // Returns index of console upon finding which, else returns NCOMS
-int
+static int
 console_port_idx()
 {
 	int i;
@@ -90,7 +91,7 @@ console_port_idx()
 //
 // Serial port setup
 
-void
+static void
 detect_serial(void)
 {
 	// This function adapted from http://www.beyondlogic.org/serial/serial.htm
@@ -117,7 +118,7 @@ detect_serial(void)
 	printf(".\n");
 }
 
-void
+static void
 serial_init_port(uint16_t com_addr, uint32_t speed)
 {
 	// Much of this code was guided/adapted from linux 2.6.6's
@@ -158,7 +159,7 @@ serial_init_port(uint16_t com_addr, uint32_t speed)
 }
 
 
-void
+static void
 serial_init(void)
 {
 	// NOTE: 115200 can sometimes be too fast for running inside of bochs.
@@ -213,7 +214,7 @@ serial_getc(uint8_t port)
 	return data;
 }
 
-int
+static int
 serial_getc_console()
 {
 	int cons_idx = console_port_idx();
@@ -234,7 +235,7 @@ serial_getc_console()
 	return c;
 }
 
-void
+static void
 serial_getc_userspace(uint8_t port)
 {
 	if(Com_user(port) < 1)
@@ -279,7 +280,7 @@ serial_getc_userspace(uint8_t port)
 	page_fault_mode = prev_pfm;
 }
 
-void
+static void
 serial_intr(int irq)
 {
 	switch(irq)
@@ -313,7 +314,7 @@ serial_intr(int irq)
 	}
 }
 
-void
+static void
 serial_putc(uint8_t c, uint8_t port)
 {
 	uint8_t thre;
@@ -378,7 +379,7 @@ static unsigned addr_6845;
 static uint16_t* crt_buf;
 static uint16_t crt_pos;
 
-void
+static void
 cga_init(void)
 {
 	volatile uint16_t *cp;
@@ -407,7 +408,7 @@ cga_init(void)
 }
 
 
-void
+static void
 cga_putc(int c)
 {
 	/* if no attribute given, then use black on white */
@@ -645,13 +646,13 @@ kbd_proc_data(void)
 	return c;
 }
 
-void
+static void
 kbd_intr(int irq)
 {
 	cons_intr(kbd_proc_data);
 }
 
-void
+static void
 kbd_init(void)
 {
 	// Drain the kbd buffer so that Bochs generates interrupts.
@@ -677,7 +678,7 @@ static struct {
 
 // called by device interrupt routines to feed input characters
 // into the circular console input buffer.
-void
+static void
 cons_intr(int (*proc)(void))
 {
 	int c;
