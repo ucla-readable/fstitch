@@ -102,6 +102,23 @@ static uint8_t sb16_getmixer(uint8_t port)
 	return inb(MIXER_DATA_PORT);
 }
 
+static void sb16_intr(int irq)
+{
+	sb_interrupted = 1;
+	
+	if(!sb_initialized)
+		return;
+	
+	/* wake up the environment if it is sleeping, and not for IPC */
+	if(sb_env->env_status == ENV_NOT_RUNNABLE && !sb_env->env_ipc_recving)
+		sb_env->env_status = ENV_RUNNABLE;
+	
+	/* toggle current block */
+	sb_block = !sb_block;
+	
+	inb(POLL16_PORT);
+}
+
 // Interrupts should be enabled prior to entering sb16_init()
 void sb16_init(void)
 {
@@ -361,21 +378,4 @@ int sb16_wait(void)
 	
 	/* this will call env_run which will copy UTF back to curenv */
 	sched_yield();
-}
-
-void sb16_intr(int irq)
-{
-	sb_interrupted = 1;
-	
-	if(!sb_initialized)
-		return;
-	
-	/* wake up the environment if it is sleeping, and not for IPC */
-	if(sb_env->env_status == ENV_NOT_RUNNABLE && !sb_env->env_ipc_recving)
-		sb_env->env_status = ENV_RUNNABLE;
-	
-	/* toggle current block */
-	sb_block = !sb_block;
-	
-	inb(POLL16_PORT);
 }
