@@ -3,6 +3,7 @@
 #include <inc/x86.h>
 #include <inc/malloc.h>
 #include <inc/string.h>
+#include <inc/irq.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -12,6 +13,7 @@
 #include <kfs/debug.h>
 #include <kfs/ide_pio_bd.h>
 
+static const uint8_t ide_irq[2] = {14, 15};
 static const uint16_t ide_base[2] = {0x1F0, 0x170};
 static const uint16_t ide_reset[2] = {0x3F6, 0x376};
 static const char * ide_names[2][2] = {{"ide_pio_hda", "ide_pio_hdb"}, {"ide_pio_hdc", "ide_pio_hdd"}};
@@ -27,6 +29,18 @@ struct ide_info {
 	uint8_t * ra_cache;
 };
 
+static struct {
+	int users;
+	union {
+		void * dst;
+		const void * src;
+	};
+	uint8_t count;
+	uint8_t done;
+	uint8_t write;
+	uint8_t busy;
+} ide_requests[2] = {{users: 0, busy: 0}};
+
 static int ide_notbusy(uint8_t controller)
 {
 	uint16_t base = ide_base[controller];
@@ -34,22 +48,79 @@ static int ide_notbusy(uint8_t controller)
 	/* wait for disk not busy */
 	while((inb(base + 7) & 0xC0) != 0x40)
 	{
-		sys_yield();
 		if(8 * HZ <= env->env_jiffies - start_jiffies)
 		{
 			uint16_t reset = ide_reset[controller];
-			printf("Warning: IDE operation timed out on controller %d\n", controller);
+			printf("Warning: ATA operation timed out on controller %d\n", controller);
 			/* reset the drive */
 			outb(reset, 0x0E);
 			sleep(2);
 			outb(reset, 0x0A);
 			return -1;
 		}
+		/* yield after checking the time, so we don't
+		 * time out merely because of the scheduler */
+		sys_yield();
 	}
 	return 0;
 }
 
-#define SECTSIZE 512
+#define IDE_SECTSIZE 512
+
+static void ide_irq_handler(int irq)
+{
+	uint8_t controller;
+	uint16_t base;
+	if(irq == ide_irq[0])
+		controller = 0;
+	else if(irq == ide_irq[1])
+		controller = 1;
+	else
+	{
+		printf("Unhandled ATA interrupt %d!\n", irq);
+		return;
+	}
+	base = ide_base[controller];
+	if(!ide_requests[controller].busy)
+	{
+		printf("Unexpected ATA interrupt %d\n", irq);
+		return;
+	}
+	/* the controller expects us to query the status register... */
+	if(ide_notbusy(controller) == -1)
+	{
+		printf("Extra ATA interrupt %d\n", irq);
+		return;
+	}
+	if(ide_requests[controller].write)
+	{
+		/* handle a write interrupt */
+		ide_requests[controller].done++;
+		if(ide_requests[controller].count--)
+		{
+			/* need to send the next block */
+			outsl(base + 0, ide_requests[controller].src, IDE_SECTSIZE / 4);
+			ide_requests[controller].src += IDE_SECTSIZE;
+		}
+		else
+		{
+			/* FIXME: notify the user? */
+			ide_requests[controller].busy = 0;
+		}
+	}
+	else
+	{
+		/* handle a read interrupt */
+		ide_requests[controller].done++;
+		insl(base + 0, ide_requests[controller].dst, IDE_SECTSIZE / 4);
+		ide_requests[controller].dst += IDE_SECTSIZE;
+		if(!--ide_requests[controller].count)
+		{
+			/* FIXME: notify the user? */
+			ide_requests[controller].busy = 0;
+		}
+	}
+}
 
 static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * dst, uint8_t count)
 {
@@ -57,6 +128,12 @@ static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * ds
 	
 	if(ide_notbusy(controller) == -1)
 		return -1;
+	
+	ide_requests[controller].dst = dst;
+	ide_requests[controller].count = count;
+	ide_requests[controller].done = 0;
+	ide_requests[controller].write = 0;
+	ide_requests[controller].busy = 1;
 	
 	outb(base + 2, count);
 	outb(base + 3, sector & 0xFF);
@@ -66,14 +143,8 @@ static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * ds
 	/* command 0x20 means read sector */
 	outb(base + 7, 0x20);
 	
-	while(count--)
-	{
-		if(ide_notbusy(controller) == -1)
-			return -1;
-		
-		insl(base + 0, dst, SECTSIZE / 4);
-		dst += SECTSIZE;
-	}
+	while(ide_requests[controller].busy)
+		sys_yield();
 	return 0;
 }
 
@@ -84,6 +155,12 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 	if(ide_notbusy(controller) == -1)
 		return -1;
 	
+	ide_requests[controller].src = src;
+	ide_requests[controller].count = count;
+	ide_requests[controller].done = -1;
+	ide_requests[controller].write = 1;
+	ide_requests[controller].busy = 1;
+	
 	outb(base + 2, count);
 	outb(base + 3, sector & 0xFF);
 	outb(base + 4, (sector >> 8) & 0xFF);
@@ -92,14 +169,11 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 	/* command 0x30 means write sector */
 	outb(base + 7, 0x30);
 	
-	while(count--)
-	{
-		if(ide_notbusy(controller) == -1)
-			return -1;
+	/* simulate the first interrupt */
+	ide_irq_handler(ide_irq[controller]);
 	
-		outsl(base + 0, src, SECTSIZE / 4);
-		src += SECTSIZE;
-	}
+	while(ide_requests[controller].busy)
+		sys_yield();
 	return 0;
 }
 
@@ -113,6 +187,7 @@ static char * ide_string(char * string, const uint16_t * ide, int length)
 	return string;
 }
 
+/* FIXME: use interrupts to do the read, make sure we don't clobber the controller (use ide_requests) */
 static uint32_t ide_size(uint8_t controller, uint8_t disk)
 {
 	uint16_t base = ide_base[controller];
@@ -128,7 +203,7 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 	
 	if(ide_notbusy(controller) == -1)
 		return -1;
-	insl(base + 0, id, SECTSIZE / 4);
+	insl(base + 0, id, IDE_SECTSIZE / 4);
 	
 	/* print out some drive information */
 	printf("ATA %s %s:", controller ? "secondary" : "primary", disk ? "slave" : "master");
@@ -159,6 +234,7 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 	return (uint32_t) id[1] * (uint32_t) id[3] * (uint32_t) id[6];
 }
 
+/* FIXME: make sure we don't clobber the controller doing this (use ide_requests) */
 static uint32_t ide_pio_tune(uint8_t controller, uint8_t disk)
 {
 	uint16_t base = ide_base[controller];
@@ -211,12 +287,12 @@ static uint32_t ide_pio_bd_get_numblocks(BD_t * object)
 
 static uint16_t ide_pio_bd_get_blocksize(BD_t * object)
 {
-	return SECTSIZE;
+	return IDE_SECTSIZE;
 }
 
 static uint16_t ide_pio_bd_get_atomicsize(BD_t * object)
 {
-	return SECTSIZE;
+	return IDE_SECTSIZE;
 }
 
 static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
@@ -233,7 +309,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, SECTSIZE);
+	bdesc = bdesc_alloc(number, IDE_SECTSIZE);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -252,7 +328,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 			/* we have something in the cache */
 			if(info->ra_sector <= number && number < info->ra_sector+info->ra_count)
 				/* cache hit */
-				memcpy(bdesc->ddesc->data, info->ra_cache + SECTSIZE * (number - info->ra_sector), SECTSIZE);
+				memcpy(bdesc->ddesc->data, info->ra_cache + IDE_SECTSIZE * (number - info->ra_sector), IDE_SECTSIZE);
 			else
 				/* cache miss */
 				need_to_read = 1;
@@ -274,7 +350,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 				/* read it */
 				if(ide_read(info->controller, info->disk, number, info->ra_cache, info->ra_count) == -1)
 					return NULL;
-				memcpy(bdesc->ddesc->data, info->ra_cache, SECTSIZE);
+				memcpy(bdesc->ddesc->data, info->ra_cache, IDE_SECTSIZE);
 				info->ra_sector = number;
 			}
 		}
@@ -303,7 +379,7 @@ static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, SECTSIZE);
+	bdesc = bdesc_alloc(number, IDE_SECTSIZE);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -331,7 +407,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	
 	/* make sure it's a whole block */
-	if(block->ddesc->length != SECTSIZE)
+	if(block->ddesc->length != IDE_SECTSIZE)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */
@@ -374,6 +450,8 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	
+	if(!--ide_requests[info->controller].users)
+		request_irq(ide_irq[info->controller], NULL);
 	free(info->ra_cache);
 	blockman_destroy(&info->blockman);
 	free(info);
@@ -410,7 +488,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	}
 	
 	info->ra_count = readahead;
-	info->ra_cache = malloc(SECTSIZE * info->ra_count);
+	info->ra_cache = malloc(IDE_SECTSIZE * info->ra_count);
 	if(!info->ra_cache)
 	{
 		free(info);
@@ -440,6 +518,16 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	{
 		DESTROY(bd);
 		return NULL;
+	}
+	
+	if(!ide_requests[controller].users++)
+	{
+		if(request_irq(ide_irq[controller], ide_irq_handler) < 0)
+		{
+			/* DESTROY() will decrement users again */
+			DESTROY(bd);
+			return NULL;
+		}
 	}
 	
 	return bd;
