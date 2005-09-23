@@ -54,7 +54,7 @@ static int ide_notbusy(uint8_t controller)
 			printf("Warning: ATA operation timed out on controller %d\n", controller);
 			/* reset the drive */
 			outb(reset, 0x0E);
-			sleep(2);
+			sleep(HZ / 50);
 			outb(reset, 0x0A);
 			return -1;
 		}
@@ -238,19 +238,18 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 static uint32_t ide_pio_tune(uint8_t controller, uint8_t disk)
 {
 	uint16_t base = ide_base[controller];
-
+	
 	if(ide_notbusy(controller) == -1)
 		return -1;
-
+	
 	// PIO Mode 4 magic, needs refinement
 	outb(base + 2, 0x0C);
 	outb(base + 1, 0x03);
 	outb(base + 7, 0xEF);
-
+	
 	if(ide_notbusy(controller) == -1)
 		printf("Error setting controller %d to PIO MODE 4\n", controller);
-
-
+	
 	return 0;
 }
 
