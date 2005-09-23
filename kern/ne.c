@@ -8,7 +8,7 @@
 
 #include <kern/8390.h>
 #include <kern/kclock.h>
-#include <kern/trap.h>
+#include <kern/irq.h>
 #include <kern/josnic.h>
 
 static void delay(void)

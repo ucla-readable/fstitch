@@ -10,7 +10,7 @@
 
 #include <kern/kclock.h>
 #include <kern/8390.h>
-#include <kern/trap.h>
+#include <kern/irq.h>
 #include <kern/picirq.h>
 #include <kern/josnic.h>
 

@@ -19,6 +19,7 @@ enum
 	SYS_page_map,
 	SYS_page_unmap,
 	SYS_set_pgfault_upcall,
+	SYS_set_irq_upcall,
 	SYS_ipc_try_send,
 	SYS_ipc_recv,
 	SYS_batch_syscall,
@@ -42,6 +43,7 @@ enum
 	SYS_unreg_serial,
 
 	SYS_grant_io,
+	SYS_assign_irq,
 
 	SYS_get_hw_time,
 

@@ -20,6 +20,8 @@
 #include <kern/josnic.h>
 #include <kern/elf.h>
 #include <kern/kclock.h>
+#include <kern/picirq.h>
+#include <kern/irq.h>
 
 
 /**********************************
@@ -346,6 +348,20 @@ sys_set_pgfault_upcall(envid_t envid, uintptr_t upcall)
 		return -E_BAD_ENV;
 	
 	e->env_pgfault_upcall = upcall;
+	return 0;
+}
+
+static int
+sys_set_irq_upcall(envid_t envid, uintptr_t upcall)
+{
+	struct Env * e;
+
+	if(envid2env(envid, &e, 1) || e->env_status == ENV_FREE)
+		return -E_BAD_ENV;
+
+	if(!upcall)
+		env_irq_unassign_all(e);
+	e->env_irq_upcall = upcall;
 	return 0;
 }
 
@@ -868,7 +884,7 @@ static int
 sys_grant_io(envid_t envid)
 {
 	int r;
-	struct Env *e;
+	struct Env * e;
 
 	if ((r = envid2env(envid, &e, 1)) < 0)
 		return r;
@@ -879,6 +895,21 @@ sys_grant_io(envid_t envid)
 		e->env_tf.tf_eflags |= FL_IOPL_3;
 
 	return 0;
+}
+
+static int
+sys_assign_irq(envid_t envid, int irq, int enable)
+{
+	int r;
+	struct Env * e;
+
+	if(irq < 0 || MAX_IRQS <= irq)
+		return -E_INVAL;
+	
+	if((r = envid2env(envid, &e, 1)) < 0)
+		return r;
+	
+	return enable ? env_assign_irq(irq, e) : env_unassign_irq(irq, e);
 }
 
 // RTC challenge
@@ -943,6 +974,8 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_page_unmap(a1, a2);
 		case SYS_set_pgfault_upcall:
 			return sys_set_pgfault_upcall(a1, a2);
+		case SYS_set_irq_upcall:
+			return sys_set_irq_upcall(a1, a2);
 		case SYS_ipc_recv:
 			return sys_ipc_recv(a1, a2, a3);
 		case SYS_ipc_try_send:
@@ -975,6 +1008,8 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_unreg_serial(a1);
 		case SYS_grant_io:
 			return sys_grant_io(a1);
+		case SYS_assign_irq:
+			return sys_assign_irq(a1, a2, a3);
 		case SYS_get_hw_time:
 			return sys_get_hw_time((int*)a1, (int*)a2, (int*)a3, (int*)a4, (int*)a5);
 		case SYS_print_backtrace:

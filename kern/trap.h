@@ -25,8 +25,6 @@ extern struct Gatedesc idt[];
 
 extern uint32_t page_fault_mode;
 
-typedef void (*irq_handler_t)(int irq);
-
 void handle_int_0(void);
 void handle_int_1(void);
 void handle_int_2(void);
@@ -69,9 +67,6 @@ void handle_int_48(void);
 
 void idt_init(void);
 void print_trapframe(struct Trapframe *tf);
-int request_irq(int irq, irq_handler_t handler);
-void probe_irq_on(void);
-int probe_irq_off(void);
 void page_fault_handler(struct Trapframe *);
 void reboot(void) __attribute__((noreturn));
 

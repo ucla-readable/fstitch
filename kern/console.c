@@ -13,6 +13,7 @@
 #include <kern/picirq.h>
 #include <kern/kclock.h>
 #include <kern/trap.h>
+#include <kern/irq.h>
 #include <kern/env.h>
 #include <kern/serial.h>
 

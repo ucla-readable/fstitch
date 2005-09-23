@@ -12,6 +12,7 @@
 #include <kern/sched.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
+#include <kern/irq.h>
 #include <kern/sb16.h>
 #include <kern/3c509.h>
 #include <kern/elf.h>
@@ -217,47 +218,13 @@ print_trapframe(struct Trapframe *tf)
 #endif
 }
 
-static irq_handler_t irq_handlers[MAX_IRQS] = {NULL};
-static int last_unexpected_irq = 0;
-static uint16_t irq_mask_backup;
-
-int
-request_irq(int irq, irq_handler_t handler)
-{
-	/* don't allow IRQ 0 */
-	if(irq < 1 || MAX_IRQS <= irq)
-		return -1;
-	if(irq_handlers[irq] && handler)
-		return -1;
-	irq_handlers[irq] = handler;
-	return 0;
-}
-
-void
-probe_irq_on(void)
-{
-	if(!last_unexpected_irq)
-		irq_mask_backup = irq_mask_8259A;
-	last_unexpected_irq = -1;
-	irq_setmask_8259A_quiet(0);
-}
-
-int
-probe_irq_off(void)
-{
-	int irq = last_unexpected_irq;
-	irq_setmask_8259A_quiet(irq_mask_backup);
-	last_unexpected_irq = 0;
-	return irq;
-}
-
 void
 trap(struct Trapframe *tf)
 {
 	if(tf->tf_cs != GD_KT)
 		curenv->env_tsc += read_tsc() - env_tsc;
 	
-	/* IRQ - we want to allow this to happen in the kernel, these must be asynchronous! */
+	/* IRQ - we want to allow this to happen in the kernel; these must be asynchronous! */
 	/* note that user environments are not allowed to invoke these interrupt numbers */
 	if(IRQ_OFFSET <= tf->tf_trapno && tf->tf_trapno < IRQ_OFFSET + MAX_IRQS)
 	{
@@ -273,70 +240,56 @@ trap(struct Trapframe *tf)
 			if(tf->tf_cs != GD_KT)
 				sched_yield();
 			/* ignore clock interrupt in kernel */
-			goto out;
-		}
-		
-		if(irq_handlers[irq])
-		{
-			irq_handlers[irq](irq);
-			goto out;
-		}
-		
-		if(!last_unexpected_irq)
-		{
-			printf("spurious interrupt on IRQ %d\n", irq);
-			//print_trapframe(tf);
 		}
 		else
-			last_unexpected_irq = irq;
-		goto out;
+			dispatch_irq(irq);
+		
 	}
-	
-	// Handle processor exceptions
-	if(tf->tf_trapno == T_BRKPT)
+	else if(tf->tf_trapno == T_BRKPT)
 	{
 		/* save the state in case we will be reading it */
 		if(tf->tf_cs != GD_KT)
 			curenv->env_tf = *tf;
 		monitor(tf);
-		goto out;
 	}
-	if(tf->tf_trapno == T_DEBUG)
+	else if(tf->tf_trapno == T_DEBUG)
 	{
 		monitor(tf);
 		ldr6(0); // clear debug flags for future breakpoints
 		tf->tf_eflags |= FL_RF; // in case breakpoint on eip's inst, set RF flag
-		goto out;
 	}
-	if(tf->tf_trapno == T_PGFLT)
-	{
+	else if(tf->tf_trapno == T_PGFLT)
 		page_fault_handler(tf);
-		goto out;
-	}
-	if(tf->tf_trapno == T_SYSCALL)
+	else if(tf->tf_trapno == T_SYSCALL)
 	{
 		tf->tf_eax = syscall(tf->tf_eax, tf->tf_edx, tf->tf_ecx, tf->tf_ebx, tf->tf_edi, tf->tf_esi);
 		if(jiffies - curenv->env_jiffies > 0)
 			/* our timeslice expired during the system call */
 			sched_yield();
-		goto out;
 	}
-	if(tf->tf_trapno == T_TSS)
+	else if(tf->tf_trapno == T_TSS)
 	{
 		print_trapframe(tf);
 		env_destroy(curenv);
 		/* does not return */
 	}
-	
-	/* the user process or the kernel has a bug */
-	print_trapframe(tf);
-	print_backtrace(tf, NULL, NULL);
-	if(tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
 	else
-		env_destroy(curenv);
+	{
+		/* the user process or the kernel has a bug */
+		print_trapframe(tf);
+		print_backtrace(tf, NULL, NULL);
+		if(tf->tf_cs == GD_KT)
+			panic("unhandled trap in kernel");
+		else
+			env_destroy(curenv);
+		/* does not return */
+	}
 	
-out:
+	/* if there are pending IRQs to be delivered to user environments,
+	 * env_dispatch_irqs() sets curenv to one of them and pushes a signal
+	 * handler onto the target environment's stack */
+	env_dispatch_irqs();
+	
 	env_tsc = read_tsc();
 	return;
 }
@@ -392,6 +345,7 @@ page_fault_handler(struct Trapframe *tf)
 		uint32_t old_fault_mode = page_fault_mode;
 		uint32_t * uxstack = (uint32_t *) tf->tf_esp;
 		
+		/* note that we don't need TRUP() because of this check */
 		if(tf->tf_esp < UXSTACKTOP - PGSIZE || tf->tf_esp > UXSTACKTOP)
 			uxstack = (uint32_t *) UXSTACKTOP;
 		
@@ -405,9 +359,6 @@ page_fault_handler(struct Trapframe *tf)
 		
 		tf->tf_esp = (register_t) &uxstack[-10];
 		tf->tf_eip = curenv->env_pgfault_upcall;
-		
-		/* paranoid copy back to curenv */
-		curenv->env_tf = *tf;
 		
 		page_fault_mode = old_fault_mode;
 		return;

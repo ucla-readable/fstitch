@@ -8,6 +8,7 @@
 #include <inc/elf.h>
 
 #include <kern/env.h>
+#include <kern/irq.h>
 #include <kern/pmap.h>
 #include <kern/trap.h>
 #include <kern/monitor.h>
@@ -206,6 +207,8 @@ env_alloc(struct Env** new, envid_t parent_id, int priority)
 
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
+	// Clear the IRQ handler until the user installs one.
+	e->env_irq_upcall = 0;
 
 	// Also clear the IPC receiving flag.
 	e->env_ipc_recving = 0;
@@ -418,6 +421,8 @@ env_free(struct Env *e)
 void
 env_destroy(struct Env *e) 
 {
+	if(e->env_irq_upcall)
+		env_irq_unassign_all(e);
 	env_free(e);
 
 	if (curenv == e) {

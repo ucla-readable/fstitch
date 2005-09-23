@@ -5,7 +5,7 @@
 #include <inc/string.h>
 
 #include <kern/3c509.h>
-#include <kern/trap.h>
+#include <kern/irq.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
 #include <kern/josnic.h>
@@ -115,7 +115,7 @@ static int el3_probe(const struct josnic * nic)
 	int ioaddr;
 
 #if !ENABLE_INKERNEL_INTS
-	printf("3c509: not probing, requires in-kernel interrupts\n");
+	printf("3c509: not probing (requires in-kernel interrupts)\n");
 	return -E_NO_DEV;
 #else
 	

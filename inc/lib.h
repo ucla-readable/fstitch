@@ -67,6 +67,7 @@ int	sys_set_symtbls(envid_t envid, void *symtbl, size_t symtbl_size, void *symst
 int	sys_reg_serial(int port, void *buffer_pg);
 int	sys_unreg_serial(int port);
 int	sys_grant_io(envid_t envid);
+int	sys_assign_irq(envid_t envid, int irq, int enable);
 int	sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon);
 int sys_print_backtrace();
 
@@ -85,6 +86,7 @@ sys_exofork(void)
 }
 
 int	sys_set_pgfault_upcall(envid_t env, void* upcall);
+int	sys_set_irq_upcall(envid_t env, void* upcall);
 int	sys_ipc_recv(envid_t fromenv, void* rcv_pg, int timeout);
 int	sys_ipc_try_send(envid_t dst_env, uint32_t value,
 			 void* pg, unsigned pg_perm, const void* cap);

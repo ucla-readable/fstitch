@@ -732,10 +732,9 @@ int mon_env_current(int argc, char ** argv, struct Trapframe * tf)
 		return 0;
 	}
 	
-	/* we have to make sure the user trap frame matches the new current
-	 * environment, so that the next call to env_run will not save it to the
-	 * wrong environment... we don't need to save the current one back to
-	 * curenv, because that was done in trap() */
+	/* switch user trap frame and page tables */
+	if(curenv)
+		curenv->env_tf = *tf;
 	*tf = e->env_tf;
 	curenv = e;
 	lcr3(e->env_cr3);

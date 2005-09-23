@@ -6,6 +6,7 @@
 
 #include <kern/pmap.h>
 #include <kern/env.h>
+#include <kern/irq.h>
 #include <kern/trap.h>
 #include <kern/sched.h>
 #include <kern/kclock.h>
@@ -127,7 +128,7 @@ void sb16_init(void)
 	
 	printf("SB16: ");
 #if !ENABLE_INKERNEL_INTS
-	printf("not detecting, require in-kernel interrupts\n");
+	printf("not detecting (requires in-kernel interrupts)\n");
 	return;
 #else
 	if(sb16_reset())
@@ -163,7 +164,11 @@ void sb16_init(void)
 	//sb16_setmixer(0x33, sb16_getmixer(0x33) | 0xF8);
 	
 	/* interrupt test */
-	request_irq(SB16_IRQ, sb16_intr);
+	if(request_irq(SB16_IRQ, sb16_intr))
+	{
+		printf("SB16: Unable to allocate IRQ %d!\n", SB16_IRQ);
+		return;
+	}
 	irq_setmask_8259A(irq_mask_8259A & ~(1 << SB16_IRQ));
 	sb_interrupted = 0;
 	sb16_write(0xF2);

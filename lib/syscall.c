@@ -117,6 +117,12 @@ sys_set_pgfault_upcall(envid_t envid, void* upcall)
 }
 
 int
+sys_set_irq_upcall(envid_t envid, void* upcall)
+{
+	return syscall(SYS_set_irq_upcall, envid, (uintptr_t) upcall, 0, 0, 0);
+}
+
+int
 sys_ipc_recv(envid_t fromenv, void* dstva, int timeout)
 {
 	return syscall(SYS_ipc_recv, fromenv, (uintptr_t) dstva, timeout, 0, 0);
@@ -240,6 +246,12 @@ int
 sys_grant_io(envid_t envid)
 {
 	return syscall(SYS_grant_io, (register_t) envid, 0, 0, 0, 0);
+}
+
+int
+sys_assign_irq(envid_t envid, int irq, int enable)
+{
+	return syscall(SYS_assign_irq, (register_t) envid, irq, enable, 0, 0);
 }
 
 int
