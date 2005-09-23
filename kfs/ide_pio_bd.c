@@ -33,6 +33,8 @@ static int ide_notbusy(uint8_t controller)
 	int start_jiffies = env->env_jiffies;
 	/* wait for disk not busy */
 	while((inb(base + 7) & 0xC0) != 0x40)
+	{
+		sys_yield();
 		if(8 * HZ <= env->env_jiffies - start_jiffies)
 		{
 			uint16_t reset = ide_reset[controller];
@@ -43,6 +45,7 @@ static int ide_notbusy(uint8_t controller)
 			outb(reset, 0x0A);
 			return -1;
 		}
+	}
 	return 0;
 }
 
