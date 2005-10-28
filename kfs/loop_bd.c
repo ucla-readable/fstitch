@@ -195,7 +195,8 @@ static int loop_destroy(BD_t * bd)
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_lfs(info->lfs, bd);
+	r = modman_dec_lfs(info->lfs, bd);
+	assert(r >= 0);
 	
 	CALL(info->lfs, free_fdesc, info->file);
 	free((char *) info->filename);
