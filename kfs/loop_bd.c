@@ -199,7 +199,6 @@ static int loop_destroy(BD_t * bd)
 	
 	CALL(info->lfs, free_fdesc, info->file);
 	free((char *) info->filename);
-	free(info->file);
 	memset(info, 0, sizeof(*info));
 	free(info);
 
