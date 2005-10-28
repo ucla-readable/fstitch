@@ -55,6 +55,8 @@ void free(void * ptr)
 #if FAILFAST_ALIGN_END
 	ptr = (void *) ROUNDDOWN32(ptr, PGSIZE);
 #endif
+	if(!va_is_mapped(ptr))
+		printf("[%08x] (%s) BUG: double free(0x%08x)\n", env->env_id, env->env_name, ptr);
 	while(va_is_mapped(ptr))
 	{
 		int r = sys_page_unmap(0, ptr);
