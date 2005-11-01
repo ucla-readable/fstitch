@@ -28,6 +28,9 @@
 /* "TBLCLASS" */
 #define TABLE_CLASSIFIER_MAGIC 0x7B1C1A55
 
+/* "FILEHIDE" */
+#define FILE_HIDING_MAGIC 0xF11E41DE
+
 /* "LEET0CFS" (because UHFS is leet) */
 #define UHFS_MAGIC 0x1EE70CF5
 
