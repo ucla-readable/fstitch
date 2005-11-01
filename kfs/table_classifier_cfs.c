@@ -327,6 +327,9 @@ static int table_classifier_link(CFS_t * cfs, const char * oldname, const char *
 	CFS_t * old_selected_cfs, * new_selected_cfs;
 
 	old_selected_cfs = lookup_cfs_name(state->mount_table, oldname, &oldnewname);
+	if (!old_selected_cfs)
+		return -E_NOT_FOUND;
+
 	new_selected_cfs = lookup_cfs_name(state->mount_table, newname, &newnewname);
 	if (old_selected_cfs != new_selected_cfs)
 		return -E_INVAL;
@@ -342,6 +345,9 @@ static int table_classifier_rename(CFS_t * cfs, const char * oldname, const char
 	CFS_t * old_selected_cfs, * new_selected_cfs;
 
 	old_selected_cfs = lookup_cfs_name(state->mount_table, oldname, &oldnewname);
+	if (!old_selected_cfs)
+		return -E_NOT_FOUND;
+
 	new_selected_cfs = lookup_cfs_name(state->mount_table, newname, &newnewname);
 	if (old_selected_cfs != new_selected_cfs)
 		return -E_INVAL;
