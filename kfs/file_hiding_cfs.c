@@ -2,6 +2,7 @@
 #include <inc/malloc.h>
 #include <inc/hash_map.h>
 #include <inc/vector.h>
+#include <inc/dirent.h>
 
 #include <kfs/fidman.h>
 #include <kfs/modman.h>
@@ -249,11 +250,39 @@ static int file_hiding_getdirentries(CFS_t * cfs, int fid, char * buf, int nbyte
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 	const char * path = fid_table_get(state, fid);
+	int i, r, s, hidden;
+	dirent_t * d;
+	char * fname;
 
 	if (!path)
 		return -E_NOT_FOUND;
 
-	return CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
+	fname = malloc(strlen(path) + DIRENT_MAXNAMELEN + 1);
+	if (!fname)
+		return -E_NO_MEM;
+
+	r = CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
+
+	// Look for hidden files
+	for (i = 0; i < r; )
+	{
+		d = (dirent_t *) (buf + i);
+
+		strcpy(fname, path);
+		strncpy(fname + strlen(fname), d->d_name, DIRENT_MAXNAMELEN);
+		hidden = hide_lookup(state->hide_table, fname);
+		if (0 <= hidden)
+		{
+			// Remove a hidden file
+			s = d->d_reclen;
+			memmove(buf + i, buf + i + s, r - i - s);
+			r  -= s;
+		}
+		else
+			i += d->d_reclen;
+	}
+	free(fname);
+	return r;
 }
 
 static int file_hiding_truncate(CFS_t * cfs, int fid, uint32_t size)
