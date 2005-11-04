@@ -110,32 +110,27 @@ USER_CFLAGS := $(CFLAGS) -DKUDOS_USER
 $(OBJDIR)/user/%.o: user/%.c
 	@echo + cc[USER] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/lib/%.o: lib/%.raw
-	@echo + ld[LIB] $<
-	@mkdir -p $(@D)
-	$(V)$(LD) -r -o $@ $(ULDFLAGS) $(LDFLAGS) -b binary $<
+	$(V)$(CC) $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+	$(V)$(CC) $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/lib/%.o: lib/%.S
 	@echo + as[LIB] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(USER_CFLAGS) -c -o $@ $<
+	$(V)$(CC) $(USER_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/fs/%.o: fs/%.c
 	@echo + cc[FS] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+	$(V)$(CC) $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/kfs/%.o: kfs/%.c
 	@echo + cc[KFS] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+	$(V)$(CC) -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 
 # Build vi/emacs tag files
