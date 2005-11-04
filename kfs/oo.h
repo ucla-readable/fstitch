@@ -1,8 +1,8 @@
 #ifndef __KUDOS_KFS_OO_H
 #define __KUDOS_KFS_OO_H
 
-#include <inc/types.h>
-#include <inc/malloc.h>
+#include <lib/types.h>
+#include <malloc.h>
 
 #include <kfs/magic.h>
 

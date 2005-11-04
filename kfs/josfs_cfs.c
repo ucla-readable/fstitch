@@ -3,7 +3,7 @@
 
 #include <inc/lib.h>
 #include <inc/malloc.h>
-#include <inc/hash_map.h>
+#include <lib/hash_map.h>
 #include <inc/fd.h>
 
 #include <kfs/fidman.h>

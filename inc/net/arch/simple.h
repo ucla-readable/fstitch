@@ -3,7 +3,7 @@
 
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
-#include <inc/vector.h>
+#include <lib/vector.h>
 
 // lwIP has an inet_aton() and inet_ntoa() that use struct in_addr,
 // but everything else in lwIP uses struct ip_addr. These functions takes

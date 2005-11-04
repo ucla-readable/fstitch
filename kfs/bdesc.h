@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_BDESC_H
 #define __KUDOS_KFS_BDESC_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 struct bdesc;
 typedef struct bdesc bdesc_t;

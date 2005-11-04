@@ -1,9 +1,9 @@
 #ifndef __KUDOS_KFS_MODMAN_BD_H
 #define __KUDOS_KFS_MODMAN_BD_H
 
-#include <inc/types.h>
-#include <inc/vector.h>
-#include <inc/hash_map.h>
+#include <lib/types.h>
+#include <lib/vector.h>
+#include <lib/hash_map.h>
 
 #include <kfs/bd.h>
 #include <kfs/cfs.h>

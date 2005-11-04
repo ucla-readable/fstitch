@@ -1,4 +1,4 @@
-#include <inc/fixed_max_heap.h>
+#include <lib/fixed_max_heap.h>
 #include <inc/malloc.h>
 
 #include <kfs/chdesc.h>

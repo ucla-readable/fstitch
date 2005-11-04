@@ -98,16 +98,16 @@ PERL	:= perl
 CTAGS	:= ctags
 
 # Native command flags
-NCFLAGS	:= -Wall -pedantic
+NCFLAGS	:= -Wall -pedantic -DKUTIL
 NCXXFLAGS	:= $(NCFLAGS)
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
 
 # Compiler flags
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-format -gstabs
+CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -I$(TOP)/inc -MD -Wall -Wno-format -gstabs
 CFLAGS	:= $(CFLAGS) -O2
-BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
+BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS -DKUDOS_KERNEL
 
 LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
 
@@ -141,10 +141,10 @@ $(OBJDIR)/kern/stabs.o: conf/env.mk
 
 
 # inc/net for lwip, inc/ for string.h
-LIB_NET_CFLAGS := -I$(TOP)/inc/net/ -I$(TOP)/inc/net/ipv4 -I$(TOP)/inc/
+LIB_NET_CFLAGS := -I$(TOP)/inc/net/ -I$(TOP)/inc/net/ipv4 -I$(TOP)/inc/ -DKUDOS
 
 # Rules for building kernel object files
-KERN_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
+KERN_CFLAGS := $(CFLAGS) -DKUDOS -DKUDOS_KERNEL
 
 $(OBJDIR)/kern/%.o: kern/%.c
 	@echo + cc $<
@@ -173,7 +173,7 @@ $(OBJDIR)/boot/%.o: boot/%.S
 
 
 # Rules for building user object files
-USER_CFLAGS := $(CFLAGS) -DKUDOS_USER
+USER_CFLAGS := $(CFLAGS) -DKUDOS -DKUDOS_USER
 
 $(OBJDIR)/user/%.o: user/%.c
 	@echo + cc[USER] $<

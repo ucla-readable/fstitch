@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <inc/hash_map.h>
+#include <lib/hash_map.h>
 #include <inc/malloc.h>
 #include <inc/fd.h>
 

@@ -1,8 +1,8 @@
 #include <inc/lib.h>
-#include <inc/types.h>
+#include <lib/types.h>
 #include <inc/x86.h>
-#include <inc/malloc.h>
-#include <inc/string.h>
+#include <malloc.h>
+#include <string.h>
 #include <inc/irq.h>
 
 #include <kfs/bd.h>

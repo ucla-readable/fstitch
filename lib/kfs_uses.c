@@ -1,6 +1,6 @@
 #include <inc/string.h>
-#include <inc/vector.h>
-#include <inc/hash_map.h>
+#include <lib/vector.h>
+#include <lib/hash_map.h>
 #include <inc/assert.h>
 #include <inc/malloc.h>
 #include <kfs/modman.h>

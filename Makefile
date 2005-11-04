@@ -80,12 +80,12 @@ PERL	:= perl
 CTAGS	:= ctags
 
 # Native command flags
-NCFLAGS	:= -Wall -pedantic
+NCFLAGS	:= -Wall -pedantic -DKUTIL
 NCXXFLAGS	:= $(NCFLAGS)
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
 
 # Compiler flags
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -Wno-format -g
+CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -Wno-format -g -DUNIXUSER
 CFLAGS	:= $(CFLAGS) -O2
 
 # Lists that the */UUMakefrag makefile fragments will add to

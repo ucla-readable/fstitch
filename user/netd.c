@@ -8,7 +8,7 @@
 #include <inc/lib.h>
 #include <inc/net.h>
 #include <inc/malloc.h>
-#include <inc/hash_set.h>
+#include <lib/hash_set.h>
 
 #include "lwip/debug.h"
 #include "lwip/stats.h"

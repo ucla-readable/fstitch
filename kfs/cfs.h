@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_CFS_H
 #define __KUDOS_KFS_CFS_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 #include <kfs/oo.h>
 #include <kfs/feature.h>

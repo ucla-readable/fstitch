@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <mmu.h>
 #include <error.h>
-#include <vector.h>
+#include <lib/vector.h>
 #include <malloc.h>
 #include <lib.h>
 

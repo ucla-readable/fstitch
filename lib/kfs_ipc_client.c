@@ -1,8 +1,8 @@
 #include <inc/string.h>
 #include <inc/lib.h>
 #include <inc/malloc.h>
-#include <inc/vector.h>
-#include <inc/hash_map.h>
+#include <lib/vector.h>
+#include <lib/hash_map.h>
 
 #include <inc/cfs_ipc_client.h>
 #include <inc/serial_kfs.h>

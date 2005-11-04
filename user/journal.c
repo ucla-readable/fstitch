@@ -8,7 +8,7 @@
 #include <inc/kfs_uses.h>
 #include <arch/simple.h>
 #include <inc/stdio.h>
-#include <inc/hash_map.h>
+#include <lib/hash_map.h>
 
 static BD_t * find_bd(const char * name)
 {

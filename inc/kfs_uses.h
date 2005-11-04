@@ -1,8 +1,8 @@
 #ifndef KUDOS_INC_KFS_USES_H
 #define KUDOS_INC_KFS_USES_H
 
-#include <inc/hash_map.h>
-#include <inc/vector.h>
+#include <lib/hash_map.h>
+#include <lib/vector.h>
 #include <kfs/cfs.h>
 
 struct kfs_node;

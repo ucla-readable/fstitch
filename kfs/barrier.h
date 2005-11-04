@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_BARRIER_H
 #define __KUDOS_KFS_BARRIER_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

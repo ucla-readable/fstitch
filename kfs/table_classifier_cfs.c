@@ -4,8 +4,8 @@
 
 #include <inc/lib.h>
 #include <inc/malloc.h>
-#include <inc/hash_map.h>
-#include <inc/vector.h>
+#include <lib/hash_map.h>
+#include <lib/vector.h>
 
 #include <kfs/fidman.h>
 #include <kfs/modman.h>

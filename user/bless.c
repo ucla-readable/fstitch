@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 #include <inc/x86.h>
-#include <inc/partition.h>
+#include <lib/partition.h>
 
 static void ide_notbusy(void)
 {

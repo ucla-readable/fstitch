@@ -1,7 +1,7 @@
 #include <inc/lib.h>
 #include <inc/malloc.h>
 #include <inc/error.h>
-#include <inc/vector.h>
+#include <lib/vector.h>
 
 
 static void ** vector_create_elts(size_t n);

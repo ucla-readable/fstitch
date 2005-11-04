@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_PC_PTABLE_BD_H
 #define __KUDOS_KFS_PC_PTABLE_BD_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 #include <kfs/bd.h>
 
 void * pc_ptable_init(BD_t * bd);

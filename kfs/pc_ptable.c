@@ -1,9 +1,9 @@
-#include <inc/stdio.h>
-#include <inc/types.h>
-#include <inc/malloc.h>
-#include <inc/string.h>
-#include <inc/partition.h>
-#include <inc/vector.h>
+#include <stdio.h>
+#include <lib/types.h>
+#include <malloc.h>
+#include <string.h>
+#include <lib/partition.h>
+#include <lib/vector.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

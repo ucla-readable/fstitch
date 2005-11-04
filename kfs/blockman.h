@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_BLOCKMAN_H
 #define __KUDOS_KFS_BLOCKMAN_H
 
-#include <inc/hash_map.h>
+#include <lib/hash_map.h>
 
 typedef hash_map_t blockman_t;
 

@@ -6,8 +6,8 @@
 #include <kfs/lfs.h>
 #include <kfs/bd.h>
 
-#include <inc/hash_map.h>
-#include <inc/hash_set.h>
+#include <lib/hash_map.h>
+#include <lib/hash_set.h>
 #include <arch/simple.h>
 #include <inc/assert.h>
 #include <inc/stdio.h>

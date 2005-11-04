@@ -1,10 +1,10 @@
 #include <inc/env.h>
-#include <inc/stdio.h>
+#include <stdio.h>
 #include <inc/error.h>
-#include <inc/types.h>
-#include <inc/malloc.h>
-#include <inc/string.h>
-#include <inc/hash_map.h>
+#include <lib/types.h>
+#include <malloc.h>
+#include <string.h>
+#include <lib/hash_map.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

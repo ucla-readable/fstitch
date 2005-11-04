@@ -1,6 +1,6 @@
 #include <inc/error.h>
 #include <inc/string.h>
-#include <inc/hash_map.h>
+#include <lib/hash_map.h>
 #include <inc/malloc.h>
 
 #include <kfs/modman.h>

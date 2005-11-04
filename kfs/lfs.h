@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_LFS_H
 #define __KUDOS_KFS_LFS_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 #include <kfs/oo.h>
 

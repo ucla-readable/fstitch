@@ -1,5 +1,5 @@
 #include <inc/string.h>
-#include <inc/partition.h>
+#include <lib/partition.h>
 
 #include "fs.h"
 

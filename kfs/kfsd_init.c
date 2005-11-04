@@ -1,6 +1,6 @@
-#include <inc/vector.h>
+#include <lib/vector.h>
 #include <inc/lib.h>
-#include <inc/partition.h>
+#include <lib/partition.h>
 
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable.h>

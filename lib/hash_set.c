@@ -2,9 +2,9 @@
 #include <inc/error.h>
 #include <inc/config.h>
 #include <inc/malloc.h>
-#include <inc/vector.h>
-#include <inc/hash_map.h>
-#include <inc/hash_set.h>
+#include <lib/vector.h>
+#include <lib/hash_map.h>
+#include <lib/hash_set.h>
 
 //
 // Implement hash_set.h using hash_map (to quickly implement this).

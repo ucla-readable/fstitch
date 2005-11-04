@@ -1,7 +1,7 @@
-#include <inc/stdio.h>
+#include <stdio.h>
 #include <inc/error.h>
-#include <inc/malloc.h>
-#include <inc/string.h>
+#include <malloc.h>
+#include <string.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>

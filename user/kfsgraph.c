@@ -1,5 +1,5 @@
-#include <inc/vector.h>
-#include <inc/hash_map.h>
+#include <lib/vector.h>
+#include <lib/hash_map.h>
 #include <inc/assert.h>
 #include <inc/stdio.h>
 #include <inc/kfs_uses.h>

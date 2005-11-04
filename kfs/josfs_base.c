@@ -1,11 +1,11 @@
 /* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
-#include <inc/types.h>
+#include <lib/types.h>
 #include <inc/error.h>
 #include <inc/x86.h>
-#include <inc/malloc.h>
-#include <inc/string.h>
+#include <malloc.h>
+#include <string.h>
 #include <inc/error.h>
-#include <inc/hash_set.h>
+#include <lib/hash_set.h>
 
 /* textbar, sleep from inc/lib.h */
 int sleep(int32_t centisecs);

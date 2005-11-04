@@ -1,7 +1,7 @@
 #ifndef KUDOS_KFS_DEBUG_H
 #define KUDOS_KFS_DEBUG_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 #include <kfs/bdesc.h>
 

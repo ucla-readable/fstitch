@@ -1,7 +1,7 @@
-#include <inc/stdio.h>
-#include <inc/types.h>
-#include <inc/malloc.h>
-#include <inc/string.h>
+#include <stdio.h>
+#include <lib/types.h>
+#include <malloc.h>
+#include <string.h>
 #include <inc/lib.h>
 /* for byte order translations */
 #include <inc/net/ipv4/lwip/inet.h>

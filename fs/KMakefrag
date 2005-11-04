@@ -102,10 +102,11 @@ $(OBJDIR)/fs/fs: $(FSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJ
 	$(V)$(STRIP) $@
 
 # How to build the file system image
+# TODO: move into util/
 $(OBJDIR)/fs/fsformat: fs/fsformat.c
 	@echo + mk $(OBJDIR)/fs/fsformat
 	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(USER_CFLAGS) -o $(OBJDIR)/fs/fsformat fs/fsformat.c
+	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $(OBJDIR)/fs/fsformat fs/fsformat.c
 
 $(OBJDIR)/fs/bdsplit: fs/bdsplit.c
 	@echo + mk $(OBJDIR)/fs/bdsplit
