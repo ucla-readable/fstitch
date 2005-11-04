@@ -82,13 +82,13 @@ CTAGS	:= ctags
 # Native command flags
 NCFLAGS	:= -Wall -pedantic
 NCXXFLAGS	:= $(NCFLAGS)
-CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
 
 # Compiler flags
 CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -Wno-format -g
 CFLAGS	:= $(CFLAGS) -O2
 
-# Lists that the */Makefrag makefile fragments will add to
+# Lists that the */UUMakefrag makefile fragments will add to
 OBJDIRS :=
 
 # Make sure that 'all' is the first target
@@ -164,7 +164,7 @@ conf/gcc.mk:
 	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>conf/gcc.mk; fi
 
 
-# Include Makefrags for subdirectories
+# Include UUMakefrags for subdirectories
 include boot/UUMakefrag
 include lib/UUMakefrag
 include user/UUMakefrag

@@ -255,7 +255,7 @@ include lib/KMakefrag
 include user/KMakefrag
 include fs/KMakefrag
 include kfs/KMakefrag
-include util/KMakefrag
+include util/Makefrag
 
 
 # For deleting the build
