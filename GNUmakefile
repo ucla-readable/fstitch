@@ -100,7 +100,7 @@ CTAGS	:= ctags
 # Native command flags
 NCFLAGS	:= -Wall -pedantic
 NCXXFLAGS	:= $(NCFLAGS)
-CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
 
 # Compiler flags
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
@@ -114,7 +114,7 @@ LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
 # Linker flags for user programs
 ULDFLAGS := -T $(OBJDIR)/user/user.ld
 
-# Lists that the */Makefrag makefile fragments will add to
+# Lists that the */KMakefrag makefile fragments will add to
 OBJDIRS :=
 
 # Make sure that 'all' is the first target
@@ -248,14 +248,14 @@ conf/gcc.mk:
 	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>conf/gcc.mk; fi
 
 
-# Include Makefrags for subdirectories
-include boot/Makefrag
-include kern/Makefrag
-include lib/Makefrag
-include user/Makefrag
-include fs/Makefrag
-include kfs/Makefrag
-include util/Makefrag
+# Include KMakefrags for subdirectories
+include boot/KMakefrag
+include kern/KMakefrag
+include lib/KMakefrag
+include user/KMakefrag
+include fs/KMakefrag
+include kfs/KMakefrag
+include util/KMakefrag
 
 
 # For deleting the build

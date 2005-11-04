@@ -104,7 +104,7 @@ $(OBJDIR)/kudos-grub: $(OBJDIR)/kern/kernel
 	$(V)$(OBJCOPY) --adjust-vma=0x10000000 $^ $@
 
 # How to build the kernbin structures
-kern/appkernbin.c: kern/Makefrag
+kern/appkernbin.c: kern/KMakefrag
 	@echo + mk $@
 	$(V)echo '#include <kern/kernbin.h>' >$@
 	$(V)echo $(KERN_BINFILES) | tr ' ' '\012' | grep . | sed 's/obj\/kudos\/\([^\/]*\)\/\(.*\)/extern const uint8_t _binary_obj_kudos_\1_\2_start[], _binary_obj_kudos_\1_\2_size[];/' >>$@

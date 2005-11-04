@@ -56,7 +56,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/kfs_ipc_client.c \
 			lib/kfs_uses.c
 
-include lib/net/Makefrag
+include lib/net/KMakefrag
 
 LIB_OBJFILES := $(patsubst lib/%.c, $(OBJDIR)/lib/%.o, $(LIB_SRCFILES))
 LIB_OBJFILES := $(patsubst lib/%.S, $(OBJDIR)/lib/%.o, $(LIB_OBJFILES))
