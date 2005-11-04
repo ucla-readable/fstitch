@@ -25,10 +25,10 @@ void env_run(struct Env* e) __attribute__((noreturn));
 void env_pop_tf(struct Trapframe* tf) __attribute__((noreturn));
 
 #define ENV_CREATE(x)			{		\
-	extern uint8_t _binary_obj_##x##_start[],	\
-		_binary_obj_##x##_size[];		\
-	env_create(_binary_obj_##x##_start,		\
-		(int)_binary_obj_##x##_size);		\
+	extern uint8_t _binary_obj_kudos_##x##_start[],	\
+		_binary_obj_kudos_##x##_size[];		\
+	env_create(_binary_obj_kudos_##x##_start,		\
+		(int)_binary_obj_kudos_##x##_size);		\
 }
 
 #endif // !KUDOS_KERN_ENV_H

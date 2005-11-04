@@ -1,0 +1,5 @@
+OBJDIRS += user
+
+$(OBJDIR)/user/%: $(OBJDIR)/user/%.o
+	@echo + ld $@
+	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) $@.o -L$(OBJDIR)/lib -luser

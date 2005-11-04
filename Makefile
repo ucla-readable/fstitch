@@ -1,4 +1,4 @@
-# kudos kfs makefile
+# unix-user kfs makefile
 
 #
 # This makefile system follows the structuring conventions
@@ -8,7 +8,7 @@
 #	http://aegis.sourceforge.net/auug97.pdf
 #
 BASE_OBJDIR := obj
-OBJDIR := $(BASE_OBJDIR)/kudos
+OBJDIR := $(BASE_OBJDIR)/unix-user
 UTILDIR := $(BASE_OBJDIR)/util
 
 ifdef GCCPREFIX
@@ -51,23 +51,15 @@ SYMTBL         := symtbl
 SYMSTRTBL      := symstrtbl
 
 UTILS := \
-	$(UTILDIR)/$(PTYPAIR) \
-	$(UTILDIR)/$(ELFDUMP_SYMTAB) \
 	$(UTILDIR)/$(HEX2BIN) \
 	$(UTILDIR)/$(KNBD_SERVER) \
 	$(UTILDIR)/$(KDB_SERVER) \
 	$(UTILDIR)/kdb.jar
 
-# Cross-compiler KudOS toolchain
+# Cross-compiler KFS toolchain
 #
-# This Makefile will automatically use the cross-compiler toolchain
-# installed as 'i386-jos-elf-*', if one exists.  If the host tools ('gcc',
-# 'objdump', and so forth) compile for a 32-bit x86 ELF target, that will
-# be detected as well.  If you have the right compiler toolchain installed
-# using a different name, set GCCPREFIX explicitly by doing
-#
-#	make 'GCCPREFIX=i386-jos-elf-' gccsetup
-#
+# This Makefile could automatically use the cross-compiler toolchain,
+# but does not for now because we do not need it.
 
 CC	:= $(GCCPREFIX)gcc -pipe
 CPP	:= $(GCCPREFIX)cpp
@@ -78,16 +70,6 @@ LD	:= $(GCCPREFIX)ld
 OBJCOPY	:= $(GCCPREFIX)objcopy
 OBJDUMP	:= $(GCCPREFIX)objdump
 NM	:= $(GCCPREFIX)nm
-
-ifdef USE_STABS
-# Strip nothing for now, but it would be nice to strip the unnecessary symtab
-# and strtab sections.
-STRIP   := true
-CFLAGS  := $(CFLAGS) -DUSE_STABS
-LD_CPPFLAGS := $(CPPFLAGS) -DUSE_STABS
-else
-STRIP	:= $(GCCPREFIX)strip
-endif
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
@@ -103,16 +85,8 @@ NCXXFLAGS	:= $(NCFLAGS)
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(Makefrag\).mk
 
 # Compiler flags
-# Note that -O2 is required for the boot loader to fit within 512 bytes;
-# -fno-builtin is required to avoid refs to undefined functions in the kernel.
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -MD -Wall -Wno-format -gstabs
+CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -Wno-format -g
 CFLAGS	:= $(CFLAGS) -O2
-BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
-
-LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
-
-# Linker flags for user programs
-ULDFLAGS := -T $(OBJDIR)/user/user.ld
 
 # Lists that the */Makefrag makefile fragments will add to
 OBJDIRS :=
@@ -127,50 +101,8 @@ all: tags TAGS
 .DELETE_ON_ERROR:
 
 # make it so that no intermediate .o files are never deleted
-.PRECIOUS: %.o $(OBJDIR)/kern/%.o $(OBJDIR)/boot/%.o \
+.PRECIOUS: %.o \
 	$(OBJDIR)/lib/%.o $(OBJDIR)/kfs/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
-
-
-# Rules for building linker scripts and dealing with on/off STABS support
-$(OBJDIR)/%.ld: %.ld conf/env.mk
-	@echo + cpp $<
-	@mkdir -p $(@D)
-	$(V)$(CPP) $(LD_CPPFLAGS) $< $@
-
-$(OBJDIR)/kern/stabs.o: conf/env.mk
-
-
-# inc/net for lwip, inc/ for string.h
-LIB_NET_CFLAGS := -I$(TOP)/inc/net/ -I$(TOP)/inc/net/ipv4 -I$(TOP)/inc/
-
-# Rules for building kernel object files
-KERN_CFLAGS := $(CFLAGS) -DKUDOS_KERNEL
-
-$(OBJDIR)/kern/%.o: kern/%.c
-	@echo + cc $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/kern/%.o: kern/%.S
-	@echo + as $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/kern/%.o: lib/%.c
-	@echo + cc $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/boot/%.o: boot/%.c
-	@echo + cc $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
-
-$(OBJDIR)/boot/%.o: boot/%.S
-	@echo + as $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(KERN_CFLAGS) -c -o $@ $<
-
 
 # Rules for building user object files
 USER_CFLAGS := $(CFLAGS) -DKUDOS_USER
@@ -184,11 +116,6 @@ $(OBJDIR)/lib/%.o: lib/%.raw
 	@echo + ld[LIB] $<
 	@mkdir -p $(@D)
 	$(V)$(LD) -r -o $@ $(ULDFLAGS) $(LDFLAGS) -b binary $<
-
-$(OBJDIR)/lib/net/%.o: lib/net/%.c
-	@echo + cc[LIB/NET] $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[LIB] $<
@@ -213,7 +140,7 @@ $(OBJDIR)/kfs/%.o: kfs/%.c
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(UTILS)
+TAGDEPS := $(OBJDIR)/fs/clean-fs.img $(UTILS)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -228,18 +155,7 @@ TAGS: $(TAGDEPS)
 
 # try to infer the correct GCCPREFIX
 conf/gcc.mk:
-	@if i386-jos-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
-	then echo 'GCCPREFIX=i386-jos-elf-' >conf/gcc.mk; \
-	elif objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
-	then echo 'GCCPREFIX=' >conf/gcc.mk; \
-	else echo "***" 1>&2; \
-	echo "*** Error: Couldn't find an i386-*-elf version of GCC/binutils." 1>&2; \
-	echo "*** Is the directory with i386-jos-elf-gcc in your PATH?" 1>&2; \
-	echo "*** If your i386-*-elf toolchain is installed with a command" 1>&2; \
-	echo "*** prefix other than 'i386-jos-elf-', set your GCCPREFIX" 1>&2; \
-	echo "*** environment variable to that prefix and run 'make' again." 1>&2; \
-	echo "*** To turn off this error, run 'echo GCCPREFIX= >conf/gcc.mk'." 1>&2; \
-	echo "***" 1>&2; exit 1; fi
+	echo 'GCCPREFIX=' >conf/gcc.mk
 	@f=`grep GCCPREFIX conf/gcc.mk | sed 's/.*=//'`; if echo $$f | grep '^[12]\.' >/dev/null 2>&1; then echo "***" 1>&2; \
 	echo "*** Error: Your gcc compiler is too old." 1>&2; \
 	echo "*** The labs will only work with gcc-3.0 or later, and are only" 1>&2; \
@@ -249,12 +165,11 @@ conf/gcc.mk:
 
 
 # Include Makefrags for subdirectories
-include boot/Makefrag
-include kern/Makefrag
-include lib/Makefrag
-include user/Makefrag
-include fs/Makefrag
-include kfs/Makefrag
+include boot/UUMakefrag
+include lib/UUMakefrag
+include user/UUMakefrag
+include fs/UUMakefrag
+include kfs/UUMakefrag
 include util/Makefrag
 
 
@@ -263,7 +178,7 @@ fsclean:
 	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
 
 clean:
-	rm -rf $(BASE_OBJDIR) kern/appkernbin.c fsformat.d conf/gcc.mk tags TAGS
+	rm -rf $(BASE_OBJDIR) fsformat.d conf/gcc.mk tags TAGS
 
 realclean: clean
 	rm -rf lab$(LAB).tar.gz

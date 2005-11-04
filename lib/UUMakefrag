@@ -1,0 +1,69 @@
+
+OBJDIRS += lib
+
+#		lib/console.c \
+#			lib/libmain.c \
+#			lib/exit.c \
+#			lib/panic.c \
+#			lib/printf.c \
+#			lib/printfmt.c \
+#			lib/readline.c \
+#			lib/string.c \
+#			lib/memchr.c \
+#			lib/syscall.c \
+#			lib/malloc.c \
+#			lib/malloc_failfast.c \
+#			lib/md5.c
+
+LIB_SRCFILES := \
+			lib/kfs_feature.c
+
+#LIB_SRCFILES :=		$(LIB_SRCFILES) \
+#			lib/pgfault.c \
+#			lib/pfentry.S \
+#			lib/irq.c \
+#			lib/irqentry.S \
+#			lib/fork.c \
+#			lib/ipc.c \
+#			lib/spawn.c
+
+#LIB_SRCFILES :=		$(LIB_SRCFILES) \
+#			lib/fd.c \
+#			lib/file.c \
+#			lib/fprintf.c \
+#			lib/fsipc.c \
+#			lib/pageref.c \
+#			lib/pipe.c \
+#			lib/socket.c \
+#			lib/wait.c
+
+#LIB_SRCFILES :=		$(LIB_SRCFILES) \
+#			lib/getarg.c \
+#			lib/serial.c \
+#			lib/netclient.c \
+#			lib/hwclock.c \
+#			lib/textbar.c \
+#			lib/sleep.c
+
+LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/vector.c \
+			lib/hash_map.c \
+			lib/hash_set.c \
+			lib/fixed_max_heap.c \
+			lib/qsort.c
+
+LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/kpl.c \
+			lib/cfs_ipc_client.c \
+			lib/kfs_ipc_client.c \
+			lib/kfs_uses.c
+
+#include lib/net/Makefrag
+
+LIB_OBJFILES := $(patsubst lib/%.c, $(OBJDIR)/lib/%.o, $(LIB_SRCFILES))
+LIB_OBJFILES := $(patsubst lib/%.S, $(OBJDIR)/lib/%.o, $(LIB_OBJFILES))
+
+$(OBJDIR)/lib/libuser.a: $(LIB_OBJFILES)
+	@echo + ar $@
+	$(V)$(AR) r $@ $(LIB_OBJFILES)
+

@@ -47,8 +47,8 @@ $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $
 		$(OBJDIR)/lib/entry.o $(KFSOFILES) \
 		-L$(OBJDIR)/lib -luser $(GCC_LIB) \
 		 -b binary $(SYMTBL) $(SYMSTRTBL)
-	$(V)$(OBJDIR)/util/$(ELFDUMP_SYMTAB) -sym $@ > $(SYMTBL)
-	$(V)$(OBJDIR)/util/$(ELFDUMP_SYMTAB) -symstr $@ > $(SYMSTRTBL)
+	$(V)$(UTILDIR)/$(ELFDUMP_SYMTAB) -sym $@ > $(SYMTBL)
+	$(V)$(UTILDIR)/$(ELFDUMP_SYMTAB) -symstr $@ > $(SYMSTRTBL)
 	$(V)# We assume here that running ld this second time does not change what
 	$(V)# the elf symtable/strtable holds. TODO: is this a safe assumption?
 	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib \

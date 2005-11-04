@@ -1,0 +1,46 @@
+OBJDIRS += kfs
+
+#			$(OBJDIR)/kfs/ide_pio_bd.o \
+#			$(OBJDIR)/kfs/nbd_bd.o \
+#			$(OBJDIR)/kfs/josfs_cfs.o \
+#			$(OBJDIR)/kfs/cfs_ipc_serve.o \
+#			$(OBJDIR)/kfs/kfs_ipc_serve.o \
+#			$(OBJDIR)/kfs/ipc_serve.o \
+#			$(OBJDIR)/kfs/kfsd_init.o
+#			$(OBJDIR)/kfs/debug.o
+
+KFSOFILES := \
+			$(OBJDIR)/kfs/bdesc.o \
+			$(OBJDIR)/kfs/chdesc.o \
+			$(OBJDIR)/kfs/chdesc_util.o \
+			$(OBJDIR)/kfs/modman.o \
+			$(OBJDIR)/kfs/fidman.o \
+			$(OBJDIR)/kfs/blockman.o \
+			$(OBJDIR)/kfs/revision.o \
+			$(OBJDIR)/kfs/barrier.o \
+			$(OBJDIR)/kfs/partition_bd.o \
+			$(OBJDIR)/kfs/pc_ptable.o \
+			$(OBJDIR)/kfs/wt_cache_bd.o \
+			$(OBJDIR)/kfs/wb_cache_bd.o \
+			$(OBJDIR)/kfs/block_resizer_bd.o \
+			$(OBJDIR)/kfs/journal_bd.o \
+			$(OBJDIR)/kfs/md_bd.o \
+			$(OBJDIR)/kfs/mirror_bd.o \
+			$(OBJDIR)/kfs/loop_bd.o \
+			$(OBJDIR)/kfs/mem_bd.o \
+			$(OBJDIR)/kfs/josfs_base.o \
+			$(OBJDIR)/kfs/wholedisk_lfs.o \
+			$(OBJDIR)/kfs/uhfs.o \
+			$(OBJDIR)/kfs/devfs_cfs.o \
+			$(OBJDIR)/kfs/table_classifier_cfs.o \
+			$(OBJDIR)/kfs/file_hiding_cfs.o \
+			$(OBJDIR)/kfs/fidprotector_cfs.o \
+			$(OBJDIR)/kfs/fidcloser_cfs.o \
+			$(OBJDIR)/kfs/sched.o \
+			$(OBJDIR)/kfs/kfsd.o
+
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES)
+	@echo + ld $@
+	$(V)mkdir -p $(@D)
+	$(V)$(LD) -o $@ $(KFSOFILES) \
+		-L$(OBJDIR)/lib -luser $(GCC_LIB)

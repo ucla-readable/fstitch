@@ -28,6 +28,6 @@ $(OBJDIR)/boot/stage2: $(STAGE2_OBJS)
 	$(V)$(OBJCOPY) -S -O binary $@.out $@
 	$(V)perl boot/check.pl $@
 
-$(OBJDIR)/boot/mbr: boot/mbr.hex $(OBJDIR)/util/$(HEX2BIN)
+$(OBJDIR)/boot/mbr: boot/mbr.hex $(UTILDIR)/$(HEX2BIN)
 	@echo + $(HEX2BIN) boot/mbr.hex
-	$(V)$(OBJDIR)/util/$(HEX2BIN) boot/mbr.hex > $@
+	$(V)$(UTILDIR)/$(HEX2BIN) boot/mbr.hex > $@

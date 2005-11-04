@@ -1,0 +1,13 @@
+#
+# Makefile fragment for the KudOS kernel.
+# This is NOT a complete makefile;
+# you must run GNU make in the top-level directory
+# where the GNUmakefile is located.
+#
+
+OBJDIRS += boot
+
+$(OBJDIR)/boot/mbr: boot/mbr.hex $(UTILDIR)/$(HEX2BIN)
+	@echo + $(HEX2BIN) boot/mbr.hex
+	@mkdir -p $(@D)
+	$(V)$(UTILDIR)/$(HEX2BIN) boot/mbr.hex > $@

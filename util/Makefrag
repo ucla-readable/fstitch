@@ -7,32 +7,32 @@
 
 OBJDIRS += util
 
-$(OBJDIR)/util/$(ELFDUMP_SYMTAB) : util/$(ELFDUMP_SYMTAB).cpp
+$(UTILDIR)/$(ELFDUMP_SYMTAB) : util/$(ELFDUMP_SYMTAB).cpp
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(NCXX) $(NCXXFLAGS) -o $@ $<
 
-$(OBJDIR)/util/$(PTYPAIR) : util/$(PTYPAIR).cpp
+$(UTILDIR)/$(PTYPAIR) : util/$(PTYPAIR).cpp
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(NCXX) $(NCXXFLAGS) $(LIBUTIL) -o  $@ $<
 
-$(OBJDIR)/util/$(KNBD_SERVER) : util/$(KNBD_SERVER).c
+$(UTILDIR)/$(KNBD_SERVER) : util/$(KNBD_SERVER).c
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -o $@ $<
 
-$(OBJDIR)/util/$(KDB_SERVER) : util/$(KDB_SERVER).c
+$(UTILDIR)/$(KDB_SERVER) : util/$(KDB_SERVER).c
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -o $@ $<
 
-$(OBJDIR)/util/$(HEX2BIN) : util/$(HEX2BIN).c
+$(UTILDIR)/$(HEX2BIN) : util/$(HEX2BIN).c
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -o $@ $<
 
-$(OBJDIR)/util/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/*.java)
+$(UTILDIR)/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/*.java)
 	@echo + ant[UTIL/DEBUG]
 	@mkdir -p $(@D)
 	$(V)$(ANT) -f util/debug/build.xml
