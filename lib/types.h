@@ -5,6 +5,9 @@
 #include <inc/types.h>
 #elif defined(UNIXUSER) || defined(KUTIL)
 #include <sys/types.h>
+#include <stdint.h>
+/* Represents true-or-false values */
+typedef unsigned char bool;
 #else
 #error Unknown target system
 #endif
