@@ -1,6 +1,7 @@
+#include <string.h>
 #include <inc/lib.h>
-#include <inc/string.h>
 #include <inc/josnic.h> /* for htons, htonl */
+#include <lib/stdio.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
@@ -356,7 +357,7 @@ static int debug_socket[2];
 #define STRING (-3)
 #define END 0
 
-/* This function is used like a binary version of fprintf(). It takes a file
+/* This function is used like a binary version of kdprintf(). It takes a file
  * descriptor, and then a series of pairs of (size, pointer) of data to write to
  * it. The list is terminated by a 0 size. Also accepted are the special sizes
  * -1, -2, and -4, which indicate that the data is to be extracted from the
@@ -436,7 +437,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 	r = gethostbyname(host, &addr);
 	if(r < 0)
 	{
-		sleep(200);
+		sleepj(200);
 		r = gethostbyname(host, &addr);
 		if(r < 0)
 			return r;
@@ -444,7 +445,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 	r = connect(addr, port, debug_socket);
 	if(r < 0)
 	{
-		sleep(200);
+		sleepj(200);
 		r = connect(addr, port, debug_socket);
 		if(r < 0)
 			return r;
@@ -471,19 +472,19 @@ int kfs_debug_init(const char * host, uint16_t port)
 		}
 	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
 #else
-	fprintf(debug_socket[1], "DEBUG %d\n", debug_rev);
-	fprintf(debug_socket[1], "DEBUG_OPCODE %d\n", debug_opcode_rev);
+	kdprintf(debug_socket[1], "DEBUG %d\n", debug_rev);
+	kdprintf(debug_socket[1], "DEBUG_OPCODE %d\n", debug_opcode_rev);
 
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
 			int p;
-			fprintf(debug_socket[1], "[%04x:%04x] %s", modules[m].module, modules[m].opcodes[o]->opcode, modules[m].opcodes[o]->name);
+			kdprintf(debug_socket[1], "[%04x:%04x] %s", modules[m].module, modules[m].opcodes[o]->opcode, modules[m].opcodes[o]->name);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
-				fprintf(debug_socket[1], "%s%s", p ? ", " : " (", modules[m].opcodes[o]->params[p]->name);
-			fprintf(debug_socket[1], ")\n");
+				kdprintf(debug_socket[1], "%s%s", p ? ", " : " (", modules[m].opcodes[o]->params[p]->name);
+			kdprintf(debug_socket[1], ")\n");
 		}
-	fprintf(debug_socket[1], "\n");
+	kdprintf(debug_socket[1], "\n");
 #endif
 	
 	printf("Debugging interface initialized OK\n");
@@ -617,21 +618,21 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
 #else
 #if KFS_OMIT_FILE_FUNC
-	fprintf(debug_socket[1], "Line %d, type [%04x:%04x] ", line, module, opcode);
+	kdprintf(debug_socket[1], "Line %d, type [%04x:%04x] ", line, module, opcode);
 #else
-	fprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
+	kdprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
 #endif
 	
 	if(!modules[m].opcodes)
 	{
 		/* unknown module */
-		fprintf(debug_socket[1], "!module");
+		kdprintf(debug_socket[1], "!module");
 		r = -E_INVAL;
 	}
 	else if(!modules[m].opcodes[o]->params)
 	{
 		/* unknown opcode */
-		fprintf(debug_socket[1], "!opcode");
+		kdprintf(debug_socket[1], "!opcode");
 		r = -E_INVAL;
 	}
 	else
@@ -640,61 +641,61 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
 		{
 			if(p)
-				fprintf(debug_socket[1], ", ");
+				kdprintf(debug_socket[1], ", ");
 			switch(modules[m].opcodes[o]->params[p]->type)
 			{
 				case INT32:
 				{
 					int32_t param = va_arg(ap, int32_t);
-					fprintf(debug_socket[1], "%d", param);
+					kdprintf(debug_socket[1], "%d", param);
 					break;
 				}
 				case UINT32:
 				{
 					uint32_t param = va_arg(ap, uint32_t);
-					fprintf(debug_socket[1], "%u", param);
+					kdprintf(debug_socket[1], "%u", param);
 					break;
 				}
 				case UHEX32:
 				{
 					uint32_t param = va_arg(ap, uint32_t);
-					fprintf(debug_socket[1], "0x%08x", param);
+					kdprintf(debug_socket[1], "0x%08x", param);
 					break;
 				}
 				case INT16:
 				{
 					int16_t param = va_arg(ap, int16_t);
-					fprintf(debug_socket[1], "%d", param);
+					kdprintf(debug_socket[1], "%d", param);
 					break;
 				}
 				case UINT16:
 				{
 					uint16_t param = va_arg(ap, uint16_t);
-					fprintf(debug_socket[1], "%u", param);
+					kdprintf(debug_socket[1], "%u", param);
 					break;
 				}
 				case UHEX16:
 				{
 					uint16_t param = va_arg(ap, uint16_t);
-					fprintf(debug_socket[1], "0x%04x", param);
+					kdprintf(debug_socket[1], "0x%04x", param);
 					break;
 				}
 				case BOOL:
 				{
 					bool param = va_arg(ap, bool);
-					fprintf(debug_socket[1], param ? "true" : "false");
+					kdprintf(debug_socket[1], param ? "true" : "false");
 					break;
 				}
 				default:
 					/* unknown type */
-					fprintf(debug_socket[1], "!type");
+					kdprintf(debug_socket[1], "!type");
 					r = -E_INVAL;
 					break;
 			}
 		}
 	}
 	
-	fprintf(debug_socket[1], "\n");
+	kdprintf(debug_socket[1], "\n");
 #endif
 	
 	va_end(ap);

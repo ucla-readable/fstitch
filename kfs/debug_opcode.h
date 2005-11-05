@@ -1,1 +1,68 @@
-sed 's!lib/dirent.h!lib/dirent.h!' ./kfs/debug_opcode.h
+#ifndef KUDOS_KFS_DEBUG_OPCODE_H
+#define KUDOS_KFS_DEBUG_OPCODE_H
+
+#define DEBUG_OPCODE_REV           "$Rev$"
+
+/* modules */
+#define KDB_MODULE_INFO              1
+#define KDB_MODULE_BDESC           100
+#define KDB_MODULE_CHDESC_ALTER    200
+#define KDB_MODULE_CHDESC_INFO     300
+
+/* opcodes */
+
+/* info (0xx) */
+#define KDB_INFO_MARK                0
+
+/* bdesc (1xx) */
+#define KDB_BDESC_ALLOC            101
+#define KDB_BDESC_ALLOC_WRAP       102
+#define KDB_BDESC_RETAIN           103
+#define KDB_BDESC_RELEASE          104
+#define KDB_BDESC_DESTROY          105
+#define KDB_BDESC_FREE_DDESC       106
+#define KDB_BDESC_AUTORELEASE      107
+#define KDB_BDESC_AR_RESET         108
+#define KDB_BDESC_AR_POOL_PUSH     109
+#define KDB_BDESC_AR_POOL_POP      110
+
+/* chdesc alter (2xx) */
+#define KDB_CHDESC_CREATE_NOOP     201
+#define KDB_CHDESC_CREATE_BIT      202
+#define KDB_CHDESC_CREATE_BYTE     203
+#define KDB_CHDESC_CONVERT_NOOP    204
+#define KDB_CHDESC_CONVERT_BIT     205
+#define KDB_CHDESC_CONVERT_BYTE    206
+#define KDB_CHDESC_APPLY           207
+#define KDB_CHDESC_ROLLBACK        208
+#define KDB_CHDESC_SET_FLAGS       209
+#define KDB_CHDESC_CLEAR_FLAGS     210
+#define KDB_CHDESC_DESTROY         211
+#define KDB_CHDESC_ADD_DEPENDENCY  212
+#define KDB_CHDESC_ADD_DEPENDENT   213
+#define KDB_CHDESC_REM_DEPENDENCY  214
+#define KDB_CHDESC_REM_DEPENDENT   215
+#define KDB_CHDESC_WEAK_RETAIN     216
+#define KDB_CHDESC_WEAK_FORGET     217
+#define KDB_CHDESC_SET_BLOCK       218
+#define KDB_CHDESC_SET_OWNER       219
+#define KDB_CHDESC_SET_FREE_PREV   220
+#define KDB_CHDESC_SET_FREE_NEXT   221
+#define KDB_CHDESC_SET_FREE_HEAD   222
+
+/* chdesc info (3xx) */
+#define KDB_CHDESC_MOVE                 301
+#define KDB_CHDESC_SATISFY              302
+#define KDB_CHDESC_WEAK_COLLECT         303
+#define KDB_CHDESC_ROLLBACK_COLLECTION  304
+#define KDB_CHDESC_APPLY_COLLECTION     305
+#define KDB_CHDESC_ORDER_DESTROY        306
+#define KDB_CHDESC_DETACH_DEPENDENCIES  307
+#define KDB_CHDESC_DETACH_DEPENDENTS    308
+#define KDB_CHDESC_OVERLAP_ATTACH       309
+#define KDB_CHDESC_OVERLAP_MULTIATTACH  310
+#define KDB_CHDESC_DUPLICATE            311
+#define KDB_CHDESC_SPLIT                312
+#define KDB_CHDESC_MERGE                313
+
+#endif /* KUDOS_KFS_DEBUG_OPCODE_H */
