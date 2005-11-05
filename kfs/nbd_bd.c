@@ -1,10 +1,11 @@
 #include <stdio.h>
-#include <lib/types.h>
 #include <malloc.h>
 #include <string.h>
 #include <inc/lib.h>
 /* for byte order translations */
 #include <inc/net/ipv4/lwip/inet.h>
+#include <lib/types.h>
+#include <lib/stdio.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -74,7 +75,7 @@ static int nbd_bd_reset(BD_t * object)
 	uint16_t blocksize;
 	int i, r;
 	
-	fprintf(STDERR_FILENO, "%s(): resetting %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
+	kdprintf(STDERR_FILENO, "%s(): resetting %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	
 	for(i = 0; i != 2; i++)
 		if(info->fd[i] != -1)
@@ -162,11 +163,11 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		return bdesc;
 		
 	error:
-		sleep(tries * 5);
+		sleepj(tries * 5);
 		nbd_bd_reset(object);
 	}
 	
-	fprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
+	kdprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	return NULL;
 }
 
@@ -253,13 +254,13 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		return 0;
 		
 	error:
-		sleep(tries * 5);
+		sleepj(tries * 5);
 		nbd_bd_reset(object);
 	}
 	
 	/* the write failed; don't remove any change descriptors... */
 	revision_tail_revert(block, object);
-	fprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
+	kdprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	return r;
 }
 

@@ -43,7 +43,7 @@ static void knbd_serve(knbd_state_t * ks)
 		number = ntohl(number);
 		if(number >= st.st_size / bs)
 		{
-			fprintf(STDERR_FILENO, "knbdd: Reset block %u\n", number);
+			kdprintf(STDERR_FILENO, "knbdd: Reset block %u\n", number);
 			number = 0;
 		}
 		seek(ks->bd, number * BLOCK_SIZE);
@@ -62,7 +62,7 @@ static void knbd_serve(knbd_state_t * ks)
 				write(ks->bd, buffer, BLOCK_SIZE);
 				break;
 			default:
-				fprintf(STDERR_FILENO, "knbdd: Unknown command 0x%02x!\n", command);
+				kdprintf(STDERR_FILENO, "knbdd: Unknown command 0x%02x!\n", command);
 		}
 	}
 }
@@ -75,7 +75,7 @@ static int knbd_accept(const char * bd_filename, int fd[2], struct ip_addr remot
 	bd = open(bd_filename, O_RDWR);
 	if (bd < 0)
 	{
-		fprintf(STDERR_FILENO, "knbdd %s(%s): open: %e\n", __FUNCTION__, bd_filename, bd);
+		kdprintf(STDERR_FILENO, "knbdd %s(%s): open: %e\n", __FUNCTION__, bd_filename, bd);
 		return bd;
 	}
 	
@@ -112,7 +112,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 
 	if ((r = bind_listen(ip_addr_any, port, &listen_key)) < 0)
 	{
-		fprintf(STDERR_FILENO, "knbdd: bind_listen: %e\n", r);
+		kdprintf(STDERR_FILENO, "knbdd: bind_listen: %e\n", r);
 		exit();
 	}
 
@@ -121,13 +121,13 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 	{
 		if ((r = accept(listen_key, fd, &remote_ip, &remote_port)) < 0)
 		{
-			fprintf(STDERR_FILENO, "knbdd accept: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd accept: %e\n", r);
 			exit();
 		}
 
 		if ((r = fork()) < 0)
 		{
-			fprintf(STDERR_FILENO, "knbdd fork: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd fork: %e\n", r);
 			exit();
 		}
 		if (r == 0)
@@ -138,12 +138,12 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 
 		if ((r = close(fd[0])) < 0)
 		{
-			fprintf(STDERR_FILENO, "knbdd close: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
 			exit();
 		}
 		if ((r = close(fd[1])) < 0)
 		{
-			fprintf(STDERR_FILENO, "knbdd close: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
 			exit();
 		}
 	}

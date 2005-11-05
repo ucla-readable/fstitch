@@ -1,7 +1,7 @@
 #include <inc/lib.h>
 
 int
-sleep(int32_t jiffies)
+sleepj(int32_t jiffies)
 {
 	const int32_t wakeup = jiffies + env->env_jiffies;
 

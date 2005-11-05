@@ -1,8 +1,8 @@
 // Stripped-down primitive printf-style formatting routines,
-// used in common by printf, sprintf, fprintf, etc.
+// used in common by printf, sprintf, kdprintf, etc.
 // This code is also used by both the kernel and user programs.
 
-#include <inc/types.h>
+#include <lib/types.h>
 #include <inc/stdio.h>
 #include <inc/stdarg.h>
 #include <inc/error.h>

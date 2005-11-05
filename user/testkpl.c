@@ -27,7 +27,7 @@ umain(int argc, char **argv)
 
 	if(argc != 3)
 	{
-		fprintf(STDERR_FILENO, "Usage: %s <path> <text_to_write>\n", argv[0]);
+		kdprintf(STDERR_FILENO, "Usage: %s <path> <text_to_write>\n", argv[0]);
 		exit();
 	}
 

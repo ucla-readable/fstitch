@@ -2,6 +2,7 @@
 
 #include <inc/string.h>
 #include <inc/malloc.h>
+#include <lib/memdup.h>
 
 int
 strlen(const char *s)
@@ -214,17 +215,6 @@ memcmp(const void *p, const void *q, size_t len)
 	}
 	return 0;
 }
-
-#ifndef KUDOS_KERNEL
-void *
-memdup(const void *src, size_t len)
-{
-	void * copy = malloc(len);
-	if(copy)
-		memcpy(copy, src, len);
-	return copy;
-}
-#endif
 
 int
 isnum(char c)

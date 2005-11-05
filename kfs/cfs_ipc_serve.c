@@ -1,12 +1,12 @@
+#include <inc/serial_cfs.h>
 #include <kfs/cfs.h>
 #include <kfs/kfsd.h>
 #include <kfs/ipc_serve.h> // for IPCSERVE_REQVA
-#include <inc/serial_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
-#include <inc/malloc.h>
 #include <inc/env.h>
+#include <malloc.h>
 
 #define CFS_IPC_SERVE_DEBUG 0
 
@@ -99,7 +99,7 @@ static void alloc_prevrecv(envid_t envid, prev_serve_recv_t ** prevrecv)
 	*prevrecv = prev_serve_recvs[ENVX(envid)] = malloc(sizeof(prev_serve_recv_t));
 	if (!*prevrecv)
 	{
-		fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
+		kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
 		kfsd_shutdown();
 	}
 }
@@ -301,7 +301,7 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	if (data)
 	{
 		if (md->size > sizeof(md->data))
-			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: CFS->get_metadata() returned more data (%d) than serial_cfs allows (%d), truncating.\n", md->size, sizeof(md->data));
+			kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: CFS->get_metadata() returned more data (%d) than serial_cfs allows (%d), truncating.\n", md->size, sizeof(md->data));
 		memcpy(md->data, data, MIN(md->size, sizeof(md->data)));
 		free(data);
 	}
@@ -370,7 +370,7 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 	// All requests must contain an argument page
 	if (! ((perm & PTE_P) && (perm & PTE_U)) )
 	{
-		fprintf(STDERR_FILENO, "Invalid request from %08x: no argument page\n", whom);
+		kdprintf(STDERR_FILENO, "Invalid request from %08x: no argument page\n", whom);
 		return; // just leave it hanging...
 	}
 
@@ -382,7 +382,7 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 
 	if (!frontend_cfs && type != SCFS_SHUTDOWN)
 	{
-		fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Received request but there is no registered frontend CFS object.\n");
+		kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Received request but there is no registered frontend CFS object.\n");
 		return; // just leave it hanging...
 	}
 
@@ -442,7 +442,7 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 			serve_debug(whom, (struct Scfs_debug*) pg);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Unknown type %d\n", type);
+			kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Unknown type %d\n", type);
 	}
 	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
 		panic("sys_page_unmap: %e", r);

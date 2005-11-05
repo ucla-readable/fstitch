@@ -1,6 +1,6 @@
-#include <inc/string.h>
+#include <string.h>
+#include <malloc.h>
 #include <inc/lib.h>
-#include <inc/malloc.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
 

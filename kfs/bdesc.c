@@ -1,8 +1,10 @@
 #include <stdio.h>
+#include <lib/kdprintf.h>
 #include <inc/error.h>
 #include <malloc.h>
 #include <lib/types.h>
 #include <string.h>
+#include <lib/panic.h>
 
 #include <kfs/bd.h>
 #include <kfs/blockman.h>
@@ -87,7 +89,7 @@ void bdesc_release(bdesc_t ** bdesc)
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ddesc->ref_count);
 	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): block 0x%08x had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): block 0x%08x had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
 		(*bdesc)->ref_count = (*bdesc)->ar_count;
 	}
@@ -98,7 +100,7 @@ void bdesc_release(bdesc_t ** bdesc)
 		{
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->changes)
-				fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			if((*bdesc)->ddesc->manager)
 				blockman_remove((*bdesc)->ddesc);
 			free((*bdesc)->ddesc->data);
@@ -115,7 +117,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 {
 	if(bdesc->ar_count == bdesc->ref_count)
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc 0x%08x autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc 0x%08x autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
 		return bdesc;
 	}
 	if(!bdesc->ar_count++)
@@ -148,7 +150,7 @@ void bdesc_autorelease_pool_pop(void)
 	struct auto_pool * pool = autorelease_stack;
 	if(!pool)
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
 		return;
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_POP, bdesc_autorelease_pool_depth() - 1);

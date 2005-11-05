@@ -10,7 +10,7 @@
 #include <kfs/chdesc.h>
 #include <kfs/fdesc.h>
 #include <kfs/feature.h>
-#include <inc/dirent.h>
+#include <lib/dirent.h>
 
 struct LFS;
 typedef struct LFS LFS_t;

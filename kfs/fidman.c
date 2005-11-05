@@ -1,5 +1,6 @@
 #include <lib/types.h>
 #include <assert.h>
+#include <lib/panic.h>
 #include <inc/error.h>
 #include <kfs/fidman.h>
 

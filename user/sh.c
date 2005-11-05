@@ -53,7 +53,7 @@ again:
 
 		case 'w':	// Add an argument
 			if (argc == MAXARGS) {
-				fprintf(STDERR_FILENO, "too many arguments\n");
+				kdprintf(STDERR_FILENO, "too many arguments\n");
 				exit();
 			}
 			argv[argc++] = t;
@@ -62,7 +62,7 @@ again:
 		case '<':	// Input redirection
 			// Grab the filename from the argument list
 			if (gettoken(0, &t) != 'w') {
-				fprintf(STDERR_FILENO, "syntax error: < not followed by word\n");
+				kdprintf(STDERR_FILENO, "syntax error: < not followed by word\n");
 				exit();
 			}
 			// Open 't' for reading as file descriptor 0
@@ -76,7 +76,7 @@ again:
 			fd = open(t, O_RDONLY);
 			if(fd < 0)
 			{
-				fprintf(STDERR_FILENO, "%s: %e\n", t, fd);
+				kdprintf(STDERR_FILENO, "%s: %e\n", t, fd);
 				exit();
 			}
 			if(fd)
@@ -84,13 +84,13 @@ again:
 				r = dup2(fd, 0);
 				if (r < 0)
 				{
-					fprintf(STDERR_FILENO, "dup2: %e\n", r);
+					kdprintf(STDERR_FILENO, "dup2: %e\n", r);
 					exit();
 				}
 				r = close(fd);
 				if (r < 0)
 				{
-					fprintf(STDERR_FILENO, "close: %e\n", r);
+					kdprintf(STDERR_FILENO, "close: %e\n", r);
 					exit();
 				}
 				if (0 < stdin_stash)
@@ -105,7 +105,7 @@ again:
 		case '>':	// Output redirection
 			// Grab the filename from the argument list
 			if (gettoken(0, &t) != 'w') {
-				fprintf(STDERR_FILENO, "syntax error: > not followed by word\n");
+				kdprintf(STDERR_FILENO, "syntax error: > not followed by word\n");
 				exit();
 			}
 			// Open 't' for writing as file descriptor 1
@@ -119,7 +119,7 @@ again:
 			fd = open(t, O_WRONLY | O_CREAT | O_TRUNC);
 			if(fd < 0)
 			{
-				fprintf(STDERR_FILENO, "%s: %e\n", t, fd);
+				kdprintf(STDERR_FILENO, "%s: %e\n", t, fd);
 				exit();
 			}
 			if(fd != 1)
@@ -157,13 +157,13 @@ again:
 			r = pipe(p);
 			if(r)
 			{
-				fprintf(STDERR_FILENO, "pipe: %e\n", r);
+				kdprintf(STDERR_FILENO, "pipe: %e\n", r);
 				exit();
 			}
 			r = fork();
 			if(r < 0)
 			{
-				fprintf(STDERR_FILENO, "fork: %e\n", r);
+				kdprintf(STDERR_FILENO, "fork: %e\n", r);
 				exit();
 			}
 			if(r)
@@ -248,20 +248,20 @@ runit:
 		r = dup2(stdin_stash, STDIN_FILENO);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "dup2: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
 			exit();
 		}
 		r = close(stdin_stash);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %e\n", r);
 			exit();
 		}
 	}
 
 	// Spawn the command!
 	if ((r = spawn(argv[0], (const char **) argv)) < 0)
-		fprintf(STDOUT_FILENO, "spawn %s: %e\n", argv[0], r);
+		kdprintf(STDOUT_FILENO, "spawn %s: %e\n", argv[0], r);
 
 	// In the parent, close all file descriptors and wait for the
 	// spawned command to exit.
@@ -403,19 +403,19 @@ umain(int argc, char** argv)
 		stdin_stash = dup(STDIN_FILENO);
 		if (stdin_stash < 0)
 		{
-			fprintf(STDERR_FILENO, "dup2: %e\n", stdin_stash);
+			kdprintf(STDERR_FILENO, "dup2: %e\n", stdin_stash);
 			exit();
 		}
 
 		r = close(STDIN_FILENO);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %e\n", r);
 			exit();
 		}
 		if ((r = open(argv[0], O_RDONLY)) < 0)
 		{
-			fprintf(STDERR_FILENO, "%s: %e", argv[0], r);
+			kdprintf(STDERR_FILENO, "%s: %e", argv[0], r);
 			exit();
 		}
 		assert(r==STDIN_FILENO);

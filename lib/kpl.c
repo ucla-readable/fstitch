@@ -240,7 +240,7 @@ int fs_shutdown(void)
 	if(r < 0)
 		return r;
 	/* wait for shutdown to complete */
-	sleep(HZ);
+	sleepj(HZ);
 	return jfs_shutdown();
 }
 

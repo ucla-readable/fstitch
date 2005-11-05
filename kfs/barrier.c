@@ -1,7 +1,9 @@
-#include <inc/error.h>
 #include <assert.h>
 #include <string.h>
 #include <malloc.h>
+#include <lib/panic.h>
+#include <inc/error.h>
+#include <lib/stdio.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -122,14 +124,14 @@ static bool chdesc_in_range(chdesc_t * chdesc, uint16_t offset, uint16_t size)
 			/* assume in range */
 			return 1;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return 0;
 	}
 	if(offset <= chd_offset && chd_end <= offset + size)
 		return 1;
 	if(chd_end <= offset || offset + size <= chd_offset)
 		return 0;
-	fprintf(STDERR_FILENO, "%s(): (%s:%d): invalid inter-atomic block change descriptor!\n", __FUNCTION__, __FILE__, __LINE__);
+	kdprintf(STDERR_FILENO, "%s(): (%s:%d): invalid inter-atomic block change descriptor!\n", __FUNCTION__, __FILE__, __LINE__);
 	return 0;
 }
 

@@ -137,7 +137,7 @@ dev_lookup(int dev_id, struct Dev** dev)
 			*dev = devtab[i];
 			return 0;
 		}
-	fprintf(STDERR_FILENO, "[%08x] unknown device type %d\n", env->env_id, dev_id);
+	kdprintf(STDERR_FILENO, "[%08x] unknown device type %d\n", env->env_id, dev_id);
 	*dev = 0;
 	return -E_INVAL;
 }
@@ -304,7 +304,7 @@ read(int fdnum, void* buf, size_t n)
 	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
 		return r;
 	if ((fd->fd_omode & O_ACCMODE) == O_WRONLY) {
-		fprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
+		kdprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
 		return -E_INVAL;
 	}
 	r = (*dev->dev_read)(fd, buf, n, fd->fd_offset);
@@ -324,7 +324,7 @@ read_nb(int fdnum, void* buf, size_t n)
 	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
 		return r;
 	if ((fd->fd_omode & O_ACCMODE) == O_WRONLY) {
-		fprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
+		kdprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
 		return -E_INVAL;
 	}
 	r = (*dev->dev_read_nb)(fd, buf, n, fd->fd_offset);
@@ -361,7 +361,7 @@ read_map(int fdnum, off_t offset, void** blk)
 	if(!dev->dev_read_map)
 		return -E_INVAL;
 	if ((fd->fd_omode & O_ACCMODE) == O_WRONLY) {
-		fprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
+		kdprintf(STDERR_FILENO, "[%08x] read %d -- bad mode\n", env->env_id, fdnum); 
 		return -E_INVAL;
 	}
 	return (*dev->dev_read_map)(fd, offset, blk);
@@ -378,7 +378,7 @@ write(int fdnum, const void* buf, size_t n)
 	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
 		return r;
 	if ((fd->fd_omode & O_ACCMODE) == O_RDONLY) {
-		fprintf(STDERR_FILENO, "[%08x] write %d -- bad mode\n", env->env_id, fdnum);
+		kdprintf(STDERR_FILENO, "[%08x] write %d -- bad mode\n", env->env_id, fdnum);
 		return -E_INVAL;
 	}
 	if (debug)
@@ -429,7 +429,7 @@ ftruncate(int fdnum, off_t newsize)
 	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
 		return r;
 	if ((fd->fd_omode & O_ACCMODE) == O_RDONLY) {
-		fprintf(STDERR_FILENO, "[%08x] ftruncate %d -- bad mode\n",
+		kdprintf(STDERR_FILENO, "[%08x] ftruncate %d -- bad mode\n",
 		       env->env_id, fdnum); 
 		return -E_INVAL;
 	}
@@ -484,7 +484,7 @@ wait_fd(int fdnum, size_t nrefs)
 
 	while (p->pp_ref > nrefs)
 	{
-		fprintf(STDERR_FILENO, "wait_fd(%d, %d) = %d\n", fdnum, nrefs, p->pp_ref);
+		kdprintf(STDERR_FILENO, "wait_fd(%d, %d) = %d\n", fdnum, nrefs, p->pp_ref);
 		sys_yield();
 	}
 

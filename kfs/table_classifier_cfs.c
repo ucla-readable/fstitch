@@ -2,8 +2,10 @@
 // - ls on a directory should also show mounts to names in that directory
 
 
-#include <inc/lib.h>
 #include <malloc.h>
+#include <string.h>
+#include <inc/error.h>
+#include <lib/stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
 
@@ -563,7 +565,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 		return r;
 	}
 
-	fprintf(STDERR_FILENO, "table_classifier_cfs: mount to %s\n", path);
+	kdprintf(STDERR_FILENO, "table_classifier_cfs: mount to %s\n", path);
 	return 0;
 }
 
@@ -595,7 +597,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 			return NULL;
 	}
 
-	fprintf(STDERR_FILENO,"table_classifier_cfs: removed mount at %s\n", path);
+	kdprintf(STDERR_FILENO,"table_classifier_cfs: removed mount at %s\n", path);
 	vector_erase(state->mount_table, idx);
 	path_cfs = me->cfs;
 	mount_entry_destroy(me);

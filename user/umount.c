@@ -63,7 +63,7 @@ static int destroy_nodes(hash_set_t * nodes)
 				printf("destroyed %s\n", node->name);
 		}
 		else if (r != -E_BUSY)
-			fprintf(STDERR_FILENO, "Unexpected DESTROY(%s) error: %e\n", node->name, r);
+			kdprintf(STDERR_FILENO, "Unexpected DESTROY(%s) error: %e\n", node->name, r);
 	}
 
 	return ndestroyed;
@@ -129,7 +129,7 @@ static void remove_cycles(kfs_node_t * root, hash_map_t * uses_graph)
 			journalbd_use = vector_elt(root->uses, uses_index);
 			if (strcmp(journalbd_use->name, "journal"))
 			{
-				fprintf(STDERR_FILENO, "%s: %s does not use a \"journal\", I don't understand\n", __FUNCTION__, root->name);
+				kdprintf(STDERR_FILENO, "%s: %s does not use a \"journal\", I don't understand\n", __FUNCTION__, root->name);
 				exit();
 			}
 		}
@@ -142,10 +142,10 @@ static void remove_cycles(kfs_node_t * root, hash_map_t * uses_graph)
 		// (destroy now because no one will be using it after this)
 		r = journal_bd_set_journal(journal, NULL);
 		if (r < 0)
-			fprintf(STDERR_FILENO, "%s: journal_bd_set_journal(%s, NULL): %e", __FUNCTION__, root->name, r);
+			kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal(%s, NULL): %e", __FUNCTION__, root->name, r);
 		r = DESTROY((BD_t*) journalbd_use->node->obj);
 		if (r < 0)
-			fprintf(STDERR_FILENO, "%s: DESTROY(%s): %e\n", __FUNCTION__, journalbd_use->node->name, r);
+			kdprintf(STDERR_FILENO, "%s: DESTROY(%s): %e\n", __FUNCTION__, journalbd_use->node->name, r);
 
 		if (verbose)
 			printf("destroyed %s (to break possible cycle)\n", journalbd_use->node->name);
@@ -212,14 +212,14 @@ void umain(int argc, const char ** argv)
 	uses_graph = kfs_uses();
 	if (!uses_graph)
 	{
-		fprintf(STDERR_FILENO, "kfs_uses() failed\n");
+		kdprintf(STDERR_FILENO, "kfs_uses() failed\n");
 		exit();
 	}
 
 	tclass = get_table_classifier();
 	if (!tclass)
 	{
-		fprintf(STDERR_FILENO, "Unable to find root table classifier\n");
+		kdprintf(STDERR_FILENO, "Unable to find root table classifier\n");
 		exit();
 	}
 
@@ -236,13 +236,13 @@ void umain(int argc, const char ** argv)
 	}
 	if (!node)
 	{
-		fprintf(STDERR_FILENO, "Unable to find mount at \"%s\"\n", mount);
+		kdprintf(STDERR_FILENO, "Unable to find mount at \"%s\"\n", mount);
 		exit();
 	}
 
 	if (!table_classifier_cfs_remove(tclass, mount))
 	{
-		fprintf(STDERR_FILENO, "table_classifier_cfs_remove() failed to unmount %s pointing to %s\n", mount, node->name);
+		kdprintf(STDERR_FILENO, "table_classifier_cfs_remove() failed to unmount %s pointing to %s\n", mount, node->name);
 		exit();
 	}
 	if (verbose)

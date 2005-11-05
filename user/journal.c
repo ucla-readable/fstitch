@@ -125,7 +125,7 @@ void umain(int argc, const char ** argv)
 				r = DESTROY((BD_t*) journalbd_node->obj);
 				if(r < 0)
 				{
-					fprintf(STDERR_FILENO, "Could not destroy %s: %e\n", journalbd_node->name, r);
+					kdprintf(STDERR_FILENO, "Could not destroy %s: %e\n", journalbd_node->name, r);
 					exit();
 				}
 			}

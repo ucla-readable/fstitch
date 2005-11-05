@@ -6,7 +6,7 @@
 #include <inc/lib.h>
 #include <inc/serial.h>
 #include <inc/x86.h>
-#include <inc/types.h>
+#include <lib/types.h>
 
 #define SIO_FROST_DEBUG 0
 
@@ -73,7 +73,7 @@ sio_recv(sio_fd_t fd)
 	else
 	{
 #if SIO_FROST_DEBUG
-		fprintf(1, "#");
+		kdprintf(1, "#");
 #endif
 		fd->sioread = 1;
 	}
@@ -89,7 +89,7 @@ void
 sio_send(u8_t c, sio_fd_t fd)
 {
 #if SIO_FROST_DEBUG
-	fprintf(1, "@");
+	kdprintf(1, "@");
 #endif
 	serial_sendc(c, fd->com_addr);
 }

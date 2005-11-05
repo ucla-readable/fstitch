@@ -128,7 +128,7 @@ CFS_t * get_table_classifier()
 	r = modman_it_init_cfs(&it);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "modman_it_init_cfs() failed\n");
+		kdprintf(STDERR_FILENO, "modman_it_init_cfs() failed\n");
 		return NULL;
 	}
 

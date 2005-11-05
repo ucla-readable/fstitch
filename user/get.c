@@ -41,13 +41,13 @@ static void
 close_conn(struct http_state *hs)
 {
 	if (!silent && hs->body_length)
-		fprintf(status_fd, "\n");
+		kdprintf(status_fd, "\n");
 
 	// Confirm we recved all data:
 	if (hs->body_length)
 	{
 		if (hs->body_sofar != hs->body_length)
-			fprintf(STDERR_FILENO,
+			kdprintf(STDERR_FILENO,
 					  "http header said %d bytes, but we recved %d.\n",
 					  hs->body_length, hs->body_sofar);
 
@@ -58,7 +58,7 @@ close_conn(struct http_state *hs)
 			if((r = fstat(fileout_fd, &stat)) < 0)
 				panic("stat: %e", r);
 			if(stat.st_size != hs->body_length)
-				fprintf(STDERR_FILENO,
+				kdprintf(STDERR_FILENO,
 						  "http header said %d bytes, but our file is %d.\n",
 						  hs->body_length, stat.st_size);
 		}
@@ -71,14 +71,14 @@ static void
 removeoutput_close_exit(struct http_state *hs)
 {
 	if (!silent)
-		fprintf(status_fd, "Exiting\n");
+		kdprintf(status_fd, "Exiting\n");
 	if (fileout_name)
 	{
 		int r;
 		if ((r = close(fileout_fd)) < 0)
-			fprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
 		if ((r = remove(fileout_name)) < 0)
-			fprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
 	}
 
 	exit();
@@ -89,13 +89,13 @@ init_body_length_settings(struct http_state *hs)
 {
 	hs->body_sofar_period = ROUNDUP32(hs->body_length, 80) / 80;
 	if (hs->body_length && !silent && !print_server_headers)
-		fprintf(status_fd, "Size: %d bytes\n", hs->body_length);
+		kdprintf(status_fd, "Size: %d bytes\n", hs->body_length);
 /*
 	if (fileout_name && hs->body_length > MAXFILESIZE)
 	{
 		// FIXME: this size check does not check size of header!
 		if (!silent)
-			fprintf(STDERR_FILENO,
+			kdprintf(STDERR_FILENO,
 					  "Requested file too large for our filesystem, exiting\n");
 		removeoutput_close_exit(hs);
 	}
@@ -111,7 +111,7 @@ update_body_length_display(struct http_state *hs)
 	while (hs->body_sofar_shown < hs->body_sofar * 80 / hs->body_length)
 	{
 		if (!silent && fileout_fd != status_fd)
-			fprintf(status_fd, "=");
+			kdprintf(status_fd, "=");
 		hs->body_sofar_shown++;
 	}
 }
@@ -130,9 +130,9 @@ http_read_header(struct http_state *hs)
 	while ((r = read(hs->net[0], &c, 1)))
 	{
 		if (print_server_headers)
-			fprintf(status_fd, "%c", c);
+			kdprintf(status_fd, "%c", c);
 		if (save_server_headers && fileout_fd != status_fd)
-			fprintf(fileout_fd, "%c", c);
+			kdprintf(fileout_fd, "%c", c);
 		
 		if (c == '\n' || c == '\r')
 		{
@@ -145,7 +145,7 @@ http_read_header(struct http_state *hs)
 				//char *msg = code_str_end + 1;
 				
 				if (!silent)
-					fprintf(status_fd, "%s\n", code_str);
+					kdprintf(status_fd, "%s\n", code_str);
 				
 				*code_str_end = 0;
 				const long code = strtol(code_str, NULL, 10);
@@ -181,12 +181,12 @@ http_read_header(struct http_state *hs)
 		if (hs->header_end_sofar == 4)
 		{
 			if(!hs->body_length && !silent && !print_server_headers)
-				fprintf(status_fd, "Size: unknown\n");
+				kdprintf(status_fd, "Size: unknown\n");
 			return 0;
 		}
 	}
 
-	fprintf(STDERR_FILENO, "Connection closed while reading http header\n");
+	kdprintf(STDERR_FILENO, "Connection closed while reading http header\n");
 	return -1;
 }
 
@@ -216,7 +216,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 	int r;
 
 	if (!silent)
-		fprintf(status_fd, "http target: addr = %s, port = %d, resource = \"%s\"\n",
+		kdprintf(status_fd, "http target: addr = %s, port = %d, resource = \"%s\"\n",
 		        inet_iptoa(addr), port, uri);
 
 	hs = &ghs;
@@ -230,29 +230,29 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 
 	// Connect
 	if (!silent)
-		fprintf(status_fd, "Connecting... ");
+		kdprintf(status_fd, "Connecting... ");
 	if ((r = connect(addr, port, hs->net)) < 0)
 	{
-		fprintf(STDERR_FILENO, "connect: %e\n", r);
+		kdprintf(STDERR_FILENO, "connect: %e\n", r);
 		exit();
 	}
 	if (!silent)
-		fprintf(status_fd, "Connected\n");
+		kdprintf(status_fd, "Connected\n");
 
 	// Send the request
-	fprintf(hs->net[1], "GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", uri, host);
+	kdprintf(hs->net[1], "GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", uri, host);
 	if (!silent)
-		fprintf(status_fd, "Sending request... ");
+		kdprintf(status_fd, "Sending request... ");
 
 	// Read response
 	if ((r = http_read_header(hs)) < 0)
 	{
-		fprintf(STDERR_FILENO, "http_read_header: %e\n", r);
+		kdprintf(STDERR_FILENO, "http_read_header: %e\n", r);
 		removeoutput_close_exit(hs);
 	}
 	if ((r = http_read_body(hs)) < 0)
 	{
-		fprintf(STDERR_FILENO, "http_read_body: %e\n", r);
+		kdprintf(STDERR_FILENO, "http_read_body: %e\n", r);
 		removeoutput_close_exit(hs);
 	}
 
@@ -301,14 +301,14 @@ parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **
 	addr_str[MIN(addr_in_url_end - addr_in_url, sizeof(addr_str))] = 0;
 	if (addr_in_url_end - addr_in_url > sizeof(addr_str))
 	{
-		fprintf(STDERR_FILENO, "ip address string too long: \"%s\"\n", addr_str);
+		kdprintf(STDERR_FILENO, "ip address string too long: \"%s\"\n", addr_str);
 		return -1;
 	}
 
 	r = gethostbyname(addr_str, addr);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", addr_str, r);
+		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", addr_str, r);
 		return -1;
 	}
 
@@ -321,7 +321,7 @@ parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **
 		memcpy(port_str, port_in_url, MIN(port_in_url_end - port_in_url, sizeof(port_str)));
 		port_str[MIN(port_in_url_end - port_in_url, sizeof(port_str))] = 0;
 		if(port_in_url_end - port_in_url > sizeof(port_str)) {
-			fprintf(STDERR_FILENO, "port string too long: \"%s\"\n", port_str);
+			kdprintf(STDERR_FILENO, "port string too long: \"%s\"\n", port_str);
 			return -1;
 		}
 
@@ -350,13 +350,13 @@ parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **
 static void
 print_usage(char *bin)
 {
-	fprintf(STDERR_FILENO, "%s: [http://]<host>[:<port>][<resource>] [OPTIONS]\n", bin);
-	fprintf(STDERR_FILENO, "Options:\n");
-	fprintf(STDERR_FILENO, "  -o <file>: save to file\n");
-	fprintf(STDERR_FILENO, "  -q: turn off status output\n");
-	fprintf(STDERR_FILENO, "  -e: redirect status output to stderr\n");
-	fprintf(STDERR_FILENO, "  -S: print server headers\n");
-	fprintf(STDERR_FILENO, "  -s: save  server headers\n");
+	kdprintf(STDERR_FILENO, "%s: [http://]<host>[:<port>][<resource>] [OPTIONS]\n", bin);
+	kdprintf(STDERR_FILENO, "Options:\n");
+	kdprintf(STDERR_FILENO, "  -o <file>: save to file\n");
+	kdprintf(STDERR_FILENO, "  -q: turn off status output\n");
+	kdprintf(STDERR_FILENO, "  -e: redirect status output to stderr\n");
+	kdprintf(STDERR_FILENO, "  -S: print server headers\n");
+	kdprintf(STDERR_FILENO, "  -s: save  server headers\n");
 }
 
 void
@@ -375,7 +375,7 @@ umain(int argc, char **argv)
 	{
 		if ((r = open(filename, O_WRONLY|O_CREAT|O_TRUNC)) < 0)
 		{
-			fprintf(STDERR_FILENO, "open: %e\n", r);
+			kdprintf(STDERR_FILENO, "open: %e\n", r);
 			exit();
 		}
 		fileout_fd   = r;
@@ -399,7 +399,7 @@ umain(int argc, char **argv)
 	char *host = NULL;
 	if ((r = parse_url(url, &addr, &port, &uri, &host)) < 0)
 	{
-		fprintf(STDERR_FILENO, "parse_url: %e\n", r);
+		kdprintf(STDERR_FILENO, "parse_url: %e\n", r);
 		exit();
 	}
 

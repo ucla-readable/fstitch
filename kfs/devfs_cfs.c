@@ -1,8 +1,12 @@
-#include <inc/lib.h>
 #include <malloc.h>
+#include <string.h>
+#include <assert.h>
+#include <inc/error.h>
+#include <lib/stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
-#include <inc/dirent.h>
+#include <lib/fcntl.h>
+#include <lib/dirent.h>
 
 #include <kfs/fidman.h>
 #include <kfs/chdesc.h>

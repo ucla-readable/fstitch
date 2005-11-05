@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <lib/stdio.h>
 
 #include <kfs/modman.h>
 #include <inc/serial_kfs.h>
@@ -415,7 +416,7 @@ static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 			if (len+1 > SKFS_MAX_NAMELEN)								\
 			{															\
 				len = SKFS_MAX_NAMELEN;									\
-				fprintf(STDERR_FILENO, "%s(): serial kfs support limiting name \"%s\" to %u chars\n", __FUNCTION__, me->name, len); \
+				kdprintf(STDERR_FILENO, "%s(): serial kfs support limiting name \"%s\" to %u chars\n", __FUNCTION__, me->name, len); \
 			}															\
 			strncpy(rl->name, me->name, len);							\
 			rl->name[len] = 0;											\
@@ -460,7 +461,7 @@ static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 				if (len+1 > SKFS_MAX_NAMELEN)							\
 				{														\
 					len = SKFS_MAX_NAMELEN;								\
-					fprintf(STDERR_FILENO, "%s(): serial kfs support limiting use name \"%s\" to %u chars\n", __FUNCTION__, use_name, len); \
+					kdprintf(STDERR_FILENO, "%s(): serial kfs support limiting use name \"%s\" to %u chars\n", __FUNCTION__, use_name, len); \
 				}														\
 				strncpy(ru->use_name, use_name, len);					\
 				ru->use_name[len] = 0;									\
@@ -479,7 +480,7 @@ static void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lo
 		case 2: LOOKUP_REQEST_RETURN(bd,  BD);  break;
 		default:
 			// Leave requester hanging...
-			fprintf(STDERR_FILENO, "%s(): Unknown type %d\n", __FUNCTION__, pg->type);
+			kdprintf(STDERR_FILENO, "%s(): Unknown type %d\n", __FUNCTION__, pg->type);
 	}
 }
 
@@ -522,7 +523,7 @@ static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t
 		case 2: ITS_REQUEST_RETURN(bd,  BD);  break;
 		default:
 			// Leave requester hanging...
-			fprintf(STDERR_FILENO, "%s(): Unknown type %d\n", __FUNCTION__, pg->type);
+			kdprintf(STDERR_FILENO, "%s(): Unknown type %d\n", __FUNCTION__, pg->type);
 	}
 }
 
@@ -550,7 +551,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	fid = CALL(cfs, open, pg->file, O_CREAT|O_WRONLY);
 	if(fid < 0)
 	{
-		fprintf(STDERR_FILENO, "%s(): open %s: %e\n", __FUNCTION__, pg->file, fid);
+		kdprintf(STDERR_FILENO, "%s(): open %s: %e\n", __FUNCTION__, pg->file, fid);
 		return fid;
 	}
 
@@ -560,7 +561,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 		s = CALL(cfs, write, fid, test_data, size, sizeof(test_data));
 		if (s < 0)
 		{
-			fprintf(STDERR_FILENO, "%s(): write: %e\n", __FUNCTION__, s);
+			kdprintf(STDERR_FILENO, "%s(): write: %e\n", __FUNCTION__, s);
 			CALL(cfs, close, fid);
 			return s;
 		}
@@ -570,7 +571,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 
 	r = CALL(cfs, close, fid);
 	if (r < 0)
-		fprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %e\n", __FUNCTION__, r);
+		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %e\n", __FUNCTION__, r);
 
 	return time_end - time_start;
 }
@@ -600,7 +601,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 	// All requests must contain an argument page
 	if (! ((perm & PTE_P) && (perm & PTE_U)) )
 	{
-		fprintf(STDERR_FILENO, "Invalid serial kfs request from %08x: no argument page\n", whom);
+		kdprintf(STDERR_FILENO, "Invalid serial kfs request from %08x: no argument page\n", whom);
 		return; // Just leave it hanging...
 	}
 	assert(pg);
@@ -660,7 +661,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(PERF_TEST, perf_test);
 
 		default:
-			fprintf(STDERR_FILENO, "kfs_ipc_serve: Unknown type %d\n", type);
+			kdprintf(STDERR_FILENO, "kfs_ipc_serve: Unknown type %d\n", type);
 			return; // Just leave hanging...
 	}
 }

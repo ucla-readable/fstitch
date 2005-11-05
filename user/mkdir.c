@@ -22,7 +22,7 @@ umain(int argc, char **argv)
 		int fd;
 		if((fd = r = open(argv[i], O_CREAT | O_MKDIR)) < 0)
 		{
-			fprintf(STDERR_FILENO, "open(%s): %e\n", argv[i], r);
+			kdprintf(STDERR_FILENO, "open(%s): %e\n", argv[i], r);
 			exit();
 		}
 

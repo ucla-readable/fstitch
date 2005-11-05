@@ -1,7 +1,7 @@
+#include <string.h>
+#include <malloc.h>
 #include <inc/error.h>
-#include <inc/string.h>
 #include <lib/hash_map.h>
-#include <inc/malloc.h>
 
 #include <kfs/modman.h>
 #include <kfs/cfs_ipc_serve.h>
@@ -61,7 +61,7 @@ static int check_capability(const open_file_t * of)
 {
 	if (cfs_ipc_serve_cur_cappa() != of->cappa && cfs_ipc_serve_cur_cappa())
 	{
-		fprintf(STDERR_FILENO, "fidprotector %s: FAILURE for fid %d. fid's cappa = 0x%08x, request's cappa = 0x%08x.\n", __FUNCTION__, of->fid, of->cappa, cfs_ipc_serve_cur_cappa());
+		kdprintf(STDERR_FILENO, "fidprotector %s: FAILURE for fid %d. fid's cappa = 0x%08x, request's cappa = 0x%08x.\n", __FUNCTION__, of->fid, of->cappa, cfs_ipc_serve_cur_cappa());
 		return -E_IPC_FAILED_CAP;
 	}
 
@@ -117,7 +117,7 @@ static int fidprotector_open(CFS_t * cfs, const char * name, int mode)
 
 	cappa = cfs_ipc_serve_cur_cappa();
 	if (cappa == -1)
-		fprintf(STDERR_FILENO, "%s(\"%s\"): warning: capability is the unused-marker\n", __FUNCTION__, name);
+		kdprintf(STDERR_FILENO, "%s(\"%s\"): warning: capability is the unused-marker\n", __FUNCTION__, name);
 
 	r = 0;
 	of = open_file_create(fid, cappa);

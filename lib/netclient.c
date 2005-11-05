@@ -105,13 +105,13 @@ gethostbyname(const char *name, struct ip_addr *ipaddr)
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd ipcrecv\n");
+		kdprintf(STDERR_FILENO, "connect(): unable to find netd ipcrecv\n");
 		return -1;
 	}
 	netd_net = find_netd_net();
 	if (!netd_net)
 	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
+		kdprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -142,13 +142,13 @@ connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd ipcrecv\n");
+		kdprintf(STDERR_FILENO, "connect(): unable to find netd ipcrecv\n");
 		return -1;
 	}
 	netd_net = find_netd_net();
 	if (!netd_net)
 	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
+		kdprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -182,13 +182,13 @@ bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
-		fprintf(STDERR_FILENO, "bind_listen(): unable to find netd ipcrecv\n");
+		kdprintf(STDERR_FILENO, "bind_listen(): unable to find netd ipcrecv\n");
 		return -1;
 	}
 	netd_net = find_netd_net();
 	if (!netd_net)
 	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
+		kdprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -227,13 +227,13 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
-		fprintf(STDERR_FILENO, "accept(): unable to find netd ipcrecv\n");
+		kdprintf(STDERR_FILENO, "accept(): unable to find netd ipcrecv\n");
 		return -1;
 	}
 	netd_net = find_netd_net();
 	if (!netd_net)
 	{
-		fprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
+		kdprintf(STDERR_FILENO, "connect(): unable to find netd net\n");
 		return -1;
 	}
 
@@ -278,7 +278,7 @@ net_stats(int fd)
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
 	{
-		fprintf(STDERR_FILENO, "net_stats: unable to find netd ipcrecv\n");
+		kdprintf(STDERR_FILENO, "net_stats: unable to find netd ipcrecv\n");
 		return -1;
 	}
 
@@ -306,7 +306,7 @@ net_stats(int fd)
 
 	if ((r = close(stats_fd)) < 0)
 	{
-		fprintf(STDERR_FILENO, "close: %e\n", r);
+		kdprintf(STDERR_FILENO, "close: %e\n", r);
 		return -1;
 	}
 

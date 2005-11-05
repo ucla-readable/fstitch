@@ -86,7 +86,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				cache = wb_cache_bd(partitions[i], cache_nblks);
 				if (!cache)
 				{
-					fprintf(STDERR_FILENO, "wb_cache_bd() failed\n");
+					kdprintf(STDERR_FILENO, "wb_cache_bd() failed\n");
 					exit();
 				}
 				break;
@@ -94,7 +94,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				cache = wt_cache_bd(partitions[i], cache_nblks);
 				if (!cache)
 				{
-					fprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
+					kdprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
 					exit();
 				}
 				break;
@@ -102,7 +102,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				cache = partitions[i];
 				break;
 			default:
-				fprintf(STDERR_FILENO, "%s() does not know about cache type %d\n", __FUNCTION__, cache_type);
+				kdprintf(STDERR_FILENO, "%s() does not know about cache type %d\n", __FUNCTION__, cache_type);
 				exit();
 				cache = NULL; // satisfy compiler
 		}
@@ -113,7 +113,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			/* create a cache above the resizer */
 			if (! (cache = wt_cache_bd(resizer, 16)) )
 			{
-				fprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
+				kdprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
 				exit();
 			}
 		}
@@ -126,7 +126,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 
 			if (! (journal = journal_bd(cache)) )
 			{
-				fprintf(STDERR_FILENO, "journal_bd() failed\n");
+				kdprintf(STDERR_FILENO, "journal_bd() failed\n");
 				exit();
 			}
 
@@ -134,7 +134,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			if (!lfs)
 			{
 				(void) DESTROY(journal);
-				fprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
+				kdprintf(STDERR_FILENO, "%s: josfs() failed\n", __FUNCTION__);
 				return NULL;
 			}
 
@@ -146,7 +146,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			{
 				(void) DESTROY(lfs);
 				(void) DESTROY(journal);
-				fprintf(STDERR_FILENO, "%s: loop_bd(journal_lfs, \"%s\") failed\n", __FUNCTION__, journal_lfs_file);
+				kdprintf(STDERR_FILENO, "%s: loop_bd(journal_lfs, \"%s\") failed\n", __FUNCTION__, journal_lfs_file);
 				return NULL;
 			}
 			if ((r = journal_bd_set_journal(journal, journalbd)) >= 0)
@@ -155,7 +155,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			{
 				(void) DESTROY(lfs);
 				(void) DESTROY(journal);
-				fprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed: %e\n", __FUNCTION__, r);
+				kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed: %e\n", __FUNCTION__, r);
 				return NULL;
 			}
 
@@ -165,9 +165,9 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 					printf("Fscking pre-journal-replayed filesystem... ");
 				int r = josfs_fsck(lfs);
 				if (r < 0)
-					fprintf(STDERR_FILENO, "critical errors: %e\n", r);
+					kdprintf(STDERR_FILENO, "critical errors: %e\n", r);
 				else if (r > 0)
-					fprintf(STDERR_FILENO, "found %d errors\n", r);
+					kdprintf(STDERR_FILENO, "found %d errors\n", r);
 				else if (verbose)
 					printf("done.\n");
 			}
@@ -181,7 +181,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				printf("Fscking... ");
 			int r = josfs_fsck(josfs_lfs);
 			if (r < 0)
-				fprintf(STDERR_FILENO, "errors found: %e\n");
+				kdprintf(STDERR_FILENO, "errors found: %e\n");
 			else if (verbose)
 				printf("done.\n");
 		}
@@ -192,7 +192,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			printf("Using wholedisk");
 		else
 		{
-			fprintf(STDERR_FILENO, "lfs creation failed\n");
+			kdprintf(STDERR_FILENO, "lfs creation failed\n");
 			exit();
 		}
 
@@ -206,7 +206,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 
 		if (! (u = uhfs(lfs)) )
 		{
-			fprintf(STDERR_FILENO, "uhfs() failed\n");
+			kdprintf(STDERR_FILENO, "uhfs() failed\n");
 			exit();
 		}
 
@@ -266,13 +266,13 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs.id, &md);
 			if (r < 0)
 			{
-				fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", extjournal_file, r);
+				kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", extjournal_file, r);
 				exit();
 			}
 			*journal_lfs = create_lfs(*(uint32_t *) md.data);
 			if (!*journal_lfs)
 			{
-				fprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", extjournal_file);
+				kdprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", extjournal_file);
 				exit();
 			}
 
@@ -281,7 +281,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs_name.id, &md);
 			if (r < 0)
 			{
-				fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", extjournal_file, r);
+				kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", extjournal_file, r);
 				exit();
 			}
 			*journal_lfs_file = strdup((char *) md.data);
@@ -297,7 +297,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			*jfsck = 0;
 		else
 		{
-			fprintf(STDERR_FILENO, "Illegal -jfsck option \"%s\"\n", jfsck_str);
+			kdprintf(STDERR_FILENO, "Illegal -jfsck option \"%s\"\n", jfsck_str);
 			print_usage(argv[0]);
 			exit();
 		}
@@ -315,7 +315,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			*fsck = 0;
 		else
 		{
-			fprintf(STDERR_FILENO, "Illegal -fsck option \"%s\"\n", fsck_str);
+			kdprintf(STDERR_FILENO, "Illegal -fsck option \"%s\"\n", fsck_str);
 			print_usage(argv[0]);
 			exit();
 		}
@@ -331,7 +331,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			*cache_type = NO_CACHE;
 		else
 		{
-			fprintf(STDERR_FILENO, "Illegal -c option \"%s\"\n", cache_type_str);
+			kdprintf(STDERR_FILENO, "Illegal -c option \"%s\"\n", cache_type_str);
 			print_usage(argv[0]);
 			exit();
 		}
@@ -349,14 +349,14 @@ static BD_t * create_disk(int argc, const char ** argv)
 	device_index = get_arg_idx(argc, argv, "-d");
 	if (device_index <= 0)
 	{
-		fprintf(STDERR_FILENO, "No -d parameter\n");
+		kdprintf(STDERR_FILENO, "No -d parameter\n");
 		print_usage(argv[0]);
 		exit();
 	}
 
 	if (++device_index >= argc)
 	{
-		fprintf(STDERR_FILENO, "No parameters passed with -d\n");
+		kdprintf(STDERR_FILENO, "No parameters passed with -d\n");
 		print_usage(argv[0]);
 		exit();
 	}
@@ -367,7 +367,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (device_index + 3 >= argc)
 		{
-			fprintf(STDERR_FILENO, "Insufficient parameters for ide\n");
+			kdprintf(STDERR_FILENO, "Insufficient parameters for ide\n");
 			print_usage(argv[0]);
 			exit();
 		}
@@ -378,7 +378,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (! (disk = ide_pio_bd(controllerno, diskno, readahead)) )
 		{
-			fprintf(STDERR_FILENO, "ide_pio_bd(%d, %d, %d) failed\n", controllerno, diskno);
+			kdprintf(STDERR_FILENO, "ide_pio_bd(%d, %d, %d) failed\n", controllerno, diskno);
 			return NULL;
 		}
 	}
@@ -390,7 +390,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (device_index + 1 >= argc)
 		{
-			fprintf(STDERR_FILENO, "Insufficient parameters for nbd\n");
+			kdprintf(STDERR_FILENO, "Insufficient parameters for nbd\n");
 			print_usage(argv[0]);
 			exit();
 		}
@@ -401,7 +401,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (! (disk = nbd_bd(host, port)) )
 		{
-			fprintf(STDERR_FILENO, "nbd_bd(%s, %d) failed\n", host, port);
+			kdprintf(STDERR_FILENO, "nbd_bd(%s, %d) failed\n", host, port);
 			return NULL;
 		}
 	}
@@ -414,7 +414,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (device_index + 2 >= argc)
 		{
-			fprintf(STDERR_FILENO, "Insufficient parameters for mem\n");
+			kdprintf(STDERR_FILENO, "Insufficient parameters for mem\n");
 			print_usage(argv[0]);
 			exit();
 		}
@@ -422,18 +422,18 @@ static BD_t * create_disk(int argc, const char ** argv)
 		blocksize_str = argv[device_index + 1];
 		blocksize = strtol(blocksize_str, NULL, 10);
 		if (blocksize == 0) {
-			fprintf(STDERR_FILENO, "Bad block size for mem\n");
+			kdprintf(STDERR_FILENO, "Bad block size for mem\n");
 		}
 
 		block_count_str = argv[device_index + 2];
 		block_count = strtol(block_count_str, NULL, 10);
 		if (block_count == 0) {
-			fprintf(STDERR_FILENO, "Bad block count for mem\n");
+			kdprintf(STDERR_FILENO, "Bad block count for mem\n");
 		}
 
 		if (! (disk = mem_bd(block_count, blocksize)) )
 		{
-			fprintf(STDERR_FILENO, "mem_bd(%d, %d) failed\n", block_count, blocksize);
+			kdprintf(STDERR_FILENO, "mem_bd(%d, %d) failed\n", block_count, blocksize);
 			return NULL;
 		}
 	}
@@ -446,7 +446,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (device_index + 1 >= argc)
 		{
-			fprintf(STDERR_FILENO, "Insufficient parameters for loop\n");
+			kdprintf(STDERR_FILENO, "Insufficient parameters for loop\n");
 			print_usage(argv[0]);
 			exit();
 		}
@@ -458,13 +458,13 @@ static BD_t * create_disk(int argc, const char ** argv)
 		r = cfs_get_metadata(filename, KFS_feature_file_lfs.id, &md);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename, r);
+			kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename, r);
 			exit();
 		}
 		lfs = create_lfs(*(uint32_t *) md.data);
 		if (!lfs)
 		{
-			fprintf(STDERR_FILENO, "Unable to find the LFS for file %s\n", filename);
+			kdprintf(STDERR_FILENO, "Unable to find the LFS for file %s\n", filename);
 			exit();
 		}
 
@@ -473,20 +473,20 @@ static BD_t * create_disk(int argc, const char ** argv)
 		r = cfs_get_metadata(filename, KFS_feature_file_lfs_name.id, &md);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename, r);
+			kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename, r);
 			exit();
 		}
 		lfs_filename = (char *) md.data;
 		if (!lfs_filename)
 		{
-			fprintf(STDERR_FILENO, "Unable to get lfs filename\n");
+			kdprintf(STDERR_FILENO, "Unable to get lfs filename\n");
 			exit();
 		}
 
 		// Create loop_bd
 		if (! (disk = loop_bd(lfs, lfs_filename)) )
 		{
-			fprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
+			kdprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
 			return NULL;
 		}
 	}
@@ -498,7 +498,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (device_index + 1 >= argc)
 		{
-			fprintf(STDERR_FILENO, "Insufficient parameters for bd\n");
+			kdprintf(STDERR_FILENO, "Insufficient parameters for bd\n");
 			print_usage(argv[0]);
 			exit();
 		}
@@ -514,13 +514,13 @@ static BD_t * create_disk(int argc, const char ** argv)
 
 		if (!disk)
 		{
-			fprintf(STDERR_FILENO, "Unable to find BD %s\n", bd_name);
+			kdprintf(STDERR_FILENO, "Unable to find BD %s\n", bd_name);
 			return NULL;
 		}
 	}
 	else
 	{
-		fprintf(STDERR_FILENO, "Unknown device type \"%s\"\n", argv[device_index]);
+		kdprintf(STDERR_FILENO, "Unknown device type \"%s\"\n", argv[device_index]);
 			print_usage(argv[0]);
 			exit();
 	}
@@ -554,7 +554,7 @@ void umain(int argc, const char ** argv)
 	mount_point = get_arg_val(argc, argv, "-m");
 	if (!mount_point)
 	{
-		fprintf(STDERR_FILENO, "No mount specified\n");
+		kdprintf(STDERR_FILENO, "No mount specified\n");
 		print_usage(argv[0]);
 		exit();
 	}
@@ -576,7 +576,7 @@ void umain(int argc, const char ** argv)
 	r = table_classifier_cfs_add(tclass, mount_point, cfs);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "table_classifier_cfs_add(): %e\n", r);
+		kdprintf(STDERR_FILENO, "table_classifier_cfs_add(): %e\n", r);
 		exit();
 	}
 }

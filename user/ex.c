@@ -396,7 +396,7 @@ static int parse_linenos(const char ** x, size_t * begin, size_t * end)
 
 	if (b > e)
 	{
-		fprintf(STDERR_FILENO, "Invalid lineno range %u-%u\n", b, e);
+		kdprintf(STDERR_FILENO, "Invalid lineno range %u-%u\n", b, e);
 		return -E_INVAL;
 	}
 
@@ -518,14 +518,14 @@ static int file_save(void)
 	r = ftruncate(ex_file.fdnum, 0);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "ftrucate", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "ftrucate", r);
 		return r;
 	}
 
 	r = seek(ex_file.fdnum, 0);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "seek", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "seek", r);
 		return r;
 	}
 
@@ -539,10 +539,10 @@ static int file_save(void)
 		r = write(ex_file.fdnum, l->text, strlen(l->text));
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "write", r);
+			kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "write", r);
 			return r;
 		}
-		fprintf(ex_file.fdnum, "\n");
+		kdprintf(ex_file.fdnum, "\n");
 		l = l->next;
 	}
 
@@ -601,13 +601,13 @@ static void cmd_shell(size_t begin, size_t end, const char * cmd)
 
 	if (begin != ex_file.cur_lineno || end != ex_file.cur_lineno)
 	{
-		fprintf(STDERR_FILENO, "No range allowed\n");
+		kdprintf(STDERR_FILENO, "No range allowed\n");
 		return;
 	}
 
 	r = spawnl("/sh", "/sh", (const char **) 0);
 	if (r < 0)
-		fprintf(STDERR_FILENO, "spawn /sh: %e\n", r);
+		kdprintf(STDERR_FILENO, "spawn /sh: %e\n", r);
 	wait(r);
 }
 
@@ -617,19 +617,19 @@ static void cmd_quit(size_t begin, size_t end, const char * cmd)
 
 	if (begin != ex_file.cur_lineno || end != ex_file.cur_lineno)
 	{
-		fprintf(STDERR_FILENO, "No range allowed\n");
+		kdprintf(STDERR_FILENO, "No range allowed\n");
 		return;
 	}
 
 	if (ex_file.modified && cmd[1] != '!')
 	{
-		fprintf(STDERR_FILENO, "No write since last change (use ! to override)\n");
+		kdprintf(STDERR_FILENO, "No write since last change (use ! to override)\n");
 		return;
 	}
 
 	r = file_close();
 	if (r < 0)
-		fprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
 	exit();
 }
 
@@ -640,21 +640,21 @@ static void cmd_insert_file(size_t begin, size_t end, const char * cmd)
 
 	if (begin != ex_file.cur_lineno || end != ex_file.cur_lineno)
 	{
-		fprintf(STDERR_FILENO, "Range write not implemented\n");
+		kdprintf(STDERR_FILENO, "Range write not implemented\n");
 		return;
 	}
 
 	file = parse_filename(cmd+1);
 	if (!file)
 	{
-		fprintf(STDERR_FILENO, "No filename given\n");
+		kdprintf(STDERR_FILENO, "No filename given\n");
 		return;
 	}
 
 	r = file_insert(file, O_RDWR);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "Unable to insert file \"%s\": %e\n", file, r);
+		kdprintf(STDERR_FILENO, "Unable to insert file \"%s\": %e\n", file, r);
 		return;
 	}
 	r = close(r);
@@ -677,14 +677,14 @@ static int write_file(const char * file)
 		ex_file.fdnum = open(file, O_RDWR|O_CREAT);
 		if (ex_file.fdnum < 0)
 		{
-			fprintf(STDERR_FILENO, "Unable to write to \"%s\"\n", file);
+			kdprintf(STDERR_FILENO, "Unable to write to \"%s\"\n", file);
 			if (file_was_open)
 			{
 				ex_file.fdnum = open(ex_file.filename, O_RDWR);
 				if (ex_file.fdnum < 0)
 				{
 					ex_file.fdnum = -1;
-					fprintf(STDERR_FILENO, "Unable to reopen original file\n");
+					kdprintf(STDERR_FILENO, "Unable to reopen original file\n");
 				}
 			}
 			return -E_UNSPECIFIED;
@@ -698,7 +698,7 @@ static int write_file(const char * file)
 	r = file_save();
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_save", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_save", r);
 		return -E_UNSPECIFIED;
 	}
 
@@ -713,7 +713,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 
 	if (begin != ex_file.cur_lineno || end != ex_file.cur_lineno)
 	{
-		fprintf(STDERR_FILENO, "Range write not implemented\n");
+		kdprintf(STDERR_FILENO, "Range write not implemented\n");
 		return;
 	}
 
@@ -722,7 +722,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 	{
 		if (cmd[1])
 		{
-			fprintf(STDERR_FILENO, "No filename given\n");
+			kdprintf(STDERR_FILENO, "No filename given\n");
 			return;
 		}
 		file = NULL;
@@ -736,7 +736,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 	{
 		r = file_close();
 		if (r < 0)
-			fprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
+			kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
 		exit();
 	}
 
@@ -752,7 +752,7 @@ static void cmd_writequit(size_t begin, size_t end, const char * cmd)
 
 	if (begin != ex_file.cur_lineno || end != ex_file.cur_lineno)
 	{
-		fprintf(STDERR_FILENO, "Range write not implemented\n");
+		kdprintf(STDERR_FILENO, "Range write not implemented\n");
 		return;
 	}
 
@@ -761,7 +761,7 @@ static void cmd_writequit(size_t begin, size_t end, const char * cmd)
 	{
 		if (cmd[1])
 		{
-			fprintf(STDERR_FILENO, "No filename given\n");
+			kdprintf(STDERR_FILENO, "No filename given\n");
 			return;
 		}
 		file = ex_file.filename;
@@ -972,9 +972,9 @@ static void display_lines(size_t begin, size_t end, bool linenos)
 		if (r < len)
 		{
 			if (r < 0)
-				fprintf(STDOUT_FILENO, "%s(): %s: %e\n", __FUNCTION__, "write", r);
+				kdprintf(STDOUT_FILENO, "%s(): %s: %e\n", __FUNCTION__, "write", r);
 			else
-				fprintf(STDOUT_FILENO, "%s(): Only able to display %u of %u chars on line\n", __FUNCTION__, r, len);
+				kdprintf(STDOUT_FILENO, "%s(): Only able to display %u of %u chars on line\n", __FUNCTION__, r, len);
 			return;
 		}
 		printf("\n");
@@ -1006,7 +1006,7 @@ static void cmd_insert(size_t begin, size_t end, const char * cmd)
 	r = line_goto(begin);
 	if (r < 0)
 	{
-		fprintf(STDOUT_FILENO, "Illegal lineno\n");
+		kdprintf(STDOUT_FILENO, "Illegal lineno\n");
 		return;
 	}
 
@@ -1035,7 +1035,7 @@ static void cmd_append(size_t begin, size_t end, const char * cmd)
 	r = line_goto(begin);
 	if (r < 0)
 	{
-		fprintf(STDOUT_FILENO, "Illegal lineno\n");
+		kdprintf(STDOUT_FILENO, "Illegal lineno\n");
 		return;
 	}
 
@@ -1056,7 +1056,7 @@ static void cmd_delete(size_t begin, size_t end, const char * cmd)
 	r = line_goto(begin);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "Out of range lineno %u (file %u lines)\n", begin, ex_file.numlines);
+		kdprintf(STDERR_FILENO, "Out of range lineno %u (file %u lines)\n", begin, ex_file.numlines);
 		return;
 	}
 
@@ -1073,7 +1073,7 @@ static void cmd_change(size_t begin, size_t end, const char * cmd)
 	r = line_goto(begin);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "Out of range lineno %u (file %u lines)\n", begin, ex_file.numlines);
+		kdprintf(STDERR_FILENO, "Out of range lineno %u (file %u lines)\n", begin, ex_file.numlines);
 		return;
 	}
 
@@ -1130,7 +1130,7 @@ static void run_loop(void)
 		r = parse_linenos(&l, &begin, &end);
 		if (r < 0)
 		{
-			fprintf(STDOUT_FILENO, "lineno out of range\n");
+			kdprintf(STDOUT_FILENO, "lineno out of range\n");
 			continue;
 		}
 
@@ -1193,7 +1193,7 @@ static void register_commands(void)
 
 static void print_usage(const char * bin)
 {
-	fprintf(STDERR_FILENO, "%s [<file>]\n", bin);
+	kdprintf(STDERR_FILENO, "%s [<file>]\n", bin);
 }
 
 static void parse_cmdline(int argc, char ** argv)
@@ -1214,7 +1214,7 @@ static void parse_cmdline(int argc, char ** argv)
 		r = file_open(file, O_RDWR|O_CREAT);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "Unable to open \"%s\"\n", file);
+			kdprintf(STDERR_FILENO, "Unable to open \"%s\"\n", file);
 			exit();
 		}
 	}

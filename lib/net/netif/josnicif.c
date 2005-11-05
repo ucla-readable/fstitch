@@ -126,7 +126,7 @@ low_level_output(struct netif *netif, struct pbuf *p)
     memcpy(&buffer[offset], q->payload, q->len);
     offset += q->len;
     if(q->len == q->tot_len && q->next) {
-      fprintf(STDERR_FILENO, "josnicif: breaking output packet chain\n");
+      kdprintf(STDERR_FILENO, "josnicif: breaking output packet chain\n");
       break;
     }
   }

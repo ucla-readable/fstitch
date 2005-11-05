@@ -64,7 +64,7 @@ umain(int argc, char **argv)
 
 	if ((r = sys_grant_io(0)) < 0)
 	{
-		fprintf(STDERR_FILENO, "sys_grant_io: %e\n", r);
+		kdprintf(STDERR_FILENO, "sys_grant_io: %e\n", r);
 		exit();
 	}
 
@@ -73,8 +73,8 @@ umain(int argc, char **argv)
 	// Wait a bit before starting (and stopping the fs) in case we were
 	// started "diskwrite < fs.img", so that the shell has a chance to
 	// close its fds:
-	if ((r = sleep(HZ / 2)) < 0)
-		fprintf(STDERR_FILENO, "sleep: %e\n");
+	if ((r = sleepj(HZ / 2)) < 0)
+		kdprintf(STDERR_FILENO, "sleepj: %e\n");
 
 	for (;; blockno++)
 	{
@@ -99,7 +99,7 @@ umain(int argc, char **argv)
 			// (typing or a web 404, for example), exit
 			if (tot_n != sizeof(blk))
 			{
-				fprintf(STDERR_FILENO, "Input had less than one block of data, exiting without modifying the disk\n");
+				kdprintf(STDERR_FILENO, "Input had less than one block of data, exiting without modifying the disk\n");
 				break;
 			}
 
@@ -107,7 +107,7 @@ umain(int argc, char **argv)
 			// to help ensure whomever is feeding diskwrite data is loaded
 			if ((r = fs_shutdown()) < 0)
 			{
-				fprintf(STDERR_FILENO, "Unable to shutdown fs, exiting\n");
+				kdprintf(STDERR_FILENO, "Unable to shutdown fs, exiting\n");
 				break;
 			}
 		}
@@ -127,11 +127,11 @@ umain(int argc, char **argv)
 		if (!iscons(STDOUT_FILENO))
 			printf_c(reboot_msg);
 
-		if ((r = sleep(2 * HZ)) < 0)
-			fprintf(STDERR_FILENO, "sleep: %e\n", r);
+		if ((r = sleepj(2 * HZ)) < 0)
+			kdprintf(STDERR_FILENO, "sleepj: %e\n", r);
 		sys_reboot();
 	}
 	// This will fail, why?:
 	//if ((r = spawnl("fs", "fs", (const char **) 0)) < 0)
-	//	fprintf(STDERR_FILENO, "spawn fs: %e\n", r);
+	//	kdprintf(STDERR_FILENO, "spawn fs: %e\n", r);
 }

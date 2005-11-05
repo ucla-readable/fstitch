@@ -1,7 +1,10 @@
-#include <stdio.h>
+#include <lib/stdio.h>
+#include <assert.h>
 #include <inc/error.h>
 #include <malloc.h>
 #include <string.h>
+#include <lib/memdup.h>
+#include <lib/panic.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -83,7 +86,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 			offset = NULL;
 			break;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return -E_INVAL;
 	}
 	if(offset && source_offset > *offset)
@@ -460,7 +463,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 			assert(r >= 0);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, original->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, original->type);
 			free(descs);
 			return -E_INVAL;
 		fail_first:
@@ -571,7 +574,7 @@ int chdesc_split(chdesc_t * original, int count)
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, original);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, descs[0]->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, descs[0]->type);
 	}
 #endif
 	

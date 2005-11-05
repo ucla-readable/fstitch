@@ -2,12 +2,17 @@ OBJDIRS += kfs
 
 #			$(OBJDIR)/kfs/ide_pio_bd.o \
 #			$(OBJDIR)/kfs/nbd_bd.o \
+#			$(OBJDIR)/kfs/wb_cache_bd.o \
+#			$(OBJDIR)/kfs/journal_bd.o \
 #			$(OBJDIR)/kfs/josfs_cfs.o \
+#			$(OBJDIR)/kfs/fidcloser_cfs.o \
+#			$(OBJDIR)/kfs/fidprotector_cfs.o \
 #			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/kfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/ipc_serve.o \
-#			$(OBJDIR)/kfs/kfsd_init.o
-#			$(OBJDIR)/kfs/debug.o
+#			$(OBJDIR)/kfs/sched.o \
+#			$(OBJDIR)/kfs/kfsd_init.o \
+#			$(OBJDIR)/kfs/debug.o \
 
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
@@ -21,9 +26,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
-			$(OBJDIR)/kfs/wb_cache_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
-			$(OBJDIR)/kfs/journal_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \
 			$(OBJDIR)/kfs/mirror_bd.o \
 			$(OBJDIR)/kfs/loop_bd.o \
@@ -34,9 +37,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
-			$(OBJDIR)/kfs/fidprotector_cfs.o \
-			$(OBJDIR)/kfs/fidcloser_cfs.o \
-			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES)

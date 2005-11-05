@@ -73,7 +73,7 @@ static void playpong(int child)
 			exit();
 		}
 		
-		sleep(child ? (HZ / 50) : (HZ / 100));
+		sleepj(child ? (HZ / 50) : (HZ / 100));
 	}
 }
 
@@ -82,7 +82,7 @@ void pong(void)
 	int eid = fork();
 	if(eid < 0)
 	{
-		fprintf(STDERR_FILENO, "fork: %e\n", eid);
+		kdprintf(STDERR_FILENO, "fork: %e\n", eid);
 		return;
 	}
 	if(eid)

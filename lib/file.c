@@ -1,7 +1,7 @@
 #include <inc/fs.h>
 #include <inc/string.h>
 #include <inc/lib.h>
-#include <inc/dirent.h>
+#include <lib/dirent.h>
 
 #define debug 0
 

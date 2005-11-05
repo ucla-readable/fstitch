@@ -1,7 +1,7 @@
-#include <lib/hash_map.h>
-#include <lib/vector.h>
 #include <malloc.h>
 #include <inc/lib.h>
+#include <lib/hash_map.h>
+#include <lib/vector.h>
 
 #include <kfs/modman.h>
 #include <kfs/cfs_ipc_serve.h>
@@ -116,7 +116,7 @@ static void open_file_gc(fidcloser_state_t * state)
 	hash_map_it_init(&hm_it, state->open_files);
 	if (!ofs_to_erase)
 	{
-		fprintf(STDERR_FILENO, "fidcloser unable to malloc memory to gc\n");
+		kdprintf(STDERR_FILENO, "fidcloser unable to malloc memory to gc\n");
 		return;
 	}
 
@@ -130,7 +130,7 @@ static void open_file_gc(fidcloser_state_t * state)
 		r = vector_push_back(ofs_to_erase, of);
 		if (r < 0)
 		{
-			fprintf(STDERR_FILENO, "fidcloser gc: vector_push_back: %e\n", r);
+			kdprintf(STDERR_FILENO, "fidcloser gc: vector_push_back: %e\n", r);
 			break;
 		}
 	}
@@ -149,7 +149,7 @@ static void open_file_gc(fidcloser_state_t * state)
 	{
 		r = open_file_close(state, vector_elt(ofs_to_erase, i));
 		if (r < 0)
-			fprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %e\n", r);
+			kdprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %e\n", r);
 	}
 
 	cfs_ipc_serve_set_cur_cappa(cur_cappa);

@@ -79,7 +79,7 @@ ipc_send(envid_t toenv, uint32_t val, void* pg, unsigned perm, const void* cap)
 			/* panic() here can cause the filesystem server
 			 * to lock up due to malicious user code! */
 			//panic("ipc_send: %e", r);
-			fprintf(STDERR_FILENO, "ipc_send from 0x%08x to 0x%08x: %e\n", env->env_id, toenv, r);
+			kdprintf(STDERR_FILENO, "ipc_send from 0x%08x to 0x%08x: %e\n", env->env_id, toenv, r);
 			return;
 		}
 		

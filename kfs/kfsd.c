@@ -1,4 +1,7 @@
 #include <inc/lib.h>
+#include <inc/error.h>
+#include <inc/mmu.h>
+#include <lib/stdio.h>
 
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>

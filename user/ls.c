@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <inc/dirent.h>
+#include <lib/dirent.h>
 #include <kfs/lfs.h>
 
 static int flag[256];
@@ -14,7 +14,7 @@ ls(const char *path, const char *prefix)
 	struct Stat st;
 
 	if ((r = stat(path, &st)) < 0) {
-		fprintf(STDERR_FILENO, "stat %s: %e\n", path, r);
+		kdprintf(STDERR_FILENO, "stat %s: %e\n", path, r);
 		exit();
 	}
 	if (st.st_isdir && !flag['d'])
@@ -33,7 +33,7 @@ lsdir(const char *path, const char *prefix)
 	struct dirent *d;
 
 	if ((fd = open(path, O_RDONLY)) < 0) {
-		fprintf(STDERR_FILENO, "open %s: %e", path, fd);
+		kdprintf(STDERR_FILENO, "open %s: %e", path, fd);
 		exit();
 	}
 	for (;;) {
@@ -55,24 +55,24 @@ ls1(const char *prefix, bool isdir, off_t size, const char *name)
 	char *sep;
 
 	if(flag['l'])
-		fprintf(1, "%11d %c ", size, isdir ? 'd' : '-');
+		kdprintf(1, "%11d %c ", size, isdir ? 'd' : '-');
 	if(prefix) {
 		if (prefix[0] && prefix[strlen(prefix)-1] != '/')
 			sep = "/";
 		else
 			sep = "";
-		fprintf(1, "%s%s", prefix, sep);
+		kdprintf(1, "%s%s", prefix, sep);
 	}
-	fprintf(1, "%s", name);
+	kdprintf(1, "%s", name);
 	if(flag['F'] && isdir)
-		fprintf(1, "/");
-	fprintf(1, "\n");
+		kdprintf(1, "/");
+	kdprintf(1, "\n");
 }
 
 static void
 usage(void)
 {
-	fprintf(1, "usage: ls [-dFl] [file...]\n");
+	kdprintf(1, "usage: ls [-dFl] [file...]\n");
 	exit();
 }
 

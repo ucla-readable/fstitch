@@ -5,7 +5,7 @@
 #ifndef KUDOS_INC_FD_H
 #define KUDOS_INC_FD_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 #include <inc/fs.h>
 
 // pre-declare for forward references

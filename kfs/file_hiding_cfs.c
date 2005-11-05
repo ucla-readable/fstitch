@@ -1,8 +1,10 @@
-#include <inc/lib.h>
 #include <malloc.h>
+#include <string.h>
+#include <inc/error.h>
+#include <lib/stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
-#include <inc/dirent.h>
+#include <lib/dirent.h>
 
 #include <kfs/fidman.h>
 #include <kfs/modman.h>
@@ -519,7 +521,7 @@ int file_hiding_cfs_hide(CFS_t * cfs, const char * path)
 		return r;
 	}
 
-	fprintf(STDERR_FILENO, "file_hiding_cfs: hiding %s\n", path);
+	kdprintf(STDERR_FILENO, "file_hiding_cfs: hiding %s\n", path);
 	return 0;
 }
 
@@ -538,7 +540,7 @@ int file_hiding_cfs_unhide(CFS_t * cfs, const char *path)
 		return idx;
 	me = vector_elt(state->hide_table, idx);
 
-	fprintf(STDERR_FILENO,"file_hiding_cfs: unhiding %s\n", path);
+	kdprintf(STDERR_FILENO,"file_hiding_cfs: unhiding %s\n", path);
 	vector_erase(state->hide_table, idx);
 	hide_entry_destroy(me);
 

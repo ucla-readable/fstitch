@@ -126,7 +126,7 @@ static void output_graph_dot(hash_map_t * nodes, int level)
 
 static void print_usage(const char * binname)
 {
-	fprintf(STDERR_FILENO, "Usage: %s: [-t|-d] [-l <level>]\n", binname);
+	kdprintf(STDERR_FILENO, "Usage: %s: [-t|-d] [-l <level>]\n", binname);
 }
 
 void umain(int argc, const char ** argv)

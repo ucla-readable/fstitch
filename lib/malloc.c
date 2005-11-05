@@ -57,7 +57,7 @@
 */
 
 #include <inc/malloc.h>
-#include <inc/types.h>
+#include <lib/types.h>
 #include <inc/stdio.h>
 #include <inc/lib.h>
 

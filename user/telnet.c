@@ -177,7 +177,7 @@ telnet_connect(struct ip_addr addr, uint16_t port)
 	printf("Connecting to %s:%d... ", inet_iptoa(addr), port);
 	if ((r = connect(addr, port, ts->net)) < 0)
 	{
-		fprintf(STDERR_FILENO, "connect: %e\n", r);
+		kdprintf(STDERR_FILENO, "connect: %e\n", r);
 		exit();
 	}
 	printf("Connected.\n");
@@ -194,12 +194,12 @@ telnet_poll(struct telnet_state *ts)
 	{
 		if ((r_recv = telnet_poll_recv(ts)) < 0)
 		{
-			fprintf(STDERR_FILENO, "telnet_poll_recv: %e\n", r_recv);
+			kdprintf(STDERR_FILENO, "telnet_poll_recv: %e\n", r_recv);
 			close_conn_and_exit(ts);
 		}
 		if ((r_send = telnet_poll_send(ts)) < 0)
 		{
-			fprintf(STDERR_FILENO, "telnet_poll_send: %e\n", r_send);
+			kdprintf(STDERR_FILENO, "telnet_poll_send: %e\n", r_send);
 			close_conn_and_exit(ts);
 		}
 
@@ -238,7 +238,7 @@ umain(int argc, char **argv)
 	r = gethostbyname(argv[argv_i++], &connect_ipaddr);
 	if (r < 0)
 	{
-		fprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", argv[argv_i-1], r);
+		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", argv[argv_i-1], r);
 		exit();
 	}
 
@@ -247,7 +247,7 @@ umain(int argc, char **argv)
 	ts = telnet_connect(connect_ipaddr, port);
 	if (!ts)
 	{
-		fprintf(STDERR_FILENO, "telnet_connect returned NULL\n");
+		kdprintf(STDERR_FILENO, "telnet_connect returned NULL\n");
 		exit();
 	}
 

@@ -1,9 +1,9 @@
 #include <inc/lib.h>
-#include <lib/types.h>
-#include <inc/x86.h>
 #include <malloc.h>
 #include <string.h>
 #include <inc/irq.h>
+#include <inc/x86.h>
+#include <lib/types.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -54,7 +54,7 @@ static int ide_notbusy(uint8_t controller)
 			printf("Warning: ATA operation timed out on controller %d\n", controller);
 			/* reset the drive */
 			outb(reset, 0x0E);
-			sleep(HZ / 50);
+			sleepj(HZ / 50);
 			outb(reset, 0x0A);
 			return -1;
 		}

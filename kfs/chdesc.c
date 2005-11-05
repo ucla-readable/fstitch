@@ -1,7 +1,9 @@
-#include <stdio.h>
+#include <lib/stdio.h>
 #include <inc/error.h>
+#include <assert.h>
 #include <malloc.h>
 #include <string.h>
+#include <lib/memdup.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -143,7 +145,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	/* if either is a NOOP chdesc, they don't conflict */
 	if(recent->type == NOOP || original->type == NOOP)
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
@@ -186,7 +188,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(original->flags & CHDESC_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
-		fprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
+		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
 		return -E_BUSY;
 	}
 	return chdesc_add_depend(recent, original);
@@ -724,7 +726,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	/* compensate for Heisenberg's uncertainty principle */
 	if(!dependent || !dependency)
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
@@ -733,7 +735,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	{
 		if(dependency->flags & CHDESC_WRITTEN)
 			return 0;
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): Attempt to add dependency to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Attempt to add dependency to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -E_INVAL;
 	}
 	if(dependency->flags & CHDESC_WRITTEN)
@@ -747,7 +749,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	/* avoid creating a dependency loop */
 	if(dependent == dependency || chdesc_has_dependency(dependency, dependent))
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -E_INVAL;
 	}
 	/* chdesc_has_dependency() marks the DAG rooted at "dependency" so we must unmark it */
@@ -832,14 +834,14 @@ int chdesc_apply(chdesc_t * chdesc)
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
-				fprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 #endif
 			break;
 		case NOOP:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return -E_INVAL;
 	}
 	chdesc->flags &= ~CHDESC_ROLLBACK;
@@ -862,14 +864,14 @@ int chdesc_rollback(chdesc_t * chdesc)
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
-				fprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 #endif
 			break;
 		case NOOP:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return -E_INVAL;
 	}
 	chdesc->flags |= CHDESC_ROLLBACK;
@@ -889,7 +891,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 		{
 			/* ...but check for this anyway */
 			chrefdesc_t * next = chdesc->weak_refs;
-			fprintf(STDERR_FILENO, "%s: (%s:%d): dangling chdesc weak reference!\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s: (%s:%d): dangling chdesc weak reference!\n", __FUNCTION__, __FILE__, __LINE__);
 			chdesc->weak_refs = next->next;
 			free(next);
 		}
@@ -901,7 +903,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 {
 	if((*chdesc)->flags & CHDESC_WRITTEN)
 	{
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): satisfaction of already satisfied chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfaction of already satisfied chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
@@ -917,7 +919,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
 		if((*chdesc)->type != NOOP)
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc with dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc with dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
 		switch((*chdesc)->type)
 		{
 			case BYTE:
@@ -933,7 +935,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
 				break;
 			default:
-				fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 				return -E_INVAL;
 		}
 		
@@ -1010,7 +1012,7 @@ void chdesc_weak_forget(chdesc_t ** location)
 		}
 		if(!scan)
 		{
-			fprintf(STDERR_FILENO, "%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
 			return;
 		}
 		*prev = scan->next;
@@ -1042,7 +1044,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	else
 	{
 		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
 		if((*chdesc)->type == NOOP && (free_head == *chdesc || (*chdesc)->free_prev))
 		{
 			assert(!(*chdesc)->dependencies);
@@ -1051,7 +1053,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	}
 	
 	if((*chdesc)->dependencies && (*chdesc)->dependents)
-		fprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
 	/* remove dependencies first, so chdesc_satisfy() won't just turn it to a NOOP */
 	while((*chdesc)->dependencies)
 		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);
@@ -1076,7 +1078,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		case BIT:
 			break;
 		default:
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 	}
 	
 	if((*chdesc)->block)

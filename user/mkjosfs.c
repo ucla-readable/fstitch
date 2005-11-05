@@ -22,16 +22,16 @@ umain(int argc, char *argv[])
 	if (argc != 2) usage(argv[0]);
 	fd = open(argv[1], O_WRONLY);
 	if (fd < 0) {
-		fprintf(STDERR_FILENO, "Unable to open %s\n", argv[1]);
+		kdprintf(STDERR_FILENO, "Unable to open %s\n", argv[1]);
 		exit();
 	}
 	r = fstat(fd, &st);
 	if (r < 0) {
-		fprintf(STDERR_FILENO, "Unable to stat %s\n", argv[1]);
+		kdprintf(STDERR_FILENO, "Unable to stat %s\n", argv[1]);
 		exit();
 	}
 	if (st.st_isdir) {
-		fprintf(STDERR_FILENO, "Error: %s is a directory\n", argv[1]);
+		kdprintf(STDERR_FILENO, "Error: %s is a directory\n", argv[1]);
 		exit();
 	}
 
@@ -52,7 +52,7 @@ umain(int argc, char *argv[])
 
 	r = write(fd, &s, sizeof(s));
 	if (r < sizeof(s)) {
-		fprintf(STDERR_FILENO, "Error: Only wrote %d bytes to %s, needed %d\n",
+		kdprintf(STDERR_FILENO, "Error: Only wrote %d bytes to %s, needed %d\n",
 				r, argv[1], sizeof(s));
 		exit();
 	}

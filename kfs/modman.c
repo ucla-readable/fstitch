@@ -1,7 +1,9 @@
-#include <inc/lib.h>
 #include <malloc.h>
+#include <string.h>
+#include <stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
+#include <inc/error.h>
 
 #include <kfs/bd.h>
 #include <kfs/cfs.h>

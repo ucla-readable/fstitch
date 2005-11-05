@@ -100,7 +100,7 @@ gc_listens(void)
 		{
 			if ((err = tcp_close(listen_states[i].pcb)) != ERR_OK)
 			{
-				fprintf(STDERR_FILENO, "netd gc_listens: tcp_close: \"%s\", aborting.\n", lwip_strerr(err));
+				kdprintf(STDERR_FILENO, "netd gc_listens: tcp_close: \"%s\", aborting.\n", lwip_strerr(err));
 				tcp_abort(listen_states[i].pcb);
 			}
 			listen_states[i].pcb = NULL;
@@ -156,9 +156,9 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 		// Error while connected.
 		// Inform client of failure only by closing the pipes
 		if ((r = close(cs->to_client)) < 0)
-			fprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
 		if ((r = close(cs->from_client)) < 0)
-			fprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
 	}
 
 	// Deallocate resources
@@ -184,7 +184,7 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 	{
 		if ((err = tcp_close(pcb)) != ERR_OK)
 		{
-			fprintf(STDERR_FILENO, "netd close_conn: tcp_close: \"%s\", aborting.\n", lwip_strerr(err));
+			kdprintf(STDERR_FILENO, "netd close_conn: tcp_close: \"%s\", aborting.\n", lwip_strerr(err));
 			tcp_abort(pcb);
 		}
 	}
@@ -212,7 +212,7 @@ lwip_to_netclient_err(err_t err)
 		case ERR_IF:
 			return -E_NET_IF;
 		default:
-			fprintf(STDERR_FILENO, "netd Connection closed with lwip err %d is %s. TODO: translate to netclient error code.\n", err, lwip_strerr(err));
+			kdprintf(STDERR_FILENO, "netd Connection closed with lwip err %d is %s. TODO: translate to netclient error code.\n", err, lwip_strerr(err));
 			return -E_UNSPECIFIED;
 	}
 }
@@ -249,7 +249,7 @@ conn_err_listen(void *arg, err_t err)
 	}
 	else
 	{
-		fprintf(STDERR_FILENO, "netd listen error on %s:%d, no acceptor: %s\n",
+		kdprintf(STDERR_FILENO, "netd listen error on %s:%d, no acceptor: %s\n",
 				  inet_iptoa(ls->ipaddr), ls->port, lwip_strerr(err));
 	}
 
@@ -261,7 +261,7 @@ conn_err_listen(void *arg, err_t err)
 	{
 		if ((err = tcp_close(ls->pcb)) != ERR_OK)
 		{
-			fprintf(STDERR_FILENO, "netd close_err_listen: tcp_close: %s, aborting.\n", lwip_strerr(err));
+			kdprintf(STDERR_FILENO, "netd close_err_listen: tcp_close: %s, aborting.\n", lwip_strerr(err));
 			tcp_abort(ls->pcb);
 		}
 	}
@@ -301,7 +301,7 @@ send_data(struct tcp_pcb *pcb, struct client_state *cs)
 		cs->send_buf.left -= len;
 	}
 	else
-		fprintf(STDERR_FILENO, "netd send_data: error %s len %d %d\n", lwip_strerr(err), len, tcp_sndbuf(pcb));
+		kdprintf(STDERR_FILENO, "netd send_data: error %s len %d %d\n", lwip_strerr(err), len, tcp_sndbuf(pcb));
 }
 
 static err_t
@@ -361,7 +361,7 @@ netd_poll(void *arg, struct tcp_pcb *pcb)
 	{
 		if ((err = tcp_close(pcb)) != ERR_OK)
 		{
-			fprintf(STDERR_FILENO, "netd netd_poll: tcp_close: %s, aborting.\n", lwip_strerr(err));
+			kdprintf(STDERR_FILENO, "netd netd_poll: tcp_close: %s, aborting.\n", lwip_strerr(err));
 			tcp_abort(pcb);
 		}
 		return ERR_OK;
@@ -475,12 +475,12 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 		// lib/net/core/tcp_in.c:574: pcb->accept != NULL
 		// and then crash in a checksum fuction. Returning ERR_MEM is a hack
 		// workaround to avoid this problem.
-		fprintf(STDERR_FILENO, "netd: ");
+		kdprintf(STDERR_FILENO, "netd: ");
 		if (!ls->acceptor)
-			fprintf(STDERR_FILENO, "!ls->acceptor");
+			kdprintf(STDERR_FILENO, "!ls->acceptor");
 		else
-			fprintf(STDERR_FILENO, "ls->acceptor no longer around");
-		fprintf(STDERR_FILENO, ", on %s:%d, from %s:%d\n",
+			kdprintf(STDERR_FILENO, "ls->acceptor no longer around");
+		kdprintf(STDERR_FILENO, ", on %s:%d, from %s:%d\n",
 				  inet_iptoa(pcb->local_ip), pcb->local_port,
 				  inet_iptoa(pcb->remote_ip), pcb->remote_port);
 
@@ -509,7 +509,7 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 	//cs = mem_malloc(sizeof(struct client_state));	
 	if (!cs)
 	{
-		fprintf(STDERR_FILENO, "netd netd_accept: malloc: Out of memory\n");
+		kdprintf(STDERR_FILENO, "netd netd_accept: malloc: Out of memory\n");
 		conn_err_listen(ls, ERR_MEM);
 		return ERR_MEM;
 	}
@@ -844,7 +844,7 @@ dns_raw2msg(const uint8_t *raw)
 
 	if (dm->h.flags & DNS_FLAG_TC)
 	{
-		fprintf(STDERR_FILENO, "netd: dns resolver received truncated answer\n");
+		kdprintf(STDERR_FILENO, "netd: dns resolver received truncated answer\n");
 		free(dm);
 		return NULL;
 	}
@@ -1025,7 +1025,7 @@ static void
 dns_state_free(dns_state_t *ds)
 {
 	if (!hash_set_erase(pending_dns_queries, ds))
-		fprintf(STDERR_FILENO, "netd %s(): dns_state was not in the pending_dns_queries\n", __FUNCTION__);
+		kdprintf(STDERR_FILENO, "netd %s(): dns_state was not in the pending_dns_queries\n", __FUNCTION__);
 
 	if (ds->pcb)
 		udp_remove(ds->pcb);
@@ -1101,7 +1101,7 @@ gethostbyname_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, struct ip_add
 	if (!ans)
 	{
 		if (debug & DEBUG_DNS)
-			fprintf(STDERR_FILENO, "netd: dns_raw2msg() failed\n");
+			kdprintf(STDERR_FILENO, "netd: dns_raw2msg() failed\n");
 		r = -E_UNSPECIFIED;
 		goto exit;
 	}
@@ -1109,7 +1109,7 @@ gethostbyname_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, struct ip_add
 	if (! (ans->h.flags & DNS_FLAG_QR) )
 	{
 		if (debug & DEBUG_DNS)
-			fprintf(STDERR_FILENO, "netd: reply's flags do not have QR set\n");
+			kdprintf(STDERR_FILENO, "netd: reply's flags do not have QR set\n");
 		r = -E_UNSPECIFIED;
 		goto exit;
 	}
@@ -1121,7 +1121,7 @@ gethostbyname_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, struct ip_add
 			r = -E_NOT_FOUND;
 		else
 		{
-			fprintf(STDERR_FILENO, "netd: dns reply has rcode %d\n", rcode);
+			kdprintf(STDERR_FILENO, "netd: dns reply has rcode %d\n", rcode);
 			r = -E_UNSPECIFIED;
 		}
 		goto exit;
@@ -1140,7 +1140,7 @@ gethostbyname_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, struct ip_add
 		}
 	}
 	if (r < 0 && (debug & DEBUG_DNS))
-		fprintf(STDERR_FILENO, "netd: dns reply has no A RR\n");
+		kdprintf(STDERR_FILENO, "netd: dns reply has no A RR\n");
 
   exit:
 	(void) pbuf_free(p);
@@ -1165,7 +1165,7 @@ start_dns_query(dns_state_t *ds)
 	dns_servers = get_dns_servers();
 	if (!dns_servers || !vector_size(dns_servers))
 	{
-		fprintf(STDERR_FILENO, "netd: no known dns servers\n");
+		kdprintf(STDERR_FILENO, "netd: no known dns servers\n");
 		ipc_send(ds->envid, lwip_to_netclient_err(ERR_ABRT), NULL, 0, NULL);
 		return;
 	}
@@ -1232,7 +1232,7 @@ serve_connect(envid_t whom, struct Netreq_connect *req)
 	cs = malloc(sizeof(struct client_state));
 	if (!cs)
 	{
-		fprintf(STDERR_FILENO, "netd serve_connect: malloc: Out of memory\n");
+		kdprintf(STDERR_FILENO, "netd serve_connect: malloc: Out of memory\n");
 		ipc_send(whom, lwip_to_netclient_err(ERR_MEM), NULL, 0, NULL);
 		return;
 	}
@@ -1242,7 +1242,7 @@ serve_connect(envid_t whom, struct Netreq_connect *req)
 	pcb = tcp_new();
 	if (!pcb)
 	{
-		fprintf(STDERR_FILENO, "netd serve_connect: tcp_new: Out of memory\n");
+		kdprintf(STDERR_FILENO, "netd serve_connect: tcp_new: Out of memory\n");
 		conn_err_client(cs, ERR_MEM);
 		return;
 	}
@@ -1270,7 +1270,7 @@ serve_bind_listen(envid_t whom, struct Netreq_bind_listen *req)
 
 	if (ls->pcb)
 	{
-		fprintf(STDERR_FILENO, "netd does not currently support multiple active listens per environment, rejecting request from envid %08x\n", whom);
+		kdprintf(STDERR_FILENO, "netd does not currently support multiple active listens per environment, rejecting request from envid %08x\n", whom);
 		ipc_send(whom, lwip_to_netclient_err(ERR_USE), NULL, 0, NULL);
 		return;
 	}
@@ -1343,7 +1343,7 @@ serve_accept(envid_t whom, struct Netreq_accept *req)
 
 	if (ls->acceptor)
 	{
-		fprintf(STDERR_FILENO,
+		kdprintf(STDERR_FILENO,
 				  "netd currently only allows one active accept per listen key\n");
 		ipc_send(whom, lwip_to_netclient_err(ERR_USE), NULL, 0, NULL);
 		return;
@@ -1363,7 +1363,7 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 
 	if ((r = fork()) < 0)
 	{
-		fprintf(STDERR_FILENO, "fork: %e\n", r);
+		kdprintf(STDERR_FILENO, "fork: %e\n", r);
 		exit();
 	}
 	if (r == 0)
@@ -1372,35 +1372,35 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 
 		if ((r = pipe(p)) < 0)
 		{
-			fprintf(STDERR_FILENO, "pipe: %e\n", r);
+			kdprintf(STDERR_FILENO, "pipe: %e\n", r);
 			exit();
 		}
 
 		if ((r = dup2env_send(p[0], whom)) < 0)
 		{
-			fprintf(STDERR_FILENO, "dup2env_send: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2env_send: %e\n", r);
 			exit();
 		}
 
 		if ((r = dup2(p[1], STDOUT_FILENO)) < 0)
 		{
-			fprintf(STDERR_FILENO, "dup2: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
 			exit();
 		}
 		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
-			fprintf(STDERR_FILENO, "dup2: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
 			exit();
 		}
 
 		if ((r = close(p[0])) < 0)
 		{
-			fprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %e\n", r);
 			exit();
 		}
 		if ((r = close(p[1])) < 0)
 		{
-			fprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %e\n", r);
 			exit();
 		}
 
@@ -1478,7 +1478,7 @@ netd_net_ipcrecv_comm(void)
 
 	if ((r = fstat(netd_net_ipcrecv.fd, &stat)) < 0)
 	{
-		fprintf(STDERR_FILENO, "netd fstat: %e", r);
+		kdprintf(STDERR_FILENO, "netd fstat: %e", r);
 		exit();
 	}
 
@@ -1495,7 +1495,7 @@ netd_net_ipcrecv_comm(void)
 	if (!r && sizeof_netreq(req))
 	{
 		// The other end of pipe is closed
-		fprintf(STDERR_FILENO, "netd net: netd ipcrecv has closed pipe, exiting.\n");
+		kdprintf(STDERR_FILENO, "netd net: netd ipcrecv has closed pipe, exiting.\n");
 		exit();
 	}
 
@@ -1523,7 +1523,7 @@ netd_net_ipcrecv_comm(void)
 			serve_gethostbyname(whom, (struct Netreq_gethostbyname*) req_pg);
 			break;
 		default:
-			fprintf(STDERR_FILENO, "netd net: Invalid request code %d from %08x\n", whom, req);
+			kdprintf(STDERR_FILENO, "netd net: Invalid request code %d from %08x\n", whom, req);
 			break;
 	}
 }
@@ -1582,7 +1582,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 		// All requests must contain an argument page
 		if (!(perm & PTE_P))
 		{
-			fprintf(STDERR_FILENO, "netd ipcrecv: Invalid request from %08x: no argument page\n", whom);
+			kdprintf(STDERR_FILENO, "netd ipcrecv: Invalid request from %08x: no argument page\n", whom);
 			continue; // just leave it hanging...
 		}
 
@@ -1590,7 +1590,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 		struct Stat stat;
 		if ((r = fstat(fd, &stat)) < 0)
 		{
-			fprintf(STDERR_FILENO, "netd ipcrecv fstat: %e", r);
+			kdprintf(STDERR_FILENO, "netd ipcrecv fstat: %e", r);
 			exit();
 		}
 
@@ -1606,7 +1606,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 		if (!r && sizeof_netreq(req))
 		{
 			// The other end of pipe is closed
-			fprintf(STDERR_FILENO, "netd ipcrecv: netd net has closed pipe, exiting.\n");
+			kdprintf(STDERR_FILENO, "netd ipcrecv: netd net has closed pipe, exiting.\n");
 			exit();
 		}
 	}
@@ -1630,14 +1630,14 @@ netd(int argc, const char **argv)
 	// to netd net
 	if ((r = pipe(p)) < 0)
 	{
-		fprintf(STDERR_FILENO, "netd pipe: %e\n", r);
+		kdprintf(STDERR_FILENO, "netd pipe: %e\n", r);
 		exit();
 	}
 
 	// Fork off netd ipcrecv and start netd ipcrecv and netd net
 	if ((ipcrecv_envid = r = fork()) < 0)
 	{
-		fprintf(STDERR_FILENO, "netd fork: %e\n", r);
+		kdprintf(STDERR_FILENO, "netd fork: %e\n", r);
 		exit();
 	}
 	if (!r)

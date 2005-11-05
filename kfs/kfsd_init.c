@@ -1,5 +1,5 @@
-#include <lib/vector.h>
 #include <inc/lib.h>
+#include <lib/vector.h>
 #include <lib/partition.h>
 
 #include <kfs/ide_pio_bd.h>
@@ -55,32 +55,32 @@ int kfsd_init(void)
 
 	if((r = KFS_DEBUG_INIT()) < 0)
 	{
-		fprintf(STDERR_FILENO, "kfs_debug_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "kfs_debug_init: %e\n", r);
 		kfsd_shutdown();
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
 	if((r = modman_init()) < 0)
 	{
-		fprintf(STDERR_FILENO, "modman_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "modman_init: %e\n", r);
 		kfsd_shutdown();
 	}
 
 	if (!cfs_ipc_serve_init())
 	{
-		fprintf(STDERR_FILENO, "cfs_ipc_serve_init failed\n");
+		kdprintf(STDERR_FILENO, "cfs_ipc_serve_init failed\n");
 		kfsd_shutdown();
 	}
 
 	if ((r = sched_init()) < 0)
 	{
-		fprintf(STDERR_FILENO, "sched_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "sched_init: %e\n", r);
 		kfsd_shutdown();
 	}
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{
-		fprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %e\n");
+		kdprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %e\n");
 		kfsd_shutdown();
 	}
 	
@@ -89,7 +89,7 @@ int kfsd_init(void)
 
 	if (! (uhfses = vector_create()) )
 	{
-		fprintf(STDERR_FILENO, "OOM, vector_create\n");
+		kdprintf(STDERR_FILENO, "OOM, vector_create\n");
 		kfsd_shutdown();
 	}
 
@@ -98,10 +98,10 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		/* delay kfsd startup slightly for netd to start */
-		sleep(200);
+		sleepj(200);
 
 		if (! (bd = nbd_bd("192.168.0.2", 2492)) )
-			fprintf(STDERR_FILENO, "nbd_bd failed\n");
+			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
 
 		if (bd && (r = construct_uhfses(bd, 512, uhfses)) < 0)
 			kfsd_shutdown();
@@ -112,7 +112,7 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		if (! (bd = ide_pio_bd(0, 0, 0)) )
-			fprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
+			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
@@ -125,7 +125,7 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		if (! (bd = ide_pio_bd(0, 1, 0)) )
-			fprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
+			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
@@ -154,7 +154,7 @@ int kfsd_init(void)
 			r = table_classifier_cfs_add(table_class, fspaths[i], vector_elt(uhfses, i));
 			if (r < 0)
 			{
-				fprintf(STDERR_FILENO, "table_classifier_cfs_add: %e\n", r);
+				kdprintf(STDERR_FILENO, "table_classifier_cfs_add: %e\n", r);
 				kfsd_shutdown();
 			}
 		}
@@ -277,7 +277,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			printf("Using wholedisk");
 		else
 		{
-			fprintf(STDERR_FILENO, "\nlfs creation failed\n");
+			kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
 			kfsd_shutdown();
 		}
 
@@ -288,12 +288,12 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (! (u = uhfs(lfs)) )
 		{
-			fprintf(STDERR_FILENO, "uhfs() failed\n");
+			kdprintf(STDERR_FILENO, "uhfs() failed\n");
 			kfsd_shutdown();
 		}
 		if (vector_push_back(uhfses, u) < 0)
 		{
-			fprintf(STDERR_FILENO, "vector_push_back() failed\n");
+			kdprintf(STDERR_FILENO, "vector_push_back() failed\n");
 			kfsd_shutdown();
 		}
 	}

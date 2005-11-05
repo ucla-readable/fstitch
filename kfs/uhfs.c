@@ -1,7 +1,12 @@
-#include <inc/lib.h>
-#include <lib/hash_map.h>
 #include <malloc.h>
+#include <string.h>
+#include <assert.h>
 #include <inc/fd.h>
+#include <inc/error.h>
+#include <lib/stdio.h>
+#include <lib/hash_map.h>
+#include <lib/fcntl.h>
+#include <lib/panic.h>
 
 #include <kfs/fidman.h>
 #include <kfs/modman.h>
@@ -367,7 +372,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 
 	// FIXME if offset > filesize, allocate blocks
 	if (offset > filesize) {
-		fprintf(STDERR_FILENO, "--- Uh oh, offset > filesize, %d > %d ---!\n", offset, filesize);
+		kdprintf(STDERR_FILENO, "--- Uh oh, offset > filesize, %d > %d ---!\n", offset, filesize);
 		target_size = offset;
 		return -E_UNSPECIFIED;
 	}
@@ -758,7 +763,7 @@ static int uhfs_destroy(CFS_t * cfs)
 
 	hash_map_it_init(&it, state->open_files);
 	while ((f = hash_map_val_next(&it)))
-		fprintf(STDERR_FILENO, "%s(%s): orphaning fid %u\n", __FUNCTION__, modman_name_cfs(cfs), f->fid);
+		kdprintf(STDERR_FILENO, "%s(%s): orphaning fid %u\n", __FUNCTION__, modman_name_cfs(cfs), f->fid);
 
 	r = modman_rem_cfs(cfs);
 	if(r < 0)

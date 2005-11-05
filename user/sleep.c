@@ -13,9 +13,9 @@ umain(int argc, char **argv)
 
 	const int32_t jiffies = HZ*strtol(argv[1], NULL, 10);
 
-	if ((r = sleep(jiffies)) < 0)
+	if ((r = sleepj(jiffies)) < 0)
 	{
-		fprintf(STDERR_FILENO, "sleep: %e\n", r);
+		kdprintf(STDERR_FILENO, "sleepj: %e\n", r);
 		exit();
 	}
 }

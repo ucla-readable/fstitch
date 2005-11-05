@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_SCHED_H
 #define __KUDOS_KFS_SCHED_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 typedef void (*sched_callback)(void * arg);
 

@@ -1,5 +1,6 @@
-#include <inc/lib.h>
 #include <malloc.h>
+#include <inc/error.h>
+#include <lib/kdprintf.h>
 #include <lib/hash_map.h>
 
 #include <kfs/bdesc.h>
@@ -28,7 +29,7 @@ void blockman_destroy(blockman_t ** blockman)
 	while((ddesc = hash_map_val_next(&it)))
 	{
 		if(bdesc_autorelease_poolstack_scan(ddesc) < ddesc->ref_count)
-			fprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning data descriptor 0x%08x (manager 0x%08x)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning data descriptor 0x%08x (manager 0x%08x)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman);
 		ddesc->manager = NULL;
 	}
 	hash_map_destroy(hash);

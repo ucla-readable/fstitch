@@ -48,7 +48,7 @@ void umain(int argc, char * argv[])
 	if(argc != 2 && argc != 4)
 	{
 usage:
-		fprintf(STDERR_FILENO, "Usage: %s [--limit limit[kM]] file\n", argv[0]);
+		kdprintf(STDERR_FILENO, "Usage: %s [--limit limit[kM]] file\n", argv[0]);
 		return;
 	}
 	
@@ -81,7 +81,7 @@ usage:
 	fd = open(argv[argc - 1], O_RDONLY);
 	if(fd < 0)
 	{
-		fprintf(STDERR_FILENO, "%s: %e\n", argv[argc - 1], fd);
+		kdprintf(STDERR_FILENO, "%s: %e\n", argv[argc - 1], fd);
 		return;
 	}
 	

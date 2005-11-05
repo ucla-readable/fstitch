@@ -1,6 +1,7 @@
 #ifndef __KUDOS_KFS_JOSFS_BASE_H
 #define __KUDOS_KFS_JOSFS_BASE_H
 
+#include <lib/mmu.h>
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 

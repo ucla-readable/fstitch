@@ -33,7 +33,7 @@ umain(int argc, char **argv)
 			int f = open(argv[i], O_RDONLY);
 			if(f < 0)
 			{
-				fprintf(STDERR_FILENO, "can't open %s: %e\n", argv[i], f);
+				kdprintf(STDERR_FILENO, "can't open %s: %e\n", argv[i], f);
 				exit();
 			}
 			else
@@ -44,5 +44,5 @@ umain(int argc, char **argv)
 		}
 	}
 	if(r)
-		fprintf(STDERR_FILENO, "write error: %e\n", r);
+		kdprintf(STDERR_FILENO, "write error: %e\n", r);
 }

@@ -48,27 +48,6 @@ typedef int32_t ssize_t;
 /* off_t is used for file offsets and lengths. */
 typedef int32_t off_t;
 
-/* Efficient min and max operations */ 
-#define MIN(_a, _b)	\
-	({		\
-		typeof(_a) __a = (_a);	\
-		typeof(_b) __b = (_b);	\
-		__a <= __b ? __a : __b;	\
-	})
-
-#define MAX(_a, _b)	\
-	({		\
-		typeof(_a) __a = (_a);	\
-		typeof(_b) __b = (_b);	\
-		__a >= __b ? __a : __b;	\
-	})
-
-/* 32-bit integer rounding; only works for n = power of two */
-#define ROUNDUP32(a, n)		\
-	({ uint32_t __n = (n);  (((uint32_t) (a) + __n - 1) & ~(__n - 1)); })
-#define ROUND32(a, n)		ROUNDUP32((a), (n))
-#define ROUNDDOWN32(a, n)	(((uint32_t) (a)) & ~((n) - 1))
-
 /* static assert, for compile-time assertion checking */
 #define static_assert(x)	switch (x) case 0: case (x):
 

@@ -94,11 +94,11 @@ setup_interface(int argc, const char **argv, struct netif *nif_stayaround)
 	{
 #if ALLOW_JOSNIC
 		if(!nif_jn)
-			fprintf(STDERR_FILENO, "Unable to allocate a josnic interface.\n");
+			kdprintf(STDERR_FILENO, "Unable to allocate a josnic interface.\n");
 #endif
 #if ALLOW_SLIP
 		if(!nif_sl)
-			fprintf(STDERR_FILENO, "Unable to allocate a slip interface.\n");
+			kdprintf(STDERR_FILENO, "Unable to allocate a slip interface.\n");
 #endif
 
 		return NULL;
@@ -148,12 +148,12 @@ slipif_setup(struct netif *netif, struct ip_addr ipaddr, struct ip_addr netmask,
 
 	if (!quiet)
 	{
-		fprintf(STDERR_FILENO, "%c%c%d up for ", netif->name[0], netif->name[1], netif->num);
-		fprintf(STDERR_FILENO, "%s", inet_iptoa(ipaddr));
-		fprintf(STDERR_FILENO, "<->");
-		fprintf(STDERR_FILENO, "%s", inet_iptoa(gw));
-		fprintf(STDERR_FILENO, " over serial port 0x%x (default iface)", ((sio_fd_t)(netif->state))->com_addr);
-		fprintf(STDERR_FILENO, "\n");
+		kdprintf(STDERR_FILENO, "%c%c%d up for ", netif->name[0], netif->name[1], netif->num);
+		kdprintf(STDERR_FILENO, "%s", inet_iptoa(ipaddr));
+		kdprintf(STDERR_FILENO, "<->");
+		kdprintf(STDERR_FILENO, "%s", inet_iptoa(gw));
+		kdprintf(STDERR_FILENO, " over serial port 0x%x (default iface)", ((sio_fd_t)(netif->state))->com_addr);
+		kdprintf(STDERR_FILENO, "\n");
 	}
 
 	return nif;
@@ -162,10 +162,10 @@ slipif_setup(struct netif *netif, struct ip_addr ipaddr, struct ip_addr netmask,
 void
 josnicif_print_setup(struct netif *netif)
 {
-	fprintf(STDERR_FILENO, "%c%c%d up for ", netif->name[0], netif->name[1], netif->num);
-	fprintf(STDERR_FILENO, "%s", inet_iptoa(netif->ip_addr));
-	//fprintf(STDERR_FILENO, " using nicd %d", ((struct josnicif*)(netif->state))->nicd);
-	fprintf(STDERR_FILENO, "\n");
+	kdprintf(STDERR_FILENO, "%c%c%d up for ", netif->name[0], netif->name[1], netif->num);
+	kdprintf(STDERR_FILENO, "%s", inet_iptoa(netif->ip_addr));
+	//kdprintf(STDERR_FILENO, " using nicd %d", ((struct josnicif*)(netif->state))->nicd);
+	kdprintf(STDERR_FILENO, "\n");
 }
 
 
@@ -183,7 +183,7 @@ josnicif_dhcp_completed(struct netif *netif)
 	{
 		dns_servers = vector_create();//_size(netif->dhcp->dns_count);
 		if(!dns_servers)
-			fprintf(STDERR_FILENO, "%s(): vector_create_size() failed\n",
+			kdprintf(STDERR_FILENO, "%s(): vector_create_size() failed\n",
 					__FUNCTION__);
 	}
 
@@ -253,7 +253,7 @@ net_loop(struct netif *nif, void (* poll)(void))
 		jn_sl = 1;
 	else
 	{
-		fprintf(STDERR_FILENO, "Unknown interface name %c%c\n", nif->name[0], nif->name[1]);
+		kdprintf(STDERR_FILENO, "Unknown interface name %c%c\n", nif->name[0], nif->name[1]);
 		exit();
 	}
 
@@ -284,7 +284,7 @@ net_loop(struct netif *nif, void (* poll)(void))
 		if(jn_sl == 0)
 		{
 			if ((r = josnicif_check_inpacket(nif)) < 0)
-				fprintf(STDERR_FILENO, "josnicif_check_inpacket: %e\n", r);
+				kdprintf(STDERR_FILENO, "josnicif_check_inpacket: %e\n", r);
 			else
 				read_data += r;
 			josnicif_input(nif);

@@ -24,7 +24,7 @@ umain(int argc, char *argv[])
 
 	fd = open(argv[1], O_RDONLY);
 	if (fd < 0) {
-		fprintf(STDERR_FILENO, "Unable to open %s\n", argv[1]);
+		kdprintf(STDERR_FILENO, "Unable to open %s\n", argv[1]);
 		exit();
 	}
 	while ((r = read(fd, buf, sizeof(buf))) > 0) {

@@ -1,4 +1,6 @@
 #include <lib/fixed_max_heap.h>
+#include <lib/panic.h>
+#include <lib/stdio.h>
 #include <malloc.h>
 
 #include <kfs/chdesc.h>
@@ -399,7 +401,7 @@ void revision_slice_push_down(revision_slice_t * slice)
 			slice->ready[i]->flags &= ~CHDESC_READY;
 		}
 		else
-			fprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
+			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
 	}
 }
 
@@ -420,7 +422,7 @@ void revision_slice_pull_up(revision_slice_t * slice)
 			slice->ready[i]->flags |= CHDESC_READY;
 		}
 		else
-			fprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
+			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
 	}
 }
 

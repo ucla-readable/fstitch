@@ -4,7 +4,6 @@ OBJDIRS += lib
 #		lib/console.c \
 #			lib/libmain.c \
 #			lib/exit.c \
-#			lib/panic.c \
 #			lib/printf.c \
 #			lib/printfmt.c \
 #			lib/readline.c \
@@ -16,6 +15,8 @@ OBJDIRS += lib
 #			lib/md5.c
 
 LIB_SRCFILES := \
+			lib/memdup.c \
+			lib/panic.c \
 			lib/kfs_feature.c
 
 #LIB_SRCFILES :=		$(LIB_SRCFILES) \
@@ -30,7 +31,7 @@ LIB_SRCFILES := \
 #LIB_SRCFILES :=		$(LIB_SRCFILES) \
 #			lib/fd.c \
 #			lib/file.c \
-#			lib/fprintf.c \
+#			lib/kdprintf.c \
 #			lib/fsipc.c \
 #			lib/pageref.c \
 #			lib/pipe.c \

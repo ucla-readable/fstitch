@@ -1,7 +1,8 @@
-#include <lib/types.h>
 #include <malloc.h>
 #include <string.h>
 #include <inc/error.h>
+#include <lib/types.h>
+#include <lib/stdio.h>
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>

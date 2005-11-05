@@ -372,7 +372,7 @@ umain(void)
 
 	if((r = sys_grant_io(0)) < 0)
 	{
-		fprintf(STDERR_FILENO, "FS: sys_grant_io: %e\n", r);
+		kdprintf(STDERR_FILENO, "FS: sys_grant_io: %e\n", r);
 		exit();
 	}
 

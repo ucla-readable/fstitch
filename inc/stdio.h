@@ -45,12 +45,12 @@ int	vsnprintf(char*, int, const char*, va_list);
 #define  STDOUT_FILENO  1  // Standard output.
 #define  STDERR_FILENO  2  // Standard error output.
 
-// lib/fprintf.c
+// lib/kdprintf.c
 #ifndef KUDOS_KERNEL
 int   printf(const char *fmt, ...);
 #endif
-int	fprintf(int fd, const char*, ...);
-int	vfprintf(int fd, const char*, va_list);
+int	kdprintf(int fd, const char*, ...);
+int	vkdprintf(int fd, const char*, va_list);
 
 // lib/readline.c
 char*	readline(const char* prompt);

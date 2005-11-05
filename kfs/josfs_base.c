@@ -1,14 +1,14 @@
 /* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
 #include <lib/types.h>
-#include <inc/error.h>
-#include <inc/x86.h>
 #include <malloc.h>
 #include <string.h>
 #include <inc/error.h>
 #include <lib/hash_set.h>
+#include <lib/stdio.h>
+#include <assert.h>
 
 /* textbar, sleep from inc/lib.h */
-int sleep(int32_t centisecs);
+int sleepj(int32_t jiffies);
 int textbar_init(int use_line);
 int textbar_close(void);
 int textbar_set_progress(int progress, uint8_t color);
@@ -250,7 +250,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 		if (info->m >= 0 && info->p < 140) {
 			(info->p)++;
 			textbar_set_progress(info->p, info->color);
-			sleep(5);
+			sleepj(5);
 		}
 
 		blockno = i / JOSFS_BLKFILES;
@@ -335,7 +335,7 @@ int josfs_fsck(LFS_t * object)
 
 		if (info->m >= 0) {
 			textbar_set_progress(info->p, info->color);
-			sleep(5);
+			sleepj(5);
 		}
 
 		do {
@@ -368,7 +368,7 @@ int josfs_fsck(LFS_t * object)
 					if (info->p < 141 + (j*20/s_nblocks)) {
 						(info->p)++;
 						textbar_set_progress(info->p, info->color);
-						sleep(5);
+						sleepj(5);
 					}
 				}
 
@@ -388,9 +388,9 @@ int josfs_fsck(LFS_t * object)
 	if (r < 0 || errors) {
 		if (info->m >= 0) {
 			for (j = 0; j < 5; j++) {
-				sleep(75);
+				sleepj(75);
 				textbar_set_progress(info->p, 12);
-				sleep(75);
+				sleepj(75);
 				textbar_set_progress(0, 12);
 			}
 		}

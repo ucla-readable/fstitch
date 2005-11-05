@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_DIRENT_H
 #define __KUDOS_KFS_DIRENT_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 #define DIRENT_MAXNAMELEN 128
 

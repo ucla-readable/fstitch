@@ -1,16 +1,16 @@
 // jos fs server access through the cfs interface.
 // Derived from uhfs.c.
 
-#include <inc/lib.h>
 #include <malloc.h>
-#include <lib/hash_map.h>
+#include <inc/lib.h>
 #include <inc/fd.h>
+#include <lib/hash_map.h>
+#include <lib/dirent.h>
 
 #include <kfs/fidman.h>
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
-#include <inc/dirent.h>
 #include <kfs/josfs_cfs.h>
 
 
