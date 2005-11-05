@@ -112,9 +112,9 @@ $(OBJDIR)/fs/fs.img: $(OBJDIR)/boot/mbr $(OBJDIR)/fs/clean-fs.img
 	$(V)cp $(OBJDIR)/boot/mbr $@
 	$(V)dd if=$(OBJDIR)/fs/clean-fs.img of=$@ seek=1 conv=notrunc 2> /dev/null
 
-#fs/.journal:
-#	@echo + dd if=/dev/zero of=fs/.journal
-#	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null
+fs/.journal:
+	@echo + dd if=/dev/zero of=fs/.journal
+	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null
 
 all: $(OBJDIR)/fs/fs.img
 
