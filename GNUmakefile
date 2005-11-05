@@ -263,7 +263,7 @@ fsclean:
 	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
 
 clean:
-	rm -rf $(BASE_OBJDIR) kern/appkernbin.c fsformat.d conf/gcc.mk tags TAGS
+	rm -rf $(BASE_OBJDIR) fs/.journal kern/appkernbin.c fsformat.d conf/gcc.mk tags TAGS
 
 realclean: clean
 	rm -rf lab$(LAB).tar.gz
