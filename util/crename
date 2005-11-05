@@ -1,0 +1,33 @@
+#!/bin/bash
+
+usage () {
+	echo "Apply a regex to .c and .h file contents in this and all subdirectories."
+	echo "Usage: $0 <sed exp> [find regex]"
+	exit 1
+}
+
+if [ $# -lt 1 ]; then
+	usage
+elif [ $# -gt 2 ]; then
+	usage
+fi
+
+SEDEXP="$1"
+FINDREGEX="*.[ch]"
+
+if [ $# -eq 2 ]; then
+	FINDREGEX="$2"
+fi
+
+TMPFILE=`mktemp` || exit 1
+
+echo $SEDEXP
+echo $FINDREGEX
+
+for file in `find . -name "$FINDREGEX"`;
+do
+	echo $file;
+	sed $SEDEXP $file > $TMPFILE && mv -f $TMPFILE $file
+done
+
+rm -f $TMPFILE
