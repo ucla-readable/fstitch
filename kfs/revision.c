@@ -1,5 +1,5 @@
 #include <lib/fixed_max_heap.h>
-#include <inc/malloc.h>
+#include <malloc.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>

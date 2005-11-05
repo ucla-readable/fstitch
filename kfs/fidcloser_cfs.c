@@ -1,6 +1,6 @@
 #include <lib/hash_map.h>
 #include <lib/vector.h>
-#include <inc/malloc.h>
+#include <malloc.h>
 #include <inc/lib.h>
 
 #include <kfs/modman.h>

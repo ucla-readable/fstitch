@@ -2,7 +2,7 @@
 // Derived from uhfs.c.
 
 #include <inc/lib.h>
-#include <inc/malloc.h>
+#include <malloc.h>
 #include <lib/hash_map.h>
 #include <inc/fd.h>
 

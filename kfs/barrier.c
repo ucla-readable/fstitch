@@ -1,7 +1,7 @@
 #include <inc/error.h>
-#include <inc/assert.h>
-#include <inc/string.h>
-#include <inc/malloc.h>
+#include <assert.h>
+#include <string.h>
+#include <malloc.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

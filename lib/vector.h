@@ -1,7 +1,7 @@
 #ifndef KUDOS_INC_VECTOR_H
 #define KUDOS_INC_VECTOR_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 struct vector {
 	size_t size;

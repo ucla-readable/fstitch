@@ -1,7 +1,7 @@
 #ifndef KUDOS_INC_HASH_SET_H
 #define KUDOS_INC_HASH_SET_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 #include <lib/hash_map.h>
 
 struct hash_set;

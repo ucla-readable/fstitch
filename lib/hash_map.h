@@ -1,7 +1,7 @@
 #ifndef KUDOS_INC_HASH_MAP_H
 #define KUDOS_INC_HASH_MAP_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 struct hash_map_elt {
 	void * key;
