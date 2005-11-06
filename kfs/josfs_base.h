@@ -9,6 +9,10 @@
 
 // File nodes (both in-memory and on-disk)
 
+#if (PGSIZE != 4096)
+#error JOSFS designed only with 4kB blocks in mind
+#endif
+
 // Bytes per file system block - same as page size
 #define JOSFS_BLKSIZE	PGSIZE
 #define JOSFS_BLKBITSIZE	(JOSFS_BLKSIZE * 8)
