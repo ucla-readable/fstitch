@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inc/env.h> // HZ
 #include <inc/error.h>
 #include <lib/types.h>
+#include <lib/jiffies.h> // HZ
+#include <lib/panic.h>
 #include <lib/hash_map.h>
 
 #include <kfs/bd.h>

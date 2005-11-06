@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <lib/types.h>
 #include <inc/error.h>
-#include <inc/env.h> // HZ
+#include <lib/types.h>
+#include <lib/jiffies.h> // HZ
 #include <lib/hash_map.h>
 #include <lib/panic.h>
 

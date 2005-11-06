@@ -13,9 +13,7 @@
 #include <kfs/nbd_bd.h>
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
-#ifdef KUDOS
 #include <kfs/josfs_base.h>
-#endif
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
@@ -206,9 +204,7 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
-#ifdef KUDOS
 	const bool enable_fsck = 0;
-#endif
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
@@ -271,30 +267,17 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 
 			/* create a cache above the resizer */
-#ifdef KUDOS
 			if (! (cache = wb_cache_bd(resizer, cache_nblks)) )
 				kfsd_shutdown();
-#else
-			cache = NULL;
-#endif
 		}
 		else
 		{
-#ifdef KUDOS
 			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
 				kfsd_shutdown();
-#else
-			cache = partitions[i];
-#endif
 		}
 
-#ifdef KUDOS
 		lfs = josfs_lfs = josfs(cache);
-#else
-		lfs = josfs_lfs = NULL;
-#endif
 
-#ifdef KUDOS
 		if (josfs_lfs && enable_fsck)
 		{
 			printf("Fscking... ");
@@ -306,7 +289,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			else
 				printf("critical error: %e\n", r);
 		}
-#endif
 
 		if (lfs)
 			printf("Using josfs");
@@ -352,10 +334,8 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 	}
 	else
 	{
-#ifdef KUDOS
 		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
 			kfsd_shutdown();
-#endif
 	}
 
 	return bd;
