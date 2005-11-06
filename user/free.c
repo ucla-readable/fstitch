@@ -38,7 +38,7 @@ umain(int argc, char **argv)
 	if(argc > 2 || get_arg_idx(argc, (const char**) argv, "-h"))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	struct mem_stats ms;
@@ -62,7 +62,7 @@ umain(int argc, char **argv)
 		unit      = 1024*1024;
 	} else {
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 		// appease compiler warnings
 		unit_name = '?';
 		unit = -1;

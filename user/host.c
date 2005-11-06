@@ -16,7 +16,7 @@ umain(int argc, char **argv)
 	if (argc != 2 || !strcmp("-h", argv[1]))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	name = argv[1];

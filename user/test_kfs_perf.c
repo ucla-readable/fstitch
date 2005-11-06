@@ -12,7 +12,7 @@ void umain(int argc, const char ** argv)
 	if (argc < 2 || get_arg_idx(argc, argv, "-h"))
 	{
 		printf("Usage: %s [test_file] [size]\n", argv[0]);
-		exit();
+		exit(0);
 	}
 
 	if (argc >= 2)

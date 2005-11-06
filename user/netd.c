@@ -1364,7 +1364,7 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 	if ((r = fork()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "fork: %e\n", r);
-		exit();
+		exit(0);
 	}
 	if (r == 0)
 	{
@@ -1373,40 +1373,40 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 		if ((r = pipe(p)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "pipe: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = dup2env_send(p[0], whom)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2env_send: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = dup2(p[1], STDOUT_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = close(p[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(p[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		stats_display();
 
-		exit();
+		exit(0);
 	}
 }
 
@@ -1479,7 +1479,7 @@ netd_net_ipcrecv_comm(void)
 	if ((r = fstat(netd_net_ipcrecv.fd, &stat)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "netd fstat: %e", r);
-		exit();
+		exit(0);
 	}
 
 	if (stat.st_size <= 0)
@@ -1496,7 +1496,7 @@ netd_net_ipcrecv_comm(void)
 	{
 		// The other end of pipe is closed
 		kdprintf(STDERR_FILENO, "netd net: netd ipcrecv has closed pipe, exiting.\n");
-		exit();
+		exit(0);
 	}
 
 	if (debug & DEBUG_REQ)
@@ -1538,7 +1538,7 @@ netd_net(envid_t ipcrecv, int fd, int argc, const char **argv)
 	if (!nif)
 	{
 		sys_env_destroy(ipcrecv);
-		exit();
+		exit(0);
 	}
 
 	netd_net_ipcrecv.envid = ipcrecv;
@@ -1549,7 +1549,7 @@ netd_net(envid_t ipcrecv, int fd, int argc, const char **argv)
 	net_loop(nif, netd_net_ipcrecv_comm);
 
 	sys_env_destroy(ipcrecv);
-	exit();
+	exit(0);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -1591,7 +1591,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 		if ((r = fstat(fd, &stat)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "netd ipcrecv fstat: %e", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = write(fd, &whom, sizeof(whom))) < 0)
@@ -1607,7 +1607,7 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 		{
 			// The other end of pipe is closed
 			kdprintf(STDERR_FILENO, "netd ipcrecv: netd net has closed pipe, exiting.\n");
-			exit();
+			exit(0);
 		}
 	}
 
@@ -1631,14 +1631,14 @@ netd(int argc, const char **argv)
 	if ((r = pipe(p)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "netd pipe: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	// Fork off netd ipcrecv and start netd ipcrecv and netd net
 	if ((ipcrecv_envid = r = fork()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "netd fork: %e\n", r);
-		exit();
+		exit(0);
 	}
 	if (!r)
 	{
@@ -1682,7 +1682,7 @@ umain(int argc, char **argv)
 	if (argc >= 2 && !strcmp("-h", argv[1]))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	if (get_arg_idx(argc, (const char**) argv, "-c"))

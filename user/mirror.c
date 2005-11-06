@@ -19,7 +19,7 @@ static void print_usage(const char * bin)
 	printf("%s add <mirror_bd> net <ip> <port>\n", bin);
 	printf("%s add <mirror_bd> bd <bd_name>\n", bin);
 	printf("%s remove <mirror_bd> <diskno>\n", bin);
-	exit();
+	exit(0);
 }
 
 static BD_t * find_bd(const char * mirror_name)
@@ -65,7 +65,7 @@ void umain(int argc, const char ** argv)
 	else if (argc == 6 && strcmp(argv[1], "add") == 0) {
 		mirror = find_bd(argv[2]);
 		if (!mirror)
-			exit();
+			exit(0);
 
 		if (!strcmp(argv[3], "net")) {
 			int port = strtol(argv[5], NULL, 10);
@@ -78,19 +78,19 @@ void umain(int argc, const char ** argv)
 		}
 
 		if (!disk)
-			exit();
+			exit(0);
 
 		mirror_bd_add_device(mirror, disk);
 	}
 	else if (argc == 5 && strcmp(argv[1], "add") == 0) {
 		mirror = find_bd(argv[2]);
 		if (!mirror)
-			exit();
+			exit(0);
 		if (!strcmp(argv[3], "bd"))
 			disk = find_bd(argv[4]);
 
 		if (!disk)
-			exit();
+			exit(0);
 
 		mirror_bd_add_device(mirror, disk);
 	}

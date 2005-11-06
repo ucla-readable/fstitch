@@ -8,7 +8,7 @@ umain(int argc, char **argv)
 	if (argc != 2)
 	{
 		printf("Usage: %s <secs>\n", argv[0]);
-		exit();
+		exit(0);
 	}
 
 	const int32_t jiffies = HZ*strtol(argv[1], NULL, 10);
@@ -16,6 +16,6 @@ umain(int argc, char **argv)
 	if ((r = sleepj(jiffies)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "sleepj: %e\n", r);
-		exit();
+		exit(0);
 	}
 }

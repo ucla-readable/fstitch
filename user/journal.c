@@ -126,7 +126,7 @@ void umain(int argc, const char ** argv)
 				if(r < 0)
 				{
 					kdprintf(STDERR_FILENO, "Could not destroy %s: %e\n", journalbd_node->name, r);
-					exit();
+					exit(0);
 				}
 			}
 		}

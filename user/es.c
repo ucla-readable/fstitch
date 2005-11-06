@@ -85,7 +85,7 @@ umain(int argc, char **argv)
 	if(argc > 2 || (argc == 2 && !strcmp(argv[1], "-h")))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	envid_t root_envid;

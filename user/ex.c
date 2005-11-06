@@ -630,7 +630,7 @@ static void cmd_quit(size_t begin, size_t end, const char * cmd)
 	r = file_close();
 	if (r < 0)
 		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
-	exit();
+	exit(0);
 }
 
 static void cmd_insert_file(size_t begin, size_t end, const char * cmd)
@@ -737,7 +737,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 		r = file_close();
 		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
-		exit();
+		exit(0);
 	}
 
 	struct Stat s;
@@ -1205,7 +1205,7 @@ static void parse_cmdline(int argc, char ** argv)
 	if (argc > 2 || get_arg_idx(argc, (const char **) argv, "-h"))
 	{
 		print_usage(bin);
-		exit();
+		exit(0);
 	}
 
 	if (argc == 2)
@@ -1215,7 +1215,7 @@ static void parse_cmdline(int argc, char ** argv)
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "Unable to open \"%s\"\n", file);
-			exit();
+			exit(0);
 		}
 	}
 }

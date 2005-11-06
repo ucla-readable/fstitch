@@ -41,7 +41,7 @@ umain(int argc, char **argv)
 	ARGBEGIN{
 	default:
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	case 'k':
 		scale = 0;
 		reported_unit = "K";

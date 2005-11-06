@@ -64,7 +64,7 @@ close_conn(struct http_state *hs)
 		}
 	}
 
-	exit();
+	exit(0);
 }
 
 static void
@@ -81,7 +81,7 @@ removeoutput_close_exit(struct http_state *hs)
 			kdprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
 	}
 
-	exit();
+	exit(0);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -234,7 +234,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 	if ((r = connect(addr, port, hs->net)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "connect: %e\n", r);
-		exit();
+		exit(0);
 	}
 	if (!silent)
 		kdprintf(status_fd, "Connected\n");
@@ -367,7 +367,7 @@ umain(int argc, char **argv)
 	if (argc < 2 || (argc >=2 && !strcmp("-h", argv[1])))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 	
 	const char *filename = get_arg_val(argc, (const char**) argv, "-o");
@@ -376,7 +376,7 @@ umain(int argc, char **argv)
 		if ((r = open(filename, O_WRONLY|O_CREAT|O_TRUNC)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "open: %e\n", r);
-			exit();
+			exit(0);
 		}
 		fileout_fd   = r;
 		fileout_name = filename;
@@ -400,7 +400,7 @@ umain(int argc, char **argv)
 	if ((r = parse_url(url, &addr, &port, &uri, &host)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "parse_url: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	http_get(addr, port, uri, host);

@@ -8,7 +8,7 @@ static void
 usage(char *s)
 {
 	printf("usage: %s filename\n", s);
-	exit();
+	exit(0);
 }
 
 void
@@ -25,7 +25,7 @@ umain(int argc, char *argv[])
 	fd = open(argv[1], O_RDONLY);
 	if (fd < 0) {
 		kdprintf(STDERR_FILENO, "Unable to open %s\n", argv[1]);
-		exit();
+		exit(0);
 	}
 	while ((r = read(fd, buf, sizeof(buf))) > 0) {
 		MD5Update(&context, buf, r);

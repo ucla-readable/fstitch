@@ -70,7 +70,7 @@ static void playpong(int child)
 		{
 			sys_env_destroy(child);
 			sys_vga_set_mode_text();
-			exit();
+			exit(0);
 		}
 		
 		sleepj(child ? (HZ / 50) : (HZ / 100));

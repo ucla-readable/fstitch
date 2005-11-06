@@ -113,7 +113,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 	if ((r = bind_listen(ip_addr_any, port, &listen_key)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "knbdd: bind_listen: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	// Accept connections and fork to handle each connection
@@ -122,29 +122,29 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 		if ((r = accept(listen_key, fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd accept: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = fork()) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd fork: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if (r == 0)
 		{
 			knbd_accept(bd_filename, fd, remote_ip, remote_port);
-			exit();
+			exit(0);
 		}
 
 		if ((r = close(fd[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(fd[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
-			exit();
+			exit(0);
 		}
 	}
 }

@@ -87,7 +87,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				if (!cache)
 				{
 					kdprintf(STDERR_FILENO, "wb_cache_bd() failed\n");
-					exit();
+					exit(0);
 				}
 				break;
 			case WT_CACHE:
@@ -95,7 +95,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				if (!cache)
 				{
 					kdprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
-					exit();
+					exit(0);
 				}
 				break;
 			case NO_CACHE:
@@ -103,7 +103,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				break;
 			default:
 				kdprintf(STDERR_FILENO, "%s() does not know about cache type %d\n", __FUNCTION__, cache_type);
-				exit();
+				exit(0);
 				cache = NULL; // satisfy compiler
 		}
 
@@ -114,7 +114,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			if (! (cache = wt_cache_bd(resizer, 16)) )
 			{
 				kdprintf(STDERR_FILENO, "wt_cache_bd() failed\n");
-				exit();
+				exit(0);
 			}
 		}
 
@@ -127,7 +127,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			if (! (journal = journal_bd(cache)) )
 			{
 				kdprintf(STDERR_FILENO, "journal_bd() failed\n");
-				exit();
+				exit(0);
 			}
 
 			lfs = josfs_lfs = josfs(journal);
@@ -193,7 +193,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		else
 		{
 			kdprintf(STDERR_FILENO, "lfs creation failed\n");
-			exit();
+			exit(0);
 		}
 
 		if (journaling)
@@ -207,7 +207,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 		if (! (u = uhfs(lfs)) )
 		{
 			kdprintf(STDERR_FILENO, "uhfs() failed\n");
-			exit();
+			exit(0);
 		}
 
 		return u;
@@ -267,13 +267,13 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			if (r < 0)
 			{
 				kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", extjournal_file, r);
-				exit();
+				exit(0);
 			}
 			*journal_lfs = create_lfs(*(uint32_t *) md.data);
 			if (!*journal_lfs)
 			{
 				kdprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", extjournal_file);
-				exit();
+				exit(0);
 			}
 
 			// Find the lfs's name for extjournal_file
@@ -282,7 +282,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			if (r < 0)
 			{
 				kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", extjournal_file, r);
-				exit();
+				exit(0);
 			}
 			*journal_lfs_file = strdup((char *) md.data);
 			*journal = 1;
@@ -299,7 +299,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 		{
 			kdprintf(STDERR_FILENO, "Illegal -jfsck option \"%s\"\n", jfsck_str);
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 
 	}
@@ -317,7 +317,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 		{
 			kdprintf(STDERR_FILENO, "Illegal -fsck option \"%s\"\n", fsck_str);
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 	}
 
@@ -333,7 +333,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 		{
 			kdprintf(STDERR_FILENO, "Illegal -c option \"%s\"\n", cache_type_str);
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 	}
 
@@ -351,14 +351,14 @@ static BD_t * create_disk(int argc, const char ** argv)
 	{
 		kdprintf(STDERR_FILENO, "No -d parameter\n");
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	if (++device_index >= argc)
 	{
 		kdprintf(STDERR_FILENO, "No parameters passed with -d\n");
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	if (!strcmp("ide", argv[device_index]))
@@ -369,7 +369,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		{
 			kdprintf(STDERR_FILENO, "Insufficient parameters for ide\n");
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 
 		controllerno = strtol(argv[device_index+1], NULL, 10);
@@ -392,7 +392,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		{
 			kdprintf(STDERR_FILENO, "Insufficient parameters for nbd\n");
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 
 		host = argv[device_index+1];
@@ -416,7 +416,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		{
 			kdprintf(STDERR_FILENO, "Insufficient parameters for mem\n");
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 
 		blocksize_str = argv[device_index + 1];
@@ -448,7 +448,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		{
 			kdprintf(STDERR_FILENO, "Insufficient parameters for loop\n");
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 
 		filename = argv[device_index+1];
@@ -459,13 +459,13 @@ static BD_t * create_disk(int argc, const char ** argv)
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename, r);
-			exit();
+			exit(0);
 		}
 		lfs = create_lfs(*(uint32_t *) md.data);
 		if (!lfs)
 		{
 			kdprintf(STDERR_FILENO, "Unable to find the LFS for file %s\n", filename);
-			exit();
+			exit(0);
 		}
 
 		// Find the lfs's name for filename
@@ -474,13 +474,13 @@ static BD_t * create_disk(int argc, const char ** argv)
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename, r);
-			exit();
+			exit(0);
 		}
 		lfs_filename = (char *) md.data;
 		if (!lfs_filename)
 		{
 			kdprintf(STDERR_FILENO, "Unable to get lfs filename\n");
-			exit();
+			exit(0);
 		}
 
 		// Create loop_bd
@@ -500,7 +500,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		{
 			kdprintf(STDERR_FILENO, "Insufficient parameters for bd\n");
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 		}
 
 		bd_name = argv[device_index+1];
@@ -522,7 +522,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 	{
 		kdprintf(STDERR_FILENO, "Unknown device type \"%s\"\n", argv[device_index]);
 			print_usage(argv[0]);
-			exit();
+			exit(0);
 	}
 
 	assert(disk);
@@ -548,7 +548,7 @@ void umain(int argc, const char ** argv)
 	if (get_arg_idx(argc, argv, "-h"))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	mount_point = get_arg_val(argc, argv, "-m");
@@ -556,27 +556,27 @@ void umain(int argc, const char ** argv)
 	{
 		kdprintf(STDERR_FILENO, "No mount specified\n");
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	parse_options(argc, argv, &journal, &jfsck, &journal_lfs, &journal_lfs_file, &fsck, &cache_type, &cache_num_blocks);
 
 	disk = create_disk(argc, argv);
 	if (!disk)
-		exit();
+		exit(0);
 
 	cfs = build_uhfs(disk, journal, jfsck, journal_lfs, journal_lfs_file, fsck, cache_type, cache_num_blocks);
 	if (!cfs)
-		exit();
+		exit(0);
 
 	tclass = get_table_classifier();
 	if (!tclass)
-		exit();
+		exit(0);
 
 	r = table_classifier_cfs_add(tclass, mount_point, cfs);
 	if (r < 0)
 	{
 		kdprintf(STDERR_FILENO, "table_classifier_cfs_add(): %e\n", r);
-		exit();
+		exit(0);
 	}
 }

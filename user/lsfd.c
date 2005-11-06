@@ -4,7 +4,7 @@ static void
 usage(void)
 {
 	printf("usage: lsfd [-1|-2]\n");
-	exit();
+	exit(0);
 }
 
 void

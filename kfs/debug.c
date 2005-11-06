@@ -705,7 +705,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	{
 		printf("kfs_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %e\n", file, line, function, module, opcode, r);
 		sys_print_backtrace();
-		exit();
+		exit(0);
 	}
 	return r;
 }

@@ -5,7 +5,7 @@ static void
 usage(char *s)
 {
 	printf("usage: %s [existing filename|devicename]\n", s);
-	exit();
+	exit(0);
 }
 
 void
@@ -23,16 +23,16 @@ umain(int argc, char *argv[])
 	fd = open(argv[1], O_WRONLY);
 	if (fd < 0) {
 		kdprintf(STDERR_FILENO, "Unable to open %s\n", argv[1]);
-		exit();
+		exit(0);
 	}
 	r = fstat(fd, &st);
 	if (r < 0) {
 		kdprintf(STDERR_FILENO, "Unable to stat %s\n", argv[1]);
-		exit();
+		exit(0);
 	}
 	if (st.st_isdir) {
 		kdprintf(STDERR_FILENO, "Error: %s is a directory\n", argv[1]);
-		exit();
+		exit(0);
 	}
 
 	flen = st.st_size;
@@ -54,7 +54,7 @@ umain(int argc, char *argv[])
 	if (r < sizeof(s)) {
 		kdprintf(STDERR_FILENO, "Error: Only wrote %d bytes to %s, needed %d\n",
 				r, argv[1], sizeof(s));
-		exit();
+		exit(0);
 	}
 	close(fd);
 	printf("Success. New filesystem has %d blocks.\n", s.s_nblocks);

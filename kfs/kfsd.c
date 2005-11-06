@@ -8,10 +8,6 @@
 #include <lib/mmu.h>
 #include <lib/stdio.h>
 
-#ifdef UNIXUSER
-#define exit() exit(0)
-#endif
-
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
@@ -55,7 +51,7 @@ void kfsd_shutdown(void)
 			module_shutdowns[i].arg = NULL;
 		}
 	}
-	exit();
+	exit(0);
 }
 
 void kfsd_main(void)
@@ -65,7 +61,7 @@ void kfsd_main(void)
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
 	if ((r = kfsd_init()) < 0)
-		exit();
+		exit(r);
 
 	sched_loop();
 }

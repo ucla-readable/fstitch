@@ -96,7 +96,7 @@ close_conn_and_exit(struct httpd_state *hs)
 			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e\n", r);
 	}
 
-	exit();
+	exit(0);
 }
 /*---------------------------------------------------------------------------*/
 
@@ -173,42 +173,42 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 	if ((r = pipe(p)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "pipe(): %e\n", r);
-		exit();
+		exit(0);
 	}
 	
 	if ((r = fork()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "fork(): %e\n", r);
-		exit();
+		exit(0);
 	}
 	if (r == 0)
 	{
 		if ((r = dup2(p[1], STDOUT_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2(): %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2(): %e\n", r);
-			exit();
+			exit(0);
 		}
 		
 		if ((r = close(p[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(): %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(p[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(): %e\n", r);
-			exit();
+			exit(0);
 		}
 		
 		display_fn(arg);
 		
 		close_all();
-		exit();
+		exit(0);
 		return 0; // appease compiler, *shouldn't* get here
 	}
 	else
@@ -218,7 +218,7 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 		if ((r = close(p[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(): %e\n", r);
-			exit();
+			exit(0);
 		}
 		
 		// read fork child's output from p[0]
@@ -248,7 +248,7 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 		if ((r = close(p[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(): %e\n", r);
-			exit();
+			exit(0);
 		}
 		
 		file->data = cgi_output;
@@ -315,12 +315,12 @@ spawn_cgi(void *arg)
 	if ((r = parse_argv(bin_name, argv, MAXARGS)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "parse_argv(): %e", r);
-		exit();
+		exit(0);
 	}
 	if ((r = spawn(bin_name, (const char**) argv)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "spawn(): %e", r);
-		exit();
+		exit(0);
 	}
 	spawn_child = r;
 	
@@ -463,7 +463,7 @@ httpd_serve(struct httpd_state *hs)
 		if (!c)
 		{
 			kdprintf(STDERR_FILENO, "malformed request '%s'\n", request);
-			exit();
+			exit(0);
 		}
 		resource = request = c;
 
@@ -611,7 +611,7 @@ httpd_listen(void)
 	if ((r = bind_listen(ip_addr_any, 80, &listen_key)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "bind_listen: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	// Accept connections and fork to handle each connection
@@ -620,33 +620,33 @@ httpd_listen(void)
 		if ((r = accept(listen_key, fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "accept: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = fork()) < 0)
 		{
 			kdprintf(STDERR_FILENO, "fork: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if (r == 0)
 		{
 			if ((r = httpd_accept(fd, remote_ip, remote_port)) < 0)
 			{
 				kdprintf(STDERR_FILENO, "httpd_accept: %e\n", r);
-				exit();
+				exit(0);
 			}
-			exit();
+			exit(0);
 		}
 
 		if ((r = close(fd[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(fd[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 	}
 }
@@ -671,7 +671,7 @@ umain(int argc, char **argv)
 	if (argc >= 2 && !strcmp("-h", argv[1]))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	display_conns = !get_arg_idx(argc, (const char**) argv, "-q");

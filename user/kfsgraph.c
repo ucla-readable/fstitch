@@ -139,7 +139,7 @@ void umain(int argc, const char ** argv)
 	if (get_arg_idx(argc, argv, "-h"))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	if (get_arg_idx(argc, argv, "-t"))

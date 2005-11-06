@@ -17,18 +17,18 @@ umain(int argc, char **argv)
 	if(argc == 2 && !strcmp(argv[1], "--debug"))
 	{
 		cfs_debug();
-		exit();
+		exit(0);
 	}
 	if(argc == 2 && !strcmp(argv[1], "--shutdown"))
 	{
 		cfs_shutdown();
-		exit();
+		exit(0);
 	}
 
 	if(argc != 3)
 	{
 		kdprintf(STDERR_FILENO, "Usage: %s <path> <text_to_write>\n", argv[0]);
-		exit();
+		exit(0);
 	}
 
 	fd = kpl_open(filename, O_RDWR);

@@ -130,7 +130,7 @@ static void remove_cycles(kfs_node_t * root, hash_map_t * uses_graph)
 			if (strcmp(journalbd_use->name, "journal"))
 			{
 				kdprintf(STDERR_FILENO, "%s: %s does not use a \"journal\", I don't understand\n", __FUNCTION__, root->name);
-				exit();
+				exit(0);
 			}
 		}
 
@@ -200,7 +200,7 @@ void umain(int argc, const char ** argv)
 	if (get_arg_idx(argc, argv, "-h") || argc < 2 || argc > 3)
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	mount = argv[1];
@@ -213,14 +213,14 @@ void umain(int argc, const char ** argv)
 	if (!uses_graph)
 	{
 		kdprintf(STDERR_FILENO, "kfs_uses() failed\n");
-		exit();
+		exit(0);
 	}
 
 	tclass = get_table_classifier();
 	if (!tclass)
 	{
 		kdprintf(STDERR_FILENO, "Unable to find root table classifier\n");
-		exit();
+		exit(0);
 	}
 
 	tclass_node = hash_map_find_val(uses_graph, tclass);
@@ -237,13 +237,13 @@ void umain(int argc, const char ** argv)
 	if (!node)
 	{
 		kdprintf(STDERR_FILENO, "Unable to find mount at \"%s\"\n", mount);
-		exit();
+		exit(0);
 	}
 
 	if (!table_classifier_cfs_remove(tclass, mount))
 	{
 		kdprintf(STDERR_FILENO, "table_classifier_cfs_remove() failed to unmount %s pointing to %s\n", mount, node->name);
-		exit();
+		exit(0);
 	}
 	if (verbose)
 		printf("unmounted from table_classifier_cfs\n");

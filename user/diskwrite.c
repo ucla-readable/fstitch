@@ -59,13 +59,13 @@ umain(int argc, char **argv)
 		printf("About: write the data from stdin to the partition/disk containing the current fileystem.\n");
 		printf("Example: diskwrite < small_fs.img\n");
 		printf("         get 192.168.0.2/fs.img -e | diskwrite\n");
-		exit();
+		exit(0);
 	}
 
 	if ((r = sys_grant_io(0)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "sys_grant_io: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	find_fs(&disk_no, &partition_length, &fs_offset);

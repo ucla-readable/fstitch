@@ -254,7 +254,7 @@ net_loop(struct netif *nif, void (* poll)(void))
 	else
 	{
 		kdprintf(STDERR_FILENO, "Unknown interface name %c%c\n", nif->name[0], nif->name[1]);
-		exit();
+		exit(0);
 	}
 
 	//

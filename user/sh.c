@@ -54,7 +54,7 @@ again:
 		case 'w':	// Add an argument
 			if (argc == MAXARGS) {
 				kdprintf(STDERR_FILENO, "too many arguments\n");
-				exit();
+				exit(0);
 			}
 			argv[argc++] = t;
 			break;
@@ -63,7 +63,7 @@ again:
 			// Grab the filename from the argument list
 			if (gettoken(0, &t) != 'w') {
 				kdprintf(STDERR_FILENO, "syntax error: < not followed by word\n");
-				exit();
+				exit(0);
 			}
 			// Open 't' for reading as file descriptor 0
 			// (which environments use as standard input).
@@ -77,7 +77,7 @@ again:
 			if(fd < 0)
 			{
 				kdprintf(STDERR_FILENO, "%s: %e\n", t, fd);
-				exit();
+				exit(0);
 			}
 			if(fd)
 			{
@@ -85,13 +85,13 @@ again:
 				if (r < 0)
 				{
 					kdprintf(STDERR_FILENO, "dup2: %e\n", r);
-					exit();
+					exit(0);
 				}
 				r = close(fd);
 				if (r < 0)
 				{
 					kdprintf(STDERR_FILENO, "close: %e\n", r);
-					exit();
+					exit(0);
 				}
 				if (0 < stdin_stash)
 				{
@@ -106,7 +106,7 @@ again:
 			// Grab the filename from the argument list
 			if (gettoken(0, &t) != 'w') {
 				kdprintf(STDERR_FILENO, "syntax error: > not followed by word\n");
-				exit();
+				exit(0);
 			}
 			// Open 't' for writing as file descriptor 1
 			// (which environments use as standard output).
@@ -120,7 +120,7 @@ again:
 			if(fd < 0)
 			{
 				kdprintf(STDERR_FILENO, "%s: %e\n", t, fd);
-				exit();
+				exit(0);
 			}
 			if(fd != 1)
 			{
@@ -158,13 +158,13 @@ again:
 			if(r)
 			{
 				kdprintf(STDERR_FILENO, "pipe: %e\n", r);
-				exit();
+				exit(0);
 			}
 			r = fork();
 			if(r < 0)
 			{
 				kdprintf(STDERR_FILENO, "fork: %e\n", r);
-				exit();
+				exit(0);
 			}
 			if(r)
 			{
@@ -196,7 +196,7 @@ again:
 		case '(':
 		case ')':
 			printf("Unsupported shell token: %c\n", c);
-			exit();
+			exit(0);
 			break;
 
 		case 0:		// String is complete
@@ -249,13 +249,13 @@ runit:
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
-			exit();
+			exit(0);
 		}
 		r = close(stdin_stash);
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 	}
 
@@ -287,7 +287,7 @@ runit:
 	}
 
 	// Done!
-	exit();
+	exit(0);
 }
 
 
@@ -372,7 +372,7 @@ static void
 usage(void)
 {
 	printf("usage: sh [-dix] [command-file]\n");
-	exit();
+	exit(0);
 }
 
 void
@@ -404,19 +404,19 @@ umain(int argc, char** argv)
 		if (stdin_stash < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2: %e\n", stdin_stash);
-			exit();
+			exit(0);
 		}
 
 		r = close(STDIN_FILENO);
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = open(argv[0], O_RDONLY)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "%s: %e", argv[0], r);
-			exit();
+			exit(0);
 		}
 		assert(r==STDIN_FILENO);
 	}
@@ -432,7 +432,7 @@ umain(int argc, char** argv)
 				printf("EXITING\n");
 			if (interactive)
 				printf("\n");
-			exit();	// end of file
+			exit(0);	// end of file
 		}
 		if (debug)
 			printf("LINE: %s\n", buf);
@@ -441,7 +441,7 @@ umain(int argc, char** argv)
 		if (echocmds)
 			printf("# %s\n", buf);
 		if (!strcmp(buf, "exit"))
-			exit();
+			exit(0);
 		if (debug)
 			printf("BEFORE FORK\n");
 		if ((r = fork()) < 0)
@@ -450,7 +450,7 @@ umain(int argc, char** argv)
 			printf("FORK: %d\n", r);
 		if (r == 0) {
 			runcmd(buf);
-			exit();
+			exit(0);
 		} else {
 			if (!strchr(buf, '&'))
 				wait(r);

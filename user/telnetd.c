@@ -72,7 +72,7 @@ close_conn_and_exit(struct telnetd_state *ts)
 				 inet_iptoa(ts->remote_ip),
 				 ts->remote_port);
 
-	exit();
+	exit(0);
 }
 /*---------------------------------------------------------------------------*/
 static int
@@ -250,12 +250,12 @@ telnetd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
   	if ((r = pipe(stdin)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "pipe(): %e\n", r);
-		exit();
+		exit(0);
 	}
   	if ((r = pipe(stdout)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "pipe(): %e\n", r);
-		exit();
+		exit(0);
 	}
 	ts->stdin  = stdin[1];
 	ts->stdout = stdout[0];
@@ -263,7 +263,7 @@ telnetd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
 	if ((r = fork()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "fork(): %e\n", r);
-		exit();
+		exit(0);
 	}
 	if (r == 0)
 	{
@@ -271,64 +271,64 @@ telnetd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
 		if ((r = close(fd[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdin[0], r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(fd[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdin[0], r);
-			exit();
+			exit(0);
 		}
 
 		// Setup std fds
 		if ((r = dup2(stdin[0], STDIN_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2(%d, 0): %e\n", stdin[0], r);
-			exit();
+			exit(0);
 		}
 		if ((r = dup2(stdout[1], STDOUT_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2(%d, 1): %e\n", stdout[1], r);
-			exit();
+			exit(0);
 		}
 		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "dup2(%d, 1): %e\n", STDOUT_FILENO, r);
-			exit();
+			exit(0);
 		}
 
 		// Close original telnetd<->sh fds
 		if ((r = close(stdin[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdin[0], r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(stdin[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdin[1], r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(stdout[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdout[0], r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(stdout[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdout[1], r);
-			exit();
+			exit(0);
 		}
 		// Note: past this point we have only print_c to error to.
 
 		if ((r = spawnl("/sh", "sh", "-i", (char*) 0)) < 0)
 		{
 			printf_c("telnetd: spawn sh: %e\n", r);
-			exit();
+			exit(0);
 		}
 		spawn_child = r;
 
 		close_all();
 		wait(spawn_child);
-		exit();
+		exit(0);
 	}
 	else
 	{
@@ -341,12 +341,12 @@ telnetd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
 		if ((r = close(stdin[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdin[0], r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(stdout[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close(%d): %e\n", stdout[1], r);
-			exit();
+			exit(0);
 		}
 
 		if (display_conns)
@@ -370,7 +370,7 @@ telnetd_listen(void)
 	if ((r = bind_listen(ip_addr_any, 23, &listen_key)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "bind_listen: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	// Accept connections and fork to handle each connection
@@ -379,13 +379,13 @@ telnetd_listen(void)
 		if ((r = accept(listen_key, fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "accept: %e\n", r);
-			exit();
+			exit(0);
 		}
 
 		if ((r = fork()) < 0)
 		{
 			kdprintf(STDERR_FILENO, "fork: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if (r == 0)
 		{
@@ -395,12 +395,12 @@ telnetd_listen(void)
 		if ((r = close(fd[0])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 		if ((r = close(fd[1])) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit();
+			exit(0);
 		}
 	}
 }
@@ -426,7 +426,7 @@ umain(int argc, char **argv)
 	if (argc >= 2 && !strcmp("-h", argv[1]))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	display_conns = !get_arg_idx(argc, (const char**) argv, "-q");

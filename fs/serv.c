@@ -303,7 +303,7 @@ serve_shutdown(envid_t envid)
 	printf("Syncing and shutting down classic filesystem.\n");
 	fs_sync();
 	ipc_send(envid, 0, NULL, 0, NULL);
-	exit();
+	exit(0);
 }
 
 void
@@ -373,7 +373,7 @@ umain(void)
 	if((r = sys_grant_io(0)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "FS: sys_grant_io: %e\n", r);
-		exit();
+		exit(0);
 	}
 
 	serve_init();

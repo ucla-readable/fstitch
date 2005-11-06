@@ -34,7 +34,7 @@ umain(int argc, char **argv)
 			if(f < 0)
 			{
 				kdprintf(STDERR_FILENO, "can't open %s: %e\n", argv[i], f);
-				exit();
+				exit(0);
 			}
 			else
 			{

@@ -33,7 +33,7 @@ static struct telnet_state {
 static void
 close_conn_and_exit(struct telnet_state *ts)
 {
-	exit();
+	exit(0);
 }
 /*---------------------------------------------------------------------------*/
 static int
@@ -178,7 +178,7 @@ telnet_connect(struct ip_addr addr, uint16_t port)
 	if ((r = connect(addr, port, ts->net)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "connect: %e\n", r);
-		exit();
+		exit(0);
 	}
 	printf("Connected.\n");
 	
@@ -227,7 +227,7 @@ umain(int argc, char **argv)
 	if (argc < 3 || (argc >=2 && !strcmp("-h", argv[1])))
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	display_cmds = get_arg_idx(argc, (const char**) argv, "-c");
@@ -239,7 +239,7 @@ umain(int argc, char **argv)
 	if (r < 0)
 	{
 		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", argv[argv_i-1], r);
-		exit();
+		exit(0);
 	}
 
 	u16_t port = strtol(argv[argv_i++], NULL, 10);
@@ -248,7 +248,7 @@ umain(int argc, char **argv)
 	if (!ts)
 	{
 		kdprintf(STDERR_FILENO, "telnet_connect returned NULL\n");
-		exit();
+		exit(0);
 	}
 
 	telnet_poll(ts); // won't return

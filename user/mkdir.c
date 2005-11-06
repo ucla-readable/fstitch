@@ -12,7 +12,7 @@ umain(int argc, char **argv)
 	if(argc < 2)
 	{
 		print_usage(argv[0]);
-		exit();
+		exit(0);
 	}
 
 	int i;
@@ -23,7 +23,7 @@ umain(int argc, char **argv)
 		if((fd = r = open(argv[i], O_CREAT | O_MKDIR)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "open(%s): %e\n", argv[i], r);
-			exit();
+			exit(0);
 		}
 
 		// Ensure the directory was created, in case of buggy fs

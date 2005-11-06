@@ -15,7 +15,7 @@ ls(const char *path, const char *prefix)
 
 	if ((r = stat(path, &st)) < 0) {
 		kdprintf(STDERR_FILENO, "stat %s: %e\n", path, r);
-		exit();
+		exit(0);
 	}
 	if (st.st_isdir && !flag['d'])
 		lsdir(path, prefix);
@@ -34,7 +34,7 @@ lsdir(const char *path, const char *prefix)
 
 	if ((fd = open(path, O_RDONLY)) < 0) {
 		kdprintf(STDERR_FILENO, "open %s: %e", path, fd);
-		exit();
+		exit(0);
 	}
 	for (;;) {
 		r = getdirentries(fd, buf, sizeof(buf), &base);
@@ -73,7 +73,7 @@ static void
 usage(void)
 {
 	kdprintf(1, "usage: ls [-dFl] [file...]\n");
-	exit();
+	exit(0);
 }
 
 void
