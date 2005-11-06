@@ -8,6 +8,9 @@
 #define PTABLE_DOS_EXT_TYPE     0x05
 #define PTABLE_W95_EXT_TYPE     0x0F
 #define PTABLE_LINUX_EXT_TYPE   0x85
+#define PTABLE_FREEBSD_TYPE     0xA5
+#define PTABLE_OPENBSD_TYPE     0xA6
+#define PTABLE_NETBSD_TYPE      0xA9
 
 #define PTABLE_MAGIC		((uint8_t *) "\x55\xAA")
 #define PTABLE_MAGIC_OFFSET	510
