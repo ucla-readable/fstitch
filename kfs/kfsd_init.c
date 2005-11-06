@@ -24,6 +24,7 @@
 #include <kfs/cfs_ipc_serve.h>
 #endif
 #include <kfs/modman.h>
+#include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/debug.h>
@@ -70,6 +71,12 @@ int kfsd_init(void)
 	if((r = modman_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "modman_init: %e\n", r);
+		kfsd_shutdown();
+	}
+
+	if ((r = ipc_serve_init()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "ipc_serve_init: %e\n", r);
 		kfsd_shutdown();
 	}
 
