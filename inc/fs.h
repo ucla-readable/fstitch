@@ -8,6 +8,10 @@
 
 // File nodes (both in-memory and on-disk)
 
+#if (PGSIZE != 4096)
+#error FS designed only with 4kB blocks in mind
+#endif
+
 // Bytes per file system block - same as page size
 #define BLKSIZE		PGSIZE
 #define BLKBITSIZE	(BLKSIZE * 8)
