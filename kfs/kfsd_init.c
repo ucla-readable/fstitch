@@ -1,6 +1,9 @@
-#include <inc/lib.h>
+//#include <inc/lib.h>
+#include <lib/kdprintf.h>
 #include <lib/vector.h>
 #include <lib/partition.h>
+#include <lib/sleep.h>
+#include <assert.h>
 
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable.h>
@@ -10,14 +13,18 @@
 #include <kfs/nbd_bd.h>
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
+#ifdef KUDOS
 #include <kfs/josfs_base.h>
+#endif
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
 #include <kfs/table_classifier_cfs.h>
 #include <kfs/fidprotector_cfs.h>
 #include <kfs/fidcloser_cfs.h>
+#ifdef KUDOS
 #include <kfs/cfs_ipc_serve.h>
+#endif
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
@@ -49,8 +56,10 @@ int kfsd_init(void)
 	vector_t * uhfses = NULL;
 
 	CFS_t * table_class = NULL;
+#ifdef KUDOS
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidcloser = NULL;
+#endif
 	int r;
 
 	if((r = KFS_DEBUG_INIT()) < 0)
@@ -66,11 +75,15 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
+#ifdef KUDOS
 	if (!cfs_ipc_serve_init())
 	{
 		kdprintf(STDERR_FILENO, "cfs_ipc_serve_init failed\n");
 		kfsd_shutdown();
 	}
+#else
+	kdprintf(STDERR_FILENO, "Not starting cfs_ipc_serve: non-kudos targets are not yet supported\n");
+#endif
 
 	if ((r = sched_init()) < 0)
 	{
@@ -111,8 +124,12 @@ int kfsd_init(void)
 	{
 		BD_t * bd;
 
+#ifdef KUDOS
 		if (! (bd = ide_pio_bd(0, 0, 0)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
+#else
+		bd = NULL;
+#endif
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
@@ -138,8 +155,10 @@ int kfsd_init(void)
 
 	if (! (table_class = table_classifier_cfs()) )
 		kfsd_shutdown();
+#ifdef KUDOS
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
+#endif
 #if USE_THIRD_LEG
 	CFS_t * josfscfs = josfs_cfs();
 	r = table_classifier_cfs_add(table_class, "/", josfscfs);
@@ -167,6 +186,7 @@ int kfsd_init(void)
 	if (r < 0)
 		kfsd_shutdown();
 
+#ifdef KUDOS
 	//
 	// fidfairies
 
@@ -177,6 +197,7 @@ int kfsd_init(void)
 	if (! (fidcloser = fidcloser_cfs(get_frontend_cfs())) )
 		kfsd_shutdown();
 	set_frontend_cfs(fidcloser);
+#endif
 
 	return 0;
 }
@@ -185,7 +206,9 @@ int kfsd_init(void)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
+#ifdef KUDOS
 	const bool enable_fsck = 0;
+#endif
 	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
 	uint32_t i;
@@ -248,17 +271,30 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				kfsd_shutdown();
 
 			/* create a cache above the resizer */
+#ifdef KUDOS
 			if (! (cache = wb_cache_bd(resizer, cache_nblks)) )
 				kfsd_shutdown();
+#else
+			cache = NULL;
+#endif
 		}
 		else
 		{
+#ifdef KUDOS
 			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
 				kfsd_shutdown();
+#else
+			cache = partitions[i];
+#endif
 		}
 
+#ifdef KUDOS
 		lfs = josfs_lfs = josfs(cache);
+#else
+		lfs = josfs_lfs = NULL;
+#endif
 
+#ifdef KUDOS
 		if (josfs_lfs && enable_fsck)
 		{
 			printf("Fscking... ");
@@ -270,6 +306,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			else
 				printf("critical error: %e\n", r);
 		}
+#endif
 
 		if (lfs)
 			printf("Using josfs");
@@ -315,8 +352,10 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 	}
 	else
 	{
+#ifdef KUDOS
 		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
 			kfsd_shutdown();
+#endif
 	}
 
 	return bd;

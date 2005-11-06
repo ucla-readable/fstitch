@@ -10,8 +10,6 @@ OBJDIRS += kfs
 #			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/kfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/ipc_serve.o \
-#			$(OBJDIR)/kfs/sched.o \
-#			$(OBJDIR)/kfs/kfsd_init.o \
 #			$(OBJDIR)/kfs/debug.o \
 
 KFSOFILES := \
@@ -37,6 +35,8 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
+			$(OBJDIR)/kfs/sched.o \
+			$(OBJDIR)/kfs/kfsd_init.o \
 			$(OBJDIR)/kfs/kfsd.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a

@@ -1,7 +1,8 @@
-#include <inc/lib.h>
-#include <lib/vector.h>
 #include <inc/error.h>
+#include <lib/vector.h>
+#include <lib/jiffies.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
@@ -20,7 +21,6 @@ typedef struct fn_entry fn_entry_t;
 
 static vector_t * fes = NULL;
 
-
 int sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies)
 {
 	int r;
@@ -33,7 +33,7 @@ int sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies)
 	fe->fn = fn;
 	fe->arg = arg;
 	fe->period = freq_jiffies;
-	fe->next = env->env_jiffies + freq_jiffies;
+	fe->next = jiffy_time() + freq_jiffies;
 
 	r = vector_push_back(fes, fe);
 	if (r < 0)
@@ -88,10 +88,12 @@ void sched_loop(void)
 		int r;
 
 		// Run cvs_ipc_serve each loop (which will sleep for a bit)
+#ifdef KUDOS
 		ipc_serve_run();
+#endif
 
 		// Run other fes scheduled to have run by now
-		cur_ncs = env->env_jiffies;
+		cur_ncs = jiffy_time();
 		fes_size = vector_size(fes);
 		for (i=0; i < fes_size; i++)
 		{
@@ -100,7 +102,7 @@ void sched_loop(void)
 			{
 				fe->fn(fe->arg);
 
-				cur_ncs = env->env_jiffies;
+				cur_ncs = jiffy_time();
 				// Set up the next callback time based on when the timer
 				// should have gone off, and not necessarily when it did
 				fe->next += fe->period;
