@@ -1,3 +1,8 @@
+#include <inc/error.h>
+#include <lib/types.h>
+
+#if defined(KUDOS)
+
 #include <inc/lib.h>
 
 #define TEXT ((uint8_t *) 0xB8000)
@@ -51,3 +56,41 @@ int textbar_init(int use_line)
 	textbar_set_progress(0, 7);
 	return 160;
 }
+
+#elif defined(UNIXUSER)
+
+#include <stdio.h>
+
+static const int textbar_width = 80;
+static int textbar_current = 0;
+static int textbar_line = -1;
+
+int textbar_set_progress(int progress, uint8_t color)
+{
+	if(textbar_line < 0)
+		return -E_INVAL;
+	if(progress < 0 || progress > 160)
+		return -E_INVAL;
+	
+	progress--;
+	for(; textbar_current != textbar_width; ++textbar_current)
+		printf("=");
+	
+	return 0;
+}
+
+int textbar_close(void)
+{
+	return textbar_set_progress(0, 7);
+}
+
+int textbar_init(int use_line)
+{
+	// TODO: return actual terminal width
+	// TODO: support resizing terminals
+	return textbar_width;
+}
+
+#else
+#error Unknown target system
+#endif
