@@ -39,6 +39,8 @@ _panic(const char *file, int line, const char *fmt,...)
 		asm volatile("int3");
 #elif defined(UNIXUSER)
 	assert(0);
+#else
+#error Unknown target system
 #endif
 }
 
