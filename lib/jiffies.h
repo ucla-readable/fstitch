@@ -15,12 +15,20 @@ static __inline int jiffy_time(void)
 }
 
 #elif defined(UNIXUSER)
-#include <sys/timeb.h>
+#include <sys/time.h>
+#include <time.h>
+#include <stdio.h>
+#include <assert.h>
 static __inline int jiffy_time(void)
 {
-	struct timeb t;
-	(void) ftime(&t);
-	return t.time * JIFFIES_PER_SECOND + (t.millitm * 1000) / JIFFIES_PER_SECOND;
+	struct timeval tv;
+	if (gettimeofday(&tv, NULL))
+	{
+		perror("gettimeofday");
+		assert(0);
+	}
+	return tv.tv_sec * JIFFIES_PER_SECOND
+	       + tv.tv_usec * (1000000 / JIFFIES_PER_SECOND);
 }
 
 #else
