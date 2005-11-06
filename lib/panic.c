@@ -3,6 +3,7 @@
 #elif defined(UNIXUSER)
 #include <stdio.h>
 #include <stdarg.h>
+#include <assert.h>
 #else
 #error Unknown target system
 #endif

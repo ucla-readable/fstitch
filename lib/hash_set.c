@@ -1,4 +1,4 @@
-#include <inc/assert.h>
+#include <assert.h>
 #include <inc/error.h>
 #include <inc/config.h>
 #include <stdlib.h>
