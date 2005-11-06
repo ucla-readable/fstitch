@@ -1,7 +1,7 @@
 #include <lib/stdio.h>
 #include <assert.h>
 #include <inc/error.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <lib/memdup.h>
 #include <lib/panic.h>

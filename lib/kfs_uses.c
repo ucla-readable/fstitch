@@ -2,7 +2,7 @@
 #include <lib/vector.h>
 #include <lib/hash_map.h>
 #include <inc/assert.h>
-#include <inc/malloc.h>
+#include <stdlib.h>
 #include <kfs/modman.h>
 #include <inc/kfs_uses.h>
 

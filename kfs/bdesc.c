@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <lib/kdprintf.h>
 #include <inc/error.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <lib/types.h>
 #include <string.h>
 #include <lib/panic.h>

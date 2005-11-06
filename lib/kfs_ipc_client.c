@@ -1,5 +1,5 @@
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <inc/lib.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>

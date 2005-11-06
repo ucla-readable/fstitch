@@ -56,7 +56,7 @@
     don't want to touch unless you are extending or adapting malloc.
 */
 
-#include <inc/malloc.h>
+#include <stdlib.h>
 #include <lib/types.h>
 #include <inc/stdio.h>
 #include <inc/lib.h>

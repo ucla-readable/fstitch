@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <inc/malloc.h>
+#include <stdlib.h>
 #include <inc/error.h>
 #include <lib/vector.h>
 

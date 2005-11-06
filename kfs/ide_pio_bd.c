@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <inc/irq.h>
 #include <inc/x86.h>

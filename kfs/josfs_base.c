@@ -1,6 +1,6 @@
 /* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
 #include <lib/types.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <inc/error.h>
 #include <lib/hash_set.h>

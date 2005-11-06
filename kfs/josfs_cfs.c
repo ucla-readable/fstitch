@@ -1,7 +1,7 @@
 // jos fs server access through the cfs interface.
 // Derived from uhfs.c.
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <inc/lib.h>
 #include <inc/fd.h>
 #include <lib/hash_map.h>

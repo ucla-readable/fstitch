@@ -2,7 +2,7 @@
 // - ls on a directory should also show mounts to names in that directory
 
 
-#include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <inc/error.h>
 #include <lib/stdio.h>

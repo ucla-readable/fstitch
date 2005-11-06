@@ -1,6 +1,6 @@
 #include <assert.h>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <lib/panic.h>
 #include <inc/error.h>
 #include <lib/stdio.h>

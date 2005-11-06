@@ -1,7 +1,7 @@
 #include <inc/lib.h>
 #include <lib/vector.h>
 #include <inc/error.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 #include <kfs/ipc_serve.h>
 #include <kfs/sched.h>

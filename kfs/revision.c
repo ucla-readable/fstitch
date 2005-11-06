@@ -1,7 +1,7 @@
 #include <lib/fixed_max_heap.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>

@@ -1,5 +1,5 @@
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <lib/memdup.h>
 
 #ifndef KUDOS_KERNEL

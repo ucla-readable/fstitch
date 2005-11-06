@@ -1,5 +1,5 @@
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <inc/error.h>
 #include <lib/hash_map.h>
 

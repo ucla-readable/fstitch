@@ -1,5 +1,5 @@
 #include <lib/fixed_max_heap.h>
-#include <inc/malloc.h>
+#include <stdlib.h>
 
 static int parent(int child) {
 	return ((child+1)/2)-1;

@@ -1,7 +1,7 @@
 // Basic string routines.  Not hardware optimized, but not shabby.
 
 #include <inc/string.h>
-#include <inc/malloc.h>
+#include <stdlib.h>
 #include <lib/memdup.h>
 
 int

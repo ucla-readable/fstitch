@@ -6,7 +6,7 @@
 
 #include <inc/lib.h> // for get_pte()
 #include <inc/env.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 #define CFS_IPC_SERVE_DEBUG 0
 

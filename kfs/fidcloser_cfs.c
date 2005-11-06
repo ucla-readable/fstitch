@@ -1,4 +1,4 @@
-#include <malloc.h>
+#include <stdlib.h>
 #include <inc/lib.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>

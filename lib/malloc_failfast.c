@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <inc/malloc.h>
+#include <stdlib.h>
 
 #ifdef USE_FAILFAST_MALLOC /* [ */
 
