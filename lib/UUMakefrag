@@ -38,13 +38,13 @@ LIB_SRCFILES := \
 #			lib/socket.c \
 #			lib/wait.c
 
-#LIB_SRCFILES :=		$(LIB_SRCFILES) \
+LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/sleep.c \
 #			lib/getarg.c \
 #			lib/serial.c \
 #			lib/netclient.c \
 #			lib/hwclock.c \
-#			lib/textbar.c \
-#			lib/sleep.c
+#			lib/textbar.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/vector.c \
