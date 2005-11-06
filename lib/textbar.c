@@ -69,11 +69,10 @@ int textbar_set_progress(int progress, uint8_t color)
 {
 	if(textbar_line < 0)
 		return -E_INVAL;
-	if(progress < 0 || progress > 160)
+	if(progress < 0 || progress > textbar_width)
 		return -E_INVAL;
 	
-	progress--;
-	for(; textbar_current != textbar_width; ++textbar_current)
+	for(; textbar_current < progress; ++textbar_current)
 		printf("=");
 	
 	return 0;
