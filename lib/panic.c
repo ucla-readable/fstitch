@@ -34,7 +34,11 @@ _panic(const char *file, int line, const char *fmt,...)
 	printf_c("\n");
 
 	// Cause a breakpoint exception
+#if defined(KUDOS)	
 	for (;;)
 		asm volatile("int3");
+#elif defined(UNIXUSER)
+	assert(0);
+#endif
 }
 
