@@ -1,7 +1,3 @@
-#ifdef KUDOS
-#include <inc/lib.h> // binaryname
-#endif
-
 #include <inc/error.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +63,7 @@ void kfsd_main(void)
 }
 
 #if defined(KUDOS)
+#include <inc/lib.h> // binaryname
 void umain(int argc, char * argv[])
 {
 	int r, i;
