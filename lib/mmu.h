@@ -10,7 +10,7 @@
 #include <asm/page.h>
 #define PGSIZE PAGE_SIZE
 #elif defined(__MACH__)
-#include <sys/vm.h>
+#include <mach/machine/vm_param.h>
 #define PGSIZE PAGE_SIZE
 #else
 #warning Assuming 4KB page size
