@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_JOURNAL_BD_H
 #define __KUDOS_KFS_JOURNAL_BD_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 #include <kfs/bd.h>
 
 /* journal_bd modules are initially created as passthrough, read-only devices */
