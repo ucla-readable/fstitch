@@ -3,6 +3,7 @@
 #elif defined(UNIXUSER)
 #include <unistd.h>
 #endif
+#include <lib/types.h>
 
 int
 sleepj(int32_t jiffies)
