@@ -1,16 +1,11 @@
+#include <lib/types.h>
+#include <lib/jiffies.h>
+
 #if defined(KUDOS)
 #include <inc/lib.h>
-#elif defined(UNIXUSER)
-#include <unistd.h>
-#endif
-#include <lib/types.h>
-
 int
 sleepj(int32_t jiffies)
 {
-#if defined(UNIXUSER)
-	return usleep(jiffies * 10000);
-#elif defined(KUDOS)
 	const int32_t wakeup = jiffies + env->env_jiffies;
 
 	if (jiffies < 0)
@@ -22,5 +17,18 @@ sleepj(int32_t jiffies)
 			return 0;
 		sys_yield();
 	}
-#endif
 }
+
+#elif defined(UNIXUSER)
+#include <unistd.h>
+int
+sleepj(int32_t jiffies)
+{
+	// TODO: use nanosleep to avoid unix signal interactions
+	return usleep(jiffies * (1000000 / JIFFIES_PER_SECOND));
+}
+
+#else
+#error Unknown target system
+#endif
+

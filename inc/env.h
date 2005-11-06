@@ -40,9 +40,6 @@ typedef int32_t envid_t;
 #define ENV_MAX_PRIORITY	63
 #define ENV_DEFAULT_PRIORITY	(ENV_MAX_PRIORITY / 2)
 
-#define HZ			100
-#define JIFFIES_PER_SECOND	HZ
-
 struct Env {
 	struct Trapframe env_tf;	// Saved registers
 	LIST_ENTRY(Env) env_link;	// Free list link pointers
@@ -82,5 +79,7 @@ struct Env {
 	size_t      symstrtbl_size;
 #endif
 };
+
+#include <lib/jiffies.h>
 
 #endif /* !KUDOS_INC_ENV_H */
