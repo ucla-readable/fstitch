@@ -1,5 +1,7 @@
 #include <lib/fixed_max_heap.h>
+#include <lib/types.h>
 #include <stdlib.h>
+#include <assert.h>
 
 static int parent(int child) {
 	return ((child+1)/2)-1;

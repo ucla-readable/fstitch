@@ -39,8 +39,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/kfsd.o
 
-$(OBJDIR)/kfs/kfsd: $(KFSOFILES)
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(LD) -o $@ $(KFSOFILES) \
-		-L$(OBJDIR)/lib -luser $(GCC_LIB)
+	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -luser

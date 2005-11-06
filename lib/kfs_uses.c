@@ -1,7 +1,8 @@
-#include <inc/string.h>
+#include <string.h>
+#include <lib/kdprintf.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
-#include <inc/assert.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <kfs/modman.h>
 #include <inc/kfs_uses.h>

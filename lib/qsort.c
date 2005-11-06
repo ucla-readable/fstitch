@@ -1,4 +1,4 @@
-#include <inc/lib.h>
+#include <stdlib.h>
 
 #define _PARAMS(protos) protos
 #define _DEFUN(fn, types, protos) fn(protos)

@@ -53,10 +53,11 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/fixed_max_heap.c \
 			lib/qsort.c
 
+#			lib/kpl.c \
+#			lib/cfs_ipc_client.c \
+#			lib/kfs_ipc_client.c \
+
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
-			lib/kpl.c \
-			lib/cfs_ipc_client.c \
-			lib/kfs_ipc_client.c \
 			lib/kfs_uses.c
 
 #include lib/net/Makefrag

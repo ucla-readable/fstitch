@@ -1,7 +1,18 @@
-
+#if defined(KUDOS)
 #include <inc/lib.h>
+#elif defined(UNIXUSER)
+#include <stdio.h>
+#include <stdarg.h>
+#else
+#error Unknown target system
+#endif
 
 char *argv0;
+
+#ifdef UNIXUSER
+#define printf_c printf
+const char binaryname[] = "?";
+#endif
 
 /*
  * Panic is called on unresolvable fatal errors.
@@ -17,25 +28,10 @@ _panic(const char *file, int line, const char *fmt,...)
 
 	// Print the panic message
 	if (argv0)
-#ifdef KUDOS
-		printf_c(
-#else
-		printf(
-#endif
-			"%s: ", argv0);
-#ifdef KUDOS
-	printf_c(
-#else
-	printf(
-#endif
-		"user panic in %s at %s:%d: ", binaryname, file, line);
+		printf_c("%s: ", argv0);
+	printf_c("user panic in %s at %s:%d: ", binaryname, file, line);
 	vprintf(fmt, ap);
-#ifdef KUDOS
-	printf_c(
-#else
-	printf(
-#endif
-		"\n");
+	printf_c("\n");
 
 	// Cause a breakpoint exception
 	for (;;)
