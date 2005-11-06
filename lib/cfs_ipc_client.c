@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <inc/serial_cfs.h>
+#include <lib/serial_cfs.h>
 #include <inc/cfs_ipc_client.h>
 
 static const char kfsd_name_sh[] = "/kfsd";

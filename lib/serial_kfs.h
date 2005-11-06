@@ -1,8 +1,8 @@
-#ifndef __KUDOS_INC_SERIAL_KFS_H
-#define __KUDOS_INC_SERIAL_KFS_H
+#ifndef __KUDOS_LIB_SERIAL_KFS_H
+#define __KUDOS_LIB_SERIAL_KFS_H
 
-#include <inc/types.h>
-#include <inc/mmu.h>
+#include <lib/types.h>
+#include <lib/mmu.h>
 
 #define SKFS_VAL 2
 
@@ -314,4 +314,4 @@ typedef struct {
 	char file[100];
 } Skfs_perf_test_t;
 
-#endif // __KUDOS_INC_SERIAL_KFS_H
+#endif // __KUDOS_LIB_SERIAL_KFS_H

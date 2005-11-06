@@ -1,15 +1,19 @@
+#include <lib/stdio.h>
+
 #include <kfs/kfsd.h>
 #include <kfs/ipc_serve.h>
-#include <inc/serial_cfs.h>
-#include <inc/serial_kfs.h>
-#include <kfs/cfs_ipc_serve.h>
-#include <kfs/kfs_ipc_serve.h>
+#include <lib/serial_cfs.h>
+#include <lib/serial_kfs.h>
 
-#include <inc/env.h>
-#include <inc/lib.h> // for get_pte()
+#include <lib/jiffies.h>
 
 #define IPC_RECV_TIMEOUT HZ
 
+#if defined(KUDOS)
+
+#include <inc/lib.h> // for get_pte()
+#include <kfs/cfs_ipc_serve.h>
+#include <kfs/kfs_ipc_serve.h>
 
 int ipc_serve_init(void)
 {
@@ -52,3 +56,20 @@ void ipc_serve_run(void)
 	if ((r = sys_page_unmap(0, (void*) IPCSERVE_REQVA)) < 0)
 		panic("sys_page_unmap: %e", r);
 }
+
+#elif defined(UNIXUSER)
+
+int ipc_serve_init(void)
+{
+	// TODO: implement this module. Perhaps use SysV IPC messages?
+	kdprintf(STDERR_FILENO, "ipc_serve not yet implmented for unix-user\n");
+	return 0;
+}
+
+void ipc_serve_run(void)
+{
+}
+
+#else
+#error Unknown target system
+#endif

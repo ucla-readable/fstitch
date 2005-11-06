@@ -88,9 +88,7 @@ void sched_loop(void)
 		int r;
 
 		// Run cvs_ipc_serve each loop (which will sleep for a bit)
-#ifdef KUDOS
 		ipc_serve_run();
-#endif
 
 		// Run other fes scheduled to have run by now
 		cur_ncs = jiffy_time();

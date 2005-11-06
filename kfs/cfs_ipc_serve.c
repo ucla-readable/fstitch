@@ -1,4 +1,4 @@
-#include <inc/serial_cfs.h>
+#include <lib/serial_cfs.h>
 #include <kfs/cfs.h>
 #include <kfs/kfsd.h>
 #include <kfs/ipc_serve.h> // for IPCSERVE_REQVA

@@ -1,8 +1,8 @@
-#ifndef __KUDOS_INC_SERIAL_CFS_H
-#define __KUDOS_INC_SERIAL_CFS_H
+#ifndef __KUDOS_LIB_SERIAL_CFS_H
+#define __KUDOS_LIB_SERIAL_CFS_H
 
-#include <inc/types.h>
-#include <inc/mmu.h>
+#include <lib/types.h>
+#include <lib/mmu.h>
 
 #define SCFS_VAL 1
 
@@ -156,4 +156,4 @@ struct Scfs_metadata {
 	uint8_t data[PGSIZE - sizeof(size_t) - sizeof(uint32_t)];
 };
 
-#endif // not __KUDOS_INC_SERIAL_CFS_H
+#endif // not __KUDOS_LIB_SERIAL_CFS_H

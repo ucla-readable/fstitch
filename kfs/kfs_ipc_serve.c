@@ -2,7 +2,7 @@
 #include <lib/stdio.h>
 
 #include <kfs/modman.h>
-#include <inc/serial_kfs.h>
+#include <lib/serial_kfs.h>
 #include <kfs/kfs_ipc_serve.h>
 
 #define KIS_DEBUG 0

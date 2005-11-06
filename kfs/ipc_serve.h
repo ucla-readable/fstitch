@@ -1,6 +1,7 @@
 #ifndef __KUDOS_KFS_IPC_SERVE_H
 #define __KUDOS_KFS_IPC_SERVE_H
 
+#include <lib/mmu.h>
 #include <kfs/fidcloser_cfs.h>
 
 // VA at which to receive page mappings containing client reqs.

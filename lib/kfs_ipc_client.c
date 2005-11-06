@@ -5,7 +5,7 @@
 #include <lib/hash_map.h>
 
 #include <inc/cfs_ipc_client.h>
-#include <inc/serial_kfs.h>
+#include <lib/serial_kfs.h>
 #include <inc/kfs_ipc_client.h>
 
 #include <kfs/cfs.h>

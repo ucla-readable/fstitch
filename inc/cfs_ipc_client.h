@@ -1,7 +1,7 @@
 #ifndef _CFS_IPC_CLIENT_H_
 #define _CFS_IPC_CLIENT_H_
 
-#include <inc/serial_cfs.h>
+#include <lib/serial_cfs.h>
 #include <inc/env.h>
 
 envid_t find_fs(void);
