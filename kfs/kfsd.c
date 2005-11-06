@@ -1,7 +1,16 @@
-#include <inc/lib.h>
+#ifdef KUDOS
+#include <inc/lib.h> // binaryname
+#endif
+
 #include <inc/error.h>
-#include <inc/mmu.h>
+#include <stdlib.h>
+#include <string.h>
+#include <lib/mmu.h>
 #include <lib/stdio.h>
+
+#ifdef UNIXUSER
+#define exit() exit(0)
+#endif
 
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
@@ -49,7 +58,19 @@ void kfsd_shutdown(void)
 	exit();
 }
 
+void kfsd_main(void)
+{
+	int r;
 
+	memset(module_shutdowns, 0, sizeof(module_shutdowns));
+
+	if ((r = kfsd_init()) < 0)
+		exit();
+
+	sched_loop();
+}
+
+#if defined(KUDOS)
 void umain(int argc, char * argv[])
 {
 	int r, i;
@@ -75,8 +96,6 @@ void umain(int argc, char * argv[])
 		return;
 	}*/
 
-	memset(module_shutdowns, 0, sizeof(module_shutdowns));
-
 	// Allocate more pages for the stack because we sometimes need it (for chdesc graph traversal)
 	for(i = 2; i != 33; i++)
 	{
@@ -84,8 +103,16 @@ void umain(int argc, char * argv[])
 		assert(r >= 0);
 	}
 
-	if ((r = kfsd_init()) < 0)
-		exit();
-
-	sched_loop();
+	kfsd_main();
 }
+
+#elif defined(UNIXUSER)
+int main(int argc, char * argv[])
+{
+	kfsd_main();
+	return 0;
+}
+
+#else
+#error Unknown target system
+#endif

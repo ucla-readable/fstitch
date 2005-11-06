@@ -11,6 +11,7 @@
 #include <inc/mmu.h>
 #include <inc/stdio.h>
 #include <inc/stdarg.h>
+#include <inc/stdlib.h>
 #include <inc/string.h>
 #include <inc/error.h>
 #include <inc/assert.h>
@@ -28,7 +29,6 @@ extern char* binaryname;
 extern const struct Env* env;
 extern const struct Env envs[NENV];
 extern const struct Page pages[];
-void	exit(void);
 
 // pgfault.c
 void	set_pgfault_handler(void (*handler)(void* addr, uint32_t err, uint32_t esp, uint32_t eflags, uint32_t eip));
