@@ -3,10 +3,12 @@
 #include <lib/vector.h>
 #include <lib/partition.h>
 #include <lib/sleep.h>
+#include <lib/disklabel.h>
 #include <assert.h>
 
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable.h>
+#include <kfs/bsd_ptable.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
@@ -34,12 +36,21 @@
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
+void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
 static const char * fspaths[] = {
 #if !USE_THIRD_LEG
 "/",
 #endif
 "/k0", "/k1", "/k2", "/k3"};
+
+struct kfsd_partition {
+	BD_t * bd;
+	uint16_t type;
+	uint16_t subtype;
+	char description[32];
+};
+typedef struct kfsd_partition kfsd_partition_t;
 
 //#define USE_MIRROR
 #define USE_WB_CACHE
@@ -213,64 +224,113 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
 	const bool enable_fsck = 0;
 	void * ptbl = NULL;
-	BD_t * partitions[4] = {NULL};
+	void * bsdtbl = NULL;
+	vector_t * partitions = NULL;
+	kfsd_partition_t * part = NULL;
 	uint32_t i;
+
+	if (! (partitions = vector_create()) )
+	{
+		kdprintf(STDERR_FILENO, "OOM, vector_create\n");
+		kfsd_shutdown();
+	}
 
 #ifdef USE_MIRROR
 	bd = mirror_bd(bd, NULL, 4);
 #endif
 
-	/* discover partitions */
+	/* discover pc partitions */
 	ptbl = pc_ptable_init(bd);
 	if (ptbl)
 	{
 		uint32_t max = pc_ptable_count(ptbl);
-		printf("Found %d partitions.\n", max);
+		printf("Found %d pc partitions.\n", max);
 		for (i = 1; i <= max; i++)
 		{
 			uint8_t type = pc_ptable_type(ptbl, i);
 			printf("Partition %d has type %02x\n", i, type);
 			if (type == PTABLE_KUDOS_TYPE)
 			{
-				partitions[i-1] = pc_ptable_bd(ptbl, i);
-				if (partitions[i-1])
-					OBJFLAGS(partitions[i-1]) |= OBJ_PERSISTENT;
+				if (! (part = malloc(sizeof(kfsd_partition_t))) )
+				{
+					kdprintf(STDERR_FILENO, "OOM, malloc\n");
+					kfsd_shutdown();
+				}
+				part->bd = pc_ptable_bd(ptbl, i);
+				if (part->bd)
+				{
+					OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
+					part->type = PTABLE_KUDOS_TYPE;
+					part->subtype = 0;
+					snprintf(part->description, 32, "Partition %d", i);
+					if (vector_push_back(partitions, part))
+					{
+						kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
+						kfsd_shutdown();
+					}
+				}
+			}
+			else if (type == PTABLE_FREEBSD_TYPE)
+			{
+				BD_t * tmppart;
+				tmppart = pc_ptable_bd(ptbl, i);
+				if (tmppart)
+				{
+					OBJFLAGS(tmppart) |= OBJ_PERSISTENT;
+					bsdtbl = bsd_ptable_init(tmppart);
+					if (bsdtbl)
+					{
+						handle_bsd_partitions(bsdtbl, partitions);
+					}
+					bsd_ptable_free(bsdtbl);
+				}
 			}
 		}
 		pc_ptable_free(ptbl);
-			
-		if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
+
+		if (vector_size(partitions) <= 0)
 		{
-			printf("No KudOS partition found!\n");
+			printf("No partition found!\n");
 			//kfsd_shutdown();
 		}
 	}
 	else
 	{
 		printf("Using whole disk.\n");
-		partitions[0] = bd;
+		if (! (part = malloc(sizeof(kfsd_partition_t))) )
+		{
+			kdprintf(STDERR_FILENO, "OOM, malloc\n");
+			kfsd_shutdown();
+		}
+		// Using type 0, subtype 1 to represent whole disk
+		part->bd = bd;
+		part->type = 0;
+		part->subtype = 1;
+		snprintf(part->description, 32, "Wholedisk");
+		if (vector_push_back(partitions, part))
+		{
+			kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
+			kfsd_shutdown();
+		}
 	}
 
-	// HACK
-	if (!partitions[0] && !partitions[1] && !partitions[2] && !partitions[3])
-		partitions[0] = bd;
-
 	/* setup each partition's cache, basefs, and uhfs */
-	for (i=0; i < 4; i++)
+	for (i = 0; i < vector_size(partitions); i++)
 	{
 		BD_t * cache;
 		BD_t * resizer;
 		LFS_t * josfs_lfs;
-		LFS_t * lfs;
+		LFS_t * lfs = NULL;
 		CFS_t * u;
 			
-		if (!partitions[i])
+		part = vector_elt(partitions, i);
+		if (!part)
 			continue;
 
-		if (4096 != CALL(partitions[i], get_atomicsize))
+		if (4096 != CALL(part->bd, get_atomicsize))
 		{
 			/* create a resizer */
-			if (! (resizer = block_resizer_bd(partitions[i], 4096)) )
+			if (! (resizer = block_resizer_bd(part->bd, 4096)) )
 				kfsd_shutdown();
 
 			/* create a cache above the resizer */
@@ -279,38 +339,42 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		}
 		else
 		{
-			if (! (cache = wb_cache_bd(partitions[i], cache_nblks)) )
+			if (! (cache = wb_cache_bd(part->bd, cache_nblks)) )
 				kfsd_shutdown();
 		}
 
-		lfs = josfs_lfs = josfs(cache);
-
-		if (josfs_lfs && enable_fsck)
+		if (part->type == PTABLE_KUDOS_TYPE)
 		{
-			printf("Fscking... ");
-			int r = josfs_fsck(josfs_lfs);
-			if (r == 0)
-				printf("done.\n");
-			else if (r > 0)
-				printf("found %d errors\n", r);
+			lfs = josfs_lfs = josfs(cache);
+
+			if (josfs_lfs && enable_fsck)
+			{
+				printf("Fscking... ");
+				int r = josfs_fsck(josfs_lfs);
+				if (r == 0)
+					printf("done.\n");
+				else if (r > 0)
+					printf("found %d errors\n", r);
+				else
+					printf("critical error: %e\n", r);
+			}
+
+			if (lfs)
+				printf("Using josfs on %s\n", part->description);
+			else if ((lfs = wholedisk(cache)))
+				printf("Using wholedisk on %s\n", part->description);
 			else
-				printf("critical error: %e\n", r);
+			{
+				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
+				kfsd_shutdown();
+			}
 		}
-
-		if (lfs)
-			printf("Using josfs");
-		else if ((lfs = wholedisk(cache)))
-			printf("Using wholedisk");
-		else
+		else if (part->type == PTABLE_FREEBSD_TYPE)
 		{
-			kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
-			kfsd_shutdown();
+			// TODO
+			printf("Can't handle UFS right now\n");
+			continue;
 		}
-
-		if (i == 0 && partitions[0] == bd)
-			printf(" on disk.\n");
-		else
-			printf(" on partition %d.\n", i);
 
 		if (! (u = uhfs(lfs)) )
 		{
@@ -323,6 +387,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			kfsd_shutdown();
 		}
 	}
+
+	vector_destroy(partitions);
+	partitions = NULL;
 
 	return 0;
 }
@@ -346,4 +413,37 @@ BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
 	}
 
 	return bd;
+}
+
+void handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
+{
+	uint32_t j, bsd_max = bsd_ptable_count(bsdtbl);
+	uint8_t fstype;
+	kfsd_partition_t * part = NULL;
+
+	for (j = 1; j <= bsd_max; j++)
+	{
+		fstype = bsd_ptable_type(bsdtbl, j);
+		if (fstype != BSDLABEL_FS_UNUSED)
+		{
+			if (! (part = malloc(sizeof(kfsd_partition_t))) )
+			{
+				kdprintf(STDERR_FILENO, "OOM, malloc\n");
+				kfsd_shutdown();
+			}
+			part->bd = bsd_ptable_bd(bsdtbl, j);
+			if (part->bd)
+			{
+				OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
+				part->type = PTABLE_FREEBSD_TYPE;
+				part->subtype = fstype;
+				snprintf(part->description, 32, "BSD Partition %d", j);
+				if (vector_push_back(partitions, part))
+				{
+					kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
+					kfsd_shutdown();
+				}
+			}
+		}
+	}
 }
