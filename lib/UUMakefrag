@@ -28,10 +28,10 @@ LIB_SRCFILES := \
 #			lib/ipc.c \
 #			lib/spawn.c
 
-#LIB_SRCFILES :=		$(LIB_SRCFILES) \
+LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/kdprintf.c \
 #			lib/fd.c \
 #			lib/file.c \
-#			lib/kdprintf.c \
 #			lib/fsipc.c \
 #			lib/pageref.c \
 #			lib/pipe.c \
