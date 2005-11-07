@@ -52,8 +52,8 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/hash_map.c \
 			lib/hash_set.c \
 			lib/fixed_max_heap.c \
-			lib/qsort.c
 
+#			lib/qsort.c
 #			lib/kpl.c \
 #			lib/cfs_ipc_client.c \
 #			lib/kfs_ipc_client.c \
