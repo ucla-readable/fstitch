@@ -10,11 +10,12 @@
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kudos
 UTILDIR := $(BASE_OBJDIR)/util
+GCCCONF := conf/Kgcc.mk
 
 ifdef GCCPREFIX
 SETTINGGCCPREFIX := true
 else
--include conf/gcc.mk
+-include $(GCCCONF)
 endif
 
 ifdef LAB
@@ -227,25 +228,25 @@ TAGS: $(TAGDEPS)
 
 
 # try to infer the correct GCCPREFIX
-conf/gcc.mk:
+$(GCCCONF):
 	@if i386-jos-elf-objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
-	then echo 'GCCPREFIX=i386-jos-elf-' >conf/gcc.mk; \
+	then echo 'GCCPREFIX=i386-jos-elf-' >$(GCCCONF); \
 	elif objdump -i 2>&1 | grep '^elf32-i386$$' >/dev/null 2>&1; \
-	then echo 'GCCPREFIX=' >conf/gcc.mk; \
+	then echo 'GCCPREFIX=' >$(GCCCONF); \
 	else echo "***" 1>&2; \
 	echo "*** Error: Couldn't find an i386-*-elf version of GCC/binutils." 1>&2; \
 	echo "*** Is the directory with i386-jos-elf-gcc in your PATH?" 1>&2; \
 	echo "*** If your i386-*-elf toolchain is installed with a command" 1>&2; \
 	echo "*** prefix other than 'i386-jos-elf-', set your GCCPREFIX" 1>&2; \
 	echo "*** environment variable to that prefix and run 'make' again." 1>&2; \
-	echo "*** To turn off this error, run 'echo GCCPREFIX= >conf/gcc.mk'." 1>&2; \
+	echo "*** To turn off this error, run 'echo GCCPREFIX= >$(GCCCONF)'." 1>&2; \
 	echo "***" 1>&2; exit 1; fi
-	@f=`grep GCCPREFIX conf/gcc.mk | sed 's/.*=//'`; if echo $$f | grep '^[12]\.' >/dev/null 2>&1; then echo "***" 1>&2; \
+	@f=`grep GCCPREFIX $(GCCCONF) | sed 's/.*=//'`; if echo $$f | grep '^[12]\.' >/dev/null 2>&1; then echo "***" 1>&2; \
 	echo "*** Error: Your gcc compiler is too old." 1>&2; \
 	echo "*** The labs will only work with gcc-3.0 or later, and are only" 1>&2; \
 	echo "*** tested on gcc-3.3 and later." 1>&2; \
 	echo "***" 1>&2; exit 1; fi
-	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>conf/gcc.mk; fi
+	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>$(GCCCONF); fi
 
 
 # Include KMakefrags for subdirectories
@@ -263,13 +264,13 @@ fsclean:
 	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
 
 clean:
-	rm -rf $(BASE_OBJDIR) fs/.journal kern/appkernbin.c fsformat.d conf/gcc.mk tags TAGS
+	rm -rf $(BASE_OBJDIR) fs/.journal kern/appkernbin.c fsformat.d $(GCCCONF) tags TAGS
 
 realclean: clean
 	rm -rf lab$(LAB).tar.gz
 
 distclean: realclean
-	rm -rf conf/gcc.mk
+	rm -rf $(GCCCONF)
 
 
 # This magic automatically generates makefile dependencies

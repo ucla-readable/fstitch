@@ -10,11 +10,12 @@
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/unix-user
 UTILDIR := $(BASE_OBJDIR)/util
+GCCCONF := conf/UUgcc.mk
 
 ifdef GCCPREFIX
 SETTINGGCCPREFIX := true
 else
--include conf/gcc.mk
+-include $(GCCCONF)
 endif
 
 ifdef LAB
@@ -149,14 +150,14 @@ TAGS: $(TAGDEPS)
 
 
 # try to infer the correct GCCPREFIX
-conf/gcc.mk:
-	echo 'GCCPREFIX=' >conf/gcc.mk
-	@f=`grep GCCPREFIX conf/gcc.mk | sed 's/.*=//'`; if echo $$f | grep '^[12]\.' >/dev/null 2>&1; then echo "***" 1>&2; \
+$(GCCCONF):
+	echo 'GCCPREFIX=' >$(GCCCONF)
+	@f=`grep GCCPREFIX $(GCCCONF) | sed 's/.*=//'`; if echo $$f | grep '^[12]\.' >/dev/null 2>&1; then echo "***" 1>&2; \
 	echo "*** Error: Your gcc compiler is too old." 1>&2; \
 	echo "*** The labs will only work with gcc-3.0 or later, and are only" 1>&2; \
 	echo "*** tested on gcc-3.3 and later." 1>&2; \
 	echo "***" 1>&2; exit 1; fi
-	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>conf/gcc.mk; fi
+	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>$(GCCCONF); fi
 
 
 # Include UUMakefrags for subdirectories
@@ -173,13 +174,13 @@ fsclean:
 	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
 
 clean:
-	rm -rf $(BASE_OBJDIR) fs/.journal fsformat.d conf/gcc.mk tags TAGS
+	rm -rf $(BASE_OBJDIR) fs/.journal fsformat.d $(GCCCONF) tags TAGS
 
 realclean: clean
 	rm -rf lab$(LAB).tar.gz
 
 distclean: realclean
-	rm -rf conf/gcc.mk
+	rm -rf $(GCCCONF)
 
 
 # This magic automatically generates makefile dependencies
