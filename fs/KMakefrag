@@ -32,6 +32,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/knbdd \
 			$(OBJDIR)/user/ls \
 			$(OBJDIR)/user/lsfd \
+			$(OBJDIR)/user/maddec \
 			$(OBJDIR)/user/mario \
 			$(OBJDIR)/user/md5sum \
 			$(OBJDIR)/user/mirror \
@@ -61,6 +62,7 @@ FSIMGTXTFILES :=	fs/.journal \
 			fs/404.html \
 			fs/bomb.img \
 			fs/favicon.ico \
+			fs/foo.mp3 \
 			fs/goomba.spr \
 			fs/index.html \
 			fs/indy.0 \

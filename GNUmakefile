@@ -191,6 +191,11 @@ $(OBJDIR)/lib/net/%.o: lib/net/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
+$(OBJDIR)/lib/%.o: lib/libmad/%.c
+	@echo + cc[LIBMAD] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+
 $(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
