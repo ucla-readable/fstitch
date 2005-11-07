@@ -285,6 +285,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 					bsd_ptable_free(bsdtbl);
 				}
 			}
+			else {
+				printf("Unknown partition type %x\n", type);
+			}
 		}
 		pc_ptable_free(ptbl);
 
@@ -373,6 +376,11 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		{
 			// TODO
 			printf("Can't handle UFS right now\n");
+			continue;
+		}
+		else
+		{
+			printf("Unknown partition type %x\n", part->type);
 			continue;
 		}
 
