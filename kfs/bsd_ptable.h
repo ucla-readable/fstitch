@@ -4,6 +4,9 @@
 #include <lib/types.h>
 #include <kfs/bd.h>
 
+#define  DKTYPENAMES
+#define  FSTYPENAMES
+
 void * bsd_ptable_init(BD_t * bd);
 int bsd_ptable_count(void * info);
 uint8_t bsd_ptable_type(void * info, int index);

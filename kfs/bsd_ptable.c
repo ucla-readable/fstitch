@@ -1,14 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <lib/types.h>
-#include <lib/disklabel.h>
-#include <lib/vector.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/partition_bd.h>
 #include <kfs/bsd_ptable.h>
+
+#include <lib/types.h>
+#include <lib/disklabel.h>
+#include <lib/vector.h>
+
 
 struct bsdpart {
 	uint32_t start, length;
@@ -113,13 +115,13 @@ void * bsd_ptable_init(BD_t * bd)
 		}
 		if (label->d_partitions[i].p_offset - offset < 0)
 		{
-			printf("Partition %d has an invalid offset!\n", i);
+			printf("BSD Partition %d has an invalid offset!\n", i);
 			goto bsd_init_error;
 		}
 		if (label->d_partitions[i].p_offset - offset +
 				label->d_partitions[i].p_size > maxblocks)
 		{
-			printf("Partition %d is too big!\n", i);
+			printf("BSD Partition %d is too big!\n", i);
 			goto bsd_init_error;
 		}
 		if (label->d_partitions[i].p_fstype >= BSDLABEL_FSMAXTYPES)
@@ -128,7 +130,7 @@ void * bsd_ptable_init(BD_t * bd)
 		info->parts[i].start = label->d_partitions[i].p_offset - offset;
 		info->parts[i].length = label->d_partitions[i].p_size;
 		info->parts[i].type = label->d_partitions[i].p_fstype;
-		printf("Partition %d has %d blocks, type: %s\n", i,
+		printf("BSD Partition %d has %d blocks, type: %s\n", i,
 				info->parts[i].length, fstypenames[info->parts[i].type]);
 	}
 

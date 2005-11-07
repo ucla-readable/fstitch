@@ -116,6 +116,7 @@ struct disklabel {
 #define BSDLABEL_DTYPE_VINUM	     12 	     /* vinum volume */
 #define BSDLABEL_DTYPE_DOC2K	     13 	     /* Msys DiskOnChip */
 
+#ifdef DKTYPENAMES
 static char *dktypenames[] = {
 	"unknown",
 	"SMD",
@@ -134,6 +135,7 @@ static char *dktypenames[] = {
 	NULL
 };
 #define BSDLABEL_DKMAXTYPES  (sizeof(dktypenames) / sizeof(dktypenames[0]) - 1)
+#endif
 
 /*
  * Filesystem type and version.
@@ -156,6 +158,7 @@ static char *dktypenames[] = {
 #define BSDLABEL_FS_BOOT       13    /* partition contains bootstrap */
 #define BSDLABEL_FS_VINUM      14    /* Vinum drive */
 
+#ifdef  FSTYPENAMES
 static char *fstypenames[] = {
 	"unused",
 	"swap",
@@ -175,6 +178,7 @@ static char *fstypenames[] = {
 	NULL
 };
 #define BSDLABEL_FSMAXTYPES  (sizeof(fstypenames) / sizeof(fstypenames[0]) - 1)
+#endif
 
 /*
  * flags shared by various drives:
