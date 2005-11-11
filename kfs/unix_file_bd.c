@@ -100,10 +100,10 @@ unix_file_bd_read_block(BD_t * object, uint32_t number)
 	
 	seeked = lseek(info->fd, number * info->blocksize, SEEK_SET);
 	if (seeked != number * info->blocksize)
-   {
-      perror("lseek");
-      assert(0);
-   }
+	{
+		perror("lseek");
+		assert(0);
+	}
 
 	r = read(info->fd, ret->ddesc->data, info->blocksize);
 	if (r != info->blocksize)
