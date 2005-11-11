@@ -84,6 +84,7 @@ unix_file_bd_read_block(BD_t * object, uint32_t number)
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	bdesc_t * ret;
 	int r;
+	off_t seeked;
 
 	if (number >= info->blockcount)
 		return NULL;
@@ -97,9 +98,20 @@ unix_file_bd_read_block(BD_t * object, uint32_t number)
 		return NULL;
 	bdesc_autorelease(ret);
 	
-	lseek(info->fd, number * info->blocksize, SEEK_SET);
+	seeked = lseek(info->fd, number * info->blocksize, SEEK_SET);
+	if (seeked != number * info->blocksize)
+   {
+      perror("lseek");
+      assert(0);
+   }
+
 	r = read(info->fd, ret->ddesc->data, info->blocksize);
-	assert(r == info->blocksize);
+	if (r != info->blocksize)
+	{
+		if (r < 0)
+			perror("read");
+		assert(0);
+	}
 
 	r = blockman_managed_add(info->blockman, ret);
 	if (r < 0)
@@ -132,6 +144,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	int r;
+	off_t seeked;
 	
 	if(block->ddesc->length != info->blocksize) {
 		panic("wrote block with bad length\n");
@@ -148,8 +161,17 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	}
 
-	lseek(info->fd, block->number * info->blocksize, SEEK_SET);
-	write(info->fd, block->ddesc->data, info->blocksize);
+	seeked = lseek(info->fd, block->number * info->blocksize, SEEK_SET);
+	if (seeked != block->number * info->blocksize)
+	{
+		perror("lseek");
+		assert(0);
+	}
+	if (write(info->fd, block->ddesc->data, info->blocksize) != info->blocksize)
+	{
+		perror("write");
+		assert(0);
+	}
 
 	r = revision_tail_acknowledge(block, object);
 	if (r != 0) {
@@ -168,7 +190,11 @@ static int
 unix_file_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
-	assert(fsync(info->fd) == 0);
+	if (fsync(info->fd))
+	{
+		perror("fsync");
+		assert(0);
+	}
 	return 0;
 }
 
@@ -213,6 +239,7 @@ unix_file_bd(char *fname, uint32_t blocks, uint16_t blocksize)
 	
 	r = stat(fname, &sb);
 	if (r == -1) {
+		perror("stat");
 		panic("unable to stat %s\n", fname);
 	}
 	if (sb.st_size != (blocks * blocksize)) {
