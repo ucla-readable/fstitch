@@ -182,6 +182,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
+#warning From man 2 sync:
 #warning Note that while fsync() will flush all data from the host to the
 #warning drive (i.e. the "permanent storage device"), the drive itself may
 #warning not physically write the data to the platters for quite some time
