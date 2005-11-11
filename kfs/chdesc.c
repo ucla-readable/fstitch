@@ -232,9 +232,32 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return chdesc_overlap_multiattach_slip(chdesc, block, 0);
 }
 
-int __ensure_bdesc_has_changes(bdesc_t * block) __attribute__ ((alias("ensure_bdesc_has_changes")));
-int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency) __attribute__((alias("chdesc_add_depend_fast")));
-int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block) __attribute__((alias("chdesc_overlap_multiattach")));
+int __ensure_bdesc_has_changes(bdesc_t * block)
+#if defined(__MACH__)
+{
+	return ensure_bdesc_has_changes(block);
+}
+#else
+	__attribute__ ((alias("ensure_bdesc_has_changes")));
+#endif
+
+int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
+#if defined(__MACH__)
+{
+	return chdesc_add_depend_fast(dependent, dependency);
+}
+#else
+	__attribute__((alias("chdesc_add_depend_fast")));
+#endif
+
+int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
+#if defined(__MACH__)
+{
+	return chdesc_overlap_multiattach(chdesc, block);
+}
+#else
+	__attribute__((alias("chdesc_overlap_multiattach")));
+#endif
 
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
