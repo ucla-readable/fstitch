@@ -187,6 +187,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 #warning drive (i.e. the "permanent storage device"), the drive itself may
 #warning not physically write the data to the platters for quite some time
 #warning and it may be written in an out-of-order sequence.
+// NOTE: MacOSX's has the fcntl() command F_FULLFSYNC to flush a drive's buffer
 static int
 unix_file_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 {
@@ -257,8 +258,11 @@ unix_file_bd(char *fname, uint32_t blocks, uint16_t blocksize)
 	info->blockcount = blocks;
 	info->blocksize = blocksize;
 
-	info->fd = open(fname, O_RDWR, 0);
+	// TODO: use O_DIRECT open flag on linux, fcntl(F_NOCACHE) on osx?
+	// NOTE: linux implements O_DSYNC using O_SYNC :(
+	info->fd = open(fname, O_RDWR | O_DSYNC, 0);
 	if (!info->fd == -1) {
+		perror("open");
 		free(info);
 		free(bd);
 		return NULL;
