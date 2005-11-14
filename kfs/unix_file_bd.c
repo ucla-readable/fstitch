@@ -276,6 +276,7 @@ unix_file_bd(char *fname, uint32_t blocks, uint16_t blocksize)
 	r = fcntl(info->fd, F_NOCACHE, 1);
 	if (r == -1) {
 		perror("fcntl");
+		close(info->fd);
 		free(info);
 		free(bd);
 		return NULL;
