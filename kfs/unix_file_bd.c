@@ -258,15 +258,29 @@ unix_file_bd(char *fname, uint32_t blocks, uint16_t blocksize)
 	info->blockcount = blocks;
 	info->blocksize = blocksize;
 
-	// TODO: use O_DIRECT open flag on linux, fcntl(F_NOCACHE) on osx?
+	// TODO: use O_DIRECT open flag on linux
 	// NOTE: linux implements O_DSYNC using O_SYNC :(
+#if defined(__MACH__)
+	info->fd = open(fname, O_RDWR, 0);
+#else
 	info->fd = open(fname, O_RDWR | O_DSYNC, 0);
+#endif
 	if (!info->fd == -1) {
 		perror("open");
 		free(info);
 		free(bd);
 		return NULL;
 	}
+#if defined(__MACH__)
+	// disable caching for file on Mac OS X
+	r = fcntl(info->fd, F_NOCACHE, 1);
+	if (r == -1) {
+		perror("fcntl");
+		free(info);
+		free(bd);
+		return NULL;
+	}
+#endif
 	info->blockman = blockman_create();
 	if (!info->blockman) {
 		close(info->fd);
