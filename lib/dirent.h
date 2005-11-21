@@ -3,7 +3,7 @@
 
 #include <lib/types.h>
 
-#define DIRENT_MAXNAMELEN 128
+#define DIRENT_MAXNAMELEN 255
 
 struct dirent {
 	uint32_t d_fileno;
