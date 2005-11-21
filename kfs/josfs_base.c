@@ -495,11 +495,11 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	return r;
 }
 
-int count_free_space(LFS_t * object)
+static uint32_t count_free_space(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	const uint32_t s_nblocks = super->s_nblocks;
-	int i, count = 0;
+	uint32_t i, count = 0;
 
 	for (i = 0; i < s_nblocks; i++)
 		if (read_bitmap(object, i))
@@ -832,7 +832,7 @@ static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t of
 	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %d\n", f->file->f_name, offset);
 
 	nblocks = josfs_get_file_numblocks(object, file);
-	if (offset % JOSFS_BLKSIZE != 0 || offset >= nblocks * JOSFS_BLKSIZE)
+	if (offset % JOSFS_BLKSIZE || offset >= nblocks * JOSFS_BLKSIZE)
 		return INVALID_BLOCK;
 
 	if (offset >= JOSFS_NDIRECT * JOSFS_BLKSIZE) {
@@ -1388,7 +1388,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, 
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_filetype, &KFS_feature_file_lfs, &KFS_feature_file_lfs_name};
+static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_file_lfs_name};
 
 static size_t josfs_get_num_features(LFS_t * object, const char * name)
 {
@@ -1432,12 +1432,12 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		}
 	}
 	else if (id == KFS_feature_freespace.id) {
-		int free_space;
-		*data = malloc(sizeof(int));
+		uint32_t free_space;
+		*data = malloc(sizeof(uint32_t));
 		if (!*data)
 			return -E_NO_MEM;
 
-		*size = sizeof(int);
+		*size = sizeof(uint32_t);
 		free_space = count_free_space(object) * JOSFS_BLKSIZE / 1024;
 		memcpy(*data, &free_space, sizeof(uint32_t));
 	}
@@ -1457,7 +1457,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 static int josfs_get_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("JOSFSDEBUG: josfs_get_metadata_name\n");
+	Dprintf("JOSFSDEBUG: josfs_get_metadata_name %s\n", name);
 	int r;
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_name(object, name);
 	if (!f)
