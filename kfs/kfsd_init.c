@@ -16,6 +16,7 @@
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
+#include <kfs/ufs_base.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
@@ -35,7 +36,7 @@
 #define USE_THIRD_LEG 0 // 1 -> mount josfs_cfs at '/'
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
-BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks);
+BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
 static const char * fspaths[] = {
@@ -321,7 +322,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	for (i = 0; i < vector_size(partitions); i++)
 	{
 		BD_t * cache;
-		BD_t * resizer;
 		LFS_t * josfs_lfs;
 		LFS_t * lfs = NULL;
 		CFS_t * u;
@@ -330,24 +330,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		if (!part)
 			continue;
 
-		if (4096 != CALL(part->bd, get_atomicsize))
-		{
-			/* create a resizer */
-			if (! (resizer = block_resizer_bd(part->bd, 4096)) )
-				kfsd_shutdown();
-
-			/* create a cache above the resizer */
-			if (! (cache = wb_cache_bd(resizer, cache_nblks)) )
-				kfsd_shutdown();
-		}
-		else
-		{
-			if (! (cache = wb_cache_bd(part->bd, cache_nblks)) )
-				kfsd_shutdown();
-		}
-
 		if (part->type == PTABLE_KUDOS_TYPE)
 		{
+			cache = construct_cacheing(part->bd, cache_nblks, 4096);
 			lfs = josfs_lfs = josfs(cache);
 
 			if (josfs_lfs && enable_fsck)
@@ -374,9 +359,17 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		}
 		else if (part->type == PTABLE_FREEBSD_TYPE)
 		{
-			// TODO
-			printf("Can't handle UFS right now\n");
-			continue;
+			// TODO handle 1K fragment size in UFS?
+			cache = construct_cacheing(part->bd, cache_nblks, 2048);
+			lfs = ufs(cache);
+
+			if (lfs)
+				printf("Using ufs on %s\n", part->description);
+			else
+			{
+				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
+				continue;
+			}
 		}
 		else
 		{
@@ -402,16 +395,16 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	return 0;
 }
 
-BD_t * construct_cacheing(BD_t * bd, size_t cache_nblks)
+BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 {
-	if (4096 != CALL(bd, get_blocksize))
+	if (bs != CALL(bd, get_blocksize))
 	{
 		/* create a resizer */
-		if (! (bd = block_resizer_bd(bd, 4096)) )
+		if (! (bd = block_resizer_bd(bd, bs)) )
 			kfsd_shutdown();
 
 		/* create a cache above the resizer */
-		if (! (bd = wt_cache_bd(bd, cache_nblks)) )
+		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
 			kfsd_shutdown();
 	}
 	else
