@@ -47,7 +47,7 @@ static BD_t * wholedisk_get_blockdev(LFS_t * object)
 	return ((struct wd_info *) OBJLOCAL(object))->bd;
 }
 
-static uint32_t wholedisk_allocate_block(LFS_t * object, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */

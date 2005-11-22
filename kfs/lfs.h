@@ -36,7 +36,7 @@ struct LFS {
 	OBJECT(LFS_t);
 	DECLARE(LFS_t, uint32_t, get_blocksize);
 	DECLARE(LFS_t, BD_t *, get_blockdev);
-	DECLARE(LFS_t, uint32_t, allocate_block, int purpose, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, uint32_t, allocate_block, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number);
 	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number, bool * synthetic);
 	DECLARE(LFS_t, int, cancel_synthetic_block, uint32_t number);

@@ -391,7 +391,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		{
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
 			prev_head = NULL; /* no need to link with previous chains here */
-			number = CALL(state->lfs, allocate_block, type, &prev_head, &tail);
+			number = CALL(state->lfs, allocate_block, f->fdesc, type, &prev_head, &tail);
 			if (number == INVALID_BLOCK)
 				return size_written;
 

@@ -165,13 +165,13 @@ struct UFS_cg {
 };
 
 struct UFS_dinode {
-	uint16_t  di_mode;	/*   0: IFMT, permissions; see below. */
-	int16_t   di_nlink;	/*   2: File link count. */
+	uint16_t di_mode;	/*   0: IFMT, permissions; see below. */
+	int16_t  di_nlink;	/*   2: File link count. */
 	union {
 		uint16_t oldids[2];	/*   4: Ffs: old user and group ids. */
 		int32_t	 inumber;	/*   4: Lfs: inode number. */
 	} di_u;
-	uint64_t  di_size;	/*   8: File byte count. */
+	uint64_t di_size;	/*   8: File byte count. */
 	int32_t  di_atime;	/*  16: Last access time. */
 	int32_t  di_atimensec;	/*  20: Last access time. */
 	int32_t  di_mtime;	/*  24: Last modified time. */

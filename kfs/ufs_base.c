@@ -135,7 +135,7 @@ static int read_cg(LFS_t * object, uint32_t num, struct UFS_cg * cg)
 	return 0;
 }
 
-// TODO do more checks, move printf statements elsewhere
+// TODO do more checks, move printf statements elsewhere, mark fs as unclean
 static int check_super(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -181,7 +181,7 @@ static int check_super(LFS_t * object)
 	printf("internal symlink max length: %d\n", info->super->fs_maxsymlinklen);
 	printf("Flags: fmod: %d, clean: %d, ronly: %d, flags: %d\n",
 			info->super->fs_fmod, info->super->fs_clean, info->super->fs_ronly, info->super->fs_flags);
-	printf("Superblock Cylinder Summary:\n\tDirectories: %d\n\tFree Blocks: %d\n\tFree Inodes: %d\n\tFree Flags: %d\n", info->super->fs_cstotal.cs_ndir,
+	printf("Superblock Cylinder Summary:\n\tDirectories: %d\n\tFree Blocks: %d\n\tFree Inodes: %d\n\tFree Frags: %d\n", info->super->fs_cstotal.cs_ndir,
 			info->super->fs_cstotal.cs_nbfree, info->super->fs_cstotal.cs_nifree,
 			info->super->fs_cstotal.cs_nffree);
 
@@ -208,10 +208,12 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	return 0;
 }
 
-// TODO
 static uint32_t count_free_space(LFS_t * object)
 {
-	return 0;
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+
+	return info->super->fs_cstotal.cs_nbfree * info->super->fs_frag
+		+ info->super->fs_cstotal.cs_nffree;
 }
 
 // Skip over slashes.
@@ -342,7 +344,7 @@ static BD_t * ufs_get_blockdev(LFS_t * object)
 
 // TODO
 // purpose parameter is ignored
-static uint32_t ufs_allocate_block(LFS_t * object, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	count_free_space(object);
 	return INVALID_BLOCK;

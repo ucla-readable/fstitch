@@ -683,8 +683,8 @@ static BD_t * josfs_get_blockdev(LFS_t * object)
 	return ((struct lfs_info *) OBJLOCAL(object))->ubd;
 }
 
-// purpose parameter is ignored
-static uint32_t josfs_allocate_block(LFS_t * object, int purpose, chdesc_t ** head, chdesc_t ** tail)
+// file and purpose parameter are ignored
+static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_allocate_block\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -946,7 +946,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		return CALL(info->ubd, write_block, indirect);
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
-		uint32_t inumber = josfs_allocate_block(object, 0, head, tail);
+		uint32_t inumber = josfs_allocate_block(object, NULL, 0, head, tail);
 		bdesc_t * indirect;
 		if (inumber == INVALID_BLOCK)
 			return -E_NO_DISK;
@@ -1104,7 +1104,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	}
 
 	// No empty slots, gotta allocate a new block
-	number = josfs_allocate_block(object, 0, head, tail);
+	number = josfs_allocate_block(object, NULL, 0, head, tail);
 	if (number != INVALID_BLOCK)
 		blk = josfs_lookup_block(object, number);
 	if (!blk)
