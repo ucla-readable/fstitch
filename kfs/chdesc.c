@@ -443,7 +443,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		}
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
-		if((i || *head) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
+		/* but we should check to make sure *head has not already been written */
+		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
 			goto destroy;
 	}
 	
@@ -556,7 +557,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 		}
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
-		if((i || *head) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
+		/* but we should check to make sure *head has not already been written */
+		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
 			goto destroy;
 	}
 	
@@ -668,7 +670,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		}
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
-		if((i || *head) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
+		/* but we should check to make sure *head has not already been written */
+		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
 			goto destroy;
 	}
 	
