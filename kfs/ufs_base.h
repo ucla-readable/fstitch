@@ -21,6 +21,11 @@
 #define UFS_NIADDR	3  /* Indirect addresses in inode. */
 
 #define UFS_MAXFILESIZE 0xFFFFFFFF
+
+// Sigh, on disk, used inodes are marked 1, but used frags are marked 0
+#define UFS_USED 0
+#define UFS_FREE 1
+
 /*---------------------------------------------------------------------*/
 
 // TODO Insert BSD Copyright legalese
