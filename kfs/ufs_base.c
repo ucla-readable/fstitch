@@ -108,7 +108,7 @@ static int read_inode(LFS_t * object, uint32_t num, struct UFS_dinode * inode)
 
 	inode_table = CALL(info->ubd, read_block, fragno);
 	if (!inode_table)
-		return -E_UNSPECIFIED;
+		return -E_NOT_FOUND;
 	wanted = (struct UFS_dinode *) (inode_table->ddesc->data);
 	wanted += frag_off;
 	memcpy(inode, wanted, sizeof(struct UFS_dinode));
@@ -137,7 +137,7 @@ static int write_inode(LFS_t * object, uint32_t num, struct UFS_dinode inode, ch
 
 	inode_table = CALL(info->ubd, read_block, fragno);
 	if (!inode_table)
-		return -E_UNSPECIFIED;
+		return -E_NOT_FOUND;
 	offset = sizeof(struct UFS_dinode) * frag_off;
 	r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head, tail);
 	if (r < 0)
@@ -159,7 +159,7 @@ static int read_cg(LFS_t * object, uint32_t num, struct UFS_cg * cg)
 	b = CALL(info->ubd, read_block,
 			info->cylstart[num] + info->super->fs_cblkno);
 	if (!b)
-		return -E_UNSPECIFIED;
+		return -E_NOT_FOUND;
 
 	memcpy(cg, b->ddesc->data, sizeof(struct UFS_cg));
 
@@ -638,14 +638,15 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 }
 
 // Find a free block and allocate all fragments in the block
-static uint32_t allocate_wholeblock(LFS_t * object, chdesc_t ** head, chdesc_t ** tail)
-{ 
+static int allocate_wholeblock(LFS_t * object, uint32_t * out, int wipe, chdesc_t ** head, chdesc_t ** tail)
+{
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	int r;
 	uint32_t i, num;
+	bdesc_t * block;
 	chdesc_t * newtail;
 
-	if (!head || !tail)
+	if (!head || !tail || !out)
 		return -E_INVAL;
 
 	// Find free block
@@ -668,42 +669,97 @@ static uint32_t allocate_wholeblock(LFS_t * object, chdesc_t ** head, chdesc_t *
 			return r;
 		else if (r == 1) // This should not happen
 			return -E_UNSPECIFIED;
+
+		if (wipe) {
+			block = CALL(info->ubd, read_block, i);
+			if (!block)
+				return -E_NOT_FOUND;
+			r = chdesc_create_init(block, info->ubd, head, &newtail);
+			if (r < 0)
+				return r;
+		}
 	}
-	return num * info->super->fs_frag;
+
+	*out = num * info->super->fs_frag;
+	return 0;
 }
 
-// Offset is a byte offset
-static uint32_t ufs_write_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
+// Update a ptr in an indirect ptr block
+static int update_indirect_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t n, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %x %d\n", __FUNCTION__, file, offset);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	int r;
+
+	r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head, tail);
+	if (r < 0)
+		return r;
+	return CALL(info->ubd, write_block, block);
+}
+
+// Update file's inode with an nth indirect ptr
+static int allocate_indirect_ptr(LFS_t * object, fdesc_t * file, int n, chdesc_t ** head, chdesc_t ** tail)
+{
+	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
+	int r;
+	uint32_t newblock;
+	chdesc_t * newtail;
+
+	if (!file || !head || !tail || n < 0 || n >= UFS_NIADDR)
+		return -E_INVAL;
+	if (f->file->f_inode.di_ib[n])
+		return -E_UNSPECIFIED;
+
+	r = allocate_wholeblock(object, &newblock, 1, head, tail);
+	if (r < 0)
+		return r;
+	f->file->f_inode.di_ib[n] = newblock;
+	return write_inode(object, f->file->f_num, f->file->f_inode, head, &newtail);
+}
+
+// Write the block ptrs for a file, allocate indirect blocks as needed
+// Offset is a byte offset
+static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, chdesc_t ** head, chdesc_t ** tail)
+{
+	Dprintf("UFSDEBUG: %s %x %d %d\n", __FUNCTION__, file, offset, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
-	uint32_t fragno, blockno, nindirb, nindirf;
+	int r;
+	uint32_t blockno, nindirb, nindirf, newblock;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
+	chdesc_t * tmptail;
+	chdesc_t ** newtail = tail;
 
-	if (offset % info->super->fs_fsize || offset > f->file->f_inode.di_size)
-		return INVALID_BLOCK;
+	if (!head || !tail || !file || offset % info->super->fs_bsize)
+		return -E_INVAL;
 
 	nindirb = info->super->fs_nindir;
 	nindirf = nindirb / info->super->fs_frag;
 	blockno = offset / info->super->fs_bsize;
-	fragno = (offset / info->super->fs_fsize) % info->super->fs_frag;
 
 	if (blockno < UFS_NDADDR) {
-		return f->file->f_inode.di_db[blockno] + fragno;
+		f->file->f_inode.di_db[blockno] = value;
+		return write_inode(object, f->file->f_num, f->file->f_inode, head, tail);
 	}
 	else if (blockno < UFS_NDADDR + nindirb) {
 		block_off[0] = blockno - UFS_NDADDR;
 		frag_off[0] = block_off[0] / nindirf;
 		pt_off[0] = block_off[0] % nindirf;
 
+		// Allocate single indirect block if needed
+		if (!f->file->f_inode.di_ib[0]) {
+			r = allocate_indirect_ptr(object, file, 0, head, newtail);
+			if (r < 0)
+				return r;
+			newtail = &tmptail;
+		}
+
 		indirect[0] = CALL(info->ubd, read_block,
 				f->file->f_inode.di_ib[0] + frag_off[0]);
 		if (!indirect[0])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
 
-		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
+		return update_indirect_block(object, indirect[0], pt_off[0], value, head, newtail);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb) {
 		block_off[1] = blockno - UFS_NDADDR - nindirb;
@@ -713,51 +769,50 @@ static uint32_t ufs_write_file_block(LFS_t * object, fdesc_t * file, uint32_t of
 		frag_off[0] = (block_off[1] % nindirb) / nindirf;
 		pt_off[0] = block_off[1] % nindirf;
 
+		// Allocate double indirect block if needed
+		if (!f->file->f_inode.di_ib[1]) {
+			r = allocate_indirect_ptr(object, file, 1, head, newtail);
+			if (r < 0)
+				return r;
+			newtail = &tmptail;
+		}
+
 		indirect[1] = CALL(info->ubd, read_block,
 				f->file->f_inode.di_ib[1] + frag_off[1]);
 		if (!indirect[1])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
 
-		block_off[0] = (*((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1])) + fragno;
+		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
+
+		// Allocate single indirect block if needed
+		if (!block_off[0]) {
+			r = allocate_wholeblock(object, &newblock, 1, head, newtail);
+			if (r < 0)
+				return r;
+			newtail = &tmptail;
+			r = update_indirect_block(object, indirect[1], pt_off[1], newblock, head, newtail);
+			if (r < 0)
+				return r;
+		}
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
 		if (!indirect[0])
-			return -E_UNSPECIFIED;
-		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
+			return -E_NOT_FOUND;
+
+		return update_indirect_block(object, indirect[0], pt_off[0], value, head, newtail);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb * nindirb) {
-		block_off[2] = blockno - UFS_NDADDR - nindirb * nindirb;
-		frag_off[2] = block_off[2] / nindirf / nindirb / nindirb;
-		pt_off[2] = (block_off[2] / nindirb / nindirb) % nindirf;
+		// We'll only need triple indirect ptrs when the filesize is:
+		//  4 KB Blocksize: > 4GB
+		//  8 KB Blocksize: > 32GB
+		// 16 KB Blocksize: > 256GB
 
-		frag_off[1] = block_off[2] / nindirf / nindirb;
-		pt_off[1] = (block_off[2] / nindirb) % nindirf;
-
-		frag_off[0] = (block_off[2] % nindirb) / nindirf;
-		pt_off[0] = block_off[2] % nindirf;
-
-		indirect[2] = CALL(info->ubd, read_block,
-				f->file->f_inode.di_ib[2] + frag_off[2]);
-		if (!indirect[1])
-			return -E_UNSPECIFIED;
-
-		block_off[1] = (*((uint32_t *) (indirect[2]->ddesc->data) + pt_off[2])) + fragno;
-
-		indirect[1] = CALL(info->ubd, read_block,
-				block_off[1] + frag_off[1]);
-		if (!indirect[1])
-			return -E_UNSPECIFIED;
-
-		block_off[0] = (*((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1])) + fragno;
-
-		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
-		if (!indirect[0])
-			return -E_UNSPECIFIED;
-		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
+		// FIXME write some tedious code
 	}
 
 	return -E_UNSPECIFIED;
 }
+
 static uint32_t count_free_space(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -1016,7 +1071,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		indirect[0] = CALL(info->ubd, read_block,
 				f->file->f_inode.di_ib[0] + frag_off[0]);
 		if (!indirect[0])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
 
 		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
 	}
@@ -1031,16 +1086,23 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		indirect[1] = CALL(info->ubd, read_block,
 				f->file->f_inode.di_ib[1] + frag_off[1]);
 		if (!indirect[1])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
 
-		block_off[0] = (*((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1])) + fragno;
+		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
 		if (!indirect[0])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
+
 		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb * nindirb) {
+		// We'll only need triple indirect ptrs when the filesize is:
+		//  4 KB Blocksize: > 4GB
+		//  8 KB Blocksize: > 32GB
+		// 16 KB Blocksize: > 256GB
+
+		/* although I think this will work...
 		block_off[2] = blockno - UFS_NDADDR - nindirb * nindirb;
 		frag_off[2] = block_off[2] / nindirf / nindirb / nindirb;
 		pt_off[2] = (block_off[2] / nindirb / nindirb) % nindirf;
@@ -1053,22 +1115,22 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 
 		indirect[2] = CALL(info->ubd, read_block,
 				f->file->f_inode.di_ib[2] + frag_off[2]);
+		if (!indirect[2])
+			return -E_NOT_FOUND;
+
+		block_off[1] = *((uint32_t *) (indirect[2]->ddesc->data) + pt_off[2]);
+
+		indirect[1] = CALL(info->ubd, read_block, block_off[1] + frag_off[1]);
 		if (!indirect[1])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
 
-		block_off[1] = (*((uint32_t *) (indirect[2]->ddesc->data) + pt_off[2])) + fragno;
-
-		indirect[1] = CALL(info->ubd, read_block,
-				block_off[1] + frag_off[1]);
-		if (!indirect[1])
-			return -E_UNSPECIFIED;
-
-		block_off[0] = (*((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1])) + fragno;
+		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
 		if (!indirect[0])
-			return -E_UNSPECIFIED;
+			return -E_NOT_FOUND;
 		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
+		*/
 	}
 
 	return -E_UNSPECIFIED;
