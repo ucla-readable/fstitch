@@ -35,8 +35,8 @@ struct lfs_info
 };
 
 struct ufs_fdesc {
-	uint32_t dir_inode;
-	uint32_t dir_offset;
+	uint32_t dir_inode; // Parent directory's inode number
+	uint32_t dir_offset; // Byte offset of entry in parent directory
 	uint32_t numfrags; // Number of fragments
 	uint32_t lastfrag; // Last fragment in the file
 	uint32_t lastalloc; // Last fragment we allocated
@@ -541,6 +541,8 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	return 0;
 }
 
+// This is the 'raw' function to write the block bitmap
+// You probably want allocate_wholeblock()
 static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
@@ -637,27 +639,66 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	return 0;
 }
 
-// Find a free block and allocate all fragments in the block
-static int allocate_wholeblock(LFS_t * object, uint32_t * out, int wipe, chdesc_t ** head, chdesc_t ** tail)
+// FIXME this is a fairly inefficient way to scan for free blocks
+// we should take advantage of cylinder group summaries
+// and possibly even file and purpose.
+static uint32_t find_free_block_linear(LFS_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	uint32_t num;
 	int r;
-	uint32_t i, num;
-	bdesc_t * block;
-	chdesc_t * newtail;
-
-	if (!head || !tail || !out)
-		return -E_INVAL;
 
 	// Find free block
 	// FIXME, make sure it's fs_dsize and not fs_size
 	for (num = 0; num < info->super->fs_dsize; num++) {
 		r = read_block_bitmap(object, num);
 		if (r < 0)
-			return r;
+			return INVALID_BLOCK;
 		if (r == UFS_FREE)
-			break;
+			return num; // returns a block number
 	}
+
+	return INVALID_BLOCK;
+}
+
+// FIXME this is a fairly inefficient way to scan for free fragments
+// we should take advantage of cylinder group summaries
+// and possibly even file and purpose.
+static uint32_t find_free_frag_linear(LFS_t * object, fdesc_t * file, int purpose)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	uint32_t num;
+	int r;
+
+	// Find free block
+	// FIXME, make sure it's fs_dsize and not fs_size
+	for (num = 0; num < info->super->fs_dsize * info->super->fs_frag; num++) {
+		r = read_fragment_bitmap(object, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+	return num; // returns a fragment number
+	}
+
+	return INVALID_BLOCK;
+}
+
+// Find a free block and allocate all fragments in the block
+static uint32_t allocate_wholeblock(LFS_t * object, int wipe, chdesc_t ** head, chdesc_t ** tail)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	int r;
+	bool synthetic;
+	uint32_t i, num;
+	bdesc_t * block;
+	chdesc_t * newtail;
+
+	if (!head || !tail)
+		return INVALID_BLOCK;
+
+	num = find_free_block_linear(object, NULL, 0);
+	if (num == INVALID_BLOCK)
+		return INVALID_BLOCK;
 
 	// Mark the fragments as used
 	for (i = num * info->super->fs_frag; i < (num + 1) * info->super->fs_frag; i++) {
@@ -666,22 +707,23 @@ static int allocate_wholeblock(LFS_t * object, uint32_t * out, int wipe, chdesc_
 		else
 			r = write_fragment_bitmap(object, i, UFS_USED, head, &newtail);
 		if (r < 0)
-			return r;
-		else if (r == 1) // This should not happen
-			return -E_UNSPECIFIED;
+			return INVALID_BLOCK;
+		assert(r != 1); // This should not happen
 
 		if (wipe) {
-			block = CALL(info->ubd, read_block, i);
+			block = CALL(info->ubd, synthetic_read_block, i, &synthetic);
+			// FIXME revert all previously allocated blocks?
 			if (!block)
-				return -E_NOT_FOUND;
+				return INVALID_BLOCK;
 			r = chdesc_create_init(block, info->ubd, head, &newtail);
+			if (r >= 0)
+				r = CALL(info->ubd, write_block, block);
 			if (r < 0)
-				return r;
+				return INVALID_BLOCK;
 		}
 	}
 
-	*out = num * info->super->fs_frag;
-	return 0;
+	return num * info->super->fs_frag;
 }
 
 // Update a ptr in an indirect ptr block
@@ -700,7 +742,6 @@ static int update_indirect_block(LFS_t * object, bdesc_t * block, uint32_t offse
 static int allocate_indirect_ptr(LFS_t * object, fdesc_t * file, int n, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
-	int r;
 	uint32_t newblock;
 	chdesc_t * newtail;
 
@@ -709,9 +750,9 @@ static int allocate_indirect_ptr(LFS_t * object, fdesc_t * file, int n, chdesc_t
 	if (f->file->f_inode.di_ib[n])
 		return -E_UNSPECIFIED;
 
-	r = allocate_wholeblock(object, &newblock, 1, head, tail);
-	if (r < 0)
-		return r;
+	newblock = allocate_wholeblock(object, 1, head, tail);
+	if (newblock == INVALID_BLOCK)
+		return -E_NOT_FOUND;
 	f->file->f_inode.di_ib[n] = newblock;
 	return write_inode(object, f->file->f_num, f->file->f_inode, head, &newtail);
 }
@@ -786,9 +827,9 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 		// Allocate single indirect block if needed
 		if (!block_off[0]) {
-			r = allocate_wholeblock(object, &newblock, 1, head, newtail);
-			if (r < 0)
-				return r;
+			newblock = allocate_wholeblock(object, 1, head, newtail);
+			if (newblock == INVALID_BLOCK)
+				return -E_NOT_FOUND;
 			newtail = &tmptail;
 			r = update_indirect_block(object, indirect[1], pt_off[1], newblock, head, newtail);
 			if (r < 0)
@@ -827,6 +868,120 @@ static inline const char* skip_slash(const char* p)
 	while (*p == '/')
 		p++;
 	return p;
+}
+
+static int read_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct * entry, uint32_t * basep)
+{
+	Dprintf("UFSDEBUG: %s %x, %d\n", __FUNCTION__, basep, *basep);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
+	struct UFS_direct * dirfile;
+	bdesc_t * dirblock = NULL;
+	uint32_t blockno, offset;
+
+	if (!entry)
+		return -E_INVAL;
+
+	// Make sure it's a directory and we can read from it
+	if (f->file->f_type != TYPE_DIR)
+		return -E_NOT_DIR;
+
+	if (*basep >= f->file->f_inode.di_size)
+		return -E_INVAL;
+
+	blockno = ufs_get_file_block(object, file, ROUNDDOWN32(*basep, info->super->fs_fsize));
+	if (blockno != INVALID_BLOCK)
+		dirblock = ufs_lookup_block(object, blockno);
+	if (!dirblock)
+		return -E_NOT_FOUND;
+
+	offset = *basep % info->super->fs_fsize;
+	dirfile = (struct UFS_direct *) (dirblock->ddesc->data + offset);
+
+	if (offset + dirfile->d_reclen > info->super->fs_fsize
+			|| dirfile->d_reclen < dirfile->d_namlen)
+		return -E_UNSPECIFIED;
+
+	entry->d_ino = dirfile->d_ino;
+	entry->d_reclen = dirfile->d_reclen;
+	entry->d_type = dirfile->d_type;
+	entry->d_namlen = dirfile->d_namlen;
+	strncpy(entry->d_name, dirfile->d_name, dirfile->d_namlen);
+	entry->d_name[dirfile->d_namlen] = 0;
+
+	*basep += dirfile->d_reclen;
+	return 0;
+}
+
+// Writes a directory entry, does not check for free space
+static int write_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct entry, uint32_t basep, chdesc_t ** head, chdesc_t ** tail)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	bdesc_t * block;
+	uint32_t foffset, blockno;
+	uint16_t offset, actual_len;
+	int r;
+
+	if (!head || !tail || !file)
+		return -E_INVAL;
+
+	actual_len = sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN;
+
+	offset = basep % info->super->fs_fsize;
+	foffset = basep - offset;
+	blockno = ufs_get_file_block(object, file, foffset);
+	if (blockno == INVALID_BLOCK)
+		return -E_NOT_FOUND;
+	block = CALL(info->ubd, read_block, blockno);
+	if (!block)
+		return -E_NOT_FOUND;
+
+	r = chdesc_create_byte(block, info->ubd, offset, actual_len,
+			&entry, head, tail);
+	if (r < 0)
+		return r;
+
+	return CALL(info->ubd, write_block, block);
+}
+
+// TODO handle crossing fragment boundaries
+static int erase_dirent(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+{
+	struct UFS_direct last_entry, entry;
+	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
+	uint32_t basep = 0, last_basep;
+	int r;
+
+	if (!head || !tail || !file)
+		return -E_INVAL;
+
+	if (f->dir_offset < 12) {
+		printf("%s: trying to remove . or ..\n", __FUNCTION__);
+		return -E_NOT_EMPTY;
+	}
+
+	// Find the entry in front of us
+	do {
+		last_basep = basep;
+		r = read_dirent(object, file, &last_entry, &basep);
+		if (r < 0)
+			return r;
+	} while (basep < f->dir_offset);
+
+	// we went past the entry somehow?
+	if (basep != f->dir_offset) {
+		printf("%s: went past the directory entry\n", __FUNCTION__);
+		return -E_UNSPECIFIED;
+	}
+
+	// Get our entry
+	r = read_dirent(object, file, &entry, &basep);
+	if (r < 0)
+		return r;
+
+	last_entry.d_reclen += entry.d_reclen;
+
+	return write_dirent(object, file, last_entry, last_basep, head, tail);
 }
 
 static int dir_lookup(LFS_t * object, struct UFS_File dir, const char * name, struct ufs_fdesc * new_fdesc)
@@ -962,22 +1117,72 @@ static BD_t * ufs_get_blockdev(LFS_t * object)
 	return ((struct lfs_info *) OBJLOCAL(object))->ubd;
 }
 
-// TODO
-// purpose parameter is ignored
+// Allocates fragments, really
 static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
+	bdesc_t * block;
+	uint32_t blockno;
+	bool synthetic = 0;
+	chdesc_t * newtail;
+	int r;
 
-	// require file to be non-null for now
+	// FIXME require file to be non-null for now
 	if (!head || !tail || !file)
-		return -E_INVAL;
+		return INVALID_BLOCK;
 
 	if (f->lastalloc != INVALID_BLOCK)
 		// We already allocated a fragment, go use that first
-		return -E_UNSPECIFIED;
+		return INVALID_BLOCK;
 
+	// Time to allocate a find a new block
+	if (((f->lastfrag + 1) % info->super->fs_frag) == 0) {
+		blockno = find_free_block_linear(object, file, purpose);
+		if (blockno == INVALID_BLOCK)
+			return INVALID_BLOCK;
+		blockno *= info->super->fs_frag;
+	}
+	else {
+		r = read_fragment_bitmap(object, f->lastfrag + 1);
+		if (r < 0)
+			return r;
+		else if (r == UFS_FREE)
+			blockno = f->lastfrag + 1; // UFS says we must use it
+		else
+		{
+			// Time to allocate a new block and copy the data there
+			// TODO fill in code here
+			// find new block
+			blockno = find_free_block_linear(object, file, purpose);
+			// for all fragments not part of a block
+			// read the frag, allocate new frag, copy old frag to new frag
+			// set block ptr accordingly, also set blockno, f->lastfrag
+		}
+	}
+
+	r = write_fragment_bitmap(object, blockno, UFS_USED, head, tail);
+	if (r != 0)
+		return INVALID_BLOCK;
+
+	assert(read_fragment_bitmap(object, blockno) == UFS_USED);
+	block = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
+	if (!block)
+		goto allocate_block_cleanup;
+
+	r = chdesc_create_init(block, info->ubd, head, &newtail);
+	if (r >= 0)
+		r = CALL(info->ubd, write_block, block);
+	if (r < 0)
+		goto allocate_block_cleanup;
+	
+	f->lastalloc = blockno;
+	return blockno;
+
+allocate_block_cleanup:
+	r = write_fragment_bitmap(object, blockno, UFS_FREE, head, &newtail);
+	assert(r == 0);
 	return INVALID_BLOCK;
 }
 
@@ -1139,42 +1344,24 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("UFSDEBUG: %s %x, %d\n", __FUNCTION__, basep, *basep);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
-	struct UFS_direct * dirfile;
+	struct UFS_direct dirfile;
 	struct UFS_dinode inode;
-	bdesc_t * dirblock = NULL;
-	uint32_t blockno, offset, actual_len;
+	uint32_t actual_len, p;
 	int r;
 
 	if (!entry)
 		return -E_INVAL;
 
-	// Make sure it's a directory and we can read from it
-	if (f->file->f_type != TYPE_DIR)
-		return -E_NOT_DIR;
+	p = *basep;
+	r = read_dirent(object, file, &dirfile, &p);
+	if (r < 0)
+		return r;
 
-	if (*basep >= f->file->f_inode.di_size)
-		return -E_INVAL;
-
-	blockno = ufs_get_file_block(object, file, ROUNDDOWN32(*basep, info->super->fs_fsize));
-	if (blockno != INVALID_BLOCK)
-		dirblock = ufs_lookup_block(object, blockno);
-	if (!dirblock)
-		return -E_NOT_FOUND;
-
-	offset = *basep % info->super->fs_fsize;
-	dirfile = (struct UFS_direct *) (dirblock->ddesc->data + offset);
-
-	if (offset + dirfile->d_reclen > info->super->fs_fsize
-			|| dirfile->d_reclen < dirfile->d_namlen)
-		return -E_UNSPECIFIED;
-
-	actual_len = sizeof(struct dirent) + dirfile->d_namlen - DIRENT_MAXNAMELEN;
+	actual_len = sizeof(struct dirent) + dirfile.d_namlen - DIRENT_MAXNAMELEN;
 	if (size < actual_len)
 		return -E_INVAL;
 
-	r = read_inode(object, dirfile->d_ino, &inode); 
+	r = read_inode(object, dirfile.d_ino, &inode); 
 	if (r < 0)
 		return r;
 
@@ -1184,7 +1371,7 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 	}
 	entry->d_filesize = inode.di_size;
 
-	switch(dirfile->d_type)
+	switch(dirfile.d_type)
 	{
 		case UFS_DT_REG:
 			entry->d_type = TYPE_FILE;
@@ -1202,13 +1389,13 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 		default:
 			entry->d_type = TYPE_INVAL;
 	}
-	entry->d_fileno = dirfile->d_ino;
+	entry->d_fileno = dirfile.d_ino;
 	entry->d_reclen = actual_len;
-	entry->d_namelen = dirfile->d_namlen;
-	strncpy(entry->d_name, dirfile->d_name, dirfile->d_namlen);
-	entry->d_name[dirfile->d_namlen] = 0;
+	entry->d_namelen = dirfile.d_namlen;
+	strncpy(entry->d_name, dirfile.d_name, dirfile.d_namlen);
+	entry->d_name[dirfile.d_namlen] = 0;
 
-	*basep += dirfile->d_reclen;
+	*basep = p;
 	return 0;
 }
 
@@ -1377,10 +1564,64 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 	return ufs_get_metadata(object, f, id, size, data);
 }
 
-// TODO
+// TODO (permission feature, etc)
 static int ufs_set_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	return 0;
+	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
+	int r;
+	
+	if (!head || !tail || !f || !data)
+		return -E_INVAL;
+
+	if (id == KFS_feature_size.id) {
+		if (sizeof(uint32_t) != size || *((uint32_t *) data) >= UFS_MAXFILESIZE)
+			return -E_INVAL;
+
+		f->file->f_inode.di_size = *((uint32_t *) data);
+		return write_inode(object, f->file->f_num, f->file->f_inode, head, tail);
+	}
+	else if (id == KFS_feature_filetype.id) {
+		uint8_t fs_type;
+		uint32_t p;
+		struct UFS_direct entry;
+		struct ufs_fdesc dirfdesc; 
+		struct UFS_File dirfile;
+
+		if (sizeof(uint32_t) != size)
+			return -E_INVAL;
+		switch(*((uint32_t *) data))
+		{
+			case TYPE_FILE:
+				fs_type = UFS_DT_REG;
+				break;
+			case TYPE_DIR:
+				fs_type = UFS_DT_DIR;
+				break;
+			case TYPE_SYMLINK:
+				fs_type = UFS_DT_LNK;
+				break;
+			// case TYPE_DEVICE: ambiguous
+			default:
+				return -E_INVAL;
+		}
+
+		// FIXME perhaps we should read in the full fdesc?
+		// instead of using this synthetic version?
+		dirfdesc.file = &dirfile;
+		dirfile.f_type = TYPE_DIR;
+		r = read_inode(object, f->dir_inode, &dirfile.f_inode);
+		if (r < 0)
+			return r;
+
+		p = f->dir_offset;
+		r = read_dirent(object, (fdesc_t *) &dirfdesc, &entry, &p);
+		if (r < 0)
+			return r;
+
+		return write_dirent(object, (fdesc_t *) &dirfdesc, entry, f->dir_offset, head, tail);
+	}
+
+	return -E_INVAL;
 }
 
 static int ufs_set_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
