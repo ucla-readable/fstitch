@@ -16,7 +16,7 @@
 #error inc/fs.h got included in ufs_base.c
 #endif
 
-#define UFS_BASE_DEBUG 0
+#define UFS_BASE_DEBUG 1
 
 #if UFS_BASE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -562,7 +562,7 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		value = 1;
 
 	blocknum = num * info->super->fs_frag;
-	r = read_cg(object, blocknum / info->super->fs_ipg, &cg);
+	r = read_cg(object, blocknum / info->super->fs_fpg, &cg);
 	if (r < 0)
 		return r;
 
@@ -585,7 +585,7 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		return 1;
 	}
 
-	blockno = info->cylstart[num / info->super->fs_ipg]
+	blockno = info->cylstart[num / info->super->fs_fpg]
 		+ info->super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno);
 	if (!cgblock)
@@ -1117,6 +1117,66 @@ static BD_t * ufs_get_blockdev(LFS_t * object)
 	return ((struct lfs_info *) OBJLOCAL(object))->ubd;
 }
 
+static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
+	uint32_t i, blockno, offset;
+	int r, frags;
+	bool synthetic = 0;
+	chdesc_t * newtail;
+	bdesc_t * block, * newblock;
+
+	if (!head || !tail || !file)
+		return INVALID_BLOCK;
+
+	frags = f->numfrags % info->super->fs_frag;
+	offset = (f->numfrags - frags) * info->super->fs_size;
+
+	// Time to allocate a new block and copy the data there
+	// FIXME handle failure case better?
+
+	// find new block
+	blockno = find_free_block_linear(object, file, purpose);
+	if (blockno == INVALID_BLOCK)
+		return INVALID_BLOCK;
+	blockno *= info->super->fs_frag;
+
+	// allocate some fragments
+	for (i = 0 ; i < frags; i++) {
+		if (i == 0)
+			r = write_fragment_bitmap(object, blockno, UFS_USED, head, tail);
+		else
+			r = write_fragment_bitmap(object, blockno + i, UFS_USED, head, &newtail);
+		if (r != 0)
+			return INVALID_BLOCK;
+	}
+
+	// read in fragments, and write to new location
+	for (i = 0 ; i < frags; i++) {
+		block = CALL(info->ubd, read_block, f->lastfrag - frags + i + 1);
+		if (!block)
+			return INVALID_BLOCK;
+		newblock = CALL(info->ubd, synthetic_read_block, blockno + i, &synthetic);
+		if (!newblock)
+			return INVALID_BLOCK;
+
+		r = chdesc_create_full(newblock, info->ubd, block->ddesc->data, head, &newtail);
+		if (r >= 0)
+			r = CALL(info->ubd, write_block, newblock);
+		if (r < 0)
+			return INVALID_BLOCK;
+	}
+
+	// update block ptr
+	r = write_block_ptr(object, file, offset, blockno, head, &newtail);
+
+	blockno = blockno + frags;
+	f->lastfrag = blockno - 1;
+
+	return blockno;
+}
+
 // Allocates fragments, really
 static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
 {
@@ -1125,7 +1185,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
 	bdesc_t * block;
 	uint32_t blockno;
-	bool synthetic = 0;
+	bool synthetic = 0, use_newtail = 0;
 	chdesc_t * newtail;
 	int r;
 
@@ -1139,10 +1199,16 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 	// Time to allocate a find a new block
 	if (((f->lastfrag + 1) % info->super->fs_frag) == 0) {
-		blockno = find_free_block_linear(object, file, purpose);
-		if (blockno == INVALID_BLOCK)
-			return INVALID_BLOCK;
-		blockno *= info->super->fs_frag;
+		if (f->numfrags % info->super->fs_frag) {
+			blockno = find_frags_new_home(object, file, purpose, head, tail);
+			use_newtail = 1;
+		}
+		else {
+			blockno = find_free_block_linear(object, file, purpose);
+			if (blockno == INVALID_BLOCK)
+				return INVALID_BLOCK;
+			blockno *= info->super->fs_frag;
+		}
 	}
 	else {
 		r = read_fragment_bitmap(object, f->lastfrag + 1);
@@ -1152,17 +1218,15 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 			blockno = f->lastfrag + 1; // UFS says we must use it
 		else
 		{
-			// Time to allocate a new block and copy the data there
-			// TODO fill in code here
-			// find new block
-			blockno = find_free_block_linear(object, file, purpose);
-			// for all fragments not part of a block
-			// read the frag, allocate new frag, copy old frag to new frag
-			// set block ptr accordingly, also set blockno, f->lastfrag
+			blockno = find_frags_new_home(object, file, purpose, head, tail);
+			use_newtail = 1;
 		}
 	}
 
-	r = write_fragment_bitmap(object, blockno, UFS_USED, head, tail);
+	if (use_newtail)
+		r = write_fragment_bitmap(object, blockno, UFS_USED, head, &newtail);
+	else
+		r = write_fragment_bitmap(object, blockno, UFS_USED, head, tail);
 	if (r != 0)
 		return INVALID_BLOCK;
 
@@ -1257,7 +1321,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
 
-	if (offset % info->super->fs_fsize || offset > f->file->f_inode.di_size)
+	if (offset % info->super->fs_fsize || offset >= f->file->f_inode.di_size)
 		return INVALID_BLOCK;
 
 	nindirb = info->super->fs_nindir;
@@ -1399,25 +1463,41 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 	return 0;
 }
 
-// TODO
 static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
-	uint32_t nfrags = f->numfrags;
-	uint32_t nblocks;
-	uint32_t nindirb;
+	uint32_t offset;
+	int r;
 
-	if (!head || !tail || !f)
+	if (!head || !tail || !f || block == INVALID_BLOCK)
 		return -E_INVAL;
 
-	nfrags = f->numfrags;
-	nblocks = nfrags / info->super->fs_frag;
-	if (nfrags % info->super->fs_frag)
-		nblocks++;
+	if (block != f->lastalloc)
+		// hmm, that's not the right block
+		return -E_UNSPECIFIED;
 
-	nindirb = info->super->fs_nindir;
+	if (f->numfrags % info->super->fs_frag) {
+		// not appending to a new block,
+		// the fragment has been attached implicitly
+		f->numfrags++;
+		f->lastfrag = block;
+		f->lastalloc = INVALID_BLOCK;
+
+		*tail = NULL;
+
+		return 0;
+	}
+
+	offset = f->numfrags * info->super->fs_fsize;
+	r = write_block_ptr(object, file, offset, block, head, tail);
+	if (r < 0)
+		return r;
+
+	f->numfrags++;
+	f->lastfrag = block;
+	f->lastalloc = INVALID_BLOCK;
 
 	return 0;
 }
@@ -1567,7 +1647,7 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 // TODO (permission feature, etc)
 static int ufs_set_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
+	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	int r;
 	
 	if (!head || !tail || !f || !data)
