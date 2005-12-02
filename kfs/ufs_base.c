@@ -16,7 +16,7 @@
 #error inc/fs.h got included in ufs_base.c
 #endif
 
-#define UFS_BASE_DEBUG 1
+#define UFS_BASE_DEBUG 0
 
 #if UFS_BASE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -430,9 +430,31 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
 	uint32_t blockno, offset, * ptr;
-	int r, unused_before = 0, unused_after = 0;
+	int r, nfrags_before, nfrags_after, unused_before = 0, unused_after = 0;
 	bdesc_t * block, * cgblock;
 	chdesc_t * newtail, * ch;
+
+	// Counting bits set in a byte via lookup table...
+	// anyone know a faster/better way?
+	const unsigned char BitsSetTable256[] = 
+	{
+		0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8
+	};
 
 	if (!head || !tail)
 		return -E_INVAL;
@@ -465,7 +487,8 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 		return 1;
 	}
 
-	if (((*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF) == 0xFF)
+	nfrags_before = BitsSetTable256[(*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF];
+	if (nfrags_before == 8)
 		unused_before = 1;
 
 	blockno = info->cylstart[num / info->super->fs_fpg]
@@ -490,7 +513,8 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	*tail = ch;
 	*head = ch;
 
-	if (((*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF) == 0xFF)
+	nfrags_after = BitsSetTable256[(*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF];
+	if (nfrags_after == 8)
 		unused_after = 1;
 
 	if (value) { // Marked fragment as free
@@ -500,9 +524,13 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 			if (r < 0)
 				return r;
 			cg.cg_cs.cs_nffree -= (info->super->fs_frag - 1);
+			info->super->fs_cstotal.cs_nffree -= (info->super->fs_frag - 1);
 		}
 		else
+		{
 			cg.cg_cs.cs_nffree++;
+			info->super->fs_cstotal.cs_nffree++;
+		}
 	}
 	else { // Marked fragment as used
 		if (unused_before) { // Mark the whole block as used
@@ -511,14 +539,38 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 			if (r < 0)
 				return r;
 			cg.cg_cs.cs_nffree += (info->super->fs_frag - 1);
+			info->super->fs_cstotal.cs_nffree += (info->super->fs_frag - 1);
 		}
 		else
+		{
 			cg.cg_cs.cs_nffree--;
+			info->super->fs_cstotal.cs_nffree--;
+		}
+	}
+
+	if (nfrags_before > 0 && nfrags_before < 8) {
+		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_before];
+		cg.cg_frsum[nfrags_before]--;
+		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
+				sizeof(cg.cg_frsum[nfrags_before]),
+				&cg.cg_frsum[nfrags_before], head, &newtail);
+		if (r < 0)
+			return r;
+
+	}
+	if (nfrags_after > 0 && nfrags_after < 8) {
+		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_after];
+		cg.cg_frsum[nfrags_after]++;
+		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
+				sizeof(cg.cg_frsum[nfrags_after]),
+				&cg.cg_frsum[nfrags_after], head, &newtail);
+		if (r < 0)
+			return r;
 	}
 
 	r = chdesc_create_byte(cgblock, info->ubd,
-			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nifree,
-			sizeof(cg.cg_cs.cs_nifree), &cg.cg_cs.cs_nifree, head, &newtail);
+			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nffree,
+			sizeof(cg.cg_cs.cs_nffree), &cg.cg_cs.cs_nffree, head, &newtail);
 	if (r < 0)
 		return r;
 
@@ -526,11 +578,10 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	if (r < 0)
 		return r;
 
-	info->super->fs_cstotal.cs_nifree--;
 	r = chdesc_create_byte(info->super_block, info->ubd,
-			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nifree,
-			sizeof(info->super->fs_cstotal.cs_nifree),
-			&info->super->fs_cstotal.cs_nifree, head, &newtail);
+			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nffree,
+			sizeof(info->super->fs_cstotal.cs_nffree),
+			&info->super->fs_cstotal.cs_nffree, head, &newtail);
 	if (r < 0)
 		return r;
 
@@ -612,8 +663,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	else
 		cg.cg_cs.cs_nbfree--;
 	r = chdesc_create_byte(cgblock, info->ubd,
-			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nifree,
-			sizeof(cg.cg_cs.cs_nifree), &cg.cg_cs.cs_nifree, head, &newtail);
+			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nbfree,
+			sizeof(cg.cg_cs.cs_nbfree), &cg.cg_cs.cs_nbfree, head, &newtail);
 	if (r < 0)
 		return r;
 
@@ -626,9 +677,9 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	else
 		info->super->fs_cstotal.cs_nbfree--;
 	r = chdesc_create_byte(info->super_block, info->ubd,
-			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nifree,
-			sizeof(info->super->fs_cstotal.cs_nifree),
-			&info->super->fs_cstotal.cs_nifree, head, &newtail);
+			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nbfree,
+			sizeof(info->super->fs_cstotal.cs_nbfree),
+			&info->super->fs_cstotal.cs_nbfree, head, &newtail);
 	if (r < 0)
 		return r;
 
@@ -649,8 +700,7 @@ static uint32_t find_free_block_linear(LFS_t * object, fdesc_t * file, int purpo
 	int r;
 
 	// Find free block
-	// FIXME, make sure it's fs_dsize and not fs_size
-	for (num = 0; num < info->super->fs_dsize; num++) {
+	for (num = 0; num < info->super->fs_size / info->super->fs_frag; num++) {
 		r = read_block_bitmap(object, num);
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -671,8 +721,7 @@ static uint32_t find_free_frag_linear(LFS_t * object, fdesc_t * file, int purpos
 	int r;
 
 	// Find free block
-	// FIXME, make sure it's fs_dsize and not fs_size
-	for (num = 0; num < info->super->fs_dsize * info->super->fs_frag; num++) {
+	for (num = 0; num < info->super->fs_size; num++) {
 		r = read_fragment_bitmap(object, num);
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -1142,6 +1191,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		return INVALID_BLOCK;
 	blockno *= info->super->fs_frag;
 
+	printf("XXX moving %d blocks from %d to %d\n", frags, f->lastfrag - frags + 1, blockno);
 	// allocate some fragments
 	for (i = 0 ; i < frags; i++) {
 		if (i == 0)
@@ -1171,6 +1221,13 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	// update block ptr
 	r = write_block_ptr(object, file, offset, blockno, head, &newtail);
 
+	// free old fragments
+	for (i = 0 ; i < frags; i++) {
+		r = write_fragment_bitmap(object, f->lastfrag - frags + i + 1, UFS_FREE, head, &newtail);
+		if (r != 0)
+			return INVALID_BLOCK;
+	}
+
 	blockno = blockno + frags;
 	f->lastfrag = blockno - 1;
 
@@ -1199,6 +1256,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 	// Time to allocate a find a new block
 	if (((f->lastfrag + 1) % info->super->fs_frag) == 0) {
+		printf("XXX new block time\n");
 		if (f->numfrags % info->super->fs_frag) {
 			blockno = find_frags_new_home(object, file, purpose, head, tail);
 			use_newtail = 1;
@@ -1223,6 +1281,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		}
 	}
 
+	printf("XXX allocate %d\n", blockno);
 	if (use_newtail)
 		r = write_fragment_bitmap(object, blockno, UFS_USED, head, &newtail);
 	else
