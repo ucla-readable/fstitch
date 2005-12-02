@@ -1191,7 +1191,6 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		return INVALID_BLOCK;
 	blockno *= info->super->fs_frag;
 
-	printf("XXX moving %d blocks from %d to %d\n", frags, f->lastfrag - frags + 1, blockno);
 	// allocate some fragments
 	for (i = 0 ; i < frags; i++) {
 		if (i == 0)
@@ -1256,7 +1255,6 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 	// Time to allocate a find a new block
 	if (((f->lastfrag + 1) % info->super->fs_frag) == 0) {
-		printf("XXX new block time\n");
 		if (f->numfrags % info->super->fs_frag) {
 			blockno = find_frags_new_home(object, file, purpose, head, tail);
 			use_newtail = 1;
@@ -1281,7 +1279,6 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		}
 	}
 
-	printf("XXX allocate %d\n", blockno);
 	if (use_newtail)
 		r = write_fragment_bitmap(object, blockno, UFS_USED, head, &newtail);
 	else
