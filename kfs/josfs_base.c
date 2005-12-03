@@ -59,7 +59,7 @@ struct josfs_fdesc {
 };
 
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number);
-static int josfs_free_block(LFS_t * object, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
+static int josfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
@@ -1072,7 +1072,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 	dir->f_size += JOSFS_BLKSIZE;
 	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &(dir->f_size), head, &newtail);
 	if (r < 0) {
-		josfs_free_block(object, number, head, &newtail);
+		josfs_free_block(object, NULL, number, head, &newtail);
 		goto allocate_name_exit2;
 	}
 
@@ -1220,7 +1220,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 			return INVALID_BLOCK;
 
 		f->file->f_indirect = 0;
-		r = josfs_free_block(object, indirect->number, head, &newtail);
+		r = josfs_free_block(object, NULL, indirect->number, head, &newtail);
 
 		return blockno;
 	}
@@ -1246,7 +1246,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 	}
 }
 
-static int josfs_free_block(LFS_t * object, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int josfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_free_block\n");
 	return write_bitmap(object, block, 1, head, tail);

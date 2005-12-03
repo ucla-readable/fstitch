@@ -149,7 +149,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 		save_head = prev_head;
 
 		/* Now free the block */
-		r = CALL(state->lfs, free_block, block, &prev_head, &tail);
+		r = CALL(state->lfs, free_block, f->fdesc, block, &prev_head, &tail);
 		if (r < 0)
 			return r;
 
@@ -504,7 +504,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 
 		save_head = prev_head;
 
-		r = CALL(state->lfs, free_block, number, &prev_head, &tail);
+		r = CALL(state->lfs, free_block, f, number, &prev_head, &tail);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
