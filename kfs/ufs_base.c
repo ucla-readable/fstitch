@@ -52,9 +52,12 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
 static int ufs_set_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 
+static uint32_t read_btot(LFS_t * object, uint32_t num);
+static uint16_t read_fbp(LFS_t * object, uint32_t num);
 static int read_inode_bitmap(LFS_t * object, uint32_t blockno);
 static int read_fragment_bitmap(LFS_t * object, uint32_t blockno);
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
+static int write_btot(LFS_t * object, uint32_t num, uint32_t value, chdesc_t ** head, chdesc_t ** tail);
 static int write_inode_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
 static int write_fragment_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
 static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
@@ -229,6 +232,70 @@ static int check_super(LFS_t * object)
 	return 0;
 }
 
+static uint32_t read_btot(LFS_t * object, uint32_t num)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct UFS_cg cg;
+	uint32_t blockno, offset;
+	uint32_t * ptr;
+	int r;
+	bdesc_t * block;
+
+	r = read_cg(object, num / info->super->fs_fpg, &cg);
+	if (r < 0)
+		return r;
+
+	offset = num % info->super->fs_fpg;
+	if (offset >= cg.cg_ndblk)
+		return -E_INVAL;
+
+	offset = cg.cg_btotoff + offset / 256;
+	blockno = info->cylstart[num / info->super->fs_fpg]
+		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
+
+	block = CALL(info->ubd, read_block, blockno);
+	if (!block)
+		return -E_NOT_FOUND;
+
+	ptr = ((uint32_t *) block->ddesc->data)
+		+ (offset % info->super->fs_fsize) / 4;
+
+	return *ptr;
+}
+
+static uint16_t read_fbp(LFS_t * object, uint32_t num)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct UFS_cg cg;
+	uint32_t blockno, offset;
+	uint32_t * ptr;
+	int r;
+	bdesc_t * block;
+
+	r = read_cg(object, num / info->super->fs_fpg, &cg);
+	if (r < 0)
+		return r;
+
+	offset = num % info->super->fs_fpg;
+	if (offset >= cg.cg_ndblk)
+		return -E_INVAL;
+
+	offset = cg.cg_boff + offset / 512;
+	blockno = info->cylstart[num / info->super->fs_fpg]
+		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
+
+	block = CALL(info->ubd, read_block, blockno);
+	if (!block)
+		return -E_NOT_FOUND;
+
+	ptr = ((uint32_t *) block->ddesc->data)
+		+ (offset % info->super->fs_fsize) / 4;
+
+	if ((num / 1024) % 2)
+		return ((*ptr >> 16) & 0xFFFF);
+	return (*ptr & 0xFFFF);
+}
+
 static int read_inode_bitmap(LFS_t * object, uint32_t num)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -327,6 +394,91 @@ static int read_block_bitmap(LFS_t * object, uint32_t num)
 	if (*ptr & (1 << (num % 32)))
 		return UFS_FREE;
 	return UFS_USED;
+}
+
+static int write_btot(LFS_t * object, uint32_t num, uint32_t value, chdesc_t ** head, chdesc_t ** tail)
+{
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct UFS_cg cg;
+	uint32_t blockno, offset, * ptr;
+	int r;
+	bdesc_t * block;
+
+	// FIXME I think value <= 128
+	if (!head || !tail || value > 128)
+		return -E_INVAL;
+
+	r = read_cg(object, num / info->super->fs_fpg, &cg);
+	if (r < 0)
+		return r;
+
+	offset = num % info->super->fs_fpg;
+	if (offset >= cg.cg_ndblk)
+		return -E_INVAL;
+
+	offset = cg.cg_btotoff + offset / 256;
+	blockno = info->cylstart[num / info->super->fs_fpg]
+		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
+
+	block = CALL(info->ubd, read_block, blockno);
+	if (!block)
+		return -E_NOT_FOUND;
+
+	ptr = ((uint32_t *) block->ddesc->data)
+		+ (offset % info->super->fs_fsize) / 4;
+
+	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head, tail);
+	if (r >= 0)
+		r = CALL(info->ubd, write_block, block);
+	if (r < 0)
+		return r;
+
+	return 0;
+}
+
+static int write_fbp(LFS_t * object, uint32_t num, uint16_t value, chdesc_t ** head, chdesc_t ** tail)
+{
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct UFS_cg cg;
+	uint32_t blockno, offset, * ptr;
+	int r;
+	bdesc_t * block;
+
+	// FIXME I think value <= 128
+	if (!head || !tail || value > 128)
+		return -E_INVAL;
+
+	r = read_cg(object, num / info->super->fs_fpg, &cg);
+	if (r < 0)
+		return r;
+
+	offset = num % info->super->fs_fpg;
+	if (offset >= cg.cg_ndblk)
+		return -E_INVAL;
+
+	offset = cg.cg_boff + offset / 512;
+	blockno = info->cylstart[num / info->super->fs_fpg]
+		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
+
+	block = CALL(info->ubd, read_block, blockno);
+	if (!block)
+		return -E_NOT_FOUND;
+
+	ptr = ((uint32_t *) block->ddesc->data)
+		+ (offset % info->super->fs_fsize) / 4;
+
+	if ((num / 1024) % 2)
+		offset += 2;
+
+	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head, tail);
+	if (r >= 0)
+		r = CALL(info->ubd, write_block, block);
+	if (r < 0)
+		return r;
+
+	return 0;
 }
 
 static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
@@ -599,7 +751,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
-	uint32_t blocknum, blockno, offset, * ptr;
+	uint32_t blocknum, blockno, offset, * ptr, btot;
+	uint16_t fbp;
 	int r;
 	bdesc_t * block, * cgblock;
 	chdesc_t * newtail, * ch;
@@ -671,6 +824,27 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	r = CALL(info->ubd, write_block, cgblock);
 	if (r < 0)
 		return r;
+
+	if (value) {
+		btot = read_btot(object, blocknum) + 1;
+		r = write_btot(object, blocknum, btot, head, &newtail);
+		if (r < 0)
+			return r;
+		fbp = read_fbp(object, blocknum) + 1;
+		r = write_fbp(object, blocknum, fbp, head, &newtail);
+		if (r < 0)
+			return r;
+	}
+	else {
+		btot = read_btot(object, blocknum) - 1;
+		r = write_btot(object, blocknum, btot, head, &newtail);
+		if (r < 0)
+			return r;
+		fbp = read_fbp(object, blocknum) - 1;
+		r = write_fbp(object, blocknum, fbp, head, &newtail);
+		if (r < 0)
+			return r;
+	}
 
 	if (value)
 		info->super->fs_cstotal.cs_nbfree++;
@@ -1521,11 +1695,12 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 
 static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
 	uint32_t offset;
 	int r;
+	chdesc_t * newtail;
 
 	if (!head || !tail || !f || block == INVALID_BLOCK)
 		return -E_INVAL;
@@ -1534,6 +1709,11 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 		// hmm, that's not the right block
 		return -E_UNSPECIFIED;
 
+	f->file->f_inode.di_blocks += 4; // grr, di_blocks counts 512 byte blocks
+	r = write_inode(object, f->file->f_num, f->file->f_inode, head, tail);
+	if (r < 0)
+		return r;
+
 	if (f->numfrags % info->super->fs_frag) {
 		// not appending to a new block,
 		// the fragment has been attached implicitly
@@ -1541,13 +1721,11 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 		f->lastfrag = block;
 		f->lastalloc = INVALID_BLOCK;
 
-		*tail = NULL;
-
 		return 0;
 	}
 
 	offset = f->numfrags * info->super->fs_fsize;
-	r = write_block_ptr(object, file, offset, block, head, tail);
+	r = write_block_ptr(object, file, offset, block, head, &newtail);
 	if (r < 0)
 		return r;
 
@@ -1573,12 +1751,51 @@ static int ufs_rename(LFS_t * object, const char * oldname, const char * newname
 // TODO
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
-	return 0;
+	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
+	uint32_t offset, blockno, truncated;
+	int r;
+	chdesc_t * newtail;
+
+	if (!head || !tail || !f || f->numfrags == 0)
+		return INVALID_BLOCK;
+
+	f->file->f_inode.di_blocks -= 4; // grr, di_blocks counts 512 byte blocks
+	r = write_inode(object, f->file->f_num, f->file->f_inode, head, tail);
+	if (r < 0)
+		return INVALID_BLOCK;
+
+	truncated = f->lastfrag;
+
+	if (f->numfrags % info->super->fs_frag) {
+
+		// not truncating the entire block
+		// the fragment has been attached implicitly
+		f->numfrags--;
+		f->lastfrag--;
+
+		return truncated;
+	}
+
+	offset = f->numfrags * info->super->fs_fsize;
+	r = write_block_ptr(object, file, offset, 0, head, &newtail);
+	if (r < 0)
+		return INVALID_BLOCK;
+
+	offset -= info->super->fs_bsize;
+	blockno = ufs_get_file_block(object, file, offset);
+	assert(blockno != INVALID_BLOCK); // FIXME handle better
+
+	f->lastfrag = blockno + info->super->fs_frag - 2;
+	f->numfrags--;
+
+	return truncated;
 }
 
 static int ufs_free_block(LFS_t * object, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
 	return write_fragment_bitmap(object, block, UFS_FREE, head, tail);
 }
 
