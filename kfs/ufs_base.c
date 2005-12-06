@@ -242,11 +242,11 @@ static uint32_t read_btot(LFS_t * object, uint32_t num)
 
 	r = read_cg(object, num / info->super->fs_fpg, &cg);
 	if (r < 0)
-		return r;
+		return INVALID_BLOCK;
 
 	offset = num % info->super->fs_fpg;
 	if (offset >= cg.cg_ndblk)
-		return -E_INVAL;
+		return INVALID_BLOCK;
 
 	offset = cg.cg_btotoff + offset / 256;
 	blockno = info->cylstart[num / info->super->fs_fpg]
@@ -254,7 +254,7 @@ static uint32_t read_btot(LFS_t * object, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno);
 	if (!block)
-		return -E_NOT_FOUND;
+		return INVALID_BLOCK;
 
 	ptr = ((uint32_t *) block->ddesc->data)
 		+ (offset % info->super->fs_fsize) / 4;
@@ -273,11 +273,11 @@ static uint16_t read_fbp(LFS_t * object, uint32_t num)
 
 	r = read_cg(object, num / info->super->fs_fpg, &cg);
 	if (r < 0)
-		return r;
+		return UFS_INVALID16;
 
 	offset = num % info->super->fs_fpg;
 	if (offset >= cg.cg_ndblk)
-		return -E_INVAL;
+		return UFS_INVALID16;
 
 	offset = cg.cg_boff + offset / 512;
 	blockno = info->cylstart[num / info->super->fs_fpg]
@@ -285,7 +285,7 @@ static uint16_t read_fbp(LFS_t * object, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno);
 	if (!block)
-		return -E_NOT_FOUND;
+		return UFS_INVALID16;
 
 	ptr = ((uint32_t *) block->ddesc->data)
 		+ (offset % info->super->fs_fsize) / 4;
@@ -397,14 +397,13 @@ static int read_block_bitmap(LFS_t * object, uint32_t num)
 
 static int write_btot(LFS_t * object, uint32_t num, uint32_t value, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
+	Dprintf("UFSDEBUG: %s %d %d\n", __FUNCTION__, num, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
-	uint32_t blockno, offset, * ptr;
+	uint32_t blockno, offset;
 	int r;
 	bdesc_t * block;
 
-	// FIXME I think value <= 128
 	if (!head || !tail || value > 128)
 		return -E_INVAL;
 
@@ -424,9 +423,6 @@ static int write_btot(LFS_t * object, uint32_t num, uint32_t value, chdesc_t ** 
 	if (!block)
 		return -E_NOT_FOUND;
 
-	ptr = ((uint32_t *) block->ddesc->data)
-		+ (offset % info->super->fs_fsize) / 4;
-
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head, tail);
 	if (r >= 0)
 		r = CALL(info->ubd, write_block, block);
@@ -438,14 +434,13 @@ static int write_btot(LFS_t * object, uint32_t num, uint32_t value, chdesc_t ** 
 
 static int write_fbp(LFS_t * object, uint32_t num, uint16_t value, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
+	Dprintf("UFSDEBUG: %s %d %d\n", __FUNCTION__, num, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
-	uint32_t blockno, offset, * ptr;
+	uint32_t blockno, offset;
 	int r;
 	bdesc_t * block;
 
-	// FIXME I think value <= 128
 	if (!head || !tail || value > 128)
 		return -E_INVAL;
 
@@ -464,12 +459,6 @@ static int write_fbp(LFS_t * object, uint32_t num, uint16_t value, chdesc_t ** h
 	block = CALL(info->ubd, read_block, blockno);
 	if (!block)
 		return -E_NOT_FOUND;
-
-	ptr = ((uint32_t *) block->ddesc->data)
-		+ (offset % info->super->fs_fsize) / 4;
-
-	if ((num / 1024) % 2)
-		offset += 2;
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head, tail);
 	if (r >= 0)
@@ -747,7 +736,7 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 // You probably want allocate_wholeblock()
 static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
+	Dprintf("UFSDEBUG: %s %d %d\n", __FUNCTION__, num, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
 	uint32_t blocknum, blockno, offset, * ptr, btot;
@@ -788,7 +777,7 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		return 1;
 	}
 
-	blockno = info->cylstart[num / info->super->fs_fpg]
+	blockno = info->cylstart[blocknum / info->super->fs_fpg]
 		+ info->super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno);
 	if (!cgblock)
@@ -826,24 +815,18 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 
 	if (value) {
 		btot = read_btot(object, blocknum) + 1;
-		r = write_btot(object, blocknum, btot, head, &newtail);
-		if (r < 0)
-			return r;
 		fbp = read_fbp(object, blocknum) + 1;
-		r = write_fbp(object, blocknum, fbp, head, &newtail);
-		if (r < 0)
-			return r;
 	}
 	else {
 		btot = read_btot(object, blocknum) - 1;
-		r = write_btot(object, blocknum, btot, head, &newtail);
-		if (r < 0)
-			return r;
 		fbp = read_fbp(object, blocknum) - 1;
-		r = write_fbp(object, blocknum, fbp, head, &newtail);
-		if (r < 0)
-			return r;
 	}
+	r = write_btot(object, blocknum, btot, head, &newtail);
+	if (r < 0)
+		return r;
+	r = write_fbp(object, blocknum, fbp, head, &newtail);
+	if (r < 0)
+		return r;
 
 	if (value)
 		info->super->fs_cstotal.cs_nbfree++;
@@ -959,6 +942,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 // Deallocate an entire block
 static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
 	int r;
@@ -1205,7 +1189,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 
 		// Deallocate double indirect block if necessary
 		if (blockno == UFS_NDADDR + nindirb && r >= 0) {
-			r = modify_indirect_ptr(object, file, 0, 1, head, newtail);
+			r = modify_indirect_ptr(object, file, 1, 1, head, newtail);
 			if (r >= 0)
 				r = erase_wholeblock(object, num[1], file, head, newtail);
 		}
@@ -2005,13 +1989,9 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 			if (f->numfrags % info->super->fs_frag == 0) {
 				assert(block % info->super->fs_frag == 0);
 
-				f->file->f_inode.di_blocks -= 32;
-				r = write_inode(object, f->file->f_num, f->file->f_inode, head, tail);
-				if (r < 0)
-					return r;
 				// free the entire block
 				assert(block % info->super->fs_frag == 0);
-				return erase_wholeblock(object, block / info->super->fs_frag, file, head, &newtail);
+				return erase_wholeblock(object, block / info->super->fs_frag, file, head, tail);
 			}
 			else {
 				// Do nothing
