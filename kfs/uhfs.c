@@ -472,7 +472,8 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool link_supported = lfs_feature_supported(state->lfs, name, KFS_feature_nlinks.id);
 	int i, r;
-	uint32_t nlinks, nblocks;
+	uint32_t nblocks;
+	uint16_t nlinks;
 	size_t data_len;
 	void * data;
 	chdesc_t * prev_head = NULL, * tail, * save_head;
