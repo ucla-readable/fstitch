@@ -231,6 +231,62 @@ static int check_super(LFS_t * object)
 	return 0;
 }
 
+// [ndir, ..., nffree] parameters are deltas
+static int update_summary(LFS_t * object, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head, chdesc_t ** tail)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct UFS_cg cg;
+	uint32_t blockno;
+	int r;
+	bdesc_t * cgblock;
+	chdesc_t * newtail;
+
+	if (!head || !tail || cyl < 0 || cyl >= info->super->fs_ncg)
+		return -E_INVAL;
+
+	r = read_cg(object, cyl, &cg);
+	if (r < 0)
+		return r;
+
+	blockno = info->cylstart[cyl] + info->super->fs_cblkno;
+	cgblock = CALL(info->ubd, read_block, blockno);
+	if (!cgblock)
+		return -E_NOT_FOUND;
+
+	cg.cg_cs.cs_ndir += ndir;
+	cg.cg_cs.cs_nbfree += nbfree;
+	cg.cg_cs.cs_nifree += nifree;
+	cg.cg_cs.cs_nffree += nffree;
+
+	r = chdesc_create_byte(cgblock, info->ubd,
+			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs,
+			sizeof(cg.cg_cs), &cg.cg_cs, head, tail);
+	if (r < 0)
+		return r;
+
+	r = CALL(info->ubd, write_block, cgblock);
+	if (r < 0)
+		return r;
+
+	info->super->fs_cstotal.cs_ndir += ndir;
+	info->super->fs_cstotal.cs_nbfree += nbfree;
+	info->super->fs_cstotal.cs_nifree += nifree;
+	info->super->fs_cstotal.cs_nffree += nffree;
+
+	r = chdesc_create_byte(info->super_block, info->ubd,
+			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal,
+			sizeof(info->super->fs_cstotal),
+			&info->super->fs_cstotal, head, &newtail);
+	if (r < 0)
+		return r;
+
+	r = CALL(info->ubd, write_block, info->super_block);
+	if (r < 0)
+		return r;
+
+	return 0;
+}
+
 static uint32_t read_btot(LFS_t * object, uint32_t num)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -475,8 +531,8 @@ static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
 	uint32_t blockno, offset, * ptr;
-	int r;
-	bdesc_t * block, * cgblock;
+	int r, cyl = num / info->super->fs_ipg;
+	bdesc_t * block;
 	chdesc_t * newtail, * ch;
 
 	if (!head || !tail)
@@ -487,7 +543,7 @@ static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	else
 		value = 0;
 
-	r = read_cg(object, num / info->super->fs_ipg, &cg);
+	r = read_cg(object, cyl, &cg);
 	if (r < 0)
 		return r;
 
@@ -496,7 +552,7 @@ static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		return -E_INVAL;
 
 	offset = cg.cg_iusedoff + offset / 8;
-	blockno = info->cylstart[num / info->super->fs_ipg]
+	blockno = info->cylstart[cyl]
 		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno);
 	if (!block)
@@ -509,12 +565,6 @@ static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		printf("already at the right value!\n");
 		return 1;
 	}
-
-	blockno = info->cylstart[num / info->super->fs_ipg]
-		+ info->super->fs_cblkno;
-	cgblock = CALL(info->ubd, read_block, blockno);
-	if (!cgblock)
-		return -E_NOT_FOUND;
 
 	ch = chdesc_create_bit(block, info->ubd,
 			(offset % info->super->fs_fsize) / 4, 1 << (num % 32));
@@ -533,35 +583,11 @@ static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	*head = ch;
 
 	if (value)
-		cg.cg_cs.cs_nifree--;
+		r = update_summary(object, cyl, 0, 0, -1, 0, head, &newtail);
 	else
-		cg.cg_cs.cs_nifree++;
-	r = chdesc_create_byte(cgblock, info->ubd,
-			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nifree,
-			sizeof(cg.cg_cs.cs_nifree), &cg.cg_cs.cs_nifree, head, &newtail);
-	if (r < 0)
-		return r;
+		r = update_summary(object, cyl, 0, 0, 1, 0, head, &newtail);
 
-	r = CALL(info->ubd, write_block, cgblock);
-	if (r < 0)
-		return r;
-
-	if (value)
-		info->super->fs_cstotal.cs_nifree--;
-	else
-		info->super->fs_cstotal.cs_nifree++;
-	r = chdesc_create_byte(info->super_block, info->ubd,
-			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nifree,
-			sizeof(info->super->fs_cstotal.cs_nifree),
-			&info->super->fs_cstotal.cs_nifree, head, &newtail);
-	if (r < 0)
-		return r;
-
-	r = CALL(info->ubd, write_block, info->super_block);
-	if (r < 0)
-		return r;
-
-	return 0;
+	return r;
 }
 
 static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
@@ -570,7 +596,8 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
 	uint32_t blockno, offset, * ptr;
-	int r, nfrags_before, nfrags_after, unused_before = 0, unused_after = 0;
+	int r, nf, cyl = num / info->super->fs_fpg;
+	int nfrags_before, nfrags_after, unused_before = 0, unused_after = 0;
 	bdesc_t * block, * cgblock;
 	chdesc_t * newtail, * ch;
 
@@ -604,7 +631,7 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	else
 		value = 1;
 
-	r = read_cg(object, num / info->super->fs_fpg, &cg);
+	r = read_cg(object, cyl, &cg);
 	if (r < 0)
 		return r;
 
@@ -613,8 +640,8 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 		return -E_INVAL;
 
 	offset = cg.cg_freeoff + offset / 8;
-	blockno = info->cylstart[num / info->super->fs_fpg]
-		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
+	blockno = info->cylstart[cyl] + info->super->fs_cblkno
+		+ offset / info->super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno);
 	if (!block)
 		return -E_NOT_FOUND;
@@ -631,8 +658,7 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 	if (nfrags_before == 8)
 		unused_before = 1;
 
-	blockno = info->cylstart[num / info->super->fs_fpg]
-		+ info->super->fs_cblkno;
+	blockno = info->cylstart[cyl] + info->super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno);
 	if (!cgblock)
 		return -E_NOT_FOUND;
@@ -663,14 +689,10 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 					UFS_FREE, head, &newtail);
 			if (r < 0)
 				return r;
-			cg.cg_cs.cs_nffree -= (info->super->fs_frag - 1);
-			info->super->fs_cstotal.cs_nffree -= (info->super->fs_frag - 1);
+			nf = 1 - info->super->fs_frag;
 		}
 		else
-		{
-			cg.cg_cs.cs_nffree++;
-			info->super->fs_cstotal.cs_nffree++;
-		}
+			nf = 1;
 	}
 	else { // Marked fragment as used
 		if (unused_before) { // Mark the whole block as used
@@ -678,14 +700,10 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 					UFS_USED, head, &newtail);
 			if (r < 0)
 				return r;
-			cg.cg_cs.cs_nffree += (info->super->fs_frag - 1);
-			info->super->fs_cstotal.cs_nffree += (info->super->fs_frag - 1);
+			nf = info->super->fs_frag - 1;
 		}
 		else
-		{
-			cg.cg_cs.cs_nffree--;
-			info->super->fs_cstotal.cs_nffree--;
-		}
+			nf = -1;
 	}
 
 	if (nfrags_before > 0 && nfrags_before < 8) {
@@ -708,28 +726,11 @@ static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdes
 			return r;
 	}
 
-	r = chdesc_create_byte(cgblock, info->ubd,
-			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nffree,
-			sizeof(cg.cg_cs.cs_nffree), &cg.cg_cs.cs_nffree, head, &newtail);
-	if (r < 0)
-		return r;
-
 	r = CALL(info->ubd, write_block, cgblock);
 	if (r < 0)
 		return r;
 
-	r = chdesc_create_byte(info->super_block, info->ubd,
-			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nffree,
-			sizeof(info->super->fs_cstotal.cs_nffree),
-			&info->super->fs_cstotal.cs_nffree, head, &newtail);
-	if (r < 0)
-		return r;
-
-	r = CALL(info->ubd, write_block, info->super_block);
-	if (r < 0)
-		return r;
-
-	return 0;
+	return update_summary(object, cyl, 0, 0, 0, nf, head, &newtail);
 }
 
 // This is the 'raw' function to write the block bitmap
@@ -741,8 +742,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	struct UFS_cg cg;
 	uint32_t blocknum, blockno, offset, * ptr, btot;
 	uint16_t fbp;
-	int r;
-	bdesc_t * block, * cgblock;
+	int r, cyl;
+	bdesc_t * block;
 	chdesc_t * newtail, * ch;
 
 	if (!head || !tail)
@@ -754,7 +755,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		value = 1;
 
 	blocknum = num * info->super->fs_frag;
-	r = read_cg(object, blocknum / info->super->fs_fpg, &cg);
+	cyl = blocknum / info->super->fs_fpg;
+	r = read_cg(object, cyl, &cg);
 	if (r < 0)
 		return r;
 
@@ -763,8 +765,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		return -E_INVAL;
 
 	offset = cg.cg_clusteroff + offset / 8;
-	blockno = info->cylstart[blocknum / info->super->fs_fpg]
-		+ info->super->fs_cblkno + offset / info->super->fs_fsize;
+	blockno = info->cylstart[cyl] + info->super->fs_cblkno
+		+ offset / info->super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno);
 	if (!block)
 		return -E_NOT_FOUND;
@@ -776,12 +778,6 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 		printf("already at the right value!\n");
 		return 1;
 	}
-
-	blockno = info->cylstart[blocknum / info->super->fs_fpg]
-		+ info->super->fs_cblkno;
-	cgblock = CALL(info->ubd, read_block, blockno);
-	if (!cgblock)
-		return -E_NOT_FOUND;
 
 	ch = chdesc_create_bit(block, info->ubd,
 			(offset % info->super->fs_fsize) / 4, 1 << (num % 32));
@@ -799,20 +795,6 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	*tail = ch;
 	*head = ch;
 
-	if (value)
-		cg.cg_cs.cs_nbfree++;
-	else
-		cg.cg_cs.cs_nbfree--;
-	r = chdesc_create_byte(cgblock, info->ubd,
-			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_nbfree,
-			sizeof(cg.cg_cs.cs_nbfree), &cg.cg_cs.cs_nbfree, head, &newtail);
-	if (r < 0)
-		return r;
-
-	r = CALL(info->ubd, write_block, cgblock);
-	if (r < 0)
-		return r;
-
 	if (value) {
 		btot = read_btot(object, blocknum) + 1;
 		fbp = read_fbp(object, blocknum) + 1;
@@ -828,22 +810,13 @@ static int write_block_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 	if (r < 0)
 		return r;
 
+
 	if (value)
-		info->super->fs_cstotal.cs_nbfree++;
+		r = update_summary(object, cyl, 0, 1, 0, 0, head, &newtail);
 	else
-		info->super->fs_cstotal.cs_nbfree--;
-	r = chdesc_create_byte(info->super_block, info->ubd,
-			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nbfree,
-			sizeof(info->super->fs_cstotal.cs_nbfree),
-			&info->super->fs_cstotal.cs_nbfree, head, &newtail);
-	if (r < 0)
-		return r;
+		r = update_summary(object, cyl, 0, -1, 0, 0, head, &newtail);
 
-	r = CALL(info->ubd, write_block, info->super_block);
-	if (r < 0)
-		return r;
-
-	return 0;
+	return r;
 }
 
 // FIXME this is a fairly inefficient way to scan for free blocks
@@ -2119,9 +2092,7 @@ static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, 
 		// Decrement parent directory's link count
 		struct UFS_dinode dir_inode;
 		struct UFS_cg cg;
-		uint32_t blockno;
-		bdesc_t * cgblock;
-		chdesc_t * newtail;
+		int cyl = f->file->f_num / info->super->fs_ipg;
 
 		r = read_inode(object, f->dir_inode, &dir_inode);
 		if (r < 0)
@@ -2132,42 +2103,13 @@ static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, 
 			goto ufs_remove_name_error;
 
 		// Update group summary
-		r = read_cg(object, f->file->f_num / info->super->fs_ipg, &cg);
+		r = read_cg(object, cyl, &cg);
 		if (r < 0)
 			goto ufs_remove_name_error;
 
-		blockno = info->cylstart[f->file->f_num / info->super->fs_ipg]
-			+ info->super->fs_cblkno;
-		cgblock = CALL(info->ubd, read_block, blockno);
-		if (!cgblock) {
-			r = -E_NOT_FOUND;
-			goto ufs_remove_name_error;
-		}
-
-		cg.cg_cs.cs_ndir--;
-
-		r = chdesc_create_byte(cgblock, info->ubd,
-				(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_ndir,
-				sizeof(cg.cg_cs.cs_ndir), &cg.cg_cs.cs_ndir, head, &newtail);
+		r = update_summary(object, cyl, -1, 0, 0, 0, head, &newtail);
 		if (r < 0)
 			goto ufs_remove_name_error;
-
-		r = CALL(info->ubd, write_block, cgblock);
-		if (r < 0)
-			goto ufs_remove_name_error;
-
-		info->super->fs_cstotal.cs_ndir--;
-		r = chdesc_create_byte(info->super_block, info->ubd,
-				(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nifree,
-				sizeof(info->super->fs_cstotal.cs_nifree),
-				&info->super->fs_cstotal.cs_nifree, head, &newtail);
-		if (r < 0)
-			goto ufs_remove_name_error;
-
-		r = CALL(info->ubd, write_block, info->super_block);
-		if (r < 0)
-			goto ufs_remove_name_error;
-
 	}
 
 	ufs_free_fdesc(object, (fdesc_t *) f);
