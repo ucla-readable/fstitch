@@ -668,6 +668,7 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
+	const bool unixdir = lfs_feature_supported(state->lfs, name, KFS_feature_unixdir.id);
 	fdesc_t * f;
 	struct dirent entry;
 	size_t data_len;
@@ -694,6 +695,13 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 		if (filetype == TYPE_DIR) {
 			do {
 				r = CALL(state->lfs, get_dirent, f, &entry, sizeof(struct dirent), &basep);
+				if (unixdir) {
+					if (!strcmp(entry.d_name, ".")
+							|| !strcmp(entry.d_name, "..")) {
+						r = 1;
+						entry.d_name[0] = 0;
+					}
+				}
 				if (r < 0) {
 					return unlink_file(cfs, name, f);
 				}

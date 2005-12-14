@@ -45,7 +45,7 @@ struct ufs_fdesc {
 };
 
 static bdesc_t * ufs_lookup_block(LFS_t * object, uint32_t number);
-static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
+static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep, const bool skip);
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
@@ -566,7 +566,7 @@ static int write_inode_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t
 
 static int write_fragment_bitmap(LFS_t * object, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
+	Dprintf("UFSDEBUG: %s %d %d\n", __FUNCTION__, num, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
 	uint32_t blockno, offset, * ptr;
@@ -1313,11 +1313,6 @@ static int erase_dirent(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc
 	if (!head || !tail || !file)
 		return -E_INVAL;
 
-	if (f->dir_offset < 24) {
-		printf("%s: trying to remove . or ..\n", __FUNCTION__);
-		return -E_NOT_EMPTY;
-	}
-
 	// FIXME perhaps we should read in the full fdesc?
 	// instead of using this synthetic version?
 	dirfdesc.file = &dirfile;
@@ -1326,7 +1321,7 @@ static int erase_dirent(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc
 	if (r < 0)
 		return r;
 
-	if (f->dir_offset % 2048 == 0){
+	if (f->dir_offset % 512 == 0) {
 		// We are the first entry in the fragment
 		p = f->dir_offset;
 		r = read_dirent(object, dirf, &entry, &p);
@@ -1396,7 +1391,7 @@ static int dir_lookup(LFS_t * object, struct UFS_File dir, const char * name, st
 	temp_fdesc.file = &dir;
 	while (r >= 0) {
 		last_basep = basep;
-		r = ufs_get_dirent(object, (fdesc_t *) &temp_fdesc, &entry, sizeof(struct dirent), &basep);
+		r = get_dirent(object, (fdesc_t *) &temp_fdesc, &entry, sizeof(struct dirent), &basep, 0);
 		if (r < 0)
 			return r;
 		if (entry.d_fileno == 0) // Blank spot
@@ -1849,9 +1844,8 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 	return -E_UNSPECIFIED;
 }
 
-static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
+static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep, const bool skip)
 {
-	Dprintf("UFSDEBUG: %s %x, %d\n", __FUNCTION__, basep, *basep);
 	struct UFS_direct dirfile;
 	struct UFS_dinode inode;
 	uint32_t actual_len, p;
@@ -1865,7 +1859,7 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 		r = read_dirent(object, file, &dirfile, &p);
 		if (r < 0)
 			return r;
-	} while (dirfile.d_ino == 0);
+	} while (skip && dirfile.d_ino == 0);
 
 	actual_len = sizeof(struct dirent) + dirfile.d_namlen - DIRENT_MAXNAMELEN;
 	if (size < actual_len)
@@ -1907,6 +1901,11 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 
 	*basep = p;
 	return 0;
+}
+
+static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
+{
+	return get_dirent(object, file, entry, size, basep, 1);
 }
 
 static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
@@ -2041,20 +2040,37 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 	return write_fragment_bitmap(object, block, UFS_FREE, head, tail);
 }
 
-// TODO remove directories
 static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f;
-	int r;
+	int r, minlinks = 1;
 	chdesc_t * newtail;
 
-	if (!head || !tail)
+	if (!head || !tail || !name || !strcmp(name, "") || !strcmp(name, "/"))
 		return -E_INVAL;
+
+	if (strlen(name) > 1)
+		if (!strcmp(name + strlen(name) - 2, "/."))
+			return -E_INVAL;
 
 	f = (struct ufs_fdesc *) ufs_lookup_name(object, name);
 	if (!f)
 		return -E_NOT_FOUND;
+
+	if (f->file->f_type == TYPE_DIR) {
+		if (f->file->f_inode.di_nlink > 2) {
+			r = -E_NOT_EMPTY;
+			goto ufs_remove_name_error;
+		}
+		else if (f->file->f_inode.di_nlink < 2) {
+			printf("%s warning, directory with %d links\n", __FUNCTION__, f->file->f_inode.di_nlink);
+			minlinks = f->file->f_inode.di_nlink;
+		}
+		else
+			minlinks = 2;
+	}
 
 	// Remove directory entry
 	r = erase_dirent(object, (fdesc_t *) f, head, tail);
@@ -2062,13 +2078,28 @@ static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, 
 		goto ufs_remove_name_error;
 
 	// Update / free inode
-	assert (f->file->f_inode.di_nlink >= 1);
-	if (f->file->f_inode.di_nlink == 1) {
+	assert (f->file->f_inode.di_nlink >= minlinks);
+	if (f->file->f_inode.di_nlink == minlinks) {
+		// Truncate the directory
+		if (f->file->f_type == TYPE_DIR) {
+			uint32_t number, nblocks, j;
+			nblocks = ufs_get_file_numblocks(object, (fdesc_t *) f);
+
+			for (j = 0; j < nblocks; j++) {
+				number = ufs_truncate_file_block(object, (fdesc_t *) f, head, &newtail);
+				if (number == INVALID_BLOCK) {
+					r = -E_INVAL;
+					goto ufs_remove_name_error;
+				}
+
+				r = ufs_free_block(object, (fdesc_t *) f, number, head, &newtail);
+				if (r < 0)
+					goto ufs_remove_name_error;
+			}
+		}
+
 		// Clear inode
-		f->file->f_inode.di_mode = 0;
-		f->file->f_inode.di_nlink = 0;
-		f->file->f_inode.di_u.inumber = 0;
-		f->file->f_inode.di_size = 0;
+		memset(&f->file->f_inode, 0, sizeof(struct UFS_dinode));
 		r = write_inode(object, f->file->f_num, f->file->f_inode, head, &newtail);
 		if (r < 0)
 			goto ufs_remove_name_error;
@@ -2082,6 +2113,61 @@ static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, 
 		r = write_inode(object, f->file->f_num, f->file->f_inode, head, &newtail);
 		if (r < 0)
 			goto ufs_remove_name_error;
+	}
+
+	if (f->file->f_type == TYPE_DIR) {
+		// Decrement parent directory's link count
+		struct UFS_dinode dir_inode;
+		struct UFS_cg cg;
+		uint32_t blockno;
+		bdesc_t * cgblock;
+		chdesc_t * newtail;
+
+		r = read_inode(object, f->dir_inode, &dir_inode);
+		if (r < 0)
+			goto ufs_remove_name_error;
+		dir_inode.di_nlink--;
+		r = write_inode(object, f->dir_inode, dir_inode, head, &newtail);
+		if (r < 0)
+			goto ufs_remove_name_error;
+
+		// Update group summary
+		r = read_cg(object, f->file->f_num / info->super->fs_ipg, &cg);
+		if (r < 0)
+			goto ufs_remove_name_error;
+
+		blockno = info->cylstart[f->file->f_num / info->super->fs_ipg]
+			+ info->super->fs_cblkno;
+		cgblock = CALL(info->ubd, read_block, blockno);
+		if (!cgblock) {
+			r = -E_NOT_FOUND;
+			goto ufs_remove_name_error;
+		}
+
+		cg.cg_cs.cs_ndir--;
+
+		r = chdesc_create_byte(cgblock, info->ubd,
+				(uint16_t) &((struct UFS_cg *) NULL)->cg_cs.cs_ndir,
+				sizeof(cg.cg_cs.cs_ndir), &cg.cg_cs.cs_ndir, head, &newtail);
+		if (r < 0)
+			goto ufs_remove_name_error;
+
+		r = CALL(info->ubd, write_block, cgblock);
+		if (r < 0)
+			goto ufs_remove_name_error;
+
+		info->super->fs_cstotal.cs_ndir--;
+		r = chdesc_create_byte(info->super_block, info->ubd,
+				(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal.cs_nifree,
+				sizeof(info->super->fs_cstotal.cs_nifree),
+				&info->super->fs_cstotal.cs_nifree, head, &newtail);
+		if (r < 0)
+			goto ufs_remove_name_error;
+
+		r = CALL(info->ubd, write_block, info->super_block);
+		if (r < 0)
+			goto ufs_remove_name_error;
+
 	}
 
 	ufs_free_fdesc(object, (fdesc_t *) f);
@@ -2105,7 +2191,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, ch
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_file_lfs_name};
+static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_file_lfs_name, &KFS_feature_unixdir};
 
 static size_t ufs_get_num_features(LFS_t * object, const char * name)
 {
