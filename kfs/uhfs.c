@@ -203,7 +203,7 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 		chdesc_t * prev_head, * tail;
 
 		prev_head = NULL;
-		fdesc = CALL(state->lfs, allocate_name, name, 0, NULL, &prev_head, &tail);
+		fdesc = CALL(state->lfs, allocate_name, name, TYPE_FILE, NULL, &prev_head, &tail);
 		if (!fdesc)
 			return -E_UNSPECIFIED;
 	}

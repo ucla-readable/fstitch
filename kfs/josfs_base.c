@@ -866,7 +866,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	if (blockno != INVALID_BLOCK)
 		dirblock = josfs_lookup_block(object, blockno);
 	if (!dirblock)
-		return - E_NOT_FOUND;
+		return -E_NOT_FOUND;
 	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
 
 	namelen = strlen(dirfile->f_name);
@@ -1003,6 +1003,18 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, const char * name, uint8_t 
 
 	if (!head || !tail || link)
 		return NULL;
+
+	switch (type)
+	{
+		case TYPE_FILE:
+			type = JOSFS_TYPE_FILE;
+			break;
+		case TYPE_DIR:
+			type = JOSFS_TYPE_DIR;
+			break;
+		default:
+			return NULL;
+	}
 
 	new_fdesc = malloc(sizeof(struct josfs_fdesc));
 	if (!new_fdesc)
