@@ -28,7 +28,9 @@ struct lfs_info
 {
 	BD_t * ubd;
 	bdesc_t * super_block;
+	bdesc_t * csum_block;
 	struct UFS_Super * super;
+	struct UFS_csum * csum;
 	// commonly used values
 	uint16_t ipf; // inodes per fragment
 	uint32_t * cylstart; // array of cylinder starting block numbers
@@ -50,6 +52,8 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
 static int ufs_set_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
+static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail);
+static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
 
 static uint32_t read_btot(LFS_t * object, uint32_t num);
 static uint16_t read_fbp(LFS_t * object, uint32_t num);
@@ -228,6 +232,17 @@ static int check_super(LFS_t * object)
 
 	bdesc_retain(info->super_block);
 
+	info->csum_block = CALL(info->ubd, read_block, info->super->fs_csaddr);
+	if (!info->csum_block)
+	{
+		printf("Unable to read cylinder summary!\n");
+		return -1;
+	}
+
+	info->csum = (struct UFS_csum *) (info->csum_block->ddesc->data);
+
+	bdesc_retain(info->csum_block);
+
 	return 0;
 }
 
@@ -236,6 +251,7 @@ static int update_summary(LFS_t * object, int cyl, int ndir, int nbfree, int nif
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_cg cg;
+	struct UFS_csum * csum;
 	uint32_t blockno;
 	int r;
 	bdesc_t * cgblock;
@@ -248,6 +264,7 @@ static int update_summary(LFS_t * object, int cyl, int ndir, int nbfree, int nif
 	if (r < 0)
 		return r;
 
+	// Update cylinder group
 	blockno = info->cylstart[cyl] + info->super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno);
 	if (!cgblock)
@@ -268,6 +285,24 @@ static int update_summary(LFS_t * object, int cyl, int ndir, int nbfree, int nif
 	if (r < 0)
 		return r;
 
+	// Update cylinder summary area
+	csum = info->csum + cyl;
+	csum->cs_ndir += ndir;
+	csum->cs_nbfree += nbfree;
+	csum->cs_nifree += nifree;
+	csum->cs_nffree += nffree;
+
+	r = chdesc_create_byte(info->csum_block, info->ubd,
+			cyl * sizeof(struct UFS_csum), sizeof(struct UFS_csum),
+			csum, head, &newtail);
+	if (r < 0)
+		return r;
+
+	r = CALL(info->ubd, write_block, info->csum_block);
+	if (r < 0)
+		return r;
+
+	// Update superblock
 	info->super->fs_cstotal.cs_ndir += ndir;
 	info->super->fs_cstotal.cs_nbfree += nbfree;
 	info->super->fs_cstotal.cs_nifree += nifree;
@@ -849,13 +884,32 @@ static uint32_t find_free_frag_linear(LFS_t * object, fdesc_t * file, int purpos
 	uint32_t num;
 	int r;
 
-	// Find free block
+	// Find free fragment
 	for (num = 0; num < info->super->fs_size; num++) {
 		r = read_fragment_bitmap(object, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
 	return num; // returns a fragment number
+	}
+
+	return INVALID_BLOCK;
+}
+
+// FIXME this is a fairly inefficient way to scan for free inodes
+static uint32_t find_free_inode_linear(LFS_t * object, fdesc_t * file)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	uint32_t num;
+	int r;
+
+	// Find free inode
+	for (num = 0; num < info->super->fs_ipg * info->super->fs_ncg; num++) {
+		r = read_inode_bitmap(object, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns a inode number
 	}
 
 	return INVALID_BLOCK;
@@ -1200,7 +1254,7 @@ static inline const char* skip_slash(const char* p)
 // file is the directory
 static int read_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct * entry, uint32_t * basep)
 {
-	Dprintf("UFSDEBUG: %s %x, %d\n", __FUNCTION__, basep, *basep);
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, *basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
 	struct UFS_direct * dirfile;
@@ -1215,7 +1269,7 @@ static int read_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct * entry
 		return -E_NOT_DIR;
 
 	if (*basep >= f->file->f_inode.di_size)
-		return -E_INVAL;
+		return -E_EOF;
 
 	blockno = ufs_get_file_block(object, file, ROUNDDOWN32(*basep, info->super->fs_fsize));
 	if (blockno != INVALID_BLOCK)
@@ -1244,6 +1298,7 @@ static int read_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct * entry
 // Writes a directory entry, does not check for free space
 static int write_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct entry, uint32_t basep, chdesc_t ** head, chdesc_t ** tail)
 {
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * block;
 	uint32_t foffset, blockno;
@@ -1275,6 +1330,7 @@ static int write_dirent(LFS_t * object, fdesc_t * file, struct UFS_direct entry,
 // file is the one we are removing
 static int erase_dirent(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
 {
+	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct UFS_direct last_entry, entry;
 	struct ufs_fdesc * f = (struct ufs_fdesc *) file;
 	struct ufs_fdesc dirfdesc;
@@ -1328,6 +1384,124 @@ static int erase_dirent(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc
 	last_entry.d_reclen += entry.d_reclen;
 
 	return write_dirent(object, dirf, last_entry, last_basep, head, tail);
+}
+
+static int search_dirent(LFS_t * object, fdesc_t * file, uint32_t len)
+{
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, len);
+	struct UFS_direct entry;
+	uint32_t basep = 0, last_basep, actual_len;
+	int r;
+
+	if (!file)
+		return -E_INVAL;
+
+	len = ROUNDUP32(sizeof(struct UFS_direct) + len - UFS_MAXNAMELEN, 4);
+
+	while (1) {
+		last_basep = basep;
+		r = read_dirent(object, file, &entry, &basep);
+		if (r < 0 && r != -E_EOF)
+			return r;
+		if (r == -E_EOF) // EOF, return where next entry starts
+			return basep;
+
+		if (entry.d_ino) {
+			actual_len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
+			if (entry.d_reclen - actual_len >= len)
+				return last_basep; // return entry to insert after
+		}
+		else {
+			if (entry.d_reclen >= len)
+				return last_basep; // return blank entry location
+		}
+	}
+}
+
+static int insert_dirent(LFS_t * object, fdesc_t * dir_file, fdesc_t * new_file, int * offset, chdesc_t ** head, chdesc_t ** tail)
+{
+	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, *offset);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_fdesc * df = (struct ufs_fdesc *) dir_file;
+	struct ufs_fdesc * nf = (struct ufs_fdesc *) new_file;
+	struct UFS_direct entry, last_entry;
+	chdesc_t * tmptail;
+	chdesc_t ** newtail = tail;
+	uint32_t len, last_len, blockno, newsize = *offset + 512;
+	int r, p = *offset, alloc = 0;
+	uint8_t fs_type;
+
+	if (!head || !tail || !df || !nf || *offset < 0)
+		return -E_INVAL;
+
+	len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
+
+	switch(nf->file->f_type)
+	{
+		case TYPE_FILE:
+			fs_type = UFS_DT_REG;
+			break;
+		case TYPE_DIR:
+			fs_type = UFS_DT_DIR;
+			break;
+		case TYPE_SYMLINK:
+			fs_type = UFS_DT_LNK;
+			break;
+			// case TYPE_DEVICE: ambiguous
+		default:
+			return -E_INVAL;
+	}
+
+	entry.d_type = fs_type;
+	entry.d_ino = nf->file->f_num;
+	entry.d_namlen = strlen(nf->file->f_name);
+	strcpy(entry.d_name, nf->file->f_name);
+	entry.d_name[entry.d_namlen] = 0;
+
+	// Need to extend directory
+	if (*offset >= df->file->f_inode.di_size) {
+		// Need to allocate/append fragment
+		if (*offset % info->super->fs_fsize == 0) {
+			blockno = ufs_allocate_block(object, dir_file, 0, head, newtail);
+			if (blockno == INVALID_BLOCK)
+				return -E_UNSPECIFIED;
+			newtail = &tmptail;
+			r = ufs_append_file_block(object, dir_file, blockno, head, newtail);
+			if (r < 0)
+				return r;
+		}
+
+		// Set directory size
+		r = ufs_set_metadata(object, df, KFS_feature_size.id, sizeof(uint32_t), &newsize, head, newtail);
+		if (r < 0)
+			return r;
+		alloc = 1;
+	}
+
+	r = read_dirent(object, dir_file, &last_entry, &p);
+	if (r < 0)
+		return r;
+
+	// Inserting after existing entry
+	if (!alloc && last_entry.d_ino) {
+		last_len = ROUNDUP32(sizeof(struct UFS_direct) + last_entry.d_namlen - UFS_MAXNAMELEN, 4);
+		entry.d_reclen = last_entry.d_reclen - last_len;
+		r = write_dirent(object, dir_file, entry, *offset + last_len, head, newtail);
+		if (r < 0)
+			return r;
+		newtail = &tmptail;
+		last_entry.d_reclen = last_len;
+		r = write_dirent(object, dir_file, last_entry, *offset, head, newtail);
+		*offset += last_len;
+		return r;
+	}
+	else {
+		if (alloc) // Writing to new fragment
+			entry.d_reclen = 512;
+		else // Overwriting blank entry
+			entry.d_reclen = last_entry.d_reclen;
+		return write_dirent(object, dir_file, entry, *offset, head, newtail);
+	}
 }
 
 static void get_parent_path(const char * path, char * parent)
@@ -1429,6 +1603,7 @@ static int walk_path(LFS_t * object, const char * path, struct ufs_fdesc * new_f
 
 		new_fdesc->file->f_name[0] = 0;
 		new_fdesc->file->f_type = TYPE_DIR;
+		new_fdesc->file->f_num = UFS_ROOT_INODE;
 		memcpy(&new_fdesc->file->f_inode, &dir.f_inode, sizeof(struct UFS_dinode));
 		new_fdesc->lastalloc = INVALID_BLOCK;
 		new_fdesc->numfrags = ufs_get_file_numblocks(object, (fdesc_t *) new_fdesc);
@@ -1918,9 +2093,181 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	return 0;
 }
 
-// TODO
 static fdesc_t * ufs_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
 {
+	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	fdesc_t * fdesc, * new_fdesc;
+	struct ufs_fdesc *f, * nf;
+	struct ufs_fdesc * ln = (struct ufs_fdesc *) link;
+	const char * filename;
+	char pname[UFS_MAXPATHLEN];
+	uint32_t inum = 0;
+	int r, offset, notdot = 1;
+	uint16_t mode;
+	chdesc_t * newtail;
+
+	if (!head || !tail || !name)
+		return NULL;
+	switch (type)
+	{
+		case TYPE_FILE:
+			mode = UFS_IFREG;
+			break;
+		case TYPE_DIR:
+			mode = UFS_IFDIR;
+			break;
+		default:
+			return NULL;
+	}
+
+	// Don't link files of different types
+	if (ln && type != ln->file->f_type)
+		return NULL;
+
+	get_parent_path(name, pname);
+	filename = skip_slash(name + strlen(pname));
+
+	// Don't create directory hard links, except for . and ..
+	if (!strcmp(filename, "."))
+		notdot = 0;
+	else if (!strcmp(filename, ".."))
+		notdot = 0;
+
+	if (ln && notdot && type == TYPE_DIR)
+		return NULL;
+
+	fdesc = ufs_lookup_name(object, name);
+	if (fdesc) { // File exists already
+		ufs_free_fdesc(object, fdesc);
+		return NULL;
+	}
+
+	// Get parent directory
+	fdesc = ufs_lookup_name(object, pname);
+	f = (struct ufs_fdesc *) fdesc;
+	if (!fdesc)
+		return NULL;
+
+	// Find an empty slot to write into
+	offset = search_dirent(object, fdesc, strlen(filename) + 1);
+	if (offset < 0)
+		goto ufs_allocate_name_exit;
+
+	if (!ln) {
+		// Allocate new inode
+		inum = find_free_inode_linear(object, fdesc);
+		if (inum == INVALID_BLOCK)
+			goto ufs_allocate_name_exit;
+	}
+
+	// Create data structures, fill in fields
+	new_fdesc = malloc(sizeof(struct ufs_fdesc));
+	nf = (struct ufs_fdesc *) new_fdesc;
+	if (!new_fdesc)
+		goto ufs_allocate_name_exit;
+
+	nf->file = malloc(sizeof(UFS_File_t));
+	if (!nf->file)
+		goto ufs_allocate_name_exit2;
+
+	if (!ln) {
+		nf->dir_inode = f->file->f_num;
+		nf->numfrags = 0;
+		nf->lastfrag = 0;
+		nf->lastalloc = INVALID_BLOCK;
+		strcpy(nf->fullpath, name);
+
+		nf->file->f_num = inum;
+		nf->file->f_type = type;
+		strcpy(nf->file->f_name, filename);
+
+		memset(&nf->file->f_inode, 0, sizeof(struct UFS_dinode));
+		nf->file->f_inode.di_mode = mode | UFS_IREAD; // FIXME set permissions
+		nf->file->f_inode.di_nlink = 1;
+		nf->file->f_inode.di_gen = 0; // FIXME use random number?
+
+		// Write new inode to disk and allocate it
+		r = write_inode(object, inum, nf->file->f_inode, head, tail);
+		if (r < 0)
+			goto ufs_allocate_name_exit2;
+
+		r = write_inode_bitmap(object, inum, UFS_USED, head, &newtail);
+		if (r != 0)
+			goto ufs_allocate_name_exit2;
+	}
+	else {
+		nf->dir_inode = ln->dir_inode;
+		nf->numfrags = ln->numfrags;
+		nf->lastfrag = ln->lastfrag;
+		nf->lastalloc = ln->lastalloc;
+		strcpy(nf->fullpath, name);
+
+		nf->file->f_num = ln->file->f_num;
+		nf->file->f_type = ln->file->f_type;
+		strcpy(nf->file->f_name, filename);
+		memcpy(&nf->file->f_inode, &ln->file->f_inode, sizeof(struct UFS_dinode));
+	}
+
+	// Create directory entry
+	r = insert_dirent(object, fdesc, new_fdesc, &offset, head, &newtail);
+	if (r < 0)
+		goto ufs_allocate_name_exit3;
+	nf->dir_offset = offset;
+
+	// Increase link count
+	if (ln) {
+		// Need to re-read the inode from disk
+		if (!strcmp(filename, ".")) {
+			r = read_inode(object, nf->file->f_num, &nf->file->f_inode);
+			if (r < 0)
+				goto ufs_allocate_name_exit2;
+			r = read_inode(object, ln->file->f_num, &ln->file->f_inode);
+			if (r < 0)
+				goto ufs_allocate_name_exit2;
+		}
+		nf->file->f_inode.di_nlink++;
+		r = write_inode(object, nf->file->f_num, nf->file->f_inode, head, &newtail);
+		if (r < 0)
+			goto ufs_allocate_name_exit3;
+	}
+
+	// Create . and ..
+	if (type == TYPE_DIR && notdot) {
+		fdesc_t * cfdesc;
+		char cname[UFS_MAXPATHLEN];
+		int len = strlen(name);
+
+		strcpy(cname, name);
+		strcpy(cname + len, "/.");
+		cfdesc = ufs_allocate_name(object, cname, TYPE_DIR, new_fdesc, head, &newtail);
+		if (!cfdesc)
+			goto ufs_allocate_name_exit2;
+		ufs_free_fdesc(object, cfdesc);
+		strcpy(cname + len, "/..");
+		cfdesc = ufs_allocate_name(object, cname, TYPE_DIR, fdesc, head, &newtail);
+		if (!cfdesc)
+			goto ufs_allocate_name_exit2;
+		ufs_free_fdesc(object, cfdesc);
+
+		r = update_summary(object, inum / info->super->fs_ipg, 1, 0, 0, 0, head, &newtail);
+		if (r < 0)
+			goto ufs_allocate_name_exit2;
+	}
+
+	ufs_free_fdesc(object, new_fdesc);
+	ufs_free_fdesc(object, fdesc);
+
+	// Changes may have occured, reread from disk
+	return ufs_lookup_name(object, name);
+
+ufs_allocate_name_exit3:
+	if (!ln)
+		write_inode_bitmap(object, inum, UFS_FREE, head, &newtail);
+ufs_allocate_name_exit2:
+	ufs_free_fdesc(object, new_fdesc);
+ufs_allocate_name_exit:
+	ufs_free_fdesc(object, fdesc);
 	return NULL;
 }
 
@@ -2360,6 +2707,7 @@ static int ufs_destroy(LFS_t * lfs)
 	modman_dec_bd(info->ubd, lfs);
 
 	bdesc_release(&info->super_block);
+	bdesc_release(&info->csum_block);
 	free(info->cylstart);
 
 	free(OBJLOCAL(lfs));
