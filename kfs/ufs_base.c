@@ -54,6 +54,8 @@ static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, 
 static int ufs_set_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail);
 static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
+static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
+static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
 
 static uint32_t read_btot(LFS_t * object, uint32_t num);
 static uint16_t read_fbp(LFS_t * object, uint32_t num);
@@ -2271,10 +2273,132 @@ ufs_allocate_name_exit:
 	return NULL;
 }
 
-// TODO
 static int ufs_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
+	Dprintf("UFSDEBUG: %s %s %s\n", __FUNCTION__, oldname, newname);
+	fdesc_t * old_fdesc;
+	fdesc_t * new_fdesc;
+	struct ufs_fdesc * oldf;
+	struct ufs_fdesc * newf;
+	struct ufs_fdesc deadf;
+	struct UFS_File deadfile;
+	struct ufs_fdesc dirfdesc;
+	struct UFS_File dirfile;
+	struct UFS_direct entry;
+	chdesc_t * newtail;
+	uint32_t p;
+	int r, existing = 0;
+
+	if (!head || !tail )
+		return -E_INVAL;
+
+	if (!strcmp(oldname, newname)) // Umm, ok
+		return 0;
+
+	old_fdesc = ufs_lookup_name(object, oldname);
+	if (!old_fdesc)
+		return -E_NOT_FOUND;
+
+	oldf = (struct ufs_fdesc *) old_fdesc;
+
+	new_fdesc = ufs_lookup_name(object, newname);
+	newf = (struct ufs_fdesc *) new_fdesc;
+	if (new_fdesc) {
+		// Overwriting a directory makes little sense
+		if (newf->file->f_type == TYPE_DIR) {
+			r = -E_NOT_EMPTY;
+			goto ufs_rename_exit2;
+		}
+
+		// File already exists
+		existing = 1;
+
+		// Save old info
+		memcpy(&deadf, newf, sizeof(struct ufs_fdesc));
+		memcpy(&deadfile, newf->file, sizeof(struct UFS_File));
+		deadf.file = &deadfile;
+
+		// FIXME perhaps we should read in the full fdesc?
+		// instead of using this synthetic version?
+		dirfdesc.file = &dirfile;
+		dirfile.f_type = TYPE_DIR;
+		r = read_inode(object, newf->dir_inode, &dirfile.f_inode);
+		if (r < 0)
+			goto ufs_rename_exit2;
+
+		p = newf->dir_offset;
+		r = read_dirent(object, (fdesc_t *) &dirfdesc, &entry, &p);
+		if (r < 0)
+			goto ufs_rename_exit2;
+
+		entry.d_ino = oldf->file->f_num;
+		r = write_dirent(object, (fdesc_t *) &dirfdesc, entry, newf->dir_offset, head, tail);
+		if (r < 0)
+			goto ufs_rename_exit2;
+
+		oldf->file->f_inode.di_nlink++;
+		r = write_inode(object, oldf->file->f_num, oldf->file->f_inode, head, &newtail);
+		if (r < 0)
+			goto ufs_rename_exit2;
+	}
+	else {
+		// Link files together
+		new_fdesc = ufs_allocate_name(object, newname, oldf->file->f_type, old_fdesc, head, tail);
+		newf = (struct ufs_fdesc *) new_fdesc;
+		if (!new_fdesc) {
+			r = -E_UNSPECIFIED;
+			goto ufs_rename_exit;
+		}
+	}
+
+	// FIXME different in mem fdescs for the same inode are out of sync, bah
+	if (existing) {
+		oldf->file->f_inode.di_nlink--;
+		r = write_inode(object, oldf->file->f_num, oldf->file->f_inode, head, &newtail);
+		if (r < 0)
+			goto ufs_rename_exit2;
+	}
+	else {
+		newf->file->f_inode.di_nlink--;
+		r = write_inode(object, newf->file->f_num, newf->file->f_inode, head, &newtail);
+		if (r < 0)
+			goto ufs_rename_exit2;
+	}
+
+	r = erase_dirent(object, old_fdesc, head, &newtail);
+	if (r < 0)
+		goto ufs_rename_exit2;
+
+	if (existing) {
+		uint32_t block, i, n = deadf.numfrags;
+		for (i = 0; i < n; i++) {
+			block = ufs_truncate_file_block(object, (fdesc_t *) &deadf, head, &newtail);
+			if (block == INVALID_BLOCK) {
+				r = -E_UNSPECIFIED;
+				goto ufs_rename_exit2;
+			}
+			r = ufs_free_block(object, (fdesc_t *) &deadf, block, head, &newtail);
+			if (r < 0)
+				goto ufs_rename_exit2;
+		}
+
+		memset(&deadf.file->f_inode, 0, sizeof(struct UFS_dinode));
+		r = write_inode(object, deadf.file->f_num, deadf.file->f_inode, head, &newtail);
+		if (r < 0)
+			goto ufs_rename_exit2;
+
+		r = write_inode_bitmap(object, deadf.file->f_num, UFS_FREE, head, &newtail);
+		if (r < 0)
+			goto ufs_rename_exit2;
+	}
+
 	return 0;
+
+ufs_rename_exit2:
+	ufs_free_fdesc(object, new_fdesc);
+ufs_rename_exit:
+	ufs_free_fdesc(object, old_fdesc);
+	return r;
 }
 
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
