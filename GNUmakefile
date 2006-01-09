@@ -18,24 +18,11 @@ else
 -include $(GCCCONF)
 endif
 
-ifdef LAB
-SETTINGLAB := true
-else
+ifndef LAB
 -include conf/lab.mk
 endif
 
 -include conf/env.mk
-
-ifndef SOL
-SOL := 0
-endif
-ifndef LABADJUST
-LABADJUST := 0
-endif
-
-ifndef LABSETUP
-LABSETUP := ./
-endif
 
 
 TOP = .
