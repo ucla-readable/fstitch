@@ -177,7 +177,7 @@ breakpoints_print(struct Trapframe *tf)
 
 
 // Set a breakpoint register:
-// envid: envid of the env to set teh breakpoint in (or ENVID_KERNEL)
+// envid: envid of the env to set the breakpoint in (or ENVID_KERNEL)
 // reg: which breakpoint register, [0, 3].
 // addr: the linear address to set a breakpoint for.
 // mem_exec: 0 for a memory breakpoint, 1 for an exec breakpoint.
