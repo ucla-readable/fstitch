@@ -8,7 +8,7 @@ static int parent(int child) {
 }
 
 static int child(int parent) {
-	return ((parent+1)*2)-1;;
+	return ((parent+1)*2)-1;
 }
 
 static void reheapify_up_elt(fixed_max_heap_t *heap, int p)
@@ -129,10 +129,8 @@ fixed_max_heap_pop(fixed_max_heap_t *heap)
 void *
 fixed_max_heap_head(const fixed_max_heap_t *heap)
 {
-	void *ret;
 	assert(heap->len >= 1);
-	ret = heap->arr[0];
-	return ret;
+	return heap->arr[0];
 }
 
 void
@@ -150,7 +148,7 @@ fixed_max_heap_delete(fixed_max_heap_t *heap, void *elt)
 		}
 	}
 	assert(found);
-	heap->weights[i] = 0x0fffffff;
+	heap->weights[i] = 0x7FFFFFFF;
 	reheapify_up_elt(heap, i);
 	// move last elt to top
 	heap->arr[0] = heap->arr[heap->len - 1];
