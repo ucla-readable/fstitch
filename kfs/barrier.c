@@ -230,12 +230,15 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 				if (!slice)
 					panic("%s(): revision_slice_create() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__);
 
-				revision_slice_push_down(slice);
+				if (slice->ready_size)
+				{
+					revision_slice_push_down(slice);
 
-				/* write the updated target_block */
-				r = CALL(forward->target, write_block, target_block);
-				if (r < 0)
-					panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+					/* write the updated target_block */
+					r = CALL(forward->target, write_block, target_block);
+					if (r < 0)
+						panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+				}
 
 				if (slice->ready_size == slice->full_size)
 					bdesc_release(&forward->block);
