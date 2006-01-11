@@ -20,4 +20,4 @@ void  fixed_max_heap_delete(fixed_max_heap_t *heap, void *elt);
 int   fixed_max_heap_length(const fixed_max_heap_t *heap);
 int   fixed_max_heap_contains(const fixed_max_heap_t *heap, const void *elt);
 
-#endif // FIXE_MAX_HEAP_H
+#endif // FIXED_MAX_HEAP_H
