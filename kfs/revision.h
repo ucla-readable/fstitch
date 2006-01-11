@@ -1,5 +1,5 @@
-#ifndef _REVISION_H
-#define _REVISION_H
+#ifndef __KUDOS_KFS_REVISION_H
+#define __KUDOS_KFS_REVISION_H
 
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
@@ -43,4 +43,4 @@ void revision_slice_push_down(revision_slice_t * slice);
 void revision_slice_pull_up(revision_slice_t * slice);
 void revision_slice_destroy(revision_slice_t * slice);
 
-#endif // not _REVISION_H
+#endif /* __KUDOS_KFS_REVISION_H */
