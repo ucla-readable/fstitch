@@ -6,6 +6,7 @@
 #include <inc/syscall.h>
 
 #include <kern/env.h>
+#include <kern/irq.h>
 #include <kern/pmap.h>
 #include <kern/monitor.h>
 #include <kern/kclock.h>
@@ -63,7 +64,19 @@ void sched_yield(void)
 	struct Env * e;
 	int halted = 0;
 	
+	/* if there are pending IRQs to be delivered to user environments,
+	 * env_dispatch_irqs() sets curenv to one of them and pushes a signal
+	 * handler onto the target environment's stack */
+	if(env_dispatch_irqs() > 0)
+	{
+		/* move the environment to the end of its queue */
+		TAILQ_REMOVE(&run_queues[curenv->env_epriority], curenv, env_link);
+		TAILQ_INSERT_TAIL(&run_queues[curenv->env_epriority], curenv, env_link);
+		env_run(curenv);
+	}
+	
 	/* The idle environment is the only environment allowed at priority 0 */
+again:
 	while(priority--)
 	{
 		for(e = TAILQ_FIRST(&run_queues[priority]); e; e = TAILQ_NEXT(e, env_link))
@@ -88,7 +101,7 @@ void sched_yield(void)
 				__asm__ __volatile__("hlt");
 				/* and then restart */
 				priority = ENV_MAX_PRIORITY + 1;
-				continue;
+				goto again;
 			}
 			TAILQ_REMOVE(&run_queues[priority], e, env_link);
 			TAILQ_INSERT_TAIL(&run_queues[priority], e, env_link);

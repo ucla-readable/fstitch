@@ -14,7 +14,7 @@ void dispatch_irq(int irq);
 void probe_irq_on(void);
 int probe_irq_off(void);
 
-void env_dispatch_irqs(void);
+int env_dispatch_irqs(void);
 
 int env_assign_irq(int irq, struct Env * env);
 int env_unassign_irq(int irq, struct Env * env);

@@ -181,7 +181,7 @@ print_trapframe(struct Trapframe *tf)
 	printf("  esp  0x%08x\n", tf->tf_esp);
 	printf("  ss   0x----%04x\n", tf->tf_ss);
 #else
-  	printf("TRAP frame at %p\n", tf);
+  	printf("TRAP frame at %p-%p\n", tf, tf + 1);
 
 	printf("  esp  0x%08x", tf->tf_esp);
 	printf("  ebp  0x%08x", tf->tf_ebp);
@@ -243,7 +243,6 @@ trap(struct Trapframe *tf)
 		}
 		else
 			dispatch_irq(irq);
-		
 	}
 	else if(tf->tf_trapno == T_BRKPT)
 	{
@@ -284,11 +283,6 @@ trap(struct Trapframe *tf)
 			env_destroy(curenv);
 		/* does not return */
 	}
-	
-	/* if there are pending IRQs to be delivered to user environments,
-	 * env_dispatch_irqs() sets curenv to one of them and pushes a signal
-	 * handler onto the target environment's stack */
-	env_dispatch_irqs();
 	
 	env_tsc = read_tsc();
 	return;

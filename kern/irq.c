@@ -53,34 +53,26 @@ static int env_irq_total = 0;
 
 static void env_irq_handler(int irq)
 {
-	struct Env * e;
-	
-	if(envid2env(irq_env[irq], &e, 0) < 0)
-	{
-		/* env is gone, deregister it - this should probably never happen */
-		irq_setmask_8259A(irq_mask_8259A | (1 << irq));
-		request_irq(irq, NULL);
-		irq_env[irq] = 0;
-		env_irq_total -= irq_count[irq];
-		irq_count[irq] = 0;
-	}
-	else
-	{
-		irq_count[irq]++;
-		env_irq_total++;
-	}
+	irq_count[irq]++;
+	env_irq_total++;
 }
 
-void env_dispatch_irqs(void)
+int env_dispatch_irqs(void)
 {
 	static int irq_index = -1;
 	
 	uint32_t old_fault_mode = page_fault_mode;
 	uint32_t * ustack;
 	struct Env * env;
+	register_t eflags = read_eflags();
+	
+	__asm__ __volatile__("cli");
 	
 	if(!env_irq_total)
-		return;
+	{
+		write_eflags(eflags);
+		return 0;
+	}
 	
 	/* we have to be very careful that the check
 	 * above keeps this loop from being infinite! */
@@ -100,16 +92,22 @@ void env_dispatch_irqs(void)
 		irq_env[irq_index] = 0;
 		env_irq_total -= irq_count[irq_index];
 		irq_count[irq_index] = 0;
-		return;
+		write_eflags(eflags);
+		return -1;
 	}
+	
+	write_eflags(eflags);
 	
 	/* can't deliver an IRQ without a handler */
 	if(!env->env_irq_upcall)
-		return;
+		return -1;
 	
 	/* wouldn't want to wrap around 0 */
 	if(env->env_tf.tf_esp < 6 * sizeof(uint32_t))
+	{
 		env_destroy(env);
+		return -1;
+	}
 	
 	/* switch curenv */
 	if(curenv)
@@ -133,6 +131,8 @@ void env_dispatch_irqs(void)
 	UTF->tf_eip = curenv->env_irq_upcall;
 	
 	page_fault_mode = old_fault_mode;
+	
+	return 1;
 }
 
 int env_assign_irq(int irq, struct Env * env)
