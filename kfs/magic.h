@@ -19,10 +19,7 @@
 /* "SAFEDATA" */
 #define JOURNAL_MAGIC 0x5AFEDA7A
 
-/* "JnlQ" */
-#define JOURNAL_QUEUE_MAGIC 0x4A6E6C51
-
-/* ??? */
+/* "???BDAID" */
 #define MIRROR_BD_MAGIC 0x888BDA1D
 
 /* "TBLCLASS" */
@@ -36,6 +33,9 @@
 
 /* "DATADELA" */
 #define WB_CACHE_MAGIC 0xDA7ADE1A
+
+/* "DISCORDR" */
+#define ELEVATOR_CACHE_MAGIC 0xD15C08D8
 
 /* "WOLEDISC" */
 #define WHOLEDISK_MAGIC 0x301ED15C

@@ -14,6 +14,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/bsd_ptable.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
 			$(OBJDIR)/kfs/wb_cache_bd.o \
+			$(OBJDIR)/kfs/elevator_cache_bd.o \
 			$(OBJDIR)/kfs/ide_pio_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
 			$(OBJDIR)/kfs/journal_bd.o \
