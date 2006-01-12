@@ -297,8 +297,12 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	
 	index = push_block(info, block);
 	if(index == INVALID_BLOCK)
+	{
 		/* kind of a waste of the read... but we have to do it */
+		if(*synthetic)
+			CALL(info->bd, cancel_block, number);
 		return NULL;
+	}
 	
 	return block;
 }
