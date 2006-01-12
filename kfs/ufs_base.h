@@ -255,9 +255,11 @@ struct  UFS_direct {
 typedef struct UFS_File UFS_File_t;
 
 struct UFS_File {
-	char f_name[UFS_MAXNAMELEN];
 	struct UFS_dinode f_inode;
 	uint32_t f_num; // Inode number
+	uint32_t f_numfrags; // Number of fragments
+	uint32_t f_lastfrag; // Last fragment in the file
+	uint32_t f_lastalloc; // Last fragment we allocated
 	uint8_t f_type;
 };
 
