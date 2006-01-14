@@ -13,6 +13,14 @@
 #include <kfs/revision.h>
 #include <kfs/elevator_cache_bd.h>
 
+#define ELEV_DEBUG 0
+
+#if ELEV_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
 /* incremental flush every second */
 #define FLUSH_PERIOD HZ
 
@@ -87,6 +95,7 @@ static uint16_t elevator_cache_bd_get_atomicsize(BD_t * object)
 
 static struct elevator_slot * lookup_block_slot(struct cache_info * info, uint32_t number, struct elevator_slot ** parent)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	struct elevator_slot * slot = info->blocks;
 	if(parent)
 		*parent = NULL;
@@ -106,31 +115,31 @@ static struct elevator_slot * lookup_block_slot(struct cache_info * info, uint32
 
 static bdesc_t * lookup_block_exact(struct cache_info * info, uint32_t number)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	struct elevator_slot * slot = lookup_block_slot(info, number, NULL);
 	return slot ? slot->block : NULL;
 }
 
 static bdesc_t * lookup_block_larger(struct cache_info * info, uint32_t number)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	struct elevator_slot * parent;
 	struct elevator_slot * slot = lookup_block_slot(info, number, &parent);
 	if(slot)
 		return slot->block;
-	if(!parent)
-		return NULL;
 	
-	do
+	while(parent && parent->block->number < number)
 	{
-		slot = parent;
+		number = parent->block->number;
 		parent = parent->parent;
 	}
-	while(parent && parent->larger == slot);
 	
 	return parent ? parent->block : NULL;
 }
 
 static int insert_block(struct cache_info * info, bdesc_t * block)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, block->number);
 	struct elevator_slot * parent = NULL;
 	struct elevator_slot ** pointer = &info->blocks;
 	struct elevator_slot * slot = info->blocks;
@@ -156,7 +165,7 @@ static int insert_block(struct cache_info * info, bdesc_t * block)
 	if(!slot)
 		return -E_NO_MEM;
 	
-	slot->block = block;
+	slot->block = bdesc_retain(block);
 	slot->parent = parent;
 	slot->pointer = pointer;
 	slot->smaller = NULL;
@@ -168,6 +177,8 @@ static int insert_block(struct cache_info * info, bdesc_t * block)
 
 static int remove_slot(struct elevator_slot * slot)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, slot->block->number);
+	bdesc_release(&slot->block);
 	if(!slot->smaller && !slot->larger)
 	{
 		*slot->pointer = NULL;
@@ -187,7 +198,8 @@ static int remove_slot(struct elevator_slot * slot)
 		struct elevator_slot * next = slot->larger;
 		while(next->smaller)
 			next = next->smaller;
-		next_block = next->block;
+		/* must retain because it will be released in the recursive call */
+		next_block = bdesc_retain(next->block);
 		remove_slot(next);
 		slot->block = next_block;
 	}
@@ -196,6 +208,7 @@ static int remove_slot(struct elevator_slot * slot)
 
 static int remove_block(struct cache_info * info, bdesc_t * block)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, block->number);
 	struct elevator_slot * slot = lookup_block_slot(info, block->number, NULL);
 	if(slot)
 	{
@@ -208,10 +221,25 @@ static int remove_block(struct cache_info * info, bdesc_t * block)
 
 static void remove_block_number(struct cache_info * info, uint32_t number)
 {
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	struct elevator_slot * slot = lookup_block_slot(info, number, NULL);
 	if(slot)
 		remove_slot(slot);
 }
+
+#if 0
+static void block_dump(struct elevator_slot * slot, int indent)
+{
+	int i;
+	if(!slot)
+		return;
+	block_dump(slot->smaller, indent + 1);
+	for(i = 0; i != indent; i++)
+		printf(" ");
+	printf("%d\n", slot->block->number);
+	block_dump(slot->larger, indent + 1);
+}
+#endif
 
 static bdesc_t * advance_head(struct cache_info * info)
 {
@@ -219,20 +247,26 @@ static bdesc_t * advance_head(struct cache_info * info)
 	if(!block)
 		block = lookup_block_larger(info, 0);
 	assert(block);
-	info->head_pos = block->number;
+	Dprintf("%s() = %d\n", block->number);
+	/* advance the head *past* this block, not to it */
+	info->head_pos = block->number + 1;
 	return block;
 }
 
 static int evict_block(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	Dprintf("%s()\n", __FUNCTION__);
 	
 	if(!info->dirty)
 		return 0;
 	
 	for(;;)
 	{
+		//printf("Trying to evict a block! (dirty = %d)\n", info->dirty);
+		//block_dump(info->blocks, 1);
 		bdesc_t * block = advance_head(info);
+		//printf("Advanced head to %d (%d)\n", info->head_pos, block->number);
 		revision_slice_t * slice = revision_slice_create(block, object, info->bd, 0);
 		if(!slice)
 			return -E_NO_MEM;
@@ -240,6 +274,7 @@ static int evict_block(BD_t * object)
 		{
 			int r;
 			
+			//printf("Writing slice...\n");
 			revision_slice_push_down(slice);
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
@@ -247,12 +282,16 @@ static int evict_block(BD_t * object)
 			
 			if(slice->ready_size == slice->full_size)
 			{
+				//printf("Slice completely written!\n");
 				revision_slice_destroy(slice);
 				remove_block(info, block);
 				info->dirty--;
 				break;
 			}
+			//printf("Slice incomplete, trying again.\n");
 		}
+		//else
+			//printf("Slice not ready!\n");
 		revision_slice_destroy(slice);
 	}
 	
@@ -263,6 +302,7 @@ static bdesc_t * elevator_cache_bd_read_block(BD_t * object, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	bdesc_t * block;
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	
 	/* make sure it's a valid block */
 	if(number >= CALL(info->bd, get_numblocks))
@@ -284,21 +324,14 @@ static bdesc_t * elevator_cache_bd_read_block(BD_t * object, uint32_t number)
 	/* not in the cache, need to read it */
 	/* notice that we do not reset the head position here, even though
 	 * technically the head has been moved - this is for fairness */
-	block = CALL(info->bd, read_block, number);
-	if(!block)
-		return NULL;
-	
-	if(insert_block(info, block) < 0)
-		/* kind of a waste of the read... but we have to do it */
-		return NULL;
-	
-	return block;
+	return CALL(info->bd, read_block, number);
 }
 
 static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	bdesc_t * block;
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	
 	/* make sure it's a valid block */
 	if(number >= CALL(info->bd, get_numblocks))
@@ -323,24 +356,13 @@ static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t 
 	/* not in the cache, need to read it */
 	/* notice that we do not reset the head position here, even though
 	 * technically the head may have been moved - this is for fairness */
-	block = CALL(info->bd, synthetic_read_block, number, synthetic);
-	if(!block)
-		return NULL;
-	
-	if(insert_block(info, block) < 0)
-	{
-		/* kind of a waste of the read... but we have to do it */
-		if(*synthetic)
-			CALL(info->bd, cancel_block, number);
-		return NULL;
-	}
-	
-	return block;
+	return CALL(info->bd, synthetic_read_block, number, synthetic);
 }
 
 static int elevator_cache_bd_cancel_block(BD_t * object, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	
 	/* make sure it's a valid block */
 	if(number >= CALL(info->bd, get_numblocks))
@@ -355,6 +377,7 @@ static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	struct elevator_slot * slot;
+	Dprintf("%s(%d)\n", __FUNCTION__, block->number);
 	
 	/* make sure it's a valid block */
 	if(block->number >= CALL(info->bd, get_numblocks))
@@ -422,6 +445,7 @@ static uint16_t elevator_cache_bd_get_devlevel(BD_t * object)
 static void elevator_cache_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
+	Dprintf("%s()\n", __FUNCTION__);
 	int r = evict_block(object);
 	if(r < 0)
 		panic("%s(): eviction failed! (%e)\n", __FUNCTION__, r);
