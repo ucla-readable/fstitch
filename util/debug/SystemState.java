@@ -64,6 +64,11 @@ public class SystemState
 		return chdescs.iterator();
 	}
 	
+	public int getChdescCount()
+	{
+		return chdescs.size();
+	}
+	
 	public void setFreeHead(Chdesc free_head)
 	{
 		this.free_head = free_head;

@@ -35,6 +35,11 @@ public class ChdescCollection
 		return (Chdesc) chdescs.remove(key);
 	}
 	
+	public int size()
+	{
+		return chdescs.size();
+	}
+	
 	public Iterator iterator()
 	{
 		return new HashMapValueIterator(chdescs);
