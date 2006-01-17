@@ -13,6 +13,8 @@
 
 /* info (0xx) */
 #define KDB_INFO_MARK                0
+#define KDB_INFO_BD_NAME             1
+#define KDB_INFO_BDESC_NUMBER        2
 
 /* bdesc (1xx) */
 #define KDB_BDESC_ALLOC            101

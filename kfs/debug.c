@@ -13,7 +13,8 @@ struct param {
 	const char * name;
 	/* keep this in sync with the array below */
 	enum {
-		INT32 = 0,
+		STRING = 0,
+		INT32,
 		UINT32,
 		UHEX32,
 		INT16,
@@ -37,11 +38,12 @@ struct module {
 /* data declarations */
 
 /* keep this in sync with the enum above */
-const uint8_t type_sizes[] = {4, 4, 4, 2, 2, 2, 1};
+const uint8_t type_sizes[] = {-1, 4, 4, 4, 2, 2, 2, 1};
 
 /* all parameters */
 static const struct param
 	param_ar_count =    {"ar_count",    UINT32},
+	param_bd =          {"bd",          UHEX32},
 	param_block =       {"block",       UHEX32},
 	param_blocks =      {"blocks",      UHEX32},
 	param_chdesc =      {"chdesc",      UHEX32},
@@ -58,6 +60,7 @@ static const struct param
 	param_length =      {"length",      UINT16},
 	param_location =    {"location",    UHEX32},
 	param_module =      {"module",      UHEX16},
+	param_name =        {"name",        STRING},
 	param_number =      {"number",      UINT32},
 	param_offset =      {"offset",      UINT16},
 	param_order =       {"order",       UHEX32},
@@ -75,6 +78,16 @@ static const struct param
 /* parameter combinations */
 static const struct param * params_info_mark[] = {
 	&param_module,
+	&last_param
+};
+static const struct param * params_info_bd_name[] = {
+	&param_bd,
+	&param_name,
+	&last_param
+};
+static const struct param * params_info_bdesc_number[] = {
+	&param_block,
+	&param_number,
 	&last_param
 };
 static const struct param * params_bdesc_alloc[] = {
@@ -230,6 +243,8 @@ static const struct param * params_chdesc_merge[] = {
 /* all opcodes */
 static const struct opcode
 	opcode_info_mark =                  OPCODE(KDB_INFO_MARK,                  params_info_mark),
+	opcode_info_bd_name =               OPCODE(KDB_INFO_BD_NAME,               params_info_bd_name),
+	opcode_info_bdesc_number =          OPCODE(KDB_INFO_BDESC_NUMBER,          params_info_bdesc_number),
 	opcode_bdesc_alloc =                OPCODE(KDB_BDESC_ALLOC,                params_bdesc_alloc),
 	opcode_bdesc_alloc_wrap =           OPCODE(KDB_BDESC_ALLOC_WRAP,           params_bdesc_alloc),
 	opcode_bdesc_retain =               OPCODE(KDB_BDESC_RETAIN,               params_bdesc_retain_release),
@@ -280,6 +295,8 @@ static const struct opcode
 /* opcode combinations */
 static const struct opcode * opcodes_info[] = {
 	&opcode_info_mark,
+	&opcode_info_bd_name,
+	&opcode_info_bdesc_number,
 	&last_opcode
 };
 static const struct opcode * opcodes_bdesc[] = {
@@ -354,7 +371,7 @@ static int debug_socket[2];
 #define LIT_8 (-1)
 #define LIT_16 (-2)
 #define LIT_32 (-4)
-#define STRING (-3)
+#define LIT_STR (-3)
 #define END 0
 
 /* This function is used like a binary version of kdprintf(). It takes a file
@@ -461,12 +478,12 @@ int kfs_debug_init(const char * host, uint16_t port)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
 			int p;
-			kfs_debug_write(debug_socket[1], LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, STRING, modules[m].opcodes[o]->name, END);
+			kfs_debug_write(debug_socket[1], LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
 				/* TODO: maybe write the logical data type here as well */
-				kfs_debug_write(debug_socket[1], LIT_8, size, STRING, modules[m].opcodes[o]->params[p]->name, END);
+				kfs_debug_write(debug_socket[1], LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
 			}
 			kfs_debug_write(debug_socket[1], LIT_8, 0, END);
 		}
@@ -566,9 +583,9 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	
 #if KFS_DEBUG_BINARY
 #if KFS_OMIT_FILE_FUNC
-	kfs_debug_write(debug_socket[1], STRING, "", LIT_32, line, STRING, "", LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(debug_socket[1], LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
 #else
-	kfs_debug_write(debug_socket[1], STRING, file, LIT_32, line, STRING, function, LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(debug_socket[1], LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
 #endif
 	
 	if(!modules[m].opcodes)
@@ -604,6 +621,11 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			{
 				uint8_t param = va_arg(ap, uint8_t);
 				kfs_debug_write(debug_socket[1], LIT_8, 1, LIT_8, param, END);
+			}
+			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == STRING)
+			{
+				char * param = va_arg(ap, char *);
+				kfs_debug_write(debug_socket[1], LIT_8, -1, LIT_STR, param, END);
 			}
 			else
 			{
@@ -644,6 +666,12 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 				kdprintf(debug_socket[1], ", ");
 			switch(modules[m].opcodes[o]->params[p]->type)
 			{
+				case STRING:
+				{
+					char * param = va_arg(ap, char *);
+					kdprintf(debug_socket[1], "%s", param);
+					break;
+				}
 				case INT32:
 				{
 					int32_t param = va_arg(ap, int32_t);

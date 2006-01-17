@@ -38,6 +38,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 		return NULL;
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number);
 	bdesc->number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
@@ -57,6 +58,7 @@ bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
 	if(!bdesc)
 		return NULL;
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number);
 	bdesc->ddesc = ddesc;
 	bdesc->number = number;
 	bdesc->ref_count = 1;
