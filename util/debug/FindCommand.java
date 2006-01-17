@@ -32,7 +32,7 @@ public class FindCommand implements Command
 			if(state.getChdescCount() > max)
 			{
 				max = state.getChdescCount();
-				maxOpcode = start + i;
+				maxOpcode = dbg.getApplied();
 			}
 			dbg.replay(1);
 		}
@@ -61,7 +61,7 @@ public class FindCommand implements Command
 			if(state.getChdescCount() < min)
 			{
 				min = state.getChdescCount();
-				minOpcode = start + i;
+				minOpcode = dbg.getApplied();
 			}
 			dbg.replay(1);
 		}

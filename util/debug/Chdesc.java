@@ -147,6 +147,13 @@ public class Chdesc
 		this.owner = owner;
 	}
 	
+	public void setOffset(short offset)
+	{
+		if(type != TYPE_BIT && type != TYPE_BYTE)
+			throw new RuntimeException("Attempt to set offset of non-BIT/BYTE chdesc!");
+		this.offset = offset;
+	}
+	
 	public void setFlags(int flags)
 	{
 		if(!isValid())
