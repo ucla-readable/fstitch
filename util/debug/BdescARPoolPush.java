@@ -14,11 +14,6 @@ public class BdescARPoolPush extends Opcode
 	{
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_BDESC_AR_POOL_PUSH: depth = " + depth;

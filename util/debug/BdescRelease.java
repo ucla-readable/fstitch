@@ -18,11 +18,6 @@ public class BdescRelease extends Opcode
 	{
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_BDESC_RELEASE: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc) + ", ref_count = " + ref_count + ", ar_count = " + ar_count + ", dd_count = " + dd_count;

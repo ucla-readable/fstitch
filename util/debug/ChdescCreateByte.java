@@ -20,11 +20,6 @@ public class ChdescCreateByte extends Opcode
 		state.addChdesc(new Chdesc(chdesc, block, owner, offset, length));
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_CREATE_BYTE: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block) + ", owner = " + SystemState.hex(owner) + ", offset = " + offset + ", length = " + length;

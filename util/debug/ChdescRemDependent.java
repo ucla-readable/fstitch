@@ -18,11 +18,6 @@ public class ChdescRemDependent extends Opcode
 			source.remDependent(target);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_REM_DEPENDENT: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);

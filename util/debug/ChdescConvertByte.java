@@ -20,11 +20,6 @@ public class ChdescConvertByte extends Opcode
 			chdesc.changeToByte(offset, length);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_CONVERT_BYTE: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset + ", length = " + length;

@@ -18,11 +18,6 @@ public class ChdescSetOwner extends Opcode
 			chdesc.setOwner(owner);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_SET_OWNER: chdesc = " + SystemState.hex(chdesc) + ", owner = " + SystemState.hex(owner);

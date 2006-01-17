@@ -15,11 +15,6 @@ public class BdescDestroy extends Opcode
 	{
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_BDESC_DESTROY: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc);

@@ -18,11 +18,6 @@ public class ChdescClearFlags extends Opcode
 			chdesc.clearFlags(flags);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_CLEAR_FLAGS: chdesc = " + SystemState.hex(chdesc) + ", flags = " + Chdesc.renderFlags(flags);

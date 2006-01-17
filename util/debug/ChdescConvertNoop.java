@@ -17,11 +17,6 @@ public class ChdescConvertNoop extends Opcode
 			chdesc.changeToNoop();
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_CONVERT_NOOP: chdesc = " + SystemState.hex(chdesc);

@@ -44,6 +44,17 @@ public class Debugger extends OpcodeFactory
 		/* before the days of stream revision data */
 		if(debugRev == 65536 && debugOpcodeRev == 1262764639)
 			throw new UnsupportedStreamRevisionException(0, 0, 1288);
+		
+		/* known unsupported revisions */
+		
+		/* supported revisions */
+		if(debugRev == 1582 && debugOpcodeRev == 1577)
+			return;
+		if(debugRev == 1660 && debugOpcodeRev == 1660)
+			return;
+		
+		/* 0 means "use a newer revision" */
+		throw new UnsupportedStreamRevisionException(debugRev, debugOpcodeRev, 0);
 	}
 
 	public void addModule(Module module)
@@ -125,13 +136,24 @@ public class Debugger extends OpcodeFactory
 	public boolean replay(int count)
 	{
 		boolean change = false;
-		while(applied < opcodes.size() && count-- > 0)
-		{
-			Opcode opcode = (Opcode) opcodes.get(applied++);
-			opcode.applyTo(state);
-			if(opcode.hasEffect())
-				change = true;
-		}
+		if(count == 1)
+			while(applied < opcodes.size())
+			{
+				Opcode opcode = (Opcode) opcodes.get(applied++);
+				opcode.applyTo(state);
+				if(opcode.hasEffect())
+					change = true;
+				if(!opcode.isSkippable())
+					break;
+			}
+		else
+			while(applied < opcodes.size() && count-- > 0)
+			{
+				Opcode opcode = (Opcode) opcodes.get(applied++);
+				opcode.applyTo(state);
+				if(opcode.hasEffect())
+					change = true;
+			}
 		return change;
 	}
 	

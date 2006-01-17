@@ -18,11 +18,6 @@ public class ChdescSetBlock extends Opcode
 			chdesc.setBlock(block);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_SET_BLOCK: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block);

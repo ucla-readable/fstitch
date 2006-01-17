@@ -17,11 +17,6 @@ public class ChdescCreateNoop extends Opcode
 		state.addChdesc(new Chdesc(chdesc, block, owner));
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_CREATE_NOOP: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block) + ", owner = " + SystemState.hex(owner);

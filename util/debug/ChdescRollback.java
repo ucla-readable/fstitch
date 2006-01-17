@@ -17,11 +17,6 @@ public class ChdescRollback extends Opcode
 			chdesc.setFlags(Chdesc.FLAG_ROLLBACK);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_ROLLBACK: chdesc = " + SystemState.hex(chdesc);

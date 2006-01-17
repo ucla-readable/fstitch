@@ -32,11 +32,6 @@ public class ChdescSetFreePrev extends Opcode
 		}
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_SET_FREE_PREV: chdesc = " + SystemState.hex(chdesc) + ", free_prev = " + SystemState.hex(free_prev);

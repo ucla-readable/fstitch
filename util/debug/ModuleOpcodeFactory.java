@@ -87,6 +87,10 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 		{
 			switch(size)
 			{
+				case -1:
+					parameters.add(readString());
+					types.add(String.class);
+					break;
 				case 1:
 					//parameters.add(Byte.valueOf(input.readByte()));
 					parameters.add(new Byte(input.readByte()));

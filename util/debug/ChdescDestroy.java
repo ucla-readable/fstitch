@@ -17,11 +17,6 @@ public class ChdescDestroy extends Opcode
 			chdesc.destroy();
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_DESTROY: chdesc = " + SystemState.hex(chdesc);

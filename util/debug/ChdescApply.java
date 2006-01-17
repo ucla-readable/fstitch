@@ -17,11 +17,6 @@ public class ChdescApply extends Opcode
 			chdesc.clearFlags(Chdesc.FLAG_ROLLBACK);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_APPLY: chdesc = " + SystemState.hex(chdesc);

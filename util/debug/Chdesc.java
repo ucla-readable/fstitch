@@ -307,17 +307,29 @@ public class Chdesc
 		return "\"ch" + SystemState.hex(address) + "-hc" + SystemState.hex(hashCode()) + "\"";
 	}
 	
-	private String renderBlockOwner(boolean showNull)
+	private String renderBlockOwner(boolean showNull, SystemState state)
 	{
 		String info = "";
 		if(showNull || block != 0)
-			info += "\\non " + SystemState.hex(block);
+		{
+			Bdesc bdesc = state.lookupBdesc(block);
+			if(bdesc != null)
+				info += "\\n#" + bdesc.number + " (" + SystemState.hex(block) + ")";
+			else
+				info += "\\non " + SystemState.hex(block);
+		}
 		if(showNull || owner != 0)
-			info += "\\nat " + SystemState.hex(owner);
+		{
+			String name = state.getBdName(owner);
+			if(name != null)
+				info += "\\n" + name;
+			else
+				info += "\\nat " + SystemState.hex(owner);
+		}
 		return info;
 	}
 	
-	public String render(boolean renderFree)
+	public String render(boolean renderFree, SystemState state)
 	{
 		String name = renderName();
 		
@@ -325,13 +337,13 @@ public class Chdesc
 		switch(type)
 		{
 			case TYPE_NOOP:
-				links += renderBlockOwner(false) + "\",style=\"";
+				links += renderBlockOwner(false, state) + "\",style=\"";
 				break;
 			case TYPE_BIT:
-				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner(true) + "\",fillcolor=springgreen1,style=\"filled";
+				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner(true, state) + "\",fillcolor=springgreen1,style=\"filled";
 				break;
 			case TYPE_BYTE:
-				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner(true) + "\",fillcolor=slateblue1,style=\"filled";
+				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner(true, state) + "\",fillcolor=slateblue1,style=\"filled";
 				break;
 			case TYPE_DESTROY:
 				links += "\",fillcolor=orange,style=\"filled";

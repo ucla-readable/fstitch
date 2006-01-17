@@ -5,15 +5,30 @@ import java.io.IOException;
 
 public class SystemState
 {
-	private HashMap bdescs;
+	private HashMap bds, bdescs;
 	public final ChdescCollection chdescs;
 	private Chdesc free_head;
 	
 	public SystemState()
 	{
+		bds = new HashMap();
 		bdescs = new HashMap();
 		chdescs = new ChdescCollection("registered");
 		free_head = null;
+	}
+	
+	public void setBdName(int bd, String name)
+	{
+		//Integer key = Integer.valueOf(bd);
+		Integer key = new Integer(bd);
+		bds.put(key, name);
+	}
+	
+	public String getBdName(int bd)
+	{
+		//Integer key = Integer.valueOf(bd);
+		Integer key = new Integer(bd);
+		return (String) bds.get(key);
 	}
 	
 	public void addBdesc(Bdesc bdesc)
@@ -23,6 +38,13 @@ public class SystemState
 		if(bdescs.containsKey(key))
 			throw new RuntimeException("Duplicate bdesc registered!");
 		bdescs.put(key, bdesc);
+	}
+	
+	public void setBdesc(int bdesc, int number)
+	{
+		//Integer key = Integer.valueOf(bdesc);
+		Integer key = new Integer(bdesc);
+		bdescs.put(key, new Bdesc(bdesc, 0, number));
 	}
 	
 	public Bdesc lookupBdesc(int bdesc)
@@ -84,7 +106,7 @@ public class SystemState
 		else
 			output.write("rankdir=LR;\norientation=P;\nsize=\"16,10\";\n");
 		output.write("subgraph clusterAll {\nlabel=\"" + title + "\";\ncolor=white;\n");
-		output.write("node [shape=circle,color=black];\n");
+		output.write("node [shape=ellipse,color=black];\n");
 		
 		Iterator i = chdescs.iterator();
 		while(i.hasNext())
@@ -95,9 +117,9 @@ public class SystemState
 			if(isFree)
 				free++;
 			if(renderFree)
-				output.write(chdesc.render(true));
+				output.write(chdesc.render(true, this));
 			else if(chdesc == free_head || prev == null)
-				output.write(chdesc.render(!isFree));
+				output.write(chdesc.render(!isFree, this));
 		}
 		
 		if(free_head != null)

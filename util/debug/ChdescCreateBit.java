@@ -20,11 +20,6 @@ public class ChdescCreateBit extends Opcode
 		state.addChdesc(new Chdesc(chdesc, block, owner, offset, xor));
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_CREATE_BIT: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block) + ", owner = " + SystemState.hex(owner) + ", offset = " + offset + ", xor = " + SystemState.hex(xor);

@@ -15,11 +15,6 @@ public class BdescFreeDdesc extends Opcode
 	{
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_BDESC_FREE_DDESC: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc);

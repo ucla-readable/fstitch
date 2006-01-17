@@ -8,5 +8,7 @@ public class InfoModule extends Module
 		super(input, KDB_MODULE_INFO);
 		
 		addFactory(InfoMark.getFactory(input));
+		addFactory(InfoBdName.getFactory(input));
+		addFactory(InfoBdescNumber.getFactory(input));
 	}
 }

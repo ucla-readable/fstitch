@@ -18,11 +18,6 @@ public class ChdescWeakForget extends Opcode
 			chdesc.weakForget(location);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_WEAK_FORGET: chdesc = " + SystemState.hex(chdesc) + ", location = " + SystemState.hex(location);

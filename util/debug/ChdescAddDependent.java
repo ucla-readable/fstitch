@@ -27,11 +27,6 @@ public class ChdescAddDependent extends Opcode
 		}
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_ADD_DEPENDENT: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);

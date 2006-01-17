@@ -18,11 +18,6 @@ public class ChdescSetFlags extends Opcode
 			chdesc.setFlags(flags);
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_SET_FLAGS: chdesc = " + SystemState.hex(chdesc) + ", flags = " + Chdesc.renderFlags(flags);

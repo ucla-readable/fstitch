@@ -27,11 +27,6 @@ public class ChdescSetFreeHead extends Opcode
 		}
 	}
 	
-	public boolean hasEffect()
-	{
-		return true;
-	}
-	
 	public String toString()
 	{
 		return "KDB_CHDESC_SET_FREE_HEAD: chdesc = " + SystemState.hex(chdesc);

@@ -42,7 +42,15 @@ public abstract class Opcode implements Constants
 	
 	public abstract void applyTo(SystemState state);
 	
-	public abstract boolean hasEffect();
+	public boolean hasEffect()
+	{
+		return true;
+	}
+	
+	public boolean isSkippable()
+	{
+		return false;
+	}
 	
 	public abstract String toString();
 	
