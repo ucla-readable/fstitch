@@ -121,7 +121,10 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	/* at this point we have succeeded in moving the chdesc */
 	
 	if(offset)
+	{
 		*offset -= source_offset;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, chdesc, *offset);
+	}
 	
 	if(chdesc->block)
 	{

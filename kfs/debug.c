@@ -171,6 +171,11 @@ static const struct param * params_chdesc_weak_retain_release[] = {
 	&param_location,
 	&last_param
 };
+static const struct param * params_chdesc_set_offset[] = {
+	&param_chdesc,
+	&param_offset,
+	&last_param
+};
 static const struct param * params_chdesc_set_block[] = {
 	&param_chdesc,
 	&param_block,
@@ -272,6 +277,7 @@ static const struct opcode
 	opcode_chdesc_rem_dependent =       OPCODE(KDB_CHDESC_REM_DEPENDENT,       params_chdesc_connect),
 	opcode_chdesc_weak_retain =         OPCODE(KDB_CHDESC_WEAK_RETAIN,         params_chdesc_weak_retain_release),
 	opcode_chdesc_weak_forget =         OPCODE(KDB_CHDESC_WEAK_FORGET,         params_chdesc_weak_retain_release),
+	opcode_chdesc_set_offset =          OPCODE(KDB_CHDESC_SET_OFFSET,          params_chdesc_set_offset),
 	opcode_chdesc_set_block =           OPCODE(KDB_CHDESC_SET_BLOCK,           params_chdesc_set_block),
 	opcode_chdesc_set_owner =           OPCODE(KDB_CHDESC_SET_OWNER,           params_chdesc_set_owner),
 	opcode_chdesc_set_free_prev =       OPCODE(KDB_CHDESC_SET_FREE_PREV,       params_chdesc_set_free_prev),
@@ -330,6 +336,7 @@ static const struct opcode * opcodes_chdesc_alter[] = {
 	&opcode_chdesc_rem_dependent,
 	&opcode_chdesc_weak_retain,
 	&opcode_chdesc_weak_forget,
+	&opcode_chdesc_set_offset,
 	&opcode_chdesc_set_block,
 	&opcode_chdesc_set_owner,
 	&opcode_chdesc_set_free_prev,
