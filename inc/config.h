@@ -40,10 +40,10 @@
 // DEFAULT_IP_JOSNIC used when:
 // - ENABLE_JOSNIC_DHCP==0
 // - Some of addr, netmask, gw, dns are passed via the command line (dhcp then not used)
-#define DEFAULT_IP_JOSNIC_ADDR    "192.168.3.2"
+#define DEFAULT_IP_JOSNIC_ADDR    "192.168.0.2"
 #define DEFAULT_IP_JOSNIC_NETMASK "255.255.255.0"
-#define DEFAULT_IP_JOSNIC_GW      "192.168.3.1"
-#define DEFAULT_IP_JOSNIC_DNS     "128.143.2.7"
+#define DEFAULT_IP_JOSNIC_GW      "192.168.0.1"
+#define DEFAULT_IP_JOSNIC_DNS     "131.179.80.16"
 
 #define DEFAULT_IP_SLIP_ADDR      "192.168.2.2"
 #define DEFAULT_IP_SLIP_NETMASK   "255.255.255.255"
