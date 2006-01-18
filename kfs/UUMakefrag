@@ -31,6 +31,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/loop_bd.o \
 			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \
+			$(OBJDIR)/kfs/ufs_base.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
