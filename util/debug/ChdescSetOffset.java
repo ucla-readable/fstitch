@@ -21,7 +21,7 @@ public class ChdescSetOffset extends Opcode
 	
 	public String toString()
 	{
-		return "KDB_CHDESC_SET_OFFSET: chdesc = " + SystemState.hex(chdesc) + ", offset = " + SystemState.hex(offset);
+		return "KDB_CHDESC_SET_OFFSET: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset;
 	}
 	
 	public static ModuleOpcodeFactory getFactory(DataInput input)
