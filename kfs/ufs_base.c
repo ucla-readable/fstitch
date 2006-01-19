@@ -1839,7 +1839,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 		// Time to allocate a find a new block
 		if (((f->file->f_lastfrag + 1) % info->super->fs_frag) == 0) {
-			blockno = allocate_wholeblock(object, 1, file, head, tail);
+			blockno = allocate_wholeblock(object, 0, file, head, tail);
 			f->file->f_lastalloc = blockno;
 			return blockno;
 		}
@@ -1889,12 +1889,6 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	if (!block)
 		goto allocate_block_cleanup;
 
-	r = chdesc_create_init(block, info->ubd, head, &newtail);
-	if (r >= 0)
-		r = CALL(info->ubd, write_block, block);
-	if (r < 0)
-		goto allocate_block_cleanup;
-	
 	f->file->f_inode.di_blocks += 4; // grr, di_blocks counts 512 byte blocks
 	r = write_inode(object, f->file->f_num, f->file->f_inode, head, &newtail);
 	if (r < 0)
