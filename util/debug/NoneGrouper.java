@@ -31,7 +31,7 @@ public class NoneGrouper implements Grouper
 
 		public String toString()
 		{
-			return "none";
+			return "off";
 		}
 	}
 
