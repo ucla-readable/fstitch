@@ -104,7 +104,7 @@ public class SystemState
 		if(landscape)
 			output.write("rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
 		else
-			output.write("rankdir=LR;\norientation=P;\nsize=\"16,10\";\n");
+			output.write("rankdir=LR;\norientation=P;\nsize=\"16,16\";\n");
 		output.write("subgraph clusterAll {\nlabel=\"" + title + "\";\ncolor=white;\n");
 		output.write("node [shape=ellipse,color=black];\n");
 		

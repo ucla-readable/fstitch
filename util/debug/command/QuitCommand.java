@@ -15,7 +15,7 @@ public class QuitCommand implements Command
 	 * */
 	public QuitCommand()
 	{
-		this("Quits the program");
+		this("Quits the program.");
 	}
 	
 	/**

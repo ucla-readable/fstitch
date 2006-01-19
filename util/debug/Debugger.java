@@ -12,6 +12,7 @@ public class Debugger extends OpcodeFactory
 	private SystemState state;
 	private int applied;
 	private boolean renderFree;
+	private String groupingType;
 	private int debugRev;
 	private int debugOpcodeRev;
 	
@@ -24,6 +25,7 @@ public class Debugger extends OpcodeFactory
 		state = new SystemState();
 		applied = 0;
 		renderFree = false;
+		groupingType = "off";
 		
 		debugRev = input.readInt();
 		debugOpcodeRev = input.readInt();
@@ -197,6 +199,17 @@ public class Debugger extends OpcodeFactory
 		this.renderFree = renderFree;
 	}
 	
+	public String getGroupingType()
+	{
+		return groupingType;
+	}
+	
+	public void setGroupingType(String groupingType)
+	{
+		/* FIXME: set grouping type here! */
+		this.groupingType = groupingType;
+	}
+	
 	public void render(Writer output, boolean landscape) throws IOException
 	{
 		String title = "";
@@ -223,7 +236,7 @@ public class Debugger extends OpcodeFactory
 			Debugger dbg = null;
 			
 			interpreter.addCommand(new CloseCommand());
-			interpreter.addCommand(new FreeCommand());
+			interpreter.addCommand(new OptionCommand());
 			interpreter.addCommand(new GuiCommand());
 			interpreter.addCommand(new JumpCommand());
 			interpreter.addCommand(new ListCommand());
