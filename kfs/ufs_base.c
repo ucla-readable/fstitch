@@ -7,13 +7,11 @@
 #include <lib/stdio.h>
 #include <assert.h>
 
-#include <kfs/bd.h>
-#include <kfs/lfs.h>
 #include <kfs/modman.h>
 #include <kfs/ufs_base.h>
 
 #ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in ufs_base.c
+#error inc/fs.h got included in __FILE__
 #endif
 
 #define UFS_BASE_DEBUG 0
@@ -52,7 +50,7 @@ struct ufs_fdesc {
 };
 
 static bdesc_t * ufs_lookup_block(LFS_t * object, uint32_t number);
-static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep, const bool skip);
+static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int ufs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail);
@@ -184,11 +182,13 @@ static int check_super(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t numblocks;
-	int i;
+	int i, bs;
 
+	// TODO better way of detecting fs block size
 	/* make sure we have the block size we expect */
-	if (CALL(info->ubd, get_blocksize) != UFS_FRAGSIZE) {
-		printf("Block device size is not UFS_FRAGSIZE!\n");
+	bs = CALL(info->ubd, get_blocksize);
+	if (bs != 2048) {
+		printf("Block device size is not 2048! (%d)\n", bs);
 		return -1;
 	}
 
@@ -1578,7 +1578,7 @@ static int dir_lookup(LFS_t * object, struct UFS_File dir, const char * name, st
 	temp_fdesc.file = &dir;
 	while (r >= 0) {
 		last_basep = basep;
-		r = get_dirent(object, (fdesc_t *) &temp_fdesc, &entry, sizeof(struct dirent), &basep, 0);
+		r = get_dirent(object, (fdesc_t *) &temp_fdesc, &entry, sizeof(struct dirent), &basep);
 		if (r < 0)
 			return r;
 		if (entry.d_fileno == 0) // Blank spot
@@ -1628,7 +1628,7 @@ static int dir_lookup(LFS_t * object, struct UFS_File dir, const char * name, st
 
 static int walk_path(LFS_t * object, const char * path, struct ufs_fdesc * new_fdesc)
 {
-	printf("UFSDEBUG: %s %s\n", __FUNCTION__, path);
+	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, path);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	open_ufsfile_t * existing_file;
 	struct UFS_File dir;
@@ -2070,22 +2070,19 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 	return -E_UNSPECIFIED;
 }
 
-static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep, const bool skip)
+static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	struct UFS_direct dirfile;
 	struct UFS_dinode inode;
-	uint32_t actual_len, p;
+	uint32_t actual_len;
 	int r;
 
 	if (!entry)
 		return -E_INVAL;
 
-	p = *basep;
-	do {
-		r = read_dirent(object, file, &dirfile, &p);
-		if (r < 0)
-			return r;
-	} while (skip && dirfile.d_ino == 0);
+	r = read_dirent(object, file, &dirfile, basep);
+	if (r < 0)
+		return r;
 
 	actual_len = sizeof(struct dirent) + dirfile.d_namlen - DIRENT_MAXNAMELEN;
 	if (size < actual_len)
@@ -2125,13 +2122,20 @@ static int get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uin
 	strncpy(entry->d_name, dirfile.d_name, dirfile.d_namlen);
 	entry->d_name[dirfile.d_namlen] = 0;
 
-	*basep = p;
 	return 0;
 }
 
 static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	return get_dirent(object, file, entry, size, basep, 1);
+	int r;
+
+	do {
+		r = get_dirent(object, file, entry, size, basep);
+		if (r < 0)
+			return r;
+	} while (entry->d_fileno == 0);
+
+	return r;
 }
 
 static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
@@ -2531,7 +2535,6 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 				assert(block % info->super->fs_frag == 0);
 
 				// free the entire block
-				assert(block % info->super->fs_frag == 0);
 				return erase_wholeblock(object, block / info->super->fs_frag, file, head, tail);
 			}
 			else {
@@ -2691,6 +2694,8 @@ static const feature_t * ufs_get_feature(LFS_t * object, const char * name, size
 static int ufs_get_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t id, size_t * size, void ** data)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+
 	if (id == KFS_feature_size.id) {
 		*data = malloc(sizeof(off_t));
 		if (!*data)
@@ -2722,7 +2727,7 @@ static int ufs_get_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t
 			return -E_NO_MEM;
 
 		*size = sizeof(uint32_t);
-		free_space = count_free_space(object) * UFS_FRAGSIZE / 1024;
+		free_space = count_free_space(object) * info->super->fs_fsize / 1024;
 		memcpy(*data, &free_space, sizeof(uint32_t));
 	}
 	else if (id == KFS_feature_file_lfs.id) {

@@ -1,14 +1,8 @@
 #ifndef __KUDOS_KFS_UFS_BASE_H
 #define __KUDOS_KFS_UFS_BASE_H
 
-#include <lib/mmu.h>
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
-
-// FreeBSD upped the default block size to 16k
-#define UFS_BLKSIZE 16384
-#define UFS_FRAGSIZE 2048
-#define UFS_BLKBITSIZE	(UFS_BLKSIZE * 8)
 
 // Maximum size of a filename (a single path component), including null
 #define UFS_MAXNAMELEN	255
