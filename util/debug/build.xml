@@ -34,6 +34,7 @@
 		<javac
 			srcdir="${src}"
 			destdir="${classes}"
+			source="1.4"
 			debug="on"
 			includes="**/*.java"
 			excludes="**/.svn/**"/>
