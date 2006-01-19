@@ -96,7 +96,7 @@ public class SystemState
 		this.free_head = free_head;
 	}
 	
-	public void render(Writer output, String title, boolean renderFree, boolean landscape) throws IOException
+	public void render(Writer output, String title, boolean renderFree, Grouper grouper, boolean landscape) throws IOException
 	{
 		int free = 0;
 		
@@ -112,6 +112,10 @@ public class SystemState
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
+
+			grouper.add(chdesc);
+
+			/* render the chdesc */
 			Chdesc prev = chdesc.getFreePrev();
 			boolean isFree = chdesc == free_head || prev != null;
 			if(isFree)
@@ -157,6 +161,8 @@ public class SystemState
 		       		output.write(free_head.renderName() + "\n}\n");
 			}
 		}
+
+		grouper.render("", output);
 		
 		/*output.write("node [shape=box,color=black];\n");
 		i = bdescs.iterator();

@@ -13,6 +13,11 @@ public class OptionCommand implements Command
 	{
 		return "Get or set rendering options: freelist, grouping.";
 	}
+
+	/** Primary grouping color. */
+	protected final static String color1 = "red";
+	/** Secondary grouping color. */
+	protected final static String color2 = "gold";
 	
 	public Object runCommand(String args[], Object data, CommandInterpreter interpreter) throws CommandException
 	{
@@ -44,18 +49,30 @@ public class OptionCommand implements Command
 					String now = "";
 					if(args.length != 1)
 					{
-						if("off".equals(args[1]) || "block".equals(args[1]) || "owner".equals(args[1]))
-							dbg.setGroupingType(args[1]);
-						else if("block-owner".equals(args[1]) || "owner-block".equals(args[1]))
-							dbg.setGroupingType(args[1]);
-						else
-						{
-							System.out.println("Invalid setting: " + args[1]);
+						String groupingType = args[1];
+						GrouperFactory grouperFactory;
+						GrouperFactory noneFactory = NoneGrouper.Factory.getFactory();
+						if("off".equals(groupingType))
+							grouperFactory = NoneGrouper.Factory.getFactory();
+						else if("block".equals(groupingType))
+							grouperFactory = new BlockGrouper.Factory(noneFactory, color1);
+						else if("owner".equals(groupingType))
+							grouperFactory = new OwnerGrouper.Factory(noneFactory, color1, dbg);
+						else if("block-owner".equals(groupingType))
+							grouperFactory = new BlockGrouper.Factory(new OwnerGrouper.Factory(noneFactory, color1, dbg), color2);
+						else if("owner-block".equals(groupingType))
+							grouperFactory = new OwnerGrouper.Factory(new BlockGrouper.Factory(noneFactory, color1), color2, dbg);
+						else {
+							System.out.println("Invalid setting: " + groupingType);
 							return data;
 						}
+
+						dbg.setGrouperFactory(grouperFactory);
 						now = "now ";
 					}
-					System.out.println("Change descriptor grouping is " + now + dbg.getGroupingType());
+					else
+						System.out.println("Available groupings: off, block, owner, block-owner, owner-block.");
+					System.out.println("Change descriptor grouping is " + now + dbg.getGrouperFactory());
 				}
 				else
 					System.out.println("Invalid option: " + args[0]);
