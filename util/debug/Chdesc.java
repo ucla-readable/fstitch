@@ -313,30 +313,41 @@ public class Chdesc
 	{
 		return "\"ch" + SystemState.hex(address) + "-hc" + SystemState.hex(hashCode()) + "\"";
 	}
-	
-	private String renderBlockOwner(boolean showNull, SystemState state)
+
+	public static String getBlockName(int block, int owner, boolean showBlock, boolean showOwner, SystemState state)
 	{
-		String info = "";
-		if(showNull || block != 0)
+		String name = "";
+		if(showBlock && block != 0)
 		{
 			Bdesc bdesc = state.lookupBdesc(block);
 			if(bdesc != null)
-				info += "\\n#" + bdesc.number + " (" + SystemState.hex(block) + ")";
+				name += "#" + bdesc.number + " (" + SystemState.hex(block) + ")";
 			else
-				info += "\\non " + SystemState.hex(block);
+				name += "on " + SystemState.hex(block);
 		}
-		if(showNull || owner != 0)
+		if(showOwner && owner != 0)
 		{
-			String name = state.getBdName(owner);
-			if(name != null)
-				info += "\\n" + name;
+			String bdName = state.getBdName(owner);
+			if(bdName != null)
+				name += bdName;
 			else
-				info += "\\nat " + SystemState.hex(owner);
+				name += "at " + SystemState.hex(owner);
 		}
-		return info;
+		return name;
 	}
 	
-	public String render(boolean renderFree, SystemState state)
+	private String renderBlockOwner(boolean showBlock, boolean showOwner, SystemState state)
+	{
+		String bName = getBlockName(block, 0, showBlock, false, state);
+		if(bName.length() > 0)
+			bName = "\\n" + bName;
+		String oName = getBlockName(0, owner, false, showOwner, state);
+		if(oName.length() > 0)
+			oName = "\\n" + oName;
+		return bName + oName;
+	}
+	
+	public String render(boolean renderFree, boolean renderBlock, boolean renderOwner, SystemState state)
 	{
 		String name = renderName();
 		
@@ -344,13 +355,13 @@ public class Chdesc
 		switch(type)
 		{
 			case TYPE_NOOP:
-				links += renderBlockOwner(false, state) + "\",style=\"";
+				links += renderBlockOwner(renderBlock, renderOwner, state) + "\",style=\"";
 				break;
 			case TYPE_BIT:
-				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner(true, state) + "\",fillcolor=springgreen1,style=\"filled";
+				links += "\\n[" + offset + ":" + SystemState.hex(xor) + "]" + renderBlockOwner(renderBlock, renderOwner, state) + "\",fillcolor=springgreen1,style=\"filled";
 				break;
 			case TYPE_BYTE:
-				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner(true, state) + "\",fillcolor=slateblue1,style=\"filled";
+				links += "\\n[" + offset + ":" + length + "]" + renderBlockOwner(renderBlock, renderOwner, state) + "\",fillcolor=slateblue1,style=\"filled";
 				break;
 			case TYPE_DESTROY:
 				links += "\",fillcolor=orange,style=\"filled";

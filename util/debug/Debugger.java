@@ -12,6 +12,8 @@ public class Debugger extends OpcodeFactory
 	private SystemState state;
 	private int applied;
 	private boolean renderFree;
+	private boolean renderBlock;
+	private boolean renderOwner;
 	private GrouperFactory grouperFactory;
 	private int debugRev;
 	private int debugOpcodeRev;
@@ -25,6 +27,8 @@ public class Debugger extends OpcodeFactory
 		state = new SystemState();
 		applied = 0;
 		renderFree = false;
+		renderBlock = true;
+		renderOwner = true;
 		grouperFactory = NoneGrouper.Factory.getFactory();
 		
 		debugRev = input.readInt();
@@ -199,6 +203,26 @@ public class Debugger extends OpcodeFactory
 		this.renderFree = renderFree;
 	}
 	
+	public boolean getRenderBlock()
+	{
+		return renderBlock;
+	}
+	
+	public void setRenderBlock(boolean renderBlock)
+	{
+		this.renderBlock = renderBlock;
+	}
+	
+	public boolean getRenderOwner()
+	{
+		return renderOwner;
+	}
+	
+	public void setRenderOwner(boolean renderOwner)
+	{
+		this.renderOwner = renderOwner;
+	}
+	
 	public GrouperFactory getGrouperFactory()
 	{
 		return grouperFactory;
@@ -214,7 +238,7 @@ public class Debugger extends OpcodeFactory
 		String title = "";
 		if(applied > 0)
 			title = opcodes.get(applied - 1).toString();
-		state.render(output, title, renderFree, grouperFactory.newInstance(), landscape);
+		state.render(output, title, renderFree, renderBlock, renderOwner, grouperFactory.newInstance(), landscape);
 	}
 	
 	public String toString()

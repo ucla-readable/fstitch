@@ -96,7 +96,7 @@ public class SystemState
 		this.free_head = free_head;
 	}
 	
-	public void render(Writer output, String title, boolean renderFree, Grouper grouper, boolean landscape) throws IOException
+	public void render(Writer output, String title, boolean renderFree, boolean renderBlock, boolean renderOwner, Grouper grouper, boolean landscape) throws IOException
 	{
 		int free = 0;
 		
@@ -121,9 +121,9 @@ public class SystemState
 			if(isFree)
 				free++;
 			if(renderFree)
-				output.write(chdesc.render(true, this));
+				output.write(chdesc.render(true, renderBlock, renderOwner, this));
 			else if(chdesc == free_head || prev == null)
-				output.write(chdesc.render(!isFree, this));
+				output.write(chdesc.render(!isFree, renderBlock, renderOwner, this));
 		}
 		
 		if(free_head != null)

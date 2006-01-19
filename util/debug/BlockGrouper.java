@@ -11,9 +11,9 @@ public class BlockGrouper extends AbstractGrouper
 		protected String color;
 		protected String name;
 
-		public Factory(GrouperFactory subGrouperFactory, String color)
+			public Factory(GrouperFactory subGrouperFactory, String color, Debugger dbg)
 		{
-			super(subGrouperFactory);
+			super(subGrouperFactory, dbg);
 			this.color = color;
 
 			name = "block[" + color + "]";
@@ -24,7 +24,7 @@ public class BlockGrouper extends AbstractGrouper
 
 		public Grouper newInstance()
 		{
-			return new BlockGrouper(subGrouperFactory, color);
+			return new BlockGrouper(subGrouperFactory, color, debugger);
 		}
 
 		public String toString()
@@ -37,9 +37,9 @@ public class BlockGrouper extends AbstractGrouper
 
 	protected String color;
 
-	public BlockGrouper(GrouperFactory subGrouperFactory, String color)
+	public BlockGrouper(GrouperFactory subGrouperFactory, String color, Debugger dbg)
 	{
-		super(subGrouperFactory);
+		super(subGrouperFactory, dbg);
 		this.color = color;
 	}
 
@@ -50,18 +50,20 @@ public class BlockGrouper extends AbstractGrouper
 
 	protected void renderGroup(Object groupKey, Grouper subGrouper, String clusterPrefix, Writer output) throws IOException
 	{
-		Integer block = (Integer) groupKey;
+		int block = ((Integer) groupKey).intValue();
 		String clusterName = clusterPrefix + block;
-		if(block.intValue() != 0)
+		if(block != 0)
 		{
 			output.write("subgraph cluster" + clusterName + " {\n");
-			output.write("label=\"block " + SystemState.hex(block.intValue())
-			             + "\";\n");
+
+			String blockName = Chdesc.getBlockName(block, 0, true, false, debugger.getState());
+			output.write("label=\"" + blockName + "\";\n");
+
 			output.write("color=" + color + ";\n");
 			output.write("labeljust=r;\n");
 		}
 		subGrouper.render(clusterName, output);
-		if(block.intValue() != 0)
+		if(block != 0)
 			output.write("}\n");
 	}
 }

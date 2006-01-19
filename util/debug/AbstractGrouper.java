@@ -14,21 +14,25 @@ public abstract class AbstractGrouper implements Grouper
 	public abstract static class Factory implements GrouperFactory
 	{
 		protected GrouperFactory subGrouperFactory;
+		protected Debugger debugger;
 
-		protected Factory(GrouperFactory subGrouperFactory)
+		protected Factory(GrouperFactory subGrouperFactory, Debugger debugger)
 		{
 			this.subGrouperFactory = subGrouperFactory;
+			this.debugger = debugger;
 		}
 	}
 
 
 	private Map groupMap; // Map<Object,Grouper>
 	private GrouperFactory subGrouperFactory;
+	protected Debugger debugger;
 
-	public AbstractGrouper(GrouperFactory subGrouperFactory)
+	public AbstractGrouper(GrouperFactory subGrouperFactory, Debugger debugger)
 	{
 		groupMap = new HashMap();
 		this.subGrouperFactory = subGrouperFactory;
+		this.debugger = debugger;
 	}
 
 	public void add(Chdesc c)

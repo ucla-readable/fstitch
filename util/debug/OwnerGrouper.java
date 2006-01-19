@@ -9,14 +9,12 @@ public class OwnerGrouper extends AbstractGrouper
 	public static class Factory extends AbstractGrouper.Factory
 	{
 		protected String color;
-		protected Debugger debugger;
 		protected String name;
 
 		public Factory(GrouperFactory subGrouperFactory, String color, Debugger dbg)
 		{
-			super(subGrouperFactory);
+			super(subGrouperFactory, dbg);
 			this.color = color;
-			this.debugger = dbg;
 
 			name = "owner[" + color + "]";
 			String subName = subGrouperFactory.toString();
@@ -38,13 +36,11 @@ public class OwnerGrouper extends AbstractGrouper
 
 
 	protected String color;
-	protected Debugger debugger;
 
 	public OwnerGrouper(GrouperFactory subGrouperFactory, String color, Debugger dbg)
 	{
-		super(subGrouperFactory);
+		super(subGrouperFactory, dbg);
 		this.color = color;
-		this.debugger = dbg;
 	}
 
 	protected Object getGroupKey(Chdesc c)
@@ -58,11 +54,11 @@ public class OwnerGrouper extends AbstractGrouper
 		String clusterName = clusterPrefix + owner;
 		if(owner != 0)
 		{
-			String ownerName = debugger.getState().getBdName(owner);
-			if(ownerName == null)
-				ownerName = SystemState.hex(owner);
 			output.write("subgraph cluster" + clusterName + " {\n");
-			output.write("label=\"module " + ownerName + "\";\n");
+
+			String ownerName = Chdesc.getBlockName(0, owner, false, true, debugger.getState());
+			output.write("label=\"" + ownerName + "\";\n");
+
 			output.write("color=" + color + ";\n");
 			output.write("labeljust=r;\n");
 		}

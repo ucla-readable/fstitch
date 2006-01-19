@@ -52,17 +52,27 @@ public class OptionCommand implements Command
 						String groupingType = args[1];
 						GrouperFactory grouperFactory;
 						GrouperFactory noneFactory = NoneGrouper.Factory.getFactory();
-						if("off".equals(groupingType))
-							grouperFactory = NoneGrouper.Factory.getFactory();
-						else if("block".equals(groupingType))
-							grouperFactory = new BlockGrouper.Factory(noneFactory, color1);
-						else if("owner".equals(groupingType))
+						if("off".equals(groupingType)) {
+							grouperFactory = noneFactory;
+							dbg.setRenderBlock(true);
+							dbg.setRenderOwner(true);
+						} else if("block".equals(groupingType)) {
+							grouperFactory = new BlockGrouper.Factory(noneFactory, color1, dbg);
+							dbg.setRenderBlock(false);
+							dbg.setRenderOwner(true);
+						} else if("owner".equals(groupingType)) {
 							grouperFactory = new OwnerGrouper.Factory(noneFactory, color1, dbg);
-						else if("block-owner".equals(groupingType))
-							grouperFactory = new BlockGrouper.Factory(new OwnerGrouper.Factory(noneFactory, color1, dbg), color2);
-						else if("owner-block".equals(groupingType))
-							grouperFactory = new OwnerGrouper.Factory(new BlockGrouper.Factory(noneFactory, color1), color2, dbg);
-						else {
+							dbg.setRenderBlock(true);
+							dbg.setRenderOwner(false);
+						} else if("block-owner".equals(groupingType)) {
+							grouperFactory = new BlockGrouper.Factory(new OwnerGrouper.Factory(noneFactory, color1, dbg), color2, dbg);
+							dbg.setRenderBlock(false);
+							dbg.setRenderOwner(false);
+						} else if("owner-block".equals(groupingType)) {
+							grouperFactory = new OwnerGrouper.Factory(new BlockGrouper.Factory(noneFactory, color1, dbg), color2, dbg);
+							dbg.setRenderBlock(false);
+							dbg.setRenderOwner(false);
+						} else {
 							System.out.println("Invalid setting: " + groupingType);
 							return data;
 						}
