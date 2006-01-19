@@ -1,0 +1,32 @@
+#!/bin/sh
+
+if [ $# -ne 1 ];
+then
+	echo "About: Scales a postscript file, from stdin. Output is sent to stdout."
+	echo "Usage: `basename $0` <INT_SCALE>"
+	exit 1
+fi
+
+SCALE=$1
+
+BEGINSETUP="%%BeginSetup"
+PAGEBOUNDINGBOX="%%PageBoundingBox"
+
+TMPFILE=`mktemp /tmp/psscale.XXXXXX` || exit 1
+
+# Set the scale
+# NOTE: because of this quick line, this script is not smart enough to be
+# ran on its own output
+sed "s/^$BEGINSETUP$/$BEGINSETUP\n$SCALE $SCALE scale/" > $TMPFILE
+
+# Update the bounding box header
+BOUNDBOX="`grep ^%%PageBoundingBox $TMPFILE | sed "s/^$PAGEBOUNDINGBOX: //"`"
+BB1="`echo $BOUNDBOX | awk '{print $1}'`"
+BB2="`echo $BOUNDBOX | awk '{print $2}'`"
+BB3="`echo $BOUNDBOX | awk '{print $3}'`"
+BB4="`echo $BOUNDBOX | awk '{print $4}'`"
+BB3=$(($SCALE * $BB3))
+BB4=$(($SCALE * $BB4))
+sed "s/^$PAGEBOUNDINGBOX: $BOUNDBOX/$PAGEBOUNDINGBOX: $BB1 $BB2 $BB3 $BB4/" < $TMPFILE
+
+rm -f $TMPFILE
