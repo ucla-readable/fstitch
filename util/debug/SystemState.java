@@ -112,18 +112,21 @@ public class SystemState
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
-
-			grouper.add(chdesc);
-
-			/* render the chdesc */
 			Chdesc prev = chdesc.getFreePrev();
 			boolean isFree = chdesc == free_head || prev != null;
 			if(isFree)
 				free++;
+			/* render the chdesc */
 			if(renderFree)
+			{
+				grouper.add(chdesc);
 				output.write(chdesc.render(true, renderBlock, renderOwner, this));
+			}
 			else if(chdesc == free_head || prev == null)
+			{
+				grouper.add(chdesc);
 				output.write(chdesc.render(!isFree, renderBlock, renderOwner, this));
+			}
 		}
 		
 		if(free_head != null)

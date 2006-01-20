@@ -15,20 +15,22 @@ public class GuiCommand implements Command
 	
 	public String getHelp()
 	{
-		return "Start GUI control panel.";
+		return "Start GUI control panel, optionally rendering to PostScript.";
 	}
 	
 	public Object runCommand(String args[], Object data, final CommandInterpreter interpreter) throws CommandException
 	{
 		final Debugger dbg = (Debugger) data;
 		final GuiCommand shell = this;
+		final String view = (args.length > 0) ? "ps " + args[0] : "view";
+		final String title = "Debugger GUI" + ((args.length > 0) ? ": " + args[0] : "");
 		if(dbg != null)
 		{
 			Runnable runnable = new Runnable()
 			{
 				public void run()
 				{
-					final JFrame frame = new JFrame("Debugger GUI");
+					final JFrame frame = new JFrame(title);
 					Container pane = frame.getContentPane();
 					JButton button;
 					
@@ -59,8 +61,8 @@ public class GuiCommand implements Command
 							{
 								String command = e.getActionCommand();
 								interpreter.runCommandLine(command, dbg, false);
-								if(!"view new".equals(command))
-									interpreter.runCommandLine("view", dbg, false);
+								if(!"view new".equals(command) && !view.equals(command))
+									interpreter.runCommandLine(view, dbg, false);
 								
 								/* even though we're already in the event thread,
 								 * we need this to happen after the invokeLater()
@@ -91,8 +93,16 @@ public class GuiCommand implements Command
 					button.addActionListener(listener);
 					pane.add(button);
 					
-					button = new JButton("New");
-					button.setActionCommand("view new");
+					if("view".equals(view))
+					{
+						button = new JButton("New");
+						button.setActionCommand("view new");
+					}
+					else
+					{
+						button = new JButton("PS");
+						button.setActionCommand(view);
+					}
 					button.addActionListener(listener);
 					pane.add(button);
 					
