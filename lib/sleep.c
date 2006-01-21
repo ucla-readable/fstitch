@@ -4,7 +4,7 @@
 #if defined(KUDOS)
 #include <inc/lib.h>
 int
-sleepj(int32_t jiffies)
+jsleep(int32_t jiffies)
 {
 	const int32_t wakeup = jiffies + env->env_jiffies;
 
@@ -22,7 +22,7 @@ sleepj(int32_t jiffies)
 #elif defined(UNIXUSER)
 #include <unistd.h>
 int
-sleepj(int32_t jiffies)
+jsleep(int32_t jiffies)
 {
 	// TODO: use nanosleep to avoid unix signal interactions
 	return usleep(jiffies * (1000000 / JIFFIES_PER_SECOND));

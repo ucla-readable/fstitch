@@ -5,10 +5,11 @@
 #include <inc/error.h>
 #include <lib/hash_set.h>
 #include <lib/stdio.h>
+#include <lib/jiffies.h>
 #include <assert.h>
 
 /* textbar, sleep from inc/lib.h */
-int sleepj(int32_t jiffies);
+int jsleep(int32_t jiffies);
 int textbar_init(int use_line);
 int textbar_close(void);
 int textbar_set_progress(int progress, uint8_t color);
@@ -250,7 +251,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, uint8_t * fbmap, uint8_t * ubma
 		if (info->m >= 0 && info->p < 140) {
 			(info->p)++;
 			textbar_set_progress(info->p, info->color);
-			sleepj(5);
+			jsleep(HZ / 20);
 		}
 
 		blockno = i / JOSFS_BLKFILES;
@@ -335,7 +336,7 @@ int josfs_fsck(LFS_t * object)
 
 		if (info->m >= 0) {
 			textbar_set_progress(info->p, info->color);
-			sleepj(5);
+			jsleep(HZ / 20);
 		}
 
 		do {
@@ -368,7 +369,7 @@ int josfs_fsck(LFS_t * object)
 					if (info->p < 141 + (j*20/s_nblocks)) {
 						(info->p)++;
 						textbar_set_progress(info->p, info->color);
-						sleepj(5);
+						jsleep(HZ / 20);
 					}
 				}
 
@@ -388,9 +389,9 @@ int josfs_fsck(LFS_t * object)
 	if (r < 0 || errors) {
 		if (info->m >= 0) {
 			for (j = 0; j < 5; j++) {
-				sleepj(75);
+				jsleep(3 * HZ / 4);
 				textbar_set_progress(info->p, 12);
-				sleepj(75);
+				jsleep(3 * HZ / 4);
 				textbar_set_progress(0, 12);
 			}
 		}

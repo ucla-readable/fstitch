@@ -371,7 +371,7 @@ static const struct module modules[] = {
 };
 static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
-static int debug_socket[2];
+static int debug_socket[2] = {-1, -1};
 
 #if KFS_DEBUG_BINARY
 
@@ -461,7 +461,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 	r = gethostbyname(host, &addr);
 	if(r < 0)
 	{
-		sleepj(200);
+		jsleep(2 * HZ);
 		r = gethostbyname(host, &addr);
 		if(r < 0)
 			return r;
@@ -469,7 +469,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 	r = connect(addr, port, debug_socket);
 	if(r < 0)
 	{
-		sleepj(200);
+		jsleep(2 * HZ);
 		r = connect(addr, port, debug_socket);
 		if(r < 0)
 			return r;

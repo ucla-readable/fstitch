@@ -54,7 +54,7 @@ static int ide_notbusy(uint8_t controller)
 			printf("Warning: ATA operation timed out on controller %d\n", controller);
 			/* reset the drive */
 			outb(reset, 0x0E);
-			sleepj(HZ / 50);
+			jsleep(HZ / 50);
 			outb(reset, 0x0A);
 			return -1;
 		}

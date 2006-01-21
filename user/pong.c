@@ -73,7 +73,7 @@ static void playpong(int child)
 			exit(0);
 		}
 		
-		sleepj(child ? (HZ / 50) : (HZ / 100));
+		jsleep(child ? (HZ / 50) : (HZ / 100));
 	}
 }
 

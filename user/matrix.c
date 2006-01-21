@@ -160,7 +160,7 @@ void matrix(int argc, char * argv[])
 		}
 		
 		memcpy((void *) 0xB8000, matrix->buffer, BUFFER(matrix));
-		sleepj(tmult * HZ / 100);
+		jsleep(tmult * HZ / 100);
 	}
 	
 	memcpy(matrix->buffer + offset, matrix_failure[0], 36);

@@ -163,7 +163,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		return bdesc;
 		
 	error:
-		sleepj(tries * 5);
+		jsleep(tries * HZ / 20);
 		nbd_bd_reset(object);
 	}
 	
@@ -254,7 +254,7 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		return 0;
 		
 	error:
-		sleepj(tries * 5);
+		jsleep(tries * HZ / 20);
 		nbd_bd_reset(object);
 	}
 	

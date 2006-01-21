@@ -1,4 +1,6 @@
-//#include <inc/lib.h>
+#ifdef KUDOS
+#include <inc/lib.h>
+#endif
 #include <lib/kdprintf.h>
 #include <lib/vector.h>
 #include <lib/partition.h>
@@ -11,6 +13,7 @@
 #include <kfs/bsd_ptable.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
+#include <kfs/elevator_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
 #include <kfs/journal_bd.h>
@@ -76,7 +79,20 @@ int kfsd_init(void)
 	if((r = KFS_DEBUG_INIT()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "kfs_debug_init: %e\n", r);
-		kfsd_shutdown();
+#ifdef KUDOS
+		while(r != 'y' && r != 'n')
+		{
+			kdprintf(STDERR_FILENO, "Start anyway? [Y/n] ");
+			r = 0;
+			while(r <= 0)
+				r = sys_cgetc_nb();
+			if(r == '\n')
+				r = 'y';
+			kdprintf(STDERR_FILENO, "%c\n", r);
+		}
+		if(r == 'n')
+#endif
+			kfsd_shutdown();
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
@@ -99,7 +115,7 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 #else
-	kdprintf(STDERR_FILENO, "Not starting cfs_ipc_serve: non-kudos targets are not yet supported\n");
+	kdprintf(STDERR_FILENO, "Not starting cfs_ipc_serve: non-KudOS targets are not yet supported\n");
 #endif
 
 	if ((r = sched_init()) < 0)
@@ -128,7 +144,7 @@ int kfsd_init(void)
 		BD_t * bd;
 
 		/* delay kfsd startup slightly for netd to start */
-		sleepj(200);
+		jsleep(2 * HZ);
 
 		if (! (bd = nbd_bd("192.168.0.2", 2492)) )
 			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
@@ -148,10 +164,15 @@ int kfsd_init(void)
 		bd = NULL;
 #endif
 		if (bd)
+		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-
-		if (bd && (r = construct_uhfses(bd, 128, uhfses)) < 0)
-			kfsd_shutdown();
+			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
+			bd = elevator_cache_bd(bd, 32);
+			if (!bd)
+				kfsd_shutdown();
+			if ((r = construct_uhfses(bd, 128, uhfses)) < 0)
+				kfsd_shutdown();
+		}
 	}
 
 	if (use_disk_1)
@@ -245,7 +266,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	if (ptbl)
 	{
 		uint32_t max = pc_ptable_count(ptbl);
-		printf("Found %d pc partitions.\n", max);
+		printf("Found %d PC partitions.\n", max);
 		for (i = 1; i <= max; i++)
 		{
 			uint8_t type = pc_ptable_type(ptbl, i);

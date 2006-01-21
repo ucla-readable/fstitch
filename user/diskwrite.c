@@ -73,8 +73,8 @@ umain(int argc, char **argv)
 	// Wait a bit before starting (and stopping the fs) in case we were
 	// started "diskwrite < fs.img", so that the shell has a chance to
 	// close its fds:
-	if ((r = sleepj(HZ / 2)) < 0)
-		kdprintf(STDERR_FILENO, "sleepj: %e\n");
+	if ((r = jsleep(HZ / 2)) < 0)
+		kdprintf(STDERR_FILENO, "jsleep: %e\n");
 
 	for (;; blockno++)
 	{
@@ -127,8 +127,8 @@ umain(int argc, char **argv)
 		if (!iscons(STDOUT_FILENO))
 			printf_c(reboot_msg);
 
-		if ((r = sleepj(2 * HZ)) < 0)
-			kdprintf(STDERR_FILENO, "sleepj: %e\n", r);
+		if ((r = jsleep(2 * HZ)) < 0)
+			kdprintf(STDERR_FILENO, "jsleep: %e\n", r);
 		sys_reboot();
 	}
 	// This will fail, why?:

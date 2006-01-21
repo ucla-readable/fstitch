@@ -3,6 +3,6 @@
 
 #include <lib/types.h>
 
-int sleepj(int32_t jiffies);
+int jsleep(int32_t jiffies);
 
 #endif /* !KUDOS_LIB_SLEEP_H */
