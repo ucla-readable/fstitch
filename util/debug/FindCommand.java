@@ -90,10 +90,10 @@ public class FindCommand implements Command
 					range = "in range ";
 				}
 				if("max".equals(args[0]))
-					opcode = findMax(dbg, 0, dbg.getOpcodeCount());
+					opcode = findMax(dbg, start, stop);
 				else
-					opcode = findMin(dbg, 0, dbg.getOpcodeCount());
-				System.out.println("The " + args[0] + "imum opcode count " + range + "first occurs at opcode #" + opcode);
+					opcode = findMin(dbg, start, stop);
+				System.out.println("The " + args[0] + "imum change descriptor count " + range + "first occurs at opcode #" + opcode);
 			}
 			else
 				System.out.println("Need a valid opcode range.");

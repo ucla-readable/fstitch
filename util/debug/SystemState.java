@@ -119,12 +119,14 @@ public class SystemState
 			/* render the chdesc */
 			if(renderFree)
 			{
-				grouper.add(chdesc);
+				if((chdesc.getFlags() & Chdesc.FLAG_WRITTEN) == 0)
+					grouper.add(chdesc);
 				output.write(chdesc.render(true, renderBlock, renderOwner, this));
 			}
 			else if(chdesc == free_head || prev == null)
 			{
-				grouper.add(chdesc);
+				if((chdesc.getFlags() & Chdesc.FLAG_WRITTEN) == 0)
+					grouper.add(chdesc);
 				output.write(chdesc.render(!isFree, renderBlock, renderOwner, this));
 			}
 		}
