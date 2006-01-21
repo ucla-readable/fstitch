@@ -47,4 +47,4 @@ KFSOFILES := \
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib $(FUSE_HOME)/lib/.libs/libfuse.so -lpthread -luser
+	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -lpthread -luser
