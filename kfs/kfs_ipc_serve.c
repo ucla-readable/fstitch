@@ -304,6 +304,20 @@ static void kis_wt_cache_bd(envid_t whom, const Skfs_wt_cache_bd_t * pg)
 	RETURN_IPC;
 }
 
+#include <kfs/elevator_cache_bd.h>
+static void kis_elevator_cache_bd(envid_t whom, const Skfs_elevator_cache_bd_t * pg)
+{
+	BD_t * bd = (BD_t *) pg->bd;
+	uint32_t val;
+
+	if (!modman_name_bd(bd))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) elevator_cache_bd(bd, pg->blocks);
+
+	RETURN_IPC;
+}
+
 #include <kfs/block_resizer_bd.h>
 static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * pg)
 {
@@ -646,6 +660,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(JOURNAL_BD_SET_JOURNAL, journal_bd_set_journal);
 		SERVE(WB_CACHE_BD,            wb_cache_bd);
 		SERVE(WT_CACHE_BD,            wt_cache_bd);
+		SERVE(ELEVATOR_CACHE_BD,      elevator_cache_bd);
 		SERVE(BLOCK_RESIZER_BD,       block_resizer_bd);
 		SERVE(MD_BD,                  md_bd);
 		SERVE(MIRROR_BD,              mirror_bd);

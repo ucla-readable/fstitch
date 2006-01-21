@@ -596,6 +596,23 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	return create_bd(bd_id);
 }
 
+#include <kfs/elevator_cache_bd.h>
+BD_t * elevator_cache_bd(BD_t * disk, uint32_t blocks)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(ELEVATOR_CACHE_BD, elevator_cache_bd);
+
+	pg->bd = (uint32_t) OBJLOCAL(disk);
+	pg->blocks = blocks;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
+}
+
 #include <kfs/block_resizer_bd.h>
 BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 {
