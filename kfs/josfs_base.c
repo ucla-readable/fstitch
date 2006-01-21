@@ -689,8 +689,6 @@ static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose
 	Dprintf("JOSFSDEBUG: josfs_allocate_block\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t blockno, bitmap_size, s_nblocks;
-	bool synthetic = 0;
-	chdesc_t *newtail;
 	int r;
 
 	if (!head || !tail)
@@ -703,25 +701,11 @@ static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose
 
 	for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
 		if (block_is_free(object, blockno)) {
-			bdesc_t * bdesc;
-
 			r = write_bitmap(object, blockno, 0, head, tail);
 			if (r < 0)
 				return INVALID_BLOCK;
 
 			assert(!block_is_free(object, blockno));
-			bdesc = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
-			if (!bdesc)
-			{
-				r = write_bitmap(object, blockno, 1, head, tail);
-				assert(r >= 0);
-				return INVALID_BLOCK;
-			}
-
-			// FIXME error checks
-			r = chdesc_create_init(bdesc, info->ubd, head, &newtail);
-			r |= CALL(info->ubd, write_block, bdesc);
-			assert(r >= 0);
 			return blockno;
 		}
 	}

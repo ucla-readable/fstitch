@@ -348,7 +348,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * prev_head = NULL, * tail, * save_head;
+	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
 	f = hash_map_find_val(state->open_files, (void*) fid);
@@ -384,29 +384,66 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	while (size_written < size)
 	{
 		uint32_t number;
-		bdesc_t * block;
+		bdesc_t * block = NULL;
+		chdesc_t * save_head;
 
 		number = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
+			bool synthetic;
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
+
+			save_head = prev_head;
 			prev_head = NULL; /* no need to link with previous chains here */
+
 			number = CALL(state->lfs, allocate_block, f->fdesc, type, &prev_head, &tail);
 			if (number == INVALID_BLOCK)
 				return size_written;
 
-			save_head = prev_head;
+			/* get the block to zero it */
+			block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
+			if (!block)
+			{
+				no_block:
+				prev_head = NULL;
+				r = CALL(state->lfs, free_block, f->fdesc, number, &prev_head, &tail);
+				assert(r >= 0);
+				return size_written;
+			}
+			/* zero it */
+			r = chdesc_create_init(block, bd, &prev_head, &tail);
+			if (r < 0)
+			{
+				if (synthetic)
+					CALL(state->lfs, cancel_synthetic_block, number);
+				goto no_block;
+			}
+			/* note that we do not write it - we will write it later */
 
+			/* append it to the file, depending on zeroing it */
 			r = CALL(state->lfs, append_file_block, f->fdesc, number, &prev_head, &tail);
 			if (r < 0)
-				return size_written;
+			{
+				/* we don't need to worry about unzeroing the
+				 * block - it was free anyhow, so we can leave
+				 * it alone if we write it as-is */
+				prev_head = NULL;
+				CALL(state->lfs, write_block, block, &prev_head, &tail);
+				goto no_block;
+			}
 
+			/* the data written will end up depending on the zeroing
+			 * automatically, so just use the previous head here */
 			prev_head = save_head;
 		}
-		/* get the block to write to - maybe a synthetic block in the future, if we are writing the whole block? */
-		block = CALL(state->lfs, lookup_block, number);
-		if (!block)
-			return size_written;
+
+		/* get the block to write to (if we don't have it from above) */
+		if(!block)
+		{
+			block = CALL(state->lfs, lookup_block, number);
+			if (!block)
+				return size_written;
+		}
 
 		/* write the data to the block */
 		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
