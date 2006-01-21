@@ -128,10 +128,13 @@ $(OBJDIR)/fs/%.o: fs/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
+FUSE_HOME := ../../fuse-2.5.0
+FUSE_CFLAGS := -I$(FUSE_HOME)/include -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=25
+
 $(OBJDIR)/kfs/%.o: kfs/%.c
 	@echo + cc[KFS] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+	$(V)$(CC) -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
 
 
 # Build vi/emacs tag files

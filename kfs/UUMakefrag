@@ -38,6 +38,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/ipc_serve.o \
+			$(OBJDIR)/kfs/fuse.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o \
 			$(OBJDIR)/kfs/kfsd_init.o \
@@ -46,4 +47,4 @@ KFSOFILES := \
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -luser
+	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib $(FUSE_HOME)/lib/.libs/libfuse.so -lpthread -luser

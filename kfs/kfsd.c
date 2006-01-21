@@ -4,7 +4,12 @@
 #include <lib/mmu.h>
 #include <lib/stdio.h>
 
+#if defined(KUDOS)
 #include <kfs/sched.h>
+#elif defined(UNIXUSER)
+#include <kfs/fuse.h>
+#endif
+
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
@@ -50,7 +55,7 @@ void kfsd_shutdown(void)
 	exit(0);
 }
 
-void kfsd_main(void)
+void kfsd_main(int argc, char **argv)
 {
 	int r;
 
@@ -59,7 +64,14 @@ void kfsd_main(void)
 	if ((r = kfsd_init()) < 0)
 		exit(r);
 
+#if defined(KUDOS)
 	sched_loop();
+#elif defined(UNIXUSER)
+	fuse_loop(argc, argv);
+#else
+#error Unknown target system
+#endif
+
 }
 
 #if defined(KUDOS)
@@ -96,13 +108,13 @@ void umain(int argc, char * argv[])
 		assert(r >= 0);
 	}
 
-	kfsd_main();
+	kfsd_main(NULL, NULL);
 }
 
 #elif defined(UNIXUSER)
 int main(int argc, char * argv[])
 {
-	kfsd_main();
+	kfsd_main(argc, argv);
 	return 0;
 }
 
