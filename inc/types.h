@@ -46,6 +46,7 @@ typedef uint32_t size_t;
 typedef int32_t ssize_t;
 
 /* off_t is used for file offsets and lengths. */
+/* NOTE: unix-user's off_t is int64_t */
 typedef int32_t off_t;
 
 /* static assert, for compile-time assertion checking */
