@@ -905,7 +905,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	entry->d_filesize = dirfile->f_size;
 	entry->d_reclen = reclen;
 	entry->d_namelen = namelen;
-	strncpy(entry->d_name, dirfile->f_name, sizeof(entry->d_name));
+	strncpy(entry->d_name, dirfile->f_name, namelen + 1);
 
 	*basep += 1;
 	return 0;
