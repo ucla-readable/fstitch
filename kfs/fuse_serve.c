@@ -109,7 +109,7 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 		Dprintf("%d:file type %u unknown\n", __LINE__, *type);
 		goto err;
 	}
-    stbuf->st_ino = ino;
+	stbuf->st_ino = ino;
 
 	free(type);
 	return 0;
@@ -122,21 +122,21 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 static void serve_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
 	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
-    struct stat stbuf;
+	struct stat stbuf;
 
-    (void) fi;
+	(void) fi;
 
-    memset(&stbuf, 0, sizeof(stbuf));
-    if (serve_stat(ino, &stbuf) == -1)
-        fuse_reply_err(req, ENOENT);
-    else
-        fuse_reply_attr(req, &stbuf, 1.0);
+	memset(&stbuf, 0, sizeof(stbuf));
+	if (serve_stat(ino, &stbuf) == -1)
+		fuse_reply_err(req, ENOENT);
+	else
+		fuse_reply_attr(req, &stbuf, 1.0);
 }
 
 static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
 	Dprintf("%s(parent_ino = %d, name = \"%s\")\n", __FUNCTION__, (int) parent, name);
-    struct fuse_entry_param e;
+	struct fuse_entry_param e;
 	int fid;
 
 	if (name && name[0] != '/')
@@ -151,28 +151,28 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	static_assert(sizeof(fid) == sizeof(fuse_ino_t));
 	fid = CALL(frontend_cfs, open, name, 0);
 
-    if (fid < 0)
+	if (fid < 0)
 	{
 		if (fid == -12) // FIXME: 12 is E_NOT_FOUND
 			fuse_reply_err(req, ENOENT);
 		else
 			fuse_reply_err(req, TODOERROR);
 	}
-    else
+	else
 	{
 		int r = hash_map_insert(inodes, (void*) fid, (void*) name);
 		assert(r == 0);
 		r = hash_map_insert(parents, (void*) fid, (void*) parent);
 		assert(r == 0);
 
-        memset(&e, 0, sizeof(e));
-        e.ino = (fuse_ino_t) fid;
-        e.attr_timeout = 1.0;
-        e.entry_timeout = 1.0;
-        serve_stat(e.ino, &e.attr);
+		memset(&e, 0, sizeof(e));
+		e.ino = (fuse_ino_t) fid;
+		e.attr_timeout = 1.0;
+		e.entry_timeout = 1.0;
+		serve_stat(e.ino, &e.attr);
 
-        fuse_reply_entry(req, &e);
-    }
+		fuse_reply_entry(req, &e);
+	}
 }
 
 static int read_single_dir(const char * name, int fid, off_t k, dirent_t * dirent)
@@ -221,13 +221,13 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 {
 	int fid;
 	Dprintf("%s(ino = %d, size = %u, off = %lld)\n", __FUNCTION__, (int) ino, size, off);
-    (void) fi;
+	(void) fi;
 
 	fid = (int) ino;
 	if (fid == 1)
 		fid = (int) hash_map_find_val(inodes, (void*) ino);
 
-//        fuse_reply_err(req, ENOTDIR);
+//		fuse_reply_err(req, ENOTDIR);
 
 	uint32_t total_size = 0;
 	char * buf = NULL;
@@ -309,8 +309,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 static void serve_open(fuse_req_t req, fuse_ino_t ino,
                        struct fuse_file_info *fi)
 {
-//    else if ((fi->flags & 3) != O_RDONLY)
-//        fuse_reply_err(req, EACCES);
+//	else if ((fi->flags & 3) != O_RDONLY)
+//		fuse_reply_err(req, EACCES);
 
 	uint32_t size;
 	void * data;
@@ -330,7 +330,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 	type = *((uint32_t*) data);
 
 	if (type == TYPE_DIR)
-        fuse_reply_err(req, EISDIR);
+		fuse_reply_err(req, EISDIR);
 	fuse_reply_open(req, fi);
 }
 
@@ -361,11 +361,11 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 
 static struct fuse_lowlevel_ops serve_oper =
 {
-    .lookup  = serve_lookup,
-    .getattr = serve_getattr,
-    .readdir = serve_readdir,
-    .open    = serve_open,
-    .read	 = serve_read,
+	.lookup  = serve_lookup,
+	.getattr = serve_getattr,
+	.readdir = serve_readdir,
+	.open    = serve_open,
+	.read	 = serve_read,
 };
 
 
