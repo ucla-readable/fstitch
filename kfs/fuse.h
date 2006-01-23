@@ -1,6 +1,11 @@
-#ifndef __KUDOS_KFS_FUSE_H
-#define __KUDOS_KFS_FUSE_H
+#ifndef __KUDOS_KFS_FUSE_SERVE_H
+#define __KUDOS_KFS_FUSE_SERVE_H
 
-void fuse_loop(int argc, char **argv);
+#include <kfs/cfs.h>
 
-#endif /* __KUDOS_KFS_FUSE_H */
+void    set_frontend_cfs(CFS_t * cfs);
+CFS_t * get_frontend_cfs(void);
+
+void fuse_serve_loop(int argc, char ** argv);
+
+#endif /* __KUDOS_KFS_FUSE_SERVE_H */

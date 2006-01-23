@@ -13,6 +13,9 @@
 #include <kfs/wb_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
+#ifdef UNIXUSER
+#include <kfs/unix_file_bd.h>
+#endif
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
@@ -25,6 +28,9 @@
 #include <kfs/fidcloser_cfs.h>
 #ifdef KUDOS
 #include <kfs/cfs_ipc_serve.h>
+#endif
+#ifdef UNIXUSER
+#include <kfs/fuse.h>
 #endif
 #include <kfs/modman.h>
 #include <kfs/ipc_serve.h>
@@ -130,8 +136,12 @@ int kfsd_init(void)
 		/* delay kfsd startup slightly for netd to start */
 		sleepj(200);
 
+#ifdef KUDOS
 		if (! (bd = nbd_bd("192.168.0.2", 2492)) )
 			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
+#else
+		bd = NULL;
+#endif
 
 		if (bd && (r = construct_uhfses(bd, 512, uhfses)) < 0)
 			kfsd_shutdown();
@@ -144,8 +154,10 @@ int kfsd_init(void)
 #ifdef KUDOS
 		if (! (bd = ide_pio_bd(0, 0, 0)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
-#else
-		bd = NULL;
+#endif
+#ifdef UNIXUSER
+		if (! (bd = unix_file_bd("obj/unix-user/fs/fs.img", 512)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(...) failed\n");
 #endif
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
@@ -158,8 +170,12 @@ int kfsd_init(void)
 	{
 		BD_t * bd;
 
+#ifdef KUDOS
 		if (! (bd = ide_pio_bd(0, 1, 0)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
+#else
+		bd = NULL;
+#endif
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
@@ -172,10 +188,8 @@ int kfsd_init(void)
 
 	if (! (table_class = table_classifier_cfs()) )
 		kfsd_shutdown();
-#ifdef KUDOS
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
-#endif
 #if USE_THIRD_LEG
 	CFS_t * josfscfs = josfs_cfs();
 	r = table_classifier_cfs_add(table_class, "/", josfscfs);

@@ -67,7 +67,7 @@ void kfsd_main(int argc, char **argv)
 #if defined(KUDOS)
 	sched_loop();
 #elif defined(UNIXUSER)
-	fuse_loop(argc, argv);
+	fuse_serve_loop(argc, argv);
 #else
 #error Unknown target system
 #endif
