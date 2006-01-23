@@ -347,7 +347,7 @@ static int josfs_cfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, s
 		if (!*data)
 			return -E_NO_MEM;
 		*size = sizeof(s.st_size);
-		**(off_t **) data = s.st_size;
+		**(int32_t **) data = s.st_size;
 	}
 	else if (id == KFS_feature_filetype.id)
 	{
