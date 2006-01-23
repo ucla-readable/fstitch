@@ -23,8 +23,10 @@
 #define Dprintf(x...)
 #endif
 
+// If we move to multiple fuse_serve instances we can put global fields into
+// FUSE's userdata param
 static CFS_t * frontend_cfs = NULL;
-static hash_map_t * inodes; // fuse_ino_t ino -> char * filename
+static hash_map_t * names; // fuse_ino_t ino -> char * filename
 static hash_map_t * parents; // fuse_ino_t child -> fuse_ino_t parent
 
 #define TODOERROR 0
@@ -51,12 +53,12 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 	uint32_t type_size;
 	uint32_t * type;
 
-	name = hash_map_find_val(inodes, (void *) ino);
+	name = hash_map_find_val(names, (void *) ino);
 	if (!name)
 		return -1;
 
 	fid = (int) ino;
-	if (fid == 1)
+	if (fid == FUSE_ROOT_ID)
 	{
 		name = "/";
 		fid = (int) name;
@@ -136,19 +138,18 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
 	Dprintf("%s(parent_ino = %d, name = \"%s\")\n", __FUNCTION__, (int) parent, name);
-	struct fuse_entry_param e;
 	int fid;
 
 	if (name && name[0] != '/')
 	{
-		char * nname = malloc(strlen(name) + 2); // FIXME: free me
+		char * nname = malloc(strlen(name) + 2);
 		assert(nname);
 		nname[0] = '/';
 		strcpy(nname+1, name);
 		name = nname;
 	}
 
-	static_assert(sizeof(fid) == sizeof(fuse_ino_t));
+	// FIXME: a fid is semantically different from an inode
 	fid = CALL(frontend_cfs, open, name, 0);
 
 	if (fid < 0)
@@ -160,19 +161,48 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	}
 	else
 	{
-		int r = hash_map_insert(inodes, (void*) fid, (void*) name);
+		struct fuse_entry_param e;
+		int r;
+
+		r = hash_map_insert(names, (void*) fid, (void*) name);
 		assert(r == 0);
 		r = hash_map_insert(parents, (void*) fid, (void*) parent);
 		assert(r == 0);
 
 		memset(&e, 0, sizeof(e));
+		static_assert(sizeof(fid) == sizeof(fuse_ino_t));
 		e.ino = (fuse_ino_t) fid;
 		e.attr_timeout = 1.0;
 		e.entry_timeout = 1.0;
 		serve_stat(e.ino, &e.attr);
 
 		fuse_reply_entry(req, &e);
+
+		Dprintf("%s(ino = %d, parent = %d, name = \"%s\")\n",
+		       __FUNCTION__, fid, (int) parent, name);
 	}
+}
+
+static void serve_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup)
+{
+	Dprintf("%s(ino = %d, nlookup = %u)\n", __FUNCTION__, (int) ino, nlookup);
+	char *name;
+	int r;
+
+	if ((r = CALL(frontend_cfs, close, (int) ino)) < 0)
+		kdprintf(STDERR_FILENO, "%s:%d: close(ino = %d): %d\n", 
+				 __FILE__, __LINE__, (int) ino);
+
+	if (!(name = hash_map_erase(names, (void*) ino)))
+		kdprintf(STDERR_FILENO, "%s:%d: %s(ino = %d) on inode not in names table\n",
+		         __FILE__, __LINE__, (int) ino);
+	free(name);
+
+	if (!hash_map_erase(parents, (void*) ino))
+		kdprintf(STDERR_FILENO, "%s:%d: %s(ino = %d) on inode not in parents table\n",
+		         __FILE__, __LINE__, (int) ino);
+
+	fuse_reply_none(req);
 }
 
 static int read_single_dir(const char * name, int fid, off_t k, dirent_t * dirent)
@@ -224,8 +254,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 	(void) fi;
 
 	fid = (int) ino;
-	if (fid == 1)
-		fid = (int) hash_map_find_val(inodes, (void*) ino);
+	if (fid == FUSE_ROOT_ID)
+		fid = (int) hash_map_find_val(names, (void*) ino);
 
 //		fuse_reply_err(req, ENOTDIR);
 
@@ -271,8 +301,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		size_t oldsize = total_size;
 		int r;
 
-		const char * name = hash_map_find_val(inodes, (void*) fid);
-		if ((int) ino == 1)
+		const char * name = hash_map_find_val(names, (void*) fid);
+		if ((int) ino == FUSE_ROOT_ID)
 			name = "/";
 		assert(name != NULL);
 
@@ -319,10 +349,10 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 
 	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
 
-	const char * name = hash_map_find_val(inodes, (void *) ino);
+	const char * name = hash_map_find_val(names, (void *) ino);
 	assert(name);
 
-	if (ino == 1)
+	if (ino == FUSE_ROOT_ID)
 		name = "/";
 
 	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &size, &data);
@@ -332,6 +362,12 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 	if (type == TYPE_DIR)
 		fuse_reply_err(req, EISDIR);
 	fuse_reply_open(req, fi);
+}
+
+static void serve_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
+	// nothing to release for open files
 }
 
 static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
@@ -362,9 +398,11 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 static struct fuse_lowlevel_ops serve_oper =
 {
 	.lookup  = serve_lookup,
+	.forget  = serve_forget,
 	.getattr = serve_getattr,
 	.readdir = serve_readdir,
 	.open    = serve_open,
+	.release = serve_release,
 	.read	 = serve_read,
 };
 
@@ -382,16 +420,16 @@ void fuse_serve_loop(int argc, char **argv)
 
 	assert(frontend_cfs);
 
-	inodes = hash_map_create();
-	assert(inodes);
+	names = hash_map_create();
+	assert(names);
 	parents = hash_map_create();
 	assert(parents);
 
 	rootfid = CALL(frontend_cfs, open, "/", 0);
 	assert(rootfid >= 0);
-	r = hash_map_insert(inodes, (void*) 1, (void*) rootfid); // store actual fid, not name
+	r = hash_map_insert(names, (void*) FUSE_ROOT_ID, (void*) rootfid); // store actual fid, not name
 	assert(r == 0);
-	r = hash_map_insert(parents, (void*) 1, (void*) 1);
+	r = hash_map_insert(parents, (void*) FUSE_ROOT_ID, (void*) FUSE_ROOT_ID);
 	assert(r == 0);
 
 	if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
