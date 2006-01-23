@@ -7,7 +7,7 @@
 #if defined(KUDOS)
 #include <kfs/sched.h>
 #elif defined(UNIXUSER)
-#include <kfs/fuse.h>
+#include <kfs/fuse_serve.h>
 #endif
 
 #include <kfs/kfsd.h>

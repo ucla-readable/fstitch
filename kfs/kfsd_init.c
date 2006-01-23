@@ -30,7 +30,7 @@
 #include <kfs/cfs_ipc_serve.h>
 #endif
 #ifdef UNIXUSER
-#include <kfs/fuse.h>
+#include <kfs/fuse_serve.h>
 #endif
 #include <kfs/modman.h>
 #include <kfs/ipc_serve.h>
