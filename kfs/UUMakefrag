@@ -1,4 +1,5 @@
 OBJDIRS += kfs
+BIN += $(OBJDIR)/kfs/kfsd
 
 #			$(OBJDIR)/kfs/ide_pio_bd.o \
 #			$(OBJDIR)/kfs/nbd_bd.o \
