@@ -1,21 +1,21 @@
+#include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <fuse_lowlevel.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <assert.h>
-#include <lib/hash_map.h>
 #include <lib/dirent.h>
-#include <lib/panic.h>
 #include <lib/kdprintf.h>
-#include <kfs/feature.h>
+#include <lib/panic.h>
 #include <kfs/cfs.h>
+#include <kfs/feature.h>
 #include <kfs/modman.h>
+#include <kfs/fuse_serve.h>
+#include <kfs/fuse_serve_inode.h>
 
 #define FUSE_SERVE_DEBUG 0
-
 
 #if FUSE_SERVE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -26,8 +26,6 @@
 // If we move to multiple fuse_serve instances we can put global fields into
 // FUSE's userdata param
 static CFS_t * frontend_cfs = NULL;
-static hash_map_t * names; // fuse_ino_t ino -> char * filename
-static hash_map_t * parents; // fuse_ino_t child -> fuse_ino_t parent
 
 #define TODOERROR 0
 
@@ -53,16 +51,9 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 	uint32_t type_size;
 	uint32_t * type;
 
-	name = hash_map_find_val(names, (void *) ino);
-	if (!name)
+	
+	if (!(name = inode_fname(ino)))
 		return -1;
-
-	fid = (int) ino;
-	if (fid == FUSE_ROOT_ID)
-	{
-		name = "/";
-		fid = (int) name;
-	}
 
 	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &type_size, (void **) &type);
 	if (r < 0)
@@ -77,6 +68,11 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 		uint32_t basep;
 		uint32_t nlinks = 0;
 
+		// FIXME: we should use the same inode->file mapping throughout an
+		// inode's life. Using opening by name can break this.
+		fid = CALL(frontend_cfs, open, name, 0);
+		assert(fid >= 0);
+
 		while ((r = CALL(frontend_cfs, getdirentries, fid, buf, sizeof(buf), &basep)) > 0)
 		{
 			char * cur = buf;
@@ -86,6 +82,9 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 					cur += ((dirent_t *) cur)->d_reclen;
 				}
 		}
+
+		r = CALL(frontend_cfs, close, fid);
+		assert(r >= 0);
 
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = nlinks;
@@ -135,77 +134,56 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 		fuse_reply_attr(req, &stbuf, 1.0);
 }
 
-static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_name)
 {
-	Dprintf("%s(parent_ino = %d, name = \"%s\")\n", __FUNCTION__, (int) parent, name);
+	Dprintf("%s(parent_ino = %d, local_name = \"%s\")\n", __FUNCTION__, (int) parent, local_name);
+	int r;
+	fuse_ino_t ino;
+	bool new_ino = 0;
 	int fid;
+	struct fuse_entry_param e;
 
-	if (name && name[0] != '/')
+	ino = lname_inode(parent, local_name);
+	if (ino == FAIL_INO)
 	{
-		char * nname = malloc(strlen(name) + 2);
-		assert(nname);
-		nname[0] = '/';
-		strcpy(nname+1, name);
-		name = nname;
-	}
+		char * full_name = fname(parent, local_name);
 
-	// FIXME: a fid is semantically different from an inode
-	fid = CALL(frontend_cfs, open, name, 0);
+		// Check that name exists
+		fid = CALL(frontend_cfs, open, full_name, 0);
+		free(full_name);
+		if (fid < 0)
+		{
+			if (fid == -12) // FIXME: 12 is E_NOT_FOUND
+				fuse_reply_err(req, ENOENT);
+			else
+				fuse_reply_err(req, TODOERROR);
+			return;
+		}
+		r = CALL(frontend_cfs, close, fid);
+		assert(r >= 0);
 
-	if (fid < 0)
-	{
-		if (fid == -12) // FIXME: 12 is E_NOT_FOUND
-			fuse_reply_err(req, ENOENT);
-		else
-			fuse_reply_err(req, TODOERROR);
-	}
-	else
-	{
-		struct fuse_entry_param e;
-		int r;
-
-		r = hash_map_insert(names, (void*) fid, (void*) name);
+		r = add_inode(parent, local_name, &ino);
 		assert(r == 0);
-		r = hash_map_insert(parents, (void*) fid, (void*) parent);
-		assert(r == 0);
-
-		memset(&e, 0, sizeof(e));
-		static_assert(sizeof(fid) == sizeof(fuse_ino_t));
-		e.ino = (fuse_ino_t) fid;
-		e.attr_timeout = 1.0;
-		e.entry_timeout = 1.0;
-		serve_stat(e.ino, &e.attr);
-
-		fuse_reply_entry(req, &e);
-
-		Dprintf("%s(ino = %d, parent = %d, name = \"%s\")\n",
-		       __FUNCTION__, fid, (int) parent, name);
+		new_ino = 1;
 	}
+
+	memset(&e, 0, sizeof(e));
+	e.ino = ino;
+	e.attr_timeout = 1.0;
+	e.entry_timeout = 1.0;
+	serve_stat(e.ino, &e.attr);
+
+	fuse_reply_entry(req, &e);
 }
 
 static void serve_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup)
 {
 	Dprintf("%s(ino = %d, nlookup = %u)\n", __FUNCTION__, (int) ino, nlookup);
-	char *name;
-	int r;
-
-	if ((r = CALL(frontend_cfs, close, (int) ino)) < 0)
-		kdprintf(STDERR_FILENO, "%s:%d: close(ino = %d): %d\n", 
-				 __FILE__, __LINE__, (int) ino);
-
-	if (!(name = hash_map_erase(names, (void*) ino)))
-		kdprintf(STDERR_FILENO, "%s:%d: %s(ino = %d) on inode not in names table\n",
-		         __FILE__, __LINE__, (int) ino);
-	free(name);
-
-	if (!hash_map_erase(parents, (void*) ino))
-		kdprintf(STDERR_FILENO, "%s:%d: %s(ino = %d) on inode not in parents table\n",
-		         __FILE__, __LINE__, (int) ino);
-
+	remove_inode(ino);
 	fuse_reply_none(req);
 }
 
-static int read_single_dir(const char * name, int fid, off_t k, dirent_t * dirent)
+static int read_single_dir(int fid, off_t k, dirent_t * dirent)
 {
 	Dprintf("%s(fid = %d, k = %lld)\n", __FUNCTION__, fid, k);
 	uint32_t basep = 0;
@@ -246,19 +224,46 @@ static int read_single_dir(const char * name, int fid, off_t k, dirent_t * diren
 	return eof;
 }
 
+static void serve_opendir(fuse_req_t req, fuse_ino_t ino,
+                          struct fuse_file_info *fi)
+{
+	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
+	const char * name;
+	int fid;
+
+	name = inode_fname(ino);
+	assert(name);
+	fid = CALL(frontend_cfs, open, name, 0);
+	if (fid < 0)
+	{
+		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
+		// TODO: fuse_reply_err(req, ENOTDIR);
+		fuse_reply_err(req, -1);
+		return;
+	}
+
+	fi->fh = (uint64_t) fid;
+
+	fuse_reply_open(req, fi);
+}
+
+static void serve_releasedir(fuse_req_t req, fuse_ino_t ino,
+                             struct fuse_file_info *fi)
+{
+	Dprintf("%s(ino = %d, fid = %d)\n", __FUNCTION__, (int) ino, fid);
+	int fid = (int) fi->fh;
+	int r;
+
+	r = CALL(frontend_cfs, close, fid);
+	if (r < 0)
+		fuse_reply_err(req, -1);
+}
+
 static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
                           off_t off, struct fuse_file_info *fi)
 {
-	int fid;
 	Dprintf("%s(ino = %d, size = %u, off = %lld)\n", __FUNCTION__, (int) ino, size, off);
-	(void) fi;
-
-	fid = (int) ino;
-	if (fid == FUSE_ROOT_ID)
-		fid = (int) hash_map_find_val(names, (void*) ino);
-
-//		fuse_reply_err(req, ENOTDIR);
-
+	int fid = (int) fi->fh;
 	uint32_t total_size = 0;
 	char * buf = NULL;
 	struct stat stbuf;
@@ -289,8 +294,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 			buf = (char *) realloc(buf, total_size);
 			assert(buf);
 			memset(&stbuf, 0, sizeof(stbuf));
-			stbuf.st_ino = (fuse_ino_t) hash_map_find_val(parents, (void*) ino);
-			assert(stbuf.st_ino != 0);
+			stbuf.st_ino = inode_parent(ino);
+			assert(stbuf.st_ino != FAIL_INO);
 			fuse_add_dirent(buf + oldsize, name, &stbuf, ++off);
 		}
 	}
@@ -299,14 +304,10 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 	{
 		dirent_t dirent;
 		size_t oldsize = total_size;
+		fuse_ino_t entry_ino;
 		int r;
 
-		const char * name = hash_map_find_val(names, (void*) fid);
-		if ((int) ino == FUSE_ROOT_ID)
-			name = "/";
-		assert(name != NULL);
-
-		r = read_single_dir(name, fid, off - 2, &dirent);
+		r = read_single_dir(fid, off - 2, &dirent);
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "%d:read_single_dir(%d, %lld, 0x%08x) = %d\n",
@@ -328,7 +329,14 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		assert(buf);
 
 		memset(&stbuf, 0, sizeof(stbuf));
-		stbuf.st_ino = ino;
+		entry_ino = lname_inode(ino, dirent.d_name);
+		if (entry_ino == FAIL_INO)
+		{
+			r = add_inode(ino, dirent.d_name, &entry_ino);
+			assert(r == 0);
+		}
+
+		stbuf.st_ino = entry_ino;
 		fuse_add_dirent(buf + oldsize, dirent.d_name, &stbuf, ++off);
 	}
 
@@ -339,21 +347,18 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 static void serve_open(fuse_req_t req, fuse_ino_t ino,
                        struct fuse_file_info *fi)
 {
-//	else if ((fi->flags & 3) != O_RDONLY)
-//		fuse_reply_err(req, EACCES);
-
+	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
 	uint32_t size;
 	void * data;
 	uint32_t type;
+	int fid;
 	int r;
 
-	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
+//	else if ((fi->flags & 3) != O_RDONLY)
+//		fuse_reply_err(req, EACCES);
 
-	const char * name = hash_map_find_val(names, (void *) ino);
+	const char * name = inode_fname(ino);
 	assert(name);
-
-	if (ino == FUSE_ROOT_ID)
-		name = "/";
 
 	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &size, &data);
 	assert(r >= 0);
@@ -361,22 +366,31 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 
 	if (type == TYPE_DIR)
 		fuse_reply_err(req, EISDIR);
+
+	fid = CALL(frontend_cfs, open, name, 0);
+	assert(r >= 0);
+	fi->fh = (uint64_t) fid;
+	
 	fuse_reply_open(req, fi);
 }
 
 static void serve_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
 	Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
-	// nothing to release for open files
+	int fid = (int) fi->fh;
+	int r;
+
+	r = CALL(frontend_cfs, close, fid);
+	assert(r >= 0);
 }
 
 static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
                        off_t off, struct fuse_file_info *fi)
 {
-	int fid = (int) ino;
+	Dprintf("%s(ino = %d, fid = %d, size = %u, off = %lld)\n", __FUNCTION__, (int) ino, fid, size, off);
+	int fid = (int) fi->fh;
 	char * buf;
 	int r;
-	Dprintf("%s(ino = %d, size = %u, off = %lld)\n", __FUNCTION__, (int) ino, size, off);
 
 	buf = malloc(size);
 	assert(buf);
@@ -397,40 +411,31 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 
 static struct fuse_lowlevel_ops serve_oper =
 {
-	.lookup  = serve_lookup,
-	.forget  = serve_forget,
-	.getattr = serve_getattr,
-	.readdir = serve_readdir,
-	.open    = serve_open,
-	.release = serve_release,
-	.read	 = serve_read,
+	.lookup     = serve_lookup,
+	.forget     = serve_forget,
+	.getattr    = serve_getattr,
+	.opendir    = serve_opendir,
+	.releasedir = serve_releasedir,
+	.readdir    = serve_readdir,
+	.open       = serve_open,
+	.release    = serve_release,
+	.read	    = serve_read,
 };
 
 
 void fuse_serve_loop(int argc, char **argv)
 {
+	Dprintf("%s()\n", __FUNCTION__);
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 	char *mountpoint;
 	int err = -1;
 	int fd;
-	int rootfid;
 	int r;
-
-	Dprintf("%s()\n", __FUNCTION__);
 
 	assert(frontend_cfs);
 
-	names = hash_map_create();
-	assert(names);
-	parents = hash_map_create();
-	assert(parents);
-
-	rootfid = CALL(frontend_cfs, open, "/", 0);
-	assert(rootfid >= 0);
-	r = hash_map_insert(names, (void*) FUSE_ROOT_ID, (void*) rootfid); // store actual fid, not name
-	assert(r == 0);
-	r = hash_map_insert(parents, (void*) FUSE_ROOT_ID, (void*) FUSE_ROOT_ID);
-	assert(r == 0);
+	r = init_inodes();
+	assert(r >= 0);
 
 	if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
 	    (fd = fuse_mount(mountpoint, &args)) != -1)
