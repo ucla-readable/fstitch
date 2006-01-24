@@ -350,7 +350,7 @@ static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes
 	dirent->d_reclen = reclen;
 	dirent->d_type = TYPE_DEVICE;
 	dirent->d_namelen = namelen;
-	strncpy(dirent->d_name, bde->name, DIRENT_MAXNAMELEN);
+	strncpy(dirent->d_name, bde->name, reclen);
 	
 	return 0;
 }
