@@ -220,7 +220,27 @@ void remove_inode(fuse_ino_t ino)
 	assert(0);
 }
 
-int init_inodes(void)
+void inodes_shutdown(void)
+{
+	// free memory so that we don't trip memory leak detectors
+	if (parents)
+	{
+		hash_map_destroy(parents);
+		parents = NULL;
+	}
+	if (fnames)
+	{
+		hash_map_destroy(fnames);
+		fnames = NULL;
+	}
+	if (lnames)
+	{
+		hash_map_destroy(lnames);
+		lnames = NULL;
+	}
+}
+
+int inodes_init(void)
 {
 	fuse_ino_t root_ino;
 	int r;
@@ -234,30 +254,31 @@ int init_inodes(void)
 
 	lnames = hash_map_create();
 	if (!lnames)
+	{
+		inodes_shutdown();
 		return -ENOMEM;
+	}
 
 	fnames = hash_map_create();
 	if (!fnames)
-		goto oom_lnames;
+	{
+		inodes_shutdown();
+		return -ENOMEM;
+	}
 
 	parents = hash_map_create();
 	if (!parents)
-		goto oom_fnames;
+	{
+		inodes_shutdown();
+		return -ENOMEM;
+	}
 
 	if ((r = add_inode(FUSE_ROOT_ID, "/", &root_ino)) < 0)
-		goto oom_parents;
+	{
+		inodes_shutdown();
+		return -ENOMEM;
+	}
 	assert(root_ino == FUSE_ROOT_ID);
 
 	return 0;
-
-  oom_parents:
-	hash_map_destroy(parents);
-	parents = NULL;
-  oom_fnames:
-	hash_map_destroy(fnames);
-	fnames = NULL;
-  oom_lnames:
-	hash_map_destroy(lnames);
-	lnames = NULL;
-	return -ENOMEM;
 }

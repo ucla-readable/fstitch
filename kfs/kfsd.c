@@ -61,17 +61,17 @@ void kfsd_main(int argc, char **argv)
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
-	if ((r = kfsd_init()) < 0)
+	if ((r = kfsd_init(argc, argv)) < 0)
 		exit(r);
 
 #if defined(KUDOS)
 	sched_loop();
 #elif defined(UNIXUSER)
-	fuse_serve_loop(argc, argv);
+	fuse_serve_loop();
 #else
 #error Unknown target system
 #endif
-
+	kfsd_shutdown();
 }
 
 #if defined(KUDOS)

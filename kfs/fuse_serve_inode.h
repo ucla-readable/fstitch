@@ -6,7 +6,8 @@
 // FAIL_INO is the fuse_ino_t returned to indicate failure
 #define FAIL_INO ((fuse_ino_t) 0)
 
-int init_inodes(void);
+void inodes_shutdown(void);
+int inodes_init(void);
 
 int add_inode(fuse_ino_t parent, const char * local_name, fuse_ino_t * pino);
 void remove_inode(fuse_ino_t ino);

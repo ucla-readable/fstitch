@@ -8,6 +8,7 @@ BIN += $(OBJDIR)/kfs/kfsd
 #			$(OBJDIR)/kfs/fidprotector_cfs.o \
 #			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/kfs_ipc_serve.o \
+#			$(OBJDIR)/kfs/ipc_serve.o \
 #			$(OBJDIR)/kfs/debug.o \
 
 KFSOFILES := \
@@ -38,7 +39,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
-			$(OBJDIR)/kfs/ipc_serve.o \
 			$(OBJDIR)/kfs/fuse_serve.o \
 			$(OBJDIR)/kfs/fuse_serve_inode.o \
 			$(OBJDIR)/kfs/sched.o \

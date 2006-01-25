@@ -32,12 +32,12 @@
 #include <kfs/fidcloser_cfs.h>
 #ifdef KUDOS
 #include <kfs/cfs_ipc_serve.h>
+#include <kfs/ipc_serve.h>
 #endif
 #ifdef UNIXUSER
 #include <kfs/fuse_serve.h>
 #endif
 #include <kfs/modman.h>
-#include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/debug.h>
@@ -69,7 +69,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define wb_cache_bd wt_cache_bd
 #endif
 
-int kfsd_init(void)
+int kfsd_init(int argc, char ** argv)
 {
 	const bool use_disk_0 = 1;
 	const bool use_disk_1 = 0;
@@ -109,20 +109,24 @@ int kfsd_init(void)
 		kfsd_shutdown();
 	}
 
+#if defined(KUDOS)
 	if ((r = ipc_serve_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "ipc_serve_init: %e\n", r);
 		kfsd_shutdown();
 	}
 
-#ifdef KUDOS
 	if (!cfs_ipc_serve_init())
 	{
 		kdprintf(STDERR_FILENO, "cfs_ipc_serve_init failed\n");
 		kfsd_shutdown();
 	}
-#else
-	kdprintf(STDERR_FILENO, "Not starting cfs_ipc_serve: non-KudOS targets are not yet supported\n");
+#elif defined(UNIXUSER)
+	if ((r = fuse_serve_init(argc, argv)) < 0)
+	{
+		kdprintf(STDERR_FILENO, "fuse_serve_init: %d\n", r);
+		kfsd_shutdown();
+	}
 #endif
 
 	if ((r = sched_init()) < 0)

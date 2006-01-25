@@ -11,6 +11,7 @@
 #include <lib/panic.h>
 #include <kfs/cfs.h>
 #include <kfs/feature.h>
+#include <kfs/kfsd.h>
 #include <kfs/modman.h>
 #include <kfs/fuse_serve.h>
 #include <kfs/fuse_serve_inode.h>
@@ -438,6 +439,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 	return;
 }
 
+
 static struct fuse_lowlevel_ops serve_oper =
 {
 	.lookup     = serve_lookup,
@@ -451,45 +453,98 @@ static struct fuse_lowlevel_ops serve_oper =
 	.read	    = serve_read,
 };
 
+static struct fuse_args fuse_args;
+static char * fuse_mountpoint = NULL;
+static int fuse_fd = -1;
+static struct fuse_session * fuse_session = NULL;
+static bool fuse_signal_handlers_set = 0;
 
-void fuse_serve_loop(int argc, char **argv)
+static void fuse_serve_shutdown(void * arg)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-	char *mountpoint;
-	int err = -1;
-	int fd;
+	if (fuse_session)
+	{
+		if (fuse_signal_handlers_set)
+			fuse_remove_signal_handlers(fuse_session);
+		fuse_session_destroy(fuse_session);
+	}
+
+	if (fuse_fd != -1)
+	{
+		close(fuse_fd);
+		fuse_unmount(fuse_mountpoint);
+	}
+
+	fuse_opt_free_args(&fuse_args);
+
+	inodes_shutdown();
+}
+
+int fuse_serve_init(int argc, char ** argv)
+{
+	struct fuse_chan * channel;
 	int r;
 
-	assert(frontend_cfs);
+	assert(!fuse_mountpoint && fuse_fd == -1 && !fuse_session && !fuse_signal_handlers_set);
 
-	r = init_inodes();
-	assert(r >= 0);
+	// We can't use FUSE_ARGS_INIT() here so assert we are initing the whole structure
+	static_assert(sizeof(fuse_args) == sizeof(argc) + sizeof(argv) + sizeof(int));
+	fuse_args.argc = argc;
+	fuse_args.argv = argv;
+	fuse_args.allocated = 0;
 
-	if (fuse_parse_cmdline(&args, &mountpoint, NULL, NULL) != -1 &&
-	    (fd = fuse_mount(mountpoint, &args)) != -1)
+	if ((r = kfsd_register_shutdown_module(fuse_serve_shutdown, NULL)) < 0)
 	{
-		struct fuse_session *se;
-
-		se = fuse_lowlevel_new(&args, &serve_oper, sizeof(serve_oper), NULL);
-		if (se)
-		{
-			if (fuse_set_signal_handlers(se) != -1)
-			{
-				struct fuse_chan *ch = fuse_kern_chan_new(fd);
-				if (ch)
-				{
-					fuse_session_add_chan(se, ch);
-					err = fuse_session_loop(se);
-				}
-				fuse_remove_signal_handlers(se);
-			}
-			fuse_session_destroy(se);
-		}
-		close(fd);
+		kdprintf(STDERR_FILENO, "%s(): kfsd_register_shutdown_module() = %d\n", __FUNCTION__, r);
+		return r;
 	}
-	fuse_unmount(mountpoint);
-	fuse_opt_free_args(&args);
 
-	exit(err ? 1 : 0);
+	if ((r = inodes_init()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "%s(): init_inodes() = %d\n", __FUNCTION__, r);
+		return r;
+	}
+
+	if (fuse_parse_cmdline(&fuse_args, &fuse_mountpoint, NULL, NULL) == -1)
+	{
+		kdprintf(STDERR_FILENO, "%s(): fuse_parse_cmdline() failed\n", __FUNCTION__);
+		return -1;
+	}
+
+	if ((fuse_fd = fuse_mount(fuse_mountpoint, &fuse_args)) == -1)
+	{
+		kdprintf(STDERR_FILENO, "%s(): fuse_mount() failed\n", __FUNCTION__);
+		return -1;
+	}
+
+	fuse_session = fuse_lowlevel_new(&fuse_args, &serve_oper, sizeof(serve_oper), NULL);
+	if (!fuse_session)
+	{
+		kdprintf(STDERR_FILENO, "%s(): fuse_lowlevel_new() failed\n", __FUNCTION__);
+		return -1;
+	}
+
+	if (fuse_set_signal_handlers(fuse_session) == -1)
+	{
+		kdprintf(STDERR_FILENO, "%s(): fuse_set_signal_handlers() failed\n", __FUNCTION__);
+		return -1;
+	}
+	fuse_signal_handlers_set = 1;
+
+	if (!(channel = fuse_kern_chan_new(fuse_fd)))
+	{
+		kdprintf(STDERR_FILENO, "%s(): fuse_kern_chan_new() failed\n", __FUNCTION__);
+		return -1;
+	}
+
+	fuse_session_add_chan(fuse_session, channel);
+
+	return 0;
+}
+
+int fuse_serve_loop(void)
+{
+	Dprintf("%s()\n", __FUNCTION__);
+	assert(fuse_session);
+	assert(frontend_cfs);
+	return fuse_session_loop(fuse_session);
 }

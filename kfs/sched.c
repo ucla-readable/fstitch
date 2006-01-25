@@ -1,6 +1,7 @@
 #include <inc/error.h>
 #include <lib/vector.h>
 #include <lib/jiffies.h>
+#include <lib/kdprintf.h>
 #include <stdlib.h>
 #include <assert.h>
 
@@ -41,6 +42,10 @@ int sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies)
 		free(fe);
 		return r;
 	}
+
+#if !defined(KUDOS)
+	kdprintf(STDERR_FILENO, "WARNING: %s() invoked but the sched module is not yet supported\n", __FUNCTION__);
+#endif
 
 	return 0;
 }
@@ -88,7 +93,9 @@ void sched_loop(void)
 		int r;
 
 		// Run cvs_ipc_serve each loop (which will sleep for a bit)
+#if defined(KUDOS)
 		ipc_serve_run();
+#endif
 
 		// Run other fes scheduled to have run by now
 		cur_ncs = jiffy_time();

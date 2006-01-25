@@ -1,19 +1,15 @@
-#include <lib/stdio.h>
-
-#include <kfs/kfsd.h>
-#include <kfs/ipc_serve.h>
+#include <inc/lib.h> // for get_pte()
+#include <lib/jiffies.h>
 #include <lib/serial_cfs.h>
 #include <lib/serial_kfs.h>
-
-#include <lib/jiffies.h>
+#include <lib/stdio.h>
+#include <kfs/cfs_ipc_serve.h>
+#include <kfs/kfsd.h>
+#include <kfs/kfs_ipc_serve.h>
+#include <kfs/ipc_serve.h>
 
 #define IPC_RECV_TIMEOUT HZ
 
-#if defined(KUDOS)
-
-#include <inc/lib.h> // for get_pte()
-#include <kfs/cfs_ipc_serve.h>
-#include <kfs/kfs_ipc_serve.h>
 
 int ipc_serve_init(void)
 {
@@ -57,35 +53,20 @@ void ipc_serve_run(void)
 		panic("sys_page_unmap: %e", r);
 }
 
-#elif defined(UNIXUSER)
-
-int ipc_serve_init(void)
-{
-	// TODO: implement this module.
-	//
-	// Perhaps use SysV IPC messages or a combination of SysV IPC shared
-	// memory and semaphores?
-	// - messages make (as of a few years ago) 2 data copies along the way.
-	//   kudos ipc makes none, but because of kudos ipc uses shared memory
-	//   cfs_ipc_client library makes 1 copy.
-	// - do they differ in the number of context switches?
-	// - we might consider how ipc will affect our move to async. eg being
-	//   able to select()/kqueue() incoming messages may be easier to work
-	//   with than just a syscall to receive data.
-	// - are there other performance or functionality points we should
-	//   consider?
-	// - sysv ipc messages and shared memory allow us to transfer more than
-	//   one page at a time. we can use this to reduce reads and writes
-	//   from 2 to 1 data-transfer ipc.
-
-	kdprintf(STDERR_FILENO, "ipc_serve not yet implemented for unix-user\n");
-	return 0;
-}
-
-void ipc_serve_run(void)
-{
-}
-
-#else
-#error Unknown target system
-#endif
+// Possible ways to implement IPC for unix-user:
+//
+// Perhaps use SysV IPC messages or a combination of SysV IPC shared
+// memory and semaphores?
+// - messages make (as of a few years ago) 2 data copies along the way.
+//   kudos ipc makes none, but because of kudos ipc uses shared memory
+//   cfs_ipc_client library makes 1 copy.
+// - do they differ in the number of context switches?
+// - we might consider how ipc will affect our move to async. eg being
+//   able to select()/kqueue() incoming messages may be easier to work
+//   with than just a syscall to receive data.
+// - are there other performance or functionality points we should
+//   consider?
+// - sysv ipc messages and shared memory allow us to transfer more than
+//   one page at a time. we can use this to reduce reads and writes
+//   from 2 to 1 data-transfer ipc.
+// - expose an IPC file, write/read from the file or use xattrs.
