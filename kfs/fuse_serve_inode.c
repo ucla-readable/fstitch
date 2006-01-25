@@ -18,7 +18,7 @@
 #endif
 
 
-// Return the full name of for local_name in parent.
+// Return the full name for local_name in directory parent.
 // It is the caller's job to free the returned string.
 // Returns NULL on out of memory or non-existant parent.
 char * fname(fuse_ino_t parent, const char * local_name)

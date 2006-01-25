@@ -15,6 +15,29 @@
 #include <kfs/fuse_serve.h>
 #include <kfs/fuse_serve_inode.h>
 
+// Helpful documentation: FUSE's fuse_lowlevel.h, README, and FAQ
+// Helpful debugging options:
+// - Enable debug output for fuse_serve_inode (to show inode alloc/free)
+// - Enable debug output for fuse_serve
+// - Run with the -d flag to see FUSE messages coming in and going out
+
+// TODOs:
+// - Why does using a 0s timeout (instead of 1.0) not work? Is this a problem?
+// - Send errors to fuse in more situations (and better translate KFS<->FUSE errors)
+// - Propagate errors rather than assert() in places where assert() is used for errors that can happen
+// - Send negative lookup answers (rather than ENOENT), right?
+// - Add support for the other fuse_lowlevel_ops that make sense (write, ...)
+// - Implement sched's functionality (limit block wait on kernel communication? allow delays until we get a kernel callback?)
+// - Switch off kernel buffer cache for our serves? (direct_io)
+// - Be safer; eg call open() only when we should
+// - Speedup serve_readdir() when helpful (it runs O(n^2); a slightly more complex O(n) would work)
+// - Speedup fuse_serve_inode if helpful; lname_inode() is O(|dir's entries|)
+// - Provide mechanism to free up resources upon exit so we don't falsely trigger mem leak detectors?
+// - "ls dir; sleep 5; ls dir" (for example), on the 2nd "ls dir", releases a file's inode and then recreates the inode. In this case we give a new inode number. Should we try to reuse the original inode number? (We'll probably need to unique them with the generation field, if so.) (To see this turn on fuse_serve_inode debugging and run the example command.)
+// - Support multiple hard links
+// - Support more metadata; eg permissions, atime, and mtime
+// - Support delayed event response or multiple threads
+
 #define FUSE_SERVE_DEBUG 0
 
 #if FUSE_SERVE_DEBUG
