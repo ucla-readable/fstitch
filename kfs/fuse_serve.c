@@ -49,20 +49,22 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 	int fid;
 	int r;
 	uint32_t type_size;
-	uint32_t * type;
+	union {
+		uint32_t * type;
+		void * ptr;
+	} type;
 
-	
 	if (!(name = inode_fname(ino)))
 		return -1;
 
-	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &type_size, (void **) &type);
+	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
 		Dprintf("%d:frontend_cfs->get_metadata() = %d\n", __LINE__, r);
 		return -1;
 	}
 
-	if (*type == TYPE_DIR)
+	if (*type.type == TYPE_DIR)
 	{
 		char buf[1024];
 		uint32_t basep;
@@ -89,11 +91,15 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = nlinks;
 	}
-	else if (*type == TYPE_FILE)
+	else if (*type.type == TYPE_FILE)
 	{
 		uint32_t filesize_size;
-		int32_t  * filesize;
-		r = CALL(frontend_cfs, get_metadata, name, KFS_feature_size.id, &filesize_size, (void **) &filesize);
+		union {
+			int32_t * filesize;
+			void * ptr;
+		} filesize;
+
+		r = CALL(frontend_cfs, get_metadata, name, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 		if (r < 0)
 		{
 			Dprintf("%d:frontend_cfs->get_metadata() = %d\n", __LINE__, r);
@@ -102,21 +108,21 @@ static int serve_stat(fuse_ino_t ino, struct stat *stbuf)
 
 		stbuf->st_mode = S_IFREG | 0444;
 		stbuf->st_nlink = 1; //	TODO: KFS_feature_nlinks
-		stbuf->st_size = (off_t) *filesize;
-		free(filesize);
+		stbuf->st_size = (off_t) *filesize.filesize;
+		free(filesize.filesize);
 	}
 	else
 	{
-		Dprintf("%d:file type %u unknown\n", __LINE__, *type);
+		Dprintf("%d:file type %u unknown\n", __LINE__, *type.type);
 		goto err;
 	}
 	stbuf->st_ino = ino;
 
-	free(type);
+	free(type.type);
 	return 0;
 
   err:
-	free(type);
+	free(type.type);
 	return -1;
 }
 
