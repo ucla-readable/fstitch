@@ -7,7 +7,7 @@ OBJDIRS += fs
 #			$(OBJDIR)/fs/test.o \
 
 USERAPPS := \
-	$(OBJDIR)/kfs/kfsd
+#	$(OBJDIR)/kfs/kfsd # not placed in filesystem to save on fs-regens
 
 #	$(OBJDIR)/user/bless \
 #			$(OBJDIR)/user/cat \

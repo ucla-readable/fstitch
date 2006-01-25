@@ -1,4 +1,5 @@
 OBJDIRS += kfs
+BIN += $(OBJDIR)/kfs/kfsd
 
 #			$(OBJDIR)/kfs/ide_pio_bd.o \
 #			$(OBJDIR)/kfs/nbd_bd.o \
@@ -38,6 +39,8 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/ipc_serve.o \
+			$(OBJDIR)/kfs/fuse_serve.o \
+			$(OBJDIR)/kfs/fuse_serve_inode.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o \
 			$(OBJDIR)/kfs/kfsd_init.o \
@@ -46,4 +49,4 @@ KFSOFILES := \
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -luser
+	$(V)$(CC) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -lpthread -luser

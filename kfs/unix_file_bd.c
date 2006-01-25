@@ -9,18 +9,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/blockman.h>
 #include <kfs/modman.h>
 #include <kfs/unix_file_bd.h>
 #include <kfs/revision.h>
-#include <kfs/josfs_base.h>
 
 /* We can remove this part once we no longer format as JOS by default */
 #ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in mem_bd.c
+#error inc/fs.h got included in unix_file_bd.c
 #endif
 
 struct unix_file_info {
@@ -226,11 +224,12 @@ unix_file_bd_destroy(BD_t * bd)
 }
 
 BD_t *
-unix_file_bd(char *fname, uint32_t blocks, uint16_t blocksize)
+unix_file_bd(char *fname, uint16_t blocksize)
 {
 	struct unix_file_info * info;
 	BD_t * bd = malloc(sizeof(*bd));
 	struct stat sb;
+	uint32_t blocks;
 	int r;
 	
 	if (blocks < 1)
@@ -244,8 +243,9 @@ unix_file_bd(char *fname, uint32_t blocks, uint16_t blocksize)
 		perror("stat");
 		panic("unable to stat %s\n", fname);
 	}
+	blocks = sb.st_size / blocksize;
 	if (sb.st_size != (blocks * blocksize)) {
-		panic("file %s has wrong size\n", fname);
+		panic("file %s's size is not block-aligned\n", fname);
 	}
 
 	info = malloc(sizeof(*info));

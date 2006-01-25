@@ -34,7 +34,7 @@ typedef struct JOSFS_File JOSFS_File_t;
 
 struct JOSFS_File {
 	char f_name[JOSFS_MAXNAMELEN];	// filename
-	off_t f_size;			// file size in bytes
+	int32_t f_size;			// file size in bytes
 	uint32_t f_type;		// file type
 
 	// Block pointers.

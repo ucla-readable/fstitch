@@ -1256,7 +1256,8 @@ static int josfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head
 	fdesc_t * file;
 	bdesc_t * dirblock = NULL;
 	struct josfs_fdesc * f;
-	int r, offset;
+	int r;
+	uint16_t offset;
 	uint8_t data = 0;
 
 	if (!head || !tail)
@@ -1325,12 +1326,12 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 {
 	Dprintf("JOSFSDEBUG: josfs_get_metadata\n");
 	if (id == KFS_feature_size.id) {
-		*data = malloc(sizeof(off_t));
+		*data = malloc(sizeof(int32_t));
 		if (!*data)
 			return -E_NO_MEM;
 
-		*size = sizeof(off_t);
-		memcpy(*data, &(f->file->f_size), sizeof(off_t));
+		*size = sizeof(int32_t);
+		memcpy(*data, &(f->file->f_size), sizeof(int32_t));
 	}
 	else if (id == KFS_feature_filetype.id) {
 		*data = malloc(sizeof(uint32_t));
@@ -1412,7 +1413,8 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	Dprintf("JOSFSDEBUG: josfs_set_metadata %s, %d, %d\n", f->file->f_name, id, size);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * dirblock = NULL;
-	int r, offset;
+	int r;
+	uint16_t offset;
 
 	if (!head || !tail)
 		return -E_INVAL;
@@ -1420,7 +1422,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	*tail = NULL;
 
 	if (id == KFS_feature_size.id) {
-		if (sizeof(off_t) != size || *((off_t *) data) < 0 || *((off_t *) data) >= JOSFS_MAXFILESIZE)
+		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) >= JOSFS_MAXFILESIZE)
 			return -E_INVAL;
 
 		dirblock = CALL(info->ubd, read_block, f->dirb);
@@ -1429,14 +1431,14 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_size;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(off_t), data, head, tail)) < 0)
+		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(int32_t), data, head, tail)) < 0)
 			return r;
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
 			return r;
 
-		f->file->f_size = *((off_t *) data);
+		f->file->f_size = *((int32_t *) data);
 		return 0;
 	}
 	else if (id == KFS_feature_filetype.id) {

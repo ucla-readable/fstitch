@@ -2691,12 +2691,12 @@ static int ufs_get_metadata(LFS_t * object, const struct ufs_fdesc * f, uint32_t
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 
 	if (id == KFS_feature_size.id) {
-		*data = malloc(sizeof(off_t));
+		*data = malloc(sizeof(int32_t));
 		if (!*data)
 			return -E_NO_MEM;
 
-		*size = sizeof(off_t);
-		memcpy(*data, &(f->file->f_inode.di_size), sizeof(off_t));
+		*size = sizeof(int32_t);
+		memcpy(*data, &(f->file->f_inode.di_size), sizeof(int32_t));
 	}
 	else if (id == KFS_feature_filetype.id) {
 		*data = malloc(sizeof(uint32_t));

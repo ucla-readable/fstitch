@@ -108,6 +108,9 @@ all: tags TAGS
 # Rules for building user object files
 USER_CFLAGS := $(CFLAGS) -DKUDOS_USER
 
+# Binaries not placed in a generated filesystem
+BIN :=
+
 $(OBJDIR)/user/%.o: user/%.c
 	@echo + cc[USER] $<
 	@mkdir -p $(@D)
@@ -128,15 +131,26 @@ $(OBJDIR)/fs/%.o: fs/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
+FUSE_CFLAGS := -I/usr/local/include/fuse -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=25
+
 $(OBJDIR)/kfs/%.o: kfs/%.c
 	@echo + cc[KFS] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+	$(V)$(CC) -DKFSD $(USER_CFLAGS) $(LIB_NET_CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
+
+
+# Include UUMakefrags for subdirectories
+include boot/UUMakefrag
+include lib/UUMakefrag
+include user/UUMakefrag
+include fs/UUMakefrag
+include kfs/UUMakefrag
+include util/Makefrag
 
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(OBJDIR)/fs/clean-fs.img $(UTILS)
+TAGDEPS := $(OBJDIR)/fs/clean-fs.img $(BIN) $(UTILS)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -158,15 +172,6 @@ $(GCCCONF):
 	echo "*** tested on gcc-3.3 and later." 1>&2; \
 	echo "***" 1>&2; exit 1; fi
 	@if uname 2>&1 | grep Darwin >/dev/null; then true; else echo LIBUTIL=-lutil >>$(GCCCONF); fi
-
-
-# Include UUMakefrags for subdirectories
-include boot/UUMakefrag
-include lib/UUMakefrag
-include user/UUMakefrag
-include fs/UUMakefrag
-include kfs/UUMakefrag
-include util/Makefrag
 
 
 # For deleting the build
