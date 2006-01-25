@@ -108,7 +108,7 @@ all: tags TAGS
 # Rules for building user object files
 USER_CFLAGS := $(CFLAGS) -DKUDOS_USER
 
-# Native binaries not placed in a generated filesystem
+# Binaries not placed in a generated filesystem
 BIN :=
 
 $(OBJDIR)/user/%.o: user/%.c
