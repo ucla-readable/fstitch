@@ -1113,6 +1113,7 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	bdesc_t * dirblock = NULL;
 	int i, r, offset;
 	chdesc_t * newtail;
+	uint8_t filetype;
 
 	if (!head || !tail)
 		return -E_INVAL;
@@ -1132,7 +1133,19 @@ static int josfs_rename(LFS_t * object, const char * oldname, const char * newna
 	memcpy(&temp_file, oldfile, sizeof(JOSFS_File_t));
 	josfs_free_fdesc(object, oldfdesc);
 
-	newfdesc = josfs_allocate_name(object, newname, temp_file.f_type, NULL, head, tail);
+	switch (temp_file.f_type)
+	{
+		case JOSFS_TYPE_FILE:
+			filetype = TYPE_FILE;
+			break;
+		case JOSFS_TYPE_DIR:
+			filetype = TYPE_DIR;
+			break;
+		default:
+			filetype = TYPE_INVAL;
+	}
+
+	newfdesc = josfs_allocate_name(object, newname, filetype, NULL, head, tail);
 	if (!newfdesc)
 		return -E_FILE_EXISTS;
 
