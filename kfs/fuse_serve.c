@@ -39,7 +39,7 @@
 // - Speedup fuse_serve_inode if helpful; lname_inode() is O(|dir's entries|)
 // - Provide mechanism to free up resources upon exit so we don't falsely trigger mem leak detectors?
 // - "ls dir; sleep 5; ls dir" (for example), on the 2nd "ls dir", releases a file's inode and then recreates the inode. In this case we give a new inode number. Should we try to reuse the original inode number? (We'll probably need to unique them with the generation field, if so.) (To see this turn on fuse_serve_inode debugging and run the example command.)
-// - Support multiple hard links
+// - Support multiple hard links (how do we deal with open() and opendir()?)
 // - Support more metadata; eg permissions, atime, and mtime
 // - Support delayed event response or multiple threads
 
@@ -102,7 +102,7 @@ static void serve_statfs(fuse_req_t req)
 static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	const char * name;
+	const char * full_name;
 	int fid;
 	int r;
 	uint32_t type_size;
@@ -111,10 +111,11 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 		void * ptr;
 	} type;
 
-	if (!(name = inode_fname(ino)))
+	// INODE TODO: make full_name a parameter
+	if (!(full_name = inode_fname(ino)))
 		return -1;
 
-	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &type_size, &type.ptr);
+	r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
 		Dprintf("%d:frontend_cfs->get_metadata() = %d\n", __LINE__, r);
@@ -129,7 +130,7 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 
 		// FIXME: we should use the same inode->file mapping throughout an
 		// inode's life. Using opening by name can break this.
-		fid = CALL(frontend_cfs, open, name, 0);
+		fid = CALL(frontend_cfs, open, full_name, 0);
 		assert(fid >= 0);
 
 		while ((r = CALL(frontend_cfs, getdirentries, fid, buf, sizeof(buf), &basep)) > 0)
@@ -156,7 +157,7 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 			void * ptr;
 		} filesize;
 
-		r = CALL(frontend_cfs, get_metadata, name, KFS_feature_size.id, &filesize_size, &filesize.ptr);
+		r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 		if (r < 0)
 		{
 			Dprintf("%d:frontend_cfs->get_metadata() = %d\n", __LINE__, r);
@@ -223,6 +224,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 		fid = (int) fi->fh;
 	else
 	{
+		// INODE TODO: get full_name from fi->fh
 		const char * full_name = inode_fname(ino);
 		assert(full_name);
 		fid = CALL(frontend_cfs, open, full_name, 0);
@@ -374,6 +376,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	else if (r < 0)
 		assert(0);
 
+	// INODE TODO: use fname()
 	full_name = inode_fname(*ino);
 	assert(full_name);
 
@@ -580,11 +583,12 @@ static int read_single_dir(int fid, off_t k, dirent_t * dirent)
 }
 
 static void ssync(fuse_req_t req, fuse_ino_t ino, int datasync,
-                 struct fuse_file_info * fi)
+                  struct fuse_file_info * fi)
 {
 	const char * full_name;
 	int r;
 
+	// INODE TODO: get full_name from fi->fh
 	full_name = inode_fname(ino);
 	assert(full_name);
 	// ignore datasync
@@ -623,13 +627,14 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t ino,
                           struct fuse_file_info * fi)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	const char * name;
+	const char * full_name;
 	int fid;
 	int r;
 
-	name = inode_fname(ino);
-	assert(name);
-	fid = CALL(frontend_cfs, open, name, 0);
+	// INODE TODO: how could we avoid ino -> full_name?
+	full_name = inode_fname(ino);
+	assert(full_name);
+	fid = CALL(frontend_cfs, open, full_name, 0);
 	if (fid < 0)
 	{
 		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
@@ -672,33 +677,33 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
 	if (off == 0)
 	{
-		const char * name = ".";
-		size_t name_len = 1;
-		if (total_size + fuse_dirent_size(name_len) <= size)
+		const char * local_name = ".";
+		size_t local_name_len = 1;
+		if (total_size + fuse_dirent_size(local_name_len) <= size)
 		{
-			total_size += fuse_dirent_size(name_len);
+			total_size += fuse_dirent_size(local_name_len);
 			buf = (char *) realloc(buf, total_size);
 			assert(buf);
 			memset(&stbuf, 0, sizeof(stbuf));
 			stbuf.st_ino = ino;
-			fuse_add_dirent(buf, name, &stbuf, ++off);
+			fuse_add_dirent(buf, local_name, &stbuf, ++off);
 		}
 	}
 
 	if (off == 1)
 	{
-		const char * name = "..";
-		size_t name_len = 2;
-		if (total_size + fuse_dirent_size(name_len) <= size)
+		const char * local_name = "..";
+		size_t local_name_len = 2;
+		if (total_size + fuse_dirent_size(local_name_len) <= size)
 		{
 			size_t oldsize = total_size;
-			total_size += fuse_dirent_size(name_len);
+			total_size += fuse_dirent_size(local_name_len);
 			buf = (char *) realloc(buf, total_size);
 			assert(buf);
 			memset(&stbuf, 0, sizeof(stbuf));
 			stbuf.st_ino = inode_parent(ino);
 			assert(stbuf.st_ino != FAIL_INO);
-			fuse_add_dirent(buf + oldsize, name, &stbuf, ++off);
+			fuse_add_dirent(buf + oldsize, local_name, &stbuf, ++off);
 		}
 	}
 
@@ -747,7 +752,7 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 }
 
 static void serve_open(fuse_req_t req, fuse_ino_t ino,
-                       struct fuse_file_info *fi)
+                       struct fuse_file_info * fi)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
 	uint32_t size;
@@ -759,10 +764,11 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 //	else if ((fi->flags & 3) != O_RDONLY)
 //		fuse_reply_err(req, EACCES);
 
-	const char * name = inode_fname(ino);
-	assert(name);
+	// INODE TODO: how could we avoid ino -> full_name?
+	const char * full_name = inode_fname(ino);
+	assert(full_name);
 
-	r = CALL(frontend_cfs, get_metadata, name, KFS_feature_filetype.id, &size, &data);
+	r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_filetype.id, &size, &data);
 	assert(r >= 0);
 	type = *((uint32_t*) data);
 
@@ -773,7 +779,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 		return;
 	}
 
-	fid = CALL(frontend_cfs, open, name, 0);
+	fid = CALL(frontend_cfs, open, full_name, 0);
 	assert(r >= 0);
 	fi->fh = (uint64_t) fid;
 	
