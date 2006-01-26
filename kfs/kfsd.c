@@ -41,7 +41,7 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 void kfsd_shutdown(void)
 {
 	int i;
-	printf("Syncing and shutting down KFSD.\n");
+	printf("Syncing and shutting down.\n");
 
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{

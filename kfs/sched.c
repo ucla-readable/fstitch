@@ -43,10 +43,6 @@ int sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies)
 		return r;
 	}
 
-#if !defined(KUDOS)
-	kdprintf(STDERR_FILENO, "WARNING: %s() invoked but the sched module is not yet supported\n", __FUNCTION__);
-#endif
-
 	return 0;
 }
 
@@ -83,47 +79,53 @@ int sched_init(void)
 	return 0;
 }
 
+#if defined(KUDOS)
+static
+#endif
+void sched_iteration(void)
+{
+	int32_t cur_ncs;
+	size_t i, fes_size;
+	fn_entry_t * fe;
+	int r;
+
+	// Run other fes scheduled to have run by now
+	cur_ncs = jiffy_time();
+	fes_size = vector_size(fes);
+	for (i=0; i < fes_size; i++)
+	{
+		fe = vector_elt(fes, i);
+		if (fe->next - cur_ncs <= 0)
+		{
+			fe->fn(fe->arg);
+
+			cur_ncs = jiffy_time();
+			// Set up the next callback time based on when the timer
+			// should have gone off, and not necessarily when it did
+			fe->next += fe->period;
+		}
+	}
+
+	// Run bdesc autoreleasing at the end of the main loop
+	bdesc_autorelease_pool_pop();
+	assert(!bdesc_autorelease_pool_depth());
+	r = bdesc_autorelease_pool_push();
+	assert(r >= 0);
+
+	// Run chdesc reclamation at the end of the main loop
+	chdesc_reclaim_written();
+
+	// Also run debug command processing
+	KFS_DEBUG_NET_COMMAND();
+}
+
+#if defined(KUDOS)
 void sched_loop(void)
 {
 	for (;;)
 	{
-		int32_t cur_ncs;
-		size_t i, fes_size;
-		fn_entry_t * fe;
-		int r;
-
-		// Run cvs_ipc_serve each loop (which will sleep for a bit)
-#if defined(KUDOS)
-		ipc_serve_run();
-#endif
-
-		// Run other fes scheduled to have run by now
-		cur_ncs = jiffy_time();
-		fes_size = vector_size(fes);
-		for (i=0; i < fes_size; i++)
-		{
-			fe = vector_elt(fes, i);
-			if (fe->next - cur_ncs <= 0)
-			{
-				fe->fn(fe->arg);
-
-				cur_ncs = jiffy_time();
-				// Set up the next callback time based on when the timer
-				// should have gone off, and not necessarily when it did
-				fe->next += fe->period;
-			}
-		}
-
-		// Run bdesc autoreleasing at the end of the main loop
-		bdesc_autorelease_pool_pop();
-		assert(!bdesc_autorelease_pool_depth());
-		r = bdesc_autorelease_pool_push();
-		assert(r >= 0);
-
-		// Run chdesc reclamation at the end of the main loop
-		chdesc_reclaim_written();
-
-		// Also run debug command processing
-		KFS_DEBUG_NET_COMMAND();
+		ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
+		sched_iteration();
 	}
 }
+#endif

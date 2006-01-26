@@ -8,12 +8,14 @@
 #include <unistd.h>
 #include <lib/dirent.h>
 #include <lib/fcntl.h>
+#include <lib/jiffies.h>
 #include <lib/kdprintf.h>
 #include <lib/panic.h>
 #include <kfs/cfs.h>
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>
 #include <kfs/modman.h>
+#include <kfs/sched.h>
 #include <kfs/fuse_serve.h>
 #include <kfs/fuse_serve_inode.h>
 
@@ -24,11 +26,13 @@
 // - Run with the -d flag to see FUSE messages coming in and going out
 
 // TODOs:
+// - Why does FUSE stop responding if we throw a user throws a slew of work at it?
+// - Why does "echo hello > existing_file" truncate existing_file but fail to write?
 // - Why does using a 0s timeout (instead of 1.0) not work? Is this a problem?
 // - Send errors to fuse in more situations (and better translate KFS<->FUSE errors)
 // - Propagate errors rather than assert() in places where assert() is used for errors that can happen
 // - Send negative lookup answers (rather than ENOENT), right?
-// - Add support for the other fuse_lowlevel_ops that make sense (write, ...)
+// - Add support for the other fuse_lowlevel_ops that make sense
 // - Implement sched's functionality (limit block wait on kernel communication? allow delays until we get a kernel callback?)
 // - Switch off kernel buffer cache for our serves? (direct_io)
 // - Be safer; eg call open() only when we should
@@ -957,10 +961,118 @@ int fuse_serve_init(int argc, char ** argv)
 	return 0;
 }
 
+
+// Return end - start
+struct timeval time_elapsed(struct timeval start, struct timeval end)
+{
+	struct timeval diff;
+
+	assert(start.tv_sec < end.tv_sec
+	       || (start.tv_sec == end.tv_sec && start.tv_usec <= end.tv_usec));
+
+	diff.tv_sec = end.tv_sec - start.tv_sec;
+	if (end.tv_usec > start.tv_usec)
+		diff.tv_usec = end.tv_usec - start.tv_usec;
+	else {
+		diff.tv_sec--;
+		diff.tv_usec = (1000000 - start.tv_usec) + end.tv_usec;
+	}
+	return diff;
+}
+
+void print_timeval(struct timeval tv)
+{
+	printf("%f", ((float) tv.tv_sec) + ((float) tv.tv_usec) / 1000000.0);
+}
+
+// Return MAX(remaining - elapsed, 0)
+struct timeval time_subtract(struct timeval remaining, struct timeval elapsed)
+{
+	struct timeval n;
+	if (remaining.tv_sec < elapsed.tv_sec
+	    || (remaining.tv_sec == elapsed.tv_sec
+	        && remaining.tv_usec <= elapsed.tv_usec))
+		n.tv_sec = n.tv_usec = 0;
+	else
+	{
+		n.tv_sec = remaining.tv_sec - elapsed.tv_sec;
+		if (remaining.tv_usec > elapsed.tv_usec)
+			n.tv_usec = remaining.tv_usec - elapsed.tv_usec;
+		else {
+			n.tv_sec--;
+			n.tv_usec = (1000000 - elapsed.tv_usec) + remaining.tv_usec;
+		}
+	}
+	return n;
+}
+
+// Return the amount of time to wait between sched_iteration() calls
+static struct timeval fuse_serve_timeout(void)
+{
+	struct timeval tv = { .tv_sec = 0, .tv_usec = 1000000/HZ };
+	return tv;
+}
+
 int fuse_serve_loop(void)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	assert(fuse_session);
 	assert(frontend_cfs);
-	return fuse_session_loop(fuse_session);
+
+	// Adapted from FUSE's lib/fuse_loop.c to also support sched callbacks
+
+    int res = 0;
+    struct fuse_chan *ch = fuse_session_next_chan(fuse_session, NULL);
+    size_t bufsize = fuse_chan_bufsize(ch);
+    char *buf = (char *) malloc(bufsize);
+    if (!buf) {
+        fprintf(stderr, "fuse: failed to allocate read buffer\n");
+        return -1;
+    }
+	int fd = fuse_chan_fd(ch);
+	struct timeval tv = fuse_serve_timeout();
+
+    while (!fuse_session_exited(fuse_session)) {
+		fd_set rfds;
+		int r;
+		struct timeval it_start, it_end;
+
+		fd = fuse_chan_fd(ch);
+		FD_ZERO(&rfds);
+		FD_SET(fd, &rfds);
+		r = select(fd+1, &rfds, NULL, NULL, &tv);
+
+		if (r == 0 && !FD_ISSET(fd, &rfds)) {
+			sched_iteration();
+			tv = fuse_serve_timeout();
+		} else if (r < 0) {
+			if (errno != EINTR)
+				perror("select");
+			tv = fuse_serve_timeout(); // tv may have become undefined
+		} else {
+			r = gettimeofday(&it_start, NULL);
+			if (r == -1) {
+				perror("gettimeofday");
+				break;
+			}
+
+			r = fuse_chan_receive(ch, buf, bufsize);
+			if (r) {
+				if (r == -1)
+					break;
+				fuse_session_process(fuse_session, buf, r, ch);
+			}
+
+			r = gettimeofday(&it_end, NULL);
+			if (r == -1) {
+				perror("gettimeofday");
+				break;
+			}
+			tv = time_subtract(tv, time_elapsed(it_start, it_end));
+		}
+    }
+
+    free(buf);
+    fuse_session_reset(fuse_session);
+    return res;
 }

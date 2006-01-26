@@ -1,7 +1,13 @@
 #ifndef KUDOS_LIB_JIFFIES_H
 #define KUDOS_LIB_JIFFIES_H
 
+#if defined(UNIXUSER)
+// UNIXUSER only uses HZ for callbacks around every 1s or more
+#define HZ			5
+#else
 #define HZ			100
+#endif
+
 #define JIFFIES_PER_SECOND	HZ
 
 static __inline int jiffy_time(void) __attribute__((always_inline));
