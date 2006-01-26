@@ -133,7 +133,7 @@ int add_inode(fuse_ino_t parent, const char * local_name, fuse_ino_t * pino)
 
 	if (lname_inode(parent, local_name) != FAIL_INO)
 	{
-		Dprintf("%s(parent = %d, local_name = \"%s\") -> PARENT DOES NOT EXIST\n", __FUNCTION__, (int) parent, local_name);
+		Dprintf("%s(parent = %lu, local_name = \"%s\") -> PARENT DOES NOT EXIST\n", __FUNCTION__, parent, local_name);
 		return -1;
 	}
 
@@ -169,7 +169,7 @@ int add_inode(fuse_ino_t parent, const char * local_name, fuse_ino_t * pino)
 	assert(r == 0);
 
 	*pino = ino;
-	Dprintf("%s(parent = %d, local_name = \"%s\") -> inode %d\n", __FUNCTION__, (int) parent, local_name, (int) ino);
+	Dprintf("%s(parent = %lu, local_name = \"%s\") -> inode %lu\n", __FUNCTION__, parent, local_name, ino);
 	return 0;
 }
 
@@ -184,7 +184,7 @@ void remove_inode(fuse_ino_t ino)
 	full_name = hash_map_erase(fnames, (void *) ino);
 	if (!full_name)
 	{
-		kdprintf(STDERR_FILENO, "%s(ino = %d): ino does not exist\n", __FUNCTION__, (int) ino);
+		kdprintf(STDERR_FILENO, "%s(ino = %lu): ino does not exist\n", __FUNCTION__, ino);
 		return;
 	}
 	memset(full_name, 0, strlen(full_name));
@@ -212,7 +212,7 @@ void remove_inode(fuse_ino_t ino)
 				vector_destroy(linodes);
 			}
 
-			Dprintf("%s(ino = %d)\n", __FUNCTION__, (int) ino);
+			Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
 			return;
 		}
 	}
@@ -245,7 +245,6 @@ int inodes_init(void)
 	fuse_ino_t root_ino;
 	int r;
 
-	static_assert(sizeof(int) == sizeof(fuse_ino_t));
 	static_assert(sizeof(void*) == sizeof(fuse_ino_t));
 
 	assert(!fnames && !parents && !lnames);

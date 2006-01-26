@@ -41,7 +41,7 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 void kfsd_shutdown(void)
 {
 	int i;
-	printf("Syncing and shutting down new filesystem.\n");
+	printf("Syncing and shutting down KFSD.\n");
 
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
@@ -55,7 +55,7 @@ void kfsd_shutdown(void)
 	exit(0);
 }
 
-void kfsd_main(int argc, char **argv)
+void kfsd_main(int argc, char ** argv)
 {
 	int r;
 
@@ -108,7 +108,7 @@ void umain(int argc, char * argv[])
 		assert(r >= 0);
 	}
 
-	kfsd_main(NULL, NULL);
+	kfsd_main(argc, argv);
 }
 
 #elif defined(UNIXUSER)
