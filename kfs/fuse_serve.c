@@ -26,15 +26,14 @@
 // - Run with the -d flag to see FUSE messages coming in and going out
 
 // TODOs:
-// - Why does FUSE stop responding if we throw a user throws a slew of work at it?
+// - Why does FUSE stop responding if a user throws a slew of work at it?
 // - Why does "echo hello > existing_file" truncate existing_file but fail to write?
 // - Why does using a 0s timeout (instead of 1.0) not work? Is this a problem?
 // - Send errors to fuse in more situations (and better translate KFS<->FUSE errors)
 // - Propagate errors rather than assert() in places where assert() is used for errors that can happen
 // - Send negative lookup answers (rather than ENOENT), right?
 // - Add support for the other fuse_lowlevel_ops that make sense
-// - Implement sched's functionality (limit block wait on kernel communication? allow delays until we get a kernel callback?)
-// - Switch off kernel buffer cache for our serves? (direct_io)
+// - Switch off kernel buffer cache for ourself? (direct_io)
 // - Be safer; eg call open() only when we should
 // - Speedup serve_readdir() when helpful (it runs O(n^2); a slightly more complex O(n) would work)
 // - Speedup fuse_serve_inode if helpful; lname_inode() is O(|dir's entries|)
@@ -475,6 +474,7 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
 	char * full_name;
+	fuse_ino_t ino;
 	int r;
 
 	full_name = fname(parent, local_name);
@@ -490,6 +490,11 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 		return;
 	}
 
+	// Remove ino from inode cache, fuse won't tell us to forget
+	ino = lname_inode(parent, local_name);
+	if (ino != FAIL_INO)
+		remove_inode(ino);
+
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
 }
@@ -502,6 +507,7 @@ static void serve_rename(fuse_req_t req,
 	        __FUNCTION__, old_parent, old_local_name, new_parent, new_local_name);
 	char * old_full_name;
 	char * new_full_name;
+	fuse_ino_t old_ino;
 	int r;
 
 	old_full_name = fname(old_parent, old_local_name);
@@ -522,6 +528,11 @@ static void serve_rename(fuse_req_t req,
 		assert(!r);
 		return;
 	}
+
+	// Remove old_ino from inode cache, fuse won't tell us to forget
+	old_ino = lname_inode(old_parent, old_local_name);
+	if (old_ino != FAIL_INO)
+		remove_inode(old_ino);
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
@@ -978,11 +989,6 @@ struct timeval time_elapsed(struct timeval start, struct timeval end)
 		diff.tv_usec = (1000000 - start.tv_usec) + end.tv_usec;
 	}
 	return diff;
-}
-
-void print_timeval(struct timeval tv)
-{
-	printf("%f", ((float) tv.tv_sec) + ((float) tv.tv_usec) / 1000000.0);
 }
 
 // Return MAX(remaining - elapsed, 0)
