@@ -1,6 +1,6 @@
 OBJDIRS += user
 BIN += $(OBJDIR)/user/fsync
 
-$(OBJDIR)/user/%: $(OBJDIR)/user/%.o
+$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/libuser.a
 	@echo + ld $@
-	$(V)$(CC) $@.o -L$(OBJDIR)/lib -luser -o $@
+	$(V)$(CC) -o $@ $@.o -L$(OBJDIR)/lib -luser
