@@ -26,7 +26,6 @@
 // - Run with the -d flag to see FUSE messages coming in and going out
 
 // TODOs:
-// - Why does FUSE stop responding if a user throws a slew of work at it?
 // - Why does "echo hello > existing_file" truncate existing_file but fail to write?
 // - Why does using a 0s timeout (instead of 1.0) not work? Is this a problem?
 // - Send errors to fuse in more situations (and better translate KFS<->FUSE errors)
