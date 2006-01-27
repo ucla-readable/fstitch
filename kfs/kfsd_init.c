@@ -429,6 +429,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		}
 	}
 
+	for (i=0; i < vector_size(partitions); i++)
+		free(vector_elt(partitions, i));
+
 	vector_destroy(partitions);
 	partitions = NULL;
 

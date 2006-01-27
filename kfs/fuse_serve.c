@@ -477,7 +477,6 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
 	char * full_name;
-	fuse_ino_t ino;
 	int r;
 
 	full_name = fname(parent, local_name);
@@ -492,11 +491,6 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 		assert(!r);
 		return;
 	}
-
-	// Remove ino from inode cache, fuse won't tell us to forget
-	ino = lname_inode(parent, local_name);
-	if (ino != FAIL_INO)
-		remove_inode(ino);
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
@@ -578,7 +572,7 @@ static int read_single_dir(int fid, off_t k, dirent_t * dirent)
 		dirno++;
 	}
 
-	memcpy(dirent, cur, sizeof(buf));
+	memcpy(dirent, cur, ((dirent_t*) cur)->d_reclen);
 	return eof;
 }
 
@@ -663,6 +657,9 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t ino,
 		r = fuse_reply_err(req, -1);
 		assert(!r);
 	}
+
+	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
+	assert(!r);
 }
 
 static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
@@ -770,7 +767,10 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 
 	r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_filetype.id, &size, &data);
 	assert(r >= 0);
+
 	type = *((uint32_t*) data);
+	free(data);
+	data = NULL;
 
 	if (type == TYPE_DIR)
 	{
@@ -795,6 +795,8 @@ static void serve_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 
 	r = CALL(frontend_cfs, close, fid);
 	assert(r >= 0);
+	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
+	assert(!r);
 }
 
 static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,

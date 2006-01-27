@@ -1526,7 +1526,11 @@ static int josfs_sync(LFS_t * object, const char * name)
 	nblocks = josfs_get_file_numblocks(object, f);
 	for (i = 0 ; i < nblocks; i++)
 		if ((r = CALL(info->ubd, sync, josfs_get_file_block(object, f, i * JOSFS_BLKSIZE), NULL)) < 0)
+		{
+			josfs_free_fdesc(object, f);
 			return r;
+		}
+	josfs_free_fdesc(object, f);
 
 	if (strcmp(name, "/") == 0)
 		return 0;

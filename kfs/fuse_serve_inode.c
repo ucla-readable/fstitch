@@ -222,7 +222,36 @@ void remove_inode(fuse_ino_t ino)
 
 void inodes_shutdown(void)
 {
-	// free memory so that we don't trip memory leak detectors
+	if (parents && fnames && lnames)
+	{
+		// FUSE does not guarantee that all looked up inodes will be released.
+		// We can free these inodes here so that we don't trip memory leak
+		// detectors; the value of this is questionable.
+
+		vector_t * inos;
+		hash_map_it_t it;
+		vector_t * inoentries;
+		size_t i;
+
+		inos = vector_create();
+		assert(inos);
+
+		hash_map_it_init(&it, lnames);
+
+		while ((inoentries = (vector_t *) hash_map_val_next(&it)))
+		{
+			for (i=0; i < vector_size(inoentries); i++)
+			{
+				inoentry_t * e = (inoentry_t *) vector_elt(inoentries, i);
+				vector_push_back(inos, (void *) e->ino);
+			}
+		}
+
+		for (i=0; i < vector_size(inos); i++)
+			remove_inode((fuse_ino_t) vector_elt(inos, i));
+		vector_destroy(inos);
+	}
+
 	if (parents)
 	{
 		hash_map_destroy(parents);
