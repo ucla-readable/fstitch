@@ -18,7 +18,7 @@
 #define NBD_RETRIES 5
 
 struct nbd_info {
-	int fd[2];
+	int fd;
 	uint32_t length;
 	blockman_t * blockman;
 	struct ip_addr ip;
@@ -73,25 +73,24 @@ static int nbd_bd_reset(BD_t * object)
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	uint32_t length;
 	uint16_t blocksize;
-	int i, r;
+	int r;
 	
 	kdprintf(STDERR_FILENO, "%s(): resetting %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
 	
-	for(i = 0; i != 2; i++)
-		if(info->fd[i] != -1)
-		{
-			close(info->fd[i]);
-			info->fd[i] = -1;
-		}
+	if(info->fd != -1)
+	{
+		close(info->fd);
+		info->fd = -1;
+	}
 	
-	if(connect(info->ip, info->port, info->fd))
+	if(connect(info->ip, info->port, &info->fd))
 		goto error;
 	
-	r = read(info->fd[0], &length, sizeof(length));
+	r = read(info->fd, &length, sizeof(length));
 	if(r != sizeof(length))
 		goto error;
 	
-	r= read(info->fd[0], &blocksize, sizeof(blocksize));
+	r= read(info->fd, &blocksize, sizeof(blocksize));
 	if(r != sizeof(blocksize))
 		goto error;
 	
@@ -105,12 +104,11 @@ static int nbd_bd_reset(BD_t * object)
 	return 0;
 	
   error:
-	for(i = 0; i != 2; i++)
-		if(info->fd[i] != -1)
-		{
-			close(info->fd[i]);
-			info->fd[i] = -1;
-		}
+	if(info->fd != -1)
+	{
+		close(info->fd);
+		info->fd = -1;
+	}
 	
 	return -1;
 }
@@ -143,15 +141,15 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		number = htonl(number);
 		
 		/* read it */
-		r = write(info->fd[1], &command, 1);
+		r = write(info->fd, &command, 1);
 		if(r != 1)
 			goto error;
 		
-		r = write(info->fd[1], &number, sizeof(number));
+		r = write(info->fd, &number, sizeof(number));
 		if(r != sizeof(number))
 			goto error;
 		
-		r = readn(info->fd[0], bdesc->ddesc->data, info->blocksize);
+		r = readn(info->fd, bdesc->ddesc->data, info->blocksize);
 		if(r != info->blocksize)
 			goto error;
 		
@@ -237,15 +235,15 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		number = htonl(block->number);
 		
 		/* write it */
-		r = write(info->fd[1], &command, 1);
+		r = write(info->fd, &command, 1);
 		if(r != 1)
 			goto error;
 		
-		r = write(info->fd[1], &number, sizeof(number));
+		r = write(info->fd, &number, sizeof(number));
 		if(r != sizeof(number))
 			goto error;
 		
-		r = write(info->fd[1], block->ddesc->data, info->blocksize);
+		r = write(info->fd, block->ddesc->data, info->blocksize);
 		if(r != info->blocksize)
 			goto error;
 		
@@ -285,11 +283,11 @@ static int nbd_bd_destroy(BD_t * bd)
 	
 	blockman_destroy(&info->blockman);
 	
-	r = close(info->fd[0]);
+	r = close(info->fd);
 	if(r < 0)
 		val = r;
 	
-	r = close(info->fd[1]);
+	r = close(info->fd);
 	if(r < 0)
 		val = r;
 	
@@ -323,14 +321,14 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 		goto error_blockman;
 	info->port = port;
 	
-	if(connect(info->ip, port, info->fd))
+	if(connect(info->ip, port, &info->fd))
 		goto error_blockman;
 	
-	r = read(info->fd[0], &info->length, sizeof(info->length));
+	r = read(info->fd, &info->length, sizeof(info->length));
 	if(r != sizeof(info->length))
 		goto error_connect;
 	
-	r= read(info->fd[0], &info->blocksize, sizeof(info->blocksize));
+	r= read(info->fd, &info->blocksize, sizeof(info->blocksize));
 	if(r != sizeof(info->blocksize))
 		goto error_connect;
 	
@@ -349,8 +347,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	return bd;
 	
   error_connect:
-	close(info->fd[0]);
-	close(info->fd[1]);
+	close(info->fd);
   error_blockman:
 	blockman_destroy(&info->blockman);
   error_info:

@@ -38,7 +38,6 @@ char*	readline(const char* prompt);
 
 // syscall.c
 void	sys_cputs(const char* string);
-int	sys_cgetc(void);
 int	sys_cgetc_nb(void);
 envid_t	sys_getenvid(void);
 int	sys_env_destroy(envid_t env);
@@ -180,10 +179,11 @@ int textbar_set_progress(int progress, uint8_t color);
 #define PIPEBUFSIZ (PIPEBUFPAGES * PGSIZE - 2 * sizeof(off_t))
 int	pipe(int pipefd[2]);
 int	pipeisclosed(int pipefd);
-size_t pipefree(int pipefd);
+size_t  pipefree(int pipefd);
 
 int	socket(int socketfd[2]);
 int	socketisclosed(int socketfd);
+size_t  socketfree(int socketfd);
 
 // wait.c
 void	wait(envid_t env);
@@ -213,10 +213,10 @@ void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, c
 
 // netclient.c
 int   gethostbyname(const char *name, struct ip_addr *ipaddr);
-int   connect(struct ip_addr ipaddr, uint16_t port, int fd[2]);
+int   connect(struct ip_addr ipaddr, uint16_t port, int *fd);
 int   bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key);
 int   close_listen(uint32_t listen_key);
-int   accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* remote_port);
+int   accept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* remote_port);
 
 int   net_stats(int fd);
 

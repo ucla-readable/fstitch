@@ -121,6 +121,22 @@ socketisclosed(int fdnum)
 	return _socketisclosed(fd, p);
 }
 
+/* return size available for writing, which, unlike the case for pipes,
+ * cannot simply be calculated from the size available for reading */
+size_t
+socketfree(int fdnum)
+{
+	struct Fd* fd;
+	struct Socket* p;
+	int r;
+	
+	if ((r = fd_lookup(fdnum, &fd)) < 0)
+		return r;
+	p = (struct Socket*) fd2data(fd);
+	/* return size available for writing */
+	return PIPEBUFSIZ - p->pipe[1].p_wpos - p->pipe[1].p_rpos;
+}
+
 static int
 socketread(struct Fd* fd, void* vbuf, size_t n, off_t offset)
 {

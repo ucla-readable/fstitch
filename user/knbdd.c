@@ -10,7 +10,7 @@
 static struct knbd_state {
 	struct ip_addr remote_ip;
 	int16_t remote_port;
-	int net[2];
+	int net;
 	int bd;
 } gks;
 typedef struct knbd_state knbd_state_t;
@@ -31,14 +31,14 @@ static void knbd_serve(knbd_state_t * ks)
 	number = st.st_size / bs;
 	number = htonl(number);
 	bs = htons(bs);
-	write(ks->net[1], &number, sizeof(number));
-	write(ks->net[1], &bs, sizeof(bs));
+	write(ks->net, &number, sizeof(number));
+	write(ks->net, &bs, sizeof(bs));
 	
 	for(;;)
 	{
-		if(read(ks->net[0], &command, 1) != 1)
+		if(read(ks->net, &command, 1) != 1)
 			break;
-		if(read(ks->net[0], &number, sizeof(number)) != 4)
+		if(read(ks->net, &number, sizeof(number)) != 4)
 			break;
 		number = ntohl(number);
 		if(number >= st.st_size / bs)
@@ -53,12 +53,12 @@ static void knbd_serve(knbd_state_t * ks)
 				if (display_reqs)
 					printf("knbdd: Read block %u\n", number);
 				read(ks->bd, buffer, BLOCK_SIZE);
-				write(ks->net[1], buffer, BLOCK_SIZE);
+				write(ks->net, buffer, BLOCK_SIZE);
 				break;
 			case 1:
 				if (display_reqs)
 					printf("knbdd: Write block %u\n", number);
-				readn(ks->net[0], buffer, BLOCK_SIZE);
+				readn(ks->net, buffer, BLOCK_SIZE);
 				write(ks->bd, buffer, BLOCK_SIZE);
 				break;
 			default:
@@ -67,7 +67,7 @@ static void knbd_serve(knbd_state_t * ks)
 	}
 }
 
-static int knbd_accept(const char * bd_filename, int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
+static int knbd_accept(const char * bd_filename, int fd, struct ip_addr remote_ip, uint16_t remote_port)
 {
 	struct knbd_state * ks = &gks;
 	int bd;
@@ -82,8 +82,7 @@ static int knbd_accept(const char * bd_filename, int fd[2], struct ip_addr remot
 	// Initialize ks
 	ks->remote_ip = remote_ip;
 	ks->remote_port = remote_port;
-	ks->net[0] = fd[0];
-	ks->net[1] = fd[1];
+	ks->net = fd;
 	ks->bd = bd;
 	
 	if (display_conns)
@@ -105,7 +104,7 @@ static int knbd_accept(const char * bd_filename, int fd[2], struct ip_addr remot
 static int knbd_listen(const char * bd_filename, uint16_t port)
 {
 	uint32_t listen_key;
-	int fd[2];
+	int fd;
 	struct ip_addr remote_ip;
 	uint16_t remote_port;
 	int r;
@@ -119,7 +118,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 	// Accept connections and fork to handle each connection
 	while (1)
 	{
-		if ((r = accept(listen_key, fd, &remote_ip, &remote_port)) < 0)
+		if ((r = accept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd accept: %e\n", r);
 			exit(0);
@@ -136,12 +135,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 			exit(0);
 		}
 
-		if ((r = close(fd[0])) < 0)
-		{
-			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
-			exit(0);
-		}
-		if ((r = close(fd[1])) < 0)
+		if ((r = close(fd)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
 			exit(0);

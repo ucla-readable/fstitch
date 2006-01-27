@@ -134,7 +134,7 @@ gethostbyname(const char *name, struct ip_addr *ipaddr)
 }
 
 int
-connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
+connect(struct ip_addr ipaddr, uint16_t port, int *fd)
 {
 	int r;
 	envid_t netd_ipcrecv = 0, netd_net = 0;
@@ -165,9 +165,7 @@ connect(struct ip_addr ipaddr, uint16_t port, int fd[2])
 		return r;
 
 	// Receive fds
-	if ((fd[0] = r = dup2env_recv(netd_net)) < 0)
-		panic("dup2env_recv: %e", r);
-	if ((fd[1] = dup2env_recv(netd_net)) < 0)
+	if ((*fd = r = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
 
 	return 0;
@@ -217,7 +215,7 @@ close_listen(uint32_t listen_key)
 }
 
 int
-accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* remote_port)
+accept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* remote_port)
 {
 	envid_t netd_ipcrecv = 0, netd_net = 0;
 	struct ip_addr ripaddr;
@@ -249,9 +247,7 @@ accept(uint32_t listen_key, int fd[2], struct ip_addr* remote_ipaddr, uint16_t* 
 		return r;
 
 	// Receive the fds
-	if ((fd[0] = r = dup2env_recv(netd_net)) < 0)
-		panic("dup2env_recv: %e", r);
-	if ((fd[1] = dup2env_recv(netd_net)) < 0)
+	if ((*fd = r = dup2env_recv(netd_net)) < 0)
 		panic("dup2env_recv: %e", r);
 
 	// Receive the remote ipaddr and port

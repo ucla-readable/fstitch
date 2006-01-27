@@ -47,11 +47,10 @@ print_usage(char *bin)
 void
 umain(int argc, char **argv)
 {
-	int lines = 24;
+	int lines = 22;
 	int cols = 80;
 	char buf[cols+1];
-	int n;
-	int i, r;
+	int n, i, r;
 
 	if (argc > 3) {
 		print_usage(argv[0]);
@@ -69,12 +68,14 @@ umain(int argc, char **argv)
 	for (;;) {
 		for (i = 0; i < lines; i++) {
 			n = f_readline(0, buf, cols);
-			if (n <= 0) return;
+			if (n <= 0)
+				return;
 			if ((r = write(1, buf, n)) != n)
 				panic("write error when copying");
 		}
-		n = sys_cgetc();
-		//printf("got n == %d, %c\n", n, n);
-		if (n == 'q') return;
+		printf("-- MORE --\n");
+		n = f_readline(2, buf, cols);
+		if (n <= 0 || buf[0] == 'q')
+			return;
 	}
 }

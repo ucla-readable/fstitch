@@ -5,7 +5,6 @@
 enum
 {
 	SYS_cputs = 0,		// Used in Lab 3 Part 1
-	SYS_cgetc,
 	SYS_cgetc_nb,
 	SYS_getenvid,
 	SYS_env_destroy,

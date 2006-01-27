@@ -23,7 +23,7 @@ static int   save_server_headers  = 0; // save  the headers sent by the server
 
 
 static struct http_state {
-	int net[2];
+	int net;
 
 	uint8_t buf[PGSIZE];
 
@@ -127,7 +127,7 @@ http_read_header(struct http_state *hs)
 	char c;
 	int r;
 
-	while ((r = read(hs->net[0], &c, 1)))
+	while ((r = read(hs->net, &c, 1)))
 	{
 		if (print_server_headers)
 			kdprintf(status_fd, "%c", c);
@@ -195,7 +195,7 @@ http_read_body(struct http_state *hs)
 {
 	int r;
 
-	while ((r = read(hs->net[0], hs->buf, sizeof(hs->buf))))
+	while ((r = read(hs->net, hs->buf, sizeof(hs->buf))))
 	{
 		const int read_len = r;
 		r = write(fileout_fd, hs->buf, read_len);
@@ -231,7 +231,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 	// Connect
 	if (!silent)
 		kdprintf(status_fd, "Connecting... ");
-	if ((r = connect(addr, port, hs->net)) < 0)
+	if ((r = connect(addr, port, &hs->net)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "connect: %e\n", r);
 		exit(0);
@@ -240,7 +240,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 		kdprintf(status_fd, "Connected\n");
 
 	// Send the request
-	kdprintf(hs->net[1], "GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", uri, host);
+	kdprintf(hs->net, "GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", uri, host);
 	if (!silent)
 		kdprintf(status_fd, "Sending request... ");
 

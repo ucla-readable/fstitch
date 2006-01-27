@@ -42,12 +42,6 @@ sys_cputs(const char *a1)
 }
 
 int
-sys_cgetc(void)
-{
-	return syscall(SYS_cgetc, 0, 0, 0, 0, 0);
-}
-
-int
 sys_cgetc_nb(void)
 {
 	return syscall(SYS_cgetc_nb, 0, 0, 0, 0, 0);

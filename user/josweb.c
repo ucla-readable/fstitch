@@ -74,7 +74,7 @@ struct httpd_state_data {
 static struct httpd_state {
 	struct ip_addr remote_ip;
 	uint16_t remote_port;
-	int net[2];
+	int net;
 	struct httpd_state_data file;
 } ghs;
 
@@ -90,9 +90,9 @@ close_conn_and_exit(struct httpd_state *hs)
 		if (hs->file.fd != -1)
 			if((r = close(hs->file.fd)) < 0)
 				kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e", r);
-		if ((r = close(hs->net[0])) < 0)
+		if ((r = close(hs->net)) < 0)
 			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e\n", r);
-		if ((r = close(hs->net[1])) < 0)
+		if ((r = close(hs->net)) < 0)
 			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e\n", r);
 	}
 
@@ -394,31 +394,31 @@ send_http_header(struct httpd_state *hs, int http_status)
 	else
 		panic("Unimplemented http status code %d", http_status);
 
-	if ((r = kdprintf(hs->net[1], "HTTP/1.0 %d %s\r\n", http_status, status_str)) < 0)
+	if ((r = kdprintf(hs->net, "HTTP/1.0 %d %s\r\n", http_status, status_str)) < 0)
 		panic("kdprintf: %e");
 
 	//
 	// Server
 	
-	if ((r = kdprintf(hs->net[1], "Server: JOSWeb/1.0\r\n")) < 0)
+	if ((r = kdprintf(hs->net, "Server: JOSWeb/1.0\r\n")) < 0)
 		panic("kdprintf: %e", r);
 
 	//
 	// Content length
 
-	if ((r = kdprintf(hs->net[1], "Content-Length: %d\r\n", hs->file.len)) < 0)
+	if ((r = kdprintf(hs->net, "Content-Length: %d\r\n", hs->file.len)) < 0)
 		panic("kdprintf: %e", r);
 
 	//
 	// Connection
 
-	if ((r = kdprintf(hs->net[1], "Connection: close\r\n")) < 0)
+	if ((r = kdprintf(hs->net, "Connection: close\r\n")) < 0)
 		panic("kdprintf: %e", r);
 
 	//
 	// End of header
 
-	if ((r = kdprintf(hs->net[1], "\r\n")) < 0)
+	if ((r = kdprintf(hs->net, "\r\n")) < 0)
 		panic("kdprintf: %e", r);
 }
 
@@ -438,7 +438,7 @@ httpd_serve(struct httpd_state *hs)
 	// Read "GET <URI> [<HTTP VERSION>]\r\n"
 	while (1)
 	{
-		if ((r = read(hs->net[0], &request[i], 1)) < 0)
+		if ((r = read(hs->net, &request[i], 1)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "read: %e\n", r);
 			close_conn_and_exit(hs);
@@ -546,7 +546,7 @@ httpd_serve(struct httpd_state *hs)
 				close_conn_and_exit(hs);
 			}
 
-			r = write(hs->net[1], buf, nbytes);
+			r = write(hs->net, buf, nbytes);
 			if (r != nbytes)
 			{
 				kdprintf(STDERR_FILENO, "%s:%d write: %e\n", __FILE__, __LINE__, r);
@@ -559,7 +559,7 @@ httpd_serve(struct httpd_state *hs)
 	}
 	else
 	{
-		if ((r = write(hs->net[1], hs->file.data, hs->file.len)) < 0)
+		if ((r = write(hs->net, hs->file.data, hs->file.len)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "write: %e\n", r);
 			close_conn_and_exit(hs);
@@ -570,7 +570,7 @@ httpd_serve(struct httpd_state *hs)
 }
 
 static int
-httpd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
+httpd_accept(int fd, struct ip_addr remote_ip, uint16_t remote_port)
 {
 	struct httpd_state *hs = &ghs;
 	int r;
@@ -578,8 +578,7 @@ httpd_accept(int fd[2], struct ip_addr remote_ip, uint16_t remote_port)
 	// Initialize hs
 	hs->remote_ip = remote_ip;
 	hs->remote_port = remote_port;
-	hs->net[0] = fd[0];
-	hs->net[1] = fd[1];
+	hs->net = fd;
 	hs->file.data = NULL;
 	hs->file.fd   = -1;
 	
@@ -603,7 +602,7 @@ static void
 httpd_listen(void)
 {
 	uint32_t listen_key;
-	int fd[2];
+	int fd;
 	struct ip_addr remote_ip;
 	uint16_t remote_port;
 	int r;
@@ -617,7 +616,7 @@ httpd_listen(void)
 	// Accept connections and fork to handle each connection
 	while (1)
 	{
-		if ((r = accept(listen_key, fd, &remote_ip, &remote_port)) < 0)
+		if ((r = accept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "accept: %e\n", r);
 			exit(0);
@@ -638,12 +637,7 @@ httpd_listen(void)
 			exit(0);
 		}
 
-		if ((r = close(fd[0])) < 0)
-		{
-			kdprintf(STDERR_FILENO, "close: %e\n", r);
-			exit(0);
-		}
-		if ((r = close(fd[1])) < 0)
+		if ((r = close(fd)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "close: %e\n", r);
 			exit(0);

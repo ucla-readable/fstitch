@@ -371,7 +371,7 @@ static const struct module modules[] = {
 };
 static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
-static int debug_socket[2] = {-1, -1};
+static int debug_socket = -1;
 
 #if KFS_DEBUG_BINARY
 
@@ -466,11 +466,11 @@ int kfs_debug_init(const char * host, uint16_t port)
 		if(r < 0)
 			return r;
 	}
-	r = connect(addr, port, debug_socket);
+	r = connect(addr, port, &debug_socket);
 	if(r < 0)
 	{
 		jsleep(2 * HZ);
-		r = connect(addr, port, debug_socket);
+		r = connect(addr, port, &debug_socket);
 		if(r < 0)
 			return r;
 	}
@@ -479,36 +479,36 @@ int kfs_debug_init(const char * host, uint16_t port)
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
 
 #if KFS_DEBUG_BINARY
-	kfs_debug_write(debug_socket[1], LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
+	kfs_debug_write(debug_socket, LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
 
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
 			int p;
-			kfs_debug_write(debug_socket[1], LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
+			kfs_debug_write(debug_socket, LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
 				/* TODO: maybe write the logical data type here as well */
-				kfs_debug_write(debug_socket[1], LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
+				kfs_debug_write(debug_socket, LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
 			}
-			kfs_debug_write(debug_socket[1], LIT_8, 0, END);
+			kfs_debug_write(debug_socket, LIT_8, 0, END);
 		}
-	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
+	kfs_debug_write(debug_socket, LIT_16, 0, END);
 #else
-	kdprintf(debug_socket[1], "DEBUG %d\n", debug_rev);
-	kdprintf(debug_socket[1], "DEBUG_OPCODE %d\n", debug_opcode_rev);
+	kdprintf(debug_socket, "DEBUG %d\n", debug_rev);
+	kdprintf(debug_socket, "DEBUG_OPCODE %d\n", debug_opcode_rev);
 
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
 			int p;
-			kdprintf(debug_socket[1], "[%04x:%04x] %s", modules[m].module, modules[m].opcodes[o]->opcode, modules[m].opcodes[o]->name);
+			kdprintf(debug_socket, "[%04x:%04x] %s", modules[m].module, modules[m].opcodes[o]->opcode, modules[m].opcodes[o]->name);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
-				kdprintf(debug_socket[1], "%s%s", p ? ", " : " (", modules[m].opcodes[o]->params[p]->name);
-			kdprintf(debug_socket[1], ")\n");
+				kdprintf(debug_socket, "%s%s", p ? ", " : " (", modules[m].opcodes[o]->params[p]->name);
+			kdprintf(debug_socket, ")\n");
 		}
-	kdprintf(debug_socket[1], "\n");
+	kdprintf(debug_socket, "\n");
 #endif
 	
 	printf("Debugging interface initialized OK\n");
@@ -554,7 +554,7 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 void kfs_debug_net_command(void)
 {
 	uint16_t command[2];
-	int bytes = read_nb(debug_socket[0], &command, 4);
+	int bytes = read_nb(debug_socket, &command, 4);
 	if(bytes == 4)
 		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
 }
@@ -564,7 +564,7 @@ static void kfs_debug_wait(void)
 	uint16_t command[2];
 	int bytes = 0;
 	while(bytes != 4)
-		bytes = read(debug_socket[0], &command, 4);
+		bytes = read(debug_socket, &command, 4);
 	kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
 }
 
@@ -590,21 +590,21 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	
 #if KFS_DEBUG_BINARY
 #if KFS_OMIT_FILE_FUNC
-	kfs_debug_write(debug_socket[1], LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(debug_socket, LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
 #else
-	kfs_debug_write(debug_socket[1], LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(debug_socket, LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
 #endif
 	
 	if(!modules[m].opcodes)
 	{
 		/* unknown module */
-		kfs_debug_write(debug_socket[1], LIT_8, 0, LIT_8, 1, END);
+		kfs_debug_write(debug_socket, LIT_8, 0, LIT_8, 1, END);
 		r = -E_INVAL;
 	}
 	else if(!modules[m].opcodes[o]->params)
 	{
 		/* unknown opcode */
-		kfs_debug_write(debug_socket[1], LIT_8, 0, LIT_8, 2, END);
+		kfs_debug_write(debug_socket, LIT_8, 0, LIT_8, 2, END);
 		r = -E_INVAL;
 	}
 	else
@@ -617,51 +617,51 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			if(size == 4)
 			{
 				uint32_t param = va_arg(ap, uint32_t);
-				kfs_debug_write(debug_socket[1], LIT_8, 4, LIT_32, param, END);
+				kfs_debug_write(debug_socket, LIT_8, 4, LIT_32, param, END);
 			}
 			else if(size == 2)
 			{
 				uint16_t param = va_arg(ap, uint16_t);
-				kfs_debug_write(debug_socket[1], LIT_8, 2, LIT_16, param, END);
+				kfs_debug_write(debug_socket, LIT_8, 2, LIT_16, param, END);
 			}
 			else if(size == 1)
 			{
 				uint8_t param = va_arg(ap, uint8_t);
-				kfs_debug_write(debug_socket[1], LIT_8, 1, LIT_8, param, END);
+				kfs_debug_write(debug_socket, LIT_8, 1, LIT_8, param, END);
 			}
 			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == STRING)
 			{
 				char * param = va_arg(ap, char *);
-				kfs_debug_write(debug_socket[1], LIT_8, -1, LIT_STR, param, END);
+				kfs_debug_write(debug_socket, LIT_8, -1, LIT_STR, param, END);
 			}
 			else
 			{
 				/* unknown type */
-				kfs_debug_write(debug_socket[1], LIT_8, 0, LIT_8, 3, END);
+				kfs_debug_write(debug_socket, LIT_8, 0, LIT_8, 3, END);
 				r = -E_INVAL;
 			}
 		}
 	}
 	
 	/* TODO: not technically necessary, see above */
-	kfs_debug_write(debug_socket[1], LIT_16, 0, END);
+	kfs_debug_write(debug_socket, LIT_16, 0, END);
 #else
 #if KFS_OMIT_FILE_FUNC
-	kdprintf(debug_socket[1], "Line %d, type [%04x:%04x] ", line, module, opcode);
+	kdprintf(debug_socket, "Line %d, type [%04x:%04x] ", line, module, opcode);
 #else
-	kdprintf(debug_socket[1], "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
+	kdprintf(debug_socket, "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
 #endif
 	
 	if(!modules[m].opcodes)
 	{
 		/* unknown module */
-		kdprintf(debug_socket[1], "!module");
+		kdprintf(debug_socket, "!module");
 		r = -E_INVAL;
 	}
 	else if(!modules[m].opcodes[o]->params)
 	{
 		/* unknown opcode */
-		kdprintf(debug_socket[1], "!opcode");
+		kdprintf(debug_socket, "!opcode");
 		r = -E_INVAL;
 	}
 	else
@@ -670,67 +670,67 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
 		{
 			if(p)
-				kdprintf(debug_socket[1], ", ");
+				kdprintf(debug_socket, ", ");
 			switch(modules[m].opcodes[o]->params[p]->type)
 			{
 				case STRING:
 				{
 					char * param = va_arg(ap, char *);
-					kdprintf(debug_socket[1], "%s", param);
+					kdprintf(debug_socket, "%s", param);
 					break;
 				}
 				case INT32:
 				{
 					int32_t param = va_arg(ap, int32_t);
-					kdprintf(debug_socket[1], "%d", param);
+					kdprintf(debug_socket, "%d", param);
 					break;
 				}
 				case UINT32:
 				{
 					uint32_t param = va_arg(ap, uint32_t);
-					kdprintf(debug_socket[1], "%u", param);
+					kdprintf(debug_socket, "%u", param);
 					break;
 				}
 				case UHEX32:
 				{
 					uint32_t param = va_arg(ap, uint32_t);
-					kdprintf(debug_socket[1], "0x%08x", param);
+					kdprintf(debug_socket, "0x%08x", param);
 					break;
 				}
 				case INT16:
 				{
 					int16_t param = va_arg(ap, int16_t);
-					kdprintf(debug_socket[1], "%d", param);
+					kdprintf(debug_socket, "%d", param);
 					break;
 				}
 				case UINT16:
 				{
 					uint16_t param = va_arg(ap, uint16_t);
-					kdprintf(debug_socket[1], "%u", param);
+					kdprintf(debug_socket, "%u", param);
 					break;
 				}
 				case UHEX16:
 				{
 					uint16_t param = va_arg(ap, uint16_t);
-					kdprintf(debug_socket[1], "0x%04x", param);
+					kdprintf(debug_socket, "0x%04x", param);
 					break;
 				}
 				case BOOL:
 				{
 					bool param = va_arg(ap, bool);
-					kdprintf(debug_socket[1], param ? "true" : "false");
+					kdprintf(debug_socket, param ? "true" : "false");
 					break;
 				}
 				default:
 					/* unknown type */
-					kdprintf(debug_socket[1], "!type");
+					kdprintf(debug_socket, "!type");
 					r = -E_INVAL;
 					break;
 			}
 		}
 	}
 	
-	kdprintf(debug_socket[1], "\n");
+	kdprintf(debug_socket, "\n");
 #endif
 	
 	va_end(ap);

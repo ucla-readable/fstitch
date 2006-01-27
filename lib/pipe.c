@@ -113,6 +113,8 @@ pipeisclosed(int fdnum)
 	return _pipeisclosed(fd, p);
 }
 
+/* return size available for writing, which, in a pipe, can
+ * be calculated from the size available for reading */
 size_t
 pipefree(int fdnum)
 {

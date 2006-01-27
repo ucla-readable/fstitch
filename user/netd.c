@@ -50,7 +50,7 @@ struct buf {
 };
 
 struct client_state {
-	int to_client, from_client;
+	int client;
 	envid_t envid; // known to be true only until connected
 	bool eof;
 	struct buf send_buf;
@@ -78,8 +78,7 @@ buf_init(struct buf *b)
 static void
 client_state_init(struct client_state *cs)
 {
-	cs->to_client   = -1;
-	cs->from_client = -1;
+	cs->client      = -1;
 	cs->envid       = 0;
 	cs->eof         = 0;
 
@@ -109,27 +108,19 @@ gc_listens(void)
 }
 
 /*---------------------------------------------------------------------------*/
-static void
-setup_client_netd_pipes(envid_t client, int *to_client, int *from_client)
+static int
+setup_client_netd_socket(envid_t client)
 {
-	int to_client_tmp[2];
-	int from_client_tmp[2];
+	int client_tmp[2];
 	int r;
 	
-	if ((r = pipe(to_client_tmp)) < 0)
-		panic("pipe: %e", r);
-	if ((r = pipe(from_client_tmp)) < 0)
-		panic("pipe: %e", r);
-	*to_client  = to_client_tmp[1];
-	*from_client = from_client_tmp[0];
-	if ((r = dup2env_send(to_client_tmp[0], client)) < 0)
+	if ((r = socket(client_tmp)) < 0)
+		panic("socket: %e", r);
+	if ((r = dup2env_send(client_tmp[0], client)) < 0)
 		panic("dup2env_send: %e", r);
-	if ((r = dup2env_send(from_client_tmp[1], client)) < 0)
-		panic("dup2env_send: %e", r);
-	if ((r = close(to_client_tmp[0])) < 0)
+	if ((r = close(client_tmp[0])) < 0)
 		panic("close: %e", r);
-	if ((r = close(from_client_tmp[1])) < 0)
-		panic("close: %e", r);
+	return client_tmp[1];
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -145,7 +136,7 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 	}
 
 	// Notify client of closing
-	if (cs->to_client == -1 && cs->from_client == -1)
+	if (cs->client == -1)
 	{
 		// Error while connecting/accepting.
 		// Inform client of failure (client is ipc_recv()ing)
@@ -155,9 +146,7 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 	{
 		// Error while connected.
 		// Inform client of failure only by closing the pipes
-		if ((r = close(cs->to_client)) < 0)
-			kdprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
-		if ((r = close(cs->from_client)) < 0)
+		if ((r = close(cs->client)) < 0)
 			kdprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
 	}
 
@@ -328,7 +317,7 @@ netd_queue_send(struct client_state *cs, struct tcp_pcb *pcb)
 	int n = 0;
 	do
 	{
-		n = read_nb(cs->from_client, cs->send_buf.data, sizeof(cs->send_buf._data) - cs->send_buf.left);
+		n = read_nb(cs->client, cs->send_buf.data, sizeof(cs->send_buf._data) - cs->send_buf.left);
 		
 		if (n == -1)
 			break;
@@ -370,7 +359,7 @@ netd_poll(void *arg, struct tcp_pcb *pcb)
 	{
 		// ACK data read from the pipe since when originally written if
 		// it allows the receive window to increase
-		const size_t space_free = MIN(TCP_WND, pipefree(cs->to_client));
+		const size_t space_free = MIN(TCP_WND, socketfree(cs->client));
 		if (pcb->rcv_wnd < space_free)
 			tcp_recved(pcb, space_free - pcb->rcv_wnd);
 
@@ -440,14 +429,14 @@ netd_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 				// it doesn't seem useful at this time to allow PIPEBUFSIZ
 				// < TCP_WND, so we simply statically assert this requirement.
 				static_assert(PIPEBUFSIZ >= TCP_WND);
-				if ((r = write(cs->to_client, data, q_len_remaining)) < 0)
+				if ((r = write(cs->client, data, q_len_remaining)) < 0)
 					panic("write: %e", r);
 				data += r;
 				q_len_remaining -= r;
 			}
 		}
 
-		tcp_recved(pcb, MIN(TCP_WND, pipefree(cs->to_client)) - pcb->rcv_wnd);
+		tcp_recved(pcb, MIN(TCP_WND, socketfree(cs->client)) - pcb->rcv_wnd);
 		(void) pbuf_free(p);
 	}
 	else if (err == ERR_OK && p == NULL)
@@ -525,7 +514,7 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 	ipc_send(cs->envid, 0, NULL, 0, NULL);
 
 	// Setup the client<->netd pipes
-	setup_client_netd_pipes(cs->envid, &cs->to_client, &cs->from_client);
+	cs->client = setup_client_netd_socket(cs->envid);
 
 	// Send the remote ipaddr and port
 	ipc_send(cs->envid, pcb->remote_ip.addr, NULL, 0, NULL);
@@ -575,7 +564,7 @@ netd_connect(void *arg, struct tcp_pcb *pcb, err_t err)
 	tcp_setprio(pcb, TCP_PRIO_MIN);
 
 	// Setup the client<->netd pipes
-	setup_client_netd_pipes(cs->envid, &cs->to_client, &cs->from_client);
+	cs->client = setup_client_netd_socket(cs->envid);
 
 	// Setup tcp functions
 	tcp_arg(pcb, cs);

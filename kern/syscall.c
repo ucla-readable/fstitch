@@ -43,20 +43,6 @@ sys_cputs(const char* s)
 // Read a character from the system console.
 // Returns the character.
 static int
-sys_cgetc(void)
-{
-	int c;
-
-	printf("KudOS kernel warning: [%08x] (%s) called sys_cgetc()\n", curenv->env_id, curenv->env_name);
-	// The cons_getc() primitive doesn't wait for a character,
-	// but the sys_cgetc() system call does.
-	while ((c = cons_getc()) == -1)
-		; /* spin */
-
-	return c;
-}
-
-static int
 sys_cgetc_nb(void)
 {
 	return cons_getc();
@@ -946,8 +932,6 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 		case SYS_cputs:
 			sys_cputs((char *) a1);
 			return 0;
-		case SYS_cgetc:
-			return sys_cgetc();
 		case SYS_cgetc_nb:
 			return sys_cgetc_nb();
 		case SYS_getenvid:

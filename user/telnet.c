@@ -21,7 +21,7 @@ static bool display_cmds  = 0; // print telnet cmds (doesn't print options, for 
 
 
 static struct telnet_state {
-	int     net[2];
+	int     net;
 	bool    reached_eof;
 
 	uint8_t cmd_str[2];
@@ -68,7 +68,7 @@ telnet_poll_send(struct telnet_state *ts)
 	{
 		if ((r = write(STDOUT_FILENO, buf, n)) < 0)
 			panic("write: %e", r);
-		if ((r = write(ts->net[1], buf, n)) < 0)
+		if ((r = write(ts->net, buf, n)) < 0)
 			panic("write: %e", r);
 		if (r != n)
 			panic("r (%d) != n (%d)", r, n);
@@ -95,7 +95,7 @@ telnet_poll_recv(struct telnet_state *ts)
 	  
 	// Print each character to the shell's stdin.
 	// We must also watch for, and not pass on to the shell, any telnet cmds.
-	while ((r = read_nb(ts->net[0], &c, 1)) > 0)
+	while ((r = read_nb(ts->net, &c, 1)) > 0)
 	{
 		n++;
 
@@ -175,7 +175,7 @@ telnet_connect(struct ip_addr addr, uint16_t port)
 	ts->in_telnet_cmd_param = 0;
 
 	printf("Connecting to %s:%d... ", inet_iptoa(addr), port);
-	if ((r = connect(addr, port, ts->net)) < 0)
+	if ((r = connect(addr, port, &ts->net)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "connect: %e\n", r);
 		exit(0);
