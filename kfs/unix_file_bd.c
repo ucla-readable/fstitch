@@ -232,9 +232,6 @@ unix_file_bd(char *fname, uint16_t blocksize)
 	uint32_t blocks;
 	int r;
 	
-	if (blocks < 1)
-		return NULL;
-
 	if(!bd)
 		return NULL;
 	
@@ -247,6 +244,8 @@ unix_file_bd(char *fname, uint16_t blocksize)
 	if (sb.st_size != (blocks * blocksize)) {
 		panic("file %s's size is not block-aligned\n", fname);
 	}
+	if (blocks < 1)
+		return NULL;
 
 	info = malloc(sizeof(*info));
 	if(!info)
