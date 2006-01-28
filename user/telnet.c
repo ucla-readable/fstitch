@@ -174,8 +174,8 @@ telnet_connect(struct ip_addr addr, uint16_t port)
 	ts->in_telnet_cmd = 0;
 	ts->in_telnet_cmd_param = 0;
 
-	printf("Connecting to %s:%d... ", inet_iptoa(addr), port);
-	if ((r = connect(addr, port, &ts->net)) < 0)
+	printf("Connecting to %s:%d... ", kinet_iptoa(addr), port);
+	if ((r = kconnect(addr, port, &ts->net)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "connect: %e\n", r);
 		exit(0);
@@ -235,7 +235,7 @@ umain(int argc, char **argv)
 	printf("Telnet Client\n");
 
 	struct ip_addr connect_ipaddr;
-	r = gethostbyname(argv[argv_i++], &connect_ipaddr);
+	r = kgethostbyname(argv[argv_i++], &connect_ipaddr);
 	if (r < 0)
 	{
 		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", argv[argv_i-1], r);

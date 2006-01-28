@@ -87,7 +87,7 @@ static int knbd_accept(const char * bd_filename, int fd, struct ip_addr remote_i
 	
 	if (display_conns)
 		printf("knbdd connection accepted from %s:%u\n",
-				 inet_iptoa(ks->remote_ip),
+				 kinet_iptoa(ks->remote_ip),
 				 ks->remote_port);
 
 	knbd_serve(ks);
@@ -95,7 +95,7 @@ static int knbd_accept(const char * bd_filename, int fd, struct ip_addr remote_i
 
 	if (display_conns)
 		printf("knbdd connection closed   with %s:%u\n",
-				 inet_iptoa(ks->remote_ip),
+				 kinet_iptoa(ks->remote_ip),
 				 ks->remote_port);
 
 	return 0;
@@ -109,7 +109,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 	uint16_t remote_port;
 	int r;
 
-	if ((r = bind_listen(ip_addr_any, port, &listen_key)) < 0)
+	if ((r = kbind_listen(ip_addr_any, port, &listen_key)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "knbdd: bind_listen: %e\n", r);
 		exit(0);
@@ -118,7 +118,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 	// Accept connections and fork to handle each connection
 	while (1)
 	{
-		if ((r = accept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
+		if ((r = kaccept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "knbdd accept: %e\n", r);
 			exit(0);

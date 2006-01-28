@@ -584,7 +584,7 @@ httpd_accept(int fd, struct ip_addr remote_ip, uint16_t remote_port)
 	
 	if (display_conns)
 		printf("http connection accepted from %s:%d\n",
-				 inet_iptoa(hs->remote_ip),
+				 kinet_iptoa(hs->remote_ip),
 				 hs->remote_port);
 
 	if ((r = httpd_serve(hs)) < 0)
@@ -592,7 +592,7 @@ httpd_accept(int fd, struct ip_addr remote_ip, uint16_t remote_port)
 
 	if (display_conns)
 		printf("http connection closed   with %s:%d\n",
-				 inet_iptoa(hs->remote_ip),
+				 kinet_iptoa(hs->remote_ip),
 				 hs->remote_port);
 
 	return 0;
@@ -607,7 +607,7 @@ httpd_listen(void)
 	uint16_t remote_port;
 	int r;
 
-	if ((r = bind_listen(ip_addr_any, 80, &listen_key)) < 0)
+	if ((r = kbind_listen(ip_addr_any, 80, &listen_key)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "bind_listen: %e\n", r);
 		exit(0);
@@ -616,7 +616,7 @@ httpd_listen(void)
 	// Accept connections and fork to handle each connection
 	while (1)
 	{
-		if ((r = accept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
+		if ((r = kaccept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
 		{
 			kdprintf(STDERR_FILENO, "accept: %e\n", r);
 			exit(0);

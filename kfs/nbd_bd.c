@@ -34,14 +34,14 @@ static int nbd_bd_get_config(void * object, int level, char * string, size_t len
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "host: %s, port: %d, blocksize: %d, count: %d", inet_iptoa(info->ip), info->port, info->blocksize, info->length);
+			snprintf(string, length, "host: %s, port: %d, blocksize: %d, count: %d", kinet_iptoa(info->ip), info->port, info->blocksize, info->length);
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "%s:%d", inet_iptoa(info->ip), info->port);
+			snprintf(string, length, "%s:%d", kinet_iptoa(info->ip), info->port);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "host: %s, port: %d, blocksize: %d, count: %d", inet_iptoa(info->ip), info->port, info->blocksize, info->length);
+			snprintf(string, length, "host: %s, port: %d, blocksize: %d, count: %d", kinet_iptoa(info->ip), info->port, info->blocksize, info->length);
 	}
 	return 0;
 }
@@ -75,7 +75,7 @@ static int nbd_bd_reset(BD_t * object)
 	uint16_t blocksize;
 	int r;
 	
-	kdprintf(STDERR_FILENO, "%s(): resetting %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
+	kdprintf(STDERR_FILENO, "%s(): resetting %s:%d\n", __FUNCTION__, kinet_iptoa(info->ip), info->port);
 	
 	if(info->fd != -1)
 	{
@@ -83,7 +83,7 @@ static int nbd_bd_reset(BD_t * object)
 		info->fd = -1;
 	}
 	
-	if(connect(info->ip, info->port, &info->fd))
+	if(kconnect(info->ip, info->port, &info->fd))
 		goto error;
 	
 	r = read(info->fd, &length, sizeof(length));
@@ -165,7 +165,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		nbd_bd_reset(object);
 	}
 	
-	kdprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
+	kdprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, kinet_iptoa(info->ip), info->port);
 	return NULL;
 }
 
@@ -258,7 +258,7 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* the write failed; don't remove any change descriptors... */
 	revision_tail_revert(block, object);
-	kdprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, inet_iptoa(info->ip), info->port);
+	kdprintf(STDERR_FILENO, "%s(): giving up on %s:%d\n", __FUNCTION__, kinet_iptoa(info->ip), info->port);
 	return r;
 }
 
@@ -317,11 +317,11 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	if(!info->blockman)
 		goto error_info;
 	
-	if(gethostbyname(address, &info->ip) < 0)
+	if(kgethostbyname(address, &info->ip) < 0)
 		goto error_blockman;
 	info->port = port;
 	
-	if(connect(info->ip, port, &info->fd))
+	if(kconnect(info->ip, port, &info->fd))
 		goto error_blockman;
 	
 	r = read(info->fd, &info->length, sizeof(info->length));

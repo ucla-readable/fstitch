@@ -9,7 +9,6 @@ BIN += $(OBJDIR)/kfs/kfsd
 #			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/kfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/ipc_serve.o \
-#			$(OBJDIR)/kfs/debug.o \
 
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
@@ -20,6 +19,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/blockman.o \
 			$(OBJDIR)/kfs/revision.o \
 			$(OBJDIR)/kfs/barrier.o \
+			$(OBJDIR)/kfs/unix_file_bd.o \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable.o \
 			$(OBJDIR)/kfs/bsd_ptable.o \
@@ -44,7 +44,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/kfsd.o \
 			$(OBJDIR)/kfs/kfsd_init.o \
-			$(OBJDIR)/kfs/unix_file_bd.o
+			$(OBJDIR)/kfs/debug.o
 
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
 	@echo + ld $@

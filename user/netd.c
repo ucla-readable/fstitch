@@ -164,9 +164,9 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 	if (debug & DEBUG_CONNSTATUS)
 	{
 		printf("netd connection closed %s:%d",
-				 inet_iptoa(pcb->local_ip), (int) pcb->local_port);
+				 kinet_iptoa(pcb->local_ip), (int) pcb->local_port);
 		printf("<->%s:%d\n",
-				 inet_iptoa(pcb->remote_ip), (int) pcb->remote_port);
+				 kinet_iptoa(pcb->remote_ip), (int) pcb->remote_port);
 	}
 
 	if (pcb)
@@ -239,12 +239,12 @@ conn_err_listen(void *arg, err_t err)
 	else
 	{
 		kdprintf(STDERR_FILENO, "netd listen error on %s:%d, no acceptor: %s\n",
-				  inet_iptoa(ls->ipaddr), ls->port, lwip_strerr(err));
+				  kinet_iptoa(ls->ipaddr), ls->port, lwip_strerr(err));
 	}
 
 	if (debug & DEBUG_CONNSTATUS)
 		printf("netd listen on %s:%d closed, err = %s\n",
-				 inet_iptoa(ls->pcb->remote_ip), ls->pcb->remote_port, lwip_strerr(err));
+				 kinet_iptoa(ls->pcb->remote_ip), ls->pcb->remote_port, lwip_strerr(err));
 
 	if (ls->pcb)
 	{
@@ -470,8 +470,8 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 		else
 			kdprintf(STDERR_FILENO, "ls->acceptor no longer around");
 		kdprintf(STDERR_FILENO, ", on %s:%d, from %s:%d\n",
-				  inet_iptoa(pcb->local_ip), pcb->local_port,
-				  inet_iptoa(pcb->remote_ip), pcb->remote_port);
+		         kinet_iptoa(pcb->local_ip), pcb->local_port,
+		         kinet_iptoa(pcb->remote_ip), pcb->remote_port);
 
 		gc_listens();
 
@@ -487,9 +487,9 @@ netd_accept(void *arg, struct tcp_pcb *pcb, err_t err)
 	if (debug & DEBUG_CONNSTATUS)
 	{
 		printf("netd connection accepted %s:%d",
-				 inet_iptoa(ls->ipaddr), (int) ls->port);
+		       kinet_iptoa(ls->ipaddr), (int) ls->port);
 		printf("<->%s:%d\n",
-				 inet_iptoa(pcb->remote_ip), (int) pcb->remote_port);
+		       kinet_iptoa(pcb->remote_ip), (int) pcb->remote_port);
 	}
 
 	tcp_setprio(pcb, TCP_PRIO_MIN);
@@ -554,8 +554,8 @@ netd_connect(void *arg, struct tcp_pcb *pcb, err_t err)
 
 	if (debug & DEBUG_CONNSTATUS)
 		printf("netd connection connected to %s:%d\n",
-				 inet_iptoa(pcb->remote_ip),
-				 pcb->remote_port);
+		       kinet_iptoa(pcb->remote_ip),
+		       pcb->remote_port);
 
 	// Inform client of connect success
 	ipc_send(cs->envid, 0, NULL, 0, NULL);
@@ -905,7 +905,7 @@ dns_raw2msg(const uint8_t *raw)
 		{
 			struct ip_addr ip = *(struct ip_addr*) dm->ans[i].rdata;
 			if (debug & DEBUG_DNS)
-				printf("A: %s", inet_iptoa(ip));
+				printf("A: %s", kinet_iptoa(ip));
 		}
 		else if (dm->ans[i].type == 0x5)
 		{
@@ -1084,7 +1084,7 @@ gethostbyname_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, struct ip_add
 	int i, r;
 
 	if (debug & DEBUG_DNS)
-		printf("dns reply from %s:%d\n", inet_iptoa(*addr), port);
+		printf("dns reply from %s:%d\n", kinet_iptoa(*addr), port);
 
 	dns_msg_t *ans = dns_raw2msg(p->payload);
 	if (!ans)
@@ -1216,7 +1216,7 @@ serve_connect(envid_t whom, struct Netreq_connect *req)
 
 	if (debug & DEBUG_REQ)
 		printf("netd net request: Connect to %s:%d\n",
-				 inet_iptoa(req->req_ipaddr), req->req_port);
+		       kinet_iptoa(req->req_ipaddr), req->req_port);
 
 	cs = malloc(sizeof(struct client_state));
 	if (!cs)
@@ -1251,7 +1251,7 @@ serve_bind_listen(envid_t whom, struct Netreq_bind_listen *req)
 
 	if (debug & DEBUG_REQ)
 		printf("netd net request: Listen on %s:%d\n",
-				 inet_iptoa(req->req_ipaddr), req->req_port);
+		       kinet_iptoa(req->req_ipaddr), req->req_port);
 
 	gc_listens();
 

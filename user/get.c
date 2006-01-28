@@ -217,7 +217,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 
 	if (!silent)
 		kdprintf(status_fd, "http target: addr = %s, port = %d, resource = \"%s\"\n",
-		        inet_iptoa(addr), port, uri);
+		        kinet_iptoa(addr), port, uri);
 
 	hs = &ghs;
 	// Initialize hs
@@ -231,7 +231,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 	// Connect
 	if (!silent)
 		kdprintf(status_fd, "Connecting... ");
-	if ((r = connect(addr, port, &hs->net)) < 0)
+	if ((r = kconnect(addr, port, &hs->net)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "connect: %e\n", r);
 		exit(0);
@@ -305,7 +305,7 @@ parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **
 		return -1;
 	}
 
-	r = gethostbyname(addr_str, addr);
+	r = kgethostbyname(addr_str, addr);
 	if (r < 0)
 	{
 		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", addr_str, r);

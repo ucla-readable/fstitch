@@ -1,6 +1,9 @@
+#if defined(KUDOS)
+
 #include "lwip/tcp.h"
 #include <inc/net.h>
 #include <inc/lib.h>
+#include <lib/netclient.h>
 
 const char netd_name_sh[]   = "/netd";
 const char netd_name_kern[] = "netd";
@@ -77,7 +80,7 @@ find_netd_net(void)
 uint8_t req_buf[2*PGSIZE];
 
 int
-gethostbyname(const char *name, struct ip_addr *ipaddr)
+kgethostbyname(const char *name, struct ip_addr *ipaddr)
 {
 	const int name_len = strlen(name);
 	int i, r;
@@ -100,7 +103,7 @@ gethostbyname(const char *name, struct ip_addr *ipaddr)
 	}
 
 	if (addr_name == 0)
-		return (inet_atoip(name, ipaddr) == 1);
+		return (kinet_atoip(name, ipaddr) == 1);
 
 	netd_ipcrecv = find_netd_ipcrecv();
 	if (!netd_ipcrecv)
@@ -134,7 +137,7 @@ gethostbyname(const char *name, struct ip_addr *ipaddr)
 }
 
 int
-connect(struct ip_addr ipaddr, uint16_t port, int *fd)
+kconnect(struct ip_addr ipaddr, uint16_t port, int *fd)
 {
 	int r;
 	envid_t netd_ipcrecv = 0, netd_net = 0;
@@ -172,7 +175,7 @@ connect(struct ip_addr ipaddr, uint16_t port, int *fd)
 }
 
 int
-bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
+kbind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 {
 	envid_t netd_ipcrecv = 0, netd_net = 0;
 	int r;
@@ -209,13 +212,13 @@ bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 }
 
 int
-close_listen(uint32_t listen_key)
+kclose_listen(uint32_t listen_key)
 {
 	panic("TODO?");
 }
 
 int
-accept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* remote_port)
+kaccept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* remote_port)
 {
 	envid_t netd_ipcrecv = 0, netd_net = 0;
 	struct ip_addr ripaddr;
@@ -263,7 +266,7 @@ accept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* re
 
 // Write netd stats to fd
 int
-net_stats(int fd)
+knet_stats(int fd)
 {
 	envid_t netd_ipcrecv = 0, netd_net = 0;
 	char stats_buf[128];
@@ -315,7 +318,7 @@ net_stats(int fd)
 // These are not netclient specific, but this file is a good enough home.
 
 int
-inet_atoip(const char* cp, struct ip_addr *addr)
+kinet_atoip(const char* cp, struct ip_addr *addr)
 {
 	int r;
 	struct in_addr in_addr;
@@ -326,9 +329,169 @@ inet_atoip(const char* cp, struct ip_addr *addr)
 }
 
 char*
-inet_iptoa(struct ip_addr addr)
+kinet_iptoa(struct ip_addr addr)
 {
 	struct in_addr in_addr;
 	in_addr.s_addr = addr.addr;
 	return inet_ntoa(in_addr);
 }
+
+#elif defined(UNIXUSER)
+
+#include <arpa/inet.h>
+#include <assert.h>
+#include <errno.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <inc/error.h>
+#include <lib/kdprintf.h>
+#include <lib/netclient.h>
+
+int
+kgethostbyname(const char * name, struct ip_addr * ipaddr)
+{
+	struct hostent * h = gethostbyname(name);
+	if (!h)
+	{
+		switch (h_errno)
+		{
+			case HOST_NOT_FOUND:
+				return -E_NOT_FOUND;
+			case NO_ADDRESS:
+				return -E_NOT_FOUND;
+			case NO_RECOVERY: case TRY_AGAIN:
+				return -E_UNSPECIFIED;
+			default:
+				assert(0);
+		}
+	}
+
+	memcpy(&(ipaddr->sin_addr), h->h_addr_list[0], h->h_length);
+	return 0;
+}
+
+int
+kconnect(struct ip_addr ipaddr, uint16_t port, int *fd)
+{
+	struct sockaddr_in serv_addr;
+	int sock;
+	int r;
+
+	memset(&serv_addr, 0, sizeof(serv_addr));
+	serv_addr.sin_addr.s_addr = ipaddr.sin_addr.s_addr;
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(port);
+
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock == -1)
+	{
+		assert(0);
+		return -E_UNSPECIFIED;
+	}
+
+	r = connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+	if (r == -1)
+	{
+		perror("connect");
+		assert(0);
+		(void) close(sock);
+		return -E_UNSPECIFIED;
+	}
+
+	*fd = sock;
+	return 0;
+}
+
+int
+kbind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
+{
+	struct sockaddr_in listen_addr;
+	const int backlog = 10; // TODO: what should this be?
+	int sock;
+	int r;
+
+	memset(&listen_addr, 0, sizeof(listen_addr));
+	listen_addr.sin_family = AF_INET;
+	listen_addr.sin_port = port;
+	listen_addr.sin_addr.s_addr = ((struct sockaddr_in) ipaddr).sin_addr.s_addr;
+
+	sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (sock == -1)
+		return -E_UNSPECIFIED;
+
+	r = bind(sock, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
+	if (r == -1)
+	{
+		(void) close(sock);
+		return -E_UNSPECIFIED;
+	}
+
+	r = listen(sock, backlog);
+	if (r == -1)
+	{
+		(void) close(sock);
+		if (errno == EADDRINUSE)
+			return -E_NET_USE;
+		else
+			return -E_UNSPECIFIED;
+	}
+
+	*listen_key = sock;
+	return 0;
+}
+
+int
+kclose_listen(uint32_t listen_key)
+{
+	kdprintf(STDERR_FILENO, "TODO?");
+	assert(0);
+}
+
+int
+kaccept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* remote_port)
+{
+	int r;
+
+	do {
+		r = accept(listen_key, NULL, NULL);
+	} while  (r == -1 && errno == EINTR);
+	
+	if (r == -1)
+	{
+		if (errno == ECONNABORTED)
+			return -E_NET_ABRT;
+		else
+			return -E_UNSPECIFIED;
+	}
+
+	*fd = listen_key;
+	return 0;
+}
+
+int
+knet_stats(int fd)
+{
+	assert(0); // currently, on uses in unix-user
+}
+
+
+int
+kinet_atoip(const char* cp, struct ip_addr *addr)
+{
+	return inet_aton(cp, &(addr->sin_addr));
+}
+
+char*
+kinet_iptoa(struct ip_addr addr)
+{
+	return inet_ntoa(addr.sin_addr);
+}
+
+#else
+#error Unknown target system
+#endif

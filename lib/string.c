@@ -224,14 +224,3 @@ isnum(char c)
 	else
 		return 0;
 }
-
-// Returns the revision number specified in the given subversion rev string.
-long
-svnrevtol(const char *rev_str)
-{
-	// ignore the "$ Rev:" before the rev number
-	// (strtol will ignore the " $" that is after the rev number)
-	rev_str = &rev_str[6]; 
-
-	return strtol(rev_str, NULL, 10);
-}

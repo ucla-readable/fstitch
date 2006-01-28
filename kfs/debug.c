@@ -1,7 +1,19 @@
-#include <string.h>
-#include <inc/lib.h>
-#include <inc/josnic.h> /* for htons, htonl */
+#include <lib/jiffies.h>
+#include <lib/sleep.h>
+#include <lib/types.h>
+#include <inc/error.h>
+#include <lib/netclient.h>
+#include <lib/stdarg.h>
 #include <lib/stdio.h>
+#include <lib/svnrevtol.h>
+
+/* htons and htonl */
+#include <string.h>
+#if defined(KUDOS)
+#include <inc/josnic.h>
+#elif defined(UNIXUSER)
+#include <netinet/in.h>
+#endif
 
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
@@ -458,21 +470,27 @@ int kfs_debug_init(const char * host, uint16_t port)
 	int32_t debug_rev, debug_opcode_rev;
 	
 	printf("Initializing KFS debugging interface...\n");
-	r = gethostbyname(host, &addr);
+	r = kgethostbyname(host, &addr);
 	if(r < 0)
 	{
 		jsleep(2 * HZ);
-		r = gethostbyname(host, &addr);
+		r = kgethostbyname(host, &addr);
 		if(r < 0)
+		{
+			assert(0);
 			return r;
+		}
 	}
-	r = connect(addr, port, &debug_socket);
+	r = kconnect(addr, port, &debug_socket);
 	if(r < 0)
 	{
 		jsleep(2 * HZ);
-		r = connect(addr, port, &debug_socket);
+		r = kconnect(addr, port, &debug_socket);
 		if(r < 0)
+		{
+			assert(0);
 			return r;
+		}
 	}
 	
 	debug_rev = svnrevtol("$Rev$");
@@ -551,10 +569,27 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 	}
 }
 
+#if defined(UNIXUSER)
+#include <unistd.h>
+#include <fcntl.h>
+#endif
+
 void kfs_debug_net_command(void)
 {
 	uint16_t command[2];
-	int bytes = read_nb(debug_socket, &command, 4);
+	int bytes;
+
+#if defined(KUDOS)
+	bytes = read_nb(debug_socket, &command, 4);
+#elif defined(UNIXUSER)
+	if (fcntl(debug_socket, F_SETFL, O_NONBLOCK))
+		assert(0);
+	bytes = read(debug_socket, &command, 4);
+	if (fcntl(debug_socket, F_SETFL, 0)) // TODO: restore to original value
+		assert(0);
+#else
+#error Unknown target
+#endif
 	if(bytes == 4)
 		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
 }
@@ -739,8 +774,14 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	if(r < 0)
 	{
 		printf("kfs_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %e\n", file, line, function, module, opcode, r);
+#if defined(KUDOS)
 		sys_print_backtrace();
 		exit(0);
+#elif defined(UNIXUSER)
+		assert(0);
+#else
+#error Unknown target
+#endif
 	}
 	return r;
 }

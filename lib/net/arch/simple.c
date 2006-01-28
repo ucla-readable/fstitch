@@ -1,4 +1,4 @@
-#include <inc/lib.h>
+#include <lib/netclient.h>
 
 #include "lwip/debug.h"
 #include "lwip/stats.h"
@@ -39,23 +39,23 @@ setup_ip_addrs(int argc, const char **argv, int jn_sl, bool *josnic_dhcp, struct
 {
 	const char *addr_str = get_arg_val(argc, argv, "-addr");
 
-	if(!addr_str || (1 != inet_atoip(addr_str, addr)))
-		if(1 != inet_atoip(default_ip[jn_sl][0], addr))
+	if(!addr_str || (1 != kinet_atoip(addr_str, addr)))
+		if(1 != kinet_atoip(default_ip[jn_sl][0], addr))
 			panic("bad default ip addr \"%s\"", default_ip[jn_sl][0]);
 
 	const char *netmask_str = get_arg_val(argc, argv, "-netmask");
-	if(!netmask_str || (1 != inet_atoip(netmask_str, netmask)))
-		if(1 != inet_atoip(default_ip[jn_sl][1], netmask))
+	if(!netmask_str || (1 != kinet_atoip(netmask_str, netmask)))
+		if(1 != kinet_atoip(default_ip[jn_sl][1], netmask))
 			panic("bad default ip netmask \"%s\"", default_ip[jn_sl][1]);
 
 	const char *gw_str = get_arg_val(argc, argv, "-gw");
-	if(!gw_str || (1 != inet_atoip(gw_str, gw)))
-		if(1 != inet_atoip(default_ip[jn_sl][2], gw))
+	if(!gw_str || (1 != kinet_atoip(gw_str, gw)))
+		if(1 != kinet_atoip(default_ip[jn_sl][2], gw))
 			panic("bad default ip gw \"%s\"", default_ip[jn_sl][2]);
 
 	const char *dns_str = get_arg_val(argc, argv, "-dns");
-	if(!dns_str || (1 != inet_atoip(dns_str, dns)))
-		if(1 != inet_atoip(default_ip[jn_sl][3], dns))
+	if(!dns_str || (1 != kinet_atoip(dns_str, dns)))
+		if(1 != kinet_atoip(default_ip[jn_sl][3], dns))
 			panic("bad default ip dns \"%s\"", default_ip[jn_sl][3]);
 
 	if (addr_str || netmask_str || gw_str)
@@ -149,9 +149,9 @@ slipif_setup(struct netif *netif, struct ip_addr ipaddr, struct ip_addr netmask,
 	if (!quiet)
 	{
 		kdprintf(STDERR_FILENO, "%c%c%d up for ", netif->name[0], netif->name[1], netif->num);
-		kdprintf(STDERR_FILENO, "%s", inet_iptoa(ipaddr));
+		kdprintf(STDERR_FILENO, "%s", kinet_iptoa(ipaddr));
 		kdprintf(STDERR_FILENO, "<->");
-		kdprintf(STDERR_FILENO, "%s", inet_iptoa(gw));
+		kdprintf(STDERR_FILENO, "%s", kinet_iptoa(gw));
 		kdprintf(STDERR_FILENO, " over serial port 0x%x (default iface)", ((sio_fd_t)(netif->state))->com_addr);
 		kdprintf(STDERR_FILENO, "\n");
 	}
@@ -163,7 +163,7 @@ void
 josnicif_print_setup(struct netif *netif)
 {
 	kdprintf(STDERR_FILENO, "%c%c%d up for ", netif->name[0], netif->name[1], netif->num);
-	kdprintf(STDERR_FILENO, "%s", inet_iptoa(netif->ip_addr));
+	kdprintf(STDERR_FILENO, "%s", kinet_iptoa(netif->ip_addr));
 	//kdprintf(STDERR_FILENO, " using nicd %d", ((struct josnicif*)(netif->state))->nicd);
 	kdprintf(STDERR_FILENO, "\n");
 }

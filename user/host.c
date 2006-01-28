@@ -20,9 +20,9 @@ umain(int argc, char **argv)
 	}
 
 	name = argv[1];
-	r = gethostbyname(name, &ip);
+	r = kgethostbyname(name, &ip);
 	if (r < 0)
 		kdprintf(STDERR_FILENO, "gethostbyname(): %e\n", r);
 	else
-		printf("%s\n", inet_iptoa(ip));
+		printf("%s\n", kinet_iptoa(ip));
 }

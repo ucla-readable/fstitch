@@ -30,6 +30,9 @@ LIB_SRCFILES := \
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/kdprintf.c \
+			lib/netclient.c \
+			lib/svnrevtol.c
+
 #			lib/fd.c \
 #			lib/file.c \
 #			lib/fsipc.c \
@@ -40,7 +43,6 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 
 #			lib/getarg.c \
 #			lib/serial.c \
-#			lib/netclient.c \
 #			lib/hwclock.c \
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
