@@ -157,13 +157,8 @@ int kfsd_init(int argc, char ** argv)
 		/* delay kfsd startup slightly for netd to start */
 		jsleep(2 * HZ);
 
-#ifdef KUDOS
-		if (! (bd = nbd_bd("192.168.0.2", 2492)) )
+		if (! (bd = nbd_bd("192.168.1.2", 2492)) )
 			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
-#else
-		bd = NULL;
-#endif
-
 		if (bd && (r = construct_uhfses(bd, 512, uhfses)) < 0)
 			kfsd_shutdown();
 	}
