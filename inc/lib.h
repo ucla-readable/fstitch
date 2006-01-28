@@ -207,25 +207,6 @@ void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, c
 
 #include <lib/fcntl.h>
 
-#ifndef KUDOS_KERNEL
-#ifndef __LWIP_IP_ADDR_H__
-#include "lwip/ip_addr.h"
-
-// netclient.c
-int   gethostbyname(const char *name, struct ip_addr *ipaddr);
-int   connect(struct ip_addr ipaddr, uint16_t port, int *fd);
-int   bind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key);
-int   close_listen(uint32_t listen_key);
-int   accept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* remote_port);
-
-int   net_stats(int fd);
-
-
-int   inet_atoip(const char* cp, struct ip_addr *addr);
-char* inet_iptoa(struct ip_addr addr);
-
-#endif /* !__LWIP_IP_ADDR_H__ */
-#endif /* !KUDOS_KERNEL */
-
+#include <lib/netclient.h>
 
 #endif /* !KUDOS_INC_LIB_H */
