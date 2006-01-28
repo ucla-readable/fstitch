@@ -28,6 +28,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/fd.c \
+			lib/std.c \
 			lib/file.c \
 			lib/kdprintf.c \
 			lib/svnrevtol.c \

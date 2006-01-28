@@ -333,6 +333,7 @@ read_nb(int fdnum, void* buf, size_t n)
 	return r;
 }
 
+/*
 int
 readn(int fdnum, void* buf, size_t n)
 {
@@ -347,6 +348,7 @@ readn(int fdnum, void* buf, size_t n)
 	}
 	return tot;
 }
+*/
 
 int
 read_map(int fdnum, off_t offset, void** blk)

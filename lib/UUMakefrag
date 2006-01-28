@@ -29,6 +29,7 @@ LIB_SRCFILES := \
 #			lib/spawn.c
 
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
+			lib/std.c \
 			lib/kdprintf.c \
 			lib/netclient.c \
 			lib/svnrevtol.c

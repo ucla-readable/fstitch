@@ -12,6 +12,7 @@
 #include <inc/stdio.h>
 #include <inc/stdarg.h>
 #include <inc/stdlib.h>
+#include <lib/std.h>
 #include <inc/string.h>
 #include <inc/error.h>
 #include <inc/assert.h>
@@ -117,7 +118,6 @@ ssize_t	write(int fd, const void* buf, size_t nbytes);
 int getdirentries(int fd, void* buf, int nbytes, uint32_t* basep);
 int	seek(int fd, off_t offset);
 void	close_all(void);
-ssize_t	readn(int fd, void* buf, size_t nbytes);
 int	dup(int fd);
 int	dup2(int oldfd, int newfd);
 int	dup2env_send(int fdnum, envid_t envid);

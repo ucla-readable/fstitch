@@ -1,11 +1,20 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inc/lib.h>
-/* for byte order translations */
-#include <inc/net/ipv4/lwip/inet.h>
+#include <inc/error.h>
+#include <lib/jiffies.h>
+#include <lib/netclient.h>
 #include <lib/types.h>
+#include <lib/std.h>
 #include <lib/stdio.h>
+#include <lib/sleep.h>
+
+/* byte ordering */
+#include <string.h>
+#if defined(KUDOS)
+#include <inc/josnic.h>
+#elif defined(UNIXUSER)
+#include <netinet/in.h>
+#endif
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

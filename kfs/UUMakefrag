@@ -2,7 +2,6 @@ OBJDIRS += kfs
 BIN += $(OBJDIR)/kfs/kfsd
 
 #			$(OBJDIR)/kfs/ide_pio_bd.o \
-#			$(OBJDIR)/kfs/nbd_bd.o \
 #			$(OBJDIR)/kfs/josfs_cfs.o \
 #			$(OBJDIR)/kfs/fidcloser_cfs.o \
 #			$(OBJDIR)/kfs/fidprotector_cfs.o \
@@ -20,6 +19,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/revision.o \
 			$(OBJDIR)/kfs/barrier.o \
 			$(OBJDIR)/kfs/unix_file_bd.o \
+			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable.o \
 			$(OBJDIR)/kfs/bsd_ptable.o \
