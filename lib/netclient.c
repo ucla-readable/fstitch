@@ -389,16 +389,11 @@ kconnect(struct ip_addr ipaddr, uint16_t port, int *fd)
 
 	sock = socket(PF_INET, SOCK_STREAM, 0);
 	if (sock == -1)
-	{
-		assert(0);
 		return -E_UNSPECIFIED;
-	}
 
 	r = connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
 	if (r == -1)
 	{
-		perror("connect");
-		assert(0);
 		(void) close(sock);
 		return -E_UNSPECIFIED;
 	}
