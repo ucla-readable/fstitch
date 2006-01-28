@@ -11,6 +11,7 @@
 #include <lib/jiffies.h>
 #include <lib/kdprintf.h>
 #include <lib/panic.h>
+#include <inc/error.h>
 #include <kfs/cfs.h>
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>
@@ -147,7 +148,7 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = nlinks;
 	}
-	else if (*type.type == TYPE_FILE)
+	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
 	{
 		uint32_t filesize_size;
 		union {
@@ -261,7 +262,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 	memset(&stbuf, 0, sizeof(stbuf));
 	if (fill_stat(ino, &stbuf) == -1)
 	{
-		r = fuse_reply_err(req, ENOENT);
+		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
 	}
 	else
@@ -291,7 +292,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 		full_name = NULL;
 		if (fid < 0)
 		{
-			if (fid == -12) // FIXME: 12 is E_NOT_FOUND
+			if (fid == -E_NOT_FOUND)
 				r = fuse_reply_err(req, ENOENT);
 			else
 				r = fuse_reply_err(req, TODOERROR);
@@ -562,7 +563,7 @@ static int read_single_dir(int fid, off_t k, dirent_t * dirent)
 		cur = buf;
 
 		r = CALL(frontend_cfs, getdirentries, fid, buf, sizeof(buf), &basep);
-		if (r == -1) // -E_UNSPECIFIED, should imply eof
+		if (r == -E_UNSPECIFIED) // should imply eof
 		{
 			eof = 1;
 			break;
@@ -662,8 +663,9 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t ino,
 	r = CALL(frontend_cfs, close, fid);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, -1);
+		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
+		return;
 	}
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
@@ -719,14 +721,14 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		fuse_ino_t entry_ino;
 
 		r = read_single_dir(fid, off - 2, &dirent);
+		if (r == 1 || r == -E_NOT_FOUND)
+			break;
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "%d:read_single_dir(%d, %lld, 0x%08x) = %d\n",
 					 __LINE__, fid, off - 2, &dirent, r);
 			assert(r >= 0);
 		}
-		if (r == 1)
-			break;
 
 		total_size += fuse_dirent_size(dirent.d_namelen);
 
