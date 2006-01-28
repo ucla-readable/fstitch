@@ -47,7 +47,7 @@ print_usage(char *bin)
 void
 umain(int argc, char **argv)
 {
-	int lines = 22;
+	int lines = 24;
 	int cols = 80;
 	char buf[cols+1];
 	int n, i, r;
@@ -73,9 +73,11 @@ umain(int argc, char **argv)
 			if ((r = write(1, buf, n)) != n)
 				panic("write error when copying");
 		}
-		printf("-- MORE --\n");
+		printf("-- MORE --\r");
 		n = f_readline(2, buf, cols);
 		if (n <= 0 || buf[0] == 'q')
 			return;
+		/* erase the "-- MORE --" line */
+		printf("\e[A\r          \r");
 	}
 }
