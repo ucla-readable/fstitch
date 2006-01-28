@@ -26,7 +26,6 @@
 // - Run with the -d flag to see FUSE messages coming in and going out
 
 // TODOs:
-// - Why does "echo hello > existing_file" truncate existing_file but fail to write?
 // - Why does using a 0s timeout (instead of 1.0) not work? Is this a problem?
 // - Send errors to fuse in more situations (and better translate KFS<->FUSE errors)
 // - Propagate errors rather than assert() in places where assert() is used for errors that can happen
@@ -211,6 +210,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 	int r;
 	int fid;
 	uint32_t size;
+	struct stat stbuf;
 
 	if (to_set != FUSE_SET_ATTR_SIZE)
 	{
@@ -219,11 +219,15 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 		return;
 	}
 
+	size = (uint32_t) attr->st_size;
+	assert(size == attr->st_size);
+	Dprintf("\tsize = %u\n", size);
+
 	if (fi)
 		fid = (int) fi->fh;
 	else
 	{
-		// INODE TODO: get full_name from fi->fh
+		// INODE TODO: how could we avoid ino -> full_name?
 		const char * full_name = inode_fname(ino);
 		assert(full_name);
 		fid = CALL(frontend_cfs, open, full_name, 0);
@@ -234,10 +238,6 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 			return;
 		}
 	}
-
-	size = (uint32_t) attr->st_size;
-	assert(size == attr->st_size);
-	Dprintf("\tsize = %u\n", size);
 
 	r = CALL(frontend_cfs, truncate, fid, size);
 
@@ -258,8 +258,17 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 		return;
 	}
 
-	r = fuse_reply_attr(req, attr, STDTIMEOUT);
-	assert(!r);
+	memset(&stbuf, 0, sizeof(stbuf));
+	if (fill_stat(ino, &stbuf) == -1)
+	{
+		r = fuse_reply_err(req, ENOENT);
+		assert(!r);
+	}
+	else
+	{
+		r = fuse_reply_attr(req, &stbuf, STDTIMEOUT);
+		assert(!r);
+	}
 }
 
 static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_name)
