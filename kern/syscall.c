@@ -6,6 +6,7 @@
 #include <inc/assert.h>
 #include <inc/josnic.h>
 #include <inc/sb16.h>
+#include <inc/mouse.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
@@ -18,6 +19,7 @@
 #include <kern/sb16.h>
 #include <kern/vga.h>
 #include <kern/josnic.h>
+#include <kern/mouse.h>
 #include <kern/elf.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
@@ -784,6 +786,30 @@ sys_net_ioctl(int req, int ival1, void * pval, int ival2)
 }
 
 static int
+sys_mouse_ioctl(int req, int ival, void * pval)
+{
+	uint32_t old_fault_mode = page_fault_mode;
+	int value = -E_INVAL;
+	
+	switch(req)
+	{
+		case MOUSE_IOCTL_DETECT:
+			value = mouse_detect();
+			break;
+		case MOUSE_IOCTL_READ:
+			page_fault_mode = PFM_KILL;
+			value = mouse_read(pval, ival);
+			break;
+		case MOUSE_IOCTL_COMMAND:
+			value = mouse_command(ival);
+			break;
+	}
+	
+	page_fault_mode = old_fault_mode;
+	return value;
+}
+
+static int
 sys_reboot()
 {
 	reboot();
@@ -982,6 +1008,8 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_vga_map_text(a1);
 		case SYS_net_ioctl:
 			return sys_net_ioctl(a1, a2, (void *) a3, a4);
+		case SYS_mouse_ioctl:
+			return sys_mouse_ioctl(a1, a2, (void *) a3);
 		case SYS_reboot:
 			return sys_reboot();
 		case SYS_set_symtbls:

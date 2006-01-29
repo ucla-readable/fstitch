@@ -10,4 +10,3 @@ exit(int status)
 	close_all();
 	sys_env_destroy(0);
 }
-

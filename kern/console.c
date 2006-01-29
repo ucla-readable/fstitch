@@ -10,6 +10,7 @@
 #include <inc/error.h>
 
 #include <kern/console.h>
+#include <kern/mouse.h>
 #include <kern/picirq.h>
 #include <kern/kclock.h>
 #include <kern/trap.h>
@@ -588,11 +589,17 @@ static int
 kbd_proc_data(void)
 {
 	int c;
-	uint8_t data;
+	uint8_t data, status;
 	static uint32_t shift = 0;
 
-	if ((inb(KBSTATP) & KBS_DIB) == 0)
+	status = inb(KBSTATP);
+	if(!(status & KBS_DIB))
 		return -1;
+	if(status & KBS_AUXD)
+	{
+		mouse_intr(1);
+		return 0;
+	}
 
 	data = inb(KBDATAP);
 
@@ -647,7 +654,7 @@ kbd_proc_data(void)
 	return c;
 }
 
-static void
+void
 kbd_intr(int irq)
 {
 	cons_intr(kbd_proc_data);

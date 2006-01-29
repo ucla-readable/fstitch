@@ -7,18 +7,31 @@ int rand(int nseed);
 
 static void parent_set_video(int eid)
 {
+	int value;
 	rand(hwclock_time(NULL));
-	sys_vga_set_mode_320(VGA);
+	if(sys_vga_set_mode_320(VGA))
+	{
+		ipc_send(eid, 1, NULL, 0, NULL);
+		exit(1);
+	}
 	sys_vga_set_mode_text();
 	ipc_send(eid, 0, NULL, 0, NULL);
-	ipc_recv(eid, NULL, NULL, NULL, NULL, 0);
+	value = ipc_recv(eid, NULL, NULL, NULL, NULL, 0);
+	if(value)
+		exit(1);
 }
 
 static void child_set_video(void)
 {
-	int parent;
-	ipc_recv(0, &parent, NULL, NULL, NULL, 0);
-	sys_vga_set_mode_320(VGA);
+	int value, parent;
+	value = ipc_recv(0, &parent, NULL, NULL, NULL, 0);
+	if(value)
+		exit(1);
+	if(sys_vga_set_mode_320(VGA) < 0)
+	{
+		ipc_send(parent, 1, NULL, 0, NULL);
+		exit(1);
+	}
 	ipc_send(parent, 0, NULL, 0, NULL);
 	rand(hwclock_time(NULL));
 }

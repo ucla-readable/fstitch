@@ -208,20 +208,21 @@ sys_net_ioctl(int req, int ival1, void * pval, int ival2)
 }
 
 int
+sys_mouse_ioctl(int req, int ival, void * pval)
+{
+	return syscall(SYS_mouse_ioctl, req, ival, (uintptr_t) pval, 0, 0);
+}
+
+int
 sys_reboot(void)
 {
 	return syscall(SYS_reboot, 0, 0, 0, 0, 0);
 }
 
 int
-sys_set_symtbls(envid_t envid,
-					 void *symtbl,    size_t symtbl_size,
-					 void *symstrtbl, size_t symstrtbl_size)
+sys_set_symtbls(envid_t envid, void *symtbl, size_t symtbl_size, void *symstrtbl, size_t symstrtbl_size)
 {
-	return syscall(SYS_set_symtbls,
-						(register_t) envid,
-						(register_t) symtbl,    (register_t) symtbl_size,
-						(register_t) symstrtbl, (register_t) symstrtbl);
+	return syscall(SYS_set_symtbls, (register_t) envid, (register_t) symtbl, (register_t) symtbl_size, (register_t) symstrtbl, (register_t) symstrtbl);
 }
 
 int
@@ -249,9 +250,9 @@ sys_assign_irq(envid_t envid, int irq, int enable)
 }
 
 int
-sys_get_hw_time(int* sec, int* min, int* hour, int* day, int* mon)
+sys_get_hw_time(int * sec, int * min, int * hour, int * day, int * mon)
 {
-        return syscall(SYS_get_hw_time, (int)sec, (int)min, (int)hour, (int)day, (int)mon);
+        return syscall(SYS_get_hw_time, (int) sec, (int) min, (int) hour, (int) day, (int) mon);
 }
 
 int

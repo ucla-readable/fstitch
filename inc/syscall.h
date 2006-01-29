@@ -34,6 +34,8 @@ enum
 
 	SYS_net_ioctl,
 
+	SYS_mouse_ioctl,
+
 	SYS_reboot,
 
 	SYS_set_symtbls,

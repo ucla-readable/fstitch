@@ -44,7 +44,8 @@ void tv(int argc, char * argv[])
 	int channel = 3;
 	int number = 0;
 	
-	sys_vga_set_mode_320(0xA0000);
+	if(sys_vga_set_mode_320(0xA0000) < 0)
+		exit(1);
 	set_palette(0);
 	
 	c = getchar_nb();

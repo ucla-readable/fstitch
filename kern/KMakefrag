@@ -32,6 +32,7 @@ KERN_SRCFILES :=	kern/entry.S \
 			kern/picirq.c \
 			kern/irq.c \
 			kern/pci.c \
+			kern/mouse.c \
 			kern/printf.c \
 			lib/serial.c \
 			kern/trap.c \

@@ -33,4 +33,7 @@ void cons_init(void);
 void cons_putc(int c);
 int cons_getc(void);
 
+/* needed by mouse_intr() */
+void kbd_intr(int irq);
+
 #endif /* _CONSOLE_H_ */

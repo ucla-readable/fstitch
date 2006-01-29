@@ -29,6 +29,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/journal \
 	 		$(OBJDIR)/kern/kernel \
 			$(OBJDIR)/user/kfsgraph \
+			$(OBJDIR)/user/kgpm \
 			$(OBJDIR)/user/knbdd \
 			$(OBJDIR)/user/ls \
 			$(OBJDIR)/user/lsfd \
@@ -40,6 +41,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/mkjosfs \
 			$(OBJDIR)/user/more \
 			$(OBJDIR)/user/mount \
+			$(OBJDIR)/user/moused \
 			$(OBJDIR)/user/mv \
 			$(OBJDIR)/user/netstats \
 			$(OBJDIR)/user/null \

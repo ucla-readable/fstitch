@@ -62,6 +62,7 @@ int	sys_vga_set_mode_text(void);
 int	sys_vga_set_palette(uint8_t * palette, uint8_t dim);
 int	sys_vga_map_text(uintptr_t address);
 int	sys_net_ioctl(int req, int ival1, void * pval, int ival2);
+int	sys_mouse_ioctl(int req, int ival, void * pval);
 int	sys_reboot(void);
 int	sys_set_symtbls(envid_t envid, void *symtbl, size_t symtbl_size, void *symstrtbl, size_t symstrtbl_size);
 int	sys_reg_serial(int port, void *buffer_pg);
