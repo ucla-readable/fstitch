@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
 #include <inc/error.h>
 #include <lib/vector.h>
 

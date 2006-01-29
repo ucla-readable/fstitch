@@ -199,12 +199,6 @@ int jsleep(int32_t jiffies);
 int hwclock_time(int *t);
 int bcd2dec(int bcd);
 
-// qsort.c
-// Sort in ascending order. compar should return a value less than,
-// equal to, or greater than zero if 'a' is less than, equal to, or
-// greater than 'b', respectively.
-void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, const void *));
-
 #include <lib/fcntl.h>
 
 #include <lib/netclient.h>
