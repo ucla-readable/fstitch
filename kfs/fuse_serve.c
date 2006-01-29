@@ -124,7 +124,7 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 	if (*type.type == TYPE_DIR)
 	{
 		char buf[1024];
-		uint32_t basep;
+		uint32_t basep = 0;
 		uint32_t nlinks = 2;
 
 		// FIXME: we should use the same inode->file mapping throughout an
