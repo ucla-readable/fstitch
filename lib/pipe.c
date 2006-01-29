@@ -89,14 +89,14 @@ _pipeisclosed(struct Fd* fd, struct Pipe* p)
 {
 	int n, nn, ret;
 
-	while (1) {
+	for (;;) {
 		n = env->env_runs;
 		ret = pageref(fd) == pageref(p);
 		nn = env->env_runs;
 		if (n == nn)
 			return ret;
-		if (n != nn && ret == 1)
-			printf("pipe race avoided\n", n, env->env_runs, ret);
+		if (ret)
+			printf("[%08x] pipe race avoided (fd = %d)\n", env->env_id, fd2num(fd));
 	}
 }
 
