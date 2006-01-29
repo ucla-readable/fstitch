@@ -657,6 +657,8 @@ print_usage(char *bin)
 void
 umain(int argc, char **argv)
 {
+	if (fork() != 0)
+		return;
 	if (argc == 0)
 	{
 		binaryname = "josweb";

@@ -42,6 +42,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/getarg.c \
 			lib/serial.c \
 			lib/netclient.c \
+			lib/mouse.c \
 			lib/hwclock.c \
 			lib/textbar.c \
 			lib/sleep.c

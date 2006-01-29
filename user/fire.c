@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/mouse.h>
 
 /* from demo.c */
 int rand(int nseed);
@@ -6,8 +7,10 @@ extern uint8_t demo_buffer[2][64000];
 
 void fire(int argc, char * argv[])
 {
-	int i, j;
+	int i, j, mouse_fd, button = 0;
 	uint8_t palette[768];
+	
+	mouse_fd = open_mouse();
 	
 	for(i = 0; i != 64; i++)
 	{
@@ -42,9 +45,26 @@ void fire(int argc, char * argv[])
 	
 	while(getchar_nb() == -1)
 	{
+		if(mouse_fd > 0)
+		{
+			struct mouse_data data;
+			int n = read_nb(mouse_fd, &data, sizeof(struct mouse_data));
+			if(n == sizeof(struct mouse_data))
+				button = data.left + data.middle + data.right;
+			else if(0 <= n)
+			{
+				close(mouse_fd);
+				mouse_fd = -1;
+			}
+		}
+		
 		memcpy(demo_buffer[0], (void *) 0xA0000 + 640, 64000 - 640);
-		for(i = 0; i != 640; i++)
-			demo_buffer[0][64000 - 640 + i] = rand(0);
+		if(button)
+			for(i = 0; i != 640; i++)
+				demo_buffer[0][64000 - 640 + i] = rand(0) | 128;
+		else
+			for(i = 0; i != 640; i++)
+				demo_buffer[0][64000 - 640 + i] = rand(0);
 		
 		for(i = 0; i != 320; i++)
 			/* calculate only the bottom 1/4 of the buffer */

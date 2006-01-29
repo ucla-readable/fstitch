@@ -76,20 +76,24 @@ mouse_displ(int overflow, int sign, uint8_t mantissa)
 	return r;
 }
 
-static void
+static envid_t
 serve(int fd)
 {
 	uint8_t buf[3], pos = 0;
-	while (1)
+	while(!pipeisclosed(fd))
 	{
 		int n = sys_mouse_ioctl(MOUSE_IOCTL_READ, 3 - pos, buf + pos);
-		if (n <= 0)
+		if(n <= 0)
 		{
+			envid_t client;
+			int r = ipc_recv(0, &client, NULL, NULL, NULL, 1);
+			if(0 <= r)
+				return client;
 			sys_yield();
 			continue;
 		}
 		pos += n;
-		if (pos == 3)
+		if(pos == 3)
 		{
 			struct mouse_data data;
 			data.dx = mouse_displ(X_OVERFLOW(buf[0]), X_SIGN(buf[0]), buf[1]);
@@ -97,18 +101,23 @@ serve(int fd)
 			data.left = L_BUTTON(buf[0]);
 			data.middle = M_BUTTON(buf[0]);
 			data.right = R_BUTTON(buf[0]);
-			//printf("[dx=%d, dy=%d, buttons=%d%d%d]\n", data.dx, data.dy,
-			//	data.left, data.middle, data.right);
 			pos = 0;
-			if (write(fd, &data, sizeof(data)) < 0)
+			if(write(fd, &data, sizeof(data)) < 0)
 				break;
 		}
 	}
+	return -1;
 }
 
 void
 umain(void)
 {
+	envid_t client = -1;
+	if (fork() != 0)
+		return;
+	/* set name without leading / */
+	sys_env_set_name(0, "moused");
+	
 	printf("Mouse Daemon ");
 
 	if (sys_mouse_ioctl(MOUSE_IOCTL_DETECT, 0, NULL) < 0)
@@ -124,32 +133,32 @@ umain(void)
 	else
 		printf("started.\n");
 
-	if (fork() != 0)
-		return;
-
-	while (1)
+	for (;;)
 	{
-		envid_t client;
-		int r = ipc_recv(0, &client, NULL, NULL, NULL, 0);
-		if (r < 0)
-			goto err_recv;
+		int r, fds[2];
+		if(client < 0)
+		{
+			r = ipc_recv(0, &client, NULL, NULL, NULL, 0);
+			if(r < 0)
+				goto err_recv;
+		}
 
 		r = mouse_enable();
-		if (r < 0)
+		if(r < 0)
 			goto err_enable;
 
-		int fds[2];
 		r = pipe(fds);
-		if (r < 0)
+		if(r < 0)
 			goto err_pipe;
 
 		r = dup2env_send(fds[0], client);
-		if (r < 0)
+		if(r < 0)
 			goto err_send;
-
-
 		close(fds[0]);
-		serve(fds[1]);
+
+		client = serve(fds[1]);
+		close(fds[1]);
+
 		mouse_reset();
 		continue;
 
@@ -164,4 +173,3 @@ umain(void)
 			sys_yield();
 	}
 }
-
