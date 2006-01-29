@@ -11,6 +11,9 @@ int rand(int nseed)
 	return (seed >> 16) & 0x7fff;
 }
 
+/* buffer space for demos */
+uint8_t demo_buffer[5 * 64000] = {0};
+
 void data(int argc, char * argv[]);
 void fall(int argc, char * argv[]);
 void fire(int argc, char * argv[]);
@@ -19,6 +22,7 @@ void life(int argc, char * argv[]);
 void matrix(int argc, char * argv[]);
 void pong(int argc, char * argv[]);
 void swirl(int argc, char * argv[]);
+void tv(int argc, char * argv[]);
 void wars(int argc, char * argv[]);
 
 static const struct {
@@ -33,6 +37,7 @@ static const struct {
 	{"matrix", matrix},
 	{"pong", pong},
 	{"swirl", swirl},
+	{"tv", tv},
 	{"wars", wars}
 };
 

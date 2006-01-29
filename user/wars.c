@@ -2,7 +2,7 @@
 #include <inc/malloc.h>
 #include <inc/string.h>
 
-const static unsigned char font_map[256][8] = {
+const unsigned char demo_font_map[256][8] = {
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, {0x3c, 0x42, 0xa5, 0x81, 0xa5, 0x99, 0x42, 0x3c}, {0x3c, 0x7e, 0xdb, 0xff, 0xdb, 0xe7, 0x7e, 0x3c}, {0x36, 0x7f, 0x7f, 0x7f, 0x3e, 0x1c, 0x08, 0x00},
 	{0x08, 0x1c, 0x3e, 0x7f, 0x3e, 0x1c, 0x08, 0x00}, {0x1c, 0x1c, 0x6b, 0x7f, 0x6b, 0x08, 0x1c, 0x00}, {0x08, 0x1c, 0x3e, 0x7f, 0x3e, 0x08, 0x1c, 0x00}, {0x00, 0x00, 0x18, 0x3c, 0x3c, 0x18, 0x00, 0x00},
 	{0xff, 0xff, 0xe7, 0xc3, 0xc3, 0xe7, 0xff, 0xff}, {0x00, 0x3c, 0x66, 0x42, 0x42, 0x66, 0x3c, 0x00}, {0xff, 0xc3, 0x99, 0xbd, 0xbd, 0x99, 0xc3, 0xff}, {0x0f, 0x03, 0x05, 0x79, 0xd8, 0xd8, 0x70, 0x00},
@@ -69,7 +69,7 @@ const static unsigned char font_map[256][8] = {
 	{0x6c, 0x76, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00}, {0x3c, 0x66, 0x1c, 0x30, 0x7e, 0x00, 0x00, 0x00}, {0x00, 0x00, 0x3c, 0x3c, 0x3c, 0x3c, 0x00, 0x00}, {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 };
 
-#define PIXEL(ch, x, y) ((font_map[ch][y] >> (7 - (x))) & 1)
+#define PIXEL(ch, x, y) ((demo_font_map[ch][y] >> (7 - (x))) & 1)
 
 #define SCALE 4
 #define CH_SIZE (SCALE * 8)
@@ -197,7 +197,8 @@ static void wars_kill(void)
  * adjusting the screen x coordinate based on z.
  */
 
-static unsigned char buffer[64000 * 5] = {0};
+/* from demo.c */
+extern unsigned char demo_buffer[5 * 64000];
 
 #define FIXED_POINT 1024
 
@@ -245,7 +246,7 @@ static void wars_draw_char(unsigned char ch, int x, int y, int z)
 			if(SCALE_PIXEL(ch, cx, cy))
 			{
 				int index = sy + sx;
-				unsigned char * pixel = &buffer[index];
+				unsigned char * pixel = &demo_buffer[index];
 				if(*pixel < color)
 					*pixel = color;
 			}
@@ -271,11 +272,11 @@ static void wars_aa_scale(void)
 		for(x = 0; x != 320; x++)
 		{
 			int offset = (yl * 2 + x) * 2;
-			int pixel = buffer[offset];
-			pixel += buffer[offset + 1];
-			pixel += buffer[offset + 640];
-			pixel += buffer[offset + 641];
-			buffer[64000 * 4 + yl + x] = pixel / 4;
+			int pixel = demo_buffer[offset];
+			pixel += demo_buffer[offset + 1];
+			pixel += demo_buffer[offset + 640];
+			pixel += demo_buffer[offset + 641];
+			demo_buffer[64000 * 4 + yl + x] = pixel / 4;
 		}
 	}
 }
@@ -309,7 +310,7 @@ void wars(int argc, char * argv[])
 		int offset = 0, draw = 0;
 		struct LINE * line;
 		
-		memset(buffer, 0, 64000 * 4);
+		memset(demo_buffer, 0, 64000 * 4);
 		
 		for(line = lines; line; line = line->next)
 		{
@@ -325,7 +326,7 @@ void wars(int argc, char * argv[])
 		i += SCALE;
 		
 		wars_aa_scale();
-		memcpy((void *) 0xA0000, &buffer[64000 * 4], 64000);
+		memcpy((void *) 0xA0000, &demo_buffer[64000 * 4], 64000);
 		while(frame_end - env->env_jiffies > 0)
 			sys_yield();
 		if(!draw)

@@ -1,7 +1,7 @@
 #include <inc/lib.h>
 
-static uint8_t palette[256 * 3];
-static uint8_t image[200][320];
+/* from demo.c */
+extern uint8_t demo_buffer[2][64000];
 
 void ladybug(int argc, char * argv[])
 {
@@ -18,7 +18,7 @@ void ladybug(int argc, char * argv[])
 	fd = open(filename, O_RDONLY);
 	if(fd >= 0)
 	{
-		r = read(fd, palette, 256 * 3);
+		r = read(fd, demo_buffer[1], 256 * 3);
 		if(r == 256 * 3)
 			use_palette = 1;
 		close(fd);
@@ -26,19 +26,19 @@ void ladybug(int argc, char * argv[])
 
 	if(use_palette)
 		for(i = 0; i < (256*3); i++)
-			palette[i] >>= 2;
+			demo_buffer[1][i] >>= 2;
 
 	snprintf(filename, sizeof(filename), "/%s.img", base);
 	fd = open(filename, O_RDONLY);
-	r = read(fd, image, 200 * 320);
+	r = read(fd, demo_buffer[0], 200 * 320);
 	close(fd);
 
 	// set graphics mode
 	sys_vga_set_mode_320(0xA0000);
 	if(use_palette)
-		sys_vga_set_palette(palette, 0);
+		sys_vga_set_palette(demo_buffer[1], 0);
 	
-	memcpy((void *) 0xA0000, image, 64000);
+	memcpy((void *) 0xA0000, demo_buffer[0], 64000);
 
 	getchar();
 
