@@ -50,6 +50,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/rmdir \
 			$(OBJDIR)/user/sb16 \
 			$(OBJDIR)/user/sh \
+			$(OBJDIR)/user/shoot \
 			$(OBJDIR)/user/sleep \
 			$(OBJDIR)/user/sync \
 			$(OBJDIR)/user/telnet \
