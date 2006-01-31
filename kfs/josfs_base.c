@@ -750,6 +750,7 @@ static fdesc_t * josfs_lookup_name(LFS_t * object, const char * name)
 		temp_fdesc->file = f;
 		temp_fdesc->dirb = blockno;
 		temp_fdesc->index = index;
+		temp_fdesc->fullpath[0] = 0; // guard against accidental use and valgrind false positive
 		return (fdesc_t *) temp_fdesc;
 	}
 	free(temp_fdesc);
