@@ -219,9 +219,9 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 		/* in QEMU, this value is the size of the filesystem image
 		 * and not necessarily that of the configured disk geometry */
 		printf("yes\n  LBA sectors: %d\n", lba_sectors);
+		return lba_sectors;
 	}
-	else
-		printf("no\n");
+	printf("no\n");
 	
 	if(id[53] & 1)
 	{
@@ -305,7 +305,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		return bdesc;
 	
 	/* make sure it's a valid block */
-	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
+	if(number >= info->length)
 		return NULL;
 	
 	bdesc = bdesc_alloc(number, IDE_SECTSIZE);
@@ -375,7 +375,7 @@ static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	}
 	
 	/* make sure it's a valid block */
-	if(number >= ((struct ide_info *) OBJLOCAL(object))->length)
+	if(number >= info->length)
 		return NULL;
 	
 	bdesc = bdesc_alloc(number, IDE_SECTSIZE);
@@ -410,7 +410,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	/* make sure it's a valid block */
-	if(block->number >= ((struct ide_info *) OBJLOCAL(object))->length)
+	if(block->number >= info->length)
 		return -E_INVAL;
 	
 	/* prepare the block for writing */
