@@ -117,6 +117,11 @@ void * pc_ptable_init(BD_t * bd)
 		goto error_mbr;
 	ptable = (struct pc_ptable *) &mbr->ddesc->data[PTABLE_OFFSET];
 	
+	/* FIXME: support EZDrive partition tables here!
+	 * They have shadow partitions of type PTABLE_EZDRIVE_TYPE listed
+	 * in sector 0, and the real partition table is in sector 1. */
+	/* Note: we'd also have to support this in the bootloader. */
+	
 	if(mbr->ddesc->data[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
 	   mbr->ddesc->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
 	{
