@@ -40,25 +40,26 @@ struct LFS {
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number);
 	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number, bool * synthetic);
 	DECLARE(LFS_t, int, cancel_synthetic_block, uint32_t number);
-	DECLARE(LFS_t, fdesc_t *, lookup_name, const char * name);
+	DECLARE(LFS_t, fdesc_t *, lookup_inode, inode_t ino);
+	DECLARE(LFS_t, inode_t, lookup_name, inode_t parent, const char * name);
 	DECLARE(LFS_t, void, free_fdesc, fdesc_t * fdesc);
 	DECLARE(LFS_t, uint32_t, get_file_numblocks, fdesc_t * file);
 	DECLARE(LFS_t, uint32_t, get_file_block, fdesc_t * file, uint32_t offset);
 	DECLARE(LFS_t, int, get_dirent, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 	DECLARE(LFS_t, int, append_file_block, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, fdesc_t *, allocate_name, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, int, rename, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, fdesc_t *, allocate_name, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, int, rename, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, uint32_t, truncate_file_block, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, free_block, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, int, remove_name, const char * name, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, int, remove_name, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, write_block, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, size_t, get_num_features, const char * name);
-	DECLARE(LFS_t, const feature_t *, get_feature, const char * name, size_t num);
-	DECLARE(LFS_t, int, get_metadata_name, const char * name, uint32_t id, size_t * size, void ** data);
+	DECLARE(LFS_t, size_t, get_num_features, inode_t ino);
+	DECLARE(LFS_t, const feature_t *, get_feature, inode_t ino, size_t num);
+	DECLARE(LFS_t, int, get_metadata_inode, inode_t ino, uint32_t id, size_t * size, void ** data);
 	DECLARE(LFS_t, int, get_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t * size, void ** data);
-	DECLARE(LFS_t, int, set_metadata_name, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, int, set_metadata_inode, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, set_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, int, sync, const char * name);
+	DECLARE(LFS_t, int, sync, inode_t ino);
 };
 
 #define LFS_INIT(lfs, module, info) { \

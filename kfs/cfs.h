@@ -11,22 +11,25 @@ typedef struct CFS CFS_t;
 
 struct CFS {
 	OBJECT(CFS_t);
-	DECLARE(CFS_t, int, open, const char * name, int mode);
+	DECLARE(CFS_t, inode_t, get_root);
+	DECLARE(CFS_t, inode_t, lookup, inode_t parent, const char * name);
+	DECLARE(CFS_t, int, open, inode_t ino, int mode);
+	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, inode_t * newino);
 	DECLARE(CFS_t, int, close, int fid);
 	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, getdirentries, int fid, char * buf, int nbytes, uint32_t * basep);
 	DECLARE(CFS_t, int, truncate, int fid, uint32_t size);
-	DECLARE(CFS_t, int, unlink, const char * name);
-	DECLARE(CFS_t, int, link, const char * oldname, const char * newname);
-	DECLARE(CFS_t, int, rename, const char * oldname, const char * newname);
-	DECLARE(CFS_t, int, mkdir, const char * name);
-	DECLARE(CFS_t, int, rmdir, const char * name);
+	DECLARE(CFS_t, int, unlink, inode_t parent, const char * name);
+	DECLARE(CFS_t, int, link, inode_t ino, inode_t newparent, const char * newname);
+	DECLARE(CFS_t, int, rename, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname);
+	DECLARE(CFS_t, inode_t, mkdir, inode_t parent, const char * name);
+	DECLARE(CFS_t, int, rmdir, inode_t parent, const char * name);
 	DECLARE(CFS_t, size_t, get_num_features, const char * name);
 	DECLARE(CFS_t, const feature_t *, get_feature, const char * name, size_t num);
-	DECLARE(CFS_t, int, get_metadata, const char * name, uint32_t id, size_t * size, void ** data);
-	DECLARE(CFS_t, int, set_metadata, const char * name, uint32_t id, size_t size, const void * data);
-	DECLARE(CFS_t, int, sync, const char * name);
+	DECLARE(CFS_t, int, get_metadata, inode_t ino, uint32_t id, size_t * size, void ** data);
+	DECLARE(CFS_t, int, set_metadata, inode_t ino, uint32_t id, size_t size, const void * data);
+	DECLARE(CFS_t, int, sync, inode_t ino); // also pass fid? linux vfs may pass parent_ino and local_name.
 };
 
 #define CFS_INIT(cfs, module, info) { \
