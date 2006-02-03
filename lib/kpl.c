@@ -2,6 +2,7 @@
 #include <inc/fd.h>
 #include <inc/kpl.h>
 #include <inc/cfs_ipc_client.h>
+#include <inc/kfs_ipc_client.h>
 #include <kfs/feature.h>
 
 static int kpl_close(struct Fd* fd);
@@ -174,7 +175,7 @@ int kpl_rename(const char * oldname, const char * newname)
 // Synchronize disk with buffer cache
 int kpl_sync(void)
 {
-	return cfs_sync(NULL);
+	return kfs_sync(NULL);
 }
 
 int kpl_shutdown(void)

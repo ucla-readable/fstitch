@@ -20,15 +20,9 @@
 
 /* This file implements the first whack at our new WB cache. It's an LRU cache,
  * and it allows you to give it chdescs with unsatisfied dependencies. However,
- * it will fill up and deadlock if you give it too many. Also sync() is a bit
- * broken, because this cache follows the new policy of not creating strange
- * calling paths by just waiting for dependencies to get satisfied, instead of
- * forcing the sync to occur. In cases where bad things are happening due to the
- * preliminary nature of this file, or the problems we have yet to find
- * solutions for, this code returns -E_HOLYMACKEREL which is just -E_BUSY. */
-
-#warning make a better error code
-#define E_HOLYMACKEREL E_BUSY
+ * it will fill up and deadlock if you give it too many. If this ever causes a
+ * problem, an appropriate error message is displayed on the console and -E_BUSY
+ * is returned. */
 
 /* This structure is optimized for memory footprint with unions.
  * The items in each union are never used at the same time. */
@@ -190,7 +184,7 @@ static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
 	{
 		/* otherwise we would have caught it above... */
 		assert(slice->full_size);
-		r = -E_HOLYMACKEREL;
+		r = -E_BUSY;
 	}
 	else
 	{
@@ -199,7 +193,7 @@ static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
 		if(r < 0)
 			revision_slice_pull_up(slice);
 		else if(completely)
-			r = (slice->ready_size == slice->full_size) ? 0 : -E_HOLYMACKEREL;
+			r = (slice->ready_size == slice->full_size) ? 0 : -E_BUSY;
 		else
 			r = 0;
 	}
@@ -221,7 +215,7 @@ static int evict_block(BD_t * object)
 			return 0;
 		}
 	
-	return -E_HOLYMACKEREL;
+	return -E_BUSY;
 }
 
 static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number)
@@ -335,11 +329,9 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
 	if(index)
 	{
-		/* already have this block, just check for deadlock */
+		/* already have this block */
 		assert(info->blocks[index].block->ddesc == block->ddesc);
 		touch_block(info, index);
-		
-#warning wb_cache_bd_write_block() check for deadlock (old written block)
 		
 		return 0;
 	}
@@ -349,7 +341,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 			if(evict_block(object) < 0)
 			{
 				printf("HOLY MACKEREL! We can't write a block, because the cache is full!\n");
-				return -E_HOLYMACKEREL;
+				return -E_BUSY;
 			}
 		assert(hash_map_size(info->block_map) < info->size);
 		
@@ -357,35 +349,33 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		if(index == INVALID_BLOCK)
 			return -E_NO_MEM;
 		
-#warning wb_cache_bd_write_block() check for deadlock (new written block)
-		
 		return 0;
 	}
 }
 
-static int wb_cache_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	int start_dirty = wb_cache_dirty_count(object);
+	int dirty = start_dirty;
 
-#warning FIXME sync is (fundamentally) broken
-	
-	if(block == SYNC_FULL_DEVICE)
+	if(!dirty)
+		return FLUSH_EMPTY;
+
+	while(dirty)
 	{
-		if(wb_cache_dirty_count(object))
-		{
-#warning flush the dirty blocks, make sure we are 100% clean... what about failures here?
-			return -E_HOLYMACKEREL;
-		}
-		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
+		struct cache_slot * slot;
+		int next_dirty;
+		/* this looks a lot like wb_cache_bd_callback below... */
+		for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
+			flush_block(object, slot, 0);
+		next_dirty = wb_cache_dirty_count(object);
+		if(next_dirty == dirty)
+			return (start_dirty == dirty) ? FLUSH_NONE : FLUSH_SOME;
+		dirty = next_dirty;
 	}
-	
-	/* make sure it's a valid block */
-	if(block >= CALL(info->bd, get_numblocks))
-		return -E_INVAL;
-	
-	return -E_HOLYMACKEREL;
-	/* sync it */
-	return CALL(info->bd, sync, block, ch);
+
+	return FLUSH_DONE;
 }
 
 static uint16_t wb_cache_bd_get_devlevel(BD_t * object)
@@ -413,9 +403,9 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	
 	if(wb_cache_dirty_count(bd) != 0)
 	{
-		r = CALL(bd, sync, SYNC_FULL_DEVICE, NULL);
+		r = CALL(bd, flush, FLUSH_DEVICE, NULL);
 		if(r < 0)
-			return r;
+			return -E_BUSY;
 	}
 	assert(!wb_cache_dirty_count(bd));
 	

@@ -1,6 +1,7 @@
 #include <lib/serial_cfs.h>
 #include <kfs/cfs.h>
 #include <kfs/kfsd.h>
+#include <kfs/sync.h>
 #include <kfs/ipc_serve.h> // for IPCSERVE_REQVA
 #include <kfs/cfs_ipc_serve.h>
 
@@ -72,7 +73,7 @@ static void cfs_ipc_serve_shutdown(void * arg)
 
 	if (frontend_cfs)
 	{
-		CALL(frontend_cfs, sync, NULL);
+		kfs_sync(NULL);
 		DESTROY(frontend_cfs);
 		frontend_cfs = NULL;
 	}
@@ -338,14 +339,6 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 	}
 }
 
-static void serve_sync(envid_t envid, struct Scfs_sync * req)
-{
-	int r;
-	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-	r = CALL(frontend_cfs, sync, req->name);
-	ipc_send(envid, r, NULL, 0, NULL);
-}
-
 static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
 	Dprintf("%s: %08x\n", __FUNCTION__, envid);
@@ -431,9 +424,6 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 			break;
 		case SCFS_SET_METADATA:
 			serve_set_metadata(whom, (struct Scfs_set_metadata*) pg);
-			break;
-		case SCFS_SYNC:
-			serve_sync(whom, (struct Scfs_sync*) pg);
 			break;
 		case SCFS_SHUTDOWN:
 			serve_shutdown(whom, (struct Scfs_shutdown*) pg);

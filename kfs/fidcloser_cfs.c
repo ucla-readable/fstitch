@@ -359,12 +359,6 @@ static int fidcloser_set_metadata(CFS_t * cfs, const char * name, uint32_t id, s
 	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
 }
 
-static int fidcloser_sync(CFS_t * cfs, const char * name)
-{
-	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, sync, name);
-}
-
 
 //
 // CFS_t management

@@ -271,9 +271,9 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	return r;
 }
 
-static int nbd_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int nbd_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	return 0;
+	return FLUSH_EMPTY;
 }
 
 static uint16_t nbd_bd_get_devlevel(BD_t * object)

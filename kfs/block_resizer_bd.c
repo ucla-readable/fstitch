@@ -170,23 +170,9 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	return barrier_partial_forward(info->forward_buffer, info->merge_count, object, block);
 }
 
-static int block_resizer_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int block_resizer_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
-	uint32_t i, number;
-	
-	if(block == SYNC_FULL_DEVICE)
-		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
-	
-	/* make sure it's a valid block */
-	if(block >= info->block_count)
-		return -E_INVAL;
-	
-	number = block * info->merge_count;
-	for(i = 0; i != info->merge_count; i++)
-		CALL(info->bd, sync, i, ch);
-	
-	return 0;
+	return FLUSH_EMPTY;
 }
 
 static uint16_t block_resizer_bd_get_devlevel(BD_t * object)

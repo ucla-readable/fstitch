@@ -360,7 +360,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 
 	if (path_len > SKFS_MAX_NAMELEN)
 	{
-		Dprintf("%s(): path \"%s\"'s length is too long for serial kfs (%u > %u)\n", __FUNCTION__, path, path_len, SKFS_MAX_NAMELEN);
+		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, path, path_len, SKFS_MAX_NAMELEN);
 		return -E_BAD_PATH;
 	}
 
@@ -383,7 +383,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
 
 	if (path_len > SKFS_MAX_NAMELEN)
 	{
-		Dprintf("%s(): path \"%s\"'s length is too long for serial kfs (%u > %u)\n", __FUNCTION__, path, path_len, SKFS_MAX_NAMELEN);
+		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, path, path_len, SKFS_MAX_NAMELEN);
 		return NULL;
 	}
 
@@ -476,7 +476,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 
 	if (file_len > SKFS_MAX_NAMELEN)
 	{
-		Dprintf("%s(): file \"%s\"'s length is too long for serial kfs (%u > %u)\n", __FUNCTION__, file, file_len, SKFS_MAX_NAMELEN);
+		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, file, file_len, SKFS_MAX_NAMELEN);
 		return NULL;
 	}
 
@@ -517,7 +517,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 
 	if (address_len > SKFS_MAX_NAMELEN)
 	{
-		Dprintf("%s(): address \"%s\"'s length is too long for serial kfs (%u > %u)\n", __FUNCTION__, address, address_len, SKFS_MAX_NAMELEN);
+		Dprintf("%s(): address \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, address, address_len, SKFS_MAX_NAMELEN);
 		return NULL;
 	}
 
@@ -912,17 +912,42 @@ MODMAN_IT_NEXT(lfs, LFS);
 MODMAN_IT_NEXT(bd,  BD);
 
 
+// sync
+
+int kfs_sync(const char * name)
+{
+	const envid_t fsid = find_fs();
+	const int name_len = name ? strlen(name) + 1 : 0;
+
+	if (name_len > SKFS_MAX_NAMELEN)
+	{
+		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, name, name_len, SKFS_MAX_NAMELEN);
+		return -E_BAD_PATH;
+	}
+
+	INIT_PG(SYNC, sync);
+
+	if (name)
+		strncpy(pg->name, name, sizeof(pg->name));
+	else
+		pg->name[0] = 0;
+
+	SEND_PG();
+	return RECV_PG();
+}
+
+
 //
 // Perf testing
 
 int perf_test(int cfs_bd, const char * file, int size)
 {
 	const envid_t fsid = find_fs();
-	const int file_len = strlen(file)+1;
+	const int file_len = strlen(file) + 1;
 
 	if (file_len > SKFS_MAX_NAMELEN)
 	{
-		Dprintf("%s(): file \"%s\"'s length is too long for serial kfs (%u > %u)\n", __FUNCTION__, file, file_len, SKFS_MAX_NAMELEN);
+		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, file, file_len, SKFS_MAX_NAMELEN);
 		return -E_BAD_PATH;
 	}
 

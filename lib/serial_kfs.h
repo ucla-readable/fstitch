@@ -50,19 +50,19 @@
 #define SKFS_MIRROR_BD_ADD 26
 #define SKFS_MIRROR_BD_REMOVE 27
 #define SKFS_PARTITION_BD 28
-#define SKFS_PC_PTABLE_BD 29
-#define SKFS_IDE_PIO_BD 30
+#define SKFS_IDE_PIO_BD 29
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 31
-#define SKFS_MODMAN_RETURN_LOOKUP  32
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 33
-#define SKFS_MODMAN_REQUEST_ITS    34
-#define SKFS_MODMAN_RETURN_IT      35
+#define SKFS_MODMAN_REQUEST_LOOKUP 30
+#define SKFS_MODMAN_RETURN_LOOKUP  31
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 32
+#define SKFS_MODMAN_REQUEST_ITS    33
+#define SKFS_MODMAN_RETURN_IT      34
+
+#define SKFS_SYNC 35
 
 #define SKFS_PERF_TEST 36
-
 
 #define SKFS_TYPE int skfs_type
 
@@ -309,6 +309,15 @@ typedef struct {
 	int type;
 	uint32_t id;
 } Skfs_modman_return_it_t;
+
+
+//
+// sync
+
+typedef struct {
+	SKFS_TYPE;
+	char name[SKFS_MAX_NAMELEN];
+} Skfs_sync_t;
 
 
 //

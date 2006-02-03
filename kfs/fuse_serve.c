@@ -15,6 +15,7 @@
 #include <kfs/cfs.h>
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>
+#include <kfs/sync.h>
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/fuse_serve.h>
@@ -595,7 +596,7 @@ static void ssync(fuse_req_t req, fuse_ino_t ino, int datasync,
 	full_name = inode_fname(ino);
 	assert(full_name);
 	// ignore datasync
-	r = CALL(frontend_cfs, sync, full_name);
+	r = kfs_sync(full_name);
 	if (r == -18)
 	{
 		r = fuse_reply_err(req, TODOERROR); // device busy

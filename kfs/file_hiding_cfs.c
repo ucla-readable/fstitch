@@ -400,17 +400,6 @@ static int file_hiding_set_metadata(CFS_t * cfs, const char * name, uint32_t id,
 	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
 }
 
-static int file_hiding_sync(CFS_t * cfs, const char * name)
-{
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-
-	if (hide_lookup(state->hide_table, name) >= 0)
-		return -E_NOT_FOUND;
-
-	return CALL(state->frontend_cfs, sync, name);
-}
-
 static int file_hiding_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);

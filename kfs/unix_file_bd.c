@@ -16,17 +16,11 @@
 #include <kfs/unix_file_bd.h>
 #include <kfs/revision.h>
 
-/* We can remove this part once we no longer format as JOS by default */
-#ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in unix_file_bd.c
-#endif
-
 struct unix_file_info {
 	char *fname;
 	int fd;
 	uint32_t blockcount;
 	uint16_t blocksize;
-	uint16_t level;
 	blockman_t * blockman;
 };
 
@@ -187,7 +181,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 #warning and it may be written in an out-of-order sequence.
 // NOTE: MacOSX's has the fcntl() command F_FULLFSYNC to flush a drive's buffer
 static int
-unix_file_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	if (fsync(info->fd))
@@ -195,13 +189,15 @@ unix_file_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
 		perror("fsync");
 		assert(0);
 	}
-	return 0;
+	/* FLUSH_EMPTY is OK even if we did flush something,
+	 * because unix_file_bd is a terminal BD */
+	return FLUSH_EMPTY;
 }
 
 static uint16_t
 unix_file_bd_get_devlevel(BD_t * object)
 {
-	return ((struct unix_file_info *) OBJLOCAL(object))->level;
+	return 0;
 }
 
 static int
@@ -289,8 +285,6 @@ unix_file_bd(char *fname, uint16_t blocksize)
 		return NULL;
 	}
 
-	info->level = 0;
-	
 	BD_INIT(bd, unix_file_bd, info);
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))

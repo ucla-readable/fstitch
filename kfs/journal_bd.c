@@ -524,10 +524,16 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	return CALL(info->bd, write_block, block);
 }
 
-static int journal_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	return CALL(info->bd, sync, block, ch);
+	if(info->keep)
+	{
+		if(journal_bd_stop_transaction(object) < 0)
+			return FLUSH_NONE;
+		return FLUSH_DONE;
+	}
+	return FLUSH_EMPTY;
 }
 
 static uint16_t journal_bd_get_devlevel(BD_t * object)

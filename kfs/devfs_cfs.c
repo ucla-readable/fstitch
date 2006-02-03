@@ -490,34 +490,6 @@ static int devfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 	return -E_INVAL;
 }
 
-static int devfs_sync(CFS_t * cfs, const char * name)
-{
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
-	bd_entry_t * bde;
-	
-	if(!name || !name[0])
-	{
-		const size_t bd_table_size = vector_size(state->bd_table);
-		int i;
-		
-		/* FIXME save return values? */
-		for(i = 0; i < bd_table_size; i++)
-			CALL(((bd_entry_t *) vector_elt(state->bd_table, i))->bd, sync, SYNC_FULL_DEVICE, NULL);
-		
-		return 0;
-	}
-	
-	if(name[0] == '/')
-		name++;
-	bde = bde_lookup_name(state, name);
-	
-	if(!bde)
-		return -E_NOT_FOUND;
-	
-	return CALL(bde->bd, sync, SYNC_FULL_DEVICE, NULL);
-}
-
 static int devfs_destroy(CFS_t * cfs)
 {
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);

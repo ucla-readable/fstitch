@@ -11,8 +11,19 @@ typedef struct BD BD_t;
 #include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
 
-#define SYNC_FULL_DEVICE 0xFFFFFFFF
+#define FLUSH_DEVICE 0xFFFFFFFF
 #define INVALID_BLOCK 0xFFFFFFFF
+
+/* flush() should return:
+ * FLUSH_EMPTY if no flush was necessary
+ * FLUSH_DONE if a flush was completed
+ * FLUSH_SOME if some progress was made
+ * FLUSH_NONE if no progress was made */
+#define FLUSH_EMPTY ((int) 0)
+#define FLUSH_DONE ((int) 1)
+/* notice that FLUSH_SOME and FLUSH_NONE are negative */
+#define FLUSH_SOME ((int) -2)
+#define FLUSH_NONE ((int) 1 << (8 * sizeof(int) - 1))
 
 struct BD {
 	OBJECT(BD_t);
@@ -33,7 +44,7 @@ struct BD {
 	 * block by a subsequent read_block call. */
 	DECLARE(BD_t, int, cancel_block, uint32_t number);
 	DECLARE(BD_t, int, write_block, bdesc_t * block);
-	DECLARE(BD_t, int, sync, uint32_t block, chdesc_t * ch);
+	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
 };
 
 #define BD_INIT(bd, module, info) { \
@@ -46,7 +57,7 @@ struct BD {
 	ASSIGN(bd, module, synthetic_read_block); \
 	ASSIGN(bd, module, cancel_block); \
 	ASSIGN(bd, module, write_block); \
-	ASSIGN(bd, module, sync); \
+	ASSIGN(bd, module, flush); \
 }
 
 #endif /* __KUDOS_KFS_BD_H */

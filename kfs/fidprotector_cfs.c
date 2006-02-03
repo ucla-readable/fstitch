@@ -272,12 +272,6 @@ static int fidprotector_set_metadata(CFS_t * cfs, const char * name, uint32_t id
 	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
 }
 
-static int fidprotector_sync(CFS_t * cfs, const char * name)
-{
-	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, sync, name);
-}
-
 
 //
 // CFS_t management

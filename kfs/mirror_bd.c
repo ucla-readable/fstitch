@@ -258,72 +258,9 @@ static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
 	return value0|value1;
 }
 
-static int mirror_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int mirror_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
-	int value0 = -1, value1 = -1;
-	
-	if(block == SYNC_FULL_DEVICE)
-	{
-		if(disk1_bad)
-			return CALL(info->bd[0], sync, SYNC_FULL_DEVICE, NULL);
-		else if(disk0_bad)
-			return CALL(info->bd[1], sync, SYNC_FULL_DEVICE, NULL);
-
-		value0 = CALL(info->bd[0], sync, SYNC_FULL_DEVICE, NULL);
-		value1 = CALL(info->bd[1], sync, SYNC_FULL_DEVICE, NULL);
-
-		if(value0 == value1) // Consensus
-			return value0;
-		// We're biased against disk 1 since we have no idea which disk really failed in the case of both returning errors
-		if(value1 < 0)
-		{
-			label_drive_bad(object, 1);
-			return value0;
-		}
-		if(value0 < 0)
-		{
-			label_drive_bad(object, 0);
-			return value1;
-		}
-		return value0|value1;
-	}
-	
-	/* make sure it's a valid block */
-	if(block >= info->numblocks)
-		return -E_INVAL;
-	
-	if(disk1_bad)
-		value0 = CALL(info->bd[0], sync, block, ch);
-	else if(disk0_bad)
-		value1 = CALL(info->bd[1], sync, block, ch);
-	else
-	{
-		/* we can't sort out what change descriptors to
-		 * actually use, so just sync the whole block */
-		value0 = CALL(info->bd[0], sync, block, NULL);
-		value1 = CALL(info->bd[1], sync, block, NULL);
-	}
-	
-	if(disk1_bad)
-		return value0;
-	if(disk0_bad)
-		return value1;
-
-	if(value0 == value1) // Consensus
-		return value0;
-	// We're biased against disk 1
-	if(value1 < 0)
-	{
-		label_drive_bad(object, 1);
-		return value0;
-	}
-	if(value0 < 0)
-	{
-		label_drive_bad(object, 0);
-		return value1;
-	}
-	return value0|value1;
+	return FLUSH_EMPTY;
 }
 
 static uint16_t mirror_bd_get_devlevel(BD_t * object)
@@ -588,19 +525,6 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 	/* pop the local autorelease pool */
 	bdesc_autorelease_pool_pop();
 	
-	r = CALL(info->bd[good_disk], sync, SYNC_FULL_DEVICE, NULL);
-	if(r < 0)
-	{
-		modman_dec_bd(newdevice, bd);
-		return r;
-	}
-	r = CALL(newdevice, sync, SYNC_FULL_DEVICE, NULL);
-	if(r < 0)
-	{
-		modman_dec_bd(newdevice, bd);
-		return r;
-	}
-
 	info->bd[info->bad_disk] = newdevice;
 	info->bad_disk = -1;
 
@@ -612,17 +536,12 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 int mirror_bd_remove_device(BD_t * bd, int diskno)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
-	int r;
 
 	if(OBJMAGIC(bd) != MIRROR_BD_MAGIC)
 		return -E_INVAL;
 
 	if(diskno < 0 || diskno > 1)
 		return -E_INVAL;
-
-	r = mirror_bd_sync(bd, SYNC_FULL_DEVICE, NULL);
-	if(r < 0)
-		return r;
 
 	if(disk_bad)
 		return -E_INVAL;

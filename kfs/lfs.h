@@ -58,7 +58,6 @@ struct LFS {
 	DECLARE(LFS_t, int, get_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t * size, void ** data);
 	DECLARE(LFS_t, int, set_metadata_name, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 	DECLARE(LFS_t, int, set_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, int, sync, const char * name);
 };
 
 #define LFS_INIT(lfs, module, info) { \
@@ -87,7 +86,6 @@ struct LFS {
 	ASSIGN(lfs, module, get_metadata_fdesc); \
 	ASSIGN(lfs, module, set_metadata_name); \
 	ASSIGN(lfs, module, set_metadata_fdesc); \
-	ASSIGN(lfs, module, sync); \
 }
 
 #endif /* __KUDOS_KFS_LFS_H */

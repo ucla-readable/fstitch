@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <inc/cfs_ipc_client.h>
+#include <inc/kfs_ipc_client.h>
 
 void umain(int argc, char * argv[])
 {
@@ -25,7 +25,7 @@ void umain(int argc, char * argv[])
 			}
 			printf("Syncing %s... ", argv[i]);
 			/* have to go under the hood for this one */
-			r = cfs_sync(argv[i]);
+			r = kfs_sync(argv[i]);
 			if(r < 0)
 				printf("%e\n", r);
 			else
