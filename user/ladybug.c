@@ -34,7 +34,7 @@ void ladybug(int argc, char * argv[])
 	close(fd);
 
 	// set graphics mode
-	if(sys_vga_set_mode_320(0xA0000) < 0)
+	if(sys_vga_set_mode_320(0xA0000, 0) < 0)
 		exit(1);
 	if(use_palette)
 		sys_vga_set_palette(demo_buffer[1], 0);
@@ -44,5 +44,5 @@ void ladybug(int argc, char * argv[])
 	getchar();
 
 	// restore text mode
-	sys_vga_set_mode_text();
+	sys_vga_set_mode_text(0);
 }

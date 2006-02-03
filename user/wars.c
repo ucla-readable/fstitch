@@ -301,7 +301,7 @@ void wars(int argc, char * argv[])
 		}
 	}
 	
-	if(sys_vga_set_mode_320(0xA0000) < 0)
+	if(sys_vga_set_mode_320(0xA0000, 0) < 0)
 		exit(1);
 	
 	i = -CH_SIZE * line_count + SCALE;
@@ -334,7 +334,7 @@ void wars(int argc, char * argv[])
 			break;
 	}
 	
-	sys_vga_set_mode_text();
+	sys_vga_set_mode_text(0);
 	
 	wars_kill();
 }

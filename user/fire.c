@@ -39,7 +39,7 @@ void fire(int argc, char * argv[])
 	/* clear in case we are doing a partial buffer calculation */
 	memset(demo_buffer[1], 0, 64000);
 	
-	if(sys_vga_set_mode_320(0xA0000) < 0)
+	if(sys_vga_set_mode_320(0xA0000, 0) < 0)
 		exit(1);
 	sys_vga_set_palette(palette, 0);
 	
@@ -89,5 +89,5 @@ void fire(int argc, char * argv[])
 		sys_yield();
 	}
 	
-	sys_vga_set_mode_text();
+	sys_vga_set_mode_text(0);
 }

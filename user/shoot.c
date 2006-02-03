@@ -372,10 +372,10 @@ void umain(int argc, char * argv[])
 		printf("%s: cannot open mouse\n", argv[0]);
 		return;
 	}
-	if(0 <= sys_vga_set_mode_320(0xA0000))
+	if(0 <= sys_vga_set_mode_320(0xA0000, 0))
 	{
 		play_shoot(argc, argv, (uint8_t *) 0xA0000, mouse);
-		sys_vga_set_mode_text();
+		sys_vga_set_mode_text(0);
 	}
 	else
 		printf("%s: cannot get video mode\n", argv[0]);
