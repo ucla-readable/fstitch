@@ -10,6 +10,8 @@
 #include <kfs/modman.h>
 #include <kfs/wholedisk_lfs.h>
 
+#define INODE_ROOT ((inode_t) 1)
+
 struct wd_info {
 	BD_t * bd;
 	uint32_t blocksize;
@@ -35,6 +37,11 @@ static int wholedisk_get_status(void * object, int level, char * string, size_t 
 	
 	snprintf(string, length, "");
 	return 0;
+}
+
+static int wholedisk_get_root(LFS_t * lfs, inode_t * ino)
+{
+	return INODE_ROOT;
 }
 
 static uint32_t wholedisk_get_blocksize(LFS_t * object)
@@ -69,12 +76,22 @@ static int wholedisk_cancel_synthetic_block(LFS_t * object, uint32_t number)
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, cancel_block, number);
 }
 
-static fdesc_t * wholedisk_lookup_name(LFS_t * object, const char * name)
+static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t ino)
 {
-	/* only allow the empty name */
-	if(name[0])
+	/* only allow the root inode */
+	if(ino != INODE_ROOT)
 		return NULL;
 	return &fdesc;
+}
+
+static int wholedisk_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
+{
+	/* only allow the empty name */
+	if(parent != INODE_ROOT || name[0])
+		return -E_NOT_FOUND;
+	if (ino)
+		*ino = INODE_ROOT;
+	return 0;
 }
 
 static void wholedisk_free_fdesc(LFS_t * object, fdesc_t * fdesc)
@@ -104,14 +121,14 @@ static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t 
 	return -E_INVAL;
 }
 
-static fdesc_t * wholedisk_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return NULL;
 }
 
-static int wholedisk_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
@@ -132,7 +149,7 @@ static int wholedisk_free_block(LFS_t * object, fdesc_t * f, uint32_t block, chd
 	return -E_INVAL;
 }
 
-static int wholedisk_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
@@ -147,12 +164,12 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** he
 
 static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype};
 
-static size_t wholedisk_get_num_features(LFS_t * object, const char * name)
+static size_t wholedisk_get_num_features(LFS_t * object, inode_t ino)
 {
 	return sizeof(wholedisk_features) / sizeof(wholedisk_features[0]);
 }
 
-static const feature_t * wholedisk_get_feature(LFS_t * object, const char * name, size_t num)
+static const feature_t * wholedisk_get_feature(LFS_t * object, inode_t ino, size_t num)
 {
 	if(num < 0 || num >= sizeof(wholedisk_features) / sizeof(wholedisk_features[0]))
 		return NULL;
@@ -187,7 +204,7 @@ static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, vo
 	return 0;
 }
 
-static int wholedisk_get_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
+static int wholedisk_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
 	return wholedisk_get_metadata(object, id, size, data);
 }
@@ -203,7 +220,7 @@ static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, cons
 	return -E_INVAL;
 }
 
-static int wholedisk_set_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	return wholedisk_set_metadata(object, id, size, data, head, tail);
 }
