@@ -5,14 +5,15 @@
 
 #include <kfs/oo.h>
 #include <kfs/feature.h>
+#include <kfs/inode.h>
 
 struct CFS;
 typedef struct CFS CFS_t;
 
 struct CFS {
 	OBJECT(CFS_t);
-	DECLARE(CFS_t, inode_t, get_root);
-	DECLARE(CFS_t, inode_t, lookup, inode_t parent, const char * name);
+	DECLARE(CFS_t, int, get_root, inode_t * ino);
+	DECLARE(CFS_t, int, lookup, inode_t parent, const char * name, inode_t * ino);
 	DECLARE(CFS_t, int, open, inode_t ino, int mode);
 	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, inode_t * newino);
 	DECLARE(CFS_t, int, close, int fid);
@@ -23,7 +24,7 @@ struct CFS {
 	DECLARE(CFS_t, int, unlink, inode_t parent, const char * name);
 	DECLARE(CFS_t, int, link, inode_t ino, inode_t newparent, const char * newname);
 	DECLARE(CFS_t, int, rename, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname);
-	DECLARE(CFS_t, inode_t, mkdir, inode_t parent, const char * name);
+	DECLARE(CFS_t, int, mkdir, inode_t parent, const char * name, inode_t * ino);
 	DECLARE(CFS_t, int, rmdir, inode_t parent, const char * name);
 	DECLARE(CFS_t, size_t, get_num_features, const char * name);
 	DECLARE(CFS_t, const feature_t *, get_feature, const char * name, size_t num);

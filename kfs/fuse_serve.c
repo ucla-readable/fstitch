@@ -98,10 +98,10 @@ static void serve_statfs(fuse_req_t req)
 */
 
 static inode_t cfs_root_inode;
-static void init_inodes(void)
+static int init_inodes(void)
 {
 	static_assert(sizeof(fuse_ino_t) == sizeof(indoe_t));
-	cfs_root_inode = CALL(frontend_cfs, get_root);
+	return CALL(frontend_cfs, get_root, &cfs_root_inode);
 }
 
 static fuse_ino_t cfsfuse(inode_t cfs_ino)
@@ -114,10 +114,10 @@ static fuse_ino_t cfsfuse(inode_t cfs_ino)
 
 static inode_t fusecfs(fuse_ino_t fuse_ino)
 {
-	if (fuse_ino != FUSE_ROOT_ID)
-		return (inode_t) fuse_ino;
-	else
+	if (fuse_ino == FUSE_ROOT_ID)
 		return cfs_root_inode;
+	else
+		return (inode_t) fuse_ino;
 }
 
 
@@ -297,10 +297,10 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	inode_t cfs_ino;
 	struct fuse_entry_param e;
 
-	cfs_ino = CALL(frontend_cfs, lookup, fusecfs(parent), local_name);
-	if (cfs_ino < 0)
+	r = CALL(frontend_cfs, lookup, fusecfs(parent), local_name, &cfs_ino);
+	if (r < 0)
 	{
-		if (cfs_ino == -E_NOT_FOUND)
+		if (r == -E_NOT_FOUND)
 			r = fuse_reply_err(req, ENOENT);
 		else
 			r = fuse_reply_err(req, TODOERROR);
@@ -333,8 +333,8 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	int r;
 	struct fuse_entry_param e;
 
-	cfs_ino = CALL(frontend_cfs, mkdir, fusecfs(parent), local_name);
-	if (cfs_ino < 0)
+	r = CALL(frontend_cfs, mkdir, fusecfs(parent), local_name, &cfs_ino);
+	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
@@ -676,8 +676,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 		assert(buf);
 
 		memset(&stbuf, 0, sizeof(stbuf));
-		entry_cfs_ino = CALL(frontend_cfs, lookup, fuse_ino, dirent.d_name);
-		assert(entry_cfs_ino != TODO_CFS_FAIL_INO);
+		r = CALL(frontend_cfs, lookup, fuse_ino, dirent.d_name, &entry_cfs_ino);
+		assert(r >= 0);
 		stbuf.st_ino = cfsfuse(entry_cfs_ino);
 		stbuf.st_ino = TODO;
 		fuse_add_dirent(buf + oldsize, dirent.d_name, &stbuf, ++off);
@@ -859,6 +859,13 @@ int fuse_serve_init(int argc, char ** argv)
 {
 	struct fuse_chan * channel;
 	int r;
+
+	r = init_inodes();
+	if (r < 0)
+	{
+		kdprintf(STDERR_FILENO, "%s(): init_inodes() = %d\n", __FUNCTION__, r);
+		return r;
+	}
 
 	assert(!fuse_mountpoint && fuse_fd == -1 && !fuse_session && !fuse_signal_handlers_set);
 

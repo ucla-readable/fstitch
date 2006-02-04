@@ -10,6 +10,7 @@
 #include <kfs/chdesc.h>
 #include <kfs/fdesc.h>
 #include <kfs/feature.h>
+#include <kfs/inode.h>
 #include <lib/dirent.h>
 
 struct LFS;
@@ -34,6 +35,7 @@ typedef struct LFS LFS_t;
 
 struct LFS {
 	OBJECT(LFS_t);
+	DECLARE(LFS_t, int, get_root, inode_t * ino);
 	DECLARE(LFS_t, uint32_t, get_blocksize);
 	DECLARE(LFS_t, BD_t *, get_blockdev);
 	DECLARE(LFS_t, uint32_t, allocate_block, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail);
@@ -41,7 +43,7 @@ struct LFS {
 	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number, bool * synthetic);
 	DECLARE(LFS_t, int, cancel_synthetic_block, uint32_t number);
 	DECLARE(LFS_t, fdesc_t *, lookup_inode, inode_t ino);
-	DECLARE(LFS_t, inode_t, lookup_name, inode_t parent, const char * name);
+	DECLARE(LFS_t, int, lookup_name, inode_t parent, const char * name, inode_t * ino);
 	DECLARE(LFS_t, void, free_fdesc, fdesc_t * fdesc);
 	DECLARE(LFS_t, uint32_t, get_file_numblocks, fdesc_t * file);
 	DECLARE(LFS_t, uint32_t, get_file_block, fdesc_t * file, uint32_t offset);
