@@ -1,6 +1,7 @@
 #include <inc/lib.h>
 #include <lib/stdio.h>
 
+#include <kfs/sync.h>
 #include <kfs/modman.h>
 #include <lib/serial_kfs.h>
 #include <kfs/kfs_ipc_serve.h>
@@ -543,6 +544,16 @@ static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t
 
 
 //
+// sync
+
+static void kis_sync(envid_t whom, const Skfs_sync_t * pg)
+{
+	int val = kfs_sync(pg->name);
+	ipc_send(whom, val, NULL, 0, NULL);
+}
+
+
+//
 // Perf testing
 
 static char test_data[4096];
@@ -672,6 +683,8 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 
 		SERVE(MODMAN_REQUEST_LOOKUP, modman_request_lookup);
 		SERVE(MODMAN_REQUEST_ITS,    modman_request_its);
+
+		SERVE(SYNC, sync);
 
 		SERVE(PERF_TEST, perf_test);
 

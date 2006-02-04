@@ -371,13 +371,6 @@ static int josfs_cfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, s
 }
 
 
-static int josfs_cfs_sync(CFS_t * cfs, const char * name)
-{
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-
-	return jfs_sync();
-}
-
 static int josfs_cfs_destroy(CFS_t * cfs)
 {
 	josfs_cfs_state_t * state = (josfs_cfs_state_t *) OBJLOCAL(cfs);

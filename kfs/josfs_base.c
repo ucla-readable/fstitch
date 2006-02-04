@@ -1509,6 +1509,7 @@ static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 	return josfs_set_metadata(object, f, id, size, data, head, tail);
 }
 
+#if 0
 static int josfs_sync(LFS_t * object, const char * name)
 {
 	Dprintf("JOSFSDEBUG: josfs_sync %s\n", name);
@@ -1544,6 +1545,7 @@ static int josfs_sync(LFS_t * object, const char * name)
 	free(parent);
 	return r;
 }
+#endif
 
 static int josfs_destroy(LFS_t * lfs)
 {

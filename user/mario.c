@@ -296,7 +296,7 @@ void umain(int argc, char * argv[])
 		palette[r] >>= 2;
 	
 	/* go to graphics mode! */
-	if(sys_vga_set_mode_320(0xA0000) < 0)
+	if(sys_vga_set_mode_320(0xA0000, 0) < 0)
 		exit(1);
 	sys_vga_set_palette(palette, 0);
 	
@@ -314,5 +314,5 @@ void umain(int argc, char * argv[])
 	}
 	
 	/* restore text */
-	sys_vga_set_mode_text();
+	sys_vga_set_mode_text(0);
 }

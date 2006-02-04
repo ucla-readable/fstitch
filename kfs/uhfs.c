@@ -792,14 +792,6 @@ static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t
 	return r;
 }
 
-static int uhfs_sync(CFS_t * cfs, const char * name)
-{
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-
-	return CALL(state->lfs, sync, name);
-}
-
 static int uhfs_destroy(CFS_t * cfs)
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);

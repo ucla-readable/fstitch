@@ -138,31 +138,9 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	return CALL(info->bd[block->number & 1], write_block, wblock);
 }
 
-static int md_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
-	int value;
-	
-	if(block == SYNC_FULL_DEVICE)
-	{
-		int r = CALL(info->bd[0], sync, SYNC_FULL_DEVICE, NULL);
-		if(r < 0)
-		{
-			/* for reliability, do bd[1] anyway */
-			CALL(info->bd[1], sync, SYNC_FULL_DEVICE, NULL);
-			return r;
-		}
-		return CALL(info->bd[1], sync, SYNC_FULL_DEVICE, NULL);
-	}
-	
-	/* make sure it's a valid block */
-	if(block >= info->numblocks)
-		return -E_INVAL;
-	
-	/* sync it */
-	value = CALL(info->bd[block & 1], sync, block, ch);
-	
-	return value;
+	return FLUSH_EMPTY;
 }
 
 static uint16_t md_bd_get_devlevel(BD_t * object)

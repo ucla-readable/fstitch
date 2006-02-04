@@ -435,42 +435,6 @@ static int table_classifier_set_metadata(CFS_t * cfs, const char * name, uint32_
 	return CALL(selected_cfs, set_metadata, newname, id, size, data);
 }
 
-static int table_classifier_sync(CFS_t * cfs, const char * name)
-{
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs;
-
-	if(!name || !name[0])
-	{
-		const size_t mount_table_size = vector_size(state->mount_table);
-		int i, r = 0;
-		
-		for(i = 0; i < mount_table_size; i++)
-		{
-			int e = CALL(((mount_entry_t *) vector_elt(state->mount_table, i))->cfs, sync, NULL);
-			/* keep only the first error... but continue the sync */
-			if(e < 0 && !r)
-				r = e;
-		}
-		
-		return r;
-	}
-
-	selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
-
-	if (!selected_cfs)
-		return -E_NOT_FOUND;
-
-	/* some special rules for syncing mount points (i.e. whole filesystems) */
-	if(!strcmp(name, "/") && !strcmp(newname, "/"))
-		newname = NULL;
-	else if(!strcmp(name, "//") && !strcmp(newname, "//"))
-		newname++;
-	return CALL(selected_cfs, sync, newname);
-}
-
 static int table_classifier_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);

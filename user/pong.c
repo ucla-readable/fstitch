@@ -9,12 +9,12 @@ static void parent_set_video(int eid)
 {
 	int value;
 	rand(hwclock_time(NULL));
-	if(sys_vga_set_mode_320(VGA))
+	if(sys_vga_set_mode_320(VGA, 0))
 	{
 		ipc_send(eid, 1, NULL, 0, NULL);
 		exit(1);
 	}
-	sys_vga_set_mode_text();
+	sys_vga_set_mode_text(0);
 	ipc_send(eid, 0, NULL, 0, NULL);
 	value = ipc_recv(eid, NULL, NULL, NULL, NULL, 0);
 	if(value)
@@ -27,7 +27,7 @@ static void child_set_video(void)
 	value = ipc_recv(0, &parent, NULL, NULL, NULL, 0);
 	if(value)
 		exit(1);
-	if(sys_vga_set_mode_320(VGA) < 0)
+	if(sys_vga_set_mode_320(VGA, 0) < 0)
 	{
 		ipc_send(parent, 1, NULL, 0, NULL);
 		exit(1);
@@ -82,7 +82,7 @@ static void playpong(int child)
 		if(child && sys_cgetc_nb() > 0)
 		{
 			sys_env_destroy(child);
-			sys_vga_set_mode_text();
+			sys_vga_set_mode_text(0);
 			exit(0);
 		}
 		

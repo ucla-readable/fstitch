@@ -429,28 +429,6 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 }
 
 int
-cfs_sync(const char *name)
-{
-	envid_t fsid;
-	uint32_t perm;
-
-	fsid = find_fs();
-
-	struct Scfs_sync *pg = (struct Scfs_sync*)
-		ROUNDUP32(ipc_page, PGSIZE);
-	memset(pg, 0, PGSIZE);
-	pg->scfs_type = SCFS_SYNC;
-	if (name)
-		cfs_pathcpy(pg->name, name, MIN(SCFSMAXNAMELEN, MAXNAMELEN));
-	else
-		pg->name[0] = 0;
-
-	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
-
-	return ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
-}
-
-int
 cfs_shutdown(void)
 {
 	envid_t fsid;

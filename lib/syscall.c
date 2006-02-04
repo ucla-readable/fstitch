@@ -178,15 +178,15 @@ sys_sb16_wait(void)
 }
 
 int
-sys_vga_set_mode_320(uintptr_t address)
+sys_vga_set_mode_320(uintptr_t address, int fade)
 {
-	return syscall(SYS_vga_set_mode_320, address, 0, 0, 0, 0);
+	return syscall(SYS_vga_set_mode_320, address, fade, 0, 0, 0);
 }
 
 int
-sys_vga_set_mode_text(void)
+sys_vga_set_mode_text(int fade)
 {
-	return syscall(SYS_vga_set_mode_text, 0, 0, 0, 0, 0);
+	return syscall(SYS_vga_set_mode_text, fade, 0, 0, 0, 0);
 }
 
 int

@@ -30,7 +30,6 @@ struct CFS {
 	DECLARE(CFS_t, const feature_t *, get_feature, const char * name, size_t num);
 	DECLARE(CFS_t, int, get_metadata, inode_t ino, uint32_t id, size_t * size, void ** data);
 	DECLARE(CFS_t, int, set_metadata, inode_t ino, uint32_t id, size_t size, const void * data);
-	DECLARE(CFS_t, int, sync, inode_t ino); // also pass fid? linux vfs may pass parent_ino and local_name.
 };
 
 #define CFS_INIT(cfs, module, info) { \
@@ -50,7 +49,6 @@ struct CFS {
 	ASSIGN(cfs, module, get_feature); \
 	ASSIGN(cfs, module, get_metadata); \
 	ASSIGN(cfs, module, set_metadata); \
-	ASSIGN(cfs, module, sync); \
 }
 
 #endif /* __KUDOS_KFS_CFS_H */

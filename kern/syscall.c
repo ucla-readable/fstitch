@@ -669,14 +669,14 @@ sys_sb16_ioctl(int req, uint32_t a1, uint32_t a2, uint32_t a3)
 }
 
 static int
-sys_vga_set_mode_320(uintptr_t address)
+sys_vga_set_mode_320(uintptr_t address, int fade)
 {
 	int page, r;
 	
 	if(address > UTOP - (16 << PGSHIFT) || address != PTE_ADDR(address))
 		return -E_INVAL;
 	
-	r = vga_set_mode_320();
+	r = vga_set_mode_320(fade);
 	if(r)
 		return r;
 	
@@ -688,7 +688,7 @@ sys_vga_set_mode_320(uintptr_t address)
 		{
 			while(page--)
 				page_remove(curenv->env_pgdir, address + (page << PGSHIFT));
-			vga_set_mode_text();
+			vga_set_mode_text(fade);
 			return r;
 		}
 	}
@@ -697,9 +697,9 @@ sys_vga_set_mode_320(uintptr_t address)
 }
 
 static int
-sys_vga_set_mode_text(void)
+sys_vga_set_mode_text(int fade)
 {
-	return vga_set_mode_text();
+	return vga_set_mode_text(fade);
 }
 
 static int
@@ -999,9 +999,9 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 		case SYS_sb16_ioctl:
 			return sys_sb16_ioctl(a1, a2, a3, a4);
 		case SYS_vga_set_mode_320:
-			return sys_vga_set_mode_320(a1);
+			return sys_vga_set_mode_320(a1, a2);
 		case SYS_vga_set_mode_text:
-			return sys_vga_set_mode_text();
+			return sys_vga_set_mode_text(a1);
 		case SYS_vga_set_palette:
 			return sys_vga_set_palette((uint8_t *) a1, a2);
 		case SYS_vga_map_text:

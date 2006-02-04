@@ -213,12 +213,6 @@ static int wholedisk_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 	return wholedisk_set_metadata(object, id, size, data, head, tail);
 }
 
-static int wholedisk_sync(LFS_t * object, const char * name)
-{
-	CALL(((struct wd_info *) OBJLOCAL(object))->bd, sync, SYNC_FULL_DEVICE, NULL);
-	return 0;
-}
-
 static int wholedisk_destroy(LFS_t * lfs)
 {
 	int r = modman_rem_lfs(lfs);

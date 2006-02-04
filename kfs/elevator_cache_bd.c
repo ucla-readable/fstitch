@@ -229,20 +229,6 @@ static void remove_block_number(struct cache_info * info, uint32_t number)
 		remove_slot(slot);
 }
 
-#if 0
-static void block_dump(struct elevator_slot * slot, int indent)
-{
-	int i;
-	if(!slot)
-		return;
-	block_dump(slot->smaller, indent + 1);
-	for(i = 0; i != indent; i++)
-		printf(" ");
-	printf("%d\n", slot->block->number);
-	block_dump(slot->larger, indent + 1);
-}
-#endif
-
 static bdesc_t * advance_head(struct cache_info * info)
 {
 	bdesc_t * block = lookup_block_larger(info, info->head_pos);
@@ -265,10 +251,7 @@ static int evict_block(BD_t * object)
 	
 	for(;;)
 	{
-		//printf("Trying to evict a block! (dirty = %d)\n", info->dirty);
-		//block_dump(info->blocks, 1);
 		bdesc_t * block = advance_head(info);
-		//printf("Advanced head to %d (%d)\n", info->head_pos, block->number);
 		revision_slice_t * slice = revision_slice_create(block, object, info->bd, 0);
 		if(!slice)
 			return -E_NO_MEM;
@@ -276,7 +259,6 @@ static int evict_block(BD_t * object)
 		{
 			int r;
 			
-			//printf("Writing slice...\n");
 			revision_slice_push_down(slice);
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
@@ -284,16 +266,12 @@ static int evict_block(BD_t * object)
 			
 			if(slice->ready_size == slice->full_size)
 			{
-				//printf("Slice completely written!\n");
 				revision_slice_destroy(slice);
 				remove_block(info, block);
 				info->dirty--;
 				break;
 			}
-			//printf("Slice incomplete, trying again.\n");
 		}
-		//else
-			//printf("Slice not ready!\n");
 		revision_slice_destroy(slice);
 	}
 	
@@ -414,29 +392,23 @@ static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
-static int elevator_cache_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int elevator_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	int start_dirty = info->dirty;
 
-	if(block == SYNC_FULL_DEVICE)
+	if(!info->dirty)
+		return FLUSH_EMPTY;
+
+	while(info->dirty)
 	{
-		while(info->dirty)
-		{
-			int r = evict_block(object);
-			if(r < 0)
-				return r;
-		}
-		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
+		int r = evict_block(object);
+		/* this really should never happen to the elevator cache... */
+		if(r < 0)
+			return (info->dirty == start_dirty) ? FLUSH_NONE : FLUSH_SOME;
 	}
-	
-	/* make sure it's a valid block */
-	if(block >= CALL(info->bd, get_numblocks))
-		return -E_INVAL;
-	
-#warning FIXME flush individual change descriptors
-	return -1;
-	/* sync it */
-	return CALL(info->bd, sync, block, ch);
+
+	return FLUSH_DONE;
 }
 
 static uint16_t elevator_cache_bd_get_devlevel(BD_t * object)
@@ -460,9 +432,9 @@ static int elevator_cache_bd_destroy(BD_t * bd)
 	
 	if(info->dirty)
 	{
-		r = CALL(bd, sync, SYNC_FULL_DEVICE, NULL);
+		r = CALL(bd, flush, FLUSH_DEVICE, NULL);
 		if(r < 0)
-			return r;
+			return -E_BUSY;
 	}
 	assert(!info->dirty);
 	assert(!info->blocks);

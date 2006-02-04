@@ -149,7 +149,7 @@ static uint8_t vga_cur_start, vga_cur_end;
 static uint8_t vga_font[4 * VGA_MEM_SIZE];
 static int graphics = 0;
 
-int vga_set_mode_320(void)
+int vga_set_mode_320(int fade)
 {
 	int i;
 	
@@ -167,11 +167,14 @@ int vga_set_mode_320(void)
 	
 	/* save and dim palette */
 	vga_save_palette(vga_palette);
-	for(i = 1; i != 64; i++)
-	{
-		vga_set_palette(vga_palette, i);
-		kclock_delay(3);
-	}
+	if(fade)
+		for(i = 1; i != 64; i++)
+		{
+			vga_set_palette(vga_palette, i);
+			kclock_delay(3);
+		}
+	else
+		vga_set_palette(vga_palette, 63);
 	
 	/* change to graphics mode */
 	vga_set_mode(pio_320, sizeof(pio_320) / sizeof(pio_320[0]));
@@ -192,7 +195,7 @@ int vga_set_mode_320(void)
 	return 0;
 }
 
-int vga_set_mode_text(void)
+int vga_set_mode_text(int fade)
 {
 	int i;
 	
@@ -216,11 +219,14 @@ int vga_set_mode_text(void)
 	outb(0x3d5, vga_cur_end);
 	
 	/* restore palette */
-	for(i = 62; i != -1; i--)
-	{
-		vga_set_palette(vga_palette, i);
-		kclock_delay(3);
-	}
+	if(fade)
+		for(i = 62; i != -1; i--)
+		{
+			vga_set_palette(vga_palette, i);
+			kclock_delay(3);
+		}
+	else
+		vga_set_palette(vga_palette, 0);
 	
 	return 0;
 }

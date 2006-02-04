@@ -2849,6 +2849,7 @@ static int ufs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 	return ufs_set_metadata(object, f, id, size, data, head, tail);
 }
 
+#if 0
 // TODO sync metadata
 static int ufs_sync(LFS_t * object, const char * name)
 {
@@ -2889,6 +2890,7 @@ ufs_sync_error:
 	ufs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
+#endif
 
 static int ufs_destroy(LFS_t * lfs)
 {

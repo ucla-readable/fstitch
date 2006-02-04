@@ -25,9 +25,8 @@
 #define SCFS_GET_FEATURE 14
 #define SCFS_GET_METADATA 15
 #define SCFS_SET_METADATA 16
-#define SCFS_SYNC 17
-#define SCFS_SHUTDOWN 18
-#define SCFS_DEBUG 20
+#define SCFS_SHUTDOWN 17
+#define SCFS_DEBUG 18
 
 #define SCFS_TYPE int scfs_type
 
@@ -132,11 +131,6 @@ struct Scfs_set_metadata {
 	SCFS_TYPE;
 	char name[SCFSMAXNAMELEN];
 	// Scfs_metadata is sent as a separate page
-};
-
-struct Scfs_sync {
-	SCFS_TYPE;
-	char name[SCFSMAXNAMELEN];
 };
 
 struct Scfs_shutdown {

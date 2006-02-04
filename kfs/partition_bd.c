@@ -140,22 +140,9 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	return CALL(info->bd, write_block, wblock);
 }
 
-static int partition_bd_sync(BD_t * object, uint32_t block, chdesc_t * ch)
+static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	int value;
-	
-	if(block == SYNC_FULL_DEVICE)
-		return CALL(info->bd, sync, SYNC_FULL_DEVICE, NULL);
-	
-	/* make sure it's a valid block */
-	if(block >= info->length)
-		return -E_INVAL;
-	
-	/* sync it */
-	value = CALL(info->bd, sync, block + info->start, ch);
-	
-	return value;
+	return FLUSH_EMPTY;
 }
 
 static uint16_t partition_bd_get_devlevel(BD_t * object)
