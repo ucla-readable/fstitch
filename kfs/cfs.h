@@ -26,15 +26,18 @@ struct CFS {
 	DECLARE(CFS_t, int, rename, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname);
 	DECLARE(CFS_t, int, mkdir, inode_t parent, const char * name, inode_t * ino);
 	DECLARE(CFS_t, int, rmdir, inode_t parent, const char * name);
-	DECLARE(CFS_t, size_t, get_num_features, const char * name);
-	DECLARE(CFS_t, const feature_t *, get_feature, const char * name, size_t num);
+	DECLARE(CFS_t, size_t, get_num_features, inode_t ino);
+	DECLARE(CFS_t, const feature_t *, get_feature, inode_t ino, size_t num);
 	DECLARE(CFS_t, int, get_metadata, inode_t ino, uint32_t id, size_t * size, void ** data);
 	DECLARE(CFS_t, int, set_metadata, inode_t ino, uint32_t id, size_t size, const void * data);
 };
 
 #define CFS_INIT(cfs, module, info) { \
 	OBJ_INIT(cfs, module, info); \
+	ASSIGN(cfs, module, get_root); \
+	ASSIGN(cfs, module, lookup); \
 	ASSIGN(cfs, module, open); \
+	ASSIGN(cfs, module, create); \
 	ASSIGN(cfs, module, close); \
 	ASSIGN(cfs, module, read); \
 	ASSIGN(cfs, module, write); \
