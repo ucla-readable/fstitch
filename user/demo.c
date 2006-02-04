@@ -15,6 +15,7 @@ int rand(int nseed)
 uint8_t demo_buffer[5 * 64000] = {0};
 
 void data(int argc, char * argv[]);
+void explode(int argc, char * argv[]);
 void fall(int argc, char * argv[]);
 void fire(int argc, char * argv[]);
 void ladybug(int argc, char * argv[]);
@@ -30,6 +31,7 @@ static const struct {
 	void (*demo)(int, char *[]);
 } demos[] = {
 	{"data", data},
+	{"explode", explode},
 	{"fall", fall},
 	{"fire", fire},
 	{"ladybug", ladybug},

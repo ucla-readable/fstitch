@@ -36,7 +36,8 @@ void fire(int argc, char * argv[])
 		palette[3 * i + 1] = 63;
 		palette[3 * i + 2] = 63;
 	}
-	/* clear in case we are doing a partial buffer calculation */
+	
+	memset(demo_buffer[0], 0, 64000);
 	memset(demo_buffer[1], 0, 64000);
 	
 	if(sys_vga_set_mode_320(0xA0000, 0) < 0)
@@ -58,7 +59,7 @@ void fire(int argc, char * argv[])
 			}
 		}
 		
-		memcpy(demo_buffer[0], (void *) 0xA0000 + 640, 64000 - 640);
+		memcpy(demo_buffer[0], &demo_buffer[1][640], 64000 - 640);
 		if(button)
 			for(i = 0; i != 640; i++)
 				demo_buffer[0][64000 - 640 + i] = rand(0) | 128;
@@ -67,11 +68,12 @@ void fire(int argc, char * argv[])
 				demo_buffer[0][64000 - 640 + i] = rand(0);
 		
 		for(i = 0; i != 320; i++)
+		{
+			int n, x[3] = {(i + 319) % 320, i, (i + 1) % 320};
 			/* calculate only the bottom 1/4 of the buffer */
 			for(j = 150; j != 200; j++)
 			{
 				uint16_t total = 0;
-				int n, x[3] = {(i + 319) % 320, i, (i + 1) % 320};
 				if(j)
 					for(n = 0; n != 3; n++)
 						total += demo_buffer[0][(j - 1) * 320 + x[n]];
@@ -83,6 +85,7 @@ void fire(int argc, char * argv[])
 				total = total * 2 / 17;
 				demo_buffer[1][j * 320 + i] = (total > 15) ? total - 16 : 0;
 			}
+		}
 		
 		memcpy((void *) 0xA0000, demo_buffer[1], 64000);
 		
