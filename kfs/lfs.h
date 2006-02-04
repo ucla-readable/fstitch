@@ -65,12 +65,14 @@ struct LFS {
 
 #define LFS_INIT(lfs, module, info) { \
 	OBJ_INIT(lfs, module, info); \
+	ASSIGN(lfs, module, get_root); \
 	ASSIGN(lfs, module, get_blocksize); \
 	ASSIGN(lfs, module, get_blockdev); \
 	ASSIGN(lfs, module, allocate_block); \
 	ASSIGN(lfs, module, lookup_block); \
 	ASSIGN(lfs, module, synthetic_lookup_block); \
 	ASSIGN(lfs, module, cancel_synthetic_block); \
+	ASSIGN(lfs, module, lookup_inode); \
 	ASSIGN(lfs, module, lookup_name); \
 	ASSIGN(lfs, module, free_fdesc); \
 	ASSIGN(lfs, module, get_file_numblocks); \
