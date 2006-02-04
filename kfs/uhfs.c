@@ -40,13 +40,13 @@ struct uhfs_state {
 };
 
 
-static bool lfs_feature_supported(LFS_t * lfs, const char * name, int feature_id)
+static bool lfs_feature_supported(LFS_t * lfs, inode_t ino, int feature_id)
 {
-	const size_t num_features = CALL(lfs, get_num_features, name);
+	const size_t num_features = CALL(lfs, get_num_features, ino);
 	size_t i;
 
 	for (i=0; i < num_features; i++)
-		if (CALL(lfs, get_feature, name, i)->id == feature_id)
+		if (CALL(lfs, get_feature, ino, i)->id == feature_id)
 			return 1;
 
 	return 0;
@@ -105,6 +105,20 @@ static int uhfs_get_status(void * object, int level, char * string, size_t lengt
 	
 	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
 	return 0;
+}
+
+static int uhfs_get_root(CFS_t * cfs, inode_t * ino)
+{
+	Dprintf("%s()\n", __FUNCTION__);
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	return CALL(state->lfs, get_root, ino);
+}
+
+static int uhfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+{
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	return CALL(state->lfs, lookup_name, parent, name, ino);
 }
 
 static int uhfs_close(CFS_t * cfs, int fid)
@@ -182,42 +196,21 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	return 0;
 }
 
-// TODO:
-// - respect mode
-static int uhfs_open(CFS_t * cfs, const char * name, int mode)
+static int open_common(struct uhfs_state * state, inode_t ino, fdesc_t * fdesc)
 {
-	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	fdesc_t * fdesc;
 	uint32_t size_id = 0;
 	bool type = 0;
-	int fid;
 	open_file_t * f;
+	int fid;
 	int r;
-
-	/* look up the name */
-	fdesc = CALL(state->lfs, lookup_name, name);
-
-	if ((mode & O_CREAT) && !fdesc)
-	{
-		chdesc_t * prev_head, * tail;
-
-		prev_head = NULL;
-		fdesc = CALL(state->lfs, allocate_name, name, TYPE_FILE, NULL, &prev_head, &tail);
-		if (!fdesc)
-			return -E_UNSPECIFIED;
-	}
-	else
-		if (!fdesc)
-			return -E_NOT_FOUND;
 
 	/* detect whether the filesize and filetype features are supported */
 	{
-		const size_t num_features = CALL(state->lfs, get_num_features, name);
+		const size_t num_features = CALL(state->lfs, get_num_features, ino);
 		size_t i;
 		for (i=0; i < num_features; i++)
 		{
-			const feature_t * f = CALL(state->lfs, get_feature, name, i);
+			const feature_t * f = CALL(state->lfs, get_feature, ino, i);
 			if (f->id == KFS_feature_size.id)
 				size_id = KFS_feature_size.id;
 			else if (f->id == KFS_feature_filetype.id)
@@ -253,6 +246,31 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 		return -E_NO_MEM;
 	}
 
+	return fid;
+}
+
+// TODO:
+// - respect mode
+static int uhfs_open(CFS_t * cfs, inode_t ino, int mode)
+{
+	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	fdesc_t * fdesc;
+	int fid;
+	int r;
+
+	if ((mode & O_CREAT))
+		return -E_INVAL;
+
+	/* look up the ino */
+	fdesc = CALL(state->lfs, lookup_inode, ino);
+	if (!fdesc)
+		return -E_NOT_FOUND;
+
+	fid = open_common(state, ino, fdesc);
+	if (fid < 0)
+		return fid;
+
 	/* HACK: don't do this for wholedisk LFS modules */
 	if (mode & O_TRUNC && OBJMAGIC(state->lfs) != WHOLEDISK_MAGIC)
 	{
@@ -265,6 +283,30 @@ static int uhfs_open(CFS_t * cfs, const char * name, int mode)
 	}
 
 	return fid;
+}
+
+static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+{
+	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	inode_t existing_ino;
+	chdesc_t * prev_head, * tail;
+	fdesc_t * fdesc;
+	int r;
+
+	r = CALL(state->lfs, lookup_name, parent, name, &existing_ino);
+	if (r >= 0)
+	{
+		kdprintf(STDERR_FILENO, "%s(%u, \"%s\"): file already exists. What should we do? (Returning error)\n", __FUNCTION__, parent, name);
+		return -E_FILE_EXISTS;
+	}
+
+	prev_head = NULL;
+	fdesc = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, newino, &prev_head, &tail);
+	if (!fdesc)
+		return -E_UNSPECIFIED;
+
+	return open_common(state, *newino, fdesc);
 }
 
 static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
@@ -504,10 +546,10 @@ static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint
 		return r;
 }
 
-static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
+static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f)
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	const bool link_supported = lfs_feature_supported(state->lfs, name, KFS_feature_nlinks.id);
+	const bool link_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_nlinks.id);
 	int i, r;
 	uint32_t nblocks;
 	uint16_t nlinks;
@@ -528,7 +570,7 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 
 		if (nlinks > 1) {
 			CALL(state->lfs, free_fdesc, f);
-			return CALL(state->lfs, remove_name, name, &prev_head, &tail);
+			return CALL(state->lfs, remove_name, parent, name, &prev_head, &tail);
 		}
 	}
 
@@ -553,23 +595,30 @@ static int unlink_file(CFS_t * cfs, const char * name, fdesc_t * f)
 
 	CALL(state->lfs, free_fdesc, f);
 
-	return CALL(state->lfs, remove_name, name, &prev_head, &tail);
+	return CALL(state->lfs, remove_name, parent, name, &prev_head, &tail);
 }
 
-static int uhfs_unlink(CFS_t * cfs, const char * name)
+static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
+	inode_t ino;
+	bool dir_supported;
 	fdesc_t * f;
 	size_t data_len;
 	void * data;
 	uint32_t filetype;
 	int r;
 
-	f = CALL(state->lfs, lookup_name, name);
+	r = CALL(state->lfs, lookup_name, parent, name, &ino);
+	if (r < 0)
+		return r;
+
+	dir_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
+
+	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
-		return -E_NOT_FOUND;
+		return -E_UNSPECIFIED;
 
 	if (dir_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
@@ -588,30 +637,33 @@ static int uhfs_unlink(CFS_t * cfs, const char * name)
 		}
 	}
 
-	return unlink_file(cfs, name, f);
+	return unlink_file(cfs, ino, parent, name, f);
 }
 
-static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
+static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
+	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	fdesc_t * oldf, * newf, * f;
-	const bool type_supported = lfs_feature_supported(state->lfs, oldname, KFS_feature_filetype.id);
+	inode_t newino;
+	fdesc_t * oldf, * newf;
+	bool type_supported;
 	uint32_t oldtype;
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
-	oldf = CALL(state->lfs, lookup_name, oldname);
-	if (!oldf)
-		return -E_NOT_FOUND;
+	type_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
 
-	/* determine oldname's type to set newname's type */
+	oldf = CALL(state->lfs, lookup_inode, ino);
+	if (!oldf)
+		return -E_UNSPECIFIED;
+
+	/* determine old's type to set new's type */
 	if (!type_supported)
 		panic("%s() requires LFS filetype feature support to determine whether newname is to be a file or directory", __FUNCTION__);
 	{
 		void * data;
 		size_t data_len;
-		r= CALL(state->lfs, get_metadata_fdesc, oldf, KFS_feature_filetype.id, &data_len, &data);
+		r = CALL(state->lfs, get_metadata_fdesc, oldf, KFS_feature_filetype.id, &data_len, &data);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, oldf);
 			return r;
@@ -622,14 +674,12 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 		free(data);
 	}
 
-	if ((f = CALL(state->lfs, lookup_name, newname))) {
-		CALL(state->lfs, free_fdesc, f);
+	if (CALL(state->lfs, lookup_name, newparent, newname, &newino) >= 0) {
 		CALL(state->lfs, free_fdesc, oldf);
 		return -E_FILE_EXISTS;
 	}
-	CALL(state->lfs, free_fdesc, f);
 
-	newf = CALL(state->lfs, allocate_name, newname, oldtype, oldf, &prev_head, &tail);
+	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &newino, &prev_head, &tail);
 	if (!newf) {
 		CALL(state->lfs, free_fdesc, oldf);
 		return -E_UNSPECIFIED;
@@ -650,39 +700,38 @@ static int uhfs_link(CFS_t * cfs, const char * oldname, const char * newname)
 	return 0;
 }
 
-static int uhfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
+static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
+	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
-	r = CALL(state->lfs, rename, oldname, newname, &prev_head, &tail);
+	r = CALL(state->lfs, rename, oldparent, oldname, newparent, newname, &prev_head, &tail);
 	if (r < 0)
 		return r;
 
 	return 0;
 }
 
-static int uhfs_mkdir(CFS_t * cfs, const char * name)
+static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	inode_t existing_ino;
 	fdesc_t * f;
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
-	if ((f = CALL(state->lfs, lookup_name, name))) {
-		CALL(state->lfs, free_fdesc, f);
+	if (CALL(state->lfs, lookup_name, parent, name, &existing_ino) >= 0)
 		return -E_FILE_EXISTS;
-	}
 
-	f = CALL(state->lfs, allocate_name, name, TYPE_DIR, NULL, &prev_head, &tail);
+	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, ino, &prev_head, &tail);
 	if (!f)
 		return -E_UNSPECIFIED;
 
 	/* set the filetype metadata */
-	if (lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id))
+	if (lfs_feature_supported(state->lfs, *ino, KFS_feature_filetype.id))
 	{
 		const int type = TYPE_DIR;
 		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &prev_head, &tail);
@@ -690,7 +739,7 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 		{
 			/* ignore remove_name() error in favor of the real error */
 			CALL(state->lfs, free_fdesc, f);
-			(void) CALL(state->lfs, remove_name, name, &prev_head, &tail);
+			(void) CALL(state->lfs, remove_name, parent, name, &prev_head, &tail);
 			return r;
 		}
 	}
@@ -700,12 +749,13 @@ static int uhfs_mkdir(CFS_t * cfs, const char * name)
 	return 0;
 }
 
-static int uhfs_rmdir(CFS_t * cfs, const char * name)
+static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	const bool dir_supported = lfs_feature_supported(state->lfs, name, KFS_feature_filetype.id);
-	const bool unixdir = lfs_feature_supported(state->lfs, name, KFS_feature_unixdir.id);
+	inode_t ino;
+	bool dir_supported;
+	bool unixdir;
 	fdesc_t * f;
 	struct dirent entry;
 	size_t data_len;
@@ -714,9 +764,16 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 	uint32_t basep = 0;
 	int r, retval = -E_INVAL;
 
-	f = CALL(state->lfs, lookup_name, name);
+	r = CALL(state->lfs, lookup_name, parent, name, &ino);
+	if (r < 0)
+		return r;
+
+	dir_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
+	unixdir = lfs_feature_supported(state->lfs, ino, KFS_feature_unixdir.id);
+
+	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
-		return -E_NOT_FOUND;
+		return -E_UNSPECIFIED;
 
 	if (dir_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
@@ -740,7 +797,7 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 					}
 				}
 				if (r < 0) {
-					return unlink_file(cfs, name, f);
+					return unlink_file(cfs, ino, parent, name, f);
 				}
 			} while (r != 0);
 			retval = -E_NOT_EMPTY;
@@ -754,38 +811,38 @@ static int uhfs_rmdir(CFS_t * cfs, const char * name)
 	return retval;
 }
 
-static size_t uhfs_get_num_features(CFS_t * cfs, const char * name)
+static size_t uhfs_get_num_features(CFS_t * cfs, inode_t ino)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u)\n", __FUNCTION__, ino);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
-	return CALL(state->lfs, get_num_features, name);
+	return CALL(state->lfs, get_num_features, ino);
 }
 
-static const feature_t * uhfs_get_feature(CFS_t * cfs, const char * name, size_t num)
+static const feature_t * uhfs_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
-	Dprintf("\"%s\", 0x%x)\n", __FUNCTION__, name, num);
+	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, num);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
-   return CALL(state->lfs, get_feature, name, num);
+   return CALL(state->lfs, get_feature, ino, num);
 }
 
-static int uhfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
+static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
+	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 
-	return CALL(state->lfs, get_metadata_name, name, id, size, data);
+	return CALL(state->lfs, get_metadata_inode, ino, id, size, data);
 }
 
-static int uhfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
+static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
-	Dprintf("%s(\"%s\", 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, name, id, size, data);
+	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
-	r = CALL(state->lfs, set_metadata_name, name, id, size, data, &prev_head, &tail);
+	r = CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head, &tail);
 	if (r < 0)
 		return r;
 
