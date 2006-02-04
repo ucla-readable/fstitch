@@ -102,22 +102,15 @@ static int fidprotector_get_status(void * object, int level, char * string, size
 	return 0;
 }
 
-static int fidprotector_open(CFS_t * cfs, const char * name, int mode)
+static int open_fid(fidprotector_state_t * state, int fid)
 {
-	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int fid;
 	uint32_t cappa;
 	open_file_t * of;
 	int r;
 
-	fid = CALL(state->frontend_cfs, open, name, mode);
-	if (fid < 0)
-		return fid;
-
 	cappa = cfs_ipc_serve_cur_cappa();
 	if (cappa == -1)
-		kdprintf(STDERR_FILENO, "%s(\"%s\"): warning: capability is the unused-marker\n", __FUNCTION__, name);
+		kdprintf(STDERR_FILENO, "%s(): warning: capability is the unused-marker\n", __FUNCTION__);
 
 	r = 0;
 	of = open_file_create(fid, cappa);
@@ -130,6 +123,35 @@ static int fidprotector_open(CFS_t * cfs, const char * name, int mode)
 			return r;
 	}
 
+	return fid;
+}
+
+static int fidprotector_open(CFS_t * cfs, inode_t ino, int mode)
+{
+	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
+	int fid;
+
+	fid = CALL(state->frontend_cfs, open, ino, mode);
+	if (fid < 0)
+		return fid;
+
+	return open_fid(state, fid);
+}
+
+static int fidprotector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+{
+	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
+	int fid;
+
+	fid = CALL(state->frontend_cfs, create, parent, name, mode, newino);
+	if (fid < 0)
+		return fid;
+
+	fid = open_fid(state, fid);
+	if (fid < 0)
+		*newino = INODE_NONE;
 	return fid;
 }
 
@@ -218,58 +240,70 @@ static int fidprotector_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 //
 // Passthrough CFS_t functions
 
-static int fidprotector_unlink(CFS_t * cfs, const char * name)
+static int fidprotector_get_root(CFS_t * cfs, inode_t * ino)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, unlink, name);
+	return CALL(state->frontend_cfs, get_root, ino);
 }
 
-static int fidprotector_link(CFS_t * cfs, const char * oldname, const char * newname)
+static int fidprotector_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, link, oldname, newname);
+	return CALL(state->frontend_cfs, lookup, parent, name, ino);
 }
 
-static int fidprotector_rename(CFS_t * cfs, const char * oldname, const char * newname)
+static int fidprotector_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, rename, oldname, newname);
+	return CALL(state->frontend_cfs, unlink, parent, name);
 }
 
-static int fidprotector_mkdir(CFS_t * cfs, const char * name)
+static int fidprotector_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, mkdir, name);
+	return CALL(state->frontend_cfs, link, ino, newparent, newname);
 }
 
-static int fidprotector_rmdir(CFS_t * cfs, const char * name)
+static int fidprotector_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, rmdir, name);
+	return CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
 }
 
-static size_t fidprotector_get_num_features(CFS_t * cfs, const char * name)
+static int fidprotector_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_num_features, name);
+	return CALL(state->frontend_cfs, mkdir, parent, name, ino);
 }
 
-static const feature_t * fidprotector_get_feature(CFS_t * cfs, const char * name, size_t num)
+static int fidprotector_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_feature, name, num);
+	return CALL(state->frontend_cfs, rmdir, parent, name);
 }
 
-static int fidprotector_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
+static size_t fidprotector_get_num_features(CFS_t * cfs, inode_t ino)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_metadata, name, id, size, data);
+	return CALL(state->frontend_cfs, get_num_features, ino);
 }
 
-static int fidprotector_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
+static const feature_t * fidprotector_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
+	return CALL(state->frontend_cfs, get_feature, ino, num);
+}
+
+static int fidprotector_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
+{
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
+	return CALL(state->frontend_cfs, get_metadata, ino, id, size, data);
+}
+
+static int fidprotector_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
+{
+	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
+	return CALL(state->frontend_cfs, set_metadata, ino, id, size, data);
 }
 
 

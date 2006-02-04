@@ -181,26 +181,15 @@ static int fidcloser_get_status(void * object, int level, char * string, size_t 
 	return 0;
 }
 
-static int fidcloser_open(CFS_t * cfs, const char * name, int mode)
+static int open_fid(fidcloser_state_t * state, int fid)
 {
-	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
-	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	int fid;
 	const void * page;
 	const void * cache;
 	open_file_t * of;
 	int r;
 
-	open_file_gc(state);
-
 	page = cfs_ipc_serve_cur_page();
 	assert(page && va_is_mapped(page));
-
-
-	fid = CALL(state->frontend_cfs, open, name, mode);
-	if (fid < 0)
-		return fid;
-
 
 	// find a free slot to cache page
 	for(cache = FIDCLOSER_CFS_FD_MAP; cache != FIDCLOSER_CFS_FD_END; cache += PGSIZE)
@@ -234,6 +223,39 @@ static int fidcloser_open(CFS_t * cfs, const char * name, int mode)
 			return r;
 	}
 
+	return fid;
+}
+
+static int fidcloser_open(CFS_t * cfs, inode_t ino, int mode)
+{
+	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
+	int fid;
+
+	open_file_gc(state);
+
+	fid = CALL(state->frontend_cfs, open, ino, mode);
+	if (fid < 0)
+		return fid;
+
+	return open_fid(state, fid);
+}
+
+static int fidcloser_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+{
+	Dprintf("%s(parent = %u, name = \"%s\", mode = %d)\n", __FUNCTION__, parent, name, mode);
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
+	int fid;
+
+	open_file_gc(state);
+
+	fid = CALL(state->frontend_cfs, create, parent, name, mode, newino);
+	if (fid < 0)
+		return fid;
+
+	fid = open_fid(state, fid);
+	if (fid < 0)
+		*newino = INODE_NONE;
 	return fid;
 }
 
@@ -281,6 +303,18 @@ static int fidcloser_destroy(CFS_t * cfs)
 //
 // Passthrough CFS_t functions
 
+static int fidcloser_get_root(CFS_t * cfs, inode_t * ino)
+{
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
+	return CALL(state->frontend_cfs, get_root, ino);
+}
+
+static int fidcloser_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+{
+	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
+	return CALL(state->frontend_cfs, lookup, parent, name, ino);
+}
+
 static int fidcloser_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
@@ -305,58 +339,58 @@ static int fidcloser_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	return CALL(state->frontend_cfs, truncate, fid, target_size);
 }
 
-static int fidcloser_unlink(CFS_t * cfs, const char * name)
+static int fidcloser_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, unlink, name);
+	return CALL(state->frontend_cfs, unlink, parent, name);
 }
 
-static int fidcloser_link(CFS_t * cfs, const char * oldname, const char * newname)
+static int fidcloser_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, link, oldname, newname);
+	return CALL(state->frontend_cfs, link, ino, newparent, newname);
 }
 
-static int fidcloser_rename(CFS_t * cfs, const char * oldname, const char * newname)
+static int fidcloser_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, rename, oldname, newname);
+	return CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
 }
 
-static int fidcloser_mkdir(CFS_t * cfs, const char * name)
+static int fidcloser_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, mkdir, name);
+	return CALL(state->frontend_cfs, mkdir, parent, name, ino);
 }
 
-static int fidcloser_rmdir(CFS_t * cfs, const char * name)
+static int fidcloser_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, rmdir, name);
+	return CALL(state->frontend_cfs, rmdir, parent, name);
 }
 
-static size_t fidcloser_get_num_features(CFS_t * cfs, const char * name)
+static size_t fidcloser_get_num_features(CFS_t * cfs, inode_t ino)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_num_features, name);
+	return CALL(state->frontend_cfs, get_num_features, ino);
 }
 
-static const feature_t * fidcloser_get_feature(CFS_t * cfs, const char * name, size_t num)
+static const feature_t * fidcloser_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_feature, name, num);
+	return CALL(state->frontend_cfs, get_feature, ino, num);
 }
 
-static int fidcloser_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
+static int fidcloser_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_metadata, name, id, size, data);
+	return CALL(state->frontend_cfs, get_metadata, ino, id, size, data);
 }
 
-static int fidcloser_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
+static int fidcloser_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, set_metadata, name, id, size, data);
+	return CALL(state->frontend_cfs, set_metadata, ino, id, size, data);
 }
 
 
