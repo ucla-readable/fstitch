@@ -4,8 +4,8 @@
 #include <kfs/chdesc.h>
 
 /* The following operations change the state of opgroups:
- * W) Add dependents    Y) Write data
- * X) Release           Z) Add dependencies
+ * C) Add dependents    W) Write data
+ * R) Release           T) Add dependencies
  * 
  * Of these, adding dependents and releasing may always be performed. However,
  * adding a dependency may only be done before the opgroup is releasing, and
@@ -15,28 +15,28 @@
  * live in the wild. If not, it will die in its cage.)
  * 
  * The following table shows the possible states and what operations are valid.
- * Notice that each of W, X, Y, and Z above sets a bit in the state of an
+ * Notice that each of C, R, W, and T above sets a bit in the state of an
  * opgroup. Adding a dependency means that the opgroup now has dependencies,
  * releasing an opgroup means it is now released, etc.
  * 
- * W X Y Z  Can do: [ (Y) means we do not allow this now, but plan to when we
+ * C R W T  Can do: [ (W) means we do not allow this now, but plan to when we
  * -------            work out how to hide changes from other clients. ]
- * 0 0 0 0   W   X  (Y)  Z
- * 0 0 0 1   W   X  (Y)  Z
- * 0 0 1 0   W   X   Y   Z  <--- initially, these states cannot exist due to (Y)
- * 0 0 1 1   W   X   Y   Z  <-/
- * 0 1 0 0   W   X   Y
- * 0 1 0 1   W   X   Y
- * 0 1 1 0   W   X   Y
- * 0 1 1 1   W   X   Y
- * 1 0 0 0   W   X       Z  <--- these are "noop" opgroups
- * 1 0 0 1   W   X       Z  <-/
- * 1 0 1 0   W   X       Z  <--- initially, these states cannot exist due to (Y)
- * 1 0 1 1   W   X       Z  <-/
- * 1 1 0 0   W   X          <--- these are "noop" opgroups (the first is "dead")
- * 1 1 0 1   W   X          <-/
- * 1 1 1 0   W   X
- * 1 1 1 1   W   X
+ * 0 0 0 0   C   R  (W)  T
+ * 0 0 0 1   C   R  (W)  T
+ * 0 0 1 0   C   R   W   T  <--- initially, these states cannot exist due to (W)
+ * 0 0 1 1   C   R   W   T  <-/
+ * 0 1 0 0   C   R   W
+ * 0 1 0 1   C   R   W
+ * 0 1 1 0   C   R   W
+ * 0 1 1 1   C   R   W
+ * 1 0 0 0   C   R       T  <--- these are "noop" opgroups
+ * 1 0 0 1   C   R       T  <-/
+ * 1 0 1 0   C   R       T  <--- initially, these states cannot exist due to (W)
+ * 1 0 1 1   C   R       T  <-/
+ * 1 1 0 0   C   R          <--- these are "noop" opgroups (the first is "dead")
+ * 1 1 0 1   C   R          <-/
+ * 1 1 1 0   C   R
+ * 1 1 1 1   C   R
  * */
 
 typedef int opgroup_id_t;
