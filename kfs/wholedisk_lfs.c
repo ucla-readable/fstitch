@@ -41,7 +41,8 @@ static int wholedisk_get_status(void * object, int level, char * string, size_t 
 
 static int wholedisk_get_root(LFS_t * lfs, inode_t * ino)
 {
-	return INODE_ROOT;
+	*ino = INODE_ROOT;
+	return 0;
 }
 
 static uint32_t wholedisk_get_blocksize(LFS_t * object)
