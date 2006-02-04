@@ -17,6 +17,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/blockman.o \
 			$(OBJDIR)/kfs/revision.o \
+			$(OBJDIR)/kfs/opgroup.o \
 			$(OBJDIR)/kfs/barrier.o \
 			$(OBJDIR)/kfs/unix_file_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \

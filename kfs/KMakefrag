@@ -8,6 +8,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/blockman.o \
 			$(OBJDIR)/kfs/revision.o \
+			$(OBJDIR)/kfs/opgroup.o \
 			$(OBJDIR)/kfs/barrier.o \
 			$(OBJDIR)/kfs/partition_bd.o \
 			$(OBJDIR)/kfs/pc_ptable.o \
