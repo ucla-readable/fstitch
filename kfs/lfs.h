@@ -87,9 +87,9 @@ struct LFS {
 	ASSIGN(lfs, module, write_block); \
 	ASSIGN(lfs, module, get_num_features); \
 	ASSIGN(lfs, module, get_feature); \
-	ASSIGN(lfs, module, get_metadata_name); \
+	ASSIGN(lfs, module, get_metadata_inode); \
 	ASSIGN(lfs, module, get_metadata_fdesc); \
-	ASSIGN(lfs, module, set_metadata_name); \
+	ASSIGN(lfs, module, set_metadata_inode); \
 	ASSIGN(lfs, module, set_metadata_fdesc); \
 }
 
