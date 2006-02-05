@@ -43,29 +43,14 @@
 
 typedef int opgroup_id_t;
 
-typedef struct opgroup {
-	opgroup_id_t id;
-	chdesc_t * head;
-	chdesc_t * tail;
-	chdesc_t * keep;
-	int references;
-} opgroup_t;
+struct opgroup;
+typedef struct opgroup opgroup_t;
+
+struct opgroup_scope;
+typedef struct opgroup_scope opgroup_scope_t;
 
 #define OPGROUP_FLAG_HIDDEN 0x2
 #define OPGROUP_FLAG_ATOMIC 0x6
-
-typedef struct opgroup_state {
-	opgroup_t * opgroup;
-	int engaged;
-} opgroup_state_t;
-
-typedef struct opgroup_scope {
-	opgroup_id_t next_id;
-	/* map from id to state */
-	hash_map_t * id_map;
-	chdesc_t * top;
-	chdesc_t * bottom;
-} opgroup_scope_t;
 
 opgroup_scope_t * opgroup_scope_create(void);
 opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope);
