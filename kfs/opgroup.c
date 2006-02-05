@@ -3,25 +3,97 @@
 
 #include <kfs/opgroup.h>
 
-static opgroup_id_t next_opgroup_id = 0;
-static hash_map_t * id_map = NULL;
+static opgroup_scope_t * current_scope = NULL;
 
-int opgroup_init(void)
+opgroup_scope_t * opgroup_scope_create(void)
 {
-	if(id_map)
-		return -E_BUSY;
-	id_map = hash_map_create();
-	return id_map ? 0 : -E_NO_MEM;
+	opgroup_scope_t * scope = malloc(sizeof(*scope));
+	if(scope)
+	{
+		scope->next_id = 1;
+		scope->top = NULL;
+		scope->bottom = NULL;
+		scope->id_map = hash_map_create();
+		if(!scope->id_map)
+		{
+			free(scope);
+			scope = NULL;
+		}
+	}
+	return scope;
+}
+
+opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
+{
+	opgroup_scope_t * copy = malloc(sizeof(*copy));
+	if(copy)
+	{
+		*copy = *scope;
+		if(chdesc_weak_retain(copy->top, &copy->top) < 0)
+			goto error_1;
+		if(chdesc_weak_retain(copy->bottom, &copy->bottom) < 0)
+			goto error_2;
+		copy->id_map = hash_map_copy(scope->id_map);
+		if(!copy->id_map)
+		{
+			chdesc_weak_release(&copy->bottom);
+		error_2:
+			chdesc_weak_release(&copy->top);
+		error_1:
+			free(copy);
+			copy = NULL;
+		}
+		else
+		{
+			hash_map_it_t it;
+			opgroup_t * op;
+			
+			/* iterate over opgroups and increase reference counts */
+			hash_map_it_init(&it, copy->id_map);
+			while((op = hash_map_val_next(&it)))
+				op->references++;
+		}
+	}
+	return copy;
+}
+
+void opgroup_scope_destroy(opgroup_scope_t * scope)
+{
+	hash_map_it_t it;
+	opgroup_t * op;
+	opgroup_scope_t * old_scope = current_scope;
+	
+	current_scope = scope;
+	/* iterate over opgroups and abandon them */
+	hash_map_it_init(&it, scope->id_map);
+	while((op = hash_map_val_next(&it)))
+		opgroup_abandon(&op);
+	current_scope = (old_scope == scope) ? NULL : old_scope;
+	
+	chdesc_weak_release(&scope->top);
+	chdesc_weak_release(&scope->bottom);
+	hash_map_destroy(scope->id_map);
+	free(scope);
+}
+
+void opgroup_scope_set_current(opgroup_scope_t * scope)
+{
+	current_scope = scope;
 }
 
 opgroup_t * opgroup_create(int flags)
 {
 	opgroup_t * op;
+	
+	if(!current_scope)
+		return NULL;
 	if(flags)
-		goto error_1;
+		return NULL;
+	
 	if(!(op = malloc(sizeof(*op))))
 		goto error_1;
-	op->id = next_opgroup_id++;
+	op->id = current_scope->next_id++;
+	op->references = 1;
 	if(!(op->head = chdesc_create_noop(NULL, NULL)))
 		goto error_2;
 	if(!(op->tail = chdesc_create_noop(NULL, NULL)))
@@ -33,7 +105,7 @@ opgroup_t * opgroup_create(int flags)
 	chdesc_claim_noop(op->keep);
 	if(chdesc_add_depend(op->tail, op->keep) < 0)
 		goto error_6;
-	if(hash_map_insert(id_map, (void *) op->id, op) < 0)
+	if(hash_map_insert(current_scope->id_map, (void *) op->id, op) < 0)
 		goto error_7;
 	return op;
 	
@@ -83,13 +155,36 @@ int opgroup_release(opgroup_t * opgroup)
 
 int opgroup_abandon(opgroup_t ** opgroup)
 {
-	/* TODO: check state first */
-	free(*opgroup);
-	*opgroup = NULL;
+	opgroup_t * op;
+	if(!current_scope)
+		return -E_INVAL;
+	op = (opgroup_t *) hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
+	if(op != *opgroup)
+		return -E_NOT_FOUND;
+	if(!--op->references)
+	{
+		/* no more references to this opgroup */
+		if(op->keep)
+			panic("Don't know how to roll back an abandoned opgroup!");
+		chdesc_weak_release(&op->head);
+		chdesc_weak_release(&op->tail);
+		free(op);
+		*opgroup = NULL;
+	}
 	return 0;
 }
 
 opgroup_t * opgroup_lookup(opgroup_id_t id)
 {
-	return (opgroup_t *) hash_map_find_val(id_map, (void *) id);
+	return current_scope ? (opgroup_t *) hash_map_find_val(current_scope->id_map, (void *) id) : NULL;
+}
+
+chdesc_t * opgroup_get_engaged_top(void)
+{
+	return current_scope ? current_scope->top : NULL;
+}
+
+chdesc_t * opgroup_get_engaged_bottom(void)
+{
+	return current_scope ? current_scope->bottom : NULL;
 }
