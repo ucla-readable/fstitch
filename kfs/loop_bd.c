@@ -26,7 +26,7 @@ struct loop_info {
 	BD_t * lfs_bd;
 	uint16_t level;
 	fdesc_t * file;
-	const char * filename;
+	inode_t inode;
 	uint16_t blocksize;
 };
 typedef struct loop_info loop_info_t;
@@ -39,14 +39,14 @@ static int loop_get_config(void * object, int level, char * string, size_t lengt
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "filename: %s, blocksize: %d, count: %d", info->filename, info->blocksize, CALL(info->lfs, get_file_numblocks, info->file));
+			snprintf(string, length, "inode: %d, blocksize: %d, count: %d", info->inode, info->blocksize, CALL(info->lfs, get_file_numblocks, info->file));
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "%s", info->filename);
+			snprintf(string, length, "%d", info->inode);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "filename: %s, blocksize: %d", info->filename, info->blocksize);
+			snprintf(string, length, "inode: %s, blocksize: %d", info->inode, info->blocksize);
 	}
 	return 0;
 }
@@ -189,7 +189,6 @@ static int loop_destroy(BD_t * bd)
 	assert(r >= 0);
 	
 	CALL(info->lfs, free_fdesc, info->file);
-	free((char *) info->filename);
 	memset(info, 0, sizeof(*info));
 	free(info);
 
@@ -200,13 +199,13 @@ static int loop_destroy(BD_t * bd)
 }
 
 
-BD_t * loop_bd(LFS_t * lfs, const char * file)
+BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 {
 	Dprintf("%s(lfs 0x%08x, file \"%s\")\n", __FUNCTION__, lfs, file);
 	BD_t * bd;
 	loop_info_t * info;
 
-	if (!lfs || !file)
+	if (!lfs)
 		return NULL;
 
 	bd = malloc(sizeof(*bd));
@@ -223,13 +222,11 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 	info->lfs_bd = CALL(info->lfs, get_blockdev);
 	info->level = CALL(info->lfs_bd, get_devlevel);
 
-	info->filename = strdup(file);
-	if (!info->filename)
-		goto error_info;
+	info->inode = inode;
 
-	info->file = CALL(info->lfs, lookup_name, info->filename);
+	info->file = CALL(info->lfs, lookup_inode, inode);
 	if (!info->file)
-		goto error_filename;
+		goto error_inode;
 
 	info->blocksize = CALL(info->lfs, get_blocksize);
 
@@ -247,9 +244,7 @@ BD_t * loop_bd(LFS_t * lfs, const char * file)
 
 	return bd;
 
-  error_filename:
-	free((char *) info->filename);
-  error_info:
+  error_inode:
 	free(info);
   error_bd:
 	free(bd);
