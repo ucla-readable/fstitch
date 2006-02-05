@@ -122,6 +122,36 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 	return hm;
 }
 
+hash_map_t * hash_map_copy(const hash_map_t * hm)
+{
+	hash_map_t * hm_copy;
+	size_t i;
+	chain_elt_t * elt;
+	int r;
+
+	// Create new hash table
+	hm_copy = hash_map_create_size(hm->size, hm->auto_resize);
+	if (!hm_copy)
+		return NULL;
+
+	// Copy elements (rehashing them; we could do this more quickly)
+	for (i=0; i < vector_size(hm->tbl); i++)
+	{
+		elt = vector_elt(hm->tbl, i);
+		while (elt)
+		{
+			if ((r = hash_map_insert(hm_copy, elt->elt.key, elt->elt.val)) < 0)
+			{
+				hash_map_destroy(hm_copy);
+				return NULL;
+			}
+			elt = elt->next;
+		}
+	}
+
+	return hm_copy;
+}
+
 void hash_map_destroy(hash_map_t * hm)
 {
 	hash_map_clear(hm);
