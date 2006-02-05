@@ -1,6 +1,8 @@
 #ifndef __KUDOS_KFS_OPGROUP_H
 #define __KUDOS_KFS_OPGROUP_H
 
+#include <lib/hash_map.h>
+
 #include <kfs/chdesc.h>
 
 /* The following operations change the state of opgroups:
@@ -46,12 +48,32 @@ typedef struct opgroup {
 	chdesc_t * head;
 	chdesc_t * tail;
 	chdesc_t * keep;
+	int references;
 } opgroup_t;
 
 #define OPGROUP_FLAG_HIDDEN 0x2
 #define OPGROUP_FLAG_ATOMIC 0x6
 
-int opgroup_init(void);
+typedef struct opgroup_state {
+	opgroup_t * opgroup;
+	int engaged;
+} opgroup_state_t;
+
+typedef struct opgroup_scope {
+	opgroup_id_t next_id;
+	/* map from id to state */
+	hash_map_t * id_map;
+	chdesc_t * top;
+	chdesc_t * bottom;
+} opgroup_scope_t;
+
+opgroup_scope_t * opgroup_scope_create(void);
+opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope);
+void opgroup_scope_destroy(opgroup_scope_t * scope);
+
+void opgroup_scope_set_current(opgroup_scope_t * scope);
+
+/* normal opgroup operations are relative to the current scope */
 
 opgroup_t * opgroup_create(int flags);
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency);
@@ -63,5 +85,8 @@ int opgroup_release(opgroup_t * opgroup);
 int opgroup_abandon(opgroup_t ** opgroup);
 
 opgroup_t * opgroup_lookup(opgroup_id_t id);
+
+chdesc_t * opgroup_get_engaged_top(void);
+chdesc_t * opgroup_get_engaged_bottom(void);
 
 #endif /* __KUDOS_KFS_OPGROUP_H */
