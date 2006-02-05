@@ -10,7 +10,7 @@
  * R) Release           T) Add dependencies
  * 
  * Of these, adding dependents and releasing may always be performed. However,
- * adding a dependency may only be done before the opgroup is releasing, and
+ * adding a dependency may only be done before the opgroup is released, and
  * writing data can only be done if there are no dependents. It should also be
  * noted that abandoning an opgroup before releasing it causes it to be aborted.
  * (Think about abandoning your pet mouse: if you release it beforehand, it can
@@ -71,7 +71,7 @@ int opgroup_abandon(opgroup_t ** opgroup);
 
 opgroup_t * opgroup_lookup(opgroup_id_t id);
 
-chdesc_t * opgroup_get_engaged_top(void);
-chdesc_t * opgroup_get_engaged_bottom(void);
+/* add change descriptors to the engaged opgroups in the current scope */
+int opgroup_insert_change(chdesc_t * head, chdesc_t * tail);
 
 #endif /* __KUDOS_KFS_OPGROUP_H */

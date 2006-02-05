@@ -9,7 +9,10 @@ struct opgroup {
 	chdesc_t * head;
 	chdesc_t * tail;
 	chdesc_t * keep;
-	int references;
+	uint32_t references:29;
+	uint32_t has_data:1;
+	uint32_t has_dependents:1;
+	uint32_t has_dependencies:1;
 };
 
 typedef struct opgroup_state {
@@ -149,6 +152,9 @@ opgroup_t * opgroup_create(int flags)
 	
 	op->id = current_scope->next_id++;
 	op->references = 1;
+	op->has_data = 0;
+	op->has_dependents = 0;
+	op->has_dependencies = 0;
 	state->opgroup = op;
 	state->engaged = 0;
 	
@@ -192,22 +198,140 @@ error_1:
 
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 {
-	/* TODO: check state first */
-	/* from dependent's perspective, we are adding a dependency */
-	/* from dependency's perspective, we are adding a dependent */
-	return chdesc_add_depend(dependent->tail, dependency->head);
+	int r = 0;
+	/* from dependency's perspective, we are adding a dependent
+	 *   => always allowed */
+	/* from dependent's perspective, we are adding a dependency
+	 *   => dependent must not be released */
+	if(!dependent->keep)
+		return -E_INVAL;
+	/* TODO: make sure this function doesn't need anything more */
+	/* it might not have a head if it's already been written to disk */
+	if(dependency->head)
+		/* notice that this can fail if there is a dependency cycle */
+		r = chdesc_add_depend(dependent->tail, dependency->head);
+	if(r >= 0)
+	{
+		dependent->has_dependencies = 1;
+		dependency->has_dependents = 1;
+	}
+	return r;
+}
+
+static int opgroup_update_top_bottom(void)
+{
+	hash_map_it_t it;
+	opgroup_state_t * state;
+	chdesc_t * top;
+	chdesc_t * bottom;
+	chdesc_t * save_top = current_scope->top;
+	int r;
+	
+	/* TODO: finish this function */
+	return -1;
+	
+	/* create new top and bottom */
+	top = chdesc_create_noop(NULL, NULL);
+	if(!top)
+		return -E_NO_MEM;
+	bottom = chdesc_create_noop(NULL, NULL);
+	if(!bottom)
+	{
+		chdesc_destroy(&top);
+		return -E_NO_MEM;
+	}
+	if((r = chdesc_add_depend(top, bottom)) < 0)
+	{
+		chdesc_destroy(&bottom);
+		chdesc_destroy(&top);
+		return r;
+	}
+	
+	hash_map_it_init(&it, current_scope->id_map);
+	while((state = hash_map_val_next(&it)))
+		if(state->engaged)
+		{
+			if(!state->opgroup->head)
+			{
+				/* ... */
+			}
+			if(chdesc_add_depend(state->opgroup->head, top) < 0)
+			{
+				/* ... */
+			}
+			if(!state->opgroup->tail)
+			{
+				/* ... */
+			}
+			if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
+			{
+				/* ... */
+			}
+		}
+	
+	if(chdesc_weak_retain(top, &current_scope->top) < 0)
+	{
+		/* ... */
+	}
+	if(chdesc_weak_retain(bottom, &current_scope->bottom) < 0)
+	{
+		chdesc_weak_release(&current_scope->top);
+		r = chdesc_weak_retain(save_top, &current_scope->top);
+		assert(r >= 0);
+		/* ... */
+	}
+	
+	return 0;
 }
 
 int opgroup_engage(opgroup_t * opgroup)
 {
-	/* TODO: write this function */
-	return -1;
+	int r;
+	opgroup_state_t * state;
+	
+	if(!current_scope)
+		return -E_INVAL;
+	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
+	if(!state)
+		return -E_NOT_FOUND;
+	assert(state->opgroup == opgroup);
+	/* can't engage it if it has dependents */
+	if(opgroup->has_dependents)
+		return -E_INVAL;
+	if(state->engaged)
+		return 0;
+	
+	state->engaged = 1;
+	
+	r = opgroup_update_top_bottom();
+	if(r < 0)
+		state->engaged = 0;
+	else
+		/* mark it as having data since it is now engaged */
+		state->opgroup->has_data = 1;
+	return r;
 }
 
 int opgroup_disengage(opgroup_t * opgroup)
 {
-	/* TODO: write this function */
-	return -1;
+	int r;
+	opgroup_state_t * state;
+	
+	if(!current_scope)
+		return -E_INVAL;
+	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
+	if(!state)
+		return -E_NOT_FOUND;
+	assert(state->opgroup == opgroup);
+	if(!state->engaged)
+		return 0;
+	
+	state->engaged = 0;
+	
+	r = opgroup_update_top_bottom();
+	if(r < 0)
+		state->engaged = 1;
+	return r;
 }
 
 int opgroup_release(opgroup_t * opgroup)
@@ -246,12 +370,29 @@ opgroup_t * opgroup_lookup(opgroup_id_t id)
 	return current_scope ? (opgroup_t *) hash_map_find_val(current_scope->id_map, (void *) id) : NULL;
 }
 
-chdesc_t * opgroup_get_engaged_top(void)
+int opgroup_insert_change(chdesc_t * head, chdesc_t * tail)
 {
-	return current_scope ? current_scope->top : NULL;
-}
-
-chdesc_t * opgroup_get_engaged_bottom(void)
-{
-	return current_scope ? current_scope->bottom : NULL;
+	int r;
+	if(!current_scope)
+		return 0;
+	/* technically we could set has_data here instead of in engage... but is that better? */
+	if(!current_scope->top)
+	{
+		/* TODO: recreate the top if it is gone */
+		/* ... */
+		return -1;
+	}
+	r = chdesc_add_depend(current_scope->top, head);
+	if(r < 0)
+		return r;
+	if(current_scope->bottom)
+	{
+		r = chdesc_add_depend(tail, current_scope->bottom);
+		if(r < 0)
+		{
+			chdesc_remove_depend(current_scope->top, head);
+			return r;
+		}
+	}
+	return 0;
 }
