@@ -303,6 +303,46 @@ sys_page_unmap(envid_t envid, uintptr_t va)
 	return 0;
 }
 
+// Determine whether the page of memory mapped at 'va' in the current
+// environment is the same physical page mapped at 'target_va' in 'target'.
+//
+// Return 1 if they are the same page.
+// Return 0 if they are not the same page.
+// Return < 0 on error. Errors are:
+//  -E_INVAL if va is not mapped, va >= UTOP, va is not page-aligned,
+//      target_va >= UTOP, or target_va is not page-aligned.
+//  -E_BAD_ENV if environment target doesn't currently exist.
+static int
+sys_page_is_mapped(uintptr_t va, envid_t target, uintptr_t target_va)
+{
+	struct Env * e;
+	struct Page * page_cur;
+	struct Page * page_target;
+	pte_t * pte;
+
+	if(envid2env(target, &e, 0))
+		return -E_BAD_ENV;
+
+	if(va >= UTOP || PTE_ADDR(va) != va)
+		return -E_INVAL;
+	if(target_va >= UTOP || PTE_ADDR(target_va) != target_va)
+		return -E_INVAL;
+	
+	page_cur = page_lookup(curenv->env_pgdir, va, &pte);
+	if(!pte)
+		return -E_INVAL;
+	if(!(*pte & PTE_U) || !(*pte & PTE_P))
+		return -E_INVAL;
+
+	page_target = page_lookup(e->env_pgdir, target_va, &pte);
+	if(!pte)
+		return 0;
+	if(!(*pte & PTE_U) || !(*pte & PTE_P))
+		return 0;
+
+	return page_cur == page_target;
+}
+
 static int
 sys_env_set_priority(envid_t envid, int priority)
 {
@@ -982,6 +1022,8 @@ syscall(register_t sn, register_t a1, register_t a2, register_t a3, register_t a
 			return sys_page_map(a1, a2, a3, a4, a5);
 		case SYS_page_unmap:
 			return sys_page_unmap(a1, a2);
+		case SYS_page_is_mapped:
+			return sys_page_is_mapped(a1, a2, a3);
 		case SYS_set_pgfault_upcall:
 			return sys_set_pgfault_upcall(a1, a2);
 		case SYS_set_irq_upcall:

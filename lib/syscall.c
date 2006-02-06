@@ -90,6 +90,12 @@ sys_page_unmap(envid_t envid, void* pg)
 	return syscall(SYS_page_unmap, envid, (uintptr_t) pg, 0, 0, 0);
 }
 
+int
+sys_page_is_mapped(void* pg, envid_t target, uintptr_t target_va)
+{
+	return syscall(SYS_page_is_mapped, (uintptr_t) pg, target, target_va, 0, 0);
+}
+
 // sys_exofork is inlined in lib.h
 
 int

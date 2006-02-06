@@ -17,6 +17,7 @@ enum
 	SYS_page_alloc,
 	SYS_page_map,
 	SYS_page_unmap,
+	SYS_page_is_mapped,
 	SYS_set_pgfault_upcall,
 	SYS_set_irq_upcall,
 	SYS_ipc_try_send,
