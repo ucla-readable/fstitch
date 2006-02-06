@@ -383,8 +383,6 @@ opgroup_t * opgroup_lookup(opgroup_id_t id)
 
 opgroup_id_t opgroup_id(const opgroup_t * opgroup)
 {
-	if(!current_scope)
-		return -E_UNSPECIFIED;
 	if(!opgroup)
 		return -E_INVAL;
 	return opgroup->id;
