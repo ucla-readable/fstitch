@@ -25,7 +25,7 @@
 // 2- Figure out if a given fid/page is already in use by another fidcloser.
 // 3- Allow at most one fidcloser to exist at a given time.
 // Possibility 3 is safe (1 is not), simpler than 2, and at least for now
-// mupltiple fidclosers aren't something we want. so possibility 2 it is:
+// mupltiple fidclosers aren't something we want. so possibility 3 it is:
 static bool fidcloser_cfs_exists = 0;
 
 struct open_file {
