@@ -517,10 +517,10 @@ int cfs_ipc_opgroup_engage(envid_t envid, opgroup_id_t opgroupid)
 	int r = -E_BAD_ENV;
 	if (!env_scope_exists(envid) || (r = set_cur_opgroup_scope(envid)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(env = %08x, opgroup_id = %d): env has no scope\n", __FUNCTION__, envid, opgroup_id);
+		kdprintf(STDERR_FILENO, "%s(env = %08x, opgroupid = %d): env has no scope\n", __FUNCTION__, envid, opgroupid);
 		return r;
 	}
-	Dprintf("%s(env = %08x, opgroup_id = %d)\n", __FUNCTION__, envid, opgroup_id);
+	Dprintf("%s(env = %08x, opgroupid = %d)\n", __FUNCTION__, envid, opgroupid);
 	r = opgroup_engage(opgroup_lookup(opgroupid));
 	clear_cur_opgroup_scope();
 	return r;
