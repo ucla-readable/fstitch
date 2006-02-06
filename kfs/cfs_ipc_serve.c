@@ -2,7 +2,8 @@
 #include <kfs/cfs.h>
 #include <kfs/kfsd.h>
 #include <kfs/sync.h>
-#include <kfs/ipc_serve.h> // for IPCSERVE_REQVA
+#include <kfs/opgroup.h>
+#include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/cfs_ipc_serve.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -17,8 +18,6 @@
 #else
 #define Dprintf(x...)
 #endif
-
-#define PAGESNDVA (IPCSERVE_REQVA - PGSIZE)
 
 
 // Previous message store for two-part message methods.
@@ -51,6 +50,14 @@ static const void * cur_page = NULL;
 const void * cfs_ipc_serve_cur_page(void)
 {
 	return cur_page;
+}
+
+
+static envid_t cur_envid = 0;
+
+envid_t cfs_ipc_serve_cur_envid(void)
+{
+	return cur_envid;
 }
 
 
@@ -339,6 +346,102 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 	}
 }
 
+static void serve_opgroup_scope_create(envid_t envid, struct Scfs_opgroup_scope_create * req)
+{
+	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
+	if (!prevrecv)
+		alloc_prevrecv(envid, &prevrecv);
+
+	if (!prevrecv->type || prevrecv->envid != envid)
+	{
+		// First of two recvs
+		Dprintf("%s [1]: %08x, 0x%08x\n", __FUNCTION__, envid, req->scope_cappg_va);
+		prevrecv->envid = envid;
+		prevrecv->type = req->scfs_type;
+		memcpy(prevrecv->scfs, req, PGSIZE);
+	}
+	else
+	{
+		// Second of two recvs
+		struct Scfs_opgroup_scope_create *scfs = (struct Scfs_opgroup_scope_create*) prevrecv->scfs;
+		int r;
+		Dprintf("%s [2]: %08x, 0x%08x\n", __FUNCTION__, envid, scfs->scope_cappg_va);
+		r = cfs_ipc_opgroup_scope_create(envid, req, scfs->scope_cappg_va);
+		ipc_send(envid, r, NULL, 0, NULL);
+		prevrecv->envid = 0;
+		prevrecv->type = 0;
+	}
+}
+
+static void serve_opgroup_scope_copy(envid_t envid, struct Scfs_opgroup_scope_copy * req)
+{
+	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
+	if (!prevrecv)
+		alloc_prevrecv(envid, &prevrecv);
+
+	if (!prevrecv->type || prevrecv->envid != envid)
+	{
+		// First of two recvs
+		Dprintf("%s [1]: %08x, %08x, 0x%08x\n", __FUNCTION__, envid, req->child, req->child_scope_cappg_va);
+		prevrecv->envid = envid;
+		prevrecv->type = req->scfs_type;
+		memcpy(prevrecv->scfs, req, PGSIZE);
+	}
+	else
+	{
+		// Second of two recvs
+		struct Scfs_opgroup_scope_copy *scfs = (struct Scfs_opgroup_scope_copy*) prevrecv->scfs;
+		int r;
+		Dprintf("%s [2]: %08x, %08x, 0x%08x\n", __FUNCTION__, envid, scfs->child, scfs->child_scope_cappg_va);
+		r = cfs_ipc_opgroup_scope_copy(envid, scfs->child, req, scfs->child_scope_cappg_va);
+		ipc_send(envid, r, NULL, 0, NULL);
+		prevrecv->envid = 0;
+		prevrecv->type = 0;
+	}
+}
+
+static void serve_opgroup_create(envid_t envid, struct Scfs_opgroup_create * req)
+{
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->flags);
+	int opgroup = cfs_ipc_opgroup_create(envid, req->flags);
+	ipc_send(envid, opgroup, NULL, 0, NULL);
+}
+
+static void serve_opgroup_add_depend(envid_t envid, struct Scfs_opgroup_add_depend * req)
+{
+	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->dependent, req->dependency);
+	int r = cfs_ipc_opgroup_add_depend(envid, req->dependent, req->dependency);
+	ipc_send(envid, r, NULL, 0, NULL);
+}
+
+static void serve_opgroup_engage(envid_t envid, struct Scfs_opgroup_engage * req)
+{
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->opgroup);
+	int r = cfs_ipc_opgroup_engage(envid, req->opgroup);
+	ipc_send(envid, r, NULL, 0, NULL);
+}
+
+static void serve_opgroup_disengage(envid_t envid, struct Scfs_opgroup_disengage * req)
+{
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->opgroup);
+	int r = cfs_ipc_opgroup_disengage(envid, req->opgroup);
+	ipc_send(envid, r, NULL, 0, NULL);
+}
+
+static void serve_opgroup_release(envid_t envid, struct Scfs_opgroup_release * req)
+{
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->opgroup);
+	int r = cfs_ipc_opgroup_release(envid, req->opgroup);
+	ipc_send(envid, r, NULL, 0, NULL);
+}
+
+static void serve_opgroup_abandon(envid_t envid, struct Scfs_opgroup_abandon * req)
+{
+	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->opgroup);
+	int r = cfs_ipc_opgroup_abandon(envid, req->opgroup);
+	ipc_send(envid, r, NULL, 0, NULL);
+}
+
 static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
 	Dprintf("%s: %08x\n", __FUNCTION__, envid);
@@ -378,6 +481,8 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 		kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Received request but there is no registered frontend CFS object.\n");
 		return; // just leave it hanging...
 	}
+
+	cur_envid = whom;
 
 	switch (type) {
 		case SCFS_OPEN:
@@ -425,6 +530,30 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 		case SCFS_SET_METADATA:
 			serve_set_metadata(whom, (struct Scfs_set_metadata*) pg);
 			break;
+		case SCFS_OPGROUP_SCOPE_CREATE:
+			serve_opgroup_scope_create(whom, (struct Scfs_opgroup_scope_create*) pg);
+			break;
+		case SCFS_OPGROUP_SCOPE_COPY:
+			serve_opgroup_scope_copy(whom, (struct Scfs_opgroup_scope_copy*) pg);
+			break;
+		case SCFS_OPGROUP_CREATE:
+			serve_opgroup_create(whom, (struct Scfs_opgroup_create*) pg);
+			break;
+		case SCFS_OPGROUP_ADD_DEPEND:
+			serve_opgroup_add_depend(whom, (struct Scfs_opgroup_add_depend*) pg);
+			break;
+		case SCFS_OPGROUP_ENGAGE:
+			serve_opgroup_engage(whom, (struct Scfs_opgroup_engage*) pg);
+			break;
+		case SCFS_OPGROUP_DISENGAGE:
+			serve_opgroup_disengage(whom, (struct Scfs_opgroup_disengage*) pg);
+			break;
+		case SCFS_OPGROUP_RELEASE:
+			serve_opgroup_release(whom, (struct Scfs_opgroup_release*) pg);
+			break;
+		case SCFS_OPGROUP_ABANDON:
+			serve_opgroup_abandon(whom, (struct Scfs_opgroup_abandon*) pg);
+			break;
 		case SCFS_SHUTDOWN:
 			serve_shutdown(whom, (struct Scfs_shutdown*) pg);
 			break;
@@ -434,6 +563,9 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 		default:
 			kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: Unknown type %d\n", type);
 	}
+
+	cur_envid = 0;
+
 	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
 		panic("sys_page_unmap: %e", r);
 	cur_cappa = 0;

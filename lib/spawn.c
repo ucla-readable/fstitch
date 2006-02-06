@@ -1,5 +1,6 @@
 #include <inc/lib.h>
 #include <inc/elf.h>
+#include <inc/cfs_ipc_client.h>
 
 #define UTEMP2USTACK(addr)	((uintptr_t) (addr) + (USTACKTOP - PGSIZE) - UTEMP)
 #define UTEMP2			(UTEMP + PGSIZE)
@@ -169,6 +170,15 @@ spawn(const char* prog, const char** argv)
 	
 	r = copy_shared_pages(child);
 	if(r < 0)
+	{
+		sys_env_destroy(child);
+		return r;
+	}
+
+	/* Copy our opgroup scope.
+	 * No need to error if kfsd is gone (-E_TIMEOUT), let spawn continue. */
+	r = cfs_opgroup_scope_copy(child);
+	if(r < 0 && r != -E_TIMEOUT)
 	{
 		sys_env_destroy(child);
 		return r;

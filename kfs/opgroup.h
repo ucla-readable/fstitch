@@ -2,7 +2,7 @@
 #define __KUDOS_KFS_OPGROUP_H
 
 #include <lib/hash_map.h>
-
+#include <lib/opgroup.h>
 #include <kfs/chdesc.h>
 
 /* The following operations change the state of opgroups:
@@ -41,16 +41,11 @@
  * 1 1 1 1   C   R
  * */
 
-typedef int opgroup_id_t;
-
 struct opgroup;
 typedef struct opgroup opgroup_t;
 
 struct opgroup_scope;
 typedef struct opgroup_scope opgroup_scope_t;
-
-#define OPGROUP_FLAG_HIDDEN 0x2
-#define OPGROUP_FLAG_ATOMIC 0x6
 
 opgroup_scope_t * opgroup_scope_create(void);
 opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope);
@@ -59,6 +54,14 @@ void opgroup_scope_destroy(opgroup_scope_t * scope);
 void opgroup_scope_set_current(opgroup_scope_t * scope);
 
 /* normal opgroup operations are relative to the current scope */
+
+// HACK: rename opgroup methods so that they do not clash with cfs_ipc_client's
+#define opgroup_create(f)        kfsd_opgroup_create(f)
+#define opgroup_add_depend(t, c) kfsd_opgroup_add_depend(t, c)
+#define opgroup_engage(o)        kfsd_opgroup_engage(o)
+#define opgroup_disengage(o)     kfsd_opgroup_disengage(o)
+#define opgroup_release(o)       kfsd_opgroup_release(o)
+#define opgroup_abandon(o)       kfsd_opgroup_abandon(o)
 
 opgroup_t * opgroup_create(int flags);
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency);

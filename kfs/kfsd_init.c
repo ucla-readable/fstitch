@@ -28,9 +28,10 @@
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
 #include <kfs/table_classifier_cfs.h>
+#ifdef KUDOS
+#include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/fidprotector_cfs.h>
 #include <kfs/fidcloser_cfs.h>
-#ifdef KUDOS
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/ipc_serve.h>
 #endif
@@ -78,6 +79,7 @@ int kfsd_init(int argc, char ** argv)
 
 	CFS_t * table_class = NULL;
 #ifdef KUDOS
+	CFS_t * opgroupscope_tracker = NULL;
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidcloser = NULL;
 #endif
@@ -239,6 +241,10 @@ int kfsd_init(int argc, char ** argv)
 		kfsd_shutdown();
 
 #ifdef KUDOS
+	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
+		kfsd_shutdown();
+	set_frontend_cfs(opgroupscope_tracker);
+
 	//
 	// fidfairies
 

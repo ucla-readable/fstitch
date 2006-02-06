@@ -1,5 +1,6 @@
 #include <inc/lib.h>
 #include <lib/serial_cfs.h>
+#include <lib/opgroup.h>
 #include <inc/cfs_ipc_client.h>
 
 static const char kfsd_name_sh[] = "/kfsd";
@@ -34,8 +35,102 @@ find_fs(void)
 }
 
 #define REQVA (0x10000000 - PGSIZE)
+#define OPGROUPSCOPE_CAPPG ((void *) (REQVA - PGSIZE))
+#define OPGROUPSCOPE_CHILD_CAPPG (OPGROUPSCOPE_CAPPG - PGSIZE)
 
 static char ipc_page[PGSIZE * 2];
+
+
+static int
+cfs_opgroup_scope_create(envid_t fsid)
+{
+	int r;
+
+	if(get_pte(OPGROUPSCOPE_CAPPG) & PTE_P)
+		return -E_UNSPECIFIED;
+
+	if(!(fsid = find_fs()))
+		return -E_TIMEOUT;
+
+	if((r = sys_page_alloc(0, OPGROUPSCOPE_CAPPG, PTE_U|PTE_P|PTE_SHARE)) < 0)
+		return r;
+	struct Scfs_opgroup_scope_create *pg = (struct Scfs_opgroup_scope_create*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_SCOPE_CREATE;
+	pg->scope_cappg_va = (uintptr_t) OPGROUPSCOPE_CAPPG;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, OPGROUPSCOPE_CAPPG);
+
+	ipc_send(fsid, SCFS_VAL, OPGROUPSCOPE_CAPPG, PTE_U|PTE_P, OPGROUPSCOPE_CAPPG);
+
+	r = ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+	if (r < 0)
+		(void) sys_page_unmap(0, OPGROUPSCOPE_CAPPG);
+	return r;
+}
+
+int
+cfs_opgroup_scope_copy(envid_t child)
+{
+	envid_t fsid;
+	int r, s;
+
+	// No copy needed if this env does not have an opgroup scope
+	if(!(get_pte(OPGROUPSCOPE_CAPPG) & PTE_P))
+		return 0;
+
+	// While the above cappg check may return 0 from within kfsd,
+	// do a second, name, check as well just in case kfsd does fork()/spawn()
+	if(!strcmp(env->env_name, "kfsd"))
+		return 0;
+
+	if(!(fsid = find_fs()))
+		return -E_TIMEOUT;
+
+	// Create a cappg for the child
+	if((r = sys_page_alloc(child, OPGROUPSCOPE_CAPPG, PTE_U|PTE_P|PTE_SHARE)) < 0)
+		return r;
+
+	// Map the child's cappg into us so that we can send it to kfsd
+	// on the child's behalf
+	r = sys_page_map(child, OPGROUPSCOPE_CAPPG, 0, OPGROUPSCOPE_CHILD_CAPPG, PTE_U|PTE_P|PTE_SHARE);
+	if(r < 0)
+	{
+		(void) sys_page_unmap(child, OPGROUPSCOPE_CAPPG);
+		return r;
+	}
+
+	struct Scfs_opgroup_scope_copy *pg = (struct Scfs_opgroup_scope_copy*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_SCOPE_COPY;
+	pg->child = child;
+	pg->child_scope_cappg_va = (uintptr_t) OPGROUPSCOPE_CAPPG;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, OPGROUPSCOPE_CHILD_CAPPG);
+
+	ipc_send(fsid, SCFS_VAL, OPGROUPSCOPE_CHILD_CAPPG, PTE_U|PTE_P, OPGROUPSCOPE_CHILD_CAPPG);
+
+	r = ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+	if (r < 0)
+		(void) sys_page_unmap(child, OPGROUPSCOPE_CAPPG);
+
+	s = sys_page_unmap(0, OPGROUPSCOPE_CHILD_CAPPG);
+	assert(r < 0 || s >= 0); // hard to recover from and shouldn't happen..
+
+	return r;
+}
+
+static int
+ensure_opgroup_scope_exists(envid_t fsid)
+{
+	if(get_pte(OPGROUPSCOPE_CAPPG) & PTE_P)
+		return 0;
+
+	return cfs_opgroup_scope_create(fsid);
+}
+
 
 /* copy a path into the request, prepending a / in case the client did not have one */
 /* we do this here instead of in KPL because we are already copying the string here */
@@ -59,8 +154,12 @@ cfs_open(const char *fname, int mode, void *refpg, const void * cappg)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_open *pg = (struct Scfs_open*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -81,6 +180,8 @@ cfs_close(int fid, const void * cappg)
 {
 	envid_t fsid;
 	uint32_t perm;
+
+	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
 
 	fsid = find_fs();
 
@@ -103,6 +204,8 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data, const void * cappg
 	envid_t fsid;
 	uint32_t perm;
 	uint32_t i;
+
+	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
 
 	fsid = find_fs();
 
@@ -142,6 +245,8 @@ cfs_write(int fid, uint32_t offset, uint32_t size, const char *data, const void 
 	uint32_t perm;
 	uint32_t i;
 
+	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
+
 	fsid = find_fs();
 
 	for (i = 0; i < size; i += PGSIZE) {
@@ -178,6 +283,8 @@ cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep, const void *
 	envid_t fsid;
 	uint32_t perm;
 	struct Scfs_getdirentries_return *ret = (struct Scfs_getdirentries_return*) REQVA;
+
+	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
 
 	fsid = find_fs();
 
@@ -220,6 +327,8 @@ cfs_truncate(int fid, uint32_t size, const void * cappg)
 	envid_t fsid;
 	uint32_t perm;
 
+	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
+
 	fsid = find_fs();
 
 	struct Scfs_truncate *pg = (struct Scfs_truncate*)
@@ -239,8 +348,12 @@ cfs_unlink(const char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_unlink *pg = (struct Scfs_unlink*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -258,8 +371,12 @@ cfs_link(const char *oldname, const char *newname)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_link *pg = (struct Scfs_link*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -278,8 +395,12 @@ cfs_rename(const char *oldname, const char *newname)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_rename *pg = (struct Scfs_rename*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -298,8 +419,12 @@ cfs_mkdir(const char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_mkdir *pg = (struct Scfs_mkdir*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -317,8 +442,12 @@ cfs_rmdir(const char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_rmdir *pg = (struct Scfs_rmdir*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -336,8 +465,12 @@ cfs_get_num_features(char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_get_num_features *pg = (struct Scfs_get_num_features*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -358,6 +491,9 @@ cfs_get_feature(char *name, int num, char *dump)
 	uint32_t perm;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_get_feature *pg = (struct Scfs_get_feature*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -385,6 +521,9 @@ cfs_get_metadata(const char *name, int id, struct Scfs_metadata *md)
 
 	fsid = find_fs();
 
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
 	struct Scfs_get_metadata *pg = (struct Scfs_get_metadata*)
 		ROUNDUP32(ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
@@ -408,8 +547,12 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 	envid_t fsid;
 	uint32_t perm;
 	struct Scfs_metadata *p;
+	int r;
 
 	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
 
 	struct Scfs_set_metadata *pg = (struct Scfs_set_metadata*)
 		ROUNDUP32(ipc_page, PGSIZE);
@@ -427,6 +570,140 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 
 	return ipc_recv(fsid, NULL, 0, &perm, NULL, 0);
 }
+
+opgroup_id_t
+opgroup_create(int flags)
+{
+	envid_t fsid;
+	int r;
+
+	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
+	struct Scfs_opgroup_create *pg = (struct Scfs_opgroup_create*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_CREATE;
+	pg->flags = flags;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
+
+	return ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+}
+
+int
+opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency)
+{
+	envid_t fsid;
+	int r;
+
+	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
+	struct Scfs_opgroup_add_depend *pg = (struct Scfs_opgroup_add_depend*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_ADD_DEPEND;
+	pg->dependent = dependent;
+	pg->dependency = dependency;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
+
+	return ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+}
+
+int
+opgroup_engage(opgroup_id_t opgroup)
+{
+	envid_t fsid;
+	int r;
+
+	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
+	struct Scfs_opgroup_engage *pg = (struct Scfs_opgroup_engage*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_ENGAGE;
+	pg->opgroup = opgroup;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
+
+	return ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+}
+
+int
+opgroup_disengage(opgroup_id_t opgroup)
+{
+	envid_t fsid;
+	int r;
+
+	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
+	struct Scfs_opgroup_disengage *pg = (struct Scfs_opgroup_disengage*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_DISENGAGE;
+	pg->opgroup = opgroup;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
+
+	return ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+}
+
+int
+opgroup_release(opgroup_id_t opgroup)
+{
+	envid_t fsid;
+	int r;
+
+	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
+	struct Scfs_opgroup_release *pg = (struct Scfs_opgroup_release*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_RELEASE;
+	pg->opgroup = opgroup;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
+
+	return ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+}
+
+int
+opgroup_abandon(opgroup_id_t opgroup)
+{
+	envid_t fsid;
+	int r;
+
+	fsid = find_fs();
+
+	if((r = ensure_opgroup_scope_exists(fsid)) < 0)
+		return r;
+
+	struct Scfs_opgroup_abandon *pg = (struct Scfs_opgroup_abandon*)
+		ROUNDUP32(ipc_page, PGSIZE);
+	memset(pg, 0, PGSIZE);
+	pg->scfs_type = SCFS_OPGROUP_ABANDON;
+	pg->opgroup = opgroup;
+
+	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
+
+	return ipc_recv(fsid, NULL, 0, NULL, NULL, 0);
+}
+
 
 int
 cfs_shutdown(void)
