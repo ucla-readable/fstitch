@@ -378,7 +378,11 @@ int opgroup_abandon(opgroup_t ** opgroup)
 
 opgroup_t * opgroup_lookup(opgroup_id_t id)
 {
-	return current_scope ? (opgroup_t *) hash_map_find_val(current_scope->id_map, (void *) id) : NULL;
+	opgroup_state_t * state;
+	if(!current_scope)
+		return NULL;
+	state = (opgroup_state_t *) hash_map_find_val(current_scope->id_map, (void *) id);
+	return state ? state->opgroup : NULL;
 }
 
 opgroup_id_t opgroup_id(const opgroup_t * opgroup)
