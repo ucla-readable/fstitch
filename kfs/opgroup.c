@@ -1,4 +1,5 @@
 #include <lib/hash_map.h>
+#include <lib/panic.h>
 #include <inc/error.h>
 #include <assert.h>
 
@@ -199,6 +200,8 @@ error_1:
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 {
 	int r = 0;
+	if(!dependent || !dependency)
+		return -E_INVAL;
 	/* from dependency's perspective, we are adding a dependent
 	 *   => always allowed */
 	/* from dependent's perspective, we are adding a dependency
@@ -291,6 +294,8 @@ int opgroup_engage(opgroup_t * opgroup)
 	
 	if(!current_scope)
 		return -E_INVAL;
+	if(!opgroup)
+		return -E_INVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
 	if(!state)
 		return -E_NOT_FOUND;
@@ -319,6 +324,8 @@ int opgroup_disengage(opgroup_t * opgroup)
 	
 	if(!current_scope)
 		return -E_INVAL;
+	if(!opgroup)
+		return -E_INVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
 	if(!state)
 		return -E_NOT_FOUND;
@@ -336,6 +343,8 @@ int opgroup_disengage(opgroup_t * opgroup)
 
 int opgroup_release(opgroup_t * opgroup)
 {
+	if(!opgroup)
+		return -E_INVAL;
 	if(opgroup->keep)
 		chdesc_satisfy(&opgroup->keep);
 	return 0;
@@ -345,6 +354,8 @@ int opgroup_abandon(opgroup_t ** opgroup)
 {
 	opgroup_state_t * state;
 	if(!current_scope)
+		return -E_INVAL;
+	if(!opgroup)
 		return -E_INVAL;
 	state = hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
 	if(!state)
@@ -368,6 +379,15 @@ int opgroup_abandon(opgroup_t ** opgroup)
 opgroup_t * opgroup_lookup(opgroup_id_t id)
 {
 	return current_scope ? (opgroup_t *) hash_map_find_val(current_scope->id_map, (void *) id) : NULL;
+}
+
+opgroup_id_t opgroup_id(const opgroup_t * opgroup)
+{
+	if(!current_scope)
+		return -E_UNSPECIFIED;
+	if(!opgroup)
+		return -E_INVAL;
+	return opgroup->id;
 }
 
 int opgroup_insert_change(chdesc_t * head, chdesc_t * tail)
