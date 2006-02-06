@@ -9,7 +9,7 @@
 
 #include <inc/env.h>
 #include <kfs/cfs_ipc_serve.h> // for PAGESNDVA
-#include <lib/opgroup.h>
+#include <kfs/opgroup.h>
 
 // The range used for mapping cfs client opgroup scope pages
 #define CFS_IPC_OPGROUP_SCOPE_END ((void *) PAGESNDVA)

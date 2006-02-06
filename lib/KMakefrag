@@ -57,6 +57,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/kpl.c \
 			lib/cfs_ipc_client.c \
+			lib/kfs_ipc_opgroup.c \
 			lib/kfs_ipc_client.c \
 			lib/kfs_uses.c
 

@@ -2,7 +2,7 @@
 #define __KUDOS_KFS_OPGROUP_H
 
 #include <lib/hash_map.h>
-#include <lib/opgroup.h>
+
 #include <kfs/chdesc.h>
 
 /* The following operations change the state of opgroups:
@@ -41,6 +41,13 @@
  * 1 1 1 1   C   R
  * */
 
+typedef int opgroup_id_t;
+
+#define OPGROUP_FLAG_HIDDEN 0x2
+#define OPGROUP_FLAG_ATOMIC 0x6
+
+#ifdef KFSD
+
 struct opgroup;
 typedef struct opgroup opgroup_t;
 
@@ -54,14 +61,6 @@ void opgroup_scope_destroy(opgroup_scope_t * scope);
 void opgroup_scope_set_current(opgroup_scope_t * scope);
 
 /* normal opgroup operations are relative to the current scope */
-
-// HACK: rename opgroup methods so that they do not clash with cfs_ipc_client's
-#define opgroup_create(f)        kfsd_opgroup_create(f)
-#define opgroup_add_depend(t, c) kfsd_opgroup_add_depend(t, c)
-#define opgroup_engage(o)        kfsd_opgroup_engage(o)
-#define opgroup_disengage(o)     kfsd_opgroup_disengage(o)
-#define opgroup_release(o)       kfsd_opgroup_release(o)
-#define opgroup_abandon(o)       kfsd_opgroup_abandon(o)
 
 opgroup_t * opgroup_create(int flags);
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency);
@@ -77,5 +76,18 @@ opgroup_id_t opgroup_id(const opgroup_t * opgroup);
 
 /* add change descriptors to the engaged opgroups in the current scope */
 int opgroup_insert_change(chdesc_t * head, chdesc_t * tail);
+
+#else /* KFSD */
+
+opgroup_id_t opgroup_create(int flags);
+int opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency);
+
+int opgroup_engage(opgroup_id_t opgroup);
+int opgroup_disengage(opgroup_id_t opgroup);
+
+int opgroup_release(opgroup_id_t opgroup);
+int opgroup_abandon(opgroup_id_t opgroup);
+
+#endif /* KFSD */
 
 #endif /* __KUDOS_KFS_OPGROUP_H */

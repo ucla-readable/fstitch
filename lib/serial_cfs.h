@@ -4,7 +4,8 @@
 #include <lib/types.h>
 #include <lib/mmu.h>
 #include <inc/env.h>
-#include <lib/opgroup.h>
+
+#include <kfs/opgroup.h>
 
 #define SCFS_VAL 1
 

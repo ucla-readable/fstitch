@@ -1,5 +1,5 @@
 #include <inc/lib.h>
-#include <lib/opgroup.h>
+#include <kfs/opgroup.h>
 
 static const char * result[] = { "FAIL", "PASS" };
 
