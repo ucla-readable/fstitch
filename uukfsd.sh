@@ -10,6 +10,7 @@ shift
 
 # Run kfsd. If it exits non-zero (and so probably crashed) explicitly # unmount.
 # Lazy unmount in case fusermount is called before kfsd's mount is removed.
+# Set KFSD_WRAP to run kfsd within a wrapper, such as valgrind.
 # TODO: from C we could use WIFEXITED() to know exactly when to fusermount.
-./obj/unix-user/kfs/kfsd "$MNT" $@ \
+$KFSD_WRAP ./obj/unix-user/kfs/kfsd "$MNT" $@ \
 	|| if [ "$MNT" != "-h" ]; then fusermount -uz "$MNT"; fi
