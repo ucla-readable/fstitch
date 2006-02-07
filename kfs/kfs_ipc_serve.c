@@ -18,7 +18,7 @@
 #define RETURN_IPC_INVAL do { val = -E_INVAL; goto exit; } while(0)
 #define RETURN_IPC       exit: ipc_send(whom, (uint32_t) val, NULL, 0, NULL)
 
-static uint8_t ipc_page[2*PGSIZE];
+static uint8_t ipc_page[PGSIZE] __attribute__((__aligned__(PGSIZE)));
 
 
 //
@@ -70,7 +70,7 @@ static void kis_destroy_bd(envid_t whom, const Skfs_destroy_bd_t * pg)
 static void kis_request_flags_magic(envid_t whom,  const Skfs_request_flags_magic_t * pg)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, pg->id);
-	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ROUNDUP32(ipc_page, PGSIZE);
+	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ipc_page;
 
 	if (!modman_name_cfs((CFS_t *) pg->id)
 		&& !modman_name_lfs((LFS_t *) pg->id)
@@ -87,7 +87,7 @@ static void kis_request_flags_magic(envid_t whom,  const Skfs_request_flags_magi
 static void kis_request_config_status(envid_t whom, const Skfs_request_config_status_t * pg)
 {
 	Dprintf("%s(0x%08x, %d, %d)\n", __FUNCTION__, pg->id, pg->level, pg->config_status);
-	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ROUNDUP32(ipc_page, PGSIZE);
+	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ipc_page;
 	int r;
 
 	if (!modman_name_cfs((CFS_t *) pg->id)
@@ -404,8 +404,8 @@ static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 
 #define LOOKUP_REQEST_RETURN(typel, typeu)								\
 	do {																\
-		Skfs_modman_return_lookup_t * rl = (Skfs_modman_return_lookup_t *) ROUNDUP32(ipc_page, PGSIZE); \
-		Skfs_modman_return_lookup_user_t * ru = (Skfs_modman_return_lookup_user_t *) ROUNDUP32(ipc_page, PGSIZE); \
+		Skfs_modman_return_lookup_t * rl = (Skfs_modman_return_lookup_t *) ipc_page; \
+		Skfs_modman_return_lookup_user_t * ru = (Skfs_modman_return_lookup_user_t *) ipc_page; \
 		const modman_entry_##typel##_t * me;							\
 		int users_remaining, i;											\
 																		\
@@ -504,7 +504,7 @@ static void kis_modman_request_lookup(envid_t whom, const Skfs_modman_request_lo
 	do {																\
 		modman_it_t it;													\
 		typeu##_t * t;													\
-		Skfs_modman_return_it_t * ri = (Skfs_modman_return_it_t *) ROUNDUP32(ipc_page, PGSIZE);	\
+		Skfs_modman_return_it_t * ri = (Skfs_modman_return_it_t *) ipc_page;	\
 		int r = modman_it_init_##typel(&it);							\
 		assert(r >= 0);													\
 																		\
