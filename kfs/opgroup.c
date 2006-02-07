@@ -8,10 +8,16 @@
 struct opgroup {
 	opgroup_id_t id;
 	chdesc_t * head;
+	/* head_keep stays until we get a dependent */
+	chdesc_t * head_keep;
 	chdesc_t * tail;
-	chdesc_t * keep;
-	uint32_t references:29;
+	/* tail_keep stays until we are released */
+	chdesc_t * tail_keep;
+	uint32_t references:30;
+	/* has_data is set when we engage, not when we actually get data */
 	uint32_t has_data:1;
+	uint32_t is_released:1;
+	uint32_t engaged_count:30;
 	uint32_t has_dependents:1;
 	uint32_t has_dependencies:1;
 };
@@ -26,6 +32,8 @@ struct opgroup_scope {
 	/* map from ID to opgroup state */
 	hash_map_t * id_map;
 	chdesc_t * top;
+	/* top_keep stays until we change the engaged set */
+	chdesc_t * top_keep;
 	chdesc_t * bottom;
 };
 
@@ -38,6 +46,7 @@ opgroup_scope_t * opgroup_scope_create(void)
 	{
 		scope->next_id = 1;
 		scope->top = NULL;
+		scope->top_keep = NULL;
 		scope->bottom = NULL;
 		scope->id_map = hash_map_create();
 		if(!scope->id_map)
@@ -58,10 +67,20 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 		goto error_1;
 	
 	copy->next_id = scope->next_id;
-	if(chdesc_weak_retain(scope->top, &copy->top) < 0)
-		goto error_2;
+	if(scope->top)
+	{
+		if(chdesc_weak_retain(scope->top, &copy->top) < 0)
+			goto error_2;
+		/* we need our own top_keep */
+		copy->top_keep = chdesc_create_noop(NULL, NULL);
+		if(!copy->top_keep)
+			goto error_3;
+		chdesc_claim_noop(copy->top_keep);
+		if(chdesc_add_depend(copy->top, copy->top_keep) < 0)
+			goto error_4;
+	}
 	if(chdesc_weak_retain(scope->bottom, &copy->bottom) < 0)
-		goto error_3;
+		goto error_4;
 	
 	/* iterate over opgroups and increase reference counts */
 	hash_map_it_init(&it, scope->id_map);
@@ -69,29 +88,42 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	{
 		opgroup_state_t * dup = malloc(sizeof(*dup));
 		if(!dup)
-			goto error_4;
+			goto error_5;
 		*dup = *state;
-		if(hash_map_insert(copy->id_map, (void *) state->opgroup->id, dup) < 0)
+		if(hash_map_insert(copy->id_map, (void *) dup->opgroup->id, dup) < 0)
 		{
 			free(dup);
-			goto error_4;
+			goto error_5;
 		}
-		state->opgroup->references++;
+		dup->opgroup->references++;
+		/* FIXME: can we do better than just assert? */
+		assert(dup->opgroup->references);
+		if(dup->engaged)
+		{
+			dup->opgroup->engaged_count++;
+			/* FIXME: can we do better than just assert? */
+			assert(dup->opgroup->engaged_count);
+		}
 	}
 	
 	return copy;
 	
-error_4:
+error_5:
 	hash_map_it_init(&it, copy->id_map);
 	while((state = hash_map_val_next(&it)))
 	{
 		/* don't need to check for 0 */
 		state->opgroup->references--;
+		if(state->engaged)
+			state->opgroup->engaged_count--;
 		free(state);
 	}
 	hash_map_destroy(copy->id_map);
 	
 	chdesc_weak_release(&copy->bottom);
+error_4:
+	if(copy->top_keep)
+		chdesc_satisfy(&copy->top_keep);
 error_3:
 	chdesc_weak_release(&copy->top);
 error_2:
@@ -118,6 +150,8 @@ void opgroup_scope_destroy(opgroup_scope_t * scope)
 		 * hash_map_erase() and free the opgroup_state_t we just got
 		 * from the iterator. So we have to restart the iterator every
 		 * time through the loop. */
+		int r = opgroup_disengage(state->opgroup);
+		assert(r >= 0);
 		opgroup_abandon(&state->opgroup);
 		hash_map_it_init(&it, scope->id_map);
 	}
@@ -126,6 +160,8 @@ void opgroup_scope_destroy(opgroup_scope_t * scope)
 	/* restore the current scope (unless it was destroyed) */
 	current_scope = (old_scope == scope) ? NULL : old_scope;
 	
+	if(scope->top_keep)
+		chdesc_satisfy(&scope->top_keep);
 	chdesc_weak_release(&scope->top);
 	chdesc_weak_release(&scope->bottom);
 	free(scope);
@@ -154,6 +190,8 @@ opgroup_t * opgroup_create(int flags)
 	op->id = current_scope->next_id++;
 	op->references = 1;
 	op->has_data = 0;
+	op->is_released = 0;
+	op->engaged_count = 0;
 	op->has_dependents = 0;
 	op->has_dependencies = 0;
 	state->opgroup = op;
@@ -163,30 +201,39 @@ opgroup_t * opgroup_create(int flags)
 		goto error_3;
 	if(chdesc_weak_retain(op->head, &op->head) < 0)
 		goto error_4;
-	if(!(op->tail = chdesc_create_noop(NULL, NULL)))
+	if(!(op->head_keep = chdesc_create_noop(NULL, NULL)))
 		goto error_4;
-	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
+	chdesc_claim_noop(op->head_keep);
+	if(chdesc_add_depend(op->head, op->head_keep) < 0)
 		goto error_5;
-	if(chdesc_add_depend(op->head, op->tail) < 0)
-		goto error_5;
-	if(!(op->keep = chdesc_create_noop(NULL, NULL)))
+	if(!(op->tail = chdesc_create_noop(NULL, NULL)))
 		goto error_6;
-	chdesc_claim_noop(op->keep);
-	if(chdesc_add_depend(op->tail, op->keep) < 0)
+	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
 		goto error_7;
-	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
+	if(chdesc_add_depend(op->head, op->tail) < 0)
+		goto error_7;
+	if(!(op->tail_keep = chdesc_create_noop(NULL, NULL)))
 		goto error_8;
+	chdesc_claim_noop(op->tail_keep);
+	if(chdesc_add_depend(op->tail, op->tail_keep) < 0)
+		goto error_9;
+	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
+		goto error_10;
 	
 	return op;
 	
+error_10:
+	chdesc_remove_depend(op->tail, op->tail_keep);
+error_9:
+	chdesc_destroy(&op->tail_keep);
 error_8:
-	chdesc_remove_depend(op->tail, op->keep);
-error_7:
-	chdesc_destroy(&op->keep);
-error_6:
 	chdesc_remove_depend(op->head, op->tail);
-error_5:
+error_7:
 	chdesc_destroy(&op->tail);
+error_6:
+	chdesc_remove_depend(op->head, op->head_keep);
+error_5:
+	chdesc_destroy(&op->head_keep);
 error_4:
 	chdesc_destroy(&op->head);
 error_3:
@@ -203,13 +250,16 @@ int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 	if(!dependent || !dependency)
 		return -E_INVAL;
 	/* from dependency's perspective, we are adding a dependent
-	 *   => always allowed */
+	 *   => dependency must not be engaged [anywhere] */
+	if(dependency->engaged_count)
+		return -E_INVAL;
 	/* from dependent's perspective, we are adding a dependency
 	 *   => dependent must not be released */
-	if(!dependent->keep)
+	if(!dependent->tail_keep || dependent->is_released)
 		return -E_INVAL;
-	/* TODO: make sure this function doesn't need anything more */
 	/* it might not have a head if it's already been written to disk */
+	/* (in this case, it won't be engaged again since it will have
+	 * dependents now, so we don't need to recreate it) */
 	if(dependency->head)
 		/* notice that this can fail if there is a dependency cycle */
 		r = chdesc_add_depend(dependent->tail, dependency->head);
@@ -217,6 +267,8 @@ int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 	{
 		dependent->has_dependencies = 1;
 		dependency->has_dependents = 1;
+		if(dependency->head_keep)
+			chdesc_satisfy(&dependency->head_keep);
 	}
 	return r;
 }
@@ -226,63 +278,78 @@ static int opgroup_update_top_bottom(void)
 	hash_map_it_t it;
 	opgroup_state_t * state;
 	chdesc_t * top;
+	chdesc_t * top_keep;
 	chdesc_t * bottom;
 	chdesc_t * save_top = current_scope->top;
 	int r;
 	
-	/* TODO: finish this function */
-	return -1;
-	
 	/* create new top and bottom */
 	top = chdesc_create_noop(NULL, NULL);
 	if(!top)
-		return -E_NO_MEM;
+		goto error_1;
+	top_keep = chdesc_create_noop(NULL, NULL);
+	if(!top_keep)
+		goto error_2;
+	chdesc_claim_noop(top_keep);
+	r = chdesc_add_depend(top, top_keep);
+	if(r < 0)
+		goto error_3;
 	bottom = chdesc_create_noop(NULL, NULL);
-	if(!bottom)
-	{
-		chdesc_destroy(&top);
-		return -E_NO_MEM;
-	}
-	if((r = chdesc_add_depend(top, bottom)) < 0)
+	if(r < 0)
+		goto error_4;
+	r = chdesc_add_depend(top, bottom);
+	if(r < 0)
 	{
 		chdesc_destroy(&bottom);
+	error_4:
+		chdesc_remove_depend(top, top_keep);
+	error_3:
+		chdesc_destroy(&top_keep);
+	error_2:
 		chdesc_destroy(&top);
-		return r;
+	error_1:
+		return -E_NO_MEM;
 	}
 	
 	hash_map_it_init(&it, current_scope->id_map);
 	while((state = hash_map_val_next(&it)))
 		if(state->engaged)
 		{
-			if(!state->opgroup->head)
+			assert(state->opgroup->head);
+			r = chdesc_add_depend(state->opgroup->head, top);
+			if(r < 0)
 			{
-				/* ... */
+			error_loop:
+				chdesc_satisfy(&top_keep);
+				/* satisfy a chdesc with dependencies... is this OK? */
+				chdesc_satisfy(&bottom);
+				return r;
 			}
-			if(chdesc_add_depend(state->opgroup->head, top) < 0)
-			{
-				/* ... */
-			}
-			if(!state->opgroup->tail)
-			{
-				/* ... */
-			}
-			if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
-			{
-				/* ... */
-			}
+			if(state->opgroup->tail)
+				if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
+					goto error_loop;
 		}
 	
-	if(chdesc_weak_retain(top, &current_scope->top) < 0)
+	r = chdesc_weak_retain(top, &current_scope->top);
+	if(r < 0)
+		goto error_loop;
+	
+	if(!bottom->dependencies)
 	{
-		/* ... */
+		chdesc_remove_depend(top, bottom);
+		/* let it get garbage collected */
+		bottom = NULL;
 	}
+	
 	if(chdesc_weak_retain(bottom, &current_scope->bottom) < 0)
 	{
-		chdesc_weak_release(&current_scope->top);
 		r = chdesc_weak_retain(save_top, &current_scope->top);
 		assert(r >= 0);
-		/* ... */
+		goto error_loop;
 	}
+	
+	/* we claimed it so no need to weak retain */
+	current_scope->top_keep = top_keep;
 	
 	return 0;
 }
@@ -307,12 +374,19 @@ int opgroup_engage(opgroup_t * opgroup)
 		return 0;
 	
 	state->engaged = 1;
+	state->opgroup->engaged_count++;
+	/* FIXME: can we do better than just assert? */
+	assert(state->opgroup->engaged_count);
 	
 	r = opgroup_update_top_bottom();
 	if(r < 0)
+	{
 		state->engaged = 0;
+		state->opgroup->engaged_count--;
+	}
 	else
 		/* mark it as having data since it is now engaged */
+		/* (and therefore could acquire data at any time) */
 		state->opgroup->has_data = 1;
 	return r;
 }
@@ -334,10 +408,14 @@ int opgroup_disengage(opgroup_t * opgroup)
 		return 0;
 	
 	state->engaged = 0;
+	state->opgroup->engaged_count--;
 	
 	r = opgroup_update_top_bottom();
 	if(r < 0)
+	{
 		state->engaged = 1;
+		state->opgroup->engaged_count++;
+	}
 	return r;
 }
 
@@ -345,8 +423,11 @@ int opgroup_release(opgroup_t * opgroup)
 {
 	if(!opgroup)
 		return -E_INVAL;
-	if(opgroup->keep)
-		chdesc_satisfy(&opgroup->keep);
+	if(opgroup->tail_keep)
+	{
+		chdesc_satisfy(&opgroup->tail_keep);
+		opgroup->is_released = 1;
+	}
 	return 0;
 }
 
@@ -361,11 +442,16 @@ int opgroup_abandon(opgroup_t ** opgroup)
 	if(!state)
 		return -E_NOT_FOUND;
 	assert(state->opgroup == *opgroup);
+	/* can't abandon an engaged opgroup */
+	if(state->engaged)
+		return -E_INVAL;
 	if(!--state->opgroup->references)
 	{
 		/* no more references to this opgroup */
-		if(state->opgroup->keep)
+		if(state->opgroup->tail_keep || !state->opgroup->is_released)
 			panic("Don't know how to roll back an abandoned opgroup!");
+		if(state->opgroup->head_keep)
+			chdesc_satisfy(&state->opgroup->head_keep);
 		chdesc_weak_release(&state->opgroup->head);
 		chdesc_weak_release(&state->opgroup->tail);
 		free(state->opgroup);
@@ -397,13 +483,7 @@ int opgroup_insert_change(chdesc_t * head, chdesc_t * tail)
 	int r;
 	if(!current_scope)
 		return 0;
-	/* technically we could set has_data here instead of in engage... but is that better? */
-	if(!current_scope->top)
-	{
-		/* TODO: recreate the top if it is gone */
-		/* ... */
-		return -1;
-	}
+	assert(current_scope->top);
 	r = chdesc_add_depend(current_scope->top, head);
 	if(r < 0)
 		return r;
