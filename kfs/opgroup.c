@@ -355,7 +355,7 @@ int opgroup_abandon(opgroup_t ** opgroup)
 	opgroup_state_t * state;
 	if(!current_scope)
 		return -E_INVAL;
-	if(!opgroup)
+	if(!opgroup || !*opgroup)
 		return -E_INVAL;
 	state = hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
 	if(!state)
