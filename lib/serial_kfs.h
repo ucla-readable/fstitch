@@ -187,7 +187,7 @@ typedef struct {
 typedef struct {
 	SKFS_TYPE;
 	uint32_t lfs;
-	char file[SKFS_MAX_NAMELEN];
+	uint32_t inum;
 } Skfs_loop_bd_t;
 
 typedef struct {
