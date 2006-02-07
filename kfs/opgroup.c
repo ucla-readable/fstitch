@@ -485,7 +485,8 @@ int opgroup_insert_change(chdesc_t * head, chdesc_t * tail)
 	int r;
 	if(!current_scope)
 		return 0;
-	assert(current_scope->top);
+	if(!current_scope->top)
+		return 0;
 	r = chdesc_add_depend(current_scope->top, head);
 	if(r < 0)
 		return r;
