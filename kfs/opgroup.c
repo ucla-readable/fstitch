@@ -348,6 +348,8 @@ static int opgroup_update_top_bottom(void)
 		goto error_loop;
 	}
 	
+	if(current_scope->top_keep)
+		chdesc_satisfy(&current_scope->top_keep);
 	/* we claimed it so no need to weak retain */
 	current_scope->top_keep = top_keep;
 	
