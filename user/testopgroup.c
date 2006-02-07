@@ -41,7 +41,7 @@ void umain(int argc, char ** argv)
 	r = opgroup_engage(a);
 	printf("opgroup_engage(%d) : %d [%s]\n", a, r, result[r>=0]);
 	r = opgroup_engage(b);
-	printf("opgroup_engage(%d) : %d [%s]\n", b, r, result[r>=0]);
+	printf("opgroup_engage(%d) : %d [%s]\n", b, r, result[r<0]);
 	r = opgroup_disengage(a);
 	printf("opgroup_disengage(%d) : %d [%s]\n", a, r, result[r>=0]);
 
