@@ -24,6 +24,7 @@
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
 #include <kfs/ufs_base.h>
+#include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
@@ -417,6 +418,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			printf("Unknown partition type %x\n", part->type);
 			continue;
 		}
+		if (! (lfs = opgroup_lfs(lfs)))
+			kfsd_shutdown();
 
 		if (! (u = uhfs(lfs)) )
 		{

@@ -12,6 +12,7 @@
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
+#include <kfs/opgroup.h>
 #include <kfs/lfs.h>
 #include <kfs/cfs.h>
 #include <kfs/uhfs.h>
@@ -420,6 +421,12 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			}
 			/* note that we do not write it - we will write it later */
 
+			r = opgroup_insert_change(prev_head, tail);
+			/* can we do better than this? */
+			assert(r >= 0);
+
+			uhfs_mark_data(prev_head, tail);
+
 			/* append it to the file, depending on zeroing it */
 			r = CALL(state->lfs, append_file_block, f->fdesc, number, &prev_head, &tail);
 			if (r < 0)
@@ -450,6 +457,11 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head, &tail);
 		if (r < 0)
 			return size_written;
+
+		r = opgroup_insert_change(prev_head, tail);
+		/* can we do better than this? */
+		assert(r >= 0);
+
 		uhfs_mark_data(prev_head, tail);
 
 		save_head = prev_head;

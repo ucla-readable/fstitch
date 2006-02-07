@@ -199,6 +199,22 @@ static void kis_josfs_fsck(envid_t whom, const Skfs_josfs_fsck_t * pg)
 	RETURN_IPC;
 }
 
+// opgroup_lfs
+#include <kfs/opgroup_lfs.h>
+
+static void kis_opgroup_lfs(envid_t whom, const Skfs_opgroup_lfs_t * pg)
+{
+	LFS_t * base = (LFS_t *) pg->base;
+	uint32_t val;
+
+	if (!modman_name_lfs(base))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) opgroup_lfs(base);
+
+	RETURN_IPC;
+}
+
 // wholedisk
 #include <kfs/wholedisk_lfs.h>
 
@@ -660,6 +676,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(JOSFS_BASE, josfs_base);
 		SERVE(JOSFS_FSCK, josfs_fsck);
 
+		SERVE(OPGROUP_LFS, opgroup_lfs);
 		SERVE(WHOLEDISK, wholedisk);
 
 		// BD

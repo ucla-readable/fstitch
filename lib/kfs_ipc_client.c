@@ -448,6 +448,22 @@ int josfs_fsck(LFS_t * lfs)
 	return RECV_PG();
 }
 
+#include <kfs/opgroup_lfs.h>
+LFS_t * opgroup_lfs(LFS_t * base)
+{
+	const envid_t fsid = find_fs();
+	uint32_t lfs_id;
+
+	INIT_PG(OPGROUP_LFS, opgroup_lfs);
+
+	pg->base = (uint32_t) OBJLOCAL(base);
+
+	SEND_PG();
+	lfs_id = RECV_PG();
+
+	return create_lfs(lfs_id);
+}
+
 #include <kfs/wholedisk_lfs.h>
 LFS_t * wholedisk(BD_t * bd)
 {
