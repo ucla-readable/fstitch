@@ -2,6 +2,8 @@
 #include <string.h>
 #include <inc/error.h>
 #include <lib/types.h>
+#include <lib/stdio.h>
+#include <assert.h>
 
 #include <kfs/lfs.h>
 #include <kfs/feature.h>
