@@ -11,7 +11,6 @@ struct dirent {
 	uint32_t d_filesize;
 	uint16_t d_reclen;
 	uint8_t d_type;
-	inode_t d_ino;
 	uint8_t d_namelen;
 	char d_name[DIRENT_MAXNAMELEN + 1];
 };
