@@ -246,7 +246,7 @@ struct  UFS_direct {
 
 /*---------------------------------------------------------------------*/
 
-typedef struct UFS_File UFS_File_t;
+typedef struct UFS_File ufs_fdesc_t;
 
 struct UFS_File {
 	struct UFS_dinode f_inode;
