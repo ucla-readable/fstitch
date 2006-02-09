@@ -228,7 +228,7 @@ static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 	if (!modman_name_lfs(lfs))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) loop_bd(lfs, pg->file);
+	val = (uint32_t) loop_bd(lfs, pg->inum);
 
 	RETURN_IPC;
 }
