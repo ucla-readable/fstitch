@@ -60,7 +60,7 @@ struct LFS {
 	DECLARE(LFS_t, int, get_metadata_inode, inode_t ino, uint32_t id, size_t * size, void ** data);
 	DECLARE(LFS_t, int, get_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t * size, void ** data);
 	DECLARE(LFS_t, int, set_metadata_inode, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(LFS_t, int, set_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(LFS_t, int, set_metadata_fdesc, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 };
 
 #define LFS_INIT(lfs, module, info) { \

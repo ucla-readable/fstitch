@@ -64,7 +64,7 @@ static int josfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chde
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail);
-static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
+static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
 
 static int read_bitmap(LFS_t * object, uint32_t blockno);
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail);
@@ -1448,7 +1448,7 @@ static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 	return josfs_get_metadata(object, f, id, size, data);
 }
 
-static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_set_metadata %s, %d, %d\n", f->file->f_name, id, size);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -1521,7 +1521,7 @@ static int josfs_set_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 static int josfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	int r;
-	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
+	struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
 	if (!f)
 		return -E_INVAL;
 	r = josfs_set_metadata(object, f, id, size, data, head, tail);
@@ -1529,9 +1529,9 @@ static int josfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, si
 	return r;
 }
 
-static int josfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int josfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	const struct josfs_fdesc * f = (struct josfs_fdesc *) file;
+	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	return josfs_set_metadata(object, f, id, size, data, head, tail);
 }
 
