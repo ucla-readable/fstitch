@@ -9,8 +9,10 @@
 
 // File nodes (both in-memory and on-disk)
 
+#if 0
 #if (PGSIZE != 4096)
 #error JOSFS designed only with 4kB blocks in mind
+#endif
 #endif
 
 // Bytes per file system block - same as page size
@@ -42,14 +44,9 @@ struct JOSFS_File {
 	uint32_t f_direct[JOSFS_NDIRECT];	// direct blocks
 	uint32_t f_indirect;		// indirect block
 
-	// Points to the directory in which this file lives.
-	// Meaningful only in memory; the value on disk can be garbage.
-	// dir_lookup() sets the value when required.
-	struct JOSFS_File* f_dir;
-
 	// Pad out to 256 bytes; must do arithmetic in case we're compiling
 	// fsformat on a 64-bit machine.
-	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4*JOSFS_NDIRECT - 4 - sizeof(struct JOSFS_File*)];
+	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4*JOSFS_NDIRECT - 4];
 };
 
 #define JOSFS_TYPE_FILE 0
