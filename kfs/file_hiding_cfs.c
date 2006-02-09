@@ -305,7 +305,7 @@ static int file_hiding_getdirentries(CFS_t * cfs, int fid, char * buf, int nbyte
 	for (i = 0; i < r; )
 	{
 		d = (dirent_t *) (buf + i);
-		hidden = hide_lookup(state->hide_table, d->d_ino);
+		hidden = hide_lookup(state->hide_table, d->d_fileno);
 		if (0 <= hidden)
 		{
 			// Remove a hidden file
