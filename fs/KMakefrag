@@ -10,6 +10,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/cat \
 			$(OBJDIR)/user/clock \
 			$(OBJDIR)/user/demo \
+			$(OBJDIR)/user/depend \
 			$(OBJDIR)/user/df \
 			$(OBJDIR)/user/diskwrite \
 			$(OBJDIR)/user/echo \
