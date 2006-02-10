@@ -6,11 +6,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <lib/dirent.h>
 #include <lib/fcntl.h>
 #include <lib/jiffies.h>
 #include <lib/kdprintf.h>
 #include <lib/panic.h>
+#include <lib/hash_set.h>
 #include <inc/error.h>
 #include <kfs/cfs.h>
 #include <kfs/feature.h>
@@ -20,6 +22,7 @@
 #include <kfs/sched.h>
 #include <kfs/fuse_serve.h>
 #include <kfs/fuse_serve_inode.h>
+#include <kfs/fuse_serve_mount.h>
 
 // Helpful documentation: FUSE's fuse_lowlevel.h, README, and FAQ
 // Helpful debugging options:
@@ -37,7 +40,6 @@
 // - Be safer; eg call open() only when we should
 // - Speedup serve_readdir() when helpful (it runs O(n^2); a slightly more complex O(n) would work)
 // - Speedup fuse_serve_inode if helpful; lname_inode() is O(|dir's entries|)
-// - Provide mechanism to free up resources upon exit so we don't falsely trigger mem leak detectors?
 // - "ls dir; sleep 5; ls dir" (for example), on the 2nd "ls dir", releases a file's inode and then recreates the inode. In this case we give a new inode number. Should we try to reuse the original inode number? (We'll probably need to unique them with the generation field, if so.) (To see this turn on fuse_serve_inode debugging and run the example command.)
 // - Support multiple hard links (how do we deal with open() and opendir()?)
 // - Support more metadata; eg permissions, atime, and mtime
@@ -55,21 +57,36 @@
 #define FUSE_ERR_SUCCESS 0
 #define STDTIMEOUT 1.0
 
+static CFS_t * root_cfs = NULL;
+static bool serving = 0;
 
-// If we move to multiple fuse_serve instances we can put global fields into
-// FUSE's userdata param
-static CFS_t * frontend_cfs = NULL;
+static int shutdown_pipe[2];
 
-void set_frontend_cfs(CFS_t * cfs)
+static size_t channel_buf_len = 0;
+static char * channel_buf = NULL;
+static int remove_activity; // remove activity fd for fuse_serve_mount
+
+
+int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 {
-	Dprintf("%s(cfs = %s)\n", __FUNCTION__, modman_name_cfs(cfs));
-	frontend_cfs = cfs;
-}
+	// We could easily allow mount adds from within sched callbacks if this
+	// becomes useful.
+	// With a good bit of work we can probably allow mount adds from
+	// within fuse requests.
+	if (serving)
+		return -E_BUSY;
 
-CFS_t * get_frontend_cfs(void)
-{
-	Dprintf("%s() = %s\n", __FUNCTION__, modman_name_cfs(frontend_cfs));
-	return frontend_cfs;
+	if (!cfs)
+		return -E_INVAL;
+
+	if (!strcmp("", path) || !strcmp("/", path))
+	{
+		root_cfs = cfs;
+		fuse_serve_mount_set_root(cfs);
+		return 0;
+	}
+
+	return fuse_serve_mount_add(cfs, path);
 }
 
 
@@ -99,7 +116,14 @@ static void serve_statfs(fuse_req_t req)
 }
 */
 
-static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
+static CFS_t * reqcfs(fuse_req_t req)
+{
+	assert(req);
+	assert(fuse_req_userdata(req));
+	return ((mount_t *) fuse_req_userdata(req))->cfs;
+}
+
+static int fill_stat(fuse_req_t req, fuse_ino_t ino, struct stat * stbuf)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
 	const char * full_name;
@@ -115,10 +139,10 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 	if (!(full_name = inode_fname(ino)))
 		return -1;
 
-	r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_filetype.id, &type_size, &type.ptr);
+	r = CALL(reqcfs(req), get_metadata, full_name, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
-		Dprintf("%d:frontend_cfs->get_metadata() = %d\n", __LINE__, r);
+		Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
 		return -1;
 	}
 
@@ -130,10 +154,10 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 
 		// FIXME: we should use the same inode->file mapping throughout an
 		// inode's life. Using opening by name can break this.
-		fid = CALL(frontend_cfs, open, full_name, 0);
+		fid = CALL(reqcfs(req), open, full_name, 0);
 		assert(fid >= 0);
 
-		while ((r = CALL(frontend_cfs, getdirentries, fid, buf, sizeof(buf), &basep)) > 0)
+		while ((r = CALL(reqcfs(req), getdirentries, fid, buf, sizeof(buf), &basep)) > 0)
 		{
 			char * cur = buf;
 			while (cur < buf + r)
@@ -143,7 +167,7 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 			}
 		}
 
-		r = CALL(frontend_cfs, close, fid);
+		r = CALL(reqcfs(req), close, fid);
 		assert(r >= 0);
 
 		stbuf->st_mode = S_IFDIR | 0755;
@@ -157,14 +181,14 @@ static int fill_stat(fuse_ino_t ino, struct stat * stbuf)
 			void * ptr;
 		} filesize;
 
-		r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_size.id, &filesize_size, &filesize.ptr);
+		r = CALL(reqcfs(req), get_metadata, full_name, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 		if (r < 0)
 		{
-			Dprintf("%d:frontend_cfs->get_metadata() = %d\n", __LINE__, r);
+			Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
 			goto err;
 		}
 
-		stbuf->st_mode = S_IFREG | 0444;
+		stbuf->st_mode = S_IFREG | 0644;
 		stbuf->st_nlink = 1; //	TODO: KFS_feature_nlinks
 		stbuf->st_size = (off_t) *filesize.filesize;
 		free(filesize.filesize);
@@ -193,7 +217,7 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 	(void) fi;
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (fill_stat(ino, &stbuf) == -1)
+	if (fill_stat(req, ino, &stbuf) == -1)
 	{
 		r = fuse_reply_err(req, ENOENT);
 		assert(!r);
@@ -232,7 +256,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 		// INODE TODO: how could we avoid ino -> full_name?
 		const char * full_name = inode_fname(ino);
 		assert(full_name);
-		fid = CALL(frontend_cfs, open, full_name, 0);
+		fid = CALL(reqcfs(req), open, full_name, 0);
 		if (fid < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
@@ -241,11 +265,11 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 		}
 	}
 
-	r = CALL(frontend_cfs, truncate, fid, size);
+	r = CALL(reqcfs(req), truncate, fid, size);
 
 	if (!fi)
 	{
-		if (CALL(frontend_cfs, close, fid) < 0)
+		if (CALL(reqcfs(req), close, fid) < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
@@ -261,7 +285,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 	}
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (fill_stat(ino, &stbuf) == -1)
+	if (fill_stat(req, ino, &stbuf) == -1)
 	{
 		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
@@ -288,7 +312,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 		char * full_name = fname(parent, local_name);
 
 		// Check that name exists
-		fid = CALL(frontend_cfs, open, full_name, 0);
+		fid = CALL(reqcfs(req), open, full_name, 0);
 		free(full_name);
 		full_name = NULL;
 		if (fid < 0)
@@ -300,7 +324,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 			assert(!r);
 			return;
 		}
-		r = CALL(frontend_cfs, close, fid);
+		r = CALL(reqcfs(req), close, fid);
 		assert(r >= 0);
 
 		r = add_inode(parent, local_name, &ino);
@@ -312,7 +336,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	e.ino = ino;
 	e.attr_timeout = STDTIMEOUT;
 	e.entry_timeout = STDTIMEOUT;
-	r = fill_stat(e.ino, &e.attr);
+	r = fill_stat(req, e.ino, &e.attr);
 	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
@@ -338,7 +362,7 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	full_name = fname(parent, local_name);
 	assert(full_name);
 
-	r = CALL(frontend_cfs, mkdir, full_name);
+	r = CALL(reqcfs(req), mkdir, full_name);
 	free(full_name);
 	full_name = NULL;
 	if (r < 0)
@@ -356,7 +380,7 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	e.attr_timeout = STDTIMEOUT;
 	e.entry_timeout = STDTIMEOUT;
 	// ignore mode parameter for now
-	r = fill_stat(e.ino, &e.attr);
+	r = fill_stat(req, e.ino, &e.attr);
 	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
@@ -390,7 +414,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	full_name = inode_fname(*ino);
 	assert(full_name);
 
-	fid = CALL(frontend_cfs, open, full_name, O_CREAT);
+	fid = CALL(reqcfs(req), open, full_name, O_CREAT);
 	if (fid < 0)
 	{
 		remove_inode(*ino);
@@ -404,7 +428,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	e->attr_timeout = STDTIMEOUT;
 	e->entry_timeout = STDTIMEOUT;
 	// ignore mode for now
-	r = fill_stat(e->ino, &e->attr);
+	r = fill_stat(req, e->ino, &e->attr);
 	assert(r >= 0);
 
 	return fid;
@@ -451,7 +475,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 	if (fid < 0)
 		return;
 
-	fid = CALL(frontend_cfs, close, fid);
+	fid = CALL(reqcfs(req), close, fid);
 	assert(fid >= 0);
 
 	r = fuse_reply_entry(req, &e);
@@ -468,7 +492,7 @@ static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_n
 	full_name = fname(parent, local_name);
 	assert(full_name);
 
-	r = CALL(frontend_cfs, unlink, full_name);
+	r = CALL(reqcfs(req), unlink, full_name);
 	free(full_name);
 	full_name = NULL;
 	if (r < 0)
@@ -492,7 +516,7 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 	full_name = fname(parent, local_name);
 	assert(full_name);
 
-	r = CALL(frontend_cfs, rmdir, full_name);
+	r = CALL(reqcfs(req), rmdir, full_name);
 	free(full_name);
 	full_name = NULL;
 	if (r < 0)
@@ -522,7 +546,7 @@ static void serve_rename(fuse_req_t req,
 	new_full_name = fname(new_parent, new_local_name);
 	assert(new_local_name);
 
-	r = CALL(frontend_cfs, rename, old_full_name, new_full_name);
+	r = CALL(reqcfs(req), rename, old_full_name, new_full_name);
 	free(old_full_name);
 	old_full_name = NULL;
 	free(new_full_name);
@@ -545,7 +569,7 @@ static void serve_rename(fuse_req_t req,
 	assert(!r);
 }
 
-static int read_single_dir(int fid, off_t k, dirent_t * dirent)
+static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
 {
 	Dprintf("%s(fid = %d, k = %lld)\n", __FUNCTION__, fid, k);
 	uint32_t basep = 0;
@@ -563,7 +587,7 @@ static int read_single_dir(int fid, off_t k, dirent_t * dirent)
 		uint32_t nbytes;
 		cur = buf;
 
-		r = CALL(frontend_cfs, getdirentries, fid, buf, sizeof(buf), &basep);
+		r = CALL(cfs, getdirentries, fid, buf, sizeof(buf), &basep);
 		if (r == -E_UNSPECIFIED) // should imply eof
 		{
 			eof = 1;
@@ -638,7 +662,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t ino,
 	// INODE TODO: how could we avoid ino -> full_name?
 	full_name = inode_fname(ino);
 	assert(full_name);
-	fid = CALL(frontend_cfs, open, full_name, 0);
+	fid = CALL(reqcfs(req), open, full_name, 0);
 	if (fid < 0)
 	{
 		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
@@ -661,7 +685,7 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t ino,
 	int r;
 	Dprintf("%s(ino = %lu, fid = %d)\n", __FUNCTION__, ino, fid);
 
-	r = CALL(frontend_cfs, close, fid);
+	r = CALL(reqcfs(req), close, fid);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
@@ -721,7 +745,7 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		size_t oldsize = total_size;
 		fuse_ino_t entry_ino;
 
-		r = read_single_dir(fid, off - 2, &dirent);
+		r = read_single_dir(reqcfs(req), fid, off - 2, &dirent);
 		if (r == 1 || r == -E_NOT_FOUND)
 			break;
 		if (r < 0)
@@ -776,7 +800,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 	const char * full_name = inode_fname(ino);
 	assert(full_name);
 
-	r = CALL(frontend_cfs, get_metadata, full_name, KFS_feature_filetype.id, &size, &data);
+	r = CALL(reqcfs(req), get_metadata, full_name, KFS_feature_filetype.id, &size, &data);
 	assert(r >= 0);
 
 	type = *((uint32_t*) data);
@@ -790,7 +814,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 		return;
 	}
 
-	fid = CALL(frontend_cfs, open, full_name, 0);
+	fid = CALL(reqcfs(req), open, full_name, 0);
 	assert(r >= 0);
 	fi->fh = (uint64_t) fid;
 	
@@ -804,7 +828,7 @@ static void serve_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 	int fid = (int) fi->fh;
 	int r;
 
-	r = CALL(frontend_cfs, close, fid);
+	r = CALL(reqcfs(req), close, fid);
 	assert(r >= 0);
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
@@ -830,7 +854,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 	buf = malloc(size);
 	assert(buf);
 
-	r = CALL(frontend_cfs, read, fid, buf, off, size);
+	r = CALL(reqcfs(req), read, fid, buf, off, size);
 	if (r <= 0)
 	{
 		// TODO: handle -E_EOF?
@@ -866,7 +890,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t ino, const char * buf,
 	fid = (int) fi->fh;
 
 	static_assert(sizeof(uint32_t) == sizeof(size));
-	nbytes = CALL(frontend_cfs, write, fid, buf, offset, size);
+	nbytes = CALL(reqcfs(req), write, fid, buf, offset, size);
 	if (nbytes < size)
 	{
 		r = fuse_reply_write(req, TODOERROR);
@@ -903,44 +927,96 @@ static struct fuse_lowlevel_ops serve_oper =
 	.write      = serve_write,
 };
 
-static struct fuse_args fuse_args;
-static char * fuse_mountpoint = NULL;
-static int fuse_fd = -1;
-static struct fuse_session * fuse_session = NULL;
-static bool fuse_signal_handlers_set = 0;
+
+static void signal_handler(int sig)
+{
+	char buf = 1;
+	if (shutdown_pipe[1] == -1)
+		return;
+	if (write(shutdown_pipe[1], &buf, sizeof(buf)) != sizeof(buf))
+	{
+		kdprintf(STDERR_FILENO, "%s(%d): write() failed\n", __FUNCTION__, sig);
+		perror("write");
+	}
+	printf("Shutdown started.\n");
+	fflush(stdout);
+}
+
+static int set_signal_handler(int sig, void (*handler)(int))
+{
+	struct sigaction sa;
+	struct sigaction prev_sa;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	if (sigaction(sig, NULL, &prev_sa) == -1)
+	{
+		perror("sigaction");
+		return -1;
+	}
+	if (prev_sa.sa_handler == SIG_DFL && sigaction(sig, &sa, NULL) == -1)
+	{
+		perror("Cannot set signal handler");
+		return -1;
+	}
+	return 0;
+}
+
+static int set_signal_handlers(void)
+{
+	if ((set_signal_handler(SIGHUP, signal_handler) == -1)
+	     || (set_signal_handler(SIGINT, signal_handler) == -1)
+	     || (set_signal_handler(SIGTERM, signal_handler) == -1)
+	     || (set_signal_handler(SIGPIPE, SIG_IGN) == -1))
+		return -1;
+	return 0;
+}
+
+static void ignore_shutdown_signals(void)
+{
+	int shutdown_pipe_write;
+
+	if (shutdown_pipe[1] == -1)
+		return; // shutdown signals are already ignored
+
+	// Close the shutdown pipe; remove access from the signal handler before closing
+	shutdown_pipe_write = shutdown_pipe[1];
+	shutdown_pipe[1] = -1;
+	if (close(shutdown_pipe_write) == -1)
+		perror("fuse_serve_shutdown(): close(shutdown_pipe_write)");
+	if (close(shutdown_pipe[0]) == -1)
+		perror("fuse_serve_shutdown(): close(shutdown_pipe[0])");
+	shutdown_pipe[0] = -1;
+}
+
 
 static void fuse_serve_shutdown(void * arg)
 {
-	if (fuse_session)
-	{
-		if (fuse_signal_handlers_set)
-			fuse_remove_signal_handlers(fuse_session);
-		fuse_session_destroy(fuse_session);
-	}
+	ignore_shutdown_signals();
 
-	if (fuse_fd != -1)
-	{
-		close(fuse_fd);
-		fuse_unmount(fuse_mountpoint);
-	}
+	root_cfs = NULL;
+	serving = 0;
 
-	fuse_opt_free_args(&fuse_args);
+	free(channel_buf);
+	channel_buf = NULL;
+	channel_buf_len = 0;
 
-	inodes_shutdown();
+	fuse_serve_mount_instant_shutdown();
+	if (remove_activity != -1 && close(remove_activity) < 0)
+		perror("fuse_serve_shutdown: close");
+	remove_activity = -1;
 }
+
 
 int fuse_serve_init(int argc, char ** argv)
 {
-	struct fuse_chan * channel;
 	int r;
 
-	assert(!fuse_mountpoint && fuse_fd == -1 && !fuse_session && !fuse_signal_handlers_set);
-
-	// We can't use FUSE_ARGS_INIT() here so assert we are initing the whole structure
-	static_assert(sizeof(fuse_args) == sizeof(argc) + sizeof(argv) + sizeof(int));
-	fuse_args.argc = argc;
-	fuse_args.argv = argv;
-	fuse_args.allocated = 0;
+	root_cfs = NULL;
+	serving = 0;
 
 	if ((r = kfsd_register_shutdown_module(fuse_serve_shutdown, NULL)) < 0)
 	{
@@ -948,47 +1024,40 @@ int fuse_serve_init(int argc, char ** argv)
 		return r;
 	}
 
-	if ((r = inodes_init()) < 0)
+	if ((r = pipe(shutdown_pipe)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): init_inodes() = %d\n", __FUNCTION__, r);
-		return r;
+		perror("fuse_serve_init(): pipe:");
+		return -E_UNSPECIFIED;
 	}
 
-	if (fuse_parse_cmdline(&fuse_args, &fuse_mountpoint, NULL, NULL) == -1)
+	if ((r = fuse_serve_mount_init(argc, argv, &serve_oper, sizeof(serve_oper))) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_parse_cmdline() failed\n", __FUNCTION__);
-		return -1;
+		kdprintf(STDERR_FILENO, "%s(): fuse_serve_mount_init() = %d\n", __FUNCTION__, r);
+		goto error_pipe;
 	}
+	remove_activity = r;
 
-	if ((fuse_fd = fuse_mount(fuse_mountpoint, &fuse_args)) == -1)
+	channel_buf_len = fuse_serve_mount_chan_bufsize();
+    if (!(channel_buf = (char *) malloc(channel_buf_len)))
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_mount() failed\n", __FUNCTION__);
-		return -1;
-	}
+        kdprintf(STDERR_FILENO, "%s(): malloc(%u) failed to allocate read buffer\n", __FUNCTION__, channel_buf_len);
+		goto error_buf_len;
+    }
 
-	fuse_session = fuse_lowlevel_new(&fuse_args, &serve_oper, sizeof(serve_oper), NULL);
-	if (!fuse_session)
-	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_lowlevel_new() failed\n", __FUNCTION__);
-		return -1;
-	}
-
-	if (fuse_set_signal_handlers(fuse_session) == -1)
-	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_set_signal_handlers() failed\n", __FUNCTION__);
-		return -1;
-	}
-	fuse_signal_handlers_set = 1;
-
-	if (!(channel = fuse_kern_chan_new(fuse_fd)))
-	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_kern_chan_new() failed\n", __FUNCTION__);
-		return -1;
-	}
-
-	fuse_session_add_chan(fuse_session, channel);
+	if ((r = set_signal_handlers()) < 0)
+		goto error_buf_malloc;
 
 	return 0;
+
+  error_buf_malloc:
+	free(channel_buf);
+	channel_buf = NULL;
+  error_buf_len:
+	channel_buf_len = 0;
+  error_pipe:
+	close(shutdown_pipe[1]);
+	close(shutdown_pipe[0]);
+	return r;
 }
 
 
@@ -1038,58 +1107,118 @@ static struct timeval fuse_serve_timeout(void)
 	return tv;
 }
 
+
+// Adapted from FUSE's lib/fuse_loop.c to support sched callbacks and multiple mounts
 int fuse_serve_loop(void)
 {
+	struct timeval tv;
+	int r;
 	Dprintf("%s()\n", __FUNCTION__);
-	assert(fuse_session);
-	assert(frontend_cfs);
 
-	// Adapted from FUSE's lib/fuse_loop.c to also support sched callbacks
+	if ((r = fuse_serve_mount_load_mounts()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "%s(): fuse_serve_load_mounts: %d\n", __FUNCTION__, r);
+		return r;
+	}
 
-    int res = 0;
-    struct fuse_chan *ch = fuse_session_next_chan(fuse_session, NULL);
-    size_t bufsize = fuse_chan_bufsize(ch);
-    char *buf = (char *) malloc(bufsize);
-    if (!buf) {
-        fprintf(stderr, "fuse: failed to allocate read buffer\n");
-        return -1;
-    }
-	int fd = fuse_chan_fd(ch);
-	struct timeval tv = fuse_serve_timeout();
+	serving = 1;
+	tv = fuse_serve_timeout();
 
-    while (!fuse_session_exited(fuse_session)) {
+    while (fuse_serve_mounts() && hash_set_size(fuse_serve_mounts()))
+	{
 		fd_set rfds;
-		int r;
+		int max_fd = 0;
+		hash_set_it_t mounts_it;
+		mount_t * mount;
 		struct timeval it_start, it_end;
 
-		fd = fuse_chan_fd(ch);
 		FD_ZERO(&rfds);
-		FD_SET(fd, &rfds);
-		r = select(fd+1, &rfds, NULL, NULL, &tv);
 
-		if (r == 0 && !FD_ISSET(fd, &rfds)) {
+		if (shutdown_pipe[0] != -1)
+		{
+			FD_SET(shutdown_pipe[0], &rfds);
+			if (shutdown_pipe[0] > max_fd)
+				max_fd = shutdown_pipe[0];
+		}
+
+		FD_SET(remove_activity, &rfds);
+		if (remove_activity > max_fd)
+			max_fd = remove_activity;
+
+		hash_set_it_init(&mounts_it, fuse_serve_mounts());
+		while ((mount = hash_set_next(&mounts_it)))
+		{
+			if (mount->mounted && !fuse_session_exited(mount->session))
+			{
+				int mount_fd = fuse_chan_fd(mount->channel);
+				FD_SET(mount_fd, &rfds);
+				if (mount_fd > max_fd)
+					max_fd = mount_fd;
+			}
+		}
+
+		r = select(max_fd+1, &rfds, NULL, NULL, &tv);
+
+		if (r == 0)
+		{
+			//printf("."); fflush(stdout); // debugging output
 			sched_iteration();
 			tv = fuse_serve_timeout();
-		} else if (r < 0) {
+		}
+		else if (r < 0)
+		{
 			if (errno != EINTR)
 				perror("select");
+			//printf("!\n"); fflush(stdout); // debugging output
 			tv = fuse_serve_timeout(); // tv may have become undefined
-		} else {
-			r = gettimeofday(&it_start, NULL);
-			if (r == -1) {
+		}
+		else
+		{
+			if (gettimeofday(&it_start, NULL) == -1)
+			{
 				perror("gettimeofday");
 				break;
 			}
 
-			r = fuse_chan_receive(ch, buf, bufsize);
-			if (r) {
-				if (r == -1)
-					break;
-				fuse_session_process(fuse_session, buf, r, ch);
+			hash_set_it_init(&mounts_it, fuse_serve_mounts());
+			while ((mount = hash_set_next(&mounts_it)))
+			{
+				if (mount->mounted && FD_ISSET(mount->channel_fd, &rfds))
+				{
+					r = fuse_chan_receive(mount->channel, channel_buf, channel_buf_len);
+					assert(r > 0); // what would this error mean?
+
+					Dprintf("fuse_serve: mount \"%s\"\n", mount->kfs_path);
+					fuse_serve_inodes_set_cur(mount->inodes);
+					fuse_session_process(mount->session, channel_buf, r, mount->channel);
+					fuse_serve_inodes_clear_cur();
+				}
 			}
 
-			r = gettimeofday(&it_end, NULL);
-			if (r == -1) {
+			if (shutdown_pipe[0] != -1 && FD_ISSET(shutdown_pipe[0], &rfds))
+			{
+				// Start unmounting all filesystems
+				// Looping will stop once all filesystems are unmounted
+				ignore_shutdown_signals();
+				if (fuse_serve_mount_start_shutdown() < 0)
+				{
+					kdprintf(STDERR_FILENO, "fuse_serve_mount_start_shutdown() failed, exiting fuse_serve_loop()\n");
+					return -E_UNSPECIFIED;
+				}
+			}
+
+			if (FD_ISSET(remove_activity, &rfds))
+			{
+				if (fuse_serve_mount_step_remove() < 0)
+				{
+					kdprintf(STDERR_FILENO, "fuse_serve_mount_step_remove() failed, exiting fuse_serve_loop()\n");
+					return -E_UNSPECIFIED;
+				}
+			}
+
+
+			if (gettimeofday(&it_end, NULL) == -1)
+			{
 				perror("gettimeofday");
 				break;
 			}
@@ -1097,7 +1226,7 @@ int fuse_serve_loop(void)
 		}
     }
 
-    free(buf);
-    fuse_session_reset(fuse_session);
-    return res;
+	serving = 0;
+
+    return 0;
 }

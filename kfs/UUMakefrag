@@ -43,6 +43,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/fuse_serve.o \
 			$(OBJDIR)/kfs/fuse_serve_inode.o \
+			$(OBJDIR)/kfs/fuse_serve_mount.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/sync.o \
 			$(OBJDIR)/kfs/kfsd.o \

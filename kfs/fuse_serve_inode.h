@@ -6,8 +6,18 @@
 // FAIL_INO is the fuse_ino_t returned to indicate failure
 #define FAIL_INO ((fuse_ino_t) 0)
 
-void inodes_shutdown(void);
-int inodes_init(void);
+typedef struct inodes inodes_t;
+
+inodes_t * fuse_serve_inodes_create(void);
+void fuse_serve_inodes_destroy(inodes_t * i);
+
+// Set the current inodes_t*
+void fuse_serve_inodes_set_cur(inodes_t * i);
+// Clear the current inodes_t*
+void fuse_serve_inodes_clear_cur(void);
+
+
+// These functions operate using the current inodes_t*
 
 int add_inode(fuse_ino_t parent, const char * local_name, fuse_ino_t * pino);
 void remove_inode(fuse_ino_t ino);

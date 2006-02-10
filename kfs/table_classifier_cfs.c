@@ -23,6 +23,8 @@
 #endif
 
 
+static CFS_t * singleton_table_classifier_cfs = NULL;
+
 // 
 // Data structs and initers
 
@@ -443,6 +445,9 @@ static int table_classifier_destroy(CFS_t * cfs)
 	if(r < 0)
 		return r;
 
+	if (cfs == singleton_table_classifier_cfs)
+		singleton_table_classifier_cfs = NULL;
+
 	hash_map_destroy(state->open_files);
 	vector_destroy(state->mount_table);
 	memset(state, 0, sizeof(*state));
@@ -481,6 +486,16 @@ CFS_t * table_classifier_cfs(void)
 	{
 		DESTROY(cfs);
 		return NULL;
+	}
+
+	if (!singleton_table_classifier_cfs)
+		singleton_table_classifier_cfs = cfs;
+	else
+	{
+		kdprintf(STDERR_FILENO, "More than one table_classifier_cfs now exists, only the first will be used for singleton operations.\n");
+		// If we want multiple table_classifiers, update unix-user to
+		// support them and then just remove table_classifier_cfs's
+		// support for a singleton table_classifier_cfs.
 	}
 
 	return cfs;
@@ -531,6 +546,13 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 
 	kdprintf(STDERR_FILENO, "table_classifier_cfs: mount to %s\n", path);
 	return 0;
+}
+
+int singleton_table_classifier_cfs_add(const char * path, CFS_t * path_cfs)
+{
+	if (!singleton_table_classifier_cfs)
+		return -E_BUSY;
+	return table_classifier_cfs_add(singleton_table_classifier_cfs, path, path_cfs);
 }
 
 CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)

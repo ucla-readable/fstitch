@@ -3,8 +3,11 @@
 
 #include <kfs/cfs.h>
 
-void    set_frontend_cfs(CFS_t * cfs);
-CFS_t * get_frontend_cfs(void);
+// Add a mount at path for cfs.
+// Can only be called before entering fuse_serve_loop().
+int fuse_serve_add_mount(const char * path, CFS_t * cfs);
+
+#define kfsd_add_mount(p, c) fuse_serve_add_mount(p, c)
 
 int fuse_serve_init(int argc, char ** argv);
 int fuse_serve_loop();

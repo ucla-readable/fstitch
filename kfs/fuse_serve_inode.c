@@ -65,34 +65,48 @@ char * fname(fuse_ino_t parent, const char * local_name)
 }
 
 
-static uint32_t ino_counter; // value for next inode
-
-// fuse_ino_t ino -> char * filename
-static hash_map_t * fnames = NULL;
-
-// fuse_ino_t child -> fuse_ino_t parent
-static hash_map_t * parents = NULL;
-
-
 typedef struct inoentry {
 	const char * local_name;
 	fuse_ino_t ino;
 } inoentry_t;
 
-// fuse_ino_t parent -> vector_t * (inoentry)
-static hash_map_t * lnames = NULL;
+struct inodes {
+	uint32_t ino_counter; // value for next inode
+
+	// fuse_ino_t ino -> char * filename
+	hash_map_t * fnames;
+
+	// fuse_ino_t child -> fuse_ino_t parent
+	hash_map_t * parents;
+
+	// fuse_ino_t parent -> vector_t * (inoentry)
+	hash_map_t * lnames;
+};
+
+static inodes_t * curi = NULL;
+
+
+void fuse_serve_inodes_set_cur(inodes_t * i)
+{
+	curi = i;
+}
+
+void fuse_serve_inodes_clear_cur(void)
+{
+	curi = NULL;
+}
 
 
 // Returns ino's full name. Returns NULL if ino does not exist.
 const char * inode_fname(fuse_ino_t ino)
 {
-	return (const char *) hash_map_find_val(fnames, (void *) ino);
+	return (const char *) hash_map_find_val(curi->fnames, (void *) ino);
 }
 
 // Returns ino's parent inode. Returns FAIL_INO if ino does not exist.
 fuse_ino_t inode_parent(fuse_ino_t ino)
 {
-	return (fuse_ino_t) hash_map_find_val(parents, (void *) ino);
+	return (fuse_ino_t) hash_map_find_val(curi->parents, (void *) ino);
 }
 
 // Returns the inode for local_name (which is in parent).
@@ -103,7 +117,7 @@ fuse_ino_t lname_inode(fuse_ino_t parent, const char * local_name)
 	size_t size;
 	size_t i;
 
-	inodes = (const vector_t *) hash_map_find_val(lnames, (void *) parent);
+	inodes = (const vector_t *) hash_map_find_val(curi->lnames, (void *) parent);
 	if (!inodes)
 		return FAIL_INO;
 
@@ -143,7 +157,7 @@ int add_inode(fuse_ino_t parent, const char * local_name, fuse_ino_t * pino)
 
 	// store in our inode structures
 
-	ino = (fuse_ino_t) ino_counter++;
+	ino = (fuse_ino_t) curi->ino_counter++;
 
 	entry = malloc(sizeof(*entry));
 	assert(entry);
@@ -151,21 +165,21 @@ int add_inode(fuse_ino_t parent, const char * local_name, fuse_ino_t * pino)
 	entry->local_name = strdup(local_name);
 	entry->ino = ino;
 
-	linodes = (vector_t *) hash_map_find_val(lnames, (void *) parent);
+	linodes = (vector_t *) hash_map_find_val(curi->lnames, (void *) parent);
 	if (!linodes)
 	{
 		linodes = vector_create();
 		assert(linodes);
-		r = hash_map_insert((void *) lnames, (void *) parent, (void *) linodes);
+		r = hash_map_insert((void *) curi->lnames, (void *) parent, (void *) linodes);
 		assert(r == 0);
 	}
 	r = vector_push_back(linodes, entry);
 	assert(r >= 0);
 
-	r = hash_map_insert(fnames, (void *) ino, (void *) full_name);
+	r = hash_map_insert(curi->fnames, (void *) ino, (void *) full_name);
 	assert(r == 0);
 
-	r = hash_map_insert(parents, (void *) ino, (void *) parent);
+	r = hash_map_insert(curi->parents, (void *) ino, (void *) parent);
 	assert(r == 0);
 
 	*pino = ino;
@@ -181,7 +195,7 @@ void remove_inode(fuse_ino_t ino)
 	size_t size;
 	size_t i;
 
-	full_name = hash_map_erase(fnames, (void *) ino);
+	full_name = hash_map_erase(curi->fnames, (void *) ino);
 	if (!full_name)
 	{
 		kdprintf(STDERR_FILENO, "%s(ino = %lu): ino does not exist\n", __FUNCTION__, ino);
@@ -190,10 +204,10 @@ void remove_inode(fuse_ino_t ino)
 	memset(full_name, 0, strlen(full_name));
 	free(full_name);
 
-	parent = (fuse_ino_t) hash_map_erase(parents, (void *) ino);
+	parent = (fuse_ino_t) hash_map_erase(curi->parents, (void *) ino);
 	assert(parent != FAIL_INO);
 
-	linodes = hash_map_find_val(lnames, (void *) parent);
+	linodes = hash_map_find_val(curi->lnames, (void *) parent);
 	size = vector_size(linodes);
 	for (i=0; i < size; i++)
 	{
@@ -207,7 +221,7 @@ void remove_inode(fuse_ino_t ino)
 
 			if (size == 1)
 			{
-				if(!hash_map_erase(lnames, (void *) parent))
+				if(!hash_map_erase(curi->lnames, (void *) parent))
 					assert(0);
 				vector_destroy(linodes);
 			}
@@ -220,9 +234,10 @@ void remove_inode(fuse_ino_t ino)
 	assert(0);
 }
 
-void inodes_shutdown(void)
+static void inodes_shutdown(void)
 {
-	if (parents && fnames && lnames)
+	assert(curi);
+	if (curi->parents && curi->fnames && curi->lnames)
 	{
 		// FUSE does not guarantee that all looked up inodes will be released.
 		// We can free these inodes here so that we don't trip memory leak
@@ -236,7 +251,7 @@ void inodes_shutdown(void)
 		inos = vector_create();
 		assert(inos);
 
-		hash_map_it_init(&it, lnames);
+		hash_map_it_init(&it, curi->lnames);
 
 		while ((inoentries = (vector_t *) hash_map_val_next(&it)))
 		{
@@ -252,61 +267,81 @@ void inodes_shutdown(void)
 		vector_destroy(inos);
 	}
 
-	if (parents)
+	if (curi->parents)
 	{
-		hash_map_destroy(parents);
-		parents = NULL;
+		hash_map_destroy(curi->parents);
+		curi->parents = NULL;
 	}
-	if (fnames)
+	if (curi->fnames)
 	{
-		hash_map_destroy(fnames);
-		fnames = NULL;
+		hash_map_destroy(curi->fnames);
+		curi->fnames = NULL;
 	}
-	if (lnames)
+	if (curi->lnames)
 	{
-		hash_map_destroy(lnames);
-		lnames = NULL;
+		hash_map_destroy(curi->lnames);
+		curi->lnames = NULL;
 	}
 }
 
-int inodes_init(void)
+
+void fuse_serve_inodes_destroy(inodes_t * i)
+{
+	if (!i)
+		return;
+	curi = i;
+	inodes_shutdown();
+	memset(curi, 0, sizeof(*curi));
+	free(curi);
+	curi = NULL;
+}
+
+inodes_t * fuse_serve_inodes_create(void)
 {
 	fuse_ino_t root_ino;
 	int r;
 
 	static_assert(sizeof(void*) == sizeof(fuse_ino_t));
 
-	assert(!fnames && !parents && !lnames);
+//	assert(!fnames && !parents && !lnames);
 
-	ino_counter = 1;
+	inodes_t * i;
+	assert(!curi);
 
-	lnames = hash_map_create();
-	if (!lnames)
+	if (!(curi = calloc(1, sizeof(*i))))
+		return NULL;
+
+	curi->ino_counter = 1;
+
+	curi->lnames = hash_map_create();
+	if (!curi->lnames)
 	{
-		inodes_shutdown();
-		return -ENOMEM;
+//		inodes_shutdown();
+		return NULL;
 	}
 
-	fnames = hash_map_create();
-	if (!fnames)
+	curi->fnames = hash_map_create();
+	if (!curi->fnames)
 	{
-		inodes_shutdown();
-		return -ENOMEM;
+//		inodes_shutdown();
+		return NULL;
 	}
 
-	parents = hash_map_create();
-	if (!parents)
+	curi->parents = hash_map_create();
+	if (!curi->parents)
 	{
-		inodes_shutdown();
-		return -ENOMEM;
+//		inodes_shutdown();
+		return NULL;
 	}
 
 	if ((r = add_inode(FUSE_ROOT_ID, "/", &root_ino)) < 0)
 	{
-		inodes_shutdown();
-		return -ENOMEM;
+//		inodes_shutdown();
+		return NULL;
 	}
 	assert(root_ino == FUSE_ROOT_ID);
 
-	return 0;
+	i = curi;
+	curi = NULL;
+	return i;
 }
