@@ -23,7 +23,7 @@
 #define E_FILE_EXISTS	14	// File already exists
 #define E_NOT_EXEC	15	// File not a valid executable
 #define E_NOT_DIR	16	// File is not a directory
-#define E_NOT_EMPTY	17 // Directory not empty
+#define E_NOT_EMPTY	17	// Directory not empty
 
 #define E_BUSY		18	// Device is busy
 #define E_NO_DEV	19	// No such device
