@@ -248,7 +248,7 @@ int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 	/* from dependency's perspective, we are adding a dependent
 	 *   => dependency must not be engaged [anywhere] */
 	if(dependency->engaged_count)
-		return -E_INVAL;
+		return -E_BUSY;
 	/* from dependent's perspective, we are adding a dependency
 	 *   => dependent must not be released */
 	if(!dependent->tail_keep || dependent->is_released)
@@ -362,7 +362,7 @@ int opgroup_engage(opgroup_t * opgroup)
 	opgroup_state_t * state;
 	
 	if(!current_scope)
-		return -E_INVAL;
+		return -E_NO_DEV;
 	if(!opgroup)
 		return -E_INVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
@@ -376,7 +376,7 @@ int opgroup_engage(opgroup_t * opgroup)
 		return 0;
 	
 	state->engaged = 1;
-	state->opgroup->engaged_count++;
+	opgroup->engaged_count++;
 	/* FIXME: can we do better than just assert? */
 	assert(state->opgroup->engaged_count);
 	
@@ -384,12 +384,12 @@ int opgroup_engage(opgroup_t * opgroup)
 	if(r < 0)
 	{
 		state->engaged = 0;
-		state->opgroup->engaged_count--;
+		opgroup->engaged_count--;
 	}
 	else
 		/* mark it as having data since it is now engaged */
 		/* (and therefore could acquire data at any time) */
-		state->opgroup->has_data = 1;
+		opgroup->has_data = 1;
 	return r;
 }
 
@@ -399,7 +399,7 @@ int opgroup_disengage(opgroup_t * opgroup)
 	opgroup_state_t * state;
 	
 	if(!current_scope)
-		return -E_INVAL;
+		return -E_NO_DEV;
 	if(!opgroup)
 		return -E_INVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
@@ -410,13 +410,13 @@ int opgroup_disengage(opgroup_t * opgroup)
 		return 0;
 	
 	state->engaged = 0;
-	state->opgroup->engaged_count--;
+	opgroup->engaged_count--;
 	
 	r = opgroup_update_top_bottom();
 	if(r < 0)
 	{
 		state->engaged = 1;
-		state->opgroup->engaged_count++;
+		opgroup->engaged_count++;
 	}
 	return r;
 }
@@ -437,7 +437,7 @@ int opgroup_abandon(opgroup_t ** opgroup)
 {
 	opgroup_state_t * state;
 	if(!current_scope)
-		return -E_INVAL;
+		return -E_NO_DEV;
 	if(!opgroup || !*opgroup)
 		return -E_INVAL;
 	state = hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
@@ -446,7 +446,7 @@ int opgroup_abandon(opgroup_t ** opgroup)
 	assert(state->opgroup == *opgroup);
 	/* can't abandon an engaged opgroup */
 	if(state->engaged)
-		return -E_INVAL;
+		return -E_BUSY;
 	if(!--state->opgroup->references)
 	{
 		/* no more references to this opgroup */
