@@ -67,20 +67,19 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 		goto error_1;
 	
 	copy->next_id = scope->next_id;
-	if(scope->top)
+	copy->top = scope->top;
+	if(copy->top)
 	{
-		if(chdesc_weak_retain(scope->top, &copy->top) < 0)
-			goto error_2;
 		/* we need our own top_keep */
 		copy->top_keep = chdesc_create_noop(NULL, NULL);
 		if(!copy->top_keep)
-			goto error_3;
+			goto error_2;
 		chdesc_claim_noop(copy->top_keep);
 		if(chdesc_add_depend(copy->top, copy->top_keep) < 0)
-			goto error_4;
+			goto error_3;
 	}
 	if(chdesc_weak_retain(scope->bottom, &copy->bottom) < 0)
-		goto error_4;
+		goto error_3;
 	
 	/* iterate over opgroups and increase reference counts */
 	hash_map_it_init(&it, scope->id_map);
@@ -88,12 +87,12 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	{
 		opgroup_state_t * dup = malloc(sizeof(*dup));
 		if(!dup)
-			goto error_5;
+			goto error_4;
 		*dup = *state;
 		if(hash_map_insert(copy->id_map, (void *) dup->opgroup->id, dup) < 0)
 		{
 			free(dup);
-			goto error_5;
+			goto error_4;
 		}
 		dup->opgroup->references++;
 		/* FIXME: can we do better than just assert? */
@@ -108,7 +107,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	
 	return copy;
 	
-error_5:
+error_4:
 	hash_map_it_init(&it, copy->id_map);
 	while((state = hash_map_val_next(&it)))
 	{
@@ -121,11 +120,9 @@ error_5:
 	hash_map_destroy(copy->id_map);
 	
 	chdesc_weak_release(&copy->bottom);
-error_4:
+error_3:
 	if(copy->top_keep)
 		chdesc_satisfy(&copy->top_keep);
-error_3:
-	chdesc_weak_release(&copy->top);
 error_2:
 	free(copy);
 error_1:
@@ -162,7 +159,6 @@ void opgroup_scope_destroy(opgroup_scope_t * scope)
 	
 	if(scope->top_keep)
 		chdesc_satisfy(&scope->top_keep);
-	chdesc_weak_release(&scope->top);
 	chdesc_weak_release(&scope->bottom);
 	free(scope);
 }
@@ -281,7 +277,7 @@ static int opgroup_update_top_bottom(void)
 	chdesc_t * top_keep;
 	chdesc_t * bottom;
 	chdesc_t * save_top = current_scope->top;
-	int r;
+	int r, count = 0;
 	
 	/* create new top and bottom */
 	top = chdesc_create_noop(NULL, NULL);
@@ -328,11 +324,8 @@ static int opgroup_update_top_bottom(void)
 			if(state->opgroup->tail)
 				if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
 					goto error_loop;
+			count++;
 		}
-	
-	r = chdesc_weak_retain(top, &current_scope->top);
-	if(r < 0)
-		goto error_loop;
 	
 	if(!bottom->dependencies)
 	{
@@ -348,6 +341,13 @@ static int opgroup_update_top_bottom(void)
 		goto error_loop;
 	}
 	
+	if(!count)
+	{
+		chdesc_satisfy(&top_keep);
+		top = NULL;
+	}
+	
+	current_scope->top = top;
 	if(current_scope->top_keep)
 		chdesc_satisfy(&current_scope->top_keep);
 	/* we claimed it so no need to weak retain */
