@@ -23,7 +23,7 @@ then
 	[ "$MNT" != "-h" ] && fusermount -uz "$MNT"
 elif [ "$KFSD_WRAP" == "valgrind" ] && [ "$KFSD_WRAP_OPTS" == "" ]
 then
-	KFSD_WRAP_OPTS="--suppressions=memcheck.supp --leak-check=full"
+	KFSD_WRAP_OPTS="--suppressions=conf/memcheck.supp --leak-check=full"
 	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS $@ \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
 else
