@@ -350,11 +350,11 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			kdprintf(STDERR_FILENO, "OOM, malloc\n");
 			kfsd_shutdown();
 		}
-		// Using type 0, subtype 1 to represent whole disk
+		// No partition table, make it look like a KudOS partition...
 		part->bd = bd;
-		part->type = 0;
-		part->subtype = 1;
-		snprintf(part->description, 32, "Wholedisk");
+		part->type = PTABLE_KUDOS_TYPE;
+		part->subtype = 0;
+		snprintf(part->description, 32, "Whole disk");
 		if (vector_push_back(partitions, part))
 		{
 			kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
