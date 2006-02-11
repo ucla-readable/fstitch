@@ -86,7 +86,7 @@ PERL	:= perl
 CTAGS	:= ctags
 
 # Native command flags
-NCFLAGS	:= -Wall -pedantic -DKUTIL
+NCFLAGS	:= -Wall -DKUTIL
 NCXXFLAGS	:= $(NCFLAGS)
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
 
