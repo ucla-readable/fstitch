@@ -38,7 +38,7 @@ int mon_env_kill(int argc, char ** argv, struct Trapframe * tf);
 
 int mon_env_debug(int argc, char ** argv, struct Trapframe * tf);
 
-int mon_shell(int argc, char ** argv, struct Trapframe * tf);
+int mon_init(int argc, char ** argv, struct Trapframe * tf);
 
 int mon_exit(int argc, char ** argv, struct Trapframe * tf);
 

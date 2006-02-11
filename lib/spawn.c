@@ -41,8 +41,8 @@ binary_page_alloc(envid_t dst_env, const char* name,
 	}
 	
 	// If a kernel binary was requested, call sys_kernbin_page_alloc.
-	if (name[0] != '/')
-		return sys_kernbin_page_alloc(dst_env, name,
+	if (name[0] == '%')
+		return sys_kernbin_page_alloc(dst_env, &name[1],
 					      offset, pg, pg_perm);
 
 	// Emulate the action of sys_kernbin_page_alloc using the filesystem.
