@@ -537,6 +537,14 @@ int cfs_ipc_opgroup_add_depend(envid_t envid, opgroup_id_t dependent_id, opgroup
 {
 	int r;
 	Dprintf("%s(env = %08x, dependent_id = %d, dependency_id = %d)\n", __FUNCTION__, envid, dependent_id, dependency_id);
+
+	// Adding a dependent to dependency_id requires that dependency_id to
+	// be disengaged. Because exiting a process disengages, we must
+	// gc() all scopes that contain dependency_id to ensure it is
+	// disengaged if it should be. Because we do not have a map of
+	// opgroup ids to scopes, gc() all scopes:
+	opgroup_scope_gc(NULL);
+
 	if ((r = set_cur_opgroup_scope_wrap(envid, __FUNCTION__)))
 		return r;
 	r = opgroup_add_depend(opgroup_lookup(dependent_id), opgroup_lookup(dependency_id));
