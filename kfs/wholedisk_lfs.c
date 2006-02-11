@@ -143,7 +143,7 @@ static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, ch
 	return INVALID_BLOCK;
 }
 
-static int wholedisk_free_block(LFS_t * object, fdesc_t * f, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
@@ -226,7 +226,7 @@ static int wholedisk_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id
 	return wholedisk_set_metadata(object, id, size, data, head, tail);
 }
 
-static int wholedisk_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	return wholedisk_set_metadata(object, id, size, data, head, tail);
 }

@@ -19,6 +19,8 @@ typedef struct hash_map hash_map_t;
 hash_map_t * hash_map_create(void);
 // Create a hash_map, reserve space for n entries, allow/don't auto resizing.
 hash_map_t * hash_map_create_size(size_t n, bool auto_resize);
+// Create a hash map that contains the same elements as hm
+hash_map_t * hash_map_copy(const hash_map_t * hm);
 // Destroy a hash_map, does not destroy keys or vals.
 void         hash_map_destroy(hash_map_t * hm);
 

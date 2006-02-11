@@ -220,14 +220,9 @@ runit:
 
 	// Clean up command line.
 	// Read all commands from the filesystem: add an initial '/' to
-	// the command name.
+	// the command name (unless it starts with % for kernel binaries).
 	// This essentially acts like 'PATH=/'.
-	if (argv[0][0] == '%') {
-		/* support spawning kernel binaries with % prefix */
-		strcpy(argv0buf, argv[0] + 1);
-		argv[0] = argv0buf;
-	}
-	else if (argv[0][0] != '/') {
+	if (argv[0][0] != '/' && argv[0][0] != '%') {
 		argv0buf[0] = '/';
 		strcpy(argv0buf + 1, argv[0]);
 		argv[0] = argv0buf;

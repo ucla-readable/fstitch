@@ -10,6 +10,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/cat \
 			$(OBJDIR)/user/clock \
 			$(OBJDIR)/user/demo \
+			$(OBJDIR)/user/depend \
 			$(OBJDIR)/user/df \
 			$(OBJDIR)/user/diskwrite \
 			$(OBJDIR)/user/echo \
@@ -57,6 +58,7 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/telnetd \
 			$(OBJDIR)/user/test_kfs_perf \
 			$(OBJDIR)/user/testkpl \
+			$(OBJDIR)/user/testopgroup \
  			$(OBJDIR)/user/umount \
 			$(OBJDIR)/user/uptime \
 			$(OBJDIR)/user/volume

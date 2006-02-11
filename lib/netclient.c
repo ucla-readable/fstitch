@@ -77,7 +77,7 @@ find_netd_net(void)
 }
 
 
-uint8_t req_buf[2*PGSIZE];
+static uint8_t req_buf[PGSIZE] __attribute__((__aligned__(PGSIZE)));
 
 int
 kgethostbyname(const char *name, struct ip_addr *ipaddr)
@@ -119,7 +119,7 @@ kgethostbyname(const char *name, struct ip_addr *ipaddr)
 	}
 
 	// Setup lookup request
-	struct Netreq_gethostbyname *req = (struct Netreq_gethostbyname*) ROUND32(req_buf, PGSIZE);
+	struct Netreq_gethostbyname *req = (struct Netreq_gethostbyname*) req_buf;
 	strncpy(req->name, name, DNS_NAME_MAXLEN-1);
 
 	// Send request
@@ -156,7 +156,7 @@ kconnect(struct ip_addr ipaddr, uint16_t port, int *fd)
 	}
 
 	// Setup connect request
-	struct Netreq_connect *req = (struct Netreq_connect*) ROUND32(req_buf, PGSIZE);
+	struct Netreq_connect *req = (struct Netreq_connect*) req_buf;
 	req->req_ipaddr = ipaddr;
 	req->req_port   = port;
 
@@ -194,7 +194,7 @@ kbind_listen(struct ip_addr ipaddr, uint16_t port, uint32_t* listen_key)
 	}
 
 	// Setup bind_listen request
-	struct Netreq_bind_listen *req = (struct Netreq_bind_listen*) ROUND32(req_buf, PGSIZE);
+	struct Netreq_bind_listen *req = (struct Netreq_bind_listen*) req_buf;
 	req->req_ipaddr = ipaddr;
 	req->req_port   = port;
 
@@ -239,7 +239,7 @@ kaccept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* r
 	}
 
 	// Setup accept request
-	struct Netreq_accept *req = (struct Netreq_accept*) ROUND32(req_buf, PGSIZE);
+	struct Netreq_accept *req = (struct Netreq_accept*) req_buf;
 	req->req_listen_key = listen_key;
 
 	// Send request
@@ -285,7 +285,7 @@ knet_stats(int fd)
 	netd_net = 0;
 
 	// Setup accept request
-	struct Netreq_stats *req = (struct Netreq_stats*) ROUND32(req_buf, PGSIZE);
+	struct Netreq_stats *req = (struct Netreq_stats*) req_buf;
 
 	// Send request
 	ipc_send(netd_ipcrecv, NETREQ_STATS, req, PTE_P|PTE_U, NULL);

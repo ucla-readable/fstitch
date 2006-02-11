@@ -89,6 +89,7 @@ int ei_open(int which)
 int ei_close(int which)
 {
 	NS8390_init(&ei_dev[which], 0);
+	request_irq(ei_dev[which].irq, NULL);
 	return 0;
 }
 

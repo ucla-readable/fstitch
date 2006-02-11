@@ -1,6 +1,7 @@
 // implement fork from user space
 
 #include <inc/string.h>
+#include <inc/cfs_ipc_client.h>
 #include <inc/lib.h>
 
 // PTE_COW marks copy-on-write page table entries.
@@ -182,6 +183,12 @@ fork(void)
 									 (void*)  _binary_symstrtbl_start,
 									 (size_t) _binary_symstrtbl_size)) < 0)
 		panic("sys_set_symtbls: %e", r);
+
+	/* Copy our opgroup scope.
+	 * No need to error if kfsd is gone (-E_TIMEOUT), let fork continue. */
+	r = cfs_opgroup_scope_copy(envid);
+	if(r < 0 && r != -E_TIMEOUT)
+		panic("cfs_opgroup_scope_copy: %e", r);
 
 	if((r = sys_env_set_status(envid, ENV_RUNNABLE)))
 		panic("fork: %e", r);

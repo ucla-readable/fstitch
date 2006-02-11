@@ -20,12 +20,13 @@
 #define Dprintf(x...)
 #endif
 
-static uint8_t ipcpage[2*PGSIZE];
-static uint8_t ipc_recv_page[2*PGSIZE];
+/* could one of these pages be shared with CFS' __cfs_ipc_page? */
+static uint8_t ipc_page[PGSIZE] __attribute__((__aligned__(PGSIZE)));
+static uint8_t ipc_recv_page[PGSIZE] __attribute__((__aligned__(PGSIZE)));
 
-#define INIT_PG(typem, type)												\
-	Skfs_##type##_t * pg = (Skfs_##type##_t *) ROUNDUP32(ipcpage, PGSIZE);	\
-	memset(pg, 0, PGSIZE);													\
+#define INIT_PG(typem, type)								\
+	Skfs_##type##_t * pg = (Skfs_##type##_t *) ipc_page;	\
+	memset(pg, 0, PGSIZE);									\
 	pg->skfs_type = SKFS_##typem
 
 #define SEND_PG() ipc_send(fsid, SKFS_VAL, pg, PTE_P|PTE_U, NULL)
@@ -173,7 +174,7 @@ static int kic_bd_destroy(BD_t * bd)
 static int kic_get_config_status(bool config_status, object_t * obj, int level, char * string, size_t length)
 {
 	const envid_t fsid = find_fs();
-	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ROUNDUP32(ipc_recv_page, PGSIZE);
+	Skfs_return_config_status_t * rcs = (Skfs_return_config_status_t *) ipc_recv_page;
 	int perm, r;
 
 	INIT_PG(REQUEST_CONFIG_STATUS, request_config_status);
@@ -207,7 +208,7 @@ static int kic_get_status(void * obj, int level, char * string, size_t length)
 static int kic_get_flags_magic(object_t * obj)
 {
 	const envid_t fsid = find_fs();
-	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ROUNDUP32(ipc_recv_page, PGSIZE);
+	Skfs_return_flags_magic_t * rfm = (Skfs_return_flags_magic_t *) ipc_recv_page;
 	int perm, r;
 
 	INIT_PG(REQUEST_FLAGS_MAGIC, request_flags_magic);
@@ -445,6 +446,22 @@ int josfs_fsck(LFS_t * lfs)
 
 	SEND_PG();
 	return RECV_PG();
+}
+
+#include <kfs/opgroup_lfs.h>
+LFS_t * opgroup_lfs(LFS_t * base)
+{
+	const envid_t fsid = find_fs();
+	uint32_t lfs_id;
+
+	INIT_PG(OPGROUP_LFS, opgroup_lfs);
+
+	pg->base = (uint32_t) OBJLOCAL(base);
+
+	SEND_PG();
+	lfs_id = RECV_PG();
+
+	return create_lfs(lfs_id);
 }
 
 #include <kfs/wholedisk_lfs.h>
@@ -722,8 +739,8 @@ const modman_entry_##typel##_t * modman_lookup_##typel(typeu##_t * t)	\
 {																		\
 	Dprintf("%s(0x%08x, id 0x%08x)\n", __FUNCTION__, t, OBJLOCAL(t));	\
 	const envid_t fsid = find_fs();										\
-	Skfs_modman_return_lookup_t * lookup = (Skfs_modman_return_lookup_t *) ROUNDUP32(ipc_recv_page, PGSIZE); \
-	Skfs_modman_return_lookup_user_t * lookup_user = (Skfs_modman_return_lookup_user_t *) ROUNDUP32(ipc_recv_page, PGSIZE);	\
+	Skfs_modman_return_lookup_t * lookup = (Skfs_modman_return_lookup_t *) ipc_recv_page; \
+	Skfs_modman_return_lookup_user_t * lookup_user = (Skfs_modman_return_lookup_user_t *) ipc_recv_page;	\
 	int perm;															\
 	int users_remaining, ur;											\
 	vector_t * recved_lookup_users;										\
@@ -856,7 +873,7 @@ int modman_it_init_##typel(modman_it_t * it)							\
 	const envid_t fsid = find_fs();										\
 	uint32_t perm;														\
 	uint32_t more_its;													\
-	Skfs_modman_return_it_t * rit = (Skfs_modman_return_it_t *) ROUNDUP32(ipc_recv_page, PGSIZE); \
+	Skfs_modman_return_it_t * rit = (Skfs_modman_return_it_t *) ipc_recv_page; \
 	int r;																\
 																		\
 	r = kic_modman_it_init(it);											\

@@ -1,5 +1,6 @@
 #include <inc/lib.h>
 #include <inc/elf.h>
+#include <inc/cfs_ipc_client.h>
 
 #define UTEMP2USTACK(addr)	((uintptr_t) (addr) + (USTACKTOP - PGSIZE) - UTEMP)
 #define UTEMP2			(UTEMP + PGSIZE)
@@ -40,8 +41,8 @@ binary_page_alloc(envid_t dst_env, const char* name,
 	}
 	
 	// If a kernel binary was requested, call sys_kernbin_page_alloc.
-	if (name[0] != '/')
-		return sys_kernbin_page_alloc(dst_env, name,
+	if (name[0] == '%')
+		return sys_kernbin_page_alloc(dst_env, &name[1],
 					      offset, pg, pg_perm);
 
 	// Emulate the action of sys_kernbin_page_alloc using the filesystem.
@@ -169,6 +170,15 @@ spawn(const char* prog, const char** argv)
 	
 	r = copy_shared_pages(child);
 	if(r < 0)
+	{
+		sys_env_destroy(child);
+		return r;
+	}
+
+	/* Copy our opgroup scope.
+	 * No need to error if kfsd is gone (-E_TIMEOUT), let spawn continue. */
+	r = cfs_opgroup_scope_copy(child);
+	if(r < 0 && r != -E_TIMEOUT)
 	{
 		sys_env_destroy(child);
 		return r;

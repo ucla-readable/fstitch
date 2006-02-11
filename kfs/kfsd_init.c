@@ -24,13 +24,15 @@
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
 #include <kfs/ufs_base.h>
+#include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
+#ifdef KUDOS
 #include <kfs/table_classifier_cfs.h>
+#include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/fidprotector_cfs.h>
 #include <kfs/fidcloser_cfs.h>
-#ifdef KUDOS
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/ipc_serve.h>
 #endif
@@ -76,8 +78,9 @@ int kfsd_init(int argc, char ** argv)
 	const bool use_net    = 0;
 	vector_t * uhfses = NULL;
 
-	CFS_t * table_class = NULL;
 #ifdef KUDOS
+	CFS_t * table_class = NULL;
+	CFS_t * opgroupscope_tracker = NULL;
 	CFS_t * fidprotector = NULL;
 	CFS_t * fidcloser = NULL;
 #endif
@@ -207,13 +210,15 @@ int kfsd_init(int argc, char ** argv)
 	//
 	// Mount uhfses
 
+#ifdef KUDOS
 	if (! (table_class = table_classifier_cfs()) )
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
+#endif
 #if USE_THIRD_LEG
 	CFS_t * josfscfs = josfs_cfs();
-	r = table_classifier_cfs_add(table_class, "/", josfscfs);
+	r = kfsd_add_mount("/", josfscfs);
 	if (r < 0)
 		kfsd_shutdown();
 #endif
@@ -222,10 +227,10 @@ int kfsd_init(int argc, char ** argv)
 		size_t i;
 		for (i=0; i < uhfses_size; i++)
 		{
-			r = table_classifier_cfs_add(table_class, fspaths[i], vector_elt(uhfses, i));
+			r = kfsd_add_mount(fspaths[i], vector_elt(uhfses, i));
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "table_classifier_cfs_add: %e\n", r);
+				kdprintf(STDERR_FILENO, "kfsd_add_mount: %e\n", r);
 				kfsd_shutdown();
 			}
 		}
@@ -234,11 +239,15 @@ int kfsd_init(int argc, char ** argv)
 		uhfses = NULL;
 	}
 
-	r = table_classifier_cfs_add(table_class, "/dev", modman_devfs);
+	r = kfsd_add_mount("/dev", modman_devfs);
 	if (r < 0)
 		kfsd_shutdown();
 
 #ifdef KUDOS
+	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
+		kfsd_shutdown();
+	set_frontend_cfs(opgroupscope_tracker);
+
 	//
 	// fidfairies
 
@@ -341,11 +350,11 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			kdprintf(STDERR_FILENO, "OOM, malloc\n");
 			kfsd_shutdown();
 		}
-		// Using type 0, subtype 1 to represent whole disk
+		// No partition table, make it look like a KudOS partition...
 		part->bd = bd;
-		part->type = 0;
-		part->subtype = 1;
-		snprintf(part->description, 32, "Wholedisk");
+		part->type = PTABLE_KUDOS_TYPE;
+		part->subtype = 0;
+		snprintf(part->description, 32, "Whole disk");
 		if (vector_push_back(partitions, part))
 		{
 			kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
@@ -411,6 +420,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			printf("Unknown partition type %x\n", part->type);
 			continue;
 		}
+		if (! (lfs = opgroup_lfs(lfs)))
+			kfsd_shutdown();
 
 		if (! (u = uhfs(lfs)) )
 		{

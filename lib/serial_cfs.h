@@ -3,6 +3,9 @@
 
 #include <lib/types.h>
 #include <lib/mmu.h>
+#include <inc/env.h>
+
+#include <kfs/opgroup.h>
 
 #define SCFS_VAL 1
 
@@ -25,8 +28,16 @@
 #define SCFS_GET_FEATURE 14
 #define SCFS_GET_METADATA 15
 #define SCFS_SET_METADATA 16
-#define SCFS_SHUTDOWN 17
-#define SCFS_DEBUG 18
+#define SCFS_OPGROUP_SCOPE_CREATE 17
+#define SCFS_OPGROUP_SCOPE_COPY 18
+#define SCFS_OPGROUP_CREATE 19
+#define SCFS_OPGROUP_ADD_DEPEND 20
+#define SCFS_OPGROUP_ENGAGE 21
+#define SCFS_OPGROUP_DISENGAGE 22
+#define SCFS_OPGROUP_RELEASE 23
+#define SCFS_OPGROUP_ABANDON 24
+#define SCFS_SHUTDOWN 25
+#define SCFS_DEBUG 26
 
 #define SCFS_TYPE int scfs_type
 
@@ -131,6 +142,48 @@ struct Scfs_set_metadata {
 	SCFS_TYPE;
 	char name[SCFSMAXNAMELEN];
 	// Scfs_metadata is sent as a separate page
+};
+
+struct Scfs_opgroup_scope_create {
+	SCFS_TYPE;
+	uintptr_t scope_cappg_va;
+};
+
+struct Scfs_opgroup_scope_copy {
+	SCFS_TYPE;
+	envid_t child;
+	uintptr_t child_scope_cappg_va;
+};
+
+struct Scfs_opgroup_create {
+	SCFS_TYPE;
+	int flags;
+};
+
+struct Scfs_opgroup_add_depend {
+	SCFS_TYPE;
+	opgroup_id_t dependent;
+	opgroup_id_t dependency;
+};
+
+struct Scfs_opgroup_engage {
+	SCFS_TYPE;
+	opgroup_id_t opgroup;
+};
+
+struct Scfs_opgroup_disengage {
+	SCFS_TYPE;
+	opgroup_id_t opgroup;
+};
+
+struct Scfs_opgroup_release {
+	SCFS_TYPE;
+	opgroup_id_t opgroup;
+};
+
+struct Scfs_opgroup_abandon {
+	SCFS_TYPE;
+	opgroup_id_t opgroup;
 };
 
 struct Scfs_shutdown {

@@ -1070,8 +1070,9 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	else
 	{
 		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
-		if((*chdesc)->type == NOOP && (free_head == *chdesc || (*chdesc)->free_prev))
+		if((*chdesc)->type != NOOP)
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		else if(free_head == *chdesc || (*chdesc)->free_prev)
 		{
 			assert(!(*chdesc)->dependencies);
 			chdesc_free_remove(*chdesc);

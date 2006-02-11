@@ -49,6 +49,7 @@ int	sys_page_alloc(envid_t env, void* pg, int perm);
 int	sys_page_map(envid_t dst_env, void* dst_pg,
 		     envid_t src_env, void* src_pg, int perm);
 int	sys_page_unmap(envid_t env, void* pg);
+int sys_page_is_mapped(void* pg, envid_t target, uintptr_t target_va);
 int	sys_env_set_name(envid_t envid, const char * name);
 int	sys_env_set_priority(envid_t env, int priority);
 int	sys_sb16_close(void);

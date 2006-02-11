@@ -5,4 +5,3 @@ moused
 telnetd
 josweb
 kgpm
-%initsh &

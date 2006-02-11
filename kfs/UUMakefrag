@@ -35,12 +35,14 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/ufs_base.o \
+			$(OBJDIR)/kfs/opgroup_lfs.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/fuse_serve.o \
+			$(OBJDIR)/kfs/fuse_serve_mount.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/sync.o \
 			$(OBJDIR)/kfs/kfsd.o \

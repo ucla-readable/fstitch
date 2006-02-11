@@ -248,7 +248,7 @@ opendisk(const char* name)
 	}
 
 	if (s.st_size < 1024 || s.st_size > 128*1024*1024) {
-		fprintf(stderr, "bad disk size %d\n", s.st_size);
+		fprintf(stderr, "bad disk size %d\n", (int) s.st_size);
 		exit(1);
 	}
 
@@ -379,13 +379,6 @@ flushdisk(void)
 			flushb(&cache[i]);
 }
 
-void
-usage(void)
-{
-	fprintf(stderr, "usage: fsformat kern/fs.img [kernel [files...]]\n");
-	exit(1);
-}
-
 int
 main(int argc, char **argv)
 {
@@ -394,7 +387,10 @@ main(int argc, char **argv)
 	assert(BLKSIZE % sizeof(struct File) == 0);
 
 	if(argc < 2)
-		usage();
+	{
+		fprintf(stderr, "usage: fsformat kern/fs.img [files...]\n");
+		return 1;
+	}
 
 	opendisk(argv[1]);
 	for(i=2; i<argc; i++)

@@ -57,6 +57,7 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/kpl.c \
 			lib/cfs_ipc_client.c \
+			lib/kfs_ipc_opgroup.c \
 			lib/kfs_ipc_client.c \
 			lib/kfs_uses.c
 
@@ -69,4 +70,3 @@ LIB_OBJFILES := $(patsubst lib/%.S, $(OBJDIR)/lib/%.o, $(LIB_OBJFILES))
 $(OBJDIR)/lib/libuser.a: $(LIB_OBJFILES)
 	@echo + ar $@
 	$(V)$(AR) r $@ $(LIB_OBJFILES)
-

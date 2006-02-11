@@ -55,7 +55,6 @@ KERN_SRCFILES := $(wildcard $(KERN_SRCFILES))
 
 # Binary program images to embed within the kernel.
 KERN_BINFILES :=	user/idle \
-			user/initsh \
 			user/init \
 			user/netd \
 			kfs/kfsd

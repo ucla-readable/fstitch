@@ -50,7 +50,7 @@ static struct Command commands[] = {
 	{"env_run", "Run an environment, or the current environment", mon_env_run},
 	{"env_kill", "Kill an environment, or the current environment", mon_env_kill},
 	{"env_debug", "Manage environment debugging output", mon_env_debug},
-	{"shell", "Start a shell", mon_shell},
+	{"init", "Start init", mon_init},
 	{"exit", "Exits the monitor", mon_exit},
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
@@ -857,9 +857,9 @@ int mon_env_debug(int argc, char ** argv, struct Trapframe * tf)
 	return 0;
 }
 
-int mon_shell(int argc, char ** argv, struct Trapframe * tf)
+int mon_init(int argc, char ** argv, struct Trapframe * tf)
 {
-	ENV_CREATE(user_initsh);
+	ENV_CREATE(user_init);
 	return 0;
 }
 

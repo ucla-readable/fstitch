@@ -476,10 +476,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 		jsleep(2 * HZ);
 		r = kgethostbyname(host, &addr);
 		if(r < 0)
-		{
-			assert(0);
 			return r;
-		}
 	}
 	r = kconnect(addr, port, &debug_socket);
 	if(r < 0)
@@ -487,10 +484,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 		jsleep(2 * HZ);
 		r = kconnect(addr, port, &debug_socket);
 		if(r < 0)
-		{
-			assert(0);
 			return r;
-		}
 	}
 	
 	debug_rev = svnrevtol("$Rev$");
