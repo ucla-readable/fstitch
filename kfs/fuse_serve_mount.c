@@ -532,6 +532,8 @@ int fuse_serve_mount_step_remove(void)
 	if (vector_size(remove_queue) > 0)
 	{
 		qe = vector_elt(remove_queue, 0);
+		// NOTE: vector_erase() is O(|remove_queue|). If this queue
+		// gets to be big we can change how this removeal works.
 		vector_erase(remove_queue, 0);
 	}
 	else
@@ -734,6 +736,8 @@ static void * helper_thread(void * ignore)
 			return NULL;
 		}
 		qe = vector_elt(helper.queue, 0);
+		// NOTE: vector_erase() is O(|helper.queue|). If this queue
+		// gets to be big we can change how this removeal works.
 		vector_erase(helper.queue, 0);
 		mutex_unlock(&helper.mutex);
 
