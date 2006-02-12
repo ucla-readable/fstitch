@@ -14,8 +14,4 @@
    fun:_dl_allocate_tls
    fun:allocate_stack
    fun:pthread_create@@GLIBC_2.1
-   fun:ensure_helper_is_running
-   fun:fuse_serve_loop
-   fun:kfsd_main
-   fun:main
 }
