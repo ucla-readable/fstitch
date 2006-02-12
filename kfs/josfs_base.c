@@ -38,6 +38,8 @@ int textbar_set_progress(int progress, uint8_t color);
 #define Dprintf(x...)
 #endif
 
+#define INODE_ROOT ((inode_t) 1)
+
 #define block_is_free read_bitmap
 #define super ((struct JOSFS_Super *) info->super_block->ddesc->data)
 #define isvalid(x) (x >= reserved && x < s_nblocks)
@@ -683,7 +685,7 @@ static int josfs_get_status(void * object, int level, char * string, size_t leng
 
 static int josfs_get_root(LFS_t * object, inode_t * ino)
 {
-	*ino = 1;
+	*ino = INODE_ROOT;
 	return 0;
 }
 
@@ -766,8 +768,8 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 	fd->ino = ino;
 	fd->file = file;
 
-	if (ino == 1) { // superblock
-		memcpy(file, super + 8, sizeof(JOSFS_File_t));
+	if (ino == INODE_ROOT) { // superblock
+		memcpy(file, &super->s_root, sizeof(JOSFS_File_t));
 	} else {
 		dirblock = CALL(info->ubd, read_block, fd->dirb);
 		if (!dirblock)
@@ -796,11 +798,11 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	int r;
 
 	fd = (struct josfs_fdesc *)josfs_lookup_inode(object, parent);
-	if (!fd) return E_INVAL;
+	if (!fd) return -E_INVAL;
 	parent_file = fd->file;
 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
-	if (!r)
+	if (r < 0)
 		return r;
 	*ino = dirb * JOSFS_BLKFILES + index;
 	return 0;
