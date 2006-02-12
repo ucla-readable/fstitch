@@ -215,9 +215,14 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		stbuf->st_size = (off_t) *filesize.filesize;
 		free(filesize.filesize);
 	}
+	else if (*type.type == TYPE_INVAL)
+	{
+		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): file type is invalid\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino);
+		goto err;
+	}
 	else
 	{
-		Dprintf("%d:file type %u unknown\n", __LINE__, *type.type);
+		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, *type.type);
 		goto err;
 	}
 	stbuf->st_ino = fuse_ino;
@@ -690,8 +695,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 			break;
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "%d:read_single_dir(%d, %lld, 0x%08x) = %d\n",
-					 __LINE__, fid, off - 2, &dirent, r);
+			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(%d, %lld, 0x%08x) = %d\n",
+					 __FILE__, __FUNCTION__, fid, off - 2, &dirent, r);
 			assert(r >= 0);
 		}
 
