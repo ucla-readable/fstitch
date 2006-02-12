@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <fuse_lowlevel.h>
 #include <inc/error.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>
@@ -78,19 +79,20 @@ size_t fuse_serve_mount_chan_bufsize(void)
 	return fuse_chan_bufsize(root->channel);
 }
 
-void fuse_serve_mount_set_root(CFS_t * root_cfs)
+int fuse_serve_mount_set_root(CFS_t * root_cfs)
 {
+	int r;
 	Dprintf("%s(%s)\n", __FUNCTION__, modman_name_cfs(root_cfs));
+	if (!root)
+		return -E_UNSPECIFIED;
 	if (root_service_started)
-	{
-		kdprintf(STDERR_FILENO, "%s(\"%s\") called after root service started, ignoring\n", __FUNCTION__, modman_name_cfs(root->cfs));
-		return;
-	}
-	if (root)
-	{
-		root->cfs = root_cfs;
-		printf("Mounted \"\" from %s\n", modman_name_cfs(root_cfs));
-	}
+		return -E_BUSY;
+
+	if ((r = CALL(root_cfs, get_root, &root->root_ino)) < 0)
+		return r;
+	root->cfs = root_cfs;
+	printf("Mounted \"\" from %s\n", modman_name_cfs(root_cfs));
+	return 0;
 }
 
 int fuse_serve_mount_load_mounts(void)
@@ -224,7 +226,6 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 
 	m->cfs = cfs;
 
-	static_assert(sizeof(fuse_ino_t) == sizeof(inode_t));
 	if ((r = CALL(cfs, get_root, &m->root_ino)) < 0)
 		goto error_path;
 

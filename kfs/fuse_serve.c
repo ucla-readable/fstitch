@@ -44,7 +44,7 @@
 // - Support more metadata; eg permissions, atime, and mtime
 // - Support delayed event response or multiple threads
 
-#define FUSE_SERVE_DEBUG 1
+#define FUSE_SERVE_DEBUG 0
 
 #if FUSE_SERVE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -68,6 +68,8 @@ static int remove_activity; // remove activity fd for fuse_serve_mount
 
 int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 {
+	int r;
+	Dprintf("%s(\"%s\", %s)\n", __FUNCTION__, path, modman_name_cfs(cfs));
 	// We could easily allow mount adds from within sched callbacks if this
 	// becomes useful.
 	// With a good bit of work we can probably allow mount adds from
@@ -80,8 +82,9 @@ int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 
 	if (!strcmp("", path) || !strcmp("/", path))
 	{
+		if ((r = fuse_serve_mount_set_root(cfs)) < 0)
+			return r;
 		root_cfs = cfs;
-		fuse_serve_mount_set_root(cfs);
 		return 0;
 	}
 
@@ -115,22 +118,31 @@ static void serve_statfs(fuse_req_t req)
 }
 */
 
+// Return the fuse_ino_t corresponding to the given request's inode_t
 static fuse_ino_t cfsfuseino(fuse_req_t req, inode_t cfs_ino)
 {
-	if (cfs_ino != ((mount_t *) fuse_req_userdata(req))->root_ino)
-		return (fuse_ino_t) cfs_ino;
-	else
+	inode_t root_cfs_ino = ((mount_t *) fuse_req_userdata(req))->root_ino;
+	if (cfs_ino == root_cfs_ino)
 		return FUSE_ROOT_ID;
+	else if (cfs_ino == FUSE_ROOT_ID)
+		return (fuse_ino_t) root_cfs_ino;
+	else
+		return (fuse_ino_t) cfs_ino;
 }
 
+// Return the request's inode_t corresponding to the fues_ino_t
 static inode_t fusecfsino(fuse_req_t req, fuse_ino_t fuse_ino)
 {
+	inode_t root_cfs_ino = ((mount_t *) fuse_req_userdata(req))->root_ino;
+	if (fuse_ino == root_cfs_ino)
+		return FUSE_ROOT_ID;
 	if (fuse_ino == FUSE_ROOT_ID)
-		return ((mount_t *) fuse_req_userdata(req))->root_ino;
+		return root_cfs_ino;
 	else
 		return (inode_t) fuse_ino;
 }
 
+// Return the request's corresponding frontend cfs
 static CFS_t * reqcfs(fuse_req_t req)
 {
 	assert(req);
@@ -140,7 +152,7 @@ static CFS_t * reqcfs(fuse_req_t req)
 
 static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struct stat * stbuf)
 {
-	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
+	Dprintf("%s(fuse_ino = %lu, cfs_ino = %u)\n", __FUNCTION__, fuse_ino, cfs_ino);
 	int r;
 	uint32_t type_size;
 	union {
@@ -330,9 +342,10 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	e.attr_timeout = STDTIMEOUT;
 	e.entry_timeout = STDTIMEOUT;
 	r = fill_stat(req, cfs_ino, e.ino, &e.attr);
-	assert(r >= 0);
-
-	r = fuse_reply_entry(req, &e);
+	if (r < 0)
+		r = fuse_reply_err(req, TODOERROR);
+	else
+		r = fuse_reply_entry(req, &e);
 	assert(!r);
 }
 
@@ -658,8 +671,10 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 			buf = (char *) realloc(buf, total_size);
 			assert(buf);
 			memset(&stbuf, 0, sizeof(stbuf));
-			stbuf.st_ino = inode_parent(fuse_ino); // TODO: inode_parent()
-			assert(stbuf.st_ino != FAIL_INO);
+			// HACK: fill in ".."'s inode using "."
+			// This only works for root, but is helpful until our basefs fills in ".."
+			stbuf.st_ino = fuse_ino;
+			// assert(stbuf.st_ino != FAIL_INO);
 			fuse_add_dirent(buf + oldsize, local_name, &stbuf, ++off);
 		}
 	}
@@ -695,7 +710,6 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 		r = CALL(reqcfs(req), lookup, fuse_ino, dirent.d_name, &entry_cfs_ino);
 		assert(r >= 0);
 		stbuf.st_ino = cfsfuseino(req, entry_cfs_ino);
-		stbuf.st_ino = TODO;
 		fuse_add_dirent(buf + oldsize, dirent.d_name, &stbuf, ++off);
 	}
 
@@ -1070,6 +1084,7 @@ int fuse_serve_loop(void)
 		{
 			if (mount->mounted && !fuse_session_exited(mount->session))
 			{
+				//printf("[\"%s\"]", mount->kfs_path); fflush(stdout); // debug
 				int mount_fd = fuse_chan_fd(mount->channel);
 				FD_SET(mount_fd, &rfds);
 				if (mount_fd > max_fd)
@@ -1108,7 +1123,7 @@ int fuse_serve_loop(void)
 					r = fuse_chan_receive(mount->channel, channel_buf, channel_buf_len);
 					assert(r > 0); // what would this error mean?
 
-					Dprintf("fuse_serve: mount \"%s\"\n", mount->kfs_path);
+					Dprintf("fuse_serve: request for mount \"%s\"\n", mount->kfs_path);
 					fuse_session_process(mount->session, channel_buf, r, mount->channel);
 				}
 			}

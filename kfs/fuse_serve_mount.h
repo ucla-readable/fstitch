@@ -43,7 +43,7 @@ int fuse_serve_mount_start_shutdown(void);
 
 // Set the root mountpoint.
 // Can only be called before calling fuse_serve_mount_load_mounts().
-void fuse_serve_mount_set_root(CFS_t * root);
+int fuse_serve_mount_set_root(CFS_t * root);
 
 // Return the buffer size for fuse channels
 size_t fuse_serve_mount_chan_bufsize(void);
