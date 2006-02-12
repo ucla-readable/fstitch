@@ -1824,7 +1824,19 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 			return -E_NO_MEM;
 
 		*size = sizeof(uint32_t);
-		*((uint32_t *) *data) = f->f_type;
+		switch (f->f_type)
+		{
+			case UFS_DT_DIR:
+				*((uint32_t *) *data) = TYPE_DIR;
+				break;
+			case UFS_DT_REG:
+				*((uint32_t *) *data) = TYPE_FILE;
+				break;
+			default:
+				kdprintf(STDERR_FILENO, "%s(): file type %u is currently unsupported\n", __FUNCTION__, f->f_type);
+				*((uint32_t *) *data) = TYPE_INVAL;
+				break;
+		}
 	}
 	else if (id == KFS_feature_nlinks.id) {
 		*data = malloc(sizeof(int16_t));
