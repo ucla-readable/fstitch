@@ -24,6 +24,7 @@
 #endif
 
 struct bd_entry {
+	inode_t ino;
 	const char * name;
 	BD_t * bd;
 	int fid, open_count;
@@ -31,8 +32,9 @@ struct bd_entry {
 typedef struct bd_entry bd_entry_t;
 
 struct devfs_state {
-	vector_t * bd_table;
+	vector_t * bd_table; // TODO: use a hash_set_t for faster lookups/removes
 	hash_map_t * fid_map;
+	inode_t root_ino;
 	int root_fid, open_count;
 };
 typedef struct devfs_state devfs_state_t;
@@ -44,6 +46,7 @@ static bd_entry_t * bd_entry_create(const char * name, BD_t * bd)
 	if(!bde)
 		return NULL;
 	
+	bde->ino = (inode_t) bd;
 	bde->name = name;
 	bde->bd = bd;
 	bde->fid = -1;
@@ -54,6 +57,7 @@ static bd_entry_t * bd_entry_create(const char * name, BD_t * bd)
 static BD_t * bd_entry_destroy(bd_entry_t * bde)
 {
 	BD_t * bd = bde->bd;
+	bde->ino = INODE_NONE;
 	bde->name = NULL;
 	bde->bd = NULL;
 	bde->fid = -1;
@@ -88,6 +92,22 @@ static bd_entry_t * bde_lookup_name(devfs_state_t * state, const char * name)
 	{
 		bd_entry_t * bde = (bd_entry_t *) vector_elt(state->bd_table, i);
 		if(!strcmp(bde->name, name))
+			return bde;
+	}
+	
+	return NULL;
+}
+
+static bd_entry_t * bde_lookup_inode(devfs_state_t * state, inode_t ino)
+{
+	Dprintf("%s(0x%08x, %u)\n", __FUNCTION__, state, ino);
+	const size_t bd_table_size = vector_size(state->bd_table);
+	int i;
+	
+	for(i = 0; i < bd_table_size; i++)
+	{
+		bd_entry_t * bde = (bd_entry_t *) vector_elt(state->bd_table, i);
+		if (bde->ino == ino)
 			return bde;
 	}
 	
@@ -142,15 +162,47 @@ static bool devfs_bd_in_use(BD_t * bd)
 	return i != vector_size(entry->users);
 }
 
-static int devfs_open(CFS_t * cfs, const char * name, int mode)
+static int devfs_get_root(CFS_t * cfs, inode_t * ino)
 {
-	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
+	Dprintf("%s()\n", __FUNCTION__);
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	return state->root_ino;
+}
+
+static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+{
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, ino, name);
+	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	bd_entry_t * bde;
+	
+	if(parent != state->root_ino)
+		return -E_INVAL;
+	
+	if(!name[0] || !strcmp(name, "/"))
+	{
+		*ino = state->root_ino;
+		return 0;
+	}
+	
+	if(name[0] == '/')
+		name++;
+	bde = bde_lookup_name(state, name);
+	if(!bde)
+		return -E_NOT_FOUND;
+	
+	*ino = bde->ino;
+	return 0;
+}
+
+static int devfs_open(CFS_t * cfs, inode_t ino, int mode)
+{
+	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	int r;
 	
 	/* open / as a directory */
-	if(!name[0] || !strcmp(name, "/"))
+	if(ino == state->root_ino)
 	{
 		if(state->root_fid == -1)
 		{
@@ -162,9 +214,7 @@ static int devfs_open(CFS_t * cfs, const char * name, int mode)
 		return state->root_fid;
 	}
 	
-	if(name[0] == '/')
-		name++;
-	bde = bde_lookup_name(state, name);
+	bde = bde_lookup_inode(state, ino);
 	if(!bde)
 		return -E_NOT_FOUND;
 	
@@ -186,6 +236,12 @@ static int devfs_open(CFS_t * cfs, const char * name, int mode)
 	
 	bde->open_count++;
 	return bde->fid;
+}
+
+static int devfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+{
+	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
+	return -E_INVAL;
 }
 
 static int devfs_close(CFS_t * cfs, int fid)
@@ -389,73 +445,68 @@ static int devfs_truncate(CFS_t * cfs, int fid, uint32_t size)
 	return -E_INVAL;
 }
 
-static int devfs_unlink(CFS_t * cfs, const char * name)
+static int devfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	/* I suppose we could support removing block devices. It might pose some issues however. */
 	return -E_INVAL;
 }
 
-static int devfs_link(CFS_t * cfs, const char * oldname, const char * newname)
+static int devfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
+	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
 	return -E_INVAL;
 }
 
-static int devfs_rename(CFS_t * cfs, const char * oldname, const char * newname)
+static int devfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
+	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	/* I suppose we could support renaming block devices. It might pose some issues however. */
 	return -E_INVAL;
 }
 
-static int devfs_mkdir(CFS_t * cfs, const char * name)
+static int devfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	return -E_INVAL;
 }
 
-static int devfs_rmdir(CFS_t * cfs, const char * name)
+static int devfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	return -E_INVAL;
 }
 
 static const feature_t * devfs_features[] = {&KFS_feature_size, &KFS_feature_filetype};
 
-static size_t devfs_get_num_features(CFS_t * cfs, const char * name)
+static size_t devfs_get_num_features(CFS_t * cfs, inode_t ino)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
+	Dprintf("%s(%u)\n", __FUNCTION__, ino);
 	return sizeof(devfs_features) / sizeof(devfs_features[0]);
 }
 
-static const feature_t * devfs_get_feature(CFS_t * cfs, const char * name, size_t num)
+static const feature_t * devfs_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
-	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, num);
+	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, num);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde;
 	
-	if(name[0] == '/')
-		name++;
-	bde = bde_lookup_name(state, name);
+	bde = bde_lookup_inode(state, ino);
 	
 	if(!bde || num < 0 || num >= sizeof(devfs_features) / sizeof(devfs_features[0]))
 		return NULL;
 	return devfs_features[num];
 }
 
-static int devfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
+static int devfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
+	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	bd_entry_t * bde = NULL;
-	
-	/* check for the special file / */
-	if(name[0] && strcmp(name, "/"))
+
+	if (ino != state->root_ino)
 	{
-		if(name[0] == '/')
-			name++;
-		bde = bde_lookup_name(state, name);
+		bde = bde_lookup_inode(state, ino);
 		if(!bde)
 			return -E_NOT_FOUND;
 	}
@@ -484,9 +535,9 @@ static int devfs_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_
 	return 0;
 }
 
-static int devfs_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
+static int devfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
-	Dprintf("%s(\"%s\", 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, name, id, size, data);
+	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
 	return -E_INVAL;
 }
 
@@ -524,6 +575,7 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	CFS_INIT(cfs, devfs, state);
 	OBJMAGIC(cfs) = DEVFS_MAGIC;
 	
+	state->root_ino = (inode_t) cfs;
 	state->root_fid = -1;
 	state->open_count = 0;
 	
@@ -573,7 +625,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	if(strchr(name, '/'))
 		return -E_INVAL;
 	
-	bde = bde_lookup_name(state, name);
+	bde = bde_lookup_inode(state, (inode_t) bd);
 	if(bde)
 		return -E_INVAL;
 	
@@ -597,6 +649,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	return 0;
 }
 
+// TODO: can this function take a module pointer instead of a name?
 BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
