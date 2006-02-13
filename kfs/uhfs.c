@@ -18,7 +18,7 @@
 #include <kfs/uhfs.h>
 
 
-#define UHFS_DEBUG 1
+#define UHFS_DEBUG 0
 
 
 #if UHFS_DEBUG
