@@ -18,31 +18,16 @@ else
 -include $(GCCCONF)
 endif
 
-ifdef LAB
-SETTINGLAB := true
-else
--include conf/lab.mk
-endif
-
 -include conf/env.mk
-
-ifndef SOL
-SOL := 0
-endif
-ifndef LABADJUST
-LABADJUST := 0
-endif
-
-ifndef LABSETUP
-LABSETUP := ./
-endif
 
 
 TOP = .
 
 # Native utilities
+FSFORMAT       := fsformat
 ELFDUMP_SYMTAB := elfdump_symtab
 PTYPAIR        := ptypair
+BDSPLIT        := bdsplit
 KNBD_SERVER    := knbd-server
 KDB_SERVER     := kdb-server
 HEX2BIN        := hex2bin
@@ -52,9 +37,11 @@ SYMTBL         := symtbl
 SYMSTRTBL      := symstrtbl
 
 UTILS := \
-	$(UTILDIR)/$(HEX2BIN) \
+	$(UTILDIR)/$(FSFORMAT) \
+	$(UTILDIR)/$(BDSPLIT) \
 	$(UTILDIR)/$(KNBD_SERVER) \
 	$(UTILDIR)/$(KDB_SERVER) \
+	$(UTILDIR)/$(HEX2BIN) \
 	$(UTILDIR)/kdb.jar
 
 # Cross-compiler KFS toolchain

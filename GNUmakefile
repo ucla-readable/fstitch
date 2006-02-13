@@ -16,10 +16,6 @@ else
 -include $(GCCCONF)
 endif
 
-ifndef LAB
--include conf/lab.mk
-endif
-
 -include conf/env.mk
 
 
