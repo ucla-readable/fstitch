@@ -18,7 +18,7 @@
 #include <kfs/uhfs.h>
 
 
-#define UHFS_DEBUG 0
+#define UHFS_DEBUG 1
 
 
 #if UHFS_DEBUG
@@ -288,7 +288,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode)
 
 static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
 {
-	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
+	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t existing_ino;
 	chdesc_t * prev_head, * tail;
