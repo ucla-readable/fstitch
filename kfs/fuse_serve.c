@@ -1054,6 +1054,12 @@ int fuse_serve_loop(void)
 	int r;
 	Dprintf("%s()\n", __FUNCTION__);
 
+	if (!root_cfs)
+	{
+		kdprintf(STDERR_FILENO, "%s(): no root cfs was specified; not running.\n", __FUNCTION__);
+		return -E_UNSPECIFIED;
+	}
+
 	if ((r = fuse_serve_mount_load_mounts()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "%s(): fuse_serve_load_mounts: %d\n", __FUNCTION__, r);
