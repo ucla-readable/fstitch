@@ -29,11 +29,11 @@ ifndef FSSIZE
 	FSSIZE := `echo $$((($(FSINUSE) + 255) / 256 + $(FSFREE)))`
 endif
 
-$(OBJDIR)/fs/clean-fs.img: $(OBJDIR)/fs/fsformat $(FSIMGFILES)
+$(OBJDIR)/fs/clean-fs.img: $(UTILDIR)/$(FSFORMAT) $(FSIMGFILES)
 	@echo + mk $(OBJDIR)/fs/clean-fs.img \($(FSSIZE)M\)
 	$(V)mkdir -p $(@D)
 	$(V)dd if=/dev/zero of=$(OBJDIR)/fs/clean-fs.img bs=1M count=$(FSSIZE) 2>/dev/null
-	$(V)$(OBJDIR)/fs/fsformat $(OBJDIR)/fs/clean-fs.img $(FSIMGFILES)
+	$(V)$(UTILDIR)/$(FSFORMAT) $(OBJDIR)/fs/clean-fs.img $(FSIMGFILES)
 
 $(OBJDIR)/fs/fs.img: $(OBJDIR)/boot/mbr $(OBJDIR)/fs/clean-fs.img
 	@echo + mk $(OBJDIR)/fs/fs.img
