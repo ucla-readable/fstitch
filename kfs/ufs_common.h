@@ -12,15 +12,23 @@
 #include <kfs/lfs.h>
 #include <kfs/ufs_base.h>
 #include <kfs/ufs_alloc.h>
+#include <kfs/ufs_dirent.h>
+
+struct ufs_parts
+{
+	LFS_t * base;
+	UFS_Alloc_t * allocator;
+	UFS_Dirent_t * dirent;
+};
 
 struct lfs_info
 {
 	BD_t * ubd;
-	UFS_Alloc_t * allocator;
 	bdesc_t * super_block;
 	bdesc_t * csum_block;
 	struct UFS_Super * super;
 	struct UFS_csum * csum;
+	struct ufs_parts parts;
 	// commonly used values
 	uint16_t ipf; // inodes per fragment
 	uint32_t * cylstart; // array of cylinder starting block numbers
@@ -41,5 +49,6 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail);
 int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail);
 int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head, chdesc_t ** tail);
+int check_name(const char * p);
 
 #endif /* __KUDOS_KFS_UFS_COMMON_H */

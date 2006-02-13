@@ -674,3 +674,21 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	return 0;
 }
 
+int check_name(const char * p)
+{
+	int i;
+
+	if (!p)
+		return -1;
+
+	if (strlen(p) < 1 || strlen(p) > UFS_MAXNAMELEN)
+		return -2;
+
+	for (i = 0 ; i < strlen(p); i++) {
+		if (p[i] == '/')
+			return 1;
+	}
+
+	return 0;
+}
+
