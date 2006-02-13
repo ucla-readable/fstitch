@@ -7,6 +7,16 @@
 
 OBJDIRS += util
 
+$(UTILDIR)/$(FSFORMAT): util/$(FSFORMAT).c
+	@echo + cc[UTIL] $<
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<
+
+$(UTILDIR)/$(BDSPLIT): util/$(BDSPLIT).c
+	@echo + mk $(OBJDIR)/fs/bdsplit
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(NCFLAGS) -o $@ $<
+
 $(UTILDIR)/$(ELFDUMP_SYMTAB) : util/$(ELFDUMP_SYMTAB).cpp
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
