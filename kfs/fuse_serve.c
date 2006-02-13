@@ -193,9 +193,14 @@ static int fill_stat(fuse_req_t req, fuse_ino_t ino, struct stat * stbuf)
 		stbuf->st_size = (off_t) *filesize.filesize;
 		free(filesize.filesize);
 	}
+	else if (*type.type == TYPE_INVAL)
+	{
+		kdprintf(STDERR_FILENO, "%s:%s(\"%s\"): file type is invalid\n", __FILE__, __FUNCTION__, full_name);
+		goto err;
+	}
 	else
 	{
-		Dprintf("%d:file type %u unknown\n", __LINE__, *type.type);
+		kdprintf(STDERR_FILENO, "%s:%s(\"%s\"): unsupported file type %u\n", __FILE__, __FUNCTION__, full_name, *type.type);
 		goto err;
 	}
 	stbuf->st_ino = ino;
@@ -750,8 +755,8 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 			break;
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "%d:read_single_dir(%d, %lld, 0x%08x) = %d\n",
-					 __LINE__, fid, off - 2, &dirent, r);
+			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(%d, %lld, 0x%08x) = %d\n",
+					 __FILE__, __FUNCTION__, fid, off - 2, &dirent, r);
 			assert(r >= 0);
 		}
 
@@ -1114,6 +1119,12 @@ int fuse_serve_loop(void)
 	struct timeval tv;
 	int r;
 	Dprintf("%s()\n", __FUNCTION__);
+
+	if (!root_cfs)
+	{
+		kdprintf(STDERR_FILENO, "%s(): no root cfs was specified; not running.\n", __FUNCTION__);
+		return -E_UNSPECIFIED;
+	}
 
 	if ((r = fuse_serve_mount_load_mounts()) < 0)
 	{
