@@ -804,7 +804,7 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
 	if (r < 0)
 		return r;
-	*ino = dirb * JOSFS_BLKFILES + index;
+	*ino = dirb * JOSFS_BLKFILES + (index / sizeof(JOSFS_File_t));
 	return 0;
 }
 
@@ -1598,6 +1598,12 @@ LFS_t * josfs(BD_t * block_device)
 	struct lfs_info * info;
 	LFS_t * lfs = malloc(sizeof(*lfs));
 
+	if (PGSIZE != 4096) {
+		free(lfs);
+		Dprintf("JOSFSDEBUG: PGSIZE != 4096\n");
+		return NULL;
+	}
+	
 	if (!lfs)
 		return NULL;
 
