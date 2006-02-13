@@ -48,7 +48,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
-static const char * fspaths[] = {"/k0", "/k1", "/k2", "/k3"};
+static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
 struct kfsd_partition {
 	BD_t * bd;
