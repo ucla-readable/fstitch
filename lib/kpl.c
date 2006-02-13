@@ -237,12 +237,7 @@ int sync(void)
 
 int fs_shutdown(void)
 {
-	int r = kpl_shutdown();
-	if(r < 0)
-		return r;
-	/* wait for shutdown to complete */
-	jsleep(HZ);
-	return jfs_shutdown();
+	return kpl_shutdown();
 }
 
 int disk_avail_space(const char* path)
