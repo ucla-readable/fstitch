@@ -1,18 +1,12 @@
 
 OBJDIRS += fs
 
-FSOFILES := 		$(OBJDIR)/fs/ide.o \
-			$(OBJDIR)/fs/fs.o \
-			$(OBJDIR)/fs/serv.o \
-			$(OBJDIR)/fs/test.o \
-
 USERAPPS :=		$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/cat \
 			$(OBJDIR)/user/clock \
 			$(OBJDIR)/user/demo \
 			$(OBJDIR)/user/depend \
 			$(OBJDIR)/user/df \
-			$(OBJDIR)/user/diskwrite \
 			$(OBJDIR)/user/echo \
 			$(OBJDIR)/user/es \
 			$(OBJDIR)/user/ex \
@@ -88,49 +82,17 @@ FSIMGTXTFILES :=	fs/.journal \
 
 FSIMGFILES := $(FSIMGTXTFILES) $(USERAPPS)
 
-$(OBJDIR)/fs/fs: $(FSOFILES) $(OBJDIR)/lib/entry.o $(OBJDIR)/lib/libuser.a $(OBJDIR)/user/user.ld
-	@echo + ld $@
-	$(V)mkdir -p $(@D)
-	$(V)echo "" > $(SYMTBL)
-	$(V)echo "" > $(SYMSTRTBL)
-	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib \
-		$(OBJDIR)/lib/entry.o $(FSOFILES) \
-		-L$(OBJDIR)/lib -luser $(GCC_LIB) \
-		 -b binary $(SYMTBL) $(SYMSTRTBL)
-	$(V)$(UTILDIR)/$(ELFDUMP_SYMTAB) -sym $@ > $(SYMTBL)
-	$(V)$(UTILDIR)/$(ELFDUMP_SYMTAB) -symstr $@ > $(SYMSTRTBL)
-	$(V)# We assume here that running ld this second time does not change what
-	$(V)# the elf symtable/strtable holds. TODO: is this a safe assumption?
-	$(V)$(LD) -o $@ $(ULDFLAGS) $(LDFLAGS) -nostdlib \
-		$(OBJDIR)/lib/entry.o $(FSOFILES) \
-		-L$(OBJDIR)/lib -luser $(GCC_LIB) \
-		 -b binary $(SYMTBL) $(SYMSTRTBL)
-	$(V)$(OBJDUMP) -S $@ >$@.asm
-	$(V)$(STRIP) $@
-
-# How to build the file system image
-# TODO: move into util/
-$(OBJDIR)/fs/fsformat: fs/fsformat.c
-	@echo + mk $(OBJDIR)/fs/fsformat
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $(OBJDIR)/fs/fsformat fs/fsformat.c
-
-$(OBJDIR)/fs/bdsplit: fs/bdsplit.c
-	@echo + mk $(OBJDIR)/fs/bdsplit
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(USER_CFLAGS) -o $(OBJDIR)/fs/bdsplit fs/bdsplit.c
-
 include conf/fs.mk
 ifndef FSSIZE
 	FSINUSE := \`du -slLc --block-size=4096 $(OBJDIR)/kern/kernel $(FSIMGFILES) | grep total$$ | awk '{print $$1}'\`
 	FSSIZE := `echo $$((($(FSINUSE) + 255) / 256 + $(FSFREE)))`
 endif
 
-$(OBJDIR)/fs/clean-fs.img: $(OBJDIR)/fs/fsformat $(FSIMGFILES) $(OBJDIR)/boot/boot $(OBJDIR)/boot/stage2
+$(OBJDIR)/fs/clean-fs.img: $(UTILDIR)/$(FSFORMAT) $(FSIMGFILES) $(OBJDIR)/boot/boot $(OBJDIR)/boot/stage2
 	@echo + mk $(OBJDIR)/fs/clean-fs.img \($(FSSIZE)M\)
 	$(V)mkdir -p $(@D)
 	$(V)dd if=/dev/zero of=$(OBJDIR)/fs/clean-fs.img bs=1M count=$(FSSIZE) 2>/dev/null
-	$(V)$(OBJDIR)/fs/fsformat $(OBJDIR)/fs/clean-fs.img $(FSIMGFILES)
+	$(V)$(UTILDIR)/$(FSFORMAT) $(OBJDIR)/fs/clean-fs.img $(FSIMGFILES)
 	$(V)dd if=$(OBJDIR)/boot/boot of=$(OBJDIR)/fs/clean-fs.img conv=notrunc 2>/dev/null
 	$(V)dd if=$(OBJDIR)/boot/stage2 of=$(OBJDIR)/fs/clean-fs.img seek=1 count=7 conv=notrunc 2>/dev/null
 
@@ -148,4 +110,3 @@ all: $(OBJDIR)/fs/fs.img
 #all: $(addsuffix .sym, $(USERAPPS))
 
 #all: $(addsuffix .asm, $(USERAPPS))
-

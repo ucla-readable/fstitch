@@ -29,10 +29,8 @@ LIB_SRCFILES :=		$(LIB_SRCFILES) \
 LIB_SRCFILES :=		$(LIB_SRCFILES) \
 			lib/fd.c \
 			lib/std.c \
-			lib/file.c \
 			lib/kdprintf.c \
 			lib/svnrevtol.c \
-			lib/fsipc.c \
 			lib/pageref.c \
 			lib/pipe.c \
 			lib/socket.c \

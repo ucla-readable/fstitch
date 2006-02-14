@@ -26,7 +26,6 @@
 #include <kfs/ufs_base.h>
 #include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
-#include <kfs/josfs_cfs.h>
 #include <kfs/mirror_bd.h>
 #ifdef KUDOS
 #include <kfs/table_classifier_cfs.h>
@@ -45,17 +44,11 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 
-#define USE_THIRD_LEG 0 // 1 -> mount josfs_cfs at '/'
-
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
-static const char * fspaths[] = {
-#if !USE_THIRD_LEG
-"/",
-#endif
-"/k0", "/k1", "/k2", "/k3"};
+static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
 struct kfsd_partition {
 	BD_t * bd;
@@ -215,12 +208,6 @@ int kfsd_init(int argc, char ** argv)
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
-#endif
-#if USE_THIRD_LEG
-	CFS_t * josfscfs = josfs_cfs();
-	r = kfsd_add_mount("/", josfscfs);
-	if (r < 0)
-		kfsd_shutdown();
 #endif
 	{
 		const size_t uhfses_size = vector_size(uhfses);

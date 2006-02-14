@@ -67,44 +67,4 @@ struct Super {
 	struct File s_root;		// Root directory node
 };
 
-// Definitions for requests from clients to file system
-
-#define FSREQ_OPEN	1
-#define FSREQ_MAP	2
-#define FSREQ_SET_SIZE	3
-#define FSREQ_CLOSE	4
-#define FSREQ_DIRTY	5
-#define FSREQ_REMOVE	6
-#define FSREQ_SYNC	7
-#define FSREQ_AVAIL_SPACE 8
-#define FSREQ_SHUTDOWN 9
-
-struct Fsreq_open {
-	char req_path[MAXPATHLEN];
-	int req_omode;
-};
-
-struct Fsreq_map {
-	int req_fileid;
-	off_t req_offset;
-};
-
-struct Fsreq_set_size {
-	int req_fileid;
-	off_t req_size;
-};
-
-struct Fsreq_close {
-	int req_fileid;
-};
-
-struct Fsreq_dirty {
-	int req_fileid;
-	off_t req_offset;
-};
-
-struct Fsreq_remove {
-	char req_path[MAXPATHLEN];
-};
-
 #endif /* !KUDOS_INC_FS_H */

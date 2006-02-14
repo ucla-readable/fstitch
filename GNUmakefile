@@ -1,5 +1,3 @@
-# kudos kfs makefile
-
 #
 # This makefile system follows the structuring conventions
 # recommended by Peter Miller in his excellent paper:
@@ -18,18 +16,16 @@ else
 -include $(GCCCONF)
 endif
 
-ifndef LAB
--include conf/lab.mk
-endif
-
 -include conf/env.mk
 
 
 TOP = .
 
 # Native utilities
+FSFORMAT       := fsformat
 ELFDUMP_SYMTAB := elfdump_symtab
 PTYPAIR        := ptypair
+BDSPLIT        := bdsplit
 KNBD_SERVER    := knbd-server
 KDB_SERVER     := kdb-server
 HEX2BIN        := hex2bin
@@ -39,11 +35,13 @@ SYMTBL         := symtbl
 SYMSTRTBL      := symstrtbl
 
 UTILS := \
-	$(UTILDIR)/$(PTYPAIR) \
+	$(UTILDIR)/$(FSFORMAT) \
 	$(UTILDIR)/$(ELFDUMP_SYMTAB) \
-	$(UTILDIR)/$(HEX2BIN) \
+	$(UTILDIR)/$(PTYPAIR) \
+	$(UTILDIR)/$(BDSPLIT) \
 	$(UTILDIR)/$(KNBD_SERVER) \
 	$(UTILDIR)/$(KDB_SERVER) \
+	$(UTILDIR)/$(HEX2BIN) \
 	$(UTILDIR)/kdb.jar
 
 # Cross-compiler KudOS toolchain

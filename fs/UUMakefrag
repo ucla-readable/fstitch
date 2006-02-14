@@ -1,66 +1,7 @@
 
 OBJDIRS += fs
 
-#FSOFILES := 		$(OBJDIR)/fs/ide.o \
-#			$(OBJDIR)/fs/fs.o \
-#			$(OBJDIR)/fs/serv.o \
-#			$(OBJDIR)/fs/test.o \
-
-USERAPPS := \
-#	$(OBJDIR)/kfs/kfsd # not placed in filesystem to save on fs-regens
-
-#	$(OBJDIR)/user/bless \
-#			$(OBJDIR)/user/cat \
-#			$(OBJDIR)/user/clock \
-#			$(OBJDIR)/user/demo \
-#			$(OBJDIR)/user/df \
-#			$(OBJDIR)/user/diskwrite \
-#			$(OBJDIR)/user/echo \
-#			$(OBJDIR)/user/es \
-#			$(OBJDIR)/user/ex \
-#			$(OBJDIR)/user/fourem \
-#			$(OBJDIR)/user/free \
-#			$(OBJDIR)/user/get \
-#			$(OBJDIR)/user/grep \
-#			$(OBJDIR)/user/hexdump \
-#			$(OBJDIR)/user/host \
-#			$(OBJDIR)/user/ifdown \
-#			$(OBJDIR)/user/ifup \
-#			$(OBJDIR)/user/init \
-#			$(OBJDIR)/user/int3 \
-#			$(OBJDIR)/user/josweb \
-#			$(OBJDIR)/user/journal \
-#	 		$(OBJDIR)/kern/kernel \
-#			$(OBJDIR)/user/kfsgraph \
-#			$(OBJDIR)/user/knbdd \
-#			$(OBJDIR)/user/ls \
-#			$(OBJDIR)/user/lsfd \
-#			$(OBJDIR)/user/mario \
-#			$(OBJDIR)/user/md5sum \
-#			$(OBJDIR)/user/mirror \
-#			$(OBJDIR)/user/mkdir \
-#			$(OBJDIR)/user/mkjosfs \
-#			$(OBJDIR)/user/more \
-#			$(OBJDIR)/user/mount \
-#			$(OBJDIR)/user/mv \
-#			$(OBJDIR)/user/netstats \
-#			$(OBJDIR)/user/null \
-#			$(OBJDIR)/user/reboot \
-#			$(OBJDIR)/user/rm \
-#			$(OBJDIR)/user/rmdir \
-#			$(OBJDIR)/user/sb16 \
-#			$(OBJDIR)/user/sh \
-#			$(OBJDIR)/user/sleep \
-#			$(OBJDIR)/user/sync \
-#			$(OBJDIR)/user/telnet \
-#			$(OBJDIR)/user/telnetd \
-#			$(OBJDIR)/user/test_kfs_perf \
-#			$(OBJDIR)/user/testkpl \
-# 			$(OBJDIR)/user/umount \
-#			$(OBJDIR)/user/uptime \
-#			$(OBJDIR)/user/volume
-
-FSIMGTXTFILES :=	fs/.journal \
+FSIMGFILES :=		fs/.journal \
 			fs/404.html \
 			fs/bomb.img \
 			fs/favicon.ico \
@@ -82,30 +23,17 @@ FSIMGTXTFILES :=	fs/.journal \
 
 -include fs/audio/Makefrag
 
-FSIMGFILES := $(FSIMGTXTFILES) $(USERAPPS)
-
-# How to build the file system image
-$(OBJDIR)/fs/fsformat: fs/fsformat.c
-	@echo + mk $(OBJDIR)/fs/fsformat
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(USER_CFLAGS) -o $(OBJDIR)/fs/fsformat fs/fsformat.c
-
-$(OBJDIR)/fs/bdsplit: fs/bdsplit.c
-	@echo + mk $(OBJDIR)/fs/bdsplit
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(USER_CFLAGS) -o $(OBJDIR)/fs/bdsplit fs/bdsplit.c
-
 include conf/fs.mk
 ifndef FSSIZE
 	FSINUSE := \`du -slLc --block-size=4096 $(FSIMGFILES) | grep total$$ | awk '{print $$1}'\`
 	FSSIZE := `echo $$((($(FSINUSE) + 255) / 256 + $(FSFREE)))`
 endif
 
-$(OBJDIR)/fs/clean-fs.img: $(OBJDIR)/fs/fsformat $(FSIMGFILES)
+$(OBJDIR)/fs/clean-fs.img: $(UTILDIR)/$(FSFORMAT) $(FSIMGFILES)
 	@echo + mk $(OBJDIR)/fs/clean-fs.img \($(FSSIZE)M\)
 	$(V)mkdir -p $(@D)
 	$(V)dd if=/dev/zero of=$(OBJDIR)/fs/clean-fs.img bs=1M count=$(FSSIZE) 2>/dev/null
-	$(V)$(OBJDIR)/fs/fsformat $(OBJDIR)/fs/clean-fs.img $(FSIMGFILES)
+	$(V)$(UTILDIR)/$(FSFORMAT) $(OBJDIR)/fs/clean-fs.img $(FSIMGFILES)
 
 $(OBJDIR)/fs/fs.img: $(OBJDIR)/boot/mbr $(OBJDIR)/fs/clean-fs.img
 	@echo + mk $(OBJDIR)/fs/fs.img
@@ -117,8 +45,3 @@ fs/.journal:
 	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null
 
 all: $(OBJDIR)/fs/fs.img
-
-#all: $(addsuffix .sym, $(USERAPPS))
-
-#all: $(addsuffix .asm, $(USERAPPS))
-

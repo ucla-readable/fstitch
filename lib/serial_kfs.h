@@ -153,7 +153,6 @@ typedef struct {
 } Skfs_uhfs_t;
 
 // TODO: devfs_cfs
-// TODO: josfs_cfs
 
 // Not present: fidcloser
 // Not present: fidprotector
