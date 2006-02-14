@@ -24,28 +24,30 @@
 static int
 mouse_reset(void)
 {
+	const uint8_t wanted[] = { ANS_ACK, ANS_PASSED_SELF_TEST, ANS_MOUSE_ID };
+	int state = 0, end_jiffies = env->env_jiffies + HZ;
+
 	if (sys_mouse_ioctl(MOUSE_IOCTL_COMMAND, CMD_RESET, NULL) < 0)
 		return -1;
 
-	int state = 0;
-	const uint8_t wanted[] = { ANS_ACK, ANS_PASSED_SELF_TEST, ANS_MOUSE_ID };
-		// wanted[state] is what we are expecting
-	while (1)
+	while (state < 3 && end_jiffies - env->env_jiffies > 0)
 	{
 		uint8_t b;
 		if (sys_mouse_ioctl(MOUSE_IOCTL_READ, 1, &b) < 0)
+		{
+			sys_yield();
 			continue;
+		}
+		// wanted[state] is what we are expecting
 		if (b == wanted[state])
 			state++;
 		else if (b == wanted[0])
 			state = 1;
 		else
 			state = 0;
-		if (state == 3)
-			break;
 	}
 
-	return 1;
+	return (state == 3) ? 0 : -1;
 }
 
 static int
@@ -113,11 +115,7 @@ void
 umain(void)
 {
 	envid_t client = -1;
-	if (fork() != 0)
-		return;
-	/* set name without leading / */
-	sys_env_set_name(0, "moused");
-	
+
 	printf("Mouse Daemon ");
 
 	if (sys_mouse_ioctl(MOUSE_IOCTL_DETECT, 0, NULL) < 0)
@@ -132,6 +130,11 @@ umain(void)
 	}
 	else
 		printf("started.\n");
+
+	if (fork() != 0)
+		return;
+	/* set name without leading / */
+	sys_env_set_name(0, "moused");
 
 	for (;;)
 	{
