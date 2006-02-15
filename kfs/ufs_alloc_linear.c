@@ -90,6 +90,6 @@ UFS_Alloc_t * ufs_alloc_linear(struct lfs_info * info)
 		return NULL;
 
 	UFS_ALLOC_INIT(obj, ufs_alloc_linear, info);
-	return 0;
+	return obj;
 }
 
