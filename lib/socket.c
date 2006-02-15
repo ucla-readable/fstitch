@@ -134,7 +134,7 @@ socketfree(int fdnum)
 		return r;
 	p = (struct Socket*) fd2data(fd);
 	/* return size available for writing */
-	return PIPEBUFSIZ - p->pipe[1].p_wpos - p->pipe[1].p_rpos;
+	return PIPEBUFSIZ - (p->pipe[1].p_wpos - p->pipe[1].p_rpos);
 }
 
 static int
