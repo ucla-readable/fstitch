@@ -5,7 +5,7 @@
 // UNIXUSER only uses HZ for callbacks around every 1s or more
 #define HZ			5
 #else
-#define HZ			100
+#define HZ			1000
 #endif
 
 #define JIFFIES_PER_SECOND	HZ
