@@ -1028,7 +1028,7 @@ dns_state_free(dns_state_t *ds)
 static void
 dns_tmr()
 {
-	const int32_t dns_tmr_interval = 20;
+	const int32_t dns_tmr_interval = HZ / 5;
 	const size_t  max_rounds = 2;
 	hash_set_it_t it;
 	dns_state_t *ds;
