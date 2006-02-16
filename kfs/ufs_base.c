@@ -736,6 +736,7 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	open_ufsfile_t * ef;
 	int r, exists = -1;
+	uint8_t type;
 
 	if (ino == 0)
 		return NULL;
@@ -756,7 +757,20 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 		ef->file->f_lastfrag = 0;
 		ef->file->f_num = ino;
 		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
-		ef->file->f_type = ef->file->f_inode.di_mode >> 12;
+		type = ef->file->f_inode.di_mode >> 12;
+		switch (type)
+		{
+			case UFS_DT_DIR:
+				ef->file->f_type = TYPE_DIR;
+				break;
+			case UFS_DT_REG:
+				ef->file->f_type = TYPE_FILE;
+				break;
+			default:
+				kdprintf(STDERR_FILENO, "%s(): file type %u is currently unsupported\n", __FUNCTION__, type);
+				ef->file->f_type = TYPE_INVAL;
+				break;
+		}
 		return (fdesc_t *) ef->file;
 	}
 
@@ -1470,19 +1484,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 			return -E_NO_MEM;
 
 		*size = sizeof(uint32_t);
-		switch (f->f_type)
-		{
-			case UFS_DT_DIR:
-				*((uint32_t *) *data) = TYPE_DIR;
-				break;
-			case UFS_DT_REG:
-				*((uint32_t *) *data) = TYPE_FILE;
-				break;
-			default:
-				kdprintf(STDERR_FILENO, "%s(): file type %u is currently unsupported\n", __FUNCTION__, f->f_type);
-				*((uint32_t *) *data) = TYPE_INVAL;
-				break;
-		}
+		*((uint32_t *) *data) = f->f_type;
 	}
 	else if (id == KFS_feature_nlinks.id) {
 		*data = malloc(sizeof(int16_t));
@@ -1649,6 +1651,7 @@ static int ufs_get_root(LFS_t * lfs, inode_t * ino)
 
 static int ufs_destroy(LFS_t * lfs)
 {
+	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(lfs);
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
@@ -1671,6 +1674,7 @@ static int ufs_destroy(LFS_t * lfs)
 
 LFS_t * ufs(BD_t * block_device)
 {
+	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info;
 	LFS_t * lfs;
    
