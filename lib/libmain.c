@@ -25,20 +25,20 @@ libmain(int argc, char **argv)
 
 	// ensure stdin, stdout, and stderr fds exist
 	if((consfd = r = opencons()) < 0)
-		panic("opencons: %e", r);
+		panic("opencons: %i", r);
 	if(consfd == STDIN_FILENO)
 	{
 		// std fds not allocated, set them up
 		if((r = dup2(STDIN_FILENO, STDOUT_FILENO)) < 0)
-			panic("dup2(STDIN_FILENO, STDOUT_FILENO): %e", r);
+			panic("dup2(STDIN_FILENO, STDOUT_FILENO): %i", r);
 		if((r = dup2(STDIN_FILENO, STDERR_FILENO)) < 0)
-			panic("dup2(STDIN_FILENO, STDERR_FILENO): %e", r);
+			panic("dup2(STDIN_FILENO, STDERR_FILENO): %i", r);
 	}
 	else if(consfd > STDERR_FILENO)
 	{
 		// std fds are allocated
 		if((r = close(consfd)) < 0)
-			panic("close(%d): %e", consfd, r);
+			panic("close(%d): %i", consfd, r);
 	}
 	else
 		panic("some but not all standard fds are present");
@@ -52,7 +52,7 @@ libmain(int argc, char **argv)
 									 (size_t) _binary_symtbl_size,
 									 (void*)  _binary_symstrtbl_start,
 									 (size_t) _binary_symstrtbl_size)) < 0)
-		panic("sys_set_symtbls: %e", r);
+		panic("sys_set_symtbls: %i", r);
 #endif
 
 	// call user main routine

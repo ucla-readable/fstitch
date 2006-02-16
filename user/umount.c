@@ -63,7 +63,7 @@ static int destroy_nodes(hash_set_t * nodes)
 				printf("destroyed %s\n", node->name);
 		}
 		else if (r != -E_BUSY)
-			kdprintf(STDERR_FILENO, "Unexpected DESTROY(%s) error: %e\n", node->name, r);
+			kdprintf(STDERR_FILENO, "Unexpected DESTROY(%s) error: %i\n", node->name, r);
 	}
 
 	return ndestroyed;
@@ -142,10 +142,10 @@ static void remove_cycles(kfs_node_t * root, hash_map_t * uses_graph)
 		// (destroy now because no one will be using it after this)
 		r = journal_bd_set_journal(journal, NULL);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal(%s, NULL): %e", __FUNCTION__, root->name, r);
+			kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal(%s, NULL): %i", __FUNCTION__, root->name, r);
 		r = DESTROY((BD_t*) journalbd_use->node->obj);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: DESTROY(%s): %e\n", __FUNCTION__, journalbd_use->node->name, r);
+			kdprintf(STDERR_FILENO, "%s: DESTROY(%s): %i\n", __FUNCTION__, journalbd_use->node->name, r);
 
 		if (verbose)
 			printf("destroyed %s (to break possible cycle)\n", journalbd_use->node->name);

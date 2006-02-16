@@ -89,11 +89,11 @@ close_conn_and_exit(struct httpd_state *hs)
 	{
 		if (hs->file.fd != -1)
 			if((r = close(hs->file.fd)) < 0)
-				kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e", r);
+				kdprintf(STDERR_FILENO, "WARNING: httpd: close: %i", r);
 		if ((r = close(hs->net)) < 0)
-			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %i\n", r);
 		if ((r = close(hs->net)) < 0)
-			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING: httpd: close: %i\n", r);
 	}
 
 	exit(0);
@@ -139,16 +139,16 @@ fs_open(char *filename, struct fs_file *file)
 		if (fd == -E_NOT_FOUND)
 			return 0;
 		else
-			panic("open '%s': %e", filename, fd);		
+			panic("open '%s': %i", filename, fd);		
 	}
 
 	struct Stat stat;
 	if ((r = fstat(fd, &stat)) < 0)
-		panic("fstat: %e");
+		panic("fstat: %i");
 
 	struct Fd *fds;
 	if ((r = fd_lookup(fd, &fds)) < 0)
-		panic("fd_lookup: %e", r);
+		panic("fd_lookup: %i", r);
 
 	file->fd   = fd;
 	file->data = NULL;
@@ -172,36 +172,36 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 
 	if ((r = pipe(p)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "pipe(): %e\n", r);
+		kdprintf(STDERR_FILENO, "pipe(): %i\n", r);
 		exit(0);
 	}
 	
 	if ((r = fork()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "fork(): %e\n", r);
+		kdprintf(STDERR_FILENO, "fork(): %i\n", r);
 		exit(0);
 	}
 	if (r == 0)
 	{
 		if ((r = dup2(p[1], STDOUT_FILENO)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2(): %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2(): %i\n", r);
 			exit(0);
 		}
 		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2(): %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2(): %i\n", r);
 			exit(0);
 		}
 		
 		if ((r = close(p[0])) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close(): %e\n", r);
+			kdprintf(STDERR_FILENO, "close(): %i\n", r);
 			exit(0);
 		}
 		if ((r = close(p[1])) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close(): %e\n", r);
+			kdprintf(STDERR_FILENO, "close(): %i\n", r);
 			exit(0);
 		}
 		
@@ -217,7 +217,7 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 		
 		if ((r = close(p[1])) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close(): %e\n", r);
+			kdprintf(STDERR_FILENO, "close(): %i\n", r);
 			exit(0);
 		}
 		
@@ -238,7 +238,7 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 			}
 			else if (r < 0)
 			{
-				panic("read: %e", r);
+				panic("read: %i", r);
 			}
 			else if (r == 0)
 			{
@@ -247,7 +247,7 @@ fd_display(void (*display_fn)(void *), void *arg, struct fs_file *file)
 		
 		if ((r = close(p[0])) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close(): %e\n", r);
+			kdprintf(STDERR_FILENO, "close(): %i\n", r);
 			exit(0);
 		}
 		
@@ -314,12 +314,12 @@ spawn_cgi(void *arg)
 	argv[MAXARGS-1] = 0;
 	if ((r = parse_argv(bin_name, argv, MAXARGS)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "parse_argv(): %e", r);
+		kdprintf(STDERR_FILENO, "parse_argv(): %i", r);
 		exit(0);
 	}
 	if ((r = spawn(bin_name, (const char**) argv)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "spawn(): %e", r);
+		kdprintf(STDERR_FILENO, "spawn(): %i", r);
 		exit(0);
 	}
 	spawn_child = r;
@@ -395,31 +395,31 @@ send_http_header(struct httpd_state *hs, int http_status)
 		panic("Unimplemented http status code %d", http_status);
 
 	if ((r = kdprintf(hs->net, "HTTP/1.0 %d %s\r\n", http_status, status_str)) < 0)
-		panic("kdprintf: %e");
+		panic("kdprintf: %i");
 
 	//
 	// Server
 	
 	if ((r = kdprintf(hs->net, "Server: JOSWeb/1.0\r\n")) < 0)
-		panic("kdprintf: %e", r);
+		panic("kdprintf: %i", r);
 
 	//
 	// Content length
 
 	if ((r = kdprintf(hs->net, "Content-Length: %d\r\n", hs->file.len)) < 0)
-		panic("kdprintf: %e", r);
+		panic("kdprintf: %i", r);
 
 	//
 	// Connection
 
 	if ((r = kdprintf(hs->net, "Connection: close\r\n")) < 0)
-		panic("kdprintf: %e", r);
+		panic("kdprintf: %i", r);
 
 	//
 	// End of header
 
 	if ((r = kdprintf(hs->net, "\r\n")) < 0)
-		panic("kdprintf: %e", r);
+		panic("kdprintf: %i", r);
 }
 
 
@@ -440,7 +440,7 @@ httpd_serve(struct httpd_state *hs)
 	{
 		if ((r = read(hs->net, &request[i], 1)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "read: %e\n", r);
+			kdprintf(STDERR_FILENO, "read: %i\n", r);
 			close_conn_and_exit(hs);
 		}
 		if (request[i] == '\n' || i >= sizeof(request_pg)-1)
@@ -541,7 +541,7 @@ httpd_serve(struct httpd_state *hs)
 			r = nbytes = read(hs->file.fd, buf, PGSIZE);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "%s:%d read: %e\n", __FILE__, __LINE__, r);
+				kdprintf(STDERR_FILENO, "%s:%d read: %i\n", __FILE__, __LINE__, r);
 				free(buf);
 				close_conn_and_exit(hs);
 			}
@@ -549,7 +549,7 @@ httpd_serve(struct httpd_state *hs)
 			r = write(hs->net, buf, nbytes);
 			if (r != nbytes)
 			{
-				kdprintf(STDERR_FILENO, "%s:%d write: %e\n", __FILE__, __LINE__, r);
+				kdprintf(STDERR_FILENO, "%s:%d write: %i\n", __FILE__, __LINE__, r);
 				free(buf);
 				close_conn_and_exit(hs);
 			}
@@ -561,7 +561,7 @@ httpd_serve(struct httpd_state *hs)
 	{
 		if ((r = write(hs->net, hs->file.data, hs->file.len)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "write: %e\n", r);
+			kdprintf(STDERR_FILENO, "write: %i\n", r);
 			close_conn_and_exit(hs);
 		}
 	}
@@ -609,7 +609,7 @@ httpd_listen(void)
 
 	if ((r = kbind_listen(ip_addr_any, 80, &listen_key)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "bind_listen: %e\n", r);
+		kdprintf(STDERR_FILENO, "bind_listen: %i\n", r);
 		exit(0);
 	}
 
@@ -618,20 +618,20 @@ httpd_listen(void)
 	{
 		if ((r = kaccept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "accept: %e\n", r);
+			kdprintf(STDERR_FILENO, "accept: %i\n", r);
 			exit(0);
 		}
 
 		if ((r = fork()) < 0)
 		{
-			kdprintf(STDERR_FILENO, "fork: %e\n", r);
+			kdprintf(STDERR_FILENO, "fork: %i\n", r);
 			exit(0);
 		}
 		if (r == 0)
 		{
 			if ((r = httpd_accept(fd, remote_ip, remote_port)) < 0)
 			{
-				kdprintf(STDERR_FILENO, "httpd_accept: %e\n", r);
+				kdprintf(STDERR_FILENO, "httpd_accept: %i\n", r);
 				exit(0);
 			}
 			exit(0);
@@ -639,7 +639,7 @@ httpd_listen(void)
 
 		if ((r = close(fd)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %i\n", r);
 			exit(0);
 		}
 	}

@@ -121,7 +121,7 @@ pipefree(int fdnum)
 	struct Stat stat;
 	int r;
 	if ((r = fstat(fdnum, &stat)) < 0)
-		panic("fstat: %e", r);
+		panic("fstat: %i", r);
 	return PIPEBUFSIZ - stat.st_size;
 }
 

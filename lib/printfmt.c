@@ -11,7 +11,7 @@
  * Space or zero padding and a field width are supported for the numeric
  * formats only. 
  * 
- * The special format %e takes an integer error code
+ * The special format %i takes an integer error code
  * and prints a string describing the error.
  * The integer may be positive or negative,
  * so that -E_NO_MEM and E_NO_MEM are equivalent.
@@ -173,8 +173,8 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			putch(va_arg(ap, int), putdat);
 			break;
 
-		// error message
-		case 'e':
+		// error message info
+		case 'i':
 			err = va_arg(ap, int);
 			if (0 <= err)
 			{

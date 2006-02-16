@@ -75,7 +75,7 @@ static int knbd_accept(const char * bd_filename, int fd, struct ip_addr remote_i
 	bd = open(bd_filename, O_RDWR);
 	if (bd < 0)
 	{
-		kdprintf(STDERR_FILENO, "knbdd %s(%s): open: %e\n", __FUNCTION__, bd_filename, bd);
+		kdprintf(STDERR_FILENO, "knbdd %s(%s): open: %i\n", __FUNCTION__, bd_filename, bd);
 		return bd;
 	}
 	
@@ -111,7 +111,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 
 	if ((r = kbind_listen(ip_addr_any, port, &listen_key)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "knbdd: bind_listen: %e\n", r);
+		kdprintf(STDERR_FILENO, "knbdd: bind_listen: %i\n", r);
 		exit(0);
 	}
 
@@ -120,13 +120,13 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 	{
 		if ((r = kaccept(listen_key, &fd, &remote_ip, &remote_port)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "knbdd accept: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd accept: %i\n", r);
 			exit(0);
 		}
 
 		if ((r = fork()) < 0)
 		{
-			kdprintf(STDERR_FILENO, "knbdd fork: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd fork: %i\n", r);
 			exit(0);
 		}
 		if (r == 0)
@@ -137,7 +137,7 @@ static int knbd_listen(const char * bd_filename, uint16_t port)
 
 		if ((r = close(fd)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "knbdd close: %e\n", r);
+			kdprintf(STDERR_FILENO, "knbdd close: %i\n", r);
 			exit(0);
 		}
 	}

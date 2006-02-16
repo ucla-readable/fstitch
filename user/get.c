@@ -56,7 +56,7 @@ close_conn(struct http_state *hs)
 			struct Stat stat;
 			int r;
 			if((r = fstat(fileout_fd, &stat)) < 0)
-				panic("stat: %e", r);
+				panic("stat: %i", r);
 			if(stat.st_size != hs->body_length)
 				kdprintf(STDERR_FILENO,
 						  "http header said %d bytes, but our file is %d.\n",
@@ -76,9 +76,9 @@ removeoutput_close_exit(struct http_state *hs)
 	{
 		int r;
 		if ((r = close(fileout_fd)) < 0)
-			kdprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING (ignoring): %i\n", r);
 		if ((r = remove(fileout_name)) < 0)
-			kdprintf(STDERR_FILENO, "WARNING (ignoring): %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING (ignoring): %i\n", r);
 	}
 
 	exit(0);
@@ -233,7 +233,7 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 		kdprintf(status_fd, "Connecting... ");
 	if ((r = kconnect(addr, port, &hs->net)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "connect: %e\n", r);
+		kdprintf(STDERR_FILENO, "connect: %i\n", r);
 		exit(0);
 	}
 	if (!silent)
@@ -247,12 +247,12 @@ http_get(struct ip_addr addr, uint16_t port, const char *uri, const char *host)
 	// Read response
 	if ((r = http_read_header(hs)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "http_read_header: %e\n", r);
+		kdprintf(STDERR_FILENO, "http_read_header: %i\n", r);
 		removeoutput_close_exit(hs);
 	}
 	if ((r = http_read_body(hs)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "http_read_body: %e\n", r);
+		kdprintf(STDERR_FILENO, "http_read_body: %i\n", r);
 		removeoutput_close_exit(hs);
 	}
 
@@ -308,7 +308,7 @@ parse_url(char *url, struct ip_addr *addr, u16_t *port, char **resource, char **
 	r = kgethostbyname(addr_str, addr);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %e\n", addr_str, r);
+		kdprintf(STDERR_FILENO, "Bad ip address string \"%s\": %i\n", addr_str, r);
 		return -1;
 	}
 
@@ -375,7 +375,7 @@ umain(int argc, char **argv)
 	{
 		if ((r = open(filename, O_WRONLY|O_CREAT|O_TRUNC)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "open: %e\n", r);
+			kdprintf(STDERR_FILENO, "open: %i\n", r);
 			exit(0);
 		}
 		fileout_fd   = r;
@@ -399,7 +399,7 @@ umain(int argc, char **argv)
 	char *host = NULL;
 	if ((r = parse_url(url, &addr, &port, &uri, &host)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "parse_url: %e\n", r);
+		kdprintf(STDERR_FILENO, "parse_url: %i\n", r);
 		exit(0);
 	}
 

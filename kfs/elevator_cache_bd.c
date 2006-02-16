@@ -262,7 +262,7 @@ static int evict_block(BD_t * object)
 			revision_slice_push_down(slice);
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
-				panic("%s(): write_block failed (%e), but code for recovery is not implemented", __FUNCTION__, r);
+				panic("%s(): write_block failed (%i), but code for recovery is not implemented", __FUNCTION__, r);
 			
 			if(slice->ready_size == slice->full_size)
 			{
@@ -422,7 +422,7 @@ static void elevator_cache_bd_callback(void * arg)
 	Dprintf("%s()\n", __FUNCTION__);
 	int r = evict_block(object);
 	if(r < 0)
-		panic("%s(): eviction failed! (%e)\n", __FUNCTION__, r);
+		panic("%s(): eviction failed! (%i)\n", __FUNCTION__, r);
 }
 
 static int elevator_cache_bd_destroy(BD_t * bd)

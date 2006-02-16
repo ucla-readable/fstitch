@@ -66,7 +66,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 			chdescs_moved = 1;
 			r = chdesc_move(chdesc, target_block, target, 0);
 			if (r < 0)
-				panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+				panic("%s(): chdesc_move() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
 		else
 			chmetadesc = &(*chmetadesc)->next;
@@ -80,7 +80,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 		 * cancel the block */
 		r = CALL(target, cancel_block, number);
 		if (r < 0)
-			panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			panic("%s(): BD::cancel_block() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 	}
 	else if (chdescs_moved)
 	{
@@ -92,13 +92,13 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 		/* write the updated target_block */
 		r = CALL(target, write_block, target_block);
 		if (r < 0)
-			panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+			panic("%s(): target->write_block() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 	}
 
 	/* put block back into current state */
 	r = revision_tail_revert(block, barrier);
 	if (r < 0)
-		panic("%s(): revision_tail_revert() failed (%e), but this function does not know what to do in case of failure", __FUNCTION__, r);
+		panic("%s(): revision_tail_revert() failed (%i), but this function does not know what to do in case of failure", __FUNCTION__, r);
 
 	return 0;
 }
@@ -184,7 +184,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 				/* keep it at the barrier for a bit... we need this to create the revision_slice */
 				r = chdesc_move(chdesc, target_block, barrier, forward->offset);
 				if (r < 0)
-					panic("%s(): chdesc_move() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+					panic("%s(): chdesc_move() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			}
 			else
 				chmetadesc = &(*chmetadesc)->next;
@@ -198,7 +198,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			 * as well cancel the block */
 			r = CALL(forward->target, cancel_block, forward->number);
 			if (r < 0)
-				panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+				panic("%s(): BD::cancel_block() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			forward->block = NULL;
 			continue;
 		}
@@ -237,7 +237,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 					/* write the updated target_block */
 					r = CALL(forward->target, write_block, target_block);
 					if (r < 0)
-						panic("%s(): target->write_block() failed (%e), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+						panic("%s(): target->write_block() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 				}
 
 				if (slice->ready_size == slice->full_size)
@@ -254,7 +254,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 	/* put block back into current state */
 	r = revision_tail_revert(block, barrier);
 	if (r < 0)
-		panic("%s(): revision_tail_revert() failed (%e), but this function does not know what to do in case of failure", __FUNCTION__, r);
+		panic("%s(): revision_tail_revert() failed (%i), but this function does not know what to do in case of failure", __FUNCTION__, r);
 
 	return 0;
 }
@@ -323,7 +323,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 			chdescs_moved = 1;
 			r = chdesc_duplicate(chdesc, nforwards, target_block);
 			if (r < 0)
-				panic("%s(): chdesc_duplicate() failed (%e), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
+				panic("%s(): chdesc_duplicate() failed (%i), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
 		}
 		else
 			chmetadesc = &(*chmetadesc)->next;
@@ -344,7 +344,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 			/* write the updated target_block */
 			r = CALL(forwards[i].target, write_block, target_block[i]);
 			if (r < 0)
-				panic("%s(): target->write_block() failed (%e), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
+				panic("%s(): target->write_block() failed (%i), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
 		}
 	}
 	else
@@ -356,7 +356,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 			{
 				r = CALL(forwards[i].target, cancel_block, forwards[i].number);
 				if (r < 0)
-					panic("%s(): BD::cancel_block() failed (%e), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
+					panic("%s(): BD::cancel_block() failed (%i), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
 			}
 	}
 	
@@ -366,7 +366,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	/* put block back into current state */
 	r = revision_tail_revert(block, barrier);
 	if(r < 0)
-		panic("%s(): revision_tail_revert() failed (%e), but this function does not know what to do in case of failure", __FUNCTION__, r);
+		panic("%s(): revision_tail_revert() failed (%i), but this function does not know what to do in case of failure", __FUNCTION__, r);
 
 	return 0;
 }

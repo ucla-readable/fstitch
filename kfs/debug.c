@@ -769,7 +769,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	/* for debugging the debugging interface... */
 	if(r < 0)
 	{
-		printf("kfs_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %e\n", file, line, function, module, opcode, r);
+		printf("kfs_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %i\n", file, line, function, module, opcode, r);
 #if defined(KUDOS)
 		sys_print_backtrace();
 		exit(0);

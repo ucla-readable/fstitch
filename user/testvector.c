@@ -11,7 +11,7 @@ void umain(void)
 	int a = 5;
 
 	if ((r = vector_push_back(v, &a)) < 0)
-		printf("vector_push_back() FAILED: %e\n", r);
+		printf("vector_push_back() FAILED: %i\n", r);
 
 	int * pa = vector_elt(v, 0);
 	if (pa != &a)

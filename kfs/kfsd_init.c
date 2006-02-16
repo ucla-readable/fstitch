@@ -81,7 +81,7 @@ int kfsd_init(int argc, char ** argv)
 
 	if((r = KFS_DEBUG_INIT()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "kfs_debug_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "kfs_debug_init: %i\n", r);
 #ifdef KUDOS
 		while(r != 'y' && r != 'n')
 		{
@@ -101,14 +101,14 @@ int kfsd_init(int argc, char ** argv)
 
 	if((r = modman_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "modman_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "modman_init: %i\n", r);
 		kfsd_shutdown();
 	}
 
 #if defined(KUDOS)
 	if ((r = ipc_serve_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "ipc_serve_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "ipc_serve_init: %i\n", r);
 		kfsd_shutdown();
 	}
 
@@ -127,13 +127,13 @@ int kfsd_init(int argc, char ** argv)
 
 	if ((r = sched_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "sched_init: %e\n", r);
+		kdprintf(STDERR_FILENO, "sched_init: %i\n", r);
 		kfsd_shutdown();
 	}
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %e\n");
+		kdprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %i\n");
 		kfsd_shutdown();
 	}
 	
@@ -217,7 +217,7 @@ int kfsd_init(int argc, char ** argv)
 			r = kfsd_add_mount(fspaths[i], vector_elt(uhfses, i));
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "kfsd_add_mount: %e\n", r);
+				kdprintf(STDERR_FILENO, "kfsd_add_mount: %i\n", r);
 				kfsd_shutdown();
 			}
 		}
@@ -375,7 +375,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				else if (r > 0)
 					printf("found %d errors\n", r);
 				else
-					printf("critical error: %e\n", r);
+					printf("critical error: %i\n", r);
 			}
 
 			if (lfs)

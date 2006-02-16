@@ -76,7 +76,7 @@ again:
 			fd = open(t, O_RDONLY);
 			if(fd < 0)
 			{
-				kdprintf(STDERR_FILENO, "%s: %e\n", t, fd);
+				kdprintf(STDERR_FILENO, "%s: %i\n", t, fd);
 				exit(0);
 			}
 			if(fd)
@@ -84,13 +84,13 @@ again:
 				r = dup2(fd, 0);
 				if (r < 0)
 				{
-					kdprintf(STDERR_FILENO, "dup2: %e\n", r);
+					kdprintf(STDERR_FILENO, "dup2: %i\n", r);
 					exit(0);
 				}
 				r = close(fd);
 				if (r < 0)
 				{
-					kdprintf(STDERR_FILENO, "close: %e\n", r);
+					kdprintf(STDERR_FILENO, "close: %i\n", r);
 					exit(0);
 				}
 				if (0 < stdin_stash)
@@ -119,7 +119,7 @@ again:
 			fd = open(t, O_WRONLY | O_CREAT | O_TRUNC);
 			if(fd < 0)
 			{
-				kdprintf(STDERR_FILENO, "%s: %e\n", t, fd);
+				kdprintf(STDERR_FILENO, "%s: %i\n", t, fd);
 				exit(0);
 			}
 			if(fd != 1)
@@ -157,13 +157,13 @@ again:
 			r = pipe(p);
 			if(r)
 			{
-				kdprintf(STDERR_FILENO, "pipe: %e\n", r);
+				kdprintf(STDERR_FILENO, "pipe: %i\n", r);
 				exit(0);
 			}
 			r = fork();
 			if(r < 0)
 			{
-				kdprintf(STDERR_FILENO, "fork: %e\n", r);
+				kdprintf(STDERR_FILENO, "fork: %i\n", r);
 				exit(0);
 			}
 			if(r)
@@ -243,20 +243,20 @@ runit:
 		r = dup2(stdin_stash, STDIN_FILENO);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2: %i\n", r);
 			exit(0);
 		}
 		r = close(stdin_stash);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %i\n", r);
 			exit(0);
 		}
 	}
 
 	// Spawn the command!
 	if ((r = spawn(argv[0], (const char **) argv)) < 0)
-		kdprintf(STDOUT_FILENO, "spawn %s: %e\n", argv[0], r);
+		kdprintf(STDOUT_FILENO, "spawn %s: %i\n", argv[0], r);
 
 	// In the parent, close all file descriptors and wait for the
 	// spawned command to exit.
@@ -398,19 +398,19 @@ umain(int argc, char** argv)
 		stdin_stash = dup(STDIN_FILENO);
 		if (stdin_stash < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2: %e\n", stdin_stash);
+			kdprintf(STDERR_FILENO, "dup2: %i\n", stdin_stash);
 			exit(0);
 		}
 
 		r = close(STDIN_FILENO);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %i\n", r);
 			exit(0);
 		}
 		if ((r = open(argv[0], O_RDONLY)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s: %e", argv[0], r);
+			kdprintf(STDERR_FILENO, "%s: %i", argv[0], r);
 			exit(0);
 		}
 		assert(r==STDIN_FILENO);
@@ -440,7 +440,7 @@ umain(int argc, char** argv)
 		if (debug)
 			printf("BEFORE FORK\n");
 		if ((r = fork()) < 0)
-			panic("fork: %e", r);
+			panic("fork: %i", r);
 		if (debug)
 			printf("FORK: %d\n", r);
 		if (r == 0) {

@@ -592,7 +592,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	fid = CALL(cfs, open, pg->file, O_CREAT|O_WRONLY);
 	if(fid < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): open %s: %e\n", __FUNCTION__, pg->file, fid);
+		kdprintf(STDERR_FILENO, "%s(): open %s: %i\n", __FUNCTION__, pg->file, fid);
 		return fid;
 	}
 
@@ -602,7 +602,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 		s = CALL(cfs, write, fid, test_data, size, sizeof(test_data));
 		if (s < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s(): write: %e\n", __FUNCTION__, s);
+			kdprintf(STDERR_FILENO, "%s(): write: %i\n", __FUNCTION__, s);
 			CALL(cfs, close, fid);
 			return s;
 		}
@@ -612,7 +612,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 
 	r = CALL(cfs, close, fid);
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %e\n", __FUNCTION__, r);
+		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %i\n", __FUNCTION__, r);
 
 	return time_end - time_start;
 }

@@ -169,7 +169,7 @@ kconnect(struct ip_addr ipaddr, uint16_t port, int *fd)
 
 	// Receive fds
 	if ((*fd = r = dup2env_recv(netd_net)) < 0)
-		panic("dup2env_recv: %e", r);
+		panic("dup2env_recv: %i", r);
 
 	return 0;
 }
@@ -251,7 +251,7 @@ kaccept(uint32_t listen_key, int *fd, struct ip_addr* remote_ipaddr, uint16_t* r
 
 	// Receive the fds
 	if ((*fd = r = dup2env_recv(netd_net)) < 0)
-		panic("dup2env_recv: %e", r);
+		panic("dup2env_recv: %i", r);
 
 	// Receive the remote ipaddr and port
 	ripaddr.addr = ipc_recv(netd_net, NULL, NULL, NULL, NULL, 0);
@@ -292,20 +292,20 @@ knet_stats(int fd)
 
 	// Receive stats fd
 	if ((stats_fd = r = dup2env_recv(netd_net)) < 0)
-		panic("dup2env_recv: %e", r);
+		panic("dup2env_recv: %i", r);
 
 	// Copy data from stats_fd to fd
 	while ((n = read(stats_fd, stats_buf, sizeof(stats_buf))) > 0)
 	{
 		if ((r = write(fd, stats_buf, n)) < 0)
-			panic("write: %e", r);
+			panic("write: %i", r);
 		if (n != r)
 			panic("n (%d) != r (%d)", n, r);
 	}
 
 	if ((r = close(stats_fd)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "close: %e\n", r);
+		kdprintf(STDERR_FILENO, "close: %i\n", r);
 		return -1;
 	}
 

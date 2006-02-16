@@ -58,5 +58,5 @@ void umain(int argc, const char * argv[])
 	return;
 	
 error:
-	kdprintf(STDERR_FILENO, "%s: %e\n", argv[0], r);
+	kdprintf(STDERR_FILENO, "%s: %i\n", argv[0], r);
 }

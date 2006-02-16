@@ -34,7 +34,7 @@ sio_open(u8_t devnum)
 	{
 		fd->buf[0] = 0; // Ensure the page is not PTE_COW
 		if((r = sys_page_map(0, fd->buf, 0, fd->buf, perm)) < 0)
-			panic("sys_page_map: %e", r);
+			panic("sys_page_map: %i", r);
 	}
 	else
 	{
@@ -42,9 +42,9 @@ sio_open(u8_t devnum)
 		// code, unmap buf so that it isn't shared with the other env.
 
 		if((r = sys_page_unmap(0, fd->buf)) < 0)
-			panic("sys_page_unmap: %e", r);
+			panic("sys_page_unmap: %i", r);
 		if((r = sys_page_alloc(0, fd->buf, perm)) < 0)
-			panic("sys_page_alloc: %e", r);
+			panic("sys_page_alloc: %i", r);
 	}
 
 

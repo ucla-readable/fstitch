@@ -33,7 +33,7 @@ void ipc_serve_run(void)
 	if (!whom && !perm)
 	{
 		if (r != -E_TIMEOUT)
-			kdprintf(STDERR_FILENO, "kfsd %s: ipc_recv: %e\n", __FUNCTION__, (int) r);
+			kdprintf(STDERR_FILENO, "kfsd %s: ipc_recv: %i\n", __FUNCTION__, (int) r);
 		return;
 	}
 
@@ -50,7 +50,7 @@ void ipc_serve_run(void)
 	}
 
 	if ((r = sys_page_unmap(0, (void*) IPCSERVE_REQVA)) < 0)
-		panic("sys_page_unmap: %e", r);
+		panic("sys_page_unmap: %i", r);
 }
 
 // Possible ways to implement IPC for unix-user:

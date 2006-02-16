@@ -32,29 +32,29 @@ umain(int argc, char **argv)
 	}
 
 	fd = kpl_open(filename, O_RDWR);
-	printf("kpl_open(\"/%s\", 0) = %e\n", filename, fd);
+	printf("kpl_open(\"/%s\", 0) = %i\n", filename, fd);
 
 	r = read(fd, data, length);
-	printf("read(fd, data, 0x%x) = %e\n", length, r);
+	printf("read(fd, data, 0x%x) = %i\n", length, r);
 	printf("data: [%s]\n", data);
 
 	r = seek(fd, 0);
-	printf("seek(fd, 0) = %e\n", r);
+	printf("seek(fd, 0) = %i\n", r);
 
 	r = write(fd, write_data, strlen(write_data));
-	printf("write(fd, \"%s\", 0x%x) = %e\n", write_data, strlen(write_data), r);
+	printf("write(fd, \"%s\", 0x%x) = %i\n", write_data, strlen(write_data), r);
 
 	r = seek(fd, 0);
-	printf("seek(fd, 0) = %e\n", r);
+	printf("seek(fd, 0) = %i\n", r);
 
 	r = read(fd, data, length);
-	printf("read(fd, data, 0x%x) = %e\n", length, r);
+	printf("read(fd, data, 0x%x) = %i\n", length, r);
 	printf("data: [%s]\n", data);
 
 	r = read(fd, data, length);
-	printf("read(fd, data, 0x%x) = %e\n", length, r);
+	printf("read(fd, data, 0x%x) = %i\n", length, r);
 	printf("data: [%s]\n", data);
 
 	r = close(fd);
-	printf("close(fd) = %e\n", r);
+	printf("close(fd) = %i\n", r);
 }

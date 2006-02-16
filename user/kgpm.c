@@ -49,7 +49,7 @@ void umain(void)
 	fd = open_mouse();
 	if(fd < 0)
 	{
-		printf("kgpm: %e\n", fd);
+		printf("kgpm: %i\n", fd);
 		return;
 	}
 	

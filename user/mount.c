@@ -155,7 +155,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 			{
 				(void) DESTROY(lfs);
 				(void) DESTROY(journal);
-				kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed: %e\n", __FUNCTION__, r);
+				kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed: %i\n", __FUNCTION__, r);
 				return NULL;
 			}
 
@@ -165,7 +165,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 					printf("Fscking pre-journal-replayed filesystem... ");
 				int r = josfs_fsck(lfs);
 				if (r < 0)
-					kdprintf(STDERR_FILENO, "critical errors: %e\n", r);
+					kdprintf(STDERR_FILENO, "critical errors: %i\n", r);
 				else if (r > 0)
 					kdprintf(STDERR_FILENO, "found %d errors\n", r);
 				else if (verbose)
@@ -181,7 +181,7 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				printf("Fscking... ");
 			int r = josfs_fsck(josfs_lfs);
 			if (r < 0)
-				kdprintf(STDERR_FILENO, "errors found: %e\n");
+				kdprintf(STDERR_FILENO, "errors found: %i\n");
 			else if (verbose)
 				printf("done.\n");
 		}
@@ -266,7 +266,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs.id, &md);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", extjournal_file, r);
+				kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %i\n", extjournal_file, r);
 				exit(0);
 			}
 			*journal_lfs = create_lfs(*(uint32_t *) md.data);
@@ -281,7 +281,7 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs_name.id, &md);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", extjournal_file, r);
+				kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %i\n", extjournal_file, r);
 				exit(0);
 			}
 			*journal_lfs_file = strdup((char *) md.data);
@@ -458,7 +458,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		r = cfs_get_metadata(filename, KFS_feature_file_lfs.id, &md);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %e\n", filename, r);
+			kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %i\n", filename, r);
 			exit(0);
 		}
 		lfs = create_lfs(*(uint32_t *) md.data);
@@ -473,7 +473,7 @@ static BD_t * create_disk(int argc, const char ** argv)
 		r = cfs_get_metadata(filename, KFS_feature_file_lfs_name.id, &md);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %e\n", filename, r);
+			kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %i\n", filename, r);
 			exit(0);
 		}
 		lfs_filename = (char *) md.data;
@@ -576,7 +576,7 @@ void umain(int argc, const char ** argv)
 	r = table_classifier_cfs_add(tclass, mount_point, cfs);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "table_classifier_cfs_add(): %e\n", r);
+		kdprintf(STDERR_FILENO, "table_classifier_cfs_add(): %i\n", r);
 		exit(0);
 	}
 }

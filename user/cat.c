@@ -12,7 +12,7 @@ cat(int f, char *s, bool term)
 		if((r = write(STDOUT_FILENO, buf, n)) != n)
 			return (r < 0) ? r : -E_NO_DISK;
 	if(n < 0)
-		panic("error reading %s: %e", s, n);
+		panic("error reading %s: %i", s, n);
 	return 0;
 }
 
@@ -33,7 +33,7 @@ umain(int argc, char **argv)
 			int f = open(argv[i], O_RDONLY);
 			if(f < 0)
 			{
-				kdprintf(STDERR_FILENO, "can't open %s: %e\n", argv[i], f);
+				kdprintf(STDERR_FILENO, "can't open %s: %i\n", argv[i], f);
 				exit(0);
 			}
 			else
@@ -44,5 +44,5 @@ umain(int argc, char **argv)
 		}
 	}
 	if(r)
-		kdprintf(STDERR_FILENO, "write error: %e\n", r);
+		kdprintf(STDERR_FILENO, "write error: %i\n", r);
 }

@@ -223,9 +223,9 @@ char * readline(const char * prompt)
 				{
 					if(c != -E_EOF)
 #ifdef KUDOS_KERNEL
-						printf("read error: %e\n", c);
+						printf("read error: %i\n", c);
 #else
-						kdprintf(STDERR_FILENO, "read error: %e\n", c);
+						kdprintf(STDERR_FILENO, "read error: %i\n", c);
 #endif
 					return NULL;
 				}

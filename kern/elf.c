@@ -142,7 +142,7 @@ eip_to_fnsym(envid_t envid, uint32_t eip)
 		if(-E_SYMTBL == r)
 			return 0;
 		else
-			panic("%e", r);
+			panic("%i", r);
 	}
 
 	register_t cur_cr3=0;
@@ -320,7 +320,7 @@ get_symbol_name(envid_t envid, struct Sym *s)
 		if(-E_SYMTBL == r)
 			return no_name;
 		else
-			panic("%e", r);
+			panic("%i", r);
 	}
 
 	if(ENVID_KERNEL != envid)

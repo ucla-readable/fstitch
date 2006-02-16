@@ -81,7 +81,7 @@ usage:
 	fd = open(argv[argc - 1], O_RDONLY);
 	if(fd < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s: %e\n", argv[argc - 1], fd);
+		kdprintf(STDERR_FILENO, "%s: %i\n", argv[argc - 1], fd);
 		return;
 	}
 	

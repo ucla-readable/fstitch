@@ -16,7 +16,7 @@ static BD_t * find_bd(const char * name)
 	modman_it_t it;
 	int r = modman_it_init_bd(&it);
 	if(r < 0)
-		panic("modman_it_init_bd() failed: %e\n", r);
+		panic("modman_it_init_bd() failed: %i\n", r);
 	
 	while((c = modman_it_next_bd(&it)))
 	{
@@ -80,7 +80,7 @@ void umain(int argc, const char ** argv)
 							DESTROY(cache);
 							if(argc == 5)
 								DESTROY(journal);
-							printf("%e\n", r);
+							printf("%i\n", r);
 						}
 					}
 					else
@@ -118,14 +118,14 @@ void umain(int argc, const char ** argv)
 			
 			r = journal_bd_set_journal(journal_bd, NULL);
 			if(r < 0)
-				printf("%e\n", r);
+				printf("%i\n", r);
 			
 			if(destroy_journalbd)
 			{
 				r = DESTROY((BD_t*) journalbd_node->obj);
 				if(r < 0)
 				{
-					kdprintf(STDERR_FILENO, "Could not destroy %s: %e\n", journalbd_node->name, r);
+					kdprintf(STDERR_FILENO, "Could not destroy %s: %i\n", journalbd_node->name, r);
 					exit(0);
 				}
 			}

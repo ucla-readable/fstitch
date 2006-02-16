@@ -115,11 +115,11 @@ setup_client_netd_socket(envid_t client)
 	int r;
 	
 	if ((r = socket(client_tmp)) < 0)
-		panic("socket: %e", r);
+		panic("socket: %i", r);
 	if ((r = dup2env_send(client_tmp[0], client)) < 0)
-		panic("dup2env_send: %e", r);
+		panic("dup2env_send: %i", r);
 	if ((r = close(client_tmp[0])) < 0)
-		panic("close: %e", r);
+		panic("close: %i", r);
 	return client_tmp[1];
 }
 /*---------------------------------------------------------------------------*/
@@ -147,7 +147,7 @@ close_conn(struct tcp_pcb *pcb, struct client_state *cs, int netclient_err)
 		// Error while connected.
 		// Inform client of failure only by closing the pipes
 		if ((r = close(cs->client)) < 0)
-			kdprintf(STDERR_FILENO, "WARNING: netd: close: %e\n", r);
+			kdprintf(STDERR_FILENO, "WARNING: netd: close: %i\n", r);
 	}
 
 	// Deallocate resources
@@ -430,7 +430,7 @@ netd_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 				// < TCP_WND, so we simply statically assert this requirement.
 				static_assert(PIPEBUFSIZ >= TCP_WND);
 				if ((r = write(cs->client, data, q_len_remaining)) < 0)
-					panic("write: %e", r);
+					panic("write: %i", r);
 				data += r;
 				q_len_remaining -= r;
 			}
@@ -1352,7 +1352,7 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 
 	if ((r = fork()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "fork: %e\n", r);
+		kdprintf(STDERR_FILENO, "fork: %i\n", r);
 		exit(0);
 	}
 	if (r == 0)
@@ -1361,35 +1361,35 @@ serve_stats(envid_t whom, struct Netreq_stats *req)
 
 		if ((r = pipe(p)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "pipe: %e\n", r);
+			kdprintf(STDERR_FILENO, "pipe: %i\n", r);
 			exit(0);
 		}
 
 		if ((r = dup2env_send(p[0], whom)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2env_send: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2env_send: %i\n", r);
 			exit(0);
 		}
 
 		if ((r = dup2(p[1], STDOUT_FILENO)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2: %i\n", r);
 			exit(0);
 		}
 		if ((r = dup2(STDOUT_FILENO, STDERR_FILENO)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "dup2: %e\n", r);
+			kdprintf(STDERR_FILENO, "dup2: %i\n", r);
 			exit(0);
 		}
 
 		if ((r = close(p[0])) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %i\n", r);
 			exit(0);
 		}
 		if ((r = close(p[1])) < 0)
 		{
-			kdprintf(STDERR_FILENO, "close: %e\n", r);
+			kdprintf(STDERR_FILENO, "close: %i\n", r);
 			exit(0);
 		}
 
@@ -1467,7 +1467,7 @@ netd_net_ipcrecv_comm(void)
 
 	if ((r = fstat(netd_net_ipcrecv.fd, &stat)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "netd fstat: %e", r);
+		kdprintf(STDERR_FILENO, "netd fstat: %i", r);
 		exit(0);
 	}
 
@@ -1475,11 +1475,11 @@ netd_net_ipcrecv_comm(void)
 		return;
 
 	if ((r = read(netd_net_ipcrecv.fd, &whom, sizeof(whom))) < 0)
-		panic("read: %e");
+		panic("read: %i");
 	if ((r = read(netd_net_ipcrecv.fd, &req, sizeof(req))) < 0)
-		panic("read: %e");
+		panic("read: %i");
 	if ((r = read(netd_net_ipcrecv.fd, req_pg, sizeof_netreq(req))) < 0)
-		panic("read: %e");
+		panic("read: %i");
 
 	if (!r && sizeof_netreq(req))
 	{
@@ -1579,16 +1579,16 @@ netd_ipcrecv(envid_t net, int fd, int argc, const char **argv)
 		struct Stat stat;
 		if ((r = fstat(fd, &stat)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "netd ipcrecv fstat: %e", r);
+			kdprintf(STDERR_FILENO, "netd ipcrecv fstat: %i", r);
 			exit(0);
 		}
 
 		if ((r = write(fd, &whom, sizeof(whom))) < 0)
-			panic("write: %e");
+			panic("write: %i");
 		if ((r = write(fd, &req, sizeof(req))) < 0)
-			panic("write: %e");
+			panic("write: %i");
 		if ((r = write(fd, (void*) REQVA, sizeof_netreq(req))) < 0)
-			panic("write: %e");
+			panic("write: %i");
 
 		sys_page_unmap(0, (void*) REQVA);
 
@@ -1619,14 +1619,14 @@ netd(int argc, const char **argv)
 	// to netd net
 	if ((r = pipe(p)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "netd pipe: %e\n", r);
+		kdprintf(STDERR_FILENO, "netd pipe: %i\n", r);
 		exit(0);
 	}
 
 	// Fork off netd ipcrecv and start netd ipcrecv and netd net
 	if ((ipcrecv_envid = r = fork()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "netd fork: %e\n", r);
+		kdprintf(STDERR_FILENO, "netd fork: %i\n", r);
 		exit(0);
 	}
 	if (!r)
