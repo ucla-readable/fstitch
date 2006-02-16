@@ -384,6 +384,7 @@ static const struct module modules[] = {
 static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
 static int debug_socket = -1;
+static int debug_count = 0;
 
 #if KFS_DEBUG_BINARY
 
@@ -617,6 +618,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			break;
 		}
 	
+	debug_count++;
 #if KFS_DEBUG_BINARY
 #if KFS_OMIT_FILE_FUNC
 	kfs_debug_write(debug_socket, LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
@@ -796,6 +798,11 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 			}
 		}
 	}
+}
+
+int kfs_debug_count(void)
+{
+	return debug_count;
 }
 
 #endif
