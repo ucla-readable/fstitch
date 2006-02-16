@@ -5,6 +5,8 @@
 #include <kfs/opgroup.h>
 #include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/cfs_ipc_serve.h>
+#include <kfs/inodeman.h>
+#include <kfs/table_classifier_cfs.h>
 
 #include <inc/lib.h> // for get_pte()
 #include <inc/env.h>
@@ -85,6 +87,8 @@ static void cfs_ipc_serve_shutdown(void * arg)
 		frontend_cfs = NULL;
 	}
 
+	inodeman_destroy();
+
 	for (i = 0; i < sizeof(prev_serve_recvs)/(sizeof(prev_serve_recvs[0])); i++)
 		free(prev_serve_recvs[i]);
 }
@@ -96,6 +100,9 @@ int cfs_ipc_serve_init(void)
 
 	if (get_pte((void*) PAGESNDVA) & PTE_P)
 		panic("cfs_ipc_serve: PAGESNDVA already mapped");
+
+	if (!inodeman_create())
+		return 0;
 
 	if ((r = kfsd_register_shutdown_module(cfs_ipc_serve_shutdown, NULL)) < 0)
 		return r;
@@ -131,10 +138,16 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 	{
 		// Second of two recvs
 		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
+		CFS_t * select_cfs;
 		int r;
+		inode_t ino;
 		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
 		cur_page = req;
-		r = CALL(frontend_cfs, open, scfs->path, scfs->mode);
+		r = path_to_inode(scfs->path, &select_cfs, &ino);
+		if (r >= 0) {
+			kfsd_set_mount(select_cfs);
+			r = CALL(frontend_cfs, open, ino, scfs->mode);
+		}
 		cur_page = NULL;
 		ipc_send(envid, r, NULL, 0, NULL);
 		prevrecv->envid = 0;
@@ -223,63 +236,121 @@ static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 static void serve_unlink(envid_t envid, struct Scfs_unlink * req)
 {
 	int r;
+	inode_t parent;
+	CFS_t * select_cfs;
+	char * name;
 	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-	r = CALL(frontend_cfs, unlink, req->name);
+	r = path_to_parent_and_name(req->name, &select_cfs, &parent, &name);
+	if (r >= 0) {
+		kfsd_set_mount(select_cfs);
+		r = CALL(frontend_cfs, unlink, parent, name);
+	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 static void serve_link(envid_t envid, struct Scfs_link * req)
 {
 	int r;
+	inode_t ino, newparent;
+	CFS_t * select_cfs, * select_new_cfs;
+	char * newname;
 	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
-	r = CALL(frontend_cfs, link, req->oldname, req->newname);
+
+	r = path_to_inode(req->oldname, &select_cfs, &ino);
+	if (r >= 0) {
+		r = path_to_parent_and_name(req->newname, &select_new_cfs, &newparent, &newname);
+		if ((r >= 0) && (select_cfs == select_new_cfs)) {
+			kfsd_set_mount(select_cfs);
+			r = CALL(frontend_cfs, link, ino, newparent, newname);
+		}
+	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 static void serve_rename(envid_t envid, struct Scfs_rename * req)
 {
 	int r;
+	inode_t oldparent, newparent;
+	char * oldname, * newname;
+	CFS_t * select_cfs, * select_new_cfs;
 	Dprintf("%s: %08x, \"%s\", \"%s\"\n", __FUNCTION__, envid, req->oldname, req->newname);
-	r = CALL(frontend_cfs, rename, req->oldname, req->newname);
+
+	r = path_to_parent_and_name(req->oldname, &select_cfs, &oldparent, &oldname);
+	if (r >= 0) {
+		r = path_to_parent_and_name(req->newname, &select_new_cfs, &newparent, &newname);
+		if ((r >= 0) && (select_cfs == select_new_cfs)) {
+			kfsd_set_mount(select_cfs);
+			r = CALL(frontend_cfs, rename, oldparent, oldname, newparent, newname);
+		}
+	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 {
 	int r;
+	inode_t ino, parent;
+	char * name;
+	CFS_t * select_cfs;
 	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
-	r = CALL(frontend_cfs, mkdir, req->path);
+
+	r = path_to_parent_and_name(req->path, &select_cfs, &parent, &name);
+	if (r >= 0) {
+		kfsd_set_mount(select_cfs);
+		r = CALL(frontend_cfs, mkdir, parent, name, &ino);
+	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 static void serve_rmdir(envid_t envid, struct Scfs_rmdir * req)
 {
 	int r;
+	inode_t parent;
+	char * name;
+	CFS_t * select_cfs;
 	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->path);
-	r = CALL(frontend_cfs, rmdir, req->path);
+
+	r = path_to_parent_and_name(req->path, &select_cfs, &parent, &name);
+	if (r >= 0) {
+		kfsd_set_mount(select_cfs);
+		r = CALL(frontend_cfs, rmdir, parent, name);
+	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 static void serve_get_num_features(envid_t envid, struct Scfs_get_num_features * req)
 {
 	int r;
+	inode_t ino;
+	CFS_t * select_cfs;
 	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
-	r = CALL(frontend_cfs, get_num_features, req->name);
+	r = path_to_inode(req->name, &select_cfs, &ino);
+	if (r >= 0) {
+		kfsd_set_mount(select_cfs);
+		r = CALL(frontend_cfs, get_num_features, ino);
+	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
 static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
 {
-	const feature_t *f;
+	const feature_t *f = NULL;
 	void *buf = (uint8_t*) PAGESNDVA;
 	int r;
+	inode_t ino;
+	CFS_t * select_cfs;
 	Dprintf("%s: %08x, \"%s\"\n", __FUNCTION__, envid, req->name);
 
 	if (get_pte(buf) & PTE_P)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
-	f = CALL(frontend_cfs, get_feature, req->name, req->num);
+	r = path_to_inode(req->name, &select_cfs, &ino);
+	if (r >= 0) {
+		kfsd_set_mount(select_cfs);
+		f = CALL(frontend_cfs, get_feature, ino, req->num);
+	}
+
 	if (!f)
 		ipc_send(envid, -E_UNSPECIFIED, NULL, 0, NULL);
 	else
@@ -294,6 +365,8 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	struct Scfs_metadata *md = (struct Scfs_metadata*) PAGESNDVA;
 	void * data = NULL;
 	int r;
+	inode_t ino;
+	CFS_t * select_cfs;
 	Dprintf("%s: %08x, \"%s\", %d\n", __FUNCTION__, envid, req->name, req->id);
 
 	if (get_pte(md) & PTE_P)
@@ -303,7 +376,11 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	md->id = req->id;
 	md->size = 0;
 
-	r = CALL(frontend_cfs, get_metadata, req->name, req->id, &md->size, &data);
+	r = path_to_inode(req->name, &select_cfs, &ino);
+	if (r >= 0) {
+		kfsd_set_mount(select_cfs);
+		r = CALL(frontend_cfs, get_metadata, ino, req->id, &md->size, &data);
+	}
 
 	assert((md->size > 0 && data) || (!md->size && !data));
 	if (data)
@@ -337,9 +414,16 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 		// Second of two recvs
 		struct Scfs_set_metadata *scfs = (struct Scfs_set_metadata*) prevrecv->scfs;
 		struct Scfs_metadata *md = (struct Scfs_metadata*) req;
+		CFS_t * select_cfs;
 		int r;
+		inode_t ino;
 		Dprintf("%s [2]: %08x, \"%s\"\n", __FUNCTION__, envid, scfs->name);
-		r = CALL(frontend_cfs, set_metadata, scfs->name, md->id, md->size, md->data);
+
+		r = path_to_inode(scfs->name, &select_cfs, &ino);
+		if (r >= 0) {
+			kfsd_set_mount(select_cfs);
+			r = CALL(frontend_cfs, set_metadata, ino, md->id, md->size, md->data);
+		}
 		ipc_send(envid, r, NULL, 0, NULL);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;

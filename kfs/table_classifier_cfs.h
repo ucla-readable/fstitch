@@ -11,4 +11,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path);
 int singleton_table_classifier_cfs_add(const char * path, CFS_t * path_cfs);
 #define kfsd_add_mount(p, c) singleton_table_classifier_cfs_add(p, c)
 
+void table_classifier_cfs_set(CFS_t * cfs);
+#define kfsd_set_mount(c) table_classifier_cfs_set(c)
+
 #endif // not __KUDOS_KFS_TABLE_CLASSIFIER_CFS_H

@@ -34,6 +34,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/table_classifier_cfs.o \
+			$(OBJDIR)/kfs/inodeman.o \
 			$(OBJDIR)/kfs/cfs_ipc_opgroup.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/fidprotector_cfs.o \

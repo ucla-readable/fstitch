@@ -12,6 +12,7 @@
 #include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
+#include <kfs/inodeman.h>
 #include <kfs/table_classifier_cfs.h>
 
 #define TABLE_CLASSIFIER_DEBUG 0
@@ -24,15 +25,10 @@
 
 
 static CFS_t * singleton_table_classifier_cfs = NULL;
+static CFS_t * selected_cfs = NULL;
 
 // 
 // Data structs and initers
-
-struct mount_entry {
-	const char * path;
-	CFS_t * cfs;
-};
-typedef struct mount_entry mount_entry_t;
 
 struct open_file {
 	int fid;
@@ -163,43 +159,6 @@ static int mount_lookup(vector_t * mount_table, const char * path)
 	return -E_NOT_FOUND;
 }
 
-// Return the cfs associated with the mount name is on, set transformed_name
-// to be the filename this cfs expects
-static CFS_t * lookup_cfs_name(vector_t * mount_table, const char * name, char ** transformed_name)
-{
-	Dprintf("%s(0x%08x, \"%s\", 0x%08x)\n", __FUNCTION__, mount_table, name, transformed_name);
-	const size_t mount_table_size = vector_size(mount_table);
-	const size_t name_len = strlen(name);
-	size_t longest_match = 0;
-	CFS_t * best_match = NULL;
-	int i;
-
-	for (i = 0; i < mount_table_size; i++)
-	{
-		const mount_entry_t *me = (mount_entry_t *) vector_elt(mount_table, i);
-		size_t mount_len = strlen(me->path);
-
-		if(mount_len <= longest_match || name_len < mount_len)
-			continue;
-
-		/* / needs special consideration because it has a trailing / */
-		if(mount_len == 1)
-			mount_len = 0;
-
-		if(!strncmp(me->path, name, mount_len))
-		{
-			if(name[mount_len] && name[mount_len] != '/')
-				continue;
-			longest_match = mount_len;
-			best_match = me->cfs;
-		}
-	}
-
-	*transformed_name = (char *) &name[longest_match];
-	return best_match;
-}
-
-
 //
 // table_classifier_cfs
 
@@ -224,19 +183,37 @@ static int table_classifier_get_status(void * object, int level, char * string, 
 	return 0;
 }
 
-static int table_classifier_open(CFS_t * cfs, const char * name, int mode)
+static int table_classifier_get_root(CFS_t * cfs, inode_t * ino)
 {
-	Dprintf("%s(\"%s\", %d)\n", __FUNCTION__, name, mode);
+	Dprintf("%s\n", __FUNCTION__);
+
+	if (!selected_cfs)
+		return -E_NOT_FOUND;
+
+	return CALL(selected_cfs, get_root, ino);
+}
+
+static int table_classifier_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+{
+	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+
+	if (!selected_cfs)
+		return -E_NOT_FOUND;
+
+	return CALL(selected_cfs, lookup, parent, name, ino);
+}
+
+static int table_classifier_open(CFS_t * cfs, inode_t ino, int mode)
+{
+	Dprintf("%s(%d, %d)\n", __FUNCTION__, ino, mode);
 	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
 	int fid;
 	int r;
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	if ((fid = CALL(selected_cfs, open, newname, mode)) < 0)
+	if ((fid = CALL(selected_cfs, open, ino, mode)) < 0)
 		return fid;
 	if ((r = fid_table_add(state, fid, selected_cfs)) < 0)
 	{
@@ -245,6 +222,17 @@ static int table_classifier_open(CFS_t * cfs, const char * name, int mode)
 	}
 	return fid;
 }
+
+static int table_classifier_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+{
+	Dprintf("%s(%d: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
+
+	if (!selected_cfs)
+		return -E_NOT_FOUND;
+
+	return CALL(selected_cfs, create, parent, name, mode, newino);
+}
+
 
 static int table_classifier_close(CFS_t * cfs, int fid)
 {
@@ -310,131 +298,94 @@ static int table_classifier_truncate(CFS_t * cfs, int fid, uint32_t size)
 	return CALL(selected_cfs, truncate, fid, size);
 }
 
-static int table_classifier_unlink(CFS_t * cfs, const char * name)
+static int table_classifier_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d, \"%s\")\n", __FUNCTION__, parent, name);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, unlink, newname);
+	return CALL(selected_cfs, unlink, parent, name);
 }
 
-static int table_classifier_link(CFS_t * cfs, const char * oldname, const char * newname)
+static int table_classifier_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * oldnewname, * newnewname;
-	CFS_t * old_selected_cfs, * new_selected_cfs;
-
-	old_selected_cfs = lookup_cfs_name(state->mount_table, oldname, &oldnewname);
-	if (!old_selected_cfs)
-		return -E_NOT_FOUND;
-
-	new_selected_cfs = lookup_cfs_name(state->mount_table, newname, &newnewname);
-	if (old_selected_cfs != new_selected_cfs)
-		return -E_INVAL;
-
-	return CALL(old_selected_cfs, link, oldnewname, newnewname);
-}
-
-static int table_classifier_rename(CFS_t * cfs, const char * oldname, const char * newname)
-{
-	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, oldname, newname);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * oldnewname, * newnewname;
-	CFS_t * old_selected_cfs, * new_selected_cfs;
-
-	old_selected_cfs = lookup_cfs_name(state->mount_table, oldname, &oldnewname);
-	if (!old_selected_cfs)
-		return -E_NOT_FOUND;
-
-	new_selected_cfs = lookup_cfs_name(state->mount_table, newname, &newnewname);
-	if (old_selected_cfs != new_selected_cfs)
-		return -E_INVAL;
-
-	return CALL(old_selected_cfs, rename, oldnewname, newnewname);
-}
-
-static int table_classifier_mkdir(CFS_t * cfs, const char * name)
-{
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d, %d, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, mkdir, newname);
+	return CALL(selected_cfs, link, ino, newparent, newname);
 }
 
-static int table_classifier_rmdir(CFS_t * cfs, const char * name)
+static int table_classifier_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d: \"%s\", %d: \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, rmdir, newname);
+	return CALL(selected_cfs, rename, oldparent, oldname, newparent, newname);
 }
 
-static size_t table_classifier_get_num_features(CFS_t * cfs, const char * name)
+static int table_classifier_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, get_num_features, newname);
+	return CALL(selected_cfs, mkdir, parent, name, ino);
 }
 
-static const feature_t * table_classifier_get_feature(CFS_t * cfs, const char * name, size_t num)
+static int table_classifier_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, num);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+
+	if (!selected_cfs)
+		return -E_NOT_FOUND;
+
+	return CALL(selected_cfs, rmdir, parent, name);
+}
+
+static size_t table_classifier_get_num_features(CFS_t * cfs, inode_t ino)
+{
+	Dprintf("%s(%d)\n", __FUNCTION__, ino);
+
+	if (!selected_cfs)
+		return -E_NOT_FOUND;
+
+	return CALL(selected_cfs, get_num_features, ino);
+}
+
+static const feature_t * table_classifier_get_feature(CFS_t * cfs, inode_t ino, size_t num)
+{
+	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, ino, num);
 
 	if (!selected_cfs)
 		return NULL;
 
-	return CALL(selected_cfs, get_feature, newname, num);
+	return CALL(selected_cfs, get_feature, ino, num);
 }
 
-static int table_classifier_get_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t * size, void ** data)
+static int table_classifier_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, id);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, ino, id);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, get_metadata, newname, id, size, data);
+	return CALL(selected_cfs, get_metadata, ino, id, size, data);
 }
 
-static int table_classifier_set_metadata(CFS_t * cfs, const char * name, uint32_t id, size_t size, const void * data)
+static int table_classifier_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
-	Dprintf("%s(\"%s\", 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, name, id, size, data);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
-	char * newname = NULL;
-	CFS_t * selected_cfs = lookup_cfs_name(state->mount_table, name, &newname);
+	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, set_metadata, newname, id, size, data);
+	return CALL(selected_cfs, set_metadata, ino, id, size, data);
 }
 
 static int table_classifier_destroy(CFS_t * cfs)
@@ -463,6 +414,9 @@ CFS_t * table_classifier_cfs(void)
 	table_classifier_state_t * state;
 	CFS_t * cfs;
 	
+	if (singleton_table_classifier_cfs)
+		return singleton_table_classifier_cfs;
+
 	cfs = malloc(sizeof(*cfs));
 	if (!cfs)
 		return NULL;
@@ -478,7 +432,7 @@ CFS_t * table_classifier_cfs(void)
 	if (!state->open_files)
 		goto error_state;
 
-	state->mount_table = vector_create();
+	state->mount_table = get_mount_table();
 	if (!state->mount_table)
 		goto error_open_files;
 
@@ -488,15 +442,7 @@ CFS_t * table_classifier_cfs(void)
 		return NULL;
 	}
 
-	if (!singleton_table_classifier_cfs)
-		singleton_table_classifier_cfs = cfs;
-	else
-	{
-		kdprintf(STDERR_FILENO, "More than one table_classifier_cfs now exists, only the first will be used for singleton operations.\n");
-		// If we want multiple table_classifiers, update unix-user to
-		// support them and then just remove table_classifier_cfs's
-		// support for a singleton table_classifier_cfs.
-	}
+	singleton_table_classifier_cfs = cfs;
 
 	return cfs;
 
@@ -591,4 +537,12 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	modman_dec_cfs(path_cfs, cfs);
 
 	return path_cfs;
+}
+
+void table_classifier_cfs_set(CFS_t * cfs)
+{
+	Dprintf("%s(%x)\n", __FUNCTION__, cfs);
+
+	if (singleton_table_classifier_cfs)
+		selected_cfs = cfs;
 }
