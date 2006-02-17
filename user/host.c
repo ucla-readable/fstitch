@@ -22,7 +22,7 @@ umain(int argc, char **argv)
 	name = argv[1];
 	r = kgethostbyname(name, &ip);
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "gethostbyname(): %e\n", r);
+		kdprintf(STDERR_FILENO, "gethostbyname(): %i\n", r);
 	else
 		printf("%s\n", kinet_iptoa(ip));
 }

@@ -30,7 +30,7 @@ void umain(int argc, char ** argv)
 		return;
 	}
 	else if (envid < 0)
-		panic("fork(): %e\n", envid);
+		panic("fork(): %i\n", envid);
 
 	// wait for a bit to help ensure parent and child printfs do not overlap
 	(void) jsleep(HZ / 5); 

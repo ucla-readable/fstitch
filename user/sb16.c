@@ -33,14 +33,14 @@ static int pipe_play(char * name)
 	error = sys_sb16_open(44100, 1, (uintptr_t) SB16_USER_BUFFER);
 	if(error)
 	{
-		printf("sys_sb16_open: %e\n", error);
+		printf("sys_sb16_open: %i\n", error);
 		return error;
 	}
 	
 	/* prime the sound buffer */
 	next_block(fd, 0);
 	
-	printf("sys_sb16_start() = %e\n", sys_sb16_start());
+	printf("sys_sb16_start() = %i\n", sys_sb16_start());
 	block = sys_sb16_wait();
 	
 	/* loop until the sound is done */
@@ -63,7 +63,7 @@ static int file_play(char * prefix)
 	error = sys_sb16_open(44100, 1, (uintptr_t) SB16_USER_BUFFER);
 	if(error)
 	{
-		printf("sys_sb16_open: %e\n", error);
+		printf("sys_sb16_open: %i\n", error);
 		return error;
 	}
 	
@@ -82,14 +82,14 @@ static int file_play(char * prefix)
 	
 	if(!number)
 	{
-		printf("%s: %e\n", prefix, fd[0]);
+		printf("%s: %i\n", prefix, fd[0]);
 		return fd[0];
 	}
 	
 	/* prime the sound buffer */
 	next_block(fd[0], 0);
 	
-	printf("sys_sb16_start() = %e\n", sys_sb16_start());
+	printf("sys_sb16_start() = %i\n", sys_sb16_start());
 	block = sys_sb16_wait();
 	
 	/* loop until the sound is done */

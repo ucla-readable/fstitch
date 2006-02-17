@@ -4,6 +4,7 @@
 #include <kfs/sync.h>
 #include <kfs/modman.h>
 #include <lib/serial_kfs.h>
+#include <kfs/inodeman.h>
 #include <kfs/kfs_ipc_serve.h>
 
 #define KIS_DEBUG 0
@@ -564,7 +565,14 @@ static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t
 
 static void kis_sync(envid_t whom, const Skfs_sync_t * pg)
 {
-	int val = kfs_sync(pg->name);
+	CFS_t * cfs;
+	inode_t ino;
+	int val;
+	if ((val = path_to_inode(pg->name, &cfs, &ino)) >= 0)
+	{
+		kfsd_set_mount(cfs);
+		val = kfs_sync(ino);
+	}
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
@@ -576,9 +584,10 @@ static char test_data[4096];
 int perf_test_cfs(const Skfs_perf_test_t * pg)
 {
 	modman_it_t it;
-	CFS_t * cfs;
+	CFS_t * cfs, * selected_cfs;
 	int fid;
 	int time_start, time_end;
+	inode_t ino;
 	int s, size, r;
 
 	r = modman_it_init_cfs(&it);
@@ -589,10 +598,13 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	modman_it_destroy(&it);
 	assert(cfs);
 
-	fid = CALL(cfs, open, pg->file, O_CREAT|O_WRONLY);
+	if ((r = path_to_inode(pg->file, &selected_cfs, &ino)) < 0)
+		return r;
+	kfsd_set_mount(selected_cfs);
+	fid = CALL(cfs, open, ino, O_CREAT|O_WRONLY);
 	if(fid < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): open %s: %e\n", __FUNCTION__, pg->file, fid);
+		kdprintf(STDERR_FILENO, "%s(): open %s: %i\n", __FUNCTION__, pg->file, fid);
 		return fid;
 	}
 
@@ -602,7 +614,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 		s = CALL(cfs, write, fid, test_data, size, sizeof(test_data));
 		if (s < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s(): write: %e\n", __FUNCTION__, s);
+			kdprintf(STDERR_FILENO, "%s(): write: %i\n", __FUNCTION__, s);
 			CALL(cfs, close, fid);
 			return s;
 		}
@@ -612,7 +624,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 
 	r = CALL(cfs, close, fid);
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %e\n", __FUNCTION__, r);
+		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %i\n", __FUNCTION__, r);
 
 	return time_end - time_start;
 }

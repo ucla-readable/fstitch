@@ -68,7 +68,7 @@ static void open_file_destroy(open_file_t * of)
 	{
 		r = sys_page_unmap(0, (void *) of->page);
 		if (r < 0)
-			printf("%s: sys_page_unmap(0, 0x%08x): %e\n", __FUNCTION__, of->page, r);
+			printf("%s: sys_page_unmap(0, 0x%08x): %i\n", __FUNCTION__, of->page, r);
 		assert(0 <= r);
 	}
 	else
@@ -130,7 +130,7 @@ static void open_file_gc(fidcloser_state_t * state)
 		r = vector_push_back(ofs_to_erase, of);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "fidcloser gc: vector_push_back: %e\n", r);
+			kdprintf(STDERR_FILENO, "fidcloser gc: vector_push_back: %i\n", r);
 			break;
 		}
 	}
@@ -149,7 +149,7 @@ static void open_file_gc(fidcloser_state_t * state)
 	{
 		r = open_file_close(state, vector_elt(ofs_to_erase, i));
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %e\n", r);
+			kdprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %i\n", r);
 	}
 
 	cfs_ipc_serve_set_cur_cappa(cur_cappa);

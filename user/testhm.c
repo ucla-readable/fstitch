@@ -14,16 +14,16 @@ void umain(void)
 
 	// Test insert
 	if ((r = hash_map_insert(hm, &ak, &av)) < 0)
-		panic("hash_map_insert FAILED: %e", r);
+		panic("hash_map_insert FAILED: %i", r);
 	if ((r = hash_map_insert(hm, &bk, &bv)) < 0)
-		panic("hash_map_insert FAILED: %e", r);
+		panic("hash_map_insert FAILED: %i", r);
 
 	// Check size is correct
 	assert(hash_map_size(hm) == 2);
 
 	// Test resizing
 	if ((r = hash_map_resize(hm, 100)) < 0)
-		panic("hash_map_resize FAILED: %e", r);
+		panic("hash_map_resize FAILED: %i", r);
 	assert(hash_map_size(hm) == 2);
 	assert(hash_map_bucket_count(hm) >= 100);
 
@@ -50,7 +50,7 @@ void umain(void)
 	// Check that change_key works
 	int ak2 = 0;
 	if ((r = hash_map_change_key(hm, &ak, &ak2)) < 0)
-		panic("hash_map_change_key FAILED: %e", r);
+		panic("hash_map_change_key FAILED: %i", r);
 	if (hash_map_find_val(hm, &ak2) != &av)
 		panic("hash_map_find_val FAILED");
 	if (hash_map_find_val(hm, &ak))

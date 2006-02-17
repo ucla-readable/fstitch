@@ -95,7 +95,7 @@ void pong(void)
 	int eid = fork();
 	if(eid < 0)
 	{
-		kdprintf(STDERR_FILENO, "fork: %e\n", eid);
+		kdprintf(STDERR_FILENO, "fork: %i\n", eid);
 		return;
 	}
 	if(eid)

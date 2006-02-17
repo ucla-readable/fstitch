@@ -124,7 +124,7 @@ mon_symbols(int argc, char **argv, struct Trapframe *tf)
 	int r;
 	if((r = get_symtbl(envid, &symtbl, &symtbl_end, 0, 0)))
 	{
-		printf("get_symtbl() on envid 0x%x: %e\n", envid, r);
+		printf("get_symtbl() on envid 0x%x: %i\n", envid, r);
 		return 0;
 	}
 
@@ -202,7 +202,7 @@ mon_breakpoint(int argc, char **argv, struct Trapframe *tf)
 			else if(-E_INVAL == r)
 				printf("Multiple colons\n");
 			else
-				printf("Unexpected error \"%e\"\n", r);
+				printf("Unexpected error \"%i\"\n", r);
 			return 0;
 		}
 	

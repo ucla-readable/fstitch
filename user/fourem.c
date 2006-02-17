@@ -10,7 +10,7 @@ void umain(int argc, char **argv)
 		int size, fid = open(argv[i], O_CREAT | O_WRONLY);
 		if(fid < 0)
 		{
-			printf("open %s: %e\n", argv[i], fid);
+			printf("open %s: %i\n", argv[i], fid);
 			return;
 		}
 
@@ -19,7 +19,7 @@ void umain(int argc, char **argv)
 			int s = write(fid, &data, sizeof(data));
 			if(s <= 0)
 			{
-				printf("write %s: %e\n", argv[i], s);
+				printf("write %s: %i\n", argv[i], s);
 				return;
 			}
 			size += s;

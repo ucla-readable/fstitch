@@ -197,7 +197,7 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 	if (get_pte(buf) & PTE_P)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
-		panic("sys_page_alloc: %e", r);
+		panic("sys_page_alloc: %i", r);
 	r = CALL(frontend_cfs, read, req->fid, buf, req->offset, req->size);
 	ipc_send(envid, r, buf, PTE_P|PTE_U, NULL);
 }
@@ -239,7 +239,7 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 	if (get_pte(resp) & PTE_P)
 		panic("resp (PAGESNDVA = 0x%08x) already mapped", resp);
 	if ((r = sys_page_alloc(0, resp, PTE_P|PTE_U|PTE_W)) < 0)
-		panic("sys_page_alloc: %e", r);
+		panic("sys_page_alloc: %i", r);
 	resp->basep = req->basep;
 	nbytes = req->nbytes;
 	if (nbytes > sizeof(resp->buf))
@@ -369,7 +369,7 @@ static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
 	if (get_pte(buf) & PTE_P)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
-		panic("sys_page_alloc: %e", r);
+		panic("sys_page_alloc: %i", r);
 	r = path_to_inode(req->name, &select_cfs, &ino);
 	if (r >= 0) {
 		kfsd_set_mount(select_cfs);
@@ -397,7 +397,7 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	if (get_pte(md) & PTE_P)
 		panic("md (PAGESNDVA = 0x%08x) already mapped", md);
 	if ((r = sys_page_alloc(0, md, PTE_P|PTE_U|PTE_W)) < 0)
-		panic("sys_page_alloc: %e", r);
+		panic("sys_page_alloc: %i", r);
 	md->id = req->id;
 	md->size = 0;
 
@@ -676,6 +676,6 @@ void cfs_ipc_serve_run(envid_t whom, void * pg, int perm, uint32_t cur_cappa)
 	cur_envid = 0;
 
 	if ((r = sys_page_unmap(0, (void*) PAGESNDVA)) < 0)
-		panic("sys_page_unmap: %e", r);
+		panic("sys_page_unmap: %i", r);
 	cur_cappa = 0;
 }

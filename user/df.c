@@ -59,7 +59,7 @@ umain(int argc, char **argv)
 	if (argc == 0) {
 		avail = disk_avail_space("/");
 		if (avail < 0) {
-			printf("%s: %e\n", "/", avail);
+			printf("%s: %i\n", "/", avail);
 		}
 		else {
 			reported = convert_unit(avail, scale);
@@ -70,7 +70,7 @@ umain(int argc, char **argv)
 		for (i = 0; i < argc; i++) {
 			avail = disk_avail_space(argv[i]);
 			if (avail < 0) {
-				printf("%s: %e\n", argv[i], avail);
+				printf("%s: %i\n", argv[i], avail);
 			}
 			else {
 				reported = convert_unit(avail, scale);

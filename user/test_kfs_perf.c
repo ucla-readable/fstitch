@@ -24,5 +24,5 @@ void umain(int argc, const char ** argv)
 	if (time > 0)
 		printf("%u kBps\n", (unsigned) (4*1024 / ((double)time / HZ)));
 	else
-		printf("perf_test: %e\n", time);
+		printf("perf_test: %i\n", time);
 }

@@ -59,7 +59,7 @@ void * get_obj_ptr(uint32_t id)
 	obj_entry_t * oe;
 	int r;
 	if ((r = ensure_objs_exists()) < 0)
-		panic("%s(): ensure_objs_exists: %e", __FUNCTION__, r); // TODO: handle error
+		panic("%s(): ensure_objs_exists: %i", __FUNCTION__, r); // TODO: handle error
 
 	oe = hash_map_find_val(objs, (void *) id);
 	if (!oe)
@@ -72,7 +72,7 @@ void add_obj(uint32_t id, void * ptr)
 	obj_entry_t * oe;
 	int r;
 	if ((r = ensure_objs_exists()) < 0)
-		panic("%s(): ensure_objs_exists: %e", __FUNCTION__, r); // TODO: handle error
+		panic("%s(): ensure_objs_exists: %i", __FUNCTION__, r); // TODO: handle error
 
 	oe = malloc(sizeof(*oe));
 	assert(oe); // TODO: handle error
@@ -88,7 +88,7 @@ void delete_obj(uint32_t id)
 	obj_entry_t * oe;
 	int r;
 	if ((r = ensure_objs_exists()) < 0)
-		panic("%s(): ensure_objs_exists: %e", __FUNCTION__, r); // TODO: handle error
+		panic("%s(): ensure_objs_exists: %i", __FUNCTION__, r); // TODO: handle error
 
 	oe = hash_map_erase(objs, (void *) id);
 	if (!oe)

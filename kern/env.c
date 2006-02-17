@@ -353,7 +353,7 @@ env_create(uint8_t* binary, size_t size)
 	r = env_alloc(&e, 0, 0);
 	if(r)
 	{
-		panic("env_alloc: %e", r);
+		panic("env_alloc: %i", r);
 		return;
 	}
 	load_icode(e, binary, size);

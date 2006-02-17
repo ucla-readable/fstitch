@@ -59,7 +59,7 @@ pgfault(void* addr, uint32_t err, uint32_t esp, uint32_t eflags, uint32_t eip)
 	
 	r = sys_page_alloc(0, (void *) PFTEMP, PTE_U | PTE_W | PTE_P);
 	if(r)
-		panic("pgfault: %e", r);
+		panic("pgfault: %i", r);
 	memcpy((void *) PFTEMP, (void *) PTE_ADDR(addr), PGSIZE);
 	/* these two can't fail */
 	sys_page_map(0, (void *) PFTEMP, 0, (void *) PTE_ADDR(addr), PTE_U | PTE_W | PTE_P);
@@ -143,7 +143,7 @@ fork(void)
 	
 	envid = sys_exofork();
 	if(envid < 0)
-		panic("sys_exofork: %e", envid);
+		panic("sys_exofork: %i", envid);
 	if(!envid)
 	{
 		env = &envs[ENVX(sys_getenvid())];
@@ -161,7 +161,7 @@ fork(void)
 			{
 				r = duppage(envid, addr >> PGSHIFT);
 				if(r)
-					panic("fork: %e", r);
+					panic("fork: %i", r);
 			}
 		}
 	}
@@ -169,7 +169,7 @@ fork(void)
 	sys_set_pgfault_upcall(envid, (void *) env->env_pgfault_upcall);
 	r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_U | PTE_W | PTE_P);
 	if(r)
-		panic("fork: %e", r);
+		panic("fork: %i", r);
 	// Copy our IRQ handler if we have one installed
 	if(env->env_irq_upcall)
 		sys_set_irq_upcall(envid, (void *) env->env_irq_upcall);
@@ -182,16 +182,16 @@ fork(void)
 									 (size_t) _binary_symtbl_size,
 									 (void*)  _binary_symstrtbl_start,
 									 (size_t) _binary_symstrtbl_size)) < 0)
-		panic("sys_set_symtbls: %e", r);
+		panic("sys_set_symtbls: %i", r);
 
 	/* Copy our opgroup scope.
 	 * No need to error if kfsd is gone (-E_TIMEOUT), let fork continue. */
 	r = cfs_opgroup_scope_copy(envid);
 	if(r < 0 && r != -E_TIMEOUT)
-		panic("cfs_opgroup_scope_copy: %e", r);
+		panic("cfs_opgroup_scope_copy: %i", r);
 
 	if((r = sys_env_set_status(envid, ENV_RUNNABLE)))
-		panic("fork: %e", r);
+		panic("fork: %i", r);
 	
 	return envid;
 }

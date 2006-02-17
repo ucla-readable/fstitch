@@ -296,7 +296,7 @@ void wars(int argc, char * argv[])
 		int e = wars_init(argv[i]);
 		if(e < 0)
 		{
-			printf("%s: %e\n", argv[i], e);
+			printf("%s: %i\n", argv[i], e);
 			return;
 		}
 	}

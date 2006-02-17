@@ -22,14 +22,14 @@ umain(int argc, char **argv)
 		int fd;
 		if((fd = r = open(argv[i], O_CREAT | O_MKDIR)) < 0)
 		{
-			kdprintf(STDERR_FILENO, "open(%s): %e\n", argv[i], r);
+			kdprintf(STDERR_FILENO, "open(%s): %i\n", argv[i], r);
 			exit(0);
 		}
 
 		// Ensure the directory was created, in case of buggy fs
 		struct Stat s;
 		if((r = fstat(fd, &s)) < 0)
-			panic("fstat: %e", r);
+			panic("fstat: %i", r);
 		assert(s.st_isdir);
 	}
 }

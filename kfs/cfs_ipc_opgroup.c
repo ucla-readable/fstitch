@@ -48,7 +48,7 @@ static bool env_page_is_mapped(const void * pg, envid_t envid, uintptr_t envid_v
 {
 	int r = sys_page_is_mapped((void *) pg, envid, envid_va);
 	if (r < 0 && r != -E_BAD_ENV)
-		panic("sys_page_is_mapped(0x%08x, %08x, 0x%08x): %e\n", pg, envid, envid_va);
+		panic("sys_page_is_mapped(0x%08x, %08x, 0x%08x): %i\n", pg, envid, envid_va);
 	return r == 1;
 }
 

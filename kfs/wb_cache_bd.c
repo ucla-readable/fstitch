@@ -6,6 +6,7 @@
 #include <lib/jiffies.h> // HZ
 #include <lib/hash_map.h>
 #include <lib/panic.h>
+#include <lib/kdprintf.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -159,7 +160,7 @@ static void touch_block(struct cache_info * info, uint32_t index)
 	}
 }
 
-static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
+static int flush_block(BD_t * object, struct cache_slot * slot)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t * slice;
@@ -168,34 +169,38 @@ static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
 	
 	/* already flushed? */
 	if(!slot->block->ddesc->changes)
-		return 0;
+		return FLUSH_EMPTY;
 	for(meta = slot->block->ddesc->changes->dependencies; meta; meta = meta->next)
 		if(meta->desc->owner == object)
 			break;
 	if(!meta)
-		return 0;
+		return FLUSH_EMPTY;
 	
 	/* honor external dependencies: 1 for the last parameter here */
 	slice = revision_slice_create(slot->block, object, info->bd, 1);
 	if(!slice)
-		return -E_NO_MEM;
+	{
+		kdprintf(STDERR_FILENO, "%s(): OOM and can't flush!\n", __FUNCTION__);
+		return FLUSH_NONE;
+	}
 	
 	if(!slice->ready_size)
 	{
 		/* otherwise we would have caught it above... */
 		assert(slice->full_size);
-		r = -E_BUSY;
+		r = FLUSH_NONE;
 	}
 	else
 	{
 		revision_slice_push_down(slice);
 		r = CALL(info->bd, write_block, slot->block);
 		if(r < 0)
+		{
 			revision_slice_pull_up(slice);
-		else if(completely)
-			r = (slice->ready_size == slice->full_size) ? 0 : -E_BUSY;
+			r = FLUSH_NONE;
+		}
 		else
-			r = 0;
+			r = (slice->ready_size == slice->full_size) ? FLUSH_DONE : FLUSH_SOME;
 	}
 	
 	revision_slice_destroy(slice);
@@ -203,19 +208,28 @@ static int flush_block(BD_t * object, struct cache_slot * slot, bool completely)
 	return r;
 }
 
+/* evict_block should evict exactly one block if it is successful */
 static int evict_block(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	struct cache_slot * slot;
 	
-	for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
-		if(!flush_block(object, slot, 1))
+	for(;;)
+	{
+		int r = FLUSH_EMPTY;
+		struct cache_slot * slot;
+		for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
 		{
-			pop_block(info, slot->block->number, (uint32_t) (slot - &info->blocks[0]));
-			return 0;
+			int code = flush_block(object, slot);
+			if(0 <= code)
+			{
+				pop_block(info, slot->block->number, (uint32_t) (slot - &info->blocks[0]));
+				return 0;
+			}
+			r |= code;
 		}
-	
-	return -E_BUSY;
+		if(r == FLUSH_NONE)
+			return -E_BUSY;
+	}
 }
 
 static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number)
@@ -239,7 +253,7 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	if(hash_map_size(info->block_map) == info->size)
 		if(evict_block(object) < 0)
 		{
-			printf("HOLY MACKEREL! We can't read a block, because the cache is full!\n");
+			printf("HOLY MACKEREL! We can't read block %d, because the cache is full!\n", number);
 			return NULL;
 		}
 	assert(hash_map_size(info->block_map) < info->size);
@@ -279,7 +293,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(hash_map_size(info->block_map) == info->size)
 		if(evict_block(object) < 0)
 		{
-			printf("HOLY MACKEREL! We can't read a block, because the cache is full!\n");
+			printf("HOLY MACKEREL! We can't synthetic read block %d, because the cache is full!\n", number);
 			return NULL;
 		}
 	assert(hash_map_size(info->block_map) < info->size);
@@ -355,26 +369,21 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	int start_dirty = wb_cache_dirty_count(object);
-	int dirty = start_dirty;
+	int dirty, start_dirty = wb_cache_dirty_count(object);
 
-	if(!dirty)
+	if(!start_dirty)
 		return FLUSH_EMPTY;
 
-	while(dirty)
-	{
-		struct cache_slot * slot;
-		int next_dirty;
-		/* this looks a lot like wb_cache_bd_callback below... */
-		for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
-			flush_block(object, slot, 0);
-		next_dirty = wb_cache_dirty_count(object);
-		if(next_dirty == dirty)
+	/* evict_block will evict exactly one block if it is successful */
+	for(dirty = start_dirty; dirty; dirty--)
+		if(evict_block(object) < 0)
+		{
+			assert(dirty == wb_cache_dirty_count(object));
 			return (start_dirty == dirty) ? FLUSH_NONE : FLUSH_SOME;
-		dirty = next_dirty;
-	}
-
+		}
+	
+	assert(!wb_cache_dirty_count(object));
+	
 	return FLUSH_DONE;
 }
 
@@ -392,7 +401,7 @@ static void wb_cache_bd_callback(void * arg)
 	/* FIXME: make this more efficient by only doing dirty blocks? */
 	/* FIXME: try to come up with a good flush ordering, instead of waiting for the next callback? */
 	for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
-		flush_block(object, slot, 0);
+		flush_block(object, slot);
 }
 
 static int wb_cache_bd_destroy(BD_t * bd)

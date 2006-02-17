@@ -27,7 +27,7 @@ set_pgfault_handler(void (*fn)(void* addr, uint32_t err, uint32_t esp, uint32_t 
 		// First time through!
 		int r = sys_page_alloc(0, (void *) (UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P);
 		if(r)
-			panic("sys_page_alloc: %e", r);
+			panic("sys_page_alloc: %i", r);
 		sys_set_pgfault_upcall(0, _pgfault_upcall);
 	}
 

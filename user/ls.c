@@ -14,7 +14,7 @@ ls(const char *path, const char *prefix)
 	struct Stat st;
 
 	if ((r = stat(path, &st)) < 0) {
-		kdprintf(STDERR_FILENO, "stat %s: %e\n", path, r);
+		kdprintf(STDERR_FILENO, "stat %s: %i\n", path, r);
 		exit(0);
 	}
 	if (st.st_isdir && !flag['d'])
@@ -33,7 +33,7 @@ lsdir(const char *path, const char *prefix)
 	struct dirent *d;
 
 	if ((fd = open(path, O_RDONLY)) < 0) {
-		kdprintf(STDERR_FILENO, "open %s: %e", path, fd);
+		kdprintf(STDERR_FILENO, "open %s: %i", path, fd);
 		exit(0);
 	}
 	for (;;) {

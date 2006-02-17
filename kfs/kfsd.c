@@ -85,19 +85,19 @@ void umain(int argc, char * argv[])
 		binaryname = "kfsd";
 		if((r = sys_env_set_name(0, "kfsd")) < 0)
 		{
-			printf("Failed to set env name: %e\n", r);
+			printf("Failed to set env name: %i\n", r);
 			return;
 		}
 	}
 	
 	if((r = sys_grant_io(0)) < 0)
 	{
-		printf("Failed to get I/O priveleges: %e\n", r);
+		printf("Failed to get I/O priveleges: %i\n", r);
 		return;
 	}
 	/*if((r = sys_env_set_priority(0, ENV_MAX_PRIORITY)) < 0)
 	{
-		printf("Failed to set priority: %e\n", r);
+		printf("Failed to set priority: %i\n", r);
 		return;
 	}*/
 

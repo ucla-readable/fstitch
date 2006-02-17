@@ -9,7 +9,7 @@ void umain(int argc, char * argv[])
 		printf("Syncing filesystem... ");
 		r = sync();
 		if(r < 0)
-			printf("%e\n", r);
+			printf("%i\n", r);
 		else
 			printf("done.\n");
 	}
@@ -27,7 +27,7 @@ void umain(int argc, char * argv[])
 			/* have to go under the hood for this one */
 			r = kfs_sync(argv[i]);
 			if(r < 0)
-				printf("%e\n", r);
+				printf("%i\n", r);
 			else
 				printf("done.\n");
 		}

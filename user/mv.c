@@ -7,7 +7,7 @@ static int copy(const char * from, const char * to)
 	int size, to_fd, from_fd = open(from, O_RDONLY);
 	if(from_fd < 0)
 	{
-		printf("%s: %e\n", from, from_fd);
+		printf("%s: %i\n", from, from_fd);
 		return from_fd;
 	}
 	
@@ -15,7 +15,7 @@ static int copy(const char * from, const char * to)
 	if(to_fd < 0)
 	{
 		close(from_fd);
-		printf("%s: %e\n", to, to_fd);
+		printf("%s: %i\n", to, to_fd);
 		return to_fd;
 	}
 	
@@ -26,7 +26,7 @@ static int copy(const char * from, const char * to)
 		if(wrote != size)
 		{
 			if(wrote < 0)
-				printf("%s: %e\n", to, wrote);
+				printf("%s: %i\n", to, wrote);
 			else
 			{
 				printf("%s: short write\n", to);
@@ -38,7 +38,7 @@ static int copy(const char * from, const char * to)
 	}
 	
 	if(size < 0 && size != -E_EOF)
-		printf("%s: %e\n", from, size);
+		printf("%s: %i\n", from, size);
 	
 	close(to_fd);
 	close(from_fd);
@@ -64,7 +64,7 @@ void umain(int argc, char **argv)
 		r = remove(argv[2]);
 		if(r < 0)
 		{
-			printf("%s: %e\n", argv[2], r);
+			printf("%s: %i\n", argv[2], r);
 			r = 0;
 		}
 		else
@@ -80,9 +80,9 @@ void umain(int argc, char **argv)
 		{
 			r = remove(argv[1]);
 			if(r < 0)
-				printf("%s: %e\n", argv[1], r);
+				printf("%s: %i\n", argv[1], r);
 		}
 	}
 	else if(r < 0)
-		printf("rename(%s, %s): %e\n", argv[1], argv[2], r);
+		printf("rename(%s, %s): %i\n", argv[1], argv[2], r);
 }

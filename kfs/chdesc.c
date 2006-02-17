@@ -727,6 +727,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return __chdesc_create_full(block, owner, data, head, tail, 0);
 }
 
+#if CHDESC_CYCLE_CHECK
 static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
@@ -743,6 +744,7 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 	/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
 	return 0;
 }
+#endif
 
 /* add a dependency to a change descriptor */
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
@@ -773,6 +775,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 			return 0;
 	
 	/* avoid creating a dependency loop */
+#if CHDESC_CYCLE_CHECK
 	if(dependent == dependency || chdesc_has_dependency(dependency, dependent))
 	{
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
@@ -780,6 +783,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	}
 	/* chdesc_has_dependency() marks the DAG rooted at "dependency" so we must unmark it */
 	chdesc_unmark_graph(dependency);
+#endif
 	
 	return chdesc_add_depend_fast(dependent, dependency);
 }

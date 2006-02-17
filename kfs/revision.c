@@ -242,6 +242,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
  * A chdesc that is internally ready need not satisfy as much: dependencies on
  * chdescs owned by other block devices are ignored. Note that this causes
  * indirect dependencies on chdescs owned by this block device to be missed. */
+/* FIXME: this function will have O(n^2) traversal behavior in the case when n blocks are *not* ready... */
 static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdesc_t * block, uint16_t target_level, bool external)
 {
 	/* assume ready until we find evidence to the contrary */
@@ -367,7 +368,10 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 			slice->ready = NULL;
 	}
 	else
+	{
 		slice->full = NULL;
+		slice->ready = NULL;
+	}
 	
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
 		if(meta->desc->owner == owner)

@@ -15,7 +15,7 @@ umain(int argc, char **argv)
 
 	if ((r = jsleep(jiffies)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "jsleep: %e\n", r);
+		kdprintf(STDERR_FILENO, "jsleep: %i\n", r);
 		exit(0);
 	}
 }

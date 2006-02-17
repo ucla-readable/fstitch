@@ -518,14 +518,14 @@ static int file_save(void)
 	r = ftruncate(ex_file.fdnum, 0);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "ftrucate", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %i\n", __FUNCTION__, "ftrucate", r);
 		return r;
 	}
 
 	r = seek(ex_file.fdnum, 0);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "seek", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %i\n", __FUNCTION__, "seek", r);
 		return r;
 	}
 
@@ -539,7 +539,7 @@ static int file_save(void)
 		r = write(ex_file.fdnum, l->text, strlen(l->text));
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "write", r);
+			kdprintf(STDERR_FILENO, "%s(): %s: %i\n", __FUNCTION__, "write", r);
 			return r;
 		}
 		kdprintf(ex_file.fdnum, "\n");
@@ -607,7 +607,7 @@ static void cmd_shell(size_t begin, size_t end, const char * cmd)
 
 	r = spawnl("/sh", "/sh", (const char **) 0);
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "spawn /sh: %e\n", r);
+		kdprintf(STDERR_FILENO, "spawn /sh: %i\n", r);
 	wait(r);
 }
 
@@ -629,7 +629,7 @@ static void cmd_quit(size_t begin, size_t end, const char * cmd)
 
 	r = file_close();
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %i\n", __FUNCTION__, "file_close", r);
 	exit(0);
 }
 
@@ -654,12 +654,12 @@ static void cmd_insert_file(size_t begin, size_t end, const char * cmd)
 	r = file_insert(file, O_RDWR);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "Unable to insert file \"%s\": %e\n", file, r);
+		kdprintf(STDERR_FILENO, "Unable to insert file \"%s\": %i\n", file, r);
 		return;
 	}
 	r = close(r);
 	if (r < 0)
-		panic("%s(): close: %e\n", __FUNCTION__, r);
+		panic("%s(): close: %i\n", __FUNCTION__, r);
 }
 
 static int write_file(const char * file)
@@ -698,7 +698,7 @@ static int write_file(const char * file)
 	r = file_save();
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_save", r);
+		kdprintf(STDERR_FILENO, "%s(): %s: %i\n", __FUNCTION__, "file_save", r);
 		return -E_UNSPECIFIED;
 	}
 
@@ -736,7 +736,7 @@ static void cmd_write(size_t begin, size_t end, const char * cmd)
 	{
 		r = file_close();
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s(): %s: %e\n", __FUNCTION__, "file_close", r);
+			kdprintf(STDERR_FILENO, "%s(): %s: %i\n", __FUNCTION__, "file_close", r);
 		exit(0);
 	}
 
@@ -839,7 +839,7 @@ static void cmd_transfer(size_t begin, size_t end, const char * cmd)
 	r = parse_linenos(&target_string, &target_begin, &target_end);
 	if (r < 0)
 	{
-		printf("Illegal target linenos: %e\n", r);
+		printf("Illegal target linenos: %i\n", r);
 		return;
 	}
 	if (target_begin != target_end)
@@ -886,7 +886,7 @@ static void cmd_transfer(size_t begin, size_t end, const char * cmd)
 		r = line_append(text);
 		if (r < 0)
 		{
-			printf("%s(): %s: %e\n", __FUNCTION__, "line_move", r);
+			printf("%s(): %s: %i\n", __FUNCTION__, "line_move", r);
 			return;
 		}
 	}
@@ -904,7 +904,7 @@ static void cmd_move(size_t begin, size_t end, const char * cmd)
 	r = parse_linenos(&target_string, &target_begin, &target_end);
 	if (r < 0)
 	{
-		printf("Illegal target linenos: %e\n", r);
+		printf("Illegal target linenos: %i\n", r);
 		return;
 	}
 	if (target_begin != target_end)
@@ -944,7 +944,7 @@ static void cmd_move(size_t begin, size_t end, const char * cmd)
 		r = line_move(target_begin+j);
 		if (r < 0)
 		{
-			printf("%s(): %s: %e\n", __FUNCTION__, "line_move", r);
+			printf("%s(): %s: %i\n", __FUNCTION__, "line_move", r);
 			return;
 		}
 	}
@@ -972,7 +972,7 @@ static void display_lines(size_t begin, size_t end, bool linenos)
 		if (r < len)
 		{
 			if (r < 0)
-				kdprintf(STDOUT_FILENO, "%s(): %s: %e\n", __FUNCTION__, "write", r);
+				kdprintf(STDOUT_FILENO, "%s(): %s: %i\n", __FUNCTION__, "write", r);
 			else
 				kdprintf(STDOUT_FILENO, "%s(): Only able to display %u of %u chars on line\n", __FUNCTION__, r, len);
 			return;

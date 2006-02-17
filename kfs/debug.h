@@ -15,7 +15,7 @@
 
 #include <kfs/debug_opcode.h>
 
-#define KFS_DEBUG_HOST "timbuktu.cs.ucla.edu"
+#define KFS_DEBUG_HOST "127.0.0.1"
 #define KFS_DEBUG_PORT 15166
 
 #define KFS_DEBUG_MARK 0
@@ -27,6 +27,7 @@
 #define KFS_DEBUG_COMMAND(command, module) kfs_debug_command(command, module, __FILE__, __LINE__, __FUNCTION__)
 #define KFS_DEBUG_NET_COMMAND() kfs_debug_net_command()
 
+#define KFS_DEBUG_COUNT() kfs_debug_count()
 #define KFS_DEBUG_DBWAIT(block) kfs_debug_dbwait(__FUNCTION__, block)
 
 int kfs_debug_init(const char * host, uint16_t port);
@@ -34,6 +35,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int line, const char * function);
 void kfs_debug_net_command(void);
 
+int kfs_debug_count(void);
 void kfs_debug_dbwait(const char * function, bdesc_t * block);
 
 #else /* KFS_DEBUG */
@@ -43,6 +45,7 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block);
 #define KFS_DEBUG_COMMAND(command, module) do {} while(0)
 #define KFS_DEBUG_NET_COMMAND() do {} while(0)
 
+#define KFS_DEBUG_COUNT() 0
 #define KFS_DEBUG_DBWAIT(block) do {} while(0)
 
 #endif /* KFS_DEBUG */
