@@ -151,7 +151,10 @@ static int fidprotector_create(CFS_t * cfs, inode_t parent, const char * name, i
 
 	fid = open_fid(state, fid);
 	if (fid < 0)
+	{
 		*newino = INODE_NONE;
+		(void) CALL(state->frontend_cfs, close, fid);
+	}
 	return fid;
 }
 

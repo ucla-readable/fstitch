@@ -255,7 +255,10 @@ static int fidcloser_create(CFS_t * cfs, inode_t parent, const char * name, int 
 
 	fid = open_fid(state, fid);
 	if (fid < 0)
+	{
 		*newino = INODE_NONE;
+		(void) CALL(state->frontend_cfs, close, fid);
+	}
 	return fid;
 }
 
