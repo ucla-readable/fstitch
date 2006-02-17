@@ -565,14 +565,7 @@ static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t
 
 static void kis_sync(envid_t whom, const Skfs_sync_t * pg)
 {
-	CFS_t * cfs;
-	inode_t ino;
-	int val;
-	if ((val = path_to_inode(pg->name, &cfs, &ino)) >= 0)
-	{
-		kfsd_set_mount(cfs);
-		val = kfs_sync(ino);
-	}
+	int val = kfs_sync();
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 

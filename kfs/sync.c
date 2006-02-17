@@ -6,7 +6,7 @@
 #include <kfs/sync.h>
 #include <kfs/modman.h>
 
-int kfs_sync(inode_t ino)
+int kfs_sync(void)
 {
 	for(;;)
 	{

@@ -565,10 +565,10 @@ static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
 	int r;
 
 	// ignore datasync
-	r = kfs_sync(fusecfsino(req, fuse_ino));
-	if (r == -18)
+	r = kfs_sync();
+	if (r == -E_BUSY)
 	{
-		r = fuse_reply_err(req, TODOERROR); // device busy
+		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
 		return;
 	}

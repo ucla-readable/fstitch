@@ -3,6 +3,6 @@
 
 #include <kfs/inode.h>
 
-int kfs_sync(inode_t ino);
+int kfs_sync(void);
 
 #endif /* __KUDOS_KFS_SYNC_H */

@@ -82,7 +82,7 @@ static void cfs_ipc_serve_shutdown(void * arg)
 
 	if (frontend_cfs)
 	{
-		kfs_sync(INODE_NONE);
+		kfs_sync();
 		DESTROY(frontend_cfs);
 		frontend_cfs = NULL;
 	}
