@@ -122,6 +122,7 @@ static void alloc_prevrecv(envid_t envid, prev_serve_recv_t ** prevrecv)
 
 static void serve_open(envid_t envid, struct Scfs_open * req)
 {
+	bool new_file = 0;
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
 		alloc_prevrecv(envid, &prevrecv);
@@ -143,11 +144,35 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 		inode_t ino;
 		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
 		cur_page = req;
-		r = path_to_inode(scfs->path, &select_cfs, &ino);
-		if (r >= 0) {
-			kfsd_set_mount(select_cfs);
-			r = CALL(frontend_cfs, open, ino, scfs->mode);
+
+		if (scfs->mode & O_CREAT)
+		{
+			inode_t parent;
+			char * filename;
+			r = path_to_parent_and_name(scfs->path, &select_cfs, &parent, &filename);
+			if (r >= 0)
+			{
+				kfsd_set_mount(select_cfs);
+				scfs->mode &= ~O_CREAT;
+				r = CALL(frontend_cfs, lookup, parent, filename, &ino);
+				if (r < 0)
+				{
+					new_file = 1;
+					r = CALL(frontend_cfs, create, parent, filename, scfs->mode, &ino);
+				}
+			}
 		}
+
+		if (!new_file)
+		{
+			r = path_to_inode(scfs->path, &select_cfs, &ino);
+			if (r >= 0)
+			{
+				kfsd_set_mount(select_cfs);
+				r = CALL(frontend_cfs, open, ino, scfs->mode);
+			}
+		}
+
 		cur_page = NULL;
 		ipc_send(envid, r, NULL, 0, NULL);
 		prevrecv->envid = 0;

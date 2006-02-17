@@ -226,11 +226,21 @@ static int table_classifier_open(CFS_t * cfs, inode_t ino, int mode)
 static int table_classifier_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
 {
 	Dprintf("%s(%d: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
+	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	int fid;
+	int r;
 
 	if (!selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, create, parent, name, mode, newino);
+	if ((fid = CALL(selected_cfs, create, parent, name, mode, newino)) < 0)
+		return fid;
+	if ((r = fid_table_add(state, fid, selected_cfs)) < 0)
+	{
+		(void) CALL(selected_cfs, close, fid);
+		return r;
+	}
+	return fid;
 }
 
 
@@ -541,7 +551,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 
 void table_classifier_cfs_set(CFS_t * cfs)
 {
-	Dprintf("%s(%x)\n", __FUNCTION__, cfs);
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 
 	if (singleton_table_classifier_cfs)
 		selected_cfs = cfs;
