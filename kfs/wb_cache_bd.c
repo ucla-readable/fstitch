@@ -209,7 +209,7 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 }
 
 /* evict_block should evict exactly one block if it is successful */
-static int evict_block(BD_t * object)
+static int evict_block(BD_t * object, bool only_dirty)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	
@@ -220,7 +220,7 @@ static int evict_block(BD_t * object)
 		for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
 		{
 			int code = flush_block(object, slot);
-			if(0 <= code)
+			if(code == FLUSH_DONE || (!only_dirty && code == FLUSH_EMPTY))
 			{
 				pop_block(info, slot->block->number, (uint32_t) (slot - &info->blocks[0]));
 				return 0;
@@ -251,7 +251,7 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number)
 	}
 	
 	if(hash_map_size(info->block_map) == info->size)
-		if(evict_block(object) < 0)
+		if(evict_block(object, 0) < 0)
 		{
 			printf("HOLY MACKEREL! We can't read block %d, because the cache is full!\n", number);
 			return NULL;
@@ -291,7 +291,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	}
 	
 	if(hash_map_size(info->block_map) == info->size)
-		if(evict_block(object) < 0)
+		if(evict_block(object, 0) < 0)
 		{
 			printf("HOLY MACKEREL! We can't synthetic read block %d, because the cache is full!\n", number);
 			return NULL;
@@ -352,7 +352,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	else
 	{
 		if(hash_map_size(info->block_map) == info->size)
-			if(evict_block(object) < 0)
+			if(evict_block(object, 0) < 0)
 			{
 				printf("HOLY MACKEREL! We can't write a block, because the cache is full!\n");
 				return -E_BUSY;
@@ -376,7 +376,7 @@ static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 	/* evict_block will evict exactly one block if it is successful */
 	for(dirty = start_dirty; dirty; dirty--)
-		if(evict_block(object) < 0)
+		if(evict_block(object, 1) < 0)
 		{
 			assert(dirty == wb_cache_dirty_count(object));
 			return (start_dirty == dirty) ? FLUSH_NONE : FLUSH_SOME;
