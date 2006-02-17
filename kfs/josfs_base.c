@@ -56,7 +56,7 @@ struct lfs_info
 
 struct josfs_fdesc {
 	uint32_t dirb; // block number on the block device of a block in one of the containing directory's datablocks. It is the block which contains the on-disk file structure for this file
-	uint32_t index; // the index in that block
+	uint32_t index; // the byte index in that block of the JOSFS_File_t for this file
 	inode_t ino;
 	JOSFS_File_t * file;
 };
@@ -764,7 +764,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 		goto josfs_lookup_inode_exit;
 
 	fd->dirb = ino / JOSFS_BLKFILES;
-	fd->index = ino % JOSFS_BLKFILES;
+	fd->index = (ino % JOSFS_BLKFILES) * sizeof(JOSFS_File_t);
 	fd->ino = ino;
 	fd->file = file;
 
@@ -775,8 +775,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 		if (!dirblock)
 			goto josfs_lookup_inode_exit2;
 	
-		memcpy(file, dirblock->ddesc->data + fd->index * sizeof(JOSFS_File_t),
-			   sizeof(JOSFS_File_t));
+		memcpy(file, dirblock->ddesc->data + fd->index, sizeof(JOSFS_File_t));
 	}
 	return (fdesc_t*)fd;
 
