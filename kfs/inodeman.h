@@ -6,7 +6,6 @@
 #include <lib/vector.h>
 
 #define MAXPATHLEN 1024
-#define mount_table_t vector_t
 
 struct mount_entry {
 	const char * path;
@@ -14,12 +13,13 @@ struct mount_entry {
 };
 typedef struct mount_entry mount_entry_t;
 
-vector_t * inodeman_create(void);
-void inodeman_destroy();
+int inodeman_init(void);
+void inodeman_shutdown();
 
 int path_to_inode(const char * path, CFS_t ** cfs, inode_t * ino);
 int path_to_parent_and_name(const char * path, CFS_t ** cfs, inode_t * parent, char ** filename);
 
-mount_table_t * get_mount_table();
+// Return the mount table as a vector of mount_entry_t*
+vector_t * get_mount_table();
 
 #endif // __KUDOS_KFS_INODEMAN_H

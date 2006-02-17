@@ -143,22 +143,23 @@ int path_to_parent_and_name(const char * path, CFS_t ** cfs, inode_t * parent, c
 	return 0;
 }
 
-mount_table_t * get_mount_table()
+vector_t * get_mount_table()
 {
 	return mount_table;
 }
 
-void inodeman_destroy()
+void inodeman_shutdown()
 {
 	vector_destroy(mount_table);
 	mount_table = NULL;
 }
 
-vector_t * inodeman_create(void)
+int inodeman_init(void)
 {
 	if (mount_table)
-		return mount_table;
-	mount_table = vector_create();
-	return mount_table;
+		return -E_BUSY;
+	if (!(mount_table = vector_create()))
+		return -E_NO_MEM;
+	return 0;
 }
 
