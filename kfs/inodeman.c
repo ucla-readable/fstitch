@@ -89,7 +89,7 @@ int path_to_inode(const char * path, CFS_t ** cfs, inode_t * ino)
 
 	strncpy(path2, path, strlen(path) + 1);
 	*cfs = lookup_cfs_name(mount_table, path2, &transformed_name);
-	if (!cfs)
+	if (!*cfs)
 		return -E_NOT_FOUND;
 
 	if ((r = CALL(*cfs, get_root, ino)) < 0)
