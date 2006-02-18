@@ -4,7 +4,7 @@
 #include <kfs/sync.h>
 #include <kfs/modman.h>
 #include <lib/serial_kfs.h>
-#include <kfs/inodeman.h>
+#include <kfs/traverse.h>
 #include <kfs/kfs_ipc_serve.h>
 
 #define KIS_DEBUG 0

@@ -4,11 +4,11 @@
 #include <lib/stdio.h>
 #include <lib/hash_map.h>
 
-#include <kfs/inodeman.h>
+#include <kfs/traverse.h>
 
-#define INODEMAN_DEBUG 0
+#define TRAVERSE_DEBUG 0
 
-#if INODEMAN_DEBUG
+#if TRAVERSE_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
@@ -148,13 +148,13 @@ vector_t * get_mount_table()
 	return mount_table;
 }
 
-void inodeman_shutdown()
+void traverse_shutdown()
 {
 	vector_destroy(mount_table);
 	mount_table = NULL;
 }
 
-int inodeman_init(void)
+int traverse_init(void)
 {
 	if (mount_table)
 		return -E_BUSY;

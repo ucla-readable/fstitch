@@ -12,7 +12,7 @@
 #include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
-#include <kfs/inodeman.h>
+#include <kfs/traverse.h>
 #include <kfs/table_classifier_cfs.h>
 
 #define TABLE_CLASSIFIER_DEBUG 0

@@ -5,7 +5,7 @@
 #include <kfs/opgroup.h>
 #include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/cfs_ipc_serve.h>
-#include <kfs/inodeman.h>
+#include <kfs/traverse.h>
 #include <kfs/table_classifier_cfs.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -87,7 +87,7 @@ static void cfs_ipc_serve_shutdown(void * arg)
 		frontend_cfs = NULL;
 	}
 
-	inodeman_shutdown();
+	traverse_shutdown();
 
 	for (i = 0; i < sizeof(prev_serve_recvs)/(sizeof(prev_serve_recvs[0])); i++)
 		free(prev_serve_recvs[i]);
@@ -101,7 +101,7 @@ int cfs_ipc_serve_init(void)
 	if (get_pte((void*) PAGESNDVA) & PTE_P)
 		panic("cfs_ipc_serve: PAGESNDVA already mapped");
 
-	if ((r = inodeman_init()) < 0)
+	if ((r = traverse_init()) < 0)
 		return r;
 
 	if ((r = kfsd_register_shutdown_module(cfs_ipc_serve_shutdown, NULL)) < 0)

@@ -1,5 +1,5 @@
-#ifndef __KUDOS_KFS_INODEMAN_H
-#define __KUDOS_KFS_INODEMAN_H
+#ifndef __KUDOS_KFS_TRAVERSE_H
+#define __KUDOS_KFS_TRAVERSE_H
 
 #include <kfs/cfs.h>
 #include <kfs/inode.h>
@@ -13,8 +13,8 @@ struct mount_entry {
 };
 typedef struct mount_entry mount_entry_t;
 
-int inodeman_init(void);
-void inodeman_shutdown();
+int traverse_init(void);
+void traverse_shutdown();
 
 int path_to_inode(const char * path, CFS_t ** cfs, inode_t * ino);
 int path_to_parent_and_name(const char * path, CFS_t ** cfs, inode_t * parent, char ** filename);
@@ -22,4 +22,4 @@ int path_to_parent_and_name(const char * path, CFS_t ** cfs, inode_t * parent, c
 // Return the mount table as a vector of mount_entry_t*
 vector_t * get_mount_table();
 
-#endif // __KUDOS_KFS_INODEMAN_H
+#endif // __KUDOS_KFS_TRAVERSE_H
