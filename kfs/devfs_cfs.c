@@ -166,7 +166,8 @@ static int devfs_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
-	return state->root_ino;
+	*ino = state->root_ino;
+	return 0;
 }
 
 static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
