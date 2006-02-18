@@ -8,7 +8,7 @@
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
 #include <kfs/uhfs.h>
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 #include <kfs/modman.h>
 #include <kfs/mem_bd.h>
 
@@ -542,7 +542,7 @@ void umain(int argc, const char ** argv)
 	bool fsck = 0, jfsck = 0;
 	int cache_type = WB_CACHE;
 	uint32_t cache_num_blocks = 128;
-	CFS_t * tclass;
+	CFS_t * mselect;
 	int r;
 
 	if (get_arg_idx(argc, argv, "-h"))
@@ -569,14 +569,14 @@ void umain(int argc, const char ** argv)
 	if (!cfs)
 		exit(0);
 
-	tclass = get_table_classifier();
-	if (!tclass)
+	mselect = get_mount_selector();
+	if (!mselect)
 		exit(0);
 
-	r = table_classifier_cfs_add(tclass, mount_point, cfs);
+	r = mount_selector_cfs_add(mselect, mount_point, cfs);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "table_classifier_cfs_add(): %i\n", r);
+		kdprintf(STDERR_FILENO, "mount_selector_cfs_add(): %i\n", r);
 		exit(0);
 	}
 }

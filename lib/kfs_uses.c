@@ -118,13 +118,13 @@ hash_map_t * kfs_uses()
 }
 
 
-CFS_t * get_table_classifier()
+CFS_t * get_mount_selector()
 {
 	int r;
 	modman_it_t it;
 	CFS_t * c;
-	const char tcc_name[] = "table_classifier_cfs-"; 
-	const int tcc_name_len = strlen(tcc_name);
+	const char msc_name[] = "mount_selector_cfs-"; 
+	const int msc_name_len = strlen(msc_name);
 
 	r = modman_it_init_cfs(&it);
 	if (r < 0)
@@ -136,7 +136,7 @@ CFS_t * get_table_classifier()
 	while ((c = modman_it_next_cfs(&it)))
 	{
 		const char * name = modman_name_cfs(c);
-		if (name && !strncmp(name, tcc_name, tcc_name_len))
+		if (name && !strncmp(name, msc_name, msc_name_len))
 			return c;
 	}
 

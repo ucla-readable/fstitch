@@ -339,14 +339,14 @@ BD_t * create_bd(uint32_t id)
 //
 // CFS
 
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 
-CFS_t * table_classifier_cfs(void)
+CFS_t * mount_selector_cfs(void)
 {
 	const envid_t fsid = find_fs();
 	uint32_t cfs_id;
 
-	INIT_PG(TABLE_CLASSIFIER_CFS, table_classifier_cfs);
+	INIT_PG(MOUNT_SELECTOR_CFS, mount_selector_cfs);
 
 	SEND_PG();
 	cfs_id = RECV_PG();
@@ -354,7 +354,7 @@ CFS_t * table_classifier_cfs(void)
 	return create_cfs(cfs_id);
 }
 
-int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
+int mount_selector_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 {
 	const envid_t fsid = find_fs();
 	const int path_len = strlen(path)+1;
@@ -365,7 +365,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 		return -E_BAD_PATH;
 	}
 
-	INIT_PG(TABLE_CLASSIFIER_CFS_ADD, table_classifier_cfs_add);
+	INIT_PG(MOUNT_SELECTOR_CFS_ADD, mount_selector_cfs_add);
 
 	pg->cfs = (uint32_t) OBJLOCAL(cfs);
 	pg->path_cfs = (uint32_t) OBJLOCAL(path_cfs);
@@ -376,7 +376,7 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 	return RECV_PG();
 }
 
-CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
+CFS_t * mount_selector_cfs_remove(CFS_t * cfs, const char * path)
 {
 	const envid_t fsid = find_fs();
 	const int path_len = strlen(path)+1;
@@ -388,7 +388,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char * path)
 		return NULL;
 	}
 
-	INIT_PG(TABLE_CLASSIFIER_CFS_REMOVE, table_classifier_cfs_remove);
+	INIT_PG(MOUNT_SELECTOR_CFS_REMOVE, mount_selector_cfs_remove);
 
 	pg->cfs = (uint32_t) OBJLOCAL(cfs);
 	strncpy(pg->path, path, path_len);

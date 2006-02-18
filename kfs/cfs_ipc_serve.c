@@ -6,7 +6,7 @@
 #include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/traverse.h>
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 
 #include <inc/lib.h> // for get_pte()
 #include <inc/env.h>

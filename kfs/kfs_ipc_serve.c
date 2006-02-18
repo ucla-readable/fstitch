@@ -113,17 +113,17 @@ static void kis_request_config_status(envid_t whom, const Skfs_request_config_st
 //
 // CFS
 
-// table_classifier_cfs
-#include <kfs/table_classifier_cfs.h>
+// mount_selector_cfs
+#include <kfs/mount_selector_cfs.h>
 
-static void kis_table_classifier_cfs(envid_t whom, const Skfs_table_classifier_cfs_t * pg)
+static void kis_mount_selector_cfs(envid_t whom, const Skfs_mount_selector_cfs_t * pg)
 {
-	uint32_t val = (uint32_t) table_classifier_cfs();
+	uint32_t val = (uint32_t) mount_selector_cfs();
 	Dprintf("%s = 0x%08x\n", __FUNCTION__, val);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
-static void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifier_cfs_add_t * pg)
+static void kis_mount_selector_cfs_add(envid_t whom, const Skfs_mount_selector_cfs_add_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	CFS_t * path_cfs = (CFS_t *) pg->path_cfs;
@@ -133,12 +133,12 @@ static void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifi
 	if (!modman_name_cfs(cfs) || !modman_name_cfs(path_cfs))
 		RETURN_IPC_INVAL;
 
-	val = table_classifier_cfs_add(cfs, pg->path, path_cfs);
+	val = mount_selector_cfs_add(cfs, pg->path, path_cfs);
 
 	RETURN_IPC;
 }
 
-static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_classifier_cfs_remove_t * pg)
+static void kis_mount_selector_cfs_remove(envid_t whom, const Skfs_mount_selector_cfs_remove_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	uint32_t val;
@@ -146,7 +146,7 @@ static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_class
 	if (!modman_name_cfs(cfs))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) table_classifier_cfs_remove(cfs, pg->path);
+	val = (uint32_t) mount_selector_cfs_remove(cfs, pg->path);
 
 	RETURN_IPC;
 }
@@ -586,7 +586,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	r = modman_it_init_cfs(&it);
 	assert(r >= 0);
 	while ((cfs = modman_it_next_cfs(&it)))
-		if (!strncmp("table_classifier_cfs-", modman_name_cfs(cfs), strlen("table_classifier_cfs-")))
+		if (!strncmp("mount_selector_cfs-", modman_name_cfs(cfs), strlen("mount_selector_cfs-")))
 			break;
 	modman_it_destroy(&it);
 	assert(cfs);
@@ -671,9 +671,9 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 
 		// CFS
 
-		SERVE(TABLE_CLASSIFIER_CFS,        table_classifier_cfs);
-		SERVE(TABLE_CLASSIFIER_CFS_ADD,    table_classifier_cfs_add);
-		SERVE(TABLE_CLASSIFIER_CFS_REMOVE, table_classifier_cfs_remove);
+		SERVE(MOUNT_SELECTOR_CFS,        mount_selector_cfs);
+		SERVE(MOUNT_SELECTOR_CFS_ADD,    mount_selector_cfs_add);
+		SERVE(MOUNT_SELECTOR_CFS_REMOVE, mount_selector_cfs_remove);
 		SERVE(UHFS, uhfs);
 
 		// LFS

@@ -34,7 +34,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
-			$(OBJDIR)/kfs/table_classifier_cfs.o \
+			$(OBJDIR)/kfs/mount_selector_cfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_opgroup.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/fidprotector_cfs.o \

@@ -28,7 +28,7 @@
 #include <kfs/uhfs.h>
 #include <kfs/mirror_bd.h>
 #ifdef KUDOS
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 #include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/fidprotector_cfs.h>
 #include <kfs/fidcloser_cfs.h>
@@ -204,7 +204,7 @@ int kfsd_init(int argc, char ** argv)
 	// Mount uhfses
 
 #ifdef KUDOS
-	if (! (table_class = table_classifier_cfs()) )
+	if (! (table_class = mount_selector_cfs()) )
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);

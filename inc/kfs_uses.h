@@ -23,7 +23,7 @@ struct kfs_node {
 // Return a hash_map of <CFS/LFS/BD_t *, kfs_node_t *> for kfsd's configuration
 hash_map_t * kfs_uses();
 
-// Return the root table_classifier_cfs
-CFS_t * get_table_classifier();
+// Return the root mount_selector_cfs
+CFS_t * get_mount_selector();
 
 #endif /* !KUDOS_INC_KFS_USES_H */

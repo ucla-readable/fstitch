@@ -162,4 +162,3 @@ int traverse_init(void)
 		return -E_NO_MEM;
 	return 0;
 }
-

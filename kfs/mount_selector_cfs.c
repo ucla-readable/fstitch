@@ -13,19 +13,18 @@
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/traverse.h>
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 
-#define TABLE_CLASSIFIER_DEBUG 0
+#define MOUNT_SELECTOR_DEBUG 0
 
-#if TABLE_CLASSIFIER_DEBUG
+#if MOUNT_SELECTOR_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
 #endif
 
 
-static CFS_t * singleton_table_classifier_cfs = NULL;
-static CFS_t * selected_cfs = NULL;
+static CFS_t * singleton_mount_selector_cfs = NULL;
 
 // 
 // Data structs and initers
@@ -36,11 +35,12 @@ struct open_file {
 };
 typedef struct open_file open_file_t;
 
-struct table_classifier_state {
+struct mount_selector_state {
 	vector_t * mount_table;
 	hash_map_t * open_files;
+	CFS_t * selected_cfs;
 };
-typedef struct table_classifier_state table_classifier_state_t;
+typedef struct mount_selector_state mount_selector_state_t;
 
 
 //
@@ -92,7 +92,7 @@ static void open_file_destroy(open_file_t * f)
 // open_files functions
 
 // Add a fid-cfs pair
-static int fid_table_add(table_classifier_state_t * state, int fid, CFS_t * cfs)
+static int fid_table_add(mount_selector_state_t * state, int fid, CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x, %d, 0x%08x)\n", __FUNCTION__, state, fid, cfs);
 	open_file_t * f;
@@ -112,7 +112,7 @@ static int fid_table_add(table_classifier_state_t * state, int fid, CFS_t * cfs)
 }
 
 // Get the existing cfs for fid
-static CFS_t * fid_table_get(const table_classifier_state_t * state, int fid)
+static CFS_t * fid_table_get(const mount_selector_state_t * state, int fid)
 {
 	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
 	open_file_t * f;
@@ -125,7 +125,7 @@ static CFS_t * fid_table_get(const table_classifier_state_t * state, int fid)
 }
 
 // Delete the cfs-fid entry for fid
-static int fid_table_del(table_classifier_state_t * state, int fid)
+static int fid_table_del(mount_selector_state_t * state, int fid)
 {
 	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
 	open_file_t * f;
@@ -160,94 +160,96 @@ static int mount_lookup(vector_t * mount_table, const char * path)
 }
 
 //
-// table_classifier_cfs
+// mount_selector_cfs
 
-static int table_classifier_get_config(void * object, int level, char * string, size_t length)
+static int mount_selector_get_config(void * object, int level, char * string, size_t length)
 {
 	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
+	if(OBJMAGIC(cfs) != MOUNT_SELECTOR_MAGIC)
 		return -E_INVAL;
 
 	snprintf(string, length, "");
 	return 0;
 }
 
-static int table_classifier_get_status(void * object, int level, char * string, size_t length)
+static int mount_selector_get_status(void * object, int level, char * string, size_t length)
 {
 	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
+	if(OBJMAGIC(cfs) != MOUNT_SELECTOR_MAGIC)
 		return -E_INVAL;
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
 	return 0;
 }
 
-static int table_classifier_get_root(CFS_t * cfs, inode_t * ino)
+static int mount_selector_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s\n", __FUNCTION__);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, get_root, ino);
+	return CALL(state->selected_cfs, get_root, ino);
 }
 
-static int table_classifier_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+static int mount_selector_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, lookup, parent, name, ino);
+	return CALL(state->selected_cfs, lookup, parent, name, ino);
 }
 
-static int table_classifier_open(CFS_t * cfs, inode_t ino, int mode)
+static int mount_selector_open(CFS_t * cfs, inode_t ino, int mode)
 {
 	Dprintf("%s(%d, %d)\n", __FUNCTION__, ino, mode);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	int fid;
 	int r;
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	if ((fid = CALL(selected_cfs, open, ino, mode)) < 0)
+	if ((fid = CALL(state->selected_cfs, open, ino, mode)) < 0)
 		return fid;
-	if ((r = fid_table_add(state, fid, selected_cfs)) < 0)
+	if ((r = fid_table_add(state, fid, state->selected_cfs)) < 0)
 	{
-		(void) CALL(selected_cfs, close, fid);
+		(void) CALL(state->selected_cfs, close, fid);
 		return r;
 	}
 	return fid;
 }
 
-static int table_classifier_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
 {
 	Dprintf("%s(%d: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	int fid;
 	int r;
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	if ((fid = CALL(selected_cfs, create, parent, name, mode, newino)) < 0)
+	if ((fid = CALL(state->selected_cfs, create, parent, name, mode, newino)) < 0)
 		return fid;
-	if ((r = fid_table_add(state, fid, selected_cfs)) < 0)
+	if ((r = fid_table_add(state, fid, state->selected_cfs)) < 0)
 	{
-		(void) CALL(selected_cfs, close, fid);
+		(void) CALL(state->selected_cfs, close, fid);
 		return r;
 	}
 	return fid;
 }
 
 
-static int table_classifier_close(CFS_t * cfs, int fid)
+static int mount_selector_close(CFS_t * cfs, int fid)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	CFS_t * selected_cfs = fid_table_get(state, fid);
 	int r, s;
 
@@ -261,10 +263,10 @@ static int table_classifier_close(CFS_t * cfs, int fid)
 	return r;
 }
 
-static int table_classifier_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int mount_selector_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	CFS_t * selected_cfs = fid_table_get(state, fid);
 
 	if (!selected_cfs)
@@ -273,10 +275,10 @@ static int table_classifier_read(CFS_t * cfs, int fid, void * data, uint32_t off
 	return CALL(selected_cfs, read, fid, data, offset, size);
 }
 
-static int table_classifier_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int mount_selector_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	CFS_t * selected_cfs = fid_table_get(state, fid);
 
 	if (!selected_cfs)
@@ -285,10 +287,10 @@ static int table_classifier_write(CFS_t * cfs, int fid, const void * data, uint3
 	return CALL(selected_cfs, write, fid, data, offset, size);
 }
 
-static int table_classifier_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int mount_selector_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	CFS_t * selected_cfs = fid_table_get(state, fid);
 
 	if (!selected_cfs)
@@ -297,9 +299,9 @@ static int table_classifier_getdirentries(CFS_t * cfs, int fid, char * buf, int 
 	return CALL(selected_cfs, getdirentries, fid, buf, nbytes, basep);
 }
 
-static int table_classifier_truncate(CFS_t * cfs, int fid, uint32_t size)
+static int mount_selector_truncate(CFS_t * cfs, int fid, uint32_t size)
 {
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	CFS_t * selected_cfs = fid_table_get(state, fid);
 
 	if (!selected_cfs)
@@ -308,106 +310,115 @@ static int table_classifier_truncate(CFS_t * cfs, int fid, uint32_t size)
 	return CALL(selected_cfs, truncate, fid, size);
 }
 
-static int table_classifier_unlink(CFS_t * cfs, inode_t parent, const char * name)
+static int mount_selector_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%d, \"%s\")\n", __FUNCTION__, parent, name);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, unlink, parent, name);
+	return CALL(state->selected_cfs, unlink, parent, name);
 }
 
-static int table_classifier_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
+static int mount_selector_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%d, %d, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, link, ino, newparent, newname);
+	return CALL(state->selected_cfs, link, ino, newparent, newname);
 }
 
-static int table_classifier_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
+static int mount_selector_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%d: \"%s\", %d: \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, rename, oldparent, oldname, newparent, newname);
+	return CALL(state->selected_cfs, rename, oldparent, oldname, newparent, newname);
 }
 
-static int table_classifier_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+static int mount_selector_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, mkdir, parent, name, ino);
+	return CALL(state->selected_cfs, mkdir, parent, name, ino);
 }
 
-static int table_classifier_rmdir(CFS_t * cfs, inode_t parent, const char * name)
+static int mount_selector_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, rmdir, parent, name);
+	return CALL(state->selected_cfs, rmdir, parent, name);
 }
 
-static size_t table_classifier_get_num_features(CFS_t * cfs, inode_t ino)
+static size_t mount_selector_get_num_features(CFS_t * cfs, inode_t ino)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, ino);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, get_num_features, ino);
+	return CALL(state->selected_cfs, get_num_features, ino);
 }
 
-static const feature_t * table_classifier_get_feature(CFS_t * cfs, inode_t ino, size_t num)
+static const feature_t * mount_selector_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
 	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, ino, num);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return NULL;
 
-	return CALL(selected_cfs, get_feature, ino, num);
+	return CALL(state->selected_cfs, get_feature, ino, num);
 }
 
-static int table_classifier_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int mount_selector_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
 	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, ino, id);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, get_metadata, ino, id, size, data);
+	return CALL(state->selected_cfs, get_metadata, ino, id, size, data);
 }
 
-static int table_classifier_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
+static int mount_selector_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, set_metadata, ino, id, size, data);
+	return CALL(state->selected_cfs, set_metadata, ino, id, size, data);
 }
 
-static int table_classifier_destroy(CFS_t * cfs)
+static int mount_selector_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 
-	if (cfs == singleton_table_classifier_cfs)
-		singleton_table_classifier_cfs = NULL;
+	if (cfs == singleton_mount_selector_cfs)
+		singleton_mount_selector_cfs = NULL;
 
 	hash_map_destroy(state->open_files);
 	vector_destroy(state->mount_table);
@@ -419,13 +430,13 @@ static int table_classifier_destroy(CFS_t * cfs)
 }
 
 
-CFS_t * table_classifier_cfs(void)
+CFS_t * mount_selector_cfs(void)
 {
-	table_classifier_state_t * state;
+	mount_selector_state_t * state;
 	CFS_t * cfs;
 	
-	if (singleton_table_classifier_cfs)
-		return singleton_table_classifier_cfs;
+	if (singleton_mount_selector_cfs)
+		return singleton_mount_selector_cfs;
 
 	cfs = malloc(sizeof(*cfs));
 	if (!cfs)
@@ -435,8 +446,10 @@ CFS_t * table_classifier_cfs(void)
 	if (!state)
 		goto error_cfs;
 
-	CFS_INIT(cfs, table_classifier, state);
-	OBJMAGIC(cfs) = TABLE_CLASSIFIER_MAGIC;
+	CFS_INIT(cfs, mount_selector, state);
+	OBJMAGIC(cfs) = MOUNT_SELECTOR_MAGIC;
+
+	state->selected_cfs = NULL;
 
 	state->open_files = hash_map_create();
 	if (!state->open_files)
@@ -452,7 +465,7 @@ CFS_t * table_classifier_cfs(void)
 		return NULL;
 	}
 
-	singleton_table_classifier_cfs = cfs;
+	singleton_mount_selector_cfs = cfs;
 
 	return cfs;
 
@@ -465,14 +478,14 @@ CFS_t * table_classifier_cfs(void)
 	return NULL;
 }
 
-int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
+int mount_selector_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, path, path_cfs);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	int r;
 
 	/* make sure this is really a table classifier */
-	if (OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
+	if (OBJMAGIC(cfs) != MOUNT_SELECTOR_MAGIC)
 		return -E_INVAL;
 	
 	/* force paths to start with / */
@@ -500,26 +513,26 @@ int table_classifier_cfs_add(CFS_t * cfs, const char * path, CFS_t * path_cfs)
 		return r;
 	}
 
-	kdprintf(STDERR_FILENO, "table_classifier_cfs: mount to %s\n", path);
+	kdprintf(STDERR_FILENO, "mount_selector_cfs: mount to %s\n", path);
 	return 0;
 }
 
-int singleton_table_classifier_cfs_add(const char * path, CFS_t * path_cfs)
+int singleton_mount_selector_cfs_add(const char * path, CFS_t * path_cfs)
 {
-	if (!singleton_table_classifier_cfs)
+	if (!singleton_mount_selector_cfs)
 		return -E_BUSY;
-	return table_classifier_cfs_add(singleton_table_classifier_cfs, path, path_cfs);
+	return mount_selector_cfs_add(singleton_mount_selector_cfs, path, path_cfs);
 }
 
-CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
+CFS_t * mount_selector_cfs_remove(CFS_t * cfs, const char *path)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, path);
-	table_classifier_state_t * state = (table_classifier_state_t *) OBJLOCAL(cfs);
+	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	mount_entry_t * me;
 	CFS_t * path_cfs = NULL;
 
 	/* make sure this is really a table classifier */
-	if (OBJMAGIC(cfs) != TABLE_CLASSIFIER_MAGIC)
+	if (OBJMAGIC(cfs) != MOUNT_SELECTOR_MAGIC)
 		return NULL;
 
 	int idx = mount_lookup(state->mount_table, path);
@@ -539,7 +552,7 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 			return NULL;
 	}
 
-	kdprintf(STDERR_FILENO,"table_classifier_cfs: removed mount at %s\n", path);
+	kdprintf(STDERR_FILENO,"mount_selector_cfs: removed mount at %s\n", path);
 	vector_erase(state->mount_table, idx);
 	path_cfs = me->cfs;
 	mount_entry_destroy(me);
@@ -549,10 +562,13 @@ CFS_t * table_classifier_cfs_remove(CFS_t * cfs, const char *path)
 	return path_cfs;
 }
 
-void table_classifier_cfs_set(CFS_t * cfs)
+void mount_selector_cfs_set(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
 
-	if (singleton_table_classifier_cfs)
-		selected_cfs = cfs;
+	if (singleton_mount_selector_cfs)
+	{
+		mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(singleton_mount_selector_cfs);
+		state->selected_cfs = cfs;
+	}
 }

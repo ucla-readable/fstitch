@@ -1,6 +1,6 @@
 #include <inc/kfs_uses.h>
 #include <kfs/modman.h>
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 #include <kfs/journal_bd.h>
 #include <kfs/cfs.h>
 #include <kfs/lfs.h>
@@ -190,8 +190,8 @@ void umain(int argc, const char ** argv)
 {
 	const char * mount;
 	hash_map_t * uses_graph;
-	CFS_t * tclass;
-	kfs_node_t * tclass_node;
+	CFS_t * mselect;
+	kfs_node_t * mselect_node;
 	kfs_node_t * node = NULL;
 	kfs_use_t * use;
 	int ndestroyed, i;
@@ -216,18 +216,18 @@ void umain(int argc, const char ** argv)
 		exit(0);
 	}
 
-	tclass = get_table_classifier();
-	if (!tclass)
+	mselect = get_mount_selector();
+	if (!mselect)
 	{
 		kdprintf(STDERR_FILENO, "Unable to find root table classifier\n");
 		exit(0);
 	}
 
-	tclass_node = hash_map_find_val(uses_graph, tclass);
-	assert(tclass_node);
-	for (i=0; i < vector_size(tclass_node->uses); i++)
+	mselect_node = hash_map_find_val(uses_graph, mselect);
+	assert(mselect_node);
+	for (i=0; i < vector_size(mselect_node->uses); i++)
 	{
-		use = vector_elt(tclass_node->uses, i);
+		use = vector_elt(mselect_node->uses, i);
 		if (!strcmp(mount, use->name))
 		{
 			node = use->node;
@@ -240,13 +240,13 @@ void umain(int argc, const char ** argv)
 		exit(0);
 	}
 
-	if (!table_classifier_cfs_remove(tclass, mount))
+	if (!mount_selector_cfs_remove(mselect, mount))
 	{
-		kdprintf(STDERR_FILENO, "table_classifier_cfs_remove() failed to unmount %s pointing to %s\n", mount, node->name);
+		kdprintf(STDERR_FILENO, "mount_selector_cfs_remove() failed to unmount %s pointing to %s\n", mount, node->name);
 		exit(0);
 	}
 	if (verbose)
-		printf("unmounted from table_classifier_cfs\n");
+		printf("unmounted from mount_selector_cfs\n");
 
 	remove_cycles(node, uses_graph);
 
