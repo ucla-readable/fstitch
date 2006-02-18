@@ -786,6 +786,19 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 	return NULL;
 }
 
+static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
+{
+	Dprintf("JOSFSDEBUG: josfs_free_fdesc %x\n", fdesc);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct josfs_fdesc * f = (struct josfs_fdesc *) fdesc;
+
+	if (f) {
+		if (f->file && f->file != &super->s_root)
+			free(f->file);
+		free(f);
+	}
+}
+
 static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("JOSFSDEBUG: josfs_lookup_name %s\n", name);
@@ -801,23 +814,12 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	parent_file = fd->file;
 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
+	josfs_free_fdesc(object, (fdesc_t *) fd);
+	fd = NULL;
 	if (r < 0)
 		return r;
 	*ino = dirb * JOSFS_BLKFILES + (index / sizeof(JOSFS_File_t));
 	return 0;
-}
-
-static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
-{
-	Dprintf("JOSFSDEBUG: josfs_free_fdesc %x\n", fdesc);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	struct josfs_fdesc * f = (struct josfs_fdesc *) fdesc;
-
-	if (f) {
-		if (f->file && f->file != &super->s_root)
-			free(f->file);
-		free(f);
-	}
 }
 
 static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
@@ -1437,10 +1439,14 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 static int josfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_metadata_inode %d\n", ino);
+	int r;
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
 	if (!f)
 		return -E_NOT_FOUND;
-	return josfs_get_metadata(object, f, id, size, data);
+	r = josfs_get_metadata(object, f, id, size, data);
+	josfs_free_fdesc(object, (fdesc_t *) f);
+	return r;
+	
 }
 
 static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
