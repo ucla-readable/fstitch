@@ -607,7 +607,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 }
 
 #include <kfs/elevator_cache_bd.h>
-BD_t * elevator_cache_bd(BD_t * disk, uint32_t blocks)
+BD_t * elevator_cache_bd(BD_t * disk, uint32_t blocks, uint32_t optimistic_count, uint32_t max_gap_size)
 {
 	const envid_t fsid = find_fs();
 	uint32_t bd_id;
@@ -616,6 +616,8 @@ BD_t * elevator_cache_bd(BD_t * disk, uint32_t blocks)
 
 	pg->bd = (uint32_t) OBJLOCAL(disk);
 	pg->blocks = blocks;
+	pg->optimistic_count = optimistic_count;
+	pg->max_gap_size = max_gap_size;
 
 	SEND_PG();
 	bd_id = RECV_PG();

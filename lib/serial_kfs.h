@@ -236,6 +236,8 @@ typedef struct {
 	SKFS_TYPE;
 	uint32_t bd;
 	uint32_t blocks;
+	uint32_t optimistic_count;
+	uint32_t max_gap_size;
 } Skfs_elevator_cache_bd_t;
 
 typedef struct {
