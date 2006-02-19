@@ -15,7 +15,7 @@ struct fdesc_common {
 
 /* This structure is meant to be "subclassed" by defining new structures with
  * the same first element and casting between them and this type. The subclasses
- * may be further extended by wrapping them in a new child object, and copying
+ * may be further extended by wrapping them in a new inner object, and copying
  * the pointer to the common members (which are shared). This is not quite like
  * subclassing - the idea is to allow each module to have its own local members
  * on the "same" fdesc. */
