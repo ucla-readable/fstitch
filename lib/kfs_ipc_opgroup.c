@@ -30,12 +30,10 @@ int
 opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency)
 {
 	envid_t fsid;
-	int r;
 
 	fsid = find_fs();
 
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
+	assert(cfs_opgroup_scope_exists());
 
 	struct Scfs_opgroup_add_depend *pg = (struct Scfs_opgroup_add_depend*)
 		ROUNDUP32(__cfs_ipc_page, PGSIZE);
@@ -53,12 +51,10 @@ int
 opgroup_engage(opgroup_id_t opgroup)
 {
 	envid_t fsid;
-	int r;
 
 	fsid = find_fs();
 
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
+	assert(cfs_opgroup_scope_exists());
 
 	struct Scfs_opgroup_engage *pg = (struct Scfs_opgroup_engage*)
 		ROUNDUP32(__cfs_ipc_page, PGSIZE);
@@ -75,12 +71,10 @@ int
 opgroup_disengage(opgroup_id_t opgroup)
 {
 	envid_t fsid;
-	int r;
 
 	fsid = find_fs();
 
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
+	assert(cfs_opgroup_scope_exists());
 
 	struct Scfs_opgroup_disengage *pg = (struct Scfs_opgroup_disengage*)
 		ROUNDUP32(__cfs_ipc_page, PGSIZE);
@@ -97,12 +91,10 @@ int
 opgroup_release(opgroup_id_t opgroup)
 {
 	envid_t fsid;
-	int r;
 
 	fsid = find_fs();
 
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
+	assert(cfs_opgroup_scope_exists());
 
 	struct Scfs_opgroup_release *pg = (struct Scfs_opgroup_release*)
 		ROUNDUP32(__cfs_ipc_page, PGSIZE);
@@ -119,12 +111,10 @@ int
 opgroup_abandon(opgroup_id_t opgroup)
 {
 	envid_t fsid;
-	int r;
 
 	fsid = find_fs();
 
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
+	assert(cfs_opgroup_scope_exists());
 
 	struct Scfs_opgroup_abandon *pg = (struct Scfs_opgroup_abandon*)
 		ROUNDUP32(__cfs_ipc_page, PGSIZE);
