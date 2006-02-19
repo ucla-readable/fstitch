@@ -48,7 +48,6 @@ umain(int argc, char *argv[])
 	for (i = 0; i < NDIRECT; i++)
 		f->f_direct[i] = 0;
 	f->f_indirect = 0;
-	f->f_dir = 0;
 
 	r = write(fd, &s, sizeof(s));
 	if (r < sizeof(s)) {

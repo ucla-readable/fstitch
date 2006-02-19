@@ -27,7 +27,7 @@
 
 struct File {
 	char f_name[MAXNAMELEN];	// filename
-	off_t f_size;			// file size in bytes
+	int32_t f_size;			// file size in bytes
 	uint32_t f_type;		// file type
 
 	// Block pointers.
@@ -35,14 +35,9 @@ struct File {
 	uint32_t f_direct[NDIRECT];	// direct blocks
 	uint32_t f_indirect;		// indirect block
 
-	// Points to the directory in which this file lives.
-	// Meaningful only in memory; the value on disk can be garbage.
-	// dir_lookup() sets the value when required.
-	struct File* f_dir;
-
 	// Pad out to 256 bytes; must do arithmetic in case we're compiling
 	// fsformat on a 64-bit machine.
-	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 4 - sizeof(struct File*)];
+	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 4];
 };
 
 // An inode block contains exactly BLKFILES 'struct File's
