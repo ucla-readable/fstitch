@@ -567,6 +567,7 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 	}
 
 	free(temp_fdesc);
+	*file = NULL;
 
 	Dprintf("JOSFSDEBUG: dir_lookup done: NOT FOUND\n");
 	return -E_NOT_FOUND;
@@ -727,6 +728,8 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
 	josfs_free_fdesc(object, (fdesc_t *) fd);
 	fd = NULL;
+	free(file);
+	file = NULL;
 	if (r < 0)
 		return r;
 	*ino = dirb * JOSFS_BLKFILES + (index / sizeof(JOSFS_File_t));
