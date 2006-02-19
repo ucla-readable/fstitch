@@ -526,6 +526,8 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 	new_file = malloc(sizeof(ufs_fdesc_t));
 	if (!new_file)
 		return NULL;
+	new_file->common = &new_file->base;
+	new_file->base.parent = INODE_NONE;
 
 	// If file struct is not in memory
 	existing_file = open_ufsfile_create(new_file);
@@ -1599,49 +1601,6 @@ static int ufs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, s
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	return ufs_set_metadata(object, f, id, size, data, head, tail);
 }
-
-#if 0
-// TODO sync metadata
-static int ufs_sync(LFS_t * object, const char * name)
-{
-	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	fdesc_t * f;
-	uint32_t i, nblocks;
-	int r;
-	char * parent;
-
-	if (!name || !name[0])
-		return CALL(info->ubd, sync, SYNC_FULL_DEVICE, NULL);
-
-	f = ufs_lookup_name(object, name);
-	if (!f)
-		return -E_NOT_FOUND;
-
-	nblocks = ufs_get_file_numblocks(object, f);
-	for (i = 0 ; i < nblocks; i++)
-		if ((r = CALL(info->ubd, sync, ufs_get_file_block(object, f, i * info->super->fs_fsize), NULL)) < 0)
-			goto ufs_sync_error;
-
-	if (strcmp(name, "/") == 0) {
-		ufs_free_fdesc(object, (fdesc_t *) f);
-		return 0;
-	}
-
-	parent = malloc(UFS_MAXPATHLEN);
-	get_parent_path(name, parent);
-	if (strlen(parent) == 0)
-		strcpy(parent, "/");
-	r = ufs_sync(object, parent);
-	ufs_free_fdesc(object, (fdesc_t *) f);
-	free(parent);
-	return r;
-
-ufs_sync_error:
-	ufs_free_fdesc(object, (fdesc_t *) f);
-	return r;
-}
-#endif
 
 static int ufs_get_root(LFS_t * lfs, inode_t * ino)
 {

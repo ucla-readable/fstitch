@@ -249,6 +249,10 @@ struct  UFS_direct {
 typedef struct UFS_File ufs_fdesc_t;
 
 struct UFS_File {
+	/* extend struct fdesc */
+	struct fdesc_common * common;
+	struct fdesc_common base;
+
 	struct UFS_dinode f_inode;
 	uint32_t f_num; // Inode number
 	uint32_t f_numfrags; // Number of fragments
