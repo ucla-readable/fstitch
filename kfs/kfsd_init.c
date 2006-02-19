@@ -175,7 +175,7 @@ int kfsd_init(int argc, char ** argv)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
-			bd = elevator_cache_bd(bd, 32);
+			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
 				kfsd_shutdown();
 			if ((r = construct_uhfses(bd, 128, uhfses)) < 0)

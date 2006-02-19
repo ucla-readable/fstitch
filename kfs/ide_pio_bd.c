@@ -193,6 +193,7 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 	uint16_t base = ide_base[controller];
 	uint16_t id[256];
 	char string[41];
+	uint32_t max_size = 0;
 	
 	if(ide_notbusy(controller) == -1)
 		return -1;
@@ -219,19 +220,31 @@ static uint32_t ide_size(uint8_t controller, uint8_t disk)
 		/* in QEMU, this value is the size of the filesystem image
 		 * and not necessarily that of the configured disk geometry */
 		printf("yes\n  LBA sectors: %d\n", lba_sectors);
-		return lba_sectors;
+		max_size = lba_sectors;
 	}
-	printf("no\n");
+	else
+		printf("no\n");
 	
 	if(id[53] & 1)
 	{
 		/* id[54-58] are valid */
-		printf("  Total sectors: %d\n", id[57] | (((uint32_t) id[58]) << 16));
-		return id[57] | (((uint32_t) id[58]) << 16);
+		uint32_t id54_sectors = id[57] | (((uint32_t) id[58]) << 16);
+		printf("  Total sectors: %d\n", id54_sectors);
+		if(id54_sectors > max_size)
+			max_size = id54_sectors;
 	}
 	
-	printf("  Total sectors (CHS): %d\n", (uint32_t) id[1] * (uint32_t) id[3] * (uint32_t) id[6]);
-	return (uint32_t) id[1] * (uint32_t) id[3] * (uint32_t) id[6];
+	/* no condition for CHS sectors */
+	{
+		uint32_t chs_sectors = (uint32_t) id[1] * (uint32_t) id[3] * (uint32_t) id[6];
+		if(chs_sectors > max_size)
+		{
+			/* only print CHS sectors if it's actually better */
+			printf("  Total sectors (CHS): %d\n", chs_sectors);
+			max_size = chs_sectors;
+		}
+	}
+	return max_size;
 }
 
 /* FIXME: make sure we don't clobber the controller doing this (use ide_requests) */

@@ -330,7 +330,7 @@ static void kis_elevator_cache_bd(envid_t whom, const Skfs_elevator_cache_bd_t *
 	if (!modman_name_bd(bd))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) elevator_cache_bd(bd, pg->blocks);
+	val = (uint32_t) elevator_cache_bd(bd, pg->blocks, pg->optimistic_count, pg->max_gap_size);
 
 	RETURN_IPC;
 }
