@@ -25,6 +25,9 @@ int cfs_set_metadata(const char *name, struct Scfs_metadata *md);
 
 // intended only for fork() and spawn()
 int cfs_opgroup_scope_copy(envid_t child);
+
+// intended only for kfs_ipc_opgroup.c
+bool cfs_opgroup_scope_exists(void);
 int cfs_ensure_opgroup_scope_exists(envid_t fsid);
 
 int cfs_shutdown(void);

@@ -122,10 +122,22 @@ cfs_opgroup_scope_copy(envid_t child)
 	return r;
 }
 
+// This function is used as a debugging check that a client's opgroup scope
+// exists; return false when the scope does not exist for sure and return true
+// if we think we have a scope (but true could be wrong...).
+bool
+cfs_opgroup_scope_exists(void)
+{
+	if (get_pte(OPGROUPSCOPE_CAPPG) & PTE_P)
+		return 1;
+	else
+		return 0;
+}
+
 int
 cfs_ensure_opgroup_scope_exists(envid_t fsid)
 {
-	if(get_pte(OPGROUPSCOPE_CAPPG) & PTE_P)
+	if(cfs_opgroup_scope_exists())
 		return 0;
 
 	return cfs_opgroup_scope_create(fsid);
@@ -154,12 +166,8 @@ cfs_open(const char *fname, int mode, void *refpg, const void * cappg)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_open *pg = (struct Scfs_open*) ipc_page;
    	memset(pg, 0, PGSIZE);
@@ -180,8 +188,6 @@ cfs_close(int fid, const void * cappg)
 	envid_t fsid;
 	uint32_t perm;
 
-	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
-
 	fsid = find_fs();
 
 	struct Scfs_close *pg = (struct Scfs_close*) ipc_page;
@@ -198,18 +204,16 @@ cfs_close(int fid, const void * cappg)
 int
 cfs_read(int fid, uint32_t offset, uint32_t size, char *data, const void * cappg)
 {
-	int r = 0;
 	envid_t fsid;
-	uint32_t perm;
 	uint32_t i;
-
-	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
 
 	fsid = find_fs();
 
 	for (i = 0; i < size; i += PGSIZE) {
 		struct Scfs_read *pg = (struct Scfs_read*) ipc_page;
 		const uint32_t requested = MIN(size - i, PGSIZE);
+		uint32_t perm;
+		int r;
 
 		memset(pg, 0, PGSIZE);
 		pg->scfs_type = SCFS_READ;
@@ -237,17 +241,15 @@ cfs_read(int fid, uint32_t offset, uint32_t size, char *data, const void * cappg
 int
 cfs_write(int fid, uint32_t offset, uint32_t size, const char *data, const void * cappg)
 {
-	int r = 0;
 	envid_t fsid;
-	uint32_t perm;
 	uint32_t i;
-
-	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
 
 	fsid = find_fs();
 
 	for (i = 0; i < size; i += PGSIZE) {
 		struct Scfs_write *pg = (struct Scfs_write*) ipc_page;
+		uint32_t perm;
+		int r;
 		memset(pg, 0, PGSIZE);
 		pg->scfs_type = SCFS_WRITE;
 		pg->fid = fid;
@@ -277,16 +279,14 @@ cfs_getdirentries(int fid, char * buf, size_t nbytes, off_t *basep, const void *
 {
 	int r = 0, nbytes_read = 0;
 	envid_t fsid;
-	uint32_t perm;
 	struct Scfs_getdirentries_return *ret = (struct Scfs_getdirentries_return*) REQVA;
-
-	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
 
 	fsid = find_fs();
 
 	struct Scfs_getdirentries *pg = (struct Scfs_getdirentries*) ipc_page;
 	while (nbytes_read < nbytes)
 	{
+		uint32_t perm;
 		memset(pg, 0, PGSIZE);
 		pg->scfs_type = SCFS_GETDIRENTRIES;
 		pg->fid = fid;
@@ -322,8 +322,6 @@ cfs_truncate(int fid, uint32_t size, const void * cappg)
 	envid_t fsid;
 	uint32_t perm;
 
-	assert(get_pte((void*) OPGROUPSCOPE_CAPPG) & PTE_P);
-
 	fsid = find_fs();
 
 	struct Scfs_truncate *pg = (struct Scfs_truncate*) ipc_page;
@@ -342,12 +340,8 @@ cfs_unlink(const char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_unlink *pg = (struct Scfs_unlink*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -364,12 +358,8 @@ cfs_link(const char *oldname, const char *newname)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_link *pg = (struct Scfs_link*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -387,12 +377,8 @@ cfs_rename(const char *oldname, const char *newname)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_rename *pg = (struct Scfs_rename*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -410,12 +396,8 @@ cfs_mkdir(const char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_mkdir *pg = (struct Scfs_mkdir*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -432,12 +414,8 @@ cfs_rmdir(const char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_rmdir *pg = (struct Scfs_rmdir*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -454,12 +432,8 @@ cfs_get_num_features(char *name)
 {
 	envid_t fsid;
 	uint32_t perm;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_get_num_features *pg = (struct Scfs_get_num_features*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -479,9 +453,6 @@ cfs_get_feature(char *name, int num, char *dump)
 	uint32_t perm;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_get_feature *pg = (struct Scfs_get_feature*) ipc_page;
 	memset(pg, 0, PGSIZE);
@@ -508,9 +479,6 @@ cfs_get_metadata(const char *name, int id, struct Scfs_metadata *md)
 
 	fsid = find_fs();
 
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
-
 	struct Scfs_get_metadata *pg = (struct Scfs_get_metadata*) ipc_page;
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_GET_METADATA;
@@ -533,12 +501,8 @@ cfs_set_metadata(const char *name, struct Scfs_metadata *md)
 	envid_t fsid;
 	uint32_t perm;
 	struct Scfs_metadata *p;
-	int r;
 
 	fsid = find_fs();
-
-	if((r = cfs_ensure_opgroup_scope_exists(fsid)) < 0)
-		return r;
 
 	struct Scfs_set_metadata *pg = (struct Scfs_set_metadata*) ipc_page;
 	memset(pg, 0, PGSIZE);
