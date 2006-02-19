@@ -183,7 +183,7 @@ static int mount_selector_get_root(CFS_t * cfs, inode_t * ino)
 
 static int mount_selector_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
-	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+	Dprintf("%s(%u: \"%s\")\n", __FUNCTION__, parent, name);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -213,7 +213,7 @@ static int open_common(mount_selector_state_t * state, fdesc_t * inner, fdesc_t 
 
 static int mount_selector_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
-	Dprintf("%s(%d, %d)\n", __FUNCTION__, ino, mode);
+	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	fdesc_t * inner;
 	int r;
@@ -228,7 +228,7 @@ static int mount_selector_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fd
 
 static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
 {
-	Dprintf("%s(%d: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
+	Dprintf("%s(%u: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	fdesc_t * inner;
 	int r;
@@ -288,7 +288,7 @@ static int mount_selector_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 
 static int mount_selector_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(%d, \"%s\")\n", __FUNCTION__, parent, name);
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -299,7 +299,7 @@ static int mount_selector_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 static int mount_selector_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(%d, %d, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
+	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -310,7 +310,7 @@ static int mount_selector_link(CFS_t * cfs, inode_t ino, inode_t newparent, cons
 
 static int mount_selector_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
-	Dprintf("%s(%d: \"%s\", %d: \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
+	Dprintf("%s(%u: \"%s\", %u: \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -321,7 +321,7 @@ static int mount_selector_rename(CFS_t * cfs, inode_t oldparent, const char * ol
 
 static int mount_selector_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
-	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+	Dprintf("%s(%u: \"%s\")\n", __FUNCTION__, parent, name);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -332,7 +332,7 @@ static int mount_selector_mkdir(CFS_t * cfs, inode_t parent, const char * name, 
 
 static int mount_selector_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
-	Dprintf("%s(%d: \"%s\")\n", __FUNCTION__, parent, name);
+	Dprintf("%s(%u: \"%s\")\n", __FUNCTION__, parent, name);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -343,7 +343,7 @@ static int mount_selector_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 
 static size_t mount_selector_get_num_features(CFS_t * cfs, inode_t ino)
 {
-	Dprintf("%s(%d)\n", __FUNCTION__, ino);
+	Dprintf("%s(%u)\n", __FUNCTION__, ino);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -354,7 +354,7 @@ static size_t mount_selector_get_num_features(CFS_t * cfs, inode_t ino)
 
 static const feature_t * mount_selector_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
-	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, ino, num);
+	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, num);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -365,7 +365,7 @@ static const feature_t * mount_selector_get_feature(CFS_t * cfs, inode_t ino, si
 
 static int mount_selector_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, ino, id);
+	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
@@ -376,7 +376,7 @@ static int mount_selector_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, si
 
 static int mount_selector_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
-	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
+	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 
 	if (!state->selected_cfs)
