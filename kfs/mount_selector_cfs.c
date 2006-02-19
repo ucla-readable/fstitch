@@ -9,7 +9,6 @@
 #include <lib/hash_map.h>
 #include <lib/vector.h>
 
-#include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/traverse.h>
@@ -29,15 +28,18 @@ static CFS_t * singleton_mount_selector_cfs = NULL;
 // 
 // Data structs and initers
 
-struct open_file {
-	int fid;
+
+struct mount_selector_fdesc {
+	fdesc_common_t * common;
+	fdesc_t * inner;
 	CFS_t * cfs;
 };
-typedef struct open_file open_file_t;
+typedef struct mount_selector_fdesc mount_selector_fdesc_t;
 
 struct mount_selector_state {
 	vector_t * mount_table;
-	hash_map_t * open_files;
+	hash_map_t * cfs_nusers; // CFS_t* -> uint32_t nusers
+	uint32_t nopen;
 	CFS_t * selected_cfs;
 };
 typedef struct mount_selector_state mount_selector_state_t;
@@ -67,75 +69,60 @@ static void mount_entry_destroy(mount_entry_t * me)
 
 
 //
-// open_file_t functions
+// mount_selector_fdesc_t functions
 
-static open_file_t * open_file_create(int fid, CFS_t * cfs)
+static int mount_selector_fdesc_create(fdesc_t * inner, CFS_t * cfs, fdesc_t ** fdesc)
 {
-	open_file_t * f = malloc(sizeof(*f));
-	if (!f)
-		return NULL;
+	mount_selector_fdesc_t * msf = malloc(sizeof(*msf));
+	if (!msf)
+		return -E_NO_MEM;
 
-	f->fid = fid;
-	f->cfs = cfs;
-	return f;
+	assert(inner && fdesc && cfs);
+	msf->common = inner->common;
+	msf->inner = inner;
+	msf->cfs = cfs;
+	*fdesc = (fdesc_t *) msf;
+	return 0;
 }
 
-static void open_file_destroy(open_file_t * f)
+static void mount_selector_fdesc_destroy(mount_selector_fdesc_t * msf)
 {
-	f->fid = -1;
-	f->cfs = NULL;
-	free(f);
+	msf->common = NULL;
+	msf->inner = NULL;
+	msf->cfs = NULL;
+	free(msf);
 }
 
 
 //
-// open_files functions
+// cfs_nusers functions
 
-// Add a fid-cfs pair
-static int fid_table_add(mount_selector_state_t * state, int fid, CFS_t * cfs)
+static int cfs_nusers_inc(mount_selector_state_t * state, const CFS_t * cfs)
 {
-	Dprintf("%s(0x%08x, %d, 0x%08x)\n", __FUNCTION__, state, fid, cfs);
-	open_file_t * f;
-	int r;
-
-	f = open_file_create(fid, cfs);
-	if (!f)
-		return -E_NO_MEM;
-	r = hash_map_insert(state->open_files, (void*) fid, f);
-	if (r < 0)
-	{
-		open_file_destroy(f);
-		return r;
-	}
-
-	return 0;
+	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, state, cfs);
+	uint32_t nusers = (uint32_t) hash_map_find_val(state->cfs_nusers, cfs);
+	if (nusers)
+		(void) hash_map_erase(state->cfs_nusers, cfs);
+	return hash_map_insert(state->cfs_nusers, (void *) cfs, (void *) ++nusers);
 }
 
-// Get the existing cfs for fid
-static CFS_t * fid_table_get(const mount_selector_state_t * state, int fid)
+static int cfs_nusers_dec(mount_selector_state_t * state, const CFS_t * cfs)
 {
-	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
-	open_file_t * f;
-
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return NULL;
-
-	return f->cfs;
+	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, state, cfs);
+	uint32_t nusers;
+	nusers = (uint32_t) hash_map_find_val(state->cfs_nusers, cfs);
+	assert(nusers);
+	(void) hash_map_erase(state->cfs_nusers, cfs);
+	if (nusers == 1)
+		return 0;
+	else
+		return hash_map_insert(state->cfs_nusers, (void *) cfs, (void *) --nusers);
 }
 
-// Delete the cfs-fid entry for fid
-static int fid_table_del(mount_selector_state_t * state, int fid)
+static uint32_t cfs_nusers_count(mount_selector_state_t * state, const CFS_t * cfs)
 {
-	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
-	open_file_t * f;
-
-	f = hash_map_erase(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	open_file_destroy(f);
-	return 0;
+	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, state, cfs);
+	return (uint32_t) hash_map_find_val(state->cfs_nusers, (void *) cfs);
 }
 
 
@@ -179,7 +166,7 @@ static int mount_selector_get_status(void * object, int level, char * string, si
 		return -E_INVAL;
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
 	
-	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	snprintf(string, length, "open fdescs: %u, active cfses: %u", state->nopen, hash_map_size(state->cfs_nusers));
 	return 0;
 }
 
@@ -205,109 +192,98 @@ static int mount_selector_lookup(CFS_t * cfs, inode_t parent, const char * name,
 	return CALL(state->selected_cfs, lookup, parent, name, ino);
 }
 
-static int mount_selector_open(CFS_t * cfs, inode_t ino, int mode)
+static int open_common(mount_selector_state_t * state, fdesc_t * inner, fdesc_t ** fdesc)
 {
-	Dprintf("%s(%d, %d)\n", __FUNCTION__, ino, mode);
-	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	int fid;
 	int r;
+	if ((r = mount_selector_fdesc_create(inner, state->selected_cfs, fdesc)) < 0)
+		goto exit_open;
+	if ((r = cfs_nusers_inc(state, state->selected_cfs)) < 0)
+		goto exit_mount_selector_fdesc;
 
-	if (!state->selected_cfs)
-		return -E_NOT_FOUND;
+	state->nopen++;
+	return 0;
 
-	if ((fid = CALL(state->selected_cfs, open, ino, mode)) < 0)
-		return fid;
-	if ((r = fid_table_add(state, fid, state->selected_cfs)) < 0)
-	{
-		(void) CALL(state->selected_cfs, close, fid);
-		return r;
-	}
-	return fid;
-}
-
-static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
-{
-	Dprintf("%s(%d: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
-	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	int fid;
-	int r;
-
-	if (!state->selected_cfs)
-		return -E_NOT_FOUND;
-
-	if ((fid = CALL(state->selected_cfs, create, parent, name, mode, newino)) < 0)
-		return fid;
-	if ((r = fid_table_add(state, fid, state->selected_cfs)) < 0)
-	{
-		(void) CALL(state->selected_cfs, close, fid);
-		return r;
-	}
-	return fid;
-}
-
-
-static int mount_selector_close(CFS_t * cfs, int fid)
-{
-	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	CFS_t * selected_cfs = fid_table_get(state, fid);
-	int r, s;
-
-	if (!selected_cfs)
-		return -E_NOT_FOUND;
-
-	r = CALL(selected_cfs, close, fid);
-	if (0 <= r)
-		if ((s = fid_table_del(state, fid)) < 0)
-			return s;
+  exit_mount_selector_fdesc:
+	(void) cfs_nusers_dec(state, state->selected_cfs);
+  exit_open:
+	(void) CALL(state->selected_cfs, close, *fdesc);
+	*fdesc = NULL;
 	return r;
 }
 
-static int mount_selector_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int mount_selector_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
-	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(%d, %d)\n", __FUNCTION__, ino, mode);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	CFS_t * selected_cfs = fid_table_get(state, fid);
+	fdesc_t * inner;
+	int r;
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, read, fid, data, offset, size);
+	if ((r = CALL(state->selected_cfs, open, ino, mode, &inner)) < 0)
+		return r;
+	return open_common(state, inner, fdesc);
 }
 
-static int mount_selector_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
 {
-	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(%d: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	CFS_t * selected_cfs = fid_table_get(state, fid);
+	fdesc_t * inner;
+	int r;
 
-	if (!selected_cfs)
+	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(selected_cfs, write, fid, data, offset, size);
+	if ((r = CALL(state->selected_cfs, create, parent, name, mode, &inner, newino)) < 0)
+		return r;
+	r = open_common(state, inner, fdesc);
+	if (r < 0)
+		*newino = INODE_NONE;
+	return r;
 }
 
-static int mount_selector_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int mount_selector_close(CFS_t * cfs, fdesc_t * fdesc)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, fdesc);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	CFS_t * selected_cfs = fid_table_get(state, fid);
+	mount_selector_fdesc_t * msf = (mount_selector_fdesc_t *) fdesc;
+	int r;
 
-	if (!selected_cfs)
-		return -E_NOT_FOUND;
-
-	return CALL(selected_cfs, getdirentries, fid, buf, nbytes, basep);
+	r = CALL(msf->cfs, close, msf->inner);
+	(void) cfs_nusers_dec(state, msf->cfs);
+	(void) mount_selector_fdesc_destroy(msf);
+	state->nopen--;
+	return r;
 }
 
-static int mount_selector_truncate(CFS_t * cfs, int fid, uint32_t size)
+static int mount_selector_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
 {
-	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
-	CFS_t * selected_cfs = fid_table_get(state, fid);
+	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
+	mount_selector_fdesc_t * msf = (mount_selector_fdesc_t *) fdesc;
+	return CALL(msf->cfs, read, msf->inner, data, offset, size);
+}
 
-	if (!selected_cfs)
-		return -E_NOT_FOUND;
+static int mount_selector_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
+{
+	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
+	mount_selector_fdesc_t * msf = (mount_selector_fdesc_t *) fdesc;
+	return CALL(msf->cfs, write, msf->inner, data, offset, size);
+}
 
-	return CALL(selected_cfs, truncate, fid, size);
+static int mount_selector_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
+{
+	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
+	mount_selector_fdesc_t * msf = (mount_selector_fdesc_t *) fdesc;
+	return CALL(msf->cfs, getdirentries, msf->inner, buf, nbytes, basep);
+}
+
+static int mount_selector_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
+{
+	Dprintf("%s(0x%08x, %u)\n", __FUNCTION__, fdesc, size);
+	mount_selector_fdesc_t * msf = (mount_selector_fdesc_t *) fdesc;
+	return CALL(msf->cfs, truncate, msf->inner, size);
 }
 
 static int mount_selector_unlink(CFS_t * cfs, inode_t parent, const char * name)
@@ -420,7 +396,7 @@ static int mount_selector_destroy(CFS_t * cfs)
 	if (cfs == singleton_mount_selector_cfs)
 		singleton_mount_selector_cfs = NULL;
 
-	hash_map_destroy(state->open_files);
+	hash_map_destroy(state->cfs_nusers);
 	vector_destroy(state->mount_table);
 	memset(state, 0, sizeof(*state));
 	free(state);
@@ -451,13 +427,14 @@ CFS_t * mount_selector_cfs(void)
 
 	state->selected_cfs = NULL;
 
-	state->open_files = hash_map_create();
-	if (!state->open_files)
+	state->cfs_nusers = hash_map_create();
+	if (!state->cfs_nusers)
 		goto error_state;
+	state->nopen = 0;
 
 	state->mount_table = get_mount_table();
 	if (!state->mount_table)
-		goto error_open_files;
+		goto error_cfs_nusers;
 
 	if (modman_add_anon_cfs(cfs, __FUNCTION__))
 	{
@@ -469,8 +446,8 @@ CFS_t * mount_selector_cfs(void)
 
 	return cfs;
 
-  error_open_files:
-	hash_map_destroy(state->open_files);
+  error_cfs_nusers:
+	hash_map_destroy(state->cfs_nusers);
   error_state:
 	free(OBJLOCAL(cfs));
   error_cfs:
@@ -540,17 +517,11 @@ CFS_t * mount_selector_cfs_remove(CFS_t * cfs, const char *path)
 		return NULL;
 	me = vector_elt(state->mount_table, idx);
 
-	// Allow unmount only if there are no open fids on path.
+	// Allow unmount only if there are no open fdescs on path.
 	// Only at this time because people above us may care and don't know
 	// who such users may be.
-	hash_map_it_t it;
-	open_file_t * of;
-	hash_map_it_init(&it, state->open_files);
-	while ((of = hash_map_val_next(&it)))
-	{
-		if (of->cfs == me->cfs)
-			return NULL;
-	}
+	if (cfs_nusers_count(state, me->cfs) > 0)
+		return NULL;
 
 	kdprintf(STDERR_FILENO,"mount_selector_cfs: removed mount at %s\n", path);
 	vector_erase(state->mount_table, idx);

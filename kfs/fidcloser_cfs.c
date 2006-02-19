@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <inc/lib.h>
-#include <lib/hash_map.h>
+#include <lib/hash_set.h>
 #include <lib/vector.h>
 
 #include <kfs/modman.h>
@@ -28,18 +28,18 @@
 // mupltiple fidclosers aren't something we want. so possibility 3 it is:
 static bool fidcloser_cfs_exists = 0;
 
-struct open_file {
-	int fid;
+struct fidcloser_fdesc {
+	fdesc_common_t * common;
+	fdesc_t * inner;
 	const struct Fd * page;
 };
-typedef struct open_file open_file_t;
+typedef struct fidcloser_fdesc fidcloser_fdesc_t;
 
 struct fidcloser_state {
-	hash_map_t * open_files;
+	hash_set_t * open_fdescs;
 	CFS_t * frontend_cfs;
 };
 typedef struct fidcloser_state fidcloser_state_t;
-
 
 static bool va_is_mapped(const void * va)
 {
@@ -48,86 +48,87 @@ static bool va_is_mapped(const void * va)
 
 
 //
-// open_file_t functions
+// fidcloser_fdesc_t functions
 
-static open_file_t * open_file_create(int fid, const void * page)
+static fidcloser_fdesc_t * fidcloser_fdesc_create(fdesc_t * inner, const void * page)
 {
-	open_file_t * of = malloc(sizeof(*of));
-	if (!of)
+	fidcloser_fdesc_t * ff = malloc(sizeof(*ff));
+	if (!ff)
 		return NULL;
 
-	of->fid = fid;
-	of->page = page;
-	return of;
+	ff->common = inner->common;
+	ff->inner = inner;
+	ff->page = page;
+	return ff;
 }
 
-static void open_file_destroy(open_file_t * of)
+static void fidcloser_fdesc_destroy(fidcloser_fdesc_t * ff)
 {
 	int r;
-	if (of->page && va_is_mapped(of->page))
+	if (ff->page && va_is_mapped(ff->page))
 	{
-		r = sys_page_unmap(0, (void *) of->page);
+		r = sys_page_unmap(0, (void *) ff->page);
 		if (r < 0)
-			printf("%s: sys_page_unmap(0, 0x%08x): %i\n", __FUNCTION__, of->page, r);
+			printf("%s: sys_page_unmap(0, 0x%08x): %i\n", __FUNCTION__, ff->page, r);
 		assert(0 <= r);
 	}
 	else
-		assert(of->fid == -1);
+		assert(ff->inner == NULL);
 
-	of->fid = -1;
-	of->page = NULL;
-	free(of);
+	ff->common = NULL;
+	ff->inner = NULL;
+	ff->page = NULL;
+	free(ff);
 }
 
-static int open_file_close(fidcloser_state_t * state, open_file_t * of)
+static int fidcloser_fdesc_close(fidcloser_state_t * state, fidcloser_fdesc_t * ff)
 {
-	open_file_t * of_erase;
+	fidcloser_fdesc_t * ff_erase;
 	int r;
 
 	// There's only work to do when the last reference to a file is closed:
-	assert(of->page);
-	assert(1 <= pageref(of->page));
-	if (1 < pageref(of->page))
+	assert(ff->page);
+	assert(1 <= pageref(ff->page));
+	if (1 < pageref(ff->page))
 	{
-		Dprintf("fidcloser_cfs %s: not closing fid %d, %d external refs\n", __FUNCTION__, of->fid, pageref(of->page)-1);
+		Dprintf("fidcloser_cfs %s: not closing, %d external refs\n", __FUNCTION__, pageref(ff->page)-1);
 		return 0;
 	}
 
-	Dprintf("fidcloser_cfs %s: sending close for fid %d\n", __FUNCTION__, of->fid);
-	r = CALL(state->frontend_cfs, close, of->fid);
+	r = CALL(state->frontend_cfs, close, ff->inner);
 	if (r < 0)
 		return r;
 
-	of_erase = hash_map_erase(state->open_files, (void*) of->fid);
-	assert(of == of_erase);
-	open_file_destroy(of);
+	ff_erase = hash_set_erase(state->open_fdescs, (void*) ff);
+	assert(ff == ff_erase);
+	fidcloser_fdesc_destroy(ff);
 
 	return 0;
 }
 
-static void open_file_gc(fidcloser_state_t * state)
+static void fdesc_gc(fidcloser_state_t * state)
 {
-	hash_map_it_t hm_it;
-	open_file_t * of;
-	vector_t * ofs_to_erase;
+	hash_set_it_t hs_it;
+	fidcloser_fdesc_t * ff;
+	vector_t * ffs_to_erase;
 	int r;
 
-	ofs_to_erase = vector_create();
-	hash_map_it_init(&hm_it, state->open_files);
-	if (!ofs_to_erase)
+	ffs_to_erase = vector_create();
+	hash_set_it_init(&hs_it, state->open_fdescs);
+	if (!ffs_to_erase)
 	{
 		kdprintf(STDERR_FILENO, "fidcloser unable to malloc memory to gc\n");
 		return;
 	}
 
-	// Gc fids
-	// (remove the fids after this, else we would mess up hm_it)
+	// Gc fdescs
+	// (remove the fdescs after this, else we would mess up hs_it)
 
-	while ((of = hash_map_val_next(&hm_it)))
+	while ((ff = hash_set_next(&hs_it)))
 	{
-		assert(of->page && va_is_mapped(of->page));
+		assert(ff->page && va_is_mapped(ff->page));
 
-		r = vector_push_back(ofs_to_erase, of);
+		r = vector_push_back(ffs_to_erase, ff);
 		if (r < 0)
 		{
 			kdprintf(STDERR_FILENO, "fidcloser gc: vector_push_back: %i\n", r);
@@ -143,17 +144,17 @@ static void open_file_gc(fidcloser_state_t * state)
 	const uint32_t cur_cappa = cfs_ipc_serve_cur_cappa();
 	cfs_ipc_serve_set_cur_cappa(0);
 
-	const size_t nofs_to_erase = vector_size(ofs_to_erase);
+	const size_t nffs_to_erase = vector_size(ffs_to_erase);
 	size_t i;
-	for (i=0; i < nofs_to_erase; i++)
+	for (i=0; i < nffs_to_erase; i++)
 	{
-		r = open_file_close(state, vector_elt(ofs_to_erase, i));
+		r = fidcloser_fdesc_close(state, vector_elt(ffs_to_erase, i));
 		if (r < 0)
 			kdprintf(STDERR_FILENO, "fidcloser gc: open_file_close: %i\n", r);
 	}
 
 	cfs_ipc_serve_set_cur_cappa(cur_cappa);
-	vector_destroy(ofs_to_erase);
+	vector_destroy(ffs_to_erase);
 }
 
 
@@ -177,15 +178,15 @@ static int fidcloser_get_status(void * object, int level, char * string, size_t 
 		return -E_INVAL;
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
 	
-	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	snprintf(string, length, "open fdescs: %u", hash_set_size(state->open_fdescs));
 	return 0;
 }
 
-static int open_fid(fidcloser_state_t * state, int fid)
+static int open_fdesc(fidcloser_state_t * state, fdesc_t * inner, fdesc_t ** outer)
 {
 	const void * page;
 	const void * cache;
-	open_file_t * of;
+	fidcloser_fdesc_t * ff;
 	int r;
 
 	page = cfs_ipc_serve_cur_page();
@@ -197,7 +198,7 @@ static int open_fid(fidcloser_state_t * state, int fid)
 			break;
 	if(cache == FIDCLOSER_CFS_FD_END)
 	{
-		(void) CALL(state->frontend_cfs, close, fid);
+		(void) CALL(state->frontend_cfs, close, inner);
 		return -E_MAX_OPEN;
 	}
 
@@ -205,74 +206,72 @@ static int open_fid(fidcloser_state_t * state, int fid)
 	r = sys_page_map(0, (void*) page, 0, (void*) cache, PTE_U | PTE_P);
 	if(r < 0)
 	{
-		(void) CALL(state->frontend_cfs, close, fid);
+		(void) CALL(state->frontend_cfs, close, inner);
 		return r;
 	}
 
 	// save this open_file
 	r = 0;
-	of = open_file_create(fid, cache);
-	if (!of || ((r = hash_map_insert(state->open_files, (void*) fid, of)) < 0))
+	ff = fidcloser_fdesc_create(inner, cache);
+	if (!ff || ((r = hash_set_insert(state->open_fdescs, (void*) ff)) < 0))
 	{
-		(void) CALL(state->frontend_cfs, close, fid);
+		(void) CALL(state->frontend_cfs, close, inner);
 		int s = sys_page_unmap(0, (void*) cache);
 		assert(0 <= s);
+		*outer = NULL;
 		if (r == 0)
 			return -E_NO_MEM;
 		else
 			return r;
 	}
 
-	return fid;
+	*outer = (fdesc_t *) ff;
+	return 0;
 }
 
-static int fidcloser_open(CFS_t * cfs, inode_t ino, int mode)
+static int fidcloser_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	int fid;
+	fdesc_t * inner;
+	int r;
 
-	open_file_gc(state);
+	fdesc_gc(state);
 
-	fid = CALL(state->frontend_cfs, open, ino, mode);
-	if (fid < 0)
-		return fid;
+	r = CALL(state->frontend_cfs, open, ino, mode, &inner);
+	if (r < 0)
+		return r;
 
-	return open_fid(state, fid);
+	return open_fdesc(state, inner, fdesc);
 }
 
-static int fidcloser_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+static int fidcloser_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
 {
 	Dprintf("%s(parent = %u, name = \"%s\", mode = %d)\n", __FUNCTION__, parent, name, mode);
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	int fid;
+	fdesc_t * inner;
+	int r;
 
-	open_file_gc(state);
+	fdesc_gc(state);
 
-	fid = CALL(state->frontend_cfs, create, parent, name, mode, newino);
-	if (fid < 0)
-		return fid;
+	r = CALL(state->frontend_cfs, create, parent, name, mode, &inner, newino);
+	if (r < 0)
+		return r;
 
-	fid = open_fid(state, fid);
-	if (fid < 0)
-	{
+	r = open_fdesc(state, inner, fdesc);
+	if (r < 0)
 		*newino = INODE_NONE;
-		(void) CALL(state->frontend_cfs, close, fid);
-	}
-	return fid;
+	return r;
 }
 
-static int fidcloser_close(CFS_t * cfs, int fid)
+static int fidcloser_close(CFS_t * cfs, fdesc_t * fdesc)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	open_file_t * of;
+	fidcloser_fdesc_t * ff = (fidcloser_fdesc_t *) fdesc;
 	int r;
 
-	of = hash_map_find_val(state->open_files, (void*) fid);
-	if (!of)
-		return -E_INVAL;
-	r = open_file_close(state, of);
+	r = fidcloser_fdesc_close(state, ff);
 	if (r < 0)
 		return r;
 	return 0;
@@ -291,8 +290,8 @@ static int fidcloser_destroy(CFS_t * cfs)
 
 	state->frontend_cfs = NULL;
 
-	hash_map_destroy(state->open_files);
-	state->open_files = NULL;
+	hash_set_destroy(state->open_fdescs);
+	state->open_fdescs = NULL;
 
 	fidcloser_cfs_exists = 0;
 
@@ -318,28 +317,32 @@ static int fidcloser_lookup(CFS_t * cfs, inode_t parent, const char * name, inod
 	return CALL(state->frontend_cfs, lookup, parent, name, ino);
 }
 
-static int fidcloser_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int fidcloser_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, read, fid, data, offset, size);
+	fidcloser_fdesc_t * ff = (fidcloser_fdesc_t *) fdesc;
+	return CALL(state->frontend_cfs, read, ff->inner, data, offset, size);
 }
 
-static int fidcloser_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int fidcloser_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, write, fid, data, offset, size);
+	fidcloser_fdesc_t * ff = (fidcloser_fdesc_t *) fdesc;
+	return CALL(state->frontend_cfs, write, ff->inner, data, offset, size);
 }
 
-static int fidcloser_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int fidcloser_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
+	fidcloser_fdesc_t * ff = (fidcloser_fdesc_t *) fdesc;
+	return CALL(state->frontend_cfs, getdirentries, ff->inner, buf, nbytes, basep);
 }
 
-static int fidcloser_truncate(CFS_t * cfs, int fid, uint32_t target_size)
+static int fidcloser_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 {
 	fidcloser_state_t * state = (fidcloser_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, truncate, fid, target_size);
+	fidcloser_fdesc_t * ff = (fidcloser_fdesc_t *) fdesc;
+	return CALL(state->frontend_cfs, truncate, ff->inner, target_size);
 }
 
 static int fidcloser_unlink(CFS_t * cfs, inode_t parent, const char * name)
@@ -423,8 +426,8 @@ CFS_t * fidcloser_cfs(CFS_t * frontend_cfs)
 	OBJMAGIC(cfs) = FIDCLOSER_MAGIC;
 
 	state->frontend_cfs = frontend_cfs;
-	state->open_files = hash_map_create();
-	if (!state->open_files)
+	state->open_fdescs = hash_set_create();
+	if (!state->open_fdescs)
 		goto error_state;
 
 	if(modman_add_anon_cfs(cfs, __FUNCTION__))

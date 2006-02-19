@@ -6,6 +6,7 @@
 #include <kfs/oo.h>
 #include <kfs/feature.h>
 #include <kfs/inode.h>
+#include <kfs/fdesc.h>
 
 struct CFS;
 typedef struct CFS CFS_t;
@@ -14,13 +15,13 @@ struct CFS {
 	OBJECT(CFS_t);
 	DECLARE(CFS_t, int, get_root, inode_t * ino);
 	DECLARE(CFS_t, int, lookup, inode_t parent, const char * name, inode_t * ino);
-	DECLARE(CFS_t, int, open, inode_t ino, int mode);
-	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, inode_t * newino);
-	DECLARE(CFS_t, int, close, int fid);
-	DECLARE(CFS_t, int, read, int fid, void * data, uint32_t offset, uint32_t size);
-	DECLARE(CFS_t, int, write, int fid, const void * data, uint32_t offset, uint32_t size);
-	DECLARE(CFS_t, int, getdirentries, int fid, char * buf, int nbytes, uint32_t * basep);
-	DECLARE(CFS_t, int, truncate, int fid, uint32_t size);
+	DECLARE(CFS_t, int, open, inode_t ino, int mode, fdesc_t ** fdesc);
+	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino);
+	DECLARE(CFS_t, int, close, fdesc_t * fdesc);
+	DECLARE(CFS_t, int, read, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size);
+	DECLARE(CFS_t, int, write, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size);
+	DECLARE(CFS_t, int, getdirentries, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep);
+	DECLARE(CFS_t, int, truncate, fdesc_t * fdesc, uint32_t size);
 	DECLARE(CFS_t, int, unlink, inode_t parent, const char * name);
 	DECLARE(CFS_t, int, link, inode_t ino, inode_t newparent, const char * newname);
 	DECLARE(CFS_t, int, rename, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname);

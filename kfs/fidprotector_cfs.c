@@ -1,7 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inc/error.h>
-#include <lib/hash_map.h>
 
 #include <kfs/modman.h>
 #include <kfs/cfs_ipc_serve.h>
@@ -16,38 +15,42 @@
 #define Dprintf(x...)
 #endif
 
-struct open_file {
-	int fid;
+struct fidprotector_fdesc {
+	fdesc_common_t * common;
+	fdesc_t * inner;
 	uint32_t cappa;
 };
-typedef struct open_file open_file_t;
+typedef struct fidprotector_fdesc fidprotector_fdesc_t;
 
 struct fidprotector_state {
-	hash_map_t * open_files;
 	CFS_t * frontend_cfs;
+	uint32_t nopen;
 };
 typedef struct fidprotector_state fidprotector_state_t;
 
 
 //
-// open_file_t functions
+// fidprotector_fdesc_t functions
 
-static open_file_t * open_file_create(int fid, uint32_t cappa)
+static fidprotector_fdesc_t * fidprotector_fdesc_create(fdesc_t * inner, uint32_t cappa)
 {
-	open_file_t * of = malloc(sizeof(*of));
-	if (!of)
+	fidprotector_fdesc_t * fpf = malloc(sizeof(*fpf));
+	if (!fpf)
 		return NULL;
 
-	of->fid = fid;
-	of->cappa = cappa;
-	return of;
+	fpf->common = inner->common;
+	fpf->inner = inner;
+	fpf->cappa = cappa;
+	return fpf;
 }
 
-static void open_file_close(open_file_t * of)
+static void fidprotector_fdesc_close(fidprotector_state_t * state, fidprotector_fdesc_t * fpf)
 {
-	of->fid = -1;
-	of->cappa = -1;
-	free(of);
+	state->nopen--;
+	fpf->common = NULL;
+	fpf->inner = NULL;
+	fpf->cappa = -1;
+	free(fpf);
 }
 
 
@@ -57,24 +60,16 @@ static void open_file_close(open_file_t * of)
 // Check that the given open file matches the last received ipc capability,
 // ensuring that no env's request is able to pass through unless they
 // have the Fd page for the request fid.
-static int check_capability(const open_file_t * of)
+static int check_capability(const fidprotector_fdesc_t * fpf)
 {
-	if (cfs_ipc_serve_cur_cappa() != of->cappa && cfs_ipc_serve_cur_cappa())
+	assert(fpf);
+	if (cfs_ipc_serve_cur_cappa() != fpf->cappa && cfs_ipc_serve_cur_cappa())
 	{
-		kdprintf(STDERR_FILENO, "fidprotector %s: FAILURE for fid %d. fid's cappa = 0x%08x, request's cappa = 0x%08x.\n", __FUNCTION__, of->fid, of->cappa, cfs_ipc_serve_cur_cappa());
+		kdprintf(STDERR_FILENO, "fidprotector %s: FAILURE: cappa = 0x%08x, request's cappa = 0x%08x.\n", __FUNCTION__, fpf->cappa, cfs_ipc_serve_cur_cappa());
 		return -E_IPC_FAILED_CAP;
 	}
 
 	return 0;
-}
-
-// Convenience function for check_capability()
-static int check_capability_fid(const fidprotector_state_t * state, int fid)
-{
-	const open_file_t * of = hash_map_find_val(state->open_files, (void*) fid);
-	if (!of)
-		return -E_INVAL;
-	return check_capability(of);
 }
 
 
@@ -98,64 +93,61 @@ static int fidprotector_get_status(void * object, int level, char * string, size
 		return -E_INVAL;
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
 	
-	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	snprintf(string, length, "open files: %u", state->nopen);
 	return 0;
 }
 
-static int open_fid(fidprotector_state_t * state, int fid)
+static int open_fdesc(fidprotector_state_t * state, fdesc_t * inner, fdesc_t ** outer)
 {
 	uint32_t cappa;
-	open_file_t * of;
-	int r;
+	fidprotector_fdesc_t * fpf;
 
 	cappa = cfs_ipc_serve_cur_cappa();
 	if (cappa == -1)
 		kdprintf(STDERR_FILENO, "%s(): warning: capability is the unused-marker\n", __FUNCTION__);
 
-	r = 0;
-	of = open_file_create(fid, cappa);
-	if (!of || ((r = hash_map_insert(state->open_files, (void*) fid, of)) < 0))
+	fpf = fidprotector_fdesc_create(inner, cappa);
+	if (!fpf)
 	{
-		(void) CALL(state->frontend_cfs, close, fid);
-		if (r == 0)
-			return -E_NO_MEM;
-		else
-			return r;
+		(void) CALL(state->frontend_cfs, close, inner);
+		*outer = NULL;
+		return -E_NO_MEM;
 	}
 
-	return fid;
+	state->nopen++;
+	*outer = (fdesc_t *) fpf;
+	return 0;
 }
 
-static int fidprotector_open(CFS_t * cfs, inode_t ino, int mode)
+static int fidprotector_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int fid;
+	fdesc_t * inner;
+	int r;
 
-	fid = CALL(state->frontend_cfs, open, ino, mode);
-	if (fid < 0)
-		return fid;
+	r = CALL(state->frontend_cfs, open, ino, mode, &inner);
+	if (r < 0)
+		return r;
 
-	return open_fid(state, fid);
+	return open_fdesc(state, inner, fdesc);
 }
 
-static int fidprotector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+static int fidprotector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int fid;
+	fdesc_t * inner;
+	int r;
 
-	fid = CALL(state->frontend_cfs, create, parent, name, mode, newino);
-	if (fid < 0)
-		return fid;
+	r = CALL(state->frontend_cfs, create, parent, name, mode, &inner, newino);
+	if (r < 0)
+		return r;
 
-	fid = open_fid(state, fid);
-	if (fid < 0)
-	{
+	r = open_fdesc(state, inner, fdesc);
+	if (r < 0)
 		*newino = INODE_NONE;
-		(void) CALL(state->frontend_cfs, close, fid);
-	}
-	return fid;
+	return r;
 }
 
 static int fidprotector_destroy(CFS_t * cfs)
@@ -169,9 +161,6 @@ static int fidprotector_destroy(CFS_t * cfs)
 
 	state->frontend_cfs = NULL;
 
-	hash_map_destroy(state->open_files);
-	state->open_files = NULL;
-
 	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
@@ -182,61 +171,64 @@ static int fidprotector_destroy(CFS_t * cfs)
 //
 // Capability checked CFS_t functions
 
-static int fidprotector_close(CFS_t * cfs, int fid)
+static int fidprotector_close(CFS_t * cfs, fdesc_t * fdesc)
 {
-	Dprintf("%s(%d)\n", __FUNCTION__, fid);
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, fdesc);
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	open_file_t * of;
+	fidprotector_fdesc_t * fpf = (fidprotector_fdesc_t *) fdesc;
 	int r;
 
-	if (!(of = hash_map_find_val(state->open_files, (void*) fid)))
-		return -E_INVAL;
-	if ((r = check_capability(of)) < 0)
+	if ((r = check_capability(fpf) < 0))
 		return r;
 
-	if ((r = CALL(state->frontend_cfs, close, fid)) < 0)
+	if ((r = CALL(state->frontend_cfs, close, fpf->inner)) < 0)
 		return r;
 
-	hash_map_erase(state->open_files, (void*) fid);
-	open_file_close(of);
+	fidprotector_fdesc_close(state, fpf);
 
 	return 0;
 }
 
-static int fidprotector_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int fidprotector_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int r = check_capability_fid(state, fid);
+	fidprotector_fdesc_t * fpf = (fidprotector_fdesc_t *) fdesc;
+	assert(fpf);
+	int r = check_capability(fpf);
 	if (r < 0)
 		return r;
-	return CALL(state->frontend_cfs, read, fid, data, offset, size);
+	assert(fpf->inner);
+	return CALL(state->frontend_cfs, read, fpf->inner, data, offset, size);
 }
 
-static int fidprotector_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int fidprotector_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int r = check_capability_fid(state, fid);
+	fidprotector_fdesc_t * fpf = (fidprotector_fdesc_t *) fdesc;
+	int r = check_capability(fpf);
 	if (r < 0)
 		return r;
-	return CALL(state->frontend_cfs, write, fid, data, offset, size);
+	return CALL(state->frontend_cfs, write, fpf->inner, data, offset, size);
 }
 
-static int fidprotector_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int fidprotector_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int r = check_capability_fid(state, fid);
+	fidprotector_fdesc_t * fpf = (fidprotector_fdesc_t *) fdesc;
+	int r = check_capability(fpf);
 	if (r < 0)
 		return r;
-	return CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
+	return CALL(state->frontend_cfs, getdirentries, fpf->inner, buf, nbytes, basep);
 }
 
-static int fidprotector_truncate(CFS_t * cfs, int fid, uint32_t target_size)
+static int fidprotector_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 {
 	fidprotector_state_t * state = (fidprotector_state_t *) OBJLOCAL(cfs);
-	int r = check_capability_fid(state, fid);
+	fidprotector_fdesc_t * fpf = (fidprotector_fdesc_t *) fdesc;
+	int r = check_capability(fpf);
 	if (r < 0)
 		return r;
-	return CALL(state->frontend_cfs, truncate, fid, target_size);
+	return CALL(state->frontend_cfs, truncate, fpf->inner, target_size);
 }
 
 
@@ -327,15 +319,16 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 
 	state = malloc(sizeof(*state));
 	if (!state)
-		goto error_cfs;
+	{
+		free(cfs);
+		return NULL;
+	}
 
 	CFS_INIT(cfs, fidprotector, state);
 	OBJMAGIC(cfs) = FIDPROTECTOR_MAGIC;
 
 	state->frontend_cfs = frontend_cfs;
-	state->open_files = hash_map_create();
-	if (!state->open_files)
-		goto error_state;
+	state->nopen = 0;
 
 	if(modman_add_anon_cfs(cfs, __FUNCTION__))
 	{
@@ -350,12 +343,4 @@ CFS_t * fidprotector_cfs(CFS_t * frontend_cfs)
 	}
 
 	return cfs;
-
-  error_state:
-	free(state);
-	OBJLOCAL(cfs) = NULL;
-  error_cfs:
-	free(cfs);
-	cfs = NULL;
-	return NULL;
 }

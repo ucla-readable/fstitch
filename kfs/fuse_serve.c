@@ -66,6 +66,18 @@ static char * channel_buf = NULL;
 static int remove_activity; // remove activity fd for fuse_serve_mount
 
 
+fdesc_t * fi_get_fdesc(struct fuse_file_info * fi)
+{
+	static_assert(sizeof(fdesc_t *) == sizeof(uint32_t));
+	return (fdesc_t *) (uint32_t) fi->fh;
+}
+
+void fi_set_fdesc(struct fuse_file_info * fi, fdesc_t * fdesc)
+{
+	static_assert(sizeof(fdesc_t *) == sizeof(uint32_t));
+	fi->fh = (uint64_t) (uint32_t) fdesc;
+}
+
 int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 {
 	int r;
@@ -172,14 +184,14 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		char buf[1024];
 		uint32_t basep = 0;
 		uint32_t nlinks = 2;
-		int fid;
+		fdesc_t * fdesc;
 
 		// FIXME: we should use the same inode->file mapping throughout an
 		// inode's life. Using opening by name can break this.
-		fid = CALL(reqcfs(req), open, cfs_ino, 0);
-		assert(fid >= 0);
+		r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+		assert(r >= 0);
 
-		while ((r = CALL(reqcfs(req), getdirentries, fid, buf, sizeof(buf), &basep)) > 0)
+		while ((r = CALL(reqcfs(req), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
 		{
 			char * cur = buf;
 			while (cur < buf + r)
@@ -189,7 +201,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			}
 		}
 
-		r = CALL(reqcfs(req), close, fid);
+		r = CALL(reqcfs(req), close, fdesc);
 		assert(r >= 0);
 
 		stbuf->st_mode = S_IFDIR | 0755;
@@ -261,7 +273,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 {
 	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 	int r;
-	int fid;
+	fdesc_t * fdesc;
 	inode_t cfs_ino;
 	uint32_t size;
 	struct stat stbuf;
@@ -280,11 +292,11 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	cfs_ino = fusecfsino(req, fuse_ino);
 
 	if (fi)
-		fid = (int) fi->fh;
+		fdesc = fi_get_fdesc(fi);
 	else
 	{
-		fid = CALL(reqcfs(req), open, cfs_ino, 0);
-		if (fid < 0)
+		r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+		if (r < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
@@ -292,11 +304,11 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		}
 	}
 
-	r = CALL(reqcfs(req), truncate, fid, size);
+	r = CALL(reqcfs(req), truncate, fdesc, size);
 
 	if (!fi)
 	{
-		if (CALL(reqcfs(req), close, fid) < 0)
+		if (CALL(reqcfs(req), close, fdesc) < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
@@ -389,14 +401,13 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 }
 
 static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
-                  mode_t mode, struct fuse_entry_param * e)
+                  mode_t mode, struct fuse_entry_param * e, fdesc_t ** fdesc)
 {
 	inode_t cfs_ino;
-	int fid;
 	int r;
 
-	fid = CALL(reqcfs(req), create, fusecfsino(req, parent), local_name, 0, &cfs_ino);
-	if (fid < 0)
+	r = CALL(reqcfs(req), create, fusecfsino(req, parent), local_name, 0, fdesc, &cfs_ino);
+	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
@@ -411,7 +422,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	r = fill_stat(req, cfs_ino, e->ino, &e->attr);
 	assert(r >= 0);
 
-	return fid;
+	return r;
 }
 
 static void serve_create(fuse_req_t req, fuse_ino_t parent,
@@ -420,15 +431,15 @@ static void serve_create(fuse_req_t req, fuse_ino_t parent,
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__,
 	        parent, local_name);
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 	struct fuse_entry_param e;
 
-	fid = create(req, parent, local_name, mode, &e);
-	if (fid < 0)
+	r = create(req, parent, local_name, mode, &e, &fdesc);
+	if (r < 0)
 		return;
 
-	fi->fh = (uint64_t) fid;
+	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_create(req, &e, fi);
 	assert(!r);
@@ -438,7 +449,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
                         const char * local_name, mode_t mode, dev_t rdev)
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 	struct fuse_entry_param e;
 
@@ -449,12 +460,12 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 		return;
 	}
 
-	fid = create(req, parent, local_name, mode, &e);
-	if (fid < 0)
+	r = create(req, parent, local_name, mode, &e, &fdesc);
+	if (r < 0)
 		return;
 
-	fid = CALL(reqcfs(req), close, fid);
-	assert(fid >= 0);
+	r = CALL(reqcfs(req), close, fdesc);
+	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
 	assert(!r);
@@ -518,9 +529,9 @@ static void serve_rename(fuse_req_t req,
 	assert(!r);
 }
 
-static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
+static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dirent)
 {
-	Dprintf("%s(fid = %d, k = %lld)\n", __FUNCTION__, fid, k);
+	Dprintf("%s(fdesc = 0x%08x, k = %lld)\n", __FUNCTION__, fdesc, k);
 	uint32_t basep = 0;
 	char buf[sizeof(dirent_t)];
 	char * cur = buf;
@@ -528,7 +539,7 @@ static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
 	int eof = 0;
 	int r;
 
-	assert(fid >= 0 && k >= 0 && dirent != NULL);
+	assert(fdesc != NULL && k >= 0 && dirent != NULL);
 	memset(buf, 0, sizeof(buf));
 
 	while (dirno <= k)
@@ -536,7 +547,7 @@ static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
 		uint32_t nbytes;
 		cur = buf;
 
-		r = CALL(cfs, getdirentries, fid, buf, sizeof(buf), &basep);
+		r = CALL(cfs, getdirentries, fdesc, buf, sizeof(buf), &basep);
 		if (r == -E_UNSPECIFIED) // should imply eof
 		{
 			eof = 1;
@@ -600,11 +611,11 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
                           struct fuse_file_info * fi)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 
-	fid = CALL(reqcfs(req), open, fusecfsino(req, fuse_ino), 0);
-	if (fid < 0)
+	r = CALL(reqcfs(req), open, fusecfsino(req, fuse_ino), 0, &fdesc);
+	if (r < 0)
 	{
 		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
 		// TODO: fuse_reply_err(req, ENOTDIR);
@@ -613,7 +624,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 		return;
 	}
 
-	fi->fh = (uint64_t) fid;
+	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_open(req, fi);
 	assert(!r);
@@ -622,11 +633,11 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
                              struct fuse_file_info * fi)
 {
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	int r;
-	Dprintf("%s(ino = %lu, fid = %d)\n", __FUNCTION__, fuse_ino, fid);
+	Dprintf("%s(ino = %lu, fdesc = 0x%08x)\n", __FUNCTION__, fuse_ino, fdesc);
 
-	r = CALL(reqcfs(req), close, fid);
+	r = CALL(reqcfs(req), close, fdesc);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
@@ -641,7 +652,7 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
 static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
                           off_t off, struct fuse_file_info * fi)
 {
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	uint32_t total_size = 0;
 	char * buf = NULL;
 	struct stat stbuf;
@@ -690,13 +701,13 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 		size_t oldsize = total_size;
 		inode_t entry_cfs_ino;
 
-		r = read_single_dir(reqcfs(req), fid, off - 2, &dirent);
+		r = read_single_dir(reqcfs(req), fdesc, off - 2, &dirent);
 		if (r == 1 || r == -E_NOT_FOUND)
 			break;
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(%d, %lld, 0x%08x) = %d\n",
-					 __FILE__, __FUNCTION__, fid, off - 2, &dirent, r);
+			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(0x%08x, %lld, 0x%08x) = %d\n",
+					 __FILE__, __FUNCTION__, fdesc, off - 2, &dirent, r);
 			assert(r >= 0);
 		}
 
@@ -731,7 +742,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 	inode_t cfs_ino;
 	void * data;
 	uint32_t type;
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 
 //	else if ((fi->flags & 3) != O_RDONLY)
@@ -753,9 +764,9 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 		return;
 	}
 
-	fid = CALL(reqcfs(req), open, cfs_ino, 0);
+	r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
 	assert(r >= 0);
-	fi->fh = (uint64_t) fid;
+	fi_set_fdesc(fi, fdesc);
 	
 	r = fuse_reply_open(req, fi);
 	assert(!r);
@@ -764,10 +775,10 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 static void serve_release(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_info * fi)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	int r;
 
-	r = CALL(reqcfs(req), close, fid);
+	r = CALL(reqcfs(req), close, fdesc);
 	assert(r >= 0);
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
@@ -776,11 +787,11 @@ static void serve_release(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
                        off_t off, struct fuse_file_info * fi)
 {
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	uint32_t offset = off;
 	char * buf;
 	int r;
-	Dprintf("%s(ino = %lu, fid = %d, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, fid, size, off);
+	Dprintf("%s(ino = %lu, fdesc = 0x%08x, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, fdesc, size, off);
 
 	if (offset != off)
 	{
@@ -793,7 +804,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	buf = malloc(size);
 	assert(buf);
 
-	r = CALL(reqcfs(req), read, fid, buf, off, size);
+	r = CALL(reqcfs(req), read, fdesc, buf, off, size);
 	if (r <= 0)
 	{
 		// TODO: handle -E_EOF?
@@ -814,7 +825,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 	Dprintf("%s(ino = %lu, size = %u, off = %lld, buf = \"%s\")\n",
 	        __FUNCTION__, fuse_ino, size, off, buf);
 	uint32_t offset = off;
-	int fid;
+	fdesc_t * fdesc;
 	int nbytes;
 	int r;
 
@@ -826,10 +837,10 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 		return;
 	}
 
-	fid = (int) fi->fh;
+	fdesc = fi_get_fdesc(fi);
 
 	static_assert(sizeof(uint32_t) == sizeof(size));
-	nbytes = CALL(reqcfs(req), write, fid, buf, offset, size);
+	nbytes = CALL(reqcfs(req), write, fdesc, buf, offset, size);
 	if (nbytes < size)
 	{
 		r = fuse_reply_write(req, TODOERROR);

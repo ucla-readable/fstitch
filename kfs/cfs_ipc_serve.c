@@ -6,6 +6,7 @@
 #include <kfs/cfs_ipc_opgroup.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/traverse.h>
+#include <kfs/fidman.h>
 #include <kfs/mount_selector_cfs.h>
 
 #include <inc/lib.h> // for get_pte()
@@ -124,6 +125,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 {
 	bool new_file = 0;
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
+	fdesc_t * fdesc;
 	if (!prevrecv)
 		alloc_prevrecv(envid, &prevrecv);
 
@@ -158,7 +160,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 				if (r < 0)
 				{
 					new_file = 1;
-					r = CALL(frontend_cfs, create, parent, filename, scfs->mode, &ino);
+					r = CALL(frontend_cfs, create, parent, filename, scfs->mode, &fdesc, &ino);
 				}
 			}
 		}
@@ -169,8 +171,16 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 			if (r >= 0)
 			{
 				kfsd_set_mount(select_cfs);
-				r = CALL(frontend_cfs, open, ino, scfs->mode);
+				r = CALL(frontend_cfs, open, ino, scfs->mode, &fdesc);
 			}
+		}
+
+		if (r >= 0)
+		{
+			r = create_fid(fdesc);
+			if (r < 0)
+				(void) CALL(frontend_cfs, close, fdesc);
+			Dprintf("%s: fid %d -> \"%s\"\n", __FUNCTION__, r, scfs->path);
 		}
 
 		cur_page = NULL;
@@ -184,7 +194,15 @@ static void serve_close(envid_t envid, struct Scfs_close * req)
 {
 	int r;
 	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
-	r = CALL(frontend_cfs, close, req->fid);
+	if (fid_fdesc(req->fid))
+	{
+		r = CALL(frontend_cfs, close, fid_fdesc(req->fid));
+		// FIXME: call release_fid(), but only when fidcloser_cfs would close
+		//s = release_fid(req->fid);
+		//assert(r < 0 || (r >= 0 && s >= 0));
+	}
+	else
+		r = -E_INVAL;
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
@@ -198,7 +216,7 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %i", r);
-	r = CALL(frontend_cfs, read, req->fid, buf, req->offset, req->size);
+	r = CALL(frontend_cfs, read, fid_fdesc(req->fid), buf, req->offset, req->size);
 	ipc_send(envid, r, buf, PTE_P|PTE_U, NULL);
 }
 
@@ -222,7 +240,7 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 		struct Scfs_write *scfs = (struct Scfs_write*) prevrecv->scfs;
 		int r;
 		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, scfs->fid, scfs->offset, scfs->size);
-		r = CALL(frontend_cfs, write, scfs->fid, req, scfs->offset, scfs->size);
+		r = CALL(frontend_cfs, write, fid_fdesc(scfs->fid), req, scfs->offset, scfs->size);
 		ipc_send(envid, r, NULL, 0, NULL);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
@@ -245,7 +263,7 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 	if (nbytes > sizeof(resp->buf))
 		nbytes = sizeof(resp->buf);
 
-	r = CALL(frontend_cfs, getdirentries, req->fid, resp->buf, nbytes, &resp->basep);
+	r = CALL(frontend_cfs, getdirentries, fid_fdesc(req->fid), resp->buf, nbytes, &resp->basep);
 	resp->nbytes_read = r;
 	ipc_send(envid, r, resp, PTE_P|PTE_U, NULL);
 }
@@ -254,7 +272,7 @@ static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 {
 	int r;
 	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
-	r = CALL(frontend_cfs, truncate, req->fid, req->size);
+	r = CALL(frontend_cfs, truncate, fid_fdesc(req->fid), req->size);
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 

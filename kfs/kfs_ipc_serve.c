@@ -578,7 +578,7 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 {
 	modman_it_t it;
 	CFS_t * cfs, * selected_cfs;
-	int fid;
+	fdesc_t * fdesc;
 	int time_start, time_end;
 	inode_t ino;
 	int s, size, r;
@@ -594,28 +594,28 @@ int perf_test_cfs(const Skfs_perf_test_t * pg)
 	if ((r = path_to_inode(pg->file, &selected_cfs, &ino)) < 0)
 		return r;
 	kfsd_set_mount(selected_cfs);
-	fid = CALL(cfs, open, ino, O_CREAT|O_WRONLY);
-	if(fid < 0)
+	r = CALL(cfs, open, ino, O_CREAT|O_WRONLY, &fdesc);
+	if(r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): open %s: %i\n", __FUNCTION__, pg->file, fid);
-		return fid;
+		kdprintf(STDERR_FILENO, "%s(): open %s: 0x%08x\n", __FUNCTION__, pg->file, fdesc);
+		return r;
 	}
 
 	time_start = env->env_jiffies;
 	for(size = 0; size + sizeof(test_data) < pg->size; )
 	{
-		s = CALL(cfs, write, fid, test_data, size, sizeof(test_data));
+		s = CALL(cfs, write, fdesc, test_data, size, sizeof(test_data));
 		if (s < 0)
 		{
 			kdprintf(STDERR_FILENO, "%s(): write: %i\n", __FUNCTION__, s);
-			CALL(cfs, close, fid);
+			CALL(cfs, close, fdesc);
 			return s;
 		}
 		size += s;
 	}
 	time_end = env->env_jiffies;
 
-	r = CALL(cfs, close, fid);
+	r = CALL(cfs, close, fdesc);
 	if (r < 0)
 		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %i\n", __FUNCTION__, r);
 

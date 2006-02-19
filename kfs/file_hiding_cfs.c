@@ -2,7 +2,6 @@
 #include <string.h>
 #include <inc/error.h>
 #include <lib/stdio.h>
-#include <lib/hash_map.h>
 #include <lib/vector.h>
 #include <lib/dirent.h>
 
@@ -28,19 +27,19 @@ struct hide_entry {
 };
 typedef struct hide_entry hide_entry_t;
 
-struct open_file {
-	int fid;
+struct file_hiding_fdesc {
+	fdesc_common_t * common;
+	fdesc_t * inner;
 	inode_t ino;
 };
-typedef struct open_file open_file_t;
+typedef struct file_hiding_fdesc file_hiding_fdesc_t;
 
 struct file_hiding_state {
 	vector_t * hide_table;
-	hash_map_t * open_files;
 	CFS_t * frontend_cfs;
+	uint32_t nopen;
 };
 typedef struct file_hiding_state file_hiding_state_t;
-
 
 //
 // hide_entry_t functions
@@ -85,75 +84,28 @@ static int hide_lookup(vector_t * hide_table, inode_t ino)
 
 
 //
-// open_file_t functions
+// file_hiding_fdesc_t functions
 
-static open_file_t * open_file_create(int fid, inode_t ino)
+static int file_hiding_fdesc_create(fdesc_t * inner, inode_t ino, fdesc_t ** fdesc)
 {
-	open_file_t * f = malloc(sizeof(*f));
-	if (!f)
-		return NULL;
-
-	f->fid = fid;
-	f->ino = ino;
-	return f;
-}
-
-static void open_file_destroy(open_file_t * f)
-{
-	f->fid = -1;
-	f->ino = INODE_NONE;
-	free(f);
-}
-
-
-//
-// open_files functions
-
-// Add a fid-cfs pair
-static int fid_table_add(file_hiding_state_t * state, int fid, inode_t ino)
-{
-	Dprintf("%s(0x%08x, %d, 0x%08x)\n", __FUNCTION__, state, fid, cfs);
-	open_file_t * f;
-	int r;
-
-	f = open_file_create(fid, ino);
-	if (!f)
+	file_hiding_fdesc_t * fhf = malloc(sizeof(*fhf));
+	if (!fhf)
 		return -E_NO_MEM;
-	r = hash_map_insert(state->open_files, (void*) fid, f);
-	if (r < 0)
-	{
-		open_file_destroy(f);
-		return r;
-	}
 
+	fhf->common = inner->common;
+	fhf->inner = inner;
+	fhf->ino = ino;
+
+	*fdesc = (fdesc_t *) fhf;
 	return 0;
 }
 
-// Get the existing cfs for fid
-static inode_t fid_table_get(const file_hiding_state_t * state, int fid)
+static void file_hiding_fdesc_destroy(file_hiding_fdesc_t * fhf)
 {
-	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
-	open_file_t * f;
-
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return INODE_NONE;
-
-	return f->ino;
-}
-
-// Delete the cfs-fid entry for fid
-static int fid_table_del(file_hiding_state_t * state, int fid)
-{
-	Dprintf("%s(0x%08x, %d)\n", __FUNCTION__, state, fid);
-	open_file_t * f;
-
-	f = hash_map_erase(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	open_file_destroy(f);
-	return 0;
+	fhf->common = NULL;
+	fhf->inner = NULL;
+	fhf->ino = INODE_NONE;
+	free(fhf);
 }
 
 
@@ -177,7 +129,7 @@ static int file_hiding_get_status(void * object, int level, char * string, size_
 		return -E_INVAL;
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 
-	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	snprintf(string, length, "open fdescs: %u", state->nopen);
 	return 0;
 }
 
@@ -203,31 +155,33 @@ static int file_hiding_lookup(CFS_t * cfs, inode_t parent, const char * name, in
 	return CALL(state->frontend_cfs, lookup, parent, name, ino);
 }
 
-static int file_hiding_open(CFS_t * cfs, inode_t ino, int mode)
+static int file_hiding_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	int fid;
+	fdesc_t * inner;
 	int r;
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
 		return -E_NOT_FOUND;
 
-	if ((fid = CALL(state->frontend_cfs, open, ino, mode)) < 0)
-		return fid;
-	if ((r = fid_table_add(state, fid, ino)) < 0)
+	if ((r = CALL(state->frontend_cfs, open, ino, mode, &inner)) < 0)
+		return r;
+	if ((r = file_hiding_fdesc_create(inner, ino, fdesc)) < 0)
 	{
-		(void) CALL(state->frontend_cfs, close, fid);
+		(void) CALL(state->frontend_cfs, close, inner);
+		*fdesc = NULL;
 		return r;
 	}
-	return fid;
+	state->nopen++;
+	return 0;
 }
 
-static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * ino)
+static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	int fid;
+	fdesc_t * inner;
 	inode_t temp_ino;
 	int r;
 
@@ -235,71 +189,69 @@ static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, in
 	if (r >= 0 && hide_lookup(state->hide_table, temp_ino) >= 0)
 		return -E_NOT_FOUND;
 
-	if ((fid = CALL(state->frontend_cfs, create, parent, name, mode, ino)) < 0)
-		return fid;
+	if ((r = CALL(state->frontend_cfs, create, parent, name, mode, &inner, ino)) < 0)
+		return r;
 
-	if ((r = fid_table_add(state, fid, *ino)) < 0)
+	if ((r = file_hiding_fdesc_create(inner, *ino, fdesc)) < 0)
 	{
-		(void) CALL(state->frontend_cfs, close, fid);
+		(void) CALL(state->frontend_cfs, close, inner);
+		*fdesc = NULL;
+		*ino = INODE_NONE;
 		return r;
 	}
-
-	return fid;
+	state->nopen++;
+	return 0;
 }
 
-static int file_hiding_close(CFS_t * cfs, int fid)
+static int file_hiding_close(CFS_t * cfs, fdesc_t * fdesc)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	inode_t ino = fid_table_get(state, fid);
-	int r, s;
+	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
+	int r;
 
-	if (ino == INODE_NONE)
-		return -E_NOT_FOUND;
-
-	r = CALL(state->frontend_cfs, close, fid);
-	if (0 <= r)
-		if ((s = fid_table_del(state, fid)) < 0)
-			return s;
+	r = CALL(state->frontend_cfs, close, fhf->inner);
+	file_hiding_fdesc_destroy(fhf);
+	state->nopen--;
 	return r;
 }
 
-static int file_hiding_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int file_hiding_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t ofhfset, uint32_t size)
 {
-	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, ofhfset, size);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	inode_t ino = fid_table_get(state, fid);
+	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
-	if (ino == INODE_NONE)
+	if (fhf->ino == INODE_NONE)
 		return -E_NOT_FOUND;
 
-	return CALL(state->frontend_cfs, read, fid, data, offset, size);
+	return CALL(state->frontend_cfs, read, fhf->inner, data, ofhfset, size);
 }
 
-static int file_hiding_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int file_hiding_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t ofhfset, uint32_t size)
 {
-	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, ofhfset, size);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	inode_t ino = fid_table_get(state, fid);
+	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
-	if (ino == INODE_NONE)
+	if (fhf->ino == INODE_NONE)
 		return -E_NOT_FOUND;
 
-	return CALL(state->frontend_cfs, write, fid, data, offset, size);
+	return CALL(state->frontend_cfs, write, fhf->inner, data, ofhfset, size);
 }
 
-static int file_hiding_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int file_hiding_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	inode_t ino = fid_table_get(state, fid);
+	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 	int i, r, s, hidden;
 	dirent_t * d;
 
-	if (ino == INODE_NONE)
+	if (fhf->ino == INODE_NONE)
 		return -E_NOT_FOUND;
 
-	r = CALL(state->frontend_cfs, getdirentries, fid, buf, nbytes, basep);
+	r = CALL(state->frontend_cfs, getdirentries, fhf->inner, buf, nbytes, basep);
 
 	// Look for hidden files
 	for (i = 0; i < r; )
@@ -319,15 +271,15 @@ static int file_hiding_getdirentries(CFS_t * cfs, int fid, char * buf, int nbyte
 	return r;
 }
 
-static int file_hiding_truncate(CFS_t * cfs, int fid, uint32_t size)
+static int file_hiding_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 {
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-	inode_t ino = fid_table_get(state, fid);
+	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
-	if (ino == INODE_NONE)
+	if (fhf->ino == INODE_NONE)
 		return -E_NOT_FOUND;
 
-	return CALL(state->frontend_cfs, truncate, fid, size);
+	return CALL(state->frontend_cfs, truncate, fhf->inner, size);
 }
 
 static int file_hiding_unlink(CFS_t * cfs, inode_t parent, const char * name)
@@ -458,7 +410,6 @@ static int file_hiding_destroy(CFS_t * cfs)
 		return r;
 	modman_dec_cfs(state->frontend_cfs, cfs);
 
-	hash_map_destroy(state->open_files);
 	vector_destroy(state->hide_table);
 	memset(state, 0, sizeof(*state));
 	free(state);
@@ -487,14 +438,11 @@ CFS_t * file_hiding_cfs(CFS_t * frontend_cfs)
 	CFS_INIT(cfs, file_hiding, state);
 	OBJMAGIC(cfs) = FILE_HIDING_MAGIC;
 
-	state->open_files = hash_map_create();
-	if (!state->open_files)
-		goto error_state;
-
 	state->hide_table = vector_create();
 	if (!state->hide_table)
-		goto error_open_files;
+		goto error_state;
 	state->frontend_cfs = frontend_cfs;
+	state->nopen = 0;
 
 	if (modman_add_anon_cfs(cfs, __FUNCTION__))
 	{
@@ -511,8 +459,6 @@ CFS_t * file_hiding_cfs(CFS_t * frontend_cfs)
 
 	return cfs;
 
-  error_open_files:
-	hash_map_destroy(state->open_files);
   error_state:
 	free(OBJLOCAL(cfs));
   error_cfs:
@@ -530,16 +476,7 @@ int file_hiding_cfs_hide(CFS_t * cfs, inode_t ino)
 	if (OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
 		return -E_INVAL;
 
-	// Allow hiding only if the file isn't open
-	hash_map_it_t it;
-	open_file_t * of;
-	hash_map_it_init(&it, state->open_files);
-	while ((of = hash_map_val_next(&it)))
-	{
-		if (of->ino == ino)
-			return -E_INVAL;
-	}
-
+	/* NOTE: hiding ino only prevents future actions from seeing/using ino */
 
 	const int already_hidden = hide_lookup(state->hide_table, ino);
 	if (0 <= already_hidden)

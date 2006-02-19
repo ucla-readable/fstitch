@@ -4,11 +4,9 @@
 #include <inc/fd.h>
 #include <inc/error.h>
 #include <lib/stdio.h>
-#include <lib/hash_map.h>
 #include <lib/fcntl.h>
 #include <lib/panic.h>
 
-#include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
@@ -27,17 +25,17 @@
 #define Dprintf(x...)
 #endif
 
-struct open_file {
-	int fid;
-	fdesc_t * fdesc;
+struct uhfs_fdesc {
+	fdesc_common_t * common;
+	fdesc_t * inner;
 	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
 	bool type; /* whether the type metadata is supported */
 };
-typedef struct open_file open_file_t;
+typedef struct uhfs_fdesc uhfs_fdesc_t;
 
 struct uhfs_state {
 	LFS_t * lfs;
-	hash_map_t * open_files;
+	uint32_t nopen;
 };
 
 
@@ -53,36 +51,32 @@ static bool lfs_feature_supported(LFS_t * lfs, inode_t ino, int feature_id)
 	return 0;
 }
 
-static open_file_t * open_file_create(int fid, fdesc_t * fdesc, uint32_t size_id, bool type)
+static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, uint32_t size_id, bool type)
 {
-	open_file_t * f = malloc(sizeof(*f));
-	if (!f)
+	uhfs_fdesc_t * uf = malloc(sizeof(*uf));
+	if (!uf)
 		return NULL;
-	f->fid = fid;
-	f->fdesc = fdesc;
-	f->size_id = size_id;
-	f->type = type;
-	return f;
+	uf->common = inner->common;
+	uf->inner = inner;
+	uf->size_id = size_id;
+	uf->type = type;
+	return uf;
 }
 
-static void open_file_destroy(open_file_t * f)
+static void uhfs_fdesc_destroy(uhfs_fdesc_t * uf)
 {
-	f->fid = -1;
-	f->fdesc = NULL;
-	f->size_id = 0;
-	f->type = 0;
-	free(f);
+	uf->common = NULL;
+	uf->inner = NULL;
+	uf->size_id = 0;
+	uf->type = 0;
+	free(uf);
 }
 
-static void open_file_close(LFS_t * lfs, open_file_t * f)
+static void uhfs_fdesc_close(struct uhfs_state * state, uhfs_fdesc_t * uf)
 {
-	int r;
-	CALL(lfs, free_fdesc, f->fdesc);
-
-	r = release_fid(f->fid);
-	assert(0 <= r);
-
-	open_file_destroy(f);
+	CALL(state->lfs, free_fdesc, uf->inner);
+	uhfs_fdesc_destroy(uf);
+	state->nopen--;
 }
 
 
@@ -104,7 +98,7 @@ static int uhfs_get_status(void * object, int level, char * string, size_t lengt
 		return -E_INVAL;
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	
-	snprintf(string, length, "fids: %u", hash_map_size(state->open_files));
+	snprintf(string, length, "open files: %u", state->nopen);
 	return 0;
 }
 
@@ -122,49 +116,39 @@ static int uhfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t *
 	return CALL(state->lfs, lookup_name, parent, name, ino);
 }
 
-static int uhfs_close(CFS_t * cfs, int fid)
+static int uhfs_close(CFS_t * cfs, fdesc_t * fdesc)
 {
-	Dprintf("%s(0x%x)\n", __FUNCTION__, fid);
+	Dprintf("%s(0x%08x)\n", __FUNCTION__, fdesc);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	open_file_t * f;
-
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	hash_map_erase(state->open_files, (void*) fid);
-	open_file_close(state->lfs, f);
+	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
+	uhfs_fdesc_close(state, uf);
 	return 0;
 }
 
-static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
+static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 {
-	Dprintf("%s(%d, 0x%x)\n", __FUNCTION__, fid, target_size);
+	Dprintf("%s(0x%08x, 0x%x)\n", __FUNCTION__, fdesc, target_size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = CALL(state->lfs, get_blocksize);
-	open_file_t * f;
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
 	chdesc_t * prev_head = NULL, * tail, * save_head;
 	int r;
 
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	nblks = CALL(state->lfs, get_file_numblocks, f->fdesc);
+	nblks = CALL(state->lfs, get_file_numblocks, uf->inner);
 
 	/* Truncate and free the blocks no longer in use because of this trunc */
 	for (; target_nblks < nblks; nblks--)
 	{
 		/* Truncate the block */
-		uint32_t block = CALL(state->lfs, truncate_file_block, f->fdesc, &prev_head, &tail);
+		uint32_t block = CALL(state->lfs, truncate_file_block, uf->inner, &prev_head, &tail);
 		if (block == INVALID_BLOCK)
 			return -E_UNSPECIFIED;
 
 		save_head = prev_head;
 
 		/* Now free the block */
-		r = CALL(state->lfs, free_block, f->fdesc, block, &prev_head, &tail);
+		r = CALL(state->lfs, free_block, uf->inner, block, &prev_head, &tail);
 		if (r < 0)
 			return r;
 
@@ -173,13 +157,13 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 
 	/* Update the file's size as recorded by lfs, which also updates
 	   the byte-level size (rather than block-level in the above) */
-	if (f->size_id)
+	if (uf->size_id)
 	{
 		void * data;
 		size_t data_len;
 		size_t size;
 
-		r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &data_len, &data);
+		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &data_len, &data);
 		if (r < 0)
 			return r;
 		assert(data_len == sizeof(target_size));
@@ -188,7 +172,7 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 
 		if (target_size < size)
 		{
-			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, &prev_head, &tail);
+			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head, &tail);
 			if (r < 0)
 				return r;
 		}
@@ -197,13 +181,11 @@ static int uhfs_truncate(CFS_t * cfs, int fid, uint32_t target_size)
 	return 0;
 }
 
-static int open_common(struct uhfs_state * state, inode_t ino, fdesc_t * fdesc)
+static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, fdesc_t ** outer)
 {
 	uint32_t size_id = 0;
 	bool type = 0;
-	open_file_t * f;
-	int fid;
-	int r;
+	uhfs_fdesc_t * uf;
 
 	/* detect whether the filesize and filetype features are supported */
 	{
@@ -222,77 +204,62 @@ static int open_common(struct uhfs_state * state, inode_t ino, fdesc_t * fdesc)
 		}
 	}
 
-
-	fid = create_fid();
-	if (fid < 0)
+	uf = uhfs_fdesc_create(inner, size_id, type);
+	if (!uf)
 	{
-		CALL(state->lfs, free_fdesc, fdesc);
-		return fid;
-	}
-
-	f = open_file_create(fid, fdesc, size_id, type);
-	if (!f)
-	{
-		release_fid(fid);
-		CALL(state->lfs, free_fdesc, fdesc);
+		CALL(state->lfs, free_fdesc, inner);
+		*outer = NULL;
 		return -E_NO_MEM;
 	}
 
-	r = hash_map_insert(state->open_files, (void *) fid, f);
-	if (r < 0)
-	{
-		open_file_destroy(f);
-		release_fid(fid);
-		CALL(state->lfs, free_fdesc, fdesc);
-		return -E_NO_MEM;
-	}
-
-	return fid;
+	state->nopen++;
+	*outer = (fdesc_t *) uf;
+	return 0;
 }
 
 // TODO:
 // - respect mode
-static int uhfs_open(CFS_t * cfs, inode_t ino, int mode)
+static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	fdesc_t * fdesc;
-	int fid;
+	fdesc_t * inner;
 	int r;
 
 	if ((mode & O_CREAT))
 		return -E_INVAL;
 
 	/* look up the ino */
-	fdesc = CALL(state->lfs, lookup_inode, ino);
-	if (!fdesc)
+	inner = CALL(state->lfs, lookup_inode, ino);
+	if (!inner)
 		return -E_NOT_FOUND;
 
-	fid = open_common(state, ino, fdesc);
-	if (fid < 0)
-		return fid;
+	r = open_common(state, inner, ino, fdesc);
+	if (r < 0)
+		return r;
 
 	/* HACK: don't do this for wholedisk LFS modules */
 	if (mode & O_TRUNC && OBJMAGIC(state->lfs) != WHOLEDISK_MAGIC)
 	{
-		r = uhfs_truncate(cfs, fid, 0);
-		if (r < 0)
+		int s = uhfs_truncate(cfs, *fdesc, 0);
+		if (s < 0)
 		{
-			uhfs_close(cfs, fid);
-			return r;
+			uhfs_close(cfs, *fdesc);
+			*fdesc = NULL;
+			return s;
 		}
 	}
 
-	return fid;
+	return r;
 }
 
-static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, inode_t * newino)
+static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
 {
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t existing_ino;
 	chdesc_t * prev_head, * tail;
-	fdesc_t * fdesc;
+	fdesc_t * inner;
 	int r;
 
 	r = CALL(state->lfs, lookup_name, parent, name, &existing_ino);
@@ -303,35 +270,34 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	}
 
 	prev_head = NULL;
-	fdesc = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, newino, &prev_head, &tail);
-	if (!fdesc)
+	inner = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, newino, &prev_head, &tail);
+	if (!inner)
 		return -E_UNSPECIFIED;
 
-	return open_common(state, *newino, fdesc);
+	r = open_common(state, inner, *newino, fdesc);
+	if (r < 0)
+		*newino = INODE_NONE;
+	return r;
 }
 
-static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_t size)
+static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(cfs, 0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(cfs, 0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	open_file_t * f;
+	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_read = 0;
 	uint32_t file_size = -1;
 
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
 	/* if we have filesize, use it! */
-	if (f->size_id)
+	if (uf->size_id)
 	{
 		size_t md_size;
 		void * data;
 		int r;
-		if ((r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &md_size, &data)) < 0)
+		if ((r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &md_size, &data)) < 0)
 			return r;
 		assert(md_size == sizeof(file_size));
 		file_size = *((uint32_t *) data);
@@ -342,14 +308,14 @@ static int uhfs_read(CFS_t * cfs, int fid, void * data, uint32_t offset, uint32_
 		uint32_t limit, number;
 		bdesc_t * block = NULL;
 
-		number = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_read);
+		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_read);
 		if (number != INVALID_BLOCK)
 			block = CALL(state->lfs, lookup_block, number);
 		if (!block)
 			return size_read ? size_read : -E_EOF;
 
 		limit = MIN(block->ddesc->length - dataoffset, size - size_read);
-		if (f->size_id)
+		if (uf->size_id)
 			if (offset + size_read + limit > file_size)
 				limit = file_size - offset - size_read;
 
@@ -381,11 +347,11 @@ static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
 		uhfs_mark_data(meta->desc, tail);
 }
 
-static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, uint32_t size)
+static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(0x%x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	open_file_t * f;
+	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	BD_t * const bd = CALL(state->lfs, get_blockdev);
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
 	const uint32_t blockoffset = offset - (offset % blocksize);
@@ -394,15 +360,11 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
-	if (f->size_id) {
+	if (uf->size_id) {
 		void * data;
 		size_t data_len;
 
-		r = CALL(state->lfs, get_metadata_fdesc, f->fdesc, f->size_id, &data_len, &data);
+		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &data_len, &data);
 		if (r < 0)
 			return r;
 		assert(data_len == sizeof(filesize));
@@ -421,7 +383,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	}
 
 	// do we really want to just return size_written if an operation failed?
-	// - yes, so that the caller knows what did get done successfully
+	// - yes, so that the caller knows what did get done successuflly
 	// also, if something fails, do we still update filesize? - we should
 
 	while (size_written < size)
@@ -430,7 +392,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		bdesc_t * block = NULL;
 		chdesc_t * save_head;
 
-		number = CALL(state->lfs, get_file_block, f->fdesc, blockoffset + (offset % blocksize) - dataoffset + size_written);
+		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
 			bool synthetic;
@@ -439,7 +401,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			save_head = prev_head;
 			prev_head = NULL; /* no need to link with previous chains here */
 
-			number = CALL(state->lfs, allocate_block, f->fdesc, type, &prev_head, &tail);
+			number = CALL(state->lfs, allocate_block, uf->inner, type, &prev_head, &tail);
 			if (number == INVALID_BLOCK)
 				return size_written;
 
@@ -449,7 +411,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			{
 				no_block:
 				prev_head = NULL;
-				r = CALL(state->lfs, free_block, f->fdesc, number, &prev_head, &tail);
+				r = CALL(state->lfs, free_block, uf->inner, number, &prev_head, &tail);
 				assert(r >= 0);
 				return size_written;
 			}
@@ -470,7 +432,7 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 			uhfs_mark_data(prev_head, tail);
 
 			/* append it to the file, depending on zeroing it */
-			r = CALL(state->lfs, append_file_block, f->fdesc, number, &prev_head, &tail);
+			r = CALL(state->lfs, append_file_block, uf->inner, number, &prev_head, &tail);
 			if (r < 0)
 			{
 				/* we don't need to worry about unzeroing the
@@ -517,10 +479,10 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 		dataoffset = 0; /* dataoffset only needed for first block */
 	}
 
-	if (f->size_id) {
+	if (uf->size_id) {
 		if (offset + size_written > target_size) {
 			target_size = offset + size_written;
-			r = CALL(state->lfs, set_metadata_fdesc, f->fdesc, f->size_id, sizeof(target_size), &target_size, &prev_head, &tail);
+			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head, &tail);
 			if (r < 0)
 				return r;
 		}
@@ -529,22 +491,18 @@ static int uhfs_write(CFS_t * cfs, int fid, const void * data, uint32_t offset, 
 	return size_written;
 }
 
-static int uhfs_getdirentries(CFS_t * cfs, int fid, char * buf, int nbytes, uint32_t * basep)
+static int uhfs_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
+	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	open_file_t * f;
+	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	uint32_t i;
 	int nbytes_read = 0;
 	int r = 0;
 
-	f = hash_map_find_val(state->open_files, (void*) fid);
-	if (!f)
-		return -E_INVAL;
-
 	for (i=0; nbytes_read < nbytes; i++)
 	{
-		r = CALL(state->lfs, get_dirent, f->fdesc, (dirent_t *) buf, nbytes - nbytes_read, basep);
+		r = CALL(state->lfs, get_dirent, uf->inner, (dirent_t *) buf, nbytes - nbytes_read, basep);
 		if (r < 0)
 			goto exit;
 		nbytes_read += ((dirent_t *) buf)->d_reclen;
@@ -864,20 +822,16 @@ static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 static int uhfs_destroy(CFS_t * cfs)
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	hash_map_it_t it;
-	open_file_t * f;
 	int r;
 
-	hash_map_it_init(&it, state->open_files);
-	while ((f = hash_map_val_next(&it)))
-		kdprintf(STDERR_FILENO, "%s(%s): orphaning fid %u\n", __FUNCTION__, modman_name_cfs(cfs), f->fid);
+	if (state->nopen > 0)
+		kdprintf(STDERR_FILENO, "%s(%s): orphaning %u open fdescs\n", __FUNCTION__, modman_name_cfs(cfs), state->nopen);
 
 	r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_lfs(state->lfs, cfs);
 
-	hash_map_destroy(state->open_files);
 	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
@@ -897,16 +851,16 @@ CFS_t * uhfs(LFS_t * lfs)
 
 	state = malloc(sizeof(*state));
 	if(!state)
-		goto error_uhfs;
+	{
+		free(cfs);
+		return NULL;
+	}
 
 	CFS_INIT(cfs, uhfs, state);
 	OBJMAGIC(cfs) = UHFS_MAGIC;
 
 	state->lfs = lfs;
-
-	state->open_files = hash_map_create();
-	if (!state->open_files)
-		goto error_state;
+	state->nopen = 0;
 
 	if(modman_add_anon_cfs(cfs, __FUNCTION__))
 	{
@@ -921,10 +875,4 @@ CFS_t * uhfs(LFS_t * lfs)
 	}
 	
 	return cfs;
-
-  error_state:
-	free(state);
- error_uhfs:
-	free(cfs);
-	return NULL;
 }
