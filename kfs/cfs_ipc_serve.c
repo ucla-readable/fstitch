@@ -192,7 +192,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 static void serve_close(envid_t envid, struct Scfs_close * req)
 {
-	int r, s;
+	int r = -E_INVAL, s;
 	fdesc_t * fdesc;
 	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
 	if (fid_closeable_fdesc(req->fid, &fdesc))
