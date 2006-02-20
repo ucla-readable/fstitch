@@ -101,7 +101,7 @@ static int check_super(LFS_t * object)
 
 	numblocks = CALL(info->ubd, get_numblocks);
 
-	printf("JOS Filesystem size: %d blocks (%dMB)\n", super->s_nblocks, super->s_nblocks / (1024 * 1024 / JOSFS_BLKSIZE));
+	printf("JOS Filesystem size: %u blocks (%uMB)\n", super->s_nblocks, super->s_nblocks / (1024 * 1024 / JOSFS_BLKSIZE));
 	if (super->s_nblocks > numblocks) {
 		printf("josfs_base: file system is too large\n");
 		return -1;
@@ -131,7 +131,7 @@ static int check_bitmap(LFS_t * object)
 	// Make sure that the bitmap blocks are marked in-use.
 	for (i = 0; i < blocks_to_read; i++) {
 		if (block_is_free(object, 2+i)) {
-			printf("josfs_base: Free Block Bitmap block %d marked free!\n");
+			printf("josfs_base: Free Block Bitmap block %d marked free!\n", 2+i);
 			return -1;
 		}
 	}
@@ -175,12 +175,12 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 				}
 			}
 			else {
-				printf("indirect block pointing to used block: %s, %d\n", file.f_name, file.f_indirect);
+				printf("indirect block pointing to used block: %s, %u\n", file.f_name, file.f_indirect);
 				r++;
 			}
 		}
 		else {
-			printf("invalid indirect block number: %s, %d", file.f_name, file.f_indirect);
+			printf("invalid indirect block number: %s, %u", file.f_name, file.f_indirect);
 			r++;
 		}
 	}
@@ -449,7 +449,7 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("JOSFSDEBUG: write_bitmap %d\n", blockno);
+	Dprintf("JOSFSDEBUG: write_bitmap %u\n", blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	uint32_t target;
@@ -641,21 +641,21 @@ static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose
 
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number)
 {
-	Dprintf("JOSFSDEBUG: josfs_lookup_block %d\n", number);
+	Dprintf("JOSFSDEBUG: josfs_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	return CALL(info->ubd, read_block, number);
 }
 
 static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
 {
-	Dprintf("JOSFSDEBUG: josfs_synthetic_lookup_block %d\n", number);
+	Dprintf("JOSFSDEBUG: josfs_synthetic_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	return CALL(info->ubd, synthetic_read_block, number, synthetic);
 }
 
 static int josfs_cancel_synthetic_block(LFS_t * object, uint32_t number)
 {
-	Dprintf("JOSFSDEBUG: josfs_cancel_synthetic_block %d\n", number);
+	Dprintf("JOSFSDEBUG: josfs_cancel_synthetic_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	return CALL(info->ubd, cancel_block, number);
 }
@@ -766,7 +766,7 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 		}
 	}
 
-	//Dprintf("JOSFSDEBUG: josfs_get_file_numblocks returns %d\n", nblocks);
+	//Dprintf("JOSFSDEBUG: josfs_get_file_numblocks returns %u\n", nblocks);
 	return nblocks;
 }
 
@@ -778,7 +778,7 @@ static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t of
 	bdesc_t * indirect;
 	uint32_t blockno, nblocks;
 
-	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %d\n", f->file->f_name, offset);
+	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %u\n", f->file->f_name, offset);
 
 	nblocks = josfs_get_file_numblocks(object, file);
 	if (offset % JOSFS_BLKSIZE || offset >= nblocks * JOSFS_BLKSIZE)
@@ -797,7 +797,7 @@ static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t of
 
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("JOSFSDEBUG: josfs_get_dirent %x, %d\n", basep, *basep);
+	Dprintf("JOSFSDEBUG: josfs_get_dirent %x, %u\n", basep, *basep);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	bdesc_t * dirblock = NULL;
 	JOSFS_File_t * dirfile;
@@ -1362,7 +1362,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 static int josfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
-	Dprintf("JOSFSDEBUG: josfs_get_metadata_inode %d\n", ino);
+	Dprintf("JOSFSDEBUG: josfs_get_metadata_inode %u\n", ino);
 	int r;
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
 	if (!f)
@@ -1381,7 +1381,7 @@ static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 
 static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("JOSFSDEBUG: josfs_set_metadata %s, %d, %d\n", f->file->f_name, id, size);
+	Dprintf("JOSFSDEBUG: josfs_set_metadata %s, %u, %u\n", f->file->f_name, id, size);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * dirblock = NULL;
 	int r;
