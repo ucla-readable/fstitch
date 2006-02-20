@@ -30,8 +30,6 @@
 #ifdef KUDOS
 #include <kfs/mount_selector_cfs.h>
 #include <kfs/cfs_ipc_opgroup.h>
-#include <kfs/fidprotector_cfs.h>
-#include <kfs/fidcloser_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/ipc_serve.h>
 #endif
@@ -74,8 +72,6 @@ int kfsd_init(int argc, char ** argv)
 #ifdef KUDOS
 	CFS_t * table_class = NULL;
 	CFS_t * opgroupscope_tracker = NULL;
-	CFS_t * fidprotector = NULL;
-	CFS_t * fidcloser = NULL;
 #endif
 	int r;
 
@@ -234,17 +230,6 @@ int kfsd_init(int argc, char ** argv)
 	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
 		kfsd_shutdown();
 	set_frontend_cfs(opgroupscope_tracker);
-
-	//
-	// fidfairies
-
-	if (! (fidprotector = fidprotector_cfs(get_frontend_cfs())) )
-		kfsd_shutdown();
-	set_frontend_cfs(fidprotector);
-
-	if (! (fidcloser = fidcloser_cfs(get_frontend_cfs())) )
-		kfsd_shutdown();
-	set_frontend_cfs(fidcloser);
 #endif
 
 	return 0;

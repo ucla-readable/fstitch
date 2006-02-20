@@ -37,8 +37,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/mount_selector_cfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_opgroup.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
-			$(OBJDIR)/kfs/fidprotector_cfs.o \
-			$(OBJDIR)/kfs/fidcloser_cfs.o \
 			$(OBJDIR)/kfs/cfs_ipc_serve.o \
 			$(OBJDIR)/kfs/kfs_ipc_serve.o \
 			$(OBJDIR)/kfs/ipc_serve.o \

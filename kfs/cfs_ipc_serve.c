@@ -192,17 +192,15 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 static void serve_close(envid_t envid, struct Scfs_close * req)
 {
-	int r;
+	int r, s;
+	fdesc_t * fdesc;
 	Dprintf("%s: %08x, %d\n", __FUNCTION__, envid, req->fid);
-	if (fid_fdesc(req->fid))
+	if (fid_closeable_fdesc(req->fid, &fdesc))
 	{
-		r = CALL(frontend_cfs, close, fid_fdesc(req->fid));
-		// FIXME: call release_fid(), but only when fidcloser_cfs would close
-		//s = release_fid(req->fid);
-		//assert(r < 0 || (r >= 0 && s >= 0));
+		r = CALL(frontend_cfs, close, fdesc);
+		s = release_fid(req->fid);
+		assert(r < 0 || (r >= 0 && s >= 0));
 	}
-	else
-		r = -E_INVAL;
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
@@ -210,13 +208,15 @@ static void serve_read(envid_t envid, struct Scfs_read * req)
 {
 	int r;
 	void *buf = (uint8_t*) PAGESNDVA;
+	fdesc_t * fdesc;
 	Dprintf("%s: %08x, %d, %d, %d\n", __FUNCTION__, envid, req->fid, req->offset, req->size);
 
 	if (get_pte(buf) & PTE_P)
 		panic("buf (PAGESNDVA = 0x%08x) already mapped", buf);
 	if ((r = sys_page_alloc(0, buf, PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %i", r);
-	r = CALL(frontend_cfs, read, fid_fdesc(req->fid), buf, req->offset, req->size);
+	if ((r = fid_fdesc(req->fid, &fdesc)) >= 0)
+		r = CALL(frontend_cfs, read, fdesc, buf, req->offset, req->size);
 	ipc_send(envid, r, buf, PTE_P|PTE_U, NULL);
 }
 
@@ -238,9 +238,11 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 	{
 		// Second of two recvs
 		struct Scfs_write *scfs = (struct Scfs_write*) prevrecv->scfs;
+		fdesc_t * fdesc;
 		int r;
 		Dprintf("%s [2]: %08x, %d, %d, %d\n", __FUNCTION__, envid, scfs->fid, scfs->offset, scfs->size);
-		r = CALL(frontend_cfs, write, fid_fdesc(scfs->fid), req, scfs->offset, scfs->size);
+		if ((r = fid_fdesc(scfs->fid, &fdesc)) >= 0)
+			r = CALL(frontend_cfs, write, fdesc, req, scfs->offset, scfs->size);
 		ipc_send(envid, r, NULL, 0, NULL);
 		prevrecv->envid = 0;
 		prevrecv->type  = 0;
@@ -250,6 +252,7 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 {
 	int nbytes;
+	fdesc_t * fdesc;
 	int r;
 	struct Scfs_getdirentries_return * resp = (struct Scfs_getdirentries_return*) PAGESNDVA;
 	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->basep);
@@ -263,16 +266,23 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 	if (nbytes > sizeof(resp->buf))
 		nbytes = sizeof(resp->buf);
 
-	r = CALL(frontend_cfs, getdirentries, fid_fdesc(req->fid), resp->buf, nbytes, &resp->basep);
-	resp->nbytes_read = r;
+	if ((r = fid_fdesc(req->fid, &fdesc)) >= 0)
+	{
+		r = CALL(frontend_cfs, getdirentries, fdesc, resp->buf, nbytes, &resp->basep);
+		resp->nbytes_read = r;
+	}
+	else
+		resp->nbytes_read = 0;
 	ipc_send(envid, r, resp, PTE_P|PTE_U, NULL);
 }
 
 static void serve_truncate(envid_t envid, struct Scfs_truncate * req)
 {
+	fdesc_t * fdesc;
 	int r;
 	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->fid, req->size);
-	r = CALL(frontend_cfs, truncate, fid_fdesc(req->fid), req->size);
+	if ((r = fid_fdesc(req->fid, &fdesc)) >= 0)
+		r = CALL(frontend_cfs, truncate, fdesc, req->size);
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 

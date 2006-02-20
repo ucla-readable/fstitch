@@ -212,11 +212,18 @@ int cfs_ipc_opgroup_scope_copy(envid_t parent, envid_t child, const void * child
 
 
 // Because opgroupscope_tracker decides when to deactivate an environment's
-// opgroup scope based on the pageref number ofr the env opgroup scope cappa,
+// opgroup scope based on the pageref number for the env opgroup scope cappa,
 // opgroupscope_tracker would never deactivate any scopes in use by
 // multiple opgroupscope_trackers.
-// Just as fidcloser_cfs.c does, we thus allow at most one
-// opgroupscope_tracker to exist at a given time.
+//
+// Three possibilities to keep this from happening:
+// 1- Assume this won't happen.
+// 2- Figure out if a given page is already in use by another
+//    opgroupscope_tracker.
+// 3- Allow at most one opgroupscope_tracker to exist at a given time.
+// Possibility 3 is safe (1 is not), simpler than 2, and at least for now
+// multiple opgroupscope_trackers aren't something we want.
+// so possibility 3 it is:
 static bool opgroupscope_tracker_cfs_exists = 0;
 
 
