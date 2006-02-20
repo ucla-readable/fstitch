@@ -1,14 +1,11 @@
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <inc/error.h>
 #include <lib/stdio.h>
-#include <lib/hash_map.h>
 #include <lib/vector.h>
 #include <lib/fcntl.h>
 #include <lib/dirent.h>
 
-#include <kfs/fidman.h>
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
@@ -22,6 +19,8 @@
 #else
 #define Dprintf(x...)
 #endif
+
+/* Idea: use index into bd_table as inode number... no need for a hash set. */
 
 struct devfs_fdesc {
 	fdesc_common_t * common;
@@ -37,7 +36,7 @@ struct devfs_fdesc {
 typedef struct devfs_fdesc devfs_fdesc_t;
 
 struct devfs_state {
-	vector_t * bd_table; // TODO: use a hash_set_t for faster lookups/removes
+	vector_t * bd_table;
 	devfs_fdesc_t root_fdesc;
 };
 typedef struct devfs_state devfs_state_t;
@@ -251,7 +250,7 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 
 static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(%d, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fid, data, offset, size);
+	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	devfs_fdesc_t * devfd = (devfs_fdesc_t *) fdesc;
 	
 	const uint32_t blocksize = CALL(devfd->bd, get_blocksize);
@@ -338,7 +337,7 @@ static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes
 /* This function looks a lot like uhfs_getdirentries() */
 static int devfs_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
+	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	uint32_t i;
 	int nbytes_read = 0;
@@ -378,13 +377,13 @@ static int devfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 static int devfs_link(CFS_t * cfs, inode_t inode, inode_t new_parent, const char * new_name)
 {
-	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, inode, newparent, newname);
+	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, inode, new_parent, new_name);
 	return -E_INVAL;
 }
 
 static int devfs_rename(CFS_t * cfs, inode_t old_parent, const char * old_name, inode_t new_parent, const char * new_name)
 {
-	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
+	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, old_parent, old_name, new_parent, new_name);
 	/* I suppose we could support renaming block devices. It might pose some issues however. */
 	return -E_INVAL;
 }
