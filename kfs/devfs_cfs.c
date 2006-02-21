@@ -42,14 +42,14 @@ struct devfs_state {
 typedef struct devfs_state devfs_state_t;
 
 
-static devfs_fdesc_t * devfs_fdesc_create(const char * name, BD_t * bd)
+static devfs_fdesc_t * devfs_fdesc_create(inode_t parent, const char * name, BD_t * bd)
 {
 	devfs_fdesc_t * fdesc = malloc(sizeof(*fdesc));
 	if(!fdesc)
 		return NULL;
 	
 	fdesc->common = &fdesc->base;
-	fdesc->base.parent = INODE_NONE;
+	fdesc->base.parent = parent;
 	fdesc->name = name;
 	fdesc->bd = bd;
 	fdesc->open_count = 0;
@@ -526,7 +526,7 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	OBJMAGIC(cfs) = DEVFS_MAGIC;
 	
 	state->root_fdesc.common = &state->root_fdesc.base;
-	state->root_fdesc.base.parent = INODE_NONE;
+	state->root_fdesc.base.parent = (inode_t) cfs;
 	state->root_fdesc.root = cfs;
 	state->root_fdesc.open_count = 0;
 	
@@ -574,7 +574,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	if(fdesc)
 		return -E_INVAL;
 	
-	fdesc = devfs_fdesc_create(name, bd);
+	fdesc = devfs_fdesc_create(state->root_fdesc.inode, name, bd);
 	if(!fdesc)
 		return -E_NO_MEM;
 	
