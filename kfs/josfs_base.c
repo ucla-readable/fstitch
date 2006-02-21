@@ -523,7 +523,6 @@ static uint32_t count_free_space(LFS_t * object)
 static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS_File_t** file, uint32_t * dirb, int *index)
 {
 	Dprintf("JOSFSDEBUG: dir_lookup %s\n", name);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t i, basep = 0;
 	int r = 0;
 
@@ -788,10 +787,9 @@ static uint32_t get_file_block(LFS_t * object, JOSFS_File_t * file, uint32_t off
 // Offset is a byte offset
 static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %u\n", file->f_name, offset);
-	return get_file_block(info, f->file, offset);
+	return get_file_block(object, f->file, offset);
 }
 
 static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -854,7 +852,7 @@ static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** na
 	if (blockno >= get_file_numblocks(info, file))
 		return -E_UNSPECIFIED;
 
-	blockno = get_file_block(info, file, blockno * JOSFS_BLKSIZE);
+	blockno = get_file_block(object, file, blockno * JOSFS_BLKSIZE);
 	if (blockno != INVALID_BLOCK)
 		dirblock = josfs_lookup_block(object, blockno);
 	if (!dirblock)
@@ -929,7 +927,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	if (blockno >= get_file_numblocks(info, f->file))
 		return -E_UNSPECIFIED;
 
-	blockno = get_file_block(info, f->file, blockno * JOSFS_BLKSIZE);
+	blockno = get_file_block(object, f->file, blockno * JOSFS_BLKSIZE);
 	if (blockno != INVALID_BLOCK)
 		dirblock = josfs_lookup_block(object, blockno);
 	if (!dirblock)
@@ -1059,7 +1057,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	// Search existing blocks for empty spot
 	for (i = 0; i < nblock; i++) {
 		int j;
-		number = get_file_block(info, ((struct josfs_fdesc *) pdir_fdesc)->file, i * JOSFS_BLKSIZE);
+		number = get_file_block(object, ((struct josfs_fdesc *) pdir_fdesc)->file, i * JOSFS_BLKSIZE);
 		if (number != INVALID_BLOCK)
 			blk = josfs_lookup_block(object, number);
 		if (!blk)
