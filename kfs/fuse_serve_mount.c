@@ -90,6 +90,10 @@ int fuse_serve_mount_set_root(CFS_t * root_cfs)
 
 	if ((r = CALL(root_cfs, get_root, &root->root_ino)) < 0)
 		return r;
+
+	if ((r = hash_map_insert(root->parents, (void *) root->root_ino, (void *) root->root_ino)) < 0)
+		return r;
+
 	root->cfs = root_cfs;
 	printf("Mounted \"\" from %s\n", modman_name_cfs(root_cfs));
 	return 0;
@@ -224,13 +228,22 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 		goto error_qe;
 	}
 
+	if (!(m->parents = hash_map_create()))
+	{
+		r = -E_NO_MEM;
+		goto error_path;
+	}
+
 	m->cfs = cfs;
 
 	if ((r = CALL(cfs, get_root, &m->root_ino)) < 0)
-		goto error_path;
+		goto error_parents;
+
+	if ((r = hash_map_insert(m->parents, (void *) m->root_ino, (void *) m->root_ino)) < 0)
+		goto error_parents;
 
 	if ((r = fuse_args_copy(&root->args, &m->args)) < 0)
-		goto error_path;
+		goto error_parents;
 
 	m->mountpoint = malloc(strlen(root->mountpoint) + strlen(path) + 1);
 	if (!m->mountpoint)
@@ -264,6 +277,8 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 	free(m->mountpoint);
   error_args:
 	fuse_opt_free_args(&m->args);
+  error_parents:
+	hash_map_destroy(m->parents);
   error_path:
 	free(m->kfs_path);
   error_qe:
@@ -319,6 +334,10 @@ static int mount_root(int argc, char ** argv)
 
 	if (!(root->kfs_path = strdup("")))
 		return -E_NO_MEM;
+
+	if (!(root->parents = hash_map_create()))
+		return -E_NO_MEM;
+
 	root->cfs = NULL; // set later via fuse_serve_mount_set_root()
 
 	if (fuse_parse_cmdline(&root->args, &root->mountpoint, NULL, NULL) == -1)
@@ -398,6 +417,7 @@ static int unmount_root(void)
 
 	free(root->mountpoint);
 	free(root->kfs_path);
+	hash_map_destroy(root->parents);
 
 	memset(root, 0, sizeof(*root));
 	free(root);
@@ -628,6 +648,7 @@ static void helper_thread_unmount(mount_t * m)
 	fuse_unmount(m->mountpoint);
 	free(m->mountpoint);
 	free(m->kfs_path);
+	hash_map_destroy(m->parents);
 	memset(m, 0, sizeof(*m));
 	free(m);
 }
@@ -787,6 +808,7 @@ int fuse_serve_mount_start_shutdown(void)
 				free(m->kfs_path);
 				fuse_opt_free_args(&m->args);
 				free(m->mountpoint);
+				hash_map_destroy(m->parents);
 				memset(m, 0, sizeof(*m));
 				free(m);
 				break;

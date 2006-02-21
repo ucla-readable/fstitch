@@ -10,7 +10,7 @@ struct fdesc_common;
 typedef struct fdesc_common fdesc_common_t;
 
 struct fdesc_common {
-	inode_t parent;
+	inode_t parent; // only valid for fdescs corresponding to directories
 };
 
 /* This structure is meant to be "subclassed" by defining new structures with

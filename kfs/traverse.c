@@ -125,7 +125,16 @@ int path_to_parent_and_name(const char * path, CFS_t ** cfs, inode_t * parent, c
 	if (!path || !cfs || !parent || !filename)
 		return -E_INVAL;
 
+	if (!strcmp(path, "/"))
+		return path_to_inode("/", cfs, parent);
+
 	namelen = strlen(path);
+
+	// Allow child to be a directory: if the child is a directory, skip
+	// the last slash so that the last directory is considered the child
+	if (path[namelen - 1] == '/')
+		namelen--;
+
 	for (i = namelen - 1; i >= 0; i--) {
 		if (path[i] == '/') {
 			strncpy(parentname, path, i + 1);

@@ -312,26 +312,51 @@ static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes
 {
 	const size_t size = vector_size(state->bd_table);
 	uint16_t reclen = sizeof(*dirent) - sizeof(dirent->d_name) + 1;
+	const char * name;
+	inode_t inode;
+	uint32_t filesize;
+	uint8_t type;
 	uint8_t namelen;
-	devfs_fdesc_t * fdesc;
 	
-	if(*basep < 0 || size <= *basep)
+	if(*basep < 0 || size + 2 <= *basep)
 		return -E_UNSPECIFIED;
 	
-	fdesc = (devfs_fdesc_t *) vector_elt(state->bd_table, *basep);
-	namelen = strlen(fdesc->name);
+	if(*basep == 0)
+	{
+		name = ".";
+		inode = state->root_fdesc.inode;
+		filesize = 0;
+		type = TYPE_DIR;
+	}
+	else if(*basep == 1)
+	{
+		name = "..";
+		inode = state->root_fdesc.inode;
+		filesize = 0;
+		type = TYPE_DIR;
+	}
+	else
+	{
+		devfs_fdesc_t * fdesc = (devfs_fdesc_t *) vector_elt(state->bd_table, *basep - 2);
+		name = fdesc->name;
+		inode = fdesc->inode;
+		filesize = CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks);
+		type = TYPE_DEVICE;
+	}
+	
+	namelen = strlen(name);
 	reclen += namelen;
 	if(reclen > nbytes)
 		return -E_UNSPECIFIED;
 	
 	(*basep)++;
 	
-	dirent->d_fileno = fdesc->inode;
-	dirent->d_filesize = CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks);
+	dirent->d_fileno = inode;
+	dirent->d_filesize = filesize;
 	dirent->d_reclen = reclen;
-	dirent->d_type = TYPE_DEVICE;
+	dirent->d_type = type;
 	dirent->d_namelen = namelen;
-	strncpy(dirent->d_name, fdesc->name, namelen + 1);
+	strncpy(dirent->d_name, name, namelen + 1);
 	
 	return 0;
 }

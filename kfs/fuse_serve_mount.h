@@ -14,6 +14,8 @@
 typedef struct mount {
 	bool mounted; // struct is valid only when mounted is true
 
+	hash_map_t * parents; // directory inode_t -> parent inode_t
+
 	char * kfs_path;
 	CFS_t * cfs;
 	inode_t root_ino;

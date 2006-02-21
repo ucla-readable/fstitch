@@ -143,13 +143,13 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 		struct Scfs_open *scfs = (struct Scfs_open*) prevrecv->scfs;
 		CFS_t * select_cfs;
 		int r;
+		inode_t parent;
 		inode_t ino;
 		Dprintf("%s [2]: %08x, \"%s\", %d\n", __FUNCTION__, envid, scfs->path, scfs->mode);
 		cur_page = req;
 
 		if (scfs->mode & O_CREAT)
 		{
-			inode_t parent;
 			char * filename;
 			r = path_to_parent_and_name(scfs->path, &select_cfs, &parent, &filename);
 			if (r >= 0)
@@ -167,7 +167,11 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 		if (!new_file)
 		{
+			int s;
+			char * filename;
+			s = path_to_parent_and_name(scfs->path, &select_cfs, &parent, &filename);
 			r = path_to_inode(scfs->path, &select_cfs, &ino);
+			assert(r < 0 || s >= 0);
 			if (r >= 0)
 			{
 				kfsd_set_mount(select_cfs);
@@ -177,6 +181,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 		if (r >= 0)
 		{
+			fdesc->common->parent = parent;
 			r = create_fid(fdesc);
 			if (r < 0)
 				(void) CALL(frontend_cfs, close, fdesc);

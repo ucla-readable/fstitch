@@ -67,7 +67,9 @@ struct josfs_fdesc {
 
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number);
 static int josfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
+static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** name, uint32_t * basep);
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
+static uint32_t get_file_block(LFS_t * object, JOSFS_File_t * file, uint32_t offset);
 static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail);
 static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
@@ -261,7 +263,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, int8_t * fbmap, int8_t * ubmap,
 		}
 
 		blockno = i / JOSFS_BLKFILES;
-		blockno = josfs_get_file_block(object, (fdesc_t *) fdesc, blockno * JOSFS_BLKSIZE);
+		blockno = get_file_block(object, fdesc->file, blockno * JOSFS_BLKSIZE);
 		if (blockno != INVALID_BLOCK)
 			dirblock = josfs_lookup_block(object, blockno);
 		if (dirblock) {
@@ -521,28 +523,18 @@ static uint32_t count_free_space(LFS_t * object)
 static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS_File_t** file, uint32_t * dirb, int *index)
 {
 	Dprintf("JOSFSDEBUG: dir_lookup %s\n", name);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t i, basep = 0;
-	struct josfs_fdesc * temp_fdesc = malloc(sizeof(struct josfs_fdesc));
 	int r = 0;
 
-	if (!temp_fdesc) {
-		Dprintf("JOSFSDEBUG: dir_lookup done: NO MEM\n");
-		return -E_NO_MEM;
-	}
-
-	temp_fdesc->common = &temp_fdesc->base;
-	temp_fdesc->base.parent = INODE_NONE;
-
-	temp_fdesc->ino = INODE_NONE;
-	temp_fdesc->file = dir;
 	for (i = 0; r >= 0; i++)
 	{
-		struct dirent entry; // will have incorrect fileno b/c we gave josfs_get_dirent a bogus inode # in temp_fdesc
-		r = josfs_get_dirent(object, (fdesc_t *) temp_fdesc, &entry, sizeof(struct dirent), &basep);
-		if (r == 0 && !strcmp(entry.d_name, name)) {
+		const char * found_name = NULL;
+		r = get_dirent_name(object, dir, &found_name, &basep);
+		if (r == 0 && !strcmp(found_name, name)) {
 			bdesc_t * dirblock = NULL;
 			uint32_t blockno = i / JOSFS_BLKFILES;
-			*dirb = josfs_get_file_block(object, (fdesc_t *) temp_fdesc, blockno * JOSFS_BLKSIZE);
+			*dirb = get_file_block(object, dir, blockno * JOSFS_BLKSIZE);
 			if (*dirb != INVALID_BLOCK)
 				dirblock = josfs_lookup_block(object, *dirb);
 			if (dirblock) {
@@ -552,13 +544,10 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 				*file = malloc(sizeof(JOSFS_File_t));
 				if (*file) {
 					memcpy(*file, target, sizeof(JOSFS_File_t));
-
-					free(temp_fdesc);
 					Dprintf("JOSFSDEBUG: dir_lookup done: FOUND\n");
 					return 0;
 				}
 				else {
-					free(temp_fdesc);
 					Dprintf("JOSFSDEBUG: dir_lookup done: NO MEM2\n");
 					return -E_NO_MEM;
 				}
@@ -566,9 +555,7 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 		}
 	}
 
-	free(temp_fdesc);
 	*file = NULL;
-
 	Dprintf("JOSFSDEBUG: dir_lookup done: NOT FOUND\n");
 	return -E_NOT_FOUND;
 }
@@ -700,7 +687,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 
 static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
-	Dprintf("JOSFSDEBUG: josfs_free_fdesc %x\n", fdesc);
+	Dprintf("JOSFSDEBUG: josfs_free_fdesc 0x%08x\n", fdesc);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) fdesc;
 
@@ -721,6 +708,9 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	uint32_t dirb = 0;
 	int r;
 
+	// "." and ".." are (at least right now) supported by code further up
+	// (this seems hacky, but it would be hard to figure out parent's parent from here)
+
 	fd = (struct josfs_fdesc *)josfs_lookup_inode(object, parent);
 	if (!fd) return -E_INVAL;
 	parent_file = fd->file;
@@ -728,6 +718,7 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
 	josfs_free_fdesc(object, (fdesc_t *) fd);
 	fd = NULL;
+	parent_file = NULL;
 	free(file);
 	file = NULL;
 	if (r < 0)
@@ -736,26 +727,23 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	return 0;
 }
 
-static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
+static uint32_t get_file_numblocks(struct lfs_info * info, JOSFS_File_t * file)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	//Dprintf("JOSFSDEBUG: josfs_get_file_numblocks %s\n", f->file->f_name);
 	bdesc_t * indirect;
 	uint32_t nblocks = 0;
 	int i;
 
 	for (i = 0; i < JOSFS_NDIRECT; i++) {
-		if (!f->file->f_direct[i])
+		if (!file->f_direct[i])
 			break;
 		nblocks++;
 	}
 
-	// f->file->f_indirect -> i == JOSFS_NDIRECT
-	assert(!f->file->f_indirect || i == JOSFS_NDIRECT);
+	// file->f_indirect -> i == JOSFS_NDIRECT
+	assert(!file->f_indirect || i == JOSFS_NDIRECT);
 
-	if (f->file->f_indirect) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
+	if (file->f_indirect) {
+		indirect = CALL(info->ubd, read_block, file->f_indirect);
 		if (indirect) {
 			uint32_t * j = (uint32_t *) indirect->ddesc->data;
 			for (i = JOSFS_NDIRECT; i < JOSFS_NINDIRECT; i++) {
@@ -766,8 +754,35 @@ static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 		}
 	}
 
-	//Dprintf("JOSFSDEBUG: josfs_get_file_numblocks returns %u\n", nblocks);
 	return nblocks;
+}
+
+static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
+	return get_file_numblocks(info, f->file);
+}
+
+static uint32_t get_file_block(LFS_t * object, JOSFS_File_t * file, uint32_t offset)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	bdesc_t * indirect;
+	uint32_t blockno, nblocks;
+
+	nblocks = get_file_numblocks(info, file);
+	if (offset % JOSFS_BLKSIZE || offset >= nblocks * JOSFS_BLKSIZE)
+		return INVALID_BLOCK;
+
+	if (offset >= JOSFS_NDIRECT * JOSFS_BLKSIZE) {
+		indirect = CALL(info->ubd, read_block, file->f_indirect);
+		if (!indirect)
+			return INVALID_BLOCK;
+		blockno = ((uint32_t *) indirect->ddesc->data)[offset / JOSFS_BLKSIZE];
+	}
+	else
+		blockno = file->f_direct[offset / JOSFS_BLKSIZE];
+	return blockno;
 }
 
 // Offset is a byte offset
@@ -775,50 +790,13 @@ static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t of
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	bdesc_t * indirect;
-	uint32_t blockno, nblocks;
-
-	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %u\n", f->file->f_name, offset);
-
-	nblocks = josfs_get_file_numblocks(object, file);
-	if (offset % JOSFS_BLKSIZE || offset >= nblocks * JOSFS_BLKSIZE)
-		return INVALID_BLOCK;
-
-	if (offset >= JOSFS_NDIRECT * JOSFS_BLKSIZE) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
-		if (!indirect)
-			return INVALID_BLOCK;
-		blockno = ((uint32_t *) indirect->ddesc->data)[offset / JOSFS_BLKSIZE];
-	}
-	else
-		blockno = f->file->f_direct[offset / JOSFS_BLKSIZE];
-	return blockno;
+	//Dprintf("JOSFSDEBUG: josfs_get_file_block_num %s, %u\n", file->f_name, offset);
+	return get_file_block(info, f->file, offset);
 }
 
-static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
+static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("JOSFSDEBUG: josfs_get_dirent %x, %u\n", basep, *basep);
-	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	bdesc_t * dirblock = NULL;
-	JOSFS_File_t * dirfile;
-	uint32_t blockno;
 	uint16_t namelen, reclen;
-
-	// Make sure it's a directory and we can read from it
-	if (f->file->f_type != JOSFS_TYPE_DIR)
-		return -E_NOT_DIR;
-
-	blockno = *basep / JOSFS_BLKFILES;
-
-	if (blockno >= josfs_get_file_numblocks(object, file))
-		return -E_UNSPECIFIED;
-
-	blockno = josfs_get_file_block(object, file, blockno * JOSFS_BLKSIZE);
-	if (blockno != INVALID_BLOCK)
-		dirblock = josfs_lookup_block(object, blockno);
-	if (!dirblock)
-		return -E_NOT_FOUND;
-	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
 
 	namelen = strlen(dirfile->f_name);
 	namelen = MIN(namelen, sizeof(entry->d_name) - 1);
@@ -836,7 +814,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		return -E_INVAL;
 
 	// Pseudo unique fileno generator
-	entry->d_fileno = f->ino;
+	entry->d_fileno = ino;
 
 	switch(dirfile->f_type)
 	{
@@ -858,12 +836,115 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	return 0;
 }
 
+// Get a dirent's name and name only; useful if the caller does not
+// know an open file's inode number
+static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** name, uint32_t * basep)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	bdesc_t * dirblock = NULL;
+	JOSFS_File_t * dirfile;
+	uint32_t blockno;
+
+	// Make sure it's a directory and we can read from it
+	if (file->f_type != JOSFS_TYPE_DIR)
+		return -E_NOT_DIR;
+
+	blockno = *basep / JOSFS_BLKFILES;
+
+	if (blockno >= get_file_numblocks(info, file))
+		return -E_UNSPECIFIED;
+
+	blockno = get_file_block(info, file, blockno * JOSFS_BLKSIZE);
+	if (blockno != INVALID_BLOCK)
+		dirblock = josfs_lookup_block(object, blockno);
+	if (!dirblock)
+		return -E_NOT_FOUND;
+	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
+
+	(*basep)++;
+	if (strlen(dirfile->f_name) < 1)
+	{
+		*name = NULL;
+		return 1;
+	}
+	else
+	{
+		*name = dirfile->f_name;
+		return 0;
+	}
+}
+
+static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
+{
+	Dprintf("JOSFSDEBUG: josfs_get_dirent 0x%08x, %u\n", basep, *basep);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
+	bdesc_t * dirblock = NULL;
+	JOSFS_File_t * dirfile;
+	uint32_t blockno;
+
+	// Make sure it's a directory and we can read from it
+	if (f->file->f_type != JOSFS_TYPE_DIR)
+		return -E_NOT_DIR;
+
+	if (*basep == 0)
+	{
+		JOSFS_File_t d = {
+			.f_name = {0},
+			.f_size = 0,
+			.f_type = TYPE_DIR,
+			.f_direct = {0},
+			.f_indirect = 0
+		};
+		strncpy(d.f_name, ".", JOSFS_MAXNAMELEN);
+		d.f_name[JOSFS_MAXNAMELEN - 1] = 0;
+		return fill_dirent(&d, f->ino, entry, size, basep);
+	}
+
+	if (*basep == 1)
+	{
+		JOSFS_File_t d = {
+			.f_name = {0},
+			.f_size = 0,
+			.f_type = TYPE_DIR,
+			.f_direct = {0},
+			.f_indirect = 0
+		};
+		inode_t parent;
+		strncpy(d.f_name, "..", JOSFS_MAXNAMELEN);
+		d.f_name[JOSFS_MAXNAMELEN - 1] = 0;
+		assert(f->common->parent != INODE_NONE);
+		if (f->ino != INODE_ROOT)
+		{
+			assert(f->common->parent != INODE_NONE);
+			parent = f->common->parent;
+		}
+		else
+			parent = f->ino;
+		return fill_dirent(&d, parent, entry, size, basep);
+	}
+
+	blockno = (*basep - 2) / JOSFS_BLKFILES;
+
+	if (blockno >= get_file_numblocks(info, f->file))
+		return -E_UNSPECIFIED;
+
+	blockno = get_file_block(info, f->file, blockno * JOSFS_BLKSIZE);
+	if (blockno != INVALID_BLOCK)
+		dirblock = josfs_lookup_block(object, blockno);
+	if (!dirblock)
+		return -E_NOT_FOUND;
+	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + ((*basep - 2) % JOSFS_BLKFILES);
+
+	return fill_dirent(dirfile, f->ino, entry, size, basep);
+}
+
 static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("JOSFSDEBUG: josfs_append_file_block\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	uint32_t nblocks = josfs_get_file_numblocks(object, file);
+	uint32_t nblocks = get_file_numblocks(info, f->file);
 	bdesc_t * indirect = NULL, * dirblock = NULL;
 	int r, offset;
 	chdesc_t *newtail;
@@ -973,12 +1054,12 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		goto allocate_name_exit;
 
 	// Modified dir_alloc_file() from JOS
-	nblock = josfs_get_file_numblocks(object, pdir_fdesc);
+	nblock = get_file_numblocks(info, ((struct josfs_fdesc *) pdir_fdesc)->file);
 
 	// Search existing blocks for empty spot
 	for (i = 0; i < nblock; i++) {
 		int j;
-		number = josfs_get_file_block(object, pdir_fdesc, i * JOSFS_BLKSIZE);
+		number = get_file_block(info, ((struct josfs_fdesc *) pdir_fdesc)->file, i * JOSFS_BLKSIZE);
 		if (number != INVALID_BLOCK)
 			blk = josfs_lookup_block(object, number);
 		if (!blk)
@@ -1152,7 +1233,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 	Dprintf("JOSFSDEBUG: josfs_truncate_file_block\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	uint32_t nblocks = josfs_get_file_numblocks(object, file);
+	uint32_t nblocks = get_file_numblocks(info, f->file);
 	bdesc_t * indirect = NULL, *dirblock = NULL;
 	uint32_t blockno, data = 0;
 	uint16_t offset;
