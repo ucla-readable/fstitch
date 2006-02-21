@@ -52,6 +52,7 @@ static devfs_fdesc_t * devfs_fdesc_create(const char * name, BD_t * bd)
 	fdesc->base.parent = INODE_NONE;
 	fdesc->name = name;
 	fdesc->bd = bd;
+	fdesc->open_count = 0;
 	return fdesc;
 }
 
@@ -61,6 +62,7 @@ static BD_t * devfs_fdesc_destroy(devfs_fdesc_t * fdesc)
 	fdesc->common = NULL;
 	fdesc->name = NULL;
 	fdesc->bd = NULL;
+	fdesc->open_count = 0;
 	free(fdesc);
 	return bd;
 }
@@ -501,6 +503,7 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	state->root_fdesc.common = &state->root_fdesc.base;
 	state->root_fdesc.base.parent = INODE_NONE;
 	state->root_fdesc.root = cfs;
+	state->root_fdesc.open_count = 0;
 	
 	state->bd_table = vector_create();
 	if(!state->bd_table)
