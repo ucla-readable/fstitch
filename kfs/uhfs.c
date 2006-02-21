@@ -262,6 +262,9 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	fdesc_t * inner;
 	int r;
 
+	*newino = INODE_NONE;
+	*fdesc = NULL;
+
 	r = CALL(state->lfs, lookup_name, parent, name, &existing_ino);
 	if (r >= 0)
 	{
