@@ -164,8 +164,9 @@ int kfsd_init(int argc, char ** argv)
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
 #endif
 #ifdef UNIXUSER
-		if (! (bd = unix_file_bd("obj/unix-user/fs/fs.img", 512)) )
-			kdprintf(STDERR_FILENO, "unix_file_bd(...) failed\n");
+		const char file[] = "obj/unix-user/fs/fs.img";
+		if (! (bd = unix_file_bd(file, 512)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #endif
 		if (bd)
 		{
@@ -186,8 +187,11 @@ int kfsd_init(int argc, char ** argv)
 #ifdef KUDOS
 		if (! (bd = ide_pio_bd(0, 1, 0)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
-#else
-		bd = NULL;
+#endif
+#ifdef UNIXUSER
+		const char file[] = "ufs.img";
+		if (! (bd = unix_file_bd(file, 512)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #endif
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
