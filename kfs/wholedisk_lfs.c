@@ -11,13 +11,29 @@
 #include <kfs/wholedisk_lfs.h>
 
 #define INODE_ROOT ((inode_t) 1)
+#define INODE_DISK ((inode_t) 2)
+
+#define DISK_NAME "disk"
 
 struct wd_info {
 	BD_t * bd;
 	uint32_t blocksize;
 };
 
-static fdesc_t fdesc;
+struct wd_fdesc {
+	fdesc_common_t * common;
+	fdesc_common_t base;
+};
+typedef struct wd_fdesc wd_fdesc_t;
+
+union fdesc_cast {
+	wd_fdesc_t wd;
+	fdesc_t cast;
+};
+
+/* stupid compiler warnings... must use unions to evade */
+static union fdesc_cast root_fdesc = {wd: {common: &root_fdesc.wd.base, base: {parent: INODE_NONE}}};
+static union fdesc_cast disk_fdesc = {wd: {common: &disk_fdesc.wd.base, base: {parent: INODE_ROOT}}};
 
 static int wholedisk_get_config(void * object, int level, char * string, size_t length)
 {
@@ -77,21 +93,22 @@ static int wholedisk_cancel_synthetic_block(LFS_t * object, uint32_t number)
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, cancel_block, number);
 }
 
-static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t ino)
+static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t inode)
 {
-	/* only allow the root inode */
-	if(ino != INODE_ROOT)
-		return NULL;
-	return &fdesc;
+	if(inode == INODE_ROOT)
+		return (fdesc_t *) &root_fdesc;
+	if(inode == INODE_DISK)
+		return (fdesc_t *) &disk_fdesc;
+	return NULL;
 }
 
-static int wholedisk_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
+static int wholedisk_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * inode)
 {
-	/* only allow the empty name */
-	if(parent != INODE_ROOT || name[0])
+	/* only allow the fixed disk name */
+	if(parent != INODE_ROOT || strcmp(name, DISK_NAME))
 		return -E_NOT_FOUND;
-	if (ino)
-		*ino = INODE_ROOT;
+	if(inode)
+		*inode = INODE_DISK;
 	return 0;
 }
 
@@ -102,17 +119,60 @@ static void wholedisk_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 
 static uint32_t wholedisk_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
+	if(file != (fdesc_t *) &disk_fdesc)
+		return INVALID_BLOCK;
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, get_numblocks);
 }
 
 static uint32_t wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
+	if(file != (fdesc_t *) &disk_fdesc)
+		return INVALID_BLOCK;
 	return offset / ((struct wd_info *) OBJLOCAL(object))->blocksize;
 }
 
 static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	return -E_INVAL;
+	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
+	
+	if(file != (fdesc_t *) &root_fdesc)
+		return -E_INVAL;
+	
+	switch(*basep)
+	{
+		case 0:
+			/* . */
+			entry->d_type = TYPE_DIR;
+			entry->d_fileno = INODE_ROOT;
+			entry->d_namelen = 1;
+			entry->d_filesize = 0;
+			strcpy(entry->d_name, ".");
+			break;
+		case 1:
+			/* .. */
+			entry->d_type = TYPE_DIR;
+			entry->d_fileno = INODE_ROOT;
+			entry->d_namelen = 2;
+			entry->d_filesize = 0;
+			strcpy(entry->d_name, "..");
+			break;
+		case 2:
+			/* disk */
+			entry->d_type = TYPE_DEVICE;
+			entry->d_fileno = INODE_DISK;
+			entry->d_namelen = strlen(DISK_NAME);
+			entry->d_filesize = state->blocksize * CALL(state->bd, get_numblocks);
+			strncpy(entry->d_name, DISK_NAME, DIRENT_MAXNAMELEN);
+			entry->d_name[DIRENT_MAXNAMELEN] = 0;
+			break;
+		default:
+			return -E_EOF;
+	}
+	
+	*basep += 1;
+	entry->d_reclen = sizeof(*entry) - sizeof(entry->d_name) + entry->d_namelen + 1;
+	
+	return 0;
 }
 
 static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
@@ -165,25 +225,25 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** he
 
 static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype};
 
-static size_t wholedisk_get_num_features(LFS_t * object, inode_t ino)
+static size_t wholedisk_get_num_features(LFS_t * object, inode_t inode)
 {
 	return sizeof(wholedisk_features) / sizeof(wholedisk_features[0]);
 }
 
-static const feature_t * wholedisk_get_feature(LFS_t * object, inode_t ino, size_t num)
+static const feature_t * wholedisk_get_feature(LFS_t * object, inode_t inode, size_t num)
 {
 	if(num < 0 || num >= sizeof(wholedisk_features) / sizeof(wholedisk_features[0]))
 		return NULL;
 	return wholedisk_features[num];
 }
 
-static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, void ** data)
+static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t * size, void ** data)
 {
 	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
 
 	if (id == KFS_feature_size.id)
 	{
-		const size_t file_size = state->blocksize * CALL(state->bd, get_numblocks);
+		const size_t file_size = (inode == INODE_DISK) ? state->blocksize * CALL(state->bd, get_numblocks) : 0;
 		*data = malloc(sizeof(file_size));
 		if (!*data)
 			return -E_NO_MEM;
@@ -192,7 +252,7 @@ static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, vo
 	}
 	else if (id == KFS_feature_filetype.id)
 	{
-		const int32_t type = TYPE_DEVICE;
+		const int32_t type = (inode == INODE_DISK) ? TYPE_DEVICE : TYPE_DIR;
 		*data = malloc(sizeof(type));
 		if (!*data)
 			return -E_NO_MEM;
@@ -205,14 +265,14 @@ static int wholedisk_get_metadata(LFS_t * object, uint32_t id, size_t * size, vo
 	return 0;
 }
 
-static int wholedisk_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
-{
-	return wholedisk_get_metadata(object, id, size, data);
-}
-
 static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
 {
-	return wholedisk_get_metadata(object, id, size, data);
+	inode_t inode = INODE_NONE;
+	if(file == (fdesc_t *) &root_fdesc)
+		inode = INODE_ROOT;
+	else if(file == (fdesc_t *) &disk_fdesc)
+		inode = INODE_DISK;
+	return wholedisk_get_metadata_inode(object, inode, id, size, data);
 }
 
 static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
@@ -221,7 +281,7 @@ static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, cons
 	return -E_INVAL;
 }
 
-static int wholedisk_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_set_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	return wholedisk_set_metadata(object, id, size, data, head, tail);
 }
