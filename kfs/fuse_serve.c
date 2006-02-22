@@ -168,15 +168,29 @@ static CFS_t * reqcfs(fuse_req_t req)
 	return reqmount(req)->cfs;
 }
 
+static bool feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
+{
+	const size_t num_features = CALL(cfs, get_num_features, cfs_ino);
+	size_t i;
+
+	for (i=0; i < num_features; i++)
+		if (CALL(cfs, get_feature, cfs_ino, i)->id == feature_id)
+			return 1;
+
+	return 0;
+}
+
 static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struct stat * stbuf)
 {
 	Dprintf("%s(fuse_ino = %lu, cfs_ino = %u)\n", __FUNCTION__, fuse_ino, cfs_ino);
 	int r;
 	uint32_t type_size;
 	union {
-		uint32_t * type;
-		void * ptr;
+			uint32_t * type;
+			void * ptr;
 	} type;
+	bool nlinks_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_nlinks.id);
+	uint32_t nlinks = 0;
 
 	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
@@ -185,33 +199,50 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		return -1;
 	}
 
+	if (nlinks_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_nlinks.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(nlinks));
+			nlinks = *(uint32_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+	}
+
 	if (*type.type == TYPE_DIR)
 	{
-		char buf[1024];
-		uint32_t basep = 0;
-		uint32_t nlinks = 2;
-		fdesc_t * fdesc;
-
-		r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
-		assert(r >= 0);
-		fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
-		assert(fdesc->common->parent != INODE_NONE);
-
-		while ((r = CALL(reqcfs(req), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
+		if (!nlinks)
 		{
-			char * cur = buf;
-			while (cur < buf + r)
+			char buf[1024];
+			uint32_t basep = 0;
+			fdesc_t * fdesc;
+
+			r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+			assert(r >= 0);
+			fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
+			assert(fdesc->common->parent != INODE_NONE);
+
+			while ((r = CALL(reqcfs(req), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
 			{
-				nlinks++;
-				cur += ((dirent_t *) cur)->d_reclen;
+				char * cur = buf;
+				while (cur < buf + r)
+				{
+					if (((dirent_t *) cur)->d_type == TYPE_DIR)
+						nlinks++;
+					cur += ((dirent_t *) cur)->d_reclen;
+				}
 			}
+
+			r = CALL(reqcfs(req), close, fdesc);
+			assert(r >= 0);
 		}
 
-		r = CALL(reqcfs(req), close, fdesc);
-		assert(r >= 0);
-
 		stbuf->st_mode = S_IFDIR | 0755;
-		stbuf->st_nlink = nlinks;
 	}
 	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
 	{
@@ -221,6 +252,9 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			void * ptr;
 		} filesize;
 
+		if (!nlinks)
+			nlinks = 1;
+
 		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 		if (r < 0)
 		{
@@ -229,7 +263,6 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		}
 
 		stbuf->st_mode = S_IFREG | 0644;
-		stbuf->st_nlink = 1; //	TODO: KFS_feature_nlinks
 		stbuf->st_size = (off_t) *filesize.filesize;
 		free(filesize.filesize);
 	}
@@ -243,7 +276,9 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, *type.type);
 		goto err;
 	}
+
 	stbuf->st_ino = fuse_ino;
+	stbuf->st_nlink = nlinks;
 
 	free(type.type);
 	return 0;

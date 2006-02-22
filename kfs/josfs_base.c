@@ -811,7 +811,6 @@ static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entr
 	if (size < reclen)
 		return -E_INVAL;
 
-	// Pseudo unique fileno generator
 	entry->d_fileno = ino;
 
 	switch(dirfile->f_type)
@@ -890,7 +889,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		JOSFS_File_t d = {
 			.f_name = {0},
 			.f_size = 0,
-			.f_type = TYPE_DIR,
+			.f_type = JOSFS_TYPE_DIR,
 			.f_direct = {0},
 			.f_indirect = 0
 		};
@@ -904,7 +903,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		JOSFS_File_t d = {
 			.f_name = {0},
 			.f_size = 0,
-			.f_type = TYPE_DIR,
+			.f_type = JOSFS_TYPE_DIR,
 			.f_direct = {0},
 			.f_indirect = 0
 		};

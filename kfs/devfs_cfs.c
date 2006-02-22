@@ -103,6 +103,9 @@ static devfs_fdesc_t * devfd_lookup_inode(devfs_state_t * state, inode_t inode)
 			return fdesc;
 	}
 	
+	if(state->root_fdesc.inode == inode)
+		return &state->root_fdesc;
+	
 	return NULL;
 }
 
