@@ -154,9 +154,6 @@ typedef struct {
 
 // TODO: devfs_cfs
 
-// Not present: fidcloser
-// Not present: fidprotector
-
 
 //
 // LFS
@@ -194,7 +191,7 @@ typedef struct {
 typedef struct {
 	SKFS_TYPE;
 	uint32_t lfs;
-	uint32_t inum;
+	char name[SKFS_MAX_NAMELEN];
 } Skfs_loop_bd_t;
 
 typedef struct {

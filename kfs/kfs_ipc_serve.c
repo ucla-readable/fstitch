@@ -245,7 +245,9 @@ static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 	if (!modman_name_lfs(lfs))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) loop_bd(lfs, pg->inum);
+	val = 0;
+	printf("%s(): not constructing loop_bd!\n", __FUNCTION__);
+	//val = (uint32_t) loop_bd(lfs, inode);
 
 	RETURN_IPC;
 }

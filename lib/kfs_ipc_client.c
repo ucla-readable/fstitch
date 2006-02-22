@@ -485,15 +485,22 @@ LFS_t * wholedisk(BD_t * bd)
 // BD
 
 #include <kfs/loop_bd.h>
-BD_t * loop_bd(LFS_t * lfs, inode_t inum)
+BD_t * loop_bd(LFS_t * lfs, const char * name)
 {
 	const envid_t fsid = find_fs();
+	const int name_len = strlen(name) + 1;
 	uint32_t bd_id;
+
+	if (name_len > SKFS_MAX_NAMELEN)
+	{
+		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, name, name_len, SKFS_MAX_NAMELEN);
+		return NULL;
+	}
 
 	INIT_PG(LOOP_BD, loop_bd);
 
 	pg->lfs = (uint32_t) OBJLOCAL(lfs);
-	pg->inum = inum;
+	strncpy(pg->name, name, name_len);
 
 	SEND_PG();
 	bd_id = RECV_PG();

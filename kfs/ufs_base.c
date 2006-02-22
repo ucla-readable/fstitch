@@ -1452,7 +1452,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, ch
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_file_lfs_name};
+static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs};
 
 static size_t ufs_get_num_features(LFS_t * object, inode_t ino)
 {

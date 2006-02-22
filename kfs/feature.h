@@ -11,12 +11,12 @@ struct feature {
 	const char * description;
 };
 
+/* these are defined in lib/kfs_feature.c */
 extern const feature_t KFS_feature_size;
 extern const feature_t KFS_feature_filetype;
 extern const feature_t KFS_feature_nlinks;
 extern const feature_t KFS_feature_freespace;
 extern const feature_t KFS_feature_file_lfs;
-extern const feature_t KFS_feature_file_lfs_name;
 
 /* filetype values - large to avoid conflict with on-disk values */
 #define TYPE_FILE    0x80
