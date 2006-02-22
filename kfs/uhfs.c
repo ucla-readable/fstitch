@@ -28,6 +28,7 @@
 struct uhfs_fdesc {
 	fdesc_common_t * common;
 	fdesc_t * inner;
+	inode_t inode;
 	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
 	bool type; /* whether the type metadata is supported */
 };
@@ -58,7 +59,8 @@ static bool check_type_supported(LFS_t * lfs, inode_t ino, fdesc_t * f, uint32_t
 	void * data;
 	int r;
 
-	if (type_supported) {
+	if (type_supported)
+	{
 		r = CALL(lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
 		assert(data_len == sizeof(*filetype));
 		if (r < 0)
@@ -67,19 +69,20 @@ static bool check_type_supported(LFS_t * lfs, inode_t ino, fdesc_t * f, uint32_t
 			*filetype = *(uint32_t *) data;
 		free(data);
 	}
-	else {
+	else
 		*filetype = TYPE_INVAL;
-	}
+
 	return type_supported;
 }
 
-static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, uint32_t size_id, bool type)
+static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, inode_t ino, uint32_t size_id, bool type)
 {
 	uhfs_fdesc_t * uf = malloc(sizeof(*uf));
 	if (!uf)
 		return NULL;
 	uf->common = inner->common;
 	uf->inner = inner;
+	uf->inode = ino;
 	uf->size_id = size_id;
 	uf->type = type;
 	return uf;
@@ -226,7 +229,7 @@ static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, 
 		}
 	}
 
-	uf = uhfs_fdesc_create(inner, size_id, type);
+	uf = uhfs_fdesc_create(inner, ino, size_id, type);
 	if (!uf)
 	{
 		CALL(state->lfs, free_fdesc, inner);
@@ -247,6 +250,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	fdesc_t * inner;
 	int r;
+	uint32_t filetype;
 
 	if ((mode & O_CREAT))
 		return -E_INVAL;
@@ -255,6 +259,17 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 	inner = CALL(state->lfs, lookup_inode, ino);
 	if (!inner)
 		return -E_NOT_FOUND;
+
+	if ((mode & O_WRONLY) || (mode & O_RDWR))
+	{
+		if (check_type_supported(state->lfs, ino, inner, &filetype))
+		{
+			if (filetype == TYPE_DIR)
+				return -E_UNSPECIFIED; // -E_EISDIR
+			else if (filetype == TYPE_INVAL)
+				return -E_UNSPECIFIED; // This seems bad too
+		}
+	}
 
 	r = open_common(state, inner, ino, fdesc);
 	if (r < 0)
@@ -315,6 +330,8 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_read = 0;
 	uint32_t file_size = -1;
+	uint32_t filetype;
+
 
 	/* if we have filesize, use it! */
 	if (uf->size_id)
