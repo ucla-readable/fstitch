@@ -186,8 +186,8 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	int r;
 	uint32_t type_size;
 	union {
-			uint32_t * type;
-			void * ptr;
+		uint32_t * type;
+		void * ptr;
 	} type;
 	bool nlinks_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_nlinks.id);
 	uint32_t nlinks = 0;
@@ -484,6 +484,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 		assert(!r);
 		return -1;
 	}
+	assert(cfs_ino != INODE_NONE);
 
 	(*fdesc)->common->parent = fusecfsino(req, parent);
 	memset(e, 0, sizeof(*e));
@@ -620,6 +621,7 @@ static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dir
 		cur = buf;
 
 		r = CALL(cfs, getdirentries, fdesc, buf, sizeof(buf), &basep);
+		assert(dirent); // catch some stack overwrites in getdirentries()
 		if (r == -E_UNSPECIFIED) // should imply eof
 		{
 			eof = 1;
