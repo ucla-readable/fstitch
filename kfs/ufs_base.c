@@ -1489,12 +1489,14 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		*((uint32_t *) *data) = f->f_type;
 	}
 	else if (id == KFS_feature_nlinks.id) {
-		*data = malloc(sizeof(int16_t));
+		uint32_t nlink;
+		*data = malloc(sizeof(uint32_t));
 		if (!*data)
 			return -E_NO_MEM;
 
-		*size = sizeof(int16_t);
-		memcpy(*data, &(f->f_inode.di_nlink), sizeof(int16_t));
+		*size = sizeof(uint32_t);
+		nlink = (uint32_t) f->f_inode.di_nlink;
+		memcpy(*data, &nlink, sizeof(uint32_t));
 	}
 	else if (id == KFS_feature_freespace.id) {
 		int free_space;
