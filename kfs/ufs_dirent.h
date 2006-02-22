@@ -17,16 +17,17 @@
 #include <kfs/ufs_base.h>
 
 /*
- * search_dirent: sets 'offset' to the offset of a file named 'file' in 'dirf'.
- * find_free_dirent: returns the offset into 'dirf' that has enough room to
+ * search_dirent:    Sets 'offset' to the offset of a file named 'file' in
+ *                   'dirf'.
+ * find_free_dirent: Returns the offset into 'dirf' that has enough room to
  *                   write a directory entry of length 'len'.
- * insert_dirent: insert an entry named 'name' to 'dirf' at offset 'offset',
- *                with inode number 'ino' and file type 'type'.
- * delete_dirent: deletes the entry named 'name' from 'dirf'.
- * get_dirent: read an entry of up to 'size' bytes into 'entry' from 'dirf'
- *             starting at offset 'basep'.  'basep' will be incremented by
- *             'size' on success.
- * modify_dirent: write 'entry' to 'dirf' at offset 'basep'.
+ * insert_dirent:    Insert an entry named 'name' to 'dirf' at offset
+ *                   'offset', with inode number 'ino' and file type 'type'.
+ * delete_dirent:    Deletes the entry named 'name' from 'dirf'.
+ * get_dirent:       Read an entry of up to 'size' bytes into 'entry' from
+ *                   'dirf' starting at an offset described by 'basep'.
+ *                   'basep' will be modified by on success.
+ * modify_dirent:    Write 'entry' to 'dirf' at an offset described by 'basep'.
  */
 
 struct UFS_Dirent;
