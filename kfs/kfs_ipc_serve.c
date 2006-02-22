@@ -240,14 +240,18 @@ static void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
 static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 {
 	LFS_t * lfs = (LFS_t *) pg->lfs;
+	CFS_t * cfs;
+	inode_t inode;
 	uint32_t val;
 
 	if (!modman_name_lfs(lfs))
 		RETURN_IPC_INVAL;
 
-	val = 0;
-	printf("%s(): not constructing loop_bd!\n", __FUNCTION__);
-	//val = (uint32_t) loop_bd(lfs, inode);
+	val = path_to_inode(pg->name, &cfs, &inode);
+	if (val >= 0)
+		val = (uint32_t) loop_bd(lfs, inode);
+	else
+		val = 0;
 
 	RETURN_IPC;
 }
