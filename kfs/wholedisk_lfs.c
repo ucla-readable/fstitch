@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <assert.h>
 #include <string.h>
 #include <inc/error.h>
 #include <lib/types.h>
@@ -134,8 +135,13 @@ static uint32_t wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_
 static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
+	const char * name;
+	size_t namelen;
 	
 	if(file != (fdesc_t *) &root_fdesc)
+		return -E_INVAL;
+	
+	if(size < sizeof(*entry) - sizeof(entry->d_name))
 		return -E_INVAL;
 	
 	switch(*basep)
@@ -146,7 +152,7 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			entry->d_fileno = INODE_ROOT;
 			entry->d_namelen = 1;
 			entry->d_filesize = 0;
-			strcpy(entry->d_name, ".");
+			name = ".";
 			break;
 		case 1:
 			/* .. */
@@ -154,23 +160,35 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			entry->d_fileno = INODE_ROOT;
 			entry->d_namelen = 2;
 			entry->d_filesize = 0;
-			strcpy(entry->d_name, "..");
+			name = "..";
 			break;
 		case 2:
 			/* disk */
 			entry->d_type = TYPE_DEVICE;
 			entry->d_fileno = INODE_DISK;
-			entry->d_namelen = strlen(DISK_NAME);
+			namelen = strlen(DISK_NAME);
+			/* do not make DISK_NAME longer than DIRENT_MAXNAMELEN...
+			 * strncpy() is defined to pad the remaining space in the
+			 * destination with nulls which we can't do here! */
+			assert(namelen < DIRENT_MAXNAMELEN);
+			entry->d_namelen = namelen;
 			entry->d_filesize = state->blocksize * CALL(state->bd, get_numblocks);
-			strncpy(entry->d_name, DISK_NAME, DIRENT_MAXNAMELEN);
-			entry->d_name[DIRENT_MAXNAMELEN] = 0;
+			name = DISK_NAME;
 			break;
 		default:
 			return -E_EOF;
 	}
 	
-	*basep += 1;
 	entry->d_reclen = sizeof(*entry) - sizeof(entry->d_name) + entry->d_namelen + 1;
+	if(entry->d_reclen > size)
+	{
+		memset(entry, 0, size);
+		return -E_INVAL;
+	}
+	strcpy(entry->d_name, name);
+	entry->d_name[entry->d_namelen] = 0;
+	
+	*basep += 1;
 	
 	return 0;
 }

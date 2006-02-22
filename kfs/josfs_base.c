@@ -884,6 +884,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	if (f->file->f_type != JOSFS_TYPE_DIR)
 		return -E_NOT_DIR;
 
+#warning FIXME check size here and below!
 	if (*basep == 0)
 	{
 		JOSFS_File_t d = {
