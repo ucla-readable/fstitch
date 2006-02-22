@@ -1055,6 +1055,8 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 		r = write_inode_bitmap(info, inum, UFS_USED, head, &newtail);
 		if (r != 0)
 			goto ufs_allocate_name_exit2;
+
+		*newino = inum;
 	}
 	else {
 		open_file = get_ufsfile(info->filemap, ln->f_num,  &ex);
@@ -1062,6 +1064,7 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 			return NULL;
 		assert(ex == 1);
 		nf = open_file->file;
+		*newino = ln->f_num;
 	}
 
 	// Create directory entry
@@ -1106,6 +1109,7 @@ ufs_allocate_name_exit2:
 	ufs_free_fdesc(object, (fdesc_t *) nf);
 ufs_allocate_name_exit:
 	ufs_free_fdesc(object, (fdesc_t *) pf);
+	*newino = INODE_NONE;
 	return NULL;
 }
 

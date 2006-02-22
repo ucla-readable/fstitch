@@ -256,7 +256,12 @@ static int ufs_dirent_linear_search_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 		last_basep = basep;
 		r = ufs_dirent_linear_get_dirent(object, dirf, &entry, sizeof(struct dirent), &basep);
 		if (r < 0)
-			return r;
+		{
+			if (r == -E_EOF)
+				return -E_NOT_FOUND;
+			else
+				return r;
+		}
 		if (entry.d_fileno == 0) // Blank spot
 			continue;
 		if (!strcmp(entry.d_name, name)) {
