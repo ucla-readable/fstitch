@@ -728,7 +728,6 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t ino;
 	bool dir_supported;
-	bool unixdir;
 	fdesc_t * f;
 	struct dirent entry;
 	size_t data_len;
@@ -742,11 +741,11 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 		return r;
 
 	dir_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
-	unixdir = lfs_feature_supported(state->lfs, ino, KFS_feature_unixdir.id);
 
 	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
 		return -E_UNSPECIFIED;
+	f->common->parent = parent;
 
 	if (dir_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
@@ -762,12 +761,10 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 		if (filetype == TYPE_DIR) {
 			do {
 				r = CALL(state->lfs, get_dirent, f, &entry, sizeof(struct dirent), &basep);
-				if (unixdir) {
-					if (!strcmp(entry.d_name, ".")
-							|| !strcmp(entry.d_name, "..")) {
-						r = 1;
-						entry.d_name[0] = 0;
-					}
+				if (!strcmp(entry.d_name, ".")
+					|| !strcmp(entry.d_name, "..")) {
+					r = 1;
+					entry.d_name[0] = 0;
 				}
 				if (r < 0) {
 					return unlink_file(cfs, ino, parent, name, f);
