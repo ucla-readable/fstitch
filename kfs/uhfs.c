@@ -332,6 +332,13 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	uint32_t file_size = -1;
 	uint32_t filetype;
 
+	if (check_type_supported(state->lfs, uf->inode, uf->inner, &filetype))
+	{
+		if (filetype == TYPE_DIR)
+			return -E_UNSPECIFIED; // -E_EISDIR
+		else if (filetype == TYPE_INVAL)
+			return -E_UNSPECIFIED; // This seems bad too
+	}
 
 	/* if we have filesize, use it! */
 	if (uf->size_id)
