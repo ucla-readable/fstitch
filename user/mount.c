@@ -18,8 +18,6 @@
 #include <arch/simple.h>
 #include <inc/stdio.h>
 
-#define wb_cache_bd wt_cache_bd
-
 static bool verbose = 0;
 
 #define WB_CACHE 0

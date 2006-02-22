@@ -296,10 +296,6 @@ static int nbd_bd_destroy(BD_t * bd)
 	if(r < 0)
 		val = r;
 	
-	r = close(info->fd);
-	if(r < 0)
-		val = r;
-	
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
