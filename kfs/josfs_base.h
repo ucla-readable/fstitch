@@ -7,14 +7,6 @@
 
 /* This file is derived from JOS' inc/fs.h */
 
-// File nodes (both in-memory and on-disk)
-
-#if 0
-#if (PGSIZE != 4096)
-#error JOSFS designed only with 4kB blocks in mind
-#endif
-#endif
-
 // Bytes per file system block - same as page size
 #define JOSFS_BLKSIZE	PGSIZE
 #define JOSFS_BLKBITSIZE	(JOSFS_BLKSIZE * 8)
@@ -32,6 +24,7 @@
 
 #define JOSFS_MAXFILESIZE	(JOSFS_NINDIRECT * JOSFS_BLKSIZE)
 
+// File nodes (both in-memory and on-disk)
 typedef struct JOSFS_File JOSFS_File_t;
 
 struct JOSFS_File {
