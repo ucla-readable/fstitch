@@ -51,6 +51,28 @@ static bool lfs_feature_supported(LFS_t * lfs, inode_t ino, int feature_id)
 	return 0;
 }
 
+static bool check_type_supported(LFS_t * lfs, inode_t ino, fdesc_t * f, uint32_t * filetype)
+{
+	bool type_supported = lfs_feature_supported(lfs, ino, KFS_feature_filetype.id);
+	size_t data_len;
+	void * data;
+	int r;
+
+	if (type_supported) {
+		r = CALL(lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
+		assert(data_len == sizeof(*filetype));
+		if (r < 0)
+			*filetype = TYPE_INVAL;
+		else
+			*filetype = *(uint32_t *) data;
+		free(data);
+	}
+	else {
+		*filetype = TYPE_INVAL;
+	}
+	return type_supported;
+}
+
 static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, uint32_t size_id, bool type)
 {
 	uhfs_fdesc_t * uf = malloc(sizeof(*uf));
@@ -578,8 +600,6 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 	inode_t ino;
 	bool dir_supported;
 	fdesc_t * f;
-	size_t data_len;
-	void * data;
 	uint32_t filetype;
 	int r;
 
@@ -587,22 +607,16 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 	if (r < 0)
 		return r;
 
-	dir_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
-
 	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
 		return -E_UNSPECIFIED;
 
+	dir_supported = check_type_supported(state->lfs, ino, f, &filetype);
 	if (dir_supported) {
-		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
-		if (r < 0) {
+		if (filetype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, f);
-			return r;
+			return -E_UNSPECIFIED;
 		}
-
-		assert(data_len == sizeof(filetype));
-		filetype = *(uint32_t *) data;
-		free(data);
 
 		if (filetype == TYPE_DIR) {
 			CALL(state->lfs, free_fdesc, f);
@@ -624,27 +638,19 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	chdesc_t * prev_head = NULL, * tail;
 	int r;
 
-	type_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
-
 	oldf = CALL(state->lfs, lookup_inode, ino);
 	if (!oldf)
 		return -E_UNSPECIFIED;
 
+	type_supported = check_type_supported(state->lfs, ino, oldf, &oldtype);
 	/* determine old's type to set new's type */
 	if (!type_supported)
 		panic("%s() requires LFS filetype feature support to determine whether newname is to be a file or directory", __FUNCTION__);
 	{
-		void * data;
-		size_t data_len;
-		r = CALL(state->lfs, get_metadata_fdesc, oldf, KFS_feature_filetype.id, &data_len, &data);
-		if (r < 0) {
+		if (oldtype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, oldf);
-			return r;
+			return -E_UNSPECIFIED;
 		}
-
-		assert(data_len == sizeof(oldtype));
-		oldtype = *(uint32_t *) data;
-		free(data);
 	}
 
 	if (CALL(state->lfs, lookup_name, newparent, newname, &newino) >= 0) {
@@ -730,8 +736,6 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	bool dir_supported;
 	fdesc_t * f;
 	struct dirent entry;
-	size_t data_len;
-	void * data;
 	uint32_t filetype;
 	uint32_t basep = 0;
 	int r, retval = -E_INVAL;
@@ -740,23 +744,17 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	if (r < 0)
 		return r;
 
-	dir_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_filetype.id);
-
 	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
 		return -E_UNSPECIFIED;
 	f->common->parent = parent;
 
+	dir_supported = check_type_supported(state->lfs, ino, f, &filetype);
 	if (dir_supported) {
-		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
-		if (r < 0) {
+		if (filetype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, f);
-			return r;
+			return -E_UNSPECIFIED;
 		}
-
-		assert(data_len == sizeof(filetype));
-		filetype = *(uint32_t *) data;
-		free(data);
 
 		if (filetype == TYPE_DIR) {
 			do {
