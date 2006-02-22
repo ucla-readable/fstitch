@@ -350,7 +350,7 @@ static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes
 	namelen = strlen(name);
 	reclen += namelen;
 	if(reclen > nbytes)
-		return -E_UNSPECIFIED;
+		return -E_INVAL;
 	
 	(*basep)++;
 	

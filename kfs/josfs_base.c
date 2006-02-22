@@ -794,10 +794,11 @@ static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t of
 
 static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	uint16_t namelen, reclen;
+	uint16_t namelen = MIN(strlen(dirfile->f_name), sizeof(entry->d_name) - 1);
+	uint16_t reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
 
-	namelen = strlen(dirfile->f_name);
-	namelen = MIN(namelen, sizeof(entry->d_name) - 1);
+	if (size < reclen)
+		return -E_INVAL;
 
 	// If the name length is 0 (or less?) then we assume it's an empty slot
 	if (namelen < 1) {
@@ -805,11 +806,6 @@ static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entr
 		*basep += 1;
 		return 1;
 	}
-
-	reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
-
-	if (size < reclen)
-		return -E_INVAL;
 
 	entry->d_fileno = ino;
 
@@ -828,6 +824,7 @@ static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entr
 	entry->d_reclen = reclen;
 	entry->d_namelen = namelen;
 	strncpy(entry->d_name, dirfile->f_name, namelen + 1);
+	entry->d_name[namelen] = 0;
 
 	*basep += 1;
 	return 0;
@@ -884,7 +881,6 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	if (f->file->f_type != JOSFS_TYPE_DIR)
 		return -E_NOT_DIR;
 
-#warning FIXME check size here and below!
 	if (*basep == 0)
 	{
 		JOSFS_File_t d = {
