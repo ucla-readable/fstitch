@@ -966,16 +966,15 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 }
 
 // FIXME free fdescs
-static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
 {
-	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * nf;
 	ufs_fdesc_t * pf;
 	open_ufsfile_t * open_file;
 	ufs_fdesc_t * ln = (ufs_fdesc_t *) link;
 	uint32_t inum = 0;
-	int r, offset, notdot = 1, ex;
+	int r, offset, createdot = 0, ex;
 	uint16_t mode;
 	chdesc_t * newtail;
 
@@ -994,18 +993,17 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 			return NULL;
 	}
 
-	// Don't link files of different types
-	if (ln && type != ln->f_type)
-		return NULL;
-
-#warning need to prevent users from creating . and ..
 	// Don't create directory hard links, except for . and ..
 	if (!strcmp(name, "."))
-		notdot = 0;
+		createdot = 1;
 	else if (!strcmp(name, ".."))
-		notdot = 0;
+		createdot = 1;
 
-	if (ln && notdot && type == TYPE_DIR)
+	if (ln && !createdot && type == TYPE_DIR)
+		return NULL;
+
+	// Don't link files of different types
+	if (ln && type != ln->f_type)
 		return NULL;
 
 	pf = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
@@ -1020,13 +1018,13 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	// Find an empty slot to write into
 	offset = CALL(info->parts.dirent, find_free_dirent, pf, strlen(name) + 1);
 	if (offset < 0)
-		goto ufs_allocate_name_exit;
+		goto allocate_name_exit;
 
 	if (!ln) {
 		// Allocate new inode
 		inum = CALL(info->parts.allocator, find_free_inode, (fdesc_t *) pf);
 		if (inum == INVALID_BLOCK)
-			goto ufs_allocate_name_exit;
+			goto allocate_name_exit;
 
 		open_file = get_ufsfile(info->filemap, inum, &ex);
 		if (!open_file)
@@ -1050,11 +1048,11 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 		// Write new inode to disk and allocate it
 		r = write_inode(info, inum, nf->f_inode, head, tail);
 		if (r < 0)
-			goto ufs_allocate_name_exit2;
+			goto allocate_name_exit2;
 
 		r = write_inode_bitmap(info, inum, UFS_USED, head, &newtail);
 		if (r != 0)
-			goto ufs_allocate_name_exit2;
+			goto allocate_name_exit2;
 
 		*newino = inum;
 	}
@@ -1070,47 +1068,67 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	// Create directory entry
 	r = CALL(info->parts.dirent, insert_dirent, pf, nf->f_num, nf->f_type, name, offset, head, &newtail);
 	if (r < 0)
-		goto ufs_allocate_name_exit3;
+		goto allocate_name_exit3;
 
 	// Increase link count
 	if (ln) {
 		nf->f_inode.di_nlink++;
 		r = write_inode(info, nf->f_num, nf->f_inode, head, &newtail);
 		if (r < 0)
-			goto ufs_allocate_name_exit3;
+			goto allocate_name_exit3;
 	}
 
 	// Create . and ..
-	if (type == TYPE_DIR && notdot) {
+	if (type == TYPE_DIR && !createdot) {
 		fdesc_t * cfdesc;
 		inode_t newino;
 
-		cfdesc = ufs_allocate_name(object, nf->f_num, ".", TYPE_DIR, (fdesc_t *) nf, &newino, head, &newtail);
+		cfdesc = allocate_name(object, nf->f_num, ".", TYPE_DIR, (fdesc_t *) nf, &newino, head, &newtail);
 		if (!cfdesc)
-			goto ufs_allocate_name_exit2;
+			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
-		cfdesc = ufs_allocate_name(object, nf->f_num, "..", TYPE_DIR, (fdesc_t *) pf, &newino, head, &newtail);
+		cfdesc = allocate_name(object, nf->f_num, "..", TYPE_DIR, (fdesc_t *) pf, &newino, head, &newtail);
 		if (!cfdesc)
-			goto ufs_allocate_name_exit2;
+			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
 		r = update_summary(info, inum / info->super->fs_ipg, 1, 0, 0, 0, head, &newtail);
 		if (r < 0)
-			goto ufs_allocate_name_exit2;
+			goto allocate_name_exit2;
 	}
 
 	return (fdesc_t *) nf;
 
-ufs_allocate_name_exit3:
+allocate_name_exit3:
 	if (!ln)
 		write_inode_bitmap(info, inum, UFS_FREE, head, &newtail);
-ufs_allocate_name_exit2:
+allocate_name_exit2:
 	ufs_free_fdesc(object, (fdesc_t *) nf);
-ufs_allocate_name_exit:
+allocate_name_exit:
 	ufs_free_fdesc(object, (fdesc_t *) pf);
 	*newino = INODE_NONE;
 	return NULL;
+}
+
+static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
+{
+	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
+	int createdot = 0;
+
+	if (!head || !tail || check_name(name))
+		return NULL;
+
+	// Users cannot create . and ..
+	if (!strcmp(name, "."))
+		createdot = 1;
+	else if (!strcmp(name, ".."))
+		createdot = 1;
+
+	if (createdot)
+		return NULL;
+
+	return allocate_name(object, parent, name, type, link, newino, head, tail);
 }
 
 #warning free fdescs
