@@ -206,15 +206,19 @@ static int ufs_dirent_linear_get_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dir
 	if (size < actual_len)
 		return -E_INVAL;
 
-	r = read_inode(info, dirent.d_ino, &inode); 
-	if (r < 0)
-		return r;
+	if (dirent.d_ino) {
+		r = read_inode(info, dirent.d_ino, &inode); 
+		if (r < 0)
+			return r;
 
-	if (inode.di_size > UFS_MAXFILESIZE) {
-		printf("%s: file too big?\n", __FUNCTION__);
-		inode.di_size &= UFS_MAXFILESIZE;
+		if (inode.di_size > UFS_MAXFILESIZE) {
+			printf("%s: file too big?\n", __FUNCTION__);
+			inode.di_size &= UFS_MAXFILESIZE;
+		}
+		entry->d_filesize = inode.di_size;
 	}
-	entry->d_filesize = inode.di_size;
+	else
+		entry->d_filesize = 0;
 
 	switch(dirent.d_type)
 	{

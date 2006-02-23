@@ -9,7 +9,7 @@ int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode)
 	struct UFS_dinode * wanted;
 	bdesc_t * inode_table;
 
-	if (num < 2)
+	if (num < UFS_ROOT_INODE)
 		printf("Warning, trying to read inode %d\n", num);
 
 	if (!inode || num >= info->super->fs_ipg * info->super->fs_ncg)
