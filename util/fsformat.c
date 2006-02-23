@@ -4,7 +4,7 @@
 
 #define _BSD_EXTENSION
 
-// We don't actually want to define off_t or register_t!
+/* We don't actually want to define off_t or register_t! */
 #define off_t		xxx_off_t
 #define register_t	xxx_register_t
 #include <stdio.h>
@@ -19,11 +19,11 @@
 #undef off_t
 #undef register_t
 
-// Prevent lib/types.h, included from inc/fs.h,
-// from attempting to redefine types defined in the host's inttypes.h.
+/* Prevent lib/types.h, included from inc/fs.h, */
+/* from attempting to redefine types defined in the host's inttypes.h. */
 #define KUDOS_LIB_TYPES_H
 #define KUDOS_INC_TYPES_H
-// Typedef the types that inc/mmu.h needs.
+/* Typedef the types that inc/mmu.h needs. */
 typedef uint16_t segment_t;
 typedef uint32_t physaddr_t;
 typedef uint32_t off_t;
@@ -90,7 +90,7 @@ readn(int f, void* av, size_t n)
 	return t;
 }
 
-// make little-endian
+/* make little-endian */
 void
 swizzle(uint32_t* x)
 {
@@ -298,7 +298,7 @@ writefile(char* name)
 				goto gotit;
 			}
 	}
-	// allocate new block
+	/* allocate new block */
 	dirb = getblk(nextb, 1, BLOCK_DIR);
 	super.s_root.f_direct[super.s_root.f_size / BLKSIZE] = nextb++;
 	super.s_root.f_size += BLKSIZE;
@@ -356,7 +356,7 @@ finishfs(void)
 		putblk(b);
 	}
 
-	// this is slow but not too slow.  i do not care
+	/* this is slow but not too slow.  i do not care */
 	if(nblock != nbitblock*BLKBITSIZE){
 		b = getblk(2+nbitblock-1, 0, BLOCK_BITS);
 		for (i = nblock % BLKBITSIZE; i < BLKBITSIZE; i++)
