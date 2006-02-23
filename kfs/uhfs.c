@@ -571,7 +571,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 	const bool link_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_nlinks.id);
 	int i, r;
 	uint32_t nblocks;
-	uint16_t nlinks;
+	uint32_t nlinks;
 	size_t data_len;
 	void * data;
 	chdesc_t * prev_head = NULL, * tail, * save_head;
