@@ -31,12 +31,7 @@ struct open_ufsfile {
 };
 typedef struct open_ufsfile open_ufsfile_t;
 
-static bdesc_t * ufs_lookup_block(LFS_t * object, uint32_t number);
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
-static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
-static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail);
-static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail);
-static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
 
@@ -1011,9 +1006,8 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		return NULL;
 
 	r = CALL(info->parts.dirent, search_dirent, pf, name, NULL, NULL);
-	if (r >= 0) { // File exists already
-		return NULL;
-	}
+	if (r >= 0) // File exists already
+		goto allocate_name_exit;
 
 	// Find an empty slot to write into
 	offset = CALL(info->parts.dirent, find_free_dirent, pf, strlen(name) + 1);
@@ -1028,7 +1022,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 		open_file = get_ufsfile(info->filemap, inum, &ex);
 		if (!open_file)
-			return NULL;
+			goto allocate_name_exit;
 		assert(ex == 0);
 
 		nf = open_file->file;
@@ -1059,7 +1053,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	else {
 		open_file = get_ufsfile(info->filemap, ln->f_num,  &ex);
 		if (!open_file)
-			return NULL;
+			goto allocate_name_exit;
 		assert(ex == 1);
 		nf = open_file->file;
 		*newino = ln->f_num;
@@ -1067,15 +1061,18 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 	// Create directory entry
 	r = CALL(info->parts.dirent, insert_dirent, pf, nf->f_num, nf->f_type, name, offset, head, &newtail);
-	if (r < 0)
-		goto allocate_name_exit3;
+	if (r < 0) {
+		if (!ln)
+			write_inode_bitmap(info, inum, UFS_FREE, head, &newtail);
+		goto allocate_name_exit2;
+	}
 
 	// Increase link count
 	if (ln) {
 		nf->f_inode.di_nlink++;
 		r = write_inode(info, nf->f_num, nf->f_inode, head, &newtail);
 		if (r < 0)
-			goto allocate_name_exit3;
+			goto allocate_name_exit2;
 	}
 
 	// Create . and ..
@@ -1098,11 +1095,9 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 			goto allocate_name_exit2;
 	}
 
+	ufs_free_fdesc(object, (fdesc_t *) pf);
 	return (fdesc_t *) nf;
 
-allocate_name_exit3:
-	if (!ln)
-		write_inode_bitmap(info, inum, UFS_FREE, head, &newtail);
 allocate_name_exit2:
 	ufs_free_fdesc(object, (fdesc_t *) nf);
 allocate_name_exit:
@@ -1131,7 +1126,6 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	return allocate_name(object, parent, name, type, link, newino, head, tail);
 }
 
-#warning free fdescs
 static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
 	Dprintf("UFSDEBUG: %s %s %s\n", __FUNCTION__, oldname, newname);
@@ -1160,19 +1154,23 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 
 	r = CALL(info->parts.dirent, search_dirent, old_pfdesc, oldname, &ino, NULL);
 	if (r < 0)
-		return r;
+		goto ufs_rename_exit;
 
 	oldf = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
-	if (!oldf)
-		return -E_NOT_FOUND;
+	if (!oldf) {
+		r = -E_NOT_FOUND;
+		goto ufs_rename_exit;
+	}
 
 	new_pfdesc = (ufs_fdesc_t *) ufs_lookup_inode(object, newparent);
-	if (!new_pfdesc)
-		return -E_NOT_FOUND;
+	if (!new_pfdesc) {
+		r = -E_NOT_FOUND;
+		goto ufs_rename_exit2;
+	}
 
 	r = CALL(info->parts.dirent, search_dirent, new_pfdesc, newname, &ino, &dir_offset);
 	if (r < 0)
-		return r;
+		goto ufs_rename_exit3;
 
 	if (dir_offset >= 0)
 		newf = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
@@ -1183,7 +1181,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		// Overwriting a directory makes little sense
 		if (newf->f_type == TYPE_DIR) {
 			r = -E_NOT_EMPTY;
-			goto ufs_rename_exit2;
+			goto ufs_rename_exit4;
 		}
 
 		// File already exists
@@ -1195,24 +1193,24 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		p = dir_offset;
 		r = CALL(info->parts.dirent, get_dirent, new_pfdesc, &entry, sizeof(entry), &p);
 		if (r < 0)
-			goto ufs_rename_exit2;
+			goto ufs_rename_exit4;
 
 		entry.d_fileno = oldf->f_num;
 		r = CALL(info->parts.dirent, modify_dirent, &dirfdesc, entry, dir_offset, head, tail);
 		if (r < 0)
-			goto ufs_rename_exit2;
+			goto ufs_rename_exit4;
 
 		oldf->f_inode.di_nlink++;
 		r = write_inode(info, oldf->f_num, oldf->f_inode, head, &newtail);
 		if (r < 0)
-			goto ufs_rename_exit2;
+			goto ufs_rename_exit4;
 	}
 	else {
 		// Link files together
 		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent,  newname, oldf->f_type, (fdesc_t *) oldf, &newino, head, tail);
 		if (!newf) {
 			r = -E_UNSPECIFIED;
-			goto ufs_rename_exit;
+			goto ufs_rename_exit3;
 		}
 		assert(ino == newino);
 	}
@@ -1220,11 +1218,11 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	newf->f_inode.di_nlink--;
 	r = write_inode(info, newf->f_num, newf->f_inode, head, &newtail);
 	if (r < 0)
-		goto ufs_rename_exit2;
+		goto ufs_rename_exit4;
 
 	r = CALL(info->parts.dirent, delete_dirent, old_pfdesc, oldname, head, &newtail);
 	if (r < 0)
-		goto ufs_rename_exit2;
+		goto ufs_rename_exit4;
 
 	if (existing) {
 		uint32_t block, i, n = deadf.f_numfrags;
@@ -1232,29 +1230,33 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 			block = ufs_truncate_file_block(object, (fdesc_t *) &deadf, head, &newtail);
 			if (block == INVALID_BLOCK) {
 				r = -E_UNSPECIFIED;
-				goto ufs_rename_exit2;
+				goto ufs_rename_exit4;
 			}
 			r = ufs_free_block(object, (fdesc_t *) &deadf, block, head, &newtail);
 			if (r < 0)
-				goto ufs_rename_exit2;
+				goto ufs_rename_exit4;
 		}
 
 		memset(&deadf.f_inode, 0, sizeof(struct UFS_dinode));
 		r = write_inode(info, deadf.f_num, deadf.f_inode, head, &newtail);
 		if (r < 0)
-			goto ufs_rename_exit2;
+			goto ufs_rename_exit4;
 
 		r = write_inode_bitmap(info, deadf.f_num, UFS_FREE, head, &newtail);
 		if (r < 0)
-			goto ufs_rename_exit2;
+			goto ufs_rename_exit4;
 	}
 
 	r = 0;
 
-ufs_rename_exit2:
+ufs_rename_exit4:
 	ufs_free_fdesc(object, (fdesc_t *) newf);
-ufs_rename_exit:
+ufs_rename_exit3:
+	ufs_free_fdesc(object, (fdesc_t *) new_pfdesc);
+ufs_rename_exit2:
 	ufs_free_fdesc(object, (fdesc_t *) oldf);
+ufs_rename_exit:
+	ufs_free_fdesc(object, (fdesc_t *) old_pfdesc);
 	return r;
 }
 
