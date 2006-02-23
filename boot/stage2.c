@@ -142,9 +142,7 @@ static int strcmp(const unsigned char * s1, const unsigned char * s2)
 static void josfs_setup_file(struct File * file, uint32_t * indirect, uint32_t partition)
 {
 	if(file->f_indirect)
-	{
 		readsect(indirect, BLKSECTS, partition + BLKSECTS * file->f_indirect);
-	}
 	else
 		for(partition = 0; partition != BLKSIZE / sizeof(*indirect); partition++)
 			indirect[partition]++;

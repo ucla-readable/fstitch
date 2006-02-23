@@ -238,7 +238,6 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	for (i = 0; i < JOSFS_NDIRECT; i++)
 		f->f_direct[i] = 0;
 	f->f_indirect = 0;
-	f->f_dir = 0;
 
 	for (i = 0; i < blocks; i++)
 		mark_block_free(&info->blocks[blocksize * 2], i);

@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <fuse_lowlevel.h>
 #include <inc/error.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>
@@ -78,19 +79,24 @@ size_t fuse_serve_mount_chan_bufsize(void)
 	return fuse_chan_bufsize(root->channel);
 }
 
-void fuse_serve_mount_set_root(CFS_t * root_cfs)
+int fuse_serve_mount_set_root(CFS_t * root_cfs)
 {
+	int r;
 	Dprintf("%s(%s)\n", __FUNCTION__, modman_name_cfs(root_cfs));
+	if (!root)
+		return -E_UNSPECIFIED;
 	if (root_service_started)
-	{
-		kdprintf(STDERR_FILENO, "%s(\"%s\") called after root service started, ignoring\n", __FUNCTION__, modman_name_cfs(root->cfs));
-		return;
-	}
-	if (root)
-	{
-		root->cfs = root_cfs;
-		printf("Mounted \"\" from %s\n", modman_name_cfs(root_cfs));
-	}
+		return -E_BUSY;
+
+	if ((r = CALL(root_cfs, get_root, &root->root_ino)) < 0)
+		return r;
+
+	if ((r = hash_map_insert(root->parents, (void *) root->root_ino, (void *) root->root_ino)) < 0)
+		return r;
+
+	root->cfs = root_cfs;
+	printf("Mounted \"\" from %s\n", modman_name_cfs(root_cfs));
+	return 0;
 }
 
 int fuse_serve_mount_load_mounts(void)
@@ -222,16 +228,22 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 		goto error_qe;
 	}
 
-	m->cfs = cfs;
-
-	if (!(m->inodes = fuse_serve_inodes_create()))
+	if (!(m->parents = hash_map_create()))
 	{
 		r = -E_NO_MEM;
 		goto error_path;
 	}
 
+	m->cfs = cfs;
+
+	if ((r = CALL(cfs, get_root, &m->root_ino)) < 0)
+		goto error_parents;
+
+	if ((r = hash_map_insert(m->parents, (void *) m->root_ino, (void *) m->root_ino)) < 0)
+		goto error_parents;
+
 	if ((r = fuse_args_copy(&root->args, &m->args)) < 0)
-		goto error_inodes;
+		goto error_parents;
 
 	m->mountpoint = malloc(strlen(root->mountpoint) + strlen(path) + 1);
 	if (!m->mountpoint)
@@ -263,10 +275,10 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 	(void) hash_set_erase(mounts, m);
   error_mountpoint:
 	free(m->mountpoint);
-  error_inodes:
-	fuse_serve_inodes_destroy(m->inodes);
   error_args:
 	fuse_opt_free_args(&m->args);
+  error_parents:
+	hash_map_destroy(m->parents);
   error_path:
 	free(m->kfs_path);
   error_qe:
@@ -322,13 +334,11 @@ static int mount_root(int argc, char ** argv)
 
 	if (!(root->kfs_path = strdup("")))
 		return -E_NO_MEM;
-	root->cfs = NULL; // set later via fuse_serve_mount_set_root()
 
-	if (!(root->inodes = fuse_serve_inodes_create()))
-	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_serve_inodes_create() failed\n", __FUNCTION__);
+	if (!(root->parents = hash_map_create()))
 		return -E_NO_MEM;
-	}
+
+	root->cfs = NULL; // set later via fuse_serve_mount_set_root()
 
 	if (fuse_parse_cmdline(&root->args, &root->mountpoint, NULL, NULL) == -1)
 	{
@@ -405,9 +415,9 @@ static int unmount_root(void)
 
 	fuse_opt_free_args(&root->args);
 
-	fuse_serve_inodes_destroy(root->inodes);
 	free(root->mountpoint);
 	free(root->kfs_path);
+	hash_map_destroy(root->parents);
 
 	memset(root, 0, sizeof(*root));
 	free(root);
@@ -571,9 +581,6 @@ int fuse_serve_mount_step_remove(void)
 
 	(void) close(qe->mount->channel_fd);
 
-	fuse_serve_inodes_destroy(qe->mount->inodes);
-	qe->mount->inodes = NULL;
-
 	fuse_opt_free_args(&qe->mount->args);
 
 	if (enqueue_helper_request(qe) < 0)
@@ -641,6 +648,7 @@ static void helper_thread_unmount(mount_t * m)
 	fuse_unmount(m->mountpoint);
 	free(m->mountpoint);
 	free(m->kfs_path);
+	hash_map_destroy(m->parents);
 	memset(m, 0, sizeof(*m));
 	free(m);
 }
@@ -798,9 +806,9 @@ int fuse_serve_mount_start_shutdown(void)
 				failed_found = 1;
 				hash_set_erase(mounts, m);
 				free(m->kfs_path);
-				fuse_serve_inodes_destroy(m->inodes);
 				fuse_opt_free_args(&m->args);
 				free(m->mountpoint);
+				hash_map_destroy(m->parents);
 				memset(m, 0, sizeof(*m));
 				free(m);
 				break;

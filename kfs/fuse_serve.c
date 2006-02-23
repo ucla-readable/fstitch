@@ -21,7 +21,6 @@
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/fuse_serve.h>
-#include <kfs/fuse_serve_inode.h>
 #include <kfs/fuse_serve_mount.h>
 
 // Helpful documentation: FUSE's fuse_lowlevel.h, README, and FAQ
@@ -67,8 +66,22 @@ static char * channel_buf = NULL;
 static int remove_activity; // remove activity fd for fuse_serve_mount
 
 
+fdesc_t * fi_get_fdesc(struct fuse_file_info * fi)
+{
+	static_assert(sizeof(fdesc_t *) == sizeof(uint32_t));
+	return (fdesc_t *) (uint32_t) fi->fh;
+}
+
+void fi_set_fdesc(struct fuse_file_info * fi, fdesc_t * fdesc)
+{
+	static_assert(sizeof(fdesc_t *) == sizeof(uint32_t));
+	fi->fh = (uint64_t) (uint32_t) fdesc;
+}
+
 int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 {
+	int r;
+	Dprintf("%s(\"%s\", %s)\n", __FUNCTION__, path, modman_name_cfs(cfs));
 	// We could easily allow mount adds from within sched callbacks if this
 	// becomes useful.
 	// With a good bit of work we can probably allow mount adds from
@@ -81,8 +94,9 @@ int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 
 	if (!strcmp("", path) || !strcmp("/", path))
 	{
+		if ((r = fuse_serve_mount_set_root(cfs)) < 0)
+			return r;
 		root_cfs = cfs;
-		fuse_serve_mount_set_root(cfs);
 		return 0;
 	}
 
@@ -116,62 +130,119 @@ static void serve_statfs(fuse_req_t req)
 }
 */
 
-static CFS_t * reqcfs(fuse_req_t req)
+// Return the fuse_ino_t corresponding to the given request's inode_t
+static fuse_ino_t cfsfuseino(fuse_req_t req, inode_t cfs_ino)
 {
-	assert(req);
-	assert(fuse_req_userdata(req));
-	return ((mount_t *) fuse_req_userdata(req))->cfs;
+	inode_t root_cfs_ino = ((mount_t *) fuse_req_userdata(req))->root_ino;
+	if (cfs_ino == root_cfs_ino)
+		return FUSE_ROOT_ID;
+	else if (cfs_ino == FUSE_ROOT_ID)
+		return (fuse_ino_t) root_cfs_ino;
+	else
+		return (fuse_ino_t) cfs_ino;
 }
 
-static int fill_stat(fuse_req_t req, fuse_ino_t ino, struct stat * stbuf)
+// Return the request's inode_t corresponding to the fues_ino_t
+static inode_t fusecfsino(fuse_req_t req, fuse_ino_t fuse_ino)
 {
-	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	const char * full_name;
-	int fid;
+	inode_t root_cfs_ino = ((mount_t *) fuse_req_userdata(req))->root_ino;
+	if (fuse_ino == root_cfs_ino)
+		return FUSE_ROOT_ID;
+	if (fuse_ino == FUSE_ROOT_ID)
+		return root_cfs_ino;
+	else
+		return (inode_t) fuse_ino;
+}
+
+// Return the request's corresponding mount_t*
+static mount_t * reqmount(fuse_req_t req)
+{
+	assert(req);
+	return (mount_t *) fuse_req_userdata(req);
+}
+
+// Return the request's corresponding frontend cfs
+static CFS_t * reqcfs(fuse_req_t req)
+{
+	assert(reqmount(req));
+	return reqmount(req)->cfs;
+}
+
+static bool feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
+{
+	const size_t num_features = CALL(cfs, get_num_features, cfs_ino);
+	size_t i;
+
+	for (i=0; i < num_features; i++)
+		if (CALL(cfs, get_feature, cfs_ino, i)->id == feature_id)
+			return 1;
+
+	return 0;
+}
+
+static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struct stat * stbuf)
+{
+	Dprintf("%s(fuse_ino = %lu, cfs_ino = %u)\n", __FUNCTION__, fuse_ino, cfs_ino);
 	int r;
 	uint32_t type_size;
 	union {
 		uint32_t * type;
 		void * ptr;
 	} type;
+	bool nlinks_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_nlinks.id);
+	uint32_t nlinks = 0;
 
-	// INODE TODO: make full_name a parameter
-	if (!(full_name = inode_fname(ino)))
-		return -1;
-
-	r = CALL(reqcfs(req), get_metadata, full_name, KFS_feature_filetype.id, &type_size, &type.ptr);
+	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
 		Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
 		return -1;
 	}
 
+	if (nlinks_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_nlinks.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(nlinks));
+			nlinks = *(uint32_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+	}
+
 	if (*type.type == TYPE_DIR)
 	{
-		char buf[1024];
-		uint32_t basep = 0;
-		uint32_t nlinks = 2;
-
-		// FIXME: we should use the same inode->file mapping throughout an
-		// inode's life. Using opening by name can break this.
-		fid = CALL(reqcfs(req), open, full_name, 0);
-		assert(fid >= 0);
-
-		while ((r = CALL(reqcfs(req), getdirentries, fid, buf, sizeof(buf), &basep)) > 0)
+		if (!nlinks)
 		{
-			char * cur = buf;
-			while (cur < buf + r)
+			char buf[1024];
+			uint32_t basep = 0;
+			fdesc_t * fdesc;
+
+			r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+			assert(r >= 0);
+			fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
+			assert(fdesc->common->parent != INODE_NONE);
+
+			while ((r = CALL(reqcfs(req), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
 			{
-				nlinks++;
-				cur += ((dirent_t *) cur)->d_reclen;
+				char * cur = buf;
+				while (cur < buf + r)
+				{
+					if (((dirent_t *) cur)->d_type == TYPE_DIR)
+						nlinks++;
+					cur += ((dirent_t *) cur)->d_reclen;
+				}
 			}
+
+			r = CALL(reqcfs(req), close, fdesc);
+			assert(r >= 0);
 		}
 
-		r = CALL(reqcfs(req), close, fid);
-		assert(r >= 0);
-
 		stbuf->st_mode = S_IFDIR | 0755;
-		stbuf->st_nlink = nlinks;
 	}
 	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
 	{
@@ -181,7 +252,10 @@ static int fill_stat(fuse_req_t req, fuse_ino_t ino, struct stat * stbuf)
 			void * ptr;
 		} filesize;
 
-		r = CALL(reqcfs(req), get_metadata, full_name, KFS_feature_size.id, &filesize_size, &filesize.ptr);
+		if (!nlinks)
+			nlinks = 1;
+
+		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 		if (r < 0)
 		{
 			Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
@@ -189,21 +263,22 @@ static int fill_stat(fuse_req_t req, fuse_ino_t ino, struct stat * stbuf)
 		}
 
 		stbuf->st_mode = S_IFREG | 0644;
-		stbuf->st_nlink = 1; //	TODO: KFS_feature_nlinks
 		stbuf->st_size = (off_t) *filesize.filesize;
 		free(filesize.filesize);
 	}
 	else if (*type.type == TYPE_INVAL)
 	{
-		kdprintf(STDERR_FILENO, "%s:%s(\"%s\"): file type is invalid\n", __FILE__, __FUNCTION__, full_name);
+		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): file type is invalid\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino);
 		goto err;
 	}
 	else
 	{
-		kdprintf(STDERR_FILENO, "%s:%s(\"%s\"): unsupported file type %u\n", __FILE__, __FUNCTION__, full_name, *type.type);
+		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, *type.type);
 		goto err;
 	}
-	stbuf->st_ino = ino;
+
+	stbuf->st_ino = fuse_ino;
+	stbuf->st_nlink = nlinks;
 
 	free(type.type);
 	return 0;
@@ -213,16 +288,16 @@ static int fill_stat(fuse_req_t req, fuse_ino_t ino, struct stat * stbuf)
 	return -1;
 }
 
-static void serve_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
+	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
 	struct stat stbuf;
 	int r;
 
 	(void) fi;
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (fill_stat(req, ino, &stbuf) == -1)
+	if (fill_stat(req, fusecfsino(req, fuse_ino), fuse_ino, &stbuf) == -1)
 	{
 		r = fuse_reply_err(req, ENOENT);
 		assert(!r);
@@ -234,12 +309,13 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
 	}
 }
 
-static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
+static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * attr,
                           int to_set, struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, ino, to_set);
+	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 	int r;
-	int fid;
+	fdesc_t * fdesc;
+	inode_t cfs_ino;
 	uint32_t size;
 	struct stat stbuf;
 
@@ -254,27 +330,28 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 	assert(size == attr->st_size);
 	Dprintf("\tsize = %u\n", size);
 
+	cfs_ino = fusecfsino(req, fuse_ino);
+
 	if (fi)
-		fid = (int) fi->fh;
+		fdesc = fi_get_fdesc(fi);
 	else
 	{
-		// INODE TODO: how could we avoid ino -> full_name?
-		const char * full_name = inode_fname(ino);
-		assert(full_name);
-		fid = CALL(reqcfs(req), open, full_name, 0);
-		if (fid < 0)
+		r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+		if (r < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
 			return;
 		}
+		fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
+		assert(fdesc->common->parent != INODE_NONE);
 	}
 
-	r = CALL(reqcfs(req), truncate, fid, size);
+	r = CALL(reqcfs(req), truncate, fdesc, size);
 
 	if (!fi)
 	{
-		if (CALL(reqcfs(req), close, fid) < 0)
+		if (CALL(reqcfs(req), close, fdesc) < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
@@ -290,7 +367,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 	}
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (fill_stat(req, ino, &stbuf) == -1)
+	if (fill_stat(req, cfs_ino, fuse_ino, &stbuf) == -1)
 	{
 		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
@@ -305,44 +382,46 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t ino, struct stat * attr,
 static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_name)
 {
 	Dprintf("%s(parent_ino = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
+	inode_t parent_cfs_ino;
 	int r;
-	fuse_ino_t ino;
-	bool new_ino = 0;
-	int fid;
+	inode_t cfs_ino;
 	struct fuse_entry_param e;
 
-	ino = lname_inode(parent, local_name);
-	if (ino == FAIL_INO)
+	parent_cfs_ino = fusecfsino(req, parent);
+	assert(parent_cfs_ino != INODE_NONE);
+
+	r = CALL(reqcfs(req), lookup, parent_cfs_ino, local_name, &cfs_ino);
+	if (r < 0)
 	{
-		char * full_name = fname(parent, local_name);
+		if (r == -E_NOT_FOUND)
+			r = fuse_reply_err(req, ENOENT);
+		else
+			r = fuse_reply_err(req, TODOERROR);
+		assert(!r);
+		return;
+	}
 
-		// Check that name exists
-		fid = CALL(reqcfs(req), open, full_name, 0);
-		free(full_name);
-		full_name = NULL;
-		if (fid < 0)
-		{
-			if (fid == -E_NOT_FOUND)
-				r = fuse_reply_err(req, ENOENT);
-			else
-				r = fuse_reply_err(req, TODOERROR);
-			assert(!r);
-			return;
-		}
-		r = CALL(reqcfs(req), close, fid);
-		assert(r >= 0);
-
-		r = add_inode(parent, local_name, &ino);
-		assert(r == 0);
-		new_ino = 1;
+	r = hash_map_insert(reqmount(req)->parents, (void *) cfs_ino, (void *) parent_cfs_ino);
+	if (r < 0)
+	{
+		r = fuse_reply_err(req, TODOERROR);
+		assert(!r);
+		return;
 	}
 
 	memset(&e, 0, sizeof(e));
-	e.ino = ino;
+	e.ino = cfsfuseino(req, cfs_ino);
 	e.attr_timeout = STDTIMEOUT;
 	e.entry_timeout = STDTIMEOUT;
-	r = fill_stat(req, e.ino, &e.attr);
-	assert(r >= 0);
+	r = fill_stat(req, cfs_ino, e.ino, &e.attr);
+	if (r < 0)
+	{
+		// TODO: is it safe to remove cfs_ino from the parents map?
+		kdprintf(STDERR_FILENO, "%s(): possible parents entry leak for cfs inode %u\n", cfs_ino);
+		r = fuse_reply_err(req, TODOERROR);
+		assert(!r);
+		return;
+	}
 
 	r = fuse_reply_entry(req, &e);
 	assert(!r);
@@ -351,7 +430,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 static void serve_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup)
 {
 	Dprintf("%s(ino = %lu, nlookup = %lu)\n", __FUNCTION__, ino, nlookup);
-	remove_inode(ino);
+	(void) hash_map_erase(reqmount(req)->parents, (void *) ino);
 	fuse_reply_none(req);
 }
 
@@ -359,17 +438,12 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
                         const char * local_name, mode_t mode)
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
-	fuse_ino_t ino;
-	char * full_name;
-	struct fuse_entry_param e;
+	inode_t cfs_ino;
+	inode_t parent_cfs_ino = fusecfsino(req, parent);
 	int r;
+	struct fuse_entry_param e;
 
-	full_name = fname(parent, local_name);
-	assert(full_name);
-
-	r = CALL(reqcfs(req), mkdir, full_name);
-	free(full_name);
-	full_name = NULL;
+	r = CALL(reqcfs(req), mkdir, parent_cfs_ino, local_name, &cfs_ino);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
@@ -377,15 +451,20 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 		return;
 	}
 
-	r = add_inode(parent, local_name, &ino);
-	assert(r == 0);
+	r = hash_map_insert(reqmount(req)->parents, (void *) cfs_ino, (void *) parent_cfs_ino);
+	if (r < 0)
+	{
+		r = fuse_reply_err(req, TODOERROR);
+		assert(!r);
+		return;
+	}
 
 	memset(&e, 0, sizeof(e));
-	e.ino = ino;
+	e.ino = cfsfuseino(req, cfs_ino);
 	e.attr_timeout = STDTIMEOUT;
 	e.entry_timeout = STDTIMEOUT;
 	// ignore mode parameter for now
-	r = fill_stat(req, e.ino, &e.attr);
+	r = fill_stat(req, cfs_ino, e.ino, &e.attr);
 	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
@@ -393,50 +472,30 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 }
 
 static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
-                  mode_t mode, fuse_ino_t * ino, struct fuse_entry_param * e)
+                  mode_t mode, struct fuse_entry_param * e, fdesc_t ** fdesc)
 {
+	inode_t cfs_ino;
 	int r;
-	const char * full_name;
-	int fid;
 
-	r = add_inode(parent, local_name, ino);
-	if (r == -1)
-	{
-		r = fuse_reply_err(req, TODOERROR); // exists
-		assert(!r);
-		return -1;
-	}
-	else if (r == -ENOMEM)
+	r = CALL(reqcfs(req), create, fusecfsino(req, parent), local_name, 0, fdesc, &cfs_ino);
+	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
 		return -1;
 	}
-	else if (r < 0)
-		assert(0);
+	assert(cfs_ino != INODE_NONE);
 
-	// INODE TODO: use fname()
-	full_name = inode_fname(*ino);
-	assert(full_name);
-
-	fid = CALL(reqcfs(req), open, full_name, O_CREAT);
-	if (fid < 0)
-	{
-		remove_inode(*ino);
-		r = fuse_reply_err(req, TODOERROR);
-		assert(!r);
-		return -1;
-	}
-
+	(*fdesc)->common->parent = fusecfsino(req, parent);
 	memset(e, 0, sizeof(*e));
-	e->ino = *ino;
+	e->ino = cfsfuseino(req, cfs_ino);
 	e->attr_timeout = STDTIMEOUT;
 	e->entry_timeout = STDTIMEOUT;
 	// ignore mode for now
-	r = fill_stat(req, e->ino, &e->attr);
+	r = fill_stat(req, cfs_ino, e->ino, &e->attr);
 	assert(r >= 0);
 
-	return fid;
+	return r;
 }
 
 static void serve_create(fuse_req_t req, fuse_ino_t parent,
@@ -445,16 +504,15 @@ static void serve_create(fuse_req_t req, fuse_ino_t parent,
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__,
 	        parent, local_name);
-	fuse_ino_t ino;
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 	struct fuse_entry_param e;
 
-	fid = create(req, parent, local_name, mode, &ino, &e);
-	if (fid < 0)
+	r = create(req, parent, local_name, mode, &e, &fdesc);
+	if (r < 0)
 		return;
 
-	fi->fh = (uint64_t) fid;
+	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_create(req, &e, fi);
 	assert(!r);
@@ -464,8 +522,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
                         const char * local_name, mode_t mode, dev_t rdev)
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
-	fuse_ino_t ino;
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 	struct fuse_entry_param e;
 
@@ -476,12 +533,12 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 		return;
 	}
 
-	fid = create(req, parent, local_name, mode, &ino, &e);
-	if (fid < 0)
+	r = create(req, parent, local_name, mode, &e, &fdesc);
+	if (r < 0)
 		return;
 
-	fid = CALL(reqcfs(req), close, fid);
-	assert(fid >= 0);
+	r = CALL(reqcfs(req), close, fdesc);
+	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
 	assert(!r);
@@ -491,15 +548,9 @@ static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_n
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__,
 	        parent, local_name);
-	char * full_name;
 	int r;
 
-	full_name = fname(parent, local_name);
-	assert(full_name);
-
-	r = CALL(reqcfs(req), unlink, full_name);
-	free(full_name);
-	full_name = NULL;
+	r = CALL(reqcfs(req), unlink, fusecfsino(req, parent), local_name);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
@@ -515,15 +566,9 @@ static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_n
 static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_name)
 {
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
-	char * full_name;
 	int r;
 
-	full_name = fname(parent, local_name);
-	assert(full_name);
-
-	r = CALL(reqcfs(req), rmdir, full_name);
-	free(full_name);
-	full_name = NULL;
+	r = CALL(reqcfs(req), rmdir, fusecfsino(req, parent), local_name);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
@@ -541,21 +586,9 @@ static void serve_rename(fuse_req_t req,
 {
 	Dprintf("%s(oldp = %lu, oldln = \"%s\", newp = %lu, newln = \"%s\")\n",
 	        __FUNCTION__, old_parent, old_local_name, new_parent, new_local_name);
-	char * old_full_name;
-	char * new_full_name;
-	fuse_ino_t old_ino;
 	int r;
 
-	old_full_name = fname(old_parent, old_local_name);
-	assert(old_full_name);
-	new_full_name = fname(new_parent, new_local_name);
-	assert(new_local_name);
-
-	r = CALL(reqcfs(req), rename, old_full_name, new_full_name);
-	free(old_full_name);
-	old_full_name = NULL;
-	free(new_full_name);
-	new_full_name = NULL;
+	r = CALL(reqcfs(req), rename, fusecfsino(req, old_parent), old_local_name, fusecfsino(req, new_parent), new_local_name);
 	if (r < 0)
 	{
 		// TODO: case -E_FILE_EXISTS: should we allow overwriting?
@@ -565,18 +598,13 @@ static void serve_rename(fuse_req_t req,
 		return;
 	}
 
-	// Remove old_ino from inode cache, fuse won't tell us to forget
-	old_ino = lname_inode(old_parent, old_local_name);
-	if (old_ino != FAIL_INO)
-		remove_inode(old_ino);
-
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
 }
 
-static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
+static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dirent)
 {
-	Dprintf("%s(fid = %d, k = %lld)\n", __FUNCTION__, fid, k);
+	Dprintf("%s(fdesc = 0x%08x, k = %lld)\n", __FUNCTION__, fdesc, k);
 	uint32_t basep = 0;
 	char buf[sizeof(dirent_t)];
 	char * cur = buf;
@@ -584,7 +612,7 @@ static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
 	int eof = 0;
 	int r;
 
-	assert(fid >= 0 && k >= 0 && dirent != NULL);
+	assert(fdesc != NULL && k >= 0 && dirent != NULL);
 	memset(buf, 0, sizeof(buf));
 
 	while (dirno <= k)
@@ -592,7 +620,8 @@ static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
 		uint32_t nbytes;
 		cur = buf;
 
-		r = CALL(cfs, getdirentries, fid, buf, sizeof(buf), &basep);
+		r = CALL(cfs, getdirentries, fdesc, buf, sizeof(buf), &basep);
+		assert(dirent); // catch some stack overwrites in getdirentries()
 		if (r == -E_UNSPECIFIED) // should imply eof
 		{
 			eof = 1;
@@ -615,20 +644,16 @@ static int read_single_dir(CFS_t * cfs, int fid, off_t k, dirent_t * dirent)
 	return eof;
 }
 
-static void ssync(fuse_req_t req, fuse_ino_t ino, int datasync,
+static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
                   struct fuse_file_info * fi)
 {
-	const char * full_name;
 	int r;
 
-	// INODE TODO: get full_name from fi->fh
-	full_name = inode_fname(ino);
-	assert(full_name);
 	// ignore datasync
-	r = kfs_sync(full_name);
-	if (r == -18)
+	r = kfs_sync();
+	if (r == -E_BUSY)
 	{
-		r = fuse_reply_err(req, TODOERROR); // device busy
+		r = fuse_reply_err(req, TODOERROR);
 		assert(!r);
 		return;
 	}
@@ -642,33 +667,33 @@ static void ssync(fuse_req_t req, fuse_ino_t ino, int datasync,
 	assert(!r);
 }
 
-static void serve_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
+static void serve_fsync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
                         struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu, datasync = %d)\n", __FUNCTION__, ino, datasync);
-	ssync(req, ino, datasync, fi);
+	Dprintf("%s(ino = %lu, datasync = %d)\n", __FUNCTION__, fuse_ino, datasync);
+	ssync(req, fuse_ino, datasync, fi);
 }
 
-static void serve_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
+static void serve_fsyncdir(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
                            struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu, datasync = %d)\n", __FUNCTION__, ino, datasync);
-	ssync(req, ino, datasync, fi);	
+	Dprintf("%s(ino = %lu, datasync = %d)\n", __FUNCTION__, fuse_ino, datasync);
+	ssync(req, fuse_ino, datasync, fi);	
 }
 
-static void serve_opendir(fuse_req_t req, fuse_ino_t ino,
+static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
                           struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	const char * full_name;
-	int fid;
+	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
+	fdesc_t * fdesc;
+	inode_t cfs_ino;
+	inode_t parent_cfs_ino;
 	int r;
 
-	// INODE TODO: how could we avoid ino -> full_name?
-	full_name = inode_fname(ino);
-	assert(full_name);
-	fid = CALL(reqcfs(req), open, full_name, 0);
-	if (fid < 0)
+	cfs_ino = fusecfsino(req, fuse_ino);
+
+	r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+	if (r < 0)
 	{
 		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
 		// TODO: fuse_reply_err(req, ENOTDIR);
@@ -677,20 +702,31 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t ino,
 		return;
 	}
 
-	fi->fh = (uint64_t) fid;
+	parent_cfs_ino = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
+	if (parent_cfs_ino == INODE_NONE)
+	{
+		kdprintf(STDERR_FILENO, "%s(): no parent ino for ino %u\n", __FUNCTION__, cfs_ino);
+		(void) CALL(reqcfs(req), close, fdesc);
+		r = fuse_reply_err(req, TODOERROR);
+		assert(!r);
+		return;
+	}
+	fdesc->common->parent = parent_cfs_ino;
+
+	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_open(req, fi);
 	assert(!r);
 }
 
-static void serve_releasedir(fuse_req_t req, fuse_ino_t ino,
-                             struct fuse_file_info *fi)
+static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
+                             struct fuse_file_info * fi)
 {
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	int r;
-	Dprintf("%s(ino = %lu, fid = %d)\n", __FUNCTION__, ino, fid);
+	Dprintf("%s(ino = %lu, fdesc = 0x%08x)\n", __FUNCTION__, fuse_ino, fdesc);
 
-	r = CALL(reqcfs(req), close, fid);
+	r = CALL(reqcfs(req), close, fdesc);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, TODOERROR);
@@ -702,61 +738,31 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t ino,
 	assert(!r);
 }
 
-static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
-                          off_t off, struct fuse_file_info *fi)
+static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
+                          off_t off, struct fuse_file_info * fi)
 {
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	uint32_t total_size = 0;
 	char * buf = NULL;
 	struct stat stbuf;
 	int r;
-	Dprintf("%s(ino = %lu, size = %u, off = %lld)\n", __FUNCTION__, ino, size, off);
+	Dprintf("%s(ino = %lu, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, size, off);
 
-	if (off == 0)
-	{
-		const char * local_name = ".";
-		size_t local_name_len = 1;
-		if (total_size + fuse_dirent_size(local_name_len) <= size)
-		{
-			total_size += fuse_dirent_size(local_name_len);
-			buf = (char *) realloc(buf, total_size);
-			assert(buf);
-			memset(&stbuf, 0, sizeof(stbuf));
-			stbuf.st_ino = ino;
-			fuse_add_dirent(buf, local_name, &stbuf, ++off);
-		}
-	}
-
-	if (off == 1)
-	{
-		const char * local_name = "..";
-		size_t local_name_len = 2;
-		if (total_size + fuse_dirent_size(local_name_len) <= size)
-		{
-			size_t oldsize = total_size;
-			total_size += fuse_dirent_size(local_name_len);
-			buf = (char *) realloc(buf, total_size);
-			assert(buf);
-			memset(&stbuf, 0, sizeof(stbuf));
-			stbuf.st_ino = inode_parent(ino);
-			assert(stbuf.st_ino != FAIL_INO);
-			fuse_add_dirent(buf + oldsize, local_name, &stbuf, ++off);
-		}
-	}
-
-	while (off >= 2)
+	while (1)
 	{
 		dirent_t dirent;
 		size_t oldsize = total_size;
-		fuse_ino_t entry_ino;
+		inode_t entry_cfs_ino;
 
-		r = read_single_dir(reqcfs(req), fid, off - 2, &dirent);
+		r = read_single_dir(reqcfs(req), fdesc, off, &dirent);
 		if (r == 1 || r == -E_NOT_FOUND)
 			break;
-		if (r < 0)
+		if (r == -E_EOF)
+			break;
+		else if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(%d, %lld, 0x%08x) = %d\n",
-					 __FILE__, __FUNCTION__, fid, off - 2, &dirent, r);
+			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(0x%08x, %lld, 0x%08x) = %d\n",
+					 __FILE__, __FUNCTION__, fdesc, off, &dirent, r);
 			assert(r >= 0);
 		}
 
@@ -772,14 +778,19 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 		assert(buf);
 
 		memset(&stbuf, 0, sizeof(stbuf));
-		entry_ino = lname_inode(ino, dirent.d_name);
-		if (entry_ino == FAIL_INO)
+		// Generate "." and ".." here rather than in the base file system
+		// because they are not able to find ".."'s inode from just
+		// "."'s inode
+		if (!strcmp(dirent.d_name, "."))
+			entry_cfs_ino = fusecfsino(req, fuse_ino);
+		else if (!strcmp(dirent.d_name, ".."))
+			entry_cfs_ino = fdesc->common->parent;
+		else
 		{
-			r = add_inode(ino, dirent.d_name, &entry_ino);
-			assert(r == 0);
+			r = CALL(reqcfs(req), lookup, fusecfsino(req, fuse_ino), dirent.d_name, &entry_cfs_ino);
+			assert(r >= 0);
 		}
-
-		stbuf.st_ino = entry_ino;
+		stbuf.st_ino = cfsfuseino(req, entry_cfs_ino);
 		fuse_add_dirent(buf + oldsize, dirent.d_name, &stbuf, ++off);
 	}
 
@@ -788,24 +799,23 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 	free(buf);
 }
 
-static void serve_open(fuse_req_t req, fuse_ino_t ino,
+static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
                        struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
+	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
 	uint32_t size;
+	inode_t cfs_ino;
 	void * data;
 	uint32_t type;
-	int fid;
+	fdesc_t * fdesc;
 	int r;
 
 //	else if ((fi->flags & 3) != O_RDONLY)
 //		fuse_reply_err(req, EACCES);
 
-	// INODE TODO: how could we avoid ino -> full_name?
-	const char * full_name = inode_fname(ino);
-	assert(full_name);
+	cfs_ino = fusecfsino(req, fuse_ino);
 
-	r = CALL(reqcfs(req), get_metadata, full_name, KFS_feature_filetype.id, &size, &data);
+	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &size, &data);
 	assert(r >= 0);
 
 	type = *((uint32_t*) data);
@@ -819,34 +829,34 @@ static void serve_open(fuse_req_t req, fuse_ino_t ino,
 		return;
 	}
 
-	fid = CALL(reqcfs(req), open, full_name, 0);
+	r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
 	assert(r >= 0);
-	fi->fh = (uint64_t) fid;
+	fi_set_fdesc(fi, fdesc);
 	
 	r = fuse_reply_open(req, fi);
 	assert(!r);
 }
 
-static void serve_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void serve_release(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	int fid = (int) fi->fh;
+	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	int r;
 
-	r = CALL(reqcfs(req), close, fid);
+	r = CALL(reqcfs(req), close, fdesc);
 	assert(r >= 0);
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
 }
 
-static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
-                       off_t off, struct fuse_file_info *fi)
+static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
+                       off_t off, struct fuse_file_info * fi)
 {
-	int fid = (int) fi->fh;
+	fdesc_t * fdesc = fi_get_fdesc(fi);
 	uint32_t offset = off;
 	char * buf;
 	int r;
-	Dprintf("%s(ino = %lu, fid = %d, size = %u, off = %lld)\n", __FUNCTION__, ino, fid, size, off);
+	Dprintf("%s(ino = %lu, fdesc = 0x%08x, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, fdesc, size, off);
 
 	if (offset != off)
 	{
@@ -859,7 +869,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 	buf = malloc(size);
 	assert(buf);
 
-	r = CALL(reqcfs(req), read, fid, buf, off, size);
+	r = CALL(reqcfs(req), read, fdesc, buf, off, size);
 	if (r <= 0)
 	{
 		// TODO: handle -E_EOF?
@@ -874,13 +884,13 @@ static void serve_read(fuse_req_t req, fuse_ino_t ino, size_t size,
 	return;
 }
 
-static void serve_write(fuse_req_t req, fuse_ino_t ino, const char * buf,
+static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
                         size_t size, off_t off, struct fuse_file_info * fi)
 {
 	Dprintf("%s(ino = %lu, size = %u, off = %lld, buf = \"%s\")\n",
-	        __FUNCTION__, ino, size, off, buf);
+	        __FUNCTION__, fuse_ino, size, off, buf);
 	uint32_t offset = off;
-	int fid;
+	fdesc_t * fdesc;
 	int nbytes;
 	int r;
 
@@ -892,10 +902,10 @@ static void serve_write(fuse_req_t req, fuse_ino_t ino, const char * buf,
 		return;
 	}
 
-	fid = (int) fi->fh;
+	fdesc = fi_get_fdesc(fi);
 
 	static_assert(sizeof(uint32_t) == sizeof(size));
-	nbytes = CALL(reqcfs(req), write, fid, buf, offset, size);
+	nbytes = CALL(reqcfs(req), write, fdesc, buf, offset, size);
 	if (nbytes < size)
 	{
 		r = fuse_reply_write(req, TODOERROR);
@@ -1161,6 +1171,7 @@ int fuse_serve_loop(void)
 		{
 			if (mount->mounted && !fuse_session_exited(mount->session))
 			{
+				//printf("[\"%s\"]", mount->kfs_path); fflush(stdout); // debug
 				int mount_fd = fuse_chan_fd(mount->channel);
 				FD_SET(mount_fd, &rfds);
 				if (mount_fd > max_fd)
@@ -1199,10 +1210,8 @@ int fuse_serve_loop(void)
 					r = fuse_chan_receive(mount->channel, channel_buf, channel_buf_len);
 					assert(r > 0); // what would this error mean?
 
-					Dprintf("fuse_serve: mount \"%s\"\n", mount->kfs_path);
-					fuse_serve_inodes_set_cur(mount->inodes);
+					Dprintf("fuse_serve: request for mount \"%s\"\n", mount->kfs_path);
 					fuse_session_process(mount->session, channel_buf, r, mount->channel);
-					fuse_serve_inodes_clear_cur();
 				}
 			}
 

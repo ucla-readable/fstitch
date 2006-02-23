@@ -21,9 +21,9 @@
 
 // CFS
 
-#define SKFS_TABLE_CLASSIFIER_CFS 8
-#define SKFS_TABLE_CLASSIFIER_CFS_ADD 9
-#define SKFS_TABLE_CLASSIFIER_CFS_REMOVE 10
+#define SKFS_MOUNT_SELECTOR_CFS 8
+#define SKFS_MOUNT_SELECTOR_CFS_ADD 9
+#define SKFS_MOUNT_SELECTOR_CFS_REMOVE 10
 
 #define SKFS_UHFS 11
 
@@ -127,25 +127,25 @@ typedef struct {
 //
 // CFS
 
-// table_classifier_cfs
+// mount_selector_cfs
 
 typedef struct {
 
 	SKFS_TYPE;
-} Skfs_table_classifier_cfs_t;
+} Skfs_mount_selector_cfs_t;
 
 typedef struct {
 	SKFS_TYPE;
 	uint32_t cfs;
 	uint32_t path_cfs;
 	char path[SKFS_MAX_NAMELEN];
-} Skfs_table_classifier_cfs_add_t;
+} Skfs_mount_selector_cfs_add_t;
 
 typedef struct {
 	SKFS_TYPE;
 	uint32_t cfs;
 	char path[SKFS_MAX_NAMELEN];
-} Skfs_table_classifier_cfs_remove_t;
+} Skfs_mount_selector_cfs_remove_t;
 
 // uhfs
 
@@ -155,9 +155,6 @@ typedef struct {
 } Skfs_uhfs_t;
 
 // TODO: devfs_cfs
-
-// Not present: fidcloser
-// Not present: fidprotector
 
 
 //
@@ -196,7 +193,7 @@ typedef struct {
 typedef struct {
 	SKFS_TYPE;
 	uint32_t lfs;
-	char file[SKFS_MAX_NAMELEN];
+	char name[SKFS_MAX_NAMELEN];
 } Skfs_loop_bd_t;
 
 typedef struct {

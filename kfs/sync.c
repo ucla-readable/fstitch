@@ -6,7 +6,7 @@
 #include <kfs/sync.h>
 #include <kfs/modman.h>
 
-int kfs_sync(const char * name)
+int kfs_sync(void)
 {
 	for(;;)
 	{

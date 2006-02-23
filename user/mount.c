@@ -8,7 +8,7 @@
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
 #include <kfs/uhfs.h>
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 #include <kfs/modman.h>
 #include <kfs/mem_bd.h>
 
@@ -17,8 +17,6 @@
 #include <inc/kfs_uses.h>
 #include <arch/simple.h>
 #include <inc/stdio.h>
-
-#define wb_cache_bd wt_cache_bd
 
 static bool verbose = 0;
 
@@ -230,7 +228,7 @@ static void print_usage(const char * bin)
 	printf("    mem  <blocksize> <blockcount>\n");
 }
 
-static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** journal_lfs, char ** journal_lfs_file, bool * fsck, int * cache_type, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** journal_lfs, const char ** journal_lfs_file, bool * fsck, int * cache_type, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
 	const char * fsck_str;
@@ -257,34 +255,25 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 		}
 		else
 		{
-			const char * extjournal_file = journal_str;
 			int r;
 
-			// Find the lfs for extjournal_file
+			// Find the lfs for journal_str
 			// TODO: support devfs_cfs's files (for now now, cfs_get_metadata(KFS_feature_file_lfs) will fail)
 			memset(&md, 0, sizeof(md));
-			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs.id, &md);
+			r = cfs_get_metadata(journal_str, KFS_feature_file_lfs.id, &md);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %i\n", extjournal_file, r);
+				kdprintf(STDERR_FILENO, "get_metadata(%s, KFS_feature_file_lfs): %i\n", journal_str, r);
 				exit(0);
 			}
 			*journal_lfs = create_lfs(*(uint32_t *) md.data);
 			if (!*journal_lfs)
 			{
-				kdprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", extjournal_file);
+				kdprintf(STDERR_FILENO, "Unable to find the LFS for external journal file %s\n", journal_str);
 				exit(0);
 			}
 
-			// Find the lfs's name for extjournal_file
-			memset(&md, 0, sizeof(md));
-			r = cfs_get_metadata(extjournal_file, KFS_feature_file_lfs_name.id, &md);
-			if (r < 0)
-			{
-				kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %i\n", extjournal_file, r);
-				exit(0);
-			}
-			*journal_lfs_file = strdup((char *) md.data);
+			*journal_lfs_file = journal_str;
 			*journal = 1;
 		}
 	}
@@ -440,7 +429,6 @@ static BD_t * create_disk(int argc, const char ** argv)
 	else if (!strcmp("loop", argv[device_index]))
 	{
 		const char * filename;
-		const char * lfs_filename;
 		LFS_t * lfs;
 		int r;
 
@@ -468,23 +456,8 @@ static BD_t * create_disk(int argc, const char ** argv)
 			exit(0);
 		}
 
-		// Find the lfs's name for filename
-		memset(&md, 0, sizeof(md));
-		r = cfs_get_metadata(filename, KFS_feature_file_lfs_name.id, &md);
-		if (r < 0)
-		{
-			kdprintf(STDERR_FILENO, "get_metadata(%s, file_lfs_name): %i\n", filename, r);
-			exit(0);
-		}
-		lfs_filename = (char *) md.data;
-		if (!lfs_filename)
-		{
-			kdprintf(STDERR_FILENO, "Unable to get lfs filename\n");
-			exit(0);
-		}
-
 		// Create loop_bd
-		if (! (disk = loop_bd(lfs, lfs_filename)) )
+		if (! (disk = loop_bd(lfs, filename)) )
 		{
 			kdprintf(STDERR_FILENO, "loop_bd(%s, %s) failed\n", modman_name_lfs(lfs), filename);
 			return NULL;
@@ -536,13 +509,13 @@ void umain(int argc, const char ** argv)
 	const char * mount_point;
 	BD_t * disk;
 	LFS_t * journal_lfs = NULL;
-	char * journal_lfs_file = NULL;
+	const char * journal_lfs_file = NULL;
 	CFS_t * cfs;
 	bool journal = 0;
 	bool fsck = 0, jfsck = 0;
 	int cache_type = WB_CACHE;
 	uint32_t cache_num_blocks = 128;
-	CFS_t * tclass;
+	CFS_t * mselect;
 	int r;
 
 	if (get_arg_idx(argc, argv, "-h"))
@@ -569,14 +542,14 @@ void umain(int argc, const char ** argv)
 	if (!cfs)
 		exit(0);
 
-	tclass = get_table_classifier();
-	if (!tclass)
+	mselect = get_mount_selector();
+	if (!mselect)
 		exit(0);
 
-	r = table_classifier_cfs_add(tclass, mount_point, cfs);
+	r = mount_selector_cfs_add(mselect, mount_point, cfs);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "table_classifier_cfs_add(): %i\n", r);
+		kdprintf(STDERR_FILENO, "mount_selector_cfs_add(): %i\n", r);
 		exit(0);
 	}
 }

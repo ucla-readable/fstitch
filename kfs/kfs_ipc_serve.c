@@ -4,6 +4,7 @@
 #include <kfs/sync.h>
 #include <kfs/modman.h>
 #include <lib/serial_kfs.h>
+#include <kfs/traverse.h>
 #include <kfs/kfs_ipc_serve.h>
 
 #define KIS_DEBUG 0
@@ -112,17 +113,17 @@ static void kis_request_config_status(envid_t whom, const Skfs_request_config_st
 //
 // CFS
 
-// table_classifier_cfs
-#include <kfs/table_classifier_cfs.h>
+// mount_selector_cfs
+#include <kfs/mount_selector_cfs.h>
 
-static void kis_table_classifier_cfs(envid_t whom, const Skfs_table_classifier_cfs_t * pg)
+static void kis_mount_selector_cfs(envid_t whom, const Skfs_mount_selector_cfs_t * pg)
 {
-	uint32_t val = (uint32_t) table_classifier_cfs();
+	uint32_t val = (uint32_t) mount_selector_cfs();
 	Dprintf("%s = 0x%08x\n", __FUNCTION__, val);
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
-static void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifier_cfs_add_t * pg)
+static void kis_mount_selector_cfs_add(envid_t whom, const Skfs_mount_selector_cfs_add_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	CFS_t * path_cfs = (CFS_t *) pg->path_cfs;
@@ -132,12 +133,12 @@ static void kis_table_classifier_cfs_add(envid_t whom, const Skfs_table_classifi
 	if (!modman_name_cfs(cfs) || !modman_name_cfs(path_cfs))
 		RETURN_IPC_INVAL;
 
-	val = table_classifier_cfs_add(cfs, pg->path, path_cfs);
+	val = mount_selector_cfs_add(cfs, pg->path, path_cfs);
 
 	RETURN_IPC;
 }
 
-static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_classifier_cfs_remove_t * pg)
+static void kis_mount_selector_cfs_remove(envid_t whom, const Skfs_mount_selector_cfs_remove_t * pg)
 {
 	CFS_t * cfs = (CFS_t *) pg->cfs;
 	uint32_t val;
@@ -145,7 +146,7 @@ static void kis_table_classifier_cfs_remove(envid_t whom, const Skfs_table_class
 	if (!modman_name_cfs(cfs))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) table_classifier_cfs_remove(cfs, pg->path);
+	val = (uint32_t) mount_selector_cfs_remove(cfs, pg->path);
 
 	RETURN_IPC;
 }
@@ -255,12 +256,18 @@ static void kis_wholedisk(envid_t whom, const Skfs_wholedisk_t * pg)
 static void kis_loop_bd(envid_t whom, const Skfs_loop_bd_t * pg)
 {
 	LFS_t * lfs = (LFS_t *) pg->lfs;
+	CFS_t * cfs;
+	inode_t inode;
 	uint32_t val;
 
 	if (!modman_name_lfs(lfs))
 		RETURN_IPC_INVAL;
 
-	val = (uint32_t) loop_bd(lfs, pg->file);
+	val = path_to_inode(pg->name, &cfs, &inode);
+	if (val >= 0)
+		val = (uint32_t) loop_bd(lfs, inode);
+	else
+		val = 0;
 
 	RETURN_IPC;
 }
@@ -580,7 +587,7 @@ static void kis_modman_request_its(envid_t whom, const Skfs_modman_request_its_t
 
 static void kis_sync(envid_t whom, const Skfs_sync_t * pg)
 {
-	int val = kfs_sync(pg->name);
+	int val = kfs_sync();
 	ipc_send(whom, val, NULL, 0, NULL);
 }
 
@@ -592,41 +599,45 @@ static char test_data[4096];
 int perf_test_cfs(const Skfs_perf_test_t * pg)
 {
 	modman_it_t it;
-	CFS_t * cfs;
-	int fid;
+	CFS_t * cfs, * selected_cfs;
+	fdesc_t * fdesc;
 	int time_start, time_end;
+	inode_t ino;
 	int s, size, r;
 
 	r = modman_it_init_cfs(&it);
 	assert(r >= 0);
 	while ((cfs = modman_it_next_cfs(&it)))
-		if (!strncmp("table_classifier_cfs-", modman_name_cfs(cfs), strlen("table_classifier_cfs-")))
+		if (!strncmp("mount_selector_cfs-", modman_name_cfs(cfs), strlen("mount_selector_cfs-")))
 			break;
 	modman_it_destroy(&it);
 	assert(cfs);
 
-	fid = CALL(cfs, open, pg->file, O_CREAT|O_WRONLY);
-	if(fid < 0)
+	if ((r = path_to_inode(pg->file, &selected_cfs, &ino)) < 0)
+		return r;
+	kfsd_set_mount(selected_cfs);
+	r = CALL(cfs, open, ino, O_CREAT|O_WRONLY, &fdesc);
+	if(r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): open %s: %i\n", __FUNCTION__, pg->file, fid);
-		return fid;
+		kdprintf(STDERR_FILENO, "%s(): open %s: 0x%08x\n", __FUNCTION__, pg->file, fdesc);
+		return r;
 	}
 
 	time_start = env->env_jiffies;
 	for(size = 0; size + sizeof(test_data) < pg->size; )
 	{
-		s = CALL(cfs, write, fid, test_data, size, sizeof(test_data));
+		s = CALL(cfs, write, fdesc, test_data, size, sizeof(test_data));
 		if (s < 0)
 		{
 			kdprintf(STDERR_FILENO, "%s(): write: %i\n", __FUNCTION__, s);
-			CALL(cfs, close, fid);
+			CALL(cfs, close, fdesc);
 			return s;
 		}
 		size += s;
 	}
 	time_end = env->env_jiffies;
 
-	r = CALL(cfs, close, fid);
+	r = CALL(cfs, close, fdesc);
 	if (r < 0)
 		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %i\n", __FUNCTION__, r);
 
@@ -682,9 +693,9 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 
 		// CFS
 
-		SERVE(TABLE_CLASSIFIER_CFS,        table_classifier_cfs);
-		SERVE(TABLE_CLASSIFIER_CFS_ADD,    table_classifier_cfs_add);
-		SERVE(TABLE_CLASSIFIER_CFS_REMOVE, table_classifier_cfs_remove);
+		SERVE(MOUNT_SELECTOR_CFS,        mount_selector_cfs);
+		SERVE(MOUNT_SELECTOR_CFS_ADD,    mount_selector_cfs_add);
+		SERVE(MOUNT_SELECTOR_CFS_REMOVE, mount_selector_cfs_remove);
 		SERVE(UHFS, uhfs);
 
 		// LFS

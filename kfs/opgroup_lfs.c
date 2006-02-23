@@ -27,6 +27,11 @@ static int opgroup_lfs_get_status(void * object, int level, char * string, size_
 	return 0;
 }
 
+static int opgroup_lfs_get_root(LFS_t * object, inode_t * ino)
+{
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_root, ino);	
+}
+
 static uint32_t opgroup_lfs_get_blocksize(LFS_t * object)
 {
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_blocksize);
@@ -65,9 +70,14 @@ static int opgroup_lfs_cancel_synthetic_block(LFS_t * object, uint32_t number)
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, cancel_synthetic_block, number);
 }
 
-static fdesc_t * opgroup_lfs_lookup_name(LFS_t * object, const char * name)
+static fdesc_t * opgroup_lfs_lookup_inode(LFS_t * object, inode_t ino)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_name, name);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_inode, ino);
+}
+
+static int opgroup_lfs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
+{
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_name, parent, name, ino);
 }
 
 static void opgroup_lfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
@@ -103,10 +113,10 @@ static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_
 	return value;
 }
 
-static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, const char * name, uint8_t type, fdesc_t * link, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	fdesc_t * fdesc = CALL(info->lfs, allocate_name, name, type, link, head, tail);
+	fdesc_t * fdesc = CALL(info->lfs, allocate_name, parent, name, type, link, newino, head, tail);
 	if(fdesc)
 	{
 		int r = opgroup_insert_change(*head, *tail);
@@ -116,10 +126,10 @@ static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, const char * name, ui
 	return fdesc;
 }
 
-static int opgroup_lfs_rename(LFS_t * object, const char * oldname, const char * newname, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, rename, oldname, newname, head, tail);
+	int value = CALL(info->lfs, rename, oldparent, oldname, newparent, newname, head, tail);
 	if(value >= 0)
 	{
 		int r = opgroup_insert_change(*head, *tail);
@@ -155,10 +165,10 @@ static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block
 	return value;
 }
 
-static int opgroup_lfs_remove_name(LFS_t * object, const char * name, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, remove_name, name, head, tail);
+	int value = CALL(info->lfs, remove_name, parent, name, head, tail);
 	if(value >= 0)
 	{
 		int r = opgroup_insert_change(*head, *tail);
@@ -181,19 +191,19 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 	return value;
 }
 
-static size_t opgroup_lfs_get_num_features(LFS_t * object, const char * name)
+static size_t opgroup_lfs_get_num_features(LFS_t * object, inode_t ino)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_num_features, name);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_num_features, ino);
 }
 
-static const feature_t * opgroup_lfs_get_feature(LFS_t * object, const char * name, size_t num)
+static const feature_t * opgroup_lfs_get_feature(LFS_t * object, inode_t ino, size_t num)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_feature, name, num);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_feature, ino, num);
 }
 
-static int opgroup_lfs_get_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t * size, void ** data)
+static int opgroup_lfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_name, name, id, size, data);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_inode, ino, id, size, data);
 }
 
 static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
@@ -201,10 +211,10 @@ static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, 
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_fdesc, file, id, size, data);
 }
 
-static int opgroup_lfs_set_metadata_name(LFS_t * object, const char * name, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, set_metadata_name, name, id, size, data, head, tail);
+	int value = CALL(info->lfs, set_metadata_inode, ino, id, size, data, head, tail);
 	if(value >= 0)
 	{
 		int r = opgroup_insert_change(*head, *tail);
@@ -214,7 +224,7 @@ static int opgroup_lfs_set_metadata_name(LFS_t * object, const char * name, uint
 	return value;
 }
 
-static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
 	int value = CALL(info->lfs, set_metadata_fdesc, file, id, size, data, head, tail);

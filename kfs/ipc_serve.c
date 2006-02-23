@@ -33,7 +33,8 @@ void ipc_serve_run(void)
 	if (!whom && !perm)
 	{
 		if (r != -E_TIMEOUT)
-			kdprintf(STDERR_FILENO, "kfsd %s: ipc_recv: %i\n", __FUNCTION__, (int) r);
+			kdprintf(STDERR_FILENO, "kfsd %s(): ipc_recv error: %i\n", __FUNCTION__, r);
+		sys_page_unmap(0, (void*) IPCSERVE_REQVA);
 		return;
 	}
 
@@ -46,7 +47,7 @@ void ipc_serve_run(void)
 			kfs_ipc_serve_run(whom, IPCSERVE_REQVA, perm, cur_cappa);
 			break;
 		default:
-			kdprintf(STDERR_FILENO, "kfsd ipc_serve: Unknown type %d\n", r);
+			kdprintf(STDERR_FILENO, "kfsd %s(): Unknown type %d\n", __FUNCTION__, r);
 	}
 
 	if ((r = sys_page_unmap(0, (void*) IPCSERVE_REQVA)) < 0)

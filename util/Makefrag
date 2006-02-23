@@ -7,7 +7,7 @@
 
 OBJDIRS += util
 
-$(UTILDIR)/$(FSFORMAT): util/$(FSFORMAT).c
+$(UTILDIR)/$(FSFORMAT): util/$(FSFORMAT).c lib/mmu.h inc/fs.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<

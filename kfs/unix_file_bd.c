@@ -220,7 +220,7 @@ unix_file_bd_destroy(BD_t * bd)
 }
 
 BD_t *
-unix_file_bd(char *fname, uint16_t blocksize)
+unix_file_bd(const char *fname, uint16_t blocksize)
 {
 	struct unix_file_info * info;
 	BD_t * bd = malloc(sizeof(*bd));

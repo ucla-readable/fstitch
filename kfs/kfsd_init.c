@@ -28,10 +28,8 @@
 #include <kfs/uhfs.h>
 #include <kfs/mirror_bd.h>
 #ifdef KUDOS
-#include <kfs/table_classifier_cfs.h>
+#include <kfs/mount_selector_cfs.h>
 #include <kfs/cfs_ipc_opgroup.h>
-#include <kfs/fidprotector_cfs.h>
-#include <kfs/fidcloser_cfs.h>
 #include <kfs/cfs_ipc_serve.h>
 #include <kfs/ipc_serve.h>
 #endif
@@ -74,8 +72,6 @@ int kfsd_init(int argc, char ** argv)
 #ifdef KUDOS
 	CFS_t * table_class = NULL;
 	CFS_t * opgroupscope_tracker = NULL;
-	CFS_t * fidprotector = NULL;
-	CFS_t * fidcloser = NULL;
 #endif
 	int r;
 
@@ -168,8 +164,9 @@ int kfsd_init(int argc, char ** argv)
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
 #endif
 #ifdef UNIXUSER
-		if (! (bd = unix_file_bd("obj/unix-user/fs/fs.img", 512)) )
-			kdprintf(STDERR_FILENO, "unix_file_bd(...) failed\n");
+		const char file[] = "obj/unix-user/fs/fs.img";
+		if (! (bd = unix_file_bd(file, 512)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #endif
 		if (bd)
 		{
@@ -190,8 +187,11 @@ int kfsd_init(int argc, char ** argv)
 #ifdef KUDOS
 		if (! (bd = ide_pio_bd(0, 1, 0)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
-#else
-		bd = NULL;
+#endif
+#ifdef UNIXUSER
+		const char file[] = "ufs.img";
+		if (! (bd = unix_file_bd(file, 512)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #endif
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
@@ -204,7 +204,7 @@ int kfsd_init(int argc, char ** argv)
 	// Mount uhfses
 
 #ifdef KUDOS
-	if (! (table_class = table_classifier_cfs()) )
+	if (! (table_class = mount_selector_cfs()) )
 		kfsd_shutdown();
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
@@ -234,17 +234,6 @@ int kfsd_init(int argc, char ** argv)
 	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
 		kfsd_shutdown();
 	set_frontend_cfs(opgroupscope_tracker);
-
-	//
-	// fidfairies
-
-	if (! (fidprotector = fidprotector_cfs(get_frontend_cfs())) )
-		kfsd_shutdown();
-	set_frontend_cfs(fidprotector);
-
-	if (! (fidcloser = fidcloser_cfs(get_frontend_cfs())) )
-		kfsd_shutdown();
-	set_frontend_cfs(fidcloser);
 #endif
 
 	return 0;

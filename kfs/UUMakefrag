@@ -14,7 +14,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/chdesc.o \
 			$(OBJDIR)/kfs/chdesc_util.o \
 			$(OBJDIR)/kfs/modman.o \
-			$(OBJDIR)/kfs/fidman.o \
 			$(OBJDIR)/kfs/blockman.o \
 			$(OBJDIR)/kfs/revision.o \
 			$(OBJDIR)/kfs/opgroup.o \
@@ -35,14 +34,15 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \
 			$(OBJDIR)/kfs/ufs_base.o \
+			$(OBJDIR)/kfs/ufs_common.o \
+			$(OBJDIR)/kfs/ufs_alloc_linear.o \
+			$(OBJDIR)/kfs/ufs_dirent_linear.o \
 			$(OBJDIR)/kfs/opgroup_lfs.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
-			$(OBJDIR)/kfs/table_classifier_cfs.o \
 			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/fuse_serve.o \
-			$(OBJDIR)/kfs/fuse_serve_inode.o \
 			$(OBJDIR)/kfs/fuse_serve_mount.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/sync.o \

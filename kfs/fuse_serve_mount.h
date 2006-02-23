@@ -4,7 +4,6 @@
 #include <fuse_lowlevel.h>
 #include <lib/types.h>
 #include <lib/hash_set.h>
-#include <kfs/fuse_serve_inode.h>
 #include <kfs/cfs.h>
 
 // Purpose:
@@ -15,9 +14,11 @@
 typedef struct mount {
 	bool mounted; // struct is valid only when mounted is true
 
+	hash_map_t * parents; // directory inode_t -> parent inode_t
+
 	char * kfs_path;
 	CFS_t * cfs;
-	inodes_t * inodes;
+	inode_t root_ino;
 
 	struct fuse_args args;
 	char * mountpoint;
@@ -44,7 +45,7 @@ int fuse_serve_mount_start_shutdown(void);
 
 // Set the root mountpoint.
 // Can only be called before calling fuse_serve_mount_load_mounts().
-void fuse_serve_mount_set_root(CFS_t * root);
+int fuse_serve_mount_set_root(CFS_t * root);
 
 // Return the buffer size for fuse channels
 size_t fuse_serve_mount_chan_bufsize(void);
