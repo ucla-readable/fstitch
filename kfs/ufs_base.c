@@ -34,6 +34,7 @@ typedef struct open_ufsfile open_ufsfile_t;
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
+static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 
 static uint32_t calc_cylgrp_start(LFS_t * object, uint32_t i)
 {
@@ -751,9 +752,9 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 			return NULL;
 		}
 		ef->file->f_lastalloc = INVALID_BLOCK;
-		ef->file->f_lastfrag = 0;
 		ef->file->f_num = ino;
 		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
+		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * info->super->fs_fsize);
 		type = ef->file->f_inode.di_mode >> 12;
 		switch (type)
 		{
