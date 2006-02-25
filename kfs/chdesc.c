@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <lib/memdup.h>
+#include <lib/panic.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -389,6 +390,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	
 	if(!chdescs)
 		return -E_NO_MEM;
+	if(&block->ddesc->data[offset] == data)
+		panic("Cannot create a change descriptor in place!");
 	
 	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
@@ -862,10 +865,14 @@ int chdesc_apply(chdesc_t * chdesc)
 		case BYTE:
 			if(!chdesc->byte.data)
 				return -E_INVAL;
+#if CHDESC_BYTE_SUM
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+#endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
@@ -892,10 +899,14 @@ int chdesc_rollback(chdesc_t * chdesc)
 		case BYTE:
 			if(!chdesc->byte.data)
 				return -E_INVAL;
+#if CHDESC_BYTE_SUM
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+#endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted!\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
