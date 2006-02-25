@@ -714,6 +714,13 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	block = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
 	if (!block)
 		goto allocate_block_cleanup;
+	r = chdesc_create_init(block, info->ubd, head, &newtail);
+	if (r < 0)
+	{
+		r = CALL(info->ubd, cancel_block, blockno);
+		assert(r >= 0);
+		goto allocate_block_cleanup;
+	}
 
 	f->f_inode.di_blocks += 4; // grr, di_blocks counts 512 byte blocks
 	r = write_inode(info, f->f_num, f->f_inode, head, &newtail);
