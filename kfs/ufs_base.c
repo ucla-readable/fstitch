@@ -1680,8 +1680,8 @@ static int ufs_destroy(LFS_t * lfs)
 
 	DESTROY(info->parts.allocator);
 	DESTROY(info->parts.dirent);
-	bdesc_retain(&info->super_block);
-	bdesc_retain(&info->csum_block);
+	bdesc_release(&info->super_block);
+	bdesc_release(&info->csum_block);
 	free(info->cylstart);
 	free(info->csums);
 	free(info->super);
