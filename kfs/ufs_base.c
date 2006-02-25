@@ -131,6 +131,8 @@ static int check_super(LFS_t * object)
 			info->super->fs_cstotal.cs_nbfree, info->super->fs_cstotal.cs_nifree,
 			info->super->fs_cstotal.cs_nffree);
 
+	bdesc_retain(info->super_block);
+
 	info->csum_block = CALL(info->ubd, read_block, info->super->fs_csaddr);
 	if (!info->csum_block)
 	{
@@ -143,6 +145,7 @@ static int check_super(LFS_t * object)
 		return -1;
 	memcpy(info->csums, info->csum_block->ddesc->data,
 			sizeof(struct UFS_csum) * info->super->fs_ncg);
+	bdesc_retain(info->csum_block);
 
 	return 0;
 }
@@ -1677,6 +1680,8 @@ static int ufs_destroy(LFS_t * lfs)
 
 	DESTROY(info->parts.allocator);
 	DESTROY(info->parts.dirent);
+	bdesc_retain(&info->super_block);
+	bdesc_retain(&info->csum_block);
 	free(info->cylstart);
 	free(info->csums);
 	free(info->super);
