@@ -232,6 +232,7 @@ struct  UFS_direct {
 #define UFS_ISVTX	0001000	/* Sticky bit. */
 #define UFS_ISGID	0002000	/* Set-gid. */
 #define UFS_ISUID	0004000	/* Set-uid. */
+#define UFS_IPERM	0007777	/* Mask of all permissions */
 
 /* File types. */
 #define UFS_IFMT	0170000	/* Mask of file type. */

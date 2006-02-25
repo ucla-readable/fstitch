@@ -1489,7 +1489,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, ch
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs};
+static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_unix_permissions};
 
 static size_t ufs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1508,6 +1508,9 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+
+	if (!f)
+		return -E_INVAL;
 
 	if (id == KFS_feature_size.id) {
 		*data = malloc(sizeof(int32_t));
@@ -1536,14 +1539,14 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		memcpy(*data, &nlink, sizeof(uint32_t));
 	}
 	else if (id == KFS_feature_freespace.id) {
-		int free_space;
-		*data = malloc(sizeof(uint32_t));
+		uint32_t free_space;
+		*data = malloc(sizeof(free_space));
 		if (!*data)
 			return -E_NO_MEM;
 
-		*size = sizeof(uint32_t);
+		*size = sizeof(free_space);
 		free_space = count_free_space(object) * info->super->fs_fsize / 1024;
-		memcpy(*data, &free_space, sizeof(uint32_t));
+		memcpy(*data, &free_space, sizeof(free_space));
 	}
 	else if (id == KFS_feature_file_lfs.id) {
 		*data = malloc(sizeof(object));
@@ -1552,6 +1555,15 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*size = sizeof(object);
 		memcpy(*data, &object, sizeof(object));
+	}
+	else if (id == KFS_feature_unix_permissions.id) {
+		uint32_t perm = f->f_inode.di_mode & UFS_IPERM;
+		*data = malloc(sizeof(perm));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(perm);
+		memcpy(*data, &(f->f_inode.di_mode), sizeof(f->f_inode.di_mode));
 	}
 	else
 		return -E_INVAL;
@@ -1619,6 +1631,13 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 		if (fs_type == (f->f_inode.di_mode >> 12))
 			return 0;
 		return -E_INVAL;
+	}
+	else if (id == KFS_feature_unix_permissions.id) {
+		if (sizeof(uint32_t) != size)
+			return -E_INVAL;
+		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
+			| (*((uint32_t *) data) & UFS_IPERM);
+		return write_inode(info, f->f_num, f->f_inode, head, tail);
 	}
 
 	return -E_INVAL;

@@ -5,3 +5,4 @@ const feature_t KFS_feature_filetype = {id: 0x00000002, optional: 0, warn: 0, de
 const feature_t KFS_feature_nlinks = {id: 0x00000003, optional: 0, warn: 0, description: "Hard Link Count"};
 const feature_t KFS_feature_freespace = {id: 0x00000004, optional: 0, warn: 0, description: "Free Space On Disk"};
 const feature_t KFS_feature_file_lfs = {id: 0x00000005, optional: 0, warn: 0, description: "File Toplevel LFS"};
+const feature_t KFS_feature_unix_permissions = {id: 0x00000006, optional: 0, warn: 0, description: "Standard Unix Permissions"};
