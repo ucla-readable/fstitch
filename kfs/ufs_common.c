@@ -638,7 +638,7 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 		return r;
 
 	// Update cylinder summary area
-	csum = info->csum + cyl;
+	csum = info->csums + cyl;
 	csum->cs_ndir += ndir;
 	csum->cs_nbfree += nbfree;
 	csum->cs_nifree += nifree;

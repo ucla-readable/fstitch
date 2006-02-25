@@ -89,7 +89,12 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 
-	info->super = (struct UFS_Super *) (info->super_block->ddesc->data);
+	info->super = malloc(sizeof(struct UFS_Super));
+	if (!info->super)
+		return -1;
+
+	memcpy(info->super, info->super_block->ddesc->data, sizeof(struct UFS_Super));
+
 	if (info->super->fs_magic != UFS_MAGIC) {
 		printf("ufs_base: bad file system magic number\n");
 		printf("%x\n", info->super->fs_magic);
@@ -126,8 +131,6 @@ static int check_super(LFS_t * object)
 			info->super->fs_cstotal.cs_nbfree, info->super->fs_cstotal.cs_nifree,
 			info->super->fs_cstotal.cs_nffree);
 
-	bdesc_retain(info->super_block);
-
 	info->csum_block = CALL(info->ubd, read_block, info->super->fs_csaddr);
 	if (!info->csum_block)
 	{
@@ -135,9 +138,11 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 
-	info->csum = (struct UFS_csum *) (info->csum_block->ddesc->data);
-
-	bdesc_retain(info->csum_block);
+	info->csums = malloc(sizeof(struct UFS_csum) * info->super->fs_ncg);
+	if (!info->csums)
+		return -1;
+	memcpy(info->csums, info->csum_block->ddesc->data,
+			sizeof(struct UFS_csum) * info->super->fs_ncg);
 
 	return 0;
 }
@@ -1653,9 +1658,9 @@ static int ufs_destroy(LFS_t * lfs)
 
 	DESTROY(info->parts.allocator);
 	DESTROY(info->parts.dirent);
-	bdesc_release(&info->super_block);
-	bdesc_release(&info->csum_block);
 	free(info->cylstart);
+	free(info->csums);
+	free(info->super);
 	hash_map_destroy(info->filemap);
 
 	free(OBJLOCAL(lfs));

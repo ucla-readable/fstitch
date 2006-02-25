@@ -27,7 +27,7 @@ struct lfs_info
 	bdesc_t * super_block;
 	bdesc_t * csum_block;
 	struct UFS_Super * super;
-	struct UFS_csum * csum;
+	struct UFS_csum * csums;
 	struct ufs_parts parts;
 	// commonly used values
 	uint16_t ipf; // inodes per fragment
