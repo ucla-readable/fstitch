@@ -1,6 +1,6 @@
 #include <inc/lib.h>
 #include <lib/dirent.h>
-#include <kfs/lfs.h>
+#include <kfs/feature.h>
 
 static int flag[256];
 
