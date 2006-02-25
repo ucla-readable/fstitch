@@ -97,6 +97,14 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
 	
+	/* make sure it's not already there */
+	for(meta = dependent->dependencies; meta; meta = meta->next)
+		if(meta->desc == dependency)
+			return 0;
+	/* shouldn't be there */
+	for(meta = dependency->dependents; meta; meta = meta->next)
+		assert(meta->desc != dependent);
+	
 	/* add the dependency to the dependent */
 	meta = malloc(sizeof(*meta));
 	if(!meta)
@@ -749,8 +757,6 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 /* add a dependency to a change descriptor */
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
-	chmetadesc_t * meta;
-	
 	/* compensate for Heisenberg's uncertainty principle */
 	if(!dependent || !dependency)
 	{
@@ -768,11 +774,6 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	}
 	if(dependency->flags & CHDESC_WRITTEN)
 		return 0;
-	
-	/* make sure it's not already there */
-	for(meta = dependent->dependencies; meta; meta = meta->next)
-		if(meta->desc == dependency)
-			return 0;
 	
 	/* avoid creating a dependency loop */
 #if CHDESC_CYCLE_CHECK
