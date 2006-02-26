@@ -190,7 +190,9 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		void * ptr;
 	} type;
 	bool nlinks_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_nlinks.id);
+	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
 	uint32_t nlinks = 0;
+	mode_t perms;
 
 	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
@@ -242,7 +244,8 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			assert(r >= 0);
 		}
 
-		stbuf->st_mode = S_IFDIR | 0755;
+		stbuf->st_mode = S_IFDIR;
+		perms = 0777; // default, in case permissions are not supported
 	}
 	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
 	{
@@ -262,7 +265,8 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			goto err;
 		}
 
-		stbuf->st_mode = S_IFREG | 0644;
+		stbuf->st_mode = S_IFREG;
+		perms = 0666; // default, in case permissions are not supported
 		stbuf->st_size = (off_t) *filesize.filesize;
 		free(filesize.filesize);
 	}
@@ -277,6 +281,22 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		goto err;
 	}
 
+	if (perms_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_unix_permissions.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(mode_t));
+			perms = *(mode_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(reqcfs(req)), r);
+	}
+
+	stbuf->st_mode |= perms;
 	stbuf->st_ino = fuse_ino;
 	stbuf->st_nlink = nlinks;
 
@@ -312,46 +332,72 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * attr,
                           int to_set, struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 	int r;
-	fdesc_t * fdesc;
 	inode_t cfs_ino;
-	uint32_t size;
 	struct stat stbuf;
+	int supported = FUSE_SET_ATTR_SIZE;
+	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
+	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 
-	if (to_set != FUSE_SET_ATTR_SIZE)
+	if (perms_supported)
+		supported |= FUSE_SET_ATTR_MODE;
+
+	if (to_set != (to_set & supported))
 	{
 		r = fuse_reply_err(req, ENOSYS);
 		assert(!r);
-		return;
 	}
-
-	size = (uint32_t) attr->st_size;
-	assert(size == attr->st_size);
-	Dprintf("\tsize = %u\n", size);
 
 	cfs_ino = fusecfsino(req, fuse_ino);
 
-	if (fi)
-		fdesc = fi_get_fdesc(fi);
-	else
+	if (to_set == FUSE_SET_ATTR_SIZE)
 	{
-		r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+		fdesc_t * fdesc;
+		uint32_t size;
+
+		size = (uint32_t) attr->st_size;
+		assert(size == attr->st_size);
+		Dprintf("\tsize = %u\n", size);
+
+		if (fi)
+			fdesc = fi_get_fdesc(fi);
+		else
+		{
+			r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+			if (r < 0)
+			{
+				r = fuse_reply_err(req, TODOERROR);
+				assert(!r);
+				return;
+			}
+			fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
+			assert(fdesc->common->parent != INODE_NONE);
+		}
+
+		r = CALL(reqcfs(req), truncate, fdesc, size);
+
+		if (!fi)
+		{
+			if (CALL(reqcfs(req), close, fdesc) < 0)
+			{
+				r = fuse_reply_err(req, TODOERROR);
+				assert(!r);
+				return;
+			}
+		}
+
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
 			return;
 		}
-		fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
-		assert(fdesc->common->parent != INODE_NONE);
 	}
 
-	r = CALL(reqcfs(req), truncate, fdesc, size);
-
-	if (!fi)
+	if (to_set == FUSE_SET_ATTR_MODE)
 	{
-		if (CALL(reqcfs(req), close, fdesc) < 0)
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(attr->st_mode), &attr->st_mode);
+		if (r < 0)
 		{
 			r = fuse_reply_err(req, TODOERROR);
 			assert(!r);
@@ -359,24 +405,12 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		}
 	}
 
-	if (r < 0)
-	{
-		r = fuse_reply_err(req, TODOERROR);
-		assert(!r);
-		return;
-	}
-
 	memset(&stbuf, 0, sizeof(stbuf));
 	if (fill_stat(req, cfs_ino, fuse_ino, &stbuf) == -1)
-	{
 		r = fuse_reply_err(req, TODOERROR);
-		assert(!r);
-	}
 	else
-	{
 		r = fuse_reply_attr(req, &stbuf, STDTIMEOUT);
-		assert(!r);
-	}
+	assert(!r);
 }
 
 static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_name)
