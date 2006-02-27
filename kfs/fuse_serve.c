@@ -332,11 +332,11 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * attr,
                           int to_set, struct fuse_file_info * fi)
 {
-	int r;
-	inode_t cfs_ino;
-	struct stat stbuf;
+	inode_t cfs_ino = fusecfsino(req, fuse_ino);
 	int supported = FUSE_SET_ATTR_SIZE;
 	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
+	struct stat stbuf;
+	int r;
 	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 
 	if (perms_supported)
@@ -347,8 +347,6 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		r = fuse_reply_err(req, ENOSYS);
 		assert(!r);
 	}
-
-	cfs_ino = fusecfsino(req, fuse_ino);
 
 	if (to_set == FUSE_SET_ATTR_SIZE)
 	{
