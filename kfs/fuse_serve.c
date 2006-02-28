@@ -104,32 +104,6 @@ int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 }
 
 
-/*
-static void serve_statfs(fuse_req_t req)
-{
-	Dprintf("%s()\n", __FUNCTION__);
-	struct statvfs st;
-	int r;
-
-	// See /usr/include/bits/statvfs.h
-	// Can we set just some of these?
-	// What does each field mean?
-	st.f_bsize;
-	st.f_frsize;
-	st.f_blocks;
-	st.f_bfree;
-	st.f_bavail;
-	st.f_files;
-	st.f_ffree;
-	st.f_favail;
-	st.f_flag;
-	st.f_namemax;
-
-	r = fuse_reply_statfs(req, &st);
-	assert(!r);
-}
-*/
-
 // Return the fuse_ino_t corresponding to the given request's inode_t
 static fuse_ino_t cfsfuseino(fuse_req_t req, inode_t cfs_ino)
 {
@@ -306,6 +280,48 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
   err:
 	free(type.type);
 	return -1;
+}
+
+static void serve_statfs(fuse_req_t req)
+{
+	Dprintf("%s()\n", __FUNCTION__);
+	struct statvfs st; // For more info, see: man 2 statvfs
+	int r;
+	size_t size;
+	void * data;
+
+	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_blocksize.id, &size, &data);
+	if (r < 0 || sizeof(st.f_bsize) != size)
+		goto serve_statfs_err;
+	st.f_bsize = st.f_frsize = *(uint32_t *) data;
+	assert(st.f_bsize != 0);
+
+	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
+	if (r < 0 || sizeof(st.f_blocks) < size)
+		st.f_blocks = st.f_bfree = st.f_bavail = 0;
+	else {
+		st.f_blocks = *(uint32_t *) data;
+		r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_freespace.id, &size, &data);
+		if (r < 0 || sizeof(st.f_bfree) < size)
+			st.f_bfree = st.f_bavail = 0;
+		else
+			st.f_bfree = st.f_bavail = *(uint32_t *) data;
+	}
+
+	// TODO - add lfs features for these guys
+	st.f_files = 0;
+	st.f_ffree = st.f_favail = 0;
+	st.f_flag = 0;
+	st.f_namemax = 256;
+
+	r = fuse_reply_statfs(req, &st);
+	assert(!r);
+	return;
+
+serve_statfs_err:
+	r = fuse_reply_err(req, TODOERROR);
+	assert(!r);
+	return;
 }
 
 static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_info * fi)
@@ -952,7 +968,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 
 static struct fuse_lowlevel_ops serve_oper =
 {
-//	.statfs     = serve_statfs,
+	.statfs     = serve_statfs,
 	.lookup     = serve_lookup,
 	.forget     = serve_forget,
 	.getattr    = serve_getattr,
