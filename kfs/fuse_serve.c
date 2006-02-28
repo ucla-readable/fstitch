@@ -368,6 +368,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	{
 		r = fuse_reply_err(req, ENOSYS);
 		assert(!r);
+		return;
 	}
 
 	if (to_set == FUSE_SET_ATTR_SIZE)
