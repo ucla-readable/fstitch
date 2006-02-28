@@ -200,13 +200,19 @@ int kpl_rmdir(const char * name)
 
 /* warning: not multithread safe! */
 static struct Scfs_metadata kpl_freespace_md;
+static struct Scfs_metadata kpl_blocksize_md;
 int kpl_disk_avail_space(const char* path)
 {
+	int space;
 	int r;
 
 	r = cfs_get_metadata(path, KFS_feature_freespace.id, &kpl_freespace_md);
 	if (r < 0) return r;
-	return *(int *) &kpl_freespace_md.data;
+	r = cfs_get_metadata(path, KFS_feature_blocksize.id, &kpl_blocksize_md);
+	if (r < 0) return r;
+	// space in bytes
+	space = *(int *) &kpl_freespace_md.data * *(int *) &kpl_blocksize_md.data / 1024;
+	return space;
 }
 
 // External filesystem functions

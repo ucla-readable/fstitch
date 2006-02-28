@@ -1368,7 +1368,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, 
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs};
+static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize};
 
 static size_t josfs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1385,7 +1385,12 @@ static const feature_t * josfs_get_feature(LFS_t * object, inode_t ino, size_t n
 static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t * size, void ** data)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_metadata\n");
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+
 	if (id == KFS_feature_size.id) {
+		if (!f)
+			return -E_INVAL;
+
 		*data = malloc(sizeof(int32_t));
 		if (!*data)
 			return -E_NO_MEM;
@@ -1394,6 +1399,9 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		memcpy(*data, &(f->file->f_size), sizeof(int32_t));
 	}
 	else if (id == KFS_feature_filetype.id) {
+		if (!f)
+			return -E_INVAL;
+
 		*data = malloc(sizeof(uint32_t));
 		if (!*data)
 			return -E_NO_MEM;
@@ -1418,7 +1426,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			return -E_NO_MEM;
 
 		*size = sizeof(uint32_t);
-		free_space = count_free_space(object) * JOSFS_BLKSIZE / 1024;
+		free_space = count_free_space(object);
 		memcpy(*data, &free_space, sizeof(uint32_t));
 	}
 	else if (id == KFS_feature_file_lfs.id) {
@@ -1428,6 +1436,24 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 		*size = sizeof(object);
 		memcpy(*data, &object, sizeof(object));
+	}
+	else if (id == KFS_feature_blocksize.id) {
+		uint32_t blocksize = josfs_get_blocksize(object);
+		*data = malloc(sizeof(blocksize));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(blocksize);
+		memcpy(*data, &blocksize, sizeof(blocksize));
+	}
+	else if (id == KFS_feature_devicesize.id) {
+		uint32_t devicesize = super->s_nblocks;
+		*data = malloc(sizeof(devicesize));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(devicesize);
+		memcpy(*data, &devicesize, sizeof(devicesize));
 	}
 	else
 		return -E_INVAL;
@@ -1440,10 +1466,9 @@ static int josfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, si
 	Dprintf("JOSFSDEBUG: josfs_get_metadata_inode %u\n", ino);
 	int r;
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
-	if (!f)
-		return -E_NOT_FOUND;
 	r = josfs_get_metadata(object, f, id, size, data);
-	josfs_free_fdesc(object, (fdesc_t *) f);
+	if (!f)
+		josfs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 	
 }
