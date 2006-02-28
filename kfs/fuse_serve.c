@@ -294,18 +294,24 @@ static void serve_statfs(fuse_req_t req)
 	if (r < 0 || sizeof(st.f_bsize) != size)
 		goto serve_statfs_err;
 	st.f_bsize = st.f_frsize = *(uint32_t *) data;
+	free(data);
 	assert(st.f_bsize != 0);
 
 	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
 	if (r < 0 || sizeof(st.f_blocks) < size)
 		st.f_blocks = st.f_bfree = st.f_bavail = 0;
-	else {
+	else
+	{
 		st.f_blocks = *(uint32_t *) data;
+		free(data);
 		r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_freespace.id, &size, &data);
 		if (r < 0 || sizeof(st.f_bfree) < size)
 			st.f_bfree = st.f_bavail = 0;
 		else
+		{
 			st.f_bfree = st.f_bavail = *(uint32_t *) data;
+			free(data);
+		}
 	}
 
 	// TODO - add lfs features for these guys
