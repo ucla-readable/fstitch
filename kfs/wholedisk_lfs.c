@@ -241,7 +241,7 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** he
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, write_block, block);
 }
 
-static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype};
+static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize};
 
 static size_t wholedisk_get_num_features(LFS_t * object, inode_t inode)
 {
@@ -276,6 +276,46 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 			return -E_NO_MEM;
 		*size = sizeof(type);
 		memcpy(*data, &type, sizeof(type));
+	}
+	else if (id == KFS_feature_freespace.id)
+	{
+		uint32_t free_space;
+		*data = malloc(sizeof(free_space));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(free_space);
+		free_space = 0;
+		memcpy(*data, &free_space, sizeof(free_space));
+	}
+	else if (id == KFS_feature_file_lfs.id)
+	{
+		*data = malloc(sizeof(object));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(object);
+		memcpy(*data, &object, sizeof(object));
+	}
+	else if (id == KFS_feature_blocksize.id)
+	{
+		uint32_t blocksize = CALL(state->bd, get_blocksize);
+		*data = malloc(sizeof(blocksize));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(blocksize);
+		memcpy(*data, &blocksize, sizeof(blocksize));
+	}
+	else if (id == KFS_feature_devicesize.id)
+	{
+		uint32_t devicesize = CALL(state->bd, get_numblocks);
+		*data = malloc(sizeof(devicesize));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(devicesize);
+		memcpy(*data, &devicesize, sizeof(devicesize));
 	}
 	else
 		return -E_INVAL;
