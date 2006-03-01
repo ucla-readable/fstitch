@@ -1609,7 +1609,7 @@ static int ufs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size
 
 	r = ufs_get_metadata(object, f, id, size, data);
 
-	if (!f)
+	if (f)
 		ufs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
