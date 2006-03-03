@@ -73,7 +73,7 @@ NCXXFLAGS	:= $(NCFLAGS)
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
 
 # Compiler flags
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -Wno-format -g -DUNIXUSER
+CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -g -DUNIXUSER
 CFLAGS	:= $(CFLAGS) -O2
 
 # Lists that the */UUMakefrag makefile fragments will add to

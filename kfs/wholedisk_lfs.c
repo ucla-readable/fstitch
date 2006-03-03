@@ -42,7 +42,8 @@ static int wholedisk_get_config(void * object, int level, char * string, size_t 
 	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
 		return -E_INVAL;
 
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 
@@ -52,7 +53,8 @@ static int wholedisk_get_status(void * object, int level, char * string, size_t 
 	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
 		return -E_INVAL;
 	
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 

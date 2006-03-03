@@ -116,7 +116,8 @@ static int devfs_get_config(void * object, int level, char * string, size_t leng
 	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
 		return -E_INVAL;
 
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 

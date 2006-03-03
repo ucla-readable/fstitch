@@ -17,13 +17,15 @@ struct opgroup_info {
 
 static int opgroup_lfs_get_config(void * object, int level, char * string, size_t length)
 {
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 
 static int opgroup_lfs_get_status(void * object, int level, char * string, size_t length)
 {
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 

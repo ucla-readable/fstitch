@@ -118,7 +118,8 @@ static int file_hiding_get_config(void * object, int level, char * string, size_
 	if(OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
 		return -E_INVAL;
 
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 

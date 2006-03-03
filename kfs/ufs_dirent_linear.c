@@ -360,13 +360,15 @@ static int ufs_dirent_linear_modify_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 
 static int ufs_dirent_linear_get_config(void * object, int level, char * string, size_t length)
 {
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 
 static int ufs_dirent_linear_get_status(void * object, int level, char * string, size_t length)
 {
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 

@@ -103,7 +103,7 @@ static int check_super(LFS_t * object)
 
 	numblocks = CALL(info->ubd, get_numblocks);
 
-	printf("JOS Filesystem size: %u blocks (%uMB)\n", super->s_nblocks, super->s_nblocks / (1024 * 1024 / JOSFS_BLKSIZE));
+	printf("JOS Filesystem size: %u blocks (%uMB)\n", (int) super->s_nblocks, (int) (super->s_nblocks / (1024 * 1024 / JOSFS_BLKSIZE)));
 	if (super->s_nblocks > numblocks) {
 		printf("josfs_base: file system is too large\n");
 		return -1;
@@ -565,7 +565,8 @@ static int josfs_get_config(void * object, int level, char * string, size_t leng
 	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
 		return -E_INVAL;
 
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 
@@ -575,7 +576,8 @@ static int josfs_get_status(void * object, int level, char * string, size_t leng
 	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
 		return -E_INVAL;
 	
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 

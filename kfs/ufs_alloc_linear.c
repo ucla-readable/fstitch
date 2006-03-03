@@ -63,13 +63,15 @@ static uint32_t ufs_alloc_linear_find_free_inode(UFS_Alloc_t * object, fdesc_t *
 
 static int ufs_alloc_linear_get_config(void * object, int level, char * string, size_t length)
 {
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 
 static int ufs_alloc_linear_get_status(void * object, int level, char * string, size_t length)
 {
-	snprintf(string, length, "");
+	if (length >= 1)
+		string[0] = 0;
 	return 0;
 }
 
