@@ -345,6 +345,42 @@ gotit:
 }
 
 void
+makedir(char* name)
+{
+	char *last;
+	File *f;
+	int i;
+	Block *dirb;
+
+	last = strrchr(name, '/');
+	if(last)
+		last++;
+	else
+		last = name;
+
+	if(super.s_root.f_size > 0){
+		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/BLKSIZE-1], 0, BLOCK_DIR);
+		f = (File*)dirb->buf;
+		for (i = 0; i < BLKFILES; i++)
+			if (f[i].f_name[0] == 0) {
+				f = &f[i];
+				goto gotit;
+			}
+	}
+	/* allocate new block */
+	dirb = getblk(nextb, 1, BLOCK_DIR);
+	super.s_root.f_direct[super.s_root.f_size / BLKSIZE] = nextb++;
+	super.s_root.f_size += BLKSIZE;
+	f = (File*)dirb->buf;
+	
+gotit:
+	strcpy(f->f_name, last);
+	f->f_size = 0;
+	f->f_type = FTYPE_DIR;
+	putblk(dirb);
+}
+
+void
 finishfs(void)
 {
 	int i;
@@ -394,7 +430,18 @@ main(int argc, char **argv)
 
 	opendisk(argv[1]);
 	for(i=2; i<argc; i++)
-		writefile(argv[i]);
+	{
+		struct stat s;
+		if(stat(argv[i], &s) < 0)
+		{
+			perror(argv[i]);
+			continue;
+		}
+		if(S_ISDIR(s.st_mode))
+			makedir(argv[i]);
+		else
+			writefile(argv[i]);
+	}
 	finishfs();
 	flushdisk();
 	exit(0);

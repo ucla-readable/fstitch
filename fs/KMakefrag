@@ -60,12 +60,15 @@ USERAPPS :=		$(OBJDIR)/user/bless \
 FSIMGTXTFILES :=	fs/.journal \
 			fs/404.html \
 			fs/bomb.img \
+			fs/dev \
 			fs/favicon.ico \
 			fs/foo.mp3 \
 			fs/goomba.spr \
 			fs/index.html \
 			fs/indy.0 \
 			fs/init.sh \
+			fs/k0 \
+			fs/k1 \
 			fs/kbear.jpg \
 			fs/kfsgraphviz.sh \
 			fs/kudos.0 \
@@ -114,6 +117,9 @@ $(OBJDIR)/fs/ufs.img: fs/ufs-clean.img.gz
 fs/.journal:
 	@echo + dd if=/dev/zero of=fs/.journal
 	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null
+
+fs/dev fs/k0 fs/k1:
+	$(V)mkdir $@
 
 all: $(OBJDIR)/fs/fs.img
 
