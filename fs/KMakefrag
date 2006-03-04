@@ -101,6 +101,16 @@ $(OBJDIR)/fs/fs.img: $(OBJDIR)/boot/mbr $(OBJDIR)/fs/clean-fs.img
 	$(V)cp $(OBJDIR)/boot/mbr $@
 	$(V)dd if=$(OBJDIR)/fs/clean-fs.img of=$@ seek=1 conv=notrunc 2> /dev/null
 
+# ufs.img is largely a sparse file.
+# Use GNU cp to create ufs.img and let the OS know about its holes:
+$(OBJDIR)/fs/ufs.img: fs/ufs-clean.img.gz
+	@echo + mk $(OBJDIR)/fs/ufs.img
+	$(V)[ ! -f $(OBJDIR)/fs/ufs.img.fifo ] || rm -f $(OBJDIR)/fs/ufs.img.fifo
+	$(V)mkfifo $(OBJDIR)/fs/ufs.img.fifo
+	$(V)gunzip -c fs/ufs-clean.img.gz > $(OBJDIR)/fs/ufs.img.fifo &
+	$(V)cp --sparse=always $(OBJDIR)/fs/ufs.img.fifo $(OBJDIR)/fs/ufs.img
+	$(V)rm -f $(OBJDIR)/fs/ufs.img.fifo
+
 fs/.journal:
 	@echo + dd if=/dev/zero of=fs/.journal
 	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null

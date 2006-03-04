@@ -65,7 +65,12 @@ typedef struct kfsd_partition kfsd_partition_t;
 int kfsd_init(int argc, char ** argv)
 {
 	const bool use_disk_0 = 1;
+#ifdef KUDOS
 	const bool use_disk_1 = 0;
+#endif
+#ifdef UNIXUSER
+	const bool use_disk_1 = 1;
+#endif
 	const bool use_net    = 0;
 	vector_t * uhfses = NULL;
 
@@ -189,7 +194,7 @@ int kfsd_init(int argc, char ** argv)
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
 #endif
 #ifdef UNIXUSER
-		const char file[] = "ufs.img";
+		const char file[] = "obj/unix-user/fs/ufs.img";
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #endif

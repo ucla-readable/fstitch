@@ -137,7 +137,7 @@ include util/Makefrag
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(OBJDIR)/fs/clean-fs.img $(BIN) $(UTILS)
+TAGDEPS := $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/ufs.img $(BIN) $(UTILS)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -163,7 +163,7 @@ $(GCCCONF):
 
 # For deleting the build
 fsclean:
-	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
+	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img $(OBJDIR)/fs/ufs.img
 
 clean:
 	rm -rf $(BASE_OBJDIR) fs/.journal fsformat.d $(GCCCONF) tags TAGS

@@ -204,7 +204,7 @@ $(OBJDIR)/kfs/%.o: kfs/%.c
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(UTILS)
+TAGDEPS := $(OBJDIR)/kern/bochs.img $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/ufs.img $(UTILS)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -251,7 +251,7 @@ include util/Makefrag
 
 # For deleting the build
 fsclean:
-	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img
+	rm -rf $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/fs.img $(OBJDIR)/fs/ufs.img
 
 clean:
 	rm -rf $(BASE_OBJDIR) fs/.journal kern/appkernbin.c fsformat.d $(GCCCONF) tags TAGS
