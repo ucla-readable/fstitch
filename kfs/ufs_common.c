@@ -30,7 +30,7 @@ int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode)
 
 	// Not sure what chflags do, so raise a warning if any are set
 	if (inode->di_flags)
-		printf("Warning, inode %d has chflags set: %d\n", num);
+		printf("Warning, inode %d has chflags set: %d\n", num, inode->di_flags);
 
 	return 0;
 }
