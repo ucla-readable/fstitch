@@ -13,7 +13,7 @@ typedef unsigned int   uint32_t;
 #include "elf.h"
 
 
-#if defined(_BIG_ENDIAN) || defined(BIG_ENDIAN)
+#ifdef _BIG_ENDIAN
 inline uint16_t leswap(uint16_t x) {
 	return ((x & 0xFF00) >> 8) | (x << 8);
 }
@@ -27,22 +27,20 @@ inline uint32_t leswap(uint32_t x) {
 inline int32_t leswap(int32_t x) {
 	return ((x & 0xFF000000) >> 24) | ((x & 0x00FF0000) >> 8)
 		| ((x & 0x0000FF00) << 8) | ((x & 0x000000FF) << 24);
-}
-#elif defined(_LITTLE_ENDIAN) || defined(LITTLE_ENDIA)
-inline uint16_t leswap(uint16_t x) {
-	return x;
-}
-inline int16_t leswap(int16_t x) {
-	return x;
-}
-inline uint32_t leswap(uint32_t x) {
-	return x;
-}
-inline int32_t leswap(int32_t x) {
-	return x;
 }
 #else
-#error Unknown host endianness
+inline uint16_t leswap(uint16_t x) {
+	return x;
+}
+inline int16_t leswap(int16_t x) {
+	return x;
+}
+inline uint32_t leswap(uint32_t x) {
+	return x;
+}
+inline int32_t leswap(int32_t x) {
+	return x;
+}
 #endif
 
 int
