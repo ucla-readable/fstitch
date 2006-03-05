@@ -108,9 +108,21 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 		/* set CHDESC_MOVED here to prevent trying to overlap attach to ourselves */
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_MOVED);
 		chdesc->flags |= CHDESC_MOVED;
+
+		if(offset)
+		{
+			*offset -= source_offset;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, chdesc, *offset);
+		}
+
 		r = __chdesc_overlap_multiattach(chdesc, destination);
 		if(r < 0)
 		{
+			if(offset)
+			{
+				*offset += source_offset;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, chdesc, *offset);
+			}
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_MOVED);
 			chdesc->flags &= ~CHDESC_MOVED;
 			chdesc_remove_depend(destination->ddesc->changes, chdesc);
@@ -119,12 +131,6 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	}
 	
 	/* at this point we have succeeded in moving the chdesc */
-	
-	if(offset)
-	{
-		*offset -= source_offset;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, chdesc, *offset);
-	}
 	
 	if(chdesc->block)
 	{
