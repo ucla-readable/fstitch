@@ -17,7 +17,7 @@ typedef struct stab {
 #define STABS_INFO 0x200000
 
 #if USE_STABS
-extern const struct stab_t __STAB_BEGIN__[], __STAB_END__[];
+extern const stab_t __STAB_BEGIN__[], __STAB_END__[];
 extern const char __STABSTR_BEGIN__[], __STABSTR_END__[];
 #endif
 
