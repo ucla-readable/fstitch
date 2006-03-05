@@ -12,8 +12,16 @@ typedef unsigned int   uint32_t;
 #include <sys/mman.h>
 #include "elf.h"
 
+#if defined(__MACH__)
+#include <machine/endian.h>
+#else
+#ifndef __USE_BSD
+#define __USE_BSD
+#endif
+#include <endian.h>
+#endif
 
-#ifdef _BIG_ENDIAN
+#if (BYTE_ORDER == BIG_ENDIAN)
 inline uint16_t leswap(uint16_t x) {
 	return ((x & 0xFF00) >> 8) | (x << 8);
 }
@@ -27,20 +35,22 @@ inline uint32_t leswap(uint32_t x) {
 inline int32_t leswap(int32_t x) {
 	return ((x & 0xFF000000) >> 24) | ((x & 0x00FF0000) >> 8)
 		| ((x & 0x0000FF00) << 8) | ((x & 0x000000FF) << 24);
+}
+#elif (BYTE_ORDER == LITTLE_ENDIAN)
+inline uint16_t leswap(uint16_t x) {
+	return x;
+}
+inline int16_t leswap(int16_t x) {
+	return x;
+}
+inline uint32_t leswap(uint32_t x) {
+	return x;
+}
+inline int32_t leswap(int32_t x) {
+	return x;
 }
 #else
-inline uint16_t leswap(uint16_t x) {
-	return x;
-}
-inline int16_t leswap(int16_t x) {
-	return x;
-}
-inline uint32_t leswap(uint32_t x) {
-	return x;
-}
-inline int32_t leswap(int32_t x) {
-	return x;
-}
+#error Unsupported host endianness
 #endif
 
 int
