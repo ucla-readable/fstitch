@@ -695,3 +695,40 @@ int check_name(const char * p)
 	return 0;
 }
 
+uint8_t kfs_to_ufs_type(uint8_t type)
+{
+	switch(type)
+	{
+		case TYPE_FILE:
+			return UFS_DT_REG;
+		case TYPE_DIR:
+			return UFS_DT_DIR;
+		case TYPE_SYMLINK:
+			return UFS_DT_LNK;
+			// case TYPE_DEVICE: ambiguous
+		default:
+			return -E_INVAL;
+	}
+	
+}
+
+uint8_t ufs_to_kfs_type(uint8_t type)
+{
+	switch(type)
+	{
+		case UFS_DT_REG:
+			return TYPE_FILE;
+		case UFS_DT_DIR:
+			return TYPE_DIR;
+			/*
+			   case UFS_DT_LNK:
+			   return TYPE_SYMLINK;
+			   case UFS_DT_CHR:
+			   case UFS_DT_BLK:
+			   return TYPE_DEVICE;
+			   */
+		default:
+			kdprintf(STDERR_FILENO, "%s(): file type %u is currently unsupported\n", __FUNCTION__, type);
+			return TYPE_INVAL;
+	}
+}

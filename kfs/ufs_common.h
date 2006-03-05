@@ -50,5 +50,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail);
 int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head, chdesc_t ** tail);
 int check_name(const char * p);
+uint8_t kfs_to_ufs_type(uint8_t type);
+uint8_t ufs_to_kfs_type(uint8_t type);
 
 #endif /* __KUDOS_KFS_UFS_COMMON_H */

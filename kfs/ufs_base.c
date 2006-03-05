@@ -768,19 +768,7 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
 		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * info->super->fs_fsize);
 		type = ef->file->f_inode.di_mode >> 12;
-		switch (type)
-		{
-			case UFS_DT_DIR:
-				ef->file->f_type = TYPE_DIR;
-				break;
-			case UFS_DT_REG:
-				ef->file->f_type = TYPE_FILE;
-				break;
-			default:
-				kdprintf(STDERR_FILENO, "%s(): file type %u is currently unsupported\n", __FUNCTION__, type);
-				ef->file->f_type = TYPE_INVAL;
-				break;
-		}
+		ef->file->f_type = ufs_to_kfs_type(type);
 		return (fdesc_t *) ef->file;
 	}
 
@@ -1644,21 +1632,10 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 
 		if (sizeof(uint32_t) != size)
 			return -E_INVAL;
-		switch(*((uint32_t *) data))
-		{
-			case TYPE_FILE:
-				fs_type = UFS_DT_REG;
-				break;
-			case TYPE_DIR:
-				fs_type = UFS_DT_DIR;
-				break;
-			case TYPE_SYMLINK:
-				fs_type = UFS_DT_LNK;
-				break;
-			// case TYPE_DEVICE: ambiguous
-			default:
-				return -E_INVAL;
-		}
+
+		fs_type = kfs_to_ufs_type(*((uint32_t *) data));
+		if (fs_type == (uint8_t) -E_INVAL)
+			return -E_INVAL;
 
 		if (fs_type == (f->f_inode.di_mode >> 12))
 			return 0;

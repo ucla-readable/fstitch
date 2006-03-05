@@ -120,21 +120,9 @@ static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 
 	len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
 
-	switch(dirinfo.d_type)
-	{
-		case TYPE_FILE:
-			fs_type = UFS_DT_REG;
-			break;
-		case TYPE_DIR:
-			fs_type = UFS_DT_DIR;
-			break;
-		case TYPE_SYMLINK:
-			fs_type = UFS_DT_LNK;
-			break;
-			// case TYPE_DEVICE: ambiguous
-		default:
-			return -E_INVAL;
-	}
+	fs_type = kfs_to_ufs_type(dirinfo.d_type);
+	if (fs_type == (uint8_t) -E_INVAL)
+		return -E_INVAL;
 
 	entry.d_type = fs_type;
 	entry.d_ino = dirinfo.d_fileno;
@@ -220,24 +208,7 @@ static int ufs_dirent_linear_get_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dir
 	else
 		entry->d_filesize = 0;
 
-	switch(dirent.d_type)
-	{
-		case UFS_DT_REG:
-			entry->d_type = TYPE_FILE;
-			break;
-		case UFS_DT_DIR:
-			entry->d_type = TYPE_DIR;
-			break;
-		case UFS_DT_LNK:
-			entry->d_type = TYPE_SYMLINK;
-			break;
-		case UFS_DT_CHR:
-		case UFS_DT_BLK:
-			entry->d_type = TYPE_DEVICE;
-			break;
-		default:
-			entry->d_type = TYPE_INVAL;
-	}
+	entry->d_type = ufs_to_kfs_type(dirent.d_type);
 	entry->d_fileno = dirent.d_ino;
 	entry->d_reclen = actual_len;
 	entry->d_namelen = dirent.d_namlen;
@@ -334,21 +305,9 @@ static int ufs_dirent_linear_modify_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 {
 	struct UFS_direct e;
 
-	switch(entry.d_type)
-	{
-		case TYPE_FILE:
-			e.d_type = UFS_DT_REG;
-			break;
-		case TYPE_DIR:
-			e.d_type = UFS_DT_DIR;
-			break;
-		case TYPE_SYMLINK:
-			e.d_type = UFS_DT_LNK;
-			break;
-			// case TYPE_DEVICE: ambiguous
-		default:
-			return -E_INVAL;
-	}
+	e.d_type = kfs_to_ufs_type(entry.d_type);
+	if (e.d_type == (uint8_t) -E_INVAL)
+		return -E_INVAL;
 
 	e.d_ino = entry.d_fileno;
 	e.d_reclen = entry.d_reclen;
