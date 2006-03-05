@@ -40,6 +40,9 @@ int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, c
 	int cg, cg_off, fragno, frag_off, r, offset;
 	bdesc_t * inode_table;
 
+	if (!head || !tail)
+		return -E_INVAL;
+
 	if (num < 2)
 		printf("Warning, trying to write inode %d\n", num);
 

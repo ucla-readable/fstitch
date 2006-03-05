@@ -164,7 +164,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 	if (!head || !tail)
 		return INVALID_BLOCK;
 
-	num = CALL(info->parts.allocator, find_free_block, file, 0);
+	num = CALL(info->parts.p_allocator, find_free_block, file, 0);
 	if (num == INVALID_BLOCK)
 		return INVALID_BLOCK;
 
@@ -236,12 +236,9 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 }
 
 // Update a ptr in an indirect ptr block
-static int update_indirect_block(LFS_t * object, bdesc_t * block, uint32_t offset, uint32_t n, chdesc_t ** head, chdesc_t ** tail)
+static inline int update_indirect_block(struct lfs_info * info, bdesc_t * block, uint32_t offset, uint32_t n, chdesc_t ** head, chdesc_t ** tail)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	int r;
-
-	r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head, tail);
+	int r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head, tail);
 	if (r < 0)
 		return r;
 	return CALL(info->ubd, write_block, block);
@@ -320,7 +317,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		return update_indirect_block(object, indirect[0], pt_off[0], value, head, newtail);
+		return update_indirect_block(info, indirect[0], pt_off[0], value, head, newtail);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb) {
 		block_off[1] = blockno - UFS_NDADDR - nindirb;
@@ -351,7 +348,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 			if (newblock == INVALID_BLOCK)
 				return -E_NOT_FOUND;
 			newtail = &tmptail;
-			r = update_indirect_block(object, indirect[1], pt_off[1], newblock, head, newtail);
+			r = update_indirect_block(info, indirect[1], pt_off[1], newblock, head, newtail);
 			if (r < 0)
 				return r;
 		}
@@ -360,7 +357,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		return update_indirect_block(object, indirect[0], pt_off[0], value, head, newtail);
+		return update_indirect_block(info, indirect[0], pt_off[0], value, head, newtail);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb * nindirb) {
 		// We'll only need triple indirect ptrs when the filesize is:
@@ -411,7 +408,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		r = update_indirect_block(object, indirect[0], pt_off[0], 0, head, newtail);
+		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head, newtail);
 		// Deallocate indirect block if necessary
 		if (blockno == UFS_NDADDR && r >= 0) {
 			newtail = &tmptail;
@@ -442,12 +439,12 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		r = update_indirect_block(object, indirect[0], pt_off[0], 0, head, newtail);
+		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head, newtail);
 		newtail = &tmptail;
 
 		// Deallocate indirect block if necessary
 		if ((block_off[1] % nindirb == 0) && r >= 0) {
-			r = update_indirect_block(object, indirect[1], pt_off[1], 0, head, newtail);
+			r = update_indirect_block(info, indirect[1], pt_off[1], 0, head, newtail);
 			if (r >= 0)
 				r = erase_wholeblock(object, num[0], file, head, newtail);
 		}
@@ -473,10 +470,8 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 	return -E_UNSPECIFIED;
 }
 
-static uint32_t count_free_space(LFS_t * object)
+static inline uint32_t count_free_space(struct lfs_info * info)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-
 	return info->super->fs_cstotal.cs_nbfree * info->super->fs_frag
 		+ info->super->fs_cstotal.cs_nffree;
 }
@@ -595,7 +590,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	// FIXME handle failure case better?
 
 	// find new block
-	blockno = CALL(info->parts.allocator, find_free_block, file, purpose);
+	blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
 	if (blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
 	blockno *= info->super->fs_frag;
@@ -664,7 +659,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 	// File has no fragments
 	if (f->f_numfrags == 0) {
-		blockno = CALL(info->parts.allocator, find_free_block, file, purpose);
+		blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
 		if (blockno == INVALID_BLOCK)
 			return INVALID_BLOCK;
 		blockno *= info->super->fs_frag;
@@ -693,7 +688,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 			use_newtail = 1;
 		}
 		else {
-			blockno = CALL(info->parts.allocator, find_free_block, file, purpose);
+			blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
 			if (blockno == INVALID_BLOCK)
 				return INVALID_BLOCK;
 			blockno *= info->super->fs_frag;
@@ -829,7 +824,7 @@ static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, in
 	if (pfile->f_type != TYPE_DIR)
 		return -E_NOT_DIR;
 
-	return CALL(info->parts.dirent, search_dirent, pfile, name, ino, NULL);
+	return CALL(info->parts.p_dirent, search_dirent, pfile, name, ino, NULL);
 }
 
 static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
@@ -933,7 +928,7 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 	int r;
 
 	do {
-		r = CALL(info->parts.dirent, get_dirent, (ufs_fdesc_t *) file, entry, size, basep);
+		r = CALL(info->parts.p_dirent, get_dirent, (ufs_fdesc_t *) file, entry, size, basep);
 		if (r < 0)
 			return r;
 	} while (entry->d_fileno == 0);
@@ -978,7 +973,6 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	return 0;
 }
 
-// FIXME free fdescs
 static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -990,6 +984,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	int r, offset, createdot = 0, ex;
 	uint16_t mode;
 	chdesc_t * newtail;
+	struct dirent dirinfo;
 
 	if (!head || !tail || check_name(name))
 		return NULL;
@@ -1023,18 +1018,18 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	if (!pf)
 		return NULL;
 
-	r = CALL(info->parts.dirent, search_dirent, pf, name, NULL, NULL);
+	r = CALL(info->parts.p_dirent, search_dirent, pf, name, NULL, NULL);
 	if (r >= 0) // File exists already
 		goto allocate_name_exit;
 
 	// Find an empty slot to write into
-	offset = CALL(info->parts.dirent, find_free_dirent, pf, strlen(name) + 1);
+	offset = CALL(info->parts.p_dirent, find_free_dirent, pf, strlen(name) + 1);
 	if (offset < 0)
 		goto allocate_name_exit;
 
 	if (!ln) {
 		// Allocate new inode
-		inum = CALL(info->parts.allocator, find_free_inode, (fdesc_t *) pf);
+		inum = CALL(info->parts.p_allocator, find_free_inode, (fdesc_t *) pf);
 		if (inum == INVALID_BLOCK)
 			goto allocate_name_exit;
 
@@ -1078,7 +1073,13 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	}
 
 	// Create directory entry
-	r = CALL(info->parts.dirent, insert_dirent, pf, nf->f_num, nf->f_type, name, offset, head, &newtail);
+	dirinfo.d_fileno = nf->f_num;
+	dirinfo.d_filesize = nf->f_inode.di_size;
+	dirinfo.d_type = nf->f_type;
+	strcpy(dirinfo.d_name, name);
+	dirinfo.d_namelen = strlen(name);
+	dirinfo.d_reclen = sizeof(struct dirent) + dirinfo.d_namelen - DIRENT_MAXNAMELEN;
+	r = CALL(info->parts.p_dirent, insert_dirent, pf, dirinfo, offset, head, &newtail);
 	if (r < 0) {
 		if (!ln)
 			write_inode_bitmap(info, inum, UFS_FREE, head, &newtail);
@@ -1170,7 +1171,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	if (!old_pfdesc)
 		return -E_NOT_FOUND;
 
-	r = CALL(info->parts.dirent, search_dirent, old_pfdesc, oldname, &ino, NULL);
+	r = CALL(info->parts.p_dirent, search_dirent, old_pfdesc, oldname, &ino, NULL);
 	if (r < 0)
 		goto ufs_rename_exit;
 
@@ -1186,7 +1187,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		goto ufs_rename_exit2;
 	}
 
-	r = CALL(info->parts.dirent, search_dirent, new_pfdesc, newname, &ino, &dir_offset);
+	r = CALL(info->parts.p_dirent, search_dirent, new_pfdesc, newname, &ino, &dir_offset);
 	if (r < 0)
 		goto ufs_rename_exit3;
 
@@ -1209,12 +1210,12 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		memcpy(&deadf, newf, sizeof(ufs_fdesc_t));
 
 		p = dir_offset;
-		r = CALL(info->parts.dirent, get_dirent, new_pfdesc, &entry, sizeof(entry), &p);
+		r = CALL(info->parts.p_dirent, get_dirent, new_pfdesc, &entry, sizeof(entry), &p);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
 		entry.d_fileno = oldf->f_num;
-		r = CALL(info->parts.dirent, modify_dirent, &dirfdesc, entry, dir_offset, head, tail);
+		r = CALL(info->parts.p_dirent, modify_dirent, &dirfdesc, entry, dir_offset, head, tail);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
@@ -1238,7 +1239,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	if (r < 0)
 		goto ufs_rename_exit4;
 
-	r = CALL(info->parts.dirent, delete_dirent, old_pfdesc, oldname, head, &newtail);
+	r = CALL(info->parts.p_dirent, delete_dirent, old_pfdesc, oldname, head, &newtail);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
@@ -1382,7 +1383,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 		goto ufs_remove_name_error2;
 	}
 
-	r = CALL(info->parts.dirent, search_dirent, pfile, name, &filenum, NULL);
+	r = CALL(info->parts.p_dirent, search_dirent, pfile, name, &filenum, NULL);
 	if (r < 0)
 		goto ufs_remove_name_error2;
 
@@ -1406,7 +1407,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	}
 
 	// Remove directory entry
-	r = CALL(info->parts.dirent, delete_dirent, pfile, name, head, tail);
+	r = CALL(info->parts.p_dirent, delete_dirent, pfile, name, head, tail);
 	if (r < 0)
 		goto ufs_remove_name_error;
 
@@ -1556,7 +1557,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 			return -E_NO_MEM;
 
 		*size = sizeof(free_space);
-		free_space = count_free_space(object);
+		free_space = count_free_space(info);
 		memcpy(*data, &free_space, sizeof(free_space));
 	}
 	else if (id == KFS_feature_file_lfs.id) {
@@ -1706,8 +1707,8 @@ static int ufs_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
 
-	DESTROY(info->parts.allocator);
-	DESTROY(info->parts.dirent);
+	DESTROY(info->parts.p_allocator);
+	DESTROY(info->parts.p_dirent);
 	bdesc_release(&info->super_block);
 	bdesc_release(&info->csum_block);
 	free(info->cylstart);
@@ -1728,6 +1729,11 @@ LFS_t * ufs(BD_t * block_device)
 	struct lfs_info * info;
 	LFS_t * lfs;
    
+	if (DIRENT_MAXNAMELEN < UFS_MAXNAMELEN) {
+		printf("struct dirent is too small!\n");
+		return NULL;
+	}
+
 	if (!block_device)
 		return NULL;
 
@@ -1746,16 +1752,16 @@ LFS_t * ufs(BD_t * block_device)
 
 	info->ubd = block_device;
 	info->parts.base = lfs;
-	info->parts.allocator = ufs_alloc_linear(info);
-	if (!info->parts.allocator) {
+	info->parts.p_allocator = ufs_alloc_linear(info);
+	if (!info->parts.p_allocator) {
 		free(info);
 		free(lfs);
 		return NULL;
 	}
 
-	info->parts.dirent = ufs_dirent_linear(info);
-	if (!info->parts.dirent) {
-		DESTROY(info->parts.allocator);
+	info->parts.p_dirent = ufs_dirent_linear(info);
+	if (!info->parts.p_dirent) {
+		DESTROY(info->parts.p_allocator);
 		free(info);
 		free(lfs);
 		return NULL;
@@ -1763,16 +1769,16 @@ LFS_t * ufs(BD_t * block_device)
 
 	info->filemap = hash_map_create();
 	if (!info->filemap) {
-		DESTROY(info->parts.allocator);
-		DESTROY(info->parts.dirent);
+		DESTROY(info->parts.p_allocator);
+		DESTROY(info->parts.p_dirent);
 		free(info);
 		free(lfs);
 		return NULL;
 	}
 
 	if (check_super(lfs)) {
-		DESTROY(info->parts.allocator);
-		DESTROY(info->parts.dirent);
+		DESTROY(info->parts.p_allocator);
+		DESTROY(info->parts.p_dirent);
 		free(info);
 		free(lfs);
 		return NULL;

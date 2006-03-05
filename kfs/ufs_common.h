@@ -17,8 +17,8 @@
 struct ufs_parts
 {
 	LFS_t * base;
-	UFS_Alloc_t * allocator;
-	UFS_Dirent_t * dirent;
+	UFS_Alloc_t * p_allocator;
+	UFS_Dirent_t * p_dirent;
 };
 
 struct lfs_info

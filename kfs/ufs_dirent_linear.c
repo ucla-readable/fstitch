@@ -105,7 +105,7 @@ static int ufs_dirent_linear_find_free_dirent(UFS_Dirent_t * object, ufs_fdesc_t
 	}
 }
 
-static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, inode_t ino, uint8_t type, const char * name, int offset, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head, chdesc_t ** tail)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_direct entry, last_entry;
@@ -115,12 +115,12 @@ static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 	int r, p = offset, alloc = 0;
 	uint8_t fs_type;
 
-	if (!head || !tail || !dirf || check_name(name) || offset < 0)
+	if (!head || !tail || !dirf || check_name(dirinfo.d_name) || offset < 0)
 		return -E_INVAL;
 
 	len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
 
-	switch(type)
+	switch(dirinfo.d_type)
 	{
 		case TYPE_FILE:
 			fs_type = UFS_DT_REG;
@@ -137,9 +137,9 @@ static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 	}
 
 	entry.d_type = fs_type;
-	entry.d_ino = ino;
-	entry.d_namlen = strlen(name);
-	strcpy(entry.d_name, name);
+	entry.d_ino = dirinfo.d_fileno;
+	entry.d_namlen = dirinfo.d_namelen;
+	strcpy(entry.d_name, dirinfo.d_name);
 	entry.d_name[entry.d_namlen] = 0;
 
 	// Need to extend directory
