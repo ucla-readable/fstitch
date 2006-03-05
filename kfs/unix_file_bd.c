@@ -48,7 +48,8 @@ static int
 unix_file_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	/* no status to report */
-	snprintf(string, length, "");
+	if (length > 0)
+		string[0] = 0;
 	return 0;
 }
 
