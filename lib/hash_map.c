@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <inc/error.h>
 #include <inc/config.h>
 #include <stdlib.h>
@@ -41,52 +40,49 @@ struct hash_map {
 	vector_t * tbl;
 };
 
-// No strong reason for 16, but do ensure this value should plays nicely
-// with the hash function.
-#define INIT_NUM_BUCKETS 16
-#define MIN_NUM_BUCKETS  INIT_NUM_BUCKETS
-
-// Expected time for successful and unsuccessful searches is Theta(1 + load),
-// given chaining hash tables and a uniform hash, CLR theorems 11.1 and 11.2.
-// 2.0 and 0.5 seem good, that is all.
-#define AUTO_GROW_LOAD   2.0
-#define AUTO_SHRINK_LOAD 0.5
-
-static size_t hash_ptr(const void * k, size_t tbl_size);
-
 
 //
 // The hashing function.
 // For now only one hashing function is needed, if hash_map's usage grows
 // beyond that of pointers hash_map should be enhanced to allow other hash
 // functions.
+// Essentially, GNU C++ STL 3.4's hash_fun and hashtable.
 
-// A rotating hash, http://burtleburtle.net/bob/hash/doobs.html.
-// NOTE: rotating hashes don't hash well, this could be improved.
-static size_t hash_ptr(const void * k, size_t tbl_size)
+// Note: assumes long is at least 32 bits.
+enum { num_primes = 28 };
+
+static const unsigned long prime_list[num_primes] =
 {
-	const uint8_t * const key = (uint8_t*) &k;
-	size_t hash = sizeof(k);
-	size_t i;
+  53ul,         97ul,         193ul,       389ul,       769ul,
+  1543ul,       3079ul,       6151ul,      12289ul,     24593ul,
+  49157ul,      98317ul,      196613ul,    393241ul,    786433ul,
+  1572869ul,    3145739ul,    6291469ul,   12582917ul,  25165843ul,
+  50331653ul,   100663319ul,  201326611ul, 402653189ul, 805306457ul,
+  1610612741ul, 3221225473ul, 4294967291ul
+};
 
-	for (i=0; i < sizeof(k); i++)
-		hash = (hash<<4) ^ (hash>>28) ^ key[i];
-
-	return (hash % tbl_size);
+static inline unsigned long next_size(size_t n)
+{
+	const unsigned long * first = prime_list;
+	const unsigned long * last = prime_list + (int) num_primes;
+	const unsigned long * pos = first;
+	for (pos = first; *(pos + 1) < n && pos != last; pos++) ;
+	return pos == last ? *(last - 1) : *pos;
 }
 
-// Instead of the rotating hash above we could use the multiplication method
-// (CLR, 11.3.2). Implement math.c using assembly, then try this out.
-#if 0
-// A is s/2^32, close to Knuth's suggested (sqrt(5)-1)/2.
-static const double hash_ptr_A = (double)2654435769 / (double)0xffffffff; 
-
-static size_t hash_ptr(const void * k, size_t tbl_size)
-{	
-	const uint32_t key = (uint32_t) k;
-	return (size_t) floor(key * modf(key * hash_ptr_A, NULL));
+inline static size_t hash_ptr(const void * k, size_t tbl_size)
+{
+	return ((size_t) k) % tbl_size;
 }
-#endif
+
+// Not yet in use, but here in case we later want it
+inline static size_t hash_str(const char * s, size_t tbl_size)
+{
+    unsigned long h = 0;
+    for ( ; *s; ++s)
+		h = 5*h + *s;
+    return h % tbl_size;
+}
 
 
 //
@@ -94,15 +90,11 @@ static size_t hash_ptr(const void * k, size_t tbl_size)
 
 hash_map_t * hash_map_create(void)
 {
-	return hash_map_create_size(INIT_NUM_BUCKETS, 1);
+	return hash_map_create_size(1, 1);
 }
 
 hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 {
-	// hash_map uses floating point for auto rehashing
-	if (auto_resize)
-		assert(ENABLE_ENV_FP);
-
 	if (!n)
 		return NULL;
 
@@ -112,7 +104,7 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 
 	hm->size = 0;
 	hm->auto_resize = auto_resize;
-	hm->tbl = vector_create_size(n);
+	hm->tbl = vector_create_size(next_size(n));
 	if (!hm->tbl)
 	{
 		free(hm);
@@ -179,6 +171,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+	size_t ns;
 
 	if (!head)
 	{
@@ -213,10 +206,10 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	head->elt.val = v;
 	hm->size++;
 
-	if (hm->auto_resize && AUTO_GROW_LOAD <= (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm))
+	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) > hash_map_bucket_count(hm))
 	{
 		// (safe to ignore failure)
-		(void) hash_map_resize(hm, 2*hash_map_bucket_count(hm));
+		(void) hash_map_resize(hm, ns);
 	}
 
 	return 0;
@@ -227,6 +220,7 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+	size_t ns;
 	void * v;
 
 	if (!head)
@@ -248,10 +242,11 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	chain_elt_destroy(k_chain);
 	hm->size--;
 
-	if (hm->auto_resize && (double)hash_map_size(hm) / (double)hash_map_bucket_count(hm) <= AUTO_SHRINK_LOAD)
+	
+	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) < hash_map_bucket_count(hm))
 	{
 		// (safe to ignore failure)
-		(void) hash_map_resize(hm, hash_map_bucket_count(hm)/2);
+		(void) hash_map_resize(hm, ns);
 	}
 
 	return v;
@@ -367,9 +362,11 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 {
 	int r;
 
+	n = next_size(n);
+
 	// Avoid unnecessary work when there is no change in the number of buckets
 	// and avoid making the hash table smaller than this implementation desires
-	if (n == hash_map_bucket_count(hm) || n <= MIN_NUM_BUCKETS)
+	if (n == hash_map_bucket_count(hm))
 		return 1;
 
 	// Possible speedup if we could use one:
