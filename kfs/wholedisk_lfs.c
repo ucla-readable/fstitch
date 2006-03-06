@@ -141,7 +141,7 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 	size_t namelen;
 	
 	if(file != (fdesc_t *) &root_fdesc)
-		return -E_INVAL;
+		return -E_NOT_DIR;
 	
 	if(size < sizeof(*entry) - sizeof(entry->d_name))
 		return -E_INVAL;
@@ -213,7 +213,7 @@ static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldn
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
@@ -234,7 +234,7 @@ static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * na
 {
 	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
