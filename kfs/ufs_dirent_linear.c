@@ -60,7 +60,7 @@ static int write_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct UFS_di
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, foffset);
 	if (blockno == INVALID_BLOCK)
 		return -E_NOT_FOUND;
-	block = CALL(info->ubd, read_block, blockno);
+	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
 		return -E_NOT_FOUND;
 

@@ -100,12 +100,14 @@ static const struct param * params_info_bd_name[] = {
 static const struct param * params_info_bdesc_number[] = {
 	&param_block,
 	&param_number,
+	&param_count, /* technically it's 16-bit here */
 	&last_param
 };
 static const struct param * params_bdesc_alloc[] = {
 	&param_block,
 	&param_ddesc,
 	&param_number,
+	&param_count, /* technically it's 16-bit here */
 	&last_param
 };
 static const struct param * params_bdesc_retain_release[] = {
@@ -792,7 +794,7 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 			const uint16_t flags = meta->desc->flags;
 			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
 			{
-				printf("%s(): waiting for debug mark... (0x%08x has DBWAIT)\n", function, meta->desc);
+				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, meta->desc);
 				kfs_debug_wait();
 				break;
 			}

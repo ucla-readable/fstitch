@@ -336,41 +336,45 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 	return 0;
 }
 
-static bdesc_t * elevator_cache_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * elevator_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	bdesc_t * block;
 	Dprintf("%s(%d)\n", __FUNCTION__, number);
 	
 	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
-		return NULL;
-	
-	block = lookup_block_exact(info, number);
-	if(block)
-		/* in the cache, use it */
-		return block;
-	
-	/* not in the cache, need to read it */
-	/* notice that we do not reset the head position here, even though
-	 * technically the head has been moved - this is for fairness */
-	return CALL(info->bd, read_block, number);
-}
-
-static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
-{
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	bdesc_t * block;
-	Dprintf("%s(%d)\n", __FUNCTION__, number);
-	
-	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
+	if(!count || number + count > CALL(info->bd, get_numblocks))
 		return NULL;
 	
 	block = lookup_block_exact(info, number);
 	if(block)
 	{
 		/* in the cache, use it */
+		assert(block->count == count);
+		return block;
+	}
+	
+	/* not in the cache, need to read it */
+	/* notice that we do not reset the head position here, even though
+	 * technically the head has been moved - this is for fairness */
+	return CALL(info->bd, read_block, number, count);
+}
+
+static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	bdesc_t * block;
+	Dprintf("%s(%d)\n", __FUNCTION__, number);
+	
+	/* make sure it's a valid block */
+	if(!count || number + count > CALL(info->bd, get_numblocks))
+		return NULL;
+	
+	block = lookup_block_exact(info, number);
+	if(block)
+	{
+		/* in the cache, use it */
+		assert(block->count == count);
 		*synthetic = 0;
 		return block;
 	}
@@ -378,7 +382,7 @@ static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t 
 	/* not in the cache, need to read it */
 	/* notice that we do not reset the head position here, even though
 	 * technically the head may have been moved - this is for fairness */
-	return CALL(info->bd, synthetic_read_block, number, synthetic);
+	return CALL(info->bd, synthetic_read_block, number, count, synthetic);
 }
 
 static int elevator_cache_bd_cancel_block(BD_t * object, uint32_t number)
@@ -402,7 +406,7 @@ static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	Dprintf("%s(%d)\n", __FUNCTION__, block->number);
 	
 	/* make sure it's a valid block */
-	if(block->number >= CALL(info->bd, get_numblocks))
+	if(block->number + block->count > CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
 	slot = lookup_block_slot(info, block->number, NULL);
@@ -431,6 +435,8 @@ static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		
 		info->dirty++;
 	}
+	else
+		assert(slot->block->count == block->count);
 	return 0;
 }
 

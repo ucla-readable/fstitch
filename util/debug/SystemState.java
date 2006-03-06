@@ -40,11 +40,11 @@ public class SystemState
 		bdescs.put(key, bdesc);
 	}
 	
-	public void setBdesc(int bdesc, int number)
+	public void setBdesc(int bdesc, int number, short count)
 	{
 		//Integer key = Integer.valueOf(bdesc);
 		Integer key = new Integer(bdesc);
-		bdescs.put(key, new Bdesc(bdesc, 0, number));
+		bdescs.put(key, new Bdesc(bdesc, 0, number, count));
 	}
 	
 	public Bdesc lookupBdesc(int bdesc)

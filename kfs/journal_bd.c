@@ -193,26 +193,32 @@ static uint16_t journal_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct journal_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
-static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	
+	/* FIXME: make this module support counts other than 1 */
+	assert(count == 1);
+	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	return CALL(info->bd, read_block, number);
+	return CALL(info->bd, read_block, number, count);
 }
 
-static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	
+	/* FIXME: make this module support counts other than 1 */
+	assert(count == 1);
+	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	return CALL(info->bd, synthetic_read_block, number, synthetic);
+	return CALL(info->bd, synthetic_read_block, number, count, synthetic);
 }
 
 static int journal_bd_cancel_block(BD_t * object, uint32_t number)
@@ -266,7 +272,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		{
 			/* we need to allocate a new transaction slot */
 			struct commit_record commit;
-			bdesc_t * record = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks);
+			bdesc_t * record = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 			if(!record)
 				return INVALID_BLOCK;
 			
@@ -294,7 +300,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		
 		/* get next journal block, write block number to journal block number map */
 		number = info->trans_slot * info->trans_total_blocks + 1;
-		number_block = CALL(info->journal, read_block, number + last / numbers_per_block(info->blocksize));
+		number_block = CALL(info->journal, read_block, number + last / numbers_per_block(info->blocksize), 1);
 		assert(number_block);
 		number += trans_number_block_count(info->blocksize);
 		number += last;
@@ -383,7 +389,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	chdesc_t * tail;
 	int r;
 	
-	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks);
+	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 	if(!block)
 		return -E_UNSPECIFIED;
 	
@@ -464,8 +470,11 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	uint32_t number;
 	int r;
 	
+	/* FIXME: make this module support counts other than 1 */
+	assert(block->count == 1);
+	
 	/* make sure it's a valid block */
-	if(block->number >= info->length)
+	if(block->number + block->count > info->length)
 		return -E_INVAL;
 	
 	if(info->recursion)
@@ -500,7 +509,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	number = journal_bd_lookup_block(object, block);
 	assert(number != INVALID_BLOCK);
-	journal_block = CALL(info->journal, read_block, number);
+	journal_block = CALL(info->journal, read_block, number, 1);
 	assert(journal_block);
 	
 	/* rewind the data to the state that is (now) below us... */
@@ -601,7 +610,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	
 	uint32_t block, bnb, db;
 	struct commit_record * cr;
-	bdesc_t * commit_block = CALL(info->journal, read_block, transaction_start);
+	bdesc_t * commit_block = CALL(info->journal, read_block, transaction_start, 1);
 	
 	if(!commit_block)
 		return -E_UNSPECIFIED;
@@ -660,7 +669,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	{
 		uint32_t index, max = MIN(bnpb, cr->nblocks - block);
 		uint32_t * numbers;
-		bdesc_t * number_block = CALL(info->journal, read_block, bnb);
+		bdesc_t * number_block = CALL(info->journal, read_block, bnb, 1);
 		if(!number_block)
 			return -E_UNSPECIFIED;
 		bdesc_retain(number_block);
@@ -669,14 +678,14 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		for(index = 0; index != max; index++)
 		{
 			bdesc_t * output;
-			bdesc_t * data_block = CALL(info->journal, read_block, db++);
+			bdesc_t * data_block = CALL(info->journal, read_block, db++, 1);
 			r = -E_UNSPECIFIED;
 			if(!data_block)
 				goto data_error;
 			bdesc_retain(data_block);
 			
 			/* FIXME synthetic */
-			output = CALL(info->bd, read_block, numbers[index]);
+			output = CALL(info->bd, read_block, numbers[index], 1);
 			if(!output)
 				goto output_error;
 			

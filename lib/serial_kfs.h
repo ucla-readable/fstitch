@@ -48,24 +48,25 @@
 #define SKFS_WT_CACHE_BD 23
 #define SKFS_ELEVATOR_CACHE_BD 24
 #define SKFS_BLOCK_RESIZER_BD 25
-#define SKFS_MD_BD 26
-#define SKFS_MIRROR_BD 27
-#define SKFS_MIRROR_BD_ADD 28
-#define SKFS_MIRROR_BD_REMOVE 29
-#define SKFS_PARTITION_BD 30
-#define SKFS_IDE_PIO_BD 31
+#define SKFS_BARRIER_RESIZER_BD 26
+#define SKFS_MD_BD 27
+#define SKFS_MIRROR_BD 28
+#define SKFS_MIRROR_BD_ADD 29
+#define SKFS_MIRROR_BD_REMOVE 30
+#define SKFS_PARTITION_BD 31
+#define SKFS_IDE_PIO_BD 32
 
 // modman
 
-#define SKFS_MODMAN_REQUEST_LOOKUP 32
-#define SKFS_MODMAN_RETURN_LOOKUP  33
-#define SKFS_MODMAN_RETURN_LOOKUP_USER 34
-#define SKFS_MODMAN_REQUEST_ITS    35
-#define SKFS_MODMAN_RETURN_IT      36
+#define SKFS_MODMAN_REQUEST_LOOKUP 33
+#define SKFS_MODMAN_RETURN_LOOKUP  34
+#define SKFS_MODMAN_RETURN_LOOKUP_USER 35
+#define SKFS_MODMAN_REQUEST_ITS    36
+#define SKFS_MODMAN_RETURN_IT      37
 
-#define SKFS_SYNC 37
+#define SKFS_SYNC 38
 
-#define SKFS_PERF_TEST 38
+#define SKFS_PERF_TEST 39
 
 #define SKFS_TYPE int skfs_type
 
@@ -244,6 +245,12 @@ typedef struct {
 	uint32_t bd;
 	uint16_t blocksize;
 } Skfs_block_resizer_bd_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t bd;
+	uint16_t blocksize;
+} Skfs_barrier_resizer_bd_t;
 
 typedef struct {
 	SKFS_TYPE;

@@ -123,7 +123,7 @@ static int nbd_bd_reset(BD_t * object)
 	return -1;
 }
 
-static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -131,10 +131,13 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
+	{
+		assert(bdesc->count == count);
 		return bdesc;
+	}
 	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
@@ -142,7 +145,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		uint8_t command = 0;
 		int r;
 		
-		bdesc = bdesc_alloc(number, info->blocksize);
+		bdesc = bdesc_alloc(number, info->blocksize, count);
 		if(!bdesc)
 			return NULL;
 		bdesc_autorelease(bdesc);
@@ -157,6 +160,10 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 		
 		r = write(info->fd, &number, sizeof(number));
 		if(r != sizeof(number))
+			goto error;
+		
+		r = write(info->fd, &count, sizeof(count));
+		if(r != sizeof(count))
 			goto error;
 		
 		r = readn(info->fd, bdesc->ddesc->data, info->blocksize);
@@ -179,7 +186,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number)
 	return NULL;
 }
 
-static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -187,15 +194,16 @@ static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, boo
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 	{
+		assert(bdesc->count == count);
 		*synthetic = 0;
 		return bdesc;
 	}
 	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, info->blocksize);
+	bdesc = bdesc_alloc(number, info->blocksize, count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -223,12 +231,8 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	int tries, r = -1;
 	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= info->length)
+	if(block->number + block->count > info->length)
 		return -E_INVAL;
 	
 	/* prepare the block for writing */
@@ -253,7 +257,11 @@ static int nbd_bd_write_block(BD_t * object, bdesc_t * block)
 		if(r != sizeof(number))
 			goto error;
 		
-		r = write(info->fd, block->ddesc->data, info->blocksize);
+		r = write(info->fd, &block->count, sizeof(block->count));
+		if(r != sizeof(block->count))
+			goto error;
+		
+		r = write(info->fd, block->ddesc->data, block->ddesc->length);
 		if(r != info->blocksize)
 			goto error;
 		
@@ -319,16 +327,12 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	
 	BD_INIT(bd, nbd_bd, info);
 	
-	info->blockman = blockman_create();
-	if(!info->blockman)
-		goto error_info;
-	
 	if(kgethostbyname(address, &info->ip) < 0)
-		goto error_blockman;
+		goto error_info;
 	info->port = port;
 	
 	if(kconnect(info->ip, port, &info->fd))
-		goto error_blockman;
+		goto error_info;
 	
 	r = read(info->fd, &info->length, sizeof(info->length));
 	if(r != sizeof(info->length))
@@ -343,7 +347,11 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	info->blocksize = ntohs(info->blocksize);
 	
 	info->level = 0;
-
+	
+	info->blockman = blockman_create(info->blocksize);
+	if(!info->blockman)
+		goto error_connect;
+	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);
@@ -352,10 +360,9 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	
 	return bd;
 	
+	blockman_destroy(&info->blockman);
   error_connect:
 	close(info->fd);
-  error_blockman:
-	blockman_destroy(&info->blockman);
   error_info:
 	free(info);
   error_bd:

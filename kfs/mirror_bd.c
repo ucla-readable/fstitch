@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 #include <inc/error.h>
 #include <lib/types.h>
 #include <stdlib.h>
@@ -102,23 +103,23 @@ static void label_drive_bad(BD_t * object, int disk)
 
 }
 
-static bdesc_t * try_read(BD_t * object, uint32_t number, int disk)
+static bdesc_t * try_read(BD_t * object, uint32_t number, uint16_t count, int disk)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	if(disk != 0 && disk != 1) // Should never happen...
 		return NULL;
 
-	bdesc = CALL(info->bd[disk], read_block, number);
+	bdesc = CALL(info->bd[disk], read_block, number, count);
 
-	/* just be nice and retry same device*/
+	/* just be nice and retry same device */
 	if(!bdesc)
-		bdesc = CALL(info->bd[disk], read_block, number);
+		bdesc = CALL(info->bd[disk], read_block, number, count);
 
 	return bdesc;
 }
 
-static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	int diskno = (number >> info->stride) & 1;
@@ -127,29 +128,32 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number)
 	
 	block = blockman_managed_lookup(info->blockman, number);
 	if(block)
+	{
+		assert(block->count == count);
 		return block;
+	}
 	
 	/* make sure it's a valid block */
-	if(number >= info->numblocks)
+	if(!count || number + count > info->numblocks)
 		return NULL;
 	
-	block = bdesc_alloc(number, info->blocksize);
+	block = bdesc_alloc(number, info->blocksize, count);
 	if(!block)
 		return NULL;
 	bdesc_autorelease(block);
 	
 	if(disk0_bad)
-		orig = try_read(object, number, 1);
+		orig = try_read(object, number, count, 1);
 	else if(disk1_bad)
-		orig = try_read(object, number, 0);
+		orig = try_read(object, number, count, 0);
 	else
 	{
-		orig = try_read(object, number, diskno);
+		orig = try_read(object, number, count, diskno);
 
 		/* two strikes and you're out! */
 		if(!orig)
 		{
-			orig = try_read(object, number, 1 - diskno);
+			orig = try_read(object, number, count, 1 - diskno);
 			/* now we know disk[diskno] is 'bad' */
 			if(orig)
 				label_drive_bad(object, diskno);
@@ -159,7 +163,8 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number)
 	if(!orig)
 		return NULL;
 	
-	memcpy(block->ddesc->data, orig->ddesc->data, info->blocksize);
+	assert(block->ddesc->length == orig->ddesc->length);
+	memcpy(block->ddesc->data, orig->ddesc->data, orig->ddesc->length);
 	
 	if(blockman_managed_add(info->blockman, block) < 0)
 		/* kind of a waste of the read... but we have to do it */
@@ -169,7 +174,7 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number)
 }
 
 /* we are a barrier, so just synthesize it if it's not already in this zone */
-static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -177,15 +182,16 @@ static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, 
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 	{
+		assert(bdesc->count == count);
 		*synthetic = 0;
 		return bdesc;
 	}
 	
 	/* make sure it's a valid block */
-	if(number >= info->numblocks)
+	if(!count || number + count > info->numblocks)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, info->blocksize);
+	bdesc = bdesc_alloc(number, info->blocksize, count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -213,12 +219,8 @@ static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	int value0 = -1, value1 = -1;
 	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= info->numblocks)
+	if(block->number + block->count > info->numblocks)
 		return -E_INVAL;
 	
 	if(disk1_bad)
@@ -339,7 +341,7 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 		return NULL;
 	}
 	
-	info->blockman = blockman_create();
+	info->blockman = blockman_create(blocksize);
 	if(!info->blockman)
 	{
 		free(info);
@@ -480,7 +482,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 			}
 		}
 		
-		source = CALL(info->bd[good_disk], read_block, i);
+		source = CALL(info->bd[good_disk], read_block, i, 1);
 		if(!source)
 		{
 			printf("\nmirror_bd: uh oh, error reading block %d on sync\n", i);
@@ -488,7 +490,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 			return -E_UNSPECIFIED;
 		}
 
-		destination = CALL(newdevice, synthetic_read_block, i, &synthetic);
+		destination = CALL(newdevice, synthetic_read_block, i, 1, &synthetic);
 		if(!destination)
 		{
 			printf("\nmirror_bd: uh oh, error getting block %d on sync\n", i);

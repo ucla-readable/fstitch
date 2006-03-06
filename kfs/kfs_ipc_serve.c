@@ -372,6 +372,20 @@ static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * p
 	RETURN_IPC;
 }
 
+#include <kfs/barrier_resizer_bd.h>
+static void kis_barrier_resizer_bd(envid_t whom, const Skfs_barrier_resizer_bd_t * pg)
+{
+	BD_t * bd = (BD_t *) pg->bd;
+	uint32_t val;
+	
+	if (!modman_name_bd(bd))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) barrier_resizer_bd(bd, pg->blocksize);
+
+	RETURN_IPC;
+}
+
 #include <kfs/md_bd.h>
 static void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
 {
@@ -719,6 +733,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(WT_CACHE_BD,            wt_cache_bd);
 		SERVE(ELEVATOR_CACHE_BD,      elevator_cache_bd);
 		SERVE(BLOCK_RESIZER_BD,       block_resizer_bd);
+		SERVE(BARRIER_RESIZER_BD,     barrier_resizer_bd);
 		SERVE(MD_BD,                  md_bd);
 		SERVE(MIRROR_BD,              mirror_bd);
 		SERVE(MIRROR_BD_ADD,          mirror_bd_add);

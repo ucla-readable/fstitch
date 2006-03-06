@@ -307,40 +307,43 @@ static uint16_t ide_pio_bd_get_atomicsize(BD_t * object)
 	return IDE_SECTSIZE;
 }
 
-static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
-	int need_to_read = 0;
 	
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
+	{
+		assert(bdesc->count == count);
 		return bdesc;
+	}
 	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, IDE_SECTSIZE);
+	bdesc = bdesc_alloc(number, IDE_SECTSIZE, count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
-	if(info->ra_count == 0)
+	if(count > info->ra_count)
 	{
-		/* read it */
-		if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
+		/* just read it */
+		if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, count) == -1)
 			return NULL;
 	}
 	else
 	{
-		/* read ahead */
-		if(info->ra_sector != 0)
+		/* try the read ahead cache */
+		int need_to_read = 0;
+		if(info->ra_sector != INVALID_BLOCK)
 		{
 			/* we have something in the cache */
-			if(info->ra_sector <= number && number < info->ra_sector+info->ra_count)
-				/* cache hit */
-				memcpy(bdesc->ddesc->data, info->ra_cache + IDE_SECTSIZE * (number - info->ra_sector), IDE_SECTSIZE);
+			if(info->ra_sector <= number && number + count <= info->ra_sector + info->ra_count)
+				/* cache hit - TODO: try readahead from here? */
+				memcpy(bdesc->ddesc->data, info->ra_cache + IDE_SECTSIZE * (number - info->ra_sector), IDE_SECTSIZE * count);
 			else
 				/* cache miss */
 				need_to_read = 1;
@@ -351,20 +354,12 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 		
 		if(need_to_read)
 		{
-			if(number == 0)
-			{
-				info->ra_sector = 0;
-				if(ide_read(info->controller, info->disk, number, bdesc->ddesc->data, 1) == -1)
-					return NULL;
-			}
-			else
-			{
-				/* read it */
-				if(ide_read(info->controller, info->disk, number, info->ra_cache, info->ra_count) == -1)
-					return NULL;
-				memcpy(bdesc->ddesc->data, info->ra_cache, IDE_SECTSIZE);
-				info->ra_sector = number;
-			}
+			/* read it */
+			/* TODO: only block for the current request, and use IRQs for readahead */
+			if(ide_read(info->controller, info->disk, number, info->ra_cache, info->ra_count) == -1)
+				return NULL;
+			memcpy(bdesc->ddesc->data, info->ra_cache, IDE_SECTSIZE * count);
+			info->ra_sector = number;
 		}
 	}
 	
@@ -375,7 +370,7 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number)
 	return bdesc;
 }
 
-static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -383,21 +378,21 @@ static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 	{
+		assert(bdesc->count == count);
 		*synthetic = 0;
 		return bdesc;
 	}
 	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, IDE_SECTSIZE);
+	bdesc = bdesc_alloc(number, IDE_SECTSIZE, count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
-		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
 	*synthetic = 1;
@@ -410,7 +405,10 @@ static int ide_pio_bd_cancel_block(BD_t * object, uint32_t number)
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
 	if(ddesc)
+	{
+		assert(!ddesc->changes);
 		blockman_remove(ddesc);
+	}
 	return 0;
 }
 
@@ -418,12 +416,8 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != IDE_SECTSIZE)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= info->length)
+	if(block->number + block->count > info->length)
 		return -E_INVAL;
 	
 	/* prepare the block for writing */
@@ -431,8 +425,10 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	KFS_DEBUG_DBWAIT(block);
 	
+#warning The barrier resizer takes care of inter-sector dependency ordering when breaking blocks into sectors.
+#warning FIXME: We must now do it here, in ide_pio_bd (and in all other terminal BDs) via a utility function.
 	/* write it */
-	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, 1) == -1)
+	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, block->count) == -1)
 	{
 		/* the write failed; don't remove any change descriptors... */
 		revision_tail_revert(block, object);
@@ -510,7 +506,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	
 	BD_INIT(bd, ide_pio_bd, info);
 	
-	info->blockman = blockman_create();
+	info->blockman = blockman_create(IDE_SECTSIZE);
 	if(!info->blockman)
 	{
 		free(info->ra_cache);
@@ -523,7 +519,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	info->disk = disk;
 	info->length = length;
 	info->level = 0;
-	info->ra_sector = 0;
+	info->ra_sector = INVALID_BLOCK;
 	ide_pio_tune(controller, disk);
 	
 	if(modman_add_bd(bd, ide_names[controller][disk]))

@@ -60,16 +60,16 @@ static uint16_t partition_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct partition_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
-static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	bdesc = CALL(info->bd, read_block, info->start + number);
+	bdesc = CALL(info->bd, read_block, info->start + number, count);
 	if(!bdesc)
 		return NULL;
 	
@@ -81,16 +81,16 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number)
 	return new_bdesc;
 }
 
-static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(number >= info->length)
+	if(!count || number + count > info->length)
 		return NULL;
 	
-	bdesc = CALL(info->bd, synthetic_read_block, info->start + number, synthetic);
+	bdesc = CALL(info->bd, synthetic_read_block, info->start + number, count, synthetic);
 	if(!bdesc)
 		return NULL;
 	
@@ -119,12 +119,8 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	bdesc_t * wblock;
 	int value;
 	
-	/* make sure it's a whole block */
-	if(block->ddesc->length != info->blocksize)
-		return -E_INVAL;
-	
 	/* make sure it's a valid block */
-	if(block->number >= info->length)
+	if(block->number + block->count > info->length)
 		return -E_INVAL;
 
 	wblock = bdesc_alloc_clone(block, block->number + info->start);

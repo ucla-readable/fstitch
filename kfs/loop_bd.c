@@ -79,12 +79,15 @@ static uint16_t loop_get_atomicsize(BD_t * bd)
 	return CALL(info->lfs_bd, get_atomicsize);
 }
 
-static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
+static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	uint32_t lfs_bno;
 	bdesc_t * block;
+
+	/* FIXME: make this module support counts other than 1 */
+	assert(count == 1);
 
 	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
 	if (lfs_bno == INVALID_BLOCK)
@@ -102,12 +105,15 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number)
 	return block;
 }
 
-static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, bool * synthetic)
+static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count, bool * synthetic)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
 	uint32_t lfs_bno;
 	bdesc_t * block;
+
+	/* FIXME: make this module support counts other than 1 */
+	assert(count == 1);
 
 	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
 	if (lfs_bno == INVALID_BLOCK)

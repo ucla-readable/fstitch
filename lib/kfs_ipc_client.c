@@ -665,6 +665,23 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	return create_bd(bd_id);
 }
 
+#include <kfs/barrier_resizer_bd.h>
+BD_t * barrier_resizer_bd(BD_t * disk, uint16_t blocksize)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(BARRIER_RESIZER_BD, barrier_resizer_bd);
+
+	pg->bd = (uint32_t) OBJLOCAL(disk);
+	pg->blocksize = blocksize;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
+}
+
 #include <kfs/md_bd.h>
 BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 {

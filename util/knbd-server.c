@@ -29,6 +29,7 @@ static void serve_loop(int bd, int client)
 	unsigned char command;
 	unsigned int number;
 	unsigned short bs = BLOCK_SIZE;
+	unsigned short count;
 	
 	fstat(bd, &st);
 	number = st.st_size / bs;
@@ -44,8 +45,11 @@ static void serve_loop(int bd, int client)
 			break;
 		if(read(client, &number, sizeof(number)) != 4)
 			break;
+		if(read(client, &count, sizeof(count)) != 2)
+			break;
 		number = ntohl(number);
-		if(number >= st.st_size / bs)
+		count = ntohs(count);
+		if(number + count > st.st_size / bs)
 		{
 			printf("Reset block %d\n", number);
 			number = 0;
@@ -55,13 +59,19 @@ static void serve_loop(int bd, int client)
 		{
 			case 0:
 				printf("Read block %d\n", number);
-				read(bd, buffer, BLOCK_SIZE);
-				write(client, buffer, BLOCK_SIZE);
+				while(count--)
+				{
+					read(bd, buffer, BLOCK_SIZE);
+					write(client, buffer, BLOCK_SIZE);
+				}
 				break;
 			case 1:
 				printf("Write block %d\n", number);
-				readn(client, buffer, BLOCK_SIZE);
-				write(bd, buffer, BLOCK_SIZE);
+				while(count--)
+				{
+					readn(client, buffer, BLOCK_SIZE);
+					write(bd, buffer, BLOCK_SIZE);
+				}
 				break;
 			default:
 				printf("Unknown command 0x%02x!\n", command);

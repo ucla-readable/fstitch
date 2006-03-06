@@ -38,7 +38,7 @@ static void condense_ptable(struct pc_ptable * ptable, struct partition * partit
 
 static int _detect_extended(struct ptable_info * info, uint32_t table_offset, uint32_t ext_offset)
 {
-	bdesc_t * table = CALL(info->bd, read_block, table_offset);
+	bdesc_t * table = CALL(info->bd, read_block, table_offset, 1);
 	struct partition ptable[4];
 	int i;
 	
@@ -112,7 +112,7 @@ void * pc_ptable_init(BD_t * bd)
 		goto error_extended;
 	
 	/* read the partition table */
-	mbr = CALL(bd, read_block, 0);
+	mbr = CALL(bd, read_block, 0, 1);
 	if(!mbr)
 		goto error_mbr;
 	ptable = (struct pc_ptable *) &mbr->ddesc->data[PTABLE_OFFSET];

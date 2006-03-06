@@ -28,13 +28,15 @@ struct bdesc {
 	uint32_t ar_count;
 	bdesc_t * ar_next;
 	datadesc_t * ddesc;
+	uint16_t count;
 };
 
 /* allocate a new bdesc */
-bdesc_t * bdesc_alloc(uint32_t number, uint16_t length);
+/* the actual size will be length * count bytes */
+bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count);
 
 /* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number);
+bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number, uint16_t count);
 
 /* make a new bdesc that shares a ddesc with another bdesc */
 bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number);

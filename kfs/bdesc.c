@@ -19,7 +19,8 @@ struct auto_pool {
 static struct auto_pool * autorelease_stack = NULL;
 
 /* allocate a new bdesc */
-bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
+/* the actual size will be length * count bytes */
+bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
 	if(!bdesc)
@@ -30,6 +31,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 		free(bdesc);
 		return NULL;
 	}
+	length *= count;
 	bdesc->ddesc->data = malloc(length);
 	if(!bdesc->ddesc->data)
 	{
@@ -37,12 +39,13 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 		free(bdesc);
 		return NULL;
 	}
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number);
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, count);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
+	bdesc->count = count;
 	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->changes = NULL;
 	bdesc->ddesc->manager = NULL;
@@ -52,18 +55,19 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length)
 }
 
 /* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
+bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number, uint16_t count)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
 	if(!bdesc)
 		return NULL;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number);
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number, count);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->ddesc = ddesc;
 	bdesc->number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
+	bdesc->count = count;
 	bdesc->ddesc->ref_count++;
 	return bdesc;
 }
@@ -71,7 +75,7 @@ bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
 /* make a new bdesc that shares a ddesc with another bdesc */
 bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number)
 {
-	return bdesc_alloc_wrap(original->ddesc, number);
+	return bdesc_alloc_wrap(original->ddesc, number, original->count);
 }
 
 /* increase the reference count of a bdesc */

@@ -72,21 +72,24 @@ unix_file_bd_get_atomicsize(BD_t * object)
 }
 
 static bdesc_t *
-unix_file_bd_read_block(BD_t * object, uint32_t number)
+unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	bdesc_t * ret;
 	int r;
 	off_t seeked;
 
-	if (number >= info->blockcount)
+	if (!count || number + count > info->blockcount)
 		return NULL;
 
 	ret = blockman_managed_lookup(info->blockman, number);
 	if (ret)
+	{
+		assert(ret->count == count);
 		return ret;
+	}
 
-	ret = bdesc_alloc(number, info->blocksize);
+	ret = bdesc_alloc(number, info->blocksize, count);
 	if (ret == NULL)
 		return NULL;
 	bdesc_autorelease(ret);
@@ -98,8 +101,8 @@ unix_file_bd_read_block(BD_t * object, uint32_t number)
 		assert(0);
 	}
 
-	r = read(info->fd, ret->ddesc->data, info->blocksize);
-	if (r != info->blocksize)
+	r = read(info->fd, ret->ddesc->data, ret->ddesc->length);
+	if (r != ret->ddesc->length)
 	{
 		if (r < 0)
 			perror("read");
@@ -113,10 +116,9 @@ unix_file_bd_read_block(BD_t * object, uint32_t number)
 }
 
 static bdesc_t *
-unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number,
-								  bool * synthetic)
+unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
-	bdesc_t * ret = unix_file_bd_read_block(object, number);
+	bdesc_t * ret = unix_file_bd_read_block(object, number, count);
 	if(ret)
 		*synthetic = 0;
 	return ret;
@@ -139,11 +141,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	int r;
 	off_t seeked;
 	
-	if(block->ddesc->length != info->blocksize) {
-		panic("wrote block with bad length\n");
-		return -E_INVAL;
-	}
-	if (block->number >= info->blockcount) {
+	if (block->number + block->count > info->blockcount) {
 		panic("wrote bad block number\n");
 		return -E_INVAL;
 	}
@@ -160,7 +158,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 		perror("lseek");
 		assert(0);
 	}
-	if (write(info->fd, block->ddesc->data, info->blocksize) != info->blocksize)
+	if (write(info->fd, block->ddesc->data, block->ddesc->length) != block->ddesc->length)
 	{
 		perror("write");
 		assert(0);
@@ -278,7 +276,7 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 		return NULL;
 	}
 #endif
-	info->blockman = blockman_create();
+	info->blockman = blockman_create(blocksize);
 	if (!info->blockman) {
 		close(info->fd);
 		free(info);

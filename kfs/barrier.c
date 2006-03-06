@@ -36,7 +36,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	if (!block->ddesc->changes)
 		return 0;
 
-	target_block = CALL(target, synthetic_read_block, number, &synthetic);
+	target_block = CALL(target, synthetic_read_block, number, 1, &synthetic);
 	if (!target_block)
 		return -E_UNSPECIFIED;
 
@@ -165,7 +165,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 			continue;
 		}
 
-		target_block = CALL(forward->target, synthetic_read_block, forward->number, &synthetic);
+		target_block = CALL(forward->target, synthetic_read_block, forward->number, 1, &synthetic);
 		if (!target_block)
 			panic("%s(): forward->target->synthetic_read_block() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 
@@ -286,7 +286,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	
 	for(i = 0; i != nforwards; i++)
 	{
-		target_block[i] = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, &synthetic[i]);
+		target_block[i] = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, 1, &synthetic[i]);
 		if(!target_block[i])
 		{
 			while(i--)

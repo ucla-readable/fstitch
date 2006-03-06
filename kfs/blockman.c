@@ -14,14 +14,25 @@
 #define Dprintf(x...)
 #endif
 
-blockman_t * blockman_create(void)
+/* the length parameter is for calculating how many blocks each bdesc_t represents */
+blockman_t * blockman_create(uint16_t length)
 {
-	return hash_map_create();
+	blockman_t * man = malloc(sizeof(*man));
+	if(!man)
+		return NULL;
+	man->map = hash_map_create();
+	if(!man->map)
+	{
+		free(man);
+		return NULL;
+	}
+	man->length = length;
+	return man;
 }
 
 void blockman_destroy(blockman_t ** blockman)
 {
-	hash_map_t * hash = *blockman;
+	hash_map_t * hash = (*blockman)->map;
 	hash_map_it_t it;
 	datadesc_t * ddesc;
 	
@@ -33,6 +44,7 @@ void blockman_destroy(blockman_t ** blockman)
 		ddesc->manager = NULL;
 	}
 	hash_map_destroy(hash);
+	free(*blockman);
 	*blockman = NULL;
 }
 
@@ -44,7 +56,7 @@ int blockman_add(blockman_t * blockman, uint32_t number, datadesc_t * ddesc)
 	if(ddesc->manager)
 		return -E_INVAL;
 	
-	r = hash_map_insert(blockman, (void *) number, ddesc);
+	r = hash_map_insert(blockman->map, (void *) number, ddesc);
 	if(r < 0)
 		return r;
 	
@@ -59,7 +71,7 @@ int blockman_remove(datadesc_t * ddesc)
 	Dprintf("<blockman 0x%08x remove %u: ddesc 0x%08x>\n", blockman, ddesc->managed_number, ddesc);
 	if(ddesc->manager)
 	{
-		hash_map_erase(ddesc->manager, (void *) ddesc->managed_number);
+		hash_map_erase(ddesc->manager->map, (void *) ddesc->managed_number);
 		ddesc->manager = NULL;
 	}
 	return 0;
@@ -68,7 +80,7 @@ int blockman_remove(datadesc_t * ddesc)
 datadesc_t * blockman_lookup(blockman_t * blockman, uint32_t number)
 {
 	Dprintf("<blockman 0x%08x lookup %u>\n", blockman, number);
-	return (datadesc_t *) hash_map_find_val(blockman, (void *) number);
+	return (datadesc_t *) hash_map_find_val(blockman->map, (void *) number);
 }
 
 int blockman_managed_add(blockman_t * blockman, bdesc_t * bdesc)
@@ -82,7 +94,7 @@ bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number)
 	datadesc_t * ddesc = blockman_lookup(blockman, number);
 	if(!ddesc)
 		return NULL;
-	bdesc = bdesc_alloc_wrap(ddesc, number);
+	bdesc = bdesc_alloc_wrap(ddesc, number, ddesc->length / blockman->length);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);

@@ -17,6 +17,7 @@ umain(void)
 		r = spawnl("/sh", "/sh", NULL);
 		if (r < 0) {
 			kdprintf(STDERR_FILENO, "initsh: spawn sh: %i\n", r);
+			jsleep(HZ);
 			continue;
 		}
 		wait(r);

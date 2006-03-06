@@ -66,25 +66,28 @@ static uint16_t mem_bd_get_atomicsize(BD_t * object)
 	return mem_bd_get_blocksize(object);
 }
 
-static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
 	bdesc_t * ret;
 	int r;
 
-	if (number >= info->blockcount)
+	if (!count || number + count > info->blockcount)
 		return NULL;
 
 	ret = blockman_managed_lookup(info->blockman, number);
 	if (ret)
+	{
+		assert(ret->count == count);
 		return ret;
+	}
 
-	ret = bdesc_alloc(number, info->blocksize);
+	ret = bdesc_alloc(number, info->blocksize, count);
 	if (ret == NULL)
 		return NULL;
 	bdesc_autorelease(ret);
 	
-	memcpy(ret->ddesc->data, &info->blocks[info->blocksize * number], info->blocksize);
+	memcpy(ret->ddesc->data, &info->blocks[info->blocksize * number], info->blocksize * count);
 
 	r = blockman_managed_add(info->blockman, ret);
 	if (r < 0)
@@ -92,9 +95,11 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number)
 	return ret;
 }
 
-static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
-	bdesc_t * ret = mem_bd_read_block(object, number);
+	/* mem_bd doesn't bother with synthetic blocks,
+	 * since it's just as fast to use real ones */
+	bdesc_t * ret = mem_bd_read_block(object, number, count);
 	if(ret)
 		*synthetic = 0;
 	return ret;
@@ -216,7 +221,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	info->blockman = blockman_create();
+	info->blockman = blockman_create(blocksize);
 	if (!info->blockman) {
 		free(info->blocks);
 		free(info);

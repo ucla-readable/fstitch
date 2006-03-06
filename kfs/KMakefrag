@@ -19,6 +19,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/elevator_cache_bd.o \
 			$(OBJDIR)/kfs/ide_pio_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
+			$(OBJDIR)/kfs/barrier_resizer_bd.o \
 			$(OBJDIR)/kfs/journal_bd.o \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \

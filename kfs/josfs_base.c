@@ -90,7 +90,7 @@ static int check_super(LFS_t * object)
 	}
 
 	/* the superblock is in block 1 */
-	info->super_block = CALL(info->ubd, read_block, 1);
+	info->super_block = CALL(info->ubd, read_block, 1, 1);
 	if (!info->super_block)
 	{
 		printf("Unable to read superblock!\n");
@@ -163,7 +163,7 @@ static int fsck_file(LFS_t * object, JOSFS_File_t file, int reserved, int8_t *fb
 			else if (ubmap[file.f_indirect]) {
 				ubmap[file.f_indirect]--;
 
-				indirect = CALL(info->ubd, read_block, file.f_indirect);
+				indirect = CALL(info->ubd, read_block, file.f_indirect, 1);
 				if (indirect) {
 					k = ((uint32_t *) indirect->ddesc->data) + JOSFS_NDIRECT;
 					for (j = JOSFS_NDIRECT; j < JOSFS_NINDIRECT; j++) {
@@ -434,7 +434,7 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 	}
 
 	if (! info->bitmap_cache) {
-		bdesc = CALL(info->ubd, read_block, target);
+		bdesc = CALL(info->ubd, read_block, target, 1);
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap!\n");
 			return -1;
@@ -475,7 +475,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	else {
 		bdesc_release(&info->bitmap_cache);
 		info->bitmap_cache = NULL;
-		bdesc = CALL(info->ubd, read_block, target);
+		bdesc = CALL(info->ubd, read_block, target, 1);
 
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap!\n");
@@ -631,14 +631,14 @@ static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("JOSFSDEBUG: josfs_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, read_block, number);
+	return CALL(info->ubd, read_block, number, 1);
 }
 
 static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
 {
 	Dprintf("JOSFSDEBUG: josfs_synthetic_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, synthetic);
+	return CALL(info->ubd, synthetic_read_block, number, 1, synthetic);
 }
 
 static int josfs_cancel_synthetic_block(LFS_t * object, uint32_t number)
@@ -671,7 +671,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 	if (ino == INODE_ROOT) { // superblock
 		memcpy(file, &super->s_root, sizeof(JOSFS_File_t));
 	} else {
-		dirblock = CALL(info->ubd, read_block, fd->dirb);
+		dirblock = CALL(info->ubd, read_block, fd->dirb, 1);
 		if (!dirblock)
 			goto josfs_lookup_inode_exit2;
 	
@@ -744,7 +744,7 @@ static uint32_t get_file_numblocks(struct lfs_info * info, JOSFS_File_t * file)
 	assert(!file->f_indirect || i == JOSFS_NDIRECT);
 
 	if (file->f_indirect) {
-		indirect = CALL(info->ubd, read_block, file->f_indirect);
+		indirect = CALL(info->ubd, read_block, file->f_indirect, 1);
 		if (indirect) {
 			uint32_t * j = (uint32_t *) indirect->ddesc->data;
 			for (i = JOSFS_NDIRECT; i < JOSFS_NINDIRECT; i++) {
@@ -776,7 +776,7 @@ static uint32_t get_file_block(LFS_t * object, JOSFS_File_t * file, uint32_t off
 		return INVALID_BLOCK;
 
 	if (offset >= JOSFS_NDIRECT * JOSFS_BLKSIZE) {
-		indirect = CALL(info->ubd, read_block, file->f_indirect);
+		indirect = CALL(info->ubd, read_block, file->f_indirect, 1);
 		if (!indirect)
 			return INVALID_BLOCK;
 		blockno = ((uint32_t *) indirect->ddesc->data)[offset / JOSFS_BLKSIZE];
@@ -949,7 +949,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		return -E_INVAL;
 
 	if (nblocks > JOSFS_NDIRECT) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
+		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
 		if (!indirect)
 			return -E_NO_DISK;
 
@@ -967,7 +967,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		indirect = josfs_lookup_block(object, inumber);
 
 		// Initialize the structure, then point to it
-		dirblock = CALL(info->ubd, read_block, f->dirb);
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -E_NO_DISK;
 
@@ -991,7 +991,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		return r;
 	}
 	else {
-		dirblock = CALL(info->ubd, read_block, f->dirb);
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -E_NO_DISK;
 
@@ -1167,7 +1167,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 		return -E_NOT_FOUND;
 
 	old = (struct josfs_fdesc *) oldfdesc;
-	dirblock = CALL(info->ubd, read_block, old->dirb);
+	dirblock = CALL(info->ubd, read_block, old->dirb, 1);
 	if (!dirblock) {
 		josfs_free_fdesc(object, oldfdesc);
 		return -E_INVAL;
@@ -1200,7 +1200,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 	for (i = 0; i < JOSFS_NDIRECT; i++)
 		new->file->f_direct[i] = temp_file.f_direct[i];
 
-	dirblock = CALL(info->ubd, read_block, new->dirb);
+	dirblock = CALL(info->ubd, read_block, new->dirb, 1);
 	if (!dirblock) {
 		josfs_free_fdesc(object, newfdesc);
 		return -E_INVAL;
@@ -1240,7 +1240,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 		return INVALID_BLOCK;
 
 	if (nblocks > JOSFS_NDIRECT + 1) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
+		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
 		if (!indirect)
 			return INVALID_BLOCK;
 
@@ -1253,13 +1253,13 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 		return blockno;
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect);
+		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
 		if (!indirect)
 			return INVALID_BLOCK;
 
 		blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 
-		dirblock = CALL(info->ubd, read_block, f->dirb);
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
 			return INVALID_BLOCK;
 
@@ -1280,7 +1280,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 	}
 	else {
 		blockno = f->file->f_direct[nblocks - 1];
-		dirblock = CALL(info->ubd, read_block, f->dirb);
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
 			return INVALID_BLOCK;
 
@@ -1332,7 +1332,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 	f = (struct josfs_fdesc *) file;
 	*tail = NULL;
 
-	dirblock = CALL(info->ubd, read_block, f->dirb);
+	dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 	if (!dirblock) {
 		r = -E_NO_DISK;
 		goto remove_name_exit;
@@ -1498,7 +1498,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) >= JOSFS_MAXFILESIZE)
 			return -E_INVAL;
 
-		dirblock = CALL(info->ubd, read_block, f->dirb);
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -E_INVAL;
 
@@ -1530,7 +1530,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 				return -E_INVAL;
 		}
 
-		dirblock = CALL(info->ubd, read_block, f->dirb);
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -E_INVAL;
 

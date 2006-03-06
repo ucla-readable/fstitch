@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <inc/error.h>
 #include <lib/types.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -60,43 +61,13 @@ static uint16_t wt_cache_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
-static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number)
+static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
-		return NULL;
-	
-	index = number % info->size;
-	if(info->blocks[index])
-	{
-		/* in the cache, use it */
-		if(info->blocks[index]->number == number)
-			return info->blocks[index];
-		
-		/* need to replace this cache entry */
-		bdesc_release(&info->blocks[index]);
-	}
-	
-	/* not in the cache, need to read it */
-	info->blocks[index] = CALL(info->bd, read_block, number);
-	
-	if(!info->blocks[index])
-		return NULL;
-	
-	/* increase reference count */
-	return bdesc_retain(info->blocks[index]);
-}
-
-static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, bool * synthetic)
-{
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	uint32_t index;
-	
-	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
+	if(!count || number + count > CALL(info->bd, get_numblocks))
 		return NULL;
 	
 	index = number % info->size;
@@ -105,6 +76,40 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 		/* in the cache, use it */
 		if(info->blocks[index]->number == number)
 		{
+			assert(info->blocks[index]->count == count);
+			return info->blocks[index];
+		}
+		
+		/* need to replace this cache entry */
+		bdesc_release(&info->blocks[index]);
+	}
+	
+	/* not in the cache, need to read it */
+	info->blocks[index] = CALL(info->bd, read_block, number, count);
+	
+	if(!info->blocks[index])
+		return NULL;
+	
+	/* increase reference count */
+	return bdesc_retain(info->blocks[index]);
+}
+
+static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	uint32_t index;
+	
+	/* make sure it's a valid block */
+	if(!count || number + count > CALL(info->bd, get_numblocks))
+		return NULL;
+	
+	index = number % info->size;
+	if(info->blocks[index])
+	{
+		/* in the cache, use it */
+		if(info->blocks[index]->number == number)
+		{
+			assert(info->blocks[index]->count == count);
 			*synthetic = 0;
 			return info->blocks[index];
 		}
@@ -114,7 +119,7 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	}
 	
 	/* not in the cache, need to read it */
-	info->blocks[index] = CALL(info->bd, synthetic_read_block, number, synthetic);
+	info->blocks[index] = CALL(info->bd, synthetic_read_block, number, count, synthetic);
 	
 	if(!info->blocks[index])
 		return NULL;
@@ -147,7 +152,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number >= CALL(info->bd, get_numblocks))
+	if(block->number + block->count > CALL(info->bd, get_numblocks))
 		return -E_INVAL;
 	
 	bdesc_retain(block);

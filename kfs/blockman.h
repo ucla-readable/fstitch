@@ -3,11 +3,15 @@
 
 #include <lib/hash_map.h>
 
-typedef hash_map_t blockman_t;
+struct blockman {
+	uint16_t length;
+	hash_map_t * map;
+};
+typedef struct blockman blockman_t;
 
 #include <kfs/bdesc.h>
 
-blockman_t * blockman_create(void);
+blockman_t * blockman_create(uint16_t length);
 void blockman_destroy(blockman_t ** blockman);
 
 int blockman_add(blockman_t * blockman, uint32_t number, datadesc_t * ddesc);

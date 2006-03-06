@@ -82,7 +82,7 @@ static int check_super(LFS_t * object)
 	}
 
 	/* the superblock is in sector 16 */
-	info->super_block = CALL(info->ubd, read_block, 4);
+	info->super_block = CALL(info->ubd, read_block, 4, 1);
 	if (!info->super_block)
 	{
 		printf("Unable to read superblock!\n");
@@ -133,7 +133,7 @@ static int check_super(LFS_t * object)
 
 	bdesc_retain(info->super_block);
 
-	info->csum_block = CALL(info->ubd, read_block, info->super->fs_csaddr);
+	info->csum_block = CALL(info->ubd, read_block, info->super->fs_csaddr, 1);
 	if (!info->csum_block)
 	{
 		printf("Unable to read cylinder summary!\n");
@@ -179,7 +179,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 		assert(r != 1); // This should not happen
 
 		if (wipe) {
-			block = CALL(info->ubd, synthetic_read_block, i, &synthetic);
+			block = CALL(info->ubd, synthetic_read_block, i, 1, &synthetic);
 			// FIXME revert all previously allocated blocks?
 			if (!block)
 				return INVALID_BLOCK;
@@ -313,7 +313,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		}
 
 		indirect[0] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[0] + frag_off[0]);
+				f->f_inode.di_ib[0] + frag_off[0], 1);
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
@@ -336,7 +336,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		}
 
 		indirect[1] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[1] + frag_off[1]);
+				f->f_inode.di_ib[1] + frag_off[1], 1);
 		if (!indirect[1])
 			return -E_NOT_FOUND;
 
@@ -353,7 +353,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 				return r;
 		}
 
-		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
+		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
@@ -404,7 +404,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		num[0] = f->f_inode.di_ib[0] / info->super->fs_frag;
 
 		indirect[0] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[0] + frag_off[0]);
+				f->f_inode.di_ib[0] + frag_off[0], 1);
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
@@ -428,14 +428,14 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		pt_off[0] = block_off[1] % nindirf;
 
 		indirect[1] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[1] + frag_off[1]);
+				f->f_inode.di_ib[1] + frag_off[1], 1);
 		if (!indirect[1])
 			return -E_NOT_FOUND;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 		num[0] = block_off[0] / info->super->fs_frag;
 
-		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
+		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
@@ -607,10 +607,10 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 
 	// read in fragments, and write to new location
 	for (i = 0 ; i < frags; i++) {
-		block = CALL(info->ubd, read_block, f->f_lastfrag - frags + i + 1);
+		block = CALL(info->ubd, read_block, f->f_lastfrag - frags + i + 1, 1);
 		if (!block)
 			return INVALID_BLOCK;
-		newblock = CALL(info->ubd, synthetic_read_block, blockno + i, &synthetic);
+		newblock = CALL(info->ubd, synthetic_read_block, blockno + i, 1, &synthetic);
 		if (!newblock)
 			return INVALID_BLOCK;
 
@@ -716,7 +716,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		return INVALID_BLOCK;
 
 	assert(read_fragment_bitmap(info, blockno) == UFS_USED);
-	block = CALL(info->ubd, synthetic_read_block, blockno, &synthetic);
+	block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
 	if (!block)
 		goto allocate_block_cleanup;
 	r = chdesc_create_init(block, info->ubd, head, &newtail);
@@ -779,14 +779,14 @@ static bdesc_t * ufs_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, read_block, number);
+	return CALL(info->ubd, read_block, number, 1);
 }
 
 static bdesc_t * ufs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, synthetic);
+	return CALL(info->ubd, synthetic_read_block, number, 1, synthetic);
 }
 
 static int ufs_cancel_synthetic_block(LFS_t * object, uint32_t number)
@@ -871,7 +871,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		pt_off[0] = block_off[0] % nindirf;
 
 		indirect[0] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[0] + frag_off[0]);
+				f->f_inode.di_ib[0] + frag_off[0], 1);
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
@@ -886,13 +886,13 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		pt_off[0] = block_off[1] % nindirf;
 
 		indirect[1] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[1] + frag_off[1]);
+				f->f_inode.di_ib[1] + frag_off[1], 1);
 		if (!indirect[1])
 			return -E_NOT_FOUND;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 
-		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0]);
+		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 

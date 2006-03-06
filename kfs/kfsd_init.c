@@ -165,7 +165,7 @@ int kfsd_init(int argc, char ** argv)
 		BD_t * bd;
 
 #ifdef KUDOS
-		if (! (bd = ide_pio_bd(0, 0, 0)) )
+		if (! (bd = ide_pio_bd(0, 0, 80)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
 #endif
 #ifdef UNIXUSER
