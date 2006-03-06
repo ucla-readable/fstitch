@@ -130,6 +130,7 @@ static void shift_water(void)
 			water_size[i] = 0;
 		if(water_size[i])
 		{
+			int water_middle = water_start[i] + water_size[i] / 2;
 			if(++water_duration[i] < 5)
 				water_size[i] += rand(0) % 4;
 			else if(water_duration[i] < 15)
@@ -138,7 +139,8 @@ static void shift_water(void)
 				water_size[i] += (rand(0) % 3) - 1;
 			else
 				water_size[i] += (rand(0) % 5) - 3;
-			water_start[i] += (rand(0) % 3) - 1;
+			water_middle += (rand(0) % 3) - 1;
+			water_start[i] = water_middle - water_size[i] / 2;
 		}
 		else if(!(rand(0) % 128))
 		{
