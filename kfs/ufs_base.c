@@ -510,6 +510,7 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 {
 	open_ufsfile_t * existing_file;
 	ufs_fdesc_t * new_file;
+	int r;
 
 	if (!filemap)
 		return NULL;
@@ -534,7 +535,8 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 		free(new_file);
 		return NULL;
 	}
-	assert(hash_map_insert(filemap, (void *) ino, existing_file) == 0);
+	r = hash_map_insert(filemap, (void *) ino, existing_file);
+	assert(r == 0);
 	return existing_file;
 }
 
@@ -715,7 +717,9 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	if (r != 0)
 		return INVALID_BLOCK;
 
-	assert(read_fragment_bitmap(info, blockno) == UFS_USED);
+	r = read_fragment_bitmap(info, blockno);
+	assert(r == UFS_USED);
+
 	block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
 	if (!block)
 		goto allocate_block_cleanup;

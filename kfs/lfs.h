@@ -16,22 +16,27 @@
 struct LFS;
 typedef struct LFS LFS_t;
 
-/* Ideally, LFS wouldn't have any calls that weren't directly related to blocks.
- * However, the on-disk structure of directory files is a part of the specification
- * of the filesystem. So we have to handle it inside the LFS module. Thus a few of
- * the calls below (like "get_dirent") seem a little bit higher-level than you would
- * otherwise expect from such a low-level interface. */
+/* Ideally, LFS wouldn't have any calls that weren't directly related to
+ * blocks. However, the on-disk structure of directory files is a part
+ * of the specification of the filesystem. So we have to handle it
+ * inside the LFS module. Thus a few of the calls below (like
+ * "get_dirent") seem a little bit higher-level than you would otherwise
+ * expect from such a low-level interface.
+ */
 
 /* "head" and "tail" parameters:
- * - The functions below that take head and tail parameters are mutators and
- * will pass back the changes they make using these pointers. The change
- * descriptor subgraphs they generate will be set up so that the head pointer
- * depends on the whole subgraph, and the tail pointer is depended upon by the
- * whole graph. Thus to make the resulting subgraph depend on something else,
- * make its tail depend on that. To make something else depend on the resulting
- * subgraph, make it depend on its head.
- * - head is both an input and output parameter: if input *head is non-NULL, the new
- * tail will be made to depend on it. tail is output only; it outputs the new tail. */
+ * - The functions below that take head and tail parameters are mutators
+ *   and will pass back the changes they make using these pointers. The
+ *   change descriptor subgraphs they generate will be set up so that
+ *   the head pointer depends on the whole subgraph, and the tail
+ *   pointer is depended upon by the whole graph. Thus to make the
+ *   resulting subgraph depend on something else, make its tail depend
+ *   on that. To make something else depend on the resulting subgraph,
+ *   make it depend on its head.
+ * - head is both an input and output parameter: if input *head is
+ *   non-NULL, the new tail will be made to depend on it. tail is
+ *   output only; it outputs the new tail.
+ */
 
 struct LFS {
 	OBJECT(LFS_t);
