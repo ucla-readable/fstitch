@@ -11,17 +11,14 @@
  * the new/ directory and all/ directory and do not add the email to just
  * one of the directories. We could do:
  * 
- * $ atomic /cp foo_mail new/foo_mail , /cp foo_mail old/foo_mail
- *
- * Notice that the leading / is necessary because we don't have the shell
- * helping us out to find the binaries.
+ * $ atomic cp foo_mail new/foo_mail , cp foo_mail old/foo_mail
  *
  * We could ensure the source foo_mail is not deleted until the email is
  * added to the mail directories:
  * (note that neither depend nor atomic support escaped ',', so one can not
  * actually do this yet)
  *
- * $ depend /atomic /cp foo_mail new/foo_mail \, /cp foo_mail old/foo_mail , /rm foo_mail
+ * $ depend atomic cp foo_mail new/foo_mail \, cp foo_mail old/foo_mail , rm foo_mail
  * */
 void umain(int argc, const char * argv[])
 {

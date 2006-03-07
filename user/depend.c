@@ -10,11 +10,8 @@
  * For example, suppose we wanted to be sure that a download with 'get' is
  * complete before we delete a previous version of the file. We could do:
  * 
- * $ depend /get http://example.com/file -o file.new , /rm file.old
- * 
- * Notice that the leading / is necessary because we don't have the shell
- * helping us out to find the binaries. */
-
+ * $ depend get http://example.com/file -o file.new , rm file.old
+ * */
 void umain(int argc, const char * argv[])
 {
 	opgroup_id_t prev_id = 0;
