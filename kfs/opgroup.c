@@ -3,7 +3,21 @@
 #include <inc/error.h>
 #include <assert.h>
 
+#include <kfs/journal_bd.h>
 #include <kfs/opgroup.h>
+
+/* Atomic opgroup TODOs:
+ *
+ * Correctness:
+ * - detect that a journal is present for the filesystems used by an opgroup
+ * - detect cyclic dependencies among opgroup transactions (chdesc update)
+ *   and block the second opgroup transaction
+ * - support multi-device transactions
+ *
+ * Performance:
+ * - only add holds to the needed journal_bds
+ * - make dependencies on an opgroup transaction depend on the commit record
+ */
 
 struct opgroup {
 	opgroup_id_t id;
@@ -20,6 +34,7 @@ struct opgroup {
 	uint32_t engaged_count:30;
 	uint32_t has_dependents:1;
 	uint32_t has_dependencies:1;
+	int flags;
 };
 
 typedef struct opgroup_state {
@@ -36,6 +51,12 @@ struct opgroup_scope {
 	chdesc_t * top_keep;
 	chdesc_t * bottom;
 };
+
+/* Do not allow multiple atomic opgroups to exist at a single point in time
+ * for now. Soon we will detect inter-atomic opgroup dependencies and remove
+ * this restriction.
+ */
+static bool atomic_opgroup_exists = 0;
 
 static opgroup_scope_t * current_scope = NULL;
 
@@ -102,6 +123,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 			dup->opgroup->engaged_count++;
 			/* FIXME: can we do better than just assert? */
 			assert(dup->opgroup->engaged_count);
+			journal_bd_add_hold();
 		}
 	}
 	
@@ -175,8 +197,15 @@ opgroup_t * opgroup_create(int flags)
 	
 	if(!current_scope)
 		return NULL;
-	if(flags)
+	if(!(!flags || flags == OPGROUP_FLAG_ATOMIC))
 		return NULL;
+
+	if(flags & OPGROUP_FLAG_ATOMIC)
+	{
+		if(atomic_opgroup_exists)
+			return NULL;
+		atomic_opgroup_exists = 1;
+	}
 	
 	if(!(op = malloc(sizeof(*op))))
 		goto error_1;
@@ -190,6 +219,7 @@ opgroup_t * opgroup_create(int flags)
 	op->engaged_count = 0;
 	op->has_dependents = 0;
 	op->has_dependencies = 0;
+	op->flags = flags;
 	state->opgroup = op;
 	state->engaged = 0;
 	
@@ -246,12 +276,13 @@ int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 	if(!dependent || !dependency)
 		return -E_INVAL;
 	/* from dependency's perspective, we are adding a dependent
-	 *   => dependency must not be engaged [anywhere] */
-	if(dependency->engaged_count)
+	 *   => dependency must not be engaged [anywhere] if it is not atomic */
+	if(!(dependency->flags & OPGROUP_FLAG_ATOMIC) && dependency->engaged_count)
 		return -E_BUSY;
 	/* from dependent's perspective, we are adding a dependency
 	 *   => dependent must not be released */
-	if(!dependent->tail_keep || dependent->is_released)
+	assert(!dependent->tail_keep == dependent->is_released);
+	if(dependent->is_released)
 		return -E_INVAL;
 	/* it might not have a head if it's already been written to disk */
 	/* (in this case, it won't be engaged again since it will have
@@ -369,8 +400,11 @@ int opgroup_engage(opgroup_t * opgroup)
 	if(!state)
 		return -E_NOT_FOUND;
 	assert(state->opgroup == opgroup);
-	/* can't engage it if it has dependents */
-	if(opgroup->has_dependents)
+	/* can't engage it if it is not atomic and it has dependents */
+	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_dependents)
+		return -E_INVAL;
+	/* can't engage it if it is atomic and has been released */
+	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->is_released)
 		return -E_INVAL;
 	if(state->engaged)
 		return 0;
@@ -387,9 +421,13 @@ int opgroup_engage(opgroup_t * opgroup)
 		opgroup->engaged_count--;
 	}
 	else
+	{
 		/* mark it as having data since it is now engaged */
 		/* (and therefore could acquire data at any time) */
 		opgroup->has_data = 1;
+		journal_bd_add_hold();
+	}
+
 	return r;
 }
 
@@ -418,12 +456,18 @@ int opgroup_disengage(opgroup_t * opgroup)
 		state->engaged = 1;
 		opgroup->engaged_count++;
 	}
+	else
+		journal_bd_remove_hold();
+
 	return r;
 }
 
 int opgroup_release(opgroup_t * opgroup)
 {
 	if(!opgroup)
+		return -E_INVAL;
+	/* can't release atomic opgroup if it is engaged */
+	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->engaged_count)
 		return -E_INVAL;
 	if(opgroup->tail_keep)
 	{
@@ -444,6 +488,9 @@ int opgroup_abandon(opgroup_t ** opgroup)
 	if(!state)
 		return -E_NOT_FOUND;
 	assert(state->opgroup == *opgroup);
+	/* can't abandon a non-released atomic opgroup */
+	if(((*opgroup)->flags & OPGROUP_FLAG_ATOMIC) && !(*opgroup)->is_released)
+		return -E_INVAL;
 	/* can't abandon an engaged opgroup */
 	if(state->engaged)
 		return -E_BUSY;
@@ -458,6 +505,13 @@ int opgroup_abandon(opgroup_t ** opgroup)
 		chdesc_weak_release(&state->opgroup->tail);
 		free(state->opgroup);
 	}
+
+	if((*opgroup)->flags & OPGROUP_FLAG_ATOMIC)
+	{
+		assert(atomic_opgroup_exists);
+		atomic_opgroup_exists = 0;
+	}
+
 	/* opgroup_scope_destroy() passes us *opgroup inside state... */
 	*opgroup = NULL;
 	free(state);

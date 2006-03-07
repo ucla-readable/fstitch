@@ -615,6 +615,15 @@ int cfs_ipc_opgroup_release(envid_t envid, opgroup_id_t opgroupid)
 {
 	int r;
 	Dprintf("%s(env = %08x, opgroupid = %d)\n", __FUNCTION__, envid, opgroupid);
+
+	// Releasing an atomic opgroup requires that opgroupid to be disengaged.
+	// Because exiting a process disengages, we must gc() all scopes that
+	// contain opgroupid to ensure it is disengaged if it should be. Because
+	// we do not have a map of opgroup ids to scopes, gc() all scopes:
+	// TODO: only call for atomic opgroups and when opgroupid is engaged
+	// (these facts are private to opgroup.c)
+	opgroup_scope_gc(NULL);
+
 	if ((r = set_cur_opgroup_scope_wrap(envid, __FUNCTION__)))
 		return r;
 	r = opgroup_release(opgroup_lookup(opgroupid));

@@ -95,6 +95,24 @@
  *   slots in the journal
  * */
 
+
+static unsigned int nholds = 0;
+
+void journal_bd_add_hold(void)
+{
+	nholds++;
+}
+
+void journal_bd_remove_hold(void)
+{
+	assert(nholds > 0);
+	if (nholds == 0)
+		kdprintf(STDERR_FILENO, "%s: nholds already 0\n", __FUNCTION__);
+	else
+		nholds--;
+}
+
+
 struct journal_info {
 	BD_t * bd;
 	BD_t * journal;
@@ -388,6 +406,9 @@ static int journal_bd_stop_transaction(BD_t * object)
 	chdesc_t * head;
 	chdesc_t * tail;
 	int r;
+
+	if (nholds)
+		return -E_BUSY;
 	
 	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 	if(!block)
@@ -557,7 +578,7 @@ static void journal_bd_callback(void * arg)
 	if(info->keep)
 	{
 		int r = journal_bd_stop_transaction(object);
-		if(r < 0)
+		if(r < 0 && r != -E_BUSY)
 			panic("Holy Mackerel!");
 	}
 }

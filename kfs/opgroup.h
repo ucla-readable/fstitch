@@ -44,6 +44,14 @@
  * 1 1 0 1   C   R          <-/
  * 1 1 1 0   C   R
  * 1 1 1 1   C   R
+ *
+ *
+ * Valid operations for atomic opgroups:
+ * - Add dependent always
+ * - Add dependency iff !released
+ * - Engage iff !released
+ * - Release iff !engaged
+ * - Abandon iff released (abandon without release requires a hidden opgroup)
  * */
 
 typedef int opgroup_id_t;

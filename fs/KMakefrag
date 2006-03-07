@@ -1,7 +1,9 @@
 
 OBJDIRS += fs
 
-USERAPPS :=		$(OBJDIR)/user/bless \
+USERAPPS :=	\
+			$(OBJDIR)/user/atomic \
+			$(OBJDIR)/user/bless \
 			$(OBJDIR)/user/cat \
 			$(OBJDIR)/user/clock \
 			$(OBJDIR)/user/demo \
