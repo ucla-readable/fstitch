@@ -599,7 +599,7 @@ int chdesc_split(chdesc_t * original, int count)
  * change descriptors being merged have no eventual dependencies on any other
  * change descriptors on the same block. The resulting change descriptors will
  * be byte change descriptors for the entire block. */
-int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 {
 	int i, r;
 	void * data;
@@ -611,7 +611,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	if(count == 1)
 		return 0;
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_MERGE, count, chdescs, head, tail);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_MERGE, count, chdescs, head);
 	
 	/* FIXME allow NOOP change descriptors with different blocks */
 	/* FIXME allow all NOOP change descriptors? (just merge them) */
@@ -709,7 +709,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	}
 	
 	/* use the hidden "slip under" feature */
-	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, tail, 1);
+	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, 1);
 	free(data);
 	if(r < 0)
 	{
@@ -724,7 +724,6 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	}
 	
 	assert(*head);
-	assert(*tail);
 	
 	/* we have now finished all operations that could potentially fail */
 	
@@ -732,37 +731,6 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	for(i = 0; i != count; i++)
 	{
 		chmetadesc_t ** scan;
-		
-		/* add the dependencies to tail */
-		while(chdescs[i]->dependencies)
-		{
-			for(meta = (*tail)->dependencies; meta; meta = meta->next)
-				if(meta->desc == chdescs[i]->dependencies->desc)
-					break;
-			if(meta)
-				/* we already have this dependency, so free the duplicate */
-				chdesc_remove_depend(chdescs[i], chdescs[i]->dependencies->desc);
-			else
-			{
-				/* move the dependency pointer */
-				meta = chdescs[i]->dependencies;
-				chdescs[i]->dependencies = meta->next;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, chdescs[i], meta->desc);
-				meta->next = (*tail)->dependencies;
-				(*tail)->dependencies = meta;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, *tail, meta->desc);
-				/* move the dependent pointer */
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, meta->desc, chdescs[i]);
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, meta->desc, *tail);
-				for(meta = meta->desc->dependents; meta; meta = meta->next)
-					if(meta->desc == chdescs[i])
-					{
-						meta->desc = *tail;
-						break;
-					}
-			}
-			
-		}
 		
 		/* add the dependents to head */
 		scan = &chdescs[i]->dependents;

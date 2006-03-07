@@ -74,9 +74,8 @@ static BD_t * wholedisk_get_blockdev(LFS_t * object)
 	return ((struct wd_info *) OBJLOCAL(object))->bd;
 }
 
-static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
 	return INVALID_BLOCK;
 }
@@ -195,51 +194,44 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 	return 0;
 }
 
-static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - size immutable */
 	return -E_INVAL;
 }
 
-static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return NULL;
 }
 
-static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return -E_PERM;
 }
 
-static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - size immutable */
 	return INVALID_BLOCK;
 }
 
-static int wholedisk_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no block accounting */
 	return -E_INVAL;
 }
 
-static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	/* always fail - no filenames */
 	return -E_PERM;
 }
 
-static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, write_block, block);
 }
 
@@ -335,20 +327,19 @@ static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 	return wholedisk_get_metadata_inode(object, inode, id, size, data);
 }
 
-static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
-	*tail = NULL; /* leave *head as is, this seems like acceptable behavior */
 	return -E_INVAL;
 }
 
-static int wholedisk_set_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_set_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
-	return wholedisk_set_metadata(object, id, size, data, head, tail);
+	return wholedisk_set_metadata(object, id, size, data, head);
 }
 
-static int wholedisk_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int wholedisk_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
-	return wholedisk_set_metadata(object, id, size, data, head, tail);
+	return wholedisk_set_metadata(object, id, size, data, head);
 }
 
 static int wholedisk_destroy(LFS_t * lfs)

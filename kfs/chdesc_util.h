@@ -31,6 +31,6 @@ int chdesc_detach_dependents(chdesc_t * chdesc);
 /* duplicate, morph, split, and merge change descriptors */
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks);
 int chdesc_split(chdesc_t * original, int count);
-int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head);
 
 #endif /* __KUDOS_KFS_CHDESC_UTIL_H */

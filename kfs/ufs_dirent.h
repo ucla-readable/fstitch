@@ -36,10 +36,10 @@ struct UFS_Dirent {
 	OBJECT(UFS_Dirent_t);
 	DECLARE(UFS_Dirent_t, int, search_dirent, ufs_fdesc_t * dirf, const char * name, inode_t * ino, int * offset);
 	DECLARE(UFS_Dirent_t, int, find_free_dirent, ufs_fdesc_t * dirf, uint32_t len);
-	DECLARE(UFS_Dirent_t, int, insert_dirent, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head, chdesc_t ** tail);
-	DECLARE(UFS_Dirent_t, int, delete_dirent, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(UFS_Dirent_t, int, insert_dirent, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head);
+	DECLARE(UFS_Dirent_t, int, delete_dirent, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head);
 	DECLARE(UFS_Dirent_t, int, get_dirent, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep);
-	DECLARE(UFS_Dirent_t, int, modify_dirent, ufs_fdesc_t * dirf, struct dirent entry, uint32_t basep, chdesc_t ** head, chdesc_t ** tail);
+	DECLARE(UFS_Dirent_t, int, modify_dirent, ufs_fdesc_t * dirf, struct dirent entry, uint32_t basep, chdesc_t ** head);
 };
 
 #define UFS_DIRENT_INIT(ufs, module, info) { \

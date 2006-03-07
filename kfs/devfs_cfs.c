@@ -280,7 +280,6 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 		const uint32_t limit = MIN(blocksize - dataoffset, size - size_written);
 		const uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
 		chdesc_t * head = NULL;
-		chdesc_t * tail;
 		bool synthetic = 0;
 
 		if(!dataoffset && limit == blocksize)
@@ -290,7 +289,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 			bdesc = CALL(devfd->bd, read_block, write_byte / blocksize, 1);
 		if(!bdesc)
 			return size_written ? size_written : -E_EOF;
-		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head, &tail);
+		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);
 		if(r < 0)
 		{
 			if(synthetic)

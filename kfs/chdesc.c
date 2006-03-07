@@ -378,7 +378,7 @@ static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
 #endif
 
 #warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
-int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t init_offset = offset % atomic_size;
@@ -501,14 +501,13 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	}
 	
 	*head = chdescs[count - 1];
-	*tail = chdescs[0];
 	
 	free(chdescs);
 	
 	return 0;
 }
 
-int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
@@ -613,7 +612,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	}
 	
 	*head = chdescs[count - 1];
-	*tail = chdescs[0];
 	
 	free(chdescs);
 	
@@ -621,7 +619,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 }
 
 #warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
-int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under)
+int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
@@ -726,16 +724,15 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	}
 	
 	*head = chdescs[count - 1];
-	*tail = chdescs[0];
 	
 	free(chdescs);
 	
 	return 0;
 }
 
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	return __chdesc_create_full(block, owner, data, head, tail, 0);
+	return __chdesc_create_full(block, owner, data, head, 0);
 }
 
 #if CHDESC_CYCLE_CHECK
