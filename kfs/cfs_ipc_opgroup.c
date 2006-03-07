@@ -235,7 +235,7 @@ static opgroupscope_tracker_state_t this_state;
 static CFS_t this_cfs;
 
 
-static void opgroup_scope_gc(void * ignore)
+static void opgroup_scope_gc(void)
 {
 	int i, r;
 	DSprintf("%s()\n", __FUNCTION__);
@@ -249,6 +249,11 @@ static void opgroup_scope_gc(void * ignore)
 			env_scope_clear(ENVX(envid));
 		}
 	}
+}
+
+static void opgroup_scope_gc_callback(void * ignore)
+{
+	opgroup_scope_gc();
 }
 
 
@@ -341,9 +346,9 @@ static int opgroupscope_tracker_destroy(CFS_t * cfs)
 	modman_dec_cfs(this_state.frontend_cfs, cfs);
 
 	// ignore return because constructor can call before gc is registered
-	(void) sched_unregister(opgroup_scope_gc, NULL);
+	(void) sched_unregister(opgroup_scope_gc_callback, NULL);
 
-	opgroup_scope_gc(NULL);
+	opgroup_scope_gc();
 	for (i = 0; i < NENV; i++)
 		if (va_is_mapped(CFS_IPC_OPGROUP_SCOPE_CAPPGS + i*PGSIZE))
 			kdprintf(STDERR_FILENO, "%s: cappg %u still mapped\n", __FUNCTION__, i);
@@ -510,7 +515,7 @@ CFS_t * opgroupscope_tracker_cfs(CFS_t * frontend_cfs)
 	memset(env_scopes, 0, sizeof(env_scopes));
 	this_state.frontend_cfs = frontend_cfs;
 
-	if ((r = sched_register(opgroup_scope_gc, NULL, OPGROUP_SCOPE_GC_PERIOD)) < 0)
+	if ((r = sched_register(opgroup_scope_gc_callback, NULL, OPGROUP_SCOPE_GC_PERIOD)) < 0)
 	{
 		DESTROY(&this_cfs);
 		return NULL;
@@ -580,7 +585,7 @@ int cfs_ipc_opgroup_add_depend(envid_t envid, opgroup_id_t dependent_id, opgroup
 	// gc() all scopes that contain dependency_id to ensure it is
 	// disengaged if it should be. Because we do not have a map of
 	// opgroup ids to scopes, gc() all scopes:
-	opgroup_scope_gc(NULL);
+	opgroup_scope_gc();
 
 	if ((r = set_cur_opgroup_scope_wrap(envid, __FUNCTION__)))
 		return r;
@@ -622,7 +627,7 @@ int cfs_ipc_opgroup_release(envid_t envid, opgroup_id_t opgroupid)
 	// we do not have a map of opgroup ids to scopes, gc() all scopes:
 	// TODO: only call for atomic opgroups and when opgroupid is engaged
 	// (these facts are private to opgroup.c)
-	opgroup_scope_gc(NULL);
+	opgroup_scope_gc();
 
 	if ((r = set_cur_opgroup_scope_wrap(envid, __FUNCTION__)))
 		return r;
