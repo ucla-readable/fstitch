@@ -74,7 +74,7 @@ CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefra
 
 # Compiler flags
 CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -g -DUNIXUSER
-CFLAGS	:= $(CFLAGS) -O2
+CFLAGS	:= $(CFLAGS) -O2 -march=pentium3
 
 # Lists that the */UUMakefrag makefile fragments will add to
 OBJDIRS :=

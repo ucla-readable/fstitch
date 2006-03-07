@@ -92,7 +92,7 @@ CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefra
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
 CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -I$(TOP)/inc -MD -Wall -Wno-format -gstabs
-CFLAGS	:= $(CFLAGS) -O2
+CFLAGS	:= $(CFLAGS) -O2 -march=pentium
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS -DKUDOS_KERNEL
 
 LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
