@@ -6,6 +6,7 @@
 #include <lib/jiffies.h> // HZ
 #include <lib/panic.h>
 #include <lib/hash_map.h>
+#include <lib/kdprintf.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
