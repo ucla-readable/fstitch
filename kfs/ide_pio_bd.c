@@ -13,7 +13,12 @@
 #include <kfs/debug.h>
 #include <kfs/ide_pio_bd.h>
 
+/* FIXME: the IRQ-based IDE driver has a bug in it that causes bad data to be read sometimes */
+#define IDE_USEIRQ 0
+
+#if IDE_USEIRQ
 static const uint8_t ide_irq[2] = {14, 15};
+#endif
 static const uint16_t ide_base[2] = {0x1F0, 0x170};
 static const uint16_t ide_reset[2] = {0x3F6, 0x376};
 static const char * ide_names[2][2] = {{"ide_pio_hda", "ide_pio_hdb"}, {"ide_pio_hdc", "ide_pio_hdd"}};
@@ -29,6 +34,7 @@ struct ide_info {
 	uint8_t * ra_cache;
 };
 
+#if IDE_USEIRQ
 static struct {
 	int users;
 	union {
@@ -40,6 +46,7 @@ static struct {
 	uint8_t write;
 	uint8_t busy;
 } ide_requests[2] = {{users: 0, busy: 0}};
+#endif
 
 static int ide_notbusy(uint8_t controller)
 {
@@ -67,6 +74,7 @@ static int ide_notbusy(uint8_t controller)
 
 #define IDE_SECTSIZE 512
 
+#if IDE_USEIRQ
 static void ide_irq_handler(int irq)
 {
 	uint8_t controller;
@@ -121,6 +129,7 @@ static void ide_irq_handler(int irq)
 		}
 	}
 }
+#endif
 
 static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * dst, uint8_t count)
 {
@@ -129,11 +138,13 @@ static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * ds
 	if(ide_notbusy(controller) == -1)
 		return -1;
 	
+#if IDE_USEIRQ
 	ide_requests[controller].dst = dst;
 	ide_requests[controller].count = count;
 	ide_requests[controller].done = 0;
 	ide_requests[controller].write = 0;
 	ide_requests[controller].busy = 1;
+#endif
 	
 	outb(base + 2, count);
 	outb(base + 3, sector & 0xFF);
@@ -143,8 +154,18 @@ static int ide_read(uint8_t controller, uint8_t disk, uint32_t sector, void * ds
 	/* command 0x20 means read sector */
 	outb(base + 7, 0x20);
 	
+#if IDE_USEIRQ
 	while(ide_requests[controller].busy)
 		sys_yield();
+#else
+	while(count--)
+	{
+		if(ide_notbusy(controller) == -1)
+			return -1;
+		insl(base + 0, dst, IDE_SECTSIZE / 4);
+		dst += IDE_SECTSIZE;
+	}
+#endif
 	return 0;
 }
 
@@ -155,11 +176,13 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 	if(ide_notbusy(controller) == -1)
 		return -1;
 	
+#if IDE_USEIRQ
 	ide_requests[controller].src = src;
 	ide_requests[controller].count = count;
 	ide_requests[controller].done = -1;
 	ide_requests[controller].write = 1;
 	ide_requests[controller].busy = 1;
+#endif
 	
 	outb(base + 2, count);
 	outb(base + 3, sector & 0xFF);
@@ -169,11 +192,21 @@ static int ide_write(uint8_t controller, uint8_t disk, uint32_t sector, const vo
 	/* command 0x30 means write sector */
 	outb(base + 7, 0x30);
 	
+#if IDE_USEIRQ
 	/* simulate the first interrupt */
 	ide_irq_handler(ide_irq[controller]);
 	
 	while(ide_requests[controller].busy)
 		sys_yield();
+#else
+	while(count--)
+	{
+		if(ide_notbusy(controller) == -1)
+			return -1;
+		outsl(base + 0, src, IDE_SECTSIZE / 4);
+		src += IDE_SECTSIZE;
+	}
+#endif
 	return 0;
 }
 
@@ -458,8 +491,10 @@ static int ide_pio_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	
+#if IDE_USEIRQ
 	if(!--ide_requests[info->controller].users)
 		request_irq(ide_irq[info->controller], NULL);
+#endif
 	free(info->ra_cache);
 	blockman_destroy(&info->blockman);
 	free(info);
@@ -528,6 +563,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 		return NULL;
 	}
 	
+#if IDE_USEIRQ
 	if(!ide_requests[controller].users++)
 	{
 		if(request_irq(ide_irq[controller], ide_irq_handler) < 0)
@@ -537,6 +573,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 			return NULL;
 		}
 	}
+#endif
 	
 	return bd;
 }
