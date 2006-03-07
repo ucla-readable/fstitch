@@ -13,8 +13,7 @@
 #include <kfs/debug.h>
 #include <kfs/ide_pio_bd.h>
 
-/* FIXME: the IRQ-based IDE driver has a bug in it that causes bad data to be read sometimes */
-#define IDE_USEIRQ 0
+#define IDE_USEIRQ 1
 
 #if IDE_USEIRQ
 static const uint8_t ide_irq[2] = {14, 15};
@@ -107,8 +106,9 @@ static void ide_irq_handler(int irq)
 		if(ide_requests[controller].count--)
 		{
 			/* need to send the next block */
-			outsl(base + 0, ide_requests[controller].src, IDE_SECTSIZE / 4);
+			const void * src = ide_requests[controller].src;
 			ide_requests[controller].src += IDE_SECTSIZE;
+			outsl(base + 0, src, IDE_SECTSIZE / 4);
 		}
 		else
 		{
@@ -119,10 +119,12 @@ static void ide_irq_handler(int irq)
 	else
 	{
 		/* handle a read interrupt */
+		void * dst = ide_requests[controller].dst;
+		uint8_t count = --ide_requests[controller].count;
 		ide_requests[controller].done++;
-		insl(base + 0, ide_requests[controller].dst, IDE_SECTSIZE / 4);
 		ide_requests[controller].dst += IDE_SECTSIZE;
-		if(!--ide_requests[controller].count)
+		insl(base + 0, dst, IDE_SECTSIZE / 4);
+		if(!count)
 		{
 			/* FIXME: notify the user? */
 			ide_requests[controller].busy = 0;
