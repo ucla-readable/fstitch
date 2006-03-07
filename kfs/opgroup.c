@@ -123,7 +123,6 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 			dup->opgroup->engaged_count++;
 			/* FIXME: can we do better than just assert? */
 			assert(dup->opgroup->engaged_count);
-			journal_bd_add_hold();
 		}
 	}
 	
@@ -422,10 +421,11 @@ int opgroup_engage(opgroup_t * opgroup)
 	}
 	else
 	{
+		if (!opgroup->has_data)
+			journal_bd_add_hold();
 		/* mark it as having data since it is now engaged */
 		/* (and therefore could acquire data at any time) */
 		opgroup->has_data = 1;
-		journal_bd_add_hold();
 	}
 
 	return r;
@@ -456,8 +456,6 @@ int opgroup_disengage(opgroup_t * opgroup)
 		state->engaged = 1;
 		opgroup->engaged_count++;
 	}
-	else
-		journal_bd_remove_hold();
 
 	return r;
 }
@@ -472,6 +470,7 @@ int opgroup_release(opgroup_t * opgroup)
 	if(opgroup->tail_keep)
 	{
 		chdesc_satisfy(&opgroup->tail_keep);
+		journal_bd_remove_hold();
 		opgroup->is_released = 1;
 	}
 	return 0;
