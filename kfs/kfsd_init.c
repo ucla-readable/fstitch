@@ -17,6 +17,7 @@
 #include <kfs/elevator_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
+#include <kfs/loop_bd.h>
 #ifdef UNIXUSER
 #include <kfs/unix_file_bd.h>
 #endif
@@ -42,7 +43,7 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 
-int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
+int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
@@ -64,6 +65,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 int kfsd_init(int argc, char ** argv)
 {
+	const bool allow_journal = 1;
 	const bool use_disk_0 = 1;
 #ifdef KUDOS
 	const bool use_disk_1 = 0;
@@ -156,7 +158,7 @@ int kfsd_init(int argc, char ** argv)
 
 		if (! (bd = nbd_bd("192.168.1.2", 2492)) )
 			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
-		if (bd && (r = construct_uhfses(bd, 512, uhfses)) < 0)
+		if (bd && (r = construct_uhfses(bd, 512, allow_journal, uhfses)) < 0)
 			kfsd_shutdown();
 	}
 
@@ -180,7 +182,7 @@ int kfsd_init(int argc, char ** argv)
 			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
 				kfsd_shutdown();
-			if ((r = construct_uhfses(bd, 128, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
 				kfsd_shutdown();
 		}
 	}
@@ -201,7 +203,7 @@ int kfsd_init(int argc, char ** argv)
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
-		if (bd && (r = construct_uhfses(bd, 128, uhfses)) < 0)		
+		if (bd && (r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)		
 			kfsd_shutdown();
 	}
 
@@ -246,7 +248,7 @@ int kfsd_init(int argc, char ** argv)
 
 
 // Bring up the filesystems for bd and add them to uhfses.
-int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
+int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses)
 {
 	const bool enable_fsck = 0;
 	void * ptbl = NULL;
@@ -346,10 +348,11 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	/* setup each partition's cache, basefs, and uhfs */
 	for (i = 0; i < vector_size(partitions); i++)
 	{
-		BD_t * cache;
+		BD_t * cache, * journal;
 		LFS_t * josfs_lfs;
 		LFS_t * lfs = NULL;
 		CFS_t * u;
+		bool is_journaled = 0;
 			
 		part = vector_elt(partitions, i);
 		if (!part)
@@ -358,7 +361,68 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		if (part->type == PTABLE_KUDOS_TYPE)
 		{
 			cache = construct_cacheing(part->bd, cache_nblks, 4096);
-			lfs = josfs_lfs = josfs(cache);
+
+			if (allow_journal)
+			{
+				journal = journal_bd(cache);
+				if (journal)
+					is_journaled = 1;
+				else
+				{
+					kdprintf(STDERR_FILENO, "journal_bd failed, not journaling\n");
+					journal = cache;
+				}
+			}
+			else
+				journal = cache;
+
+			lfs = josfs_lfs = josfs(journal);
+
+			if (is_journaled)
+			{
+				BD_t * journalbd = NULL;
+				if (josfs_lfs)
+				{
+					inode_t root_ino, journal_ino;
+					int r;
+
+					r = CALL(josfs_lfs, get_root, &root_ino);
+					if (r < 0)
+					{
+						kdprintf(STDERR_FILENO, "get_root: %i\n", r);
+						kfsd_shutdown();
+					}
+					r = CALL(josfs_lfs, lookup_name, root_ino, ".journal", &journal_ino);
+					if (r < 0)
+					{
+						kdprintf(STDERR_FILENO, "No journal file\n");
+						goto disable_journal;
+					}
+
+					journalbd = loop_bd(josfs_lfs, journal_ino);
+					if (!journalbd)
+					{
+						kdprintf(STDERR_FILENO, "loop_bd failed\n");
+						goto disable_journal;
+					}
+					r = journal_bd_set_journal(journal, journalbd);
+					if (r < 0)
+					{
+						kdprintf(STDERR_FILENO, "journal_bd_set_journal: %i\n");
+						goto disable_journal;
+					}
+				}
+				else
+				{
+				  disable_journal:
+					(void) DESTROY(journal);
+					if (journalbd)
+						(void) DESTROY(journalbd);
+					lfs = josfs_lfs;
+					journal = cache;
+					is_journaled = 0;
+				}
+			}
 
 			if (josfs_lfs && enable_fsck)
 			{
@@ -373,14 +437,19 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			}
 
 			if (lfs)
-				printf("Using josfs on %s\n", part->description);
+				printf("Using josfs on %s", part->description);
 			else if ((lfs = wholedisk(cache)))
-				printf("Using wholedisk on %s\n", part->description);
+				printf("Using wholedisk on %s", part->description);
 			else
 			{
 				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
 				kfsd_shutdown();
 			}
+			if (is_journaled)
+				printf(" (journaled)");
+			else
+				printf(" (not journaled)");
+			printf("\n");
 		}
 		else if (part->type == PTABLE_FREEBSD_TYPE)
 		{
