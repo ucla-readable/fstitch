@@ -8,6 +8,7 @@
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kudos
 UTILDIR := $(BASE_OBJDIR)/util
+VMWAREDIR := $(BASE_OBJDIR)/vmware
 GCCCONF := conf/Kgcc.mk
 
 ifdef GCCPREFIX
@@ -82,6 +83,7 @@ ANT	:= ant
 TAR	:= gtar
 PERL	:= perl
 CTAGS	:= ctags
+QEMUIMG	:= qemu-img
 
 # Native command flags
 NCFLAGS	:= -Wall -DKUTIL
@@ -248,6 +250,17 @@ include fs/KMakefrag
 include kfs/KMakefrag
 include util/Makefrag
 
+# Build VMWare files
+vmware: $(VMWAREDIR)/kudos.vmx $(VMWAREDIR)/fs.vmdk
+
+$(VMWAREDIR)/fs.vmdk: $(OBJDIR)/fs/fs.img $(VMWAREDIR)/kudos.vmx
+	@echo + $(QEMUIMG) $@
+	@$(QEMUIMG) convert $< -O vmdk $@
+
+$(VMWAREDIR)/kudos.vmx: util/kudos.vmx
+	@echo + mk $@
+	@mkdir -p ${VMWAREDIR}
+	@cp $< ${VMWAREDIR}/kudos.vmx
 
 # For deleting the build
 fsclean:
