@@ -57,7 +57,6 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	printf("Initializing memory... ");
 	i386_vm_init();
 	page_init();
-	page_check();
 	printf("done.\n");
 
 	// Lab 2 interrupt and gate descriptor initialization functions

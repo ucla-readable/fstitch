@@ -537,6 +537,8 @@ page_clear(struct Page* pp)
 	memset(pp, 0, sizeof(*pp));
 }
 
+static int oom_message = 0;
+
 //
 // Allocates a physical page.
 // Does NOT set the contents of the physical page to zero -
@@ -556,7 +558,14 @@ page_alloc(struct Page** pp)
 {
 	*pp = LIST_FIRST(&page_free_list);
 	if(!*pp)
+	{
+		if(!oom_message)
+		{
+			oom_message = 1;
+			printf("KudOS kernel: out of memory! [%08x] (%s)\n", curenv ? curenv->env_id : 0, curenv ? curenv->env_name : "");
+		}
 		return -E_NO_MEM;
+	}
 	LIST_REMOVE(*pp, pp_link);
 	page_clear(*pp);
 	return 0;
@@ -569,6 +578,7 @@ page_alloc(struct Page** pp)
 void
 page_free(struct Page* pp)
 {
+	oom_message = 0;
 	LIST_INSERT_HEAD(&page_free_list, pp, pp_link);
 }
 
@@ -728,108 +738,3 @@ tlb_invalidate(pde_t* pgdir, uintptr_t va)
 	if (!curenv || curenv->env_pgdir == pgdir)
 		invlpg(va);
 }
-
-void
-page_check(void)
-{
-	struct Page *pp, *pp0, *pp1, *pp2;
-	struct Page_list fl;
-
-	// should be able to allocate three pages
-	pp0 = pp1 = pp2 = 0;
-	assert(page_alloc(&pp0) == 0);
-	assert(page_alloc(&pp1) == 0);
-	assert(page_alloc(&pp2) == 0);
-
-	assert(pp0);
-	assert(pp1 && pp1 != pp0);
-	assert(pp2 && pp2 != pp1 && pp2 != pp0);
-
-	// temporarily steal the rest of the free pages
-	fl = page_free_list;
-	LIST_INIT(&page_free_list);
-
-	// should be no free memory
-	assert(page_alloc(&pp) == -E_NO_MEM);
-
-	// there is no free memory, so we can't allocate a page table 
-	assert(page_insert(boot_pgdir, pp1, 0x0, 0) < 0);
-
-	// free pp0 and try again: pp0 should be used for page table
-	page_free(pp0);
-	assert(page_insert(boot_pgdir, pp1, 0x0, 0) == 0);
-	assert(PTE_ADDR(boot_pgdir[0]) == page2pa(pp0));
-	assert(check_va2pa(boot_pgdir, 0x0) == page2pa(pp1));
-	assert(pp1->pp_ref == 1);
-	assert(pp0->pp_ref == 1);
-
-	// should be able to map pp2 at PGSIZE because pp0 is already allocated for page table
-	assert(page_insert(boot_pgdir, pp2, PGSIZE, 0) == 0);
-	assert(check_va2pa(boot_pgdir, PGSIZE) == page2pa(pp2));
-	assert(pp2->pp_ref == 1);
-
-	// should be no free memory
-	assert(page_alloc(&pp) == -E_NO_MEM);
-
-	// should be able to map pp2 at PGSIZE because it's already there
-	assert(page_insert(boot_pgdir, pp2, PGSIZE, 0) == 0);
-	assert(check_va2pa(boot_pgdir, PGSIZE) == page2pa(pp2));
-	assert(pp2->pp_ref == 1);
-
-	// pp2 should NOT be on the free list
-	// could happen in ref counts are handled sloppily in page_insert
-	assert(page_alloc(&pp) == -E_NO_MEM);
-
-	// should not be able to map at PTSIZE because need free page for page table
-	assert(page_insert(boot_pgdir, pp0, PTSIZE, 0) < 0);
-
-	// insert pp1 at PGSIZE (replacing pp2)
-	assert(page_insert(boot_pgdir, pp1, PGSIZE, 0) == 0);
-
-	// should have pp1 at both 0 and PGSIZE, pp2 nowhere, ...
-	assert(check_va2pa(boot_pgdir, 0x0) == page2pa(pp1));
-	assert(check_va2pa(boot_pgdir, PGSIZE) == page2pa(pp1));
-	// ... and ref counts should reflect this
-	assert(pp1->pp_ref == 2);
-	assert(pp2->pp_ref == 0);
-
-	// pp2 should be returned by page_alloc
-	assert(page_alloc(&pp) == 0 && pp == pp2);
-
-	// unmapping pp1 at 0 should keep pp1 at PGSIZE
-	page_remove(boot_pgdir, 0x0);
-	assert(check_va2pa(boot_pgdir, 0x0) == ~0);
-	assert(check_va2pa(boot_pgdir, PGSIZE) == page2pa(pp1));
-	assert(pp1->pp_ref == 1);
-	assert(pp2->pp_ref == 0);
-
-	// unmapping pp1 at PGSIZE should free it
-	page_remove(boot_pgdir, PGSIZE);
-	assert(check_va2pa(boot_pgdir, 0x0) == ~0);
-	assert(check_va2pa(boot_pgdir, PGSIZE) == ~0);
-	assert(pp1->pp_ref == 0);
-	assert(pp2->pp_ref == 0);
-
-	// so it should be returned by page_alloc
-	assert(page_alloc(&pp) == 0 && pp == pp1);
-
-	// should be no free memory
-	assert(page_alloc(&pp) == -E_NO_MEM);
-
-	// forcibly take pp0 back
-	assert(PTE_ADDR(boot_pgdir[0]) == page2pa(pp0));
-	boot_pgdir[0] = 0;
-	assert(pp0->pp_ref == 1);
-	pp0->pp_ref = 0;
-
-	// give free list back
-	page_free_list = fl;
-
-	// free the pages we took
-	page_free(pp0);
-	page_free(pp1);
-	page_free(pp2);
-
-	//printf("page_check() succeeded!\n");
-}
-
