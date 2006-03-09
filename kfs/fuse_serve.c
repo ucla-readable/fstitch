@@ -659,7 +659,7 @@ static void serve_rename(fuse_req_t req,
 
 static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dirent)
 {
-	Dprintf("%s(fdesc = 0x%08x, k = %lld)\n", __FUNCTION__, fdesc, k);
+	Dprintf("%s(fdesc = %p, k = %lld)\n", __FUNCTION__, fdesc, k);
 	uint32_t basep = 0;
 	char buf[sizeof(dirent_t)];
 	char * cur = buf;
@@ -779,7 +779,7 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
 {
 	fdesc_t * fdesc = fi_get_fdesc(fi);
 	int r;
-	Dprintf("%s(ino = %lu, fdesc = 0x%08x)\n", __FUNCTION__, fuse_ino, fdesc);
+	Dprintf("%s(ino = %lu, fdesc = %p)\n", __FUNCTION__, fuse_ino, fdesc);
 
 	r = CALL(reqcfs(req), close, fdesc);
 	if (r < 0)
@@ -911,7 +911,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	uint32_t offset = off;
 	char * buf;
 	int r;
-	Dprintf("%s(ino = %lu, fdesc = 0x%08x, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, fdesc, size, off);
+	Dprintf("%s(ino = %lu, fdesc = %p, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, fdesc, size, off);
 
 	if (offset != off)
 	{
@@ -942,8 +942,8 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
                         size_t size, off_t off, struct fuse_file_info * fi)
 {
-	Dprintf("%s(ino = %lu, size = %u, off = %lld, buf = \"%s\")\n",
-	        __FUNCTION__, fuse_ino, size, off, buf);
+	Dprintf("%s(ino = %lu, size = %u, off = %lld)\n",
+	        __FUNCTION__, fuse_ino, size, off);
 	uint32_t offset = off;
 	fdesc_t * fdesc;
 	int nbytes;
