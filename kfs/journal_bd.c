@@ -538,12 +538,15 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	r = revision_tail_prepare_stamp(block, info->stamp);
 	assert(r >= 0);
 	/* ...and copy it to the journal */
-	r = chdesc_create_full(journal_block, info->journal, block->ddesc->data, &head, &tail);
+	r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head, &tail);
 	assert(r >= 0);
 	r = revision_tail_revert_stamp(block, info->stamp);
 	assert(r >= 0);
-	r = chdesc_add_depend(info->wait, head);
-	assert(r >= 0);
+	if(head)
+	{
+		r = chdesc_add_depend(info->wait, head);
+		assert(r >= 0);
+	}
 	
 	info->recursion = 1;
 	r = CALL(info->journal, write_block, journal_block);

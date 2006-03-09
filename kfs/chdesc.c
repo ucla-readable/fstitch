@@ -141,57 +141,59 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	return 0;
 }
 
-/* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
 /* note that we don't check to see if these chdescs are for the same ddesc or not */
-static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
+int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 {
-	uint16_t r_start, r_len;
-	uint16_t o_start, o_len;
+	uint16_t a_start, a_len;
+	uint16_t b_start, b_len;
 	uint32_t start, end, tag;
 	
+	/* if either is a NOOP chdesc, they don't overlap */
+	if(a->type == NOOP || b->type == NOOP)
+		return 0;
+	
+	/* two bit chdescs overlap if they modify the same bits */
+	if(a->type == BIT && b->type == BIT)
+		return a->bit.offset == b->bit.offset && (a->bit.xor & b->bit.xor);
+	
+	if(a->type == BIT)
+	{
+		a_len = sizeof(a->bit.xor);
+		a_start = a->bit.offset * a_len;
+	}
+	else
+	{
+		a_len = a->byte.length;
+		a_start = a->byte.offset;
+	}
+	if(b->type == BIT)
+	{
+		b_len = sizeof(b->bit.xor);
+		b_start = b->bit.offset * b_len;
+	}
+	else
+	{
+		b_len = b->byte.length;
+		b_start = b->byte.offset;
+	}
+	
+	start = b_start;
+	end = start + b_len + a_len;
+	tag = a_start + a_len;
+	return tag > start && end > tag;
+}
+
+/* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
+static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
+{
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_ATTACH, recent, original);
 	
-	/* if either is a NOOP chdesc, they don't conflict */
+	/* if either is a NOOP chdesc, warn about it */
 	if(recent->type == NOOP || original->type == NOOP)
-	{
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
-		return 0;
-	}
 	
-	/* two bit chdescs can't conflict due to xor representation... */
-	if(recent->type == BIT && original->type == BIT)
-	{
-		/* ...but make sure they depend if they modify the same bits */
-		if(recent->bit.offset == original->bit.offset && (recent->bit.xor & original->bit.xor))
-			chdesc_add_depend(recent, original);
-		return 0;
-	}
-	
-	if(recent->type == BIT)
-	{
-		r_len = sizeof(recent->bit.xor);
-		r_start = recent->bit.offset * r_len;
-	}
-	else
-	{
-		r_len = recent->byte.length;
-		r_start = recent->byte.offset;
-	}
-	if(original->type == BIT)
-	{
-		o_len = sizeof(original->bit.xor);
-		o_start = original->bit.offset * o_len;
-	}
-	else
-	{
-		o_len = original->byte.length;
-		o_start = original->byte.offset;
-	}
-	
-	start = o_start;
-	end = start + o_len + r_len;
-	tag = r_start + r_len;
-	if(tag <= start || end <= tag)
+	/* if they don't overlap, we are done */
+	if(!chdesc_overlap_check(recent, original))
 		return 0;
 	
 	if(original->flags & CHDESC_ROLLBACK)
@@ -736,6 +738,62 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
 {
 	return __chdesc_create_full(block, owner, data, head, tail, 0);
+}
+
+/* Rewrite a byte change descriptor to have an updated "new data" field,
+ * avoiding the need to create layers of byte change descriptors if the previous
+ * changes are no longer relevant (e.g. if they are being overwritten and will
+ * never need to be rolled back independently from the new data). The change
+ * descriptor must not be overlapped by any other change descriptors. The offset
+ * and length parameters are relative to the change descriptor itself. */
+int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data)
+{
+	/* sanity checks */
+	if(chdesc->type != BYTE)
+		return -E_INVAL;
+	if(offset + length > chdesc->byte.offset + chdesc->byte.length)
+		return -E_INVAL;
+	
+	/* scan for overlapping chdescs - they will all depend on us, or at
+	 * least, if there are any, at least one will depend directly on us */
+	if(chdesc->dependents)
+	{
+		chmetadesc_t * meta;
+		for(meta = chdesc->dependents; meta; meta = meta->next)
+		{
+			/* no block? doesn't overlap */
+			if(!meta->desc->block)
+				continue;
+			/* not the same block? doesn't overlap */
+			if(meta->desc->block->ddesc != chdesc->block->ddesc)
+				continue;
+			/* chdesc_overlap_check doesn't check that the block is
+			 * the same, which is why we just checked it by hand */
+			if(!chdesc_overlap_check(meta->desc, chdesc))
+				continue;
+			/* overlap detected! */
+			return -E_PERM;
+		}
+	}
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REWRITE_BYTE, chdesc);
+	
+	/* no overlaps */
+	if(chdesc->flags & CHDESC_ROLLBACK)
+	{
+		memcpy(&chdesc->byte.data[offset], data, length);
+#if CHDESC_BYTE_SUM
+		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length);
+#endif
+	}
+	else
+	{
+		memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset + offset], data, length);
+#if CHDESC_BYTE_SUM
+		chdesc->byte.new_sum = chdesc_byte_sum(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.length);
+#endif
+	}
+	return 0;
 }
 
 #if CHDESC_CYCLE_CHECK

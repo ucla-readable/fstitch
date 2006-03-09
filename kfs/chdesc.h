@@ -6,7 +6,7 @@
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_CYCLE_CHECK 1
+#define CHDESC_CYCLE_CHECK 0
 
 struct chdesc;
 typedef struct chdesc chdesc_t;
@@ -56,8 +56,8 @@ struct chdesc {
 	chrefdesc_t * weak_refs;
 	chdesc_t * free_prev;
 	chdesc_t * free_next;
-	uint16_t flags, distance;
 	uint32_t stamps;
+	uint16_t flags;
 };
 
 struct chmetadesc {
@@ -76,6 +76,12 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
+
+/* check whether two change descriptors overlap, even on different blocks */
+int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);
+
+/* rewrite a byte change descriptor, if it is safe to do so */
+int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data);
 
 /* add a dependency to a change descriptor */
 int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
