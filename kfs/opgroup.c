@@ -421,7 +421,7 @@ int opgroup_engage(opgroup_t * opgroup)
 	}
 	else
 	{
-		if (!opgroup->has_data)
+		if ((opgroup->flags & OPGROUP_FLAG_ATOMIC) && !opgroup->has_data)
 			journal_bd_add_hold();
 		/* mark it as having data since it is now engaged */
 		/* (and therefore could acquire data at any time) */
@@ -470,7 +470,8 @@ int opgroup_release(opgroup_t * opgroup)
 	if(opgroup->tail_keep)
 	{
 		chdesc_satisfy(&opgroup->tail_keep);
-		journal_bd_remove_hold();
+		if (opgroup->flags & OPGROUP_FLAG_ATOMIC)
+			journal_bd_remove_hold();
 		opgroup->is_released = 1;
 	}
 	return 0;
