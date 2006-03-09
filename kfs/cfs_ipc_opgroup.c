@@ -38,6 +38,8 @@ typedef struct scope_entry {
 
 static scope_entry_t env_scopes[NENV];
 
+static void opgroup_scope_gc(void);
+
 
 static bool va_is_mapped(const void * va)
 {
@@ -122,7 +124,13 @@ static int env_scope_destroy(envid_t envid)
 static int set_cur_opgroup_scope(envid_t envid)
 {
 	if (env_scope_is_dead(envid))
-		return -E_BAD_ENV; // error for now, but we might want to create
+	{
+		// The calling env may happen to have the same env slot as a previous,
+		// now dead env, that we have not yet gc()ed
+		opgroup_scope_gc();
+		if (env_scope_is_dead(envid))
+			return -E_BAD_ENV; // error for now, but we might want to create
+	}
 	opgroup_scope_set_current(env_scope(envid));
 	return 0;
 }
