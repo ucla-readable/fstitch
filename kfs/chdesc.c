@@ -1068,8 +1068,12 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				(*chdesc)->byte.data = NULL;
 			}
 		
-		assert(!(*chdesc)->free_prev && !(*chdesc)->free_next);
-		chdesc_free_push(*chdesc);
+		/* make sure we're not already destroying this chdesc */
+		if(!((*chdesc)->flags & CHDESC_FREEING))
+		{
+			assert(!(*chdesc)->free_prev && !(*chdesc)->free_next);
+			chdesc_free_push(*chdesc);
+		}
 	}
 	
 	chdesc_weak_collect(*chdesc);
