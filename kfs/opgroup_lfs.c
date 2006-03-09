@@ -80,7 +80,8 @@ static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int p
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return block;
 }
 
@@ -146,7 +147,8 @@ static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -167,7 +169,8 @@ static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return fdesc;
 }
 
@@ -188,7 +191,8 @@ static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * ol
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -209,7 +213,8 @@ static uint32_t opgroup_lfs_truncate_file_block(LFS_t * object, fdesc_t * file, 
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return block;
 }
 
@@ -230,7 +235,8 @@ static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -251,7 +257,8 @@ static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * 
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -272,7 +279,8 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -313,7 +321,8 @@ static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t 
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -334,7 +343,8 @@ static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
-	chdesc_autorelease_noop(tail);
+	if (tail->type == NOOP)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 

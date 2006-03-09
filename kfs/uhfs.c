@@ -407,13 +407,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * prev_head = NULL, * noop_tail;
+	chdesc_t * prev_head = NULL, * tail;
 	int r;
-
-	noop_tail = chdesc_create_noop(NULL, NULL);
-	if (!noop_tail)
-		return -E_NO_MEM;
-	chdesc_claim_noop(noop_tail);
 
 	if (uf->size_id) {
 		void * data;
@@ -471,6 +466,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 				assert(r >= 0);
 				goto uhfs_write_written_exit;
 			}
+
+			/* save the tail */
+			tail = prev_head;
+
 			/* zero it */
 			r = chdesc_create_init(block, bd, &prev_head);
 			if (r < 0)
@@ -481,14 +480,11 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 			/* note that we do not write it - we will write it later */
 
-#warning FIXME - need to figure out how to create tail
-#if 0
 			r = opgroup_insert_change(prev_head, tail);
 			/* can we do better than this? */
 			assert(r >= 0);
 
 			uhfs_mark_data(prev_head, tail);
-#endif
 
 			/* append it to the file, depending on zeroing it */
 			r = CALL(state->lfs, append_file_block, uf->inner, number, &prev_head);
@@ -515,20 +511,20 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 				goto uhfs_write_written_exit;
 		}
 
+		/* save the tail */
+		tail = prev_head;
+
 		/* write the data to the block */
 		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
 		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
 
-#warning FIXME - need to figure out how to create tail
-#if 0
 		r = opgroup_insert_change(prev_head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 
 		uhfs_mark_data(prev_head, tail);
-#endif
 
 		save_head = prev_head;
 
