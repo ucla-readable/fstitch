@@ -1,7 +1,7 @@
-# KudOS debug trace information for the "file" command - add to ~/.magic
+# KudOS debug trace information for the "file" command - add to ~/.magic and run "file -C ~/.magic"
 
-12	string		KDB_		KudOS debug trace
+12	string		KDB_		KudOS debug trace data
 >0	belong		x		(%d,
 >4	belong		x		%d)
 
-4	string		KDB_		Old KudOS debug trace (prior to r1289)
+4	string		KDB_		Old KudOS debug trace data (prior to r1289)
