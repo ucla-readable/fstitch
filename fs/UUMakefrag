@@ -25,6 +25,7 @@ FSIMGFILES :=		fs/.journal \
 			fs/winamp.0
 
 -include fs/audio/Makefrag
+FSIMGFILES := $(FSIMGFILES) $(FSIMGTXTFILES)
 
 include conf/fs.mk
 ifndef FSSIZE

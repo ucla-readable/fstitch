@@ -58,8 +58,10 @@ public class LoadCommand implements Command
 					System.out.println(e);
 					dbg = null;
 				}
-				else
+				else if(dbg != null)
 					System.out.println("Bad input while reading " + args[0] + "; " + dbg.getOpcodeCount() + " opcodes OK");
+				else
+					System.out.println("Bad input while reading " + args[0]);
 			}
 			catch(IOException e)
 			{

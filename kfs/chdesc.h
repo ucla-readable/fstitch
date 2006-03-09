@@ -6,7 +6,7 @@
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_CYCLE_CHECK 0
+#define CHDESC_CYCLE_CHECK 1
 
 struct chdesc;
 typedef struct chdesc chdesc_t;
