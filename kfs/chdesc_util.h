@@ -16,6 +16,9 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset);
 void chdesc_finish_move(bdesc_t * destination);
 
+/* write an entire block without creating many layers of change descriptors */
+int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
+
 /* reassign the block pointer in a NOOP chdesc */
 int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block);
 

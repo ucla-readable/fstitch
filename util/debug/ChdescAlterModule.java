@@ -13,6 +13,7 @@ public class ChdescAlterModule extends Module
 		addFactory(ChdescConvertNoop.getFactory(input));
 		addFactory(ChdescConvertBit.getFactory(input));
 		addFactory(ChdescConvertByte.getFactory(input));
+		addFactory(ChdescRewriteByte.getFactory(input));
 		addFactory(ChdescApply.getFactory(input));
 		addFactory(ChdescRollback.getFactory(input));
 		addFactory(ChdescSetFlags.getFactory(input));

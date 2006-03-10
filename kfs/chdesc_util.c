@@ -187,6 +187,45 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 	return 0;
 }
 
+/* Write an entire block with new data, assuming that either A) no change
+ * descriptors exist on the block or B) the entire block has a single layer of
+ * BYTE change descriptors on it. In case B, use chdesc_rewrite_byte() to
+ * rewrite the existing change descriptors to reflect the new data, and return
+ * NULL in *head and *tail. In case A, return the newly created change
+ * descriptors in *head and *tail. */
+int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
+{
+	chmetadesc_t * meta;
+	uint16_t range = block->ddesc->length;
+	
+	if(*head)
+	{
+		kdprintf(STDERR_FILENO, "%s:%d %s() called with non-null *head!\n", __FILE__, __LINE__, __FUNCTION__);
+		return -E_PERM;
+	}
+	if(!block->ddesc->changes)
+		return chdesc_create_full(block, owner, data, head);
+	
+	/* FIXME: check for some other cases when we should just fall back on chdesc_create_full() */
+	
+	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+	{
+		uint16_t offset;
+		if(meta->desc->type != BYTE)
+			continue;
+		offset = meta->desc->byte.length;
+		if(chdesc_rewrite_byte(meta->desc, 0, offset, data + offset) < 0)
+			continue;
+		if(offset > range)
+			panic("impossible change descriptor structure!");
+		range -= offset;
+	}
+	if(range)
+		panic("%s() called on non-layered block!\n", __FUNCTION__);
+	
+	return 0;
+}
+
 /* Roll back a collection of change descriptors on the same block. They will be
  * rolled back in proper dependency order. */
 /* If "order" is non-null, and it is a pointer to NULL, it will be filled in

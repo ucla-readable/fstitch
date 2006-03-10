@@ -294,7 +294,7 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, int8_t * fbmap, int8_t * ubmap,
 	
 	if(r < 0)
 	{
-		if(temp_file)
+		if(temp_file && temp_file != &super->s_root)
 			free(temp_file);
 		return r;
 	}
@@ -354,7 +354,7 @@ int josfs_fsck(LFS_t * object)
 			if (r == 0)
 				d = fsck_dir(object, (fdesc_t *) &temp_fdesc.ptr, free_bitmap, used_bitmap, blocklist, hsdirs);
 
-			if (dirfile)
+			if (dirfile && dirfile != &super->s_root)
 				free(dirfile);
 
 			if (d < 0)
@@ -648,10 +648,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 {
 	struct josfs_fdesc * fd;
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	JOSFS_File_t *file = malloc(sizeof(JOSFS_File_t));
 	bdesc_t *dirblock;
-	if (!file)
-		return NULL;
 
 	fd = (struct josfs_fdesc *)malloc(sizeof(struct josfs_fdesc));
 	if (!fd)
@@ -659,26 +656,42 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 
 	fd->common = &fd->base;
 	fd->base.parent = INODE_NONE;
-	fd->dirb = ino / JOSFS_BLKFILES;
-	fd->index = (ino % JOSFS_BLKFILES) * sizeof(JOSFS_File_t);
+	if (ino == INODE_ROOT)
+	{
+		fd->dirb = 1;
+		fd->index = (uint32_t) &((struct JOSFS_Super *) NULL)->s_root;
+	}
+	else
+	{
+		fd->dirb = ino / JOSFS_BLKFILES;
+		fd->index = (ino % JOSFS_BLKFILES) * sizeof(JOSFS_File_t);
+	}
 	fd->ino = ino;
-	fd->file = file;
 
 	if (ino == INODE_ROOT) { // superblock
-		memcpy(file, &super->s_root, sizeof(JOSFS_File_t));
+		fd->file = &super->s_root;
 	} else {
+		JOSFS_File_t *file = malloc(sizeof(JOSFS_File_t));
+		if (!file)
+		{
+			goto josfs_lookup_inode_exit;
+			return NULL;
+		}
+
 		dirblock = CALL(info->ubd, read_block, fd->dirb, 1);
 		if (!dirblock)
 			goto josfs_lookup_inode_exit2;
-	
+		
 		memcpy(file, dirblock->ddesc->data + fd->index, sizeof(JOSFS_File_t));
+		fd->file = file;
 	}
 	return (fdesc_t*)fd;
 
  josfs_lookup_inode_exit2:
-	free(fd);
+	if (fd->file != &super->s_root)
+		free(fd->file);
  josfs_lookup_inode_exit:
-	free(file);
+	free(fd);
 	return NULL;
 }
 
@@ -698,6 +711,7 @@ static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("JOSFSDEBUG: josfs_lookup_name %s\n", name);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	int index = 0;
 	struct josfs_fdesc *fd;
 	JOSFS_File_t * parent_file;
@@ -709,14 +723,16 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	// (this seems hacky, but it would be hard to figure out parent's parent from here)
 
 	fd = (struct josfs_fdesc *)josfs_lookup_inode(object, parent);
-	if (!fd) return -E_INVAL;
+	if (!fd)
+		return -E_INVAL;
 	parent_file = fd->file;
 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
 	josfs_free_fdesc(object, (fdesc_t *) fd);
 	fd = NULL;
 	parent_file = NULL;
-	free(file);
+	if (file != &super->s_root)
+		free(file);
 	file = NULL;
 	if (r < 0)
 		return r;
@@ -1016,6 +1032,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	fdesc_t * pdir_fdesc;
 	uint16_t offset;
 	uint32_t nblock, number;
+	int32_t updated_size;
 	int i, r;
 
 	if (!head || link)
@@ -1052,6 +1069,8 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		number = get_file_block(object, ((struct josfs_fdesc *) pdir_fdesc)->file, i * JOSFS_BLKSIZE);
 		if (number != INVALID_BLOCK)
 			blk = josfs_lookup_block(object, number);
+		else
+			blk = NULL;
 		if (!blk)
 			goto allocate_name_exit2;
 
@@ -1072,6 +1091,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 					goto allocate_name_exit2;
 
 				new_fdesc->file = malloc(sizeof(JOSFS_File_t));
+				assert(new_fdesc->file); // TODO: handle error
 				memcpy(new_fdesc->file, &temp_file, sizeof(JOSFS_File_t));
 				new_fdesc->dirb = blk->number;
 				new_fdesc->index = j * sizeof(JOSFS_File_t);
@@ -1088,14 +1108,16 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	number = josfs_allocate_block(object, NULL, 0, head);
 	if (number != INVALID_BLOCK)
 		blk = josfs_lookup_block(object, number);
+	else
+		blk = NULL;
 	if (!blk)
 		goto allocate_name_exit2;
 
 	dir_fdesc = (struct josfs_fdesc *) josfs_lookup_inode(object, parent);
 	assert(dir_fdesc && dir_fdesc->file);
 	dir = dir_fdesc->file;
-	dir->f_size += JOSFS_BLKSIZE;
-	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &(dir->f_size), head);
+	updated_size = dir->f_size + JOSFS_BLKSIZE;
+	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &updated_size, head);
 	josfs_free_fdesc(object, (fdesc_t *) dir_fdesc);
 	dir_fdesc = NULL;
 	dir = NULL;

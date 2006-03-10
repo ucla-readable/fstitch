@@ -8,6 +8,7 @@
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kudos
 UTILDIR := $(BASE_OBJDIR)/util
+VMWAREDIR := $(BASE_OBJDIR)/vmware
 GCCCONF := conf/Kgcc.mk
 
 ifdef GCCPREFIX
@@ -82,6 +83,7 @@ ANT	:= ant
 TAR	:= gtar
 PERL	:= perl
 CTAGS	:= ctags
+QEMUIMG	:= qemu-img
 
 # Native command flags
 NCFLAGS	:= -Wall -DKUTIL
@@ -92,7 +94,7 @@ CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefra
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
 CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -I$(TOP)/inc -MD -Wall -Wno-format -gstabs
-CFLAGS	:= $(CFLAGS) -O2
+CFLAGS	:= $(CFLAGS) -O2 -march=pentium
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS -DKUDOS_KERNEL
 
 LD_CPPFLAGS := $(LD_CPPFLAGS) -I$(TOP) -traditional-cpp -P -C -undef
@@ -248,6 +250,17 @@ include fs/KMakefrag
 include kfs/KMakefrag
 include util/Makefrag
 
+# Build VMWare files
+vmware: $(VMWAREDIR)/kudos.vmx $(VMWAREDIR)/fs.vmdk
+
+$(VMWAREDIR)/fs.vmdk: $(OBJDIR)/fs/fs.img $(VMWAREDIR)/kudos.vmx
+	@echo + $(QEMUIMG) $@
+	@$(QEMUIMG) convert $< -O vmdk $@
+
+$(VMWAREDIR)/kudos.vmx: util/kudos.vmx
+	@echo + mk $@
+	@mkdir -p ${VMWAREDIR}
+	@cp $< ${VMWAREDIR}/kudos.vmx
 
 # For deleting the build
 fsclean:

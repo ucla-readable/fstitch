@@ -54,10 +54,14 @@ public class LoadCommand implements Command
 			catch(BadInputException e)
 			{
 				if(e instanceof UnsupportedStreamRevisionException)
+				{
 					System.out.println(e);
+					dbg = null;
+				}
+				else if(dbg != null)
+					System.out.println("Bad input while reading " + args[0] + "; " + dbg.getOpcodeCount() + " opcodes OK");
 				else
 					System.out.println("Bad input while reading " + args[0]);
-				dbg = null;
 			}
 			catch(IOException e)
 			{

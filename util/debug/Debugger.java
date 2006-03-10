@@ -58,25 +58,14 @@ public class Debugger extends OpcodeFactory
 			throw new UnsupportedStreamRevisionException(1582, 1577, 1659);
 		if(debugRev == 1660 && debugOpcodeRev == 1660)
 			throw new UnsupportedStreamRevisionException(1660, 1660, 1662);
+		if((debugRev == 1663 || debugRev == 1719 || debugRev == 1721 ||
+		    debugRev == 1777 || debugRev == 1856 || debugRev == 1859 ||
+		    debugRev == 1969) && debugOpcodeRev == 1663)
+			throw new UnsupportedStreamRevisionException(debugRev, debugOpcodeRev, 1990);
 		
 		/* supported revisions */
-		if(debugOpcodeRev == 1663)
-		{
-			if(debugRev == 1663)
-				return;
-			if(debugRev == 1719)
-				return;
-			if(debugRev == 1721)
-				return;
-			if(debugRev == 1777)
-				return;
-			if(debugRev == 1856)
-				return;
-			if(debugRev == 1859)
-				return;
-			if(debugRev == 1969)
-				return;
-		}
+		if(debugRev == 1991 && debugOpcodeRev == 1991)
+			return;
 		
 		/* 0 means "use a newer revision" */
 		throw new UnsupportedStreamRevisionException(debugRev, debugOpcodeRev, 0);

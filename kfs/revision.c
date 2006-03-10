@@ -1,55 +1,12 @@
-#include <lib/fixed_max_heap.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>
+#include <inc/error.h>
 #include <stdlib.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>
 #include <kfs/debug.h>
 #include <kfs/revision.h>
-
-/*
- * precondition: CHDESC_MARKED is set to 0 for each chdesc in graph.
- *
- * postconditions: CHDESC_MARKED is set to 1 for each chdesc in graph,
- * distance is set to 0 for each chdesc in graph.
- *
- * side effect: returns number of chdescs in the graph. these two
- * functionalities were merged to avoid traversing the graph an extra
- * time.
- */
-static int reset_distance(chdesc_t * ch)
-{
-	chmetadesc_t * p;
-	int num = 1;
-	if(ch->flags & CHDESC_MARKED)
-		return 0;
-	ch->flags |= CHDESC_MARKED;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, ch, CHDESC_MARKED);
-	ch->distance = 0;
-	for(p = ch->dependencies; p; p = p->next)
-		num += reset_distance(p->desc);
-	return num;
-}
-
-/*
- * precondition: all nodes have distance set to zero.
- *
- * postconditions: distance of each chdesc is set to (maximum distance
- * from ch) + num.
- *
- * to get the distance from each node to the root, do
- * calculate_distance(root, 0);
- */
-static void calculate_distance(chdesc_t * ch, int num)
-{
-	chmetadesc_t * p;
-	if(num && ch->distance >= num)
-		return;
-	ch->distance = num;
-	for(p = ch->dependencies; p; p = p->next)
-		calculate_distance(p->desc, num + 1);
-}
 
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
@@ -65,43 +22,59 @@ static bool revision_stamp_decider(chdesc_t * chdesc, void * data)
 
 static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, void * data)
 {
-	chdesc_t * root;
-	chmetadesc_t * d;
-	fixed_max_heap_t * heap;
-	int r, i, count = 0;
+	chdesc_t * root = block->ddesc->changes;
+	chmetadesc_t * scan;
+	chdesc_t ** chdescs;
+	int i = 0, count = 0;
 	
-	root = block->ddesc->changes;
 	if(!root)
-		// XXX handle this?
 		return 0;
 	
-	reset_distance(root);
-	chdesc_unmark_graph(root);
-	// calculate the distance for all chdescs
-	calculate_distance(root, 0);
+	/* find out how many chdescs are to be rolled back */
+	for(scan = root->dependencies; scan; scan = scan->next)
+		if(!decider(scan->desc, data))
+			count++;
 	
-	// find out how many chdescs are in the block
-	for(d = root->dependencies; d; d = d->next)
-		count++;
+	chdescs = malloc(sizeof(*chdescs) * count);
+	if(!chdescs)
+		return -E_NO_MEM;
 	
-	// heapify
-	heap = fixed_max_heap_create(count);
-	if(!heap)
-		panic("out of memory\n");
-	for(d = root->dependencies; d; d = d->next)
-		// we really want a min heap, so use negative distance
-		fixed_max_heap_insert(heap, d->desc, -d->desc->distance);
-	// pop & rollback
-	for(i = 0; i < count; i++)
+	for(scan = root->dependencies; scan; scan = scan->next)
+		if(!decider(scan->desc, data))
+			chdescs[i++] = scan->desc;
+	
+	for(;;)
 	{
-		chdesc_t * c = (chdesc_t *) fixed_max_heap_pop(heap);
-		if(decider(c, data))
-			continue;
-		r = chdesc_rollback(c);
-		if(r < 0)
-			panic("can't rollback!\n");
+		int again = 0;
+		for(i = 0; i != count; i++)
+		{
+			/* already rolled back? */
+			if(chdescs[i]->flags & CHDESC_ROLLBACK)
+				continue;
+			/* check for overlapping, non-rolled back chdescs above us */
+			for(scan = chdescs[i]->dependents; scan; scan = scan->next)
+			{
+				if(scan->desc->flags & CHDESC_ROLLBACK)
+					continue;
+				if(!scan->desc->block || scan->desc->block->ddesc != block->ddesc)
+					continue;
+				if(chdesc_overlap_check(scan->desc, chdescs[i]))
+					break;
+			}
+			if(scan)
+				again = 1;
+			else
+			{
+				int r = chdesc_rollback(chdescs[i]);
+				if(r < 0)
+					panic("chdesc_rollback() failed!");
+			}
+		}
+		if(!again)
+			break;
 	}
-	fixed_max_heap_free(heap);
+	
+	free(chdescs);
 	
 	return 0;
 }
@@ -128,42 +101,59 @@ int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp)
 
 static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, void * data)
 {
-	chdesc_t * root;
-	chmetadesc_t * d;
-	fixed_max_heap_t * heap;
-	int r, i, count = 0;
+	chdesc_t * root = block->ddesc->changes;
+	chmetadesc_t * scan;
+	chdesc_t ** chdescs;
+	int i = 0, count = 0;
 	
-	root = block->ddesc->changes;
 	if(!root)
-		// XXX handle this?
 		return 0;
 	
-	reset_distance(root);
-	chdesc_unmark_graph(root);
-	// calculate the distance for all chdescs
-	calculate_distance(root, 0);
+	/* find out how many chdescs are to be rolled forward */
+	for(scan = root->dependencies; scan; scan = scan->next)
+		if(!decider(scan->desc, data))
+			count++;
 	
-	// find out how many chdescs are in the block
-	for(d = root->dependencies; d; d = d->next)
-		count++;
+	chdescs = malloc(sizeof(*chdescs) * count);
+	if(!chdescs)
+		return -E_NO_MEM;
 	
-	// heapify
-	heap = fixed_max_heap_create(count);
-	if(!heap)
-		panic("out of memory\n");
-	for(d = root->dependencies; d; d = d->next)
-		fixed_max_heap_insert(heap, d->desc, d->desc->distance);
-	// pop & rollforward
-	for(i = 0; i < count; i++)
+	for(scan = root->dependencies; scan; scan = scan->next)
+		if(!decider(scan->desc, data))
+			chdescs[i++] = scan->desc;
+	
+	for(;;)
 	{
-		chdesc_t * c = (chdesc_t *) fixed_max_heap_pop(heap);
-		if(decider(c, data))
-			continue;
-		r = chdesc_apply(c);
-		if(r < 0)
-			panic("can't rollforward!\n");
+		int again = 0;
+		for(i = 0; i != count; i++)
+		{
+			/* already rolled forward? */
+			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
+				continue;
+			/* check for overlapping, rolled back chdescs below us */
+			for(scan = chdescs[i]->dependencies; scan; scan = scan->next)
+			{
+				if(!(scan->desc->flags & CHDESC_ROLLBACK))
+					continue;
+				if(!scan->desc->block || scan->desc->block->ddesc != block->ddesc)
+					continue;
+				if(chdesc_overlap_check(scan->desc, chdescs[i]))
+					break;
+			}
+			if(scan)
+				again = 1;
+			else
+			{
+				int r = chdesc_apply(chdescs[i]);
+				if(r < 0)
+					panic("chdesc_apply() failed!");
+			}
+		}
+		if(!again)
+			break;
 	}
-	fixed_max_heap_free(heap);
+	
+	free(chdescs);
 	
 	return 0;
 }
@@ -180,47 +170,46 @@ int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp)
 
 int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 {
-	chdesc_t * root;
-	chmetadesc_t * d;
-	fixed_max_heap_t * heap;
-	int r, i, count = 0;
+	chdesc_t * root = block->ddesc->changes;
+	chmetadesc_t * scan;
+	chdesc_t ** chdescs;
+	int i = 0, count = 0;
 	
-	root = block->ddesc->changes;
 	if(!root)
-		// XXX handle this?
 		return 0;
 	
-	reset_distance(root);
-	chdesc_unmark_graph(root);
-	// calculate the distance for all chdescs
-	calculate_distance(root, 0);
+	/* find out how many chdescs are to be satisfied */
+	for(scan = root->dependencies; scan; scan = scan->next)
+		if(scan->desc->owner == bd)
+			count++;
 	
-	// find out how many chdescs are in the block
-	for(d = root->dependencies; d; d = d->next)
-		count++;
+	chdescs = malloc(sizeof(*chdescs) * count);
+	if(!chdescs)
+		return -E_NO_MEM;
 	
-	// heapify
-	heap = fixed_max_heap_create(count);
-	if(!heap)
-		panic("out of memory\n");
-	for(d = root->dependencies; d; d = d->next)
-		fixed_max_heap_insert(heap, d->desc, d->desc->distance);
-	// pop & rollforward
-	for(i = 0; i < count; i++)
+	
+	for(scan = root->dependencies; scan; scan = scan->next)
+		if(scan->desc->owner == bd)
+			chdescs[i++] = scan->desc;
+	
+	for(;;)
 	{
-		chdesc_t * c = (chdesc_t *) fixed_max_heap_pop(heap);
-		if(c->owner == bd)
+		int again = 0;
+		for(i = 0; i != count; i++)
 		{
-			chdesc_satisfy(&c);
-			continue;
+			if(!chdescs[i])
+				continue;
+			if(chdescs[i]->dependencies)
+				again = 1;
+			else
+				chdesc_satisfy(&chdescs[i]);
 		}
-		r = chdesc_apply(c);
-		if(r < 0)
-			panic("can't rollforward!\n");
+		if(!again)
+			break;
 	}
-	fixed_max_heap_free(heap);
+	free(chdescs);
 	
-	return 0;
+	return revision_tail_revert(block, bd);
 }
 
 

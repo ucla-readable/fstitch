@@ -81,7 +81,6 @@ check_user_page_access(struct Env *env, const void *ptr, pte_t pte_bits)
 }
 
 void page_init(void);
-void page_check(void);
 int  page_alloc(struct Page**);
 void page_free(struct Page*);
 int  page_insert(pde_t*, struct Page*, uintptr_t va, int perm);

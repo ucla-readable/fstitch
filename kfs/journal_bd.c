@@ -6,6 +6,7 @@
 #include <lib/jiffies.h> // HZ
 #include <lib/panic.h>
 #include <lib/hash_map.h>
+#include <lib/kdprintf.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -94,6 +95,24 @@
  *   which represents the whole transaction, so we can weak retain it to claim
  *   slots in the journal
  * */
+
+
+static unsigned int nholds = 0;
+
+void journal_bd_add_hold(void)
+{
+	nholds++;
+}
+
+void journal_bd_remove_hold(void)
+{
+	assert(nholds > 0);
+	if (nholds == 0)
+		kdprintf(STDERR_FILENO, "%s: nholds already 0\n", __FUNCTION__);
+	else
+		nholds--;
+}
+
 
 struct journal_info {
 	BD_t * bd;
@@ -384,6 +403,9 @@ static int journal_bd_stop_transaction(BD_t * object)
 	bdesc_t * block;
 	chdesc_t * head;
 	int r;
+
+	if (nholds)
+		return -E_BUSY;
 	
 	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 	if(!block)
@@ -507,12 +529,15 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	r = revision_tail_prepare_stamp(block, info->stamp);
 	assert(r >= 0);
 	/* ...and copy it to the journal */
-	r = chdesc_create_full(journal_block, info->journal, block->ddesc->data, &head);
+	r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
 	assert(r >= 0);
 	r = revision_tail_revert_stamp(block, info->stamp);
 	assert(r >= 0);
-	r = chdesc_add_depend(info->wait, head);
-	assert(r >= 0);
+	if(head)
+	{
+		r = chdesc_add_depend(info->wait, head);
+		assert(r >= 0);
+	}
 	
 	info->recursion = 1;
 	r = CALL(info->journal, write_block, journal_block);
@@ -548,7 +573,7 @@ static void journal_bd_callback(void * arg)
 	if(info->keep)
 	{
 		int r = journal_bd_stop_transaction(object);
-		if(r < 0)
+		if(r < 0 && r != -E_BUSY)
 			panic("Holy Mackerel!");
 	}
 }
