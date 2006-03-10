@@ -30,4 +30,5 @@ $(OBJDIR)/boot/stage2: $(STAGE2_OBJS)
 
 $(OBJDIR)/boot/mbr: boot/mbr.hex $(UTILDIR)/$(HEX2BIN)
 	@echo + $(HEX2BIN) boot/mbr.hex
+	@mkdir -p $(@D)
 	$(V)$(UTILDIR)/$(HEX2BIN) boot/mbr.hex > $@
