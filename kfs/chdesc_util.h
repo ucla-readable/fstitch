@@ -17,7 +17,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 void chdesc_finish_move(bdesc_t * destination);
 
 /* write an entire block without creating many layers of change descriptors */
-int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
 
 /* reassign the block pointer in a NOOP chdesc */
 int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block);
@@ -34,6 +34,6 @@ int chdesc_detach_dependents(chdesc_t * chdesc);
 /* duplicate, morph, split, and merge change descriptors */
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks);
 int chdesc_split(chdesc_t * original, int count);
-int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head);
 
 #endif /* __KUDOS_KFS_CHDESC_UTIL_H */

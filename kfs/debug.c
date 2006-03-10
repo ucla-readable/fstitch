@@ -82,7 +82,6 @@ static const struct param
 	param_ref_count =   {"ref_count",   UINT32},
 	param_slip_under =  {"slip_under",  BOOL},
 	param_source =      {"source",      UHEX32},
-	param_tail =        {"tail",        UHEX32},
 	param_target =      {"target",      UHEX32},
 	param_xor =         {"xor",         UHEX32},
 	last_param = {NULL, 0};
@@ -253,7 +252,6 @@ static const struct param * params_chdesc_merge[] = {
 	&param_count,
 	&param_chdescs,
 	&param_head,
-	&param_tail,
 	&last_param
 };
 

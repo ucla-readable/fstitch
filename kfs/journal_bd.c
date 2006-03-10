@@ -280,7 +280,6 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 	if(!number)
 	{
 		chdesc_t * head = NULL;
-		chdesc_t * tail = NULL;
 		bdesc_t * number_block;
 		size_t blocks = hash_map_size(info->block_map);
 		size_t last = blocks % info->trans_data_blocks;
@@ -300,13 +299,11 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			commit.type = CRSUBCOMMIT;
 			commit.next = info->prev_slot;
 			commit.nblocks = info->trans_data_blocks;
-			r = chdesc_create_byte(record, info->journal, 0, sizeof(commit), &commit, &head, &tail);
+			r = chdesc_create_byte(record, info->journal, 0, sizeof(commit), &commit, &head);
 			assert(r >= 0);
-			assert(head == tail);
 			r = chdesc_add_depend(info->wait, head);
 			assert(r >= 0);
 			head = NULL;
-			tail = NULL;
 			info->recursion = 1;
 			r = CALL(info->journal, write_block, record);
 			info->recursion = 0;
@@ -325,7 +322,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		number += last;
 		
 		data = block->number;
-		r = chdesc_create_byte(number_block, info->journal, last * sizeof(uint32_t), sizeof(uint32_t), &data, &head, &tail);
+		r = chdesc_create_byte(number_block, info->journal, last * sizeof(uint32_t), sizeof(uint32_t), &data, &head);
 		assert(r >= 0);
 		r = chdesc_add_depend(info->wait, head);
 		assert(r >= 0);
@@ -405,7 +402,6 @@ static int journal_bd_stop_transaction(BD_t * object)
 	struct commit_record commit;
 	bdesc_t * block;
 	chdesc_t * head;
-	chdesc_t * tail;
 	int r;
 
 	if (nholds)
@@ -422,11 +418,9 @@ static int journal_bd_stop_transaction(BD_t * object)
 	
 	/* create commit record, make it depend on wait */
 	head = info->wait;
-	tail = NULL;
-	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head, &tail);
+	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
 		panic("Holy Mackerel!");
-	assert(head == tail);
 	/* ...and make hold depend on it */
 	r = chdesc_add_depend(info->hold, head);
 	if(r < 0)
@@ -439,11 +433,9 @@ static int journal_bd_stop_transaction(BD_t * object)
 	/* create cancellation, make it depend on safe */
 	commit.type = CREMPTY;
 	head = info->safe;
-	tail = NULL;
-	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head, &tail);
+	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
 		panic("Holy Mackerel!");
-	assert(head == tail);
 	/* ...and make done depend on it */
 	r = chdesc_add_depend(info->done, head);
 	if(r < 0)
@@ -488,7 +480,6 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	bdesc_t * journal_block;
 	chmetadesc_t * meta;
 	chdesc_t * head = NULL;
-	chdesc_t * tail = NULL;
 	uint32_t number;
 	int r;
 	
@@ -538,7 +529,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	r = revision_tail_prepare_stamp(block, info->stamp);
 	assert(r >= 0);
 	/* ...and copy it to the journal */
-	r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head, &tail);
+	r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
 	assert(r >= 0);
 	r = revision_tail_revert_stamp(block, info->stamp);
 	assert(r >= 0);
@@ -715,7 +706,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 				goto output_error;
 			
 			head = NULL;
-			r = chdesc_create_full(output, info->bd, data_block->ddesc->data, &head, &tail);
+			r = chdesc_create_full(output, info->bd, data_block->ddesc->data, &head);
 			if(r < 0)
 				goto output_error;
 			r = chdesc_add_depend(info->safe, head);
@@ -749,7 +740,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	{
 		typeof(cr->type) empty = CREMPTY;
 		head = info->safe;
-		chdesc_create_byte(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head, &tail);
+		chdesc_create_byte(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head);
 		assert(head == tail);
 		r = chdesc_add_depend(info->done, head);
 		if(r < 0)

@@ -158,7 +158,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = CALL(state->lfs, get_blocksize);
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
-	chdesc_t * prev_head = NULL, * tail, * save_head;
+	chdesc_t * prev_head = NULL, * save_head;
 	int r;
 
 	nblks = CALL(state->lfs, get_file_numblocks, uf->inner);
@@ -167,14 +167,14 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	for (; target_nblks < nblks; nblks--)
 	{
 		/* Truncate the block */
-		uint32_t block = CALL(state->lfs, truncate_file_block, uf->inner, &prev_head, &tail);
+		uint32_t block = CALL(state->lfs, truncate_file_block, uf->inner, &prev_head);
 		if (block == INVALID_BLOCK)
 			return -E_UNSPECIFIED;
 
 		save_head = prev_head;
 
 		/* Now free the block */
-		r = CALL(state->lfs, free_block, uf->inner, block, &prev_head, &tail);
+		r = CALL(state->lfs, free_block, uf->inner, block, &prev_head);
 		if (r < 0)
 			return r;
 
@@ -198,7 +198,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 
 		if (target_size < size)
 		{
-			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head, &tail);
+			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head);
 			if (r < 0)
 				return r;
 		}
@@ -296,7 +296,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t existing_ino;
-	chdesc_t * prev_head, * tail;
+	chdesc_t * prev_head;
 	fdesc_t * inner;
 	int r;
 
@@ -311,7 +311,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	}
 
 	prev_head = NULL;
-	inner = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, newino, &prev_head, &tail);
+	inner = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, newino, &prev_head);
 	if (!inner)
 		return -E_UNSPECIFIED;
 
@@ -416,7 +416,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &data_len, &data);
 		if (r < 0)
-			return r;
+			goto uhfs_write_exit;
 		assert(data_len == sizeof(filesize));
 		filesize = *(size_t *) data;
 		free(data);
@@ -429,7 +429,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	if (offset > filesize) {
 		kdprintf(STDERR_FILENO, "--- Uh oh, offset > filesize, %d > %d ---!\n", offset, filesize);
 		target_size = offset;
-		return -E_UNSPECIFIED;
+		r = -E_UNSPECIFIED;
+		goto uhfs_write_exit;
 	}
 
 	// do we really want to just return size_written if an operation failed?
@@ -451,9 +452,9 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			save_head = prev_head;
 			prev_head = NULL; /* no need to link with previous chains here */
 
-			number = CALL(state->lfs, allocate_block, uf->inner, type, &prev_head, &tail);
+			number = CALL(state->lfs, allocate_block, uf->inner, type, &prev_head);
 			if (number == INVALID_BLOCK)
-				return size_written;
+				goto uhfs_write_written_exit;
 
 			/* get the block to zero it */
 			block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
@@ -461,12 +462,16 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			{
 				no_block:
 				prev_head = NULL;
-				r = CALL(state->lfs, free_block, uf->inner, number, &prev_head, &tail);
+				r = CALL(state->lfs, free_block, uf->inner, number, &prev_head);
 				assert(r >= 0);
-				return size_written;
+				goto uhfs_write_written_exit;
 			}
+
+			/* save the tail */
+			tail = prev_head;
+
 			/* zero it */
-			r = chdesc_create_init(block, bd, &prev_head, &tail);
+			r = chdesc_create_init(block, bd, &prev_head);
 			if (r < 0)
 			{
 				if (synthetic)
@@ -482,14 +487,14 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			uhfs_mark_data(prev_head, tail);
 
 			/* append it to the file, depending on zeroing it */
-			r = CALL(state->lfs, append_file_block, uf->inner, number, &prev_head, &tail);
+			r = CALL(state->lfs, append_file_block, uf->inner, number, &prev_head);
 			if (r < 0)
 			{
 				/* we don't need to worry about unzeroing the
 				 * block - it was free anyhow, so we can leave
 				 * it alone if we write it as-is */
 				prev_head = NULL;
-				CALL(state->lfs, write_block, block, &prev_head, &tail);
+				CALL(state->lfs, write_block, block, &prev_head);
 				goto no_block;
 			}
 
@@ -503,14 +508,17 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		{
 			block = CALL(state->lfs, lookup_block, number);
 			if (!block)
-				return size_written;
+				goto uhfs_write_written_exit;
 		}
+
+		/* save the tail */
+		tail = prev_head;
 
 		/* write the data to the block */
 		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
-		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head, &tail);
+		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head);
 		if (r < 0)
-			return size_written;
+			goto uhfs_write_written_exit;
 
 		r = opgroup_insert_change(prev_head, tail);
 		/* can we do better than this? */
@@ -520,7 +528,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 		save_head = prev_head;
 
-		r = CALL(state->lfs, write_block, block, &prev_head, &tail);
+		r = CALL(state->lfs, write_block, block, &prev_head);
 		assert(r >= 0);
 
 		prev_head = save_head;
@@ -532,13 +540,16 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	if (uf->size_id) {
 		if (offset + size_written > target_size) {
 			target_size = offset + size_written;
-			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head, &tail);
+			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head);
 			if (r < 0)
-				return r;
+				goto uhfs_write_exit;
 		}
 	}
 
-	return size_written;
+uhfs_write_written_exit:
+	r = size_written;
+uhfs_write_exit:
+	return r;
 }
 
 static int uhfs_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
@@ -575,7 +586,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 	uint32_t nlinks;
 	size_t data_len;
 	void * data;
-	chdesc_t * prev_head = NULL, * tail, * save_head;
+	chdesc_t * prev_head = NULL, * save_head;
 
 	if (link_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, &data_len, &data);
@@ -590,13 +601,13 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 		if (nlinks > 1) {
 			CALL(state->lfs, free_fdesc, f);
-			return CALL(state->lfs, remove_name, parent, name, &prev_head, &tail);
+			return CALL(state->lfs, remove_name, parent, name, &prev_head);
 		}
 	}
 
 	nblocks = CALL(state->lfs, get_file_numblocks, f);
 	for (i = 0 ; i < nblocks; i++) {
-		uint32_t number = CALL(state->lfs, truncate_file_block, f, &prev_head, &tail);
+		uint32_t number = CALL(state->lfs, truncate_file_block, f, &prev_head);
 		if (number == INVALID_BLOCK) {
 			CALL(state->lfs, free_fdesc, f);
 			return -E_INVAL;
@@ -604,7 +615,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 		save_head = prev_head;
 
-		r = CALL(state->lfs, free_block, f, number, &prev_head, &tail);
+		r = CALL(state->lfs, free_block, f, number, &prev_head);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
@@ -615,7 +626,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 	CALL(state->lfs, free_fdesc, f);
 
-	return CALL(state->lfs, remove_name, parent, name, &prev_head, &tail);
+	return CALL(state->lfs, remove_name, parent, name, &prev_head);
 }
 
 static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
@@ -660,7 +671,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	fdesc_t * oldf, * newf;
 	bool type_supported;
 	uint32_t oldtype;
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * prev_head = NULL;
 	int r;
 
 	oldf = CALL(state->lfs, lookup_inode, ino);
@@ -683,7 +694,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 		return -E_FILE_EXISTS;
 	}
 
-	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &newino, &prev_head, &tail);
+	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &newino, &prev_head);
 	if (!newf) {
 		CALL(state->lfs, free_fdesc, oldf);
 		return -E_UNSPECIFIED;
@@ -691,7 +702,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 
 	if (type_supported)
 	{
-		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &prev_head, &tail);
+		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &prev_head);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, oldf);
 			CALL(state->lfs, free_fdesc, newf);
@@ -708,10 +719,10 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * prev_head = NULL;
 	int r;
 
-	r = CALL(state->lfs, rename, oldparent, oldname, newparent, newname, &prev_head, &tail);
+	r = CALL(state->lfs, rename, oldparent, oldname, newparent, newname, &prev_head);
 	if (r < 0)
 		return r;
 
@@ -724,13 +735,13 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * 
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t existing_ino;
 	fdesc_t * f;
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * prev_head = NULL;
 	int r;
 
 	if (CALL(state->lfs, lookup_name, parent, name, &existing_ino) >= 0)
 		return -E_FILE_EXISTS;
 
-	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, ino, &prev_head, &tail);
+	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, ino, &prev_head);
 	if (!f)
 		return -E_UNSPECIFIED;
 
@@ -738,12 +749,12 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * 
 	if (lfs_feature_supported(state->lfs, *ino, KFS_feature_filetype.id))
 	{
 		const int type = TYPE_DIR;
-		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &prev_head, &tail);
+		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &prev_head);
 		if (r < 0)
 		{
 			/* ignore remove_name() error in favor of the real error */
 			CALL(state->lfs, free_fdesc, f);
-			(void) CALL(state->lfs, remove_name, parent, name, &prev_head, &tail);
+			(void) CALL(state->lfs, remove_name, parent, name, &prev_head);
 			return r;
 		}
 	}
@@ -832,14 +843,9 @@ static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = NULL, * tail;
-	int r;
+	chdesc_t * prev_head = NULL;
 
-	r = CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head, &tail);
-	if (r < 0)
-		return r;
-
-	return r;
+	return CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head);
 }
 
 static int uhfs_destroy(CFS_t * cfs)

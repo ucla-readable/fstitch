@@ -73,9 +73,9 @@ struct chrefdesc {
 /* create new chdescs */
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner);
 chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor);
-int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail);
-int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail);
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail);
+int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
+int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head);
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
 
 /* check whether two change descriptors overlap, even on different blocks */
 int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);
@@ -114,7 +114,7 @@ void chdesc_reclaim_written(void);
 
 /* hidden functions for use in chdesc_util.c */
 int __ensure_bdesc_has_changes(bdesc_t * block);
-int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under);
+int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under);
 int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 

@@ -193,7 +193,7 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
  * rewrite the existing change descriptors to reflect the new data, and return
  * NULL in *head and *tail. In case A, return the newly created change
  * descriptors in *head and *tail. */
-int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
 	chmetadesc_t * meta;
 	uint16_t range = block->ddesc->length;
@@ -204,10 +204,9 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		return -E_PERM;
 	}
 	if(!block->ddesc->changes)
-		return chdesc_create_full(block, owner, data, head, tail);
+		return chdesc_create_full(block, owner, data, head);
 	
 	/* FIXME: check for some other cases when we should just fall back on chdesc_create_full() */
-	*tail = NULL;
 	
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
 	{
@@ -639,11 +638,12 @@ int chdesc_split(chdesc_t * original, int count)
  * change descriptors being merged have no eventual dependencies on any other
  * change descriptors on the same block. The resulting change descriptors will
  * be byte change descriptors for the entire block. */
-int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 {
-	int i, r;
+	int i, r, newnoop = 0;
 	void * data;
 	chmetadesc_t * meta;
+	chdesc_t * tail;
 	
 	/* we need at least 2 change descriptors */
 	if(count < 1)
@@ -651,7 +651,10 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	if(count == 1)
 		return 0;
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_MERGE, count, chdescs, head, tail);
+	if(!head)
+		return -E_INVAL;
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_MERGE, count, chdescs, head);
 	
 	/* FIXME allow NOOP change descriptors with different blocks */
 	/* FIXME allow all NOOP change descriptors? (just merge them) */
@@ -748,11 +751,27 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		return r;
 	}
 	
+	if(*head)
+		tail = *head;
+	else
+	{
+		tail = chdesc_create_noop(NULL, NULL);
+		if(!tail)
+		{
+			r = -E_NO_MEM;
+			goto merge_chdesc_create_failed;
+		}
+		chdesc_claim_noop(tail);
+		*head = tail;
+		newnoop = 1;
+	}
+
 	/* use the hidden "slip under" feature */
-	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, tail, 1);
+	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, 1);
 	free(data);
 	if(r < 0)
 	{
+	merge_chdesc_create_failed:
 		/* roll forward */
 		chdesc_apply_collection(count, chdescs, NULL);
 		for(i = 0; i != count; i++)
@@ -764,7 +783,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 	}
 	
 	assert(*head);
-	assert(*tail);
+	assert(tail);
 	
 	/* we have now finished all operations that could potentially fail */
 	
@@ -776,7 +795,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 		/* add the dependencies to tail */
 		while(chdescs[i]->dependencies)
 		{
-			for(meta = (*tail)->dependencies; meta; meta = meta->next)
+			for(meta = tail->dependencies; meta; meta = meta->next)
 				if(meta->desc == chdescs[i]->dependencies->desc)
 					break;
 			if(meta)
@@ -788,22 +807,23 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head, chdesc_t ** t
 				meta = chdescs[i]->dependencies;
 				chdescs[i]->dependencies = meta->next;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, chdescs[i], meta->desc);
-				meta->next = (*tail)->dependencies;
-				(*tail)->dependencies = meta;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, *tail, meta->desc);
+				meta->next = tail->dependencies;
+				tail->dependencies = meta;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, tail, meta->desc);
 				/* move the dependent pointer */
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, meta->desc, chdescs[i]);
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, meta->desc, *tail);
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, meta->desc, tail);
 				for(meta = meta->desc->dependents; meta; meta = meta->next)
 					if(meta->desc == chdescs[i])
 					{
-						meta->desc = *tail;
+						meta->desc = tail;
 						break;
 					}
 			}
-			
 		}
-		
+		if(newnoop)
+			chdesc_autorelease_noop(tail);
+
 		/* add the dependents to head */
 		scan = &chdescs[i]->dependents;
 		while(*scan)

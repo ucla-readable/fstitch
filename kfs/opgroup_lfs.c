@@ -15,6 +15,30 @@ struct opgroup_info {
 	LFS_t * lfs;
 };
 
+/* FIXME: we don't need to create a tail if opgroup_insert_change would just return doing nothing */
+static chdesc_t * opgroup_prepare_head(chdesc_t ** head, int * newnoop)
+{
+	chdesc_t * tail;
+
+	if(!head)
+		return NULL;
+
+	if(*head)
+	{
+		*newnoop = 0;
+		return *head;
+	}
+
+	tail = chdesc_create_noop(NULL, NULL);
+	if(!tail)
+		return NULL;
+
+	chdesc_claim_noop(tail);
+	*head = tail;
+	*newnoop = 1;
+	return tail;
+}
+
 static int opgroup_lfs_get_config(void * object, int level, char * string, size_t length)
 {
 	if (length >= 1)
@@ -44,16 +68,26 @@ static BD_t * opgroup_lfs_get_blockdev(LFS_t * object)
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_blockdev);
 }
 
-static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	uint32_t block = CALL(info->lfs, allocate_block, file, purpose, head, tail);
+	uint32_t block;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return INVALID_BLOCK;
+
+	block = CALL(info->lfs, allocate_block, file, purpose, head);
 	if(block != INVALID_BLOCK)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return block;
 }
 
@@ -102,94 +136,164 @@ static int opgroup_lfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent 
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_dirent, file, entry, size, basep);
 }
 
-static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, append_file_block, file, block, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, append_file_block, file, block, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
-static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	fdesc_t * fdesc = CALL(info->lfs, allocate_name, parent, name, type, link, newino, head, tail);
+	fdesc_t * fdesc;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return NULL;
+
+	fdesc = CALL(info->lfs, allocate_name, parent, name, type, link, newino, head);
 	if(fdesc)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return fdesc;
 }
 
-static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, rename, oldparent, oldname, newparent, newname, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, rename, oldparent, oldname, newparent, newname, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
-static uint32_t opgroup_lfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t opgroup_lfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	uint32_t block = CALL(info->lfs, truncate_file_block, file, head, tail);
+	uint32_t block;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return INVALID_BLOCK;
+
+	block = CALL(info->lfs, truncate_file_block, file, head);
 	if(block != INVALID_BLOCK)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return block;
 }
 
-static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, free_block, file, block, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, free_block, file, block, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
-static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, remove_name, parent, name, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, remove_name, parent, name, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
-static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, write_block, block, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, write_block, block, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -213,29 +317,49 @@ static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, 
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_fdesc, file, id, size, data);
 }
 
-static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, set_metadata_inode, ino, id, size, data, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, set_metadata_inode, ino, id, size, data, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
-static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
-	int value = CALL(info->lfs, set_metadata_fdesc, file, id, size, data, head, tail);
+	int value;
+	chdesc_t * tail;
+	int newnoop = 0;
+
+	tail = opgroup_prepare_head(head, &newnoop);
+	if(!tail)
+		return -E_INVAL;
+
+	value = CALL(info->lfs, set_metadata_fdesc, file, id, size, data, head);
 	if(value >= 0)
 	{
-		int r = opgroup_insert_change(*head, *tail);
+		int r = opgroup_insert_change(*head, tail);
 		/* can we do better than this? */
 		assert(r >= 0);
 	}
+	if (newnoop)
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 

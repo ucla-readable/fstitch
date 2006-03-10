@@ -35,12 +35,12 @@ int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode)
 	return 0;
 }
 
-int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head, chdesc_t ** tail)
+int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head)
 {
 	int cg, cg_off, fragno, frag_off, r, offset;
 	bdesc_t * inode_table;
 
-	if (!head || !tail)
+	if (!head)
 		return -E_INVAL;
 
 	if (num < 2)
@@ -59,7 +59,7 @@ int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, c
 	if (!inode_table)
 		return -E_NOT_FOUND;
 	offset = sizeof(struct UFS_dinode) * frag_off;
-	r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head, tail);
+	r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head);
 	if (r < 0)
 		return r;
 
@@ -244,14 +244,14 @@ int read_block_bitmap(struct lfs_info * info, uint32_t num)
 	return UFS_USED;
 }
 
-int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t ** head, chdesc_t ** tail)
+int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t ** head)
 {
 	struct UFS_cg cg;
 	uint32_t blockno, offset;
 	int r;
 	bdesc_t * block;
 
-	if (!head || !tail || value > 128)
+	if (!head || value > 128)
 		return -E_INVAL;
 
 	r = read_cg(info, num / info->super->fs_fpg, &cg);
@@ -270,7 +270,7 @@ int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t **
 	if (!block)
 		return -E_NOT_FOUND;
 
-	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head, tail);
+	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
 	if (r >= 0)
 		r = CALL(info->ubd, write_block, block);
 	if (r < 0)
@@ -279,14 +279,14 @@ int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t **
 	return 0;
 }
 
-int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** head, chdesc_t ** tail)
+int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** head)
 {
 	struct UFS_cg cg;
 	uint32_t blockno, offset;
 	int r;
 	bdesc_t * block;
 
-	if (!head || !tail || value > 128)
+	if (!head || value > 128)
 		return -E_INVAL;
 
 	r = read_cg(info, num / info->super->fs_fpg, &cg);
@@ -305,7 +305,7 @@ int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** 
 	if (!block)
 		return -E_NOT_FOUND;
 
-	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head, tail);
+	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
 	if (r >= 0)
 		r = CALL(info->ubd, write_block, block);
 	if (r < 0)
@@ -314,15 +314,15 @@ int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** 
 	return 0;
 }
 
-int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
+int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	struct UFS_cg cg;
 	uint32_t blockno, offset, * ptr;
 	int r, cyl = num / info->super->fs_ipg;
 	bdesc_t * block;
-	chdesc_t * newtail, * ch;
+	chdesc_t * ch;
 
-	if (!head || !tail)
+	if (!head)
 		return -E_INVAL;
 
 	if (value == UFS_USED)
@@ -366,25 +366,24 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		if ((r = chdesc_add_depend(ch, *head)) < 0)
 			return r;
 
-	*tail = ch;
 	*head = ch;
 
 	if (value)
-		r = update_summary(info, cyl, 0, 0, -1, 0, head, &newtail);
+		r = update_summary(info, cyl, 0, 0, -1, 0, head);
 	else
-		r = update_summary(info, cyl, 0, 0, 1, 0, head, &newtail);
+		r = update_summary(info, cyl, 0, 0, 1, 0, head);
 
 	return r;
 }
 
-int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
+int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	struct UFS_cg cg;
 	uint32_t blockno, offset, * ptr;
 	int r, nf, cyl = num / info->super->fs_fpg;
 	int nfrags_before, nfrags_after, unused_before = 0, unused_after = 0;
 	bdesc_t * block, * cgblock;
-	chdesc_t * newtail, * ch;
+	chdesc_t * ch;
 
 	// Counting bits set in a byte via lookup table...
 	// anyone know a faster/better way?
@@ -408,7 +407,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8
 	};
 
-	if (!head || !tail)
+	if (!head)
 		return -E_INVAL;
 
 	if (value == UFS_USED)
@@ -461,7 +460,6 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		if ((r = chdesc_add_depend(ch, *head)) < 0)
 			return r;
 
-	*tail = ch;
 	*head = ch;
 
 	nfrags_after = BitsSetTable256[(*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF];
@@ -470,8 +468,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 
 	if (value) { // Marked fragment as free
 		if (unused_after) { // Mark the whole block as free
-			r = write_block_bitmap(info, num / info->super->fs_frag,
-					UFS_FREE, head, &newtail);
+			r = write_block_bitmap(info, num / info->super->fs_frag, UFS_FREE, head);
 			if (r < 0)
 				return r;
 			nf = 1 - info->super->fs_frag;
@@ -482,7 +479,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	else { // Marked fragment as used
 		if (unused_before) { // Mark the whole block as used
 			r = write_block_bitmap(info, num / info->super->fs_frag,
-					UFS_USED, head, &newtail);
+					UFS_USED, head);
 			if (r < 0)
 				return r;
 			nf = info->super->fs_frag - 1;
@@ -496,7 +493,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		cg.cg_frsum[nfrags_before]--;
 		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
 				sizeof(cg.cg_frsum[nfrags_before]),
-				&cg.cg_frsum[nfrags_before], head, &newtail);
+				&cg.cg_frsum[nfrags_before], head);
 		if (r < 0)
 			return r;
 
@@ -506,7 +503,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		cg.cg_frsum[nfrags_after]++;
 		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
 				sizeof(cg.cg_frsum[nfrags_after]),
-				&cg.cg_frsum[nfrags_after], head, &newtail);
+				&cg.cg_frsum[nfrags_after], head);
 		if (r < 0)
 			return r;
 	}
@@ -515,21 +512,21 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	if (r < 0)
 		return r;
 
-	return update_summary(info, cyl, 0, 0, 0, nf, head, &newtail);
+	return update_summary(info, cyl, 0, 0, 0, nf, head);
 }
 
 // This is the 'raw' function to write the block bitmap
 // You probably want allocate_wholeblock()
-int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head, chdesc_t ** tail)
+int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	struct UFS_cg cg;
 	uint32_t blocknum, blockno, offset, * ptr, btot;
 	uint16_t fbp;
 	int r, cyl;
 	bdesc_t * block;
-	chdesc_t * newtail, * ch;
+	chdesc_t * ch;
 
-	if (!head || !tail)
+	if (!head)
 		return -E_INVAL;
 
 	if (value == UFS_USED)
@@ -575,7 +572,6 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		if ((r = chdesc_add_depend(ch, *head)) < 0)
 			return r;
 
-	*tail = ch;
 	*head = ch;
 
 	if (value) {
@@ -586,33 +582,32 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		btot = read_btot(info, blocknum) - 1;
 		fbp = read_fbp(info, blocknum) - 1;
 	}
-	r = write_btot(info, blocknum, btot, head, &newtail);
+	r = write_btot(info, blocknum, btot, head);
 	if (r < 0)
 		return r;
-	r = write_fbp(info, blocknum, fbp, head, &newtail);
+	r = write_fbp(info, blocknum, fbp, head);
 	if (r < 0)
 		return r;
 
 
 	if (value)
-		r = update_summary(info, cyl, 0, 1, 0, 0, head, &newtail);
+		r = update_summary(info, cyl, 0, 1, 0, 0, head);
 	else
-		r = update_summary(info, cyl, 0, -1, 0, 0, head, &newtail);
+		r = update_summary(info, cyl, 0, -1, 0, 0, head);
 
 	return r;
 }
 
 // [ndir, ..., nffree] parameters are deltas
-int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head, chdesc_t ** tail)
+int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head)
 {
 	struct UFS_cg cg;
 	struct UFS_csum * csum;
 	uint32_t blockno;
 	int r;
 	bdesc_t * cgblock;
-	chdesc_t * newtail;
 
-	if (!head || !tail || cyl < 0 || cyl >= info->super->fs_ncg)
+	if (!head || cyl < 0 || cyl >= info->super->fs_ncg)
 		return -E_INVAL;
 
 	r = read_cg(info, cyl, &cg);
@@ -632,7 +627,7 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 
 	r = chdesc_create_byte(cgblock, info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs,
-			sizeof(cg.cg_cs), &cg.cg_cs, head, tail);
+			sizeof(cg.cg_cs), &cg.cg_cs, head);
 	if (r < 0)
 		return r;
 
@@ -649,7 +644,7 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 
 	r = chdesc_create_byte(info->csum_block, info->ubd,
 			cyl * sizeof(struct UFS_csum), sizeof(struct UFS_csum),
-			csum, head, &newtail);
+			csum, head);
 	if (r < 0)
 		return r;
 
@@ -666,7 +661,7 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	r = chdesc_create_byte(info->super_block, info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal,
 			sizeof(info->super->fs_cstotal),
-			&info->super->fs_cstotal, head, &newtail);
+			&info->super->fs_cstotal, head);
 	if (r < 0)
 		return r;
 

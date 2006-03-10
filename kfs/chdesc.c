@@ -380,7 +380,7 @@ static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
 #endif
 
 #warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
-int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t init_offset = offset % atomic_size;
@@ -503,14 +503,13 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	}
 	
 	*head = chdescs[count - 1];
-	*tail = chdescs[0];
 	
 	free(chdescs);
 	
 	return 0;
 }
 
-int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
@@ -615,7 +614,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 	}
 	
 	*head = chdescs[count - 1];
-	*tail = chdescs[0];
 	
 	free(chdescs);
 	
@@ -623,7 +621,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head, chdesc_t
 }
 
 #warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
-int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail, bool slip_under)
+int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
@@ -728,16 +726,15 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	}
 	
 	*head = chdescs[count - 1];
-	*tail = chdescs[0];
 	
 	free(chdescs);
 	
 	return 0;
 }
 
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, chdesc_t ** tail)
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	return __chdesc_create_full(block, owner, data, head, tail, 0);
+	return __chdesc_create_full(block, owner, data, head, 0);
 }
 
 /* Rewrite a byte change descriptor to have an updated "new data" field,
@@ -1019,7 +1016,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc with dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc 0x%08x of type %d with dependencies!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
 		switch((*chdesc)->type)
 		{
 			case BYTE:
@@ -1149,7 +1146,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	{
 		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
 		else if(free_head == *chdesc || (*chdesc)->free_prev)
 		{
 			assert(!(*chdesc)->dependencies);

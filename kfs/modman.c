@@ -99,7 +99,7 @@ static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
 {
 	char name[64];
 	/* subtract 0x10000000 to make the generated names have fewer digits */
-	snprintf(name, 64, "%s-%x", prefix, module - 0x10000000);
+	snprintf(name, 64, "%s-%x", prefix, ((int) module) - 0x10000000);
 	return modman_add(map, module, name);
 }
 

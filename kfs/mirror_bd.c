@@ -468,7 +468,6 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		bdesc_t * source;
 		bdesc_t * destination;
 		chdesc_t * head = NULL;
-		chdesc_t * tail = NULL;
 		
 		/* periodically pop/push the autorelease pool */
 		if(!(i & 255) && i)
@@ -498,7 +497,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 			return -E_UNSPECIFIED;
 		}
 		
-		r = chdesc_create_full(destination, newdevice, source->ddesc->data, &head, &tail);
+		r = chdesc_create_full(destination, newdevice, source->ddesc->data, &head);
 		if(r < 0)
 		{
 			if(synthetic)

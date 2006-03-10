@@ -32,8 +32,8 @@ struct open_ufsfile {
 typedef struct open_ufsfile open_ufsfile_t;
 
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
-static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail);
-static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail);
+static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head);
+static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 
 static uint32_t calc_cylgrp_start(LFS_t * object, uint32_t i)
@@ -151,7 +151,7 @@ static int check_super(LFS_t * object)
 }
 
 // Find a free block and allocate all fragments in the block
-static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
@@ -159,9 +159,8 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 	bool synthetic;
 	uint32_t i, num;
 	bdesc_t * block;
-	chdesc_t * newtail;
 
-	if (!head || !tail)
+	if (!head)
 		return INVALID_BLOCK;
 
 	num = CALL(info->parts.p_allocator, find_free_block, file, 0);
@@ -171,9 +170,9 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 	// Mark the fragments as used
 	for (i = num * info->super->fs_frag; i < (num + 1) * info->super->fs_frag; i++) {
 		if (i == num * info->super->fs_frag)
-			r = write_fragment_bitmap(info, i, UFS_USED, head, tail);
+			r = write_fragment_bitmap(info, i, UFS_USED, head);
 		else
-			r = write_fragment_bitmap(info, i, UFS_USED, head, &newtail);
+			r = write_fragment_bitmap(info, i, UFS_USED, head);
 		if (r < 0)
 			return INVALID_BLOCK;
 		assert(r != 1); // This should not happen
@@ -183,7 +182,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 			// FIXME revert all previously allocated blocks?
 			if (!block)
 				return INVALID_BLOCK;
-			r = chdesc_create_init(block, info->ubd, head, &newtail);
+			r = chdesc_create_init(block, info->ubd, head);
 			if (r >= 0)
 				r = CALL(info->ubd, write_block, block);
 			if (r < 0)
@@ -193,7 +192,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 
 	if (file) {
 		f->f_inode.di_blocks += 32; // charge the fragments to the file
-		r = write_inode(info, f->f_num, f->f_inode, head, &newtail);
+		r = write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			return INVALID_BLOCK;
 	}
@@ -202,24 +201,23 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 }
 
 // Deallocate an entire block
-static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t i;
-	chdesc_t * newtail;
 
-	if (!head || !tail || num == INVALID_BLOCK)
+	if (!head || num == INVALID_BLOCK)
 		return -E_INVAL;
 
 	// Mark the fragments as used
 	for (i = num * info->super->fs_frag; i < (num + 1) * info->super->fs_frag; i++) {
 		if (i == num * info->super->fs_frag)
-			r = write_fragment_bitmap(info, i, UFS_FREE, head, tail);
+			r = write_fragment_bitmap(info, i, UFS_FREE, head);
 		else
-			r = write_fragment_bitmap(info, i, UFS_FREE, head, &newtail);
+			r = write_fragment_bitmap(info, i, UFS_FREE, head);
 		if (r < 0)
 			return r;
 		assert(r != 1); // This should not happen
@@ -227,7 +225,7 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 
 	if (file) {
 		f->f_inode.di_blocks -= 32; // charge the fragments to the file
-		r = write_inode(info, f->f_num, f->f_inode, head, &newtail);
+		r = write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			return r;
 	}
@@ -236,47 +234,46 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 }
 
 // Update a ptr in an indirect ptr block
-static inline int update_indirect_block(struct lfs_info * info, bdesc_t * block, uint32_t offset, uint32_t n, chdesc_t ** head, chdesc_t ** tail)
+static inline int update_indirect_block(struct lfs_info * info, bdesc_t * block, uint32_t offset, uint32_t n, chdesc_t ** head)
 {
-	int r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head, tail);
+	int r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head);
 	if (r < 0)
 		return r;
 	return CALL(info->ubd, write_block, block);
 }
 
 // Update file's inode with an nth indirect ptr
-static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil, chdesc_t ** head, chdesc_t ** tail)
+static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t newblock;
-	chdesc_t * newtail;
 
-	if (!file || !head || !tail || n < 0 || n >= UFS_NIADDR)
+	if (!file || !head || n < 0 || n >= UFS_NIADDR)
 		return -E_INVAL;
 
 	// Beware of the evil bit? ;)
 	if (evil) {
 		// Clears the indirect pointer...
 		f->f_inode.di_ib[n] = 0;
-		return write_inode(info, f->f_num, f->f_inode, head, &newtail);
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else {
 		// Allocates an indirect pointer block
 		if (f->f_inode.di_ib[n])
 			return -E_UNSPECIFIED;
 
-		newblock = allocate_wholeblock(object, 1, file, head, tail);
+		newblock = allocate_wholeblock(object, 1, file, head);
 		if (newblock == INVALID_BLOCK)
 			return -E_NOT_FOUND;
 		f->f_inode.di_ib[n] = newblock;
-		return write_inode(info, f->f_num, f->f_inode, head, &newtail);
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 }
 
 // Write the block ptrs for a file, allocate indirect blocks as needed
 // Offset is a byte offset
-static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, chdesc_t ** head, chdesc_t ** tail)
+static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %x %d %d\n", __FUNCTION__, file, offset, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -285,10 +282,8 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 	uint32_t blockno, nindirb, nindirf, newblock;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
-	chdesc_t * tmptail;
-	chdesc_t ** newtail = tail;
 
-	if (!head || !tail || !file || offset % info->super->fs_bsize)
+	if (!head || !file || offset % info->super->fs_bsize)
 		return -E_INVAL;
 
 	nindirb = info->super->fs_nindir;
@@ -297,7 +292,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 	if (blockno < UFS_NDADDR) {
 		f->f_inode.di_db[blockno] = value;
-		return write_inode(info, f->f_num, f->f_inode, head, tail);
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb) {
 		block_off[0] = blockno - UFS_NDADDR;
@@ -306,10 +301,9 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 		// Allocate single indirect block if needed
 		if (!f->f_inode.di_ib[0]) {
-			r = modify_indirect_ptr(object, file, 0, 0, head, newtail);
+			r = modify_indirect_ptr(object, file, 0, 0, head);
 			if (r < 0)
 				return r;
-			newtail = &tmptail;
 		}
 
 		indirect[0] = CALL(info->ubd, read_block,
@@ -317,7 +311,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		return update_indirect_block(info, indirect[0], pt_off[0], value, head, newtail);
+		return update_indirect_block(info, indirect[0], pt_off[0], value, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb) {
 		block_off[1] = blockno - UFS_NDADDR - nindirb;
@@ -329,10 +323,9 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 		// Allocate double indirect block if needed
 		if (!f->f_inode.di_ib[1]) {
-			r = modify_indirect_ptr(object, file, 1, 0, head, newtail);
+			r = modify_indirect_ptr(object, file, 1, 0, head);
 			if (r < 0)
 				return r;
-			newtail = &tmptail;
 		}
 
 		indirect[1] = CALL(info->ubd, read_block,
@@ -344,11 +337,10 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 		// Allocate single indirect block if needed
 		if (!block_off[0]) {
-			newblock = allocate_wholeblock(object, 1, file, head, newtail);
+			newblock = allocate_wholeblock(object, 1, file, head);
 			if (newblock == INVALID_BLOCK)
 				return -E_NOT_FOUND;
-			newtail = &tmptail;
-			r = update_indirect_block(info, indirect[1], pt_off[1], newblock, head, newtail);
+			r = update_indirect_block(info, indirect[1], pt_off[1], newblock, head);
 			if (r < 0)
 				return r;
 		}
@@ -357,7 +349,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		return update_indirect_block(info, indirect[0], pt_off[0], value, head, newtail);
+		return update_indirect_block(info, indirect[0], pt_off[0], value, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb * nindirb) {
 		// We'll only need triple indirect ptrs when the filesize is:
@@ -373,7 +365,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 // Erase the block ptrs for a file, deallocate indirect blocks as needed
 // Offset is a byte offset
-static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chdesc_t ** head, chdesc_t ** tail)
+static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %x %d\n", __FUNCTION__, file, offset);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -383,10 +375,8 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	uint32_t num[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
-	chdesc_t * tmptail;
-	chdesc_t ** newtail = tail;
 
-	if (!head || !tail || !file || offset % info->super->fs_bsize)
+	if (!head || !file || offset % info->super->fs_bsize)
 		return -E_INVAL;
 
 	nindirb = info->super->fs_nindir;
@@ -395,7 +385,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 
 	if (blockno < UFS_NDADDR) {
 		f->f_inode.di_db[blockno] = 0;
-		return write_inode(info, f->f_num, f->f_inode, head, tail);
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb) {
 		block_off[0] = blockno - UFS_NDADDR;
@@ -408,13 +398,12 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head, newtail);
+		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head);
 		// Deallocate indirect block if necessary
 		if (blockno == UFS_NDADDR && r >= 0) {
-			newtail = &tmptail;
-			r = modify_indirect_ptr(object, file, 0, 1, head, newtail);
+			r = modify_indirect_ptr(object, file, 0, 1, head);
 			if (r >= 0)
-				r = erase_wholeblock(object, num[0], file, head, newtail);
+				r = erase_wholeblock(object, num[0], file, head);
 		}
 		return r;
 	}
@@ -439,21 +428,20 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		if (!indirect[0])
 			return -E_NOT_FOUND;
 
-		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head, newtail);
-		newtail = &tmptail;
+		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head);
 
 		// Deallocate indirect block if necessary
 		if ((block_off[1] % nindirb == 0) && r >= 0) {
-			r = update_indirect_block(info, indirect[1], pt_off[1], 0, head, newtail);
+			r = update_indirect_block(info, indirect[1], pt_off[1], 0, head);
 			if (r >= 0)
-				r = erase_wholeblock(object, num[0], file, head, newtail);
+				r = erase_wholeblock(object, num[0], file, head);
 		}
 
 		// Deallocate double indirect block if necessary
 		if (blockno == UFS_NDADDR + nindirb && r >= 0) {
-			r = modify_indirect_ptr(object, file, 1, 1, head, newtail);
+			r = modify_indirect_ptr(object, file, 1, 1, head);
 			if (r >= 0)
-				r = erase_wholeblock(object, num[1], file, head, newtail);
+				r = erase_wholeblock(object, num[1], file, head);
 		}
 
 		return r;
@@ -572,17 +560,16 @@ static BD_t * ufs_get_blockdev(LFS_t * object)
 	return ((struct lfs_info *) OBJLOCAL(object))->ubd;
 }
 
-static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t i, blockno, offset;
 	int r, frags;
 	bool synthetic = 0;
-	chdesc_t * newtail;
 	bdesc_t * block, * newblock;
 
-	if (!head || !tail || !file)
+	if (!head || !file)
 		return INVALID_BLOCK;
 
 	frags = f->f_numfrags % info->super->fs_frag;
@@ -600,9 +587,9 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	// allocate some fragments
 	for (i = 0 ; i < frags; i++) {
 		if (i == 0)
-			r = write_fragment_bitmap(info, blockno, UFS_USED, head, tail);
+			r = write_fragment_bitmap(info, blockno, UFS_USED, head);
 		else
-			r = write_fragment_bitmap(info, blockno + i, UFS_USED, head, &newtail);
+			r = write_fragment_bitmap(info, blockno + i, UFS_USED, head);
 		if (r != 0)
 			return INVALID_BLOCK;
 	}
@@ -616,7 +603,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		if (!newblock)
 			return INVALID_BLOCK;
 
-		r = chdesc_create_full(newblock, info->ubd, block->ddesc->data, head, &newtail);
+		r = chdesc_create_full(newblock, info->ubd, block->ddesc->data, head);
 		if (r >= 0)
 			r = CALL(info->ubd, write_block, newblock);
 		if (r < 0)
@@ -624,11 +611,11 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	}
 
 	// update block ptr
-	r = write_block_ptr(object, file, offset, blockno, head, &newtail);
+	r = write_block_ptr(object, file, offset, blockno, head);
 
 	// free old fragments
 	for (i = 0 ; i < frags; i++) {
-		r = write_fragment_bitmap(info, f->f_lastfrag - frags + i + 1, UFS_FREE, head, &newtail);
+		r = write_fragment_bitmap(info, f->f_lastfrag - frags + i + 1, UFS_FREE, head);
 		if (r != 0)
 			return INVALID_BLOCK;
 	}
@@ -640,19 +627,18 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 }
 
 // Allocates fragments, really
-static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	bdesc_t * block;
 	uint32_t blockno;
-	bool synthetic = 0, use_newtail = 0;
-	chdesc_t * newtail;
+	bool synthetic = 0;
 	int r;
 
 	// FIXME require file to be non-null for now
-	if (!head || !tail || !file)
+	if (!head || !file)
 		return INVALID_BLOCK;
 
 	if (f->f_lastalloc != INVALID_BLOCK)
@@ -672,7 +658,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 		// Time to allocate a find a new block
 		if (((f->f_lastfrag + 1) % info->super->fs_frag) == 0) {
-			blockno = allocate_wholeblock(object, 0, file, head, tail);
+			blockno = allocate_wholeblock(object, 0, file, head);
 			f->f_lastalloc = blockno;
 			return blockno;
 		}
@@ -686,8 +672,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	// Time to allocate a find a new block
 	else if (((f->f_lastfrag + 1) % info->super->fs_frag) == 0) {
 		if (f->f_numfrags % info->super->fs_frag) {
-			blockno = find_frags_new_home(object, file, purpose, head, tail);
-			use_newtail = 1;
+			blockno = find_frags_new_home(object, file, purpose, head);
 		}
 		else {
 			blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
@@ -704,16 +689,10 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		else if (r == UFS_FREE)
 			blockno = f->f_lastfrag + 1; // UFS says we must use it
 		else // Next fragment is taken, move elsewhere
-		{
-			blockno = find_frags_new_home(object, file, purpose, head, tail);
-			use_newtail = 1;
-		}
+			blockno = find_frags_new_home(object, file, purpose, head);
 	}
 
-	if (use_newtail)
-		r = write_fragment_bitmap(info, blockno, UFS_USED, head, &newtail);
-	else
-		r = write_fragment_bitmap(info, blockno, UFS_USED, head, tail);
+	r = write_fragment_bitmap(info, blockno, UFS_USED, head);
 	if (r != 0)
 		return INVALID_BLOCK;
 
@@ -723,7 +702,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
 	if (!block)
 		goto allocate_block_cleanup;
-	r = chdesc_create_init(block, info->ubd, head, &newtail);
+	r = chdesc_create_init(block, info->ubd, head);
 	if (r < 0)
 	{
 		r = CALL(info->ubd, cancel_block, blockno);
@@ -732,7 +711,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	}
 
 	f->f_inode.di_blocks += 4; // grr, di_blocks counts 512 byte blocks
-	r = write_inode(info, f->f_num, f->f_inode, head, &newtail);
+	r = write_inode(info, f->f_num, f->f_inode, head);
 	if (r < 0)
 		return INVALID_BLOCK;
 
@@ -740,7 +719,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	return blockno;
 
 allocate_block_cleanup:
-	r = write_fragment_bitmap(info, blockno, UFS_FREE, head, &newtail);
+	r = write_fragment_bitmap(info, blockno, UFS_FREE, head);
 	assert(r == 0);
 	return INVALID_BLOCK;
 }
@@ -928,7 +907,7 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 	return r;
 }
 
-static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -936,7 +915,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	uint32_t offset;
 	int r;
 
-	if (!head || !tail || !f || block == INVALID_BLOCK)
+	if (!head || !f || block == INVALID_BLOCK)
 		return -E_INVAL;
 
 	if (block != f->f_lastalloc)
@@ -954,7 +933,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	}
 
 	offset = f->f_numfrags * info->super->fs_fsize;
-	r = write_block_ptr(object, file, offset, block, head, tail);
+	r = write_block_ptr(object, file, offset, block, head);
 	if (r < 0)
 		return r;
 
@@ -965,7 +944,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	return 0;
 }
 
-static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * nf;
@@ -975,10 +954,9 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	uint32_t inum = 0;
 	int r, offset, createdot = 0, ex;
 	uint16_t mode;
-	chdesc_t * newtail;
 	struct dirent dirinfo;
 
-	if (!head || !tail || check_name(name))
+	if (!head || check_name(name))
 		return NULL;
 
 	switch (type)
@@ -1045,11 +1023,11 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		nf->f_inode.di_gen = 0; // FIXME use random number?
 
 		// Write new inode to disk and allocate it
-		r = write_inode(info, inum, nf->f_inode, head, tail);
+		r = write_inode(info, inum, nf->f_inode, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 
-		r = write_inode_bitmap(info, inum, UFS_USED, head, &newtail);
+		r = write_inode_bitmap(info, inum, UFS_USED, head);
 		if (r != 0)
 			goto allocate_name_exit2;
 
@@ -1071,17 +1049,17 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	strcpy(dirinfo.d_name, name);
 	dirinfo.d_namelen = strlen(name);
 	dirinfo.d_reclen = sizeof(struct dirent) + dirinfo.d_namelen - DIRENT_MAXNAMELEN;
-	r = CALL(info->parts.p_dirent, insert_dirent, pf, dirinfo, offset, head, &newtail);
+	r = CALL(info->parts.p_dirent, insert_dirent, pf, dirinfo, offset, head);
 	if (r < 0) {
 		if (!ln)
-			write_inode_bitmap(info, inum, UFS_FREE, head, &newtail);
+			write_inode_bitmap(info, inum, UFS_FREE, head);
 		goto allocate_name_exit2;
 	}
 
 	// Increase link count
 	if (ln) {
 		nf->f_inode.di_nlink++;
-		r = write_inode(info, nf->f_num, nf->f_inode, head, &newtail);
+		r = write_inode(info, nf->f_num, nf->f_inode, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1091,17 +1069,17 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		fdesc_t * cfdesc;
 		inode_t newino;
 
-		cfdesc = allocate_name(object, nf->f_num, ".", TYPE_DIR, (fdesc_t *) nf, &newino, head, &newtail);
+		cfdesc = allocate_name(object, nf->f_num, ".", TYPE_DIR, (fdesc_t *) nf, &newino, head);
 		if (!cfdesc)
 			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
-		cfdesc = allocate_name(object, nf->f_num, "..", TYPE_DIR, (fdesc_t *) pf, &newino, head, &newtail);
+		cfdesc = allocate_name(object, nf->f_num, "..", TYPE_DIR, (fdesc_t *) pf, &newino, head);
 		if (!cfdesc)
 			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
-		r = update_summary(info, inum / info->super->fs_ipg, 1, 0, 0, 0, head, &newtail);
+		r = update_summary(info, inum / info->super->fs_ipg, 1, 0, 0, 0, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1117,12 +1095,12 @@ allocate_name_exit:
 	return NULL;
 }
 
-static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head, chdesc_t ** tail)
+static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
 	int createdot = 0;
 
-	if (!head || !tail || check_name(name))
+	if (!head || check_name(name))
 		return NULL;
 
 	// Users cannot create . and ..
@@ -1134,10 +1112,10 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	if (createdot)
 		return NULL;
 
-	return allocate_name(object, parent, name, type, link, newino, head, tail);
+	return allocate_name(object, parent, name, type, link, newino, head);
 }
 
-static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %s %s\n", __FUNCTION__, oldname, newname);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -1148,12 +1126,11 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	ufs_fdesc_t deadf;
 	ufs_fdesc_t dirfdesc;
 	struct dirent entry;
-	chdesc_t * newtail;
 	uint32_t p;
 	int r, existing = 0, dir_offset;
 	inode_t ino, newino;
 
-	if (!head || !tail || check_name(oldname) || check_name(newname))
+	if (!head || check_name(oldname) || check_name(newname))
 		return -E_INVAL;
 
 	if (!strcmp(oldname, newname)) // Umm, ok
@@ -1207,18 +1184,18 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 			goto ufs_rename_exit4;
 
 		entry.d_fileno = oldf->f_num;
-		r = CALL(info->parts.p_dirent, modify_dirent, &dirfdesc, entry, dir_offset, head, tail);
+		r = CALL(info->parts.p_dirent, modify_dirent, &dirfdesc, entry, dir_offset, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
 		oldf->f_inode.di_nlink++;
-		r = write_inode(info, oldf->f_num, oldf->f_inode, head, &newtail);
+		r = write_inode(info, oldf->f_num, oldf->f_inode, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 	}
 	else {
 		// Link files together
-		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent,  newname, oldf->f_type, (fdesc_t *) oldf, &newino, head, tail);
+		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent,  newname, oldf->f_type, (fdesc_t *) oldf, &newino, head);
 		if (!newf) {
 			r = -E_UNSPECIFIED;
 			goto ufs_rename_exit3;
@@ -1227,33 +1204,33 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	}
 
 	newf->f_inode.di_nlink--;
-	r = write_inode(info, newf->f_num, newf->f_inode, head, &newtail);
+	r = write_inode(info, newf->f_num, newf->f_inode, head);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
-	r = CALL(info->parts.p_dirent, delete_dirent, old_pfdesc, oldname, head, &newtail);
+	r = CALL(info->parts.p_dirent, delete_dirent, old_pfdesc, oldname, head);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
 	if (existing) {
 		uint32_t block, i, n = deadf.f_numfrags;
 		for (i = 0; i < n; i++) {
-			block = ufs_truncate_file_block(object, (fdesc_t *) &deadf, head, &newtail);
+			block = ufs_truncate_file_block(object, (fdesc_t *) &deadf, head);
 			if (block == INVALID_BLOCK) {
 				r = -E_UNSPECIFIED;
 				goto ufs_rename_exit4;
 			}
-			r = ufs_free_block(object, (fdesc_t *) &deadf, block, head, &newtail);
+			r = ufs_free_block(object, (fdesc_t *) &deadf, block, head);
 			if (r < 0)
 				goto ufs_rename_exit4;
 		}
 
 		memset(&deadf.f_inode, 0, sizeof(struct UFS_dinode));
-		r = write_inode(info, deadf.f_num, deadf.f_inode, head, &newtail);
+		r = write_inode(info, deadf.f_num, deadf.f_inode, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
-		r = write_inode_bitmap(info, deadf.f_num, UFS_FREE, head, &newtail);
+		r = write_inode_bitmap(info, deadf.f_num, UFS_FREE, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 	}
@@ -1271,16 +1248,15 @@ ufs_rename_exit:
 	return r;
 }
 
-static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head, chdesc_t ** tail)
+static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t offset, blockno, truncated;
 	int r;
-	chdesc_t * newtail;
 
-	if (!head || !tail || !f || f->f_numfrags == 0)
+	if (!head || !f || f->f_numfrags == 0)
 		return INVALID_BLOCK;
 
 	truncated = f->f_lastfrag;
@@ -1296,7 +1272,7 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 	}
 
 	offset = (f->f_numfrags - 1) * info->super->fs_fsize;
-	r = erase_block_ptr(object, file, offset, head, &newtail);
+	r = erase_block_ptr(object, file, offset, head);
 	if (r < 0)
 		return INVALID_BLOCK;
 
@@ -1314,15 +1290,14 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 	return truncated;
 }
 
-static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
-	chdesc_t * newtail;
 	int r;
 
-	if (!head || !tail)
+	if (!head)
 		return -E_INVAL;
 
 	if (file) {
@@ -1332,28 +1307,27 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 				assert(block % info->super->fs_frag == 0);
 
 				// free the entire block
-				return erase_wholeblock(object, block / info->super->fs_frag, file, head, tail);
+				return erase_wholeblock(object, block / info->super->fs_frag, file, head);
 			}
 			else {
 				// Do nothing
-				*tail = NULL;
 				return 0;
 			}
 		}
 		else {
 			f->f_inode.di_blocks -= 4;
-			r = write_inode(info, f->f_num, f->f_inode, head, tail);
+			r = write_inode(info, f->f_num, f->f_inode, head);
 			if (r < 0)
 				return r;
-			return write_fragment_bitmap(info, block, UFS_FREE, head, &newtail);
+			return write_fragment_bitmap(info, block, UFS_FREE, head);
 		}
 	}
 
 	// Free the fragment, no questions asked
-	return write_fragment_bitmap(info, block, UFS_FREE, head, tail);
+	return write_fragment_bitmap(info, block, UFS_FREE, head);
 }
 
-static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d %s\n", __FUNCTION__, parent, name);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -1361,9 +1335,8 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	ufs_fdesc_t * f;
 	inode_t filenum;
 	int r, minlinks = 1;
-	chdesc_t * newtail;
 
-	if (!head || !tail || check_name(name))
+	if (!head || check_name(name))
 		return -E_INVAL;
 
 	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
@@ -1399,7 +1372,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	}
 
 	// Remove directory entry
-	r = CALL(info->parts.p_dirent, delete_dirent, pfile, name, head, tail);
+	r = CALL(info->parts.p_dirent, delete_dirent, pfile, name, head);
 	if (r < 0)
 		goto ufs_remove_name_error;
 
@@ -1412,13 +1385,13 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 			nblocks = ufs_get_file_numblocks(object, (fdesc_t *) f);
 
 			for (j = 0; j < nblocks; j++) {
-				number = ufs_truncate_file_block(object, (fdesc_t *) f, head, &newtail);
+				number = ufs_truncate_file_block(object, (fdesc_t *) f, head);
 				if (number == INVALID_BLOCK) {
 					r = -E_INVAL;
 					goto ufs_remove_name_error;
 				}
 
-				r = ufs_free_block(object, (fdesc_t *) f, number, head, &newtail);
+				r = ufs_free_block(object, (fdesc_t *) f, number, head);
 				if (r < 0)
 					goto ufs_remove_name_error;
 			}
@@ -1426,17 +1399,17 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 
 		// Clear inode
 		memset(&f->f_inode, 0, sizeof(struct UFS_dinode));
-		r = write_inode(info, f->f_num, f->f_inode, head, &newtail);
+		r = write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 
-		r = write_inode_bitmap(info, f->f_num, UFS_FREE, head, &newtail);
+		r = write_inode_bitmap(info, f->f_num, UFS_FREE, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 	}
 	else {
 		f->f_inode.di_nlink--;
-		r = write_inode(info, f->f_num, f->f_inode, head, &newtail);
+		r = write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 	}
@@ -1451,7 +1424,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 		if (r < 0)
 			goto ufs_remove_name_error;
 		dir_inode.di_nlink--;
-		r = write_inode(info, pfile->f_num, dir_inode, head, &newtail);
+		r = write_inode(info, pfile->f_num, dir_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 
@@ -1460,7 +1433,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 		if (r < 0)
 			goto ufs_remove_name_error;
 
-		r = update_summary(info, cyl, -1, 0, 0, 0, head, &newtail);
+		r = update_summary(info, cyl, -1, 0, 0, 0, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 	}
@@ -1474,15 +1447,13 @@ ufs_remove_name_error2:
 	return r;
 }
 
-static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 
-	if (!head || !tail)
+	if (!head)
 		return -E_INVAL;
-
-	*tail = NULL;
 
 	return CALL(info->ubd, write_block, block);
 }
@@ -1616,12 +1587,12 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 }
 
 // TODO (permission feature, etc)
-static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	
-	if (!head || !tail || !f || !data)
+	if (!head || !f || !data)
 		return -E_INVAL;
 
 	if (id == KFS_feature_size.id) {
@@ -1629,7 +1600,7 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 			return -E_INVAL;
 
 		f->f_inode.di_size = *((uint32_t *) data);
-		return write_inode(info, f->f_num, f->f_inode, head, tail);
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_filetype.id) {
 		uint8_t fs_type;
@@ -1650,27 +1621,27 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 			return -E_INVAL;
 		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
 			| (*((uint32_t *) data) & UFS_IPERM);
-		return write_inode(info, f->f_num, f->f_inode, head, tail);
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 
 	return -E_INVAL;
 }
 
-static int ufs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	int r;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
 	if (!f)
 		return -E_INVAL;
-	r = ufs_set_metadata(object, f, id, size, data, head, tail);
+	r = ufs_set_metadata(object, f, id, size, data, head);
 	ufs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
 
-static int ufs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head, chdesc_t ** tail)
+static int ufs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
-	return ufs_set_metadata(object, f, id, size, data, head, tail);
+	return ufs_set_metadata(object, f, id, size, data, head);
 }
 
 static int ufs_get_root(LFS_t * lfs, inode_t * ino)
