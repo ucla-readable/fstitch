@@ -957,8 +957,9 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		 * dependencies on the dependencies of this chdesc. However, we
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
-		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc with dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
+		if((*chdesc)->type != NOOP) {
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc 0x%08x of type %d with dependencies!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
+		}
 		switch((*chdesc)->type)
 		{
 			case BYTE:
