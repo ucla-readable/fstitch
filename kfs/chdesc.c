@@ -1015,9 +1015,8 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		 * dependencies on the dependencies of this chdesc. However, we
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
-		if((*chdesc)->type != NOOP) {
+		if((*chdesc)->type != NOOP)
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc 0x%08x of type %d with dependencies!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
-		}
 		switch((*chdesc)->type)
 		{
 			case BYTE:
@@ -1147,7 +1146,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	{
 		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: 0x%x!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
 		else if(free_head == *chdesc || (*chdesc)->free_prev)
 		{
 			assert(!(*chdesc)->dependencies);

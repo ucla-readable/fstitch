@@ -15,6 +15,7 @@ struct opgroup_info {
 	LFS_t * lfs;
 };
 
+/* FIXME: we don't need to create a tail if opgroup_insert_change would just return doing nothing */
 static chdesc_t * opgroup_prepare_head(chdesc_t ** head, int * newnoop)
 {
 	chdesc_t * tail;
@@ -22,7 +23,8 @@ static chdesc_t * opgroup_prepare_head(chdesc_t ** head, int * newnoop)
 	if(!head)
 		return NULL;
 
-	if(*head) {
+	if(*head)
+	{
 		*newnoop = 0;
 		return *head;
 	}
@@ -85,7 +87,7 @@ static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int p
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return block;
 }
 
@@ -153,7 +155,7 @@ static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -176,7 +178,7 @@ static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return fdesc;
 }
 
@@ -199,7 +201,7 @@ static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * ol
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -222,7 +224,7 @@ static uint32_t opgroup_lfs_truncate_file_block(LFS_t * object, fdesc_t * file, 
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return block;
 }
 
@@ -245,7 +247,7 @@ static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -268,7 +270,7 @@ static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * 
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -291,7 +293,7 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -334,7 +336,7 @@ static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t 
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
@@ -357,7 +359,7 @@ static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32
 		assert(r >= 0);
 	}
 	if (newnoop)
-		chdesc_satisfy(&tail);
+		chdesc_autorelease_noop(tail);
 	return value;
 }
 
