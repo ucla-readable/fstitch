@@ -10,8 +10,16 @@
 #include <unistd.h> // STD[IN|OUT|ERR]_FILENO
 
 int	kdprintf(int fd, const char*, ...);
+
+#elif defined(__KERNEL__)
+#warning Write Linux kernel support
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+int	kdprintf(int fd, const char*, ...);
+
 #else
 #error Unknown target system
 #endif
 
-#endif /* !KUDOS_INC_STDIO_H */
+#endif /* !KUDOS_LIB_KDPRINTF_H */

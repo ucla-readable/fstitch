@@ -1,4 +1,6 @@
 EXTRA_CFLAGS += -I$(src)/..
+EXTRA_CFLAGS += -I$(src)/../lib
+EXTRA_CFLAGS += -I$(src)/../inc
 EXTRA_CFLAGS += -DKFSD
 
 obj-m += kkfsd.o

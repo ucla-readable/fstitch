@@ -29,6 +29,10 @@
 #include <stdint.h>
 /* Represents true-or-false values */
 typedef unsigned char bool;
+#elif defined(__KERNEL__)
+#include <linux/types.h>
+/* Represents true-or-false values */
+typedef unsigned char bool;
 #else
 #error Unknown target system
 #endif

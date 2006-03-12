@@ -1,7 +1,7 @@
 #ifndef KUDOS_INC_STRING_H
 #define KUDOS_INC_STRING_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 
 int		strlen(const char *s);
 char *		strcpy(char *dest, const char *src);

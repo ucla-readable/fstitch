@@ -7,8 +7,8 @@
  * much less space efficient than the default implementation. */
 //#define USE_FAILFAST_MALLOC
 
-#include <inc/types.h>
-#include <inc/assert.h>
+#include <lib/types.h>
+#include <assert.h>
 
 /* SVID2/XPG mallinfo structure */
 struct mallinfo {

@@ -630,7 +630,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	return 0;
 }
 
-#warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
 int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);

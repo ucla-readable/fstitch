@@ -37,6 +37,13 @@ static __inline int jiffy_time(void)
 	       + tv.tv_usec * (1000000 / JIFFIES_PER_SECOND);
 }
 
+#elif defined(__KERNEL__)
+#warning Write Linux kernel support
+#include <linux/jiffies.h>
+static __inline int jiffy_time(void)
+{
+	return (int) get_jiffies_64();
+}
 #else
 #error Unknown target system
 #endif

@@ -13,8 +13,12 @@
 #undef va_arg
 #define va_arg(ap, type) (assert(sizeof(int) >= sizeof(type)), (type) __builtin_va_arg(ap, int))
 
+#elif defined(__KERNEL__)
+#include <linux/kernel.h>
+#warning Write Linux kernel support
+
 #else
-#error Unknown target
+#error Unknown target system
 #endif
 
 #endif // !KUDOS_LIB_STDARG_H

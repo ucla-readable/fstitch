@@ -1,7 +1,7 @@
 #ifndef KUDOS_INC_STDLIB_H
 #define KUDOS_INC_STDLIB_H
 
-#include <inc/types.h>
+#include <lib/types.h>
 #include <inc/malloc.h>
 
 void exit(int status);
