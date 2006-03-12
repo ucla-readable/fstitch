@@ -37,6 +37,6 @@ int chdesc_split(chdesc_t * original, int count);
 int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head);
 
 /* create change descriptors based on the diff of two data regions */
-int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, void * olddata, void * newdata, chdesc_t ** head);
+int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head);
 
 #endif /* __KUDOS_KFS_CHDESC_UTIL_H */

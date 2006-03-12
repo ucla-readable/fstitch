@@ -888,7 +888,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 
 /* Take two byte arrays of size 'length' and create byte chdescs for
  * non-consecutive ranges that differ. */
-int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, void * olddata, void * newdata, chdesc_t ** head)
+int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head)
 {
 	int count = 0, i = 0, r, start;
 	uint8_t * old = (uint8_t *) olddata;
