@@ -1,5 +1,5 @@
-#include <stdlib.h>
 #include <inc/error.h>
+#include <lib/stdlib.h>
 #include <lib/kdprintf.h>
 #include <lib/hash_map.h>
 

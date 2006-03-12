@@ -1,17 +1,31 @@
-#include <inc/error.h>
-#include <stdlib.h>
-#include <string.h>
+#if !defined(__KERNEL__)
+#warning Skipping includes that are not yet part of __KERNEL__
 #include <lib/mmu.h>
 #include <lib/stdio.h>
+#endif
+#include <inc/error.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 
 #if defined(KUDOS)
 #include <kfs/sched.h>
 #elif defined(UNIXUSER)
 #include <kfs/fuse_serve.h>
+#elif defined(__KERNEL__)
+#include <linux/module.h>
+#include <linux/moduleparam.h>
+#warning Using lame defines
+#define printf printk
+#define exit(x) do { } while(0)
 #endif
 
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
+
+#if defined(__KERNEL__)
+#warning Not yet linked with kfsd_init
+#define kfsd_init(a,b) 0
+#endif
 
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
@@ -68,6 +82,8 @@ void kfsd_main(int argc, char ** argv)
 	sched_loop();
 #elif defined(UNIXUSER)
 	fuse_serve_loop();
+#elif defined(__KERNEL__)
+#warning Not yet calling a kfsd looper
 #else
 #error Unknown target system
 #endif
@@ -117,6 +133,27 @@ int main(int argc, char * argv[])
 	kfsd_main(argc, argv);
 	return 0;
 }
+
+#elif defined(__KERNEL__)
+
+static int __init init_kfsd(void)
+{
+	kfsd_main(0, NULL);
+	return 0;
+}
+
+static void __exit exit_kfsd(void)
+{
+	kfsd_shutdown();
+}
+
+module_init(init_kfsd);
+module_exit(exit_kfsd);
+
+MODULE_AUTHOR("TODO");
+MODULE_DESCRIPTION("kfs");
+MODULE_LICENSE("TODO");
+
 
 #else
 #error Unknown target system

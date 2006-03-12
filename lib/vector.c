@@ -1,8 +1,12 @@
-#include <stdlib.h>
+#if !defined(__KERNEL__)
 #include <assert.h>
-#include <string.h>
-#include <stdlib.h>
+#else
+#warning assert not yet implemented
+#define assert(x)
+#endif
 #include <inc/error.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 #include <lib/hash_set.h> // for vector_create_hashset()
 #include <lib/vector.h>
 
@@ -141,12 +145,15 @@ void vector_clear(vector_t * v)
 	v->size = 0;
 }
 
+#if defined(__KERNEL__)
+#warning qsort not yet implemented
+#else
 void vector_sort(vector_t *v, int (*compar)(const void *a, const void *b))
 {
 	if (v->size < 2) return;
 	qsort(v->elts, v->size, sizeof(void*), compar);
 }
-
+#endif
 
 //
 // Element access

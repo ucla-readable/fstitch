@@ -1,5 +1,5 @@
 #include <inc/error.h>
-#include <stdlib.h>
+#include <lib/stdlib.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
 

@@ -2,7 +2,7 @@
 #define __KUDOS_KFS_OO_H
 
 #include <lib/types.h>
-#include <stdlib.h>
+#include <lib/stdlib.h>
 
 #include <kfs/magic.h>
 

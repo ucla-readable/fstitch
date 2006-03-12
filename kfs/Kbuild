@@ -1,42 +1,48 @@
 EXTRA_CFLAGS += -I$(src)/..
-EXTRA_CFLAGS += -I$(src)/../lib
-EXTRA_CFLAGS += -I$(src)/../inc
 EXTRA_CFLAGS += -DKFSD
 
+LIB := ../lib/
+
 obj-m += kkfsd.o
-kkfsd-objs := bdesc.o \
-              chdesc.o \
-              chdesc_util.o \
-              modman.o \
-              blockman.o \
-              revision.o \
-              opgroup.o \
-              barrier.o \
-              partition_bd.o \
-              pc_ptable.o \
-              bsd_ptable.o \
-              wt_cache_bd.o \
-              wb_cache_bd.o \
-              elevator_cache_bd.o \
-              block_resizer_bd.o \
-              barrier_resizer_bd.o \
-              journal_bd.o \
-              md_bd.o \
-              mirror_bd.o \
-              loop_bd.o \
-              mem_bd.o \
-              josfs_base.o \
-              ufs_base.o \
-              ufs_common.o \
-              ufs_alloc_linear.o \
-              ufs_dirent_linear.o \
-              opgroup_lfs.o \
-              wholedisk_lfs.o \
-              uhfs.o \
-              devfs_cfs.o \
-              file_hiding_cfs.o \
-              sched.o \
-              sync.o \
+kkfsd-objs := \
+              $(LIB)/vector.o \
+              $(LIB)/hash_map.o \
+              $(LIB)/hash_set.o \
               kfsd.o \
-              kfsd_init.o \
-              debug.o
+              bdesc.o \
+              blockman.o \
+
+#              chdesc.o \
+#              chdesc_util.o \
+#              modman.o \
+#              revision.o \
+#              opgroup.o \
+#              barrier.o \
+#              partition_bd.o \
+#              pc_ptable.o \
+#              bsd_ptable.o \
+#              wt_cache_bd.o \
+#              wb_cache_bd.o \
+#              elevator_cache_bd.o \
+#              block_resizer_bd.o \
+#              barrier_resizer_bd.o \
+#              journal_bd.o \
+#              md_bd.o \
+#              mirror_bd.o \
+#              loop_bd.o \
+#              mem_bd.o \
+#              josfs_base.o \
+#              ufs_base.o \
+#              ufs_common.o \
+#              ufs_alloc_linear.o \
+#              ufs_dirent_linear.o \
+#              opgroup_lfs.o \
+#              wholedisk_lfs.o \
+#              uhfs.o \
+#              devfs_cfs.o \
+#              file_hiding_cfs.o \
+#              sched.o \
+#              sync.o \
+#              kfsd.o \
+#              kfsd_init.o \
+#              debug.o

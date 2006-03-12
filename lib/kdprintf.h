@@ -16,7 +16,8 @@ int	kdprintf(int fd, const char*, ...);
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
-int	kdprintf(int fd, const char*, ...);
+// TODO: implement
+#define kdprintf(fd, str, ...) do { } while(0)
 
 #else
 #error Unknown target system
