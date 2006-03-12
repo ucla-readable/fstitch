@@ -901,7 +901,7 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		return -E_INVAL;
 
 	/* newhead will depend on all created chdescs */
-	newhead = chdesc_create_noop(block, owner);
+	newhead = chdesc_create_noop(NULL, NULL);
 	if (!newhead)
 		return -E_NO_MEM;
 	chdesc_claim_noop(newhead);
