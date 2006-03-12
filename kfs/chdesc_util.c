@@ -191,8 +191,8 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
  * descriptors exist on the block or B) the entire block has a single layer of
  * BYTE change descriptors on it. In case B, use chdesc_rewrite_byte() to
  * rewrite the existing change descriptors to reflect the new data, and return
- * NULL in *head and *tail. In case A, return the newly created change
- * descriptors in *head and *tail. */
+ * NULL in *head. In case A, return the newly created change * descriptors in
+ * *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
 	chmetadesc_t * meta;
@@ -884,4 +884,64 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 			chdesc_destroy(&chdescs[i]);
 	
 	return 0;
+}
+
+/* Take two byte arrays of size 'length' and create byte chdescs for
+ * non-consecutive ranges that differ. */
+int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, void * olddata, void * newdata, chdesc_t ** head)
+{
+	int count = 0, i = 0, r, start;
+	uint8_t * old = (uint8_t *) olddata;
+	uint8_t * new = (uint8_t *) newdata;
+	chdesc_t ** oldhead;
+	chdesc_t * newhead;
+	chmetadesc_t * meta;
+	
+	if(!old || !new || !head || length < 1)
+		return -E_INVAL;
+
+	/* newhead will depend on all created chdescs */
+	newhead = chdesc_create_noop(block, owner);
+	if (!newhead)
+		return -E_NO_MEM;
+	chdesc_claim_noop(newhead);
+
+	while(i < length)
+	{
+		if(old[i] == new[i])
+		{
+			i++;
+			continue;
+		}
+		else
+		{
+			start = i;
+
+			while(old[++i] != new[i]);
+				/* do nothing */
+
+			/* use the original head */
+			oldhead = head;
+			r = chdesc_create_byte(block, owner, offset + start, i - start, new, oldhead);
+			if(r < 0)
+				goto chdesc_create_diff_failed;
+
+			/* add dependency to newly created chdesc */
+			r = __chdesc_add_depend_fast(newhead, *oldhead);
+			if(r < 0)
+				goto chdesc_create_diff_failed;
+			count++;
+		}
+	}
+
+	if(count)
+		*head = newhead;
+	chdesc_autorelease_noop(newhead);
+	return 0;
+
+chdesc_create_diff_failed:
+	for(meta = newhead->dependencies; meta; meta = meta->next)
+		chdesc_destroy(&meta->desc);
+	chdesc_autorelease_noop(newhead);
+	return r;
 }
