@@ -77,6 +77,9 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
 
+/* like chdesc_create_byte(), but guarantees to only create a single chdesc */
+int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
+
 /* check whether two change descriptors overlap, even on different blocks */
 int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);
 

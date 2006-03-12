@@ -379,7 +379,17 @@ static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
 }
 #endif
 
-#warning FIXME provide notification and/or specification of whether this change is/should be a single chdesc
+int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
+{
+	uint16_t atomic_size = CALL(owner, get_atomicsize);
+	uint16_t init_offset = offset % atomic_size;
+	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
+	
+	if(count == 1)
+		return chdesc_create_byte(block, owner, offset, length, data, head);
+	return -E_INVAL;
+}
+
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);

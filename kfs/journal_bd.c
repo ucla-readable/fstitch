@@ -739,8 +739,9 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	{
 		typeof(cr->type) empty = CREMPTY;
 		head = info->safe;
-		chdesc_create_byte(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head);
-#warning Make sure that only a single chdesc was created by this... so it will be atomic
+		r = chdesc_create_byte_atomic(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head);
+		if(r < 0)
+			panic("Holy Mackerel!");
 		r = chdesc_add_depend(info->done, head);
 		if(r < 0)
 			panic("Holy Mackerel!");
