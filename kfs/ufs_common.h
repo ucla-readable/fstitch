@@ -13,20 +13,20 @@
 #include <kfs/ufs_base.h>
 #include <kfs/ufs_alloc.h>
 #include <kfs/ufs_dirent.h>
+#include <kfs/ufs_super.h>
 
 struct ufs_parts
 {
 	LFS_t * base;
-	UFS_Alloc_t * p_allocator;
-	UFS_Dirent_t * p_dirent;
+	UFSmod_alloc_t * p_allocator;
+	UFSmod_dirent_t * p_dirent;
+	UFSmod_super_t * p_super;
 };
 
 struct lfs_info
 {
 	BD_t * ubd;
-	bdesc_t * super_block;
 	bdesc_t * csum_block;
-	struct UFS_Super * super;
 	struct UFS_csum * csums;
 	struct ufs_parts parts;
 	// commonly used values

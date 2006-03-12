@@ -1,11 +1,12 @@
 #include <kfs/ufs_dirent_linear.h>
 
-static int read_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct * entry, uint32_t * basep)
+static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct * entry, uint32_t * basep)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_direct * dirent;
 	bdesc_t * dirblock = NULL;
 	uint32_t blockno, offset;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!entry)
 		return -E_INVAL;
@@ -17,16 +18,16 @@ static int read_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct UFS_dir
 	if (*basep >= dirf->f_inode.di_size)
 		return -E_EOF;
 
-	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, ROUNDDOWN32(*basep, info->super->fs_fsize));
+	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, ROUNDDOWN32(*basep, super->fs_fsize));
 	if (blockno != INVALID_BLOCK)
 		dirblock = CALL(info->parts.base, lookup_block, blockno);
 	if (!dirblock)
 		return -E_NOT_FOUND;
 
-	offset = *basep % info->super->fs_fsize;
+	offset = *basep % super->fs_fsize;
 	dirent = (struct UFS_direct *) (dirblock->ddesc->data + offset);
 
-	if (offset + dirent->d_reclen > info->super->fs_fsize
+	if (offset + dirent->d_reclen > super->fs_fsize
 			|| dirent->d_reclen < dirent->d_namlen)
 		return -E_UNSPECIFIED;
 
@@ -42,20 +43,21 @@ static int read_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct UFS_dir
 }
 
 // Writes a directory entry, does not check for free space
-static int write_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct entry, uint32_t basep, chdesc_t ** head)
+static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct entry, uint32_t basep, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * block;
 	uint32_t foffset, blockno;
 	uint16_t offset, actual_len;
 	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf)
 		return -E_INVAL;
 
 	actual_len = sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN;
 
-	offset = basep % info->super->fs_fsize;
+	offset = basep % super->fs_fsize;
 	foffset = basep - offset;
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, foffset);
 	if (blockno == INVALID_BLOCK)
@@ -73,7 +75,7 @@ static int write_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct UFS_di
 }
 
 // tries to find an empty entry for a filename of len, in directory dirf
-static int ufs_dirent_linear_find_free_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, uint32_t len)
+static int ufs_dirent_linear_find_free_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, uint32_t len)
 {
 	struct UFS_direct entry;
 	uint32_t basep = 0, last_basep, actual_len;
@@ -105,13 +107,14 @@ static int ufs_dirent_linear_find_free_dirent(UFS_Dirent_t * object, ufs_fdesc_t
 	}
 }
 
-static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head)
+static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_direct entry, last_entry;
 	uint32_t len, last_len, blockno, newsize = offset + 512;
 	int r, p = offset, alloc = 0;
 	uint8_t fs_type;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf || check_name(dirinfo.d_name) || offset < 0)
 		return -E_INVAL;
@@ -131,7 +134,7 @@ static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 	// Need to extend directory
 	if (offset >= dirf->f_inode.di_size) {
 		// Need to allocate/append fragment
-		if (offset % info->super->fs_fsize == 0) {
+		if (offset % super->fs_fsize == 0) {
 			blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
 				return -E_UNSPECIFIED;
@@ -171,7 +174,7 @@ static int ufs_dirent_linear_insert_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 	}
 }
 
-static int ufs_dirent_linear_get_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep)
+static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_direct dirent;
@@ -214,7 +217,7 @@ static int ufs_dirent_linear_get_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dir
 	return 0;
 }
 
-static int ufs_dirent_linear_search_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, const char * name, inode_t * ino, int * offset)
+static int ufs_dirent_linear_search_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, const char * name, inode_t * ino, int * offset)
 {
 	uint32_t basep = 0, last_basep;
 	struct dirent entry;
@@ -247,7 +250,7 @@ static int ufs_dirent_linear_search_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 	return 0;
 }
 
-static int ufs_dirent_linear_delete_dirent(UFS_Dirent_t * object, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head)
+static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head)
 {
 	struct UFS_direct last_entry, entry;
 	uint32_t basep, last_basep, p;
@@ -297,7 +300,7 @@ static int ufs_dirent_linear_delete_dirent(UFS_Dirent_t * object, ufs_fdesc_t * 
 	return write_dirent(object, dirf, last_entry, last_basep, head);
 }
 
-static int ufs_dirent_linear_modify_dirent(UFS_Dirent_t * object, ufs_fdesc_t * file, struct dirent entry, uint32_t basep, chdesc_t ** head)
+static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * file, struct dirent entry, uint32_t basep, chdesc_t ** head)
 {
 	struct UFS_direct e;
 
@@ -327,7 +330,7 @@ static int ufs_dirent_linear_get_status(void * object, int level, char * string,
 	return 0;
 }
 
-static int ufs_dirent_linear_destroy(UFS_Dirent_t * obj)
+static int ufs_dirent_linear_destroy(UFSmod_dirent_t * obj)
 {
 	free(OBJLOCAL(obj));
 	memset(obj, 0, sizeof(*obj));
@@ -336,10 +339,14 @@ static int ufs_dirent_linear_destroy(UFS_Dirent_t * obj)
 	return 0;
 }
 
-UFS_Dirent_t * ufs_dirent_linear(struct lfs_info * info)
+UFSmod_dirent_t * ufs_dirent_linear(struct lfs_info * info)
 {
-	UFS_Dirent_t * obj = malloc(sizeof(*obj));
+	UFSmod_dirent_t * obj;
+   
+	if (!info)
+		return NULL;
 
+	obj = malloc(sizeof(*obj));
 	if (!obj)
 		return NULL;
 

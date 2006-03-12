@@ -12,6 +12,7 @@
 #include <kfs/ufs_common.h>
 #include <kfs/ufs_alloc_linear.h>
 #include <kfs/ufs_dirent_linear.h>
+#include <kfs/ufs_super_wb.h>
 
 #ifdef KUDOS_INC_FS_H
 #error inc/fs.h got included in __FILE__
@@ -39,8 +40,8 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 static uint32_t calc_cylgrp_start(LFS_t * object, uint32_t i)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return info->super->fs_fpg * i
-			+ info->super->fs_cgoffset * (i & ~info->super->fs_cgmask);
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	return super->fs_fpg * i + super->fs_cgoffset * (i & ~super->fs_cgmask);
 }
 
 #if 0
@@ -72,6 +73,7 @@ static int check_super(LFS_t * object)
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t numblocks;
 	int i, bs;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	// TODO better way of detecting fs block size
 	/* make sure we have the block size we expect */
@@ -81,70 +83,54 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 
-	/* the superblock is in sector 16 */
-	info->super_block = CALL(info->ubd, read_block, 4, 1);
-	if (!info->super_block)
-	{
-		printf("Unable to read superblock!\n");
-		return -1;
-	}
-
-	info->super = malloc(sizeof(struct UFS_Super));
-	if (!info->super)
-		return -1;
-
-	memcpy(info->super, info->super_block->ddesc->data, sizeof(struct UFS_Super));
-
-	if (info->super->fs_magic != UFS_MAGIC) {
+	if (super->fs_magic != UFS_MAGIC) {
 		printf("ufs_base: bad file system magic number\n");
-		printf("%x\n", info->super->fs_magic);
+		printf("%x\n", super->fs_magic);
 		return -1;
 	}
-	if (info->super->fs_inodefmt != 2) {
+	if (super->fs_inodefmt != 2) {
 		printf("ufs_base: unsupported inode format\n");
 		return -1;
 	}
 
 	numblocks = CALL(info->ubd, get_numblocks);
-	info->ipf = info->super->fs_inopb / info->super->fs_frag;
-	info->cylstart = malloc(sizeof(uint32_t) * info->super->fs_ncg);
+	info->ipf = super->fs_inopb / super->fs_frag;
+	info->cylstart = malloc(sizeof(uint32_t) * super->fs_ncg);
 	if (!info->cylstart)
 		return -E_NO_MEM;
 
-	for (i = 0; i < info->super->fs_ncg; i++) {
+	for (i = 0; i < super->fs_ncg; i++) {
 		info->cylstart[i] = calc_cylgrp_start(object, i);
 	}
 
-	printf("Superblock size %d\n", info->super->fs_sbsize);
-	printf("Superblock offset %d\n", info->super->fs_sblkno);
-	printf("Number of blocks: %d, data blocks %d\n", info->super->fs_size, info->super->fs_dsize);
-	printf("Block size: %d, fragment size %d, frags/block: %d\n", info->super->fs_bsize, info->super->fs_fsize, info->super->fs_frag);
-	printf("Inodes per block: %d, sectors per fragment %d\n", info->super->fs_inopb, info->super->fs_nspf);
-	printf("Inodes per group: %d, fragments per group %d\n", info->super->fs_ipg, info->super->fs_fpg);
-	printf("Cylinder Groups: %d\n", info->super->fs_ncg);
-	printf("Cylinder group offset %d, inode table offset %d\n", info->super->fs_cblkno, info->super->fs_iblkno);
-	printf("cg_offset: %d, cgmask: 0x %x\n", info->super->fs_cgoffset, info->super->fs_cgmask);
-	printf("internal symlink max length: %d\n", info->super->fs_maxsymlinklen);
+	printf("Superblock size %d\n", super->fs_sbsize);
+	printf("Superblock offset %d\n", super->fs_sblkno);
+	printf("Number of blocks: %d, data blocks %d\n", super->fs_size, super->fs_dsize);
+	printf("Block size: %d, fragment size %d, frags/block: %d\n", super->fs_bsize, super->fs_fsize, super->fs_frag);
+	printf("Inodes per block: %d, sectors per fragment %d\n", super->fs_inopb, super->fs_nspf);
+	printf("Inodes per group: %d, fragments per group %d\n", super->fs_ipg, super->fs_fpg);
+	printf("Cylinder Groups: %d\n", super->fs_ncg);
+	printf("Cylinder group offset %d, inode table offset %d\n", super->fs_cblkno, super->fs_iblkno);
+	printf("cg_offset: %d, cgmask: 0x %x\n", super->fs_cgoffset, super->fs_cgmask);
+	printf("internal symlink max length: %d\n", super->fs_maxsymlinklen);
 	printf("Flags: fmod: %d, clean: %d, ronly: %d, flags: %d\n",
-			info->super->fs_fmod, info->super->fs_clean, info->super->fs_ronly, info->super->fs_flags);
-	printf("Superblock Cylinder Summary:\n\tDirectories: %d\n\tFree Blocks: %d\n\tFree Inodes: %d\n\tFree Frags: %d\n", info->super->fs_cstotal.cs_ndir,
-			info->super->fs_cstotal.cs_nbfree, info->super->fs_cstotal.cs_nifree,
-			info->super->fs_cstotal.cs_nffree);
+			super->fs_fmod, super->fs_clean, super->fs_ronly, super->fs_flags);
+	printf("Superblock Cylinder Summary:\n\tDirectories: %d\n\tFree Blocks: %d\n\tFree Inodes: %d\n\tFree Frags: %d\n", super->fs_cstotal.cs_ndir,
+			super->fs_cstotal.cs_nbfree, super->fs_cstotal.cs_nifree,
+			super->fs_cstotal.cs_nffree);
 
-	bdesc_retain(info->super_block);
-
-	info->csum_block = CALL(info->ubd, read_block, info->super->fs_csaddr, 1);
+	info->csum_block = CALL(info->ubd, read_block, super->fs_csaddr, 1);
 	if (!info->csum_block)
 	{
 		printf("Unable to read cylinder summary!\n");
 		return -1;
 	}
 
-	info->csums = malloc(sizeof(struct UFS_csum) * info->super->fs_ncg);
+	info->csums = malloc(sizeof(struct UFS_csum) * super->fs_ncg);
 	if (!info->csums)
 		return -1;
 	memcpy(info->csums, info->csum_block->ddesc->data,
-			sizeof(struct UFS_csum) * info->super->fs_ncg);
+			sizeof(struct UFS_csum) * super->fs_ncg);
 	bdesc_retain(info->csum_block);
 
 	return 0;
@@ -159,6 +145,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 	bool synthetic;
 	uint32_t i, num;
 	bdesc_t * block;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
 		return INVALID_BLOCK;
@@ -168,8 +155,8 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 		return INVALID_BLOCK;
 
 	// Mark the fragments as used
-	for (i = num * info->super->fs_frag; i < (num + 1) * info->super->fs_frag; i++) {
-		if (i == num * info->super->fs_frag)
+	for (i = num * super->fs_frag; i < (num + 1) * super->fs_frag; i++) {
+		if (i == num * super->fs_frag)
 			r = write_fragment_bitmap(info, i, UFS_USED, head);
 		else
 			r = write_fragment_bitmap(info, i, UFS_USED, head);
@@ -197,7 +184,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 			return INVALID_BLOCK;
 	}
 
-	return num * info->super->fs_frag;
+	return num * super->fs_frag;
 }
 
 // Deallocate an entire block
@@ -208,13 +195,14 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t i;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || num == INVALID_BLOCK)
 		return -E_INVAL;
 
 	// Mark the fragments as used
-	for (i = num * info->super->fs_frag; i < (num + 1) * info->super->fs_frag; i++) {
-		if (i == num * info->super->fs_frag)
+	for (i = num * super->fs_frag; i < (num + 1) * super->fs_frag; i++) {
+		if (i == num * super->fs_frag)
 			r = write_fragment_bitmap(info, i, UFS_FREE, head);
 		else
 			r = write_fragment_bitmap(info, i, UFS_FREE, head);
@@ -282,13 +270,14 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 	uint32_t blockno, nindirb, nindirf, newblock;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (!head || !file || offset % info->super->fs_bsize)
+	if (!head || !file || offset % super->fs_bsize)
 		return -E_INVAL;
 
-	nindirb = info->super->fs_nindir;
-	nindirf = nindirb / info->super->fs_frag;
-	blockno = offset / info->super->fs_bsize;
+	nindirb = super->fs_nindir;
+	nindirf = nindirb / super->fs_frag;
+	blockno = offset / super->fs_bsize;
 
 	if (blockno < UFS_NDADDR) {
 		f->f_inode.di_db[blockno] = value;
@@ -375,13 +364,14 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	uint32_t num[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (!head || !file || offset % info->super->fs_bsize)
+	if (!head || !file || offset % super->fs_bsize)
 		return -E_INVAL;
 
-	nindirb = info->super->fs_nindir;
-	nindirf = nindirb / info->super->fs_frag;
-	blockno = offset / info->super->fs_bsize;
+	nindirb = super->fs_nindir;
+	nindirf = nindirb / super->fs_frag;
+	blockno = offset / super->fs_bsize;
 
 	if (blockno < UFS_NDADDR) {
 		f->f_inode.di_db[blockno] = 0;
@@ -391,7 +381,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		block_off[0] = blockno - UFS_NDADDR;
 		frag_off[0] = block_off[0] / nindirf;
 		pt_off[0] = block_off[0] % nindirf;
-		num[0] = f->f_inode.di_ib[0] / info->super->fs_frag;
+		num[0] = f->f_inode.di_ib[0] / super->fs_frag;
 
 		indirect[0] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[0] + frag_off[0], 1);
@@ -411,7 +401,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		block_off[1] = blockno - UFS_NDADDR - nindirb;
 		frag_off[1] = block_off[1] / nindirf / nindirb;
 		pt_off[1] = (block_off[1] / nindirb) % nindirf;
-		num[1] = f->f_inode.di_ib[1] / info->super->fs_frag;
+		num[1] = f->f_inode.di_ib[1] / super->fs_frag;
 
 		frag_off[0] = (block_off[1] % nindirb) / nindirf;
 		pt_off[0] = block_off[1] % nindirf;
@@ -422,7 +412,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 			return -E_NOT_FOUND;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
-		num[0] = block_off[0] / info->super->fs_frag;
+		num[0] = block_off[0] / super->fs_frag;
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
@@ -460,8 +450,9 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 
 static inline uint32_t count_free_space(struct lfs_info * info)
 {
-	return info->super->fs_cstotal.cs_nbfree * info->super->fs_frag
-		+ info->super->fs_cstotal.cs_nffree;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	return super->fs_cstotal.cs_nbfree * super->fs_frag
+		+ super->fs_cstotal.cs_nffree;
 }
 
 static open_ufsfile_t * open_ufsfile_create(ufs_fdesc_t * file)
@@ -552,7 +543,9 @@ static int ufs_get_status(void * object, int level, char * string, size_t length
 
 static uint32_t ufs_get_blocksize(LFS_t * object)
 {
-	return ((struct lfs_info *) OBJLOCAL(object))->super->fs_fsize;
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	return super->fs_fsize;
 }
 
 static BD_t * ufs_get_blockdev(LFS_t * object)
@@ -568,12 +561,13 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	int r, frags;
 	bool synthetic = 0;
 	bdesc_t * block, * newblock;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !file)
 		return INVALID_BLOCK;
 
-	frags = f->f_numfrags % info->super->fs_frag;
-	offset = (f->f_numfrags - frags) * info->super->fs_size;
+	frags = f->f_numfrags % super->fs_frag;
+	offset = (f->f_numfrags - frags) * super->fs_size;
 
 	// Time to allocate a new block and copy the data there
 	// FIXME handle failure case better?
@@ -582,7 +576,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
 	if (blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
-	blockno *= info->super->fs_frag;
+	blockno *= super->fs_frag;
 
 	// allocate some fragments
 	for (i = 0 ; i < frags; i++) {
@@ -636,6 +630,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	uint32_t blockno;
 	bool synthetic = 0;
 	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	// FIXME require file to be non-null for now
 	if (!head || !file)
@@ -650,14 +645,14 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
 		if (blockno == INVALID_BLOCK)
 			return INVALID_BLOCK;
-		blockno *= info->super->fs_frag;
+		blockno *= super->fs_frag;
 	}
 	// We're using indirect pointers, time to allocate whole blocks
-	else if (f->f_numfrags >= UFS_NDADDR * info->super->fs_frag) {
+	else if (f->f_numfrags >= UFS_NDADDR * super->fs_frag) {
 		// Well, except we're still working with fragments here
 
 		// Time to allocate a find a new block
-		if (((f->f_lastfrag + 1) % info->super->fs_frag) == 0) {
+		if (((f->f_lastfrag + 1) % super->fs_frag) == 0) {
 			blockno = allocate_wholeblock(object, 0, file, head);
 			f->f_lastalloc = blockno;
 			return blockno;
@@ -670,15 +665,15 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		}
 	}
 	// Time to allocate a find a new block
-	else if (((f->f_lastfrag + 1) % info->super->fs_frag) == 0) {
-		if (f->f_numfrags % info->super->fs_frag) {
+	else if (((f->f_lastfrag + 1) % super->fs_frag) == 0) {
+		if (f->f_numfrags % super->fs_frag) {
 			blockno = find_frags_new_home(object, file, purpose, head);
 		}
 		else {
 			blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
 			if (blockno == INVALID_BLOCK)
 				return INVALID_BLOCK;
-			blockno *= info->super->fs_frag;
+			blockno *= super->fs_frag;
 		}
 	}
 	// Use the next fragment
@@ -730,6 +725,7 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 	open_ufsfile_t * ef;
 	int r, exists = -1;
 	uint8_t type;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (ino == 0)
 		return NULL;
@@ -749,7 +745,7 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 		ef->file->f_lastalloc = INVALID_BLOCK;
 		ef->file->f_num = ino;
 		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
-		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * info->super->fs_fsize);
+		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * super->fs_fsize);
 		type = ef->file->f_inode.di_mode >> 12;
 		ef->file->f_type = ufs_to_kfs_type(type);
 		return (fdesc_t *) ef->file;
@@ -819,9 +815,10 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t n;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	n = f->f_inode.di_size / info->super->fs_fsize;
-	if (f->f_inode.di_size % info->super->fs_fsize)
+	n = f->f_inode.di_size / super->fs_fsize;
+	if (f->f_inode.di_size % super->fs_fsize)
 		n++;
 
 	return n;
@@ -836,14 +833,15 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 	uint32_t fragno, blockno, nindirb, nindirf;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (offset % info->super->fs_fsize || offset >= f->f_inode.di_size)
+	if (offset % super->fs_fsize || offset >= f->f_inode.di_size)
 		return INVALID_BLOCK;
 
-	nindirb = info->super->fs_nindir;
-	nindirf = nindirb / info->super->fs_frag;
-	blockno = offset / info->super->fs_bsize;
-	fragno = (offset / info->super->fs_fsize) % info->super->fs_frag;
+	nindirb = super->fs_nindir;
+	nindirf = nindirb / super->fs_frag;
+	blockno = offset / super->fs_bsize;
+	fragno = (offset / super->fs_fsize) % super->fs_frag;
 
 	if (blockno < UFS_NDADDR) {
 		return f->f_inode.di_db[blockno] + fragno;
@@ -914,6 +912,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t offset;
 	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !f || block == INVALID_BLOCK)
 		return -E_INVAL;
@@ -922,7 +921,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 		// hmm, that's not the right block
 		return -E_UNSPECIFIED;
 
-	if (f->f_numfrags % info->super->fs_frag) {
+	if (f->f_numfrags % super->fs_frag) {
 		// not appending to a new block,
 		// the fragment has been attached implicitly
 		f->f_numfrags++;
@@ -932,7 +931,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 		return 0;
 	}
 
-	offset = f->f_numfrags * info->super->fs_fsize;
+	offset = f->f_numfrags * super->fs_fsize;
 	r = write_block_ptr(object, file, offset, block, head);
 	if (r < 0)
 		return r;
@@ -955,6 +954,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	int r, offset, createdot = 0, ex;
 	uint16_t mode;
 	struct dirent dirinfo;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || check_name(name))
 		return NULL;
@@ -1079,7 +1079,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
-		r = update_summary(info, inum / info->super->fs_ipg, 1, 0, 0, 0, head);
+		r = update_summary(info, inum / super->fs_ipg, 1, 0, 0, 0, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1255,13 +1255,14 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t offset, blockno, truncated;
 	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !f || f->f_numfrags == 0)
 		return INVALID_BLOCK;
 
 	truncated = f->f_lastfrag;
 
-	if ((f->f_numfrags - 1) % info->super->fs_frag) {
+	if ((f->f_numfrags - 1) % super->fs_frag) {
 
 		// not truncating the entire block
 		// the fragment has been attached implicitly
@@ -1271,16 +1272,16 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 		return truncated;
 	}
 
-	offset = (f->f_numfrags - 1) * info->super->fs_fsize;
+	offset = (f->f_numfrags - 1) * super->fs_fsize;
 	r = erase_block_ptr(object, file, offset, head);
 	if (r < 0)
 		return INVALID_BLOCK;
 
 	if (offset != 0) {
-		offset -= info->super->fs_bsize;
+		offset -= super->fs_bsize;
 		blockno = ufs_get_file_block(object, file, offset);
 		assert(blockno != INVALID_BLOCK); // FIXME handle better
-		f->f_lastfrag = blockno + info->super->fs_frag - 1;
+		f->f_lastfrag = blockno + super->fs_frag - 1;
 	}
 	else
 		f->f_lastfrag = 0;
@@ -1296,18 +1297,19 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
 		return -E_INVAL;
 
 	if (file) {
 		// Whole block time
-		if (f->f_numfrags >= UFS_NDADDR * info->super->fs_frag) {
-			if (f->f_numfrags % info->super->fs_frag == 0) {
-				assert(block % info->super->fs_frag == 0);
+		if (f->f_numfrags >= UFS_NDADDR * super->fs_frag) {
+			if (f->f_numfrags % super->fs_frag == 0) {
+				assert(block % super->fs_frag == 0);
 
 				// free the entire block
-				return erase_wholeblock(object, block / info->super->fs_frag, file, head);
+				return erase_wholeblock(object, block / super->fs_frag, file, head);
 			}
 			else {
 				// Do nothing
@@ -1335,6 +1337,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	ufs_fdesc_t * f;
 	inode_t filenum;
 	int r, minlinks = 1;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || check_name(name))
 		return -E_INVAL;
@@ -1418,7 +1421,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 		// Decrement parent directory's link count
 		struct UFS_dinode dir_inode;
 		struct UFS_cg cg;
-		int cyl = f->f_num / info->super->fs_ipg;
+		int cyl = f->f_num / super->fs_ipg;
 
 		r = read_inode(info, pfile->f_num, &dir_inode);
 		if (r < 0)
@@ -1553,7 +1556,8 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		memcpy(*data, &blocksize, sizeof(blocksize));
 	}
 	else if (id == KFS_feature_devicesize.id) {
-		uint32_t devicesize = info->super->fs_dsize;
+		const struct UFS_Super * super = CALL(info->parts.p_super, read);
+		uint32_t devicesize = super->fs_dsize;
 		*data = malloc(sizeof(devicesize));
 		if (!*data)
 			return -E_NO_MEM;
@@ -1650,6 +1654,17 @@ static int ufs_get_root(LFS_t * lfs, inode_t * ino)
 	return UFS_ROOT_INODE;
 }
 
+static void ufs_destroy_parts(LFS_t * lfs)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(lfs);
+	if (info->parts.p_allocator)
+		DESTROY(info->parts.p_allocator);
+	if (info->parts.p_dirent)
+		DESTROY(info->parts.p_dirent);
+	if (info->parts.p_super)
+		DESTROY(info->parts.p_super);
+}
+
 static int ufs_destroy(LFS_t * lfs)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
@@ -1659,13 +1674,10 @@ static int ufs_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
 
-	DESTROY(info->parts.p_allocator);
-	DESTROY(info->parts.p_dirent);
-	bdesc_release(&info->super_block);
+	ufs_destroy_parts(lfs);
 	bdesc_release(&info->csum_block);
 	free(info->cylstart);
 	free(info->csums);
-	free(info->super);
 	hash_map_destroy(info->filemap);
 
 	free(OBJLOCAL(lfs));
@@ -1705,32 +1717,23 @@ LFS_t * ufs(BD_t * block_device)
 	info->ubd = block_device;
 	info->parts.base = lfs;
 	info->parts.p_allocator = ufs_alloc_linear(info);
-	if (!info->parts.p_allocator) {
-		free(info);
-		free(lfs);
-		return NULL;
-	}
-
 	info->parts.p_dirent = ufs_dirent_linear(info);
-	if (!info->parts.p_dirent) {
-		DESTROY(info->parts.p_allocator);
-		free(info);
-		free(lfs);
-		return NULL;
-	}
+	info->parts.p_super = ufs_super_wb(info);
+	if (!info->parts.p_allocator
+			|| !info->parts.p_dirent
+			|| !info->parts.p_super)
+		ufs_destroy_parts(lfs);
 
 	info->filemap = hash_map_create();
 	if (!info->filemap) {
-		DESTROY(info->parts.p_allocator);
-		DESTROY(info->parts.p_dirent);
+		ufs_destroy_parts(lfs);
 		free(info);
 		free(lfs);
 		return NULL;
 	}
 
 	if (check_super(lfs)) {
-		DESTROY(info->parts.p_allocator);
-		DESTROY(info->parts.p_dirent);
+		ufs_destroy_parts(lfs);
 		free(info);
 		free(lfs);
 		return NULL;

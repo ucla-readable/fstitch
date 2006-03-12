@@ -36,6 +36,7 @@ kkfsd-objs := \
 #              ufs_common.o \
 #              ufs_alloc_linear.o \
 #              ufs_dirent_linear.o \
+#              ufs_super_wb.o \
 #              opgroup_lfs.o \
 #              wholedisk_lfs.o \
 #              uhfs.o \
