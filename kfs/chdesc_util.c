@@ -1,14 +1,12 @@
 #include <inc/error.h>
 #if !defined(__KERNEL__)
 #include <assert.h>
-#include <stdio.h>
 #else
-#warning Add assert.h and stdio.h support
+#warning Add assert.h support
 #define assert(x) do { } while(0)
-#define STDERR_FILENO 0
-#define kdprintf(fd, str, ...) do { } while(0)
 #endif
 #include <inc/error.h>
+#include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/memdup.h>
