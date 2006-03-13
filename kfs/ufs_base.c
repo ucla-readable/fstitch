@@ -814,8 +814,6 @@ static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 	}
 }
 
-#include <asm/div64.h>
-
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
 	Dprintf("UFSDEBUG: %s %x\n", __FUNCTION__, file);
