@@ -1,3 +1,4 @@
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
@@ -9,13 +10,6 @@
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
 #include <kfs/wt_cache_bd.h>
-
-#if !defined(__KERNEL__)
-#include <assert.h>
-#else
-#warning Add assert.h support
-#define assert(x) do { } while(0)
-#endif
 
 struct cache_info {
 	BD_t * bd;

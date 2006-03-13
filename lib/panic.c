@@ -1,18 +1,24 @@
 #if defined(KUDOS)
 #include <inc/lib.h>
 #elif defined(UNIXUSER)
-#include <stdio.h>
 #include <stdarg.h>
-#include <assert.h>
+#elif defined(__KERNEL__)
+#erorr Kernel not yet supported
 #else
 #error Unknown target system
 #endif
 
+#include <lib/assert.h>
+#include <lib/stdio.h>
+
 char *argv0;
 
-#ifdef UNIXUSER
+#if defined(UNIXUSER)
 #define printf_c printf
 const char binaryname[] = "?";
+#elif defined(__KERNEL__)
+#define printf_c printf
+const char binaryname[] = "kfsd";
 #endif
 
 /*
@@ -38,7 +44,7 @@ _panic(const char *file, int line, const char *fmt,...)
 #if defined(KUDOS)	
 	for (;;)
 		asm volatile("int3");
-#elif defined(UNIXUSER)
+#elif defined(UNIXUSER) || defined(__KERNEL__)
 	assert(0);
 #else
 #error Unknown target system

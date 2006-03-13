@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
@@ -10,13 +11,6 @@
 #include <kfs/barrier.h>
 #include <kfs/blockman.h>
 #include <kfs/barrier_resizer_bd.h>
-
-#if !defined(__KERNEL__)
-#include <assert.h>
-#else
-#warning Add assert.h support
-#define assert(x) do { } while(0)
-#endif
 
 /* This simple size converter can only convert up in size (i.e. aggregate blocks
  * together on read, split them on write). It should not be too ineffieicent, so

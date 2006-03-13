@@ -3,14 +3,14 @@
 
 #if defined(__KERNEL__)
 
-#warning warn and panic not yet implemented
+#include <linux/kernel.h>
+#warning warn not yet implemented
 #define warn(...) do { } while(0)
-#define panic(...) do { } while(0)
 
 #else
 
-#include <stdio.h>
-#include <assert.h>
+#include <lib/stdio.h>
+#include <lib/assert.h>
 
 void _warn(const char*, int, const char*, ...);
 void _panic(const char*, int, const char*, ...) __attribute__((noreturn));

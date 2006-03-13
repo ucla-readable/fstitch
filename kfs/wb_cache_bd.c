@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/types.h>
 #include <lib/jiffies.h> // HZ
 #include <lib/hash_map.h>
@@ -17,9 +18,8 @@
 #include <kfs/wb_cache_bd.h>
 
 #if defined(__KERNEL__)
-#warning lame printk, assert, and sched_register/unregister
+#warning lame printk and sched_register/unregister
 #define printf printk
-#define assert(x) do { } while(0)
 #define sched_register(callback, bd, period) 0
 #define sched_unregister(callback, bd) 0
 #endif

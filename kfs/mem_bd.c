@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
@@ -16,13 +17,6 @@
 /* We can remove this part once we no longer format as JOS by default */
 #ifdef KUDOS_INC_FS_H
 #error inc/fs.h got included in mem_bd.c
-#endif
-
-#if !defined(__KERNEL__)
-#include <assert.h>
-#else
-#warning Add assert.h support
-#define assert(x) do { } while(0)
 #endif
 
 struct mem_info {

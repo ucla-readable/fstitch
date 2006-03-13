@@ -1,9 +1,4 @@
-#if !defined(__KERNEL__)
-#include <assert.h>
-#else
-#warning Add assert.h support
-#define assert(x) do { } while(0)
-#endif
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/panic.h>
