@@ -6,10 +6,10 @@ ifeq ($(KERNELPATH),)
 KERNELPATH = /lib/modules/${KERNELRELEASE}/build
 endif
 
-linux/kkfsd.ko all: always
+kfs/kkfsd.ko all: always
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
 
-install: linux/kkfsd.ko
+install: kfs/kkfsd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
 
 clean:
