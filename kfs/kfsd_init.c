@@ -1,13 +1,13 @@
 #ifdef KUDOS
 #include <inc/lib.h>
 #endif
+#include <lib/assert.h>
 #include <lib/kdprintf.h>
 #include <lib/vector.h>
 #include <lib/partition.h>
 #include <lib/sleep.h>
 #include <lib/jiffies.h>
 #include <lib/disklabel.h>
-#include <assert.h>
 
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable.h>
@@ -43,6 +43,16 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 
+#if defined(__KERNEL__)
+#warning lame printf
+#define printf printk
+#endif
+
+#if defined(__KERNEL__)
+#warning lame kfsd_add_mount
+#define kfsd_add_mount(x, y) (-1)
+#endif
+
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
@@ -67,11 +77,14 @@ int kfsd_init(int argc, char ** argv)
 {
 	const bool allow_journal = 1;
 	const bool use_disk_0 = 1;
-#ifdef KUDOS
+#if defined(KUDOS)
 	const bool use_disk_1 = 0;
-#endif
-#ifdef UNIXUSER
+#elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
+#elif defined(__KERNEL__)
+	const bool use_disk_1 = 0;
+#else
+#error Unknown target system
 #endif
 	const bool use_net    = 0;
 	vector_t * uhfses = NULL;
@@ -128,7 +141,7 @@ int kfsd_init(int argc, char ** argv)
 	}
 #endif
 
-	if ((r = sched_init()) < 0)
+	if ((r = kfsd_sched_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "sched_init: %i\n", r);
 		kfsd_shutdown();
@@ -166,14 +179,17 @@ int kfsd_init(int argc, char ** argv)
 	{
 		BD_t * bd;
 
-#ifdef KUDOS
+#if defined(KUDOS)
 		if (! (bd = ide_pio_bd(0, 0, 80)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
-#endif
-#ifdef UNIXUSER
+#elif defined(UNIXUSER)
 		const char file[] = "obj/unix-user/fs/fs.img";
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
+#elif defined(__KERNEL__)
+		bd = NULL;
+#else
+#error Unknown target system
 #endif
 		if (bd)
 		{
@@ -191,14 +207,17 @@ int kfsd_init(int argc, char ** argv)
 	{
 		BD_t * bd;
 
-#ifdef KUDOS
+#if defined(KUDOS)
 		if (! (bd = ide_pio_bd(0, 1, 0)) )
 			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
-#endif
-#ifdef UNIXUSER
+#elif defined(UNIXUSER)
 		const char file[] = "obj/unix-user/fs/ufs.img";
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
+#elif defined(__KERNEL__)
+		bd = NULL;
+#else
+#error Unknown target system
 #endif
 		if (bd)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;

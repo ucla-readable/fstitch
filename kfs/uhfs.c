@@ -1,11 +1,11 @@
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
 #include <inc/fd.h>
 #include <inc/error.h>
-#include <lib/stdio.h>
+#include <lib/assert.h>
 #include <lib/fcntl.h>
 #include <lib/panic.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>

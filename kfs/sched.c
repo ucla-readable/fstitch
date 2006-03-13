@@ -1,15 +1,18 @@
 #include <inc/error.h>
-#include <lib/vector.h>
+#include <lib/assert.h>
 #include <lib/jiffies.h>
 #include <lib/kdprintf.h>
-#include <stdlib.h>
-#include <assert.h>
+#include <lib/stdlib.h>
+#include <lib/vector.h>
 
-#include <kfs/ipc_serve.h>
 #include <kfs/sched.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
+
+#if defined(KUDOS)
+#include <kfs/ipc_serve.h>
+#endif
 
 struct fn_entry {
 	sched_callback fn;
@@ -67,7 +70,7 @@ int sched_unregister(const sched_callback fn, void * arg)
 }
 
 
-int sched_init(void)
+int kfsd_sched_init(void)
 {
 	// Check that sched_init is not called multiple times
 	assert(!fes);

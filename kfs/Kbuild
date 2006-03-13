@@ -13,6 +13,7 @@ kkfsd-objs := \
               $(LIB)/sleep.o \
               $(LIB)/textbar.o \
               kfsd.o \
+              kfsd_init.o \
               bdesc.o \
               blockman.o \
               chdesc.o \
@@ -43,11 +44,7 @@ kkfsd-objs := \
               ufs_super_wb.o \
               opgroup_lfs.o \
               wholedisk_lfs.o \
-
-#              uhfs.o \
-#              file_hiding_cfs.o \
-#              sched.o \
-#              sync.o \
-#              kfsd.o \
-#              kfsd_init.o \
-#              debug.o
+              uhfs.o \
+              file_hiding_cfs.o \
+              sched.o \
+              sync.o

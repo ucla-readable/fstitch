@@ -1,7 +1,7 @@
-#include <stdlib.h>
-#include <string.h>
 #include <inc/error.h>
 #include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 #include <lib/vector.h>
 #include <lib/dirent.h>
 

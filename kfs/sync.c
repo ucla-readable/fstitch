@@ -1,5 +1,5 @@
 #include <inc/error.h>
-#include <stdio.h>
+#include <lib/stdio.h>
 
 #include <kfs/bd.h>
 #include <kfs/modman.h>

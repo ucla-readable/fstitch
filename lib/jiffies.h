@@ -47,6 +47,7 @@ static __inline int jiffy_time(void)
 {
 	return (int) get_jiffies_64();
 }
+
 #else
 #error Unknown target system
 #endif
