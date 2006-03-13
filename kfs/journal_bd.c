@@ -1,7 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <inc/error.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 #include <lib/types.h>
 #include <lib/jiffies.h> // HZ
 #include <lib/panic.h>
@@ -16,6 +16,14 @@
 #include <kfs/debug.h>
 #include <kfs/revision.h>
 #include <kfs/journal_bd.h>
+
+#if defined(__KERNEL__)
+#warning lame printk, assert, and sched_register/unregister
+#define printf printk
+#define assert(x) do { } while(0)
+#define sched_register(callback, bd, period) 0
+#define sched_unregister(callback, bd) 0
+#endif
 
 /* if set and debugging is on, mark cancellation records for debug waiting */
 #define JOURNAL_COMMIT_DBWAIT 0

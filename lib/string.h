@@ -10,6 +10,16 @@
 #elif defined(__KERNEL__)
 #include <linux/string.h>
 
+static __inline char * strdup(const char * s)
+{
+	size_t len = strlen(s) + 1;
+	char * c = malloc(len);
+	if (!c)
+		return NULL;
+	strcpy(c, s);
+	return c;
+}
+
 #else
 #error Unknown target system
 #endif

@@ -1,8 +1,13 @@
+#if !defined(__KERNEL__)
 #include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-#include <lib/panic.h>
+#else
+#warning Add assert.h and printf support
+#define assert(x) do { } while(0)
+#endif
+#include <lib/string.h>
 #include <inc/error.h>
+#include <lib/stdlib.h>
+#include <lib/panic.h>
 #include <lib/stdio.h>
 
 #include <kfs/bd.h>
@@ -10,6 +15,11 @@
 #include <kfs/chdesc.h>
 #include <kfs/revision.h>
 #include <kfs/barrier.h>
+
+#if defined(__KERNEL__)
+#warning lame printk
+#define printf printk
+#endif
 
 #define BARRIER_DEBUG 0
 

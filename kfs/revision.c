@@ -1,7 +1,12 @@
-#include <lib/panic.h>
+#if !defined(__KERNEL__)
+#include <assert.h>
+#else
+#warning Add assert.h support
+#define assert(x) do { } while(0)
+#endif
 #include <lib/stdio.h>
+#include <lib/stdlib.h>
 #include <inc/error.h>
-#include <stdlib.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>

@@ -16,6 +16,9 @@
 #elif defined(UNIXUSER)
 #include <fcntl.h>
 
+#elif defined(__KERNEL__)
+#include <linux/fcntl.h>
+
 #else
 #error Unknown target system
 #endif

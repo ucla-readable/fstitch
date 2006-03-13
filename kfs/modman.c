@@ -1,6 +1,6 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
+#include <lib/stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
 #include <inc/error.h>

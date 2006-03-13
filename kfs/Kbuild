@@ -9,16 +9,19 @@ kkfsd-objs := \
               $(LIB)/vector.o \
               $(LIB)/hash_map.o \
               $(LIB)/hash_set.o \
+              $(LIB)/kfs_feature.o \
               kfsd.o \
               bdesc.o \
               blockman.o \
               chdesc.o \
-              chdesc_util.o
+              chdesc_util.o \
+              revision.o \
+              barrier.o \
+              modman.o \
+              opgroup.o \
+              devfs_cfs.o \
+              journal_bd.o
 
-#              modman.o \
-#              revision.o \
-#              opgroup.o \
-#              barrier.o \
 #              partition_bd.o \
 #              pc_ptable.o \
 #              bsd_ptable.o \
@@ -27,7 +30,6 @@ kkfsd-objs := \
 #              elevator_cache_bd.o \
 #              block_resizer_bd.o \
 #              barrier_resizer_bd.o \
-#              journal_bd.o \
 #              md_bd.o \
 #              mirror_bd.o \
 #              loop_bd.o \
@@ -41,7 +43,6 @@ kkfsd-objs := \
 #              opgroup_lfs.o \
 #              wholedisk_lfs.o \
 #              uhfs.o \
-#              devfs_cfs.o \
 #              file_hiding_cfs.o \
 #              sched.o \
 #              sync.o \

@@ -1,10 +1,20 @@
+#include <kfs/journal_bd.h>
+
+
 #include <lib/hash_map.h>
 #include <lib/panic.h>
 #include <inc/error.h>
-#include <assert.h>
 
-#include <kfs/journal_bd.h>
+
 #include <kfs/opgroup.h>
+
+#if !defined(__KERNEL__)
+#include <assert.h>
+#else
+#warning Add assert.h support
+#define assert(x) do { } while(0)
+#endif
+
 
 /* Atomic opgroup TODOs:
  *
