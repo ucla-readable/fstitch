@@ -65,6 +65,11 @@ void kfsd_shutdown(void)
 	exit(0);
 }
 
+#if defined(__KERNEL__)
+static int running = 1;
+static int shutdown = 0;
+#endif
+
 void kfsd_main(int argc, char ** argv)
 {
 	int r;
@@ -79,6 +84,13 @@ void kfsd_main(int argc, char ** argv)
 #elif defined(UNIXUSER)
 	fuse_serve_loop();
 #elif defined(__KERNEL__)
+	while(running)
+	{
+		//sched_iteration();
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ / 10);
+	}
+	shutdown = 1;
 #warning Not yet calling a kfsd looper
 #else
 #error Unknown target system
@@ -153,6 +165,12 @@ static void __exit exit_kfsd(void)
 {
 	/* We can't actually just call kfsd_shutdown() from outside the kfsd thread.... we should request that it shutdown, then wait for it. */
 	//kfsd_shutdown();
+	running = 0;
+	while(!shutdown)
+	{
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ / 10);
+	}
 }
 
 module_init(init_kfsd);

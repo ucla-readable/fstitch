@@ -7,6 +7,7 @@
 // UNIXUSER only uses HZ for callbacks around every 1s or more
 #define HZ			5
 #elif defined(__KERNEL__)
+#include <linux/jiffies.h>
 #else
 #error Unknown target system
 #endif
@@ -42,7 +43,6 @@ static __inline int jiffy_time(void)
 
 #elif defined(__KERNEL__)
 #warning Write Linux kernel support
-#include <linux/jiffies.h>
 static __inline int jiffy_time(void)
 {
 	return (int) get_jiffies_64();
