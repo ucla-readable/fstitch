@@ -132,12 +132,20 @@ int main(int argc, char * argv[])
 
 #elif defined(__KERNEL__)
 
+static int kfsd_thread(void * thunk)
+{
+	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
+	daemonize("kkfsd");
+	kfsd_main(0, NULL);
+	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
+	return 0;
+}
+
 static int __init init_kfsd(void)
 {
-	daemonize("kkfsd");
-	printk("kkfsd starting (PID = %d)\n", current->pid);
-	kfsd_main(0, NULL);
-	printk("kkfsd exiting (PID = %d)\n", current->pid);
+	pid_t pid = kernel_thread(kfsd_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	if(pid < 0)
+		printk(KERN_ERR "kkfsd unable to start kernel thread!\n");
 	return 0;
 }
 

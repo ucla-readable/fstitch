@@ -1,0 +1,3 @@
+#!/bin/bash
+
+[ "$KERNEL" -a "$1" == "-r" ] && echo $KERNEL || exec /bin/uname "$@"
