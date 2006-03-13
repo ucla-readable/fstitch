@@ -1,10 +1,9 @@
-#include <assert.h>
-#include <malloc.h>
-#include <string.h>
 #include <inc/error.h>
 #include <lib/jiffies.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 #include <lib/types.h>
 
 #include <kfs/bd.h>
@@ -14,6 +13,14 @@
 #include <kfs/sched.h>
 #include <kfs/revision.h>
 #include <kfs/elevator_cache_bd.h>
+
+#if defined(__KERNEL__)
+#warning lame assert, and sched_register/unregister
+#define assert(x) do { } while(0)
+#define sched_register(callback, bd, period) 0
+#define sched_unregister(callback, bd) 0
+#endif
+
 
 #define ELEV_DEBUG 0
 

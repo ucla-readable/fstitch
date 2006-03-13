@@ -17,6 +17,10 @@
 #define PGSIZE 4096
 #endif
 
+#elif defined(__KERNEL__)
+#include <linux/pagemap.h>
+#define PGSIZE PAGE_SIZE
+
 #else
 #error Unknown target system
 #endif

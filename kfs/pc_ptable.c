@@ -1,6 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 #include <lib/types.h>
 #include <lib/partition.h>
 #include <lib/vector.h>
@@ -9,6 +9,11 @@
 #include <kfs/bdesc.h>
 #include <kfs/partition_bd.h>
 #include <kfs/pc_ptable.h>
+
+#if defined(__KERNEL__)
+#warning Lame printf
+#define printf printk
+#endif
 
 struct partition {
 	uint32_t start, length;

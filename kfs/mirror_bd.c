@@ -1,9 +1,8 @@
-#include <stdio.h>
-#include <assert.h>
 #include <inc/error.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
 #include <lib/types.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -11,6 +10,14 @@
 #include <kfs/barrier.h>
 #include <kfs/blockman.h>
 #include <kfs/mirror_bd.h>
+
+#if !defined(__KERNEL__)
+#include <assert.h>
+#else
+#warning Add printf and assert.h support
+#define printf printk
+#define assert(x) do { } while(0)
+#endif
 
 #define disk0_bad (info->bad_disk == 0)
 #define disk1_bad (info->bad_disk == 1)

@@ -20,20 +20,20 @@ kkfsd-objs := \
               modman.o \
               opgroup.o \
               devfs_cfs.o \
-              journal_bd.o
+              mem_bd.o \
+              md_bd.o \
+              elevator_cache_bd.o \
+              block_resizer_bd.o \
+              barrier_resizer_bd.o \
+              partition_bd.o \
+              pc_ptable.o \
+              bsd_ptable.o \
+              mirror_bd.o \
+              wt_cache_bd.o \
+              wb_cache_bd.o \
+              journal_bd.o \
+              loop_bd.o
 
-#              partition_bd.o \
-#              pc_ptable.o \
-#              bsd_ptable.o \
-#              wt_cache_bd.o \
-#              wb_cache_bd.o \
-#              elevator_cache_bd.o \
-#              block_resizer_bd.o \
-#              barrier_resizer_bd.o \
-#              md_bd.o \
-#              mirror_bd.o \
-#              loop_bd.o \
-#              mem_bd.o \
 #              josfs_base.o \
 #              ufs_base.o \
 #              ufs_common.o \
