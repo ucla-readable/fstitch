@@ -138,21 +138,25 @@ int main(int argc, char * argv[])
 
 static int __init init_kfsd(void)
 {
+	daemonize("kkfsd");
+	printk("kkfsd starting (PID = %d)\n", current->pid);
 	kfsd_main(0, NULL);
+	printk("kkfsd exiting (PID = %d)\n", current->pid);
 	return 0;
 }
 
 static void __exit exit_kfsd(void)
 {
-	kfsd_shutdown();
+	/* We can't actually just call kfsd_shutdown() from outside the kfsd thread.... we should request that it shutdown, then wait for it. */
+	//kfsd_shutdown();
 }
 
 module_init(init_kfsd);
 module_exit(exit_kfsd);
 
-MODULE_AUTHOR("TODO");
-MODULE_DESCRIPTION("kfs");
-MODULE_LICENSE("TODO");
+MODULE_AUTHOR("KudOS Team");
+MODULE_DESCRIPTION("KudOS File Server Architecture");
+MODULE_LICENSE("GPL");
 
 
 #else
