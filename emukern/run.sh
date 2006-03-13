@@ -24,7 +24,7 @@ trap "echo \"Cleaning up image in $TMPDIR\"; rm -rf $TMPDIR" EXIT
 echo "Building image in $TMPDIR"
 
 mkdir $TMPDIR/image
-(cd "$KUDOS" && tar cf $TMPDIR/image/kkfsd.tar . --exclude emukern)
+(cd "$KUDOS" && tar cf $TMPDIR/image/kkfsd.tar . --exclude emukern --exclude obj)
 #gzip --best -n $TMPDIR/image/kkfsd.tar
 
 cat > $TMPDIR/image/init.sh << EOF
