@@ -12,11 +12,6 @@
 #include <kfs/blockman.h>
 #include <kfs/mirror_bd.h>
 
-#if defined(__KERNEL__)
-#warning Add printf support
-#define printf printk
-#endif
-
 #define disk0_bad (info->bad_disk == 0)
 #define disk1_bad (info->bad_disk == 1)
 #define disk0_good (info->bad_disk != 0)

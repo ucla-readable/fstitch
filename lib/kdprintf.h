@@ -12,12 +12,21 @@
 int	kdprintf(int fd, const char*, ...);
 
 #elif defined(__KERNEL__)
-#warning Write Linux kernel support
-#define STDIN_FILENO 0
+#include <linux/kernel.h>
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
-// TODO: implement
-#define kdprintf(fd, str, ...) do { } while(0)
+
+int kdprintf(int fd, const char * fmt, ...);
+
+// TODO: macro define kdprintf() to alter printk's log level
+#if 0
+#define kdprintf(fd, fmt, ...)
+({
+	if (fd == STDOUT_FILENO) printk(KERN_INFO fmt, ## __VA_ARGS__);
+	else if (fd == STDERR_FILENO) printk(KERN_ERR fmt, ## __VA_ARGS__);
+	else printk(KERN_ERR "(UNKNOWN FD) " fmt, ## __VA_ARGS__);
+})
+#endif
 
 #else
 #error Unknown target system

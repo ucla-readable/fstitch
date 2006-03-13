@@ -8,6 +8,7 @@
 #include <lib/sleep.h>
 #include <lib/jiffies.h>
 #include <lib/disklabel.h>
+#include <lib/stdio.h>
 
 #include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable.h>
@@ -42,11 +43,6 @@
 #include <kfs/kfsd.h>
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
-
-#if defined(__KERNEL__)
-#warning lame printf
-#define printf printk
-#endif
 
 #if defined(__KERNEL__)
 #warning lame kfsd_add_mount

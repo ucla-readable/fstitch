@@ -5,6 +5,7 @@ LIB := ../lib/
 
 obj-m += kkfsd.o
 kkfsd-objs := \
+              $(LIB)/kdprintf.o \
               $(LIB)/memdup.o \
               $(LIB)/vector.o \
               $(LIB)/hash_map.o \

@@ -1,10 +1,6 @@
-#if !defined(__KERNEL__)
+#include <inc/error.h>
 #include <lib/mmu.h>
 #include <lib/stdio.h>
-#else
-#warning Skipping includes that are not yet part of __KERNEL__
-#endif
-#include <inc/error.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 
@@ -15,8 +11,7 @@
 #elif defined(__KERNEL__)
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#warning Using lame defines
-#define printf printk
+#warning Using lame exit
 #define exit(x) do { } while(0)
 #endif
 

@@ -4,8 +4,7 @@
 #if defined(__KERNEL__)
 
 #include <linux/kernel.h>
-#warning warn not yet implemented
-#define warn(...) do { } while(0)
+// Though kernel.h does not define warn or _warn, we use use neither
 
 #else
 

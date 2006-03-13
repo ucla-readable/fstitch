@@ -13,11 +13,6 @@
 #define WB_CGROTOR  6
 #define WB_LAST     7
 
-#if defined(__KERNEL__)
-#warning lame printf
-#define printf printk
-#endif
-
 struct local_info
 {
 	struct lfs_info * global_info;

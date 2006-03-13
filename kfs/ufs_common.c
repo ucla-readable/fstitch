@@ -7,11 +7,6 @@
 
 #include <kfs/ufs_common.h>
 
-#if defined(__KERNEL__)
-#warning lame printf
-#define printf printk
-#endif
-
 // Assuming fixed number of inodes per cylinder group, so we don't have
 // to read the cylinder group descriptor and confirm this every time.
 // The last cylinder group may have less inodes?

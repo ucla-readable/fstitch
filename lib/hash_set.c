@@ -1,9 +1,4 @@
-#if !defined(__KERNEL__)
-#include <assert.h>
-#else
-#warning assert not yet implemented
-#define assert(x) do { } while(0)
-#endif
+#include <lib/assert.h>
 #include <lib/stdlib.h>
 #include <lib/hash_map.h>
 #include <lib/hash_set.h>

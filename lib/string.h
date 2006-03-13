@@ -8,6 +8,7 @@
 #include <string.h>
 
 #elif defined(__KERNEL__)
+#include <lib/stdlib.h>
 #include <linux/string.h>
 
 static __inline char * strdup(const char * s)

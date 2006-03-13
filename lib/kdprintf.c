@@ -1,9 +1,11 @@
-// XXX change this to use printfmt properly,
-// with no string length limitation.
+#include <lib/kdprintf.h>
 
 #if defined(KUDOS)
 
 #include <inc/lib.h>
+
+// XXX change this to use printfmt properly,
+// with no string length limitation.
 
 int
 kdprintf(int fd, const char *fmt, ...)
@@ -67,6 +69,25 @@ kdprintf(int fd, const char *fmt, ...)
 	va_end(ap);
 	r = write(fd, buf, strlen(buf));
 	free(buf);
+	return r;
+}
+
+#elif defined(__KERNEL__)
+
+#include <linux/kernel.h>
+
+int
+kdprintf(int fd, const char *fmt, ...)
+{
+	va_list ap;
+	int r;
+
+	if (fd != STDOUT_FILENO && fd != STDERR_FILENO)
+		printk(KERN_ERR "Unknown fd %d passed to %s(fd)\n", fd, __FUNCTION__);
+	va_start(ap, fmt);
+	r = vprintk(fmt, ap);
+	va_end(ap);
+
 	return r;
 }
 

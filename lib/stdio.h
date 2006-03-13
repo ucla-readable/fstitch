@@ -8,8 +8,8 @@
 #include <lib/kdprintf.h>
 #include <stdio.h>
 #elif defined(__KERNEL__)
-#warning Write Linux kernel support
 #include <lib/kdprintf.h>
+#define printf(format, ...) kdprintf(STDOUT_FILENO, format, ## __VA_ARGS__)
 #else
 #error Unknown target system
 #endif

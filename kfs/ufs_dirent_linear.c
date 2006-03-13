@@ -4,11 +4,6 @@
 
 #include <kfs/ufs_dirent_linear.h>
 
-#if defined(__KERNEL__)
-#warning lame printf
-#define printf printk
-#endif
-
 static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct * entry, uint32_t * basep)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);

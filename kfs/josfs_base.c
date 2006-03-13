@@ -23,11 +23,6 @@ int textbar_set_progress(int progress, uint8_t color);
 #error inc/fs.h got included in josfs_base.c
 #endif
 
-#if defined(__KERNEL__)
-#warning lame printf
-#define printf printk
-#endif
-
 #define JOSFS_BASE_DEBUG 0
 #define JOSFS_BASE_DEBUG_FSCK 0
 

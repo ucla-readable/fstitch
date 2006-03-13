@@ -1,14 +1,10 @@
-#if !defined(__KERNEL__)
-#include <stdio.h>
-#else
-#warning Add stdio.h support
-#endif
 #include <inc/error.h>
 #include <lib/kdprintf.h>
-#include <lib/stdlib.h>
-#include <lib/types.h>
-#include <lib/string.h>
 #include <lib/panic.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
+#include <lib/types.h>
 
 #include <kfs/bd.h>
 #include <kfs/blockman.h>

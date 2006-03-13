@@ -10,11 +10,6 @@
 #include <kfs/partition_bd.h>
 #include <kfs/pc_ptable.h>
 
-#if defined(__KERNEL__)
-#warning Lame printf
-#define printf printk
-#endif
-
 struct partition {
 	uint32_t start, length;
 	uint8_t type, boot;

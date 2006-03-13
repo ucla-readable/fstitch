@@ -18,11 +18,6 @@
 #error inc/fs.h got included in __FILE__
 #endif
 
-#if defined(__KERNEL__)
-#warning lame printf
-#define printf printk
-#endif
-
 #define UFS_BASE_DEBUG 0
 
 #if UFS_BASE_DEBUG

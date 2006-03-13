@@ -11,11 +11,6 @@
 #include <kfs/revision.h>
 #include <kfs/barrier.h>
 
-#if defined(__KERNEL__)
-#warning lame printk
-#define printf printk
-#endif
-
 #define BARRIER_DEBUG 0
 
 #if BARRIER_DEBUG

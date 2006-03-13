@@ -10,11 +10,6 @@
 #include <lib/disklabel.h>
 #include <lib/vector.h>
 
-#if defined(__KERNEL__)
-#warning Lame printf
-#define printf printk
-#endif
-
 struct bsdpart {
 	uint32_t start, length;
 	uint8_t type;

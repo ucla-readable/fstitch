@@ -18,8 +18,7 @@
 #include <kfs/wb_cache_bd.h>
 
 #if defined(__KERNEL__)
-#warning lame printk and sched_register/unregister
-#define printf printk
+#warning lame sched_register/unregister
 #define sched_register(callback, bd, period) 0
 #define sched_unregister(callback, bd) 0
 #endif
