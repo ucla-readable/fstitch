@@ -7,6 +7,12 @@
 
 #define KFS_DEBUG 0
 
+#if KFS_DEBUG && defined(__KERNEL__)
+#warning No kernel support for debugging, disabling debugging
+#undef KFS_DEBUG
+#define KFS_DEBUG 0
+#endif
+
 #if KFS_DEBUG
 
 /* For a lean and mean debug output stream, set both of these to 1. */

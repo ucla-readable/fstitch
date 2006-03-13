@@ -5,15 +5,16 @@ LIB := ../lib/
 
 obj-m += kkfsd.o
 kkfsd-objs := \
+              $(LIB)/memdup.o \
               $(LIB)/vector.o \
               $(LIB)/hash_map.o \
               $(LIB)/hash_set.o \
               kfsd.o \
               bdesc.o \
               blockman.o \
+              chdesc.o \
+              chdesc_util.o
 
-#              chdesc.o \
-#              chdesc_util.o \
 #              modman.o \
 #              revision.o \
 #              opgroup.o \
