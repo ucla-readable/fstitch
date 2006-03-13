@@ -1,7 +1,8 @@
 #if !defined(__KERNEL__)
-#warning Skipping includes that are not yet part of __KERNEL__
 #include <lib/mmu.h>
 #include <lib/stdio.h>
+#else
+#warning Skipping includes that are not yet part of __KERNEL__
 #endif
 #include <inc/error.h>
 #include <lib/stdlib.h>
