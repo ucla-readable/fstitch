@@ -1,12 +1,12 @@
 /* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
-#include <lib/types.h>
-#include <stdlib.h>
-#include <string.h>
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/hash_set.h>
-#include <lib/stdio.h>
 #include <lib/jiffies.h>
-#include <assert.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
+#include <lib/types.h>
 
 /* textbar, sleep from inc/lib.h */
 int jsleep(int32_t jiffies);
@@ -21,6 +21,11 @@ int textbar_set_progress(int progress, uint8_t color);
 
 #ifdef KUDOS_INC_FS_H
 #error inc/fs.h got included in josfs_base.c
+#endif
+
+#if defined(__KERNEL__)
+#warning lame printf
+#define printf printk
 #endif
 
 #define JOSFS_BASE_DEBUG 0

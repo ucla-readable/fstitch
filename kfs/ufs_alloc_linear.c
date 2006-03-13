@@ -1,3 +1,5 @@
+#include <lib/string.h>
+
 #include <kfs/ufs_alloc_linear.h>
 
 // FIXME this is a fairly inefficient way to scan for free blocks

@@ -10,6 +10,8 @@ kkfsd-objs := \
               $(LIB)/hash_map.o \
               $(LIB)/hash_set.o \
               $(LIB)/kfs_feature.o \
+              $(LIB)/sleep.o \
+              $(LIB)/textbar.o \
               kfsd.o \
               bdesc.o \
               blockman.o \
@@ -32,16 +34,16 @@ kkfsd-objs := \
               wt_cache_bd.o \
               wb_cache_bd.o \
               journal_bd.o \
-              loop_bd.o
+              loop_bd.o \
+              josfs_base.o \
+              ufs_base.o \
+              ufs_common.o \
+              ufs_alloc_linear.o \
+              ufs_dirent_linear.o \
+              ufs_super_wb.o \
+              opgroup_lfs.o \
+              wholedisk_lfs.o \
 
-#              josfs_base.o \
-#              ufs_base.o \
-#              ufs_common.o \
-#              ufs_alloc_linear.o \
-#              ufs_dirent_linear.o \
-#              ufs_super_wb.o \
-#              opgroup_lfs.o \
-#              wholedisk_lfs.o \
 #              uhfs.o \
 #              file_hiding_cfs.o \
 #              sched.o \

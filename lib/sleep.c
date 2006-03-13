@@ -28,6 +28,14 @@ jsleep(int32_t jiffies)
 	return usleep(jiffies * (1000000 / JIFFIES_PER_SECOND));
 }
 
+#elif defined(__KERNEL__)
+#warning Need to implement jsleep
+int
+jsleep(int32_t jiffies)
+{
+	return jiffies;
+}
+
 #else
 #error Unknown target system
 #endif

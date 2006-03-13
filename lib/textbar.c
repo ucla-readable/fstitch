@@ -90,6 +90,25 @@ int textbar_init(int use_line)
 	return textbar_width;
 }
 
+#elif defined(__KERNEL__)
+
+// Kernel textbar functinos are NOOPs
+
+int textbar_set_progress(int progress, uint8_t color)
+{
+	return 0;
+}
+
+int textbar_close(void)
+{
+	return 0;
+}
+
+int textbar_init(int use_line)
+{
+	return 0;
+}
+
 #else
 #error Unknown target system
 #endif

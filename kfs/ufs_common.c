@@ -1,4 +1,16 @@
+#include <inc/error.h>
+#include <lib/assert.h>
+#include <lib/hash_map.h>
+#include <lib/stdio.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
+
 #include <kfs/ufs_common.h>
+
+#if defined(__KERNEL__)
+#warning lame printf
+#define printf printk
+#endif
 
 // Assuming fixed number of inodes per cylinder group, so we don't have
 // to read the cylinder group descriptor and confirm this every time.

@@ -2,12 +2,6 @@
 #define __KUDOS_KFS_UFS_COMMON_H
 
 #include <lib/types.h>
-#include <stdlib.h>
-#include <string.h>
-#include <inc/error.h>
-#include <lib/hash_map.h>
-#include <lib/stdio.h>
-#include <assert.h>
 
 #include <kfs/lfs.h>
 #include <kfs/ufs_base.h>

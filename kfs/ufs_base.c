@@ -1,11 +1,11 @@
 /* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
-#include <lib/types.h>
-#include <stdlib.h>
-#include <string.h>
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/hash_map.h>
 #include <lib/stdio.h>
-#include <assert.h>
+#include <lib/stdlib.h>
+#include <lib/string.h>
+#include <lib/types.h>
 
 #include <kfs/modman.h>
 #include <kfs/ufs_base.h>
@@ -16,6 +16,11 @@
 
 #ifdef KUDOS_INC_FS_H
 #error inc/fs.h got included in __FILE__
+#endif
+
+#if defined(__KERNEL__)
+#warning lame printf
+#define printf printk
 #endif
 
 #define UFS_BASE_DEBUG 0
@@ -809,6 +814,8 @@ static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 	}
 }
 
+#include <asm/div64.h>
+
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
 	Dprintf("UFSDEBUG: %s %x\n", __FUNCTION__, file);
@@ -817,8 +824,9 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	uint32_t n;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	n = f->f_inode.di_size / super->fs_fsize;
-	if (f->f_inode.di_size % super->fs_fsize)
+	assert(ROUNDUP32(super->fs_fsize, 2) == super->fs_fsize);
+	n = f->f_inode.di_size >> super->fs_fsize;
+	if (f->f_inode.di_size != (n << super->fs_fsize))
 		n++;
 
 	return n;

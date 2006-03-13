@@ -1,3 +1,7 @@
+#include <inc/error.h>
+#include <lib/stdio.h>
+#include <lib/string.h>
+
 #include <kfs/ufs_super_wb.h>
 
 #define WB_TIME     0
@@ -8,6 +12,11 @@
 #define WB_FSMNT    5
 #define WB_CGROTOR  6
 #define WB_LAST     7
+
+#if defined(__KERNEL__)
+#warning lame printf
+#define printf printk
+#endif
 
 struct local_info
 {
