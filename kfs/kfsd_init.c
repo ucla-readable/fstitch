@@ -44,10 +44,8 @@
 #include <kfs/kfsd.h>
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
-
 #if defined(__KERNEL__)
-#warning lame kfsd_add_mount
-#define kfsd_add_mount(x, y) (-1)
+#include <kfs/kernel_serve.h>
 #endif
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
@@ -137,6 +135,14 @@ int kfsd_init(int argc, char ** argv)
 		kdprintf(STDERR_FILENO, "fuse_serve_init: %d\n", r);
 		return r;
 	}
+#elif defined(__KERNEL__)
+	if ((r = kernel_serve_init((spinlock_t *) argv)) < 0)
+	{
+		kdprintf(STDERR_FILENO, "kernel_serve_init: %d\n", r);
+		return r;
+	}
+#else
+#error Unknown target system
 #endif
 
 	if ((r = kfsd_sched_init()) < 0)

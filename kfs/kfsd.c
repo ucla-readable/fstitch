@@ -11,12 +11,17 @@
 #elif defined(__KERNEL__)
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#include <linux/spinlock.h>
 #endif
 
 #include <kfs/sync.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
+
+#ifdef __KERNEL__
+spinlock_t kfsd_lock;
+#endif
 
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
@@ -42,7 +47,7 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 	return -E_NO_MEM;
 }
 
-static int kfsd_running = 1;
+static int kfsd_running = 0;
 
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
 static void kfsd_shutdown(void)
@@ -50,7 +55,8 @@ static void kfsd_shutdown(void)
 	int i;
 	
 	printf("Syncing and shutting down.\n");
-	kfsd_running = 0;
+	if(kfsd_running > 0)
+		kfsd_running = 0;
 	
 	if(kfs_sync() < 0)
 		kdprintf(STDERR_FILENO, "Sync failed!\n");
@@ -73,7 +79,7 @@ void kfsd_request_shutdown(void)
 
 int kfsd_is_running(void)
 {
-	return kfsd_running;
+	return kfsd_running > 0;
 }
 
 void kfsd_main(int argc, char ** argv)
@@ -86,6 +92,7 @@ void kfsd_main(int argc, char ** argv)
 	{
 #ifdef __KERNEL__
 		printk("kfsd_init() failed in the kernel! (error = %d)\n", r);
+		kfsd_running = r;
 #else
 		kfsd_shutdown();
 		exit(r);
@@ -93,22 +100,31 @@ void kfsd_main(int argc, char ** argv)
 	}
 	else
 	{
+		kfsd_running = 1;
 #if defined(UNIXUSER)
 		/* fuse_serve_loop() doesn't respect kfsd_running()... but that's OK */
 		fuse_serve_loop();
 #else
+#ifdef __KERNEL__
+		spin_lock(&kfsd_lock);
+#endif
 		while(kfsd_running)
 		{
 			sched_iteration();
 #if defined(KUDOS)
 			ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
 #elif defined(__KERNEL__)
+			spin_unlock(&kfsd_lock);
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ / 25);
+			spin_lock(&kfsd_lock);
 #else
 #error Unknown target system
 #endif
 		}
+#ifdef __KERNEL__
+		spin_unlock(&kfsd_lock);
+#endif
 #endif
 	}
 	kfsd_shutdown();
@@ -166,7 +182,9 @@ static int kfsd_thread(void * thunk)
 {
 	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
 	daemonize("kkfsd");
-	kfsd_main(0, NULL);
+	spin_lock_init(&kfsd_lock);
+	/* HACK: we pass kfsd_lock in through argv */
+	kfsd_main(0, (char **) &kfsd_lock);
 	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
 	kfsd_is_shutdown = 1;
 	return 0;
@@ -177,7 +195,12 @@ static int __init init_kfsd(void)
 	pid_t pid = kernel_thread(kfsd_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	if(pid < 0)
 		printk(KERN_ERR "kkfsd unable to start kernel thread!\n");
-	return 0;
+	while(!kfsd_running && !signal_pending(current))
+	{
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ / 10);
+	}
+	return (kfsd_running > 0) ? 0 : kfsd_running;
 }
 
 static void __exit exit_kfsd(void)
