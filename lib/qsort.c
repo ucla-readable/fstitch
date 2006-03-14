@@ -152,10 +152,12 @@ _DEFUN(qsort, (a, n, es, cmp),
 	void *a _AND
 	size_t n _AND
 	size_t es _AND
-	int (*cmp)(char*,char*))
+	int (*ccmp)(const char*,const char*))
 {
 	char *pa, *pb, *pc, *pd, *pl, *pm, *pn;
 	int d, r, swaptype, swap_cnt;
+	typedef int (*cmp_t)(char*,char*);
+	cmp_t cmp = (cmp_t) ccmp;
 
 loop:	SWAPINIT(a, es);
 	swap_cnt = 0;
@@ -217,10 +219,10 @@ loop:	SWAPINIT(a, es);
 	pn = (char *) a + n * es;
 	r = min(pa - (char *)a, pb - pa);
 	vecswap(a, pb - r, r);
-	r = (int) min((char *) (pd - pc), (char *) (pn - pd - es));
+	r = (int) (min((const char *) (pd - pc), (const char *) (pn - pd - es)));
 	vecswap(pb, pn - r, r);
 	if ((r = pb - pa) > es)
-		qsort(a, r / es, es, cmp);
+		qsort(a, r / es, es, ccmp);
 	if ((r = pd - pc) > es) { 
 		/* Iterate rather than recurse to save stack space */
 		a = pn - r;
