@@ -237,9 +237,9 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
  * NULL, the structure will be computed internally and freed automatically. */
 int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
 {
-#warning write this
 	/* a lot of the code for this should be similar to code in revision.c */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_ROLLBACK_COLLECTION, count, chdescs, order);
+	panic("%s() is not written\n", __FUNCTION__);
 	return -1;
 }
 
@@ -249,16 +249,16 @@ int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order)
  * the "order" parameter. It behaves in the same way for this function. */
 int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order)
 {
-#warning write this
 	/* a lot of the code for this should be similar to code in revision.c */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_APPLY_COLLECTION, count, chdescs, order);
+	panic("%s() is not written\n", __FUNCTION__);
 	return -1;
 }
 
 void chdesc_order_destroy(void ** order)
 {
-#warning finish this
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_ORDER_DESTROY, order);
+	panic("%s() is not written\n", __FUNCTION__);
 	free(*order);
 	*order = NULL;
 }
@@ -528,12 +528,6 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 	
 	return 0;
 }
-
-/* chdesc_morph */
-/* Morph a change descriptor while moving it from one barrier zone to another.
- * The expected use of this function is after a chdesc_merge() in barrier
- * modules that change the data as it passes through them, like encryption. */
-#warning write this
 
 /* Split a change descriptor into two or more change descriptors. The original
  * change descriptor will be turned into a NOOP change descriptor which depends

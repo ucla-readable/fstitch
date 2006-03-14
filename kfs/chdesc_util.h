@@ -31,7 +31,7 @@ void chdesc_order_destroy(void ** order);
 int chdesc_detach_dependencies(chdesc_t * chdesc);
 int chdesc_detach_dependents(chdesc_t * chdesc);
 
-/* duplicate, morph, split, and merge change descriptors */
+/* duplicate, split, and merge change descriptors */
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks);
 int chdesc_split(chdesc_t * original, int count);
 int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head);
