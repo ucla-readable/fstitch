@@ -733,14 +733,14 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 	/* copy the new data */
 	data = memdup(chdescs[0]->block->ddesc->data, chdescs[0]->block->ddesc->length);
 	if(!data)
-#warning unset MOVED?
+		/* FIXME unset MOVED? */
 		return -E_NO_MEM;
 	
 	/* now roll back the change descriptors */
 	r = chdesc_rollback_collection(count, chdescs, NULL);
 	if(r < 0)
 	{
-#warning unset MOVED?
+		/* FIXME unset MOVED? */
 		free(data);
 		return r;
 	}
@@ -871,7 +871,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 		}
 	}
 	
-#warning FIXME we may not know about all pointers to these, so make them all NOOPs that depend on the new merged chdesc: note that this can fail, so we have to move it up...
+	/* FIXME we may not know about all pointers to these, so make them all NOOPs that depend on the new merged chdesc: note that this can fail, so we have to move it up... */
 	/* finally delete the original change descriptors */
 	for(i = 0; i != count; i++)
 		if(!(chdescs[i]->flags & CHDESC_WRITTEN))

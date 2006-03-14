@@ -20,7 +20,7 @@
 #include <kfs/kfsd_init.h>
 
 #ifdef __KERNEL__
-spinlock_t kfsd_lock;
+static spinlock_t kfsd_lock;
 #endif
 
 struct module_shutdown {
