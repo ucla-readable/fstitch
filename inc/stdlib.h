@@ -9,6 +9,7 @@ void exit(int status);
 // Sort in ascending order. compar should return a value less than,
 // equal to, or greater than zero if 'a' is less than, equal to, or
 // greater than 'b', respectively.
-void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const char *, const char *));
+//#warning hello from qsort
+void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 
 #endif /* !KUDOS_INC_STDLIB_H */
