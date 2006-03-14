@@ -660,7 +660,7 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	sum.cs_nbfree = super->fs_cstotal.cs_nbfree + nbfree;
 	sum.cs_nifree = super->fs_cstotal.cs_nifree + nifree;
 	sum.cs_nffree = super->fs_cstotal.cs_nffree + nffree;
-#warning perhaps we should periotically sync changes to disk
+#warning perhaps we should periodically sync changes to disk
 	return CALL(info->parts.p_super, write_cstotal, &sum, head);
 }
 
