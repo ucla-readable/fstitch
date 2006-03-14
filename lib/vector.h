@@ -40,12 +40,10 @@ void   vector_erase(vector_t * v, size_t i);
 // Remove all elts in the vector, does not destroy elts.
 void   vector_clear(vector_t * v);
 
-#if !defined(__KERNEL__)
 // Sort the vector in ascending order. compar should return a value
 // less than, equal to, or greater than zero if 'a' is less than,
 // equal to, or greater than 'b', respectively.
 void   vector_sort(vector_t *v, int (*compar)(const void *a, const void *b));
-#endif
 
 // Return the elt at position i.
 static __inline

@@ -145,15 +145,12 @@ void vector_clear(vector_t * v)
 	v->size = 0;
 }
 
-#if defined(__KERNEL__)
-#warning qsort not yet implemented
-#else
 void vector_sort(vector_t *v, int (*compar)(const void *a, const void *b))
 {
 	if (v->size < 2) return;
 	qsort(v->elts, v->size, sizeof(void*), compar);
 }
-#endif
+
 
 //
 // Element access
