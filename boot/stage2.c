@@ -132,7 +132,7 @@ static void raw_read_kernel(void * dst, uint32_t offset, uint32_t partition, uin
 	readsect(dst, BLKSECTS, partition + BLKSECTS * (1 + offset));
 }
 
-static int strcmp(const unsigned char * s1, const unsigned char * s2)
+static int strcmp(const char * s1, const char * s2)
 {
 	while(*s1 && *s1 == *s2)
 		s1++, s2++;
@@ -166,6 +166,10 @@ static void josfs_read_kernel(void * dst, uint32_t offset, uint32_t partition, u
 {
 	josfs_read_file(&D_DATA[index], K_IND, offset, dst, partition);
 }
+
+static const char * const kernel_names[] = {
+    "kernel.new", "kernel", "kernel.old"
+};
 
 void stage2(int extmem_kbytes)
 {
@@ -216,7 +220,6 @@ void stage2(int extmem_kbytes)
 	{
 		uint32_t block;
 		int name;
-		const char * kernel_names[] = {"kernel.new", "kernel", "kernel.old"};
 		
 		/* set up filesystem data */
 		josfs_setup_file(&SUPER->s_root, D_IND, partition);
@@ -225,7 +228,7 @@ void stage2(int extmem_kbytes)
 		for(name = 0; name != sizeof(kernel_names) / sizeof(kernel_names[0]); name++)
 			for(block = 0; !josfs_read_file(&SUPER->s_root, D_IND, block, D_DATA, partition); block++)
 				for(index = 0; index != BLKFILES; index++)
-					if(!strcmp(kernel_names[name], &D_DATA[index].f_name[0]))
+					if(!strcmp(kernel_names[name], (char *)&D_DATA[index].f_name[0]))
 					{
 						/* if we found it, use it */
 						josfs_setup_file(&D_DATA[index], K_IND, partition);

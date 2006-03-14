@@ -679,20 +679,20 @@ dns_msg2raw(const dns_msg_t *dm, uint8_t *raw, size_t raw_len)
 	for (i=0; i < dm->h.qdcount; i++)
 	{
 		const size_t name_len = strlen(dm->qds->qname) + 1;
-		char *x = &raw[n];
-		char *y = x;
+		unsigned char *x = &raw[n];
+		unsigned char *y = x;
 		raw[n] = '.';
 		n += 1;
-		strcpy(&raw[n], dm->qds[i].qname);		
+		strcpy((char *) &raw[n], dm->qds[i].qname);		
 		n += name_len;
 		// mark end-of-string with '.' to make the below conversion easy:
 		raw[n-1] = '.';
 		raw[n] = 0; // ensure string is null-termed
 
 		// convert dots to indicate number of following characters in label:
-		while ((y = strchr(y+1, '.')))
+		while ((y = (unsigned char *) strchr((char *) y+1, '.')))
 		{
-			*(uint8_t*) x = y - (x+1);
+			*x = y - (x+1);
 			x = y;
 		}
 		raw[n-1] = 0; // revert end-of-string back to null character
@@ -910,7 +910,7 @@ dns_raw2msg(const uint8_t *raw)
 		else if (dm->ans[i].type == 0x5)
 		{
 			size_t offset = 0;
-			char *name = dnsname_raw2string((char*) dm->ans[i].rdata, &offset);
+			char *name = dnsname_raw2string(dm->ans[i].rdata, &offset);
 			if (debug & DEBUG_DNS)
 				printf("CNAME: %s", name);
 			free(name);
@@ -1024,6 +1024,8 @@ dns_state_free(dns_state_t *ds)
 	free(ds);
 }
 
+static void start_dns_query(dns_state_t*);
+
 // Timeout expired dns requests
 static void
 dns_tmr()
@@ -1061,7 +1063,6 @@ dns_tmr()
 			ds->pcb = NULL;
 			pbuf_free(ds->p_out);
 			ds->p_out = NULL;
-			static void start_dns_query(dns_state_t*);
 			start_dns_query(ds);
 		}
 		else
