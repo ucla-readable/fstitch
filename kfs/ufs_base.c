@@ -263,7 +263,7 @@ static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil,
 // Offset is a byte offset
 static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, chdesc_t ** head)
 {
-	Dprintf("UFSDEBUG: %s %x %d %d\n", __FUNCTION__, file, offset, value);
+	Dprintf("UFSDEBUG: %s %p %d %d\n", __FUNCTION__, file, offset, value);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
@@ -356,7 +356,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 // Offset is a byte offset
 static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chdesc_t ** head)
 {
-	Dprintf("UFSDEBUG: %s %x %d\n", __FUNCTION__, file, offset);
+	Dprintf("UFSDEBUG: %s %p %d\n", __FUNCTION__, file, offset);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
@@ -796,7 +796,7 @@ static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, in
 
 static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
-	Dprintf("UFSDEBUG: %s %x\n", __FUNCTION__, fdesc);
+	Dprintf("UFSDEBUG: %s %p\n", __FUNCTION__, fdesc);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) fdesc;
 	open_ufsfile_t * uf;
@@ -811,15 +811,15 @@ static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
-	Dprintf("UFSDEBUG: %s %x\n", __FUNCTION__, file);
+	Dprintf("UFSDEBUG: %s %p\n", __FUNCTION__, file);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t n;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	assert(ROUNDUP32(super->fs_fsize, 2) == super->fs_fsize);
-	n = f->f_inode.di_size >> super->fs_fsize;
-	if (f->f_inode.di_size != (n << super->fs_fsize))
+	n = f->f_inode.di_size >> super->fs_fshift;
+	if (f->f_inode.di_size != (n << super->fs_fshift))
 		n++;
 
 	return n;
@@ -828,7 +828,7 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 // Offset is a byte offset
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
-	Dprintf("UFSDEBUG: %s %x %d\n", __FUNCTION__, file, offset);
+	Dprintf("UFSDEBUG: %s %p %d\n", __FUNCTION__, file, offset);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t fragno, blockno, nindirb, nindirf;
@@ -1262,6 +1262,7 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 		return INVALID_BLOCK;
 
 	truncated = f->f_lastfrag;
+	assert(truncated != INVALID_BLOCK);
 
 	if ((f->f_numfrags - 1) % super->fs_frag) {
 
