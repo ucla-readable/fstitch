@@ -1,3 +1,12 @@
+BASE_OBJDIR := obj
+OBJDIR := $(BASE_OBJDIR)/kernel
+UTILDIR := $(BASE_OBJDIR)/util
+
+-include conf/env.mk
+
+CTAGS	:= ctags
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Makefile.kernel\).mk
+
 ifeq ($(KERNELRELEASE),)
 KERNELRELEASE = $(shell uname -r)
 endif
@@ -6,13 +15,30 @@ ifeq ($(KERNELPATH),)
 KERNELPATH = /lib/modules/${KERNELRELEASE}/build
 endif
 
-kfs/kkfsd.ko all: always
+all: kfs/kkfsd.ko tags TAGS
+
+kfs/kkfsd.ko: always
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
 
 install: kfs/kkfsd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
 
+# Build vi/emacs tag files
+# TODO: can we give these targets more correct dependencies
+TAGDEPS := kfs/kkfsd.ko
+tags: $(TAGDEPS)
+	@echo + ctags [VI]
+	$(V)find . -type f \
+		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
+		| $(CTAGS) $(CTAGSFLAGS) -L -
+TAGS: $(TAGDEPS)
+	@echo + ctags [EMACS]
+	$(V)find . -type f \
+		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
+		| $(CTAGS) $(CTAGSFLAGS) -L - -e 
+
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
+	rm -f tags TAGS
 
 .PHONY: all always install clean

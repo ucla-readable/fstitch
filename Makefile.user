@@ -70,7 +70,7 @@ CTAGS	:= ctags
 # Native command flags
 NCFLAGS	:= -Wall -pedantic -DKUTIL
 NCXXFLAGS	:= $(NCFLAGS)
-CTAGSFLAGS	:= --extra=+q --langmap=make:+\(GNUmakefile\)\(KMakefrag\)\(UUMakefrag\).mk
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kuds\)\(Makefile.user\)\(Makefile.kernel\).mk
 
 # Compiler flags
 CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall -g -DUNIXUSER
@@ -141,12 +141,12 @@ TAGDEPS := $(OBJDIR)/fs/clean-fs.img $(OBJDIR)/fs/ufs.img $(BIN) $(UTILS)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
-		| grep -v /CVS/ | grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
+		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) $(CTAGSFLAGS) -L -
 TAGS: $(TAGDEPS)
 	@echo + ctags [EMACS]
 	$(V)find . -type f \
-		| grep -v /CVS/ | grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
+		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) $(CTAGSFLAGS) -L - -e 
 
 
