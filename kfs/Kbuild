@@ -24,6 +24,7 @@ KKFSD_LIB_OBJS := \
 KKFSD_KFS_OBJS := \
               kfsd.o \
               kfsd_init.o \
+              kernel_serve.o \
               bdesc.o \
               blockman.o \
               chdesc.o \
