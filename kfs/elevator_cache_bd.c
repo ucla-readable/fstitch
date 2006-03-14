@@ -15,12 +15,6 @@
 #include <kfs/revision.h>
 #include <kfs/elevator_cache_bd.h>
 
-#if defined(__KERNEL__)
-#warning lame sched_register/unregister
-#define sched_register(callback, bd, period) 0
-#define sched_unregister(callback, bd) 0
-#endif
-
 #define ELEV_DEBUG 0
 
 #if ELEV_DEBUG

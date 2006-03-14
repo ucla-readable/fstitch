@@ -18,12 +18,6 @@
 #include <kfs/revision.h>
 #include <kfs/journal_bd.h>
 
-#if defined(__KERNEL__)
-#warning lame sched_register/unregister
-#define sched_register(callback, bd, period) 0
-#define sched_unregister(callback, bd) 0
-#endif
-
 /* if set and debugging is on, mark cancellation records for debug waiting */
 #define JOURNAL_COMMIT_DBWAIT 0
 
