@@ -254,7 +254,10 @@ int kfsd_init(int argc, char ** argv)
 
 	r = kfsd_add_mount("/dev", modman_devfs);
 	if (r < 0)
+	{
+		kdprintf(STDERR_FILENO, "kfsd_add_mount: %i\n", r);
 		return r;
+	}
 
 #ifdef KUDOS
 	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
