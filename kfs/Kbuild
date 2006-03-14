@@ -1,5 +1,8 @@
 EXTRA_CFLAGS += -I$(src)/..
-EXTRA_CFLAGS += -DKFSD -Wno-declaration-after-statement
+EXTRA_CFLAGS += -DKFSD
+ifeq ($(shell $(CC) --version | head -n 1 | grep 'gcc (GCC) 4' >/dev/null && echo 1),1)
+EXTRA_CFLAGS += -Wno-declaration-after-statement
+endif
 
 LIB := ../lib/
 
@@ -60,9 +63,11 @@ kkfsd-objs := $(addprefix $(kfsobjrel)/,$(KKFSD_LIB_OBJS)) \
 		$(addprefix $(kfsobjrel)/,$(KKFSD_KFS_OBJS))
 
 $(addprefix $(kfsobj)/,$(KKFSD_LIB_OBJS)): $(kfsobj)/%.o : $(src)/../lib/%.c
+	@test -d $(kfsobj)/kernel || mkdir -p $(kfsobj)/kernel
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)
 
 $(addprefix $(kfsobj)/,$(KKFSD_KFS_OBJS)): $(kfsobj)/%.o : $(src)/%.c
+	@test -d $(kfsobj)/kernel || mkdir -p $(kfsobj)/kernel
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)
