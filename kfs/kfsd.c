@@ -5,7 +5,6 @@
 #include <lib/string.h>
 
 #if defined(KUDOS)
-#include <kfs/sched.h>
 #include <kfs/ipc_serve.h>
 #elif defined(UNIXUSER)
 #include <kfs/fuse_serve.h>
@@ -15,6 +14,7 @@
 #endif
 
 #include <kfs/sync.h>
+#include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 
@@ -99,13 +99,12 @@ void kfsd_main(int argc, char ** argv)
 #else
 		while(kfsd_running)
 		{
+			sched_iteration();
 #if defined(KUDOS)
 			ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
-			sched_iteration();
 #elif defined(__KERNEL__)
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ / 25);
-			//sched_iteration();
 #else
 #error Unknown target system
 #endif

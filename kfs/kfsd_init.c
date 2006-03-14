@@ -151,6 +151,8 @@ int kfsd_init(int argc, char ** argv)
 		return r;
 	}
 	
+	printf("kfsd basic initialization complete!\n");
+	
 	//
 	// Setup uhfses
 

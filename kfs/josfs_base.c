@@ -8,11 +8,13 @@
 #include <lib/string.h>
 #include <lib/types.h>
 
+#ifdef KUDOS
 /* textbar, sleep from inc/lib.h */
 int jsleep(int32_t jiffies);
 int textbar_init(int use_line);
 int textbar_close(void);
 int textbar_set_progress(int progress, uint8_t color);
+#endif
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
@@ -49,7 +51,9 @@ struct lfs_info
 	BD_t * ubd;
 	bdesc_t * super_block;
 	bdesc_t * bitmap_cache; // Bitmap mini write through cache!
+#ifdef KUDOS
 	int color, p, m;
+#endif
 };
 
 struct josfs_fdesc {
@@ -256,11 +260,13 @@ static int fsck_dir(LFS_t * object, fdesc_t * f, int8_t * fbmap, int8_t * ubmap,
 
 		DFprintf("Checking %s\n", entry.d_name);
 
+#ifdef KUDOS
 		if (info->m >= 0 && info->p < 140) {
 			(info->p)++;
 			textbar_set_progress(info->p, info->color);
 			jsleep(HZ / 20);
 		}
+#endif
 
 		blockno = i / JOSFS_BLKFILES;
 		blockno = get_file_block(object, fdesc->file, blockno * JOSFS_BLKSIZE);
@@ -322,9 +328,11 @@ int josfs_fsck(LFS_t * object)
 	hash_set_it_t hsitr;
 	int reserved = 2 + (s_nblocks / JOSFS_BLKBITSIZE);
 	int d = 0, r = 0, errors = 0;
+#ifdef KUDOS
 	info->m = -1;
 	info->p = 5;
 	info->color = 10;
+#endif
 
 	if (s_nblocks % JOSFS_BLKBITSIZE)
 		reserved++;
@@ -338,17 +346,21 @@ int josfs_fsck(LFS_t * object)
 
 	hsdirs = hash_set_create();
 	if (hsdirs) {
+#ifdef KUDOS
 		info->m = textbar_init(-1);
+#endif
 		temp_fdesc.type.file = &rootfile;
 		temp_fdesc.type.ino = 0;
 
 		memcpy(&rootfile, &super->s_root, sizeof(JOSFS_File_t));
 		fsck_file(object, rootfile, reserved, free_bitmap, used_bitmap, blocklist);
 
+#ifdef KUDOS
 		if (info->m >= 0) {
 			textbar_set_progress(info->p, info->color);
 			jsleep(HZ / 20);
 		}
+#endif
 
 		do {
 			if (r == 0)
@@ -372,10 +384,13 @@ int josfs_fsck(LFS_t * object)
 		}
 		while (dirfile);
 
+#ifdef KUDOS
 		info->p = 140;
+#endif
 
 		if (r >= 0) {
 			for (j = 0; j < s_nblocks; j++) {
+#ifdef KUDOS
 				if (info->m >= 0) {
 					if (info->p < 141 + (j*20/s_nblocks)) {
 						(info->p)++;
@@ -383,6 +398,7 @@ int josfs_fsck(LFS_t * object)
 						jsleep(HZ / 20);
 					}
 				}
+#endif
 
 				if (used_bitmap[j] > 0)
 					printf("block %d is marked as used, but unclaimed\n", j);
@@ -397,6 +413,7 @@ int josfs_fsck(LFS_t * object)
 		r = -E_NO_MEM;
 	}
 
+#ifdef KUDOS
 	if (r < 0 || errors) {
 		if (info->m >= 0) {
 			for (j = 0; j < 5; j++) {
@@ -409,6 +426,7 @@ int josfs_fsck(LFS_t * object)
 	}
 
 	textbar_close();
+#endif
 	free(blocklist);
 	free(free_bitmap);
 	free(used_bitmap);

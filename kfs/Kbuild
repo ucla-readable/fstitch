@@ -19,8 +19,7 @@ KKFSD_LIB_OBJS := \
               hash_map.o \
               hash_set.o \
               kfs_feature.o \
-              sleep.o \
-              textbar.o
+              sleep.o
 
 KKFSD_KFS_OBJS := \
               kfsd.o \
