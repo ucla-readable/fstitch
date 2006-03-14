@@ -144,7 +144,7 @@ static int uhfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t *
 
 static int uhfs_close(CFS_t * cfs, fdesc_t * fdesc)
 {
-	Dprintf("%s(0x%08x)\n", __FUNCTION__, fdesc);
+	Dprintf("%s(%p)\n", __FUNCTION__, fdesc);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	uhfs_fdesc_close(state, uf);
@@ -153,7 +153,7 @@ static int uhfs_close(CFS_t * cfs, fdesc_t * fdesc)
 
 static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 {
-	Dprintf("%s(0x%08x, 0x%x)\n", __FUNCTION__, fdesc, target_size);
+	Dprintf("%s(%p, 0x%x)\n", __FUNCTION__, fdesc, target_size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = CALL(state->lfs, get_blocksize);
@@ -323,7 +323,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 
 static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(cfs, 0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
+	Dprintf("%s(cfs, %p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
@@ -399,7 +399,7 @@ static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
 
 static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
-	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
+	Dprintf("%s(%p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	BD_t * const bd = CALL(state->lfs, get_blockdev);
@@ -554,7 +554,7 @@ uhfs_write_exit:
 
 static int uhfs_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
 {
-	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
+	Dprintf("%s(%p, %p, %d, %p)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	uint32_t i;
@@ -841,7 +841,7 @@ static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * siz
 
 static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
-	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
+	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, size, data);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	chdesc_t * prev_head = NULL;
 
