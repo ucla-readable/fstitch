@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <lib/stdlib.h>
 
 #define _PARAMS(protos) protos
 #define _DEFUN(fn, types, protos) fn(protos)
@@ -88,10 +88,12 @@ PORTABILITY
 #define inline
 #endif
 
-static inline char	*med3 _PARAMS((char *, char *, char *, int (*)()));
+static inline char	*med3 _PARAMS((char *, char *, char *, int (*)(char*,char*)));
 static inline void	 swapfunc _PARAMS((char *, char *, int, int));
 
+#ifndef min
 #define min(a, b)	(a) < (b) ? a : b
+#endif
 
 /*
  * Qsort routine from Bentley & McIlroy's "Engineering a Sort Function".
@@ -138,7 +140,7 @@ _DEFUN(med3, (a, b, c, cmp),
 	char *a _AND
 	char *b _AND
 	char *c _AND
-	int (*cmp)())
+	int (*cmp)(char*,char*))
 {
 	return cmp(a, b) < 0 ?
 	       (cmp(b, c) < 0 ? b : (cmp(a, c) < 0 ? c : a ))
@@ -150,7 +152,7 @@ _DEFUN(qsort, (a, n, es, cmp),
 	void *a _AND
 	size_t n _AND
 	size_t es _AND
-	int (*cmp)())
+	int (*cmp)(char*,char*))
 {
 	char *pa, *pb, *pc, *pd, *pl, *pm, *pn;
 	int d, r, swaptype, swap_cnt;
@@ -215,7 +217,7 @@ loop:	SWAPINIT(a, es);
 	pn = (char *) a + n * es;
 	r = min(pa - (char *)a, pb - pa);
 	vecswap(a, pb - r, r);
-	r = min(pd - pc, pn - pd - es);
+	r = (int) min((char *) (pd - pc), (char *) (pn - pd - es));
 	vecswap(pb, pn - r, r);
 	if ((r = pb - pa) > es)
 		qsort(a, r / es, es, cmp);

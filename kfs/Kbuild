@@ -14,6 +14,7 @@ obj-m += kkfsd.o
 KKFSD_LIB_OBJS := \
               kdprintf.o \
               memdup.o \
+              qsort.o \
               vector.o \
               hash_map.o \
               hash_set.o \
