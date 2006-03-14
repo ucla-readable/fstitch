@@ -1,5 +1,5 @@
 import java.io.DataInput;
-import java.io.IOException;
+//import java.io.IOException;
 
 public class ChdescMove extends Opcode
 {
