@@ -152,7 +152,7 @@ _DEFUN(qsort, (a, n, es, cmp),
 	void *a _AND
 	size_t n _AND
 	size_t es _AND
-	int (*ccmp)(const char*,const char*))
+	int (*ccmp)(const void*,const void*))
 {
 	char *pa, *pb, *pc, *pd, *pl, *pm, *pn;
 	int d, r, swaptype, swap_cnt;

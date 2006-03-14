@@ -1,10 +1,5 @@
-#if !defined(__KERNEL__)
-#include <assert.h>
-#else
-#warning assert not yet implemented
-#define assert(x)
-#endif
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/hash_set.h> // for vector_create_hashset()
