@@ -9,7 +9,7 @@ else
 # Special rules that do something for all Makefiles
 .PHONY: kudos user kernel clean fsclean
 
-all: kudos user
+all: kudos user kernel
 
 kudos user kernel:
 	$(MAKE) -f Makefile.$@

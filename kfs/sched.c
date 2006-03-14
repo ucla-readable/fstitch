@@ -10,10 +10,6 @@
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
 
-#if defined(KUDOS)
-#include <kfs/ipc_serve.h>
-#endif
-
 struct fn_entry {
 	sched_callback fn;
 	void * arg;
@@ -82,9 +78,6 @@ int kfsd_sched_init(void)
 	return 0;
 }
 
-#if defined(KUDOS)
-static
-#endif
 void sched_iteration(void)
 {
 	int32_t cur_ncs;
@@ -121,14 +114,3 @@ void sched_iteration(void)
 	// Also run debug command processing
 	KFS_DEBUG_NET_COMMAND();
 }
-
-#if defined(KUDOS)
-void sched_loop(void)
-{
-	for (;;)
-	{
-		ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
-		sched_iteration();
-	}
-}
-#endif

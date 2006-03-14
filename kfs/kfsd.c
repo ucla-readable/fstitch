@@ -6,22 +6,17 @@
 
 #if defined(KUDOS)
 #include <kfs/sched.h>
+#include <kfs/ipc_serve.h>
 #elif defined(UNIXUSER)
 #include <kfs/fuse_serve.h>
 #elif defined(__KERNEL__)
 #include <linux/module.h>
 #include <linux/moduleparam.h>
-#warning Using lame exit
-#define exit(x) do { } while(0)
 #endif
 
+#include <kfs/sync.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
-
-#if defined(__KERNEL__)
-#warning Not yet linked with kfsd_init
-#define kfsd_init(a,b) 0
-#endif
 
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
@@ -47,11 +42,18 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 	return -E_NO_MEM;
 }
 
+static int kfsd_running = 1;
+
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
-void kfsd_shutdown(void)
+static void kfsd_shutdown(void)
 {
 	int i;
+	
 	printf("Syncing and shutting down.\n");
+	kfsd_running = 0;
+	
+	if(kfs_sync() < 0)
+		kdprintf(STDERR_FILENO, "Sync failed!\n");
 
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
@@ -62,13 +64,17 @@ void kfsd_shutdown(void)
 			module_shutdowns[i].arg = NULL;
 		}
 	}
-	exit(0);
 }
 
-#if defined(__KERNEL__)
-static int running = 1;
-static int shutdown = 0;
-#endif
+void kfsd_request_shutdown(void)
+{
+	kfsd_running = 0;
+}
+
+int kfsd_is_running(void)
+{
+	return kfsd_running;
+}
 
 void kfsd_main(int argc, char ** argv)
 {
@@ -77,24 +83,35 @@ void kfsd_main(int argc, char ** argv)
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
 	if ((r = kfsd_init(argc, argv)) < 0)
-		exit(r);
-
-#if defined(KUDOS)
-	sched_loop();
-#elif defined(UNIXUSER)
-	fuse_serve_loop();
-#elif defined(__KERNEL__)
-	while(running)
 	{
-		//sched_iteration();
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(HZ / 10);
+#ifdef __KERNEL__
+		printk("kfsd_init() failed in the kernel! (error = %d)\n", r);
+#else
+		kfsd_shutdown();
+		exit(r);
+#endif
 	}
-	shutdown = 1;
-#warning Not yet calling a kfsd looper
+	else
+	{
+#if defined(UNIXUSER)
+		/* fuse_serve_loop() doesn't respect kfsd_running()... but that's OK */
+		fuse_serve_loop();
+#else
+		while(kfsd_running)
+		{
+#if defined(KUDOS)
+			ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
+			sched_iteration();
+#elif defined(__KERNEL__)
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(HZ / 25);
+			//sched_iteration();
 #else
 #error Unknown target system
 #endif
+		}
+#endif
+	}
 	kfsd_shutdown();
 }
 
@@ -144,12 +161,15 @@ int main(int argc, char * argv[])
 
 #elif defined(__KERNEL__)
 
+static int kfsd_is_shutdown = 0;
+
 static int kfsd_thread(void * thunk)
 {
 	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
 	daemonize("kkfsd");
 	kfsd_main(0, NULL);
 	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
+	kfsd_is_shutdown = 1;
 	return 0;
 }
 
@@ -163,10 +183,8 @@ static int __init init_kfsd(void)
 
 static void __exit exit_kfsd(void)
 {
-	/* We can't actually just call kfsd_shutdown() from outside the kfsd thread.... we should request that it shutdown, then wait for it. */
-	//kfsd_shutdown();
-	running = 0;
-	while(!shutdown)
+	kfsd_request_shutdown();
+	while(!kfsd_is_shutdown)
 	{
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 10);
@@ -179,7 +197,6 @@ module_exit(exit_kfsd);
 MODULE_AUTHOR("KudOS Team");
 MODULE_DESCRIPTION("KudOS File Server Architecture");
 MODULE_LICENSE("GPL");
-
 
 #else
 #error Unknown target system

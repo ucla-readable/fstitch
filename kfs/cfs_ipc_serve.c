@@ -110,14 +110,16 @@ int cfs_ipc_serve_init(void)
 	return 1;
 }
 
-static void alloc_prevrecv(envid_t envid, prev_serve_recv_t ** prevrecv)
+static int alloc_prevrecv(envid_t envid, prev_serve_recv_t ** prevrecv)
 {
 	*prevrecv = prev_serve_recvs[ENVX(envid)] = malloc(sizeof(prev_serve_recv_t));
 	if (!*prevrecv)
 	{
 		kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: malloc returned NULL\n");
-		kfsd_shutdown();
+		kfsd_request_shutdown();
+		return -E_NO_MEM;
 	}
+	return 0;
 }
 
 
@@ -127,7 +129,10 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	fdesc_t * fdesc;
 	if (!prevrecv)
-		alloc_prevrecv(envid, &prevrecv);
+		if(alloc_prevrecv(envid, &prevrecv) < 0)
+			/* if there is no prevrecv, we are in the first
+			 * case below, so we shouldn't send an error */
+			return;
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -229,7 +234,10 @@ static void serve_write(envid_t envid, struct Scfs_write * req)
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-		alloc_prevrecv(envid, &prevrecv);
+		if(alloc_prevrecv(envid, &prevrecv) < 0)
+			/* if there is no prevrecv, we are in the first
+			 * case below, so we shouldn't send an error */
+			return;
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -457,7 +465,10 @@ static void serve_set_metadata(envid_t envid, struct Scfs_set_metadata * req)
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-		alloc_prevrecv(envid, &prevrecv);
+		if(alloc_prevrecv(envid, &prevrecv) < 0)
+			/* if there is no prevrecv, we are in the first
+			 * case below, so we shouldn't send an error */
+			return;
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -492,7 +503,10 @@ static void serve_opgroup_scope_create(envid_t envid, struct Scfs_opgroup_scope_
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-		alloc_prevrecv(envid, &prevrecv);
+		if(alloc_prevrecv(envid, &prevrecv) < 0)
+			/* if there is no prevrecv, we are in the first
+			 * case below, so we shouldn't send an error */
+			return;
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -519,7 +533,10 @@ static void serve_opgroup_scope_copy(envid_t envid, struct Scfs_opgroup_scope_co
 {
 	prev_serve_recv_t * prevrecv = prev_serve_recvs[ENVX(envid)];
 	if (!prevrecv)
-		alloc_prevrecv(envid, &prevrecv);
+		if(alloc_prevrecv(envid, &prevrecv) < 0)
+			/* if there is no prevrecv, we are in the first
+			 * case below, so we shouldn't send an error */
+			return;
 
 	if (!prevrecv->type || prevrecv->envid != envid)
 	{
@@ -587,9 +604,8 @@ static void serve_opgroup_abandon(envid_t envid, struct Scfs_opgroup_abandon * r
 static void serve_shutdown(envid_t envid, struct Scfs_shutdown * req)
 {
 	Dprintf("%s: %08x\n", __FUNCTION__, envid);
-	/* must respond before shutdown, because kfsd_shutdown() exits */
+	kfsd_request_shutdown();
 	ipc_send(envid, 0, NULL, 0, NULL);
-	kfsd_shutdown();
 }
 
 static void serve_debug(envid_t envid, struct Scfs_debug * req)

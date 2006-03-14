@@ -42,7 +42,6 @@ static __inline int jiffy_time(void)
 }
 
 #elif defined(__KERNEL__)
-#warning Write Linux kernel support
 static __inline int jiffy_time(void)
 {
 	return (int) get_jiffies_64();

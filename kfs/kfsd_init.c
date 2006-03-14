@@ -1,6 +1,7 @@
 #ifdef KUDOS
 #include <inc/lib.h>
 #endif
+#include <inc/error.h>
 #include <lib/assert.h>
 #include <lib/kdprintf.h>
 #include <lib/vector.h>
@@ -51,7 +52,7 @@
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
-void handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
+int handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
@@ -95,58 +96,59 @@ int kfsd_init(int argc, char ** argv)
 	{
 		kdprintf(STDERR_FILENO, "kfs_debug_init: %i\n", r);
 #ifdef KUDOS
-		while(r != 'y' && r != 'n')
+		int c;
+		while(c != 'y' && c != 'n')
 		{
 			kdprintf(STDERR_FILENO, "Start anyway? [Y/n] ");
-			r = 0;
-			while(r <= 0)
-				r = sys_cgetc_nb();
-			if(r == '\n')
-				r = 'y';
-			kdprintf(STDERR_FILENO, "%c\n", r);
+			c = 0;
+			while(c <= 0)
+				c = sys_cgetc_nb();
+			if(c == '\n')
+				c = 'y';
+			kdprintf(STDERR_FILENO, "%c\n", c);
 		}
-		if(r == 'n')
+		if(c == 'n')
 #endif
-			kfsd_shutdown();
+			return r;
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
 	if((r = modman_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "modman_init: %i\n", r);
-		kfsd_shutdown();
+		return r;
 	}
 
 #if defined(KUDOS)
 	if ((r = ipc_serve_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "ipc_serve_init: %i\n", r);
-		kfsd_shutdown();
+		return r;
 	}
 
 	if (!cfs_ipc_serve_init())
 	{
 		kdprintf(STDERR_FILENO, "cfs_ipc_serve_init failed\n");
-		kfsd_shutdown();
+		return -E_UNSPECIFIED;
 	}
 #elif defined(UNIXUSER)
 	if ((r = fuse_serve_init(argc, argv)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "fuse_serve_init: %d\n", r);
-		kfsd_shutdown();
+		return r;
 	}
 #endif
 
 	if ((r = kfsd_sched_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "sched_init: %i\n", r);
-		kfsd_shutdown();
+		return r;
 	}
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %i\n");
-		kfsd_shutdown();
+		return r;
 	}
 	
 	//
@@ -155,7 +157,7 @@ int kfsd_init(int argc, char ** argv)
 	if (! (uhfses = vector_create()) )
 	{
 		kdprintf(STDERR_FILENO, "OOM, vector_create\n");
-		kfsd_shutdown();
+		return -E_NO_MEM;
 	}
 
 	if (use_net)
@@ -168,7 +170,7 @@ int kfsd_init(int argc, char ** argv)
 		if (! (bd = nbd_bd("192.168.1.2", 2492)) )
 			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
 		if (bd && (r = construct_uhfses(bd, 512, allow_journal, uhfses)) < 0)
-			kfsd_shutdown();
+			return r;
 	}
 
 	if (use_disk_0)
@@ -193,9 +195,9 @@ int kfsd_init(int argc, char ** argv)
 			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
 			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
-				kfsd_shutdown();
+				return -E_UNSPECIFIED;
 			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
-				kfsd_shutdown();
+				return r;
 		}
 	}
 
@@ -219,7 +221,7 @@ int kfsd_init(int argc, char ** argv)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 
 		if (bd && (r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)		
-			kfsd_shutdown();
+			return r;
 	}
 
 	//
@@ -227,7 +229,7 @@ int kfsd_init(int argc, char ** argv)
 
 #ifdef KUDOS
 	if (! (table_class = mount_selector_cfs()) )
-		kfsd_shutdown();
+		return -E_UNSPECIFIED;
 	assert(!get_frontend_cfs());
 	set_frontend_cfs(table_class);
 #endif
@@ -240,7 +242,7 @@ int kfsd_init(int argc, char ** argv)
 			if (r < 0)
 			{
 				kdprintf(STDERR_FILENO, "kfsd_add_mount: %i\n", r);
-				kfsd_shutdown();
+				return r;
 			}
 		}
 
@@ -250,11 +252,11 @@ int kfsd_init(int argc, char ** argv)
 
 	r = kfsd_add_mount("/dev", modman_devfs);
 	if (r < 0)
-		kfsd_shutdown();
+		return r;
 
 #ifdef KUDOS
 	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
-		kfsd_shutdown();
+		return -E_UNSPECIFIED;
 	set_frontend_cfs(opgroupscope_tracker);
 #endif
 
@@ -275,7 +277,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 	if (! (partitions = vector_create()) )
 	{
 		kdprintf(STDERR_FILENO, "OOM, vector_create\n");
-		kfsd_shutdown();
+		return -E_NO_MEM;
 	}
 
 #ifdef USE_MIRROR
@@ -297,7 +299,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				if (! (part = malloc(sizeof(kfsd_partition_t))) )
 				{
 					kdprintf(STDERR_FILENO, "OOM, malloc\n");
-					kfsd_shutdown();
+					return -E_NO_MEM;
 				}
 				part->bd = pc_ptable_bd(ptbl, i);
 				if (part->bd)
@@ -309,7 +311,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 					if (vector_push_back(partitions, part))
 					{
 						kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
-						kfsd_shutdown();
+						return -E_NO_MEM;
 					}
 				}
 			}
@@ -323,7 +325,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 					bsdtbl = bsd_ptable_init(tmppart);
 					if (bsdtbl)
 					{
-						handle_bsd_partitions(bsdtbl, partitions);
+						int r = handle_bsd_partitions(bsdtbl, partitions);
+						if (r < 0)
+							return r;
 					}
 					bsd_ptable_free(bsdtbl);
 				}
@@ -335,10 +339,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		pc_ptable_free(ptbl);
 
 		if (vector_size(partitions) <= 0)
-		{
 			printf("No partition found!\n");
-			//kfsd_shutdown();
-		}
 	}
 	else
 	{
@@ -346,7 +347,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		if (! (part = malloc(sizeof(kfsd_partition_t))) )
 		{
 			kdprintf(STDERR_FILENO, "OOM, malloc\n");
-			kfsd_shutdown();
+			return -E_NO_MEM;
 		}
 		// No partition table, make it look like a KudOS partition...
 		part->bd = bd;
@@ -356,7 +357,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		if (vector_push_back(partitions, part))
 		{
 			kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
-			kfsd_shutdown();
+			return -E_NO_MEM;
 		}
 	}
 
@@ -376,6 +377,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		if (part->type == PTABLE_KUDOS_TYPE)
 		{
 			cache = construct_cacheing(part->bd, cache_nblks, 4096);
+			if (!cache)
+				return -E_UNSPECIFIED;
 
 			if (allow_journal)
 			{
@@ -405,7 +408,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 					if (r < 0)
 					{
 						kdprintf(STDERR_FILENO, "get_root: %i\n", r);
-						kfsd_shutdown();
+						return r;
 					}
 					r = CALL(josfs_lfs, lookup_name, root_ino, ".journal", &journal_ino);
 					if (r < 0)
@@ -458,7 +461,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 			else
 			{
 				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
-				kfsd_shutdown();
+				return -E_UNSPECIFIED;
 			}
 			if (is_journaled)
 				printf(" (journaled)");
@@ -470,6 +473,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		{
 			// TODO handle 1K fragment size in UFS?
 			cache = construct_cacheing(part->bd, cache_nblks, 2048);
+			if (!cache)
+				return -E_UNSPECIFIED;
 			lfs = ufs(cache);
 
 			if (lfs)
@@ -486,17 +491,17 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 			continue;
 		}
 		if (! (lfs = opgroup_lfs(lfs)))
-			kfsd_shutdown();
+			return -E_UNSPECIFIED;
 
 		if (! (u = uhfs(lfs)) )
 		{
 			kdprintf(STDERR_FILENO, "uhfs() failed\n");
-			kfsd_shutdown();
+			return -E_UNSPECIFIED;
 		}
 		if (vector_push_back(uhfses, u) < 0)
 		{
 			kdprintf(STDERR_FILENO, "vector_push_back() failed\n");
-			kfsd_shutdown();
+			return -E_UNSPECIFIED;
 		}
 	}
 
@@ -515,22 +520,22 @@ BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 	{
 		/* create a resizer */
 		if (! (bd = block_resizer_bd(bd, bs)) )
-			kfsd_shutdown();
+			return NULL;
 
 		/* create a cache above the resizer */
 		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
-			kfsd_shutdown();
+			return NULL;
 	}
 	else
 	{
 		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
-			kfsd_shutdown();
+			return NULL;
 	}
 
 	return bd;
 }
 
-void handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
+int handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 {
 	uint32_t j, bsd_max = bsd_ptable_count(bsdtbl);
 	uint8_t fstype;
@@ -544,7 +549,7 @@ void handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 			if (! (part = malloc(sizeof(kfsd_partition_t))) )
 			{
 				kdprintf(STDERR_FILENO, "OOM, malloc\n");
-				kfsd_shutdown();
+				return -E_NO_MEM;
 			}
 			part->bd = bsd_ptable_bd(bsdtbl, j);
 			if (part->bd)
@@ -556,9 +561,10 @@ void handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 				if (vector_push_back(partitions, part))
 				{
 					kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
-					kfsd_shutdown();
+					return -E_NO_MEM;
 				}
 			}
 		}
 	}
+	return 0;
 }

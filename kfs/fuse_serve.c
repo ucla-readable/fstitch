@@ -1200,7 +1200,7 @@ int fuse_serve_loop(void)
 	serving = 1;
 	tv = fuse_serve_timeout();
 
-    while (fuse_serve_mounts() && hash_set_size(fuse_serve_mounts()))
+	while (fuse_serve_mounts() && hash_set_size(fuse_serve_mounts()))
 	{
 		fd_set rfds;
 		int max_fd = 0;
@@ -1299,9 +1299,9 @@ int fuse_serve_loop(void)
 			}
 			tv = time_subtract(tv, time_elapsed(it_start, it_end));
 		}
-    }
+	}
 
 	serving = 0;
 
-    return 0;
+	return 0;
 }

@@ -29,11 +29,12 @@ jsleep(int32_t jiffies)
 }
 
 #elif defined(__KERNEL__)
-#warning Need to implement jsleep
+#include <linux/module.h>
 int
 jsleep(int32_t jiffies)
 {
-	return jiffies;
+	current->state = TASK_INTERRUPTIBLE;
+	return schedule_timeout(jiffies);
 }
 
 #else
