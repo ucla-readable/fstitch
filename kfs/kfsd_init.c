@@ -19,6 +19,7 @@
 #include <kfs/elevator_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/nbd_bd.h>
+#include <kfs/mem_bd.h>
 #include <kfs/loop_bd.h>
 #ifdef UNIXUSER
 #include <kfs/unix_file_bd.h>
@@ -81,6 +82,7 @@ int kfsd_init(int argc, char ** argv)
 #else
 #error Unknown target system
 #endif
+	const bool use_mem_bd = 1;
 	const bool use_net    = 0;
 	vector_t * uhfses = NULL;
 
@@ -204,6 +206,7 @@ int kfsd_init(int argc, char ** argv)
 			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
 				return -E_UNSPECIFIED;
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
 				return r;
 		}
@@ -230,6 +233,20 @@ int kfsd_init(int argc, char ** argv)
 
 		if (bd && (r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)		
 			return r;
+	}
+
+	if (use_mem_bd)
+	{
+		BD_t * bd;
+
+		if (! (bd = mem_bd(1024, 4096)) )
+			kdprintf(STDERR_FILENO, "mem_bd(1024, 4096) failed\n");
+		if (bd)
+		{
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+				return r;
+		}
 	}
 
 	//
@@ -364,7 +381,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		part->bd = bd;
 		part->type = PTABLE_KUDOS_TYPE;
 		part->subtype = 0;
-		snprintf(part->description, 32, "Whole disk");
+		snprintf(part->description, 32, "<entire disk>");
 		if (vector_push_back(partitions, part))
 		{
 			kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");

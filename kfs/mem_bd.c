@@ -19,6 +19,10 @@
 #error inc/fs.h got included in mem_bd.c
 #endif
 
+#ifdef __KERNEL__
+#include <linux/vmalloc.h>
+#endif
+
 struct mem_info {
 	uint8_t *blocks;
 	uint32_t blockcount;
@@ -216,7 +220,13 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	info->blockcount = blocks;
 	info->blocksize = blocksize;
 
+#ifndef __KERNEL__
 	info->blocks = malloc(blocks * blocksize);
+#else
+	/* When running in the Linux kernel, we can't allocate this much
+	 * memory with kmalloc(). So, we use vmalloc() instead. */
+	info->blocks = vmalloc(blocks * blocksize);
+#endif
 	if (!info->blocks) {
 		free(info);
 		free(bd);
