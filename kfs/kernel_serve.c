@@ -274,6 +274,7 @@ serve_open(struct inode * inode, struct file * filp)
 
 	spin_lock(kfsd_lock);
 	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
+	fdesc->common->parent = filp->f_dentry->d_parent->d_inode->i_ino;
 	spin_unlock(kfsd_lock);
 	if (r < 0)
 		return -EPERM; // TODO: r could be other failures
