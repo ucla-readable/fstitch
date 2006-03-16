@@ -2,6 +2,7 @@
 #include <lib/kdprintf.h>
 #include <lib/vector.h>
 #include <lib/string.h>
+#include <lib/stdio.h>
 #include <lib/assert.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -109,6 +110,18 @@ int kernel_serve_init(spinlock_t * lock)
 //
 // Linux VFS function implementations
 
+static CFS_t *
+dentry2cfs(struct dentry * dentry)
+{
+	return ((mount_desc_t *) dentry->d_sb->s_fs_info)->cfs;
+}
+
+static fdesc_t * file2fdesc(struct file * filp)
+{
+	return (fdesc_t *) filp->private_data;
+}
+
+
 /* Looking at the NFS file system implementation was very helpful for some of these functions. */
 
 static int
@@ -139,7 +152,7 @@ serve_mk_linux_inode(struct super_block * sb, inode_t i)
 	inode = new_inode(sb);
 	if (!inode)
 		return NULL;
-	inode->i_ino = (ino_t) i;
+	inode->i_ino = i;
 	inode->i_uid = 0;
 	inode->i_gid = 0;
 	inode->i_size = 4096;
@@ -248,11 +261,40 @@ serve_kill_sb(struct super_block * sb)
 	kill_anon_super(sb);
 }
 
+static int
+serve_open(struct inode * inode, struct file * filp)
+{
+	fdesc_t * fdesc;
+	int r;
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, filp->f_dentry->d_name.name);
+
+	r = generic_file_open(inode, filp);
+	if (r < 0)
+		return r;
+
+	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
+	if (r < 0)
+		return -EPERM; // TODO: r could be other failures
+	filp->private_data = fdesc;
+	return 0;
+}
+
+static int
+serve_release(struct inode * inode, struct file * filp)
+{
+	Dprintf("%s(name = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
+	return CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
+}
+
 static struct dentry *
 serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * ignore)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return NULL;
+	// Under knoppix there is some program that looks up "auto" with a
+	// very short period, making debug output much more difficult to read.
+	// Thus don't Dprintf() for "auto" lookups.
+	if (strcmp(dentry->d_name.name, "auto"))
+		Dprintf("%s(dentry = \"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	return ERR_PTR(-EPERM);
 }
 
 static int
@@ -291,10 +333,64 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 }
 
 static int
-serve_dir_readdir(struct file * filp, void * dirent, filldir_t filldir)
+linux_filetype(uint8_t cfs_filetype)
+{
+	switch (cfs_filetype)
+	{
+		case TYPE_FILE:
+			return DT_REG;
+		case TYPE_DIR:
+			return DT_DIR;
+		case TYPE_SYMLINK:
+			return DT_LNK;
+		case TYPE_DEVICE:
+			return DT_REG;
+		default:
+			assert(0);
+			return DT_REG;
+	}
+}
+
+static int
+serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	return -1;
+	int r;
+
+	while (1)
+	{
+		uint32_t cfs_fpos = filp->f_pos;
+		char buf[sizeof(dirent_t)];
+		char * cur = buf;
+		uint32_t k_nbytes = 0;
+
+		r = CALL(dentry2cfs(filp->f_dentry), getdirentries, file2fdesc(filp), buf, sizeof(buf), &cfs_fpos);
+		if (r < 0)
+			break;
+
+		while ((cur - buf) + ((dirent_t *) cur)->d_reclen < r)
+		{
+			dirent_t * cfs_dirent = (dirent_t *) cur;
+			int s;
+			Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
+			// FIXME?: must fpos be a real file position?
+			s = filldir(k_dirent, cfs_dirent->d_name, cfs_dirent->d_namelen, 0, cfs_dirent->d_fileno, linux_filetype(cfs_dirent->d_type));
+			if (s < 0)
+			{
+				cfs_fpos = filp->f_pos;
+				r = CALL(dentry2cfs(filp->f_dentry), getdirentries, file2fdesc(filp), buf, k_nbytes, &cfs_fpos);
+				assert(r >= 0);
+				break;
+			}
+			cur += cfs_dirent->d_reclen;
+			k_nbytes += cfs_dirent->d_reclen;
+		}
+		filp->f_pos = cfs_fpos;
+	}
+
+	if (r == -E_UNSPECIFIED)
+		return 1;
+	return 0;
 }
 
 static int
@@ -332,6 +428,8 @@ static struct inode_operations kfs_dir_inode_ops = {
 };
 
 static struct file_operations kfs_dir_file_ops = {
+	.open = serve_open,
+	.release = serve_release,
 	.read = generic_read_dir,
 	.readdir = serve_dir_readdir
 };
