@@ -272,7 +272,9 @@ serve_open(struct inode * inode, struct file * filp)
 	if (r < 0)
 		return r;
 
+	spin_lock(kfsd_lock);
 	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
+	spin_unlock(kfsd_lock);
 	if (r < 0)
 		return -EPERM; // TODO: r could be other failures
 	filp->private_data = fdesc;
@@ -283,7 +285,11 @@ static int
 serve_release(struct inode * inode, struct file * filp)
 {
 	Dprintf("%s(name = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
-	return CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
+	int r;
+	spin_lock(kfsd_lock);
+	r = CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
+	spin_unlock(kfsd_lock);
+	return r;
 }
 
 static struct dentry *
@@ -357,6 +363,7 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 	Dprintf("%s()\n", __FUNCTION__);
 	int r;
 
+	spin_lock(kfsd_lock);
 	while (1)
 	{
 		uint32_t cfs_fpos = filp->f_pos;
@@ -387,6 +394,7 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 		}
 		filp->f_pos = cfs_fpos;
 	}
+	spin_unlock(kfsd_lock);
 
 	if (r == -E_UNSPECIFIED)
 		return 1;
