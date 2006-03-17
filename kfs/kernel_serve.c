@@ -430,7 +430,25 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 static int
 serve_notify_change(struct dentry * dentry, struct iattr * attr)
 {
-	Dprintf("%s()\n", __FUNCTION__);
+	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
+#if 0
+	struct inode * inode = dentry->d_inode;
+	if (attr->ia_valid & ATTR_SIZE)
+	{
+		if(is_directory)
+			return -EPERM; /* operation not permitted */
+		change_size(new_size);
+		if(failed)
+			return error;
+	}
+	inode_change_ok(inode, attr);
+	if(failed)
+		return error;
+	inode_setattr(inode, attr);
+	if(failed)
+		return error;
+	return 0;
+#endif
 	return -1;
 }
 
@@ -482,8 +500,43 @@ out:
 static ssize_t
 serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t * f_pos)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -1;
+	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
+	fdesc_t * fdesc = file2fdesc(filp);
+	CFS_t * cfs = dentry2cfs(filp->f_dentry);
+	/* pick a reasonably big, but not too big, maximum size we will allocate
+	 * on behalf of a requesting user process... TODO: use it repeatedly? */
+	size_t data_size = (count > 65536) ? 65536 : count;
+	char * data = vmalloc(data_size);
+	uint32_t offset = *f_pos;
+	ssize_t r = 0;
+	unsigned long bytes;
+	
+	if (!data)
+		return -E_NO_MEM;
+	
+	bytes = copy_from_user(data, buffer, data_size);
+	if (bytes)
+	{
+		if (data_size == bytes)
+		{
+			r = -E_FAULT;
+			goto out;
+		}
+		data_size -= bytes;
+	}
+	
+	spin_lock(kfsd_lock);
+	r = CALL(cfs, write, fdesc, data, offset, data_size);
+	spin_unlock(kfsd_lock);
+	
+	if (r < 0)
+		goto out;
+	
+	*f_pos += r;
+	
+out:
+	vfree(data);
+	return r;
 }
 
 static int
@@ -499,6 +552,8 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 	Dprintf("%s()\n", __FUNCTION__);
 	return -1;
 }
+
+#define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
 
 static int
 serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
@@ -518,7 +573,8 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 		if (r < 0)
 			break;
 
-		while ((cur - buf) + ((dirent_t *) cur)->d_reclen < r)
+		/* make sure there is a reclen to read, and make sure it doesn't say to go to far  */
+		while ((cur - buf) + RECLEN_MIN_SIZE <= r && (cur - buf) + ((dirent_t *) cur)->d_reclen <= r)
 		{
 			dirent_t * cfs_dirent = (dirent_t *) cur;
 			int s;
