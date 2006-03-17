@@ -441,7 +441,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 					r = CALL(josfs_lfs, lookup_name, root_ino, ".journal", &journal_ino);
 					if (r < 0)
 					{
-						kdprintf(STDERR_FILENO, "No journal file\n");
+						kdprintf(STDERR_FILENO, "No journal file; restarting modules\n");
 						goto disable_journal;
 					}
 
@@ -461,11 +461,12 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				else
 				{
 				  disable_journal:
-					(void) DESTROY(journal);
 					if (journalbd)
 						(void) DESTROY(journalbd);
-					lfs = josfs_lfs;
+					(void) DESTROY(josfs_lfs);
+					(void) DESTROY(journal);
 					journal = cache;
+					lfs = josfs_lfs = josfs(cache);
 					is_journaled = 0;
 				}
 			}
