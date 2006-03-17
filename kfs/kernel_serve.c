@@ -455,8 +455,12 @@ serve_read(struct file * filp, char __user * buffer, size_t count, loff_t * f_po
 	r = CALL(cfs, read, fdesc, data, offset, data_size);
 	spin_unlock(kfsd_lock);
 	
-	if (r < 0)
+	/* CFS gives us an "error" when we hit EOF */
+	if (r == -E_EOF)
+		r = 0;
+	else if (r < 0)
 		goto out;
+	
 	bytes = copy_to_user(buffer, data, r);
 	if (bytes)
 	{
