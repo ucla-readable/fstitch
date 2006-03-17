@@ -21,11 +21,25 @@ extern const feature_t KFS_feature_unix_permissions;
 extern const feature_t KFS_feature_blocksize;
 extern const feature_t KFS_feature_devicesize;
 
+#ifndef __KERNEL__
+
 /* filetype values - large to avoid conflict with on-disk values */
 #define TYPE_FILE    0x80
 #define TYPE_DIR     0x81
 #define TYPE_SYMLINK 0x82
 #define TYPE_DEVICE  0x83
 #define TYPE_INVAL   (-1)
+
+#else
+
+#include <linux/fs.h>
+
+#define TYPE_FILE     DT_REG
+#define TYPE_DIR      DT_DIR
+#define TYPE_SYMLINK  DT_LNK
+#define TYPE_DEVICE   DT_REG /* KudOS has "device" type which is really a file to Linux */
+#define TYPE_INVAL    DT_UNKNOWN
+
+#endif
 
 #endif /* __KUDOS_KFS_FEATURE_H */

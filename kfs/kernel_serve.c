@@ -497,25 +497,6 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 }
 
 static int
-linux_filetype(uint8_t cfs_filetype)
-{
-	switch (cfs_filetype)
-	{
-		case TYPE_FILE:
-			return DT_REG;
-		case TYPE_DIR:
-			return DT_DIR;
-		case TYPE_SYMLINK:
-			return DT_LNK;
-		case TYPE_DEVICE:
-			return DT_REG;
-		default:
-			assert(0);
-			return DT_REG;
-	}
-}
-
-static int
 serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 {
 	Dprintf("%s()\n", __FUNCTION__);
@@ -539,7 +520,7 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 			int s;
 			Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
 			// FIXME?: must fpos be a real file position?
-			s = filldir(k_dirent, cfs_dirent->d_name, cfs_dirent->d_namelen, 0, cfs_dirent->d_fileno, linux_filetype(cfs_dirent->d_type));
+			s = filldir(k_dirent, cfs_dirent->d_name, cfs_dirent->d_namelen, 0, cfs_dirent->d_fileno, cfs_dirent->d_type);
 			if (s < 0)
 			{
 				cfs_fpos = filp->f_pos;
