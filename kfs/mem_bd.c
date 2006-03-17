@@ -172,7 +172,11 @@ static int mem_bd_destroy(BD_t * bd)
 
 	blockman_destroy(&info->blockman);
 
+#ifndef __KERNEL__
 	free(info->blocks);
+#else
+	vfree(info->blocks);
+#endif
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
