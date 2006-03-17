@@ -6,6 +6,8 @@
 #include <lib/assert.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/vmalloc.h>
+#include <asm/uaccess.h>
 
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>
@@ -273,7 +275,7 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	if (!k_root)
 	{
 		sb->s_dev = 0;
-		return -ENOMEM;
+		return -E_NO_MEM;
 	}
 	k_root->i_ino = cfs_root;
 	serve_read_inode(k_root);
@@ -283,7 +285,7 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	{
 		iput(k_root);
 		sb->s_dev = 0;
-		return -ENOMEM;
+		return -E_NO_MEM;
 	}
 	return 0;
 }
@@ -294,7 +296,7 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 	Dprintf("%s()\n", __FUNCTION__);
 	int i, size;
 	if (strncmp(dev_name, "kfs:", 4))
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-E_INVAL);
 	
 	spin_lock(kfsd_lock);
 	size = vector_size(mounts);
@@ -307,12 +309,12 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 			if (m->mounted)
 			{
 				spin_unlock(kfsd_lock);
-				return ERR_PTR(-EBUSY);
+				return ERR_PTR(-E_BUSY);
 			}
 			if (modman_inc_cfs(m->cfs, fs_type, m->path) < 0)
 			{
 				spin_unlock(kfsd_lock);
-				return ERR_PTR(-ENOMEM);
+				return ERR_PTR(-E_NO_MEM);
 			}
 			sb = sget(fs_type, serve_compare_super, serve_set_super, m);
 			if (IS_ERR(sb) || sb->s_root) /* sb->s_root means it is mounted already? */
@@ -339,7 +341,7 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 		}
 	}
 	spin_unlock(kfsd_lock);
-	return ERR_PTR(-ENODEV);
+	return ERR_PTR(-E_NO_DEV);
 }
 
 static void
@@ -368,7 +370,7 @@ serve_open(struct inode * inode, struct file * filp)
 	fdesc->common->parent = filp->f_dentry->d_parent->d_inode->i_ino;
 	spin_unlock(kfsd_lock);
 	if (r < 0)
-		return -EPERM; // TODO: r could be other failures
+		return r;
 	filp->private_data = fdesc;
 	return 0;
 }
@@ -392,21 +394,17 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 	struct inode * inode = NULL;
 	int r;
 
-	// Under knoppix there is some program that looks up "auto" with a
-	// very short period, making debug output much more difficult to read.
-	// Thus don't Dprintf() for "auto" lookups.
-	if (strcmp(dentry->d_name.name, "auto"))
-		Dprintf("%s(dentry = \"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	Dprintf("%s(dentry = \"%s\") (pid = %d)\n", __FUNCTION__, dentry->d_name.name, current->pid);
 
 	spin_lock(kfsd_lock);
 	assert(dentry2cfs(dentry));
 	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
-	if (r < 0)
+	if (r == -E_NOT_FOUND)
+		cfs_ino = 0;
+	else if (r < 0)
 	{
 		spin_unlock(kfsd_lock);
-		if (r == -E_NOT_FOUND)
-			return ERR_PTR(-EACCES);
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(r);
 	}
 	k_ino = cfs_ino;
 	spin_unlock(kfsd_lock); // TODO: do we need to hold the lock for iget() et al, too?
@@ -415,7 +413,7 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 	{
 		inode = iget(dir->i_sb, k_ino); 
 		if (!inode)
-			return ERR_PTR(-EACCES);
+			return ERR_PTR(-E_PERM);
 	}
 	if (inode)
 	{
@@ -424,8 +422,8 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 			d->d_op = &kfs_dentry_ops;
 		return d;
 	}
+	/* add a negative dentry */
 	d_add(dentry, inode);
-	// TODO: is d->d_op already set to &kfs_dentry_ops?
 	return NULL;
 }
 
@@ -439,8 +437,42 @@ serve_notify_change(struct dentry * dentry, struct iattr * attr)
 static ssize_t
 serve_read(struct file * filp, char __user * buffer, size_t count, loff_t * f_pos)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -1;
+	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
+	fdesc_t * fdesc = file2fdesc(filp);
+	CFS_t * cfs = dentry2cfs(filp->f_dentry);
+	/* pick a reasonably big, but not too big, maximum size we will allocate
+	 * on behalf of a requesting user process... TODO: use it repeatedly? */
+	size_t data_size = (count > 65536) ? 65536 : count;
+	char * data = vmalloc(data_size);
+	uint32_t offset = *f_pos;
+	ssize_t r = 0;
+	unsigned long bytes;
+	
+	if (!data)
+		return -E_NO_MEM;
+	
+	spin_lock(kfsd_lock);
+	r = CALL(cfs, read, fdesc, data, offset, data_size);
+	spin_unlock(kfsd_lock);
+	
+	if (r < 0)
+		goto out;
+	bytes = copy_to_user(buffer, data, r);
+	if (bytes)
+	{
+		if (r == bytes)
+		{
+			r = -E_FAULT;
+			goto out;
+		}
+		r -= bytes;
+	}
+	
+	*f_pos += r;
+	
+out:
+	vfree(data);
+	return r;
 }
 
 static ssize_t
