@@ -184,6 +184,10 @@ serve_read_inode(struct inode * inode)
 	int nlinks_supported = 0, perms_supported = 0;
 	int r;
 	
+	// TODO: it seems this function can be called from another kernel_serve function (which holds kfsd_lock)
+	// or by the kernel (in which case this function needs to lock kfsd_lock).
+	// This needs to be taken care of!
+
 	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
