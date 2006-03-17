@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 
+#include <kfs/feature.h>
 #include <kfs/kfsd.h>
 #include <kfs/modman.h>
 #include <kfs/kernel_serve.h>
@@ -111,9 +112,15 @@ int kernel_serve_init(spinlock_t * lock)
 // Linux VFS function implementations
 
 static CFS_t *
+sb2cfs(struct super_block * sb)
+{
+	return ((mount_desc_t *) sb->s_fs_info)->cfs;
+}
+
+static CFS_t *
 dentry2cfs(struct dentry * dentry)
 {
-	return ((mount_desc_t *) dentry->d_sb->s_fs_info)->cfs;
+	return sb2cfs(dentry->d_sb);
 }
 
 static fdesc_t * file2fdesc(struct file * filp)
@@ -143,27 +150,103 @@ serve_compare_super(struct super_block * sb, void * data)
 	return 1;
 }
 
-static struct inode *
-serve_mk_linux_inode(struct super_block * sb, inode_t i)
+static uint32_t
+data_size(struct inode * inode)
 {
-	struct inode * inode;
-	/* FIXME */
-	printk("holy crap this is half-assed! please fix me!\n");
-	inode = new_inode(sb);
-	if (!inode)
-		return NULL;
-	inode->i_ino = i;
+	
+	uint32_t filesize_size;
+	union {
+		int32_t * filesize;
+		void * ptr;
+	} filesize;
+	uint32_t size;
+	int r;
+
+	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
+	if (r < 0)
+	{
+		Dprintf("%s: CALL(get_metadata, cfs_ino = %lu) = %d\n", __FUNCTION__, inode->i_ino, r);
+		return 0;
+	}
+	size = *filesize.filesize;
+	free(filesize.filesize);
+	return size;
+}
+
+static void
+serve_read_inode(struct inode * inode)
+{
+	uint32_t type_size;
+	union {
+		uint32_t * type;
+		void * ptr;
+	} type;
+	int nlinks_supported = 0, perms_supported = 0;
+	int r;
+	
+	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
+	if (r < 0)
+	{
+		kdprintf(STDERR_FILENO, "%s: CALL(get_metadata, ino = %u) = %d\n", __FUNCTION__, inode->i_ino, r);
+		return;
+	}
+
+	if (nlinks_supported)
+	{
+		// TODO
+		kdprintf(STDERR_FILENO, "%s: add nlinks support\n", __FUNCTION__);
+		nlinks_supported = 0;
+	}
+
+	if (perms_supported)
+	{
+		// TODO
+		kdprintf(STDERR_FILENO, "%s: add permission support\n", __FUNCTION__);
+		perms_supported = 0;
+	}
+
+	if (*type.type == TYPE_DIR)
+	{
+		if (!nlinks_supported)
+			inode->i_nlink = 2;
+		if (!perms_supported)
+			inode->i_mode = 0777; // default, in case permissions are not supported
+		inode->i_mode |= S_IFDIR;
+		inode->i_op = &kfs_dir_inode_ops;
+		inode->i_fop = &kfs_dir_file_ops;
+	}
+	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
+	{
+		if (!nlinks_supported)
+			inode->i_nlink = 1;
+		if (!perms_supported)
+			inode->i_mode = 0666; // default, in case permissions are not supported
+		inode->i_mode |= S_IFREG;
+		inode->i_op = &kfs_reg_inode_ops;
+		inode->i_fop = &kfs_reg_file_ops;
+	}
+	else if (*type.type == TYPE_INVAL)
+	{
+		kdprintf(STDERR_FILENO, "%s: inode %u has type invalid\n", __FUNCTION__, inode->i_ino);
+		goto exit;
+	}
+	else
+	{
+		kdprintf(STDERR_FILENO, "%s: inode %u has unsupported type\n", __FUNCTION__, inode->i_ino);
+		goto exit;
+	}
+
+	inode->i_size = data_size(inode);
+
 	inode->i_uid = 0;
 	inode->i_gid = 0;
-	inode->i_size = 4096;
-	inode->i_mode = 0755 | S_IFDIR;
-	inode->i_op = &kfs_dir_inode_ops;
-	inode->i_fop = &kfs_dir_file_ops;
-	inode->i_nlink = 2;
 	inode->i_mtime = CURRENT_TIME;
 	inode->i_atime = CURRENT_TIME;
 	inode->i_ctime = CURRENT_TIME;
-	return inode;
+
+  exit:
+	free(type.type);
+	return;
 }
 
 static int
@@ -181,12 +264,16 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	
 	r = CALL(m->cfs, get_root, &cfs_root);
 	assert(r >= 0);
-	k_root = serve_mk_linux_inode(sb, cfs_root);
+
+	k_root = new_inode(sb);
 	if (!k_root)
 	{
 		sb->s_dev = 0;
 		return -ENOMEM;
 	}
+	k_root->i_ino = cfs_root;
+	serve_read_inode(k_root);
+
 	sb->s_root = d_alloc_root(k_root);
 	if (!sb->s_root)
 	{
@@ -296,12 +383,46 @@ serve_release(struct inode * inode, struct file * filp)
 static struct dentry *
 serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * ignore)
 {
+	inode_t cfs_ino;
+	ino_t k_ino;
+	struct inode * inode = NULL;
+	int r;
+
 	// Under knoppix there is some program that looks up "auto" with a
 	// very short period, making debug output much more difficult to read.
 	// Thus don't Dprintf() for "auto" lookups.
 	if (strcmp(dentry->d_name.name, "auto"))
 		Dprintf("%s(dentry = \"%s\")\n", __FUNCTION__, dentry->d_name.name);
-	return ERR_PTR(-EPERM);
+
+	spin_lock(kfsd_lock);
+	assert(dentry2cfs(dentry));
+	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
+	if (r < 0)
+	{
+		spin_unlock(kfsd_lock);
+		if (r == -E_NOT_FOUND)
+			return ERR_PTR(-EACCES);
+		return ERR_PTR(-EINVAL);
+	}
+	k_ino = cfs_ino;
+	spin_unlock(kfsd_lock); // TODO: do we need to hold the lock for iget() et al, too?
+
+	if (k_ino)
+	{
+		inode = iget(dir->i_sb, k_ino); 
+		if (!inode)
+			return ERR_PTR(-EACCES);
+	}
+	if (inode)
+	{
+		struct dentry * d = d_splice_alias(inode, dentry);
+		if (d)
+			d->d_op = &kfs_dentry_ops;
+		return d;
+	}
+	d_add(dentry, inode);
+	// TODO: is d->d_op already set to &kfs_dentry_ops?
+	return NULL;
 }
 
 static int
@@ -425,6 +546,8 @@ static struct inode_operations kfs_reg_inode_ops = {
 };
 
 static struct file_operations kfs_reg_file_ops = {
+	.open = serve_open,
+	.release = serve_release,
 	.llseek = generic_file_llseek,
 	.read = serve_read,
 	.write = serve_write
@@ -448,4 +571,5 @@ static struct dentry_operations kfs_dentry_ops = {
 };
 
 static struct super_operations kfs_superblock_ops = {
+	.read_inode = serve_read_inode
 };
