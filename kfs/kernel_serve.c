@@ -176,7 +176,7 @@ data_size(struct inode * inode)
 }
 
 static void
-serve_read_inode(struct inode * inode)
+read_inode_withlock(struct inode * inode)
 {
 	uint32_t type_size;
 	union {
@@ -186,9 +186,9 @@ serve_read_inode(struct inode * inode)
 	int nlinks_supported = 0, perms_supported = 0;
 	int r;
 	
-	// TODO: it seems this function can be called from another kernel_serve function (which holds kfsd_lock)
-	// or by the kernel (in which case this function needs to lock kfsd_lock).
-	// This needs to be taken care of!
+	// The caller must hold the kfsd_lock. While we can't test that this is
+	// the case, we can check that at least someone has the lock.
+	assert(spin_is_locked(kfsd_lock));
 
 	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
@@ -255,6 +255,15 @@ serve_read_inode(struct inode * inode)
 	return;
 }
 
+static void
+serve_read_inode(struct inode * inode)
+{
+	Dprintf("%s(ino = %lu)\n", __FUNCTION__, inode->i_ino);
+	spin_lock(kfsd_lock);
+	read_inode_withlock(inode);
+	spin_unlock(kfsd_lock);
+}
+
 static int
 serve_fill_super(struct super_block * sb, mount_desc_t * m)
 {
@@ -278,7 +287,7 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 		return -E_NO_MEM;
 	}
 	k_root->i_ino = cfs_root;
-	serve_read_inode(k_root);
+	read_inode_withlock(k_root);
 
 	sb->s_root = d_alloc_root(k_root);
 	if (!sb->s_root)
@@ -568,6 +577,7 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 	int r;
 
 	spin_lock(kfsd_lock);
+
 	// TODO: support mode
 	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &fdesc, &cfs_ino);
 	if (r < 0)
@@ -583,14 +593,15 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 	r = CALL(dentry2cfs(dentry), close, fdesc);
 	if (r < 0)
 		kdprintf(STDERR_FILENO, "%s(%s): unable to close created fdesc\n", __FUNCTION__, dentry->d_name.name);
-	spin_unlock(kfsd_lock);
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
 		return -E_NO_MEM;
 	inode->i_ino = cfs_ino;
-	serve_read_inode(inode);	
+	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
+
+	spin_unlock(kfsd_lock);
 
 	return 0;
 }
