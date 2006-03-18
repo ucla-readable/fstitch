@@ -596,7 +596,10 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
+	{
+		spin_unlock(kfsd_lock);
 		return -E_NO_MEM;
+	}
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
@@ -625,7 +628,10 @@ serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
+	{
+		spin_unlock(kfsd_lock);
 		return -E_NO_MEM;
+	}
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
