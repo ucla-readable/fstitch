@@ -431,25 +431,37 @@ static int
 serve_notify_change(struct dentry * dentry, struct iattr * attr)
 {
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
-#if 0
+	CFS_t * cfs = dentry2cfs(dentry);
 	struct inode * inode = dentry->d_inode;
+	/* it would be nice if we didn't have to open the file to change the size, permissions, etc. */
+	fdesc_t * fdesc;
+	int r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
+	if (r < 0)
+		return r;
+	/* check if the change is ok */
+	r = inode_change_ok(inode, attr);
+	if(r < 0)
+		goto error;
+	/* make the changes to the FS */
 	if (attr->ia_valid & ATTR_SIZE)
 	{
-		if(is_directory)
-			return -EPERM; /* operation not permitted */
-		change_size(new_size);
-		if(failed)
-			return error;
+		if(inode->i_mode & S_IFDIR)
+		{
+			r = -EPERM; /* operation not permitted */
+			goto error;
+		}
+		/*r = change_size(attr->ia_size);*/
+		r = -EROFS; /* FIXME */
+		if(r < 0)
+			goto error;
 	}
-	inode_change_ok(inode, attr);
-	if(failed)
-		return error;
+	/* import the change to the inode */
 	inode_setattr(inode, attr);
-	if(failed)
-		return error;
-	return 0;
-#endif
-	return -1;
+	assert(r >= 0);
+	
+error:
+	CALL(cfs, close, fdesc);
+	return r;
 }
 
 static ssize_t
