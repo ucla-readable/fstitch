@@ -561,8 +561,38 @@ serve_unlink(struct inode * dir, struct dentry * dentry)
 static int
 serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameidata * nd)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -1;
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	fdesc_t * fdesc;
+	inode_t cfs_ino;
+	struct inode * inode;
+	int r;
+
+	spin_lock(kfsd_lock);
+	// TODO: support mode
+	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &fdesc, &cfs_ino);
+	if (r < 0)
+	{
+		spin_unlock(kfsd_lock);
+		return r;
+	}
+	assert(cfs_ino != INODE_NONE);
+	fdesc->common->parent = dir->i_ino;
+	// TODO: recent 2.6s support lookup_instantiate_filp() for atomic create+open.
+	// Are there other approaches to do this that work with older 2.6s?
+	// To work with knoppix's 2.6.12 we do not currently support atomic create+open.
+	r = CALL(dentry2cfs(dentry), close, fdesc);
+	if (r < 0)
+		kdprintf(STDERR_FILENO, "%s(%s): unable to close created fdesc\n", __FUNCTION__, dentry->d_name.name);
+	spin_unlock(kfsd_lock);
+
+	inode = new_inode(dir->i_sb);
+	if (!inode)
+		return -E_NO_MEM;
+	inode->i_ino = cfs_ino;
+	serve_read_inode(inode);	
+	d_instantiate(dentry, inode);
+
+	return 0;
 }
 
 #define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
