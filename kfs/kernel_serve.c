@@ -606,6 +606,47 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 	return 0;
 }
 
+static int
+serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
+{
+	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
+	inode_t cfs_ino;
+	struct inode * inode;
+	int r;
+
+	spin_lock(kfsd_lock);
+
+	r = CALL(dentry2cfs(dentry), mkdir, dir->i_ino, dentry->d_name.name, &cfs_ino);
+	if (r < 0)
+	{
+		spin_unlock(kfsd_lock);
+		return r;
+	}
+
+	inode = new_inode(dir->i_sb);
+	if (!inode)
+		return -E_NO_MEM;
+	inode->i_ino = cfs_ino;
+	read_inode_withlock(inode);	
+	d_instantiate(dentry, inode);
+
+	spin_unlock(kfsd_lock);
+
+	return 0;
+}
+
+static int
+serve_rmdir(struct inode * dir, struct dentry * dentry)
+{
+	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
+	int r;
+
+	spin_lock(kfsd_lock);
+	r = CALL(dentry2cfs(dentry), rmdir, dir->i_ino, dentry->d_name.name);
+	spin_unlock(kfsd_lock);
+	return r;
+}
+
 #define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
 
 static int
@@ -686,7 +727,9 @@ static struct file_operations kfs_reg_file_ops = {
 static struct inode_operations kfs_dir_inode_ops = {
 	.lookup	= serve_dir_lookup,
 	.unlink	= serve_unlink,
-	.create	= serve_create
+	.create	= serve_create,
+	.mkdir = serve_mkdir,
+	.rmdir = serve_rmdir
 };
 
 static struct file_operations kfs_dir_file_ops = {
