@@ -5,6 +5,10 @@
 #include <lib/vector.h>
 #include <inc/error.h>
 
+#ifdef __KERNEL__
+#include <asm/page.h> // for PAGE_OFFSET
+#endif
+
 #include <kfs/bd.h>
 #include <kfs/cfs.h>
 #include <kfs/lfs.h>
@@ -98,8 +102,15 @@ error_name:
 static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
 {
 	char name[64];
-	/* subtract 0x10000000 to make the generated names have fewer digits */
-	snprintf(name, 64, "%s-%x", prefix, ((int) module) - 0x10000000);
+#if defined(KUDOS)
+	size_t offset = 0x10000000;
+#elif defined(__KERNEL__)
+	size_t offset = PAGE_OFFSET;
+#else
+	size_t offset = 0;
+#endif
+	/* subtract offset to make the generated names have fewer digits */
+	snprintf(name, 64, "%s-%x", prefix, ((size_t) module) - offset);
 	return modman_add(map, module, name);
 }
 
