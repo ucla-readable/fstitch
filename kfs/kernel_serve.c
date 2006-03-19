@@ -370,6 +370,9 @@ serve_open(struct inode * inode, struct file * filp)
 	int r;
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, filp->f_dentry->d_name.name);
 
+	/* don't cache above KFS - we have our own caches */
+	filp->f_mode |= O_SYNC;
+
 	r = generic_file_open(inode, filp);
 	if (r < 0)
 		return r;
