@@ -8,9 +8,9 @@ function die() {
 ROOT="`(cd "\`dirname \"$0\"\`"; pwd)`"
 
 KUDOS="$ROOT/.."
-OSIMG="$ROOT/knoppix.iso"
+OSIMG="$ROOT/knoppix_mini.iso"
 KERNEL=2.6.12
-VMIMG="$ROOT/kkfsd.vm"
+VMIMG="$ROOT/kkfsd_mini.vm"
 
 [ -f "$OSIMG" ] || die "Need a Knoppix CD image!"
 [ -f "$VMIMG" ] || die "Need a QEMU VM image!"
@@ -55,7 +55,7 @@ dd if=/dev/zero of=$TMPDIR/hda.img bs=1M count=32 2> /dev/null
 dd if=$TMPDIR/kkfsd.img of=$TMPDIR/hda.img conv=notrunc
 [ "`du -b $TMPDIR/hda.img | awk '{print $1}'`" != "33554432" ] && die "KudOS directory ($KUDOS) is too large!"
 
-qemu -hda $TMPDIR/hda.img -cdrom $OSIMG -boot d -k en-us -monitor stdio -loadvm "$VMIMG"
+qemu -hda $TMPDIR/hda.img -cdrom $OSIMG -boot d -k en-us -serial stdio -loadvm "$VMIMG"
 if [ "`tr -d \\000 < $TMPDIR/hda.img | head -n 1`" == "KFS" ]
 then
 	echo "Found KFS signature on hard disk"
