@@ -12,6 +12,7 @@
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>
 #include <kfs/modman.h>
+#include <kfs/sync.h>
 #include <kfs/kernel_serve.h>
 
 #define KERNEL_SERVE_DEBUG 0
@@ -570,24 +571,17 @@ serve_unlink(struct inode * dir, struct dentry * dentry)
 	return -1;
 }
 
-static int
-serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameidata * nd)
+static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
-	fdesc_t * fdesc;
 	inode_t cfs_ino;
 	struct inode * inode;
+	fdesc_t * fdesc;
 	int r;
-
-	spin_lock(kfsd_lock);
 
 	// TODO: support mode
 	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &fdesc, &cfs_ino);
 	if (r < 0)
-	{
-		spin_unlock(kfsd_lock);
 		return r;
-	}
 	assert(cfs_ino != INODE_NONE);
 	fdesc->common->parent = dir->i_ino;
 	// TODO: recent 2.6s support lookup_instantiate_filp() for atomic create+open.
@@ -599,17 +593,40 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
-	{
-		spin_unlock(kfsd_lock);
 		return -E_NO_MEM;
-	}
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
 
+	return 0;
+}
+
+static int
+serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameidata * nd)
+{
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	int r;
+
+	spin_lock(kfsd_lock);
+	r = create_withlock(dir, dentry, mode);
 	spin_unlock(kfsd_lock);
 
-	return 0;
+	return r;
+}
+
+static int
+serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev_t dev)
+{
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	int r;
+
+	if (!(mode & S_IFREG))
+		return -E_PERM;
+
+	spin_lock(kfsd_lock);
+	r = create_withlock(dir, dentry, mode);
+	spin_unlock(kfsd_lock);
+	return r;
 }
 
 static int
@@ -652,6 +669,23 @@ serve_rmdir(struct inode * dir, struct dentry * dentry)
 
 	spin_lock(kfsd_lock);
 	r = CALL(dentry2cfs(dentry), rmdir, dir->i_ino, dentry->d_name.name);
+	spin_unlock(kfsd_lock);
+	return r;
+}
+
+static int
+serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * new_dir, struct dentry * new_dentry)
+{
+	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir, old_dentry->d_name.name, new_dir, new_dentry->d_name.name);
+	int r;
+
+	spin_lock(kfsd_lock);
+	if (dentry2cfs(old_dentry) != dentry2cfs(new_dentry))
+	{
+		spin_unlock(kfsd_lock);
+		return -E_PERM;
+	}
+	r = CALL(dentry2cfs(old_dentry), rename, new_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
 	spin_unlock(kfsd_lock);
 	return r;
 }
@@ -704,6 +738,25 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 }
 
 static int
+serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
+{
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+
+#if 1
+	printk("%s: not enabled because it might hang\n", __FUNCTION__);
+	return 0;
+#else
+	int r;
+
+	spin_lock(kfsd_lock);
+	r = kfs_sync();
+	spin_unlock(kfsd_lock);
+	printk("%s: kfs_sync() = %d\n", __FUNCTION__, r);
+	return r;
+#endif
+}
+
+static int
 serve_delete_dentry(struct dentry * dentry)
 {
 	Dprintf("%s()\n", __FUNCTION__);
@@ -730,22 +783,26 @@ static struct file_operations kfs_reg_file_ops = {
 	.release = serve_release,
 	.llseek = generic_file_llseek,
 	.read = serve_read,
-	.write = serve_write
+	.write = serve_write,
+	.fsync = serve_fsync
 };
 
 static struct inode_operations kfs_dir_inode_ops = {
 	.lookup	= serve_dir_lookup,
 	.unlink	= serve_unlink,
 	.create	= serve_create,
+	.mknod = serve_mknod,
 	.mkdir = serve_mkdir,
-	.rmdir = serve_rmdir
+	.rmdir = serve_rmdir,
+	.rename = serve_rename
 };
 
 static struct file_operations kfs_dir_file_ops = {
 	.open = serve_open,
 	.release = serve_release,
 	.read = generic_read_dir,
-	.readdir = serve_dir_readdir
+	.readdir = serve_dir_readdir,
+	.fsync = serve_fsync
 };
 
 static struct dentry_operations kfs_dentry_ops = {
