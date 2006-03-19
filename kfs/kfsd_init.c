@@ -463,7 +463,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				  disable_journal:
 					if (journalbd)
 						(void) DESTROY(journalbd);
-					(void) DESTROY(josfs_lfs);
+					if (josfs_lfs)
+						(void) DESTROY(josfs_lfs);
 					(void) DESTROY(journal);
 					journal = cache;
 					lfs = josfs_lfs = josfs(cache);
