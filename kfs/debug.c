@@ -396,6 +396,46 @@ static int debug_count = 0;
 #define LIT_STR (-3)
 #define END 0
 
+
+#if defined(__KERNEL__)
+
+#define DEBUG_PROC_FILENAME "kkfsd_debug"
+#define DEBUG_PROC_SIZE (50*1024*1024)
+
+char * proc_buffer;
+off_t proc_buffer_rpos;
+off_t proc_buffer_wpos;
+
+static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
+{
+	return -1;
+}
+
+static int proc_buffer_write(void * data, size_t len)
+{
+	char * buf;
+	size_t i;
+
+	for(i = 0; i < len; i++)
+	{
+		while(proc_buffer_wpos >= proc_buffer_rpos + DEBUG_PROC_SIZE)
+			; // buffer is full, wait for reads
+		proc_buffer[proc_buffer_wpos++ % DEBUG_PROC_SIZE] = 
+	}
+}
+
+void kfs_debug_shutdown(void * ignore)
+{
+	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
+	vfree(proc_buffer);
+	proc_buffer = NULL;
+}
+
+#define write(fd, data, size) proc_buffer_write(data, size)
+
+#endif
+
+
 /* This function is used like a binary version of kdprintf(). It takes a file
  * descriptor, and then a series of pairs of (size, pointer) of data to write to
  * it. The list is terminated by a 0 size. Also accepted are the special sizes
@@ -473,6 +513,27 @@ int kfs_debug_init(const char * host, uint16_t port)
 	int32_t debug_rev, debug_opcode_rev;
 	
 	printf("Initializing KFS debugging interface...\n");
+
+#if defined(__KERNEL__)
+	proc_buffer = vmalloc(DEBUG_PROC_SIZE);
+	if(!proc_buffer)
+		return -E_NO_MEM;
+	proc_buffer_writer = proc_buffer;
+	proc_buffer_reader = proc_buffer;
+
+	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0400, &proc_root, kfs_debug_proc_read, NULL))
+	{
+		kdprintf("%s: unable to create proc entry\n", __FUNCTION__);
+		return -E_UNSPECIFIED;
+	}
+	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL);
+	if(r < 0)
+	{
+		kdprintf("%s: unable to register shutdown callback\n", __FUNCTION__);
+		remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);
+		return r;
+	}
+#else
 	r = kgethostbyname(host, &addr);
 	if(r < 0)
 	{
@@ -489,6 +550,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 		if(r < 0)
 			return r;
 	}
+#endif
 	
 	debug_rev = svnrevtol("$Rev$");
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
