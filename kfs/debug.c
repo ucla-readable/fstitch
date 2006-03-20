@@ -2,13 +2,19 @@
 #include <lib/sleep.h>
 #include <lib/types.h>
 #include <inc/error.h>
-#include <lib/netclient.h>
 #include <lib/stdarg.h>
 #include <lib/stdio.h>
 #include <lib/svnrevtol.h>
 
+#ifdef __KERNEL__
+#include <linux/proc_fs.h>
+#include <linux/vmalloc.h>
+#else
+#include <lib/netclient.h>
+#endif
+
 /* htons and htonl */
-#include <string.h>
+#include <lib/string.h>
 #if defined(KUDOS)
 #include <inc/josnic.h>
 #elif defined(UNIXUSER)
@@ -402,9 +408,9 @@ static int debug_count = 0;
 #define DEBUG_PROC_FILENAME "kkfsd_debug"
 #define DEBUG_PROC_SIZE (50*1024*1024)
 
-char * proc_buffer;
-off_t proc_buffer_rpos;
-off_t proc_buffer_wpos;
+static uint8_t * proc_buffer;
+static off_t proc_buffer_rpos;
+static off_t proc_buffer_wpos;
 
 static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
 {
@@ -413,18 +419,22 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 
 static int proc_buffer_write(void * data, size_t len)
 {
-	char * buf;
+	uint8_t * buf = data;
 	size_t i;
-
 	for(i = 0; i < len; i++)
 	{
 		while(proc_buffer_wpos >= proc_buffer_rpos + DEBUG_PROC_SIZE)
-			; // buffer is full, wait for reads
-		proc_buffer[proc_buffer_wpos++ % DEBUG_PROC_SIZE] = 
+		{
+			// buffer is full, wait for reads
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(HZ/100);
+		}
+		proc_buffer[proc_buffer_wpos++ % DEBUG_PROC_SIZE] = buf[i];
 	}
+	return len;
 }
 
-void kfs_debug_shutdown(void * ignore)
+static void kfs_debug_shutdown(void * ignore)
 {
 	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
 	vfree(proc_buffer);
@@ -518,8 +528,8 @@ int kfs_debug_init(const char * host, uint16_t port)
 	proc_buffer = vmalloc(DEBUG_PROC_SIZE);
 	if(!proc_buffer)
 		return -E_NO_MEM;
-	proc_buffer_writer = proc_buffer;
-	proc_buffer_reader = proc_buffer;
+	proc_buffer_wpos = 0;
+	proc_buffer_rpos = 0;
 
 	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0400, &proc_root, kfs_debug_proc_read, NULL))
 	{
