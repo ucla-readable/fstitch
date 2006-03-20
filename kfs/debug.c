@@ -6,13 +6,9 @@
 #include <lib/stdio.h>
 #include <lib/svnrevtol.h>
 
-#ifdef __KERNEL__
-#include <linux/proc_fs.h>
-#include <linux/vmalloc.h>
-#else
+#ifndef __KERNEL__
 #include <lib/netclient.h>
 #endif
-
 /* htons and htonl */
 #include <lib/string.h>
 #if defined(KUDOS)
@@ -23,6 +19,9 @@
 
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
+#ifdef __KERNEL__
+#include <kfs/kfsd.h>
+#endif
 
 #if KFS_DEBUG
 
@@ -405,6 +404,10 @@ static int debug_count = 0;
 
 #if defined(__KERNEL__)
 
+#include <linux/proc_fs.h>
+#include <linux/sched.h>
+#include <linux/vmalloc.h>
+
 #define DEBUG_PROC_FILENAME "kkfsd_debug"
 #define DEBUG_PROC_SIZE (50*1024*1024)
 
@@ -518,7 +521,9 @@ static int kfs_debug_write(int fd, ...)
 
 int kfs_debug_init(const char * host, uint16_t port)
 {
+#if !defined(__KERNEL__)
 	struct ip_addr addr;
+#endif
 	int m, o, r;
 	int32_t debug_rev, debug_opcode_rev;
 	
@@ -533,13 +538,13 @@ int kfs_debug_init(const char * host, uint16_t port)
 
 	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0400, &proc_root, kfs_debug_proc_read, NULL))
 	{
-		kdprintf("%s: unable to create proc entry\n", __FUNCTION__);
+		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
 		return -E_UNSPECIFIED;
 	}
 	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL);
 	if(r < 0)
 	{
-		kdprintf("%s: unable to register shutdown callback\n", __FUNCTION__);
+		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);
 		remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);
 		return r;
 	}
