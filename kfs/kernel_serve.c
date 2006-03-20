@@ -126,7 +126,8 @@ dentry2cfs(struct dentry * dentry)
 	return sb2cfs(dentry->d_sb);
 }
 
-static fdesc_t * file2fdesc(struct file * filp)
+static fdesc_t *
+file2fdesc(struct file * filp)
 {
 	return (fdesc_t *) filp->private_data;
 }
@@ -381,10 +382,13 @@ serve_open(struct inode * inode, struct file * filp)
 	spin_lock(kfsd_lock);
 	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
 	fdesc->common->parent = filp->f_dentry->d_parent->d_inode->i_ino;
-	spin_unlock(kfsd_lock);
 	if (r < 0)
+	{
+		spin_unlock(kfsd_lock);
 		return r;
+	}
 	filp->private_data = fdesc;
+	spin_unlock(kfsd_lock);
 	return 0;
 }
 
@@ -441,39 +445,56 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 }
 
 static int
-serve_notify_change(struct dentry * dentry, struct iattr * attr)
+serve_setattr(struct dentry * dentry, struct iattr * attr)
 {
-	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
-	CFS_t * cfs = dentry2cfs(dentry);
+	Dprintf("%s(\"%s\", attributes %u)\n", __FUNCTION__, dentry->d_name.name, attr->ia_valid);
+	CFS_t * cfs;
 	struct inode * inode = dentry->d_inode;
-	/* it would be nice if we didn't have to open the file to change the size, permissions, etc. */
 	fdesc_t * fdesc;
-	int r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
-	if (r < 0)
+	int r;
+
+	if (attr->ia_valid & ~(ATTR_CTIME|ATTR_SIZE))
+		return -E_PERM;
+
+	spin_lock(kfsd_lock);
+	cfs = dentry2cfs(dentry);
+
+	/* it would be nice if we didn't have to open the file to change the size, permissions, etc. */
+	r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
+	if(r < 0)
+	{
+		spin_unlock(kfsd_lock);
 		return r;
+	}
+
 	/* check if the change is ok */
 	r = inode_change_ok(inode, attr);
 	if(r < 0)
 		goto error;
-	/* make the changes to the FS */
-	if (attr->ia_valid & ATTR_SIZE)
+
+	/* allow, but ignore */
+	if(attr->ia_valid & ATTR_CTIME);
+
+	if(attr->ia_valid & ATTR_SIZE)
 	{
 		if(inode->i_mode & S_IFDIR)
 		{
-			r = -EPERM; /* operation not permitted */
+			r = -E_PERM; /* operation not permitted */
 			goto error;
 		}
-		/*r = change_size(attr->ia_size);*/
-		r = -EROFS; /* FIXME */
-		if(r < 0)
+
+		if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
 			goto error;
 	}
+
 	/* import the change to the inode */
 	inode_setattr(inode, attr);
 	assert(r >= 0);
 	
 error:
-	CALL(cfs, close, fdesc);
+	if(CALL(cfs, close, fdesc) < 0)
+		kdprintf(STDERR_FILENO, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
+	spin_unlock(kfsd_lock);
 	return r;
 }
 
@@ -567,8 +588,13 @@ out:
 static int
 serve_unlink(struct inode * dir, struct dentry * dentry)
 {
-	Dprintf("%s()\n", __FUNCTION__);
-	return -1;
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	int r;
+
+	spin_lock(kfsd_lock);
+	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
+	spin_unlock(kfsd_lock);
+	return r;
 }
 
 static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
@@ -775,7 +801,7 @@ static struct file_system_type kfs_fs_type = {
 };
 
 static struct inode_operations kfs_reg_inode_ops = {
-	.setattr = serve_notify_change
+	.setattr = serve_setattr
 };
 
 static struct file_operations kfs_reg_file_ops = {
