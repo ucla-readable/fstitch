@@ -661,6 +661,9 @@ void kfs_debug_net_command(void)
 	bytes = read(debug_socket, &command, 4);
 	if (fcntl(debug_socket, F_SETFL, 0)) // TODO: restore to original value
 		assert(0);
+#elif defined(__KERNEL__)
+	// kkfsd does not currently support command reading
+	bytes = 0;
 #else
 #error Unknown target
 #endif
@@ -668,6 +671,7 @@ void kfs_debug_net_command(void)
 		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
 }
 
+#if !defined(__KERNEL__)
 static void kfs_debug_wait(void)
 {
 	uint16_t command[2];
@@ -676,6 +680,7 @@ static void kfs_debug_wait(void)
 		bytes = read(debug_socket, &command, 4);
 	kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
 }
+#endif
 
 int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
@@ -852,7 +857,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 #if defined(KUDOS)
 		sys_print_backtrace();
 		exit(0);
-#elif defined(UNIXUSER)
+#elif defined(UNIXUSER) || defined(__KERNEL__)
 		assert(0);
 #else
 #error Unknown target
@@ -863,6 +868,9 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 
 void kfs_debug_dbwait(const char * function, bdesc_t * block)
 {
+#if defined(__KERNEL__)
+	kdprintf(STDERR_FILENO, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
+#else
 	if(block->ddesc->changes)
 	{
 		chmetadesc_t * meta;
@@ -877,6 +885,7 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 			}
 		}
 	}
+#endif
 }
 
 int kfs_debug_count(void)
