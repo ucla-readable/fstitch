@@ -42,6 +42,9 @@ cat > init.sh << NEOF
 #!/bin/bash
 umount /mnt
 insmod kfs/kkfsd.ko
+mount kfs:/ /mnt -t kfs
+mkdir /mnt/dev
+mount kfs:/dev /mnt/dev -t kfs
 rm \\\$0
 NEOF
 chmod 755 init.sh

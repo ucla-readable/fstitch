@@ -39,6 +39,7 @@ static char *error_string[MAXERROR+1] =
 	"directory not empty",
 	"device busy",
 	"no such device",
+	"operation not permitted",
 	"permission denied",
 	"timed out",
 	"no such elf symbol",

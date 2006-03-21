@@ -206,7 +206,7 @@ static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 static int devfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * new_inode)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int devfs_close(CFS_t * cfs, fdesc_t * fdesc)
@@ -395,39 +395,40 @@ exit:
 
 static int devfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 {
-	return -E_INVAL;
+	/* pretend to truncate successfully */
+	return 0;
 }
 
 static int devfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	/* I suppose we could support removing block devices. It might pose some issues however. */
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int devfs_link(CFS_t * cfs, inode_t inode, inode_t new_parent, const char * new_name)
 {
 	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, inode, new_parent, new_name);
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int devfs_rename(CFS_t * cfs, inode_t old_parent, const char * old_name, inode_t new_parent, const char * new_name)
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, old_parent, old_name, new_parent, new_name);
 	/* I suppose we could support renaming block devices. It might pose some issues however. */
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int devfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * inode)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int devfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static const feature_t * devfs_features[] = {&KFS_feature_size, &KFS_feature_filetype};
@@ -491,7 +492,7 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t * 
 static int devfs_set_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, inode, id, size, data);
-	return -E_INVAL;
+	return -E_PERM;
 }
 
 static int devfs_destroy(CFS_t * cfs)
@@ -575,7 +576,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	
 	fdesc = devfd_lookup_name(state, name, NULL);
 	if(fdesc)
-		return -E_INVAL;
+		return -E_BUSY;
 	
 	fdesc = devfs_fdesc_create(state->root_fdesc.inode, name, bd);
 	if(!fdesc)

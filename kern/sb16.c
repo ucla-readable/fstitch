@@ -203,7 +203,7 @@ int sb16_close(void)
 		return -E_BUSY;
 	/* permitted to close? */
 	if(curenv->env_id != sb_envid && sb_env->env_id == sb_envid && sb_env->env_status != ENV_FREE)
-		return -E_PERM;
+		return -E_ACCES;
 	
 	sb_initialized = 0;
 	sb16_reset();
@@ -268,7 +268,7 @@ int sb16_setvolume(uint8_t volume)
 	uint8_t value;
 	
 	if(!sb_env || curenv->env_id != sb_envid)
-		return -E_PERM;
+		return -E_ACCES;
 	
 	if(volume > 100)
 		volume = 100;
@@ -293,7 +293,7 @@ int sb16_start(void)
 	uint16_t offset = (sb_buffer_addr >> 1) & 0xFFFF;
 	
 	if(!sb_env || curenv->env_id != sb_envid)
-		return -E_PERM;
+		return -E_ACCES;
 	
 	/* set up variables to simulate an initial interrupt for finishing block 1 */
 	sb_started = 1;
@@ -340,7 +340,7 @@ int sb16_start(void)
 int sb16_stop(void)
 {
 	if(!sb_env || curenv->env_id != sb_envid)
-		return -E_PERM;
+		return -E_ACCES;
 	
 	if(!sb_started)
 		return -E_BUSY;
@@ -355,7 +355,7 @@ int sb16_wait(void)
 	register_t eflags = read_eflags();
 	
 	if(!sb_env || curenv->env_id != sb_envid)
-		return -E_PERM;
+		return -E_ACCES;
 	
 	if(!sb_started)
 		return -E_BUSY;

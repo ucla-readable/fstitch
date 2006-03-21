@@ -29,19 +29,20 @@
 
 #define E_BUSY		18	// Device is busy
 #define E_NO_DEV	19	// No such device
-#define E_PERM		20	// Permission denied
-#define E_TIMEOUT	21	// Timed out
+#define E_PERM		20	// Operation not permitted
+#define E_ACCES		21	// Permission denied
+#define E_TIMEOUT	22	// Timed out
 
-#define E_BAD_SYM 22 // Elf symbol doesn't exist
-#define E_SYMTBL  23 // No elf symbol/symbol string table loaded in kernel
+#define E_BAD_SYM	23	// Elf symbol doesn't exist
+#define E_SYMTBL	24	// No elf symbol/symbol string table loaded in kernel
 
-#define E_NET_ABRT 24 // Net connection aborted
-#define E_NET_RST  25 // Net connection reset
-#define E_NET_CONN 26 // No connection
-#define E_NET_USE  27 // Net address in use
-#define E_NET_IF   28 // Net low-level netif error
+#define E_NET_ABRT	25	// Net connection aborted
+#define E_NET_RST	26	// Net connection reset
+#define E_NET_CONN	27	// No connection
+#define E_NET_USE	28	// Net address in use
+#define E_NET_IF	29	// Net low-level netif error
 
-#define MAXERROR	28
+#define MAXERROR	29
 
 #else
 
@@ -63,7 +64,8 @@
 #define E_NOT_EMPTY	ENOTEMPTY
 #define E_BUSY		EBUSY
 #define E_NO_DEV	ENODEV
-#define E_PERM		EACCES /* Permission denied */
+#define E_PERM		EPERM
+#define E_ACCES		EACCES
 
 /* not available on KudOS */
 #define E_INTR		EINTR
