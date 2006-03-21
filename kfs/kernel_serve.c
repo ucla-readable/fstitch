@@ -168,9 +168,8 @@ serve_compare_super(struct super_block * sb, void * data)
 }
 
 static uint32_t
-data_size(struct inode * inode)
+inode_get_size(struct inode * inode)
 {
-	
 	uint32_t filesize_size;
 	union {
 		int32_t * filesize;
@@ -178,6 +177,10 @@ data_size(struct inode * inode)
 	} filesize;
 	uint32_t size;
 	int r;
+
+	// The caller must hold the kfsd_lock. While we can't test that this is
+	// the case, we can check that at least someone has the lock.
+	assert(spin_is_locked(__kfsd_lock));
 
 	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 	if (r < 0)
@@ -257,7 +260,7 @@ read_inode_withlock(struct inode * inode)
 		goto exit;
 	}
 
-	inode->i_size = data_size(inode);
+	inode->i_size = inode_get_size(inode);
 
 	inode->i_uid = 0;
 	inode->i_gid = 0;
@@ -607,6 +610,7 @@ serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t
 	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
 	fdesc_t * fdesc = file2fdesc(filp);
 	CFS_t * cfs = dentry2cfs(filp->f_dentry);
+	struct inode * inode = filp->f_dentry->d_inode;
 	/* pick a reasonably big, but not too big, maximum size we will allocate
 	 * on behalf of a requesting user process... TODO: use it repeatedly? */
 	size_t data_size = (count > 65536) ? 65536 : count;
@@ -617,6 +621,10 @@ serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t
 	
 	if (!data)
 		return -E_NO_MEM;
+	
+	kfsd_enter();
+	if (filp->f_flags & O_APPEND)
+		offset = *f_pos = inode_get_size(inode);
 	
 	bytes = copy_from_user(data, buffer, data_size);
 	if (bytes)
@@ -629,16 +637,16 @@ serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t
 		data_size -= bytes;
 	}
 	
-	kfsd_enter();
 	r = CALL(cfs, write, fdesc, data, offset, data_size);
-	kfsd_exit();
 	
 	if (r < 0)
 		goto out;
 	
 	*f_pos += r;
+	inode->i_size = inode_get_size(inode);
 	
 out:
+	kfsd_exit();
 	vfree(data);
 	return r;
 }
