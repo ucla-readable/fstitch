@@ -1,6 +1,7 @@
 #include <inc/error.h>
 #include <lib/kdprintf.h>
 #include <lib/panic.h>
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
@@ -11,12 +12,19 @@
 #include <kfs/bdesc.h>
 #include <kfs/debug.h>
 
+/* Statically allocate two autopools. We probably won't ever need more than the
+ * main top-level one and one nested pool, and if we do, we can allocate them
+ * with malloc(). */
+#define STATIC_AUTO_POOLS 2
+
 struct auto_pool {
 	bdesc_t * list;
 	struct auto_pool * next;
 };
 
 static struct auto_pool * autorelease_stack = NULL;
+static struct auto_pool static_pool[STATIC_AUTO_POOLS];
+static unsigned int autorelease_depth = 0;
 
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
@@ -140,13 +148,19 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 /* push an autorelease pool onto the stack */
 int bdesc_autorelease_pool_push(void)
 {
-	struct auto_pool * pool = malloc(sizeof(*pool));
+	struct auto_pool * pool;
+	if(autorelease_depth < STATIC_AUTO_POOLS)
+		pool = &static_pool[autorelease_depth];
+	else
+		pool = malloc(sizeof(*pool));
 	if(!pool)
 		return -E_NO_MEM;
 	pool->list = NULL;
 	pool->next = autorelease_stack;
 	autorelease_stack = pool;
+	autorelease_depth++;
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_PUSH, bdesc_autorelease_pool_depth());
+	assert(autorelease_depth > 0);
 	return 0;
 }
 
@@ -174,16 +188,13 @@ void bdesc_autorelease_pool_pop(void)
 		}
 	}
 	autorelease_stack = pool->next;
-	free(pool);
+	if(autorelease_depth-- > STATIC_AUTO_POOLS)
+		free(pool);
 }
 
-int bdesc_autorelease_pool_depth(void)
+unsigned int bdesc_autorelease_pool_depth(void)
 {
-	int depth = 0;
-	struct auto_pool * pool;
-	for(pool = autorelease_stack; pool; pool = pool->next)
-		depth++;
-	return depth;
+	return autorelease_depth;
 }
 
 int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc)
