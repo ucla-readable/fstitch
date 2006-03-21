@@ -6,6 +6,7 @@
 #include <lib/assert.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/statfs.h>
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
 
@@ -264,6 +265,47 @@ serve_read_inode(struct inode * inode)
 	spin_lock(kfsd_lock);
 	read_inode_withlock(inode);
 	spin_unlock(kfsd_lock);
+}
+
+static int
+serve_stat_fs(struct super_block * sb, struct kstatfs * st)
+{
+	mount_desc_t * m = (mount_desc_t *) sb->s_fs_info;
+	CFS_t * cfs = m->cfs;
+	size_t size;
+	void * data;
+	int r;
+	
+	r = CALL(cfs, get_metadata, 0, KFS_feature_blocksize.id, &size, &data);
+	if (r < 0)
+		return r;
+	assert(sizeof(st->f_bsize) >= size);
+	st->f_bsize = st->f_frsize = *(uint32_t *) data;
+	free(data);
+	assert(st->f_bsize != 0);
+	
+	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
+	if (r < 0)
+		return r;
+	assert(sizeof(st->f_blocks) >= size);
+	st->f_blocks = *(uint32_t *) data;
+	free(data);
+	
+	r = CALL(cfs, get_metadata, 0, KFS_feature_freespace.id, &size, &data);
+	if (r < 0)
+		return r;
+	assert(sizeof(st->f_bfree) >= size);
+	/* what is the difference between bfree and bavail? */
+	st->f_bfree = st->f_bavail = *(uint32_t *) data;
+	free(data);
+	
+	// TODO - add lfs features for these guys
+	st->f_files = 0;
+	st->f_ffree = 0;
+	/* 256 taken from linux/dirent.h */
+	st->f_namelen = 256;
+        
+	return 0;
 }
 
 static int
@@ -836,5 +878,6 @@ static struct dentry_operations kfs_dentry_ops = {
 };
 
 static struct super_operations kfs_superblock_ops = {
-	.read_inode = serve_read_inode
+	.read_inode = serve_read_inode,
+	.statfs = serve_stat_fs
 };
