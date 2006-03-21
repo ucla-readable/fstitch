@@ -546,7 +546,7 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 	}
 
 	/* import the change to the inode */
-	inode_setattr(inode, attr);
+	r = inode_setattr(inode, attr);
 	assert(r >= 0);
 	
 error:
