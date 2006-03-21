@@ -32,13 +32,8 @@
  * From: @(#)strtol.c	8.1 (Berkeley) 6/4/93
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD: src/sys/libkern/strtol.c,v 1.8 2004/04/07 20:46:10 imp Exp $");
-
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/ctype.h>
-#include <sys/limits.h>
+#include <linux/kernel.h>
+#include <linux/ctype.h>
 
 /*
  * Convert a string to a long integer.
@@ -47,10 +42,7 @@ __FBSDID("$FreeBSD: src/sys/libkern/strtol.c,v 1.8 2004/04/07 20:46:10 imp Exp $
  * alphabets and digits are each contiguous.
  */
 long
-strtol(nptr, endptr, base)
-	const char *nptr;
-	char **endptr;
-	int base;
+strtol(const char * nptr, char ** endptr, int base)
 {
 	const char *s = nptr;
 	unsigned long acc;
