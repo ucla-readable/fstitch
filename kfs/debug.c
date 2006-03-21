@@ -418,7 +418,22 @@ static off_t proc_buffer_wpos;
 
 static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
 {
-	return -1;
+	off_t size;
+	while(proc_buffer_rpos == proc_buffer_wpos)
+	{
+		// buffer is empty, wait for writes
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ / 50);
+		if(signal_pending(current))
+			return -E_INTR;
+	}
+	size = proc_buffer_wpos - proc_buffer_rpos;
+	if(size > count)
+		size = count;
+	for(count = 0; count < size; count++)
+		*(page++) = proc_buffer[proc_buffer_rpos++ % DEBUG_PROC_SIZE];
+	*start = (char *) count;
+	return count;
 }
 
 static int proc_buffer_write(void * data, size_t len)
@@ -431,7 +446,7 @@ static int proc_buffer_write(void * data, size_t len)
 		{
 			// buffer is full, wait for reads
 			current->state = TASK_INTERRUPTIBLE;
-			schedule_timeout(HZ/100);
+			schedule_timeout(HZ / 50);
 		}
 		proc_buffer[proc_buffer_wpos++ % DEBUG_PROC_SIZE] = buf[i];
 	}
@@ -445,6 +460,7 @@ static void kfs_debug_shutdown(void * ignore)
 	proc_buffer = NULL;
 }
 
+/* override write() and ignore the file descriptor */
 #define write(fd, data, size) proc_buffer_write(data, size)
 
 #endif
