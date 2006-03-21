@@ -19,10 +19,9 @@
 #endif
 
 #include <kfs/chdesc.h>
+#include <kfs/sched.h>
 #include <kfs/debug.h>
-#ifdef __KERNEL__
 #include <kfs/kfsd.h>
-#endif
 
 #if KFS_DEBUG
 
@@ -536,6 +535,8 @@ static int kfs_debug_write(int fd, ...)
 }
 #endif
 
+static void kfs_debug_net_command(void * arg);
+
 int kfs_debug_init(const char * host, uint16_t port)
 {
 #if !defined(__KERNEL__)
@@ -545,14 +546,18 @@ int kfs_debug_init(const char * host, uint16_t port)
 	int32_t debug_rev, debug_opcode_rev;
 	
 	printf("Initializing KFS debugging interface...\n");
-
+	
+	r = sched_register(kfs_debug_net_command, NULL, HZ / 10);
+	if(r < 0)
+		return r;
+	
 #if defined(__KERNEL__)
 	proc_buffer = vmalloc(DEBUG_PROC_SIZE);
 	if(!proc_buffer)
 		return -E_NO_MEM;
 	proc_buffer_wpos = 0;
 	proc_buffer_rpos = 0;
-
+	
 	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0400, &proc_root, kfs_debug_proc_read, NULL))
 	{
 		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
@@ -586,10 +591,10 @@ int kfs_debug_init(const char * host, uint16_t port)
 	
 	debug_rev = svnrevtol("$Rev$");
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
-
+	
 #if KFS_DEBUG_BINARY
 	kfs_debug_write(debug_socket, LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
-
+	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
@@ -665,7 +670,7 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 #include <fcntl.h>
 #endif
 
-void kfs_debug_net_command(void)
+static void kfs_debug_net_command(void * arg)
 {
 	uint16_t command[2];
 	int bytes;
@@ -705,7 +710,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	va_list ap;
 	va_start(ap, function);
 	
-	kfs_debug_net_command();
+	kfs_debug_net_command(NULL);
 	
 	/* look up the right module and opcode indices */
 	for(m = 0; modules[m].opcodes; m++)

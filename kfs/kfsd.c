@@ -110,9 +110,10 @@ void kfsd_main(int argc, char ** argv)
 #endif
 		while(kfsd_running)
 		{
-			sched_iteration();
+			sched_run_callbacks();
 #if defined(KUDOS)
 			ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
+			sched_run_cleanup();
 #elif defined(__KERNEL__)
 			spin_unlock(&kfsd_lock);
 			current->state = TASK_INTERRUPTIBLE;

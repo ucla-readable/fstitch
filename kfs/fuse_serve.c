@@ -1170,7 +1170,7 @@ struct timeval time_subtract(struct timeval remaining, struct timeval elapsed)
 	return n;
 }
 
-// Return the amount of time to wait between sched_iteration() calls
+// Return the amount of time to wait between sched_run_callbacks() calls
 static struct timeval fuse_serve_timeout(void)
 {
 	struct timeval tv = { .tv_sec = 0, .tv_usec = 1000000/HZ };
@@ -1239,7 +1239,7 @@ int fuse_serve_loop(void)
 		if (r == 0)
 		{
 			//printf("."); fflush(stdout); // debugging output
-			sched_iteration();
+			sched_run_callbacks();
 			tv = fuse_serve_timeout();
 		}
 		else if (r < 0)
@@ -1267,6 +1267,7 @@ int fuse_serve_loop(void)
 
 					Dprintf("fuse_serve: request for mount \"%s\"\n", mount->kfs_path);
 					fuse_session_process(mount->session, channel_buf, r, mount->channel);
+					sched_run_cleanup();
 				}
 			}
 

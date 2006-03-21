@@ -65,6 +65,9 @@
 #define E_NO_DEV	ENODEV
 #define E_PERM		EACCES /* Permission denied */
 
+/* not available on KudOS */
+#define E_INTR		EINTR
+
 #endif
 
 #endif	// !KUDOS_INC_ERROR_H */

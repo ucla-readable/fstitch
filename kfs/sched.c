@@ -78,22 +78,21 @@ int kfsd_sched_init(void)
 	return 0;
 }
 
-void sched_iteration(void)
+void sched_run_callbacks(void)
 {
 	int32_t cur_ncs;
 	size_t i, fes_size;
-	fn_entry_t * fe;
-	int r;
 
 	// Run other fes scheduled to have run by now
 	cur_ncs = jiffy_time();
 	fes_size = vector_size(fes);
 	for (i=0; i < fes_size; i++)
 	{
-		fe = vector_elt(fes, i);
+		fn_entry_t * fe = vector_elt(fes, i);
 		if (fe->next - cur_ncs <= 0)
 		{
 			fe->fn(fe->arg);
+			sched_run_cleanup();
 
 			cur_ncs = jiffy_time();
 			// Set up the next callback time based on when the timer
@@ -101,16 +100,18 @@ void sched_iteration(void)
 			fe->next += fe->period;
 		}
 	}
+}
 
-	// Run bdesc autoreleasing at the end of the main loop
+void sched_run_cleanup(void)
+{
+	int r;
+
+	// Run bdesc autoreleasing
 	bdesc_autorelease_pool_pop();
 	assert(!bdesc_autorelease_pool_depth());
 	r = bdesc_autorelease_pool_push();
 	assert(r >= 0);
 
-	// Run chdesc reclamation at the end of the main loop
+	// Run chdesc reclamation
 	chdesc_reclaim_written();
-
-	// Also run debug command processing
-	KFS_DEBUG_NET_COMMAND();
 }

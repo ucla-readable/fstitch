@@ -14,6 +14,7 @@
 #include <kfs/kfsd.h>
 #include <kfs/modman.h>
 #include <kfs/sync.h>
+#include <kfs/sched.h>
 #include <kfs/kernel_serve.h>
 
 #define KERNEL_SERVE_DEBUG 0
@@ -32,7 +33,7 @@ static struct file_operations   kfs_dir_file_ops;
 static struct dentry_operations kfs_dentry_ops;
 static struct super_operations  kfs_superblock_ops;
 
-static spinlock_t * kfsd_lock = NULL;
+static spinlock_t * __kfsd_lock = NULL;
 
 struct mount_desc {
 	const char * path;
@@ -94,7 +95,7 @@ static void kernel_serve_shutdown(void * ignore)
 		kdprintf(STDERR_FILENO, "kernel_serve_shutdown(): unregister_filesystem: %d\n", r);
 }
 
-int kernel_serve_init(spinlock_t * lock)
+int kernel_serve_init(spinlock_t * kfsd_lock)
 {
 	int r;
 	mounts = vector_create();
@@ -107,8 +108,19 @@ int kernel_serve_init(spinlock_t * lock)
 		mounts = NULL;
 		return r;
 	}
-	kfsd_lock = lock;
+	__kfsd_lock = kfsd_lock;
 	return register_filesystem(&kfs_fs_type);
+}
+
+static void kfsd_enter(void)
+{
+	spin_lock(__kfsd_lock);
+}
+
+static void kfsd_exit(void)
+{
+	sched_run_cleanup();
+	spin_unlock(__kfsd_lock);
 }
 
 
@@ -191,7 +203,7 @@ read_inode_withlock(struct inode * inode)
 	
 	// The caller must hold the kfsd_lock. While we can't test that this is
 	// the case, we can check that at least someone has the lock.
-	assert(spin_is_locked(kfsd_lock));
+	assert(spin_is_locked(__kfsd_lock));
 
 	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
@@ -262,9 +274,9 @@ static void
 serve_read_inode(struct inode * inode)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, inode->i_ino);
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	read_inode_withlock(inode);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 }
 
 static int
@@ -276,9 +288,10 @@ serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 	void * data;
 	int r;
 	
+	kfsd_enter();
 	r = CALL(cfs, get_metadata, 0, KFS_feature_blocksize.id, &size, &data);
 	if (r < 0)
-		return r;
+		goto out;
 	assert(sizeof(st->f_bsize) >= size);
 	st->f_bsize = st->f_frsize = *(uint32_t *) data;
 	free(data);
@@ -286,14 +299,14 @@ serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 	
 	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
 	if (r < 0)
-		return r;
+		goto out;
 	assert(sizeof(st->f_blocks) >= size);
 	st->f_blocks = *(uint32_t *) data;
 	free(data);
 	
 	r = CALL(cfs, get_metadata, 0, KFS_feature_freespace.id, &size, &data);
 	if (r < 0)
-		return r;
+		goto out;
 	assert(sizeof(st->f_bfree) >= size);
 	/* what is the difference between bfree and bavail? */
 	st->f_bfree = st->f_bavail = *(uint32_t *) data;
@@ -304,8 +317,11 @@ serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 	st->f_ffree = 0;
 	/* 256 taken from linux/dirent.h */
 	st->f_namelen = 256;
+	r = 0;
         
-	return 0;
+out:
+	kfsd_exit();
+	return r;
 }
 
 static int
@@ -351,7 +367,7 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 	if (strncmp(dev_name, "kfs:", 4))
 		return ERR_PTR(-E_INVAL);
 	
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	size = vector_size(mounts);
 	for (i = 0; i < size; i++)
 	{
@@ -361,19 +377,19 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 			struct super_block * sb;
 			if (m->mounted)
 			{
-				spin_unlock(kfsd_lock);
+				kfsd_exit();
 				return ERR_PTR(-E_BUSY);
 			}
 			if (modman_inc_cfs(m->cfs, fs_type, m->path) < 0)
 			{
-				spin_unlock(kfsd_lock);
+				kfsd_exit();
 				return ERR_PTR(-E_NO_MEM);
 			}
 			sb = sget(fs_type, serve_compare_super, serve_set_super, m);
 			if (IS_ERR(sb) || sb->s_root) /* sb->s_root means it is mounted already? */
 			{
 				modman_dec_cfs(m->cfs, fs_type);
-				spin_unlock(kfsd_lock);
+				kfsd_exit();
 				return sb;
 			}
 			sb->s_flags = flags;
@@ -383,17 +399,17 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 				modman_dec_cfs(m->cfs, fs_type);
 				up_write(&sb->s_umount);
 				deactivate_super(sb);
-				spin_unlock(kfsd_lock);
+				kfsd_exit();
 				return ERR_PTR(i);
 			}
 			m->mounted = 1;
 			sb->s_flags |= MS_ACTIVE;
-			spin_unlock(kfsd_lock);
+			kfsd_exit();
 			printk("kkfsd: mounted \"kfs:%s\"\n", m->path);
 			return sb;
 		}
 	}
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return ERR_PTR(-E_NO_DEV);
 }
 
@@ -421,16 +437,16 @@ serve_open(struct inode * inode, struct file * filp)
 	if (r < 0)
 		return r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
 	fdesc->common->parent = filp->f_dentry->d_parent->d_inode->i_ino;
 	if (r < 0)
 	{
-		spin_unlock(kfsd_lock);
+		kfsd_exit();
 		return r;
 	}
 	filp->private_data = fdesc;
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return 0;
 }
 
@@ -439,9 +455,9 @@ serve_release(struct inode * inode, struct file * filp)
 {
 	Dprintf("%s(name = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
 	int r;
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return r;
 }
 
@@ -455,18 +471,18 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 
 	Dprintf("%s(dentry = \"%s\") (pid = %d)\n", __FUNCTION__, dentry->d_name.name, current->pid);
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	assert(dentry2cfs(dentry));
 	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
 	if (r == -E_NOT_FOUND)
 		cfs_ino = 0;
 	else if (r < 0)
 	{
-		spin_unlock(kfsd_lock);
+		kfsd_exit();
 		return ERR_PTR(r);
 	}
 	k_ino = cfs_ino;
-	spin_unlock(kfsd_lock); // TODO: do we need to hold the lock for iget() et al, too?
+	kfsd_exit(); // TODO: do we need to hold the lock for iget() et al, too?
 
 	if (k_ino)
 	{
@@ -498,14 +514,14 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 	if (attr->ia_valid & ~(ATTR_CTIME|ATTR_SIZE))
 		return -E_PERM;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	cfs = dentry2cfs(dentry);
 
 	/* it would be nice if we didn't have to open the file to change the size, permissions, etc. */
 	r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
 	if(r < 0)
 	{
-		spin_unlock(kfsd_lock);
+		kfsd_exit();
 		return r;
 	}
 
@@ -536,7 +552,7 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 error:
 	if(CALL(cfs, close, fdesc) < 0)
 		kdprintf(STDERR_FILENO, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return r;
 }
 
@@ -557,9 +573,9 @@ serve_read(struct file * filp, char __user * buffer, size_t count, loff_t * f_po
 	if (!data)
 		return -E_NO_MEM;
 	
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = CALL(cfs, read, fdesc, data, offset, data_size);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	
 	/* CFS gives us an "error" when we hit EOF */
 	if (r == -E_EOF)
@@ -613,9 +629,9 @@ serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t
 		data_size -= bytes;
 	}
 	
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = CALL(cfs, write, fdesc, data, offset, data_size);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	
 	if (r < 0)
 		goto out;
@@ -633,9 +649,9 @@ serve_unlink(struct inode * dir, struct dentry * dentry)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return r;
 }
 
@@ -675,9 +691,9 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = create_withlock(dir, dentry, mode);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 
 	return r;
 }
@@ -691,9 +707,9 @@ serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev_t dev)
 	if (!(mode & S_IFREG))
 		return -E_PERM;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = create_withlock(dir, dentry, mode);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return r;
 }
 
@@ -705,26 +721,26 @@ serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	struct inode * inode;
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 
 	r = CALL(dentry2cfs(dentry), mkdir, dir->i_ino, dentry->d_name.name, &cfs_ino);
 	if (r < 0)
 	{
-		spin_unlock(kfsd_lock);
+		kfsd_exit();
 		return r;
 	}
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
 	{
-		spin_unlock(kfsd_lock);
+		kfsd_exit();
 		return -E_NO_MEM;
 	}
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
 
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 
 	return 0;
 }
@@ -735,9 +751,9 @@ serve_rmdir(struct inode * dir, struct dentry * dentry)
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = CALL(dentry2cfs(dentry), rmdir, dir->i_ino, dentry->d_name.name);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return r;
 }
 
@@ -747,14 +763,14 @@ serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * 
 	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir, old_dentry->d_name.name, new_dir, new_dentry->d_name.name);
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	if (dentry2cfs(old_dentry) != dentry2cfs(new_dentry))
 	{
-		spin_unlock(kfsd_lock);
+		kfsd_exit();
 		return -E_PERM;
 	}
 	r = CALL(dentry2cfs(old_dentry), rename, new_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 	return r;
 }
 
@@ -766,7 +782,7 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 	Dprintf("%s()\n", __FUNCTION__);
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	while (1)
 	{
 		uint32_t cfs_fpos = filp->f_pos;
@@ -798,7 +814,7 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 		}
 		filp->f_pos = cfs_fpos;
 	}
-	spin_unlock(kfsd_lock);
+	kfsd_exit();
 
 	if (r == -E_UNSPECIFIED)
 		return 1;
@@ -809,19 +825,12 @@ static int
 serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
-
-#if 1
-	printk("%s: not enabled because it might hang\n", __FUNCTION__);
-	return 0;
-#else
 	int r;
 
-	spin_lock(kfsd_lock);
+	kfsd_enter();
 	r = kfs_sync();
-	spin_unlock(kfsd_lock);
-	printk("%s: kfs_sync() = %d\n", __FUNCTION__, r);
+	kfsd_exit();
 	return r;
-#endif
 }
 
 static int

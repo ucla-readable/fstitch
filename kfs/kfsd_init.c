@@ -92,11 +92,21 @@ int kfsd_init(int argc, char ** argv)
 #endif
 	int r;
 
+	/* we do kfsd_sched_init() before KFS_DEBUG_INIT() because the debugger
+	 * registers a periodic callback... but aside from this exception, the
+	 * debugger should be initialized first so we don't miss any interesting
+	 * events by accident */
+	if ((r = kfsd_sched_init()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "sched_init: %i\n", r);
+		return r;
+	}
+
 	if((r = KFS_DEBUG_INIT()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "kfs_debug_init: %i\n", r);
 #ifdef KUDOS
-		int c;
+		int c = 0;
 		while(c != 'y' && c != 'n')
 		{
 			kdprintf(STDERR_FILENO, "Start anyway? [Y/n] ");
@@ -146,12 +156,6 @@ int kfsd_init(int argc, char ** argv)
 #else
 #error Unknown target system
 #endif
-
-	if ((r = kfsd_sched_init()) < 0)
-	{
-		kdprintf(STDERR_FILENO, "sched_init: %i\n", r);
-		return r;
-	}
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{

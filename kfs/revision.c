@@ -181,8 +181,16 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	
 	/* find out how many chdescs are to be satisfied */
 	for(scan = root->dependencies; scan; scan = scan->next)
+	{
 		if(scan->desc->owner == bd)
+		{
+			chmetadesc_t * check;
+			for(check = scan->desc->dependencies; check; check = check->next)
+				if(check->desc->owner != bd)
+					kdprintf(STDERR_FILENO, "%s(): chdesc %p has dependency on %p, not on %s!\n", __FUNCTION__, scan->desc, check->desc, modman_name_bd(check->desc->owner));
 			count++;
+		}
+	}
 	
 	chdescs = malloc(sizeof(*chdescs) * count);
 	if(!chdescs)
@@ -196,6 +204,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	for(;;)
 	{
 		int again = 0;
+		int progress = 0;
 		for(i = 0; i != count; i++)
 		{
 			if(!chdescs[i])
@@ -203,10 +212,18 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 			if(chdescs[i]->dependencies)
 				again = 1;
 			else
+			{
 				chdesc_satisfy(&chdescs[i]);
+				progress = 1;
+			}
 		}
 		if(!again)
 			break;
+		if(!progress)
+		{
+			kdprintf(STDERR_FILENO, "%s(): there exist unsatisfied chdescs but no progress was made!\n", __FUNCTION__);
+			break;
+		}
 	}
 	free(chdescs);
 	

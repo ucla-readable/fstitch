@@ -10,6 +10,7 @@ int  sched_unregister(const sched_callback fn, void * arg);
 
 int  kfsd_sched_init(void);
 
-void sched_iteration(void);
+void sched_run_callbacks(void);
+void sched_run_cleanup(void);
 
 #endif /* __KUDOS_KFS_SCHED_H */
