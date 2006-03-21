@@ -409,7 +409,7 @@ static int debug_count = 0;
 #include <linux/vmalloc.h>
 
 #define DEBUG_PROC_FILENAME "kkfsd_debug"
-#define DEBUG_PROC_SIZE (50*1024*1024)
+#define DEBUG_PROC_SIZE (4 * 1024 * 1024)
 
 static uint8_t * proc_buffer;
 static off_t proc_buffer_rpos;

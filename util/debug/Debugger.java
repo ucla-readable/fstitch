@@ -72,7 +72,7 @@ public class Debugger extends OpcodeFactory
 			return;
 		if(debugRev == 2101 && debugOpcodeRev == 1991)
 			return;
-		if(debugRev == 2103 && debugOpcodeRev == 1991)
+		if(debugRev == 2104 && debugOpcodeRev == 1991)
 			return;
 		
 		/* 0 means "use a newer revision" */
