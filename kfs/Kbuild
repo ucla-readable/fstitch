@@ -38,6 +38,7 @@ KKFSD_KFS_OBJS := \
               opgroup.o \
               devfs_cfs.o \
               mem_bd.o \
+              linux_bd.o \
               md_bd.o \
               elevator_cache_bd.o \
               block_resizer_bd.o \
