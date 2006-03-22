@@ -36,7 +36,7 @@ struct linux_info {
 };
 
 static int linux_bd_get_config(void * object, int level,
-							   char * string, size_t length)
+                               char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
@@ -49,13 +49,13 @@ static int linux_bd_get_config(void * object, int level,
 		case CONFIG_NORMAL:
 		default:
 			snprintf(string, length, "%s: %d bytes x %d blocks", info->path,
-					 info->blocksize, info->blockcount);
+                                 info->blocksize, info->blockcount);
 	}
 	return 0;
 }
 
 static int linux_bd_get_status(void * object, int level,
-							   char * string, size_t length)
+                               char * string, size_t length)
 {
 	/* no status to report */
 	if (length >= 1)
@@ -81,7 +81,7 @@ static uint16_t linux_bd_get_atomicsize(BD_t * object)
 static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
 
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
-									 uint16_t count)
+                                     uint16_t count)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	bdesc_t * ret;
@@ -162,7 +162,7 @@ static int
 bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 {
 	struct linux_info * info = (struct linux_info *)
-		OBJLOCAL((BD_t*)(bio->bi_private));
+                                   OBJLOCAL((BD_t*)(bio->bi_private));
 	unsigned char *p;
 
 
@@ -183,8 +183,8 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 }
 
 static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
-											   uint16_t count,
-											   bool * synthetic)
+                                               uint16_t count,
+                                               bool * synthetic)
 {
 	/* linux_bd doesn't bother with synthetic blocks,
 	 * since it's just as fast to use real ones */
@@ -279,7 +279,7 @@ static int lookup_device(const char *path, dev_t *dev)
 
 static int open_bdev(const char *path, int mode, struct block_device **bdev)
 {
-	static char *_claim_ptr = "i belong to ospfs";
+	static char *_claim_ptr = "I belong to kkfsd";
 	int r;
 	dev_t dev;
 
