@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
+#include <kfs/kernel_serve.h>
 #endif
 
 #include <kfs/sync.h>
@@ -20,7 +21,7 @@
 #include <kfs/kfsd_init.h>
 
 #ifdef __KERNEL__
-static spinlock_t kfsd_lock;
+struct stealth_lock kfsd_global_lock;
 #endif
 
 struct module_shutdown {
@@ -106,7 +107,7 @@ void kfsd_main(int argc, char ** argv)
 		fuse_serve_loop();
 #else
 #ifdef __KERNEL__
-		spin_lock(&kfsd_lock);
+		kfsd_enter();
 #endif
 		while(kfsd_running)
 		{
@@ -115,16 +116,16 @@ void kfsd_main(int argc, char ** argv)
 			ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
 			sched_run_cleanup();
 #elif defined(__KERNEL__)
-			spin_unlock(&kfsd_lock);
+			kfsd_leave(0);
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ / 25);
-			spin_lock(&kfsd_lock);
+			kfsd_enter();
 #else
 #error Unknown target system
 #endif
 		}
 #ifdef __KERNEL__
-		spin_unlock(&kfsd_lock);
+		kfsd_leave(0);
 #endif
 #endif
 	}
@@ -183,9 +184,10 @@ static int kfsd_thread(void * thunk)
 {
 	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
 	daemonize("kkfsd");
-	spin_lock_init(&kfsd_lock);
-	/* HACK: we pass kfsd_lock in through argv */
-	kfsd_main(0, (char **) &kfsd_lock);
+	spin_lock_init(&kfsd_global_lock.lock);
+	kfsd_global_lock.locked = 0;
+	kfsd_global_lock.process = 0;
+	kfsd_main(0, NULL);
 	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
 	kfsd_is_shutdown = 1;
 	return 0;

@@ -148,7 +148,7 @@ int kfsd_init(int argc, char ** argv)
 		return r;
 	}
 #elif defined(__KERNEL__)
-	if ((r = kernel_serve_init((spinlock_t *) argv)) < 0)
+	if ((r = kernel_serve_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "kernel_serve_init: %d\n", r);
 		return r;

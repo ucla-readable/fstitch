@@ -187,7 +187,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 			chmetadesc_t * check;
 			for(check = scan->desc->dependencies; check; check = check->next)
 				if(check->desc->owner != bd)
-					kdprintf(STDERR_FILENO, "%s(): chdesc %p has dependency on %p, not on %s!\n", __FUNCTION__, scan->desc, check->desc, modman_name_bd(check->desc->owner));
+					kdprintf(STDERR_FILENO, "%s(): chdesc %p has dependency on %p, not on %s! (debug = %d)\n", __FUNCTION__, scan->desc, check->desc, modman_name_bd(check->desc->owner), KFS_DEBUG_COUNT());
 			count++;
 		}
 	}
@@ -221,7 +221,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 			break;
 		if(!progress)
 		{
-			kdprintf(STDERR_FILENO, "%s(): there exist unsatisfied chdescs but no progress was made!\n", __FUNCTION__);
+			kdprintf(STDERR_FILENO, "%s(): there exist unsatisfied chdescs but no progress was made! (debug = %d)\n", __FUNCTION__, KFS_DEBUG_COUNT());
 			break;
 		}
 	}
