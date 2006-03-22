@@ -358,6 +358,10 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	struct inode * k_root;
 	int r;
 	
+	// The caller must hold the kfsd_lock. While we can't test that this is
+	// the case, we can check that at least someone has the lock.
+	assert(spin_is_locked(__kfsd_lock));
+	
 	/* FIXME? */
 	sb->s_blocksize = 0;
 	sb->s_blocksize_bits = 0;
@@ -693,6 +697,10 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 	struct inode * inode;
 	fdesc_t * fdesc;
 	int r;
+
+	// The caller must hold the kfsd_lock. While we can't test that this is
+	// the case, we can check that at least someone has the lock.
+	assert(spin_is_locked(__kfsd_lock));
 
 	// TODO: support mode
 	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &fdesc, &cfs_ino);
