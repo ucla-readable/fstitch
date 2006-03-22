@@ -17,7 +17,7 @@
 #include <kfs/sched.h>
 #include <kfs/kernel_serve.h>
 
-#define KERNEL_SERVE_DEBUG 1
+#define KERNEL_SERVE_DEBUG 0
 
 #if KERNEL_SERVE_DEBUG
 #define Dprintf(x...) printf(x)
