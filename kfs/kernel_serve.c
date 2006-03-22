@@ -17,7 +17,7 @@
 #include <kfs/sched.h>
 #include <kfs/kernel_serve.h>
 
-#define KERNEL_SERVE_DEBUG 0
+#define KERNEL_SERVE_DEBUG 1
 
 #if KERNEL_SERVE_DEBUG
 #define Dprintf(x...) printf(x)
@@ -201,8 +201,7 @@ read_inode_withlock(struct inode * inode)
 		uint32_t * type;
 		void * ptr;
 	} type;
-	int nlinks_supported = 0, perms_supported = 0;
-	int r;
+	int r, nlinks_supported = 0, perms_supported = 0;
 	
 	// The caller must hold the kfsd_lock. While we can't test that this is
 	// the case, we can check that at least someone has the lock.
@@ -232,7 +231,32 @@ read_inode_withlock(struct inode * inode)
 	if (*type.type == TYPE_DIR)
 	{
 		if (!nlinks_supported)
+		{
+			char buf[1024];
+			uint32_t basep = 0;
+			fdesc_t * fdesc;
+			
 			inode->i_nlink = 2;
+			
+			r = CALL(sb2cfs(inode->i_sb), open, inode->i_ino, 0, &fdesc);
+			assert(r >= 0);
+			/* HACK: this does not have to be the correct value */
+			fdesc->common->parent = inode->i_ino;
+			
+			while ((r = CALL(sb2cfs(inode->i_sb), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
+			{
+				char * cur = buf;
+				while (cur < buf + r)
+				{
+					if (((dirent_t *) cur)->d_type == TYPE_DIR)
+						inode->i_nlink++;
+					cur += ((dirent_t *) cur)->d_reclen;
+				}
+			}
+			
+			r = CALL(sb2cfs(inode->i_sb), close, fdesc);
+			assert(r >= 0);
+		}
 		if (!perms_supported)
 			inode->i_mode = 0777; // default, in case permissions are not supported
 		inode->i_mode |= S_IFDIR;
