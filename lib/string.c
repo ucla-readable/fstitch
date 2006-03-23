@@ -65,10 +65,11 @@ strncmp(const char *p, const char *q, size_t len)
 char*
 strchr(const char *s, char c)
 {
-	for (; *s; s++)
+	for (;; s++)
 		if (*s == c)
 			return (char*) s;
-	return 0;
+		else if (!*s)
+			return 0;
 }
 
 char *
