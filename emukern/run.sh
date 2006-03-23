@@ -42,6 +42,7 @@ cat > init.sh << NEOF
 #!/bin/bash
 umount /mnt
 insmod kfs/kkfsd.ko
+[ -f /proc/kkfsd_debug ] && (cat /proc/kkfsd_debug | nc 10.0.2.2 15166) &
 mount kfs:/ /mnt -t kfs
 mkdir /mnt/dev
 mount kfs:/dev /mnt/dev -t kfs
