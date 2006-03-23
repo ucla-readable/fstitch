@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class InfoBdescNumber extends Opcode
 {
 	private final int block, number;
@@ -28,7 +25,7 @@ public class InfoBdescNumber extends Opcode
 		return "KDB_INFO_BDESC_NUMBER: block = " + SystemState.hex(block) + ", number = " + number + ", count = " + count;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_INFO_BDESC_NUMBER, "KDB_INFO_BDESC_NUMBER", InfoBdescNumber.class);
 		factory.addParameter("block", 4);

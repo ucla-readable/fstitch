@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescMerge extends Opcode
 {
 	private final int count, chdescs, head;
@@ -26,7 +23,7 @@ public class ChdescMerge extends Opcode
 		return "KDB_CHDESC_MERGE: count = " + count + ", chdescs = " + SystemState.hex(chdescs) + ", head = " + SystemState.hex(head);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_MERGE, "KDB_CHDESC_MERGE", ChdescMerge.class);
 		factory.addParameter("count", 4);

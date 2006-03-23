@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescWeakForget extends Opcode
 {
 	private final int chdesc, location;
@@ -23,7 +20,7 @@ public class ChdescWeakForget extends Opcode
 		return "KDB_CHDESC_WEAK_FORGET: chdesc = " + SystemState.hex(chdesc) + ", location = " + SystemState.hex(location);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_WEAK_FORGET, "KDB_CHDESC_WEAK_FORGET", ChdescWeakForget.class);
 		factory.addParameter("chdesc", 4);

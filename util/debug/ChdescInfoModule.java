@@ -1,9 +1,8 @@
-import java.io.DataInput;
 import java.io.IOException;
 
 public class ChdescInfoModule extends Module
 {
-	public ChdescInfoModule(DataInput input) throws BadInputException, IOException
+	public ChdescInfoModule(CountingDataInput input) throws BadInputException, IOException
 	{
 		super(input, KDB_MODULE_CHDESC_INFO);
 		

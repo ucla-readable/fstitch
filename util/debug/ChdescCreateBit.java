@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescCreateBit extends Opcode
 {
 	private final int chdesc, block, owner, xor;
@@ -25,7 +22,7 @@ public class ChdescCreateBit extends Opcode
 		return "KDB_CHDESC_CREATE_BIT: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block) + ", owner = " + SystemState.hex(owner) + ", offset = " + offset + ", xor = " + SystemState.hex(xor);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CREATE_BIT, "KDB_CHDESC_CREATE_BIT", ChdescCreateBit.class);
 		factory.addParameter("chdesc", 4);

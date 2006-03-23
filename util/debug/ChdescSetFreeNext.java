@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescSetFreeNext extends Opcode
 {
 	private final int chdesc, free_next;
@@ -37,7 +34,7 @@ public class ChdescSetFreeNext extends Opcode
 		return "KDB_CHDESC_SET_FREE_NEXT: chdesc = " + SystemState.hex(chdesc) + ", free_next = " + SystemState.hex(free_next);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_FREE_NEXT, "KDB_CHDESC_SET_FREE_NEXT", ChdescSetFreeNext.class);
 		factory.addParameter("chdesc", 4);

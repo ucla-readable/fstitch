@@ -11,7 +11,7 @@ public class UnsupportedStreamRevisionException extends BadInputException
 	
 	public UnsupportedStreamRevisionException(int debugRev, int debugOpcodeRev, int revToUse)
 	{
-		super("Input file revision (" + debugRev + ", " + debugOpcodeRev + ") unsupported; use " + ((revToUse == 0) ? "a newer debugger version." : "debugger version " + revToUse + " or earlier."));
+		super("Input file revision (" + debugRev + ", " + debugOpcodeRev + ") unsupported; use " + ((revToUse == 0) ? "a newer debugger version." : "debugger version " + revToUse + " or earlier."), 0);
 		this.debugRev = debugRev;
 		this.debugOpcodeRev = debugOpcodeRev;
 		this.revToUse = revToUse;

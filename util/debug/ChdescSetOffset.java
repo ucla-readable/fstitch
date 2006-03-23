@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescSetOffset extends Opcode
 {
 	private final int chdesc;
@@ -24,7 +21,7 @@ public class ChdescSetOffset extends Opcode
 		return "KDB_CHDESC_SET_OFFSET: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_OFFSET, "KDB_CHDESC_SET_OFFSET", ChdescSetOffset.class);
 		factory.addParameter("chdesc", 4);

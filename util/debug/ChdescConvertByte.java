@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescConvertByte extends Opcode
 {
 	private final int chdesc;
@@ -25,7 +22,7 @@ public class ChdescConvertByte extends Opcode
 		return "KDB_CHDESC_CONVERT_BYTE: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset + ", length = " + length;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CONVERT_BYTE, "KDB_CHDESC_CONVERT_BYTE", ChdescConvertByte.class);
 		factory.addParameter("chdesc", 4);

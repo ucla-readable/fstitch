@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescSetOwner extends Opcode
 {
 	private final int chdesc, owner;
@@ -23,7 +20,7 @@ public class ChdescSetOwner extends Opcode
 		return "KDB_CHDESC_SET_OWNER: chdesc = " + SystemState.hex(chdesc) + ", owner = " + SystemState.hex(owner);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_OWNER, "KDB_CHDESC_SET_OWNER", ChdescSetOwner.class);
 		factory.addParameter("chdesc", 4);

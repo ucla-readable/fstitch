@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class InfoMark extends Opcode
 {
 	private final short module;
@@ -24,7 +21,7 @@ public class InfoMark extends Opcode
 		return "KDB_INFO_MARK: module = " + hex(module);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_INFO_MARK, "KDB_INFO_MARK", InfoMark.class);
 		factory.addParameter("module", 2);

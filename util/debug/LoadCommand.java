@@ -25,11 +25,11 @@ public class LoadCommand implements Command
 			try {
 				int count;
 				File file = new File(args[0]);
-				InputStream input = new FileInputStream(file);
-				DataInput stream = new DataInputStream(input);
+				InputStream stream = new FileInputStream(file);
+				DataInput input = new DataInputStream(stream);
 				
 				System.out.print("Reading debug signature... ");
-				dbg = new Debugger(args[0], stream);
+				dbg = new Debugger(args[0], new CountingDataInput(input));
 				System.out.println("OK!");
 				
 				if(args.length == 1)
@@ -51,17 +51,17 @@ public class LoadCommand implements Command
 						dbg = null;
 					}
 			}
+			catch(UnsupportedStreamRevisionException e)
+			{
+				System.out.println(e);
+				dbg = null;
+			}
 			catch(BadInputException e)
 			{
-				if(e instanceof UnsupportedStreamRevisionException)
-				{
-					System.out.println(e);
-					dbg = null;
-				}
-				else if(dbg != null)
-					System.out.println("Bad input while reading " + args[0] + "; " + dbg.getOpcodeCount() + " opcodes OK");
-				else
-					System.out.println("Bad input while reading " + args[0]);
+				String message = "Bad input (" + e.getMessage() + " before byte " + e.offset + ") while reading " + args[0];
+				if(dbg != null)
+					message += "; " + dbg.getOpcodeCount() + " opcodes OK";
+				System.out.println(message);
 			}
 			catch(IOException e)
 			{

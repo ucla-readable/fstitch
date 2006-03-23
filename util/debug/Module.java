@@ -1,4 +1,3 @@
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.HashMap;
 
@@ -7,7 +6,7 @@ public abstract class Module extends OpcodeFactory
 	protected final short moduleNumber;
 	protected final HashMap factories;
 	
-	protected Module(DataInput input, short moduleNumber)
+	protected Module(CountingDataInput input, short moduleNumber)
 	{
 		super(input);
 		this.moduleNumber = moduleNumber;
@@ -23,7 +22,7 @@ public abstract class Module extends OpcodeFactory
 	{
 		short number = input.readShort();
 		if(number != moduleNumber)
-			throw new UnexpectedModuleException(number);
+			throw new UnexpectedModuleException(number, input.getOffset());
 	}
 	
 	void addFactory(ModuleOpcodeFactory factory) throws BadInputException, IOException
@@ -47,7 +46,7 @@ public abstract class Module extends OpcodeFactory
 		Short key = new Short(number);
 		ModuleOpcodeFactory factory = (ModuleOpcodeFactory) factories.get(key);
 		if(factory == null)
-			throw new UnexpectedOpcodeException(number);
+			throw new UnexpectedOpcodeException(number, input.getOffset());
 		return factory.readOpcode();
 	}
 	

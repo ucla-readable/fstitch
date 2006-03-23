@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class BdescRelease extends Opcode
 {
 	private final int block, ddesc, ref_count, ar_count, dd_count;
@@ -23,7 +20,7 @@ public class BdescRelease extends Opcode
 		return "KDB_BDESC_RELEASE: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc) + ", ref_count = " + ref_count + ", ar_count = " + ar_count + ", dd_count = " + dd_count;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_RELEASE, "KDB_BDESC_RELEASE", BdescRelease.class);
 		factory.addParameter("block", 4);

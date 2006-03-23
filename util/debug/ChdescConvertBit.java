@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescConvertBit extends Opcode
 {
 	private final int chdesc, xor;
@@ -25,7 +22,7 @@ public class ChdescConvertBit extends Opcode
 		return "KDB_CHDESC_CONVERT_BIT: chdesc = " + SystemState.hex(chdesc) + ", offset = " + offset + ", xor = " + SystemState.hex(xor);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CONVERT_BIT, "KDB_CHDESC_CONVERT_BIT", ChdescConvertBit.class);
 		factory.addParameter("chdesc", 4);

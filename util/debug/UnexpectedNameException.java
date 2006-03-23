@@ -1,15 +1,10 @@
 public class UnexpectedNameException extends BadInputException
 {
-	private final String name;
+	public final String name;
 	
-	public UnexpectedNameException(String name)
+	public UnexpectedNameException(String name, int offset)
 	{
-		super("Unexpected name: " + name);
+		super("Unexpected name: " + name, offset);
 		this.name = name;
-	}
-	
-	public String getName()
-	{
-		return name;
 	}
 }

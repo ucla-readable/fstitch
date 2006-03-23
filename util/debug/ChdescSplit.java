@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescSplit extends Opcode
 {
 	private final int original, count;
@@ -25,7 +22,7 @@ public class ChdescSplit extends Opcode
 		return "KDB_CHDESC_SPLIT: original = " + SystemState.hex(original) + ", count = " + count;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SPLIT, "KDB_CHDESC_SPLIT", ChdescSplit.class);
 		factory.addParameter("original", 4);

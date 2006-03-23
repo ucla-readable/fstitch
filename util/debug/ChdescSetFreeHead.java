@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescSetFreeHead extends Opcode
 {
 	private final int chdesc;
@@ -32,7 +29,7 @@ public class ChdescSetFreeHead extends Opcode
 		return "KDB_CHDESC_SET_FREE_HEAD: chdesc = " + SystemState.hex(chdesc);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SET_FREE_HEAD, "KDB_CHDESC_SET_FREE_HEAD", ChdescSetFreeHead.class);
 		factory.addParameter("chdesc", 4);

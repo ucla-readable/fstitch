@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescRollbackCollection extends Opcode
 {
 	private final int count, chdescs, order;
@@ -26,7 +23,7 @@ public class ChdescRollbackCollection extends Opcode
 		return "KDB_CHDESC_ROLLBACK_COLLECTION: count = " + count + ", chdescs = " + SystemState.hex(chdescs) + ", order = " + SystemState.hex(order);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_ROLLBACK_COLLECTION, "KDB_CHDESC_ROLLBACK_COLLECTION", ChdescRollbackCollection.class);
 		factory.addParameter("count", 4);

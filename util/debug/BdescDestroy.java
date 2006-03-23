@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class BdescDestroy extends Opcode
 {
 	private final int block, ddesc;
@@ -20,7 +17,7 @@ public class BdescDestroy extends Opcode
 		return "KDB_BDESC_DESTROY: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_DESTROY, "KDB_BDESC_DESTROY", BdescDestroy.class);
 		factory.addParameter("block", 4);

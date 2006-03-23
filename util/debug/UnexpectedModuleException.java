@@ -1,15 +1,10 @@
 public class UnexpectedModuleException extends BadInputException
 {
-	private final short moduleNumber;
+	public final short moduleNumber;
 	
-	public UnexpectedModuleException(short moduleNumber)
+	public UnexpectedModuleException(short moduleNumber, int offset)
 	{
-		super("Unexpected module: " + Module.hex(moduleNumber));
+		super("Unexpected module: " + Module.hex(moduleNumber), offset);
 		this.moduleNumber = moduleNumber;
-	}
-	
-	public short getModuleNumber()
-	{
-		return moduleNumber;
 	}
 }

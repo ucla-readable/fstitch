@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescMove extends Opcode
 {
 	private final int chdesc, destination, target;
@@ -28,7 +25,7 @@ public class ChdescMove extends Opcode
 		return "KDB_CHDESC_MOVE: chdesc = " + SystemState.hex(chdesc) + ", destination = " + SystemState.hex(destination) + ", target = " + SystemState.hex(target) + ", offset = " + offset;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_MOVE, "KDB_CHDESC_MOVE", ChdescMove.class);
 		factory.addParameter("chdesc", 4);

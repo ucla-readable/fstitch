@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescCreateNoop extends Opcode
 {
 	private final int chdesc, block, owner;
@@ -22,7 +19,7 @@ public class ChdescCreateNoop extends Opcode
 		return "KDB_CHDESC_CREATE_NOOP: chdesc = " + SystemState.hex(chdesc) + ", block = " + SystemState.hex(block) + ", owner = " + SystemState.hex(owner);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CREATE_NOOP, "KDB_CHDESC_CREATE_NOOP", ChdescCreateNoop.class);
 		factory.addParameter("chdesc", 4);

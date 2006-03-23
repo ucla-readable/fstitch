@@ -18,7 +18,7 @@ public class Debugger extends OpcodeFactory
 	private int debugRev;
 	private int debugOpcodeRev;
 	
-	public Debugger(String name, DataInput input) throws BadInputException, IOException
+	public Debugger(String name, CountingDataInput input) throws BadInputException, IOException
 	{
 		super(input);
 		this.name = name;
@@ -42,7 +42,7 @@ public class Debugger extends OpcodeFactory
 		
 		short module = input.readShort();
 		if(module != 0)
-			throw new UnexpectedModuleException(module);
+			throw new UnexpectedModuleException(module, input.getOffset());
 	}
 	
 	private void ensureSupportedRevision() throws UnsupportedStreamRevisionException
@@ -99,7 +99,7 @@ public class Debugger extends OpcodeFactory
 		Short key = new Short(number);
 		Module module = (Module) modules.get(key);
 		if(module == null)
-			throw new UnexpectedModuleException(number);
+			throw new UnexpectedModuleException(number, input.getOffset());
 		
 		Opcode opcode = module.readOpcode();
 		opcode.setFile(file);

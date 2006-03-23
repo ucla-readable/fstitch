@@ -1,9 +1,8 @@
-import java.io.DataInput;
 import java.io.IOException;
 
 public class BdescModule extends Module
 {
-	public BdescModule(DataInput input) throws BadInputException, IOException
+	public BdescModule(CountingDataInput input) throws BadInputException, IOException
 	{
 		super(input, KDB_MODULE_BDESC);
 		

@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class InfoBdName extends Opcode
 {
 	private final int bd;
@@ -27,7 +24,7 @@ public class InfoBdName extends Opcode
 		return "KDB_INFO_BD_NAME: bd = " + SystemState.hex(bd) + ", name = " + name;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_INFO_BD_NAME, "KDB_INFO_BD_NAME", InfoBdName.class);
 		factory.addParameter("bd", 4);

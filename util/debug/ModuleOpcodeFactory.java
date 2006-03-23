@@ -13,7 +13,7 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 	private final Vector parameterSizes;
 	private int parameterCount;
 	
-	public ModuleOpcodeFactory(DataInput input, short opcodeNumber, String opcodeName, Class opcodeClass)
+	public ModuleOpcodeFactory(CountingDataInput input, short opcodeNumber, String opcodeName, Class opcodeClass)
 	{
 		super(input);
 		this.opcodeNumber = opcodeNumber;
@@ -37,14 +37,14 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 	{
 		short number = input.readShort();
 		if(number != opcodeNumber)
-			throw new UnexpectedOpcodeException(number);
+			throw new UnexpectedOpcodeException(number, input.getOffset());
 	}
 	
 	public void verifyName() throws UnexpectedNameException, IOException
 	{
 		String name = readString();
 		if(!name.equals(opcodeName))
-			throw new UnexpectedNameException(name);
+			throw new UnexpectedNameException(name, input.getOffset());
 	}
 	
 	private boolean checkParameter(int index, String name, int size)
@@ -64,15 +64,15 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 		{
 			name = readString();
 			if(!checkParameter(index, name, size))
-				throw new UnexpectedParameterException(name, size);
+				throw new UnexpectedParameterException(name, size, input.getOffset());
 			index++;
 			size = input.readByte();
 		}
 		
 		if(size != 0)
-			throw new UnexpectedParameterException(readString(), size);
+			throw new UnexpectedParameterException(readString(), size, input.getOffset());
 		if(index < parameterCount)
-			throw new MissingParameterException((String) parameterNames.get(index), ((Integer) parameterSizes.get(index)).intValue());
+			throw new MissingParameterException((String) parameterNames.get(index), ((Integer) parameterSizes.get(index)).intValue(), input.getOffset());
 	}
 	
 	private Opcode readGenericOpcode() throws UnexpectedParameterException, MissingParameterException, IOException, NoSuchMethodException,
@@ -107,21 +107,21 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 					types.add(Integer.TYPE);
 					break;
 				default:
-					throw new UnexpectedParameterException("[" + opcodeName + ":" + index + "]", size);
+					throw new UnexpectedParameterException("[" + opcodeName + ":" + index + "]", size, input.getOffset());
 			}
 			index++;
 			size = input.readByte();
 		}
 		
 		if(size != 0)
-			throw new UnexpectedParameterException("[" + opcodeName + ":" + index + "]", size);
+			throw new UnexpectedParameterException("[" + opcodeName + ":" + index + "]", size, input.getOffset());
 		
 		size = input.readByte();
 		if(size != 0)
 			System.err.println("Got parameter error flag while reading [" + opcodeName + "]");
 		
 		if(index < parameterCount)
-			throw new MissingParameterException((String) parameterNames.get(index), ((Integer) parameterSizes.get(index)).intValue());
+			throw new MissingParameterException((String) parameterNames.get(index), ((Integer) parameterSizes.get(index)).intValue(), input.getOffset());
 		
 		/* magic reflection code to call the constructor */
 		return (Opcode) opcodeClass.getConstructor((Class[]) types.toArray(new Class[types.size()])).newInstance(parameters.toArray());
@@ -134,19 +134,19 @@ public class ModuleOpcodeFactory extends OpcodeFactory
 		}
 		catch(NoSuchMethodException e)
 		{
-			throw new BadInputException("Internal opcode class parameter error", e);
+			throw new BadInputException("Internal opcode class parameter error", e, input.getOffset());
 		}
 		catch(InstantiationException e)
 		{
-			throw new BadInputException("Internal opcode class attribute error", e);
+			throw new BadInputException("Internal opcode class attribute error", e, input.getOffset());
 		}
 		catch(IllegalAccessException e)
 		{
-			throw new BadInputException("Internal opcode class protection error", e);
+			throw new BadInputException("Internal opcode class protection error", e, input.getOffset());
 		}
 		catch(InvocationTargetException e)
 		{
-			throw new BadInputException(e.getTargetException());
+			throw new BadInputException(e.getTargetException(), input.getOffset());
 		}
 	}
 }

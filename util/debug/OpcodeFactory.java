@@ -2,9 +2,9 @@ import java.io.*;
 
 public abstract class OpcodeFactory implements Constants
 {
-	protected final DataInput input;
+	protected final CountingDataInput input;
 	
-	protected OpcodeFactory(DataInput input)
+	protected OpcodeFactory(CountingDataInput input)
 	{
 		this.input = input;
 	}
@@ -19,6 +19,11 @@ public abstract class OpcodeFactory implements Constants
 			b = input.readByte();
 		}
 		return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(string.toByteArray()))).readLine();
+	}
+	
+	public int getInputOffset()
+	{
+		return input.getOffset();
 	}
 	
 	public abstract Opcode readOpcode() throws BadInputException, IOException;

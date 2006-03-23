@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescApplyCollection extends Opcode
 {
 	private final int count, chdescs, order;
@@ -26,7 +23,7 @@ public class ChdescApplyCollection extends Opcode
 		return "KDB_CHDESC_APPLY_COLLECTION: count = " + count + ", chdescs = " + SystemState.hex(chdescs) + ", order = " + SystemState.hex(order);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_APPLY_COLLECTION, "KDB_CHDESC_APPLY_COLLECTION", ChdescApplyCollection.class);
 		factory.addParameter("count", 4);

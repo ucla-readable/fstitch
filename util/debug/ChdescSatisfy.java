@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescSatisfy extends Opcode
 {
 	private final int chdesc;
@@ -24,7 +21,7 @@ public class ChdescSatisfy extends Opcode
 		return "KDB_CHDESC_SATISFY: chdesc = " + SystemState.hex(chdesc);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_SATISFY, "KDB_CHDESC_SATISFY", ChdescSatisfy.class);
 		factory.addParameter("chdesc", 4);

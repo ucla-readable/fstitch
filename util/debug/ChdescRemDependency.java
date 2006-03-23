@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescRemDependency extends Opcode
 {
 	private final int source, target;
@@ -23,7 +20,7 @@ public class ChdescRemDependency extends Opcode
 		return "KDB_CHDESC_REM_DEPENDENCY: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_REM_DEPENDENCY, "KDB_CHDESC_REM_DEPENDENCY", ChdescRemDependency.class);
 		factory.addParameter("source", 4);

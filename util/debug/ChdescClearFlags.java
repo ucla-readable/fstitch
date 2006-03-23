@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescClearFlags extends Opcode
 {
 	private final int chdesc, flags;
@@ -23,7 +20,7 @@ public class ChdescClearFlags extends Opcode
 		return "KDB_CHDESC_CLEAR_FLAGS: chdesc = " + SystemState.hex(chdesc) + ", flags = " + Chdesc.renderFlags(flags);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_CLEAR_FLAGS, "KDB_CHDESC_CLEAR_FLAGS", ChdescClearFlags.class);
 		factory.addParameter("chdesc", 4);

@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescApply extends Opcode
 {
 	private final int chdesc;
@@ -22,7 +19,7 @@ public class ChdescApply extends Opcode
 		return "KDB_CHDESC_APPLY: chdesc = " + SystemState.hex(chdesc);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_APPLY, "KDB_CHDESC_APPLY", ChdescApply.class);
 		factory.addParameter("chdesc", 4);

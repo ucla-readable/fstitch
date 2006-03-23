@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class ChdescDetachDependencies extends Opcode
 {
 	private final int chdesc;
@@ -24,7 +21,7 @@ public class ChdescDetachDependencies extends Opcode
 		return "KDB_CHDESC_DETACH_DEPENDENCIES: chdesc = " + SystemState.hex(chdesc);
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_DETACH_DEPENDENCIES, "KDB_CHDESC_DETACH_DEPENDENCIES", ChdescDetachDependencies.class);
 		factory.addParameter("chdesc", 4);

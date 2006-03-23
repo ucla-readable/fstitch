@@ -1,6 +1,3 @@
-import java.io.DataInput;
-//import java.io.IOException;
-
 public class BdescAlloc extends Opcode
 {
 	private final int block, ddesc, number;
@@ -23,7 +20,7 @@ public class BdescAlloc extends Opcode
 		return "KDB_BDESC_ALLOC: block = " + SystemState.hex(block) + ", ddesc = " + SystemState.hex(ddesc) + ", number = " + number + ", count = " + count;
 	}
 	
-	public static ModuleOpcodeFactory getFactory(DataInput input)
+	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_BDESC_ALLOC, "KDB_BDESC_ALLOC", BdescAlloc.class);
 		factory.addParameter("block", 4);
