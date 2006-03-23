@@ -32,6 +32,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/ufs_alloc_linear.o \
 			$(OBJDIR)/kfs/ufs_dirent_linear.o \
 			$(OBJDIR)/kfs/ufs_super_wb.o \
+			$(OBJDIR)/kfs/ufs_cg_wb.o \
 			$(OBJDIR)/kfs/opgroup_lfs.o \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \

@@ -7,6 +7,7 @@
 #include <kfs/ufs_base.h>
 #include <kfs/ufs_alloc.h>
 #include <kfs/ufs_dirent.h>
+#include <kfs/ufs_cg.h>
 #include <kfs/ufs_super.h>
 
 struct ufs_parts
@@ -14,6 +15,7 @@ struct ufs_parts
 	LFS_t * base;
 	UFSmod_alloc_t * p_allocator;
 	UFSmod_dirent_t * p_dirent;
+	UFSmod_cg_t * p_cg;
 	UFSmod_super_t * p_super;
 };
 
@@ -25,13 +27,11 @@ struct lfs_info
 	struct ufs_parts parts;
 	// commonly used values
 	uint16_t ipf; // inodes per fragment
-	uint32_t * cylstart; // array of cylinder starting block numbers
 	hash_map_t * filemap; // keep track of in-memory struct UFS_Files
 };
 
 int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode);
 int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head);
-int read_cg(struct lfs_info * info, uint32_t num, struct UFS_cg * cg);
 uint32_t read_btot(struct lfs_info * info, uint32_t num);
 uint16_t read_fbp(struct lfs_info * info, uint32_t num);
 int read_inode_bitmap(struct lfs_info * info, uint32_t num);

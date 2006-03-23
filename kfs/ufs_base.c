@@ -12,6 +12,7 @@
 #include <kfs/ufs_common.h>
 #include <kfs/ufs_alloc_linear.h>
 #include <kfs/ufs_dirent_linear.h>
+#include <kfs/ufs_cg_wb.h>
 #include <kfs/ufs_super_wb.h>
 
 #ifdef KUDOS_INC_FS_H
@@ -36,13 +37,6 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head);
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
-
-static uint32_t calc_cylgrp_start(LFS_t * object, uint32_t i)
-{
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	const struct UFS_Super * super = CALL(info->parts.p_super, read);
-	return super->fs_fpg * i + super->fs_cgoffset * (i & ~super->fs_cgmask);
-}
 
 #if 0
 static void print_inode(struct UFS_dinode inode)
@@ -72,7 +66,7 @@ static int check_super(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t numblocks;
-	int i, bs;
+	int bs;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	// TODO better way of detecting fs block size
@@ -95,13 +89,6 @@ static int check_super(LFS_t * object)
 
 	numblocks = CALL(info->ubd, get_numblocks);
 	info->ipf = super->fs_inopb / super->fs_frag;
-	info->cylstart = malloc(sizeof(uint32_t) * super->fs_ncg);
-	if (!info->cylstart)
-		return -E_NO_MEM;
-
-	for (i = 0; i < super->fs_ncg; i++) {
-		info->cylstart[i] = calc_cylgrp_start(object, i);
-	}
 
 	printf("Superblock size %d\n", super->fs_sbsize);
 	printf("Superblock offset %d\n", super->fs_sblkno);
@@ -1422,7 +1409,6 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	if (f->f_type == TYPE_DIR) {
 		// Decrement parent directory's link count
 		struct UFS_dinode dir_inode;
-		struct UFS_cg cg;
 		int cyl = f->f_num / super->fs_ipg;
 
 		r = read_inode(info, pfile->f_num, &dir_inode);
@@ -1434,10 +1420,6 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 			goto ufs_remove_name_error;
 
 		// Update group summary
-		r = read_cg(info, cyl, &cg);
-		if (r < 0)
-			goto ufs_remove_name_error;
-
 		r = update_summary(info, cyl, -1, 0, 0, 0, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
@@ -1663,6 +1645,8 @@ static void ufs_destroy_parts(LFS_t * lfs)
 		DESTROY(info->parts.p_allocator);
 	if (info->parts.p_dirent)
 		DESTROY(info->parts.p_dirent);
+	if (info->parts.p_cg)
+		DESTROY(info->parts.p_cg);
 	if (info->parts.p_super)
 		DESTROY(info->parts.p_super);
 }
@@ -1678,7 +1662,6 @@ static int ufs_destroy(LFS_t * lfs)
 
 	ufs_destroy_parts(lfs);
 	bdesc_release(&info->csum_block);
-	free(info->cylstart);
 	free(info->csums);
 	hash_map_destroy(info->filemap);
 
@@ -1718,11 +1701,17 @@ LFS_t * ufs(BD_t * block_device)
 
 	info->ubd = block_device;
 	info->parts.base = lfs;
+	info->parts.p_super = ufs_super_wb(info); // Initialize first
 	info->parts.p_allocator = ufs_alloc_linear(info);
 	info->parts.p_dirent = ufs_dirent_linear(info);
-	info->parts.p_super = ufs_super_wb(info);
+	info->parts.p_cg = ufs_cg_wb(info);
+	assert(info->parts.p_allocator);
+	assert(info->parts.p_dirent);
+	assert(info->parts.p_cg);
+	assert(info->parts.p_super);
 	if (!info->parts.p_allocator
 			|| !info->parts.p_dirent
+			|| !info->parts.p_cg
 			|| !info->parts.p_super)
 		ufs_destroy_parts(lfs);
 

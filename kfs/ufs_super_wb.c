@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
 
@@ -26,6 +27,7 @@ struct local_info
 static const struct UFS_Super * ufs_super_wb_read(UFSmod_super_t * object)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	assert(&linfo->super); /* Should never be NULL */
 	return &linfo->super;
 }
 
@@ -86,7 +88,7 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_CSTOTAL] = 0;
-	/* Successfully wrote to disk, updatign oldsum to reflect what should
+	/* Successfully wrote to disk, updating oldsum to reflect what should
 	 * be on disk. */
 	memcpy(&linfo->oldsum, &linfo->super.fs_cstotal, sizeof(struct UFS_csum));
 
@@ -246,7 +248,8 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
-	int r, sync_count = 0;
+	int r;
+	uint32_t sync_count = 0;
 	chdesc_t ** oldhead;
 	chdesc_t * noophead;
 
