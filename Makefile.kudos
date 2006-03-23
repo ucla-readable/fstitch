@@ -93,7 +93,7 @@ CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Ma
 # Compiler flags
 # Note that -O2 is required for the boot loader to fit within 512 bytes;
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
-CFLAGS	:= $(CFLAGS) $(DEFS) $(LABDEFS) -fno-builtin -I$(TOP) -I$(TOP)/inc -MD -Wall -Wno-format -gstabs
+CFLAGS	:= $(CFLAGS) $(DEFS) -fno-builtin -I$(TOP) -I$(TOP)/inc -MD -Wall -Wno-format -gstabs
 CFLAGS	:= $(CFLAGS) -O2 -march=pentium
 BOOTLOADER_CFLAGS := $(CFLAGS) -DKUDOS -DKUDOS_KERNEL
 
@@ -268,9 +268,6 @@ fsclean:
 
 clean:
 	rm -rf $(BASE_OBJDIR) fs/.journal kern/appkernbin.c fsformat.d $(GCCCONF) tags TAGS
-
-realclean: clean
-	rm -rf lab$(LAB).tar.gz
 
 distclean: realclean
 	rm -rf $(GCCCONF)

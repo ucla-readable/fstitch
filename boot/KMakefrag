@@ -12,7 +12,7 @@ STAGE2_OBJS := $(OBJDIR)/boot/entry2.o $(OBJDIR)/boot/stage2.o
 
 $(OBJDIR)/boot/%.o: boot/%.c
 	@echo + cc -Os -fomit-frame-pointer $<
-	$(V)$(CC) -nostdinc $(BOOTLOADER_CFLAGS) -Os -fomit-frame-pointer -c -o $@ $<
+	$(V)$(CC) -nostdinc $(BOOTLOADER_CFLAGS) -Os -march=i386 -fomit-frame-pointer -c -o $@ $<
 
 $(OBJDIR)/boot/boot: $(BOOT_OBJS)
 	@echo + ld boot/boot
