@@ -657,6 +657,8 @@ static void serve_rename(fuse_req_t req,
 	assert(!r);
 }
 
+#define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
+
 static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dirent)
 {
 	Dprintf("%s(fdesc = %p, k = %lld)\n", __FUNCTION__, fdesc, k);
@@ -664,13 +666,12 @@ static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dir
 	char buf[sizeof(dirent_t)];
 	char * cur = buf;
 	off_t dirno = 0;
-	int eof = 0;
 	int r;
 
 	assert(fdesc != NULL && k >= 0 && dirent != NULL);
 	memset(buf, 0, sizeof(buf));
 
-	while (dirno <= k)
+	while (1)
 	{
 		uint32_t nbytes;
 		cur = buf;
@@ -678,25 +679,27 @@ static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dir
 		r = CALL(cfs, getdirentries, fdesc, buf, sizeof(buf), &basep);
 		assert(dirent); // catch some stack overwrites in getdirentries()
 		if (r == -E_UNSPECIFIED) // should imply eof
-		{
-			eof = 1;
-			break;
-		}
+			return 1;
 		else if (r < 0)
 			return r;
 
 		nbytes = r;
-		while (dirno < k
-		       && ((cur - buf) + ((dirent_t*) cur)->d_reclen) < nbytes)
+		while (dirno < k && ((cur - buf) + RECLEN_MIN_SIZE <= nbytes))
 		{
+			assert((cur - buf) + ((dirent_t *) cur)->d_reclen <= nbytes);
 			cur += ((dirent_t*) cur)->d_reclen;
 			dirno++;
 		}
-		dirno++;
-	}
 
-	memcpy(dirent, cur, ((dirent_t*) cur)->d_reclen);
-	return eof;
+		if (dirno == k && ((cur - buf) + RECLEN_MIN_SIZE <= nbytes))
+		{
+			assert((cur - buf) + ((dirent_t *) cur)->d_reclen <= nbytes);
+			memcpy(dirent, cur, ((dirent_t*) cur)->d_reclen);
+			return 0;
+		}
+
+		assert((cur - buf) == nbytes);
+	}
 }
 
 static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
