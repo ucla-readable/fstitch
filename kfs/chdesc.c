@@ -1209,7 +1209,9 @@ void chdesc_claim_noop(chdesc_t * chdesc)
 
 void chdesc_autorelease_noop(chdesc_t * chdesc)
 {
-	assert(chdesc->type == NOOP && !(chdesc->flags & CHDESC_WRITTEN));
+	assert(chdesc->type == NOOP && !chdesc->dependencies && !(chdesc->flags & CHDESC_WRITTEN));
+	while(chdesc->dependents)
+		chdesc_remove_depend(chdesc->dependents->desc, chdesc);
 	if(!chdesc->free_prev && free_head != chdesc)
 		chdesc_free_push(chdesc);
 }
