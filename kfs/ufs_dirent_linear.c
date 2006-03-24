@@ -184,12 +184,14 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 	struct UFS_direct dirent;
 	struct UFS_dinode inode;
 	uint32_t actual_len;
+	uint32_t new_basep;
 	int r;
 
 	if (!entry)
 		return -E_INVAL;
 
-	r = read_dirent(object, dirf, &dirent, basep);
+	new_basep = *basep;
+	r = read_dirent(object, dirf, &dirent, &new_basep);
 	if (r < 0)
 		return r;
 
@@ -217,6 +219,7 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 	entry->d_namelen = dirent.d_namlen;
 	strncpy(entry->d_name, dirent.d_name, dirent.d_namlen);
 	entry->d_name[dirent.d_namlen] = 0;
+	*basep = new_basep;
 
 	return 0;
 }
