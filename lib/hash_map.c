@@ -423,6 +423,9 @@ void * hash_map_val_next(hash_map_it_t * it)
 	{
 		// New iterator
 
+		if (!it->hm)
+			return NULL;
+
 		// Set it to the first elt
 		for (i=0; i < vector_size(it->hm->tbl); i++)
 		{
