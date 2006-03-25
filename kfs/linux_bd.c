@@ -180,17 +180,19 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	DEFINE_WAIT(wait);
 	spin_lock(&info->wait_lock);
 	prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
+	spin_unlock(&info->wait_lock);
+	spin_lock(&private.dma_done_lock);
 	private.dma_done = 0;
 	while (private.dma_done == 0) {
-		spin_unlock(&info->wait_lock);
+		spin_unlock(&private.dma_done_lock);
 		if (infty > 0) {
 			infty--;
 			printk(KERN_ERR "dma not done. sleeping\n");
 		}
 		schedule_timeout(5000);
-		spin_lock(&info->wait_lock);
+		spin_lock(&private.dma_done_lock);
 	}
-	spin_unlock(&info->wait_lock);
+	spin_unlock(&private.dma_done_lock);
 	finish_wait(&info->waitq, &wait);
 	printk(KERN_ERR "woke up!\n");
 
