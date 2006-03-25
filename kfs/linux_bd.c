@@ -27,7 +27,6 @@ struct linux_info {
 
 	wait_queue_head_t waitq; // wait for DMA to complete
 	spinlock_t wait_lock; // lock for 'waitq'
-	int dma_done;
 
 	uint32_t blockcount;
 	uint16_t blocksize;
@@ -78,6 +77,34 @@ static uint16_t linux_bd_get_atomicsize(BD_t * object)
 	return 512;
 }
 
+struct linux_bio_private {
+	struct linux_info * info;
+
+	spinlock_t dma_done_lock; // lock for 'dma_done'
+	int dma_done;
+
+	bdesc_t * bdesc;
+	uint32_t number;
+	uint16_t count;
+};
+
+static void dump_page(unsigned char * p, int len, int off) {
+	int lines = len / 16;
+	int i;
+	printk(KERN_ERR "begin dump:\n");
+	for (i = 0; i < lines; i++) {
+		int j;
+		printk(KERN_ERR "%08x", off);
+		for (j = 0; j < 16; j++) {
+			if (j % 8) printk(" ");
+			printk(" %02x", p[i*16 + j]);
+		}
+		printk("\n");
+		off += 16;
+	}
+	printk(KERN_ERR "dump done\n");
+}
+
 static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
 
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
@@ -90,6 +117,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int vec_len;
 	int r;
 	int i;
+	struct linux_bio_private private;
+	static int infty = 10;
 
 	if (!count || number + count > info->blockcount)
 		return NULL;
@@ -116,15 +145,25 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		return NULL;
 	}
 	for (i = 0; i < vec_len; i++) {
-		bv = bio_iovec_idx(bio, 0);
-		bv->bv_page = alloc_page(GFP_KERNEL);
+		bv = bio_iovec_idx(bio, i);
+		bv->bv_page = alloc_page((GFP_KERNEL | GFP_DMA));
 		if (!bv->bv_page) {
-			printk(KERN_ERR "mempool_alloc() failed\n");
+			printk(KERN_ERR "alloc_page() failed\n");
 			return NULL;
 		}
 		bv->bv_len = 4096;
 		bv->bv_offset = 0;
 	}
+
+	spin_lock_init(&private.dma_done_lock);
+	spin_lock(&private.dma_done_lock);
+	private.dma_done = 0;
+	spin_unlock(&private.dma_done_lock);
+	private.info = info;
+	private.bdesc = ret;
+	private.number = number;
+	private.count = count;
+
 	bio->bi_idx = 0;
 	bio->bi_vcnt = vec_len;
 	bio->bi_sector = number;
@@ -132,7 +171,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	bio->bi_bdev = info->bdev;
 	bio->bi_rw = READ;
 	bio->bi_end_io = bio_end_io_fn;
-	bio->bi_private = object;
+	bio->bi_private = &private;
 
 	generic_make_request(bio);
 
@@ -141,11 +180,14 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	DEFINE_WAIT(wait);
 	spin_lock(&info->wait_lock);
 	prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
-	info->dma_done = 0;
-	while (info->dma_done == 0) {
+	private.dma_done = 0;
+	while (private.dma_done == 0) {
 		spin_unlock(&info->wait_lock);
-		printk(KERN_ERR "dma not done. sleeping\n");
-		schedule_timeout(50);
+		if (infty > 0) {
+			infty--;
+			printk(KERN_ERR "dma not done. sleeping\n");
+		}
+		schedule_timeout(5000);
 		spin_lock(&info->wait_lock);
 	}
 	spin_unlock(&info->wait_lock);
@@ -161,23 +203,53 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 static int
 bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 {
-	struct linux_info * info = (struct linux_info *)
-                                   OBJLOCAL((BD_t*)(bio->bi_private));
-	unsigned char *p;
-
+	struct linux_bio_private * private =
+		(struct linux_bio_private *)(bio->bi_private);
+	struct linux_info * info = private->info;
+	int i;
+	static int infty = 1;
+	unsigned long flags;
 
 	printk(KERN_ERR "done w/ bio transfer\n");
 	if (bio->bi_size)
 		return 1;
 	printk(KERN_ERR "done w/ bio transfer 2\n");
-	p = (unsigned char *)(page_address(bio->bi_io_vec->bv_page));
-	// XXX doesn't actually copy the data yet
+
+	for (i = 0; i < bio->bi_vcnt; i++) {
+		int len;
+		unsigned char *p = (unsigned char *)
+			(page_address(bio_iovec_idx(bio, i)->bv_page));
+
+		assert(p);
+		len = 4096;
+		if (i == bio->bi_vcnt) {
+			len = (private->count * info->blocksize) % 4096;
+			if (len == 0)
+				len = 4096;
+		}
+
+		memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
+
+		if (infty > 0) {
+			infty--;
+			dump_page(p, 256, info->blocksize * private->number);
+		}
+
+		__free_page(bio_iovec_idx(bio, i)->bv_page);
+		bio_iovec_idx(bio, i)->bv_page = NULL;
+		bio_iovec_idx(bio, i)->bv_len = 0;
+		bio_iovec_idx(bio, i)->bv_offset = 0;
+	}
+
 	bio_put(bio);
 
-	spin_lock(&info->wait_lock);
+	spin_lock_irqsave(&private->dma_done_lock, flags);
+	private->dma_done = 1;
+	spin_unlock_irqrestore(&private->dma_done_lock, flags);
+
+	spin_lock_irqsave(&info->wait_lock, flags);
 	wake_up_all(&info->waitq);
-	info->dma_done = 1;
-	spin_unlock(&info->wait_lock);
+	spin_unlock_irqrestore(&info->wait_lock, flags);
 
 	return error;
 }
@@ -332,6 +404,8 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	}
 
 	info->level = 0;
+	info->blocksize = 512;
+	info->blockcount = info->bdev->bd_disk->capacity;
 	init_waitqueue_head(&info->waitq);
 	spin_lock_init(&info->wait_lock);
 	
