@@ -110,6 +110,8 @@ static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
                                      uint16_t count)
 {
+	DEFINE_WAIT(wait);
+	int waited = 0;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	bdesc_t * ret;
 	struct bio *bio;
@@ -173,27 +175,31 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	bio->bi_end_io = bio_end_io_fn;
 	bio->bi_private = &private;
 
+	spin_lock(&private.dma_done_lock);
+	private.dma_done = 0;
+	spin_unlock(&private.dma_done_lock);
+
 	generic_make_request(bio);
 
 	// wait for it to complete
 	printk(KERN_ERR "going to sleep!\n");
-	DEFINE_WAIT(wait);
-	spin_lock(&info->wait_lock);
-	prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
-	spin_unlock(&info->wait_lock);
 	spin_lock(&private.dma_done_lock);
-	private.dma_done = 0;
 	while (private.dma_done == 0) {
 		spin_unlock(&private.dma_done_lock);
 		if (infty > 0) {
 			infty--;
 			printk(KERN_ERR "dma not done. sleeping\n");
 		}
-		schedule_timeout(5000);
+		spin_lock(&info->wait_lock);
+		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
+		spin_unlock(&info->wait_lock);
+		schedule_timeout(500);
+		waited = 1;
 		spin_lock(&private.dma_done_lock);
 	}
 	spin_unlock(&private.dma_done_lock);
-	finish_wait(&info->waitq, &wait);
+	if (waited)
+		finish_wait(&info->waitq, &wait);
 	printk(KERN_ERR "woke up!\n");
 
 	r = blockman_managed_add(info->blockman, ret);
@@ -211,6 +217,10 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	int i;
 	static int infty = 1;
 	unsigned long flags;
+
+	assert(info);
+	assert(info->waitq.task_list.next);
+	assert(info->waitq.task_list.next->next);
 
 	printk(KERN_ERR "done w/ bio transfer\n");
 	if (bio->bi_size)
