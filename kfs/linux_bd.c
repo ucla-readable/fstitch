@@ -140,6 +140,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	vec_len = (count * info->blocksize) / 4096;
 	if ((count * info->blocksize) % 4096)
 		vec_len++;
+	assert(vec_len == 1);
 
 	bio = bio_alloc(GFP_KERNEL, vec_len);
 	if (!bio) {
@@ -234,7 +235,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 
 		assert(p);
 		len = 4096;
-		if (i == bio->bi_vcnt) {
+		if ((i+1) == bio->bi_vcnt) {
 			len = (private->count * info->blocksize) % 4096;
 			if (len == 0)
 				len = 4096;
