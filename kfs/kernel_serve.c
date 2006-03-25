@@ -813,10 +813,11 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 			break;
 
 		/* make sure there is a reclen to read, and make sure it doesn't say to go to far  */
-		while ((cur - buf) + RECLEN_MIN_SIZE <= r && (cur - buf) + ((dirent_t *) cur)->d_reclen <= r)
+		while ((cur - buf) + RECLEN_MIN_SIZE <= r)
 		{
 			dirent_t * cfs_dirent = (dirent_t *) cur;
 			int s;
+			assert((cur - buf) + ((dirent_t *) cur)->d_reclen <= r);
 			Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
 			// FIXME?: must fpos be a real file position?
 			s = filldir(k_dirent, cfs_dirent->d_name, cfs_dirent->d_namelen, 0, cfs_dirent->d_fileno, cfs_dirent->d_type);
