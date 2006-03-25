@@ -304,7 +304,6 @@ serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 	assert(sizeof(st->f_bsize) >= size);
 	st->f_bsize = st->f_frsize = *(uint32_t *) data;
 	free(data);
-	assert(st->f_bsize != 0);
 	
 	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
 	if (r < 0)

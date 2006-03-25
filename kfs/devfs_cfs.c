@@ -431,7 +431,7 @@ static int devfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	return -E_PERM;
 }
 
-static const feature_t * devfs_features[] = {&KFS_feature_size, &KFS_feature_filetype};
+static const feature_t * devfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_blocksize, &KFS_feature_devicesize};
 
 static size_t devfs_get_num_features(CFS_t * cfs, inode_t inode)
 {
@@ -458,7 +458,7 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t * 
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	devfs_fdesc_t * fdesc = NULL;
 
-	if(inode != state->root_fdesc.inode)
+	if(inode && inode != state->root_fdesc.inode)
 	{
 		fdesc = devfd_lookup_inode(state, inode);
 		if(!fdesc)
@@ -482,6 +482,14 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t * 
 			return -E_NO_MEM;
 		*size = sizeof(type);
 		memcpy(*data, &type, sizeof(type));
+	}
+	else if(id == KFS_feature_freespace.id || id == KFS_feature_blocksize.id || id == KFS_feature_devicesize.id)
+	{
+		*data = malloc(sizeof(uint32_t));
+		if(!*data)
+			return -E_NO_MEM;
+		*size = sizeof(uint32_t);
+		memset(*data, 0, sizeof(uint32_t));
 	}
 	else
 		return -E_INVAL;
