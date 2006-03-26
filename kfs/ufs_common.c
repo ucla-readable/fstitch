@@ -338,7 +338,7 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
 	if (((*ptr >> (num % 32)) & 1) == value) {
-		printf("already at the right value!\n");
+		printf("%s already at the right value! (%d: %d)\n", __FUNCTION__, num, value);
 		return 1;
 	}
 
@@ -364,21 +364,42 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	return r;
 }
 
-#warning frsum code needs to be reimplementd
+#warning frsum code needs to be correctly reimplemented
 int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
-	uint32_t blockno, offset, * ptr;
-	int r, nf, cyl;
-	int unused_before = 0, unused_after = 0;
-	bdesc_t * block, * cgblock;
-	chdesc_t * ch;
 	const struct UFS_cg * cg;
+	uint32_t blockno, offset, * ptr;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	int r, nf, cyl = num / super->fs_fpg;
+	int nfrags_before, nfrags_after, unused_before = 0, unused_after = 0;
+	bdesc_t * block; // , * cgblock;
+	chdesc_t * ch;
+
+	// Counting bits set in a byte via lookup table...
+	// anyone know a faster/better way?
+	const unsigned char BitsSetTable256[] = 
+	{
+		0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 
+		4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8
+	};
 
 	if (!head)
 		return -E_INVAL;
 
-	cyl = num / super->fs_fpg;
 	cg = CALL(info->parts.p_cg, read, cyl);
 	if (!cg)
 		return -E_UNSPECIFIED;
@@ -406,10 +427,16 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		return 1;
 	}
 
+	nfrags_before = BitsSetTable256[(*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF];
+	if (nfrags_before == 8)
+		unused_before = 1;
+
+	/*
 	blockno = CALL(info->parts.p_cg, get_cylstart, cyl) + super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno, 1);
 	if (!cgblock)
 		return -E_NOT_FOUND;
+		*/
 
 	ch = chdesc_create_bit(block, info->ubd,
 			(offset % super->fs_fsize) / 4, 1 << (num % 32));
@@ -425,6 +452,10 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 			return r;
 
 	*head = ch;
+
+	nfrags_after = BitsSetTable256[(*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF];
+	if (nfrags_after == 8)
+		unused_after = 1;
 
 	if (value) { // Marked fragment as free
 		if (unused_after) { // Mark the whole block as free
@@ -446,6 +477,32 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		else
 			nf = -1;
 	}
+
+	/* TODO
+	if (nfrags_before > 0 && nfrags_before < 8) {
+		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_before];
+		cg->cg_frsum[nfrags_before]--;
+		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
+				sizeof(cg->cg_frsum[nfrags_before]),
+				&cg->cg_frsum[nfrags_before], head);
+		if (r < 0)
+			return r;
+
+	}
+	if (nfrags_after > 0 && nfrags_after < 8) {
+		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_after];
+		cg->cg_frsum[nfrags_after]++;
+		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
+				sizeof(cg->cg_frsum[nfrags_after]),
+				&cg->cg_frsum[nfrags_after], head);
+		if (r < 0)
+			return r;
+	}
+
+	r = CALL(info->ubd, write_block, cgblock);
+	if (r < 0)
+		return r;
+	*/
 
 	return update_summary(info, cyl, 0, 0, 0, nf, head);
 }
@@ -491,7 +548,7 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		+ (offset % super->fs_fsize) / 4;
 
 	if (((*ptr >> (num % 32)) & 1) == value) {
-		printf("already at the right value!\n");
+		printf("%s already at the right value! (%d: %d)\n", __FUNCTION__, num, value);
 		return 1;
 	}
 
@@ -580,7 +637,6 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	sum.cs_nbfree = super->fs_cstotal.cs_nbfree + nbfree;
 	sum.cs_nifree = super->fs_cstotal.cs_nifree + nifree;
 	sum.cs_nffree = super->fs_cstotal.cs_nffree + nffree;
-#warning perhaps we should periodically sync changes to disk
 	return CALL(info->parts.p_super, write_cstotal, &sum, head);
 }
 

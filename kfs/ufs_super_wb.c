@@ -1,8 +1,10 @@
 #include <inc/error.h>
 #include <lib/assert.h>
+#include <lib/jiffies.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
 
+#include <kfs/sched.h>
 #include <kfs/ufs_super_wb.h>
 
 #define WB_TIME     0
@@ -13,6 +15,8 @@
 #define WB_FSMNT    5
 #define WB_CGROTOR  6
 #define WB_LAST     7
+
+#define SYNC_PERIOD HZ
 
 struct local_info
 {
@@ -268,9 +272,11 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 		r = ufs_super_wb_write_time(object, 0, oldhead);
 		if (r < 0)
 			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
-		if (r < 0)
-			goto sync_failed;
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		sync_count++;
 	}
 	if (linfo->dirty[WB_CSTOTAL]) {
@@ -278,17 +284,21 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 		r = ufs_super_wb_write_cstotal(object, 0, oldhead);
 		if (r < 0)
 			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
-		if (r < 0)
-			goto sync_failed;
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		sync_count++;
 	}
 	if (linfo->dirty[WB_FMOD]) {
 		oldhead = head;
 		r = ufs_super_wb_write_fmod(object, 0, oldhead);
-		if (r < 0)
-			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		if (r < 0)
 			goto sync_failed;
 		sync_count++;
@@ -296,9 +306,11 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 	if (linfo->dirty[WB_CLEAN]) {
 		oldhead = head;
 		r = ufs_super_wb_write_clean(object, 0, oldhead);
-		if (r < 0)
-			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		if (r < 0)
 			goto sync_failed;
 		sync_count++;
@@ -306,9 +318,11 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 	if (linfo->dirty[WB_RONLY]) {
 		oldhead = head;
 		r = ufs_super_wb_write_ronly(object, 0, oldhead);
-		if (r < 0)
-			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		if (r < 0)
 			goto sync_failed;
 		sync_count++;
@@ -316,9 +330,11 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 	if (linfo->dirty[WB_FSMNT]) {
 		oldhead = head;
 		r = ufs_super_wb_write_fsmnt(object, 0, oldhead);
-		if (r < 0)
-			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		if (r < 0)
 			goto sync_failed;
 		sync_count++;
@@ -326,9 +342,11 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 	if (linfo->dirty[WB_CGROTOR]) {
 		oldhead = head;
 		r = ufs_super_wb_write_cgrotor(object, 0, oldhead);
-		if (r < 0)
-			goto sync_failed;
-		r = chdesc_add_depend(noophead, *oldhead);
+		if (*oldhead) {
+			r = chdesc_add_depend(noophead, *oldhead);
+			if (r < 0)
+				goto sync_failed;
+		}
 		if (r < 0)
 			goto sync_failed;
 		sync_count++;
@@ -342,6 +360,17 @@ sync_failed:
 	chdesc_autorelease_noop(noophead);
 	linfo->syncing = 0;
 	return r;
+}
+
+static void ufs_super_wb_sync_callback(void * arg)
+{
+	UFSmod_super_t * object = (UFSmod_super_t *) arg;
+	int r;
+	chdesc_t * head = NULL;
+
+	r = ufs_super_wb_sync(object, &head);
+	if (r < 0)
+		printf("%s failed\n", __FUNCTION__);
 }
 
 static int ufs_super_wb_get_config(void * object, int level, char * string,
@@ -376,6 +405,7 @@ UFSmod_super_t * ufs_super_wb(struct lfs_info * info)
 {
 	UFSmod_super_t * obj;
 	struct local_info * linfo;
+	int r;
    
 	if (!info)
 		return NULL;
@@ -406,6 +436,10 @@ UFSmod_super_t * ufs_super_wb(struct lfs_info * info)
 	linfo->syncing = 0;
 
 	UFS_SUPER_INIT(obj, ufs_super_wb, linfo);
+
+	r = sched_register(ufs_super_wb_sync_callback, obj, SYNC_PERIOD);
+	assert(r >= 0);
+
 	return obj;
 }
 

@@ -1006,7 +1006,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		nf->f_type = type;
 
 		memset(&nf->f_inode, 0, sizeof(struct UFS_dinode));
-		nf->f_inode.di_mode = mode | UFS_IREAD; // FIXME set permissions
+		nf->f_inode.di_mode = mode | UFS_IREAD | UFS_IWRITE; // FIXME set permissions
 		nf->f_inode.di_nlink = 1;
 		nf->f_inode.di_gen = 0; // FIXME use random number?
 

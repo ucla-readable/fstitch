@@ -1,8 +1,10 @@
 #include <inc/error.h>
 #include <lib/assert.h>
+#include <lib/jiffies.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
 
+#include <kfs/sched.h>
 #include <kfs/ufs_cg_wb.h>
 
 #define WB_TIME     0
@@ -12,6 +14,8 @@
 #define WB_IROTOR   4
 #define WB_FRSUM    5
 #define WB_LAST     6
+
+#define SYNC_PERIOD HZ
 
 struct cyl_info
 {
@@ -296,9 +300,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			r = ufs_cg_wb_write_time(object, i, 0, oldhead);
 			if (r < 0)
 				goto sync_failed;
-			r = chdesc_add_depend(noophead, *oldhead);
-			if (r < 0)
-				goto sync_failed;
+			if (*oldhead) {
+				r = chdesc_add_depend(noophead, *oldhead);
+				if (r < 0)
+					goto sync_failed;
+			}
 			sync_count++;
 		}
 		if (linfo->cg[num].dirty[WB_CS]) {
@@ -306,9 +312,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			r = ufs_cg_wb_write_cs(object, i, 0, oldhead);
 			if (r < 0)
 				goto sync_failed;
-			r = chdesc_add_depend(noophead, *oldhead);
-			if (r < 0)
-				goto sync_failed;
+			if (*oldhead) {
+				r = chdesc_add_depend(noophead, *oldhead);
+				if (r < 0)
+					goto sync_failed;
+			}
 			sync_count++;
 		}
 		if (linfo->cg[num].dirty[WB_ROTOR]) {
@@ -316,9 +324,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			r = ufs_cg_wb_write_rotor(object, i, 0, oldhead);
 			if (r < 0)
 				goto sync_failed;
-			r = chdesc_add_depend(noophead, *oldhead);
-			if (r < 0)
-				goto sync_failed;
+			if (*oldhead) {
+				r = chdesc_add_depend(noophead, *oldhead);
+				if (r < 0)
+					goto sync_failed;
+			}
 			sync_count++;
 		}
 		if (linfo->cg[num].dirty[WB_FROTOR]) {
@@ -326,9 +336,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			r = ufs_cg_wb_write_frotor(object, i, 0, oldhead);
 			if (r < 0)
 				goto sync_failed;
-			r = chdesc_add_depend(noophead, *oldhead);
-			if (r < 0)
-				goto sync_failed;
+			if (*oldhead) {
+				r = chdesc_add_depend(noophead, *oldhead);
+				if (r < 0)
+					goto sync_failed;
+			}
 			sync_count++;
 		}
 		if (linfo->cg[num].dirty[WB_IROTOR]) {
@@ -336,9 +348,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			r = ufs_cg_wb_write_irotor(object, i, 0, oldhead);
 			if (r < 0)
 				goto sync_failed;
-			r = chdesc_add_depend(noophead, *oldhead);
-			if (r < 0)
-				goto sync_failed;
+			if (*oldhead) {
+				r = chdesc_add_depend(noophead, *oldhead);
+				if (r < 0)
+					goto sync_failed;
+			}
 			sync_count++;
 		}
 		if (linfo->cg[num].dirty[WB_FRSUM]) {
@@ -346,9 +360,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			r = ufs_cg_wb_write_frsum(object, i, 0, oldhead);
 			if (r < 0)
 				goto sync_failed;
-			r = chdesc_add_depend(noophead, *oldhead);
-			if (r < 0)
-				goto sync_failed;
+			if (*oldhead) {
+				r = chdesc_add_depend(noophead, *oldhead);
+				if (r < 0)
+					goto sync_failed;
+			}
 			sync_count++;
 		}
 	}
@@ -361,6 +377,17 @@ sync_failed:
 	chdesc_autorelease_noop(noophead);
 	linfo->syncing = 0;
 	return r;
+}
+
+static void ufs_cg_wb_sync_callback(void * arg)
+{
+	UFSmod_cg_t * object = (UFSmod_cg_t *) arg;
+	int r;
+	chdesc_t * head = NULL;;
+
+	r = ufs_cg_wb_sync(object, -1, &head);
+	if (r < 0)
+		printf("%s failed\n", __FUNCTION__);
 }
 
 static int ufs_cg_wb_get_config(void * object, int level, char * string,
@@ -399,7 +426,7 @@ UFSmod_cg_t * ufs_cg_wb(struct lfs_info * info)
 {
 	UFSmod_cg_t * obj;
 	struct local_info * linfo;
-	int i;
+	int i, r;
    
 	if (!info)
 		return NULL;
@@ -444,6 +471,10 @@ UFSmod_cg_t * ufs_cg_wb(struct lfs_info * info)
 	linfo->syncing = 0;
 
 	UFS_CG_INIT(obj, ufs_cg_wb, linfo);
+
+	r = sched_register(ufs_cg_wb_sync_callback, obj, SYNC_PERIOD);
+	assert(r >= 0);
+
 	return obj;
 
 read_block_failed:
