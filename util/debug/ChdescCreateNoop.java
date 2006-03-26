@@ -11,7 +11,7 @@ public class ChdescCreateNoop extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
-		state.addChdesc(new Chdesc(chdesc, block, owner));
+		state.addChdesc(new Chdesc(chdesc, block, owner, state.getOpcodeNumber()));
 	}
 	
 	public String toString()

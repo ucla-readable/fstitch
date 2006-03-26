@@ -14,7 +14,7 @@ public class ChdescCreateByte extends Opcode
 	
 	public void applyTo(SystemState state)
 	{
-		state.addChdesc(new Chdesc(chdesc, block, owner, offset, length));
+		state.addChdesc(new Chdesc(chdesc, block, owner, state.getOpcodeNumber(), offset, length));
 	}
 	
 	public String toString()

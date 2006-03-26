@@ -20,7 +20,7 @@ public class Chdesc
 	public static final int FLAG_DATA = 0x80;
 	public static final int FLAG_DBWAIT = 0x8000;
 	
-	public final int address;
+	public final int address, opcode;
 	
 	private int type, flags;
 	private int block, owner;
@@ -34,34 +34,36 @@ public class Chdesc
 	private ChdescCollection dependencies, dependents;
 	private HashSet locations;
 	
-	public Chdesc(int address)
+	public Chdesc(int address, int opcode)
 	{
 		this.address = address;
+		this.opcode = opcode;
 		type = TYPE_DANGLING;
 	}
 	
-	public Chdesc(int address, int block, int owner)
+	public Chdesc(int address, int block, int owner, int opcode)
 	{
 		this.address = address;
 		this.block = block;
 		this.owner = owner;
+		this.opcode = opcode;
 		dependencies = new ChdescCollection("added to dependencies");
 		dependents = new ChdescCollection("added to dependents");
 		locations = new HashSet();
 		changeToNoop();
 	}
 	
-	public Chdesc(int address, int block, int owner, short offset, int xor)
+	public Chdesc(int address, int block, int owner, int opcode, short offset, int xor)
 	{
-		this(address, block, owner);
+		this(address, block, owner, opcode);
 		changeToBit(offset, xor);
 		/* BIT chdescs start rolled back */
 		setFlags(FLAG_ROLLBACK);
 	}
 	
-	public Chdesc(int address, int block, int owner, short offset, short length)
+	public Chdesc(int address, int block, int owner, int opcode, short offset, short length)
 	{
-		this(address, block, owner);
+		this(address, block, owner, opcode);
 		changeToByte(offset, length);
 		/* BYTE chdescs start rolled back */
 		setFlags(FLAG_ROLLBACK);

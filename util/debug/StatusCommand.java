@@ -18,7 +18,24 @@ public class StatusCommand implements Command
 	{
 		Debugger dbg = (Debugger) data;
 		if(dbg != null)
-			System.out.println(dbg);
+		{
+			if(args.length > 0)
+			{
+				/* display status of chdescs */
+				SystemState state = dbg.getState();
+				for(int i = 0; i != args.length; i++)
+				{
+					int number = SystemState.unhex(args[i]);
+					Chdesc chdesc = state.lookupChdesc(number);
+					if(chdesc != null)
+						System.out.println("Chdesc " + SystemState.hex(number) + " was created by opcode " + chdesc.opcode);
+					else
+						System.out.println("No such chdesc: " + SystemState.hex(number));
+				}
+			}
+			else
+				System.out.println(dbg);
+		}
 		else
 			System.out.println("No file loaded.");
 		return data;

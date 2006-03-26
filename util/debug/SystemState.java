@@ -5,16 +5,23 @@ import java.io.IOException;
 
 public class SystemState
 {
+	private Debugger debugger;
 	private HashMap bds, bdescs;
 	public final ChdescCollection chdescs;
 	private Chdesc free_head;
 	
-	public SystemState()
+	public SystemState(Debugger debugger)
 	{
+		this.debugger = debugger;
 		bds = new HashMap();
 		bdescs = new HashMap();
 		chdescs = new ChdescCollection("registered");
 		free_head = null;
+	}
+	
+	public int getOpcodeNumber()
+	{
+		return debugger.getApplied();
 	}
 	
 	public void setBdName(int bd, String name)
@@ -186,5 +193,12 @@ public class SystemState
 		while(hex.length() < 8)
 			hex = "0" + hex;
 		return "0x" + hex;
+	}
+	
+	public static int unhex(String hex)
+	{
+		if(!hex.substring(0, 2).equals("0x"))
+			return Integer.parseInt(hex);
+		return Integer.parseInt(hex.substring(2), 16);
 	}
 }

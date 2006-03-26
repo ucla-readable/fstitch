@@ -20,7 +20,7 @@ public class ChdescSetFreePrev extends Opcode
 				Chdesc free_prev = state.lookupChdesc(this.free_prev);
 				if(free_prev == null)
 				{
-					free_prev = new Chdesc(this.free_prev);
+					free_prev = new Chdesc(this.free_prev, state.getOpcodeNumber());
 					/* should we really do this? */
 					state.addChdesc(free_prev);
 				}

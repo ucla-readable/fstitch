@@ -24,7 +24,7 @@ public class Debugger extends OpcodeFactory
 		this.name = name;
 		modules = new HashMap();
 		opcodes = new Vector();
-		state = new SystemState();
+		state = new SystemState(this);
 		applied = 0;
 		renderFree = false;
 		renderBlock = true;
@@ -181,7 +181,7 @@ public class Debugger extends OpcodeFactory
 	
 	public void resetState()
 	{
-		state = new SystemState();
+		state = new SystemState(this);
 		applied = 0;
 	}
 	

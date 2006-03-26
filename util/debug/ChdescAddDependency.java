@@ -16,7 +16,7 @@ public class ChdescAddDependency extends Opcode
 			Chdesc target = state.lookupChdesc(this.target);
 			if(target == null)
 			{
-				target = new Chdesc(this.target);
+				target = new Chdesc(this.target, state.getOpcodeNumber());
 				/* should we really do this? */
 				state.addChdesc(target);
 			}

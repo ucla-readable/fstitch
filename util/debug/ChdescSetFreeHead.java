@@ -16,7 +16,7 @@ public class ChdescSetFreeHead extends Opcode
 			Chdesc chdesc = state.lookupChdesc(this.chdesc);
 			if(chdesc == null)
 			{
-				chdesc = new Chdesc(this.chdesc);
+				chdesc = new Chdesc(this.chdesc, state.getOpcodeNumber());
 				/* should we really do this? */
 				state.addChdesc(chdesc);
 			}
