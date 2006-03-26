@@ -112,11 +112,9 @@ static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uin
 
 static int mem_bd_cancel_block(BD_t * object, uint32_t number)
 {
-	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-		blockman_remove(ddesc);
-	return 0;
+	/* cancel_block should never be called on mem_bd */
+	assert(0);
+	return -E_PERM;
 }
 
 static int mem_bd_write_block(BD_t * object, bdesc_t * block)

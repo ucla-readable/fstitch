@@ -271,12 +271,32 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
                                                uint16_t count,
                                                bool * synthetic)
 {
-	/* linux_bd doesn't bother with synthetic blocks,
-	 * since it's just as fast to use real ones */
-	bdesc_t * ret = linux_bd_read_block(object, number, count);
-	if(ret)
+	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		assert(bdesc->count == count);
 		*synthetic = 0;
-	return ret;
+		return bdesc;
+	}
+	
+	/* make sure it's a valid block */
+	if(!count || number + count > info->blockcount)
+		return NULL;
+	
+	bdesc = bdesc_alloc(number, info->blocksize, count);
+	if(!bdesc)
+		return NULL;
+	bdesc_autorelease(bdesc);
+	
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		return NULL;
+	
+	*synthetic = 1;
+	
+	return bdesc;
 }
 
 static int linux_bd_cancel_block(BD_t * object, uint32_t number)
@@ -284,7 +304,10 @@ static int linux_bd_cancel_block(BD_t * object, uint32_t number)
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
 	if(ddesc)
+	{
+		assert(!ddesc->changes);
 		blockman_remove(ddesc);
+	}
 	return 0;
 }
 
