@@ -295,7 +295,6 @@ static void serve_statfs(fuse_req_t req)
 		goto serve_statfs_err;
 	st.f_bsize = st.f_frsize = *(uint32_t *) data;
 	free(data);
-	assert(st.f_bsize != 0);
 
 	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
 	if (r < 0 || sizeof(st.f_blocks) < size)
