@@ -397,8 +397,8 @@ public class Chdesc
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
-			/* we say you depend on us: blue arrows */
-			links += chdesc.renderName() + " -> " + name + " [color=blue]\n";
+			/* we say you depend on us: gray arrows */
+			links += chdesc.renderName() + " -> " + name + " [color=gray]\n";
 		}
 		i = locations.iterator();
 		while(i.hasNext())

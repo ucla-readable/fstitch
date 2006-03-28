@@ -61,18 +61,16 @@ public class Debugger extends OpcodeFactory
 		if((debugRev == 1663 || debugRev == 1719 || debugRev == 1721 ||
 		    debugRev == 1777 || debugRev == 1856 || debugRev == 1859 ||
 		    debugRev == 1969) && debugOpcodeRev == 1663)
-			throw new UnsupportedStreamRevisionException(debugRev, debugOpcodeRev, 1990);
+			throw new UnsupportedStreamRevisionException(debugRev, 1663, 1990);
 		if(debugRev == 1991 && debugOpcodeRev == 1991)
 			throw new UnsupportedStreamRevisionException(1991, 1991, 2001);
+		if((debugRev == 2010 || debugRev == 2101 || debugRev == 2104) && debugOpcodeRev == 1991)
+			throw new UnsupportedStreamRevisionException(debugRev, 1991, 2141);
+		if(debugRev == 2004 && debugOpcodeRev == 2002) /* on a branch */
+			throw new UnsupportedStreamRevisionException(2004, 2002, 2141);
 		
 		/* supported revisions */
-		if(debugRev == 2004 && debugOpcodeRev == 2002) /* on a branch */
-			return;
-		if(debugRev == 2010 && debugOpcodeRev == 1991)
-			return;
-		if(debugRev == 2101 && debugOpcodeRev == 1991)
-			return;
-		if(debugRev == 2104 && debugOpcodeRev == 1991)
+		if(debugRev == 2142 && debugOpcodeRev == 1991)
 			return;
 		
 		/* 0 means "use a newer revision" */
@@ -90,6 +88,7 @@ public class Debugger extends OpcodeFactory
 	
 	public Opcode readOpcode() throws BadInputException, IOException
 	{
+		/* get the opcode header (the source information) */
 		String file = readString();
 		int line = input.readInt();
 		String function = readString();
@@ -105,6 +104,15 @@ public class Debugger extends OpcodeFactory
 		opcode.setFile(file);
 		opcode.setLine(line);
 		opcode.setFunction(function);
+		
+		/* get the opcode footer (the stack trace) */
+		int address = input.readInt();
+		while(address != 0)
+		{
+			opcode.addStackFrame(address);
+			address = input.readInt();
+		}
+		
 		return opcode;
 	}
 	

@@ -7,9 +7,12 @@
 #include <lib/stdio.h>
 #include <lib/svnrevtol.h>
 
-#ifndef __KERNEL__
+#ifdef __KERNEL__
+#include <linux/config.h>
+#else
 #include <lib/netclient.h>
 #endif
+
 /* htons and htonl */
 #include <lib/string.h>
 #if defined(KUDOS)
@@ -24,6 +27,29 @@
 #include <kfs/kfsd.h>
 
 #if KFS_DEBUG
+
+/* For a lean and mean debug output stream, set all of these to 1. */
+#define KFS_DEBUG_BINARY 1
+#define KFS_OMIT_FILE_FUNC 0
+#define KFS_OMIT_BTRACE 0
+
+#if !KFS_DEBUG_BINARY && defined(__KERNEL__)
+#warning No kernel support for text debugging; using binary debugging
+#undef KFS_DEBUG_BINARY
+#define KFS_DEBUG_BINARY 1
+#endif
+
+#if !KFS_OMIT_BTRACE && !defined(__i386__)
+#warning Debug backtraces only available on x86 platforms; disabling
+#undef KFS_OMIT_BTRACE
+#define KFS_OMIT_BTRACE 1
+#endif
+
+#if !KFS_OMIT_BTRACE && defined(__KERNEL__) && !defined(CONFIG_FRAME_POINTER)
+#warning In the kernel, frame pointers are required for backtraces; disabling
+#undef KFS_OMIT_BTRACE
+#define KFS_OMIT_BTRACE 1
+#endif
 
 /* structure definitions */
 struct param {
@@ -704,6 +730,10 @@ static void kfs_debug_wait(void)
 }
 #endif
 
+#ifdef __i386__
+#define x86_get_ebp(bp) { void * __bp; __asm__ __volatile__ ("movl %%ebp, %0" : "=r" (__bp) : ); bp = __bp; }
+#endif
+
 int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
 	int m, o = 0, r = 0;
@@ -782,13 +812,35 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	
 	/* TODO: not technically necessary, see above */
 	kfs_debug_write(debug_socket, LIT_16, 0, END);
+	
+#if !KFS_OMIT_BTRACE
+	{
+		int preamble = 1;
+		void ** ebp;
+		void ** last_ebp = NULL;
+		x86_get_ebp(ebp);
+		while(ebp >= last_ebp)
+		{
+			if(!ebp[1])
+				break;
+			if(!preamble || ebp[1] == __builtin_return_address(0))
+			{
+				kfs_debug_write(debug_socket, LIT_32, ebp[1], END);
+				preamble = 0;
+			}
+			last_ebp = ebp;
+			ebp = *ebp;
+		}
+	}
+#endif
+	kfs_debug_write(debug_socket, LIT_32, 0, END);
 #else
 #if KFS_OMIT_FILE_FUNC
 	kdprintf(debug_socket, "Line %d, type [%04x:%04x] ", line, module, opcode);
 #else
 	kdprintf(debug_socket, "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
 #endif
-	
+
 	if(!modules[m].opcodes)
 	{
 		/* unknown module */
@@ -868,6 +920,25 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	}
 	
 	kdprintf(debug_socket, "\n");
+	
+#if !KFS_OMIT_BTRACE
+	{
+		int frame = 0;
+		void ** ebp;
+		void ** last_ebp = NULL;
+		x86_get_ebp(ebp);
+		while(ebp >= last_ebp)
+		{
+			if(!ebp[1])
+				break;
+			if(frame || ebp[1] == __builtin_return_address(0))
+				kdprintf(debug_socket, "  [%d]: 0x%08x", frame++, ebp[1]);
+			last_ebp = ebp;
+			ebp = *ebp;
+		}
+	}
+	kdprintf(debug_socket, "\n");
+#endif
 #endif
 	
 	va_end(ap);

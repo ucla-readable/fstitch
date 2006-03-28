@@ -20,8 +20,9 @@ public class ListCommand implements Command
 		return "List opcodes in a specified range, or all opcodes by default.";
 	}
 	
-	private void listOpcode(int number, Opcode opcode)
+	private void listOpcode(int number, Opcode opcode, boolean showTrace)
 	{
+		int frames = opcode.getFrameCount();
 		if(opcode.hasEffect())
 			System.out.println("#" + number + " " + opcode);
 		else if(opcode instanceof InfoMark)
@@ -29,6 +30,12 @@ public class ListCommand implements Command
 		else
 			System.out.println(blue + "#" + number + " " + opcode + normal);
 		System.out.println("    from " + opcode.getFunction() + "() at " + opcode.getFile() + ":" + opcode.getLine());
+		if(frames != 0 && showTrace)
+		{
+			for(int i = 0; i < frames; i++)
+				System.out.print("  [" + i + "]: " + SystemState.hex(opcode.getStackFrame(i)));
+			System.out.println();
+		}
 	}
 	
 	public Object runCommand(String args[], Object data, CommandInterpreter interpreter) throws CommandException
@@ -41,14 +48,14 @@ public class ListCommand implements Command
 				{
 					int i, max = dbg.getOpcodeCount();
 					for(i = 0; i != max; i++)
-						listOpcode(i + 1, dbg.getOpcode(i));
+						listOpcode(i + 1, dbg.getOpcode(i), false);
 				}
 				else if(args.length == 1)
 				{
 					int i, max = dbg.getOpcodeCount();
 					i = Integer.parseInt(args[0]) - 1;
 					if(0 <= i && i < max)
-						listOpcode(i + 1, dbg.getOpcode(i));
+						listOpcode(i + 1, dbg.getOpcode(i), true);
 					else
 						System.out.println("No such opcode.");
 				}
@@ -61,7 +68,7 @@ public class ListCommand implements Command
 					   end, so long as the beginning is valid */
 					if(0 <= i && i < j && i < max)
 						for(; i < j && i < max; i++)
-							listOpcode(i + 1, dbg.getOpcode(i));
+							listOpcode(i + 1, dbg.getOpcode(i), false);
 					else
 						System.out.println("Invalid range.");
 				}

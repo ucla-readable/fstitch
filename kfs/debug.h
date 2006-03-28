@@ -9,16 +9,6 @@
 
 #if KFS_DEBUG
 
-/* For a lean and mean debug output stream, set both of these to 1. */
-#define KFS_DEBUG_BINARY 1
-#define KFS_OMIT_FILE_FUNC 0
-
-#if !KFS_DEBUG_BINARY && defined(__KERNEL__)
-#warning No kernel support for text debugging, using binary debugging
-#undef KFS_DEBUG_BINARY
-#define KFS_DEBUG_BINARY 1
-#endif
-
 #include <kfs/debug_opcode.h>
 
 #define KFS_DEBUG_HOST "127.0.0.1"

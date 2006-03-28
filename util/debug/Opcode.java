@@ -1,8 +1,11 @@
+import java.util.Vector;
+
 public abstract class Opcode implements Constants
 {
 	protected String file = null;
 	protected int line = 0;
 	protected String function = null;
+	protected Vector backtrace = null;
 	
 	public void setFile(String file)
 	{
@@ -25,6 +28,13 @@ public abstract class Opcode implements Constants
 		this.function = function;
 	}
 	
+	public void addStackFrame(int address)
+	{
+		if(backtrace == null)
+			backtrace = new Vector();
+		backtrace.add(new Integer(address));
+	}
+	
 	public String getFile()
 	{
 		return file;
@@ -38,6 +48,20 @@ public abstract class Opcode implements Constants
 	public String getFunction()
 	{
 		return function;
+	}
+	
+	public int getFrameCount()
+	{
+		if(backtrace == null)
+			return 0;
+		return backtrace.size();
+	}
+	
+	public int getStackFrame(int frame)
+	{
+		if(backtrace == null)
+			return 0;
+		return ((Integer) backtrace.get(frame)).intValue();
 	}
 	
 	public abstract void applyTo(SystemState state);
