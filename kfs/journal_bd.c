@@ -91,7 +91,7 @@
  * safe:
  *   allow the cancellation to easily be hooked up to all the fsdata (filesystem
  *   data) chdescs that are part of the transaction
- * done"
+ * done:
  *   provide a single chdesc that exists at the beginning of the transaction
  *   which represents the whole transaction, so we can weak retain it to claim
  *   slots in the journal
