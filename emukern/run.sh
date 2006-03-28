@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function die() {
-	echo "$@" >&2
+	echo -e "$@" >&2
 	exit 1
 }
 
@@ -25,7 +25,7 @@ trap "echo \"Cleaning up image in $TMPDIR\"; rm -rf $TMPDIR" EXIT
 echo "Building image in $TMPDIR"
 
 mkdir $TMPDIR/image
-(cd "$KUDOS" && tar cf $TMPDIR/image/kkfsd.tar --exclude emukern --exclude emubsd --exclude obj .)
+(cd "$KUDOS" && tar cf $TMPDIR/image/kkfsd.tar --exclude emukern --exclude emubsd --exclude obj --exclude scratch .)
 #gzip --best -n $TMPDIR/image/kkfsd.tar
 
 cat > $TMPDIR/image/init.sh << EOF
@@ -57,7 +57,7 @@ mkisofs -R -o $TMPDIR/kkfsd.img $TMPDIR/image || die "Cannot create CD image!"
 
 dd if=/dev/zero of=$TMPDIR/hda.img bs=1M count=32 2> /dev/null
 dd if=$TMPDIR/kkfsd.img of=$TMPDIR/hda.img conv=notrunc
-[ "`du -b $TMPDIR/hda.img | awk '{print $1}'`" != "33554432" ] && die "KudOS directory ($KUDOS) is too large!"
+[ "`du -b $TMPDIR/hda.img | awk '{print $1}'`" != "33554432" ] && die "KudOS directory ($KUDOS) is too large!\nTry putting large files in a directory named scratch to exclude them."
 
 qemu -hda $TMPDIR/hda.img -cdrom $OSIMG -boot d -k en-us -serial stdio -loadvm "$VMIMG"
 if [ "`tr -d \\000 < $TMPDIR/hda.img | head -n 1`" == "KFS" ]
