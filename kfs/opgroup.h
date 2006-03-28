@@ -88,7 +88,8 @@ opgroup_t * opgroup_lookup(opgroup_id_t id);
 opgroup_id_t opgroup_id(const opgroup_t * opgroup);
 
 /* add change descriptors to the engaged opgroups in the current scope */
-int opgroup_insert_change(chdesc_t * head, chdesc_t * tail);
+int opgroup_prepare_head(chdesc_t ** head);
+int opgroup_finish_head(chdesc_t * head);
 
 #else /* KFSD */
 

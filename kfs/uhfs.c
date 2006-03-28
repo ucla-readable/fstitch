@@ -470,6 +470,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			/* save the tail */
 			tail = prev_head;
 
+			r = opgroup_prepare_head(&prev_head);
+			/* can we do better than this? */
+			assert(r >= 0);
+
 			/* zero it */
 			r = chdesc_create_init(block, bd, &prev_head);
 			if (r < 0)
@@ -480,7 +484,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 			/* note that we do not write it - we will write it later */
 
-			r = opgroup_insert_change(prev_head, tail);
+			r = opgroup_finish_head(prev_head);
 			/* can we do better than this? */
 			assert(r >= 0);
 
@@ -514,13 +518,17 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		/* save the tail */
 		tail = prev_head;
 
+		r = opgroup_prepare_head(&prev_head);
+		/* can we do better than this? */
+		assert(r >= 0);
+
 		/* write the data to the block */
 		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
 		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
 
-		r = opgroup_insert_change(prev_head, tail);
+		r = opgroup_finish_head(prev_head);
 		/* can we do better than this? */
 		assert(r >= 0);
 

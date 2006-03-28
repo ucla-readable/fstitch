@@ -534,24 +534,35 @@ opgroup_id_t opgroup_id(const opgroup_t * opgroup)
 	return opgroup->id;
 }
 
-int opgroup_insert_change(chdesc_t * head, chdesc_t * tail)
+int opgroup_prepare_head(chdesc_t ** head)
 {
-	int r;
-	if(!current_scope)
+	if(!current_scope || !current_scope->bottom)
 		return 0;
-	if(!current_scope->top)
-		return 0;
-	r = chdesc_add_depend(current_scope->top, head);
-	if(r < 0)
-		return r;
-	if(current_scope->bottom)
+	
+	if(*head)
 	{
-		r = chdesc_add_depend(tail, current_scope->bottom);
+		int r;
+		chdesc_t * nh = chdesc_create_noop(NULL, NULL);
+		if(!nh)
+			return -E_NO_MEM;
+		r = chdesc_add_depend(nh, current_scope->bottom);
 		if(r < 0)
-		{
-			chdesc_remove_depend(current_scope->top, head);
 			return r;
-		}
+		r = chdesc_add_depend(nh, *head);
+		if(r < 0)
+			/* let it get cleaned up automatically */
+			return r;
+		*head = nh;
 	}
+	else
+		*head = current_scope->bottom;
+	
 	return 0;
+}
+
+int opgroup_finish_head(chdesc_t * head)
+{
+	if(!current_scope || !current_scope->top)
+		return 0;
+	return chdesc_add_depend(current_scope->top, head);
 }
