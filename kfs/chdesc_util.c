@@ -882,23 +882,22 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 
 /* Take two byte arrays of size 'length' and create byte chdescs for
  * non-consecutive ranges that differ. */
+/* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head)
 {
 	int count = 0, i = 0, r, start;
 	uint8_t * old = (uint8_t *) olddata;
 	uint8_t * new = (uint8_t *) newdata;
-	chdesc_t ** oldhead;
+	chdesc_t * oldhead;
 	chdesc_t * newhead;
-	chmetadesc_t * meta;
 	
 	if(!old || !new || !head || length < 1)
 		return -E_INVAL;
 
 	/* newhead will depend on all created chdescs */
 	newhead = chdesc_create_noop(NULL, NULL);
-	if (!newhead)
+	if(!newhead)
 		return -E_NO_MEM;
-	chdesc_claim_noop(newhead);
 
 	while(i < length)
 	{
@@ -907,35 +906,31 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			i++;
 			continue;
 		}
-		else
-		{
-			start = i;
+		
+		start = i;
+		while(i < length && old[i] != new[i])
+			i++;
 
-			while(old[++i] != new[i]);
-				/* do nothing */
+		/* use the original head */
+		oldhead = *head;
+		r = chdesc_create_byte(block, owner, offset + start, i - start, new + start, &oldhead);
+		if(r < 0)
+			goto chdesc_create_diff_failed;
 
-			/* use the original head */
-			oldhead = head;
-			r = chdesc_create_byte(block, owner, offset + start, i - start, new, oldhead);
-			if(r < 0)
-				goto chdesc_create_diff_failed;
-
-			/* add dependency to newly created chdesc */
-			r = __chdesc_add_depend_fast(newhead, *oldhead);
-			if(r < 0)
-				goto chdesc_create_diff_failed;
-			count++;
-		}
+		/* add dependency to newly created chdesc */
+		r = __chdesc_add_depend_fast(newhead, oldhead);
+		if(r < 0)
+			goto chdesc_create_diff_failed;
+		count++;
 	}
 
 	if(count)
 		*head = newhead;
-	chdesc_autorelease_noop(newhead);
 	return 0;
 
 chdesc_create_diff_failed:
-	for(meta = newhead->dependencies; meta; meta = meta->next)
-		chdesc_destroy(&meta->desc);
-	chdesc_autorelease_noop(newhead);
+	/* we can't just use chdesc_destroy(), because some of the
+	 * regions above may have crossed atomic boundaries... */
+	panic("%s() failed, and we don't know how to recover!\n", __FUNCTION__);
 	return r;
 }
