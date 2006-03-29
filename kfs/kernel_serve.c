@@ -292,6 +292,7 @@ static int
 serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 {
 	mount_desc_t * m = (mount_desc_t *) sb->s_fs_info;
+	Dprintf("%s(kfs:%s)\n", __FUNCTION__, m->path);
 	CFS_t * cfs = m->cfs;
 	size_t size;
 	void * data;
@@ -342,8 +343,8 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	assert(kfsd_have_lock());
 	
 	/* FIXME? */
-	sb->s_blocksize = 0;
-	sb->s_blocksize_bits = 0;
+	sb->s_blocksize = 4096;
+	sb->s_blocksize_bits = 12;
 	sb->s_magic = 0x88F50CF5;
 	sb->s_op = &kfs_superblock_ops;
 	
@@ -522,7 +523,7 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 	int r;
 
 	if (attr->ia_valid & ~(ATTR_SIZE | ATTR_CTIME))
-		return -E_PERM;
+		return -E_NO_SYS;
 
 	kfsd_enter();
 	cfs = dentry2cfs(dentry);
@@ -539,9 +540,6 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 	r = inode_change_ok(inode, attr);
 	if(r < 0)
 		goto error;
-
-	/* allow, but ignore */
-	if(attr->ia_valid & ATTR_CTIME);
 
 	if(attr->ia_valid & ATTR_SIZE)
 	{
@@ -825,13 +823,14 @@ serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 				cfs_fpos = filp->f_pos;
 				r = CALL(dentry2cfs(filp->f_dentry), getdirentries, file2fdesc(filp), buf, k_nbytes, &cfs_fpos);
 				assert(r >= 0);
-				break;
+				goto out;
 			}
 			cur += cfs_dirent->d_reclen;
 			k_nbytes += cfs_dirent->d_reclen;
 		}
 		filp->f_pos = cfs_fpos;
 	}
+out:
 	kfsd_leave(1);
 
 	if (r == -E_UNSPECIFIED)

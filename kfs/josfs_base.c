@@ -715,7 +715,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 
 static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
-	Dprintf("JOSFSDEBUG: josfs_free_fdesc 0x%08x\n", fdesc);
+	Dprintf("JOSFSDEBUG: josfs_free_fdesc %p\n", fdesc);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) fdesc;
 
@@ -902,7 +902,7 @@ static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** na
 
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("JOSFSDEBUG: josfs_get_dirent 0x%08x, %u\n", basep, *basep);
+	Dprintf("JOSFSDEBUG: josfs_get_dirent %p, %u\n", basep, *basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	bdesc_t * dirblock = NULL;
@@ -960,7 +960,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		dirblock = josfs_lookup_block(object, blockno);
 	if (!dirblock)
 		return -E_NOT_FOUND;
-	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + ((*basep - 2) % JOSFS_BLKFILES);
+	dirfile = &((JOSFS_File_t *) dirblock->ddesc->data)[(*basep - 2) % JOSFS_BLKFILES];
 
 	return fill_dirent(dirfile, f->ino, entry, size, basep);
 }
@@ -1051,6 +1051,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	uint16_t offset;
 	uint32_t nblock, number;
 	int32_t updated_size;
+	chdesc_t * temp_head;
 	int i, r;
 
 	if (!head || link)
@@ -1130,29 +1131,31 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		blk = NULL;
 	if (!blk)
 		goto allocate_name_exit2;
+	temp_head = *head;
+	if (chdesc_create_init(blk, info->ubd, &temp_head) < 0)
+		goto allocate_name_exit3;
 
+	/* TODO: change the order of the chdescs in this function! we "lose" the metadata update in the eventual head... */
 	dir_fdesc = (struct josfs_fdesc *) josfs_lookup_inode(object, parent);
 	assert(dir_fdesc && dir_fdesc->file);
 	dir = dir_fdesc->file;
 	updated_size = dir->f_size + JOSFS_BLKSIZE;
-	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &updated_size, head);
+	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &updated_size, &temp_head);
 	josfs_free_fdesc(object, (fdesc_t *) dir_fdesc);
 	dir_fdesc = NULL;
 	dir = NULL;
-	if (r < 0) {
-		josfs_free_block(object, NULL, number, head);
-		goto allocate_name_exit2;
-	}
+	if (r < 0)
+		goto allocate_name_exit3;
 
 	memset(&temp_file, 0, sizeof(JOSFS_File_t));
 	strcpy(temp_file.f_name, name);
 	temp_file.f_type = type;
 
 	if (chdesc_create_byte(blk, info->ubd, 0, sizeof(JOSFS_File_t), &temp_file, head) < 0)
-		goto allocate_name_exit2;
+		goto allocate_name_exit3;
 
 	if ((r = CALL(info->ubd, write_block, blk)) < 0)
-		goto allocate_name_exit2;
+		goto allocate_name_exit3;
 		
 	if (josfs_append_file_block(object, pdir_fdesc, number, head) >= 0) {
 		new_fdesc->file = malloc(sizeof(JOSFS_File_t));
@@ -1165,6 +1168,8 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		return (fdesc_t *) new_fdesc;
 	}
 
+allocate_name_exit3:
+	josfs_free_block(object, NULL, number, head);
 allocate_name_exit2:
 	josfs_free_fdesc(object, pdir_fdesc);
 allocate_name_exit:
