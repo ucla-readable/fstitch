@@ -36,10 +36,6 @@ typedef uint32_t register_t;
 #define UNIXUSER
 #undef KUDOS
 
-#ifndef PLAN9
-#define USED
-#endif
-
 #define nelem(x)	(sizeof(x) / sizeof((x)[0]))
 typedef struct Super Super;
 typedef struct File File;
