@@ -12,6 +12,11 @@ $(UTILDIR)/$(FSFORMAT): util/$(FSFORMAT).c lib/mmu.h inc/fs.h
 	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<
 
+$(UTILDIR)/$(FSCKJOS): util/$(FSCKJOS).c lib/mmu.h inc/fs.h
+	@echo + cc[UTIL] $<
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<
+
 $(UTILDIR)/$(BDSPLIT): util/$(BDSPLIT).c
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)

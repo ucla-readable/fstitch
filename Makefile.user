@@ -25,6 +25,7 @@ TOP = .
 
 # Native utilities
 FSFORMAT       := fsformat
+FSCKJOS        := fsck.jos
 ELFDUMP_SYMTAB := elfdump_symtab
 PTYPAIR        := ptypair
 BDSPLIT        := bdsplit
@@ -38,6 +39,7 @@ SYMSTRTBL      := symstrtbl
 
 UTILS := \
 	$(UTILDIR)/$(FSFORMAT) \
+	$(UTILDIR)/$(FSCKJOS) \
 	$(UTILDIR)/$(BDSPLIT) \
 	$(UTILDIR)/$(KNBD_SERVER) \
 	$(UTILDIR)/$(KDB_SERVER) \
