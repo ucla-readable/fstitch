@@ -299,7 +299,6 @@ int kfsd_init(int argc, char ** argv)
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses)
 {
-	const bool enable_fsck = 0;
 	void * ptbl = NULL;
 	void * bsdtbl = NULL;
 	vector_t * partitions = NULL;
@@ -474,18 +473,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 					lfs = josfs_lfs = josfs(cache);
 					is_journaled = 0;
 				}
-			}
-
-			if (josfs_lfs && enable_fsck)
-			{
-				printf("Fscking... ");
-				int r = josfs_fsck(josfs_lfs);
-				if (r == 0)
-					printf("done.\n");
-				else if (r > 0)
-					printf("found %d errors\n", r);
-				else
-					printf("critical error: %i\n", r);
 			}
 
 			if (lfs)

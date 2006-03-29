@@ -56,6 +56,5 @@ struct JOSFS_Super {
 
 
 LFS_t * josfs(BD_t * block_device);
-int     josfs_fsck(LFS_t * lfs);
 
 #endif /* __KUDOS_KFS_JOSFS_BASE_H */

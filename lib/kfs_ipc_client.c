@@ -436,18 +436,6 @@ LFS_t * josfs(BD_t * block_device)
 	return create_lfs(lfs_id);
 }
 
-int josfs_fsck(LFS_t * lfs)
-{
-	const envid_t fsid = find_fs();
-
-	INIT_PG(JOSFS_FSCK, josfs_fsck);
-
-	pg->lfs = (uint32_t) OBJLOCAL(lfs);
-
-	SEND_PG();
-	return RECV_PG();
-}
-
 #include <kfs/ufs_base.h>
 LFS_t * ufs(BD_t * block_device)
 {

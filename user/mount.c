@@ -26,7 +26,7 @@ static bool verbose = 0;
 
 static struct Scfs_metadata md;
 
-static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS_t * journal_lfs, const char * journal_lfs_file, bool enable_fsck, int cache_type, uint32_t cache_nblks)
+static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, LFS_t * journal_lfs, const char * journal_lfs_file, int cache_type, uint32_t cache_nblks)
 {
 //	void * ptbl = NULL;
 	BD_t * partitions[4] = {NULL};
@@ -156,33 +156,9 @@ static CFS_t * build_uhfs(BD_t * bd, bool enable_journal, bool enable_jfsck, LFS
 				kdprintf(STDERR_FILENO, "%s: journal_bd_set_journal() failed: %i\n", __FUNCTION__, r);
 				return NULL;
 			}
-
-			if (enable_jfsck)
-			{
-				if (verbose)
-					printf("Fscking pre-journal-replayed filesystem... ");
-				int r = josfs_fsck(lfs);
-				if (r < 0)
-					kdprintf(STDERR_FILENO, "critical errors: %i\n", r);
-				else if (r > 0)
-					kdprintf(STDERR_FILENO, "found %d errors\n", r);
-				else if (verbose)
-					printf("done.\n");
-			}
 		}
 		else
 			lfs = josfs_lfs = josfs(cache);
-
-		if (josfs_lfs && enable_fsck)
-		{
-			if (verbose)
-				printf("Fscking... ");
-			int r = josfs_fsck(josfs_lfs);
-			if (r < 0)
-				kdprintf(STDERR_FILENO, "errors found: %i\n");
-			else if (verbose)
-				printf("done.\n");
-		}
 
 		if (lfs)
 			printf("Using josfs");
@@ -218,7 +194,7 @@ static void print_usage(const char * bin)
 {
 	printf("Usage:\n");
 	printf("%s -d <device> -m <mount_point> [-v]\n", bin);
-	printf("    [-j <on|<extern_file>|off*> [-jfsck <on|off*>]] [-fsck <on|off*>]\n");
+	printf("    [-j <on|<extern_file>|off*>]\n");
 	printf("    [-$ <num_blocks>] [-c <wb*|wt|none>]\n");
 	printf("  <device> is one of:\n");
 	printf("    ide  <controllerno> <diskno> <readahead>\n");
@@ -228,11 +204,9 @@ static void print_usage(const char * bin)
 	printf("    mem  <blocksize> <blockcount>\n");
 }
 
-static void parse_options(int argc, const char ** argv, bool * journal, bool * jfsck, LFS_t ** journal_lfs, const char ** journal_lfs_file, bool * fsck, int * cache_type, uint32_t * cache_num_blocks)
+static void parse_options(int argc, const char ** argv, bool * journal, LFS_t ** journal_lfs, const char ** journal_lfs_file, int * cache_type, uint32_t * cache_num_blocks)
 {
 	const char * journal_str;
-	const char * fsck_str;
-	const char * jfsck_str;
 	const char * cache_type_str;
 	const char * cache_num_blocks_str;
 
@@ -275,38 +249,6 @@ static void parse_options(int argc, const char ** argv, bool * journal, bool * j
 
 			*journal_lfs_file = journal_str;
 			*journal = 1;
-		}
-	}
-
-	if ((jfsck_str = get_arg_val(argc, argv, "-jfsck")))
-	{
-		if (!strcmp("on", jfsck_str))
-			*jfsck = 1;
-		else if (!strcmp("off", jfsck_str))
-			*jfsck = 0;
-		else
-		{
-			kdprintf(STDERR_FILENO, "Illegal -jfsck option \"%s\"\n", jfsck_str);
-			print_usage(argv[0]);
-			exit(0);
-		}
-
-	}
-
-	if (!*journal && *jfsck)
-		printf("Ignoring pre-journal-replay fsck request, journaling is off.\n");
-
-	if ((fsck_str = get_arg_val(argc, argv, "-fsck")))
-	{
-		if (!strcmp("on", fsck_str))
-			*fsck = 1;
-		else if (!strcmp("off", fsck_str))
-			*fsck = 0;
-		else
-		{
-			kdprintf(STDERR_FILENO, "Illegal -fsck option \"%s\"\n", fsck_str);
-			print_usage(argv[0]);
-			exit(0);
 		}
 	}
 
@@ -512,7 +454,6 @@ void umain(int argc, const char ** argv)
 	const char * journal_lfs_file = NULL;
 	CFS_t * cfs;
 	bool journal = 0;
-	bool fsck = 0, jfsck = 0;
 	int cache_type = WB_CACHE;
 	uint32_t cache_num_blocks = 128;
 	CFS_t * mselect;
@@ -532,13 +473,13 @@ void umain(int argc, const char ** argv)
 		exit(0);
 	}
 
-	parse_options(argc, argv, &journal, &jfsck, &journal_lfs, &journal_lfs_file, &fsck, &cache_type, &cache_num_blocks);
+	parse_options(argc, argv, &journal, &journal_lfs, &journal_lfs_file, &cache_type, &cache_num_blocks);
 
 	disk = create_disk(argc, argv);
 	if (!disk)
 		exit(0);
 
-	cfs = build_uhfs(disk, journal, jfsck, journal_lfs, journal_lfs_file, fsck, cache_type, cache_num_blocks);
+	cfs = build_uhfs(disk, journal, journal_lfs, journal_lfs_file, cache_type, cache_num_blocks);
 	if (!cfs)
 		exit(0);
 
