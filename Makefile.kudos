@@ -170,6 +170,11 @@ $(OBJDIR)/user/%.o: user/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
 
+$(OBJDIR)/user/$(FSCKJOS).o: util/$(FSCKJOS).c
+	@echo + cc[FSCK] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -nostdinc $(USER_CFLAGS) $(LIB_NET_CFLAGS) -c -o $@ $<
+
 $(OBJDIR)/lib/%.o: lib/%.raw
 	@echo + ld[LIB] $<
 	@mkdir -p $(@D)

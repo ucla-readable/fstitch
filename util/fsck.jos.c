@@ -2,6 +2,22 @@
  * JOS file system fsck
  */
 
+#ifdef KUDOS
+
+#include <inc/lib.h>
+#include <inc/fs.h>
+
+/* make POSIX code compile on KudOS */
+#define fprintf kdprintf
+#define stderr STDERR_FILENO
+#define stat Stat
+#define main umain
+/* ignore whence... it is SEEK_SET */
+#define lseek(fd, offset, whence) seek(fd, offset)
+#define perror(str) fprintf(stderr, "%s: error\n", str)
+
+#else
+
 #define _BSD_EXTENSION
 
 /* We don't actually want to define off_t or register_t! */
@@ -30,11 +46,11 @@ typedef uint32_t off_t;
 typedef uint32_t register_t;
 
 #define KUDOS
-#undef UNIXUSER
 #include <lib/mmu.h>
 #include <inc/fs.h>
-#define UNIXUSER
 #undef KUDOS
+
+#endif
 
 static int diskfd;
 static int nblocks;
@@ -59,6 +75,7 @@ typedef struct {
 static Block cache[CACHE_BLOCKS] = {{busy: 0, used: 0, bno: 0}};
 static uint32_t * referenced_bitmap = NULL;
 
+#ifndef KUDOS
 static ssize_t readn(int f, void * av, size_t n)
 {
 	uint8_t * a;
@@ -135,6 +152,7 @@ static void swizzle_block(Block * b)
 			break;
 	}
 }
+#endif
 
 static Block * get_block(uint32_t bno, Type type)
 {
@@ -179,7 +197,7 @@ static Block * get_block(uint32_t bno, Type type)
 	
 	/* if b->used, evict block b... nothing to do though */
 	
-	if(lseek(diskfd, bno * BLKSIZE, 0) < 0 || readn(diskfd, b->buf, BLKSIZE) != BLKSIZE)
+	if(lseek(diskfd, bno * BLKSIZE, SEEK_SET) < 0 || readn(diskfd, b->buf, BLKSIZE) != BLKSIZE)
 	{
 		fprintf(stderr, "read block %d: ", bno);
 		perror("");
@@ -187,7 +205,9 @@ static Block * get_block(uint32_t bno, Type type)
 	}
 	b->type = type;
 	b->bno = bno;
+#ifndef KUDOS
 	swizzle_block(b);
+#endif
 	
 out:
 	b->busy++;
@@ -220,7 +240,7 @@ static int open_disk(const char * name)
 	Block * b;
 	struct Super * super;
 	
-	if((diskfd = open(name, O_RDWR)) < 0)
+	if((diskfd = open(name, O_RDONLY)) < 0)
 	{
 		fprintf(stderr, "open: ");
 		perror(name);
@@ -518,10 +538,7 @@ int main(int argc, char * argv[])
 	}
 	
 	if(open_disk(argv[1]) < 0)
-	{
-		perror(argv[1]);
 		return 1;
-	}
 	
 	if(scan_tree() < 0)
 		return 1;

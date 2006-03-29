@@ -14,6 +14,7 @@ USERAPPS :=	\
 			$(OBJDIR)/user/ex \
 			$(OBJDIR)/user/fourem \
 			$(OBJDIR)/user/free \
+			$(OBJDIR)/user/$(FSCKJOS) \
 			$(OBJDIR)/user/get \
 			$(OBJDIR)/user/grep \
 			$(OBJDIR)/user/hexdump \
