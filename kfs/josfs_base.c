@@ -444,17 +444,20 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 	uint32_t target;
 	uint32_t * ptr;
 
+	if (blockno >= super->s_nblocks) {
+		printf("josfs_base: requested status of block %u past end of file system!\n", blockno);
+		return -1;
+	}
+
 	target = 2 + (blockno / (JOSFS_BLKBITSIZE));
 
-	if (info->bitmap_cache && info->bitmap_cache->number != target) {
+	if (info->bitmap_cache && info->bitmap_cache->number != target)
 		bdesc_release(&info->bitmap_cache);
-		info->bitmap_cache = NULL;
-	}
 
 	if (! info->bitmap_cache) {
 		bdesc = CALL(info->ubd, read_block, target, 1);
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
-			printf("josfs_base: trouble reading bitmap!\n");
+			printf("josfs_base: trouble reading bitmap! (blockno = %u)\n", blockno);
 			return -1;
 		}
 		bdesc_retain(bdesc);
@@ -480,22 +483,25 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		return -1;
 
 	if (blockno == 0) {
-		printf("josfs_base: attempted to write to zero block!\n");
+		printf("josfs_base: attempted to write status of zero block!\n");
+		return -1;
+	}
+	else if (blockno >= super->s_nblocks) {
+		printf("josfs_base: attempted to write status of block %u past end of file system!\n", blockno);
 		return -1;
 	}
 
 	target = 2 + (blockno / JOSFS_BLKBITSIZE);
 
-	if (info->bitmap_cache && info->bitmap_cache->number == target) {
+	if (info->bitmap_cache && info->bitmap_cache->number == target)
 		bdesc = info->bitmap_cache;
-	}
 	else {
-		bdesc_release(&info->bitmap_cache);
-		info->bitmap_cache = NULL;
+		if(info->bitmap_cache)
+			bdesc_release(&info->bitmap_cache);
 		bdesc = CALL(info->ubd, read_block, target, 1);
 
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
-			printf("josfs_base: trouble reading bitmap!\n");
+			printf("josfs_base: trouble reading bitmap! (blockno = %u)\n", blockno);
 			return -1;
 		}
 
@@ -503,10 +509,9 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 		info->bitmap_cache = bdesc;
 	}
 
-	if (((uint32_t *) bdesc->ddesc->data)[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value) {
-		/* already has the right value */
+	/* does it already have the right value? */
+	if (((uint32_t *) bdesc->ddesc->data)[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value)
 		return 0;
-	}
 	/* bit chdescs take offset in increments of 32 bits */
 	ch = chdesc_create_bit(bdesc, info->ubd, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32));
 	if (!ch)
