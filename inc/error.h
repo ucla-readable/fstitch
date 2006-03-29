@@ -72,6 +72,7 @@
 #define E_NO_DEV	ENODEV
 #define E_PERM		EPERM
 #define E_ACCES		EACCES
+#define E_NO_SYS	ENOSYS
 
 /* not available on KudOS */
 #define E_INTR		EINTR
