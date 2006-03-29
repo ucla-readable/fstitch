@@ -3,7 +3,7 @@
 #ifndef KUDOS_INC_ERROR_H
 #define KUDOS_INC_ERROR_H
 
-#ifndef __KERNEL__
+#if defined(KUDOS)
 
 // Error codes -- keep in sync with list in lib/printfmt.c.
 #define E_UNSPECIFIED	1	// Unspecified or unknown problem
@@ -46,7 +46,13 @@
 
 #else
 
+#if defined(UNIXUSER)
+#include <errno.h>
+#elif defined(__KERNEL__)
 #include <linux/errno.h>
+#else
+#error Unknown target
+#endif
 
 /* Notice that E_UNSPECIFIED and E_EOF are the same value: neither really exists
  * on Linux. Alo, this value happens to be EPERM, "operation not permitted". */
@@ -70,6 +76,11 @@
 /* not available on KudOS */
 #define E_INTR		EINTR
 
+#endif
+
+#if defined(UNIXUSER)
+#define E_NET_ABRT	ECONNABORTED // Net connection aborted
+#define E_NET_USE	EADDRINUSE // Net address in use
 #endif
 
 #endif	// !KUDOS_INC_ERROR_H */

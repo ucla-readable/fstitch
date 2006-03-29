@@ -52,7 +52,6 @@
 #define Dprintf(x...)
 #endif
 
-#define TODOERROR 1
 #define FUSE_ERR_SUCCESS 0
 #define STDTIMEOUT 1.0
 
@@ -172,7 +171,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	if (r < 0)
 	{
 		Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
-		return -1;
+		return r;
 	}
 
 	if (nlinks_supported)
@@ -247,11 +246,13 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	else if (*type.type == TYPE_INVAL)
 	{
 		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): file type is invalid\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino);
+		r = -E_UNSPECIFIED;
 		goto err;
 	}
 	else
 	{
 		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, *type.type);
+		r = -E_UNSPECIFIED;
 		goto err;
 	}
 
@@ -279,7 +280,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 
   err:
 	free(type.type);
-	return -1;
+	return r;
 }
 
 static void serve_statfs(fuse_req_t req)
@@ -291,8 +292,13 @@ static void serve_statfs(fuse_req_t req)
 	void * data;
 
 	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_blocksize.id, &size, &data);
-	if (r < 0 || sizeof(st.f_bsize) != size)
+	if (r < 0)
 		goto serve_statfs_err;
+	else if (sizeof(st.f_bsize) != size)
+	{
+		r = -E_UNSPECIFIED;
+		goto serve_statfs_err;
+	}
 	st.f_bsize = st.f_frsize = *(uint32_t *) data;
 	free(data);
 
@@ -324,7 +330,7 @@ static void serve_statfs(fuse_req_t req)
 	return;
 
 serve_statfs_err:
-	r = fuse_reply_err(req, TODOERROR);
+	r = fuse_reply_err(req, -r);
 	assert(!r);
 	return;
 }
@@ -338,16 +344,12 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 	(void) fi;
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (fill_stat(req, fusecfsino(req, fuse_ino), fuse_ino, &stbuf) == -1)
-	{
-		r = fuse_reply_err(req, ENOENT);
-		assert(!r);
-	}
+	r = fill_stat(req, fusecfsino(req, fuse_ino), fuse_ino, &stbuf);
+	if (r < 0)
+		r = fuse_reply_err(req, -r);
 	else
-	{
 		r = fuse_reply_attr(req, &stbuf, STDTIMEOUT);
-		assert(!r);
-	}
+	assert(!r);
 }
 
 static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * attr,
@@ -386,7 +388,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 			r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
 			if (r < 0)
 			{
-				r = fuse_reply_err(req, TODOERROR);
+				r = fuse_reply_err(req, -r);
 				assert(!r);
 				return;
 			}
@@ -398,9 +400,10 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 
 		if (!fi)
 		{
-			if (CALL(reqcfs(req), close, fdesc) < 0)
+			r = CALL(reqcfs(req), close, fdesc);
+			if (r < 0)
 			{
-				r = fuse_reply_err(req, TODOERROR);
+				r = fuse_reply_err(req, -r);
 				assert(!r);
 				return;
 			}
@@ -408,7 +411,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 
 		if (r < 0)
 		{
-			r = fuse_reply_err(req, TODOERROR);
+			r = fuse_reply_err(req, -r);
 			assert(!r);
 			return;
 		}
@@ -419,15 +422,16 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(attr->st_mode), &attr->st_mode);
 		if (r < 0)
 		{
-			r = fuse_reply_err(req, TODOERROR);
+			r = fuse_reply_err(req, -r);
 			assert(!r);
 			return;
 		}
 	}
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	if (fill_stat(req, cfs_ino, fuse_ino, &stbuf) == -1)
-		r = fuse_reply_err(req, TODOERROR);
+	r = fill_stat(req, cfs_ino, fuse_ino, &stbuf);
+	if (r < 0)
+		r = fuse_reply_err(req, -r);
 	else
 		r = fuse_reply_attr(req, &stbuf, STDTIMEOUT);
 	assert(!r);
@@ -447,10 +451,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	r = CALL(reqcfs(req), lookup, parent_cfs_ino, local_name, &cfs_ino);
 	if (r < 0)
 	{
-		if (r == -E_NOT_FOUND)
-			r = fuse_reply_err(req, ENOENT);
-		else
-			r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -458,7 +459,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	r = hash_map_insert(reqmount(req)->parents, (void *) cfs_ino, (void *) parent_cfs_ino);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -472,7 +473,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	{
 		// TODO: is it safe to remove cfs_ino from the parents map?
 		kdprintf(STDERR_FILENO, "%s(): possible parents entry leak for cfs inode %u\n", cfs_ino);
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -500,7 +501,7 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	r = CALL(reqcfs(req), mkdir, parent_cfs_ino, local_name, &cfs_ino);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -508,7 +509,7 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	r = hash_map_insert(reqmount(req)->parents, (void *) cfs_ino, (void *) parent_cfs_ino);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -534,7 +535,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	r = CALL(reqcfs(req), create, fusecfsino(req, parent), local_name, 0, fdesc, &cfs_ino);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return -1;
 	}
@@ -607,7 +608,7 @@ static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_n
 	r = CALL(reqcfs(req), unlink, fusecfsino(req, parent), local_name);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -625,7 +626,7 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 	r = CALL(reqcfs(req), rmdir, fusecfsino(req, parent), local_name);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -647,7 +648,7 @@ static void serve_rename(fuse_req_t req,
 	{
 		// TODO: case -E_FILE_EXISTS: should we allow overwriting?
 		// TODO: case -E_INVAL: might mean files are on different filesystems
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -708,15 +709,9 @@ static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
 
 	// ignore datasync
 	r = kfs_sync();
-	if (r == -E_BUSY)
+	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
-		assert(!r);
-		return;
-	}
-	else if (r < 0)
-	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -754,7 +749,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 	{
 		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
 		// TODO: fuse_reply_err(req, ENOTDIR);
-		r = fuse_reply_err(req, -1);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -764,7 +759,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 	{
 		kdprintf(STDERR_FILENO, "%s(): no parent ino for ino %u\n", __FUNCTION__, cfs_ino);
 		(void) CALL(reqcfs(req), close, fdesc);
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, E_UNSPECIFIED);
 		assert(!r);
 		return;
 	}
@@ -786,7 +781,7 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
 	r = CALL(reqcfs(req), close, fdesc);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
@@ -918,7 +913,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	if (offset != off)
 	{
 		kdprintf(STDERR_FILENO, "%s:%d: KFSD offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, E_INVAL);
 		assert(!r);
 		return;
 	}
@@ -954,7 +949,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 	if (offset != off)
 	{
 		kdprintf(STDERR_FILENO, "%s:%d: KFSD offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
-		r = fuse_reply_err(req, TODOERROR);
+		r = fuse_reply_err(req, E_INVAL);
 		assert(!r);
 		return;
 	}
@@ -965,7 +960,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 	nbytes = CALL(reqcfs(req), write, fdesc, buf, offset, size);
 	if (nbytes < size)
 	{
-		r = fuse_reply_write(req, TODOERROR);
+		r = fuse_reply_write(req, nbytes);
 		assert(!r);
 		return;
 	}
