@@ -25,7 +25,6 @@
 
 // Helpful documentation: FUSE's fuse_lowlevel.h, README, and FAQ
 // Helpful debugging options:
-// - Enable debug output for fuse_serve_inode (to show inode alloc/free)
 // - Enable debug output for fuse_serve
 // - Run with the -d flag to see FUSE messages coming in and going out
 
@@ -654,51 +653,6 @@ static void serve_rename(fuse_req_t req,
 	assert(!r);
 }
 
-#define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
-
-static int read_single_dir(CFS_t * cfs, fdesc_t * fdesc, off_t k, dirent_t * dirent)
-{
-	Dprintf("%s(fdesc = %p, k = %lld)\n", __FUNCTION__, fdesc, k);
-	uint32_t basep = 0;
-	char buf[sizeof(dirent_t)];
-	char * cur = buf;
-	off_t dirno = 0;
-	int r;
-
-	assert(fdesc != NULL && k >= 0 && dirent != NULL);
-	memset(buf, 0, sizeof(buf));
-
-	while (1)
-	{
-		uint32_t nbytes;
-		cur = buf;
-
-		r = CALL(cfs, getdirentries, fdesc, buf, sizeof(buf), &basep);
-		assert(dirent); // catch some stack overwrites in getdirentries()
-		if (r == -E_UNSPECIFIED) // should imply eof
-			return 1;
-		else if (r < 0)
-			return r;
-
-		nbytes = r;
-		while (dirno < k && ((cur - buf) + RECLEN_MIN_SIZE <= nbytes))
-		{
-			assert((cur - buf) + ((dirent_t *) cur)->d_reclen <= nbytes);
-			cur += ((dirent_t*) cur)->d_reclen;
-			dirno++;
-		}
-
-		if (dirno == k && ((cur - buf) + RECLEN_MIN_SIZE <= nbytes))
-		{
-			assert((cur - buf) + ((dirent_t *) cur)->d_reclen <= nbytes);
-			memcpy(dirent, cur, ((dirent_t*) cur)->d_reclen);
-			return 0;
-		}
-
-		assert((cur - buf) == nbytes);
-	}
-}
-
 static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
                   struct fuse_file_info * fi)
 {
@@ -787,62 +741,74 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
 	assert(!r);
 }
 
+#define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
+
 static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
-                          off_t off, struct fuse_file_info * fi)
+                          off_t foff, struct fuse_file_info * fi)
 {
 	fdesc_t * fdesc = fi_get_fdesc(fi);
+	uint32_t off = foff;
 	uint32_t total_size = 0;
 	char * buf = NULL;
-	struct stat stbuf;
 	int r;
-	Dprintf("%s(ino = %lu, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, size, off);
+	Dprintf("%s(ino = %lu, size = %u, off = %lld)\n", __FUNCTION__, fuse_ino, size, foff);
 
 	while (1)
 	{
-		dirent_t dirent;
-		size_t oldsize = total_size;
-		inode_t entry_cfs_ino;
+		char cfs_buf[sizeof(dirent_t)];
+		char * cur = cfs_buf;
+		uint32_t uu_nbytes = 0;
+		int nbytes;
 
-		r = read_single_dir(reqcfs(req), fdesc, off, &dirent);
-		if (r == 1 || r == -E_NOT_FOUND)
+		nbytes = CALL(reqcfs(req), getdirentries, fdesc, cfs_buf, sizeof(cfs_buf), &off);
+		if (nbytes == -E_UNSPECIFIED)
 			break;
-		if (r == -E_EOF)
-			break;
-		else if (r < 0)
+		else if (nbytes < 0)
 		{
 			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(0x%08x, %lld, 0x%08x) = %d\n",
-					 __FILE__, __FUNCTION__, fdesc, off, &dirent, r);
-			assert(r >= 0);
+					 __FILE__, __FUNCTION__, fdesc, off, &cfs_buf, nbytes);
+			assert(nbytes >= 0);
 		}
 
-		total_size += fuse_dirent_size(dirent.d_namelen);
-
-		if (total_size > size)
+		/* make sure there is a reclen to read, and make sure it doesn't say to go to far  */
+		while ((cur - cfs_buf) + RECLEN_MIN_SIZE <= nbytes)
 		{
-			total_size = oldsize;
-			break;
-		}
+			dirent_t * cfs_dirent = (dirent_t *) cur;
+			size_t oldsize = total_size;
+			struct stat stbuf;
+			inode_t entry_cfs_ino;
+			assert((cur - cfs_buf) + cfs_dirent->d_reclen <= nbytes);
+			Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
 
-		buf = (char *) realloc(buf, total_size);
-		assert(buf);
+			if (total_size + fuse_dirent_size(cfs_dirent->d_namelen) > size)
+				goto out;
 
-		memset(&stbuf, 0, sizeof(stbuf));
-		// Generate "." and ".." here rather than in the base file system
-		// because they are not able to find ".."'s inode from just
-		// "."'s inode
-		if (!strcmp(dirent.d_name, "."))
-			entry_cfs_ino = fusecfsino(req, fuse_ino);
-		else if (!strcmp(dirent.d_name, ".."))
-			entry_cfs_ino = fdesc->common->parent;
-		else
-		{
-			r = CALL(reqcfs(req), lookup, fusecfsino(req, fuse_ino), dirent.d_name, &entry_cfs_ino);
-			assert(r >= 0);
+			total_size += fuse_dirent_size(cfs_dirent->d_namelen);
+			buf = (char *) realloc(buf, total_size);
+			assert(buf);
+
+			memset(&stbuf, 0, sizeof(stbuf));
+			// Generate "." and ".." here rather than in the base file system
+			// because they are not able to find ".."'s inode from just
+			// "."'s inode
+			if (!strcmp(cfs_dirent->d_name, "."))
+				entry_cfs_ino = fusecfsino(req, fuse_ino);
+			else if (!strcmp(cfs_dirent->d_name, ".."))
+				entry_cfs_ino = fdesc->common->parent;
+			else
+			{
+				r = CALL(reqcfs(req), lookup, fusecfsino(req, fuse_ino), cfs_dirent->d_name, &entry_cfs_ino);
+				assert(r >= 0);
+			}
+			stbuf.st_ino = cfsfuseino(req, entry_cfs_ino);
+			fuse_add_dirent(buf + oldsize, cfs_dirent->d_name, &stbuf, off)
+;
+			cur += cfs_dirent->d_reclen;
+			uu_nbytes += cfs_dirent->d_reclen;
 		}
-		stbuf.st_ino = cfsfuseino(req, entry_cfs_ino);
-		fuse_add_dirent(buf + oldsize, dirent.d_name, &stbuf, ++off);
 	}
 
+  out:
 	r = fuse_reply_buf(req, buf, total_size);
 	assert(!r);
 	free(buf);
