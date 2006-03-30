@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <time.h>
 #include <lib/dirent.h>
 #include <lib/fcntl.h>
 #include <lib/jiffies.h>
@@ -160,8 +161,10 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	} type;
 	bool nlinks_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_nlinks.id);
 	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
+	bool mtime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
 	uint32_t nlinks = 0;
 	mode_t perms;
+	time_t mtime = time(NULL);
 
 	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
@@ -267,7 +270,23 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(reqcfs(req)), r);
 	}
 
+	if (mtime_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_mtime.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(time_t));
+			mtime = *(time_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(reqcfs(req)), r);
+	}
+
 	stbuf->st_mode |= perms;
+	stbuf->st_mtime = mtime;
 	stbuf->st_ino = fuse_ino;
 	stbuf->st_nlink = nlinks;
 
@@ -354,21 +373,24 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	inode_t cfs_ino = fusecfsino(req, fuse_ino);
 	int supported = FUSE_SET_ATTR_SIZE;
 	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
+	bool mtime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
 	struct stat stbuf;
 	int r;
 	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 
 	if (perms_supported)
 		supported |= FUSE_SET_ATTR_MODE;
+	if (mtime_supported)
+		supported |= FUSE_SET_ATTR_MTIME;
 
 	if (to_set != (to_set & supported))
 	{
-		r = fuse_reply_err(req, ENOSYS);
+		r = fuse_reply_err(req, E_NO_SYS);
 		assert(!r);
 		return;
 	}
 
-	if (to_set == FUSE_SET_ATTR_SIZE)
+	if (to_set & FUSE_SET_ATTR_SIZE)
 	{
 		fdesc_t * fdesc;
 		uint32_t size;
@@ -413,9 +435,20 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		}
 	}
 
-	if (to_set == FUSE_SET_ATTR_MODE)
+	if (to_set & FUSE_SET_ATTR_MODE)
 	{
 		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(attr->st_mode), &attr->st_mode);
+		if (r < 0)
+		{
+			r = fuse_reply_err(req, -r);
+			assert(!r);
+			return;
+		}
+	}
+
+	if (to_set & FUSE_SET_ATTR_MTIME)
+	{
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_mtime.id, sizeof(attr->st_mtime), &attr->st_mtime);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -579,7 +612,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 
 	if (!(mode & S_IFREG))
 	{
-		r = fuse_reply_err(req, ENOSYS);
+		r = fuse_reply_err(req, E_NO_SYS);
 		assert(!r);
 		return;
 	}
