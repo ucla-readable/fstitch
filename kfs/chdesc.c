@@ -10,6 +10,14 @@
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 
+/* Change descriptor multigraphs allow more than one dependency between the same
+ * two change descriptors. This currently saves us the trouble of making sure we
+ * don't create a duplicate dependency between chdescs, though it also causes us
+ * to allocate somewhat more memory in many cases where we would otherwise
+ * detect the duplicate dependency. Allowing multigraphs results in a reasonable
+ * speedup, even though we use more memory, so it is enabled by default. */
+#define CHDESC_ALLOW_MULTIGRAPH 1
+
 static chdesc_t * free_head = NULL;
 
 static void chdesc_free_push(chdesc_t * chdesc)
@@ -98,6 +106,7 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 {
 	chmetadesc_t * meta;
 	
+#if !CHDESC_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
 	for(meta = dependent->dependencies; meta; meta = meta->next)
 		if(meta->desc == dependency)
@@ -105,6 +114,7 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	/* shouldn't be there */
 	for(meta = dependency->dependents; meta; meta = meta->next)
 		assert(meta->desc != dependent);
+#endif
 	
 	/* add the dependency to the dependent */
 	meta = malloc(sizeof(*meta));
@@ -866,7 +876,13 @@ static void chdesc_meta_remove(chmetadesc_t ** list, chdesc_t * chdesc)
 			*list = scan->next;
 			free(scan);
 			scan = *list;
-			/* could return here, but keep going just to be sure */
+#if CHDESC_ALLOW_MULTIGRAPH
+			/* if we break here, we'll remove only one edge... this
+			 * is required for multigraphs, and OK for standard
+			 * graphs (which should have only one anyway), but safer
+			 * to leave off in the latter case */
+			break;
+#endif
 		}
 		else
 		{
