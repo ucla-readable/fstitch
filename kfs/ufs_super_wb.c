@@ -263,7 +263,6 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 	noophead = chdesc_create_noop(NULL, NULL);
 	if (!noophead)
 		return -E_NO_MEM;
-	chdesc_claim_noop(noophead);
 
 	linfo->syncing = 1;
 
@@ -357,7 +356,6 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 sync_failed:
 	if (sync_count)
 		*head = noophead;
-	chdesc_autorelease_noop(noophead);
 	linfo->syncing = 0;
 	return r;
 }
