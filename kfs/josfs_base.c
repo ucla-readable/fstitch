@@ -1137,7 +1137,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize};
+static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime};
 
 static size_t josfs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1223,6 +1223,17 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 		*size = sizeof(devicesize);
 		memcpy(*data, &devicesize, sizeof(devicesize));
+	}
+	else if (id == KFS_feature_mtime.id) {
+		if (!f)
+			return -E_INVAL;
+
+		*data = malloc(sizeof(uint32_t));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(uint32_t);
+		memcpy(*data, &f->file->f_mtime, sizeof(uint32_t));
 	}
 	else
 		return -E_INVAL;
@@ -1310,6 +1321,26 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 			return r;
 
 		f->file->f_type = fs_type;
+		return 0;
+	}
+	else if (id == KFS_feature_mtime.id) {
+		if (sizeof(uint32_t) != size)
+			return -E_INVAL;
+
+		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		if (!dirblock)
+			return -E_INVAL;
+
+		offset = f->index;
+		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_mtime;
+		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), data, head)) < 0)
+			return r;
+
+		r = CALL(info->ubd, write_block, dirblock);
+		if (r < 0)
+			return r;
+
+		f->file->f_mtime = *((uint32_t *) data);
 		return 0;
 	}
 

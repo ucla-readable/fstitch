@@ -20,6 +20,7 @@ extern const feature_t KFS_feature_file_lfs;
 extern const feature_t KFS_feature_unix_permissions;
 extern const feature_t KFS_feature_blocksize;
 extern const feature_t KFS_feature_devicesize;
+extern const feature_t KFS_feature_mtime;
 
 #ifndef __KERNEL__
 

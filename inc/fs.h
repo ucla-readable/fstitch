@@ -35,9 +35,10 @@ struct File {
 	uint32_t f_direct[NDIRECT];	/* direct blocks */
 	uint32_t f_indirect;		/* indirect block */
 
-	/* Pad out to 256 bytes; must do arithmetic in case we're compiling */
-	/* fsformat on a 64-bit machine. */
-	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 4];
+	uint32_t f_mtime;		/* file mtime */
+
+	/* Pad out to 256 bytes */
+	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 8];
 };
 
 /* An inode block contains exactly BLKFILES 'struct File's */

@@ -149,6 +149,9 @@ static int kpl_stat(struct Fd* fd, struct Stat* st)
 	r = cfs_get_metadata(st->st_name, KFS_feature_size.id, &kpl_stat_md);
 	if (r < 0) return r;
 	st->st_size = *(off_t *) &kpl_stat_md.data;
+	r = cfs_get_metadata(st->st_name, KFS_feature_mtime.id, &kpl_stat_md);
+	if (r >= 0)
+		st->st_mtime = *(uint32_t *) &kpl_stat_md.data;
 	r = cfs_get_metadata(st->st_name, KFS_feature_filetype.id, &kpl_stat_md);
 	if (r < 0) return r;
 	st->st_isdir = (*(int *) &kpl_stat_md.data == TYPE_DIR);

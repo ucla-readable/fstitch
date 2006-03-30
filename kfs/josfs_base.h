@@ -37,9 +37,10 @@ struct JOSFS_File {
 	uint32_t f_direct[JOSFS_NDIRECT];	// direct blocks
 	uint32_t f_indirect;		// indirect block
 
-	// Pad out to 256 bytes; must do arithmetic in case we're compiling
-	// fsformat on a 64-bit machine.
-	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4*JOSFS_NDIRECT - 4];
+	uint32_t f_mtime;		// file mtime
+
+	// Pad out to 256 bytes
+	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4 * JOSFS_NDIRECT - 8];
 };
 
 #define JOSFS_TYPE_FILE 0

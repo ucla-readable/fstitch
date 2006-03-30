@@ -34,11 +34,6 @@ struct Fd
 	off_t fd_offset;
 	int fd_omode;
 	union {
-		// File server files
-		struct {
-			int id;
-			struct File file;
-		} fd_file;
 		// KPL files
 		struct {
 			int fid;
@@ -50,6 +45,7 @@ struct Stat
 {
 	char st_name[MAXNAMELEN];
 	off_t st_size;
+	uint32_t st_mtime;
 	int st_isdir;
 	struct Dev* st_dev;
 };

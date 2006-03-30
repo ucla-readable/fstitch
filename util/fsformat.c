@@ -113,6 +113,7 @@ swizzlefile(struct File* f)
 	for (i = 0; i < NDIRECT; i++)
 		swizzle(&f->f_direct[i]);
 	swizzle(&f->f_indirect);
+	swizzle(&f->f_mtime);
 }
 
 void
@@ -336,6 +337,7 @@ gotit:
 			break;
 	}
 	f->f_size = nblk*BLKSIZE + n;
+	f->f_mtime = 0;
 	putblk(dirb);
 	close(fd);
 }
