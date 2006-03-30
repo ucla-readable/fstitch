@@ -692,10 +692,15 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
 		uint32_t inumber = josfs_allocate_block(object, NULL, 0, head);
+		chdesc_t * temp_head = *head;
 		bdesc_t * indirect;
 		if (inumber == INVALID_BLOCK)
 			return -E_NO_DISK;
 		indirect = josfs_lookup_block(object, inumber);
+
+		// Initialize the new indirect block
+		if ((r = chdesc_create_init(indirect, info->ubd, &temp_head)) < 0)
+			return r;
 
 		// Initialize the structure, then point to it
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
