@@ -18,6 +18,7 @@ clean:
 	$(MAKE) -f Makefile.kudos clean
 	$(MAKE) -f Makefile.user clean
 	$(MAKE) -f Makefile.kernel clean
+	rm -rf obj/
 
 fsclean:
 	$(MAKE) -f Makefile.kudos fsclean
