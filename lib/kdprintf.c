@@ -1,3 +1,7 @@
+#if defined(__linux__)
+#define _GNU_SOURCE /* for vasprintf() */
+#endif
+
 #include <lib/kdprintf.h>
 
 #if defined(KUDOS)
@@ -46,15 +50,9 @@ printf(const char *fmt, ...)
 
 #elif defined(UNIXUSER)
 
-#if defined(__linux__)
-#define _GNU_SOURCE
-#endif
-#include <stdio.h>
 #include <assert.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 int
 kdprintf(int fd, const char *fmt, ...)

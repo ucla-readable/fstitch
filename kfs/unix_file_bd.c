@@ -173,12 +173,12 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	return 0;
 }
 
-#warning From man 2 sync:
-#warning Note that while fsync() will flush all data from the host to the
-#warning drive (i.e. the "permanent storage device"), the drive itself may
-#warning not physically write the data to the platters for quite some time
-#warning and it may be written in an out-of-order sequence.
-// NOTE: MacOSX's has the fcntl() command F_FULLFSYNC to flush a drive's buffer
+/* WARNING: From man 2 sync:
+ * "Note that while fsync() will flush all data from the host to the
+ * drive (i.e. the "permanent storage device"), the drive itself may
+ * not physically write the data to the platters for quite some time
+ * and it may be written in an out-of-order sequence." */
+// NOTE: MacOSX has the fcntl() command F_FULLFSYNC to flush a drive's buffer
 static int
 unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
