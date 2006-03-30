@@ -320,23 +320,49 @@ static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose
 {
 	Dprintf("JOSFSDEBUG: josfs_allocate_block\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t blockno, bitmap_size, s_nblocks;
+	uint32_t s_nblocks = super->s_nblocks;
+	uint32_t bitmap_size = (s_nblocks + JOSFS_BLKBITSIZE + 1) / JOSFS_BLKBITSIZE;
+	uint32_t bitmap_block, blockno;
+	uint32_t * curbitmap;
 	int r;
 
 	if (!head)
 		return INVALID_BLOCK;
 
-	s_nblocks = super->s_nblocks;
-	bitmap_size = (s_nblocks + JOSFS_BLKBITSIZE + 1) / JOSFS_BLKBITSIZE;
+	for (bitmap_block = 0; bitmap_block < bitmap_size; bitmap_block++)
+	{
+		if (info->bitmap_cache && info->bitmap_cache->number != bitmap_block+2)
+			bdesc_release(&info->bitmap_cache);
+		if (!info->bitmap_cache)
+		{
+			bdesc_t * bdesc = CALL(info->ubd, read_block, bitmap_block+2, 1);
+			if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE)
+			{
+				printf("josfs_base: trouble reading bitmap! (blockno = %u)\n", bitmap_block+2);
+				return -1;
+			}
+			bdesc_retain(bdesc);
+			info->bitmap_cache = bdesc;
+		}
 
-	for (blockno = 2 + bitmap_size; blockno < s_nblocks; blockno++) {
-		if (block_is_free(object, blockno)) {
-			r = write_bitmap(object, blockno, 0, head);
+		curbitmap = (uint32_t *) info->bitmap_cache->ddesc->data;
+		for (blockno = 0; blockno < JOSFS_BLKBITSIZE; blockno += 32, curbitmap++)
+		{
+			uint32_t mask = 1;
+			uint32_t full_blockno;
+
+			if (!*curbitmap)
+				continue;
+
+			while (!(*curbitmap & mask))
+				mask <<= 1, blockno++;
+			full_blockno = blockno + bitmap_block * JOSFS_BLKBITSIZE;
+
+			r = write_bitmap(object, full_blockno, 0, head);
 			if (r < 0)
 				return INVALID_BLOCK;
-
-			assert(!block_is_free(object, blockno));
-			return blockno;
+			assert(!block_is_free(object, full_blockno));
+			return full_blockno;
 		}
 	}
 
