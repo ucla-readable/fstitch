@@ -143,10 +143,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 
 	// Mark the fragments as used
 	for (i = num * super->fs_frag; i < (num + 1) * super->fs_frag; i++) {
-		if (i == num * super->fs_frag)
-			r = write_fragment_bitmap(info, i, UFS_USED, head);
-		else
-			r = write_fragment_bitmap(info, i, UFS_USED, head);
+		r = write_fragment_bitmap(info, i, UFS_USED, head);
 		if (r < 0)
 			return INVALID_BLOCK;
 		assert(r != 1); // This should not happen
@@ -189,10 +186,7 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 
 	// Mark the fragments as used
 	for (i = num * super->fs_frag; i < (num + 1) * super->fs_frag; i++) {
-		if (i == num * super->fs_frag)
-			r = write_fragment_bitmap(info, i, UFS_FREE, head);
-		else
-			r = write_fragment_bitmap(info, i, UFS_FREE, head);
+		r = write_fragment_bitmap(info, i, UFS_FREE, head);
 		if (r < 0)
 			return r;
 		assert(r != 1); // This should not happen
@@ -567,10 +561,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 
 	// allocate some fragments
 	for (i = 0 ; i < frags; i++) {
-		if (i == 0)
-			r = write_fragment_bitmap(info, blockno, UFS_USED, head);
-		else
-			r = write_fragment_bitmap(info, blockno + i, UFS_USED, head);
+		r = write_fragment_bitmap(info, blockno + i, UFS_USED, head);
 		if (r != 0)
 			return INVALID_BLOCK;
 	}
@@ -1445,7 +1436,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_unix_permissions, &KFS_feature_blocksize, &KFS_feature_devicesize};
+static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_unix_permissions, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime};
 
 static size_t ufs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1549,6 +1540,18 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		*size = sizeof(devicesize);
 		memcpy(*data, &devicesize, sizeof(devicesize));
 	}
+	else if (id == KFS_feature_mtime.id) {
+		if (!f)
+			return -E_INVAL;
+
+		int32_t mtime = f->f_inode.di_mtime;
+		*data = malloc(sizeof(mtime));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(mtime);
+		memcpy(*data, &(f->f_inode.di_mtime), sizeof(f->f_inode.di_mtime));
+	}
 	else
 		return -E_INVAL;
 
@@ -1609,6 +1612,12 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 			return -E_INVAL;
 		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
 			| (*((uint32_t *) data) & UFS_IPERM);
+		return write_inode(info, f->f_num, f->f_inode, head);
+	}
+	else if (id == KFS_feature_mtime.id) {
+		if (sizeof(uint32_t) != size)
+			return -E_INVAL;
+		f->f_inode.di_mtime = f->f_inode.di_mtime;
 		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 
