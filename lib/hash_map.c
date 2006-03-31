@@ -327,25 +327,28 @@ void * hash_map_find_val(const hash_map_t * hm, const void * k)
 	return hme.val;
 }
 
-hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k)
+hash_map_elt_t * hash_map_find_eltp(const hash_map_t * hm, const void * k)
 {
-	hash_map_elt_t hme;
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
-	hme.key = NULL;
-	hme.val = NULL;
-
 	if (!head)
-		return hme;
+		return NULL;
 
 	chain_elt_t * k_chain = chain_search_key(head, k);
 	if (!k_chain)
-		return hme;
+		return NULL;
 
-	hme = k_chain->elt;
+	return &k_chain->elt;
+}
 
-	return hme;
+hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k)
+{
+	hash_map_elt_t not_found = { .key = NULL, .val = NULL };
+	hash_map_elt_t * hme = hash_map_find_eltp(hm, k);
+	if (!hme)
+		return not_found;
+	return *hme;
 }
 
 

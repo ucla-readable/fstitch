@@ -43,6 +43,11 @@ void   hash_map_clear(hash_map_t * hm);
 void * hash_map_find_val(const hash_map_t * hm, const void * k);
 // Return the key and val associated with k.
 hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k);
+// Return a pointer to the internal key and val associated with k.
+// Useful to expose the address of the internal hash_map_elt_t->val.
+// The value of key must not be changed through this pointer.
+// The returned pointer will become invalid upon erasure of this element.
+hash_map_elt_t * hash_map_find_eltp(const hash_map_t * hm, const void * k);
 
 // Return the number of buckets currently allocated.
 size_t hash_map_bucket_count(const hash_map_t * hm);
