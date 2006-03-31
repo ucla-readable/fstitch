@@ -294,7 +294,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 	linfo->syncing = 1;
 
 	for (i = begin; i < end; i++) {
-		if (linfo->cg[num].dirty[WB_TIME]) {
+		if (linfo->cg[i].dirty[WB_TIME]) {
 			oldhead = head;
 			r = ufs_cg_wb_write_time(object, i, 0, oldhead);
 			if (r < 0)
@@ -306,7 +306,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			}
 			sync_count++;
 		}
-		if (linfo->cg[num].dirty[WB_CS]) {
+		if (linfo->cg[i].dirty[WB_CS]) {
 			oldhead = head;
 			r = ufs_cg_wb_write_cs(object, i, 0, oldhead);
 			if (r < 0)
@@ -318,7 +318,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			}
 			sync_count++;
 		}
-		if (linfo->cg[num].dirty[WB_ROTOR]) {
+		if (linfo->cg[i].dirty[WB_ROTOR]) {
 			oldhead = head;
 			r = ufs_cg_wb_write_rotor(object, i, 0, oldhead);
 			if (r < 0)
@@ -330,7 +330,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			}
 			sync_count++;
 		}
-		if (linfo->cg[num].dirty[WB_FROTOR]) {
+		if (linfo->cg[i].dirty[WB_FROTOR]) {
 			oldhead = head;
 			r = ufs_cg_wb_write_frotor(object, i, 0, oldhead);
 			if (r < 0)
@@ -342,7 +342,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			}
 			sync_count++;
 		}
-		if (linfo->cg[num].dirty[WB_IROTOR]) {
+		if (linfo->cg[i].dirty[WB_IROTOR]) {
 			oldhead = head;
 			r = ufs_cg_wb_write_irotor(object, i, 0, oldhead);
 			if (r < 0)
@@ -354,7 +354,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 			}
 			sync_count++;
 		}
-		if (linfo->cg[num].dirty[WB_FRSUM]) {
+		if (linfo->cg[i].dirty[WB_FRSUM]) {
 			oldhead = head;
 			r = ufs_cg_wb_write_frsum(object, i, 0, oldhead);
 			if (r < 0)
