@@ -165,12 +165,22 @@ bool hash_map_empty(const hash_map_t * hm)
 	return (hm->size == 0);
 }
 
+static void common_insert(hash_map_t * hm, chain_elt_t * elt)
+{
+	size_t ns;
+	hm->size++;
+	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) > hash_map_bucket_count(hm))
+	{
+		// (safe to ignore failure)
+		(void) hash_map_resize(hm, ns);
+	}
+}
+
 int hash_map_insert(hash_map_t * hm, void * k, void * v)
 {
 	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
-	size_t ns;
 
 	if (!head)
 	{
@@ -203,29 +213,46 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 	head->elt.key = k;
 	head->elt.val = v;
-	hm->size++;
 
-	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) > hash_map_bucket_count(hm))
-	{
-		// (safe to ignore failure)
-		(void) hash_map_resize(hm, ns);
-	}
+	common_insert(hm, head);
 
 	return 0;
 }
 
-void * hash_map_erase(hash_map_t * hm, const void * k)
+// Insert an elt into hm. elt must not already exist in hm.
+// This allows movement of an elt from one hm to another;
+// thus no malloc()/free() overhead and the elt maintains its memory location.
+static int insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
+{
+	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
+	const size_t elt_num = hash_ptr(elt->elt.key, vector_size(hm->tbl));
+	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+
+	if (head)
+	{
+		// Assume !chain_search_key(head, elt->elt.key)
+		elt->next = head;
+		head->prev = elt;
+	}
+
+	vector_elt_set(hm->tbl, elt_num, elt);
+	common_insert(hm, elt);
+	return 0;
+}
+
+// Erase the key-value pair for k from hm, return the element.
+static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 {
 	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+	chain_elt_t * k_chain;
 	size_t ns;
-	void * v;
 
 	if (!head)
 		return NULL;
 
-	chain_elt_t * k_chain = chain_search_key(head, k);
+	k_chain = chain_search_key(head, k);
 	if (!k_chain)
 		return NULL;
 
@@ -236,18 +263,29 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	if (k_chain->next)
 		k_chain->next->prev = k_chain->prev;
 
-	v = k_chain->elt.val;
+	k_chain->next = NULL;
+	k_chain->prev = NULL;
 
-	chain_elt_destroy(k_chain);
 	hm->size--;
 
-	
 	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) < hash_map_bucket_count(hm))
 	{
 		// (safe to ignore failure)
 		(void) hash_map_resize(hm, ns);
 	}
 
+	return k_chain;
+}
+
+void * hash_map_erase(hash_map_t * hm, const void * k)
+{
+	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
+	chain_elt_t * k_chain;
+	void * v;
+
+	k_chain = erase_chain_elt(hm, k);
+	v = k_chain->elt.val;
+	chain_elt_destroy(k_chain);
 	return v;
 }
 
@@ -362,8 +400,6 @@ size_t hash_map_bucket_count(const hash_map_t * hm)
 
 int hash_map_resize(hash_map_t * hm, size_t n)
 {
-	int r;
-
 	n = next_size(n);
 
 	// Avoid unnecessary work when there is no change in the number of buckets
@@ -381,18 +417,15 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 
 	// Rehash elements
 	size_t i;
-	chain_elt_t * elt;
 	for (i=0; i < vector_size(hm->tbl); i++)
 	{
-		elt = vector_elt(hm->tbl, i);
+		chain_elt_t * elt = vector_elt(hm->tbl, i);
 		while (elt)
 		{
-			if ((r = hash_map_insert(new_hm, elt->elt.key, elt->elt.val)) < 0)
-			{
-				hash_map_destroy(new_hm);
-				return r;
-			}
-			elt = elt->next;
+			chain_elt_t * next_elt = elt->next;
+			erase_chain_elt(hm, elt->elt.key);
+			insert_chain_elt(new_hm, elt);
+			elt = next_elt;
 		}
 	}
 
