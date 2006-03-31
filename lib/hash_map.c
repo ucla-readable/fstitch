@@ -65,7 +65,7 @@ static inline unsigned long next_size(size_t n)
 	const unsigned long * first = prime_list;
 	const unsigned long * last = prime_list + (int) num_primes;
 	const unsigned long * pos = first;
-	for (pos = first; *(pos + 1) < n && pos != last; pos++) ;
+	for (pos = first; *pos < n && pos != last; pos++) ;
 	return pos == last ? *(last - 1) : *pos;
 }
 
@@ -165,22 +165,12 @@ bool hash_map_empty(const hash_map_t * hm)
 	return (hm->size == 0);
 }
 
-static void common_insert(hash_map_t * hm, chain_elt_t * elt)
-{
-	size_t ns;
-	hm->size++;
-	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) > hash_map_bucket_count(hm))
-	{
-		// (safe to ignore failure)
-		(void) hash_map_resize(hm, ns);
-	}
-}
-
 int hash_map_insert(hash_map_t * hm, void * k, void * v)
 {
 	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+	size_t ns;
 
 	if (!head)
 	{
@@ -210,11 +200,15 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	}
 
 	vector_elt_set(hm->tbl, elt_num, head);
-
+	hm->size++;
 	head->elt.key = k;
 	head->elt.val = v;
 
-	common_insert(hm, head);
+	if (hm->auto_resize && (ns = next_size(hash_map_size(hm)) > hash_map_bucket_count(hm)))
+	{
+		// (safe to ignore failure)
+		(void) hash_map_resize(hm, hash_map_size(hm));
+	}
 
 	return 0;
 }
@@ -236,7 +230,7 @@ static int insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 	}
 
 	vector_elt_set(hm->tbl, elt_num, elt);
-	common_insert(hm, elt);
+	hm->size++;
 	return 0;
 }
 
@@ -247,7 +241,6 @@ static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 	chain_elt_t * k_chain;
-	size_t ns;
 
 	if (!head)
 		return NULL;
@@ -268,12 +261,6 @@ static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 
 	hm->size--;
 
-	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) < hash_map_bucket_count(hm))
-	{
-		// (safe to ignore failure)
-		(void) hash_map_resize(hm, ns);
-	}
-
 	return k_chain;
 }
 
@@ -282,10 +269,18 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
 	chain_elt_t * k_chain;
 	void * v;
+	size_t ns;
 
 	k_chain = erase_chain_elt(hm, k);
 	v = k_chain->elt.val;
 	chain_elt_destroy(k_chain);
+
+	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) > hash_map_bucket_count(hm))
+	{
+		// (safe to ignore failure)
+		(void) hash_map_resize(hm, ns);
+	}
+
 	return v;
 }
 
