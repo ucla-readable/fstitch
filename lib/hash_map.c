@@ -269,17 +269,23 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
 	chain_elt_t * k_chain;
 	void * v;
-	size_t ns;
 
 	k_chain = erase_chain_elt(hm, k);
 	v = k_chain->elt.val;
 	chain_elt_destroy(k_chain);
 
-	if (hm->auto_resize && (ns = next_size(hash_map_bucket_count(hm))) > hash_map_bucket_count(hm))
+#if 0
+	// Auto-shrink support is untested; we might enable this later should
+	// we find it may be helpful. This is not enabled because code that
+	// calls hash_map_erase() on every element to destroy the map
+	// would pay a time and max space penalty.
+	size_t ns = next_size(hash_map_size(hm));
+	if (hm->auto_resize && (next_size(ns + 1) < hash_map_bucket_count(hm)))
 	{
 		// (safe to ignore failure)
 		(void) hash_map_resize(hm, ns);
 	}
+#endif
 
 	return v;
 }
