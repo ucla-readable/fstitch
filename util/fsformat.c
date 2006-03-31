@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <time.h>
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/stat.h>
@@ -114,6 +115,7 @@ swizzlefile(struct File* f)
 		swizzle(&f->f_direct[i]);
 	swizzle(&f->f_indirect);
 	swizzle(&f->f_mtime);
+	swizzle(&f->f_atime);
 }
 
 void
@@ -337,7 +339,8 @@ gotit:
 			break;
 	}
 	f->f_size = nblk*BLKSIZE + n;
-	f->f_mtime = 0;
+	f->f_mtime = time(NULL);
+	f->f_atime = f->f_mtime;
 	putblk(dirb);
 	close(fd);
 }

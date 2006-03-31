@@ -38,9 +38,10 @@ struct JOSFS_File {
 	uint32_t f_indirect;		// indirect block
 
 	uint32_t f_mtime;		// file mtime
+	uint32_t f_atime;		// file atime
 
 	// Pad out to 256 bytes
-	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4 * JOSFS_NDIRECT - 8];
+	uint8_t f_pad[256 - JOSFS_MAXNAMELEN - 8 - 4 * JOSFS_NDIRECT - 12];
 };
 
 #define JOSFS_TYPE_FILE 0

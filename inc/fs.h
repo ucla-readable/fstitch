@@ -36,9 +36,10 @@ struct File {
 	uint32_t f_indirect;		/* indirect block */
 
 	uint32_t f_mtime;		/* file mtime */
+	uint32_t f_atime;		/* file atime */
 
 	/* Pad out to 256 bytes */
-	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 8];
+	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 12];
 };
 
 /* An inode block contains exactly BLKFILES 'struct File's */
