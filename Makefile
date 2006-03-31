@@ -1,8 +1,6 @@
 ifneq ($(BUILD),)
 
-# Just pass the target to the appropriate other Makefile
-%: Makefile.$(BUILD)
-	$(MAKE) -f Makefile.$(BUILD) $@
+include Makefile.$(BUILD)
 
 else
 
