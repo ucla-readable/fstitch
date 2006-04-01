@@ -2,6 +2,7 @@
 #define __KUDOS_KFS_CHDESC_H
 
 #include <lib/types.h>
+#include <lib/hash_map.h>
 
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
@@ -28,6 +29,7 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_WRITTEN   0x20 /* chdesc has been written to disk */
 #define CHDESC_FREEING   0x40 /* chdesc is being freed */
 #define CHDESC_DATA      0x80 /* user data change (not metadata) */
+#define CHDESC_BIT_NOOP 0x100 /* bit_changes NOOP chdesc */
 
 /* only effective in debugging mode */
 #define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */
@@ -50,6 +52,11 @@ struct chdesc {
 			uint16_t old_sum, new_sum;
 #endif
 		} byte;
+		struct {
+			/* used by bit_changes NOOPs */
+			hash_map_t * bit_changes;
+			void * hash_key;
+		} noop;
 	};
 	chmetadesc_t * dependencies;
 	chmetadesc_t * dependents;
@@ -117,6 +124,9 @@ void chdesc_reclaim_written(void);
 
 /* hidden functions for use in chdesc_util.c */
 int __ensure_bdesc_has_changes(bdesc_t * block);
+int __ensure_bdesc_has_overlaps(bdesc_t * block);
+chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
+chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);
 int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under);
 int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);

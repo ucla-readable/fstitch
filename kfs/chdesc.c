@@ -62,7 +62,6 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 static int ensure_bdesc_has_changes(bdesc_t * block)
 {
 	chdesc_t * chdesc;
-	
 	assert(block);
 	
 	if(block->ddesc->changes)
@@ -71,34 +70,92 @@ static int ensure_bdesc_has_changes(bdesc_t * block)
 		return 0;
 	}
 	
-	chdesc = malloc(sizeof(*chdesc));
+	chdesc = chdesc_create_noop(NULL, NULL);
 	if(!chdesc)
 		return -E_NO_MEM;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, NULL, NULL);
 	
-	chdesc->owner = NULL;
-	chdesc->block = NULL;
-	chdesc->type = NOOP;
-	chdesc->dependencies = NULL;
-	chdesc->dependents = NULL;
-	chdesc->weak_refs = NULL;
-	chdesc->free_prev = NULL;
-	chdesc->free_next = NULL;
-	chdesc->stamps = 0;
-	
-	/* NOOP chdescs start applied */
-	chdesc->flags = 0;
-	
-	if(chdesc_weak_retain(chdesc, &block->ddesc->changes))
+	if(chdesc_weak_retain(chdesc, &block->ddesc->changes) < 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, block->ddesc->changes);
-		free(chdesc);
+		chdesc_destroy(&chdesc);
 		return -E_NO_MEM;
 	}
 	
-	chdesc_free_push(chdesc);
+	return 0;
+}
+
+/* ensure bdesc->ddesc->overlaps has a noop chdesc */
+static int ensure_bdesc_has_overlaps(bdesc_t * block)
+{
+	chdesc_t * chdesc;
+	assert(block);
+	
+	if(block->ddesc->overlaps)
+	{
+		assert(block->ddesc->overlaps->type == NOOP);
+		return 0;
+	}
+	
+	chdesc = chdesc_create_noop(NULL, NULL);
+	if(!chdesc)
+		return -E_NO_MEM;
+	
+	if(chdesc_weak_retain(chdesc, &block->ddesc->overlaps) < 0)
+	{
+		chdesc_destroy(&chdesc);
+		return -E_NO_MEM;
+	}
 	
 	return 0;
+}
+
+/* ensure bdesc->ddesc->bit_changes[offset] has a noop chdesc */
+static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
+{
+	chdesc_t * chdesc;
+	hash_map_elt_t * elt;
+	void * key = (void *) (uint32_t) offset;
+	assert(block);
+	
+	chdesc = (chdesc_t *) hash_map_find_val(block->ddesc->bit_changes, key);
+	if(chdesc)
+	{
+		assert(chdesc->type == NOOP);
+		return chdesc;
+	}
+	
+	chdesc = chdesc_create_noop(NULL, NULL);
+	if(!chdesc)
+		return NULL;
+	
+	if(hash_map_insert(block->ddesc->bit_changes, key, chdesc) < 0)
+	{
+		chdesc_destroy(&chdesc);
+		return NULL;
+	}
+	elt = hash_map_find_eltp(block->ddesc->bit_changes, key);
+	assert(elt);
+	
+	/* we don't really need a flag for this, since we could just use the
+	 * noop.bit_changes field to figure it out... but that would be error-prone */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_BIT_NOOP);
+	chdesc->flags |= CHDESC_BIT_NOOP;
+	chdesc->noop.bit_changes = block->ddesc->bit_changes;
+	chdesc->noop.hash_key = key;
+	
+	if(chdesc_weak_retain(chdesc, (chdesc_t **) &elt->val) < 0)
+	{
+		hash_map_erase(block->ddesc->bit_changes, key);
+		chdesc_destroy(&chdesc);
+		return NULL;
+	}
+	
+	return chdesc;
+}
+
+/* get bdesc->ddesc->bit_changes[offset] */
+static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
+{
+	return hash_map_find_val(block->ddesc->bit_changes, (void *) (uint32_t) offset);
 }
 
 /* add a dependency to a change descriptor without checking for cycles */
@@ -206,6 +263,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(!chdesc_overlap_check(recent, original))
 		return 0;
 	
+	/* FIXME: if it overlaps completely, remove the original from ddesc->overlaps */
 	if(original->flags & CHDESC_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
@@ -215,37 +273,49 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	return chdesc_add_depend(recent, original);
 }
 
-static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, bool slip_under)
+static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * list, bool slip_under)
 {
-	chmetadesc_t * scan;
-	const chdesc_t * deps = block->ddesc->changes;
-	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block, slip_under);
-	
-	if(!deps)
-		return 0;
-	
-	for(scan = deps->dependencies; scan; scan = scan->next)
+	for(; list; list = list->next)
 	{
 		int r;
 		/* skip moved chdescs - they have just been added to this block
 		 * by chdesc_move() and already have proper overlap dependency
 		 * information with respect to the chdesc now arriving */
-		if(scan->desc->flags & CHDESC_MOVED)
+		if(list->desc->flags & CHDESC_MOVED)
 			continue;
 		/* "Slip Under" allows us to create change descriptors
 		 * underneath existing ones. (That is, existing chdescs will
 		 * depend on the new one, not the other way around.) This is a
 		 * hidden feature for internal use only. */
 		if(slip_under)
-			r = chdesc_overlap_attach(scan->desc, chdesc);
+			r = chdesc_overlap_attach(list->desc, chdesc);
 		else
-			r = chdesc_overlap_attach(chdesc, scan->desc);
+			r = chdesc_overlap_attach(chdesc, list->desc);
 		if(r < 0)
 			return r;
 	}
-	
 	return 0;
+}
+
+static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, bool slip_under)
+{
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block, slip_under);
+	
+	if(chdesc->type == BIT)
+	{
+		chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->bit.offset);
+		if(bit_changes)
+		{
+			int r = __chdesc_overlap_multiattach_slip(chdesc, bit_changes->dependencies, slip_under);
+			if(r < 0)
+				return r;
+		}
+	}
+	
+	if(!block->ddesc->overlaps)
+		return 0;
+	
+	return __chdesc_overlap_multiattach_slip(chdesc, block->ddesc->overlaps->dependencies, slip_under);
 }
 
 static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
@@ -260,6 +330,33 @@ int __ensure_bdesc_has_changes(bdesc_t * block)
 }
 #else
 	__attribute__ ((alias("ensure_bdesc_has_changes")));
+#endif
+
+int __ensure_bdesc_has_overlaps(bdesc_t * block)
+#if defined(__MACH__)
+{
+	return ensure_bdesc_has_overlaps(block);
+}
+#else
+	__attribute__ ((alias("ensure_bdesc_has_overlaps")));
+#endif
+
+chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
+#if defined(__MACH__)
+{
+	return ensure_bdesc_has_bit_changes(block, offset);
+}
+#else
+	__attribute__ ((alias("ensure_bdesc_has_bit_changes")));
+#endif
+
+chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset)
+#if defined(__MACH__)
+{
+	return chdesc_bit_changes(block, offset);
+}
+#else
+	__attribute__ ((alias("chdesc_bit_changes")));
 #endif
 
 int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
@@ -328,6 +425,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor)
 {
 	chdesc_t * chdesc;
+	chdesc_t * bit_changes;
 	int r;
 	
 	chdesc = malloc(sizeof(*chdesc));
@@ -362,6 +460,10 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	if((r = ensure_bdesc_has_changes(block)) < 0)
 		goto error;
 	if((r = chdesc_add_depend_fast(block->ddesc->changes, chdesc)) < 0)
+		goto error;
+	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
+		goto error;
+	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
 		goto error;
 	
 	/* make sure our block sticks around */
@@ -420,6 +522,11 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		free(chdescs);
 		return r;
 	}
+	if((r = ensure_bdesc_has_overlaps(block)) < 0)
+	{
+		free(chdescs);
+		return r;
+	}
 	
 	for(i = 0; i != count; i++)
 	{
@@ -474,6 +581,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
+		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
+			goto destroy;
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
 		/* but we should check to make sure *head has not already been written */
@@ -544,6 +653,11 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		free(chdescs);
 		return r;
 	}
+	if((r = ensure_bdesc_has_overlaps(block)) < 0)
+	{
+		free(chdescs);
+		return r;
+	}
 	
 	for(i = 0; i != count; i++)
 	{
@@ -587,6 +701,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
+		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
+			goto destroy;
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
 		/* but we should check to make sure *head has not already been written */
@@ -655,6 +771,11 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		free(chdescs);
 		return r;
 	}
+	if((r = ensure_bdesc_has_overlaps(block)) < 0)
+	{
+		free(chdescs);
+		return r;
+	}
 	
 	for(i = 0; i != count; i++)
 	{
@@ -698,6 +819,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
+		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
+			goto destroy;
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
 		/* but we should check to make sure *head has not already been written */
@@ -1033,6 +1156,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	
 	if((*chdesc)->dependencies)
 	{
+		chdesc_t * bit_changes;
 		/* We are trying to satisfy a chdesc with dependencies, which
 		 * can happen if we have modules generating out-of-order chdescs
 		 * but no write-back caches. We need to convert it to a NOOP so
@@ -1050,11 +1174,18 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 					free((*chdesc)->byte.data);
 					(*chdesc)->byte.data = NULL;
 				}
-				/* fall through */
-			case NOOP:
-			case BIT:
+				chdesc_remove_depend((*chdesc)->block->ddesc->overlaps, *chdesc);
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
+				break;
+			case BIT:
+				bit_changes = chdesc_bit_changes((*chdesc)->block, (*chdesc)->bit.offset);
+				assert(bit_changes);
+				chdesc_remove_depend(bit_changes, *chdesc);
+				(*chdesc)->type = NOOP;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
+				/* fall through */
+			case NOOP:
 				break;
 			default:
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
@@ -1084,11 +1215,13 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		
 		/* we don't need the data in byte change descriptors anymore */
 		if((*chdesc)->type == BYTE)
+		{
 			if((*chdesc)->byte.data)
 			{
 				free((*chdesc)->byte.data);
 				(*chdesc)->byte.data = NULL;
 			}
+		}
 		
 		/* make sure we're not already destroying this chdesc */
 		if(!((*chdesc)->flags & CHDESC_FREEING))
@@ -1099,6 +1232,19 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	}
 	
 	chdesc_weak_collect(*chdesc);
+	
+	if((*chdesc)->type == NOOP)
+	{
+		if((*chdesc)->flags & CHDESC_BIT_NOOP)
+		{
+			assert((*chdesc)->noop.bit_changes);
+			/* it should already be NULL from the weak reference */
+			assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
+			hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_BIT_NOOP);
+			(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
+		}
+	}
 	
 	*chdesc = NULL;
 	return 0;
@@ -1200,8 +1346,16 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		case BYTE:
 			if((*chdesc)->byte.data)
 				free((*chdesc)->byte.data);
-			/* fall through */
+			break;
 		case NOOP:
+			if((*chdesc)->flags & CHDESC_BIT_NOOP)
+			{
+				assert((*chdesc)->noop.bit_changes);
+				/* it should already be NULL from the weak reference */
+				assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
+				hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
+			}
+			/* fall through */
 		case BIT:
 			break;
 		default:

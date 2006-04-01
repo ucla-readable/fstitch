@@ -1,5 +1,6 @@
 #include <inc/error.h>
 #include <lib/kdprintf.h>
+#include <lib/hash_map.h>
 #include <lib/panic.h>
 #include <lib/assert.h>
 #include <lib/stdio.h>
@@ -47,6 +48,14 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		free(bdesc);
 		return NULL;
 	}
+	bdesc->ddesc->bit_changes = hash_map_create();
+	if(!bdesc->ddesc->bit_changes)
+	{
+		free(bdesc->ddesc->data);
+		free(bdesc->ddesc);
+		free(bdesc);
+		return NULL;
+	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->number = number;
@@ -56,6 +65,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->count = count;
 	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->changes = NULL;
+	bdesc->ddesc->overlaps = NULL;
 	bdesc->ddesc->manager = NULL;
 	bdesc->ddesc->managed_number = 0;
 	bdesc->ddesc->length = length;
@@ -103,7 +113,7 @@ void bdesc_release(bdesc_t ** bdesc)
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ddesc->ref_count);
 	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): block 0x%08x had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): block %p had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
 		(*bdesc)->ref_count = (*bdesc)->ar_count;
 	}
@@ -113,13 +123,18 @@ void bdesc_release(bdesc_t ** bdesc)
 		if(!(*bdesc)->ddesc->ref_count)
 		{
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
-			if((*bdesc)->ddesc->changes)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+			if((*bdesc)->ddesc->changes || (*bdesc)->ddesc->overlaps)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+			hash_map_destroy((*bdesc)->ddesc->bit_changes);
 			if((*bdesc)->ddesc->manager)
 				blockman_remove((*bdesc)->ddesc);
 			free((*bdesc)->ddesc->data);
+			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
 			free((*bdesc)->ddesc);
 		}
+		memset(*bdesc, 0, sizeof(**bdesc));
 		free(*bdesc);
 	}
 	/* released, so set pointer to NULL */
@@ -131,7 +146,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 {
 	if(bdesc->ar_count == bdesc->ref_count)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc 0x%08x autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc %p autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
 		return bdesc;
 	}
 	if(!bdesc->ar_count++)
@@ -209,9 +224,4 @@ int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc)
 				ar_count += scan->ar_count;
 	}
 	return ar_count;
-}
-
-int bdesc_blockno_compare(const void * a, const void * b)
-{
-	return (*(bdesc_t **) a)->number - (*(bdesc_t **) b)->number;
 }

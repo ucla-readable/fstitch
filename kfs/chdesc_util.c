@@ -65,6 +65,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
  * set on the change descriptor if the destination block is non-NULL. */
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
+	chdesc_t * bit_changes = NULL;
 	uint16_t * offset;
 	int r;
 	
@@ -100,10 +101,40 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 		r = __ensure_bdesc_has_changes(destination);
 		if(r < 0)
 			return r;
-		
 		r = __chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
 		if(r < 0)
 			return r;
+		
+		if(chdesc->type == BYTE)
+		{
+			r = __ensure_bdesc_has_overlaps(destination);
+			if(r < 0)
+			{
+				chdesc_remove_depend(destination->ddesc->changes, chdesc);
+				return r;
+			}
+			r = __chdesc_add_depend_fast(destination->ddesc->overlaps, chdesc);
+			if(r < 0)
+			{
+				chdesc_remove_depend(destination->ddesc->changes, chdesc);
+				return r;
+			}
+		}
+		else if(chdesc->type == BIT)
+		{
+			bit_changes = __ensure_bdesc_has_bit_changes(destination, *offset - source_offset);
+			if(!bit_changes)
+			{
+				chdesc_remove_depend(destination->ddesc->changes, chdesc);
+				return r;
+			}
+			r = __chdesc_add_depend_fast(bit_changes, chdesc);
+			if(r < 0)
+			{
+				chdesc_remove_depend(destination->ddesc->changes, chdesc);
+				return r;
+			}
+		}
 		
 		/* set CHDESC_MOVED here to prevent trying to overlap attach to ourselves */
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_MOVED);
@@ -126,6 +157,10 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_MOVED);
 			chdesc->flags &= ~CHDESC_MOVED;
 			chdesc_remove_depend(destination->ddesc->changes, chdesc);
+			if(chdesc->type == BYTE)
+				chdesc_remove_depend(destination->ddesc->overlaps, chdesc);
+			else if(chdesc->type == BIT)
+				chdesc_remove_depend(bit_changes, chdesc);
 			return r;
 		}
 	}
@@ -135,6 +170,13 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	if(chdesc->block)
 	{
 		chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
+		if(chdesc->type == BYTE)
+			chdesc_remove_depend(chdesc->block->ddesc->overlaps, chdesc);
+		else if(chdesc->type == BIT)
+		{
+			bit_changes = __chdesc_bit_changes(chdesc->block, chdesc->bit.offset + source_offset);
+			chdesc_remove_depend(bit_changes, chdesc);
+		}
 		bdesc_release(&chdesc->block);
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
@@ -385,6 +427,8 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 	chdesc_t * tail = NULL;
 	chdesc_t ** descs;
 	
+	panic("This function needs to be updated to work with ddesc->overlaps and ddesc->bit_changes");
+	
 	if(count < 2)
 		return -E_INVAL;
 	
@@ -548,6 +592,8 @@ int chdesc_split(chdesc_t * original, int count)
 	chdesc_t * tail = NULL;
 	chdesc_t ** descs;
 	
+	panic("This function needs to be updated to work with ddesc->overlaps and ddesc->bit_changes");
+	
 	if(count < 2)
 		return -E_INVAL;
 	
@@ -638,6 +684,8 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 	void * data;
 	chmetadesc_t * meta;
 	chdesc_t * tail;
+	
+	panic("This function needs to be updated to work with ddesc->overlaps and ddesc->bit_changes");
 	
 	/* we need at least 2 change descriptors */
 	if(count < 1)

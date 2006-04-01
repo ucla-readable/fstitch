@@ -2,6 +2,7 @@
 #define __KUDOS_KFS_BDESC_H
 
 #include <lib/types.h>
+#include <lib/hash_map.h>
 
 struct bdesc;
 typedef struct bdesc bdesc_t;
@@ -17,6 +18,8 @@ struct datadesc {
 	uint8_t * data;
 	uint32_t ref_count;
 	chdesc_t * changes;
+	chdesc_t * overlaps;
+	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;
 	uint16_t length;
@@ -61,8 +64,5 @@ unsigned int bdesc_autorelease_pool_depth(void);
 
 /* scan the autorelease pool stack and return the total ar_count of a ddesc */
 int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc);
-
-/* compares two bdescs' blocknos for qsort */
-int bdesc_blockno_compare(const void * a, const void * b);
 
 #endif /* __KUDOS_KFS_BDESC_H */
