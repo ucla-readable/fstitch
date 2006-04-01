@@ -6,8 +6,8 @@
 #endif
 
 /* The following operations change the state of opgroups:
- * C) Add dependents    W) Write data (i.e. engage)
- * R) Release           T) Add dependencies
+ * T) Add dependents    W) Write data (i.e. engage)
+ * R) Release           C) Add dependencies
  * 
  * NOTICE: If you read any of this paragraph, read all of it.
  * Of these, adding dependents and releasing may always be performed. However,
@@ -22,28 +22,28 @@
  * adding dependents may always be performed.)
  * 
  * The following table shows the possible states and what operations are valid.
- * Notice that each of C, R, W, and T above sets a bit in the state of an
+ * Notice that each of T, R, W, and C above sets a bit in the state of an
  * opgroup. Adding a dependency means that the opgroup now has dependencies,
  * releasing an opgroup means it is now released, etc.
  * 
- * C R W T  Can do: [ (W) means we do not allow this now, but plan to when we
+ * T R W C  Can do: [ (W) means we do not allow this now, but plan to when we
  * -------            work out how to hide changes from other clients. ]
- * 0 0 0 0   C   R  (W)  T
- * 0 0 0 1   C   R  (W)  T
- * 0 0 1 0   C   R   W   T  <--- initially, these states cannot exist due to (W)
- * 0 0 1 1   C   R   W   T  <-/
- * 0 1 0 0   C   R   W
- * 0 1 0 1   C   R   W
- * 0 1 1 0   C   R   W
- * 0 1 1 1   C   R   W
- * 1 0 0 0   C   R       T  <--- these are "noop" opgroups
- * 1 0 0 1   C   R       T  <-/
- * 1 0 1 0   C   R       T  <--- initially, these states cannot exist due to (W)
- * 1 0 1 1   C   R       T  <-/
- * 1 1 0 0   C   R          <--- these are "noop" opgroups (the first is "dead")
- * 1 1 0 1   C   R          <-/
- * 1 1 1 0   C   R
- * 1 1 1 1   C   R
+ * 0 0 0 0   T   R  (W)  C
+ * 0 0 0 1   T   R  (W)  C
+ * 0 0 1 0   T   R   W   C  <--- initially, these states cannot exist due to (W)
+ * 0 0 1 1   T   R   W   C  <-/
+ * 0 1 0 0   T   R   W
+ * 0 1 0 1   T   R   W
+ * 0 1 1 0   T   R   W
+ * 0 1 1 1   T   R   W
+ * 1 0 0 0   T   R       C  <--- these are "noop" opgroups
+ * 1 0 0 1   T   R       C  <-/
+ * 1 0 1 0   T   R       C  <--- initially, these states cannot exist due to (W)
+ * 1 0 1 1   T   R       C  <-/
+ * 1 1 0 0   T   R          <--- these are "noop" opgroups (the first is "dead")
+ * 1 1 0 1   T   R          <-/
+ * 1 1 1 0   T   R
+ * 1 1 1 1   T   R
  *
  *
  * Valid operations for atomic opgroups:
