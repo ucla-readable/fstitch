@@ -33,7 +33,7 @@ $(OBJDIR)/lib/libopgroup.so: lib/kernel_opgroup.c
 $(OBJDIR)/user/%.o: user/%.c
 	@echo + cc[USER] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -c -o $@ $< -L$(OBJDIR)/lib
+	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/libopgroup.so
 	@echo + ld $@
