@@ -57,6 +57,9 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 
 	/* transfer the barrier's bottom chdescs on block to target_block.
 	 * this loop makes use of knowledge of how chdesc_move operates. */
+	/* WARNING: this loop reverses the order of the chdescs in the block
+	 *          NOOP's dependency list, which can cause big efficiency
+	 *          problems for the revision code! FIXME! */
 	chmetadesc = &block->ddesc->changes->dependencies;
 	while (block->ddesc->changes && *chmetadesc)
 	{
@@ -174,6 +177,9 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 		/* transfer the barrier's bottom chdescs on block to target_block.
 		 * this loop makes use of knowledge of how chdesc_move operates. */
+		/* WARNING: this loop reverses the order of the chdescs in the block
+		 *          NOOP's dependency list, which can cause big efficiency
+		 *          problems for the revision code! FIXME! */
 		chmetadesc = &block->ddesc->changes->dependencies;
 		while (block->ddesc->changes && *chmetadesc)
 		{
@@ -314,6 +320,9 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	
 	/* transfer the barrier's bottom chdescs on block to target_block.
 	 * this loop makes use of knowledge of how chdesc_duplicate operates. */
+	/* WARNING: this loop reverses the order of the chdescs in the block
+	 *          NOOP's dependency list, which can cause big efficiency
+	 *          problems for the revision code! FIXME! */
 	chmetadesc = &block->ddesc->changes->dependencies;
 	while(block->ddesc->changes && *chmetadesc)
 	{
