@@ -1342,7 +1342,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	}
 
 	if (f->f_type == TYPE_DIR) {
-		if (f->f_inode.di_nlink > 2) {
+		if (f->f_inode.di_nlink > 2 && !strcmp(name, "..")) {
 			r = -E_NOT_EMPTY;
 			goto ufs_remove_name_error;
 		}
@@ -1398,15 +1398,10 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	}
 
 	if (f->f_type == TYPE_DIR) {
-		// Decrement parent directory's link count
-		struct UFS_dinode dir_inode;
 		int cyl = f->f_num / super->fs_ipg;
 
-		r = read_inode(info, pfile->f_num, &dir_inode);
-		if (r < 0)
-			goto ufs_remove_name_error;
-		dir_inode.di_nlink--;
-		r = write_inode(info, pfile->f_num, dir_inode, head);
+		pfile->f_inode.di_nlink--;
+		r = write_inode(info, pfile->f_num, pfile->f_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 
