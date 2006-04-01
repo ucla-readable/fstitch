@@ -1,9 +1,9 @@
 #ifndef __KUDOS_KFS_OPGROUP_H
 #define __KUDOS_KFS_OPGROUP_H
 
-#include <lib/hash_map.h>
-
+#ifdef KFSD
 #include <kfs/chdesc.h>
+#endif
 
 /* The following operations change the state of opgroups:
  * C) Add dependents    W) Write data (i.e. engage)

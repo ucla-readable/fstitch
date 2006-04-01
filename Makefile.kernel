@@ -7,6 +7,8 @@ UTILDIR := $(BASE_OBJDIR)/util
 CTAGS	:= ctags
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Makefile.kernel\).mk
 
+BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so $(OBJDIR)/user/testopgroup
+
 ifeq ($(KERNELRELEASE),)
 KERNELRELEASE = $(shell uname -r)
 endif
@@ -15,7 +17,7 @@ ifeq ($(KERNELPATH),)
 KERNELPATH = /lib/modules/${KERNELRELEASE}/build
 endif
 
-all: kfs/kkfsd.ko tags TAGS
+all: $(BIN) tags TAGS
 
 kfs/kkfsd.ko: always
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
@@ -23,9 +25,23 @@ kfs/kkfsd.ko: always
 install: kfs/kkfsd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
 
+$(OBJDIR)/lib/libopgroup.so: lib/kernel_opgroup.c
+	@echo + cc[LIB] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -o $@ $< -shared
+
+$(OBJDIR)/user/%.o: user/%.c
+	@echo + cc[USER] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -c -o $@ $< -L$(OBJDIR)/lib
+
+$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/libopgroup.so
+	@echo + ld $@
+	$(V)$(CC) $(CFLAGS) -o $@ $@.o -L$(OBJDIR)/lib -lopgroup
+
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := kfs/kkfsd.ko
+TAGDEPS := $(BIN)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -39,6 +55,7 @@ TAGS: $(TAGDEPS)
 
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
+	rm -rf $(OBJDIR)/
 	rm -f tags TAGS
 
 .PHONY: all always install clean
