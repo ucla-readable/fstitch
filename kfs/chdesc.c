@@ -317,7 +317,7 @@ static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * l
 		/* skip moved chdescs - they have just been added to this block
 		 * by chdesc_move() and already have proper overlap dependency
 		 * information with respect to the chdesc now arriving */
-		if(list->desc->flags & CHDESC_MOVED)
+		if(list->desc->flags & CHDESC_MOVED || list->desc == chdesc)
 			continue;
 		/* "Slip Under" allows us to create change descriptors
 		 * underneath existing ones. (That is, existing chdescs will
@@ -605,12 +605,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
 		
-		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach(chdescs[i], block))
-			goto destroy;
-		
-		copied += chdescs[i]->byte.length;
-		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
 		    destroy:
@@ -620,10 +614,16 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 			goto destroy;
 		
+		/* make sure it is dependent upon any pre-existing chdescs */
+		if(chdesc_overlap_multiattach(chdescs[i], block))
+			goto destroy;
+		
 		/* we are creating all new chdescs, so we don't need to check for loops */
 		/* but we should check to make sure *head has not already been written */
 		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
 			goto destroy;
+		
+		copied += chdescs[i]->byte.length;
 	}
 	
 	/* failed to create the chdescs */
@@ -727,10 +727,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 		
-		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach(chdescs[i], block))
-			goto destroy;
-		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
 		    destroy:
@@ -738,6 +734,10 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 			break;
 		}
 		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
+			goto destroy;
+		
+		/* make sure it is dependent upon any pre-existing chdescs */
+		if(chdesc_overlap_multiattach(chdescs[i], block))
 			goto destroy;
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
@@ -845,10 +845,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 		
-		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
-			goto destroy;
-		
 		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
 		{
 		    destroy:
@@ -856,6 +852,10 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 			break;
 		}
 		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
+			goto destroy;
+		
+		/* make sure it is dependent upon any pre-existing chdescs */
+		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
 			goto destroy;
 		
 		/* we are creating all new chdescs, so we don't need to check for loops */
