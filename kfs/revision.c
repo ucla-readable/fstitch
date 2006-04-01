@@ -126,7 +126,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	for(;;)
 	{
 		int again = 0;
-		for(i = 0; i != count; i++)
+		for(i = count - 1; i >= 0; i--)
 		{
 			/* already rolled forward? */
 			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
