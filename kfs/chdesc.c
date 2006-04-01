@@ -209,6 +209,7 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 }
 
 /* note that we don't check to see if these chdescs are for the same ddesc or not */
+/* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
 int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 {
 	uint16_t a_start, a_len;
@@ -221,7 +222,16 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 	
 	/* two bit chdescs overlap if they modify the same bits */
 	if(a->type == BIT && b->type == BIT)
-		return a->bit.offset == b->bit.offset && (a->bit.xor & b->bit.xor);
+	{
+		uint32_t shared;
+		if(a->bit.offset != b->bit.offset)
+			return 0;
+		shared = a->bit.xor & b->bit.xor;
+		if(!shared)
+			return 0;
+		/* check for complete overlap */
+		return (shared == b->bit.offset) ? 2 : 1;
+	}
 	
 	if(a->type == BIT)
 	{
@@ -247,12 +257,16 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 	start = b_start;
 	end = start + b_len + a_len;
 	tag = a_start + a_len;
-	return tag > start && end > tag;
+	if(tag <= start || end <= tag)
+		return 0;
+	return (a_start <= b_start && start + b_len <= tag) ? 2 : 1;
 }
 
 /* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
 static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 {
+	int r, overlap;
+	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_ATTACH, recent, original);
 	
 	/* if either is a NOOP chdesc, warn about it */
@@ -260,17 +274,39 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 	
 	/* if they don't overlap, we are done */
-	if(!chdesc_overlap_check(recent, original))
+	overlap = chdesc_overlap_check(recent, original);
+	if(!overlap)
 		return 0;
 	
-	/* FIXME: if it overlaps completely, remove the original from ddesc->overlaps */
 	if(original->flags & CHDESC_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
 		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
 		return -E_BUSY;
 	}
-	return chdesc_add_depend(recent, original);
+	
+	r = chdesc_add_depend(recent, original);
+	if(r < 0)
+		return r;
+	
+	/* if it overlaps completely, remove original from ddesc->overlaps or ddesc->bit_changes */
+	if(overlap == 2)
+	{
+		if(original->type == BYTE)
+			chdesc_remove_depend(original->block->ddesc->overlaps, original);
+		else if(original->type == BIT)
+		{
+			chdesc_t * bit_changes = chdesc_bit_changes(original->block, original->bit.offset);
+			assert(bit_changes);
+			chdesc_remove_depend(bit_changes, original);
+		}
+		else
+			kdprintf(STDERR_FILENO, "Complete overlap of unhandled chdesc type!\n");
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, recent, CHDESC_OVERLAP);
+		recent->flags |= CHDESC_OVERLAP;
+	}
+	
+	return 0;
 }
 
 static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * list, bool slip_under)
@@ -1070,12 +1106,12 @@ int chdesc_apply(chdesc_t * chdesc)
 				return -E_INVAL;
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
@@ -1104,12 +1140,12 @@ int chdesc_rollback(chdesc_t * chdesc)
 				return -E_INVAL;
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc 0x%08x is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
@@ -1165,7 +1201,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc 0x%08x of type %d with dependencies!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc %p of type %d with dependencies!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
 		switch((*chdesc)->type)
 		{
 			case BYTE:
@@ -1317,7 +1353,11 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	{
 		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: 0x%08x!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+		{
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+			if((*chdesc)->flags & CHDESC_OVERLAP)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying completely overlapping unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+		}
 		else if(free_head == *chdesc || (*chdesc)->free_prev)
 		{
 			assert(!(*chdesc)->dependencies);

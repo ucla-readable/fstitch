@@ -30,6 +30,7 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_FREEING   0x40 /* chdesc is being freed */
 #define CHDESC_DATA      0x80 /* user data change (not metadata) */
 #define CHDESC_BIT_NOOP 0x100 /* bit_changes NOOP chdesc */
+#define CHDESC_OVERLAP  0x200 /* overlaps another chdesc completely */
 
 /* only effective in debugging mode */
 #define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */
