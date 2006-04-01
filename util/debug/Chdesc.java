@@ -18,6 +18,7 @@ public class Chdesc
 	public static final int FLAG_WRITTEN = 0x20;
 	public static final int FLAG_FREEING = 0x40;
 	public static final int FLAG_DATA = 0x80;
+	public static final int FLAG_BIT_NOOP = 0x100;
 	public static final int FLAG_DBWAIT = 0x8000;
 	
 	public final int address, opcode;
@@ -444,6 +445,8 @@ public class Chdesc
 			names += " | FREEING";
 		if((flags & FLAG_DATA) != 0)
 			names += " | DATA";
+		if((flags & FLAG_BIT_NOOP) != 0)
+			names += " | BIT_NOOP";
 		if((flags & FLAG_DBWAIT) != 0)
 			names += " | DBWAIT";
 		names += " = " + SystemState.hex(flags);
