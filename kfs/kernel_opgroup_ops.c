@@ -7,7 +7,6 @@
 #include <kfs/opgroup.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ioctl.h>
-#include <kfs/kernel_opgroup_scopes.h>
 #include <kfs/kernel_opgroup_ops.h>
 
 
@@ -22,7 +21,6 @@ int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsigned int 
 		return -E_FAULT;
 
 	kfsd_enter();
-	opgroup_scope_set_current(process_opgroup_scope(current->pid));
 	if (cmd_args.opgroup_a >= 0)
 		opgroup_a = opgroup_lookup(cmd_args.opgroup_a);
 	if (cmd_args.opgroup_b >= 0)
@@ -55,7 +53,6 @@ int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsigned int 
 			r = -ENOTTY;
 	}
 
-	opgroup_scope_set_current(NULL);
 	kfsd_leave(1);
 
 	return r;

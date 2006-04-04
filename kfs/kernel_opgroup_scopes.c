@@ -1,17 +1,24 @@
 #include <inc/error.h>
 #include <lib/hash_map.h>
+#include <lib/stdio.h>
 #include <kfs/kfsd.h>
+#include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_scopes.h>
 
 static hash_map_t * scope_map = NULL;
 
 
-opgroup_scope_t * process_opgroup_scope(pid_t pid)
+opgroup_scope_t * process_opgroup_scope(const struct task_struct * task)
 {
-	opgroup_scope_t * scope = hash_map_find_val(scope_map, (void *) pid);
+	opgroup_scope_t * scope;
+
+	if (task == kfsd_task)
+		return NULL;
+
+	scope = hash_map_find_val(scope_map, task);
 	if (!scope && (scope = opgroup_scope_create()))
 	{
-		if (hash_map_insert(scope_map, (void *) pid, scope) < 0)
+		if (hash_map_insert(scope_map, (void *) task, scope) < 0)
 		{
 			opgroup_scope_destroy(scope);
 			scope = NULL;

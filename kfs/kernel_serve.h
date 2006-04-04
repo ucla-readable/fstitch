@@ -7,12 +7,17 @@
 #include <lib/assert.h>
 #include <kfs/cfs.h>
 #include <kfs/sched.h>
+#include <kfs/opgroup.h>
+#include <kfs/kernel_opgroup_scopes.h>
 
 int kernel_serve_add_mount(const char * path, CFS_t * cfs);
 
 #define kfsd_add_mount(p, c) kernel_serve_add_mount(p, c)
 
 int kernel_serve_init(void);
+
+struct task_struct;
+extern struct task_struct * kfsd_task;
 
 /* Linux doesn't like us scheduling while we hold a lock. We want to be able to
  * do it anyway, so we build a spinlock out of a spinlock. While we're at it,
@@ -40,6 +45,7 @@ static inline void kfsd_enter(void)
 			kfsd_global_lock.locked = 1;
 			kfsd_global_lock.process = current->pid;
 			spin_unlock(&kfsd_global_lock.lock);
+			opgroup_scope_set_current(process_opgroup_scope(current));
 			return;
 		}
 		spin_unlock(&kfsd_global_lock.lock);
@@ -57,6 +63,7 @@ static inline void kfsd_leave(int cleanup)
 {
 	assert(kfsd_global_lock.locked);
 	assert(kfsd_global_lock.process == current->pid);
+	opgroup_scope_set_current(NULL);
 	if(cleanup)
 		sched_run_cleanup();
 	kfsd_global_lock.process = 0;

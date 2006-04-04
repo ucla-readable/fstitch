@@ -21,6 +21,7 @@
 #include <kfs/kfsd_init.h>
 
 #ifdef __KERNEL__
+struct task_struct * kfsd_task;
 struct stealth_lock kfsd_global_lock;
 #endif
 
@@ -184,6 +185,7 @@ static int kfsd_thread(void * thunk)
 {
 	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
 	daemonize("kkfsd");
+	kfsd_task = current;
 	spin_lock_init(&kfsd_global_lock.lock);
 	kfsd_global_lock.locked = 0;
 	kfsd_global_lock.process = 0;
