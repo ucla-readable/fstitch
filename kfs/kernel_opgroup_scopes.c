@@ -122,8 +122,6 @@ int kernel_opgroup_scopes_init(void)
 
 #else
 
-#warning This Linux kernel does not have KudOS support; opgroups will not work!
-
 opgroup_scope_t * process_opgroup_scope(const struct task_struct * task)
 {
 	return NULL;

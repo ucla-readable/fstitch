@@ -1,5 +1,11 @@
+#include <kfs/kernel_opgroup_ops.h>
+
+#include <linux/config.h>
+
+#ifdef CONFIG_KUDOS_PROC
 #include <linux/blkdev.h>
 #include <linux/spinlock.h>
+
 #include <inc/error.h>
 #include <lib/assert.h>
 #include <lib/stdio.h>
@@ -7,10 +13,9 @@
 #include <kfs/opgroup.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ioctl.h>
-#include <kfs/kernel_opgroup_ops.h>
 
 
-int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsigned int cmd, unsigned long arg)
+static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsigned int cmd, unsigned long arg)
 {
 	opgroup_ioctl_cmd_t cmd_args;
 	opgroup_t * opgroup_a = NULL;
@@ -130,3 +135,13 @@ int kernel_opgroup_ops_init(void)
 
 	return 0;
 }
+
+#else
+
+int kernel_opgroup_ops_init(void)
+{
+	/* a message is printed that there is no support in kernel_opgroup_scopes_init() */
+	return 0;
+}
+
+#endif

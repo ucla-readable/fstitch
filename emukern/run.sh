@@ -37,13 +37,15 @@ date \`date +%m%d%H%M%Y.%S -r /mnt/kkfsd.tar*\` > /dev/null
 echo -n "Extracting CD image... "
 #tar xzf /mnt/kkfsd.tar.gz
 tar xf /mnt/kkfsd.tar
-mknod /dev/opgroup b 223 0
 echo "done."
 cat > init.sh << NEOF
 #!/bin/bash
 umount /mnt
 insmod kfs/kkfsd.ko
 [ -f /proc/kkfsd_debug ] && (cat /proc/kkfsd_debug | nc 10.0.2.2 15166) &
+if grep -q opgroup /proc/devices; then
+[ -f /dev/opgroup ] || mknod /dev/opgroup b 223 0
+chmod 666 /dev/opgroup; fi
 mount kfs:/ /mnt -t kfs
 mkdir /mnt/dev
 mount kfs:/dev /mnt/dev -t kfs
