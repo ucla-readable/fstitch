@@ -28,6 +28,8 @@ KKFSD_KFS_OBJS := \
               kfsd_init.o \
               debug.o \
               kernel_serve.o \
+              kernel_opgroup_ops.o \
+              kernel_opgroup_scopes.o \
               bdesc.o \
               blockman.o \
               chdesc.o \

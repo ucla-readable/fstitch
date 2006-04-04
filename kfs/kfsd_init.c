@@ -47,6 +47,8 @@
 #include <kfs/kfsd_init.h>
 #if defined(__KERNEL__)
 #include <kfs/kernel_serve.h>
+#include <kfs/kernel_opgroup_ops.h>
+#include <kfs/kernel_opgroup_scopes.h>
 #endif
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
@@ -151,6 +153,16 @@ int kfsd_init(int argc, char ** argv)
 	if ((r = kernel_serve_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "kernel_serve_init: %d\n", r);
+		return r;
+	}
+	if ((r = kernel_opgroup_ops_init()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "kernel_opgroup_ops_init: %d\n", r);
+		return r;
+	}
+	if ((r = kernel_opgroup_scopes_init()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "kernel_opgroup_scopes_init: %d\n", r);
 		return r;
 	}
 #else

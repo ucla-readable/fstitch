@@ -2,6 +2,8 @@
 #define __KUDOS_KFS_KERNEL_SERVE_H
 
 #include <linux/kernel.h>
+#include <asm/current.h>
+#include <linux/sched.h>
 #include <lib/assert.h>
 #include <kfs/cfs.h>
 #include <kfs/sched.h>

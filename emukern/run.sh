@@ -37,6 +37,7 @@ date \`date +%m%d%H%M%Y.%S -r /mnt/kkfsd.tar*\` > /dev/null
 echo -n "Extracting CD image... "
 #tar xzf /mnt/kkfsd.tar.gz
 tar xf /mnt/kkfsd.tar
+mknod /dev/opgroup b 223 0
 echo "done."
 cat > init.sh << NEOF
 #!/bin/bash
