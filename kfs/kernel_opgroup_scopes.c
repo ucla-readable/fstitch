@@ -16,17 +16,49 @@ static hash_map_t * scope_map = NULL;
 /* This also gets called for clone()! Check task->pid and task->tgid. */
 static void fork_handler(struct task_struct * child)
 {
-	printk("Fork, PID %d\n", child->pid);
+	opgroup_scope_t * parent_scope;
+	
+	kfsd_enter();
+	
+	parent_scope = hash_map_find_val(scope_map, child->real_parent);
+	if(parent_scope)
+	{
+		opgroup_scope_t * child_scope = opgroup_scope_copy(parent_scope);
+		if(child_scope)
+		{
+			int r = hash_map_insert(scope_map, child, child_scope);
+			if(r < 0)
+			{
+				opgroup_scope_destroy(child_scope);
+				goto fail;
+			}
+		}
+		else
+fail:
+			kdprintf(STDERR_FILENO, "error creating child scope for PID %d!\n", child->pid);
+	}
+	
+	kfsd_leave(0);
 }
 
 static void exec_handler(struct task_struct * process)
 {
-	printk("Exec, PID %d\n", process->pid);
 }
 
 static void exit_handler(struct task_struct * process)
 {
-	printk("Exit, PID %d\n", process->pid);
+	opgroup_scope_t * scope;
+	
+	kfsd_enter();
+	
+	scope = hash_map_find_val(scope_map, process);
+	if(scope)
+	{
+		hash_map_erase(scope_map, process);
+		opgroup_scope_destroy(scope);
+	}
+	
+	kfsd_leave(0);
 }
 
 opgroup_scope_t * process_opgroup_scope(const struct task_struct * task)
