@@ -3,6 +3,7 @@
 #include <lib/hash_map.h>
 #include <lib/panic.h>
 
+#include <kfs/sync.h>
 #include <kfs/journal_bd.h>
 #include <kfs/opgroup.h>
 
