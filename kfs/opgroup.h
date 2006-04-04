@@ -76,6 +76,7 @@ void opgroup_scope_set_current(opgroup_scope_t * scope);
 /* normal opgroup operations are relative to the current scope */
 
 opgroup_t * opgroup_create(int flags);
+int opgroup_sync(opgroup_t * opgroup);
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency);
 
 int opgroup_engage(opgroup_t * opgroup);
@@ -94,6 +95,7 @@ int opgroup_finish_head(chdesc_t * head);
 #else /* KFSD */
 
 opgroup_id_t opgroup_create(int flags);
+int opgroup_sync(opgroup_id_t opgroup);
 int opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency);
 
 int opgroup_engage(opgroup_id_t opgroup);

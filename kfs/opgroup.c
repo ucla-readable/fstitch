@@ -269,6 +269,12 @@ error_1:
 	return NULL;
 }
 
+int opgroup_sync(opgroup_t * opgroup)
+{
+	// TODO: sync just the needed opgroups
+	return kfs_sync();
+}
+
 int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 {
 	int r = 0;

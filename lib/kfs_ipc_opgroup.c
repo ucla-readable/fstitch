@@ -27,6 +27,12 @@ opgroup_create(int flags)
 }
 
 int
+opgroup_sync(opgroup_id_t opgroup)
+{
+	panic("opgroup_sync() not yet implemented for KudOS");
+}
+
+int
 opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency)
 {
 	envid_t fsid;
