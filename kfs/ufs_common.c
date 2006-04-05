@@ -175,7 +175,7 @@ int read_fragment_bitmap(struct lfs_info * info, uint32_t num)
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	cg = CALL(info->parts.p_cg, read, num / super->fs_ipg);
+	cg = CALL(info->parts.p_cg, read, num / super->fs_fpg);
 	if (!cg)
 		return -E_UNSPECIFIED;
 
