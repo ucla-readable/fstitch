@@ -1,0 +1,266 @@
+diff -u linux-2.6.15/drivers/Kconfig linux-2.6.15/drivers/Kconfig
+--- linux-2.6.15/drivers/Kconfig	2006-01-02 19:21:10.000000000 -0800
++++ linux-2.6.15/drivers/Kconfig	2006-04-04 18:55:41.000000000 -0700
+@@ -6,6 +6,8 @@
+ 
+ source "drivers/connector/Kconfig"
+ 
++source "drivers/kudos/Kconfig"
++
+ source "drivers/mtd/Kconfig"
+ 
+ source "drivers/parport/Kconfig"
+diff -u linux-2.6.15/drivers/Makefile linux-2.6.15/drivers/Makefile
+--- linux-2.6.15/drivers/Makefile	2006-01-02 19:21:10.000000000 -0800
++++ linux-2.6.15/drivers/Makefile	2006-04-04 18:55:41.000000000 -0700
+@@ -20,6 +20,8 @@
+ 
+ obj-$(CONFIG_CONNECTOR)		+= connector/
+ 
++obj-$(CONFIG_KUDOS_PROC)	+= kudos/
++
+ # i810fb and intelfb depend on char/agp/
+ obj-$(CONFIG_FB_I810)           += video/i810/
+ obj-$(CONFIG_FB_INTEL)          += video/intelfb/
+diff -u linux-2.6.15/drivers/kudos/Kconfig linux-2.6.15/drivers/kudos/Kconfig
+--- linux-2.6.15/drivers/kudos/Kconfig	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15/drivers/kudos/Kconfig	2006-04-04 18:55:41.000000000 -0700
+@@ -0,0 +1,5 @@
++config KUDOS_PROC
++	boolean "Provide process event hooks for KudOS"
++	---help---
++	  This option provides hooks for the KudOS kernel module to find out
++          about process events, which it needs to support opgroups.
+diff -u linux-2.6.15/drivers/kudos/Makefile linux-2.6.15/drivers/kudos/Makefile
+--- linux-2.6.15/drivers/kudos/Makefile	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15/drivers/kudos/Makefile	2006-04-04 18:55:41.000000000 -0700
+@@ -0,0 +1 @@
++obj-$(CONFIG_KUDOS_PROC)	+= kudos_proc.o
+diff -u linux-2.6.15/drivers/kudos/kudos_proc.c linux-2.6.15/drivers/kudos/kudos_proc.c
+--- linux-2.6.15/drivers/kudos/kudos_proc.c	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15/drivers/kudos/kudos_proc.c	2006-04-04 18:55:41.000000000 -0700
+@@ -0,0 +1,102 @@
++/*
++ * kudos_proc.c - provide process event hooks for KudOS
++ *
++ * Copyright (C) 2006 Regents of the University of California
++ * Based loosely on cn_proc.c by Matt Helsley
++ * 
++ * Copyright (C) 2005 Matt Helsley, IBM Corp.
++ * Based on cn_fork.c by Guillaume Thouvenin <guillaume.thouvenin@bull.net>
++ * Original copyright notice follows:
++ * Copyright (C) 2005 BULL SA.
++ *
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ */
++
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/init.h>
++#include <asm/atomic.h>
++
++#include <linux/kudos_proc.h>
++
++static atomic_t kudos_module_loaded = ATOMIC_INIT(0);
++static spinlock_t kudos_spinlock = SPIN_LOCK_UNLOCKED;
++static struct kudos_proc_ops * kudos_module = NULL;
++
++void kudos_fork_hook(struct task_struct * task)
++{
++	if(atomic_read(&kudos_module_loaded) < 1)
++		return;
++	
++	kudos_module->fork(task);
++}
++
++void kudos_exec_hook(struct task_struct * task)
++{
++	if(atomic_read(&kudos_module_loaded) < 1)
++		return;
++	
++	kudos_module->exec(task);
++}
++
++void kudos_exit_hook(struct task_struct * task)
++{
++	if(atomic_read(&kudos_module_loaded) < 1)
++		return;
++	
++	kudos_module->exit(task);
++}
++
++int kudos_register_module(struct kudos_proc_ops * ops)
++{
++	spin_lock(&kudos_spinlock);
++	
++	if(atomic_read(&kudos_module_loaded) > 0)
++	{
++		spin_unlock(&kudos_spinlock);
++		return -EBUSY;
++	}
++	
++	kudos_module = ops;
++	
++	atomic_inc(&kudos_module_loaded);
++	
++	spin_unlock(&kudos_spinlock);
++	
++	return 0;
++}
++
++int kudos_unregister_module(struct kudos_proc_ops * ops)
++{
++	spin_lock(&kudos_spinlock);
++	
++	if(atomic_read(&kudos_module_loaded) < 1 || kudos_module != ops)
++	{
++		spin_unlock(&kudos_spinlock);
++		return -EINVAL;
++	}
++	
++	atomic_dec(&kudos_module_loaded);
++	
++	kudos_module = NULL;
++	
++	spin_unlock(&kudos_spinlock);
++	
++	return 0;
++}
++
++EXPORT_SYMBOL(kudos_register_module);
++EXPORT_SYMBOL(kudos_unregister_module);
+diff -u linux-2.6.15/fs/exec.c linux-2.6.15/fs/exec.c
+--- linux-2.6.15/fs/exec.c	2006-01-02 19:21:10.000000000 -0800
++++ linux-2.6.15/fs/exec.c	2006-04-04 18:57:32.000000000 -0700
+@@ -49,6 +49,7 @@
+ #include <linux/rmap.h>
+ #include <linux/acct.h>
+ #include <linux/cn_proc.h>
++#include <linux/kudos_proc.h>
+ 
+ #include <asm/uaccess.h>
+ #include <asm/mmu_context.h>
+@@ -1092,6 +1093,7 @@
+ 				bprm->file = NULL;
+ 				current->did_exec = 1;
+ 				proc_exec_connector(current);
++				kudos_exec_hook(current);
+ 				return retval;
+ 			}
+ 			read_lock(&binfmt_lock);
+diff -u linux-2.6.15/include/linux/kudos_proc.h linux-2.6.15/include/linux/kudos_proc.h
+--- linux-2.6.15/include/linux/kudos_proc.h	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15/include/linux/kudos_proc.h	2006-04-04 18:55:41.000000000 -0700
+@@ -0,0 +1,61 @@
++/*
++ * kudos_proc.h - provide process event hooks for KudOS
++ *
++ * Copyright (C) 2006 Regents of the University of California
++ * Based loosely on cn_proc.h by Matt Helsley
++ * 
++ * Copyright (C) Matt Helsley, IBM Corp. 2005
++ * Based on cn_fork.h by Nguyen Anh Quynh and Guillaume Thouvenin
++ * Original copyright notice follows:
++ * Copyright (C) 2005 Nguyen Anh Quynh <aquynh@gmail.com>
++ * Copyright (C) 2005 Guillaume Thouvenin <guillaume.thouvenin@bull.net>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
++ */
++
++#ifndef KUDOS_PROC_H
++#define KUDOS_PROC_H
++
++#include <linux/config.h>
++
++#ifdef __KERNEL__
++
++#ifdef CONFIG_KUDOS_PROC
++
++struct task_struct;
++
++struct kudos_proc_ops {
++	void (*fork)(struct task_struct * child);
++	void (*exec)(struct task_struct * process);
++	void (*exit)(struct task_struct * process);
++};
++
++void kudos_fork_hook(struct task_struct * task);
++void kudos_exec_hook(struct task_struct * task);
++void kudos_exit_hook(struct task_struct * task);
++
++int kudos_register_module(struct kudos_proc_ops * ops);
++int kudos_unregister_module(struct kudos_proc_ops * ops);
++
++#else
++
++static inline void kudos_fork_hook(struct task_struct * task) {}
++static inline void kudos_exec_hook(struct task_struct * task) {}
++static inline void kudos_exit_hook(struct task_struct * task) {}
++
++#endif	/* CONFIG_KUDOS_PROC */
++
++#endif	/* __KERNEL__ */
++#endif	/* KUDOS_PROC_H */
+diff -u linux-2.6.15/kernel/exit.c linux-2.6.15/kernel/exit.c
+--- linux-2.6.15/kernel/exit.c	2006-01-02 19:21:10.000000000 -0800
++++ linux-2.6.15/kernel/exit.c	2006-04-04 18:58:41.000000000 -0700
+@@ -29,6 +29,7 @@
+ #include <linux/syscalls.h>
+ #include <linux/signal.h>
+ #include <linux/cn_proc.h>
++#include <linux/kudos_proc.h>
+ 
+ #include <asm/uaccess.h>
+ #include <asm/unistd.h>
+@@ -865,6 +866,7 @@
+ 
+ 	tsk->exit_code = code;
+ 	proc_exit_connector(tsk);
++	kudos_exit_hook(tsk);
+ 	exit_notify(tsk);
+ #ifdef CONFIG_NUMA
+ 	mpol_free(tsk->mempolicy);
+diff -u linux-2.6.15/kernel/fork.c linux-2.6.15/kernel/fork.c
+--- linux-2.6.15/kernel/fork.c	2006-01-02 19:21:10.000000000 -0800
++++ linux-2.6.15/kernel/fork.c	2006-04-04 19:00:23.000000000 -0700
+@@ -43,6 +43,7 @@
+ #include <linux/rmap.h>
+ #include <linux/acct.h>
+ #include <linux/cn_proc.h>
++#include <linux/kudos_proc.h>
+ 
+ #include <asm/pgtable.h>
+ #include <asm/pgalloc.h>
+@@ -1140,6 +1141,7 @@
+ 	total_forks++;
+ 	write_unlock_irq(&tasklist_lock);
+ 	proc_fork_connector(p);
++	kudos_fork_hook(p);
+ 	cpuset_fork(p);
+ 	retval = 0;
+ 
