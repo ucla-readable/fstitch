@@ -10,6 +10,7 @@
 #include <kfs/modman.h>
 #include <kfs/ufs_base.h>
 #include <kfs/ufs_common.h>
+#include <kfs/ufs_alloc_lastpos.h>
 #include <kfs/ufs_alloc_linear.h>
 #include <kfs/ufs_dirent_linear.h>
 #include <kfs/ufs_cg_wb.h>
@@ -1706,7 +1707,7 @@ LFS_t * ufs(BD_t * block_device)
 	info->ubd = block_device;
 	info->parts.base = lfs;
 	info->parts.p_super = ufs_super_wb(info); // Initialize first
-	info->parts.p_allocator = ufs_alloc_linear(info);
+	info->parts.p_allocator = ufs_alloc_lastpos(info);
 	info->parts.p_dirent = ufs_dirent_linear(info);
 	info->parts.p_cg = ufs_cg_wb(info);
 	assert(info->parts.p_allocator);

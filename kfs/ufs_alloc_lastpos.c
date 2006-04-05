@@ -1,0 +1,126 @@
+#include <lib/string.h>
+
+#include <kfs/ufs_alloc_lastpos.h>
+
+static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	static uint32_t num = 0;
+	uint32_t start;
+	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	// Find free block
+	for (start = num; num < super->fs_size / super->fs_frag; num++) {
+		r = read_block_bitmap(info, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns a block number
+	}
+
+	for (num = 0; num < start; num++) {
+		r = read_block_bitmap(info, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns a block number
+	}
+
+	return INVALID_BLOCK;
+}
+
+static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	static uint32_t num = 0;
+	uint32_t start;
+	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	// Find free fragment
+	for (start = num; num < super->fs_size; num++) {
+		r = read_fragment_bitmap(info, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns a fragment number
+	}
+
+	for (num = 0; num < start; num++) {
+		r = read_fragment_bitmap(info, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns a fragment number
+	}
+
+	return INVALID_BLOCK;
+}
+
+static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	static uint32_t num = 0;
+	uint32_t start;
+	int r;
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	// Find free inode
+	for (start = num; num < super->fs_ipg * super->fs_ncg; num++) {
+		r = read_inode_bitmap(info, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns an inode number
+	}
+
+	for (num = 0; num < start; num++) {
+		r = read_inode_bitmap(info, num);
+		if (r < 0)
+			return INVALID_BLOCK;
+		if (r == UFS_FREE)
+			return num; // returns an inode number
+	}
+
+	return INVALID_BLOCK;
+}
+
+static int ufs_alloc_lastpos_get_config(void * object, int level, char * string, size_t length)
+{
+	if (length >= 1)
+		string[0] = 0;
+	return 0;
+}
+
+static int ufs_alloc_lastpos_get_status(void * object, int level, char * string, size_t length)
+{
+	if (length >= 1)
+		string[0] = 0;
+	return 0;
+}
+
+static int ufs_alloc_lastpos_destroy(UFSmod_alloc_t * obj)
+{
+	free(OBJLOCAL(obj));
+	memset(obj, 0, sizeof(*obj));
+	free(obj);
+
+	return 0;
+}
+
+UFSmod_alloc_t * ufs_alloc_lastpos(struct lfs_info * info)
+{
+	UFSmod_alloc_t * obj;
+
+	if (!info)
+		return NULL;
+
+	obj = malloc(sizeof(*obj));
+	if (!obj)
+		return NULL;
+
+	UFS_ALLOC_INIT(obj, ufs_alloc_lastpos, info);
+	return obj;
+}
+
