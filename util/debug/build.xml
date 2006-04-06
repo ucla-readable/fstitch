@@ -35,6 +35,7 @@
 			srcdir="${src}"
 			destdir="${classes}"
 			source="1.4"
+			sourcepath=""
 			debug="on"
 			includes="**/*.java"
 			excludes="**/.svn/**"/>
