@@ -48,7 +48,7 @@ static int linux_bd_get_config(void * object, int level,
 		case CONFIG_NORMAL:
 		default:
 			snprintf(string, length, "%s: %d bytes x %d blocks", info->path,
-                                 info->blocksize, info->blockcount);
+			         info->blocksize, info->blockcount);
 	}
 	return 0;
 }
