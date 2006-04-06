@@ -234,20 +234,21 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 			(page_address(bio_iovec_idx(bio, i)->bv_page));
 
 		assert(p);
-		len = 4096;
-		if ((i+1) == bio->bi_vcnt) {
-			len = (private->count * info->blocksize) % 4096;
-			if (len == 0)
-				len = 4096;
+		if (bio->bi_rw == READ) {
+			len = 4096;
+			if ((i+1) == bio->bi_vcnt) {
+				len = (private->count * info->blocksize) % 4096;
+				if (len == 0)
+					len = 4096;
+			}
+
+			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
+
+			if (infty > 0) {
+				infty--;
+				dump_page(p, 256, info->blocksize * private->number);
+			}
 		}
-
-		memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
-
-		if (infty > 0) {
-			infty--;
-			dump_page(p, 256, info->blocksize * private->number);
-		}
-
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
 		bio_iovec_idx(bio, i)->bv_page = NULL;
 		bio_iovec_idx(bio, i)->bv_len = 0;
@@ -313,17 +314,113 @@ static int linux_bd_cancel_block(BD_t * object, uint32_t number)
 
 static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 {
+	DEFINE_WAIT(wait);
+	int waited = 0;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
+	struct bio *bio;
+	struct bio_vec *bv;
+	int vec_len;
+	int r;
+	int i;
+	struct linux_bio_private private;
+	static int infty = 10;
 	
-	if(block->ddesc->length != info->blocksize) {
-		panic("wrote block with bad length\n");
+	if((info->blocksize * block->count) != block->ddesc->length) {
+		panic("wrote block with bad length (%d bytes)\n",
+			  block->ddesc->length);
 		return -E_INVAL;
 	}
 	if (block->number >= info->blockcount) {
 		panic("wrote bad block number\n");
 		return -E_INVAL;
 	}
-	return -E_INVAL;
+
+	r = revision_tail_prepare(block, object);
+	if (r != 0) {
+		panic("revision_tail_prepare gave: %i\n", r);
+		return r;
+	}
+
+	vec_len = block->ddesc->length / 4096;
+	if (block->ddesc->length % 4096)
+		vec_len++;
+	assert(vec_len == 1);
+
+	bio = bio_alloc(GFP_KERNEL, vec_len);
+	if (!bio) {
+		printk(KERN_ERR "bio_alloc() failed()\n");
+		return -E_NO_MEM;
+	}
+	for (i = 0; i < vec_len; i++) {
+		bv = bio_iovec_idx(bio, i);
+		bv->bv_page = alloc_page(GFP_KERNEL | GFP_DMA);
+		if (!bv->bv_page) {
+			printk(KERN_ERR "alloc_page() failed\n");
+			return -E_NO_MEM;
+		}
+		// this memcpy always writes to the beginning of the page,
+		// which works fine if you just have one block, but is a
+		// problem if you have more. right now you can only pass one
+		// block to this function, so it's not a problem.
+		memcpy(page_address(bv->bv_page),
+			   block->ddesc->data,
+			   block->ddesc->length);
+		bv->bv_len = block->ddesc->length;
+		bv->bv_offset = 0;
+	}
+
+	spin_lock_init(&private.dma_done_lock);
+	spin_lock(&private.dma_done_lock);
+	private.dma_done = 0;
+	spin_unlock(&private.dma_done_lock);
+	private.info = info;
+	private.bdesc = block;
+	private.number = block->number;
+	private.count = block->count;
+
+	bio->bi_idx = 0;
+	bio->bi_vcnt = vec_len;
+	bio->bi_sector = block->number;
+	bio->bi_size = block->ddesc->length;
+	bio->bi_bdev = info->bdev;
+	bio->bi_rw = WRITE;
+	bio->bi_end_io = bio_end_io_fn;
+	bio->bi_private = &private;
+
+	spin_lock(&private.dma_done_lock);
+	private.dma_done = 0;
+	spin_unlock(&private.dma_done_lock);
+
+	generic_make_request(bio);
+
+	// wait for it to complete
+	printk(KERN_ERR "going to sleep!\n");
+	spin_lock(&private.dma_done_lock);
+	while (private.dma_done == 0) {
+		spin_unlock(&private.dma_done_lock);
+		if (infty > 0) {
+			infty--;
+			printk(KERN_ERR "dma not done. sleeping\n");
+		}
+		spin_lock(&info->wait_lock);
+		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
+		spin_unlock(&info->wait_lock);
+		schedule_timeout(500);
+		waited = 1;
+		spin_lock(&private.dma_done_lock);
+	}
+	spin_unlock(&private.dma_done_lock);
+	if (waited)
+		finish_wait(&info->waitq, &wait);
+	printk(KERN_ERR "woke up!\n");
+
+	r = revision_tail_acknowledge(block, object);
+	if (r != 0) {
+		panic("revision_tail_acknowledge gave error: %i\n", r);
+		return r;
+	}
+
+	return 0;
 }
 
 static int linux_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
