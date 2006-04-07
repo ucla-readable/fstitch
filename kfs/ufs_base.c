@@ -1014,7 +1014,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		*newino = inum;
 	}
 	else {
-		open_file = get_ufsfile(info->filemap, ln->f_num,  &ex);
+		open_file = get_ufsfile(info->filemap, ln->f_num, &ex);
 		if (!open_file)
 			goto allocate_name_exit;
 		assert(ex == 1);
@@ -1103,7 +1103,6 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	ufs_fdesc_t * new_pfdesc;
 	ufs_fdesc_t * oldf;
 	ufs_fdesc_t * newf;
-	ufs_fdesc_t deadf;
 	struct dirent entry;
 	uint32_t p;
 	int r, existing = 0, dir_offset;
@@ -1156,9 +1155,6 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		// File already exists
 		existing = 1;
 
-		// Save old info
-		memcpy(&deadf, newf, sizeof(ufs_fdesc_t));
-
 		p = dir_offset;
 		r = CALL(info->parts.p_dirent, get_dirent, new_pfdesc, &entry, sizeof(entry), &p);
 		if (r < 0)
@@ -1176,7 +1172,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	}
 	else {
 		// Link files together
-		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent,  newname, oldf->f_type, (fdesc_t *) oldf, &newino, head);
+		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent, newname, oldf->f_type, (fdesc_t *) oldf, &newino, head);
 		if (!newf) {
 			r = -E_UNSPECIFIED;
 			goto ufs_rename_exit3;
@@ -1184,8 +1180,8 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		assert(ino == newino);
 	}
 
-	newf->f_inode.di_nlink--;
-	r = write_inode(info, newf->f_num, newf->f_inode, head);
+	oldf->f_inode.di_nlink--;
+	r = write_inode(info, oldf->f_num, oldf->f_inode, head);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
@@ -1194,26 +1190,33 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		goto ufs_rename_exit4;
 
 	if (existing) {
-		uint32_t block, i, n = deadf.f_numfrags;
-		for (i = 0; i < n; i++) {
-			block = ufs_truncate_file_block(object, (fdesc_t *) &deadf, head);
-			if (block == INVALID_BLOCK) {
-				r = -E_UNSPECIFIED;
-				goto ufs_rename_exit4;
-			}
-			r = ufs_free_block(object, (fdesc_t *) &deadf, block, head);
-			if (r < 0)
-				goto ufs_rename_exit4;
-		}
-
-		memset(&deadf.f_inode, 0, sizeof(struct UFS_dinode));
-		r = write_inode(info, deadf.f_num, deadf.f_inode, head);
+		newf->f_inode.di_nlink--;
+		r = write_inode(info, newf->f_num, newf->f_inode, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
-		r = write_inode_bitmap(info, deadf.f_num, UFS_FREE, head);
-		if (r < 0)
-			goto ufs_rename_exit4;
+	   if (newf->f_inode.di_nlink == 0) {
+		   uint32_t block, i, n = newf->f_numfrags;
+		   for (i = 0; i < n; i++) {
+			   block = ufs_truncate_file_block(object, (fdesc_t *) newf, head);
+			   if (block == INVALID_BLOCK) {
+				   r = -E_UNSPECIFIED;
+				   goto ufs_rename_exit4;
+			   }
+			   r = ufs_free_block(object, (fdesc_t *) newf, block, head);
+			   if (r < 0)
+				   goto ufs_rename_exit4;
+		   }
+
+		   memset(&newf->f_inode, 0, sizeof(struct UFS_dinode));
+		   r = write_inode(info, newf->f_num, newf->f_inode, head);
+		   if (r < 0)
+			   goto ufs_rename_exit4;
+
+		   r = write_inode_bitmap(info, newf->f_num, UFS_FREE, head);
+		   if (r < 0)
+			   goto ufs_rename_exit4;
+	   }
 	}
 
 	r = 0;
@@ -1683,7 +1686,7 @@ LFS_t * ufs(BD_t * block_device)
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info;
 	LFS_t * lfs;
-   
+
 	if (DIRENT_MAXNAMELEN < UFS_MAXNAMELEN) {
 		printf("struct dirent is too small!\n");
 		return NULL;
