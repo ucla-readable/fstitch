@@ -503,6 +503,12 @@ int opgroup_abandon(opgroup_t ** opgroup)
 		return -E_BUSY;
 	if(!--state->opgroup->references)
 	{
+		if((*opgroup)->flags & OPGROUP_FLAG_ATOMIC)
+		{
+			assert(atomic_opgroup_exists);
+			atomic_opgroup_exists = 0;
+		}
+
 		/* no more references to this opgroup */
 		if(state->opgroup->tail_keep || !state->opgroup->is_released)
 			panic("Don't know how to roll back an abandoned opgroup!");
@@ -511,12 +517,6 @@ int opgroup_abandon(opgroup_t ** opgroup)
 		chdesc_weak_release(&state->opgroup->head);
 		chdesc_weak_release(&state->opgroup->tail);
 		free(state->opgroup);
-	}
-
-	if((*opgroup)->flags & OPGROUP_FLAG_ATOMIC)
-	{
-		assert(atomic_opgroup_exists);
-		atomic_opgroup_exists = 0;
 	}
 
 	/* opgroup_scope_destroy() passes us *opgroup inside state... */
