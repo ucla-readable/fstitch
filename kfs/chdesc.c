@@ -311,14 +311,22 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 
 static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * list, bool slip_under)
 {
-	for(; list; list = list->next)
+	chmetadesc_t * next = list;
+	while((list = next))
 	{
 		int r;
+		
+		/* this loop is tricky, because we might remove the item we're
+		 * looking at currently if we overlap it entirely - so we
+		 * prefetch the next pointer at the top of the loop */
+		next = list->next;
+		
 		/* skip moved chdescs - they have just been added to this block
 		 * by chdesc_move() and already have proper overlap dependency
 		 * information with respect to the chdesc now arriving */
 		if(list->desc->flags & CHDESC_MOVED || list->desc == chdesc)
 			continue;
+		
 		/* "Slip Under" allows us to create change descriptors
 		 * underneath existing ones. (That is, existing chdescs will
 		 * depend on the new one, not the other way around.) This is a
