@@ -70,8 +70,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	if (!block)
 		return -E_NOT_FOUND;
 
-	r = chdesc_create_byte(block, info->ubd, offset, actual_len,
-			&entry, head);
+	r = chdesc_create_byte(block, info->ubd, offset, actual_len, &entry, head);
 	if (r < 0)
 		return r;
 
@@ -316,7 +315,7 @@ static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 		return -E_INVAL;
 
 	e.d_ino = entry.d_fileno;
-	e.d_reclen = entry.d_reclen;
+	e.d_reclen = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namelen - UFS_MAXNAMELEN, 4);
 	e.d_namlen = entry.d_namelen;
 	strncpy(e.d_name, entry.d_name, entry.d_namelen + 1);
 

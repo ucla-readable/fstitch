@@ -1104,7 +1104,6 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	ufs_fdesc_t * oldf;
 	ufs_fdesc_t * newf;
 	ufs_fdesc_t deadf;
-	ufs_fdesc_t dirfdesc;
 	struct dirent entry;
 	uint32_t p;
 	int r, existing = 0, dir_offset;
@@ -1138,12 +1137,14 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 
 	r = CALL(info->parts.p_dirent, search_dirent, new_pfdesc, newname, &ino, &dir_offset);
 	if (r < 0)
-		goto ufs_rename_exit3;
-
-	if (dir_offset >= 0)
+		if (r == -E_NOT_FOUND)
+			newf = NULL;
+		else
+			goto ufs_rename_exit3;
+	else {
+		assert(dir_offset >= 0);
 		newf = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
-	else
-		newf = NULL;
+	}
 
 	if (newf) {
 		// Overwriting a directory makes little sense
@@ -1164,7 +1165,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 			goto ufs_rename_exit4;
 
 		entry.d_fileno = oldf->f_num;
-		r = CALL(info->parts.p_dirent, modify_dirent, &dirfdesc, entry, dir_offset, head);
+		r = CALL(info->parts.p_dirent, modify_dirent, new_pfdesc, entry, dir_offset, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
