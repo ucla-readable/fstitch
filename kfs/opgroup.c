@@ -406,6 +406,8 @@ int opgroup_engage(opgroup_t * opgroup)
 	if(!state)
 		return -E_NOT_FOUND;
 	assert(state->opgroup == opgroup);
+	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && (!opgroup->is_released || !opgroup->is_released))
+		return -E_INVAL;
 	/* can't engage it if it is not atomic and it has dependents */
 	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_dependents)
 		return -E_INVAL;
