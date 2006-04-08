@@ -198,7 +198,7 @@ public class SystemState
 	public static int unhex(String hex)
 	{
 		if(!hex.substring(0, 2).equals("0x"))
-			return Integer.parseInt(hex);
-		return Integer.parseInt(hex.substring(2), 16);
+			return (int) Long.parseLong(hex);
+		return (int) Long.parseLong(hex.substring(2), 16);
 	}
 }
