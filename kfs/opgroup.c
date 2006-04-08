@@ -511,7 +511,12 @@ int opgroup_abandon(opgroup_t ** opgroup)
 
 		/* no more references to this opgroup */
 		if(state->opgroup->tail_keep || !state->opgroup->is_released)
-			panic("Don't know how to roll back an abandoned opgroup!");
+		{
+			if(!state->opgroup->has_data)
+				opgroup_release(state->opgroup);
+			else
+				panic("Don't know how to roll back an abandoned opgroup!");
+		}
 		if(state->opgroup->head_keep)
 			chdesc_satisfy(&state->opgroup->head_keep);
 		chdesc_weak_release(&state->opgroup->head);
