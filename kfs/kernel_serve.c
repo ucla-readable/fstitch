@@ -513,6 +513,13 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 	return NULL;
 }
 
+#ifndef ATTR_FILE
+/* ATTR_FILE and struct iattr's field ia_file were introduced in 2.6.15:
+ * http://www.ussg.iu.edu/hypermail/linux/kernel/0510.3/0102.html
+ * Disable ATTR_FILE support when building for older kernels: */
+#define ATTR_FILE 0
+#endif
+
 static int
 serve_setattr(struct dentry * dentry, struct iattr * attr)
 {
@@ -522,18 +529,23 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 	fdesc_t * fdesc;
 	int r;
 
-	if (attr->ia_valid & ~(ATTR_SIZE | ATTR_CTIME))
+	if (attr->ia_valid & ~(ATTR_SIZE | ATTR_CTIME | ATTR_FILE))
 		return -E_NO_SYS;
 
 	kfsd_enter();
 	cfs = dentry2cfs(dentry);
 
-	/* it would be nice if we didn't have to open the file to change the size, permissions, etc. */
-	r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
-	if(r < 0)
+	if (attr->ia_valid & ATTR_FILE)
+		fdesc = file2fdesc(attr->ia_file);
+	else
 	{
-		kfsd_leave(1);
-		return r;
+		/* it would be nice if we didn't have to open the file to change the permissions, etc. */
+		r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
+		if (r < 0)
+		{
+			kfsd_leave(1);
+			return r;
+		}
 	}
 
 	/* check if the change is ok */
@@ -558,8 +570,9 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 	assert(r >= 0);
 	
 error:
-	if(CALL(cfs, close, fdesc) < 0)
-		kdprintf(STDERR_FILENO, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
+	if (!(attr->ia_valid & ATTR_FILE))
+		if(CALL(cfs, close, fdesc) < 0)
+			kdprintf(STDERR_FILENO, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
 	kfsd_leave(1);
 	return r;
 }
