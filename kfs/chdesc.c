@@ -603,7 +603,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
 		
-		chdescs[i]->byte.data = memdup(&((uint8_t *) data)[copied], chdescs[i]->byte.length);
+		chdescs[i]->byte.data = data ? memdup(&((uint8_t *) data)[copied], chdescs[i]->byte.length) : calloc(1, chdescs[i]->byte.length);
 		if(!chdescs[i]->byte.data)
 			goto destroy;
 #if CHDESC_BYTE_SUM

@@ -425,12 +425,17 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	// FIXME: support lfses that do not support file_size
 	target_size = filesize;
 
-	// FIXME if offset > filesize, allocate blocks
+	// FIXME: support sparse files in some way
 	if (offset > filesize) {
-		kdprintf(STDERR_FILENO, "--- Uh oh, offset > filesize, %d > %d ---!\n", offset, filesize);
-		target_size = offset;
-		r = -E_UNSPECIFIED;
-		goto uhfs_write_exit;
+		while (offset > filesize)
+		{
+			r = uhfs_write(cfs, fdesc, NULL, filesize, offset - filesize);
+			if (r < 0)
+				return r;
+			if (r == 0)
+				return -E_UNSPECIFIED;
+			filesize += r;
+		}
 	}
 
 	// do we really want to just return size_written if an operation failed?
@@ -524,7 +529,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 		/* write the data to the block */
 		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
-		r = chdesc_create_byte(block, bd, dataoffset, length, (uint8_t *) data + size_written, &prev_head);
+		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &prev_head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
 
