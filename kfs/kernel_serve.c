@@ -540,9 +540,11 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		return -E_NO_SYS;
 	}
 
+#if ATTR_FILE != 0
 	if(attr->ia_valid & ATTR_FILE)
 		fdesc = file2fdesc(attr->ia_file);
 	else
+#endif
 	{
 		/* it would be nice if we didn't have to open the file to change the permissions, etc. */
 		r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
