@@ -113,36 +113,43 @@ int kernel_serve_init(void)
 //
 // Linux VFS function implementations
 
-static CFS_t *
-sb2cfs(struct super_block * sb)
+static CFS_t * sb2cfs(struct super_block * sb)
 {
 	return ((mount_desc_t *) sb->s_fs_info)->cfs;
 }
 
-static CFS_t *
-dentry2cfs(struct dentry * dentry)
+static CFS_t * dentry2cfs(struct dentry * dentry)
 {
 	return sb2cfs(dentry->d_sb);
 }
 
-static fdesc_t *
-file2fdesc(struct file * filp)
+static fdesc_t * file2fdesc(struct file * filp)
 {
 	return (fdesc_t *) filp->private_data;
+}
+
+static int feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
+{
+	const size_t num_features = CALL(cfs, get_num_features, cfs_ino);
+	size_t i;
+
+	for(i=0; i < num_features; i++)
+		if(CALL(cfs, get_feature, cfs_ino, i)->id == feature_id)
+			return 1;
+
+	return 0;
 }
 
 
 /* Looking at the NFS file system implementation was very helpful for some of these functions. */
 
-static int
-serve_set_super(struct super_block * sb, void * data)
+static int serve_set_super(struct super_block * sb, void * data)
 {
 	sb->s_fs_info = data;
 	return set_anon_super(sb, data);
 }
 
-static int
-serve_compare_super(struct super_block * sb, void * data)
+static int serve_compare_super(struct super_block * sb, void * data)
 {
 	mount_desc_t * m = data;
 	mount_desc_t * old = sb->s_fs_info;
@@ -153,8 +160,7 @@ serve_compare_super(struct super_block * sb, void * data)
 	return 1;
 }
 
-static uint32_t
-inode_get_size(struct inode * inode)
+static uint32_t inode_get_size(struct inode * inode)
 {
 	uint32_t filesize_size;
 	union {
@@ -177,8 +183,7 @@ inode_get_size(struct inode * inode)
 	return size;
 }
 
-static void
-read_inode_withlock(struct inode * inode)
+static void read_inode_withlock(struct inode * inode)
 {
 	uint32_t type_size;
 	union {
@@ -279,8 +284,7 @@ read_inode_withlock(struct inode * inode)
 	return;
 }
 
-static void
-serve_read_inode(struct inode * inode)
+static void serve_read_inode(struct inode * inode)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, inode->i_ino);
 	kfsd_enter();
@@ -288,8 +292,7 @@ serve_read_inode(struct inode * inode)
 	kfsd_leave(1);
 }
 
-static int
-serve_stat_fs(struct super_block * sb, struct kstatfs * st)
+static int serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 {
 	mount_desc_t * m = (mount_desc_t *) sb->s_fs_info;
 	Dprintf("%s(kfs:%s)\n", __FUNCTION__, m->path);
@@ -333,8 +336,7 @@ out:
 	return r;
 }
 
-static int
-serve_fill_super(struct super_block * sb, mount_desc_t * m)
+static int serve_fill_super(struct super_block * sb, mount_desc_t * m)
 {
 	inode_t cfs_root;
 	struct inode * k_root;
@@ -370,8 +372,7 @@ serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	return 0;
 }
 
-static struct super_block *
-serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name, void * data)
+static struct super_block * serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name, void * data)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	int i, size;
@@ -424,8 +425,7 @@ serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name
 	return ERR_PTR(-E_NO_DEV);
 }
 
-static void
-serve_kill_sb(struct super_block * sb)
+static void serve_kill_sb(struct super_block * sb)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	mount_desc_t * m = sb->s_fs_info;
@@ -434,8 +434,7 @@ serve_kill_sb(struct super_block * sb)
 	kill_anon_super(sb);
 }
 
-static int
-serve_open(struct inode * inode, struct file * filp)
+static int serve_open(struct inode * inode, struct file * filp)
 {
 	fdesc_t * fdesc;
 	int r;
@@ -461,8 +460,7 @@ serve_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-static int
-serve_release(struct inode * inode, struct file * filp)
+static int serve_release(struct inode * inode, struct file * filp)
 {
 	Dprintf("%s(name = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
 	int r;
@@ -472,8 +470,7 @@ serve_release(struct inode * inode, struct file * filp)
 	return r;
 }
 
-static struct dentry *
-serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * ignore)
+static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * ignore)
 {
 	inode_t cfs_ino;
 	ino_t k_ino;
@@ -520,30 +517,38 @@ serve_dir_lookup(struct inode * dir, struct dentry * dentry, struct nameidata * 
 #define ATTR_FILE 0
 #endif
 
-static int
-serve_setattr(struct dentry * dentry, struct iattr * attr)
+static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 {
 	Dprintf("%s(\"%s\", attributes %u)\n", __FUNCTION__, dentry->d_name.name, attr->ia_valid);
 	CFS_t * cfs;
 	struct inode * inode = dentry->d_inode;
+	unsigned int supported = ATTR_SIZE | ATTR_CTIME;
 	fdesc_t * fdesc;
 	int r;
-
-	if (attr->ia_valid & ~(ATTR_SIZE | ATTR_CTIME | ATTR_FILE))
-		return -E_NO_SYS;
 
 	kfsd_enter();
 	cfs = dentry2cfs(dentry);
 
-	if (attr->ia_valid & ATTR_FILE)
+	if(feature_supported(cfs, inode->i_ino, KFS_feature_mtime.id))
+		supported |= ATTR_MTIME;
+	if(feature_supported(cfs, inode->i_ino, KFS_feature_atime.id))
+		supported |= ATTR_ATIME;
+
+	if(attr->ia_valid & ~supported)
+	{
+		kfsd_leave(0);
+		return -E_NO_SYS;
+	}
+
+	if(attr->ia_valid & ATTR_FILE)
 		fdesc = file2fdesc(attr->ia_file);
 	else
 	{
 		/* it would be nice if we didn't have to open the file to change the permissions, etc. */
 		r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
-		if (r < 0)
+		if(r < 0)
 		{
-			kfsd_leave(1);
+			kfsd_leave(0);
 			return r;
 		}
 	}
@@ -564,21 +569,33 @@ serve_setattr(struct dentry * dentry, struct iattr * attr)
 		if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
 			goto error;
 	}
+	
+	if(attr->ia_valid & ATTR_MTIME)
+	{
+		time_t mtime = attr->ia_mtime.tv_sec;
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_mtime.id, sizeof(mtime), &mtime)) < 0)
+			goto error;
+	}
+	if(attr->ia_valid & ATTR_ATIME)
+	{
+		time_t atime = attr->ia_atime.tv_sec;
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_atime.id, sizeof(atime), &atime)) < 0)
+			goto error;
+	}
 
 	/* import the change to the inode */
 	r = inode_setattr(inode, attr);
 	assert(r >= 0);
 	
 error:
-	if (!(attr->ia_valid & ATTR_FILE))
+	if(!(attr->ia_valid & ATTR_FILE))
 		if(CALL(cfs, close, fdesc) < 0)
 			kdprintf(STDERR_FILENO, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
 	kfsd_leave(1);
 	return r;
 }
 
-static ssize_t
-serve_read(struct file * filp, char __user * buffer, size_t count, loff_t * f_pos)
+static ssize_t serve_read(struct file * filp, char __user * buffer, size_t count, loff_t * f_pos)
 {
 	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
 	fdesc_t * fdesc = file2fdesc(filp);
@@ -622,8 +639,7 @@ out:
 	return r;
 }
 
-static ssize_t
-serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t * f_pos)
+static ssize_t serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t * f_pos)
 {
 	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
 	fdesc_t * fdesc = file2fdesc(filp);
@@ -669,8 +685,7 @@ out:
 	return r;
 }
 
-static int
-serve_unlink(struct inode * dir, struct dentry * dentry)
+static int serve_unlink(struct inode * dir, struct dentry * dentry)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
@@ -713,8 +728,7 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 	return 0;
 }
 
-static int
-serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameidata * nd)
+static int serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameidata * nd)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
@@ -726,8 +740,7 @@ serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameid
 	return r;
 }
 
-static int
-serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev_t dev)
+static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev_t dev)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
@@ -741,8 +754,7 @@ serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev_t dev)
 	return r;
 }
 
-static int
-serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
+static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 {
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
 	inode_t cfs_ino;
@@ -773,8 +785,7 @@ serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	return 0;
 }
 
-static int
-serve_rmdir(struct inode * dir, struct dentry * dentry)
+static int serve_rmdir(struct inode * dir, struct dentry * dentry)
 {
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
 	int r;
@@ -785,8 +796,7 @@ serve_rmdir(struct inode * dir, struct dentry * dentry)
 	return r;
 }
 
-static int
-serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * new_dir, struct dentry * new_dentry)
+static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * new_dir, struct dentry * new_dentry)
 {
 	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir, old_dentry->d_name.name, new_dir, new_dentry->d_name.name);
 	int r;
@@ -804,8 +814,7 @@ serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * 
 
 #define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
 
-static int
-serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
+static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t filldir)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	int r;
@@ -851,8 +860,7 @@ out:
 	return 0;
 }
 
-static int
-serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
+static int serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
@@ -863,8 +871,7 @@ serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 	return r;
 }
 
-static int
-serve_delete_dentry(struct dentry * dentry)
+static int serve_delete_dentry(struct dentry * dentry)
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	return -1;
