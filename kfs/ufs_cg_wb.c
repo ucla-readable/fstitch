@@ -270,10 +270,10 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
-	int i, r, sync_count = 0;
+	int i, r, satisfaction, sync_count = 0;
    	int begin, end;
 	chdesc_t ** oldhead;
-	chdesc_t * noophead;
+	chdesc_t * noophead, * drain_plug;
 
 	if (!head)
 		return -E_INVAL;
@@ -290,6 +290,15 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 	noophead = chdesc_create_noop(NULL, NULL);
 	if (!noophead)
 		return -E_NO_MEM;
+	drain_plug = chdesc_create_noop(NULL, NULL);
+	if (!drain_plug)
+		return -E_NO_MEM;
+	chdesc_claim_noop(drain_plug);
+	r = chdesc_add_depend(noophead, drain_plug);
+	if (r < 0) {
+		chdesc_autorelease_noop(drain_plug);
+		return r;
+	}
 
 	linfo->syncing = 1;
 
@@ -373,6 +382,8 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 sync_failed:
 	if (sync_count)
 		*head = noophead;
+	satisfaction = chdesc_satisfy(&drain_plug);
+	assert(satisfaction >= 0);
 	linfo->syncing = 0;
 	return r;
 }
