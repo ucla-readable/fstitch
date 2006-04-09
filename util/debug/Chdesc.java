@@ -49,8 +49,8 @@ public class Chdesc
 		this.block = block;
 		this.owner = owner;
 		this.opcode = opcode;
-		dependencies = new ChdescCollection("added to dependencies");
-		dependents = new ChdescCollection("added to dependents");
+		dependencies = new ChdescCollection();
+		dependents = new ChdescCollection();
 		locations = new HashSet();
 		changeToNoop();
 	}
