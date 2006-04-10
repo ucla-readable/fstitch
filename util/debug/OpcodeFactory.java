@@ -18,7 +18,7 @@ public abstract class OpcodeFactory implements Constants
 			string.write(b);
 			b = input.readByte();
 		}
-		return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(string.toByteArray()))).readLine();
+		return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(string.toByteArray()))).readLine().intern();
 	}
 	
 	public int getInputOffset()
