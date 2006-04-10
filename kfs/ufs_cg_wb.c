@@ -287,18 +287,9 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 		end = num + 1;
 	}
 
-	noophead = chdesc_create_noop(NULL, NULL);
-	if (!noophead)
-		return -E_NO_MEM;
-	drain_plug = chdesc_create_noop(NULL, NULL);
-	if (!drain_plug)
-		return -E_NO_MEM;
-	chdesc_claim_noop(drain_plug);
-	r = chdesc_add_depend(noophead, drain_plug);
-	if (r < 0) {
-		chdesc_autorelease_noop(drain_plug);
+	r = chdesc_create_blocked_noop(&noophead, &drain_plug);
+	if (r < 0)
 		return r;
-	}
 
 	linfo->syncing = 1;
 
