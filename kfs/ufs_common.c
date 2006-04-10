@@ -305,24 +305,28 @@ int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** 
 int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	uint32_t blockno, offset, * ptr;
-	int r, cyl;
+	int r, cyl, satisfaction, inode_offset;
 	bdesc_t * block;
-	chdesc_t * ch;
+	chdesc_t * ch, * noophead, * drain_plug;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
 		return -E_INVAL;
 
+	if (value == UFS_USED) {
+		value = 1;
+		inode_offset = -1;
+	}
+	else {
+		value = 0;
+		inode_offset = 1;
+	}
+
 	cyl = num / super->fs_ipg;
 	cg = CALL(info->parts.p_cg, read, cyl);
 	if (!cg)
 		return -E_UNSPECIFIED;
-
-	if (value == UFS_USED)
-		value = 1;
-	else
-		value = 0;
 
 	offset = num % super->fs_ipg;
 	if (offset >= cg->cg_niblk)
@@ -342,25 +346,38 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		return 1;
 	}
 
-	ch = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32));
-	if (!ch)
-		return -1;
-
-	r = CALL(info->ubd, write_block, block);
+	r = chdesc_create_blocked_noop(&noophead, &drain_plug);
 	if (r < 0)
 		return r;
 
+	ch = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32));
+	if (!ch) {
+		r = -E_NO_MEM;
+		goto write_inode_bitmap_end;
+	}
+
+	r = chdesc_add_depend(noophead, ch);
+	if (r < 0)
+		goto write_inode_bitmap_end;
+
 	if (*head)
 		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			return r;
+			goto write_inode_bitmap_end;
 
-	*head = ch;
+	r = CALL(info->ubd, write_block, block);
+	if (r < 0)
+		goto write_inode_bitmap_end;
 
-	if (value)
-		r = update_summary(info, cyl, 0, 0, -1, 0, head);
-	else
-		r = update_summary(info, cyl, 0, 0, 1, 0, head);
+	r = update_summary(info, cyl, 0, 0, inode_offset, 0, head);
+	if (r < 0)
+		goto write_inode_bitmap_end;
 
+	r = chdesc_add_depend(noophead, *head);
+
+write_inode_bitmap_end:
+	*head = noophead;
+	satisfaction = chdesc_satisfy(&drain_plug);
+	assert(satisfaction >= 0);
 	return r;
 }
 
@@ -441,7 +458,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	ch = chdesc_create_bit(block, info->ubd,
 			(offset % super->fs_fsize) / 4, 1 << (num % 32));
 	if (!ch)
-		return -1;
+		return -E_NO_MEM;
 
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
@@ -513,19 +530,23 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 {
 	uint32_t blocknum, blockno, offset, * ptr, btot;
 	uint16_t fbp;
-	int r, cyl;
+	int r, cyl, satisfaction, block_offset;
 	bdesc_t * block;
-	chdesc_t * ch;
+	chdesc_t * ch, * noophead, * drain_plug;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
 		return -E_INVAL;
 
-	if (value == UFS_USED)
+	if (value == UFS_USED) {
 		value = 0;
-	else
+		block_offset = -1;
+	}
+	else {
 		value = 1;
+		block_offset = 1;
+	}
 
 	blocknum = num * super->fs_frag;
 	cyl = blocknum / super->fs_fpg;
@@ -552,19 +573,27 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		return 1;
 	}
 
+	r = chdesc_create_blocked_noop(&noophead, &drain_plug);
+	if (r < 0)
+		return r;
+
 	ch = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32));
-	if (!ch)
-		return -1;
+	if (!ch) {
+		r = -E_NO_MEM;
+		goto write_block_bitmap_end;
+	}
+
+	r = chdesc_add_depend(noophead, ch);
+	if (r < 0)
+		goto write_block_bitmap_end;
+
+	if (*head)
+		if ((r = chdesc_add_depend(ch, *head)) < 0)
+			goto write_block_bitmap_end;
 
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
 		return r;
-
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			return r;
-
-	*head = ch;
 
 	if (value) {
 		btot = read_btot(info, blocknum) + 1;
@@ -576,17 +605,21 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	}
 	r = write_btot(info, blocknum, btot, head);
 	if (r < 0)
-		return r;
+		goto write_block_bitmap_end;
 	r = write_fbp(info, blocknum, fbp, head);
 	if (r < 0)
-		return r;
+		goto write_block_bitmap_end;
 
+	r = update_summary(info, cyl, 0, block_offset, 0, 0, head);
+	if (r < 0)
+		goto write_block_bitmap_end;
 
-	if (value)
-		r = update_summary(info, cyl, 0, 1, 0, 0, head);
-	else
-		r = update_summary(info, cyl, 0, -1, 0, 0, head);
+	r = chdesc_add_depend(noophead, *head);
 
+write_block_bitmap_end:
+	*head = noophead;
+	satisfaction = chdesc_satisfy(&drain_plug);
+	assert(satisfaction >= 0);
 	return r;
 }
 
@@ -595,9 +628,11 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 {
 	struct UFS_csum sum;
 	struct UFS_csum * csum;
-	int r;
+	int r, satisfaction;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	chdesc_t * noophead, * drain_plug;
+	chdesc_t ** oldhead;
 
 	if (!head || cyl < 0 || cyl >= super->fs_ncg)
 		return -E_INVAL;
@@ -606,16 +641,25 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	if (!cg)
 		return -E_UNSPECIFIED;
 
+	r = chdesc_create_blocked_noop(&noophead, &drain_plug);
+	if (r < 0)
+		return r;
+
 	// Update cylinder group
+	oldhead = head;
 	sum.cs_ndir = cg->cg_cs.cs_ndir + ndir;
 	sum.cs_nbfree = cg->cg_cs.cs_nbfree + nbfree;
 	sum.cs_nifree = cg->cg_cs.cs_nifree + nifree;
 	sum.cs_nffree = cg->cg_cs.cs_nffree + nffree;
 	r = CALL(info->parts.p_cg, write_cs, cyl, &sum, head);
 	if (r < 0)
-		return r;
+		goto update_summary_end;
+	if (*head != *oldhead)
+		if ((r = chdesc_add_depend(noophead, *head)) < 0)
+			goto update_summary_end;
 
 	// Update cylinder summary area
+	head = oldhead;
 	csum = info->csums + cyl;
 	csum->cs_ndir += ndir;
 	csum->cs_nbfree += nbfree;
@@ -626,18 +670,33 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 			cyl * sizeof(struct UFS_csum), sizeof(struct UFS_csum),
 			csum, head);
 	if (r < 0)
-		return r;
+		goto update_summary_end;
+	if (*head != *oldhead)
+		if ((r = chdesc_add_depend(noophead, *head)) < 0)
+			goto update_summary_end;
 
 	r = CALL(info->ubd, write_block, info->csum_block);
 	if (r < 0)
 		return r;
 
 	// Update superblock
+	head = oldhead;
 	sum.cs_ndir = super->fs_cstotal.cs_ndir + ndir;
 	sum.cs_nbfree = super->fs_cstotal.cs_nbfree + nbfree;
 	sum.cs_nifree = super->fs_cstotal.cs_nifree + nifree;
 	sum.cs_nffree = super->fs_cstotal.cs_nffree + nffree;
-	return CALL(info->parts.p_super, write_cstotal, &sum, head);
+	r = CALL(info->parts.p_super, write_cstotal, &sum, head);
+	if (r < 0)
+		goto update_summary_end;
+	if (*head != *oldhead)
+		if ((r = chdesc_add_depend(noophead, *head)) < 0)
+			goto update_summary_end;
+
+update_summary_end:
+	*head = noophead;
+	satisfaction = chdesc_satisfy(&drain_plug);
+	assert(satisfaction >= 0);
+	return r;
 }
 
 int check_name(const char * p)
