@@ -602,6 +602,15 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	}
 	assert(cfs_ino != INODE_NONE);
 
+	r = hash_map_insert(reqmount(req)->parents, (void *) fusecfsino(req, cfs_ino), (void *) fusecfsino(req, parent));
+	if (r < 0)
+	{
+		(void) CALL(reqcfs(req), close, *fdesc);
+		*fdesc = NULL;
+		(void) CALL(reqcfs(req), unlink, fusecfsino(req, parent), local_name);
+		return r;
+	}
+
 	(*fdesc)->common->parent = fusecfsino(req, parent);
 	memset(e, 0, sizeof(*e));
 	e->ino = cfsfuseino(req, cfs_ino);
@@ -626,7 +635,11 @@ static void serve_create(fuse_req_t req, fuse_ino_t parent,
 
 	r = create(req, parent, local_name, mode, &e, &fdesc);
 	if (r < 0)
+	{
+		r = fuse_reply_err(req, -r);
+		assert(r);
 		return;
+	}
 
 	fi_set_fdesc(fi, fdesc);
 
@@ -651,7 +664,11 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 
 	r = create(req, parent, local_name, mode, &e, &fdesc);
 	if (r < 0)
+	{
+		r = fuse_reply_err(req, -r);
+		assert(r);
 		return;
+	}
 
 	r = CALL(reqcfs(req), close, fdesc);
 	assert(r >= 0);
