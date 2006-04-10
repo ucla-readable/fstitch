@@ -1110,7 +1110,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	if (!head || check_name(oldname) || check_name(newname))
 		return -E_INVAL;
 
-	if (!strcmp(oldname, newname)) // Umm, ok
+	if (!strcmp(oldname, newname) && (oldparent == newparent)) // Umm, ok
 		return 0;
 
 	old_pfdesc = (ufs_fdesc_t *) ufs_lookup_inode(object, oldparent);
