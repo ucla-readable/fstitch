@@ -84,6 +84,18 @@ int kfsd_is_running(void)
 	return kfsd_running > 0;
 }
 
+static uint32_t kfsd_request_id = 0;
+
+void kfsd_next_request_id(void)
+{
+	kfsd_request_id++;
+}
+
+uint32_t kfsd_get_request_id(void)
+{
+	return kfsd_request_id;
+}
+
 void kfsd_main(int argc, char ** argv)
 {
 	int r;
@@ -134,6 +146,7 @@ void kfsd_main(int argc, char ** argv)
 }
 
 #if defined(KUDOS)
+
 #include <inc/lib.h> // binaryname
 void umain(int argc, char * argv[])
 {
@@ -171,6 +184,7 @@ void umain(int argc, char * argv[])
 }
 
 #elif defined(UNIXUSER)
+
 int main(int argc, char * argv[])
 {
 	kfsd_main(argc, argv);

@@ -1287,6 +1287,8 @@ int fuse_serve_loop(void)
 			{
 				if (mount->mounted && FD_ISSET(mount->channel_fd, &rfds))
 				{
+					/* starting a new request, so set a new request ID */
+					kfsd_next_request_id();
 					r = fuse_chan_receive(mount->channel, channel_buf, channel_buf_len);
 					assert(r > 0); // what would this error mean?
 

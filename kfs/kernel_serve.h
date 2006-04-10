@@ -6,6 +6,7 @@
 #include <linux/sched.h>
 #include <lib/assert.h>
 #include <kfs/cfs.h>
+#include <kfs/kfsd.h>
 #include <kfs/sched.h>
 #include <kfs/opgroup.h>
 #include <kfs/kernel_opgroup_scopes.h>
@@ -46,6 +47,8 @@ static inline void kfsd_enter(void)
 			kfsd_global_lock.process = current->pid;
 			spin_unlock(&kfsd_global_lock.lock);
 			opgroup_scope_set_current(process_opgroup_scope(current));
+			/* starting a new request, so set a new request ID */
+			kfsd_next_request_id();
 			return;
 		}
 		spin_unlock(&kfsd_global_lock.lock);

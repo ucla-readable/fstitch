@@ -41,6 +41,8 @@ void ipc_serve_run(void)
 	switch (r)
 	{
 		case SCFS_VAL:
+			/* starting a new request, so set a new request ID */
+			kfsd_next_request_id();
 			cfs_ipc_serve_run(whom, IPCSERVE_REQVA, perm, cur_cappa);
 			break;
 		case SKFS_VAL:
