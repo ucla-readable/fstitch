@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdlib.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
@@ -216,7 +217,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 // Insert an elt into hm. elt must not already exist in hm.
 // This allows movement of an elt from one hm to another;
 // thus no malloc()/free() overhead and the elt maintains its memory location.
-static int insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
+static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 {
 	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(elt->elt.key, vector_size(hm->tbl));
@@ -231,7 +232,6 @@ static int insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 
 	vector_elt_set(hm->tbl, elt_num, elt);
 	hm->size++;
-	return 0;
 }
 
 // Erase the key-value pair for k from hm, return the element.
@@ -271,6 +271,9 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 	void * v;
 
 	k_chain = erase_chain_elt(hm, k);
+	if (!k_chain)
+		return NULL;
+
 	v = k_chain->elt.val;
 	chain_elt_destroy(k_chain);
 
@@ -424,7 +427,8 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 		while (elt)
 		{
 			chain_elt_t * next_elt = elt->next;
-			erase_chain_elt(hm, elt->elt.key);
+			chain_elt_t * found = erase_chain_elt(hm, elt->elt.key);
+			assert(found); // we are rehashing; elt.key is in the source map
 			insert_chain_elt(new_hm, elt);
 			elt = next_elt;
 		}
