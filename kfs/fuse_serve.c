@@ -1,3 +1,4 @@
+#define __USE_BSD // for timersub()
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -1174,25 +1175,17 @@ int fuse_serve_init(int argc, char ** argv)
 
 
 // Return end - start
-struct timeval time_elapsed(struct timeval start, struct timeval end)
+static struct timeval time_elapsed(struct timeval start, struct timeval end)
 {
 	struct timeval diff;
-
 	assert(start.tv_sec < end.tv_sec
 	       || (start.tv_sec == end.tv_sec && start.tv_usec <= end.tv_usec));
-
-	diff.tv_sec = end.tv_sec - start.tv_sec;
-	if (end.tv_usec > start.tv_usec)
-		diff.tv_usec = end.tv_usec - start.tv_usec;
-	else {
-		diff.tv_sec--;
-		diff.tv_usec = (1000000 - start.tv_usec) + end.tv_usec;
-	}
+	timersub(&end, &start, &diff);
 	return diff;
 }
 
 // Return MAX(remaining - elapsed, 0)
-struct timeval time_subtract(struct timeval remaining, struct timeval elapsed)
+static struct timeval time_subtract(struct timeval remaining, struct timeval elapsed)
 {
 	struct timeval n;
 	if (remaining.tv_sec < elapsed.tv_sec
@@ -1200,15 +1193,7 @@ struct timeval time_subtract(struct timeval remaining, struct timeval elapsed)
 	        && remaining.tv_usec <= elapsed.tv_usec))
 		n.tv_sec = n.tv_usec = 0;
 	else
-	{
-		n.tv_sec = remaining.tv_sec - elapsed.tv_sec;
-		if (remaining.tv_usec > elapsed.tv_usec)
-			n.tv_usec = remaining.tv_usec - elapsed.tv_usec;
-		else {
-			n.tv_sec--;
-			n.tv_usec = (1000000 - elapsed.tv_usec) + remaining.tv_usec;
-		}
-	}
+		timersub(&remaining, &elapsed, &n);
 	return n;
 }
 
