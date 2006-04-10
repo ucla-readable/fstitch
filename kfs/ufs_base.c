@@ -621,16 +621,15 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 
 	// File has no fragments
 	if (f->f_numfrags == 0) {
-		blockno = CALL(info->parts.p_allocator, find_free_block, file, purpose);
+		blockno = CALL(info->parts.p_allocator, find_free_frag, file, purpose);
 		if (blockno == INVALID_BLOCK)
 			return INVALID_BLOCK;
-		blockno *= super->fs_frag;
 	}
 	// We're using indirect pointers, time to allocate whole blocks
 	else if (f->f_numfrags >= UFS_NDADDR * super->fs_frag) {
 		// Well, except we're still working with fragments here
 
-		// Time to allocate a find a new block
+		// Time to allocate a new block
 		if (((f->f_lastfrag + 1) % super->fs_frag) == 0) {
 			blockno = allocate_wholeblock(object, 0, file, head);
 			f->f_lastalloc = blockno;
