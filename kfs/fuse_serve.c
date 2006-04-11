@@ -596,11 +596,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 
 	r = CALL(reqcfs(req), create, fusecfsino(req, parent), local_name, 0, fdesc, &cfs_ino);
 	if (r < 0)
-	{
-		r = fuse_reply_err(req, -r);
-		assert(!r);
-		return -1;
-	}
+		return r;
 	assert(cfs_ino != INODE_NONE);
 
 	r = hash_map_insert(reqmount(req)->parents, (void *) fusecfsino(req, cfs_ino), (void *) fusecfsino(req, parent));
