@@ -572,13 +572,17 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		block = CALL(info->ubd, read_block, f->f_lastfrag - frags + i + 1, 1);
 		if (!block)
 			return INVALID_BLOCK;
+		bdesc_retain(block);
 		newblock = CALL(info->ubd, synthetic_read_block, blockno + i, 1, &synthetic);
 		if (!newblock)
-			return INVALID_BLOCK;
+			goto find_frags_new_home_failed;
 
 		r = chdesc_create_full(newblock, info->ubd, block->ddesc->data, head);
-		if (r >= 0)
-			r = CALL(info->ubd, write_block, newblock);
+		if (r < 0)
+			goto find_frags_new_home_failed;
+
+		bdesc_release(&block);
+		r = CALL(info->ubd, write_block, newblock);
 		if (r < 0)
 			return INVALID_BLOCK;
 	}
@@ -597,6 +601,10 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	f->f_lastfrag = blockno - 1;
 
 	return blockno;
+
+find_frags_new_home_failed:
+	bdesc_release(&block);
+	return INVALID_BLOCK;
 }
 
 // Allocates fragments, really
