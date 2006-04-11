@@ -7,6 +7,9 @@
 #if defined(KUDOS)
 #include <kfs/ipc_serve.h>
 #elif defined(UNIXUSER)
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <unistd.h>
 #include <kfs/fuse_serve.h>
 #elif defined(__KERNEL__)
 #include <linux/module.h>
@@ -187,6 +190,16 @@ void umain(int argc, char * argv[])
 
 int main(int argc, char * argv[])
 {
+	// limit stack size to not exceed the linux kernel's 8kB stack
+	rlim_t stack_limit = 6 * 1024;
+	struct rlimit rlimit = {.rlim_cur = stack_limit, .rlim_max = stack_limit};
+	int r = setrlimit(RLIMIT_STACK, &rlimit);
+	if(r < 0)
+	{
+		perror("setrlimit()");
+		return 1;
+	}
+
 	kfsd_main(argc, argv);
 	return 0;
 }
