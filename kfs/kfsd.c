@@ -190,7 +190,10 @@ void umain(int argc, char * argv[])
 
 int main(int argc, char * argv[])
 {
-	// limit stack size to not exceed the linux kernel's 8kB stack
+	// Limit stack size to "not exceed" the linux kernel's 8kB stack.
+	// NOTE: linux appears to allocate a "large" initial stack (on chris's
+	// laptop, 80kB). setrlimit() does not appear to shrink this allocation,
+	// merely prevent its growth.
 	rlim_t stack_limit = 6 * 1024;
 	struct rlimit rlimit = {.rlim_cur = stack_limit, .rlim_max = stack_limit};
 	int r = setrlimit(RLIMIT_STACK, &rlimit);
