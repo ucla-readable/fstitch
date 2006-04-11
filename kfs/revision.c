@@ -242,14 +242,53 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
  * chdescs owned by other block devices are ignored. Note that this causes
  * indirect dependencies on chdescs owned by this block device to be missed. */
 /* FIXME: this function will have O(n^2) traversal behavior in the case when n blocks are *not* ready... */
-static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdesc_t * block, uint16_t target_level, bool external)
+
+#include <lib/string.h>
+// TODO: how do we want to (and should we) optimize this in the kernel?
+static void * __realloc(void * p, size_t p_size, size_t new_size)
 {
-	/* assume ready until we find evidence to the contrary */
-	bool ready = 1;
+	void * q = malloc(new_size);
+	if(!q)
+		return NULL;
+	if(p)
+		memcpy(q, p, p_size);
+	free(p);
+	return q;
+}
+
+struct chdesc_is_ready_state {
+	chdesc_t * chdesc;
+	bool ready;
+	chmetadesc_t * meta;
+};
+typedef struct chdesc_is_ready_state chdesc_is_ready_state_t;
+
+/* Recursion-on-the-heap support
+ * Use this static array when the stack is small enough to fit so that malloc
+ * needn't be involved. This yields a ~5% speedup in unix-user. */
+#define STATES_INITIAL_CAPACITY 256
+static chdesc_is_ready_state_t chdesec_is_ready_static_states[STATES_INITIAL_CAPACITY];
+
+static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const owner, const bdesc_t * const block, const uint16_t target_level, const bool external)
+{
+	/* recursion-on-the-heap support */
+	size_t states_capacity = STATES_INITIAL_CAPACITY;
+	chdesc_is_ready_state_t * states = chdesec_is_ready_static_states;
+	chdesc_is_ready_state_t * state = states;
+	
+	bool ready;
 	chmetadesc_t * meta;
 	
 	if(chdesc->flags & CHDESC_READY)
 		return 1;
+	
+  recurse_start:
+	
+	/* assume ready until we find evidence to the contrary */
+	ready = 1;
+	
+	if(chdesc->flags & CHDESC_READY)
+		goto recurse_done;
 	
 	assert(!chdesc->block || chdesc->owner);
 	
@@ -296,10 +335,57 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdes
 			}
 		}
 		
-		if(recurse && !revision_slice_chdesc_is_ready(dep, owner, block, target_level, external))
+		if(recurse)
 		{
-			ready = 0;
-			break;
+			/* recursively determine whether dep is ready.
+			 * we don't recursively call this function and use the stack because the
+			 * depth can grow large enough to overflow stacks that are just a few kB.
+			 * we instead use the 'states' array to hold this function's recursive
+			 * state */
+			size_t next_index = 1 + state - &states[0];
+			bool recursee_ready;
+			state->chdesc = chdesc;
+			state->ready = ready;
+			state->meta = meta;
+			chdesc = dep;
+			if(next_index < states_capacity)
+				state++;
+			else
+			{
+				size_t cur_size = states_capacity * sizeof(*state);
+				states_capacity *= 2;
+				if(states == chdesec_is_ready_static_states)
+				{
+					states = malloc(states_capacity * sizeof(*state));
+					if(states)
+						memcpy(states, chdesec_is_ready_static_states, cur_size);
+				}
+				else
+					states = __realloc(states, cur_size, states_capacity * sizeof(*state));
+
+				if(!states)
+				{
+					kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
+					if (states != chdesec_is_ready_static_states)
+						free(states);
+					return 0;
+				}
+				state = &states[next_index];
+			}
+			goto recurse_start;
+			
+		  recurse_done:
+			assert(state != &states[0]);
+			state--;
+			recursee_ready = ready;
+			chdesc = state->chdesc;
+			ready = state->ready;
+			meta = state->meta;
+			if(!recursee_ready)
+			{
+				ready = 0;
+				break;
+			}
 		}
 	}
 	
@@ -311,6 +397,12 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, BD_t * owner, bdes
 		chdesc->flags |= CHDESC_READY;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_READY);
 	}
+	
+	if(state != &states[0])
+		goto recurse_done;
+	
+	if (states != chdesec_is_ready_static_states)
+		free(states);
 	return ready;
 }
 
