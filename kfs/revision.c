@@ -359,7 +359,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 
 				if(!states)
 				{
-					kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
+					kdprintf(STDERR_FILENO, "%s: allocation of %u frames (%u bytes) failed\n", __FUNCTION__, states_capacity, states_capacity * sizeof(*state));
 					if (states != chdesec_is_ready_static_states)
 						vfree(states);
 					return 0;
