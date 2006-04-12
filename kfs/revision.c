@@ -225,24 +225,6 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 
 /* ---- Revision slices: library functions for use inside barrier zones ---- */
 
-/* Unless we use chdesc stamps, of which there are a limited number, we don't
- * know whether chdescs that we don't own are above or below us. But that's OK,
- * because we don't need to. Hence there is no revision_slice_prepare()
- * function, because we don't need to apply or roll back any chdescs to use
- * revision slices. Basically a revision slice is a set of change descriptors at
- * a particular time, organized in a nice way so that we can figure out which
- * ones are ready to be written down and which ones are not. */
-
-/* A chdesc that is externally ready has one of these properties:
- *   1. It has no dependencies.
- *   2. It only has dependencies whose levels are less than or equal to its target level.
- *   3. It only has dependencies which are on the same block and which are ready.
- *   4. It only has dependencies as in #2 and #3 above.
- * A chdesc that is internally ready need not satisfy as much: dependencies on
- * chdescs owned by other block devices are ignored. Note that this causes
- * indirect dependencies on chdescs owned by this block device to be missed. */
-/* FIXME: this function will have O(n^2) traversal behavior in the case when n blocks are *not* ready... */
-
 #ifdef __KERNEL__
 #include <linux/vmalloc.h>
 #else
@@ -263,25 +245,39 @@ static void * __realloc(void * p, size_t p_size, size_t new_size)
 	return q;
 }
 
-struct chdesc_is_ready_state {
-	chdesc_t * chdesc;
-	chmetadesc_t * meta;
-};
-typedef struct chdesc_is_ready_state chdesc_is_ready_state_t;
+/* Unless we use chdesc stamps, of which there are a limited number, we don't
+ * know whether chdescs that we don't own are above or below us. But that's OK,
+ * because we don't need to. Hence there is no revision_slice_prepare()
+ * function, because we don't need to apply or roll back any chdescs to use
+ * revision slices. Basically a revision slice is a set of change descriptors at
+ * a particular time, organized in a nice way so that we can figure out which
+ * ones are ready to be written down and which ones are not. */
 
-/* Recursion-on-the-heap support
- * Use this static array when the stack is small enough to fit so that malloc
- * needn't be involved. This yields a ~5% speedup in unix-user. */
-#define STATES_INITIAL_CAPACITY 256
-static chdesc_is_ready_state_t chdesec_is_ready_static_states[STATES_INITIAL_CAPACITY];
+/* A chdesc that is externally ready has one of these properties:
+ *   1. It has no dependencies.
+ *   2. It only has dependencies whose levels are less than or equal to its target level.
+ *   3. It only has dependencies which are on the same block and which are ready.
+ *   4. It only has dependencies as in #2 and #3 above.
+ * A chdesc that is internally ready need not satisfy as much: dependencies on
+ * chdescs owned by other block devices are ignored. Note that this causes
+ * indirect dependencies on chdescs owned by this block device to be missed. */
+/* FIXME: this function will have O(n^2) traversal behavior in the case when n blocks are *not* ready... */
+
+#define STATIC_STATES_CAPACITY 256
 
 static uint32_t ready_epoch = 1;
 
 static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const owner, const bdesc_t * const block, const uint16_t target_level, const bool external)
 {
 	/* recursion-on-the-heap support */
-	size_t states_capacity = STATES_INITIAL_CAPACITY;
-	chdesc_is_ready_state_t * states = chdesec_is_ready_static_states;
+	struct chdesc_is_ready_state {
+			chdesc_t * chdesc;
+			chmetadesc_t * meta;
+	};
+	typedef struct chdesc_is_ready_state chdesc_is_ready_state_t;
+	static chdesc_is_ready_state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	chdesc_is_ready_state_t * states = static_states;
 	chdesc_is_ready_state_t * state = states;
 	
 	chmetadesc_t * meta;
@@ -355,11 +351,11 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 		{
 			size_t cur_size = states_capacity * sizeof(*state);
 			states_capacity *= 2;
-			if(states == chdesec_is_ready_static_states)
+			if(states == static_states)
 			{
 				states = vmalloc(states_capacity * sizeof(*state));
 				if(states)
-					memcpy(states, chdesec_is_ready_static_states, cur_size);
+					memcpy(states, static_states, cur_size);
 			}
 			else
 				states = __realloc(states, cur_size, states_capacity * sizeof(*state));
@@ -367,7 +363,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			if(!states)
 			{
 				kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
-				if (states != chdesec_is_ready_static_states)
+				if (states != static_states)
 					free(states);
 				return 0;
 			}
@@ -393,7 +389,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	}
 
  exit:
-	if (states != chdesec_is_ready_static_states)
+	if (states != static_states)
 		vfree(states);
 	return (chdesc->flags & CHDESC_READY) != 0;
 }
