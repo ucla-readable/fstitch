@@ -533,9 +533,12 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		supported |= ATTR_MTIME;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_atime.id))
 		supported |= ATTR_ATIME;
+	if(feature_supported(cfs, inode->i_ino, KFS_feature_unix_permissions.id))
+		supported |= ATTR_MODE;
 
 	if(attr->ia_valid & ~supported)
 	{
+		Dprintf("%s: attribute set %u not supported\n", __FUNCTION__, attr->ia_valid);
 		kfsd_leave(0);
 		return -E_NO_SYS;
 	}
@@ -569,6 +572,13 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		}
 
 		if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
+			goto error;
+	}
+	
+	if(attr->ia_valid & ATTR_MODE)
+	{
+		umode_t mode = attr->ia_mode;
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(mode), &mode)))
 			goto error;
 	}
 	
