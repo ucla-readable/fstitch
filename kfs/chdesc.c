@@ -439,6 +439,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
 	chdesc->stamps = 0;
+	chdesc->ready_epoch = 0;
 	
 	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
@@ -488,6 +489,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
 	chdesc->stamps = 0;
+	chdesc->ready_epoch = 0;
 	
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
@@ -599,6 +601,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
+		chdescs[i]->ready_epoch = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -721,6 +724,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
+		chdescs[i]->ready_epoch = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -839,6 +843,7 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
+		chdescs[i]->ready_epoch = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;

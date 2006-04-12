@@ -275,6 +275,8 @@ typedef struct chdesc_is_ready_state chdesc_is_ready_state_t;
 #define STATES_INITIAL_CAPACITY 256
 static chdesc_is_ready_state_t chdesec_is_ready_static_states[STATES_INITIAL_CAPACITY];
 
+static uint32_t ready_epoch = 1;
+
 static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const owner, const bdesc_t * const block, const uint16_t target_level, const bool external)
 {
 	/* recursion-on-the-heap support */
@@ -282,42 +284,46 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	chdesc_is_ready_state_t * states = chdesec_is_ready_static_states;
 	chdesc_is_ready_state_t * state = states;
 	
-	bool ready = 0;
 	chmetadesc_t * meta;
-	
-	if(chdesc->flags & CHDESC_READY)
-		return 1;
-	
-  recurse_start:
-	if(chdesc->flags & CHDESC_READY)
-		goto recurse_done;
-	
+	size_t next_index;
+
+ recurse_start:
+	if(chdesc->ready_epoch == ready_epoch) {
+		if (chdesc->flags & CHDESC_READY)
+			goto recurse_done;
+		else
+			goto exit;
+	}
+
+	chdesc->flags &= ~CHDESC_READY;
+	chdesc->ready_epoch = ready_epoch;
 	assert(!chdesc->block || chdesc->owner);
-	
-	for(meta = chdesc->dependencies; meta; meta = meta->next)
+	meta = chdesc->dependencies;
+
+ recurse_meta:
+	for (; meta; meta = meta->next)
 	{
 		chdesc_t * dep = meta->desc;
-		bool recurse = 0;
 		
 		/* handle NOOP properly: it can have NULL block and owner */
 		
 		if(!dep->owner && !dep->block)
 			/* unmanaged NOOP: always recurse */
-			recurse = 1;
+			goto recurse_down;
 		else if(!external && dep->owner != owner)
 			continue;
 		else if(!dep->block)
 		{
 			/* managed NOOP: just check level */
 			if(CALL(dep->owner, get_devlevel) > target_level)
-				goto not_ready;
+				goto exit;
 		}
 		else
 		{
 			/* normal chdesc or on-block NOOP: recurse when
 			 * owner and block match, otherwise check level */
 			if(dep->owner == owner && dep->block->ddesc == block->ddesc)
-				recurse = 1;
+				goto recurse_down;
 			/* here the !external case is both an optimization and a
 			 * way to make sure the right semantics are preserved:
 			 * we know !external means dep->owner == owner, and
@@ -328,77 +334,73 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			 * unreadiness since this dependency is on a different
 			 * block than the one we are examining right now */
 			else if(!external || CALL(dep->owner, get_devlevel) > target_level)
-				goto not_ready;
+				goto exit;
 		}
-		
-		if(recurse)
-		{
-			/* recursively determine whether dep is ready.
-			 * we don't recursively call this function and use the stack because the
-			 * depth can grow large enough to overflow stacks that are just a few kB.
-			 * we instead use the 'states' array to hold this function's recursive
-			 * state */
-			size_t next_index = 1 + state - &states[0];
-			state->chdesc = chdesc;
-			state->meta = meta;
-			chdesc = dep;
-			if(next_index < states_capacity)
-				state++;
-			else
-			{
-				size_t cur_size = states_capacity * sizeof(*state);
-				states_capacity *= 2;
-				if(states == chdesec_is_ready_static_states)
-				{
-					states = vmalloc(states_capacity * sizeof(*state));
-					if(states)
-						memcpy(states, chdesec_is_ready_static_states, cur_size);
-				}
-				else
-					states = __realloc(states, cur_size, states_capacity * sizeof(*state));
 
-				if(!states)
-				{
-					kdprintf(STDERR_FILENO, "%s: allocation of %u frames (%u bytes) failed\n", __FUNCTION__, states_capacity, states_capacity * sizeof(*state));
-					if (states != chdesec_is_ready_static_states)
-						vfree(states);
-					return 0;
-				}
-				state = &states[next_index];
+		continue;
+
+	recurse_down:
+		/* recursively determine whether dep is ready.
+		 * we don't recursively call this function and use the stack because the
+		 * depth can grow large enough to overflow stacks that are just a few kB.
+		 * we instead use the 'states' array to hold this function's recursive
+		 * state */
+		next_index = 1 + state - &states[0];
+		state->chdesc = chdesc;
+		state->meta = meta->next;
+		chdesc = dep;
+		if(next_index < states_capacity)
+			state++;
+		else
+		{
+			size_t cur_size = states_capacity * sizeof(*state);
+			states_capacity *= 2;
+			if(states == chdesec_is_ready_static_states)
+			{
+				states = malloc(states_capacity * sizeof(*state));
+				if(states)
+					memcpy(states, chdesec_is_ready_static_states, cur_size);
 			}
-			goto recurse_start;
-			
-		  recurse_done:
-			assert(state != &states[0]);
-			state--;
-			chdesc = state->chdesc;
-			meta = state->meta;
+			else
+				states = __realloc(states, cur_size, states_capacity * sizeof(*state));
+
+			if(!states)
+			{
+				kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
+				if (states != chdesec_is_ready_static_states)
+					free(states);
+				return 0;
+			}
+			state = &states[next_index];
 		}
+		goto recurse_start;
 	}
-	
+
+	/* At this point, we know the current chdesc is ready. */
+	chdesc->flags |= CHDESC_READY;
 	if(chdesc->block)
 	{
-		/* only set CHDESC_READY if we know it will get cleared by revision_slice_push_down */
 		assert(chdesc->block->ddesc == block->ddesc);
-		
-		chdesc->flags |= CHDESC_READY;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_READY);
 	}
-	
-	if(state != &states[0])
-		goto recurse_done;
 
-	ready = 1;
+ recurse_done:
+	if(state != &states[0]) {
+		state--;
+		chdesc = state->chdesc;
+		meta = state->meta;
+		goto recurse_meta;
+	}
 
- not_ready:
+ exit:
 	if (states != chdesec_is_ready_static_states)
 		vfree(states);
-	return ready;
+	return (chdesc->flags & CHDESC_READY) != 0;
 }
 
 revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, bool external)
 {
-	int i = 0, j = 0;
+	int j = 0;
 	chmetadesc_t * meta;
 	uint16_t target_level = CALL(target, get_devlevel);
 	revision_slice_t * slice = malloc(sizeof(*slice));
@@ -409,12 +411,13 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 	slice->target = target;
 	slice->full_size = 0;
 	slice->ready_size = 0;
+	slice->ready = NULL;
 	if(!block->ddesc->changes)
-	{
-		slice->full = NULL;
-		slice->ready = NULL;
 		return slice;
-	}
+
+	/* update ready epoch */
+	if (++ready_epoch == 0)
+		++ready_epoch;
 	
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
 		if(meta->desc->owner == owner)
@@ -424,44 +427,19 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 				slice->ready_size++;
 		}
 	
-	if(slice->full_size)
+	if(slice->ready_size)
 	{
-		slice->full = calloc(slice->full_size, sizeof(*slice->full));
-		if(!slice->full)
+		slice->ready = calloc(slice->ready_size, sizeof(*slice->ready));
+		if(!slice->ready)
 		{
-			/* no need to clear CHDESC_READY: anything ready
-			 * now will still be ready until it's written */
 			free(slice);
 			return NULL;
 		}
-		if(slice->ready_size)
-		{
-			slice->ready = calloc(slice->ready_size, sizeof(*slice->ready));
-			if(!slice->ready)
-			{
-				/* see comment above */
-				free(slice->full);
-				free(slice);
-				return NULL;
-			}
-		}
-		else
-			slice->ready = NULL;
-	}
-	else
-	{
-		slice->full = NULL;
-		slice->ready = NULL;
 	}
 	
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
-		if(meta->desc->owner == owner)
-		{
-			slice->full[i++] = meta->desc;
-			if(meta->desc->flags & CHDESC_READY)
-				slice->ready[j++] = meta->desc;
-		}
-	assert(i == slice->full_size);
+		if(meta->desc->owner == owner && (meta->desc->flags & CHDESC_READY))
+			slice->ready[j++] = meta->desc;
 	assert(j == slice->ready_size);
 	
 	return slice;
@@ -482,8 +460,8 @@ void revision_slice_push_down(revision_slice_t * slice)
 		{
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
 			slice->ready[i]->owner = slice->target;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, slice->ready[i], CHDESC_READY);
-			slice->ready[i]->flags &= ~CHDESC_READY;
+			/* KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, slice->ready[i], CHDESC_READY); */
+			/* XXX no longer needed slice->ready[i]->flags &= ~CHDESC_READY; */
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
@@ -503,8 +481,8 @@ void revision_slice_pull_up(revision_slice_t * slice)
 		{
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
 			slice->ready[i]->owner = slice->owner;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, slice->ready[i], CHDESC_READY);
-			slice->ready[i]->flags |= CHDESC_READY;
+			/* KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, slice->ready[i], CHDESC_READY); */
+			/* XXX no longer needed slice->ready[i]->flags |= CHDESC_READY; */
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
@@ -513,8 +491,6 @@ void revision_slice_pull_up(revision_slice_t * slice)
 
 void revision_slice_destroy(revision_slice_t * slice)
 {
-	if(slice->full)
-		free(slice->full);
 	if(slice->ready)
 		free(slice->ready);
 	free(slice);

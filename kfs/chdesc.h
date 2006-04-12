@@ -66,6 +66,7 @@ struct chdesc {
 	chdesc_t * free_next;
 	uint32_t stamps;
 	uint16_t flags;
+	uint32_t ready_epoch;
 };
 
 struct chmetadesc {

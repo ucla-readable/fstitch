@@ -34,7 +34,6 @@ typedef struct revision_slice {
 	BD_t * owner;
 	BD_t * target;
 	int full_size, ready_size;
-	chdesc_t ** full;
 	chdesc_t ** ready;
 } revision_slice_t;
 
