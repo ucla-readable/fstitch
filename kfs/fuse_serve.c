@@ -634,7 +634,7 @@ static void serve_create(fuse_req_t req, fuse_ino_t parent,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(r);
+		assert(!r);
 		return;
 	}
 
