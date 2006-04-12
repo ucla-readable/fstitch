@@ -161,6 +161,7 @@ static int barrier_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	uint32_t i, number;
+	int value;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(block->count == 1);
@@ -178,7 +179,13 @@ static int barrier_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 		info->forward_buffer[i].size = info->original_size;
 	}
 	
-	return barrier_partial_forward(info->forward_buffer, info->merge_count, object, block);
+	/* our level needs to look higher than where we want to send the chdescs, so that
+	* while we're working with the micro-cache built into the partial forwarder, we
+	* will appear to be at a level higher than the block device below us */
+	info->level++;
+	value = barrier_partial_forward(info->forward_buffer, info->merge_count, object, block);
+	info->level--;
+	return value;
 }
 
 static int barrier_resizer_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)

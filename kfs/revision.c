@@ -225,6 +225,14 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 
 /* ---- Revision slices: library functions for use inside barrier zones ---- */
 
+/* Unless we use chdesc stamps, of which there are a limited number, we don't
+ * know whether chdescs that we don't own are above or below us. But that's OK,
+ * because we don't need to. Hence there is no revision_slice_prepare()
+ * function, because we don't need to apply or roll back any chdescs to use
+ * revision slices. Basically a revision slice is a set of change descriptors at
+ * a particular time, organized in a nice way so that we can figure out which
+ * ones are ready to be written down and which ones are not. */
+
 #ifdef __KERNEL__
 #include <linux/vmalloc.h>
 #else
@@ -245,13 +253,9 @@ static void * __realloc(void * p, size_t p_size, size_t new_size)
 	return q;
 }
 
-/* Unless we use chdesc stamps, of which there are a limited number, we don't
- * know whether chdescs that we don't own are above or below us. But that's OK,
- * because we don't need to. Hence there is no revision_slice_prepare()
- * function, because we don't need to apply or roll back any chdescs to use
- * revision slices. Basically a revision slice is a set of change descriptors at
- * a particular time, organized in a nice way so that we can figure out which
- * ones are ready to be written down and which ones are not. */
+#define STATIC_STATES_CAPACITY 256
+
+static uint32_t ready_epoch = 1;
 
 /* A chdesc that is externally ready has one of these properties:
  *   1. It has no dependencies.
@@ -261,11 +265,6 @@ static void * __realloc(void * p, size_t p_size, size_t new_size)
  * A chdesc that is internally ready need not satisfy as much: dependencies on
  * chdescs owned by other block devices are ignored. Note that this causes
  * indirect dependencies on chdescs owned by this block device to be missed. */
-/* FIXME: this function will have O(n^2) traversal behavior in the case when n blocks are *not* ready... */
-
-#define STATIC_STATES_CAPACITY 256
-
-static uint32_t ready_epoch = 1;
 
 static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const owner, const bdesc_t * const block, const uint16_t target_level, const bool external)
 {
@@ -284,8 +283,9 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	size_t next_index;
 
  recurse_start:
-	if(chdesc->ready_epoch == ready_epoch) {
-		if (chdesc->flags & CHDESC_READY)
+	if(chdesc->ready_epoch == ready_epoch)
+	{
+		if(chdesc->flags & CHDESC_READY)
 			goto recurse_done;
 		else
 			goto exit;
@@ -297,7 +297,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	meta = chdesc->dependencies;
 
  recurse_meta:
-	for (; meta; meta = meta->next)
+	for(; meta; meta = meta->next)
 	{
 		chdesc_t * dep = meta->desc;
 		
@@ -320,16 +320,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			 * owner and block match, otherwise check level */
 			if(dep->owner == owner && dep->block->ddesc == block->ddesc)
 				goto recurse_down;
-			/* here the !external case is both an optimization and a
-			 * way to make sure the right semantics are preserved:
-			 * we know !external means dep->owner == owner, and
-			 * presumably the level of owner is greater than the
-			 * target level... however, they can be equal, as they
-			 * would be when revision_slice_create() is called from
-			 * the block resizer, and we want that to cause
-			 * unreadiness since this dependency is on a different
-			 * block than the one we are examining right now */
-			else if(!external || CALL(dep->owner, get_devlevel) > target_level)
+			else if(CALL(dep->owner, get_devlevel) > target_level)
 				goto exit;
 		}
 
@@ -363,7 +354,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			if(!states)
 			{
 				kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
-				if (states != static_states)
+				if(states != static_states)
 					free(states);
 				return 0;
 			}
@@ -371,25 +362,22 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 		}
 		goto recurse_start;
 	}
-
+	
 	/* At this point, we know the current chdesc is ready. */
 	chdesc->flags |= CHDESC_READY;
-	if(chdesc->block)
-	{
-		assert(chdesc->block->ddesc == block->ddesc);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_READY);
-	}
-
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_READY);
+	
  recurse_done:
-	if(state != &states[0]) {
+	if(state != &states[0])
+	{
 		state--;
 		chdesc = state->chdesc;
 		meta = state->meta;
 		goto recurse_meta;
 	}
-
+	
  exit:
-	if (states != static_states)
+	if(states != static_states)
 		vfree(states);
 	return (chdesc->flags & CHDESC_READY) != 0;
 }
