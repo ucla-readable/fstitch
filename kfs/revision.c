@@ -258,7 +258,6 @@ static void * __realloc(void * p, size_t p_size, size_t new_size)
 
 struct chdesc_is_ready_state {
 	chdesc_t * chdesc;
-	bool ready;
 	chmetadesc_t * meta;
 };
 typedef struct chdesc_is_ready_state chdesc_is_ready_state_t;
@@ -276,17 +275,13 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	chdesc_is_ready_state_t * states = chdesec_is_ready_static_states;
 	chdesc_is_ready_state_t * state = states;
 	
-	bool ready;
+	bool ready = 0;
 	chmetadesc_t * meta;
 	
 	if(chdesc->flags & CHDESC_READY)
 		return 1;
 	
   recurse_start:
-	
-	/* assume ready until we find evidence to the contrary */
-	ready = 1;
-	
 	if(chdesc->flags & CHDESC_READY)
 		goto recurse_done;
 	
@@ -308,10 +303,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 		{
 			/* managed NOOP: just check level */
 			if(CALL(dep->owner, get_devlevel) > target_level)
-			{
-				ready = 0;
-				break;
-			}
+				goto not_ready;
 		}
 		else
 		{
@@ -329,10 +321,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			 * unreadiness since this dependency is on a different
 			 * block than the one we are examining right now */
 			else if(!external || CALL(dep->owner, get_devlevel) > target_level)
-			{
-				ready = 0;
-				break;
-			}
+				goto not_ready;
 		}
 		
 		if(recurse)
@@ -343,9 +332,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			 * we instead use the 'states' array to hold this function's recursive
 			 * state */
 			size_t next_index = 1 + state - &states[0];
-			bool recursee_ready;
 			state->chdesc = chdesc;
-			state->ready = ready;
 			state->meta = meta;
 			chdesc = dep;
 			if(next_index < states_capacity)
@@ -377,19 +364,12 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 		  recurse_done:
 			assert(state != &states[0]);
 			state--;
-			recursee_ready = ready;
 			chdesc = state->chdesc;
-			ready = state->ready;
 			meta = state->meta;
-			if(!recursee_ready)
-			{
-				ready = 0;
-				break;
-			}
 		}
 	}
 	
-	if(ready && chdesc->block)
+	if(chdesc->block)
 	{
 		/* only set CHDESC_READY if we know it will get cleared by revision_slice_push_down */
 		assert(chdesc->block->ddesc == block->ddesc);
@@ -400,7 +380,10 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	
 	if(state != &states[0])
 		goto recurse_done;
-	
+
+	ready = 1;
+
+ not_ready:
 	if (states != chdesec_is_ready_static_states)
 		free(states);
 	return ready;
