@@ -243,16 +243,23 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
  * indirect dependencies on chdescs owned by this block device to be missed. */
 /* FIXME: this function will have O(n^2) traversal behavior in the case when n blocks are *not* ready... */
 
+#ifndef __KERNEL__
+#define vmalloc(x) malloc(x)
+#define vfree(x) free(x)
+#else
+#include <linux/vmalloc.h>
+#endif
+
 #include <lib/string.h>
 // TODO: how do we want to (and should we) optimize this in the kernel?
 static void * __realloc(void * p, size_t p_size, size_t new_size)
 {
-	void * q = malloc(new_size);
+	void * q = vmalloc(new_size);
 	if(!q)
 		return NULL;
 	if(p)
 		memcpy(q, p, p_size);
-	free(p);
+	vfree(p);
 	return q;
 }
 
@@ -343,7 +350,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 				states_capacity *= 2;
 				if(states == chdesec_is_ready_static_states)
 				{
-					states = malloc(states_capacity * sizeof(*state));
+					states = vmalloc(states_capacity * sizeof(*state));
 					if(states)
 						memcpy(states, chdesec_is_ready_static_states, cur_size);
 				}
@@ -354,7 +361,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 				{
 					kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
 					if (states != chdesec_is_ready_static_states)
-						free(states);
+						vfree(states);
 					return 0;
 				}
 				state = &states[next_index];
@@ -385,7 +392,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 
  not_ready:
 	if (states != chdesec_is_ready_static_states)
-		free(states);
+		vfree(states);
 	return ready;
 }
 
