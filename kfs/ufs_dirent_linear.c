@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
 
@@ -117,6 +118,8 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	uint32_t len, last_len, blockno, newsize = offset + 512;
 	int r, p = offset, alloc = 0;
 	uint8_t fs_type;
+	bdesc_t * block;
+	bool synthetic = 0;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf || check_name(dirinfo.d_name) || offset < 0)
@@ -141,6 +144,10 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
 				return -E_UNSPECIFIED;
+			block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
+			assert(block); // FIXME Leiz == Lazy
+			r = chdesc_create_init(block, info->ubd, head);
+			assert(r >= 0); // FIXME Leiz == Lazy
 			r = CALL(info->parts.base, append_file_block, (fdesc_t *) dirf, blockno, head);
 			if (r < 0)
 				return r;

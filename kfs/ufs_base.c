@@ -613,9 +613,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
-	bdesc_t * block;
 	uint32_t blockno;
-	bool synthetic = 0;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -680,21 +678,10 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	r = read_fragment_bitmap(info, blockno);
 	assert(r == UFS_USED);
 
-	block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
-	if (!block)
-		goto allocate_block_cleanup;
-	r = chdesc_create_init(block, info->ubd, head);
-	if (r < 0)
-	{
-		r = CALL(info->ubd, cancel_block, blockno);
-		assert(r >= 0);
-		goto allocate_block_cleanup;
-	}
-
 	f->f_inode.di_blocks += 4; // grr, di_blocks counts 512 byte blocks
 	r = write_inode(info, f->f_num, f->f_inode, head);
 	if (r < 0)
-		return INVALID_BLOCK;
+		goto allocate_block_cleanup;
 
 	f->f_lastalloc = blockno;
 	return blockno;
