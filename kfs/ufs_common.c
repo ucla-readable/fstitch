@@ -61,14 +61,15 @@ int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, c
 	cg = num / super->fs_ipg; // Cylinder group #
 	cg_off = num % super->fs_ipg; // nth inode in cg
 	fragno = cg_off / info->ipf; // inode is in nth fragment
-	frag_off = cg_off % info->ipf; // inode is nth inode in fragment
 	fragno += CALL(info->parts.p_cg, get_cylstart, cg) + super->fs_iblkno; // real fragno
+	frag_off = cg_off % info->ipf; // inode is nth inode in fragment
 
 	inode_table = CALL(info->ubd, read_block, fragno, 1);
 	if (!inode_table)
 		return -E_NOT_FOUND;
 	offset = sizeof(struct UFS_dinode) * frag_off;
-	r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head);
+	//r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head);
+	r = chdesc_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode_table->ddesc->data[offset], &inode, head);
 	if (r < 0)
 		return r;
 
