@@ -10,6 +10,7 @@
 #include <lib/kdprintf.h>
 
 #include <kfs/bd.h>
+#include <kfs/kfsd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
@@ -21,8 +22,8 @@
 /* if set and debugging is on, mark cancellation records for debug waiting */
 #define JOURNAL_COMMIT_DBWAIT 0
 
-/* transaction period of 15 seconds */
-#define TRANSACTION_PERIOD (15 * HZ)
+/* transaction period of 5 seconds */
+#define TRANSACTION_PERIOD (5 * HZ)
 /* transaction slot size of 64 x 4K */
 #define TRANSACTION_SIZE (64 * 4096)
 
@@ -51,7 +52,7 @@
  * can have "chained" slots, we have a special NOOP chdesc that represents the
  * whole transaction (since the commit record cancellation chdesc will not be
  * created until the end of the transaction, and we need to do the weak retains
- * as we claim slots for use during transaction).
+ * as we claim slots for use during the transaction).
  * 
  * We keep track of which slot we are currently filling as we are creating a
  * transaction. If and when we fill it, we write a subcommit record, find a new
@@ -61,17 +62,27 @@
  * slot so that we won't reuse those slots until after the entire transaction is
  * finished.
  * 
+ * It is also possible for the cache below us to run out of space due to all the
+ * change descriptors we have given it but not allowed it to write to disk. If
+ * this occurs, we need to be able to pull some recent changes out of the
+ * transaction to bring it back to a safe state to end, then end it at that
+ * point, and then take the recent changes and put them into a new transaction.
+ * For this purpose, we keep track of which change descriptors were added to the
+ * transaction during a single user request, since the only time we know it is
+ * safe to end the transaction is between user requests.
+ * 
  * Here is the chdesc structure of a transaction:
  * 
- *   +-------------+------ NOOPs --------+---------------------+---------------------+
- *   |             |                     |                     |                     |
- *   v             |                     |                     |                     |
- * "keep" <--+     |                     |                     |                     |
- *           |     v                     v                     v                     v
+ *   +-------------+------ NOOPs --------+----------+----------+---------------------+
+ *   |             |                     |          |          |                     |
+ *   |             |                     |          v          |                     |
+ *   v             |                     |       "unsafe"      |                     |
+ * "keep" <--+     |                     |          |          |                     |
+ *           |     v                     v          v          v                     v
  * jrdata <--+-- "wait" <-- commit <-- "hold" <-- fsdata <-- "safe" <-- cancel <-- "done"
  *           |                ^          ^                                ^
  * subcmt <--+                |          |                                |
- *                            |          +--- Managed chdesc              |
+ *                            |          +--- Managed NOOP chdesc         |
  *                            |                                           |
  *                            +------ Created at end of transaction ------+
  * 
@@ -95,25 +106,14 @@
  *   provide a single chdesc that exists at the beginning of the transaction
  *   which represents the whole transaction, so we can weak retain it to claim
  *   slots in the journal
+ * unsafe:
+ *   depend on all the fsdata chdescs which were added during the current
+ *   request ID, as these are the ones which might need to be pulled out
+ * lock:
+ *   not in the diagram, but a managed NOOP chdesc which is used to make sure
+ *   that there is at least one slot in the cache for the journal block device
+ *   that can be used to write the commit record
  * */
-
-
-static unsigned int nholds = 0;
-
-void journal_bd_add_hold(void)
-{
-	nholds++;
-}
-
-void journal_bd_remove_hold(void)
-{
-	assert(nholds > 0);
-	if (nholds == 0)
-		kdprintf(STDERR_FILENO, "%s: nholds already 0\n", __FUNCTION__);
-	else
-		nholds--;
-}
-
 
 struct journal_info {
 	BD_t * bd;
@@ -122,7 +122,7 @@ struct journal_info {
 	uint16_t level, cr_count;
 	uint32_t trans_total_blocks;
 	uint32_t trans_data_blocks;
-	uint32_t stamp;
+	uint32_t stamp, safe_stamp;
 	/* state information below */
 	chdesc_t * keep;
 	chdesc_t * wait;
@@ -132,6 +132,10 @@ struct journal_info {
 	uint16_t trans_slot, prev_slot;
 	chdesc_t * prev_cr;
 	chdesc_t ** cr_retain;
+	chdesc_t * unsafe;
+	chdesc_t * lock;
+	chdesc_t * lock_hold;
+	uint32_t request_id;
 	/* map from FS block number -> journal block number (note 0 is invalid) */
 	hash_map_t * block_map;
 	bool recursion;
@@ -146,6 +150,8 @@ struct commit_record {
 	uint16_t type, next;
 	uint32_t nblocks;
 };
+
+static unsigned int nholds = 0;
 
 /* number of block numbers that can be stored in a block */
 static uint16_t numbers_per_block(uint16_t blocksize)
@@ -213,9 +219,203 @@ static uint16_t journal_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct journal_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
+static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block);
+static int journal_bd_stop_transaction(BD_t * object);
+static int journal_bd_start_transaction(BD_t * object);
+
+static int journal_bd_stop_transaction_previous(BD_t * object)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	chmetadesc_t * meta;
+	chdesc_t * old_safe = info->safe;
+	chdesc_t * hold;
+	int r;
+	
+	/* create a new hold chdesc */
+	hold = chdesc_create_noop(NULL, object);
+	if(!hold)
+		return -E_NO_MEM;
+	chdesc_claim_noop(hold);
+	
+	/* make sure safe doesn't vaporize while we unhook stuff below */
+	r = chdesc_add_depend(old_safe, hold);
+	if(r < 0)
+	{
+		chdesc_destroy(&hold);
+		return r;
+	}
+	
+	/* roll the stuff back that's still a part of this request ID */
+	for(meta = info->unsafe->dependencies; meta; meta = meta->next)
+	{
+		chdesc_t * chdesc = meta->desc;
+		bdesc_t * block = chdesc->block;
+		bdesc_t * journal_block;
+		uint32_t number;
+		chdesc_t * head = NULL;
+		
+		/* first handle the chdesc's dependencies */
+		r = chdesc_add_depend(chdesc, hold);
+		assert(r >= 0);
+		chdesc_remove_depend(chdesc, info->hold);
+		chdesc_remove_depend(old_safe, chdesc);
+		
+		/* now it is time to copy the block's data to the journal */
+		
+		/* have we done this block already? */
+		if(chdesc->flags & CHDESC_ROLLBACK)
+			continue;
+		
+		/* this section looks like part of journal_bd_write_block() */
+		number = journal_bd_lookup_block(object, block);
+		assert(number != INVALID_BLOCK);
+		/* unlock previously locked journal block */
+		chdesc_noop_reassign(info->lock, NULL);
+		journal_block = CALL(info->journal, read_block, number, 1);
+		assert(journal_block);
+		
+		/* rewind the data to the last safe state... */
+		r = revision_tail_prepare_stamp(block, info->safe_stamp);
+		assert(r >= 0);
+		/* ...and copy it to the journal */
+		r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
+		assert(r >= 0);
+		/* but don't roll the block forward yet, so we'll know which we've done */
+	
+		/* write the reverted journal block */
+		info->recursion = 1;
+		r = CALL(info->journal, write_block, journal_block);
+		info->recursion = 0;
+		assert(r >= 0);
+		
+		/* lock journal_block - do it here in case the write needs other blocks */
+		journal_block = CALL(info->journal, read_block, number, 1);
+		assert(journal_block);
+		chdesc_noop_reassign(info->lock, journal_block);
+	}
+	
+	/* stop the transaction as-is */
+	r = journal_bd_stop_transaction(object);
+	assert(r >= 0);
+	chdesc_remove_depend(old_safe, hold);
+	r = journal_bd_start_transaction(object);
+	assert(r >= 0);
+	/* switch out the hold chdesc */
+	chdesc_satisfy(&info->hold);
+	info->hold = hold;
+	
+	for(meta = info->unsafe->dependencies; meta; meta = meta->next)
+	{
+		chdesc_t * chdesc = meta->desc;
+		bdesc_t * block = chdesc->block;
+		bdesc_t * journal_block;
+		uint32_t number;
+		chdesc_t * head= NULL;
+		
+		/* first handle the chdesc's dependencies */
+		r = chdesc_add_depend(info->safe, chdesc);
+		assert(r >= 0);
+		
+		/* have we done this block already? */
+		if(!(chdesc->flags & CHDESC_ROLLBACK))
+			continue;
+		
+		/* now it is time to copy the block's data to the journal */
+		
+		/* this section again looks like part of journal_bd_write_block() */
+		number = journal_bd_lookup_block(object, block);
+		assert(number != INVALID_BLOCK);
+		/* unlock previously locked journal block */
+		chdesc_noop_reassign(info->lock, NULL);
+		journal_block = CALL(info->journal, read_block, number, 1);
+		assert(journal_block);
+		
+		/* roll the block's data forward */
+		r = revision_tail_revert_stamp(block, info->safe_stamp);
+		assert(r >= 0);
+		
+		/* rewind the data to the state that is (now) below us... */
+		r = revision_tail_prepare_stamp(block, info->stamp);
+		assert(r >= 0);
+		/* ...and copy it to the journal */
+		r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
+		assert(r >= 0);
+		/* and once again don't roll the block forward yet */
+		
+		assert(head);
+		r = chdesc_add_depend(info->wait, head);
+		assert(r >= 0);
+		
+		/* write the journal block */
+		info->recursion = 1;
+		r = CALL(info->journal, write_block, journal_block);
+		info->recursion = 0;
+		assert(r >= 0);
+		
+		/* lock journal_block - do it here in case the write needs other blocks */
+		journal_block = CALL(info->journal, read_block, number, 1);
+		assert(journal_block);
+		chdesc_noop_reassign(info->lock, journal_block);
+	}
+	
+	/* one last pass to roll everything forward again */
+	for(meta = info->unsafe->dependencies; meta; meta = meta->next)
+	{
+		chdesc_t * chdesc = meta->desc;
+		
+		/* have we done this block already? */
+		if(!(chdesc->flags & CHDESC_ROLLBACK))
+			continue;
+		
+		r = revision_tail_revert_stamp(chdesc->block, info->stamp);
+		assert(r >= 0);
+	}
+	
+	return 0;
+}
+
+static int journal_bd_accept_request(BD_t * object)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	int r;
+	
+	info->request_id = kfsd_get_request_id();
+	
+	if(info->unsafe)
+	{
+		/* nothing to do? just return */
+		if(!info->unsafe->dependencies)
+			return 0;
+
+		while(info->unsafe && info->unsafe->dependencies)
+		{
+			chdesc_t * chdesc = info->unsafe->dependencies->desc;
+			chdesc_stamp(chdesc, info->stamp);
+			chdesc_remove_depend(info->unsafe, chdesc);
+			/* FIXME: move all dependencies of them to "wait" so the transaction as a whole
+			 * will inherit the dependencies of its constituent change descriptors */
+		}
+		assert(!info->unsafe);
+	}
+	
+	/* create a new NOOP for unsafe */
+	info->unsafe = chdesc_create_noop(NULL, object);
+	if(!info->unsafe)
+		return -E_NO_MEM;
+	r = chdesc_weak_retain(info->unsafe, &info->unsafe);
+	if(r < 0)
+	{
+		info->unsafe = NULL;
+		return r;
+	}
+	chdesc_claim_noop(info->unsafe);
+	return 0;
+}
+
 static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	bdesc_t * block;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -224,12 +424,26 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	if(!count || number + count > info->length)
 		return NULL;
 	
-	return CALL(info->bd, read_block, number, count);
+	if(info->keep && info->request_id != kfsd_get_request_id())
+		journal_bd_accept_request(object);
+	
+	block = CALL(info->bd, read_block, number, count);
+	if(!block)
+	{
+		/* we couldn't do the read... stop the transaction at the previous request and retry */
+		journal_bd_stop_transaction_previous(object);
+		block = CALL(info->bd, read_block, number, count);
+		if(!block)
+			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't read block %d in %s()!\n", number, __FUNCTION__);
+	}
+	
+	return block;
 }
 
 static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	bdesc_t * block;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -238,7 +452,20 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(!count || number + count > info->length)
 		return NULL;
 	
-	return CALL(info->bd, synthetic_read_block, number, count, synthetic);
+	if(info->keep && info->request_id != kfsd_get_request_id())
+		journal_bd_accept_request(object);
+	
+	block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+	if(!block)
+	{
+		/* we couldn't do the read... stop the transaction at the previous request and retry */
+		journal_bd_stop_transaction_previous(object);
+		block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+		if(!block)
+			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't read block %d in %s()!\n", number, __FUNCTION__);
+	}
+	
+	return block;
 }
 
 static int journal_bd_cancel_block(BD_t * object, uint32_t number)
@@ -256,6 +483,9 @@ static int journal_bd_grab_slot(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	uint16_t scan = info->trans_slot;
+	int r;
+	
+again:
 	do {
 		if(!info->cr_retain[scan])
 		{
@@ -269,6 +499,11 @@ static int journal_bd_grab_slot(BD_t * object)
 		if(++scan == info->cr_count)
 			scan = 0;
 	} while(scan != info->trans_slot);
+
+	/* ask the journal to flush, then try again if it did */
+	r = CALL(info->journal, flush, FLUSH_DEVICE, NULL);
+	if(r == FLUSH_DONE || r == FLUSH_SOME)
+		goto again;
 	
 	return -E_BUSY;
 }
@@ -291,9 +526,14 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		{
 			/* we need to allocate a new transaction slot */
 			struct commit_record commit;
+			/* unlock previously locked journal block */
+			chdesc_noop_reassign(info->lock, NULL);
 			bdesc_t * record = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 			if(!record)
+			{
+				/* FIXME: relock previously locked journal block */
 				return INVALID_BLOCK;
+			}
 			
 			/* first write the subcommit record */
 			commit.magic = JOURNAL_MAGIC;
@@ -313,14 +553,19 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			/* then grab a new slot */
 			r = journal_bd_grab_slot(object);
 			assert(r >= 0);
+			
+			/* lock record - do it here in case the write needs other blocks */
+			record = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
+			assert(record);
+			chdesc_noop_reassign(info->lock, record);
 		}
 		
 		/* get next journal block, write block number to journal block number map */
 		number = info->trans_slot * info->trans_total_blocks + 1;
+		/* unlock previously locked journal block */
+		chdesc_noop_reassign(info->lock, NULL);
 		number_block = CALL(info->journal, read_block, number + last / numbers_per_block(info->blocksize), 1);
 		assert(number_block);
-		number += trans_number_block_count(info->blocksize);
-		number += last;
 		
 		data = block->number;
 		r = chdesc_create_byte(number_block, info->journal, last * sizeof(uint32_t), sizeof(uint32_t), &data, &head);
@@ -332,7 +577,13 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		info->recursion = 0;
 		assert(r >= 0);
 		
+		/* lock number_block - do it here in case the write needs other blocks */
+		number_block = CALL(info->journal, read_block, number + last / numbers_per_block(info->blocksize), 1);
+		assert(number_block);
+		chdesc_noop_reassign(info->lock, number_block);
+		
 		/* add the journal block number to the map */
+		number += trans_number_block_count(info->blocksize) + last;
 		r = hash_map_insert(info->block_map, (void *) block->number, (void *) number);
 		assert(r >= 0);
 	}
@@ -381,6 +632,11 @@ static int journal_bd_start_transaction(BD_t * object)
 	/* terminate the chain */
 	info->prev_slot = info->trans_slot;
 	
+	/* set the request ID */
+	journal_bd_accept_request(object);
+	
+	/* FIXME: lock in a journal block */
+	
 	return 0;
 	
 fail_6:
@@ -404,13 +660,19 @@ static int journal_bd_stop_transaction(BD_t * object)
 	bdesc_t * block;
 	chdesc_t * head;
 	int r;
-
-	if (nholds)
+	
+	if(nholds)
 		return -E_BUSY;
 	
+	/* unlock previously locked journal block */
+	chdesc_noop_reassign(info->lock, NULL);
 	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 	if(!block)
+	{
+		kdprintf(STDERR_FILENO, "Can't get the commit record block!\n");
+		/* FIXME: relock previously locked journal block */
 		return -E_UNSPECIFIED;
+	}
 	
 	commit.magic = JOURNAL_MAGIC;
 	commit.type = CRCOMMIT;
@@ -482,7 +744,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	chmetadesc_t * meta;
 	chdesc_t * head = NULL;
 	uint32_t number;
-	int r;
+	int r, retried = 0;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(block->count == 1);
@@ -507,8 +769,10 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		if(r < 0)
 			return r;
 	}
+	else if(info->request_id != kfsd_get_request_id())
+		journal_bd_accept_request(object);
 	
-	/* add our stamp to all chdescs passing through */
+	/* add our (regular) stamp to all chdescs passing through */
 	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
 		if(meta->desc->owner == object)
 		{
@@ -518,11 +782,17 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 			r = chdesc_add_depend(info->safe, meta->desc);
 			if(r < 0)
 				panic("Holy Mackerel!");
+			r = chdesc_add_depend(info->unsafe, meta->desc);
+			if(r < 0)
+				panic("Holy Mackerel!");
 			chdesc_stamp(meta->desc, info->stamp);
 		}
 	
+retry:
 	number = journal_bd_lookup_block(object, block);
 	assert(number != INVALID_BLOCK);
+	/* unlock previously locked journal block */
+	chdesc_noop_reassign(info->lock, NULL);
 	journal_block = CALL(info->journal, read_block, number, 1);
 	assert(journal_block);
 	
@@ -545,9 +815,26 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	info->recursion = 0;
 	assert(r >= 0);
 	
+	/* lock journal_block - do it here in case the write needs other blocks */
+	journal_block = CALL(info->journal, read_block, number, 1);
+	assert(journal_block);
+	chdesc_noop_reassign(info->lock, journal_block);
+	
 	chdesc_push_down(object, block, info->bd, block);
 	
-	return CALL(info->bd, write_block, block);
+	r = CALL(info->bd, write_block, block);
+	if(r < 0)
+	{
+		if(retried)
+			panic("HOLY MACKEREL! We can't write block %d!\n", block->number);
+		retried = 1;
+		/* we couldn't do the write... stop the transaction at the previous request and retry */
+		/* FIXME: check return values */
+		journal_bd_stop_transaction_previous(object);
+		journal_bd_start_transaction(object);
+		goto retry;
+	}
+	return r;
 }
 
 static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
@@ -555,6 +842,8 @@ static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	if(info->keep)
 	{
+		/* FIXME: check return value */
+		journal_bd_accept_request(object);
 		if(journal_bd_stop_transaction(object) < 0)
 			return FLUSH_NONE;
 		return FLUSH_DONE;
@@ -573,7 +862,10 @@ static void journal_bd_callback(void * arg)
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	if(info->keep)
 	{
-		int r = journal_bd_stop_transaction(object);
+		int r;
+		/* FIXME: check return value */
+		journal_bd_accept_request(object);
+		r = journal_bd_stop_transaction(object);
 		if(r < 0 && r != -E_BUSY)
 			panic("Holy Mackerel!");
 	}
@@ -586,6 +878,8 @@ static int journal_bd_destroy(BD_t * bd)
 	
 	if(info->keep)
 	{
+		/* FIXME: check return value */
+		journal_bd_accept_request(bd);
 		r = journal_bd_stop_transaction(bd);
 		if(r < 0)
 			return r;
@@ -604,9 +898,22 @@ static int journal_bd_destroy(BD_t * bd)
 	}
 	
 	r = sched_unregister(journal_bd_callback, bd);
-	assert(r >= 0); // should not fail
+	/* should not fail */
+	assert(r >= 0);
+	
+	/* might not exist if we are destroying because of failed creation */
+	if(info->block_map)
+		hash_map_destroy(info->block_map);
+	
+	if(info->unsafe)
+		chdesc_weak_release(&info->unsafe);
+	if(info->lock)
+	{
+		chdesc_noop_reassign(info->lock, NULL);
+		chdesc_satisfy(&info->lock_hold);
+	}
+	chdesc_release_stamp(info->safe_stamp);
 	chdesc_release_stamp(info->stamp);
-	hash_map_destroy(info->block_map);
 	
 	free(info);
 	memset(bd, 0, sizeof(*bd));
@@ -816,6 +1123,14 @@ BD_t * journal_bd(BD_t * disk)
 		free(bd);
 		return NULL;
 	}
+	info->safe_stamp = chdesc_register_stamp(bd);
+	if(!info->safe_stamp)
+	{
+		chdesc_release_stamp(info->stamp);
+		free(info);
+		free(bd);
+		return NULL;
+	}
 	
 	BD_INIT(bd, journal_bd, info);
 	OBJMAGIC(bd) = JOURNAL_MAGIC;
@@ -835,10 +1150,22 @@ BD_t * journal_bd(BD_t * disk)
 	info->trans_slot = 0;
 	info->prev_slot = 0;
 	info->prev_cr = NULL;
+	info->lock = NULL;
+	info->lock_hold = NULL;
+	/* create the NOOP for unsafe and set the request ID */
+	if(journal_bd_accept_request(bd) < 0)
+	{
+		info->block_map = NULL;
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	info->block_map = hash_map_create();
 	if(!info->block_map)
-		panic("Holy Mackerel!");
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	info->cr_count = 0;
 	info->cr_retain = NULL;
@@ -871,6 +1198,7 @@ BD_t * journal_bd(BD_t * disk)
 int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	bdesc_t * lock_block;
 	uint16_t level;
 	
 	if(OBJMAGIC(bd) != JOURNAL_MAGIC)
@@ -884,10 +1212,16 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 			int i;
 			if(info->keep)
 			{
-				int r = journal_bd_stop_transaction(bd);
+				int r;
+				/* FIXME: check return value */
+				journal_bd_accept_request(bd);
+				r = journal_bd_stop_transaction(bd);
 				if(r < 0)
 					return r;
 			}
+			chdesc_satisfy(&info->lock_hold);
+			/* it will have been collected */
+			info->lock = NULL;
 			modman_dec_bd(info->journal, bd);
 			info->journal = NULL;
 			for(i = 0; i != info->cr_count; i++)
@@ -932,5 +1266,39 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	
 	replay_journal(bd);
 	
+	/* push a NOOP into the cache that depends on us */
+	lock_block = CALL(journal, read_block, 0, 1);
+	if(!lock_block)
+		panic("Holy Mackerel!");
+	info->lock = chdesc_create_noop(lock_block, bd);
+	if(!info->lock)
+		panic("Holy Mackerel!");
+	info->lock_hold = chdesc_create_noop(NULL, bd);
+	if(!info->lock_hold)
+		panic("Holy Mackerel!");
+	chdesc_claim_noop(info->lock_hold);
+	if(chdesc_add_depend(info->lock, info->lock_hold) < 0)
+		panic("Holy Mackerel!");
+	info->recursion = 1;
+	if(CALL(journal, write_block, lock_block) < 0)
+		panic("Holy Mackerel!");
+	info->recursion = 0;
+	/* and finally unlock it, now that it is set up */
+	chdesc_noop_reassign(info->lock, NULL);
+	
 	return 0;
+}
+
+void journal_bd_add_hold(void)
+{
+	nholds++;
+}
+
+void journal_bd_remove_hold(void)
+{
+	assert(nholds > 0);
+	if(!nholds)
+		kdprintf(STDERR_FILENO, "%s: nholds already 0\n", __FUNCTION__);
+	else
+		nholds--;
 }
