@@ -207,6 +207,20 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 {
 	if(noop->type != NOOP)
 		return -E_INVAL;
+	
+	/* special case for reassigning to the same ddesc */
+	if(noop->block && block && noop->block->ddesc == block->ddesc)
+	{
+		if(noop->block != block)
+		{
+			bdesc_retain(block);
+			bdesc_release(&noop->block);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, noop, block);
+			noop->block = block;
+		}
+		return 0;
+	}
+	
 	if(block)
 	{
 		int r = __ensure_bdesc_has_changes(block);
@@ -233,7 +247,7 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
  * descriptors exist on the block or B) the entire block has a single layer of
  * BYTE change descriptors on it. In case B, use chdesc_rewrite_byte() to
  * rewrite the existing change descriptors to reflect the new data, and return
- * NULL in *head. In case A, return the newly created change * descriptors in
+ * NULL in *head. In case A, return the newly created change descriptors in
  * *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
@@ -262,6 +276,12 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 			panic("impossible change descriptor structure!");
 		range -= offset;
 	}
+	
+	/* if we didn't touch anything, go ahead and use chdesc_create_full() */
+	if(range == block->ddesc->length)
+		return chdesc_create_full(block, owner, data, head);
+	
+	/* if there's anything left, it is an error... */
 	if(range)
 		panic("%s() called on non-layered block!\n", __FUNCTION__);
 	
