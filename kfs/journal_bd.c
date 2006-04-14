@@ -428,7 +428,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 		journal_bd_accept_request(object);
 	
 	block = CALL(info->bd, read_block, number, count);
-	if(!block)
+	if(!block && info->keep)
 	{
 		/* we couldn't do the read... stop the transaction at the previous request and retry */
 		journal_bd_stop_transaction_previous(object);
@@ -456,7 +456,7 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 		journal_bd_accept_request(object);
 	
 	block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
-	if(!block)
+	if(!block && info->keep)
 	{
 		/* we couldn't do the read... stop the transaction at the previous request and retry */
 		journal_bd_stop_transaction_previous(object);
@@ -1150,6 +1150,7 @@ BD_t * journal_bd(BD_t * disk)
 	info->trans_slot = 0;
 	info->prev_slot = 0;
 	info->prev_cr = NULL;
+	info->unsafe = NULL;
 	info->lock = NULL;
 	info->lock_hold = NULL;
 	/* create the NOOP for unsafe and set the request ID */
