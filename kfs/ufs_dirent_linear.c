@@ -78,58 +78,53 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	return CALL(info->ubd, write_block, block);
 }
 
-// tries to find an empty entry for a filename of len, in directory dirf
-static int ufs_dirent_linear_find_free_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, uint32_t len)
-{
-	struct UFS_direct entry;
-	uint32_t basep = 0, last_basep, actual_len;
-	int r;
-
-	if (!dirf)
-		return -E_INVAL;
-
-	len = ROUNDUP32(sizeof(struct UFS_direct) + len - UFS_MAXNAMELEN, 4);
-
-	while (1) {
-		last_basep = basep;
-		r = read_dirent(object, dirf, &entry, &basep);
-		if (r < 0 && r != -E_EOF)
-			return r;
-		if (r == -E_EOF) // EOF, return where next entry starts
-			return basep;
-
-		if (entry.d_ino) {
-			// Check to see if entry has room leftover for our entry
-			actual_len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
-			if (entry.d_reclen - actual_len >= len)
-				return last_basep; // return entry to insert after
-		}
-		else {
-			if (entry.d_reclen >= len)
-				return last_basep; // return blank entry location
-		}
-	}
-}
-
-static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head)
+static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	struct UFS_direct entry, last_entry;
-	uint32_t len, last_len, blockno, newsize = offset + 512;
-	int r, p = offset, alloc = 0;
+	uint32_t offset, len, prev_offset, last_basep = 0, basep = 0;
+	int r;
 	uint8_t fs_type;
 	bdesc_t * block;
-	bool synthetic = 0;
+	bool alloc = 0, synthetic = 0;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf || check_name(dirinfo.d_name) || offset < 0)
 		return -E_INVAL;
 
-	len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
-
 	fs_type = kfs_to_ufs_type(dirinfo.d_type);
 	if (fs_type == (uint8_t) -E_INVAL)
 		return -E_INVAL;
+
+	len = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN, 4);
+	while (1) {
+		prev_offset = last_basep;
+		last_basep = basep;
+		r = read_dirent(object, dirf, &last_entry, &basep);
+		if (r < 0 && r != -E_EOF)
+			return r;
+		if (r == -E_EOF) { // EOF, return where next entry starts
+			offset = ROUNDUP32(basep, 512);
+			alloc = 1;
+			break;
+		}
+
+		if (last_entry.d_ino) {
+			uint32_t actual_len;
+			// Check to see if entry has room leftover for our entry
+			actual_len = ROUNDUP32(sizeof(struct UFS_direct) + last_entry.d_namlen - UFS_MAXNAMELEN, 4);
+			if (last_entry.d_reclen - actual_len >= len) {
+				offset = last_basep + actual_len; // return entry to insert after
+				break;
+			}
+		}
+		else {
+			if (last_entry.d_reclen >= len) {
+				offset = last_basep; // return blank entry location
+				break;
+			}
+		}
+	}
 
 	entry.d_type = fs_type;
 	entry.d_ino = dirinfo.d_fileno;
@@ -138,10 +133,11 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	entry.d_name[entry.d_namlen] = 0;
 
 	// Need to extend directory
-	if (offset >= dirf->f_inode.di_size) {
+	if (alloc) {
+		uint32_t newsize = offset + 512;
 		// Need to allocate/append fragment
 		if (offset % super->fs_fsize == 0) {
-			blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
+			uint32_t blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
 				return -E_UNSPECIFIED;
 			block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
@@ -157,22 +153,17 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 		r = CALL(info->parts.base, set_metadata_fdesc, (fdesc_t *) dirf, KFS_feature_size.id, sizeof(uint32_t), &newsize, head);
 		if (r < 0)
 			return r;
-		alloc = 1;
 	}
-
-	r = read_dirent(object, dirf, &last_entry, &p);
-	if (r < 0)
-		return r;
 
 	// Inserting after existing entry
 	if (!alloc && last_entry.d_ino) {
-		last_len = ROUNDUP32(sizeof(struct UFS_direct) + last_entry.d_namlen - UFS_MAXNAMELEN, 4);
+		uint32_t last_len = ROUNDUP32(sizeof(struct UFS_direct) + last_entry.d_namlen - UFS_MAXNAMELEN, 4);
 		entry.d_reclen = last_entry.d_reclen - last_len;
-		r = write_dirent(object, dirf, entry, offset + last_len, head);
+		r = write_dirent(object, dirf, entry, offset, head);
 		if (r < 0)
 			return r;
 		last_entry.d_reclen = last_len;
-		r = write_dirent(object, dirf, last_entry, offset, head);
+		r = write_dirent(object, dirf, last_entry, offset - last_len, head);
 		return r;
 	}
 	else {

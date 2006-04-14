@@ -925,7 +925,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	open_ufsfile_t * open_file;
 	ufs_fdesc_t * ln = (ufs_fdesc_t *) link;
 	uint32_t inum = 0;
-	int r, offset, createdot = 0, ex;
+	int r, createdot = 0, ex;
 	uint16_t mode;
 	struct dirent dirinfo;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -964,11 +964,6 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 	r = CALL(info->parts.p_dirent, search_dirent, pf, name, NULL, NULL);
 	if (r >= 0) // File exists already
-		goto allocate_name_exit;
-
-	// Find an empty slot to write into
-	offset = CALL(info->parts.p_dirent, find_free_dirent, pf, strlen(name) + 1);
-	if (offset < 0)
 		goto allocate_name_exit;
 
 	if (!ln) {
@@ -1023,7 +1018,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	strcpy(dirinfo.d_name, name);
 	dirinfo.d_namelen = strlen(name);
 	dirinfo.d_reclen = sizeof(struct dirent) + dirinfo.d_namelen - DIRENT_MAXNAMELEN;
-	r = CALL(info->parts.p_dirent, insert_dirent, pf, dirinfo, offset, head);
+	r = CALL(info->parts.p_dirent, insert_dirent, pf, dirinfo, head);
 	if (r < 0) {
 		if (!ln)
 			write_inode_bitmap(info, inum, UFS_FREE, head);

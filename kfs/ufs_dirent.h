@@ -19,9 +19,7 @@
 /*
  * search_dirent:    Sets 'offset' to the offset of a file named 'file' in
  *                   'dirf'.
- * find_free_dirent: Returns the offset into 'dirf' that has enough room to
- *                   write a directory entry of length 'len'.
- * insert_dirent:    Insert an entry 'dirinfo' to 'dirf' at offset 'offset'.
+ * insert_dirent:    Insert an entry 'dirinfo' to 'dirf'.
  * delete_dirent:    Deletes the entry named 'name' from 'dirf'.
  * get_dirent:       Read an entry of up to 'size' bytes into 'entry' from
  *                   'dirf' starting at an offset described by 'basep'.
@@ -35,8 +33,7 @@ typedef struct UFSmod_dirent UFSmod_dirent_t;
 struct UFSmod_dirent {
 	OBJECT(UFSmod_dirent_t);
 	DECLARE(UFSmod_dirent_t, int, search_dirent, ufs_fdesc_t * dirf, const char * name, inode_t * ino, int * offset);
-	DECLARE(UFSmod_dirent_t, int, find_free_dirent, ufs_fdesc_t * dirf, uint32_t len);
-	DECLARE(UFSmod_dirent_t, int, insert_dirent, ufs_fdesc_t * dirf, struct dirent dirinfo, int offset, chdesc_t ** head);
+	DECLARE(UFSmod_dirent_t, int, insert_dirent, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head);
 	DECLARE(UFSmod_dirent_t, int, delete_dirent, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head);
 	DECLARE(UFSmod_dirent_t, int, get_dirent, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep);
 	DECLARE(UFSmod_dirent_t, int, modify_dirent, ufs_fdesc_t * dirf, struct dirent entry, uint32_t basep, chdesc_t ** head);
@@ -45,7 +42,6 @@ struct UFSmod_dirent {
 #define UFS_DIRENT_INIT(ufs, module, info) { \
 	OBJ_INIT(ufs, module, info); \
 	ASSIGN(ufs, module, search_dirent); \
-	ASSIGN(ufs, module, find_free_dirent); \
 	ASSIGN(ufs, module, insert_dirent); \
 	ASSIGN(ufs, module, delete_dirent); \
 	ASSIGN(ufs, module, get_dirent); \
