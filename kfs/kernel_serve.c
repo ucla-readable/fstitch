@@ -522,19 +522,23 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	Dprintf("%s(\"%s\", attributes %u)\n", __FUNCTION__, dentry->d_name.name, attr->ia_valid);
 	CFS_t * cfs;
 	struct inode * inode = dentry->d_inode;
-	unsigned int supported = ATTR_SIZE | ATTR_CTIME;
+	unsigned int supported = ATTR_SIZE;
 	fdesc_t * fdesc;
+	struct timespec now = current_fs_time(inode->i_sb);
 	int r;
 
 	kfsd_enter();
 	cfs = dentry2cfs(dentry);
 
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_mtime.id))
-		supported |= ATTR_MTIME;
+		supported |= ATTR_MTIME | ATTR_MTIME_SET;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_atime.id))
-		supported |= ATTR_ATIME;
+		supported |= ATTR_ATIME | ATTR_ATIME_SET;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_unix_permissions.id))
 		supported |= ATTR_MODE;
+
+	// not actually supported, but we won't error on these "supported" flags
+	supported |= ATTR_UID | ATTR_GID | ATTR_CTIME;
 
 	if(attr->ia_valid & ~supported)
 	{
@@ -577,20 +581,27 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	
 	if(attr->ia_valid & ATTR_MODE)
 	{
-		umode_t mode = attr->ia_mode;
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(mode), &mode)))
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(attr->ia_mode), &attr->ia_mode)))
 			goto error;
 	}
 	
-	if(attr->ia_valid & ATTR_MTIME)
+	if(attr->ia_valid & (ATTR_MTIME | ATTR_MTIME_SET))
 	{
-		time_t mtime = attr->ia_mtime.tv_sec;
+		time_t mtime;
+		if(attr->ia_valid & ATTR_MTIME_SET)
+			mtime = now.tv_sec;
+		else
+			mtime = attr->ia_mtime.tv_sec;
 		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_mtime.id, sizeof(mtime), &mtime)) < 0)
 			goto error;
 	}
-	if(attr->ia_valid & ATTR_ATIME)
+	if(attr->ia_valid & (ATTR_ATIME | ATTR_ATIME_SET))
 	{
-		time_t atime = attr->ia_atime.tv_sec;
+		time_t atime;
+		if(attr->ia_valid & ATTR_ATIME_SET)
+			atime = now.tv_sec;
+		else
+			atime = attr->ia_atime.tv_sec;
 		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_atime.id, sizeof(atime), &atime)) < 0)
 			goto error;
 	}
