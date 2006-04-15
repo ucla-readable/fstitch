@@ -272,11 +272,11 @@ static int mount_selector_write(CFS_t * cfs, fdesc_t * fdesc, const void * data,
 	return CALL(msf->cfs, write, msf->inner, data, offset, size);
 }
 
-static int mount_selector_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
+static int mount_selector_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
+	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, entry, size, basep);
 	mount_selector_fdesc_t * msf = (mount_selector_fdesc_t *) fdesc;
-	return CALL(msf->cfs, getdirentries, msf->inner, buf, nbytes, basep);
+	return CALL(msf->cfs, get_dirent, msf->inner, entry, size, basep);
 }
 
 static int mount_selector_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)

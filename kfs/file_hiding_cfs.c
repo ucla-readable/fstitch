@@ -241,34 +241,20 @@ static int file_hiding_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, ui
 	return CALL(state->frontend_cfs, write, fhf->inner, data, ofhfset, size);
 }
 
-static int file_hiding_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
+static int file_hiding_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, buf, nbytes, basep);
+	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, entry, size, basep);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
-	int i, r, s, hidden;
-	dirent_t * d;
+	int r;
 
 	if (fhf->ino == INODE_NONE)
 		return -E_NOT_FOUND;
 
-	r = CALL(state->frontend_cfs, getdirentries, fhf->inner, buf, nbytes, basep);
-
 	// Look for hidden files
-	for (i = 0; i < r; )
-	{
-		d = (dirent_t *) (buf + i);
-		hidden = hide_lookup(state->hide_table, d->d_fileno);
-		if (0 <= hidden)
-		{
-			// Remove a hidden file
-			s = d->d_reclen;
-			memmove(buf + i, buf + i + s, r - i - s);
-			r  -= s;
-		}
-		else
-			i += d->d_reclen;
-	}
+	do {
+		r = CALL(state->frontend_cfs, get_dirent, fhf->inner, entry, size, basep);
+	} while (r >= 0 && hide_lookup(state->hide_table, entry->d_fileno) <= 0);
 	return r;
 }
 

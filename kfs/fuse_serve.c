@@ -195,7 +195,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	{
 		if (!nlinks)
 		{
-			char buf[1024];
+			dirent_t dirent;
 			uint32_t basep = 0;
 			fdesc_t * fdesc;
 
@@ -204,16 +204,9 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
 			assert(fdesc->common->parent != INODE_NONE);
 
-			while ((r = CALL(reqcfs(req), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
-			{
-				char * cur = buf;
-				while (cur < buf + r)
-				{
-					if (((dirent_t *) cur)->d_type == TYPE_DIR)
-						nlinks++;
-					cur += ((dirent_t *) cur)->d_reclen;
-				}
-			}
+			while ((r = CALL(reqcfs(req), get_dirent, fdesc, &dirent, sizeof(dirent), &basep)) >= 0)
+				if (dirent.d_type == TYPE_DIR)
+					nlinks++;
 
 			r = CALL(reqcfs(req), close, fdesc);
 			assert(r >= 0);
@@ -834,60 +827,48 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 
 	while (1)
 	{
-		char cfs_buf[sizeof(dirent_t)];
-		char * cur = cfs_buf;
-		uint32_t uu_nbytes = 0;
+		dirent_t dirent;
 		int nbytes;
+		struct stat stbuf;
+		inode_t entry_cfs_ino;
+		size_t oldsize = total_size;
 
-		nbytes = CALL(reqcfs(req), getdirentries, fdesc, cfs_buf, sizeof(cfs_buf), &off);
+		nbytes = CALL(reqcfs(req), get_dirent, fdesc, &dirent, sizeof(dirent), &off);
 		if (nbytes == -E_UNSPECIFIED)
 			break;
 		else if (nbytes < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s:%s(): read_single_dir(0x%08x, %lld, 0x%08x) = %d\n",
-					 __FILE__, __FUNCTION__, fdesc, off, &cfs_buf, nbytes);
+			kdprintf(STDERR_FILENO, "%s:%s(): CALL(cfs, get_dirent, fdesc = %p, off = %lld) = %d\n",
+					 __FILE__, __FUNCTION__, fdesc, off, nbytes);
 			assert(nbytes >= 0);
 		}
 
-		/* make sure there is a reclen to read, and make sure it doesn't say to go to far  */
-		while ((cur - cfs_buf) + RECLEN_MIN_SIZE <= nbytes)
+		if (total_size + fuse_dirent_size(dirent.d_namelen) > size)
+			break;
+		Dprintf("%s: \"%s\"\n", __FUNCTION__, dirent.d_name);
+
+		total_size += fuse_dirent_size(dirent.d_namelen);
+		buf = (char *) realloc(buf, total_size);
+		if (!buf)
+			panic("realloc() failed");
+
+		memset(&stbuf, 0, sizeof(stbuf));
+		// Generate "." and ".." here rather than in the base file system
+		// because they are not able to find ".."'s inode from just
+		// "."'s inode
+		if (!strcmp(dirent.d_name, "."))
+			entry_cfs_ino = fusecfsino(req, fuse_ino);
+		else if (!strcmp(dirent.d_name, ".."))
+			entry_cfs_ino = fdesc->common->parent;
+		else
 		{
-			dirent_t * cfs_dirent = (dirent_t *) cur;
-			size_t oldsize = total_size;
-			struct stat stbuf;
-			inode_t entry_cfs_ino;
-			assert((cur - cfs_buf) + cfs_dirent->d_reclen <= nbytes);
-			Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
-
-			if (total_size + fuse_dirent_size(cfs_dirent->d_namelen) > size)
-				goto out;
-
-			total_size += fuse_dirent_size(cfs_dirent->d_namelen);
-			buf = (char *) realloc(buf, total_size);
-			assert(buf);
-
-			memset(&stbuf, 0, sizeof(stbuf));
-			// Generate "." and ".." here rather than in the base file system
-			// because they are not able to find ".."'s inode from just
-			// "."'s inode
-			if (!strcmp(cfs_dirent->d_name, "."))
-				entry_cfs_ino = fusecfsino(req, fuse_ino);
-			else if (!strcmp(cfs_dirent->d_name, ".."))
-				entry_cfs_ino = fdesc->common->parent;
-			else
-			{
-				r = CALL(reqcfs(req), lookup, fusecfsino(req, fuse_ino), cfs_dirent->d_name, &entry_cfs_ino);
-				assert(r >= 0);
-			}
-			stbuf.st_ino = cfsfuseino(req, entry_cfs_ino);
-			fuse_add_dirent(buf + oldsize, cfs_dirent->d_name, &stbuf, off)
-;
-			cur += cfs_dirent->d_reclen;
-			uu_nbytes += cfs_dirent->d_reclen;
+			r = CALL(reqcfs(req), lookup, fusecfsino(req, fuse_ino), dirent.d_name, &entry_cfs_ino);
+			assert(r >= 0);
 		}
+		stbuf.st_ino = cfsfuseino(req, entry_cfs_ino);
+		fuse_add_dirent(buf + oldsize, dirent.d_name, &stbuf, off);
 	}
 
-  out:
 	r = fuse_reply_buf(req, buf, total_size);
 	assert(!r);
 	free(buf);

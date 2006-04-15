@@ -389,12 +389,12 @@ static int opgroupscope_tracker_write(CFS_t * cfs, fdesc_t * fdesc, const void *
 	return r;
 }
 
-static int opgroupscope_tracker_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
+static int opgroupscope_tracker_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
 	int r = set_cur_opgroup_scope(cfs_ipc_serve_cur_envid());
 	if (r < 0)
 		return r;
-	r = CALL(this_state.frontend_cfs, getdirentries, fdesc, buf, nbytes, basep);
+	r = CALL(this_state.frontend_cfs, get_dirent, fdesc, entry, size, basep);
 	clear_cur_opgroup_scope();
 	return r;
 }

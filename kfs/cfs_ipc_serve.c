@@ -279,13 +279,27 @@ static void serve_getdirentries(envid_t envid, struct Scfs_getdirentries * req)
 	if (nbytes > sizeof(resp->buf))
 		nbytes = sizeof(resp->buf);
 
+	resp->nbytes_read = 0;
 	if ((r = fid_fdesc(req->fid, &fdesc)) >= 0)
 	{
-		r = CALL(frontend_cfs, getdirentries, fdesc, resp->buf, nbytes, &resp->basep);
-		resp->nbytes_read = r;
+		uint32_t i;
+		char * buf = resp->buf;
+		for (i=0; resp->nbytes_read < nbytes; i++)
+		{
+			uint32_t basep = resp->basep;
+			dirent_t * dirent = (dirent_t *) buf;
+			r = CALL(frontend_cfs, get_dirent, fdesc, dirent, nbytes - resp->nbytes_read, &basep);
+			if (r < 0)
+			{
+				if (resp->nbytes_read > 0)
+					r = 0;
+				break;
+			}
+			resp->nbytes_read += ((dirent_t *) buf)->d_reclen;
+			buf += ((dirent_t *) buf)->d_reclen;
+			resp->basep = basep;
+		}
 	}
-	else
-		resp->nbytes_read = 0;
 	ipc_send(envid, r, resp, PTE_P|PTE_U, NULL);
 }
 

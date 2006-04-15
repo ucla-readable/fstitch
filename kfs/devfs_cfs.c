@@ -311,7 +311,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 	return size_written ? size_written : (size ? ((r < 0) ? r : -E_EOF) : 0);
 }
 
-static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes, uint32_t * basep)
+static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int nbytes, uint32_t * basep)
 {
 	const size_t size = vector_size(state->bd_table);
 	uint16_t reclen = sizeof(*dirent) - sizeof(dirent->d_name) + 1;
@@ -364,33 +364,18 @@ static int devfs_get_dirent(devfs_state_t * state, dirent_t * dirent, int nbytes
 	return 0;
 }
 
-/* This function looks a lot like uhfs_getdirentries() */
-static int devfs_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
+static int devfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
+	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, entry, size, basep);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
-	uint32_t i;
-	int nbytes_read = 0;
-	int r = 0;
 	
 	/* check for the special file / */
 	if(fdesc != (fdesc_t *) &state->root_fdesc)
 		return -E_INVAL;
-	
-	for(i = 0; nbytes_read < nbytes; i++)
-	{
-		r = devfs_get_dirent(state, (dirent_t *) buf, nbytes - nbytes_read, basep);
-		if(r < 0)
-			goto exit;
-		nbytes_read += ((dirent_t *) buf)->d_reclen;
-		buf += ((dirent_t *) buf)->d_reclen;
-	}
-	
-exit:
-	if(!nbytes || nbytes_read > 0)
-		return nbytes_read;
-	else
-		return r;
+
+	if(!size)
+		return 0;
+	return devfs_get_dirent_helper(state, entry, size, basep);
 }
 
 static int devfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)

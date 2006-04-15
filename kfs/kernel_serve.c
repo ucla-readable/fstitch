@@ -219,7 +219,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		if (!nlinks_supported)
 		{
-			char buf[1024];
+			dirent_t dirent;
 			uint32_t basep = 0;
 			fdesc_t * fdesc;
 			
@@ -230,16 +230,9 @@ static void read_inode_withlock(struct inode * inode)
 			/* HACK: this does not have to be the correct value */
 			fdesc->common->parent = inode->i_ino;
 			
-			while ((r = CALL(sb2cfs(inode->i_sb), getdirentries, fdesc, buf, sizeof(buf), &basep)) > 0)
-			{
-				char * cur = buf;
-				while (cur < buf + r)
-				{
-					if (((dirent_t *) cur)->d_type == TYPE_DIR)
-						inode->i_nlink++;
-					cur += ((dirent_t *) cur)->d_reclen;
-				}
-			}
+			while ((r = CALL(sb2cfs(inode->i_sb), get_dirent, fdesc, &dirent, sizeof(dirent), &basep)) >= 0)
+				if (dirent.d_type == TYPE_DIR)
+					inode->i_nlink++;
 			
 			r = CALL(sb2cfs(inode->i_sb), close, fdesc);
 			assert(r >= 0);
@@ -584,7 +577,6 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(attr->ia_mode), &attr->ia_mode)))
 			goto error;
 	}
-	
 	if(attr->ia_valid & (ATTR_MTIME | ATTR_MTIME_SET))
 	{
 		time_t mtime;
@@ -846,36 +838,18 @@ static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t fill
 	while (1)
 	{
 		uint32_t cfs_fpos = filp->f_pos;
-		char buf[sizeof(dirent_t)];
-		char * cur = buf;
-		uint32_t k_nbytes = 0;
+		dirent_t dirent;
 
-		r = CALL(dentry2cfs(filp->f_dentry), getdirentries, file2fdesc(filp), buf, sizeof(buf), &cfs_fpos);
+		r = CALL(dentry2cfs(filp->f_dentry), get_dirent, file2fdesc(filp), &dirent, sizeof(dirent), &cfs_fpos);
 		if (r < 0)
 			break;
 
-		/* make sure there is a reclen to read, and make sure it doesn't say to go to far  */
-		while ((cur - buf) + RECLEN_MIN_SIZE <= r)
-		{
-			dirent_t * cfs_dirent = (dirent_t *) cur;
-			int s;
-			assert((cur - buf) + ((dirent_t *) cur)->d_reclen <= r);
-			Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
-			// FIXME?: must fpos be a real file position?
-			s = filldir(k_dirent, cfs_dirent->d_name, cfs_dirent->d_namelen, 0, cfs_dirent->d_fileno, cfs_dirent->d_type);
-			if (s < 0)
-			{
-				cfs_fpos = filp->f_pos;
-				r = CALL(dentry2cfs(filp->f_dentry), getdirentries, file2fdesc(filp), buf, k_nbytes, &cfs_fpos);
-				assert(r >= 0);
-				goto out;
-			}
-			cur += cfs_dirent->d_reclen;
-			k_nbytes += cfs_dirent->d_reclen;
-		}
+		Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
+		r = filldir(k_dirent, dirent.d_name, dirent.d_namelen, 0, dirent.d_fileno, dirent.d_type);
+		if (r < 0)
+			break;
 		filp->f_pos = cfs_fpos;
 	}
-out:
 	kfsd_leave(1);
 
 	if (r == -E_UNSPECIFIED)

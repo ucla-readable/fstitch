@@ -636,6 +636,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	bdesc_t * dirblock = NULL;
 	JOSFS_File_t * dirfile;
 	uint32_t blockno;
+	int r;
 
 	// Make sure it's a directory and we can read from it
 	if (f->file->f_type != JOSFS_TYPE_DIR)
@@ -678,19 +679,22 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		return fill_dirent(&d, parent, entry, size, basep);
 	}
 
-	blockno = (*basep - 2) / JOSFS_BLKFILES;
+	do {
+		blockno = (*basep - 2) / JOSFS_BLKFILES;
 
-	if (blockno >= get_file_numblocks(info, f->file))
-		return -E_UNSPECIFIED;
+		if (blockno >= get_file_numblocks(info, f->file))
+			return -E_UNSPECIFIED;
 
-	blockno = get_file_block(object, f->file, blockno * JOSFS_BLKSIZE);
-	if (blockno != INVALID_BLOCK)
-		dirblock = josfs_lookup_block(object, blockno);
-	if (!dirblock)
-		return -E_NOT_FOUND;
-	dirfile = &((JOSFS_File_t *) dirblock->ddesc->data)[(*basep - 2) % JOSFS_BLKFILES];
+		blockno = get_file_block(object, f->file, blockno * JOSFS_BLKSIZE);
+		if (blockno != INVALID_BLOCK)
+			dirblock = josfs_lookup_block(object, blockno);
+		if (!dirblock)
+			return -E_NOT_FOUND;
+		dirfile = &((JOSFS_File_t *) dirblock->ddesc->data)[(*basep - 2) % JOSFS_BLKFILES];
 
-	return fill_dirent(dirfile, f->ino, entry, size, basep);
+		r = fill_dirent(dirfile, f->ino, entry, size, basep);
+	} while (r >= 0 && !entry->d_reclen);
+	return r;
 }
 
 static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)

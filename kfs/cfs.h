@@ -7,6 +7,7 @@
 #include <kfs/feature.h>
 #include <kfs/inode.h>
 #include <kfs/fdesc.h>
+#include <lib/dirent.h>
 
 struct CFS;
 typedef struct CFS CFS_t;
@@ -20,7 +21,7 @@ struct CFS {
 	DECLARE(CFS_t, int, close, fdesc_t * fdesc);
 	DECLARE(CFS_t, int, read, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size);
-	DECLARE(CFS_t, int, getdirentries, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep);
+	DECLARE(CFS_t, int, get_dirent, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 	DECLARE(CFS_t, int, truncate, fdesc_t * fdesc, uint32_t size);
 	DECLARE(CFS_t, int, unlink, inode_t parent, const char * name);
 	DECLARE(CFS_t, int, link, inode_t inode, inode_t newparent, const char * newname);
@@ -42,7 +43,7 @@ struct CFS {
 	ASSIGN(cfs, module, close); \
 	ASSIGN(cfs, module, read); \
 	ASSIGN(cfs, module, write); \
-	ASSIGN(cfs, module, getdirentries); \
+	ASSIGN(cfs, module, get_dirent); \
 	ASSIGN(cfs, module, truncate); \
 	ASSIGN(cfs, module, unlink); \
 	ASSIGN(cfs, module, link); \

@@ -565,29 +565,15 @@ uhfs_write_exit:
 	return r;
 }
 
-static int uhfs_getdirentries(CFS_t * cfs, fdesc_t * fdesc, char * buf, int nbytes, uint32_t * basep)
+static int uhfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
-	Dprintf("%s(%p, %p, %d, %p)\n", __FUNCTION__, fdesc, buf, nbytes, basep);
+	Dprintf("%s(%p, %p, %d, %p)\n", __FUNCTION__, fdesc, entry, size, basep);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
-	uint32_t i;
-	int nbytes_read = 0;
-	int r = 0;
 
-	for (i=0; nbytes_read < nbytes; i++)
-	{
-		r = CALL(state->lfs, get_dirent, uf->inner, (dirent_t *) buf, nbytes - nbytes_read, basep);
-		if (r < 0)
-			goto exit;
-		nbytes_read += ((dirent_t *) buf)->d_reclen;
-		buf += ((dirent_t *) buf)->d_reclen;
-	}
-
-  exit:
-	if (!nbytes || nbytes_read > 0)
-		return nbytes_read;
-	else
-		return r;
+	if (!size)
+		return 0;
+	return CALL(state->lfs, get_dirent, uf->inner, entry, size, basep);
 }
 
 static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f)
