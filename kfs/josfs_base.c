@@ -18,13 +18,6 @@
 #endif
 
 #define JOSFS_BASE_DEBUG 0
-#define JOSFS_BASE_DEBUG_FSCK 0
-
-#if JOSFS_BASE_DEBUG_FSCK
-#define DFprintf(x...) printf(x)
-#else
-#define DFprintf(x...)
-#endif
 
 #if JOSFS_BASE_DEBUG
 #define Dprintf(x...) printf(x)
