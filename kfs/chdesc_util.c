@@ -992,7 +992,12 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		count++;
 	}
 
-	if(count)
+	if(count == 1)
+	{
+		chdesc_remove_depend(newhead, oldhead); /* no longer needed */
+		*head = oldhead;
+	}
+	else if (count > 1)
 		*head = newhead;
 	return 0;
 
