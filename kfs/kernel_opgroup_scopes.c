@@ -129,7 +129,7 @@ opgroup_scope_t * process_opgroup_scope(const struct task_struct * task)
 
 int kernel_opgroup_scopes_init(void)
 {
-	printk("This version of kkfsd was compiled without opgroup support!\n");
+	printf("This version of kkfsd was compiled without opgroup support!\n");
 	return 0;
 }
 
