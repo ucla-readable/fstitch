@@ -197,7 +197,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	{
 		int again = 0;
 		int progress = 0;
-		for(i = 0; i != count; i++)
+		for(i = count - 1; i >= 0; i--)
 		{
 			if(!chdescs[i])
 				continue;
