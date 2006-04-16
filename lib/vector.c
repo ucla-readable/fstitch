@@ -169,11 +169,12 @@ int vector_reserve(vector_t * v, size_t n)
 {
 	size_t i;
 	const size_t n_elts = v->size;
+	void ** elts;
 
 	if (n <= v->capacity)
 		return 1;
 
-	void ** elts = vector_create_elts(n);
+	elts = vector_create_elts(n);
 	if (!elts)
 		return -E_NO_MEM;
 
