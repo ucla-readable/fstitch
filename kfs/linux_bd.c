@@ -338,7 +338,6 @@ static int linux_bd_cancel_block(BD_t * object, uint32_t number)
 static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	DEFINE_WAIT(wait);
-	int waited = 0;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	struct bio *bio;
 	struct bio_vec *bv;
@@ -346,7 +345,6 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	int r;
 	int i;
 	struct linux_bio_private * private;
-	static int infty = 10;
 	
 	KDprintk(KERN_ERR "entered write\n");
 	if((info->blocksize * block->count) != block->ddesc->length) {

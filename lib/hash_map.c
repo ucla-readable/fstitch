@@ -95,10 +95,11 @@ hash_map_t * hash_map_create(void)
 
 hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 {
+	hash_map_t * hm;
 	if (!n)
 		return NULL;
 
-	hash_map_t * hm = malloc(sizeof(*hm));
+	hm = malloc(sizeof(*hm));
 	if (!hm)
 		return NULL;
 
@@ -183,6 +184,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	{
 		// See if k is already in the chain, simply update its value if so.
 		chain_elt_t * existing_elt;
+		chain_elt_t * new_head;
 		if ((existing_elt = chain_search_key(head, k)))
 		{
 			existing_elt->elt.val = v;
@@ -191,7 +193,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 		// k isn't already in the chain, add it.
 
-		chain_elt_t * new_head = chain_elt_create();
+		new_head = chain_elt_create();
 		if (!new_head)
 			return -E_NO_MEM;
 
@@ -373,11 +375,12 @@ hash_map_elt_t * hash_map_find_eltp(const hash_map_t * hm, const void * k)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
+	chain_elt_t * k_chain;
 
 	if (!head)
 		return NULL;
 
-	chain_elt_t * k_chain = chain_search_key(head, k);
+	k_chain = chain_search_key(head, k);
 	if (!k_chain)
 		return NULL;
 
@@ -404,6 +407,8 @@ size_t hash_map_bucket_count(const hash_map_t * hm)
 
 int hash_map_resize(hash_map_t * hm, size_t n)
 {
+	hash_map_t * new_hm;
+	size_t i;
 	n = next_size(n);
 
 	// Avoid unnecessary work when there is no change in the number of buckets
@@ -415,12 +420,11 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	// http://sources.redhat.com/ml/guile/1998-10/msg00864.html
 
 	// Create new hash table
-	hash_map_t * new_hm = hash_map_create_size(n, hm->auto_resize);
+	new_hm = hash_map_create_size(n, hm->auto_resize);
 	if (!new_hm)
 		return -E_NO_MEM;
 
 	// Rehash elements
-	size_t i;
 	for (i=0; i < vector_size(hm->tbl); i++)
 	{
 		chain_elt_t * elt = vector_elt(hm->tbl, i);
