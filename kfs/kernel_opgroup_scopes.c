@@ -122,6 +122,8 @@ int kernel_opgroup_scopes_init(void)
 
 #else
 
+#include <lib/stdio.h>
+
 opgroup_scope_t * process_opgroup_scope(const struct task_struct * task)
 {
 	return NULL;
