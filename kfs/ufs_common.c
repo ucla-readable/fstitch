@@ -441,7 +441,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
 	if (((*ptr >> (num % 32)) & 1) == value) {
-		printf("already at the right value!\n");
+		printf("%s already at the right value!\n", __FUNCTION__);
 		return 1;
 	}
 
