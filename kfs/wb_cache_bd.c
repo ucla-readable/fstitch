@@ -17,8 +17,8 @@
 #include <kfs/revision.h>
 #include <kfs/wb_cache_bd.h>
 
-/* try to flush every 10 seconds */
-#define FLUSH_PERIOD (10 * HZ)
+/* try to flush every 1 seconds */
+#define FLUSH_PERIOD (HZ)
 
 /* This file implements the first whack at our new WB cache. It's an LRU cache,
  * and it allows you to give it chdescs with unsatisfied dependencies. However,
