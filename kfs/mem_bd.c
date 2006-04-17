@@ -262,7 +262,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		mark_block_free(&info->blocks[blocksize * 2], i);
 	mark_block_used(&info->blocks[blocksize * 2], 0);
 	mark_block_used(&info->blocks[blocksize * 2], 1);
-	for (i = 0; i < ((blocks/blocksize) + ((blocks % blocksize) != 0)); i++)
+	for (i = 0; i < (blocks + JOSFS_BLKBITSIZE - 1) / JOSFS_BLKBITSIZE; i++)
 		mark_block_used(&info->blocks[blocksize * 2], i + 2);
 	// done setting up JOS fs
 
