@@ -118,10 +118,32 @@ unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 static bdesc_t *
 unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
 {
-	bdesc_t * ret = unix_file_bd_read_block(object, number, count);
-	if(ret)
+	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
+	bdesc_t * bdesc;
+
+	/* make sure it's a valid block */
+	if (!count || number + count > info->blockcount)
+		return NULL;
+
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
+	{
+		assert(bdesc->count == count);
 		*synthetic = 0;
-	return ret;
+		return bdesc;
+	}
+
+	bdesc = bdesc_alloc(number, info->blocksize, count);
+	if (bdesc == NULL)
+		return NULL;
+	bdesc_autorelease(bdesc);
+
+	if(blockman_managed_add(info->blockman, bdesc) < 0)
+		return NULL;
+
+	*synthetic = 1;
+
+	return bdesc;
 }
 
 static int
