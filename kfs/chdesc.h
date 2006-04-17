@@ -60,7 +60,9 @@ struct chdesc {
 		} noop;
 	};
 	chmetadesc_t * dependencies;
+	chmetadesc_t ** dependencies_tail;
 	chmetadesc_t * dependents;
+	chmetadesc_t ** dependents_tail;
 	chrefdesc_t * weak_refs;
 	chdesc_t * free_prev;
 	chdesc_t * free_next;

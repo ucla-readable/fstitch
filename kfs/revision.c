@@ -47,7 +47,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	for(;;)
 	{
 		int again = 0;
-		for(i = 0; i != count; i++)
+		for(i = count - 1; i != -1; i--)
 		{
 			/* already rolled back? */
 			if(chdescs[i]->flags & CHDESC_ROLLBACK)
@@ -126,7 +126,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	for(;;)
 	{
 		int again = 0;
-		for(i = count - 1; i >= 0; i--)
+		for(i = 0; i != count; i++)
 		{
 			/* already rolled forward? */
 			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
@@ -197,7 +197,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	{
 		int again = 0;
 		int progress = 0;
-		for(i = count - 1; i >= 0; i--)
+		for(i = 0; i != count; i++)
 		{
 			if(!chdescs[i])
 				continue;

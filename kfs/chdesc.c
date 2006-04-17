@@ -179,23 +179,27 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 		return -E_NO_MEM;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, dependent, dependency);
 	meta->desc = dependency;
-	meta->next = dependent->dependencies;
-	dependent->dependencies = meta;
+	meta->next = NULL;
+	*dependent->dependencies_tail = meta;
 	
 	/* add the dependent to the dependency */
 	meta = malloc(sizeof(*meta));
 	if(!meta)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, dependent, dependency);
-		meta = dependent->dependencies;
-		dependent->dependencies = meta->next;
+		meta = *dependent->dependencies_tail;
+		*dependent->dependencies_tail = NULL;
 		free(meta);
 		return -E_NO_MEM;
 	}
+	/* do the last step of the dependency addition above only after we know we can succeed */
+	dependent->dependencies_tail = &(*dependent->dependencies_tail)->next;
+	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, dependency, dependent);
 	meta->desc = dependent;
-	meta->next = dependency->dependents;
-	dependency->dependents = meta;
+	meta->next = NULL;
+	*dependency->dependents_tail = meta;
+	dependency->dependents_tail = &meta->next;
 	
 	/* virgin NOOP chdesc getting its first dependency */
 	if(free_head == dependent || dependent->free_prev)
@@ -434,7 +438,9 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->block = block;
 	chdesc->type = NOOP;
 	chdesc->dependencies = NULL;
+	chdesc->dependencies_tail = &chdesc->dependencies;
 	chdesc->dependents = NULL;
+	chdesc->dependents_tail = &chdesc->dependents;
 	chdesc->weak_refs = NULL;
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
@@ -484,7 +490,9 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->bit.offset = offset;
 	chdesc->bit.xor = xor;
 	chdesc->dependencies = NULL;
+	chdesc->dependencies_tail = &chdesc->dependencies;
 	chdesc->dependents = NULL;
+	chdesc->dependents_tail = &chdesc->dependents;
 	chdesc->weak_refs = NULL;
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
@@ -596,7 +604,9 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			chdescs[i]->byte.length = atomic_size - (i ? 0 : init_offset);
 		
 		chdescs[i]->dependencies = NULL;
+		chdescs[i]->dependencies_tail = &chdescs[i]->dependencies;
 		chdescs[i]->dependents = NULL;
+		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
 		chdescs[i]->weak_refs = NULL;
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
@@ -719,7 +729,9 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		chdescs[i]->byte.length = atomic_size;
 		
 		chdescs[i]->dependencies = NULL;
+		chdescs[i]->dependencies_tail = &chdescs[i]->dependencies;
 		chdescs[i]->dependents = NULL;
+		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
 		chdescs[i]->weak_refs = NULL;
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
@@ -838,7 +850,9 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->byte.length = atomic_size;
 		
 		chdescs[i]->dependencies = NULL;
+		chdescs[i]->dependencies_tail = &chdescs[i]->dependencies;
 		chdescs[i]->dependents = NULL;
+		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
 		chdescs[i]->weak_refs = NULL;
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
@@ -1038,7 +1052,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	return chdesc_add_depend_fast(dependent, dependency);
 }
 
-static void chdesc_meta_remove(chmetadesc_t ** list, chdesc_t * chdesc)
+static void chdesc_meta_remove(chmetadesc_t ** list, chmetadesc_t *** tail, chdesc_t * chdesc)
 {
 	chmetadesc_t * scan = *list;
 	while(scan)
@@ -1046,6 +1060,8 @@ static void chdesc_meta_remove(chmetadesc_t ** list, chdesc_t * chdesc)
 		if(scan->desc == chdesc)
 		{
 			*list = scan->next;
+			if(!scan->next)
+				*tail = list;
 			free(scan);
 			scan = *list;
 #if CHDESC_ALLOW_MULTIGRAPH
@@ -1067,10 +1083,10 @@ static void chdesc_meta_remove(chmetadesc_t ** list, chdesc_t * chdesc)
 void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, dependent, dependency);
-	chdesc_meta_remove(&dependent->dependencies, dependency);
+	chdesc_meta_remove(&dependent->dependencies, &dependent->dependencies_tail, dependency);
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, dependency, dependent);
-	chdesc_meta_remove(&dependency->dependents, dependent);
+	chdesc_meta_remove(&dependency->dependents, &dependency->dependents_tail, dependent);
 	
 	if(dependent->type == NOOP && !dependent->dependencies)
 		/* we just removed the last dependency of a NOOP chdesc, so satisfy it */
@@ -1249,10 +1265,12 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 			chmetadesc_t * meta = (*chdesc)->dependents;
 			chdesc_t * dependent = meta->desc;
 			(*chdesc)->dependents = meta->next;
+			if(!meta->next)
+				(*chdesc)->dependents_tail = &(*chdesc)->dependents;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, *chdesc, meta->desc);
 			
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->desc, *chdesc);
-			chdesc_meta_remove(&meta->desc->dependencies, *chdesc);
+			chdesc_meta_remove(&meta->desc->dependencies, &meta->desc->dependencies_tail, *chdesc);
 			
 			free(meta);
 			if(dependent->type == NOOP && !dependent->dependencies)
