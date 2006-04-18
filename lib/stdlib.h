@@ -75,7 +75,7 @@ static __inline void sfree(void * p, size_t size)
 
 #define smalloc(size) malloc(size)
 #define scalloc(nmemb, size) calloc(nmemb, size)
-#define sfree(p, size) free(p)
+#define sfree(p, size) do { (void) size; free(p) } while (0)
 
 #endif
 
