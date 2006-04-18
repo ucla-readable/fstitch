@@ -414,7 +414,7 @@ static int ufs_cg_wb_destroy(UFSmod_cg_t * obj)
 	for (i = 0; i < linfo->ncg; i++)
 		bdesc_release(&linfo->cg[i].cgblock);
 
-	free(linfo->cg);
+	sfree(linfo->cg, sizeof(struct cyl_info) * linfo->ncg);
 	free(linfo);
 	memset(obj, 0, sizeof(*obj));
 	free(obj);
@@ -444,7 +444,7 @@ UFSmod_cg_t * ufs_cg_wb(struct lfs_info * info)
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	linfo->ncg = super->fs_ncg;
 
-	linfo->cg = malloc(sizeof(struct cyl_info) * linfo->ncg);
+	linfo->cg = smalloc(sizeof(struct cyl_info) * linfo->ncg);
 	if (!linfo->cg) {
 		free(obj);
 		free(linfo);
@@ -483,7 +483,7 @@ read_block_failed:
 		bdesc_release(&linfo->cg[i].cgblock);
 		i--;
 	}
-	free(linfo->cg);
+	sfree(linfo->cg, sizeof(struct cyl_info) * linfo->ncg);
 	free(obj);
 	free(linfo);
 	return NULL;

@@ -194,7 +194,7 @@ static int wt_cache_bd_destroy(BD_t * bd)
 	for(block = 0; block != info->size; block++)
 		if(info->blocks[block])
 			bdesc_release(&info->blocks[block]);
-	free(info->blocks);
+	sfree(info->blocks, info->size * sizeof(*info->blocks));
 	free(info);
 	
 	memset(bd, 0, sizeof(*bd));
@@ -217,7 +217,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 		return NULL;
 	}
 	
-	info->blocks = malloc(blocks * sizeof(*info->blocks));
+	info->blocks = smalloc(blocks * sizeof(*info->blocks));
 	if(!info->blocks)
 	{
 		free(info);

@@ -436,7 +436,7 @@ static int wb_cache_bd_destroy(BD_t * bd)
 		if(info->blocks[block].block)
 			bdesc_release(&info->blocks[block].block);
 	
-	free(info->blocks);
+	sfree(info->blocks, (info->size + 1) * sizeof(*info->blocks));
 	free(info);
 	
 	memset(bd, 0, sizeof(*bd));
@@ -463,7 +463,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	/* allocate an extra cache slot: hash maps return NULL on failure, so we
 	 * can't have 0 be a valid index... besides, we need a pointers to the
 	 * head and tail of the LRU block queue */
-	info->blocks = malloc((blocks + 1) * sizeof(*info->blocks));
+	info->blocks = smalloc((blocks + 1) * sizeof(*info->blocks));
 	if(!info->blocks)
 	{
 		free(info);
@@ -499,7 +499,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	info->block_map = hash_map_create();
 	if(!info->block_map)
 	{
-		free(info->blocks);
+		sfree(info->blocks, (blocks + 1) * sizeof(*info->blocks));
 		free(info);
 		free(bd);
 		return NULL;

@@ -1228,7 +1228,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 			for(i = 0; i != info->cr_count; i++)
 				if(info->cr_retain[i])
 					chdesc_weak_release(&info->cr_retain[i]);
-			free(info->cr_retain);
+			sfree(info->cr_retain, info->cr_count * sizeof(*info->cr_retain));
 			info->cr_retain = NULL;
 			info->cr_count = 0;
 		}
@@ -1261,7 +1261,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	if(!info->cr_count)
 		panic("Holy Mackerel!");
 	
-	info->cr_retain = calloc(info->cr_count, sizeof(*info->cr_retain));
+	info->cr_retain = scalloc(info->cr_count, sizeof(*info->cr_retain));
 	if(!info->cr_retain)
 		panic("Holy Mackerel!");
 	

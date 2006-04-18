@@ -74,13 +74,13 @@ void vector_destroy(vector_t * v)
 
 static void ** vector_create_elts(size_t n)
 {
-	void ** elts = malloc(n*sizeof(*elts));
+	void ** elts = smalloc(n*sizeof(*elts));
 	return elts;
 }
 
 static void vector_destroy_elts(vector_t * v)
 {
-	free(v->elts);
+	sfree(v->elts, v->capacity*sizeof(*v->elts));
 	v->elts = NULL;
 	v->size = 0;
 	v->capacity = 0;

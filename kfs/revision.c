@@ -25,6 +25,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 {
 	chdesc_t * root = block->ddesc->changes;
 	chmetadesc_t * scan;
+	size_t chdescs_size;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -36,7 +37,8 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		if(!decider(scan->desc, data))
 			count++;
 	
-	chdescs = malloc(sizeof(*chdescs) * count);
+	chdescs_size = sizeof(*chdescs) * count;
+	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
 		return -E_NO_MEM;
 	
@@ -75,7 +77,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 			break;
 	}
 	
-	free(chdescs);
+	sfree(chdescs, chdescs_size);
 	
 	return 0;
 }
@@ -104,6 +106,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 {
 	chdesc_t * root = block->ddesc->changes;
 	chmetadesc_t * scan;
+	size_t chdescs_size;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -115,7 +118,8 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 		if(!decider(scan->desc, data))
 			count++;
 	
-	chdescs = malloc(sizeof(*chdescs) * count);
+	chdescs_size = sizeof(*chdescs) * count;
+	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
 		return -E_NO_MEM;
 	
@@ -154,7 +158,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 			break;
 	}
 	
-	free(chdescs);
+	sfree(chdescs, chdescs_size);
 	
 	return 0;
 }
@@ -173,6 +177,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 {
 	chdesc_t * root = block->ddesc->changes;
 	chmetadesc_t * scan;
+	size_t chdescs_size;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -184,7 +189,8 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 		if(scan->desc->owner == bd)
 			count++;
 	
-	chdescs = malloc(sizeof(*chdescs) * count);
+	chdescs_size = sizeof(*chdescs) * count;
+	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
 		return -E_NO_MEM;
 	
@@ -217,7 +223,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 			break;
 		}
 	}
-	free(chdescs);
+	sfree(chdescs, chdescs_size);
 	
 	return revision_tail_revert(block, bd);
 }
@@ -233,23 +239,16 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
  * a particular time, organized in a nice way so that we can figure out which
  * ones are ready to be written down and which ones are not. */
 
-#ifdef __KERNEL__
-#include <linux/vmalloc.h>
-#else
-#define vmalloc(x) malloc(x)
-#define vfree(x) free(x)
-#endif
-
 #include <lib/string.h>
 // TODO: how do we want to (and should we) optimize this in the kernel?
-static void * __realloc(void * p, size_t p_size, size_t new_size)
+static void * __srealloc(void * p, size_t p_size, size_t new_size)
 {
-	void * q = vmalloc(new_size);
+	void * q = smalloc(new_size);
 	if(!q)
 		return NULL;
 	if(p)
 		memcpy(q, p, p_size);
-	vfree(p);
+	sfree(p, p_size);
 	return q;
 }
 
@@ -344,18 +343,18 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			states_capacity *= 2;
 			if(states == static_states)
 			{
-				states = vmalloc(states_capacity * sizeof(*state));
+				states = smalloc(states_capacity * sizeof(*state));
 				if(states)
 					memcpy(states, static_states, cur_size);
 			}
 			else
-				states = __realloc(states, cur_size, states_capacity * sizeof(*state));
+				states = __srealloc(states, cur_size, states_capacity * sizeof(*state));
 
 			if(!states)
 			{
 				kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
 				if(states != static_states)
-					free(states);
+					sfree(states, states_capacity * sizeof(*state));
 				return 0;
 			}
 			state = &states[next_index];
@@ -378,7 +377,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	
  exit:
 	if(states != static_states)
-		vfree(states);
+		sfree(states, states_capacity * sizeof(*state));
 	return (chdesc->flags & CHDESC_READY) != 0;
 }
 
@@ -413,7 +412,7 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 	
 	if(slice->ready_size)
 	{
-		slice->ready = calloc(slice->ready_size, sizeof(*slice->ready));
+		slice->ready = scalloc(slice->ready_size, sizeof(*slice->ready));
 		if(!slice->ready)
 		{
 			free(slice);
@@ -476,6 +475,6 @@ void revision_slice_pull_up(revision_slice_t * slice)
 void revision_slice_destroy(revision_slice_t * slice)
 {
 	if(slice->ready)
-		free(slice->ready);
+		sfree(slice->ready, slice->ready_size * sizeof(*slice->ready));
 	free(slice);
 }

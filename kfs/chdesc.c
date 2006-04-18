@@ -563,7 +563,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	uint16_t index = offset / atomic_size;
 	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
 	uint16_t copied = 0;
-	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
+	size_t chdescs_size = sizeof(chdesc_t *) * count;
+	chdesc_t ** chdescs = smalloc(chdescs_size);
 	int i, r;
 	
 	if(!chdescs)
@@ -573,12 +574,12 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	
 	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		return r;
 	}
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		return r;
 	}
 	
@@ -656,7 +657,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
 			chdesc_destroy(&chdescs[i]);
 		}
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		
 		return -E_NO_MEM;
 	}
@@ -683,14 +684,14 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		}
 		for(i = 0; i != count; i++)
 			chdesc_destroy(&chdescs[i]);
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		
 		return -E_INVAL;
 	}
 	
 	*head = chdescs[count - 1];
 	
-	free(chdescs);
+	sfree(chdescs, chdescs_size);
 	
 	return 0;
 }
@@ -699,7 +700,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
-	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
+	size_t chdescs_size = sizeof(chdesc_t *) * count;
+	chdesc_t ** chdescs = smalloc(chdescs_size);
 	int i, r;
 	
 	if(!chdescs)
@@ -707,12 +709,12 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	
 	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		return r;
 	}
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		return r;
 	}
 	
@@ -779,7 +781,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
 			chdesc_destroy(&chdescs[i]);
 		}
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		
 		return -E_NO_MEM;
 	}
@@ -804,14 +806,14 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		}
 		for(i = 0; i != count; i++)
 			chdesc_destroy(&chdescs[i]);
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		
 		return -E_INVAL;
 	}
 	
 	*head = chdescs[count - 1];
 	
-	free(chdescs);
+	sfree(chdescs, chdescs_size);
 	
 	return 0;
 }
@@ -820,7 +822,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
-	chdesc_t ** chdescs = malloc(sizeof(*chdescs) * count);
+	size_t chdescs_size = sizeof(chdesc_t *) * count;
+	chdesc_t ** chdescs = smalloc(chdescs_size);
 	int i, r;
 	
 	if(!chdescs)
@@ -828,12 +831,12 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	
 	if((r = ensure_bdesc_has_changes(block)) < 0)
 	{
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		return r;
 	}
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		return r;
 	}
 	
@@ -900,7 +903,7 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
 			chdesc_destroy(&chdescs[i]);
 		}
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		
 		return -E_NO_MEM;
 	}
@@ -925,14 +928,14 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		}
 		for(i = 0; i != count; i++)
 			chdesc_destroy(&chdescs[i]);
-		free(chdescs);
+		sfree(chdescs, chdescs_size);
 		
 		return -E_INVAL;
 	}
 	
 	*head = chdescs[count - 1];
 	
-	free(chdescs);
+	sfree(chdescs, chdescs_size);
 	
 	return 0;
 }

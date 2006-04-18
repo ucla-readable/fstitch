@@ -114,7 +114,7 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 
-	info->csums = malloc(sizeof(struct UFS_csum) * super->fs_ncg);
+	info->csums = smalloc(sizeof(struct UFS_csum) * super->fs_ncg);
 	if (!info->csums)
 		return -1;
 	memcpy(info->csums, info->csum_block->ddesc->data,
@@ -1653,6 +1653,7 @@ static int ufs_destroy(LFS_t * lfs)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(lfs);
+	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
@@ -1660,7 +1661,7 @@ static int ufs_destroy(LFS_t * lfs)
 
 	ufs_destroy_parts(lfs);
 	bdesc_release(&info->csum_block);
-	free(info->csums);
+	sfree(info->csums, sizeof(struct UFS_csum) * super->fs_ncg);
 	hash_map_destroy(info->filemap);
 
 	free(OBJLOCAL(lfs));

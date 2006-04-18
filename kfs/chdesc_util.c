@@ -447,6 +447,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 {
 	int i, r;
 	chdesc_t * tail = NULL;
+	size_t descs_size;
 	chdesc_t ** descs;
 	
 	panic("This function needs to be updated to work with ddesc->overlaps and ddesc->bit_changes");
@@ -469,7 +470,8 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		if(blocks[i]->ddesc->length != original->block->ddesc->length)
 			return -E_INVAL;
 	
-	descs = malloc(sizeof(*descs) * count);
+	descs_size = sizeof(*descs) * count;
+	descs = smalloc(descs_size);
 	if(!descs)
 		return -E_NO_MEM;
 	
@@ -477,7 +479,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 	r = chdesc_detach_dependencies(original);
 	if(r < 0)
 	{
-		free(descs);
+		sfree(descs, descs_size);
 		return r;
 	}
 	
@@ -578,13 +580,13 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 			break;
 		default:
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, original->type);
-			free(descs);
+			sfree(descs, descs_size);
 			return -E_INVAL;
 		fail_first:
 			while(i--)
 			    fail_later:
 				chdesc_destroy(&descs[i]);
-			free(descs);
+			sfree(descs, descs_size);
 			return r;
 	}
 	
@@ -612,6 +614,7 @@ int chdesc_split(chdesc_t * original, int count)
 {
 	int i, r;
 	chdesc_t * tail = NULL;
+	size_t descs_size;
 	chdesc_t ** descs;
 	
 	panic("This function needs to be updated to work with ddesc->overlaps and ddesc->bit_changes");
@@ -619,7 +622,8 @@ int chdesc_split(chdesc_t * original, int count)
 	if(count < 2)
 		return -E_INVAL;
 	
-	descs = malloc(sizeof(*descs) * count);
+	descs_size = sizeof(*descs) * count;
+	descs = smalloc(descs_size);
 	if(!descs)
 		return -E_NO_MEM;
 	
@@ -629,7 +633,7 @@ int chdesc_split(chdesc_t * original, int count)
 	r = chdesc_detach_dependencies(original);
 	if(r < 0)
 	{
-		free(descs);
+		sfree(descs, descs_size);
 		return r;
 	}
 	
@@ -655,7 +659,7 @@ int chdesc_split(chdesc_t * original, int count)
 		fail:
 			while(i--)
 				chdesc_destroy(&descs[i]);
-			free(descs);
+			sfree(descs, descs_size);
 			return r;
 		}
 	}
@@ -690,7 +694,7 @@ int chdesc_split(chdesc_t * original, int count)
 	
 	original->type = NOOP;
 	
-	free(descs);
+	sfree(descs, descs_size);
 	return 0;
 }
 
