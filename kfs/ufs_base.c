@@ -249,7 +249,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
-	uint32_t blockno, nindirb, nindirf, newblock;
+	uint32_t blockno, nindirb, nindirf;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -308,10 +308,10 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 		// Allocate single indirect block if needed
 		if (!block_off[0]) {
-			newblock = allocate_wholeblock(object, 1, file, head);
-			if (newblock == INVALID_BLOCK)
+			block_off[0] = allocate_wholeblock(object, 1, file, head);
+			if (block_off[0] == INVALID_BLOCK)
 				return -E_NOT_FOUND;
-			r = update_indirect_block(info, indirect[1], pt_off[1], newblock, head);
+			r = update_indirect_block(info, indirect[1], pt_off[1], block_off[0], head);
 			if (r < 0)
 				return r;
 		}
