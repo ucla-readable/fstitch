@@ -461,7 +461,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	}
 	
 	/* allocate an extra cache slot: hash maps return NULL on failure, so we
-	 * can't have 0 be a valid index... besides, we need a pointers to the
+	 * can't have 0 be a valid index... besides, we need pointers to the
 	 * head and tail of the LRU block queue */
 	info->blocks = smalloc((blocks + 1) * sizeof(*info->blocks));
 	if(!info->blocks)
