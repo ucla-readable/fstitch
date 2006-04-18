@@ -28,6 +28,10 @@ void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, c
 // "size malloc" or "smal-oc".
 // malloc implementation may easily depend on allocation size.
 
+static __inline void * smalloc(size_t size) __attribute__((always_inline));
+static __inline void * scalloc(size_t nmemb, size_t size) __attribute__((always_inline));
+static __inline void sfree(void * p, size_t size) __attribute__((always_inline));
+
 #ifdef __KERNEL__
 
 #include <linux/slab.h>
@@ -36,7 +40,6 @@ void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, c
 // Use kmalloc iff size is leq KMALLOC_MAX; must be <= kmalloc's max size
 #define KMALLOC_MAX (128 * 1024)
 
-static __inline void * smalloc(size_t size) __attribute__((always_inline));
 static __inline void * smalloc(size_t size)
 {
 	if (size <= KMALLOC_MAX)
@@ -44,7 +47,6 @@ static __inline void * smalloc(size_t size)
 	return vmalloc(size);
 }
 
-static __inline void * scalloc(size_t nmemb, size_t size) __attribute__((always_inline));
 static __inline void * scalloc(size_t nmemb, size_t size)
 {
 	size_t total = nmemb * size;
@@ -62,7 +64,6 @@ static __inline void * scalloc(size_t nmemb, size_t size)
 	return p;
 }
 
-static __inline void sfree(void * p, size_t size) __attribute__((always_inline));
 static __inline void sfree(void * p, size_t size)
 {
 	if (size <= KMALLOC_MAX)
@@ -73,9 +74,20 @@ static __inline void sfree(void * p, size_t size)
 
 #else
 
-#define smalloc(size) malloc(size)
-#define scalloc(nmemb, size) calloc(nmemb, size)
-#define sfree(p, size) do { (void) size; free(p) } while (0)
+static __inline void * smalloc(size_t size)
+{
+	return malloc(size);
+}
+
+static __inline void * scalloc(size_t nmemb, size_t size)
+{
+	return calloc(nmemb, size);
+}
+
+static __inline void sfree(void * p, size_t size)
+{
+	free(p);
+}
 
 #endif
 
