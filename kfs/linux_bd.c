@@ -10,24 +10,129 @@
 #include <kfs/bdesc.h>
 #include <kfs/blockman.h>
 #include <kfs/modman.h>
+#include <kfs/kfsd.h>
 #include <kfs/linux_bd.h>
 #include <kfs/revision.h>
 
 #include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/namei.h>
+#include <linux/types.h>
 
 #ifndef __KERNEL__
 #error linux_bd must be compiled for the linux kernel
 #endif
 
+#define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
 #define DEBUG_LINUX_BD 0
+#define LINUX_BD_DEBUG_COLLECT_STATS 1
 
 #if DEBUG_LINUX_BD
 #define KDprintk(x...) printk(x)
 #else
 #define KDprintk(x...)
 #endif
+
+int linux_bd_destroy(BD_t * bd);
+
+// STATS
+#if LINUX_BD_DEBUG_COLLECT_STATS
+static struct timespec stat_read_total = {0, 0};
+static struct timespec stat_read_min = {99, 0};
+static struct timespec stat_read_max = {0, 0};
+static uint32_t stat_read_cnt = 0;
+static struct timespec stat_write_total = {0, 0};
+static struct timespec stat_write_min = {99, 0};
+static struct timespec stat_write_max = {0, 0};
+static uint32_t stat_write_cnt = 0;
+
+static void
+stat_dump(void)
+{
+	printk(KERN_ERR "READ: min:   %ld.%09ld\n", stat_read_min.tv_sec,
+		   stat_read_min.tv_nsec);
+	printk(KERN_ERR "READ: max:   %ld.%09ld\n", stat_read_max.tv_sec,
+		   stat_read_max.tv_nsec);
+	printk(KERN_ERR "READ: total: %ld.%09ld\n", stat_read_total.tv_sec,
+		   stat_read_total.tv_nsec);
+	printk(KERN_ERR "READ: %d reads\n", stat_read_cnt);
+	printk(KERN_ERR "WRITE: min:   %ld.%09ld\n", stat_write_min.tv_sec,
+		   stat_write_min.tv_nsec);
+	printk(KERN_ERR "WRITE: max:   %ld.%09ld\n", stat_write_max.tv_sec,
+		   stat_write_max.tv_nsec);
+	printk(KERN_ERR "WRITE: total: %ld.%09ld\n", stat_write_total.tv_sec,
+		   stat_write_total.tv_nsec);
+	printk(KERN_ERR "WRITE: %d writes\n", stat_write_cnt);
+}
+
+static void
+stat_update_min(struct timespec *oldmin, struct timespec *sample)
+{
+	if (oldmin->tv_sec < sample->tv_sec) return;
+	if ((oldmin->tv_sec > sample->tv_sec) ||
+		(oldmin->tv_nsec > sample->tv_nsec)) {
+		oldmin->tv_sec = sample->tv_sec;
+		oldmin->tv_nsec = sample->tv_nsec;
+	}
+}
+
+static void
+stat_update_max(struct timespec *oldmax, struct timespec *sample)
+{
+	if (oldmax->tv_sec > sample->tv_sec) return;
+	if ((oldmax->tv_sec < sample->tv_sec) ||
+		(oldmax->tv_nsec < sample->tv_nsec)) {
+		oldmax->tv_sec = sample->tv_sec;
+		oldmax->tv_nsec = sample->tv_nsec;
+	}
+}
+
+// sum += sample
+static void
+stat_add(struct timespec *sum, struct timespec *sample)
+{
+	if ((sample->tv_nsec + sum->tv_nsec) >= 1000000000L) {
+		sum->tv_sec += (sample->tv_sec + 1);
+		sum->tv_nsec += (sample->tv_nsec - 1000000000L);
+	} else {
+		sum->tv_sec += sample->tv_sec;
+		sum->tv_nsec += sample->tv_nsec;
+	}
+}
+
+// base -= sample
+static void
+stat_sub(struct timespec *base, struct timespec *sample)
+{
+	if (base->tv_nsec < sample->tv_nsec) {
+		base->tv_sec -= (sample->tv_sec + 1);
+		base->tv_nsec = (base->tv_nsec + 1000000000L) - sample->tv_nsec;
+	} else {
+		base->tv_sec -= sample->tv_sec;
+		base->tv_nsec -= sample->tv_nsec;
+	}
+}
+
+static void
+stat_process_read(struct timespec *start, struct timespec *stop)
+{
+	stat_sub(stop, start); // stop -= start;
+	stat_update_min(&stat_read_min, stop);
+	stat_update_max(&stat_read_max, stop);
+	stat_add(&stat_read_total, stop);
+	stat_read_cnt++;
+}
+
+static void
+stat_process_write(struct timespec *start, struct timespec *stop)
+{
+	stat_sub(stop, start); // stop -= start;
+	stat_update_min(&stat_write_min, stop);
+	stat_update_max(&stat_write_max, stop);
+	stat_add(&stat_write_total, stop);
+	stat_write_cnt++;
+}
+#endif // LINUX_BD_DEBUG_COLLECT_STATS
 
 struct linux_info {
 	struct block_device *bdev;
@@ -41,6 +146,16 @@ struct linux_info {
 	uint16_t level;
 	blockman_t * blockman;
 };
+
+static int registered = 0;
+void
+linux_bd_tracker(void *object)
+{
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	stat_dump();
+#endif
+	linux_bd_destroy((BD_t*)object);
+}
 
 static int linux_bd_get_config(void * object, int level,
                                char * string, size_t length)
@@ -132,6 +247,10 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int i;
 	struct linux_bio_private private;
 	static int infty = 10;
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	struct timespec start;
+	struct timespec stop;
+#endif
 
 	KDprintk(KERN_ERR "entered read\n");
 	if (!count || number + count > info->blockcount) {
@@ -197,6 +316,12 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	private.dma_done = 0;
 	spin_unlock(&private.dma_done_lock);
 
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	start = current_kernel_time();
+#endif
+#if LINUX_BD_DEBUG_PRINT_EVERY_READ
+	printk(KERN_ERR "%d\n", number);
+#endif // LINUX_BD_DEBUG_PRINT_EVERY_READ
 	generic_make_request(bio);
 
 	// wait for it to complete
@@ -219,6 +344,11 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	if (waited)
 		finish_wait(&info->waitq, &wait);
 	KDprintk(KERN_ERR "woke up!\n");
+
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	stop = current_kernel_time();
+	stat_process_read(&start, &stop);
+#endif
 
 	r = blockman_managed_add(info->blockman, ret);
 	if (r < 0)
@@ -345,6 +475,10 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	int r;
 	int i;
 	struct linux_bio_private * private;
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	struct timespec start;
+	struct timespec stop;
+#endif
 	
 	KDprintk(KERN_ERR "entered write\n");
 	if((info->blocksize * block->count) != block->ddesc->length) {
@@ -412,6 +546,9 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_private = private;
 
 	KDprintk(KERN_ERR "issuing DMA write request [%d]\n", private->seq);
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	start = current_kernel_time();
+#endif
 	generic_make_request(bio);
 
 	// wait for it to complete
@@ -437,6 +574,11 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	printk(KERN_ERR "woke up!\n");
 	*/
 
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	stop = current_kernel_time();
+	stat_process_write(&start, &stop);
+#endif
+
 	r = revision_tail_acknowledge(block, object);
 	if (r != 0) {
 		panic("revision_tail_acknowledge gave error: %i\n", r);
@@ -456,7 +598,7 @@ static uint16_t linux_bd_get_devlevel(BD_t * object)
 	return ((struct linux_info *) OBJLOCAL(object))->level;
 }
 
-static int linux_bd_destroy(BD_t * bd)
+int linux_bd_destroy(BD_t * bd)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
 	int r;
@@ -543,7 +685,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 
-	r = open_bdev(linux_bdev_path, READ, &info->bdev);
+	r = open_bdev(linux_bdev_path, WRITE, &info->bdev);
 	if (r) {
 		printk(KERN_ERR "open_bdev() error\n");
 		free(info);
@@ -567,6 +709,12 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	BD_INIT(bd, linux_bd, info);
 	
+	if (!registered) {
+		int r = kfsd_register_shutdown_module(linux_bd_tracker, bd);
+		assert(r >= 0);
+		registered = 1;
+	}
+
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);
