@@ -418,12 +418,12 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 			free(slice);
 			return NULL;
 		}
+		
+		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+			if(meta->desc->owner == owner && (meta->desc->flags & CHDESC_READY))
+				slice->ready[j++] = meta->desc;
+		assert(j == slice->ready_size);
 	}
-	
-	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
-		if(meta->desc->owner == owner && (meta->desc->flags & CHDESC_READY))
-			slice->ready[j++] = meta->desc;
-	assert(j == slice->ready_size);
 	
 	return slice;
 }
