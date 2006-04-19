@@ -55,7 +55,7 @@ static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	// Find free inode
-	for (num = 0; num < super->fs_ipg * super->fs_ncg; num++) {
+	for (num = UFS_ROOT_INODE + 1; num < super->fs_ipg * super->fs_ncg; num++) {
 		r = read_inode_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;

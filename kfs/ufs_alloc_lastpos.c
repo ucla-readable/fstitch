@@ -61,7 +61,7 @@ static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_
 static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	static uint32_t num = 0;
+	static uint32_t num = UFS_ROOT_INODE + 1;
 	uint32_t start;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -75,7 +75,7 @@ static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc
 			return num; // returns an inode number
 	}
 
-	for (num = 0; num < start; num++) {
+	for (num = UFS_ROOT_INODE + 1; num < start; num++) {
 		r = read_inode_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
