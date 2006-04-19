@@ -245,10 +245,16 @@ int kfsd_init(int argc, char ** argv)
 #error Unknown target system
 #endif
 		if (bd)
+		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-
-		if (bd && (r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)		
-			return r;
+			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
+			bd = elevator_cache_bd(bd, 128, 64, 3);
+			if (!bd)
+				return -E_UNSPECIFIED;
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+				return r;
+		}
 	}
 
 	if (use_mem_bd)
