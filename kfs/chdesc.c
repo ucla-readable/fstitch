@@ -165,41 +165,31 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
-	for(meta = dependent->dependencies; meta; meta = meta->next)
+	for(meta = dependent->dependencies; meta; meta = meta->dependency.next)
 		if(meta->desc == dependency)
 			return 0;
 	/* shouldn't be there */
-	for(meta = dependency->dependents; meta; meta = meta->next)
+	for(meta = dependency->dependents; meta; meta = meta->dependent.next)
 		assert(meta->desc != dependent);
 #endif
-	
-	/* add the dependency to the dependent */
 	meta = malloc(sizeof(*meta));
 	if(!meta)
 		return -E_NO_MEM;
+	/* add the dependency to the dependent */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, dependent, dependency);
-	meta->desc = dependency;
-	meta->next = NULL;
+	meta->dependency.desc = dependency;
+	meta->dependency.next = NULL;
+	meta->dependency.ptr = dependent->dependencies_tail;
 	*dependent->dependencies_tail = meta;
+	dependent->dependencies_tail = &meta->dependency.next;
 	
 	/* add the dependent to the dependency */
-	meta = malloc(sizeof(*meta));
-	if(!meta)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, dependent, dependency);
-		meta = *dependent->dependencies_tail;
-		*dependent->dependencies_tail = NULL;
-		free(meta);
-		return -E_NO_MEM;
-	}
-	/* do the last step of the dependency addition above only after we know we can succeed */
-	dependent->dependencies_tail = &(*dependent->dependencies_tail)->next;
-	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, dependency, dependent);
-	meta->desc = dependent;
-	meta->next = NULL;
+	meta->dependent.desc = dependent;
+	meta->dependent.next = NULL;
+	meta->dependent.ptr = dependency->dependents_tail;
 	*dependency->dependents_tail = meta;
-	dependency->dependents_tail = &meta->next;
+	dependency->dependents_tail = &meta->dependent.next;
 	
 	/* virgin NOOP chdesc getting its first dependency */
 	if(free_head == dependent || dependent->free_prev)
@@ -313,8 +303,9 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	return 0;
 }
 
-static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * list, bool slip_under)
+static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chdesc_t * list_chdesc, bool slip_under)
 {
+	chmetadesc_t * list = list_chdesc->dependencies;
 	chmetadesc_t * next = list;
 	while((list = next))
 	{
@@ -323,12 +314,14 @@ static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * l
 		/* this loop is tricky, because we might remove the item we're
 		 * looking at currently if we overlap it entirely - so we
 		 * prefetch the next pointer at the top of the loop */
-		next = list->next;
+		next = list->dependency.next;
+		
+		list_chdesc = list->dependency.desc;
 		
 		/* skip moved chdescs - they have just been added to this block
 		 * by chdesc_move() and already have proper overlap dependency
 		 * information with respect to the chdesc now arriving */
-		if(list->desc->flags & CHDESC_MOVED || list->desc == chdesc)
+		if(list_chdesc->flags & CHDESC_MOVED || list_chdesc == chdesc)
 			continue;
 		
 		/* "Slip Under" allows us to create change descriptors
@@ -336,9 +329,9 @@ static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chmetadesc_t * l
 		 * depend on the new one, not the other way around.) This is a
 		 * hidden feature for internal use only. */
 		if(slip_under)
-			r = chdesc_overlap_attach(list->desc, chdesc);
+			r = chdesc_overlap_attach(list_chdesc, chdesc);
 		else
-			r = chdesc_overlap_attach(chdesc, list->desc);
+			r = chdesc_overlap_attach(chdesc, list_chdesc);
 		if(r < 0)
 			return r;
 	}
@@ -354,7 +347,7 @@ static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, b
 		chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->bit.offset);
 		if(bit_changes)
 		{
-			int r = __chdesc_overlap_multiattach_slip(chdesc, bit_changes->dependencies, slip_under);
+			int r = __chdesc_overlap_multiattach_slip(chdesc, bit_changes, slip_under);
 			if(r < 0)
 				return r;
 		}
@@ -363,7 +356,7 @@ static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, b
 	if(!block->ddesc->overlaps)
 		return 0;
 	
-	return __chdesc_overlap_multiattach_slip(chdesc, block->ddesc->overlaps->dependencies, slip_under);
+	return __chdesc_overlap_multiattach_slip(chdesc, block->ddesc->overlaps, slip_under);
 }
 
 static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
@@ -964,17 +957,17 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 	if(chdesc->dependents)
 	{
 		chmetadesc_t * meta;
-		for(meta = chdesc->dependents; meta; meta = meta->next)
+		for(meta = chdesc->dependents; meta; meta = meta->dependent.next)
 		{
 			/* no block? doesn't overlap */
-			if(!meta->desc->block)
+			if(!meta->dependent.desc->block)
 				continue;
 			/* not the same block? doesn't overlap */
-			if(meta->desc->block->ddesc != chdesc->block->ddesc)
+			if(meta->dependent.desc->block->ddesc != chdesc->block->ddesc)
 				continue;
 			/* chdesc_overlap_check doesn't check that the block is
 			 * the same, which is why we just checked it by hand */
-			if(!chdesc_overlap_check(meta->desc, chdesc))
+			if(!chdesc_overlap_check(meta->dependent.desc, chdesc))
 				continue;
 			/* overlap detected! */
 			return -E_PERM;
@@ -1007,12 +1000,12 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 	chmetadesc_t * meta;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, dependent, CHDESC_MARKED);
 	dependent->flags |= CHDESC_MARKED;
-	for(meta = dependent->dependencies; meta; meta = meta->next)
+	for(meta = dependent->dependencies; meta; meta = meta->dependency.next)
 	{
-		if(meta->desc == dependency)
+		if(meta->dependency.desc == dependency)
 			return 1;
-		if(!(meta->desc->flags & CHDESC_MARKED))
-			if(chdesc_has_dependency(meta->desc, dependency))
+		if(!(meta->dependency.desc->flags & CHDESC_MARKED))
+			if(chdesc_has_dependency(meta->dependency.desc, dependency))
 				return 1;
 	}
 	/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
@@ -1055,45 +1048,45 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	return chdesc_add_depend_fast(dependent, dependency);
 }
 
-static void chdesc_meta_remove(chmetadesc_t ** list, chmetadesc_t *** tail, chdesc_t * chdesc)
+static void chdesc_meta_remove(chmetadesc_t * meta)
 {
-	chmetadesc_t * scan = *list;
-	while(scan)
-	{
-		if(scan->desc == chdesc)
-		{
-			*list = scan->next;
-			if(!scan->next)
-				*tail = list;
-			free(scan);
-			scan = *list;
-#if CHDESC_ALLOW_MULTIGRAPH
-			/* if we break here, we'll remove only one edge... this
-			 * is required for multigraphs, and OK for standard
-			 * graphs (which should have only one anyway), but safer
-			 * to leave off in the latter case */
-			break;
-#endif
-		}
-		else
-		{
-			list = &scan->next;
-			scan = scan->next;
-		}
-	}
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->dependent.desc, meta->dependency.desc);
+	*meta->dependency.ptr = meta->dependency.next;
+	if(meta->dependency.next)
+		meta->dependency.next->dependency.ptr = meta->dependency.ptr;
+	else
+		meta->dependent.desc->dependencies_tail = meta->dependency.ptr;
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, meta->dependency.desc, meta->dependent.desc);
+	*meta->dependent.ptr = meta->dependent.next;
+	if(meta->dependent.next)
+		meta->dependent.next->dependent.ptr = meta->dependent.ptr;
+	else
+		meta->dependency.desc->dependents_tail = meta->dependent.ptr;
+	
+	if(meta->dependent.desc->type == NOOP && !meta->dependent.desc->dependencies)
+		/* we just removed the last dependency of a NOOP chdesc, so satisfy it */
+		chdesc_satisfy(&meta->dependent.desc);
+	
+	memset(meta, 0, sizeof(*meta));
+	free(meta);
 }
 
 void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
 {
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, dependent, dependency);
-	chdesc_meta_remove(&dependent->dependencies, &dependent->dependencies_tail, dependency);
-	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, dependency, dependent);
-	chdesc_meta_remove(&dependency->dependents, &dependency->dependents_tail, dependent);
-	
-	if(dependent->type == NOOP && !dependent->dependencies)
-		/* we just removed the last dependency of a NOOP chdesc, so satisfy it */
-		chdesc_satisfy(&dependent);
+	chmetadesc_t * scan_dependencies = dependent->dependencies;
+	chmetadesc_t * scan_dependents = dependency->dependents;
+	while(scan_dependencies && scan_dependents &&
+	      scan_dependencies->dependency.desc != dependency &&
+	      scan_dependents->dependent.desc != dependent)
+	{
+		scan_dependencies = scan_dependencies->dependency.next;
+		scan_dependents = scan_dependents->dependent.next;
+	}
+	if(scan_dependencies && scan_dependencies->dependency.desc == dependency)
+		chdesc_meta_remove(scan_dependencies);
+	else if(scan_dependents && scan_dependents->dependent.desc == dependent)
+		chdesc_meta_remove(scan_dependents);
 }
 
 static void memxchg(void * p, void * q, size_t n)
@@ -1264,22 +1257,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	else
 	{
 		while((*chdesc)->dependents)
-		{
-			chmetadesc_t * meta = (*chdesc)->dependents;
-			chdesc_t * dependent = meta->desc;
-			(*chdesc)->dependents = meta->next;
-			if(!meta->next)
-				(*chdesc)->dependents_tail = &(*chdesc)->dependents;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, *chdesc, meta->desc);
-			
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->desc, *chdesc);
-			chdesc_meta_remove(&meta->desc->dependencies, &meta->desc->dependencies_tail, *chdesc);
-			
-			free(meta);
-			if(dependent->type == NOOP && !dependent->dependencies)
-				/* we just removed the last dependency of a NOOP chdesc, so free it */
-				chdesc_satisfy(&dependent);
-		}
+			chdesc_meta_remove((*chdesc)->dependents);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_WRITTEN);
 		(*chdesc)->flags |= CHDESC_WRITTEN;
 		
@@ -1403,7 +1381,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
 	/* remove dependencies first, so chdesc_satisfy() won't just turn it to a NOOP */
 	while((*chdesc)->dependencies)
-		chdesc_remove_depend(*chdesc, (*chdesc)->dependencies->desc);
+		chdesc_meta_remove((*chdesc)->dependencies);
 	if((*chdesc)->dependents)
 	{
 		/* chdesc_satisfy will set it to NULL */
@@ -1455,7 +1433,7 @@ void chdesc_autorelease_noop(chdesc_t * chdesc)
 {
 	assert(chdesc->type == NOOP && !chdesc->dependencies && !(chdesc->flags & CHDESC_WRITTEN));
 	while(chdesc->dependents)
-		chdesc_remove_depend(chdesc->dependents->desc, chdesc);
+		chdesc_meta_remove(chdesc->dependents);
 	if(!chdesc->free_prev && free_head != chdesc)
 		chdesc_free_push(chdesc);
 }

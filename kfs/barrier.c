@@ -57,13 +57,10 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 
 	/* transfer the barrier's bottom chdescs on block to target_block.
 	 * this loop makes use of knowledge of how chdesc_move operates. */
-	/* WARNING: this loop reverses the order of the chdescs in the block
-	 *          NOOP's dependency list, which can cause big efficiency
-	 *          problems for the revision code! FIXME! */
 	chmetadesc = &block->ddesc->changes->dependencies;
 	while (block->ddesc->changes && *chmetadesc)
 	{
-		chdesc_t * chdesc = (*chmetadesc)->desc;
+		chdesc_t * chdesc = (*chmetadesc)->dependency.desc;
 		if (chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK))
 		{
 			chdescs_moved = 1;
@@ -72,7 +69,7 @@ int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 				panic("%s(): chdesc_move() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 		}
 		else
-			chmetadesc = &(*chmetadesc)->next;
+			chmetadesc = &(*chmetadesc)->dependency.next;
 	}
 	if (chdescs_moved)
 		chdesc_finish_move(target_block);
@@ -177,13 +174,10 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 		/* transfer the barrier's bottom chdescs on block to target_block.
 		 * this loop makes use of knowledge of how chdesc_move operates. */
-		/* WARNING: this loop reverses the order of the chdescs in the block
-		 *          NOOP's dependency list, which can cause big efficiency
-		 *          problems for the revision code! FIXME! */
 		chmetadesc = &block->ddesc->changes->dependencies;
 		while (block->ddesc->changes && *chmetadesc)
 		{
-			chdesc_t * chdesc = (*chmetadesc)->desc;
+			chdesc_t * chdesc = (*chmetadesc)->dependency.desc;
 			if (chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK) && chdesc_in_range(chdesc, forward->offset, forward->size))
 			{
 				chdescs_moved = 1;
@@ -193,7 +187,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 					panic("%s(): chdesc_move() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 			}
 			else
-				chmetadesc = &(*chmetadesc)->next;
+				chmetadesc = &(*chmetadesc)->dependency.next;
 		}
 		if (chdescs_moved)
 			chdesc_finish_move(target_block);
@@ -320,13 +314,10 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	
 	/* transfer the barrier's bottom chdescs on block to target_block.
 	 * this loop makes use of knowledge of how chdesc_duplicate operates. */
-	/* WARNING: this loop reverses the order of the chdescs in the block
-	 *          NOOP's dependency list, which can cause big efficiency
-	 *          problems for the revision code! FIXME! */
 	chmetadesc = &block->ddesc->changes->dependencies;
 	while(block->ddesc->changes && *chmetadesc)
 	{
-		chdesc_t * chdesc = (*chmetadesc)->desc;
+		chdesc_t * chdesc = (*chmetadesc)->dependency.desc;
 		if(chdesc->owner == barrier && !(chdesc->flags & CHDESC_ROLLBACK))
 		{
 			chdescs_moved = 1;
@@ -335,7 +326,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 				panic("%s(): chdesc_duplicate() failed (%i), but chdesc revert-duplicate code for recovery is not implemented", __FUNCTION__, r);
 		}
 		else
-			chmetadesc = &(*chmetadesc)->next;
+			chmetadesc = &(*chmetadesc)->dependency.next;
 	}
 	if(chdescs_moved)
 	{

@@ -72,8 +72,11 @@ struct chdesc {
 };
 
 struct chmetadesc {
-	chdesc_t * desc;
-	chmetadesc_t * next;
+	struct {
+		chmetadesc_t ** ptr;
+		chdesc_t * desc;
+		chmetadesc_t * next;
+	} dependency, dependent;
 };
 
 struct chrefdesc {

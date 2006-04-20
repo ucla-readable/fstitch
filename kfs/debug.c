@@ -967,12 +967,12 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 	if(block->ddesc->changes)
 	{
 		chmetadesc_t * meta;
-		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
+		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
 		{
-			const uint16_t flags = meta->desc->flags;
+			const uint16_t flags = meta->dependency.desc->flags;
 			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
 			{
-				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, meta->desc);
+				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, meta->dependency.desc);
 				kfs_debug_wait();
 				break;
 			}

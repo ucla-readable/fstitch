@@ -413,8 +413,8 @@ static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	if(!slot)
 	{
 		chmetadesc_t * scan = block->ddesc->changes->dependencies;
-		for(; scan; scan = scan->next)
-			if(scan->desc->owner == object)
+		for(; scan; scan = scan->dependency.next)
+			if(scan->dependency.desc->owner == object)
 				break;
 		if(!scan)
 			/* the block is clean... no need to write it */

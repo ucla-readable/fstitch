@@ -171,8 +171,8 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	/* already flushed? */
 	if(!slot->block->ddesc->changes)
 		return FLUSH_EMPTY;
-	for(meta = slot->block->ddesc->changes->dependencies; meta; meta = meta->next)
-		if(meta->desc->owner == object)
+	for(meta = slot->block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
+		if(meta->dependency.desc->owner == object)
 			break;
 	if(!meta)
 		return FLUSH_EMPTY;
@@ -551,9 +551,9 @@ uint32_t wb_cache_dirty_count(BD_t * bd)
 			chmetadesc_t * meta = info->blocks[i].block->ddesc->changes->dependencies;
 			while(meta)
 			{
-				if(meta->desc->owner == bd)
+				if(meta->dependency.desc->owner == bd)
 					break;
-				meta = meta->next;
+				meta = meta->dependency.next;
 			}
 			if(meta)
 			{

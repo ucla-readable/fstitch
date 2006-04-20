@@ -246,9 +246,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* roll the stuff back that's still a part of this request ID */
-	for(meta = info->unsafe->dependencies; meta; meta = meta->next)
+	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
 	{
-		chdesc_t * chdesc = meta->desc;
+		chdesc_t * chdesc = meta->dependency.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
@@ -304,9 +304,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	chdesc_satisfy(&info->hold);
 	info->hold = hold;
 	
-	for(meta = info->unsafe->dependencies; meta; meta = meta->next)
+	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
 	{
-		chdesc_t * chdesc = meta->desc;
+		chdesc_t * chdesc = meta->dependency.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
@@ -359,9 +359,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* one last pass to roll everything forward again */
-	for(meta = info->unsafe->dependencies; meta; meta = meta->next)
+	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
 	{
-		chdesc_t * chdesc = meta->desc;
+		chdesc_t * chdesc = meta->dependency.desc;
 		
 		/* have we done this block already? */
 		if(!(chdesc->flags & CHDESC_ROLLBACK))
@@ -389,7 +389,7 @@ static int journal_bd_accept_request(BD_t * object)
 
 		while(info->unsafe && info->unsafe->dependencies)
 		{
-			chdesc_t * chdesc = info->unsafe->dependencies->desc;
+			chdesc_t * chdesc = info->unsafe->dependencies->dependency.desc;
 			chdesc_stamp(chdesc, info->stamp);
 			chdesc_remove_depend(info->unsafe, chdesc);
 			/* FIXME: move all dependencies of them to "wait" so the transaction as a whole
@@ -773,19 +773,19 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		journal_bd_accept_request(object);
 	
 	/* add our (regular) stamp to all chdescs passing through */
-	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
-		if(meta->desc->owner == object)
+	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
+		if(meta->dependency.desc->owner == object)
 		{
-			int r = chdesc_add_depend(meta->desc, info->hold);
+			int r = chdesc_add_depend(meta->dependency.desc, info->hold);
 			if(r < 0)
 				panic("Holy Mackerel!");
-			r = chdesc_add_depend(info->safe, meta->desc);
+			r = chdesc_add_depend(info->safe, meta->dependency.desc);
 			if(r < 0)
 				panic("Holy Mackerel!");
-			r = chdesc_add_depend(info->unsafe, meta->desc);
+			r = chdesc_add_depend(info->unsafe, meta->dependency.desc);
 			if(r < 0)
 				panic("Holy Mackerel!");
-			chdesc_stamp(meta->desc, info->stamp);
+			chdesc_stamp(meta->dependency.desc, info->stamp);
 		}
 	
 retry:

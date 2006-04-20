@@ -33,8 +33,8 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		return 0;
 	
 	/* find out how many chdescs are to be rolled back */
-	for(scan = root->dependencies; scan; scan = scan->next)
-		if(!decider(scan->desc, data))
+	for(scan = root->dependencies; scan; scan = scan->dependency.next)
+		if(!decider(scan->dependency.desc, data))
 			count++;
 	
 	chdescs_size = sizeof(*chdescs) * count;
@@ -42,9 +42,9 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	for(scan = root->dependencies; scan; scan = scan->next)
-		if(!decider(scan->desc, data))
-			chdescs[i++] = scan->desc;
+	for(scan = root->dependencies; scan; scan = scan->dependency.next)
+		if(!decider(scan->dependency.desc, data))
+			chdescs[i++] = scan->dependency.desc;
 	
 	for(;;)
 	{
@@ -55,13 +55,13 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 			if(chdescs[i]->flags & CHDESC_ROLLBACK)
 				continue;
 			/* check for overlapping, non-rolled back chdescs above us */
-			for(scan = chdescs[i]->dependents; scan; scan = scan->next)
+			for(scan = chdescs[i]->dependents; scan; scan = scan->dependent.next)
 			{
-				if(scan->desc->flags & CHDESC_ROLLBACK)
+				if(scan->dependent.desc->flags & CHDESC_ROLLBACK)
 					continue;
-				if(!scan->desc->block || scan->desc->block->ddesc != block->ddesc)
+				if(!scan->dependent.desc->block || scan->dependent.desc->block->ddesc != block->ddesc)
 					continue;
-				if(chdesc_overlap_check(scan->desc, chdescs[i]))
+				if(chdesc_overlap_check(scan->dependent.desc, chdescs[i]))
 					break;
 			}
 			if(scan)
@@ -114,8 +114,8 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 		return 0;
 	
 	/* find out how many chdescs are to be rolled forward */
-	for(scan = root->dependencies; scan; scan = scan->next)
-		if(!decider(scan->desc, data))
+	for(scan = root->dependencies; scan; scan = scan->dependency.next)
+		if(!decider(scan->dependency.desc, data))
 			count++;
 	
 	chdescs_size = sizeof(*chdescs) * count;
@@ -123,9 +123,9 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	for(scan = root->dependencies; scan; scan = scan->next)
-		if(!decider(scan->desc, data))
-			chdescs[i++] = scan->desc;
+	for(scan = root->dependencies; scan; scan = scan->dependency.next)
+		if(!decider(scan->dependency.desc, data))
+			chdescs[i++] = scan->dependency.desc;
 	
 	for(;;)
 	{
@@ -136,13 +136,13 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
 				continue;
 			/* check for overlapping, rolled back chdescs below us */
-			for(scan = chdescs[i]->dependencies; scan; scan = scan->next)
+			for(scan = chdescs[i]->dependencies; scan; scan = scan->dependency.next)
 			{
-				if(!(scan->desc->flags & CHDESC_ROLLBACK))
+				if(!(scan->dependency.desc->flags & CHDESC_ROLLBACK))
 					continue;
-				if(!scan->desc->block || scan->desc->block->ddesc != block->ddesc)
+				if(!scan->dependency.desc->block || scan->dependency.desc->block->ddesc != block->ddesc)
 					continue;
-				if(chdesc_overlap_check(scan->desc, chdescs[i]))
+				if(chdesc_overlap_check(scan->dependency.desc, chdescs[i]))
 					break;
 			}
 			if(scan)
@@ -185,8 +185,8 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 		return 0;
 	
 	/* find out how many chdescs are to be satisfied */
-	for(scan = root->dependencies; scan; scan = scan->next)
-		if(scan->desc->owner == bd)
+	for(scan = root->dependencies; scan; scan = scan->dependency.next)
+		if(scan->dependency.desc->owner == bd)
 			count++;
 	
 	chdescs_size = sizeof(*chdescs) * count;
@@ -195,9 +195,9 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 		return -E_NO_MEM;
 	
 	
-	for(scan = root->dependencies; scan; scan = scan->next)
-		if(scan->desc->owner == bd)
-			chdescs[i++] = scan->desc;
+	for(scan = root->dependencies; scan; scan = scan->dependency.next)
+		if(scan->dependency.desc->owner == bd)
+			chdescs[i++] = scan->dependency.desc;
 	
 	for(;;)
 	{
@@ -296,9 +296,9 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 	meta = chdesc->dependencies;
 
  recurse_meta:
-	for(; meta; meta = meta->next)
+	for(; meta; meta = meta->dependency.next)
 	{
-		chdesc_t * dep = meta->desc;
+		chdesc_t * dep = meta->dependency.desc;
 		
 		/* handle NOOP properly: it can have NULL block and owner */
 		
@@ -333,7 +333,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 		 * state */
 		next_index = 1 + state - &states[0];
 		state->chdesc = chdesc;
-		state->meta = meta->next;
+		state->meta = meta->dependency.next;
 		chdesc = dep;
 		if(next_index < states_capacity)
 			state++;
@@ -402,11 +402,11 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 	if (++ready_epoch == 0)
 		++ready_epoch;
 	
-	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
-		if(meta->desc->owner == owner)
+	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
+		if(meta->dependency.desc->owner == owner)
 		{
 			slice->full_size++;
-			if(revision_slice_chdesc_is_ready(meta->desc, owner, block, target_level, external))
+			if(revision_slice_chdesc_is_ready(meta->dependency.desc, owner, block, target_level, external))
 				slice->ready_size++;
 		}
 	
@@ -419,9 +419,9 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 			return NULL;
 		}
 		
-		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->next)
-			if(meta->desc->owner == owner && (meta->desc->flags & CHDESC_READY))
-				slice->ready[j++] = meta->desc;
+		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
+			if(meta->dependency.desc->owner == owner && (meta->dependency.desc->flags & CHDESC_READY))
+				slice->ready[j++] = meta->dependency.desc;
 		assert(j == slice->ready_size);
 	}
 	
