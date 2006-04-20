@@ -5,26 +5,35 @@
 static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	static uint32_t num = 0;
-	uint32_t start;
+	static uint32_t savenum = INVALID_BLOCK;
+	uint32_t start, num;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	if (savenum != INVALID_BLOCK)
+		num = savenum;
+	else
+		num = super->fs_dblkno / super->fs_frag;
 
 	// Find free block
 	for (start = num; num < super->fs_size / super->fs_frag; num++) {
 		r = read_block_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
-		if (r == UFS_FREE)
+		if (r == UFS_FREE) {
+			savenum = num + 1;
 			return num; // returns a block number
+		}
 	}
 
-	for (num = 0; num < start; num++) {
+	for (num = super->fs_dblkno / super->fs_frag; num < start; num++) {
 		r = read_block_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
-		if (r == UFS_FREE)
+		if (r == UFS_FREE) {
+			savenum = num + 1;
 			return num; // returns a block number
+		}
 	}
 
 	return INVALID_BLOCK;
@@ -33,26 +42,35 @@ static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc
 static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	static uint32_t num = 0;
-	uint32_t start;
+	static uint32_t savenum = INVALID_BLOCK;
+	uint32_t start, num;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	if (savenum != INVALID_BLOCK)
+		num = savenum;
+	else
+		num = super->fs_dblkno;
 
 	// Find free fragment
 	for (start = num; num < super->fs_size; num++) {
 		r = read_fragment_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
-		if (r == UFS_FREE)
+		if (r == UFS_FREE) {
+			savenum = num + 1;
 			return num; // returns a fragment number
+		}
 	}
 
-	for (num = 0; num < start; num++) {
+	for (num = super->fs_dblkno; num < start; num++) {
 		r = read_fragment_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
-		if (r == UFS_FREE)
+		if (r == UFS_FREE) {
+			savenum = num + 1;
 			return num; // returns a fragment number
+		}
 	}
 
 	return INVALID_BLOCK;
@@ -72,7 +90,7 @@ static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
-			return num; // returns an inode number
+			return num++; // returns an inode number
 	}
 
 	for (num = UFS_ROOT_INODE + 1; num < start; num++) {
@@ -80,7 +98,7 @@ static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
-			return num; // returns an inode number
+			return num++; // returns an inode number
 	}
 
 	return INVALID_BLOCK;

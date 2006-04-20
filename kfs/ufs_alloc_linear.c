@@ -8,17 +8,17 @@
 static uint32_t ufs_alloc_linear_find_free_block(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t num;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	uint32_t num = super->fs_dblkno / super->fs_frag;
 
 	// Find free block
-	for (num = 0; num < super->fs_size / super->fs_frag; num++) {
+	for (; num < super->fs_size / super->fs_frag; num++) {
 		r = read_block_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
-			return num; // returns a block number
+			return num++; // returns a block number
 	}
 
 	return INVALID_BLOCK;
@@ -30,17 +30,17 @@ static uint32_t ufs_alloc_linear_find_free_block(UFSmod_alloc_t * object, fdesc_
 static uint32_t ufs_alloc_linear_find_free_frag(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t num;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	uint32_t num = super->fs_dblkno;
 
 	// Find free fragment
-	for (num = 0; num < super->fs_size; num++) {
+	for (; num < super->fs_size; num++) {
 		r = read_fragment_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
-	return num; // returns a fragment number
+			return num++; // returns a fragment number
 	}
 
 	return INVALID_BLOCK;
@@ -50,17 +50,17 @@ static uint32_t ufs_alloc_linear_find_free_frag(UFSmod_alloc_t * object, fdesc_t
 static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t num;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	uint32_t num = UFS_ROOT_INODE + 1;
 
 	// Find free inode
-	for (num = UFS_ROOT_INODE + 1; num < super->fs_ipg * super->fs_ncg; num++) {
+	for (; num < super->fs_ipg * super->fs_ncg; num++) {
 		r = read_inode_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
-			return num; // returns a inode number
+			return num++; // returns a inode number
 	}
 
 	return INVALID_BLOCK;

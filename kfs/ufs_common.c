@@ -52,7 +52,7 @@ int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, c
 	if (!head)
 		return -E_INVAL;
 
-	if (num < 2)
+	if (num < UFS_ROOT_INODE)
 		printf("Warning, trying to write inode %d\n", num);
 
 	if (num >= super->fs_ipg * super->fs_ncg)
@@ -441,7 +441,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
 	if (((*ptr >> (num % 32)) & 1) == value) {
-		printf("%s already at the right value!\n", __FUNCTION__);
+		printf("%s already at the right value! (%d: %d)\n", __FUNCTION__, num, value);
 		return 1;
 	}
 
