@@ -25,7 +25,9 @@
 
 #define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
 #define DEBUG_LINUX_BD 0
-#define LINUX_BD_DEBUG_COLLECT_STATS 1
+#define LINUX_BD_DEBUG_COLLECT_STATS 0
+
+#define READ_AHEAD_COUNT 10
 
 #if DEBUG_LINUX_BD
 #define KDprintk(x...) printk(x)
@@ -34,6 +36,32 @@
 #endif
 
 int linux_bd_destroy(BD_t * bd);
+
+static void
+bad_coffee(char *p)
+{
+	uint32_t *x = (uint32_t *)p;
+	int i;
+	for (i = 0; i < 1024; i++)
+		x[i] = 0xFE0FDCBA; // little endian BADC0FFE
+}
+
+// READ AHEAD
+static bdesc_t *look_ahead_store[100];
+static uint32_t look_ahead_idx = 0;
+
+static void
+read_ahead_insert(bdesc_t *b)
+{
+	bdesc_retain(b);
+	if (look_ahead_store[look_ahead_idx]) {
+		bdesc_release(&look_ahead_store[look_ahead_idx]);
+	}
+	look_ahead_store[look_ahead_idx] = b;
+	look_ahead_idx++;
+	if (look_ahead_idx == 100)
+		look_ahead_idx = 0;
+}
 
 // STATS
 #if LINUX_BD_DEBUG_COLLECT_STATS
@@ -203,9 +231,6 @@ static uint16_t linux_bd_get_atomicsize(BD_t * object)
 struct linux_bio_private {
 	struct linux_info * info;
 
-	spinlock_t dma_done_lock; // lock for 'dma_done'
-	int dma_done;
-
 	uint32_t seq;
 	bdesc_t * bdesc;
 	uint32_t number;
@@ -213,6 +238,9 @@ struct linux_bio_private {
 };
 
 static uint32_t _seq = 0;
+
+static spinlock_t dma_outstanding_lock;
+static int dma_outstanding = 0;
 
 static void dump_page(unsigned char * p, int len, int off) {
 	int lines = len / 16;
@@ -222,7 +250,7 @@ static void dump_page(unsigned char * p, int len, int off) {
 		int j;
 		printk(KERN_ERR "%08x", off);
 		for (j = 0; j < 16; j++) {
-			if (j % 8) printk(" ");
+			if (!(j % 8)) printk(" ");
 			printk(" %02x", p[i*16 + j]);
 		}
 		printk("\n");
@@ -245,14 +273,17 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int vec_len;
 	int r;
 	int i;
-	struct linux_bio_private private;
+	int j;
+	struct linux_bio_private private[READ_AHEAD_COUNT];
 	static int infty = 10;
+	bdesc_t *blocks[READ_AHEAD_COUNT];
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	struct timespec start;
 	struct timespec stop;
 #endif
+	int read_ahead_count = READ_AHEAD_COUNT;
 
-	KDprintk(KERN_ERR "entered read\n");
+	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
 	if (!count || number + count > info->blockcount) {
 		printk(KERN_ERR "bailing on read 1\n");
 		return NULL;
@@ -267,68 +298,84 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	}
 
 	KDprintk(KERN_ERR "starting real read work\n");
-	ret = bdesc_alloc(number, info->blocksize, count);
-	if (ret == NULL)
-		return NULL;
-	bdesc_autorelease(ret);
-	
-	vec_len = (count * info->blocksize) / 4096;
-	if ((count * info->blocksize) % 4096)
-		vec_len++;
-	assert(vec_len == 1);
+	spin_lock_init(&dma_outstanding_lock);
+	spin_lock(&dma_outstanding_lock);
+	dma_outstanding = 0;
+	spin_unlock(&dma_outstanding_lock);
 
-	bio = bio_alloc(GFP_KERNEL, vec_len);
-	if (!bio) {
-		printk(KERN_ERR "bio_alloc() failed\n");
-		return NULL;
-	}
-	for (i = 0; i < vec_len; i++) {
-		bv = bio_iovec_idx(bio, i);
-		bv->bv_page = alloc_page((GFP_KERNEL | GFP_DMA));
-		if (!bv->bv_page) {
-			printk(KERN_ERR "alloc_page() failed\n");
+	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
+	assert((count * info->blocksize) <= 2048);
+	if (count != 4) read_ahead_count = 1;
+	for (j = 0; j < read_ahead_count; j++) {
+		uint32_t j_number = number + (count * j);
+		datadesc_t * dd;
+
+		dd = blockman_lookup(info->blockman, j_number);
+		if (dd) {
+			blocks[j] = NULL;
+			continue;
+		}
+
+		blocks[j] = bdesc_alloc(j_number, info->blocksize, count);
+		if (blocks[j] == NULL)
+			return NULL;
+		bdesc_autorelease(blocks[j]);
+	
+		vec_len = (count * info->blocksize) / 4096;
+		if ((count * info->blocksize) % 4096)
+			vec_len++;
+		assert(vec_len == 1);
+
+		bio = bio_alloc(GFP_KERNEL, vec_len);
+		if (!bio) {
+			printk(KERN_ERR "bio_alloc() failed\n");
 			return NULL;
 		}
-		bv->bv_len = 4096;
-		bv->bv_offset = 0;
-	}
+		for (i = 0; i < vec_len; i++) {
+			bv = bio_iovec_idx(bio, i);
+			bv->bv_page = alloc_page((GFP_KERNEL | GFP_DMA));
+			if (!bv->bv_page) {
+				printk(KERN_ERR "alloc_page() failed\n");
+				return NULL;
+			}
+			//bad_coffee(page_address(bv->bv_page));
+			bv->bv_len = info->blocksize * count;
+			bv->bv_offset = 0;
+		}
 
-	spin_lock_init(&private.dma_done_lock);
-	spin_lock(&private.dma_done_lock);
-	private.dma_done = 0;
-	spin_unlock(&private.dma_done_lock);
-	private.info = info;
-	private.bdesc = ret;
-	private.number = number;
-	private.count = count;
-	private.seq = _seq++;
+		private[j].info = info;
+		private[j].bdesc = blocks[j];
+		private[j].number = j_number;
+		private[j].count = count;
+		private[j].seq = _seq++;
 
-	bio->bi_idx = 0;
-	bio->bi_vcnt = vec_len;
-	bio->bi_sector = number;
-	bio->bi_size = info->blocksize * count;
-	bio->bi_bdev = info->bdev;
-	bio->bi_rw = READ;
-	bio->bi_end_io = bio_end_io_fn;
-	bio->bi_private = &private;
+		bio->bi_idx = 0;
+		bio->bi_vcnt = vec_len;
+		bio->bi_sector = j_number;
+		bio->bi_size = info->blocksize * count;
+		bio->bi_bdev = info->bdev;
+		bio->bi_rw = READ;
+		bio->bi_end_io = bio_end_io_fn;
+		bio->bi_private = &private[j];
 
-	spin_lock(&private.dma_done_lock);
-	private.dma_done = 0;
-	spin_unlock(&private.dma_done_lock);
+		spin_lock(&dma_outstanding_lock);
+		dma_outstanding++;
+		spin_unlock(&dma_outstanding_lock);
 
 #if LINUX_BD_DEBUG_COLLECT_STATS
-	start = current_kernel_time();
+		start = current_kernel_time();
 #endif
 #if LINUX_BD_DEBUG_PRINT_EVERY_READ
-	printk(KERN_ERR "%d\n", number);
+		printk(KERN_ERR "%d\n", j_number);
 #endif // LINUX_BD_DEBUG_PRINT_EVERY_READ
-	generic_make_request(bio);
+		generic_make_request(bio);
+	}
 
 	// wait for it to complete
-	KDprintk(KERN_ERR "going to sleep! [%d]\n", private.seq);
-	spin_lock(&private.dma_done_lock);
-	while (private.dma_done == 0) {
-		spin_unlock(&private.dma_done_lock);
+	KDprintk(KERN_ERR "going to sleep! [%d]\n", private[0].seq);
+	spin_lock(&dma_outstanding_lock);
+	while (dma_outstanding > 0) {
+		spin_unlock(&dma_outstanding_lock);
 		if (infty > 0) {
 			infty--;
 			KDprintk(KERN_ERR "dma not done. sleeping\n");
@@ -338,9 +385,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		spin_unlock(&info->wait_lock);
 		schedule_timeout(500);
 		waited = 1;
-		spin_lock(&private.dma_done_lock);
+		spin_lock(&dma_outstanding_lock);
 	}
-	spin_unlock(&private.dma_done_lock);
+	spin_unlock(&dma_outstanding_lock);
 	if (waited)
 		finish_wait(&info->waitq, &wait);
 	KDprintk(KERN_ERR "woke up!\n");
@@ -350,11 +397,19 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	stat_process_read(&start, &stop);
 #endif
 
-	r = blockman_managed_add(info->blockman, ret);
-	if (r < 0)
-		return NULL;
+	for (j = 0; j < read_ahead_count; j++) {
+		if (j != 0) {
+			if (blocks[j] == NULL) continue;
+			read_ahead_insert(blocks[j]);
+		}
+	
+		r = blockman_managed_add(info->blockman, blocks[j]);
+		assert(r >= 0);
+		if (r < 0)
+			return NULL;
+	}
 	KDprintk(KERN_ERR "exiting read\n");
-	return ret;
+	return blocks[0];
 }
 
 static int
@@ -364,7 +419,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		(struct linux_bio_private *)(bio->bi_private);
 	struct linux_info * info = private->info;
 	int i;
-	static int infty = 1;
+	static int infty = 2;
 	unsigned long flags;
 	int dir = bio->bi_rw;
 
@@ -372,11 +427,13 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	assert(info->waitq.task_list.next);
 	assert(info->waitq.task_list.next->next);
 
-	KDprintk(KERN_ERR "[%d] done w/ bio transfer\n", private->seq);
+	KDprintk(KERN_ERR "[%d] done w/ bio transfer (%d, %d)\n", private->seq,
+			 done, error);
 	if (bio->bi_size)
 		return 1;
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer 2\n", private->seq);
 
+	assert(bio->bi_vcnt == 1);
 	for (i = 0; i < bio->bi_vcnt; i++) {
 		int len;
 		unsigned char *p = (unsigned char *)
@@ -390,6 +447,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 				if (len == 0)
 					len = 4096;
 			}
+			assert(len <= 2048);
 
 			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
 
@@ -398,6 +456,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 				dump_page(p, 256, info->blocksize * private->number);
 			}
 		}
+		//bad_coffee(p);
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
 		bio_iovec_idx(bio, i)->bv_page = NULL;
 		bio_iovec_idx(bio, i)->bv_len = 0;
@@ -409,13 +468,18 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	bio_put(bio);
 
 	if (dir == READ) {
-		spin_lock_irqsave(&private->dma_done_lock, flags);
-		private->dma_done = 1;
-		spin_unlock_irqrestore(&private->dma_done_lock, flags);
+		int do_wake_up = 0;
+		spin_lock_irqsave(&dma_outstanding_lock, flags);
+		dma_outstanding--;
+		if (dma_outstanding == 0)
+			do_wake_up = 1;
+		spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 
-		spin_lock_irqsave(&info->wait_lock, flags);
-		wake_up_all(&info->waitq);
-		spin_unlock_irqrestore(&info->wait_lock, flags);
+		if (do_wake_up) {
+			spin_lock_irqsave(&info->wait_lock, flags);
+			wake_up_all(&info->waitq);
+			spin_unlock_irqrestore(&info->wait_lock, flags);
+		}
 	}
 
 	return error;
@@ -480,7 +544,8 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	struct timespec stop;
 #endif
 	
-	KDprintk(KERN_ERR "entered write\n");
+	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n",
+			 block->number, block->count);
 	if((info->blocksize * block->count) != block->ddesc->length) {
 		panic("wrote block with bad length (%d bytes)\n",
 			  block->ddesc->length);
@@ -701,6 +766,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 
+	memset(look_ahead_store, 0, sizeof(look_ahead_store));
 	info->level = 0;
 	info->blocksize = 512;
 	info->blockcount = info->bdev->bd_disk->capacity;
