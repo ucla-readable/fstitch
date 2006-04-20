@@ -561,6 +561,9 @@ BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 		if (! (bd = block_resizer_bd(bd, bs)) )
 			return NULL;
 
+		if (! (bd = wt_cache_bd(bd, 16384)) )
+			return NULL;
+
 		/* create a cache above the resizer */
 		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
 			return NULL;
