@@ -455,8 +455,7 @@ static void open_ufsfile_destroy(open_ufsfile_t * uf)
 {
 	if (uf) {
 		if (uf->count < 2) {
-			if (uf->count < 1)
-				printf("%s: warning, count below 1 (%d)\n", __FUNCTION__, uf->count);
+			assert(uf->count >= 1);
 			free(uf->file);
 			uf->count = 0;
 			uf->file = NULL;
@@ -748,25 +747,6 @@ static int ufs_cancel_synthetic_block(LFS_t * object, uint32_t number)
 	return CALL(info->ubd, cancel_block, number);
 }
 
-static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
-{
-	Dprintf("UFSDEBUG: %s %d, %s\n", __FUNCTION__, parent, name);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	ufs_fdesc_t * pfile;
-
-	if (!ino || check_name(name))
-		return -E_INVAL;
-
-	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
-	if (!pfile)
-		return -E_NOT_FOUND;
-
-	if (pfile->f_type != TYPE_DIR)
-		return -E_NOT_DIR;
-
-	return CALL(info->parts.p_dirent, search_dirent, pfile, name, ino, NULL);
-}
-
 static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
 	Dprintf("UFSDEBUG: %s %p\n", __FUNCTION__, fdesc);
@@ -780,6 +760,28 @@ static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 			hash_map_erase(info->filemap, (void *) f->f_num);
 		open_ufsfile_destroy(uf);
 	}
+}
+
+static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
+{
+	Dprintf("UFSDEBUG: %s %d, %s\n", __FUNCTION__, parent, name);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	ufs_fdesc_t * pfile;
+	int r;
+
+	if (!ino || check_name(name))
+		return -E_INVAL;
+
+	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
+	if (!pfile)
+		return -E_NOT_FOUND;
+
+	if (pfile->f_type != TYPE_DIR)
+		return -E_NOT_DIR;
+
+	r = CALL(info->parts.p_dirent, search_dirent, pfile, name, ino, NULL);
+	ufs_free_fdesc(object, (fdesc_t *) pfile);
+	return r;
 }
 
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
