@@ -223,7 +223,7 @@ int kfsd_init(int argc, char ** argv)
 			if (!bd)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, 5120, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -252,7 +252,7 @@ int kfsd_init(int argc, char ** argv)
 			if (!bd)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, 5120, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -266,7 +266,7 @@ int kfsd_init(int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, 5120, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}
