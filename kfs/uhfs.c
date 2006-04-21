@@ -447,12 +447,12 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		uint32_t number;
 		bdesc_t * block = NULL;
 		chdesc_t * save_head;
-		bool synthetic = 0;
 		const uint32_t length = MIN(blocksize - dataoffset, size - size_written);
 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
+			bool synthetic;
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
 
 			save_head = prev_head;
@@ -488,7 +488,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 					CALL(state->lfs, cancel_synthetic_block, number);
 				goto no_block;
 			}
-			synthetic = 0;
 			/* note that we do not write it - we will write it later */
 
 			r = opgroup_finish_head(prev_head);
@@ -515,15 +514,43 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		}
 		else
 		{
-			if (length >= blocksize)
-				block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
-			else
-				block = CALL(state->lfs, lookup_block, number);
-			if (!block)
+			bool synthetic = 0;
+
+			if (length < blocksize)
 			{
+				block = CALL(state->lfs, lookup_block, number);
+				if (!block)
+					goto uhfs_write_written_exit;
+			}
+			else
+			{
+				block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
+				if (!block)
+				{
+					if (synthetic)
+						CALL(state->lfs, cancel_synthetic_block, number);
+					goto uhfs_write_written_exit;
+				}
+
 				if (synthetic)
-					CALL(state->lfs, cancel_synthetic_block, number);
-				goto uhfs_write_written_exit;
+				{
+					/* save the tail */
+					tail = prev_head;
+
+					r = opgroup_prepare_head(&prev_head);
+					/* can we do better than this? */
+					assert(r >= 0);
+
+					r = chdesc_create_init(block, bd, &prev_head);
+					if (r < 0)
+						goto uhfs_write_written_exit;
+
+					r = opgroup_finish_head(prev_head);
+					/* can we do better than this? */
+					assert(r >= 0);
+
+					uhfs_mark_data(prev_head, tail);
+				}
 			}
 		}
 
@@ -537,11 +564,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		/* write the data to the block */
 		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &prev_head);
 		if (r < 0)
-		{
-			if (synthetic)
-				CALL(state->lfs, cancel_synthetic_block, number);
 			goto uhfs_write_written_exit;
-		}
 
 		r = opgroup_finish_head(prev_head);
 		/* can we do better than this? */
