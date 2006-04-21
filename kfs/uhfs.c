@@ -447,11 +447,12 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		uint32_t number;
 		bdesc_t * block = NULL;
 		chdesc_t * save_head;
+		bool synthetic = 0;
+		const uint32_t length = MIN(blocksize - dataoffset, size - size_written);
 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
-			bool synthetic;
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
 
 			save_head = prev_head;
@@ -487,6 +488,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 					CALL(state->lfs, cancel_synthetic_block, number);
 				goto no_block;
 			}
+			synthetic = 0;
 			/* note that we do not write it - we will write it later */
 
 			r = opgroup_finish_head(prev_head);
@@ -511,13 +513,18 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			 * automatically, so just use the previous head here */
 			prev_head = save_head;
 		}
-
-		/* get the block to write to (if we don't have it from above) */
-		if(!block)
+		else
 		{
-			block = CALL(state->lfs, lookup_block, number);
+			if (length >= blocksize)
+				block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
+			else
+				block = CALL(state->lfs, lookup_block, number);
 			if (!block)
+			{
+				if (synthetic)
+					CALL(state->lfs, cancel_synthetic_block, number);
 				goto uhfs_write_written_exit;
+			}
 		}
 
 		/* save the tail */
@@ -528,10 +535,13 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		assert(r >= 0);
 
 		/* write the data to the block */
-		const uint32_t length = MIN(block->ddesc->length - dataoffset, size - size_written);
 		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &prev_head);
 		if (r < 0)
+		{
+			if (synthetic)
+				CALL(state->lfs, cancel_synthetic_block, number);
 			goto uhfs_write_written_exit;
+		}
 
 		r = opgroup_finish_head(prev_head);
 		/* can we do better than this? */
