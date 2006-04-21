@@ -514,8 +514,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		}
 		else
 		{
-			bool synthetic = 0;
-
 			if (length < blocksize)
 			{
 				block = CALL(state->lfs, lookup_block, number);
@@ -524,6 +522,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 			else
 			{
+				bool synthetic;
 				block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
 				if (!block)
 				{
