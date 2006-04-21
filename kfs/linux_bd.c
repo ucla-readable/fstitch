@@ -119,12 +119,11 @@ stat_update_max(struct timespec *oldmax, struct timespec *sample)
 static void
 stat_add(struct timespec *sum, struct timespec *sample)
 {
-	if ((sample->tv_nsec + sum->tv_nsec) >= 1000000000L) {
-		sum->tv_sec += (sample->tv_sec + 1);
-		sum->tv_nsec += (sample->tv_nsec - 1000000000L);
-	} else {
-		sum->tv_sec += sample->tv_sec;
-		sum->tv_nsec += sample->tv_nsec;
+	base->tv_sec += sample->tv_sec;
+	base->tv_nsec += sample->tv_nsec;
+	if (base->tv_nsec >= NSEC_PER_SEC) {
+		base->tv_sec++;
+		base->tv_nsec -= NSEC_PER_SEC;
 	}
 }
 
@@ -132,12 +131,11 @@ stat_add(struct timespec *sum, struct timespec *sample)
 static void
 stat_sub(struct timespec *base, struct timespec *sample)
 {
-	if (base->tv_nsec < sample->tv_nsec) {
-		base->tv_sec -= (sample->tv_sec + 1);
-		base->tv_nsec = (base->tv_nsec + 1000000000L) - sample->tv_nsec;
-	} else {
-		base->tv_sec -= sample->tv_sec;
-		base->tv_nsec -= sample->tv_nsec;
+	base->tv_sec -= sample->tv_sec;
+	base->tv_nsec -= sample->tv_nsec;
+	if (base->tv_nsec < 0) {
+		base->tv_sec--;
+		base->tv_nsec += NSEC_PER_SEC;
 	}
 }
 
