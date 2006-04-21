@@ -119,11 +119,11 @@ stat_update_max(struct timespec *oldmax, struct timespec *sample)
 static void
 stat_add(struct timespec *sum, struct timespec *sample)
 {
-	base->tv_sec += sample->tv_sec;
-	base->tv_nsec += sample->tv_nsec;
-	if (base->tv_nsec >= NSEC_PER_SEC) {
-		base->tv_sec++;
-		base->tv_nsec -= NSEC_PER_SEC;
+	sum->tv_sec += sample->tv_sec;
+	sum->tv_nsec += sample->tv_nsec;
+	if (sum->tv_nsec >= NSEC_PER_SEC) {
+		sum->tv_sec++;
+		sum->tv_nsec -= NSEC_PER_SEC;
 	}
 }
 
@@ -304,6 +304,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
 	assert((count * info->blocksize) <= 2048);
 	if (count != 4) read_ahead_count = 1;
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	start = current_kernel_time();
+#endif
 	for (j = 0; j < read_ahead_count; j++) {
 		uint32_t j_number = number + (count * j);
 		datadesc_t * dd;
@@ -360,9 +363,6 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		dma_outstanding++;
 		spin_unlock(&dma_outstanding_lock);
 
-#if LINUX_BD_DEBUG_COLLECT_STATS
-		start = current_kernel_time();
-#endif
 #if LINUX_BD_DEBUG_PRINT_EVERY_READ
 		printk(KERN_ERR "%d\n", j_number);
 #endif // LINUX_BD_DEBUG_PRINT_EVERY_READ
