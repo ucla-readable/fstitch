@@ -310,7 +310,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 		else if(!dep->block)
 		{
 			/* managed NOOP: just check level */
-			if(CALL(dep->owner, get_devlevel) > target_level)
+			if(dep->owner->level > target_level)
 				goto exit;
 		}
 		else
@@ -319,7 +319,7 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			 * owner and block match, otherwise check level */
 			if(dep->owner == owner && dep->block->ddesc == block->ddesc)
 				goto recurse_down;
-			else if(CALL(dep->owner, get_devlevel) > target_level)
+			else if(dep->owner->level > target_level)
 				goto exit;
 		}
 
@@ -385,7 +385,7 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 {
 	int j = 0;
 	chmetadesc_t * meta;
-	uint16_t target_level = CALL(target, get_devlevel);
+	uint16_t target_level = target->level;
 	revision_slice_t * slice = malloc(sizeof(*slice));
 	if(!slice)
 		return NULL;

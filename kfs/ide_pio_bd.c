@@ -25,7 +25,6 @@ static const char * ide_names[2][2] = {{"ide_pio_hda", "ide_pio_hdb"}, {"ide_pio
 struct ide_info {
 	uint8_t controller;
 	uint8_t disk;
-	uint16_t level;
 	uint32_t length;
 	blockman_t * blockman;
 	uint8_t ra_count;
@@ -481,11 +480,6 @@ static int ide_pio_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t ide_pio_bd_get_devlevel(BD_t * object)
-{
-	return ((struct ide_info *) OBJLOCAL(object))->level;
-}
-
 static int ide_pio_bd_destroy(BD_t * bd)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(bd);
@@ -555,7 +549,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	info->controller = controller;
 	info->disk = disk;
 	info->length = length;
-	info->level = 0;
+	bd->level = 0;
 	info->ra_sector = INVALID_BLOCK;
 	ide_pio_tune(controller, disk);
 	

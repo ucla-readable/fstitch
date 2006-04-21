@@ -119,7 +119,7 @@ struct journal_info {
 	BD_t * bd;
 	BD_t * journal;
 	uint16_t blocksize, length;
-	uint16_t level, cr_count;
+	uint16_t cr_count;
 	uint32_t trans_total_blocks;
 	uint32_t trans_data_blocks;
 	uint32_t stamp, safe_stamp;
@@ -174,7 +174,7 @@ static int journal_bd_get_config(void * object, int level, char * string, size_t
 	switch(level)
 	{
 		case STATUS_VERBOSE:
-			snprintf(string, length, "blocksize: %d, length: %d, level: %d", info->blocksize, info->length, info->level);
+			snprintf(string, length, "blocksize: %d, length: %d, level: %d", info->blocksize, info->length, bd->level);
 			break;
 		case STATUS_BRIEF:
 			snprintf(string, length, "blocksize: %d", info->blocksize);
@@ -851,11 +851,6 @@ static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t journal_bd_get_devlevel(BD_t * object)
-{
-	return ((struct journal_info *) OBJLOCAL(object))->level;
-}
-
 static void journal_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
@@ -1098,11 +1093,9 @@ static int replay_journal(BD_t * bd)
 BD_t * journal_bd(BD_t * disk)
 {
 	struct journal_info * info;
-	uint16_t level;
 	BD_t * bd;
 	
-	level = CALL(disk, get_devlevel);
-	if(!level)
+	if(!disk->level)
 		return NULL;
 	
 	bd = malloc(sizeof(*bd));
@@ -1139,7 +1132,7 @@ BD_t * journal_bd(BD_t * disk)
 	info->journal = NULL;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->length = CALL(disk, get_numblocks);
-	info->level = level;
+	bd->level = disk->level;
 	info->trans_total_blocks = (TRANSACTION_SIZE + info->blocksize - 1) / info->blocksize;
 	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(info->blocksize);
 	info->keep = NULL;
@@ -1248,8 +1241,8 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	if(sizeof(struct commit_record) > CALL(journal, get_atomicsize))
 		return -E_INVAL;
 	
-	level = CALL(journal, get_devlevel);
-	if(!level || level > info->level)
+	level = journal->level;
+	if(!level || level > bd->level)
 		return -E_INVAL;
 	
 	if(modman_inc_bd(journal, bd, "journal") < 0)

@@ -13,7 +13,7 @@
 struct md_info {
 	BD_t * bd[2];
 	uint32_t numblocks;
-	uint16_t blocksize, atomicsize, level;
+	uint16_t blocksize, atomicsize;
 };
 
 static int md_bd_get_config(void * object, int level, char * string, size_t length)
@@ -140,11 +140,6 @@ static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t md_bd_get_devlevel(BD_t * object)
-{
-	return ((struct md_info *) OBJLOCAL(object))->level;
-}
-
 static int md_bd_destroy(BD_t * bd)
 {
 	int r = modman_rem_bd(bd);
@@ -166,8 +161,8 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	uint16_t blocksize = CALL(disk0, get_blocksize);
 	uint16_t atomicsize0 = CALL(disk0, get_atomicsize);
 	uint16_t atomicsize1 = CALL(disk1, get_atomicsize);
-	uint16_t level0 = CALL(disk0, get_devlevel);
-	uint16_t level1 = CALL(disk1, get_devlevel);
+	uint16_t level0 = disk0->level;
+	uint16_t level1 = disk1->level;
 	BD_t * bd;
 	
 	/* block sizes must be the same */
@@ -195,9 +190,9 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	info->atomicsize = MIN(atomicsize0, atomicsize1);
 	
 	if (level0 > level1)
-		info->level = level0;
+		bd->level = level0;
 	else
-		info->level = level1;
+		bd->level = level1;
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 		goto error_add;

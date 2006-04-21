@@ -27,7 +27,7 @@ typedef struct BD BD_t;
 
 struct BD {
 	OBJECT(BD_t);
-	DECLARE(BD_t, uint16_t, get_devlevel);
+	uint16_t level;
 	DECLARE(BD_t, uint32_t, get_numblocks);
 	DECLARE(BD_t, uint16_t, get_blocksize);
 	DECLARE(BD_t, uint16_t, get_atomicsize);
@@ -50,7 +50,6 @@ struct BD {
 #define BD_INIT(bd, module, info) { \
 	OBJ_INIT(bd, module, info); \
 	ASSIGN(bd, module, get_numblocks); \
-	ASSIGN(bd, module, get_devlevel); \
 	ASSIGN(bd, module, get_blocksize); \
 	ASSIGN(bd, module, get_atomicsize); \
 	ASSIGN(bd, module, read_block); \

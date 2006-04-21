@@ -169,7 +169,6 @@ struct linux_info {
 
 	uint32_t blockcount;
 	uint16_t blocksize;
-	uint16_t level;
 	blockman_t * blockman;
 };
 
@@ -656,11 +655,6 @@ static int linux_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t linux_bd_get_devlevel(BD_t * object)
-{
-	return ((struct linux_info *) OBJLOCAL(object))->level;
-}
-
 int linux_bd_destroy(BD_t * bd)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
@@ -765,7 +759,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	}
 
 	memset(look_ahead_store, 0, sizeof(look_ahead_store));
-	info->level = 0;
+	bd->level = 0;
 	info->blocksize = 512;
 	info->blockcount = info->bdev->bd_disk->capacity;
 	init_waitqueue_head(&info->waitq);

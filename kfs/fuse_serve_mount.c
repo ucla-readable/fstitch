@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
-#include <fuse_lowlevel.h>
+#include <fuse/fuse_lowlevel.h>
 #include <inc/error.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>

@@ -54,7 +54,6 @@ struct cache_info {
 	struct cache_slot * blocks;
 	hash_map_t * block_map;
 	uint16_t blocksize;
-	uint16_t level;
 };
 
 static int wb_cache_bd_get_config(void * object, int level, char * string, size_t length)
@@ -391,11 +390,6 @@ static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_DONE;
 }
 
-static uint16_t wb_cache_bd_get_devlevel(BD_t * object)
-{
-	return ((struct cache_info *) OBJLOCAL(object))->level;
-}
-
 static void wb_cache_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
@@ -513,7 +507,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	info->blocksize = CALL(disk, get_blocksize);
 	
 	/* we generally delay blocks, so our level goes up */
-	info->level = CALL(disk, get_devlevel) + 1;
+	bd->level = disk->level + 1;
 	
 	/* set up the callback */
 	if(sched_register(wb_cache_bd_callback, bd, FLUSH_PERIOD) < 0)

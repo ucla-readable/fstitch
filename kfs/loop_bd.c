@@ -24,7 +24,6 @@
 struct loop_info {
 	LFS_t * lfs;
 	BD_t * lfs_bd;
-	uint16_t level;
 	fdesc_t * file;
 	inode_t inode;
 	uint16_t blocksize;
@@ -179,11 +178,6 @@ static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t loop_get_devlevel(BD_t * bd)
-{
-	return ((loop_info_t *) OBJLOCAL(bd))->level;
-}
-
 static int loop_destroy(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
@@ -226,7 +220,7 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 
 	info->lfs = lfs;
 	info->lfs_bd = CALL(info->lfs, get_blockdev);
-	info->level = CALL(info->lfs_bd, get_devlevel);
+	bd->level = info->lfs_bd->level;
 
 	info->inode = inode;
 

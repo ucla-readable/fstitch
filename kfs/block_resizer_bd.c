@@ -22,7 +22,6 @@ struct resize_info {
 	uint16_t merge_count;
 	uint16_t atomic_size;
 	uint32_t block_count;
-	uint16_t level;
 };
 
 static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
@@ -150,11 +149,6 @@ static int block_resizer_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t block_resizer_bd_get_devlevel(BD_t * object)
-{
-	return ((struct resize_info *) OBJLOCAL(object))->level;
-}
-
 static int block_resizer_bd_destroy(BD_t * bd)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
@@ -203,7 +197,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	info->merge_count = blocksize / original_size;
 	info->atomic_size = CALL(disk, get_atomicsize);
 	info->block_count = CALL(disk, get_numblocks) / info->merge_count;
-	info->level = CALL(disk, get_devlevel);
+	bd->level = disk->level;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

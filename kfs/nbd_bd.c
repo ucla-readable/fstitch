@@ -33,7 +33,6 @@ struct nbd_info {
 	struct ip_addr ip;
 	uint16_t blocksize;
 	uint16_t port;
-	uint16_t level;
 };
 
 static int nbd_bd_get_config(void * object, int level, char * string, size_t length)
@@ -285,11 +284,6 @@ static int nbd_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t nbd_bd_get_devlevel(BD_t * object)
-{
-	return ((struct nbd_info *) OBJLOCAL(object))->level;
-}
-
 static int nbd_bd_destroy(BD_t * bd)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(bd);
@@ -346,7 +340,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	info->length = ntohl(info->length);
 	info->blocksize = ntohs(info->blocksize);
 	
-	info->level = 0;
+	bd->level = 0;
 	
 	info->blockman = blockman_create(info->blocksize);
 	if(!info->blockman)

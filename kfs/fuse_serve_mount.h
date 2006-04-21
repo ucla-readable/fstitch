@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_FUSE_SERVE_MOUNT_H
 #define __KUDOS_KFS_FUSE_SERVE_MOUNT_H
 
-#include <fuse_lowlevel.h>
+#include <fuse/fuse_lowlevel.h>
 #include <lib/types.h>
 #include <lib/hash_set.h>
 #include <kfs/cfs.h>

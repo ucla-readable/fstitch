@@ -25,7 +25,6 @@ struct mirror_info {
 	BD_t * bd[2];
 	uint32_t numblocks;
 	uint16_t blocksize, atomicsize;
-	uint16_t level;
 	uint8_t stride; // Disk reads alternate every 512 * pow(2,stride) bytes
 	int8_t bad_disk; // {none, disk 0, disk 1} => {-1, 0, 1}
 	blockman_t * blockman;
@@ -265,11 +264,6 @@ static int mirror_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t mirror_bd_get_devlevel(BD_t * object)
-{
-	return ((struct mirror_info *) OBJLOCAL(object))->level;
-}
-
 static int mirror_bd_destroy(BD_t * bd)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
@@ -312,14 +306,14 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 		numblocks0 = CALL(disk0, get_numblocks);
 		blocksize0 = CALL(disk0, get_blocksize);
 		atomicsize0 = CALL(disk0, get_atomicsize);
-		devlevel0 = CALL(disk0, get_devlevel);
+		devlevel0 = disk0->level;
 	}
 	if(bad_disk != 1)
 	{
 		numblocks1 = CALL(disk1, get_numblocks);
 		blocksize1 = CALL(disk1, get_blocksize);
 		atomicsize1 = CALL(disk1, get_atomicsize);
-		devlevel1 = CALL(disk1, get_devlevel);
+		devlevel1 = disk1->level;
 	}
 	
 	/* block sizes must be the same */
@@ -363,19 +357,19 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 	{
 		info->numblocks = MIN(numblocks0, numblocks1);
 		info->atomicsize = MIN(atomicsize0, atomicsize1);
-		info->level = MAX(devlevel0, devlevel1);
+		bd->level = MAX(devlevel0, devlevel1);
 	}
 	else if(bad_disk == 1)
 	{
 		info->numblocks = numblocks0;
 		info->atomicsize = atomicsize0;
-		info->level = devlevel0;
+		bd->level = devlevel0;
 	}
 	else
 	{
 		info->numblocks = numblocks1;
 		info->atomicsize = atomicsize1;
-		info->level = devlevel1;
+		bd->level = devlevel1;
 	}
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
@@ -437,8 +431,8 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		return -E_INVAL;
 	}
 
-	devlevel = CALL(newdevice, get_devlevel);
-	if(devlevel > info->level)
+	devlevel = newdevice->level;
+	if(devlevel > bd->level)
 	{
 		printf("mirror_bd: device level too large\n");
 		return -E_INVAL;

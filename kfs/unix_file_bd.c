@@ -215,12 +215,6 @@ unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t
-unix_file_bd_get_devlevel(BD_t * object)
-{
-	return 0;
-}
-
 static int
 unix_file_bd_destroy(BD_t * bd)
 {
@@ -307,6 +301,7 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 	}
 
 	BD_INIT(bd, unix_file_bd, info);
+	bd->level = 0;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

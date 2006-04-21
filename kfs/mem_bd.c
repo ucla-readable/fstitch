@@ -27,7 +27,6 @@ struct mem_info {
 	uint8_t *blocks;
 	uint32_t blockcount;
 	uint16_t blocksize;
-	uint16_t level;
 	blockman_t * blockman;
 };
 
@@ -155,11 +154,6 @@ static int mem_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t mem_bd_get_devlevel(BD_t * object)
-{
-	return ((struct mem_info *) OBJLOCAL(object))->level;
-}
-
 static int mem_bd_destroy(BD_t * bd)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
@@ -266,10 +260,9 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		mark_block_used(&info->blocks[blocksize * 2], i + 2);
 	// done setting up JOS fs
 
-	info->level = 0;
-	
 	BD_INIT(bd, mem_bd, info);
-	
+	bd->level = 0;
+		
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);

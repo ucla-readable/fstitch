@@ -15,7 +15,6 @@ struct partition_info {
 	uint32_t start;
 	uint32_t length;
 	uint16_t blocksize;
-	uint16_t level;
 };
 
 static int partition_bd_get_config(void * object, int level, char * string, size_t length)
@@ -142,11 +141,6 @@ static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static uint16_t partition_bd_get_devlevel(BD_t * object)
-{
-	return ((struct partition_info *) OBJLOCAL(object))->level;
-}
-
 static int partition_bd_destroy(BD_t * bd)
 {
 	int r = modman_rem_bd(bd);
@@ -179,7 +173,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	info->start = start;
 	info->length = length;
 	info->blocksize = CALL(disk, get_blocksize);
-	info->level = CALL(disk, get_devlevel);
+	bd->level = disk->level;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
