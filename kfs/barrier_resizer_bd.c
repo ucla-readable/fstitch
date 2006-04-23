@@ -181,9 +181,9 @@ static int barrier_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	/* our level needs to look higher than where we want to send the chdescs, so that
 	* while we're working with the micro-cache built into the partial forwarder, we
 	* will appear to be at a level higher than the block device below us */
-	info->level++;
+	object->level++;
 	value = barrier_partial_forward(info->forward_buffer, info->merge_count, object, block);
-	info->level--;
+	object->level--;
 	return value;
 }
 
