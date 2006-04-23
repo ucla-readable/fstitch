@@ -970,7 +970,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 	if (!ln) {
 		// Allocate new inode
-		inum = CALL(info->parts.p_allocator, find_free_inode, (fdesc_t *) pf);
+		inum = CALL(info->parts.p_allocator, find_free_inode, (fdesc_t *) pf, 0);
 		if (inum == INVALID_BLOCK)
 			goto allocate_name_exit;
 

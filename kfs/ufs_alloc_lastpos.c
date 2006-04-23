@@ -76,7 +76,7 @@ static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_
 	return INVALID_BLOCK;
 }
 
-static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file)
+static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	static uint32_t num = UFS_ROOT_INODE + 1;

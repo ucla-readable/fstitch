@@ -47,7 +47,7 @@ static uint32_t ufs_alloc_linear_find_free_frag(UFSmod_alloc_t * object, fdesc_t
 }
 
 // FIXME this is a fairly inefficient way to scan for free inodes
-static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file)
+static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	int r;
