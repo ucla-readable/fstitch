@@ -764,7 +764,7 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 
 	kfsd_enter();
 	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
-	if (r >= 0)
+	if (r >= 0 && dentry->d_inode->i_mode & S_IFDIR)
 		dir->i_nlink--;
 	kfsd_leave(1);
 	return r;
@@ -798,7 +798,8 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
-	dir->i_nlink++;
+	if (dentry->d_inode->i_mode & S_IFDIR)
+		dir->i_nlink++;
 
 	return 0;
 }
