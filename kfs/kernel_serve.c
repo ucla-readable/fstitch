@@ -185,16 +185,25 @@ static uint32_t inode_get_size(struct inode * inode)
 
 static void read_inode_withlock(struct inode * inode)
 {
+	CFS_t * cfs;
 	uint32_t type_size;
 	union {
 		uint32_t * type;
 		void * ptr;
 	} type;
-	int r, nlinks_supported = 0, perms_supported = 0;
-	
+	bool nlinks_supported, perms_supported, mtime_supported, atime_supported;
+	int r;
+
 	assert(kfsd_have_lock());
 
-	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
+	cfs = sb2cfs(inode->i_sb);
+
+	nlinks_supported = feature_supported(cfs, inode->i_ino, KFS_feature_nlinks.id);
+	perms_supported = feature_supported(cfs, inode->i_ino, KFS_feature_unix_permissions.id);
+	mtime_supported = feature_supported(cfs, inode->i_ino, KFS_feature_mtime.id);
+	atime_supported = feature_supported(cfs, inode->i_ino, KFS_feature_atime.id);
+
+	r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
 		kdprintf(STDERR_FILENO, "%s: CALL(get_metadata, ino = %u) = %d\n", __FUNCTION__, inode->i_ino, r);
@@ -203,17 +212,68 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (nlinks_supported)
 	{
-		// TODO
-		kdprintf(STDERR_FILENO, "%s: add nlinks support\n", __FUNCTION__);
-		nlinks_supported = 0;
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_nlinks.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(inode->i_nlink));
+			inode->i_nlink = *(uint32_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
 	}
 
 	if (perms_supported)
 	{
-		// TODO
-		kdprintf(STDERR_FILENO, "%s: add permission support\n", __FUNCTION__);
-		perms_supported = 0;
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_unix_permissions.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(unsigned));
+			inode->i_mode = *(unsigned *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
+
+	if (mtime_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_mtime.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(time_t));
+			inode->i_mtime.tv_sec = *(time_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+	}
+	else
+		inode->i_mtime = CURRENT_TIME;
+	inode->i_ctime = inode->i_mtime;
+
+	if (atime_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_atime.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(time_t));
+			inode->i_atime.tv_sec = *(time_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+	}
+	else
+		inode->i_atime = CURRENT_TIME;
 
 	if (*type.type == TYPE_DIR)
 	{
@@ -225,16 +285,16 @@ static void read_inode_withlock(struct inode * inode)
 			
 			inode->i_nlink = 2;
 			
-			r = CALL(sb2cfs(inode->i_sb), open, inode->i_ino, 0, &fdesc);
+			r = CALL(cfs, open, inode->i_ino, 0, &fdesc);
 			assert(r >= 0);
 			/* HACK: this does not have to be the correct value */
 			fdesc->common->parent = inode->i_ino;
 			
-			while ((r = CALL(sb2cfs(inode->i_sb), get_dirent, fdesc, &dirent, sizeof(dirent), &basep)) >= 0)
+			while ((r = CALL(cfs, get_dirent, fdesc, &dirent, sizeof(dirent), &basep)) >= 0)
 				if (dirent.d_type == TYPE_DIR)
 					inode->i_nlink++;
 			
-			r = CALL(sb2cfs(inode->i_sb), close, fdesc);
+			r = CALL(cfs, close, fdesc);
 			assert(r >= 0);
 		}
 		if (!perms_supported)
@@ -268,9 +328,6 @@ static void read_inode_withlock(struct inode * inode)
 
 	inode->i_uid = 0;
 	inode->i_gid = 0;
-	inode->i_mtime = CURRENT_TIME;
-	inode->i_atime = CURRENT_TIME;
-	inode->i_ctime = CURRENT_TIME;
 
   exit:
 	free(type.type);
@@ -707,6 +764,8 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 
 	kfsd_enter();
 	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
+	if (r >= 0)
+		dir->i_nlink--;
 	kfsd_leave(1);
 	return r;
 }
@@ -739,6 +798,7 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
+	dir->i_nlink++;
 
 	return 0;
 }
@@ -792,8 +852,9 @@ static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 		return -E_NO_MEM;
 	}
 	inode->i_ino = cfs_ino;
-	read_inode_withlock(inode);	
+	read_inode_withlock(inode);
 	d_instantiate(dentry, inode);
+	dir->i_nlink++;
 
 	kfsd_leave(1);
 
@@ -807,6 +868,8 @@ static int serve_rmdir(struct inode * dir, struct dentry * dentry)
 
 	kfsd_enter();
 	r = CALL(dentry2cfs(dentry), rmdir, dir->i_ino, dentry->d_name.name);
+	if (r >= 0)
+		dir->i_nlink--;
 	kfsd_leave(1);
 	return r;
 }
