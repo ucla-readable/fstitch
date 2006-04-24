@@ -1,0 +1,52 @@
+From vnq4v@cms.mail.virginia.edu Sun Apr 25 22:01:10 2004
+Received: (qmail 213530 invoked by uid 10000); 26 Apr 2004 05:01:09 -0000
+Delivered-To: chris@frostnet.net
+Received: (qmail 213500 invoked from network); 26 Apr 2004 05:01:09 -0000
+From: Virginia Natalie Quist <vnq4v@cms.mail.virginia.edu>
+To: Chris Frost <chris@frostnet.net>
+Subject: Re: number theory question
+In-Reply-To: <20040426044435.GG3115@frostnet.net>
+Message-ID: <SIMEON.10404260105.C@vnq4v.config.mail.virginia.edu>
+Date: Mon, 26 Apr 2004 01:01:05 -0400 (Eastern Standard Time)
+X-Mailer: Simeon for Win32 Version 4.1.4 Build (40)
+X-Authentication: IMSP
+MIME-Version: 1.0
+Content-Type: TEXT/PLAIN;
+  CHARSET=US-ASCII
+X-KMail-EncryptionState:  
+X-KMail-SignatureState:  
+X-KMail-MDN-Sent:  
+Status: RO
+Content-Length: 1254
+
+Chris,
+  Thanks for the response.  It did occur to me that 
+locking/unlocking is just raising b/b^q to your own power 
+r, but I agree that this seems like a weird or overly 
+general way to describe the D-H key exchange so I thought 
+maybe it was referring to something else.  If Ismar didn't 
+make a big deal of this in class then the distinction 
+probably doesn't matter.
+-Virgy
+ 
+On Mon, 26 Apr 2004 00:44:35 -0400 Chris Frost 
+<chris@frostnet.net> wrote:
+> Hey!
+> I'm guessing that the locking procedure is just a general procedure
+> for key exchange. I can map the D-H protocol to the locking method,
+> but I think my notes would be more detailed if it did map the way
+> I can see it might. ("locking" is calcing b^{mine} mod p, "unlocking"
+> is calcing b^{others}^{mine} mod p, and the last "B gets" is B getting the
+> sym encrypted message. But as a said, this is more complex than I think
+> the mapping should be.)
+> 
+> I'm asking David Chu, another friend in our class, and ccing ya.
+> -- 
+> Chris Frost  |  <http://www.frostnet.net/chris/>
+> -------------+----------------------------------
+> Public PGP Key:
+>    Email chris@frostnet.net with the subject "retrieve pgp key"
+>    or visit <http://www.frostnet.net/chris/about/pgp_key.phtml>
+> 
+
+
