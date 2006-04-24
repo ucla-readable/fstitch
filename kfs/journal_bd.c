@@ -118,8 +118,8 @@
 struct journal_info {
 	BD_t * bd;
 	BD_t * journal;
-	uint16_t blocksize, length;
-	uint16_t cr_count;
+	uint16_t blocksize, cr_count;
+	uint32_t length;
 	uint32_t trans_total_blocks;
 	uint32_t trans_data_blocks;
 	uint32_t stamp, safe_stamp;
