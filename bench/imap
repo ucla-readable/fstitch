@@ -1,7 +1,12 @@
 #!/usr/bin/expect -f
 # Move messages from one mailbox to another
 
-set imapd [lrange $argv 0 1]
+set imapd $env(IMAPD)
+set mailpath $env(MAILPATH)
+# doesn't work with >1 arg:
+#set imapd [lrange $argv 0 1]
+#set mailpath [lrange $argv 1 2]
+
 set nmsgs 100
 set cmdn 1
 
@@ -14,16 +19,16 @@ if {![file exists $imapd]} {
 spawn $imapd
 expect -re "\\* PREAUTH .*\r\r"
 
-send "$cmdn select mailbox.src\r"
+send "$cmdn select $mailpath/mailbox.src\r"
 expect -re "\\* $nmsgs EXISTS\r\r.*$cmdn OK .READ-WRITE. SELECT completed\r\r"
 incr cmdn
 
-send "$cmdn create mailbox.dst\n"
+send "$cmdn create $mailpath/mailbox.dst\n"
 expect "$cmdn OK CREATE completed\r\r"
 incr cmdn
 
 for {set i 1} {$i<=$nmsgs} {incr i} {
-	send "$cmdn copy $i mailbox.dst\r"
+	send "$cmdn copy $i $mailpath/mailbox.dst\r"
 	expect "$cmdn OK COPY completed\r\r"
 	incr cmdn
 

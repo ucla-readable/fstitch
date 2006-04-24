@@ -1,15 +1,16 @@
 #!/bin/bash
 # Run the imap test
 
-if [ $# -ne 1 ]; then
-	echo "Usage: $0 <imapd_file>"
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 <imapd_file> <mailpath>"
 	exit 1
 fi
 
 IMAPD=$1
+MAILPATH=$2
 
-rm -f ~/mailbox.src
-cp mailbox.src.gz ~/ || exit 1
-gunzip ~/mailbox.src.gz || exit 1
-rm -f ~/mailbox.dst
-./imap $IMAPD
+rm -f $MAILPATH/mailbox.src
+cp mailbox.src.gz $MAILPATH || exit 1
+gunzip $MAILPATH/mailbox.src.gz || exit 1
+rm -f $MAILPATH/mailbox.dst
+IMAPD=$IMAPD MAILPATH=$MAILPATH ./imap
