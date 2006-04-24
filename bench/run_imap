@@ -1,0 +1,15 @@
+#!/bin/bash
+# Run the imap test
+
+if [ $# -ne 1 ]; then
+	echo "Usage: $0 <imapd_file>"
+	exit 1
+fi
+
+IMAPD=$1
+
+rm -f ~/mailbox.src
+cp mailbox.src.gz ~/ || exit 1
+gunzip ~/mailbox.src.gz || exit 1
+rm -f ~/mailbox.dst
+./imap $IMAPD
