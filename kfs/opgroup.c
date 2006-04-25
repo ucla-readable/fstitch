@@ -576,7 +576,7 @@ int opgroup_prepare_head(chdesc_t ** head)
 
 int opgroup_finish_head(chdesc_t * head)
 {
-	if(!current_scope || !current_scope->top)
+	if(!current_scope || !current_scope->top || !head)
 		return 0;
 	return chdesc_add_depend(current_scope->top, head);
 }

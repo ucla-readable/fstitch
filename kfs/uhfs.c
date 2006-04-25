@@ -473,12 +473,12 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 				goto uhfs_write_written_exit;
 			}
 
-			/* save the tail */
-			tail = prev_head;
-
 			r = opgroup_prepare_head(&prev_head);
 			/* can we do better than this? */
 			assert(r >= 0);
+
+			/* save the tail */
+			tail = prev_head;
 
 			/* zero it */
 			r = chdesc_create_init(block, bd, &prev_head);
@@ -490,11 +490,11 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 			/* note that we do not write it - we will write it later */
 
+			uhfs_mark_data(prev_head, tail);
+
 			r = opgroup_finish_head(prev_head);
 			/* can we do better than this? */
 			assert(r >= 0);
-
-			uhfs_mark_data(prev_head, tail);
 
 			/* append it to the file, depending on zeroing it */
 			r = CALL(state->lfs, append_file_block, uf->inner, number, &prev_head);
@@ -533,43 +533,43 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 				if (synthetic)
 				{
-					/* save the tail */
-					tail = prev_head;
-
 					r = opgroup_prepare_head(&prev_head);
 					/* can we do better than this? */
 					assert(r >= 0);
+
+					/* save the tail */
+					tail = prev_head;
 
 					r = chdesc_create_init(block, bd, &prev_head);
 					if (r < 0)
 						goto uhfs_write_written_exit;
 
+					uhfs_mark_data(prev_head, tail);
+
 					r = opgroup_finish_head(prev_head);
 					/* can we do better than this? */
 					assert(r >= 0);
-
-					uhfs_mark_data(prev_head, tail);
 				}
 			}
 		}
 
-		/* save the tail */
-		tail = prev_head;
-
 		r = opgroup_prepare_head(&prev_head);
 		/* can we do better than this? */
 		assert(r >= 0);
+
+		/* save the tail */
+		tail = prev_head;
 
 		/* write the data to the block */
 		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &prev_head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
 
+		uhfs_mark_data(prev_head, tail);
+
 		r = opgroup_finish_head(prev_head);
 		/* can we do better than this? */
 		assert(r >= 0);
-
-		uhfs_mark_data(prev_head, tail);
 
 		save_head = prev_head;
 
