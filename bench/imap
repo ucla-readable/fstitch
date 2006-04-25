@@ -42,6 +42,10 @@ send "$cmdn expunge\r"
 expect -re ".*$cmdn OK Expunged $nmsgs messages\r\r"
 incr cmdn
 
+send "$cmdn check\r"
+expect -re ".*$cmdn OK Checkpoint completed\r\r"
+incr cmdn
+
 send "$cmdn close\r"
 expect "$cmdn OK CLOSE completed"
 incr cmdn

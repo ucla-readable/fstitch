@@ -1,16 +1,26 @@
 #!/bin/bash
 # Run the imap test
 
-if [ $# -ne 2 ]; then
-	echo "Usage: $0 <imapd_file> <mailpath>"
+if [ $# -ne 3 ]; then
+	echo "Usage: $0 <imapd_file> <mailpath> <kfspath>"
 	exit 1
 fi
 
 IMAPD=$1
 MAILPATH=$2
+KFSPATH=$3
 
 rm -f $MAILPATH/mailbox.src
 cp mailbox.src.gz $MAILPATH || exit 1
-gunzip $MAILPATH/mailbox.src.gz || exit 1
+gunzip $MAILPATH/mailbox.src.gz
 rm -f $MAILPATH/mailbox.dst
+
+sync
+if [ "$KFSPATH" != "" ]; then
+	$KFSPATH/obj/unix-user/user/fsync $MAILPATH
+fi
+
+echo -n "Press return to run test: "
+read x
+
 IMAPD=$IMAPD MAILPATH=$MAILPATH ./imap
