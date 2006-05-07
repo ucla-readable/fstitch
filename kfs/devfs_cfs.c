@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/stdlib.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
@@ -10,6 +11,7 @@
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/bd.h>
+#include <kfs/kfsd.h>
 #include <kfs/devfs_cfs.h>
 
 #define DEVFS_DEBUG 0
@@ -488,19 +490,28 @@ static int devfs_set_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 	return -E_PERM;
 }
 
-static int devfs_destroy(CFS_t * cfs)
+static void devfs_real_destroy(void * void_devfs_cfs)
 {
+	CFS_t * cfs = (CFS_t *) void_devfs_cfs;
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
-	/* FIXME: check open counts of all modules and the root! */
-	int r = modman_rem_cfs(cfs);
-	if(r < 0)
-		return r;
 	
 	vector_destroy(state->bd_table);
 	memset(state, 0, sizeof(*state));
 	free(state);
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
+}
+
+static int devfs_destroy(CFS_t * cfs)
+{
+	/* FIXME: check open counts of all modules and the root! */
+	int r = modman_rem_cfs(cfs);
+	if(r < 0)
+		return r;
+
+	r = kfsd_register_shutdown_module(devfs_real_destroy, cfs, SHUTDOWN_POSTMODULES);
+	assert(!r);
+
 	return 0;
 }
 

@@ -99,7 +99,7 @@ int kernel_serve_init(void)
 	mounts = vector_create();
 	if (!mounts)
 		return -E_NO_MEM;
-	r = kfsd_register_shutdown_module(kernel_serve_shutdown, NULL);
+	r = kfsd_register_shutdown_module(kernel_serve_shutdown, NULL, SHUTDOWN_PREMODULES);
 	if (r < 0)
 	{
 		vector_destroy(mounts);

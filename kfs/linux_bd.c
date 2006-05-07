@@ -10,7 +10,6 @@
 #include <kfs/bdesc.h>
 #include <kfs/blockman.h>
 #include <kfs/modman.h>
-#include <kfs/kfsd.h>
 #include <kfs/linux_bd.h>
 #include <kfs/revision.h>
 
@@ -37,6 +36,7 @@
 
 int linux_bd_destroy(BD_t * bd);
 
+#if 0
 static void
 bad_coffee(char *p)
 {
@@ -45,6 +45,7 @@ bad_coffee(char *p)
 	for (i = 0; i < 1024; i++)
 		x[i] = 0xFE0FDCBA; // little endian BADC0FFE
 }
+#endif
 
 // READ AHEAD
 static bdesc_t *look_ahead_store[100];
@@ -171,16 +172,6 @@ struct linux_info {
 	uint16_t blocksize;
 	blockman_t * blockman;
 };
-
-static int registered = 0;
-void
-linux_bd_tracker(void *object)
-{
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	stat_dump();
-#endif
-	linux_bd_destroy((BD_t*)object);
-}
 
 static int linux_bd_get_config(void * object, int level,
                                char * string, size_t length)
@@ -660,6 +651,10 @@ int linux_bd_destroy(BD_t * bd)
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
 	int r;
 
+#if LINUX_BD_DEBUG_COLLECT_STATS
+	stat_dump();
+#endif
+
 	r = modman_rem_bd(bd);
 	if (r < 0) return r;
 
@@ -767,12 +762,6 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	BD_INIT(bd, linux_bd, info);
 	
-	if (!registered) {
-		int r = kfsd_register_shutdown_module(linux_bd_tracker, bd);
-		assert(r >= 0);
-		registered = 1;
-	}
-
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
 		DESTROY(bd);

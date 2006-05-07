@@ -1108,7 +1108,7 @@ int fuse_serve_init(int argc, char ** argv)
 	root_cfs = NULL;
 	serving = 0;
 
-	if ((r = kfsd_register_shutdown_module(fuse_serve_shutdown, NULL)) < 0)
+	if ((r = kfsd_register_shutdown_module(fuse_serve_shutdown, NULL, SHUTDOWN_PREMODULES)) < 0)
 	{
 		kdprintf(STDERR_FILENO, "%s(): kfsd_register_shutdown_module() = %d\n", __FUNCTION__, r);
 		return r;

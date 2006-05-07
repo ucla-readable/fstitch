@@ -105,7 +105,7 @@ int cfs_ipc_serve_init(void)
 	if ((r = traverse_init()) < 0)
 		return r;
 
-	if ((r = kfsd_register_shutdown_module(cfs_ipc_serve_shutdown, NULL)) < 0)
+	if ((r = kfsd_register_shutdown_module(cfs_ipc_serve_shutdown, NULL, SHUTDOWN_PREMODULES)) < 0)
 		return r;
 	return 1;
 }

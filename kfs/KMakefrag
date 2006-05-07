@@ -46,6 +46,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/ipc_serve.o \
 			$(OBJDIR)/kfs/sched.o \
 			$(OBJDIR)/kfs/sync.o \
+			$(OBJDIR)/kfs/destroy.o \
 			$(OBJDIR)/kfs/kfsd.o \
 			$(OBJDIR)/kfs/kfsd_init.o \
 			$(OBJDIR)/kfs/debug.o

@@ -22,6 +22,7 @@
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
+#include <kfs/destroy.h>
 
 #ifdef __KERNEL__
 struct task_struct * kfsd_task;
@@ -31,13 +32,17 @@ struct stealth_lock kfsd_global_lock;
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
 	void * arg;
+	int when;
 };
 
 static struct module_shutdown module_shutdowns[10];
 
-int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
+int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg, int when)
 {
 	int i;
+
+	if (when != SHUTDOWN_PREMODULES && when != SHUTDOWN_POSTMODULES)
+		return -E_INVAL;
 
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
@@ -45,6 +50,7 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg)
 		{
 			module_shutdowns[i].shutdown = fn;
 			module_shutdowns[i].arg = arg;
+			module_shutdowns[i].when = when;
 			return 0;
 		}
 	}
@@ -68,13 +74,28 @@ static void kfsd_shutdown(void)
 
 	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
 	{
-		if (module_shutdowns[i].shutdown)
+		if (module_shutdowns[i].shutdown && module_shutdowns[i].when == SHUTDOWN_PREMODULES)
 		{
 			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
 			module_shutdowns[i].shutdown = NULL;
 			module_shutdowns[i].arg = NULL;
+			module_shutdowns[i].when = 0;
 		}
 	}
+
+	destroy_all();
+
+	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
+	{
+		if (module_shutdowns[i].shutdown && module_shutdowns[i].when == SHUTDOWN_POSTMODULES)
+		{
+			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
+			module_shutdowns[i].shutdown = NULL;
+			module_shutdowns[i].arg = NULL;
+			module_shutdowns[i].when = 0;
+		}
+	}
+
 }
 
 void kfsd_request_shutdown(void)
