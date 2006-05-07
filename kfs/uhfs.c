@@ -522,6 +522,13 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 			else
 			{
+				/* Since the entire block is to be overwritten we can
+				 * avoid a read and do a synthetic read. However,
+				 * we must init the disk so this introduces the possibility
+				 * that we order writes to write the zeros and then the data.
+				 * We could crash etc before the data write, corrupting the
+				 * file data! On the other hand, this removes the need to
+				 * read; a big win for randomized file overwritting. */
 				bool synthetic;
 				block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
 				if (!block)
