@@ -66,15 +66,39 @@ int sched_unregister(const sched_callback fn, void * arg)
 	return -E_NOT_FOUND;
 }
 
+static void kfsd_sched_shutdown(void * ignore)
+{
+	size_t i;
+
+	for (i = 0; i < vector_size(fes); i++)
+	{
+		fn_entry_t * fe = vector_elt(fes, i);
+		free(fe);
+		vector_elt_set(fes, i, NULL);
+	}
+
+	vector_destroy(fes);
+	fes = NULL;
+}
 
 int kfsd_sched_init(void)
 {
+	int r;
+
 	// Check that sched_init is not called multiple times
 	assert(!fes);
 
 	fes = vector_create();
 	if (!fes)
 		return -E_NO_MEM;
+
+	r = kfsd_register_shutdown_module(kfsd_sched_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	if (r < 0)
+	{
+		vector_destroy(fes);
+		fes = NULL;
+		return r;
+	}
 
 	return 0;
 }

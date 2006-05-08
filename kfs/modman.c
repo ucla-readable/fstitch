@@ -14,6 +14,7 @@
 #include <kfs/lfs.h>
 #include <kfs/debug.h>
 #include <kfs/devfs_cfs.h>
+#include <kfs/kfsd.h>
 #include <kfs/modman.h>
 
 #define MODMAN_DEBUG 0
@@ -217,6 +218,14 @@ static const char * modman_name(hash_map_t * map, void * module)
 	return mod->name;
 }
 
+static void modman_shutdown(void * ignore)
+{
+	hash_map_destroy(bd_map);
+	hash_map_destroy(cfs_map);
+	hash_map_destroy(lfs_map);
+	bd_map = cfs_map = lfs_map = NULL;
+}
+
 int modman_init(void)
 {
 	if(bd_map || cfs_map || lfs_map)
@@ -230,7 +239,11 @@ int modman_init(void)
 	{
 		modman_devfs = devfs_cfs(NULL, NULL, 0);
 		if(modman_devfs)
-			return 0;
+		{
+			int r = kfsd_register_shutdown_module(modman_shutdown, NULL, SHUTDOWN_POSTMODULES);
+			if(r >= 0)
+				return 0;
+		}
 	}
 	
 	if(bd_map)
