@@ -1,10 +1,12 @@
 #include <lib/assert.h>
 #include <lib/kdprintf.h>
+#include <lib/string.h>
 #include <lib/vector.h>
 
 #include <kfs/cfs.h>
 #include <kfs/lfs.h>
 #include <kfs/bd.h>
+#include <kfs/journal_bd.h>
 #include <kfs/modman.h>
 #include <kfs/destroy.h>
 
@@ -55,6 +57,27 @@ DESTROY_ALL(LFS_t, lfs);
 DESTROY_ALL(BD_t, bd);
 
 
+// Destroy all journal_bd journal uses to ensure there are no journal-induced
+// cycles. It is safe to just remove the journal use because kfsd has synced.
+void destroy_journal_uses(void)
+{
+	modman_it_t it;
+	BD_t * bd;
+	int r;
+
+	r = modman_it_init_bd(&it);
+	assert(!r);
+	while ((bd = modman_it_next_bd(&it)))
+	{
+		if (!strncmp(modman_name_bd(bd), "journal_bd-", strlen("journal_bd-")))
+		{
+			r = journal_bd_set_journal(bd, NULL);
+			assert(r >= 0);
+		}
+	}
+}
+
+
 #define DESTROYED_ALL_P(module, type) \
 static bool destroyed_all_##type##_p(void) \
 { \
@@ -78,7 +101,8 @@ void destroy_all(void)
 	return;
 #endif
 
-	// TODO: detect [journal] cycles and destroy
+	destroy_journal_uses();
+
 	do {
 		ndestroyed = destroy_all_cfs();
 		ndestroyed += destroy_all_lfs();
