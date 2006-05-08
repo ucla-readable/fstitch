@@ -10,8 +10,6 @@
 #include <kfs/modman.h>
 #include <kfs/destroy.h>
 
-#define DESTROY_ALL_ENABLED 0
-
 
 // Destroy all modules of type 'module' that have no users
 #define DESTROY_ALL(module, type) \
@@ -96,10 +94,6 @@ DESTROYED_ALL_P(BD_t, bd);
 void destroy_all(void)
 {
 	size_t ndestroyed;
-
-#if !DESTROY_ALL_ENABLED
-	return;
-#endif
 
 	destroy_journal_uses();
 
