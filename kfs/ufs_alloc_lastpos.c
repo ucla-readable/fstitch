@@ -120,10 +120,7 @@ static int ufs_alloc_lastpos_get_status(void * object, int level, char * string,
 
 static int ufs_alloc_lastpos_destroy(UFSmod_alloc_t * obj)
 {
-	free(OBJLOCAL(obj));
-	memset(obj, 0, sizeof(*obj));
 	free(obj);
-
 	return 0;
 }
 
