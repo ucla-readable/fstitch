@@ -392,6 +392,11 @@ static int ufs_super_wb_get_status(void * object, int level, char * string,
 static int ufs_super_wb_destroy(UFSmod_super_t * obj)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(obj);
+	int r;
+
+	r = sched_unregister(ufs_super_wb_sync_callback, obj);
+	if (r < 0)
+		return r;
 
 	bdesc_release(&linfo->super_block);
 	free(OBJLOCAL(obj));

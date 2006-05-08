@@ -409,7 +409,11 @@ static int ufs_cg_wb_get_status(void * object, int level, char * string,
 static int ufs_cg_wb_destroy(UFSmod_cg_t * obj)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(obj);
-	int i;
+	int i, r;
+
+	r = sched_unregister(ufs_cg_wb_sync_callback, obj);
+	if (r < 0)
+		return r;
 
 	for (i = 0; i < linfo->ncg; i++)
 		bdesc_release(&linfo->cg[i].cgblock);
