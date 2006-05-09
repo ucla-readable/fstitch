@@ -1,4 +1,5 @@
 #include <inc/error.h>
+#include <lib/assert.h>
 #include <lib/mmu.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
@@ -20,6 +21,8 @@
 
 #include <kfs/sync.h>
 #include <kfs/sched.h>
+#include <kfs/bdesc.h>
+#include <kfs/chdesc.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 #include <kfs/destroy.h>
@@ -58,44 +61,45 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg, int when)
 	return -E_NO_MEM;
 }
 
+static void kfsd_callback_shutdowns(int when)
+{
+	size_t i;
+	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
+	{
+		if (module_shutdowns[i].shutdown && module_shutdowns[i].when == when)
+		{
+			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
+			module_shutdowns[i].shutdown = NULL;
+			module_shutdowns[i].arg = NULL;
+			module_shutdowns[i].when = 0;
+		}
+	}
+}
+
 static int kfsd_running = 0;
 
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
 static void kfsd_shutdown(void)
 {
-	int i;
-	
-	printf("Syncing and shutting down.\n");
+   	printf("Syncing and shutting down.\n");
 	if(kfsd_running > 0)
 		kfsd_running = 0;
 	
 	if(kfs_sync() < 0)
 		kdprintf(STDERR_FILENO, "Sync failed!\n");
 
-	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
-	{
-		if (module_shutdowns[i].shutdown && module_shutdowns[i].when == SHUTDOWN_PREMODULES)
-		{
-			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
-			module_shutdowns[i].shutdown = NULL;
-			module_shutdowns[i].arg = NULL;
-			module_shutdowns[i].when = 0;
-		}
-	}
+	kfsd_callback_shutdowns(SHUTDOWN_PREMODULES);
 
 	destroy_all();
 
-	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
-	{
-		if (module_shutdowns[i].shutdown && module_shutdowns[i].when == SHUTDOWN_POSTMODULES)
-		{
-			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
-			module_shutdowns[i].shutdown = NULL;
-			module_shutdowns[i].arg = NULL;
-			module_shutdowns[i].when = 0;
-		}
-	}
+	// Run bdesc autoreleasing
+	bdesc_autorelease_pool_pop();
+	assert(!bdesc_autorelease_pool_depth());
 
+	// Run chdesc reclamation
+	chdesc_reclaim_written();
+
+	kfsd_callback_shutdowns(SHUTDOWN_POSTMODULES);
 }
 
 void kfsd_request_shutdown(void)
