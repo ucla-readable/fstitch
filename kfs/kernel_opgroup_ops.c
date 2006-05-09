@@ -126,7 +126,7 @@ int kernel_opgroup_ops_init(void)
 	set_capacity(state.gd, 0);
 	add_disk(state.gd);
 
-	r = kfsd_register_shutdown_module(kernel_opgroup_ops_shutdown, NULL);
+	r = kfsd_register_shutdown_module(kernel_opgroup_ops_shutdown, NULL, SHUTDOWN_PREMODULES);
 	if (r < 0)
 	{
 		kernel_opgroup_ops_shutdown(NULL);

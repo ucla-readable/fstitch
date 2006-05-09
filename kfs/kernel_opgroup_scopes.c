@@ -110,7 +110,7 @@ int kernel_opgroup_scopes_init(void)
 		return r;
 	}
 	
-	r = kfsd_register_shutdown_module(kernel_opgroup_scopes_shutdown, NULL);
+	r = kfsd_register_shutdown_module(kernel_opgroup_scopes_shutdown, NULL, SHUTDOWN_PREMODULES);
 	if (r < 0)
 	{
 		kernel_opgroup_scopes_shutdown(NULL);
