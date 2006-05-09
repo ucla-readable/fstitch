@@ -440,6 +440,7 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 
 	// Expire the old hash table and move in the new
 	hash_map_clear(hm);
+	vector_destroy(hm->tbl);
 	hm->size = new_hm->size;
 	hm->tbl  = new_hm->tbl;
 	free(new_hm);
