@@ -11,7 +11,11 @@
 #include <kfs/destroy.h>
 
 
-// Destroy all modules of type 'module' that have no users
+// Destroy all modules of type 'module' that have no users.
+// Note:
+// Right now destroying modules does not cause data writes, but if modules
+// begin to do this we will need to call chdesc_reclaim_written() before
+// destroying blockman-using BDs.
 #define DESTROY_ALL(module, type) \
 static size_t destroy_all_##type(void) \
 { \

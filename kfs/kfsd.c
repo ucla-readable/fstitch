@@ -90,6 +90,10 @@ static void kfsd_shutdown(void)
 
 	kfsd_callback_shutdowns(SHUTDOWN_PREMODULES);
 
+	// Reclaim chdescs written by sync and shutdowns so that when destroy_all()
+	// destroys BDs that destroy a blockman no ddescs are orphaned.
+	chdesc_reclaim_written();
+
 	destroy_all();
 
 	// Run bdesc autoreleasing
