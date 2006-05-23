@@ -286,9 +286,9 @@ int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 	if(!(dependency->flags & OPGROUP_FLAG_ATOMIC) && dependency->engaged_count)
 		return -E_BUSY;
 	/* from dependent's perspective, we are adding a dependency
-	 *   => dependent must not be released */
+	 *   => dependent must not be released (standard case) or have a dependent (noop case) */
 	assert(!dependent->tail_keep == dependent->is_released);
-	if(dependent->is_released)
+	if(dependent->is_released || dependent->has_dependents)
 		return -E_INVAL;
 	/* it might not have a head if it's already been written to disk */
 	/* (in this case, it won't be engaged again since it will have
@@ -303,6 +303,8 @@ int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
 		if(dependency->head_keep)
 			chdesc_satisfy(&dependency->head_keep);
 	}
+	else
+		kdprintf(STDERR_FILENO, "%s: chdesc_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
 	return r;
 }
 

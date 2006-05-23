@@ -36,8 +36,8 @@
  * 0 1 0 1   T   R   W
  * 0 1 1 0   T   R   W
  * 0 1 1 1   T   R   W
- * 1 0 0 0   T   R       C  <--- these are "noop" opgroups
- * 1 0 0 1   T   R       C  <-/
+ * 1 0 0 0   T   R          <--- these are "noop" opgroups. C is disallowed to easily prevent cycles.
+ * 1 0 0 1   T   R          <-/
  * 1 0 1 0   T   R       C  <--- initially, these states cannot exist due to (W)
  * 1 0 1 1   T   R       C  <-/
  * 1 1 0 0   T   R          <--- these are "noop" opgroups (the first is "dead")
