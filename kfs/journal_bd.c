@@ -901,7 +901,10 @@ static int journal_bd_destroy(BD_t * bd)
 		hash_map_destroy(info->block_map);
 	
 	if(info->unsafe)
+	{
+		chdesc_autorelease_noop(info->unsafe);
 		chdesc_weak_release(&info->unsafe);
+	}
 	if(info->lock)
 	{
 		chdesc_noop_reassign(info->lock, NULL);
