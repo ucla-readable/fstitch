@@ -113,7 +113,7 @@ static fuse_ino_t cfsfuseino(fuse_req_t req, inode_t cfs_ino)
 		return (fuse_ino_t) cfs_ino;
 }
 
-// Return the request's inode_t corresponding to the fues_ino_t
+// Return the request's inode_t corresponding to the fuse_ino_t
 static inode_t fusecfsino(fuse_req_t req, fuse_ino_t fuse_ino)
 {
 	inode_t root_cfs_ino = ((mount_t *) fuse_req_userdata(req))->root_ino;
@@ -151,28 +151,29 @@ static bool feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
 	return 0;
 }
 
-static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struct stat * stbuf)
+static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, struct stat * stbuf)
 {
 	Dprintf("%s(fuse_ino = %lu, cfs_ino = %u)\n", __FUNCTION__, fuse_ino, cfs_ino);
 	int r;
+	CFS_t * cfs = mount->cfs;
 	uint32_t type_size;
 	union {
 		uint32_t * type;
 		void * ptr;
 	} type;
-	bool nlinks_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_nlinks.id);
-	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
-	bool mtime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
-	bool atime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_atime.id);
+	bool nlinks_supported = feature_supported(cfs, cfs_ino, KFS_feature_nlinks.id);
+	bool perms_supported = feature_supported(cfs, cfs_ino, KFS_feature_unix_permissions.id);
+	bool mtime_supported = feature_supported(cfs, cfs_ino, KFS_feature_mtime.id);
+	bool atime_supported = feature_supported(cfs, cfs_ino, KFS_feature_atime.id);
 	uint32_t nlinks = 0;
 	mode_t perms;
 	time_t mtime = time(NULL);
 	time_t atime = mtime;
 
-	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
+	r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
 	if (r < 0)
 	{
-		Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
+		Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
 		return r;
 	}
 
@@ -180,7 +181,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	{
 		size_t data_len;
 		void * data;
-		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_nlinks.id, &data_len, &data);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_nlinks.id, &data_len, &data);
 		if (r >= 0)
 		{
 			assert(data_len == sizeof(nlinks));
@@ -199,16 +200,16 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			uint32_t basep = 0;
 			fdesc_t * fdesc;
 
-			r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
+			r = CALL(cfs, open, cfs_ino, 0, &fdesc);
 			assert(r >= 0);
-			fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
+			fdesc->common->parent = (inode_t) hash_map_find_val(mount->parents, (void *) cfs_ino);
 			assert(fdesc->common->parent != INODE_NONE);
 
-			while ((r = CALL(reqcfs(req), get_dirent, fdesc, &dirent, sizeof(dirent), &basep)) >= 0)
+			while ((r = CALL(cfs, get_dirent, fdesc, &dirent, sizeof(dirent), &basep)) >= 0)
 				if (dirent.d_type == TYPE_DIR)
 					nlinks++;
 
-			r = CALL(reqcfs(req), close, fdesc);
+			r = CALL(cfs, close, fdesc);
 			assert(r >= 0);
 		}
 
@@ -226,10 +227,10 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 		if (!nlinks)
 			nlinks = 1;
 
-		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
 		if (r < 0)
 		{
-			Dprintf("%d:reqcfs(req)->get_metadata() = %d\n", __LINE__, r);
+			Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
 			goto err;
 		}
 
@@ -255,7 +256,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 	{
 		size_t data_len;
 		void * data;
-		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_unix_permissions.id, &data_len, &data);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_unix_permissions.id, &data_len, &data);
 		if (r >= 0)
 		{
 			assert(data_len == sizeof(mode_t));
@@ -263,14 +264,14 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			free(data);
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(reqcfs(req)), r);
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
 
 	if (mtime_supported)
 	{
 		size_t data_len;
 		void * data;
-		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_mtime.id, &data_len, &data);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_mtime.id, &data_len, &data);
 		if (r >= 0)
 		{
 			assert(data_len == sizeof(time_t));
@@ -278,14 +279,14 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			free(data);
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(reqcfs(req)), r);
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
 
 	if (atime_supported)
 	{
 		size_t data_len;
 		void * data;
-		r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_atime.id, &data_len, &data);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_atime.id, &data_len, &data);
 		if (r >= 0)
 		{
 			assert(data_len == sizeof(time_t));
@@ -293,7 +294,7 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
 			free(data);
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(reqcfs(req)), r);
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
 
 	stbuf->st_mode |= perms;
@@ -308,6 +309,24 @@ static int fill_stat(fuse_req_t req, inode_t cfs_ino, fuse_ino_t fuse_ino, struc
   err:
 	free(type.type);
 	return r;
+}
+
+static int init_fuse_entry(mount_t * mount, inode_t parent, inode_t cfs_ino, fuse_ino_t fuse_ino, struct fuse_entry_param * e)
+{
+	int r;
+
+	r = hash_map_insert(mount->parents, (void *) cfs_ino, (void *) parent);
+	if (r < 0)
+		return r;
+
+	memset(e, 0, sizeof(*e));
+	e->ino = fuse_ino;
+	e->attr_timeout = STDTIMEOUT;
+	e->entry_timeout = STDTIMEOUT;
+	r = fill_stat(mount, cfs_ino, e->ino, &e->attr);
+	assert(r >= 0);
+
+	return 0;
 }
 
 static void serve_statfs(fuse_req_t req)
@@ -371,7 +390,7 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 	(void) fi;
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	r = fill_stat(req, fusecfsino(req, fuse_ino), fuse_ino, &stbuf);
+	r = fill_stat(reqmount(req), fusecfsino(req, fuse_ino), fuse_ino, &stbuf);
 	if (r < 0)
 		r = fuse_reply_err(req, -r);
 	else
@@ -484,7 +503,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	}
 
 	memset(&stbuf, 0, sizeof(stbuf));
-	r = fill_stat(req, cfs_ino, fuse_ino, &stbuf);
+	r = fill_stat(reqmount(req), cfs_ino, fuse_ino, &stbuf);
 	if (r < 0)
 		r = fuse_reply_err(req, -r);
 	else
@@ -511,23 +530,12 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 		return;
 	}
 
-	r = hash_map_insert(reqmount(req)->parents, (void *) cfs_ino, (void *) parent_cfs_ino);
+	r = init_fuse_entry(reqmount(req), parent_cfs_ino, cfs_ino, cfsfuseino(req, cfs_ino), &e);
 	if (r < 0)
 	{
-		r = fuse_reply_err(req, -r);
-		assert(!r);
-		return;
-	}
-
-	memset(&e, 0, sizeof(e));
-	e.ino = cfsfuseino(req, cfs_ino);
-	e.attr_timeout = STDTIMEOUT;
-	e.entry_timeout = STDTIMEOUT;
-	r = fill_stat(req, cfs_ino, e.ino, &e.attr);
-	if (r < 0)
-	{
-		// TODO: is it safe to remove cfs_ino from the parents map?
+		// TODO: is it safe to remove cfs_ino from the parents map if fill_stat() failed?
 		kdprintf(STDERR_FILENO, "%s(): possible parents entry leak for cfs inode %u\n", cfs_ino);
+
 		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
@@ -561,21 +569,14 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 		return;
 	}
 
-	r = hash_map_insert(reqmount(req)->parents, (void *) cfs_ino, (void *) parent_cfs_ino);
+	// ignore mode parameter for now
+	r = init_fuse_entry(reqmount(req), parent_cfs_ino, cfs_ino, cfsfuseino(req, cfs_ino), &e);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
 	}
-
-	memset(&e, 0, sizeof(e));
-	e.ino = cfsfuseino(req, cfs_ino);
-	e.attr_timeout = STDTIMEOUT;
-	e.entry_timeout = STDTIMEOUT;
-	// ignore mode parameter for now
-	r = fill_stat(req, cfs_ino, e.ino, &e.attr);
-	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
 	assert(!r);
@@ -584,31 +585,25 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
                   mode_t mode, struct fuse_entry_param * e, fdesc_t ** fdesc)
 {
+	inode_t cfs_parent = fusecfsino(req, parent);
 	inode_t cfs_ino;
 	int r;
 
-	r = CALL(reqcfs(req), create, fusecfsino(req, parent), local_name, 0, fdesc, &cfs_ino);
+	r = CALL(reqcfs(req), create, cfs_parent, local_name, 0, fdesc, &cfs_ino);
 	if (r < 0)
 		return r;
 	assert(cfs_ino != INODE_NONE);
 
-	r = hash_map_insert(reqmount(req)->parents, (void *) fusecfsino(req, cfs_ino), (void *) fusecfsino(req, parent));
+	// ignore mode for now
+	r = init_fuse_entry(reqmount(req), cfs_parent, cfs_ino, cfsfuseino(req, cfs_ino), e);
 	if (r < 0)
 	{
-		(void) CALL(reqcfs(req), close, *fdesc);
+		(void) CALL(reqmount(req)->cfs, close, *fdesc);
 		*fdesc = NULL;
-		(void) CALL(reqcfs(req), unlink, fusecfsino(req, parent), local_name);
+		(void) CALL(reqmount(req)->cfs, unlink, parent, local_name);
 		return r;
 	}
-
-	(*fdesc)->common->parent = fusecfsino(req, parent);
-	memset(e, 0, sizeof(*e));
-	e->ino = cfsfuseino(req, cfs_ino);
-	e->attr_timeout = STDTIMEOUT;
-	e->entry_timeout = STDTIMEOUT;
-	// ignore mode for now
-	r = fill_stat(req, cfs_ino, e->ino, &e->attr);
-	assert(r >= 0);
+	(*fdesc)->common->parent = cfs_parent;
 
 	return r;
 }
@@ -722,6 +717,37 @@ static void serve_rename(fuse_req_t req,
 	}
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
+	assert(!r);
+}
+
+static void serve_link(fuse_req_t req, fuse_ino_t fuse_ino,
+                       fuse_ino_t new_parent, const char * new_local_name)
+{
+	Dprintf("%s(ino = %lu, newp = %lu, newln = \"%s\")\n",
+	        __FUNCTION__, fuse_ino, new_parent, new_local_name);
+	inode_t cfs_ino = fusecfsino(req, fuse_ino);
+	inode_t new_cfs_parent = fusecfsino(req, new_parent);
+	struct fuse_entry_param e;
+	int r;
+
+	r = CALL(reqcfs(req), link, cfs_ino, new_cfs_parent, new_local_name);
+	if (r < 0)
+	{
+		r = fuse_reply_err(req, -r);
+		assert(!r);
+		return;
+	}
+
+	r = init_fuse_entry(reqmount(req), new_cfs_parent, cfs_ino, fuse_ino, &e);
+	if (r < 0)
+	{
+		(void) CALL(reqmount(req)->cfs, unlink, new_cfs_parent, new_local_name);
+		r = fuse_reply_err(req, -r);
+		assert(!r);
+		return;
+	}
+
+	r = fuse_reply_entry(req, &e);
 	assert(!r);
 }
 
@@ -1006,6 +1032,7 @@ static struct fuse_lowlevel_ops serve_oper =
 	.unlink     = serve_unlink,
 	.rmdir      = serve_rmdir,
 	.rename     = serve_rename,
+	.link       = serve_link,
 	.opendir    = serve_opendir,
 	.releasedir = serve_releasedir,
 	.fsyncdir   = serve_fsyncdir,

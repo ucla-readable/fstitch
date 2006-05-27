@@ -757,6 +757,32 @@ out:
 	return r;
 }
 
+static int serve_link(struct dentry * src_dentry, struct inode * parent, struct dentry * target_dentry)
+{
+	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, src_dentry->d_name.name, target_dentry->d_name.name);
+	int r;
+
+	kfsd_enter();
+	assert(dentry2cfs(src_dentry) == dentry2cfs(target_dentry));
+	r = CALL(dentry2cfs(src_dentry), link, src_dentry->d_inode->i_ino, parent->i_ino, target_dentry->d_name.name);
+	if (r >= 0)
+	{
+		struct inode * inode = new_inode(parent->i_sb);
+		if (!inode)
+		{
+			r = -E_NO_MEM;
+			goto out;
+		}
+		inode->i_ino = src_dentry->d_inode->i_ino;
+		read_inode_withlock(inode);
+		d_instantiate(target_dentry, inode);
+	}
+
+out:
+	kfsd_leave(1);
+	return r;
+}
+
 static int serve_unlink(struct inode * dir, struct dentry * dentry)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
@@ -964,6 +990,7 @@ static struct file_operations kfs_reg_file_ops = {
 
 static struct inode_operations kfs_dir_inode_ops = {
 	.lookup	= serve_dir_lookup,
+	.link = serve_link,
 	.unlink	= serve_unlink,
 	.create	= serve_create,
 	.mknod = serve_mknod,
