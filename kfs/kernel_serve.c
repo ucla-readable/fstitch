@@ -191,7 +191,7 @@ static void read_inode_withlock(struct inode * inode)
 		uint32_t * type;
 		void * ptr;
 	} type;
-	bool nlinks_supported, perms_supported, mtime_supported, atime_supported;
+	bool nlinks_supported, uid_supported, gid_supported, perms_supported, mtime_supported, atime_supported;
 	int r;
 
 	assert(kfsd_have_lock());
@@ -199,6 +199,8 @@ static void read_inode_withlock(struct inode * inode)
 	cfs = sb2cfs(inode->i_sb);
 
 	nlinks_supported = feature_supported(cfs, inode->i_ino, KFS_feature_nlinks.id);
+	uid_supported = feature_supported(cfs, inode->i_ino, KFS_feature_uid.id);
+	gid_supported = feature_supported(cfs, inode->i_ino, KFS_feature_gid.id);
 	perms_supported = feature_supported(cfs, inode->i_ino, KFS_feature_unix_permissions.id);
 	mtime_supported = feature_supported(cfs, inode->i_ino, KFS_feature_mtime.id);
 	atime_supported = feature_supported(cfs, inode->i_ino, KFS_feature_atime.id);
@@ -223,6 +225,36 @@ static void read_inode_withlock(struct inode * inode)
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+	}
+
+	if (uid_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_uid.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(uint32_t));
+			inode->i_uid = *(uint32_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+	}
+
+	if (gid_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_gid.id, &data_len, &data);
+		if (r >= 0)
+		{
+			assert(data_len == sizeof(uint32_t));
+			inode->i_gid = *(uint32_t *) data;
+			free(data);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
 
 	if (perms_supported)
@@ -325,9 +357,6 @@ static void read_inode_withlock(struct inode * inode)
 	}
 
 	inode->i_size = inode_get_size(inode);
-
-	inode->i_uid = 0;
-	inode->i_gid = 0;
 
   exit:
 	free(type.type);
@@ -584,11 +613,15 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		supported |= ATTR_MTIME | ATTR_MTIME_SET;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_atime.id))
 		supported |= ATTR_ATIME | ATTR_ATIME_SET;
+	if(feature_supported(cfs, inode->i_ino, KFS_feature_uid.id))
+		supported |= ATTR_UID;
+	if(feature_supported(cfs, inode->i_ino, KFS_feature_gid.id))
+		supported |= ATTR_GID;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_unix_permissions.id))
 		supported |= ATTR_MODE;
 
 	// not actually supported, but we won't error on these "supported" flags
-	supported |= ATTR_UID | ATTR_GID | ATTR_CTIME;
+	supported |= ATTR_CTIME;
 
 	if(attr->ia_valid & ~supported)
 	{
@@ -629,9 +662,20 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 			goto error;
 	}
 	
+	if(attr->ia_valid & ATTR_UID)
+	{
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_uid.id, sizeof(attr->ia_uid), &attr->ia_uid)) < 0)
+			goto error;
+	}
+	if(attr->ia_valid & ATTR_GID)
+	{
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_gid.id, sizeof(attr->ia_gid), &attr->ia_gid)) < 0)
+			goto error;
+	}
 	if(attr->ia_valid & ATTR_MODE)
 	{
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(attr->ia_mode), &attr->ia_mode)))
+		uint32_t cfs_mode = attr->ia_mode;
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(cfs_mode), &cfs_mode)) < 0)
 			goto error;
 	}
 	if(attr->ia_valid & (ATTR_MTIME | ATTR_MTIME_SET))
@@ -805,7 +849,7 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 
 	assert(kfsd_have_lock());
 
-	// TODO: support mode
+	// TODO: set mode, uid, and gid
 	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &fdesc, &cfs_ino);
 	if (r < 0)
 		return r;
@@ -871,6 +915,8 @@ static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 		kfsd_leave(1);
 		return r;
 	}
+
+	// TODO: set mode, uid, and gid
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)

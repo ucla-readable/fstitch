@@ -17,6 +17,8 @@ extern const feature_t KFS_feature_filetype;
 extern const feature_t KFS_feature_nlinks;
 extern const feature_t KFS_feature_freespace;
 extern const feature_t KFS_feature_file_lfs;
+extern const feature_t KFS_feature_uid;
+extern const feature_t KFS_feature_gid;
 extern const feature_t KFS_feature_unix_permissions;
 extern const feature_t KFS_feature_blocksize;
 extern const feature_t KFS_feature_devicesize;

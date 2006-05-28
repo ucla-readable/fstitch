@@ -989,6 +989,8 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		nf->f_type = type;
 
 		memset(&nf->f_inode, 0, sizeof(struct UFS_dinode));
+		nf->f_inode.di_uid = 0; // FIXME set uid
+		nf->f_inode.di_gid = 0; // FIXME set gid
 		nf->f_inode.di_mode = mode | UFS_IREAD | UFS_IWRITE; // FIXME set permissions
 		nf->f_inode.di_nlink = 1;
 		nf->f_inode.di_gen = 0; // FIXME use random number?
@@ -1427,7 +1429,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_unix_permissions, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime};
+static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_uid, &KFS_feature_gid, &KFS_feature_unix_permissions, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime};
 
 static size_t ufs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1500,6 +1502,30 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		*size = sizeof(object);
 		memcpy(*data, &object, sizeof(object));
 	}
+	else if (id == KFS_feature_uid.id) {
+		if (!f)
+			return -E_INVAL;
+
+		uint32_t uid = f->f_inode.di_uid;
+		*data = malloc(sizeof(uid));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(uid);
+		memcpy(*data, &uid, sizeof(uid));
+	}
+	else if (id == KFS_feature_gid.id) {
+		if (!f)
+			return -E_INVAL;
+
+		uint32_t gid = f->f_inode.di_gid;
+		*data = malloc(sizeof(gid));
+		if (!*data)
+			return -E_NO_MEM;
+
+		*size = sizeof(gid);
+		memcpy(*data, &gid, sizeof(gid));
+	}
 	else if (id == KFS_feature_unix_permissions.id) {
 		if (!f)
 			return -E_INVAL;
@@ -1510,7 +1536,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 			return -E_NO_MEM;
 
 		*size = sizeof(perm);
-		memcpy(*data, &(f->f_inode.di_mode), sizeof(f->f_inode.di_mode));
+		memcpy(*data, &perm, sizeof(perm));
 	}
 	else if (id == KFS_feature_blocksize.id) {
 		uint32_t blocksize = ufs_get_blocksize(object);
@@ -1597,6 +1623,18 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 		if (fs_type == (f->f_inode.di_mode >> 12))
 			return 0;
 		return -E_INVAL;
+	}
+	else if (id == KFS_feature_uid.id) {
+		if (sizeof(uint32_t) != size)
+			return -E_INVAL;
+		f->f_inode.di_uid = *(uint32_t *) data;
+		return write_inode(info, f->f_num, f->f_inode, head);
+	}
+	else if (id == KFS_feature_gid.id) {
+		if (sizeof(uint32_t) != size)
+			return -E_INVAL;
+		f->f_inode.di_gid = *(uint32_t *) data;
+		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_unix_permissions.id) {
 		if (sizeof(uint32_t) != size)

@@ -162,6 +162,8 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		void * ptr;
 	} type;
 	bool nlinks_supported = feature_supported(cfs, cfs_ino, KFS_feature_nlinks.id);
+	bool uid_supported = feature_supported(cfs, cfs_ino, KFS_feature_uid.id);
+	bool gid_supported = feature_supported(cfs, cfs_ino, KFS_feature_gid.id);
 	bool perms_supported = feature_supported(cfs, cfs_ino, KFS_feature_unix_permissions.id);
 	bool mtime_supported = feature_supported(cfs, cfs_ino, KFS_feature_mtime.id);
 	bool atime_supported = feature_supported(cfs, cfs_ino, KFS_feature_atime.id);
@@ -251,6 +253,46 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		r = -E_UNSPECIFIED;
 		goto err;
 	}
+
+	if (uid_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_uid.id, &data_len, &data);
+		if (r >= 0)
+		{
+			uint32_t cfs_uid;
+			assert(data_len == sizeof(cfs_uid));
+			stbuf->st_uid = cfs_uid = *(uint32_t *) data;
+			free(data);
+			if (stbuf->st_uid != cfs_uid)
+				kdprintf(STDERR_FILENO, "%s: UID not large enough to hold CFS UID %u\n", __FUNCTION__, cfs_uid);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed uid but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+	}
+	else
+		stbuf->st_uid = 0;
+
+	if (gid_supported)
+	{
+		size_t data_len;
+		void * data;
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_gid.id, &data_len, &data);
+		if (r >= 0)
+		{
+			uint32_t cfs_gid;
+			assert(data_len == sizeof(cfs_gid));
+			stbuf->st_gid = cfs_gid = *(uint32_t *) data;
+			free(data);
+			if (stbuf->st_gid != cfs_gid)
+				kdprintf(STDERR_FILENO, "%s: GID not large enough to hold CFS GID %u\n", __FUNCTION__, cfs_gid);
+		}
+		else
+			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed gid but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+	}
+	else
+		stbuf->st_gid = 0;
 
 	if (perms_supported)
 	{
@@ -403,6 +445,8 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 {
 	inode_t cfs_ino = fusecfsino(req, fuse_ino);
 	int supported = FUSE_SET_ATTR_SIZE;
+	bool uid_supported   = feature_supported(reqcfs(req), cfs_ino, KFS_feature_uid.id);
+	bool gid_supported   = feature_supported(reqcfs(req), cfs_ino, KFS_feature_gid.id);
 	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
 	bool mtime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
 	bool atime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
@@ -410,6 +454,10 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	int r;
 	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
 
+	if (uid_supported)
+		supported |= FUSE_SET_ATTR_UID;
+	if (gid_supported)
+		supported |= FUSE_SET_ATTR_GID;
 	if (perms_supported)
 		supported |= FUSE_SET_ATTR_MODE;
 	if (mtime_supported)
@@ -461,6 +509,41 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 			}
 		}
 
+		if (r < 0)
+		{
+			r = fuse_reply_err(req, -r);
+			assert(!r);
+			return;
+		}
+	}
+
+	if (to_set & FUSE_SET_ATTR_MODE)
+	{
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(attr->st_mode), &attr->st_mode);
+		if (r < 0)
+		{
+			r = fuse_reply_err(req, -r);
+			assert(!r);
+			return;
+		}
+	}
+
+	if (to_set & FUSE_SET_ATTR_UID)
+	{
+		uint32_t cfs_uid = attr->st_uid;
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_uid.id, sizeof(cfs_uid), &cfs_uid);
+		if (r < 0)
+		{
+			r = fuse_reply_err(req, -r);
+			assert(!r);
+			return;
+		}
+	}
+
+	if (to_set & FUSE_SET_ATTR_GID)
+	{
+		uint32_t cfs_gid = attr->st_gid;
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_gid.id, sizeof(cfs_gid), &cfs_gid);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -569,7 +652,8 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 		return;
 	}
 
-	// ignore mode parameter for now
+	// FIXME: set uid, gid, and mode
+
 	r = init_fuse_entry(reqmount(req), parent_cfs_ino, cfs_ino, cfsfuseino(req, cfs_ino), &e);
 	if (r < 0)
 	{
@@ -594,7 +678,8 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 		return r;
 	assert(cfs_ino != INODE_NONE);
 
-	// ignore mode for now
+	// FIXME: set uid, gid, and mode
+
 	r = init_fuse_entry(reqmount(req), cfs_parent, cfs_ino, cfsfuseino(req, cfs_ino), e);
 	if (r < 0)
 	{
