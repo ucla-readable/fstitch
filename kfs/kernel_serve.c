@@ -241,6 +241,8 @@ static void read_inode_withlock(struct inode * inode)
 		else
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
+	else
+		inode->i_uid = 0;
 
 	if (gid_supported)
 	{
@@ -256,6 +258,8 @@ static void read_inode_withlock(struct inode * inode)
 		else
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
+	else
+		inode->i_gid = 0;
 
 	if (perms_supported)
 	{
@@ -613,12 +617,11 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		supported |= ATTR_MTIME | ATTR_MTIME_SET;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_atime.id))
 		supported |= ATTR_ATIME | ATTR_ATIME_SET;
-	if(feature_supported(cfs, inode->i_ino, KFS_feature_uid.id))
-		supported |= ATTR_UID;
-	if(feature_supported(cfs, inode->i_ino, KFS_feature_gid.id))
-		supported |= ATTR_GID;
 	if(feature_supported(cfs, inode->i_ino, KFS_feature_unix_permissions.id))
 		supported |= ATTR_MODE;
+
+	// always at least act as if we support, so we do not error
+	supported |= ATTR_UID | ATTR_GID;
 
 	// not actually supported, but we won't error on these "supported" flags
 	supported |= ATTR_CTIME;
@@ -662,16 +665,17 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 			goto error;
 	}
 	
-	if(attr->ia_valid & ATTR_UID)
+	if((attr->ia_valid & ATTR_UID) && feature_supported(cfs, inode->i_ino, KFS_feature_uid.id))
 	{
 		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_uid.id, sizeof(attr->ia_uid), &attr->ia_uid)) < 0)
 			goto error;
 	}
-	if(attr->ia_valid & ATTR_GID)
+	if((attr->ia_valid & ATTR_GID) && feature_supported(cfs, inode->i_ino, KFS_feature_gid.id))
 	{
 		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_gid.id, sizeof(attr->ia_gid), &attr->ia_gid)) < 0)
 			goto error;
 	}
+
 	if(attr->ia_valid & ATTR_MODE)
 	{
 		uint32_t cfs_mode = attr->ia_mode;
