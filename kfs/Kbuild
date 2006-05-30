@@ -1,8 +1,14 @@
 EXTRA_CFLAGS += -I$(src)/..
 EXTRA_CFLAGS += -DKFSD
 
-GCC_VERSION := $(call cc-version)
-ifeq ($(shell echo $(GCC_VERSION) -ge 0400),1)
+# TODO: why do these not work for the below warning test?
+# (Tested 2006/5/30 on kudos-mm by Frost)
+#GCC_VERSION := $(call cc-version)
+#ifeq ($(shell echo $(GCC_VERSION) -ge 0304),0)
+# The more appropriate "$(call cc-option,foo)" also does not work.
+
+GCC_VERSION := $(shell $(CONFIG_SHELL) $(srctree)/scripts/gcc-version.sh $(CC))
+ifeq ($(shell [ $(GCC_VERSION) -ge 0304 ] && echo 1 || echo 0),1)
 	EXTRA_CFLAGS += -Wno-declaration-after-statement
 endif
 
