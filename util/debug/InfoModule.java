@@ -9,5 +9,6 @@ public class InfoModule extends Module
 		addFactory(InfoMark.getFactory(input));
 		addFactory(InfoBdName.getFactory(input));
 		addFactory(InfoBdescNumber.getFactory(input));
+		addFactory(InfoChdescLabel.getFactory(input));
 	}
 }

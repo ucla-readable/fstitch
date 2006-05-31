@@ -100,6 +100,7 @@ static const struct param
 	param_free_next =   {"free_next",   UHEX32},
 	param_free_prev =   {"free_prev",   UHEX32},
 	param_head =        {"head",        UHEX32},
+	param_label =       {"label",       STRING},
 	param_length =      {"length",      UINT16},
 	param_location =    {"location",    UHEX32},
 	param_module =      {"module",      UHEX16},
@@ -131,6 +132,11 @@ static const struct param * params_info_bdesc_number[] = {
 	&param_block,
 	&param_number,
 	&param_count, /* technically it's 16-bit here */
+	&last_param
+};
+static const struct param * params_info_chdesc_label[] = {
+	&param_chdesc,
+	&param_label,
 	&last_param
 };
 static const struct param * params_bdesc_alloc[] = {
@@ -293,6 +299,7 @@ static const struct opcode
 	opcode_info_mark =                  OPCODE(KDB_INFO_MARK,                  params_info_mark),
 	opcode_info_bd_name =               OPCODE(KDB_INFO_BD_NAME,               params_info_bd_name),
 	opcode_info_bdesc_number =          OPCODE(KDB_INFO_BDESC_NUMBER,          params_info_bdesc_number),
+	opcode_info_chdesc_label =          OPCODE(KDB_INFO_CHDESC_LABEL,          params_info_chdesc_label),
 	opcode_bdesc_alloc =                OPCODE(KDB_BDESC_ALLOC,                params_bdesc_alloc),
 	opcode_bdesc_alloc_wrap =           OPCODE(KDB_BDESC_ALLOC_WRAP,           params_bdesc_alloc),
 	opcode_bdesc_retain =               OPCODE(KDB_BDESC_RETAIN,               params_bdesc_retain_release),
@@ -347,6 +354,7 @@ static const struct opcode * opcodes_info[] = {
 	&opcode_info_mark,
 	&opcode_info_bd_name,
 	&opcode_info_bdesc_number,
+	&opcode_info_chdesc_label,
 	&last_opcode
 };
 static const struct opcode * opcodes_bdesc[] = {
@@ -589,7 +597,7 @@ int kfs_debug_init(const char * host, uint16_t port)
 		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
 		return -E_UNSPECIFIED;
 	}
-	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL);
+	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if(r < 0)
 	{
 		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);

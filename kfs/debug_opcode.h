@@ -15,6 +15,7 @@
 #define KDB_INFO_MARK                0
 #define KDB_INFO_BD_NAME             1
 #define KDB_INFO_BDESC_NUMBER        2
+#define KDB_INFO_CHDESC_LABEL        3
 
 /* bdesc (1xx) */
 #define KDB_BDESC_ALLOC            101

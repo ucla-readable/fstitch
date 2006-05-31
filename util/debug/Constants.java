@@ -9,6 +9,7 @@ public interface Constants
 	public static final short KDB_INFO_MARK = 0;
 	public static final short KDB_INFO_BD_NAME = 1;
 	public static final short KDB_INFO_BDESC_NUMBER = 2;
+	public static final short KDB_INFO_CHDESC_LABEL = 3;
 	
 	public static final short KDB_BDESC_ALLOC = 101;
 	public static final short KDB_BDESC_ALLOC_WRAP = 102;

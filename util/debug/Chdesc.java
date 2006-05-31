@@ -26,6 +26,7 @@ public class Chdesc
 	
 	private int type, flags;
 	private int block, owner;
+	private String label;
 	
 	private short offset; /* for bit, byte */
 	private int xor; /* for bit */
@@ -123,6 +124,11 @@ public class Chdesc
 		return length;
 	}
 	
+	public String getLabel()
+	{
+		return label;
+	}
+	
 	public Chdesc getFreePrev()
 	{
 		if(!isValid())
@@ -170,6 +176,11 @@ public class Chdesc
 		if(!isValid())
 			throw new RuntimeException("Attempt to clear flags of invalid chdesc!");
 		this.flags &= ~flags;
+	}
+	
+	public void setLabel(String label)
+	{
+		this.label = label;
 	}
 	
 	public void setFreePrev(Chdesc free_prev)
@@ -356,6 +367,8 @@ public class Chdesc
 		String name = renderName();
 		
 		String links = name + " [label=\"" + SystemState.hex(address);
+		if(label != null)
+			links += "\\n\\\"" + label + "\\\"";
 		switch(type)
 		{
 			case TYPE_NOOP:
