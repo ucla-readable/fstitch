@@ -17,6 +17,7 @@
 #include <kern/sched.h>
 #include <kern/kernbin.h>
 #include <kern/sb16.h>
+#include <kern/pcspk.h>
 #include <kern/vga.h>
 #include <kern/josnic.h>
 #include <kern/mouse.h>
@@ -689,21 +690,38 @@ sys_set_trapframe(envid_t envid, struct Trapframe* tf)
 static int
 sys_sb16_ioctl(int req, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-	switch(req)
-	{
-		case SB16_IOCTL_CLOSE:
-			return sb16_close();
-		case SB16_IOCTL_OPEN:
-			return sb16_open((uint16_t) a1, (uint8_t) a2, (uintptr_t) a3);
-		case SB16_IOCTL_SETVOLUME:
-			return sb16_setvolume((uint8_t) a1);
-		case SB16_IOCTL_START:
-			return sb16_start();
-		case SB16_IOCTL_STOP:
-			return sb16_stop();
-		case SB16_IOCTL_WAIT:
-			return sb16_wait();
-	}
+	if(!sb_use_pcspk)
+		switch(req)
+		{
+			case SB16_IOCTL_CLOSE:
+				return sb16_close();
+			case SB16_IOCTL_OPEN:
+				return sb16_open((uint16_t) a1, (uint8_t) a2, (uintptr_t) a3);
+			case SB16_IOCTL_SETVOLUME:
+				return sb16_setvolume((uint8_t) a1);
+			case SB16_IOCTL_START:
+				return sb16_start();
+			case SB16_IOCTL_STOP:
+				return sb16_stop();
+			case SB16_IOCTL_WAIT:
+				return sb16_wait();
+		}
+	else
+		switch(req)
+		{
+			case SB16_IOCTL_CLOSE:
+				return pcspk_close();
+			case SB16_IOCTL_OPEN:
+				return pcspk_open((uint16_t) a1, (uint8_t) a2, (uintptr_t) a3);
+			case SB16_IOCTL_SETVOLUME:
+				return pcspk_setvolume((uint8_t) a1);
+			case SB16_IOCTL_START:
+				return pcspk_start();
+			case SB16_IOCTL_STOP:
+				return pcspk_stop();
+			case SB16_IOCTL_WAIT:
+				return pcspk_wait();
+		}
 	
 	return -E_INVAL;
 }

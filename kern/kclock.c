@@ -42,6 +42,17 @@ kclock_init(void)
 }
 
 void
+kclock_reinit(int hz)
+{
+	irq_setmask_8259A_quiet(irq_mask_8259A | (1<<0));
+	/* initialize 8253 clock to interrupt hz times/sec */
+	outb(TIMER_MODE, TIMER_SEL0 | TIMER_RATEGEN | TIMER_16BIT);
+	outb(IO_TIMER1, TIMER_DIV(hz) % 256);
+	outb(IO_TIMER1, TIMER_DIV(hz) / 256);
+	irq_setmask_8259A_quiet(irq_mask_8259A & ~(1<<0));
+}
+
+void
 kclock_delay(int length)
 {
 	int limit = jiffies + length;

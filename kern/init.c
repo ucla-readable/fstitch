@@ -15,6 +15,7 @@
 #include <kern/picirq.h>
 #include <kern/pci.h>
 #include <kern/sb16.h>
+#include <kern/pcspk.h>
 #include <kern/3c509.h>
 #include <kern/ne.h>
 #include <kern/mouse.h>
@@ -78,7 +79,8 @@ i386_init(register_t boot_eax, register_t boot_ebx)
 	while (cons_getc() != -1);
 #endif
 
-	sb16_init();
+	if(sb16_init() < 0)
+		pcspk_init();
 	el3_init();
 	ne_init();
 	mouse_init();

@@ -506,7 +506,7 @@ page_init(void)
 	int i;
 	LIST_INIT(&page_free_list);
 	
-	/* set all pages to have reference count 3, because some pages are
+	/* set all pages to have reference count > 3, because some pages are
 	 * indeed mapped twice, and we'd like to make sure they stay that way
 	 * (even if the user fiddles with the kernel monitor's free_page()) */
 	for(i = 0; i < npage; i++)

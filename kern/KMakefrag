@@ -40,6 +40,7 @@ KERN_SRCFILES :=	kern/entry.S \
 			kern/sched.c \
 			kern/syscall.c \
 			kern/sb16.c \
+			kern/pcspk.c \
 			kern/vga.c \
 			kern/josnic.c \
 			kern/3c509.c \

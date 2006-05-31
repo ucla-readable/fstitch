@@ -1,7 +1,9 @@
 #include <inc/error.h>
+#include <inc/timerreg.h>
 
 #include <kern/pmap.h>
 #include <kern/picirq.h>
+#include <kern/kclock.h>
 #include <kern/trap.h>
 #include <kern/irq.h>
 #include <kern/env.h>
@@ -9,6 +11,8 @@
 static irq_handler_t irq_handlers[MAX_IRQS] = {NULL};
 static int last_unexpected_irq = 0;
 static uint16_t irq_mask_backup;
+
+int irq_0_hook_mult = 0;
 
 int request_irq(int irq, irq_handler_t handler)
 {
@@ -18,6 +22,27 @@ int request_irq(int irq, irq_handler_t handler)
 	if(irq_handlers[irq] && handler)
 		return -E_BUSY;
 	irq_handlers[irq] = handler;
+	return 0;
+}
+
+int request_irq_0(irq_handler_t handler, int hz_mult)
+{
+	if(handler)
+	{
+		if(hz_mult < 1 || hz_mult > TIMER_FREQ / HZ)
+			return -E_INVAL;
+		if(irq_handlers[0])
+			return -E_BUSY;
+		irq_handlers[0] = handler;
+		irq_0_hook_mult = hz_mult;
+		kclock_reinit(HZ * hz_mult);
+	}
+	else if(irq_handlers[0])
+	{
+		kclock_reinit(HZ);
+		irq_0_hook_mult = 0;
+		irq_handlers[0] = NULL;
+	}
 	return 0;
 }
 

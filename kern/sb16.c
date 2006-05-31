@@ -121,7 +121,7 @@ static void sb16_intr(int irq)
 }
 
 // Interrupts should be enabled prior to entering sb16_init()
-void sb16_init(void)
+int sb16_init(void)
 {
 	int i;
 	uint8_t major, minor;
@@ -129,12 +129,12 @@ void sb16_init(void)
 	printf("SB16: ");
 #if !ENABLE_INKERNEL_INTS
 	printf("not detecting (requires in-kernel interrupts)\n");
-	return;
+	return -1;
 #else
 	if(sb16_reset())
 	{
 		printf("not detected\n");
-		return;
+		return -1;
 	}
 	
 	printf("detected, DSP version ");
@@ -148,7 +148,7 @@ void sb16_init(void)
 	if(major < 4)
 	{
 		printf("SB16: DSP version too old, not initializing\n");
-		return;
+		return -1;
 	}
 	
 	/* set IRQ */
@@ -167,7 +167,7 @@ void sb16_init(void)
 	if(request_irq(SB16_IRQ, sb16_intr))
 	{
 		printf("SB16: Unable to allocate IRQ %d!\n", SB16_IRQ);
-		return;
+		return -1;
 	}
 	irq_setmask_8259A(irq_mask_8259A & ~(1 << SB16_IRQ));
 	sb_interrupted = 0;
@@ -184,7 +184,7 @@ void sb16_init(void)
 	{
 		irq_setmask_8259A(irq_mask_8259A | (1 << SB16_IRQ));
 		printf("SB16: Interrupt test failed!\n");
-		return;
+		return -1;
 	}
 	
 	printf("SB16: Interrupt test OK\n");
@@ -194,6 +194,7 @@ void sb16_init(void)
 	sb_buffer = (void *) KADDR(0);
 	
 	sb_initialized = 1;
+	return 0;
 #endif
 }
 

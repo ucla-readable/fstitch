@@ -11,7 +11,7 @@
 #define SB16_DMA 1
 #define SB16_DMA16 5
 
-void sb16_init(void);
+int sb16_init(void);
 
 /* system calls */
 int sb16_close(void);

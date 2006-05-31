@@ -38,12 +38,12 @@ static_make_sizeof_tf_fp(void)
 {
 	struct Trapframe tf;
 	/* This assembly line does not actually generate any assembly
-    * instructions. Rather, it generates a symbol called
-    * __sizeof_Trapframe_fp that has an absolute (i.e. not
-    * memory-related) value which is the size of a struct
-    * Trapframe.tf_fp. We do this because sizeof() only works inside
-    * C, but we need to know this size in trapentry.S. GCC will only
-    * accept inline assembly inside a function however, so we put it here.
+	 * instructions. Rather, it generates a symbol called
+	 * __sizeof_Trapframe_fp that has an absolute (i.e. not memory-related)
+	 * value which is the size of a struct Trapframe.tf_fp. We do this
+	 * because sizeof() only works inside C, but we need to know this size
+	 * in trapentry.S. GCC will only accept inline assembly inside a
+	 * function however, so we put it here.
 	 */
 	__asm__ __volatile__(".globl __sizeof_Trapframe_fp\n.set __sizeof_Trapframe_fp, %c0"
 								: : "i" (sizeof(tf.tf_fp)));
@@ -235,11 +235,25 @@ trap(struct Trapframe *tf)
 		
 		if(irq == 0)
 		{
-			jiffies++;
-			/* clock interrupt in user mode */
-			if(tf->tf_cs != GD_KT)
-				sched_yield();
-			/* ignore clock interrupt in kernel */
+			if(irq_0_hook_mult)
+			{
+				static int counter = 0;
+				dispatch_irq(0);
+				if(++counter >= irq_0_hook_mult)
+				{
+					counter = 0;
+					goto default_timer;
+				}
+			}
+			else
+			{
+default_timer:
+				jiffies++;
+				/* clock interrupt in user mode */
+				if(tf->tf_cs != GD_KT)
+					sched_yield();
+				/* ignore clock interrupt in kernel */
+			}
 		}
 		else
 			dispatch_irq(irq);
