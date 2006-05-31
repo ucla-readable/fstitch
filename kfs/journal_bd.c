@@ -310,7 +310,7 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
-		chdesc_t * head= NULL;
+		chdesc_t * head = NULL;
 		
 		/* first handle the chdesc's dependencies */
 		r = chdesc_add_depend(info->safe, chdesc);
@@ -390,7 +390,7 @@ static int journal_bd_accept_request(BD_t * object)
 		while(info->unsafe && info->unsafe->dependencies)
 		{
 			chdesc_t * chdesc = info->unsafe->dependencies->dependency.desc;
-			chdesc_stamp(chdesc, info->stamp);
+			chdesc_stamp(chdesc, info->safe_stamp);
 			chdesc_remove_depend(info->unsafe, chdesc);
 			/* FIXME: move all dependencies of them to "wait" so the transaction as a whole
 			 * will inherit the dependencies of its constituent change descriptors */
@@ -434,7 +434,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 		journal_bd_stop_transaction_previous(object);
 		block = CALL(info->bd, read_block, number, count);
 		if(!block)
-			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't read block %d in %s()!\n", number, __FUNCTION__);
+			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't read block %d! (debug = %d)\n", number, KFS_DEBUG_COUNT());
 	}
 	
 	return block;
@@ -462,7 +462,7 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 		journal_bd_stop_transaction_previous(object);
 		block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
 		if(!block)
-			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't read block %d in %s()!\n", number, __FUNCTION__);
+			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't synthetic read block %d! (debug = %d)\n", number, KFS_DEBUG_COUNT());
 	}
 	
 	return block;
@@ -599,6 +599,8 @@ static int journal_bd_start_transaction(BD_t * object)
 	/* do we have a journal yet? */
 	if(!info->journal)
 		return -E_INVAL;
+	if(info->keep)
+		return 0;
 	
 #define CREATE_NOOP(name, fail_label, owner) do { \
 	info->name = chdesc_create_noop(NULL, owner); \
@@ -633,7 +635,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	info->prev_slot = info->trans_slot;
 	
 	/* set the request ID */
-	journal_bd_accept_request(object);
+	info->request_id = kfsd_get_request_id();
 	
 	/* FIXME: lock in a journal block */
 	
@@ -826,12 +828,12 @@ retry:
 	if(r < 0)
 	{
 		if(retried)
-			panic("HOLY MACKEREL! We can't write block %d!\n", block->number);
+			panic("HOLY MACKEREL! We can't write block %d! (debug = %d)\n", block->number, KFS_DEBUG_COUNT());
 		retried = 1;
 		/* we couldn't do the write... stop the transaction at the previous request and retry */
-		/* FIXME: check return values */
+		/* FIXME: check return value */
 		journal_bd_stop_transaction_previous(object);
-		journal_bd_start_transaction(object);
+		head = NULL;
 		goto retry;
 	}
 	return r;
