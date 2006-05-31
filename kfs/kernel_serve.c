@@ -1034,7 +1034,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 		offset += r;
 		buffer += r;
 
-		update_atime(inode);
+		inode->i_atime = current_fs_time(inode->i_sb);
 	} while (count && r > 0);
 
 	memset(buffer, 0, count);
@@ -1072,8 +1072,7 @@ static int serve_writepage_sync(struct inode * inode, fdesc_t * fdesc,
 		offset += r;
 		buffer += r;
 
-		update_atime(inode);
-		inode_update_time(inode, 0);
+		inode->i_mtime = inode->i_atime = current_fs_time(inode->i_sb);
 		if (offset > inode->i_size)
 			inode->i_size = offset;
 	} while (count);
