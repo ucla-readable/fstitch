@@ -36,6 +36,11 @@ static inline void kfsd_enter(void) __attribute__((always_inline));
 static inline int kfsd_have_lock(void) __attribute__((always_inline));
 static inline void kfsd_leave(int cleanup) __attribute__((always_inline));
 
+static inline int kfsd_have_lock(void)
+{
+	return kfsd_global_lock.locked && kfsd_global_lock.process == current->pid;
+}
+
 static inline void kfsd_enter(void)
 {
 	assert(!kfsd_have_lock());
@@ -57,11 +62,6 @@ static inline void kfsd_enter(void)
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 100);
 	}
-}
-
-static inline int kfsd_have_lock(void)
-{
-	return kfsd_global_lock.locked && kfsd_global_lock.process == current->pid;
 }
 
 static inline void kfsd_leave(int cleanup)
