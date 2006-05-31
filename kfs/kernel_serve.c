@@ -6,6 +6,10 @@
 #include <lib/assert.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/mm.h>
+#include <linux/buffer_head.h>
+#include <linux/writeback.h>
+#include <linux/mpage.h>
 #include <linux/statfs.h>
 #include <linux/vmalloc.h>
 #include <asm/uaccess.h>
@@ -30,8 +34,14 @@ static struct inode_operations  kfs_reg_inode_ops;
 static struct file_operations   kfs_reg_file_ops;
 static struct inode_operations  kfs_dir_inode_ops;
 static struct file_operations   kfs_dir_file_ops;
+static struct address_space_operations kfs_aops;
 static struct dentry_operations kfs_dentry_ops;
 static struct super_operations  kfs_superblock_ops;
+
+
+// The current fdesc, to help kfs_aops.writepage()
+static fdesc_t * kfsd_fdesc;
+
 
 struct mount_desc {
 	const char * path;
@@ -348,6 +358,7 @@ static void read_inode_withlock(struct inode * inode)
 		inode->i_mode |= S_IFREG;
 		inode->i_op = &kfs_reg_inode_ops;
 		inode->i_fop = &kfs_reg_file_ops;
+		inode->i_mapping->a_ops = &kfs_aops;
 	}
 	else if (*type.type == TYPE_INVAL)
 	{
@@ -543,12 +554,35 @@ static int serve_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
+// A copy of 'mm/filemap.c:filemap_write_and_wait()' from 2.6.16.11;
+// because it is not exported by the kernel
+static int serve_filemap_write_and_wait(struct address_space * mapping)
+{
+	int retval = 0;
+
+	if (mapping->nrpages) {
+		retval = filemap_fdatawrite(mapping);
+		if (retval == 0)
+			retval = filemap_fdatawait(mapping);
+	}
+	return retval;
+}
+
 static int serve_release(struct inode * inode, struct file * filp)
 {
-	Dprintf("%s(name = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
+	Dprintf("%s(filp = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
 	int r;
+
 	kfsd_enter();
+
+	kfsd_fdesc = file2fdesc(filp);
+	r = serve_filemap_write_and_wait(inode->i_mapping);
+	kfsd_fdesc = NULL;
+	if (r < 0)
+		kdprintf(STDERR_FILENO, "%s(filp = \"%s\"): serve_filemap_write_and_wait() = %d\n", __FUNCTION__, filp->f_dentry->d_name.name, r);
+
 	r = CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
+
 	kfsd_leave(1);
 	return r;
 }
@@ -759,52 +793,6 @@ out:
 	return r;
 }
 
-static ssize_t serve_write(struct file * filp, const char __user * buffer, size_t count, loff_t * f_pos)
-{
-	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
-	fdesc_t * fdesc = file2fdesc(filp);
-	CFS_t * cfs = dentry2cfs(filp->f_dentry);
-	struct inode * inode = filp->f_dentry->d_inode;
-	/* pick a reasonably big, but not too big, maximum size we will allocate
-	 * on behalf of a requesting user process... TODO: use it repeatedly? */
-	size_t data_size = (count > 65536) ? 65536 : count;
-	char * data = vmalloc(data_size);
-	uint32_t offset = *f_pos;
-	ssize_t r = 0;
-	unsigned long bytes;
-	
-	if (!data)
-		return -E_NO_MEM;
-	
-	kfsd_enter();
-	if (filp->f_flags & O_APPEND)
-		offset = *f_pos = inode_get_size(inode);
-	
-	bytes = copy_from_user(data, buffer, data_size);
-	if (bytes)
-	{
-		if (data_size == bytes)
-		{
-			r = -E_FAULT;
-			goto out;
-		}
-		data_size -= bytes;
-	}
-	
-	r = CALL(cfs, write, fdesc, data, offset, data_size);
-	
-	if (r < 0)
-		goto out;
-	
-	*f_pos += r;
-	inode->i_size = inode_get_size(inode);
-	
-out:
-	kfsd_leave(1);
-	vfree(data);
-	return r;
-}
-
 static int serve_link(struct dentry * src_dentry, struct inode * parent, struct dentry * target_dentry)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, src_dentry->d_name.name, target_dentry->d_name.name);
@@ -984,7 +972,6 @@ static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t fill
 		if (r < 0)
 			break;
 
-		Dprintf("%s: \"%s\"\n", __FUNCTION__, cfs_dirent->d_name);
 		r = filldir(k_dirent, dirent.d_name, dirent.d_namelen, 0, dirent.d_fileno, dirent.d_type);
 		if (r < 0)
 			break;
@@ -1007,6 +994,180 @@ static int serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 	kfsd_leave(1);
 	return r;
 }
+
+
+//
+// address space operations
+// fs/smbfs/file.c served as a good reference for implementing these operations
+
+// TODOs:
+// - should we use generic_file_read() since we now have pagecache support?
+// - should we use the generic vector and sendfile functions?
+// - linux's pagecache and kkfsd's caches do duplicate cacheing, can we
+//   improve this situation?
+
+static int serve_readpage(struct file * filp, struct page * page)
+{
+	char * buffer = kmap(page);
+	loff_t offset = (loff_t) page->index << PAGE_CACHE_SHIFT;
+	int count = PAGE_SIZE;
+	struct inode * inode = filp->f_dentry->d_inode;
+	CFS_t * cfs;
+	fdesc_t * fdesc;
+	int r;
+
+	Dprintf("%s(filp = \"%s\", offset = %ld)\n", __FUNCTION__, filp->f_dentry->d_name.name, offset);
+
+	kfsd_enter();
+	page_cache_get(page);
+	cfs = dentry2cfs(filp->f_dentry);
+	fdesc = file2fdesc(filp);
+
+	do {
+		r = CALL(cfs, read, fdesc, buffer, offset, count);
+		if (r == -E_EOF)
+			r = 0;
+		else if (r < 0)
+			goto out;
+
+		count -= r;
+		offset += r;
+		buffer += r;
+
+		update_atime(inode);
+	} while (count && r > 0);
+
+	memset(buffer, 0, count);
+	flush_dcache_page(page);
+	SetPageUptodate(page);
+	r = 0;
+
+  out:
+	page_cache_release(page);
+	kfsd_leave(1);
+	kunmap(page);
+	unlock_page(page);
+	return r;
+}
+
+static int serve_writepage_sync(struct inode * inode, fdesc_t * fdesc,
+                                struct page * page, unsigned long pageoffset,
+                                unsigned int count)
+{
+	loff_t offset = ((loff_t) page->index << PAGE_CACHE_SHIFT) + pageoffset;
+	char * buffer = kmap(page) + pageoffset;
+	CFS_t * cfs = sb2cfs(inode->i_sb);
+	int r = 0;
+
+	Dprintf("%s(ino = %u, offset = %ld, count = %ld)\n", __FUNCTION__, inode->i_ino, offset, count);
+
+	assert(kfsd_have_lock());
+
+	do {
+		r = CALL(cfs, write, fdesc, buffer, offset, count);
+		if (r < 0)
+			break;
+
+		count -= r;
+		offset += r;
+		buffer += r;
+
+		update_atime(inode);
+		inode_update_time(inode, 0);
+		if (offset > inode->i_size)
+			inode->i_size = offset;
+	} while (count);
+
+	kunmap(page);
+	return r;
+}
+
+static int serve_writepage(struct page * page, struct writeback_control * wbc)
+{
+	struct address_space * mapping = page->mapping;
+	struct inode * inode;
+	unsigned long end_index;
+	unsigned offset = PAGE_CACHE_SIZE;
+	CFS_t * cfs;
+	fdesc_t * fdesc;
+	int r;
+
+	assert(mapping);
+	inode = mapping->host;
+	assert(inode);
+
+	Dprintf("%s(ino = %u, index = %lu)\n", __FUNCTION__, inode->i_ino, page->index);
+
+	end_index = inode->i_size >> PAGE_CACHE_SHIFT;
+
+	if (page->index >= end_index)
+	{
+		offset = inode->i_size & (PAGE_CACHE_SIZE-1);
+		if (page->index >= end_index + 1 || !offset)
+			return 0;
+	}
+
+	assert(kfsd_have_lock());
+
+	cfs = sb2cfs(inode->i_sb);
+
+	// HACK: CFS can not write files without an fdesc, but writepage()
+	// has only an inode. Two workarounds:
+	if (kfsd_fdesc)
+	{
+		// We were called by kernel_serve code that knows to set kfsd_fdesc
+		fdesc = kfsd_fdesc;
+	}
+	else
+	{
+		// We were not called by kernel_serve code that knows about kfsd_fdesc
+		printf("%s: Please set kfsd_fdesc for this trace:\n", __FUNCTION__);
+		dump_stack();
+
+		r = CALL(cfs, open, inode->i_ino, 0, &fdesc);
+		if (r < 0)
+		{
+			kdprintf(STDERR_FILENO, "%s(ino = %u): open() = %d\n", __FUNCTION__, inode->i_ino, r);
+			unlock_page(page);
+			return r;
+		}
+	}
+		
+	page_cache_get(page);
+	r = serve_writepage_sync(inode, fdesc, page, 0, offset);
+	SetPageUptodate(page);
+	unlock_page(page);
+	page_cache_release(page);
+
+	if (!kfsd_fdesc)
+		if ((r = CALL(cfs, close, fdesc)) < 0)
+			kdprintf(STDERR_FILENO, "%s(ino = %u): close() = %d\n", __FUNCTION__, inode->i_ino, r);
+
+	return r;
+}
+
+static int serve_prepare_write(struct file * filp, struct page * page,
+                               unsigned from, unsigned to)
+{
+	return 0;
+}
+
+static int serve_commit_write(struct file * filp, struct page * page,
+                              unsigned offset, unsigned to)
+{
+	Dprintf("%s(filp = \"%s\", index = %lu)\n", __FUNCTION__, filp->f_dentry->d_name.name, page->index);
+	unsigned count = to - offset;
+	int r;
+
+	kfsd_enter();
+	r = serve_writepage_sync(filp->f_dentry->d_inode, file2fdesc(filp), page, offset, count);
+	kfsd_leave(1);
+	return r;
+}
+
+
+//
+// dentry operations
 
 static int serve_delete_dentry(struct dentry * dentry)
 {
@@ -1034,7 +1195,8 @@ static struct file_operations kfs_reg_file_ops = {
 	.release = serve_release,
 	.llseek = generic_file_llseek,
 	.read = serve_read,
-	.write = serve_write,
+	.write = generic_file_write, // kfs_aops requires going thru the pagecache
+	.mmap = generic_file_mmap,
 	.fsync = serve_fsync
 };
 
@@ -1055,6 +1217,13 @@ static struct file_operations kfs_dir_file_ops = {
 	.read = generic_read_dir,
 	.readdir = serve_dir_readdir,
 	.fsync = serve_fsync
+};
+
+static struct address_space_operations kfs_aops = {
+	.readpage = serve_readpage,
+	.writepage = serve_writepage,
+	.prepare_write = serve_prepare_write,
+	.commit_write = serve_commit_write
 };
 
 static struct dentry_operations kfs_dentry_ops = {
