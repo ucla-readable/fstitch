@@ -253,10 +253,8 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	
 	if(hash_map_size(info->block_map) == info->size)
 		if(evict_block(object, 0) < 0)
-		{
-			printf("HOLY MACKEREL! We can't read block %d, because the cache is full!\n", number);
+			/* no room in cache, and can't evict anything... */
 			return NULL;
-		}
 	assert(hash_map_size(info->block_map) < info->size);
 	
 	/* not in the cache, need to read it */
@@ -294,10 +292,8 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	
 	if(hash_map_size(info->block_map) == info->size)
 		if(evict_block(object, 0) < 0)
-		{
-			printf("HOLY MACKEREL! We can't synthetic read block %d, because the cache is full!\n", number);
+			/* no room in cache, and can't evict anything... */
 			return NULL;
-		}
 	assert(hash_map_size(info->block_map) < info->size);
 	
 	/* not in the cache, need to read it */
@@ -356,10 +352,8 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	{
 		if(hash_map_size(info->block_map) == info->size)
 			if(evict_block(object, 0) < 0)
-			{
-				printf("HOLY MACKEREL! We can't write a block, because the cache is full!\n");
+				/* no room in cache, and can't evict anything... */
 				return -E_BUSY;
-			}
 		assert(hash_map_size(info->block_map) < info->size);
 		
 		index = push_block(info, block);
