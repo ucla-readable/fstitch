@@ -64,6 +64,17 @@ read_ahead_insert(bdesc_t *b)
 		look_ahead_idx = 0;
 }
 
+static void
+read_ahead_empty(void)
+{
+	int i;
+	for (i = 0; i < 100; i++)
+		if (look_ahead_store[i]) {
+			bdesc_release(&look_ahead_store[i]);
+			look_ahead_store[i] = 0;
+		}
+}
+
 // STATS
 #if LINUX_BD_DEBUG_COLLECT_STATS
 static struct timespec stat_read_total = {0, 0};
@@ -602,6 +613,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	start = current_kernel_time();
 #endif
+	//printk(KERN_ERR "WRITE %d\n", block->number);
 	generic_make_request(bio);
 
 	// wait for it to complete
@@ -658,6 +670,7 @@ int linux_bd_destroy(BD_t * bd)
 	r = modman_rem_bd(bd);
 	if (r < 0) return r;
 
+	read_ahead_empty();
 	blockman_destroy(&info->blockman);
 
 	blkdev_put(info->bdev);
