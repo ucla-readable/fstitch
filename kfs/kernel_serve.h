@@ -38,6 +38,8 @@ static inline void kfsd_leave(int cleanup) __attribute__((always_inline));
 
 static inline void kfsd_enter(void)
 {
+	assert(!kfsd_have_lock());
+
 	for(;;)
 	{
 		spin_lock(&kfsd_global_lock.lock);
