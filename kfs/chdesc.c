@@ -275,7 +275,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(original->flags & CHDESC_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
-		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc!\n");
+		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc! (debug = %d)\n", KFS_DEBUG_COUNT());
 		return -E_BUSY;
 	}
 	
@@ -1140,7 +1140,7 @@ int chdesc_apply(chdesc_t * chdesc)
 #endif
 			break;
 		case NOOP:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
 			break;
 		default:
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
@@ -1174,7 +1174,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 #endif
 			break;
 		case NOOP:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
 			break;
 		default:
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
