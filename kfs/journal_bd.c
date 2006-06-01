@@ -235,6 +235,7 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	hold = chdesc_create_noop(NULL, object);
 	if(!hold)
 		return -E_NO_MEM;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, hold, "hold");
 	chdesc_claim_noop(hold);
 	
 	/* make sure safe doesn't vaporize while we unhook stuff below */
@@ -402,6 +403,7 @@ static int journal_bd_accept_request(BD_t * object)
 	info->unsafe = chdesc_create_noop(NULL, object);
 	if(!info->unsafe)
 		return -E_NO_MEM;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->unsafe, "unsafe");
 	r = chdesc_weak_retain(info->unsafe, &info->unsafe);
 	if(r < 0)
 	{
@@ -540,8 +542,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			commit.type = CRSUBCOMMIT;
 			commit.next = info->prev_slot;
 			commit.nblocks = info->trans_data_blocks;
-			r = chdesc_create_byte(record, info->journal, 0, sizeof(commit), &commit, &head);
+			r = chdesc_create_byte_atomic(record, info->journal, 0, sizeof(commit), &commit, &head);
 			assert(r >= 0);
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "subcommit");
 			r = chdesc_add_depend(info->wait, head);
 			assert(r >= 0);
 			head = NULL;
@@ -570,6 +573,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		data = block->number;
 		r = chdesc_create_byte(number_block, info->journal, last * sizeof(uint32_t), sizeof(uint32_t), &data, &head);
 		assert(r >= 0);
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "journal number");
 		r = chdesc_add_depend(info->wait, head);
 		assert(r >= 0);
 		info->recursion = 1;
@@ -606,6 +610,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	info->name = chdesc_create_noop(NULL, owner); \
 	if(!info->name) \
 		goto fail_##fail_label; \
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
 	chdesc_claim_noop(info->name); } while(0)
 	
 	/* this order is important due to the error recovery code */
@@ -686,6 +691,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
 		panic("Holy Mackerel!");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "commit");
 	/* ...and make hold depend on it */
 	r = chdesc_add_depend(info->hold, head);
 	if(r < 0)
@@ -701,6 +707,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
 		panic("Holy Mackerel!");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "complete");
 	/* ...and make done depend on it */
 	r = chdesc_add_depend(info->done, head);
 	if(r < 0)
@@ -951,14 +958,17 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		info->keep = chdesc_create_noop(NULL, NULL);
 		if(!info->keep)
 			goto error_1;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->keep, "keep");
 		chdesc_claim_noop(info->keep);
 		info->safe = chdesc_create_noop(NULL, NULL);
 		if(!info->safe)
 			goto error_2;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->safe, "safe");
 		info->done = chdesc_create_noop(NULL, NULL);
-		chdesc_claim_noop(info->done);
 		if(!info->done)
 			goto error_3;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->done, "done");
+		chdesc_claim_noop(info->done);
 		r = chdesc_add_depend(info->safe, info->keep);
 		if(r < 0)
 		{
@@ -1050,6 +1060,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		r = chdesc_create_byte_atomic(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head);
 		if(r < 0)
 			panic("Holy Mackerel!");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "complete");
 		r = chdesc_add_depend(info->done, head);
 		if(r < 0)
 			panic("Holy Mackerel!");
@@ -1272,9 +1283,11 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	info->lock = chdesc_create_noop(lock_block, bd);
 	if(!info->lock)
 		panic("Holy Mackerel!");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock, "lock");
 	info->lock_hold = chdesc_create_noop(NULL, bd);
 	if(!info->lock_hold)
 		panic("Holy Mackerel!");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock_hold, "lock_hold");
 	chdesc_claim_noop(info->lock_hold);
 	if(chdesc_add_depend(info->lock, info->lock_hold) < 0)
 		panic("Holy Mackerel!");
