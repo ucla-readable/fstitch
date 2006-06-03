@@ -768,7 +768,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	}
 }
 
-static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
+static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_allocate_name %s\n", name);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -907,6 +907,11 @@ allocate_name_exit:
 	return NULL;
 }
 
+static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+{
+	return -E_NOT_FOUND;
+}
+
 static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_rename\n");
@@ -922,6 +927,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 	uint8_t filetype;
 	inode_t inode;
 	inode_t not_used;
+	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
 	if (!head)
 		return -E_INVAL;
@@ -957,7 +963,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 			filetype = TYPE_INVAL;
 	}
 
-	newfdesc = josfs_allocate_name(object, newparent, newname, filetype, NULL, &not_used, head);
+	newfdesc = josfs_allocate_name(object, newparent, newname, filetype, NULL, &emptymd, &not_used, head);
 	if (!newfdesc)
 		return -E_FILE_EXISTS;
 

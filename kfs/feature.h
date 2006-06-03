@@ -25,6 +25,20 @@ extern const feature_t KFS_feature_devicesize;
 extern const feature_t KFS_feature_mtime;
 extern const feature_t KFS_feature_atime;
 
+// Get metadata associated with the opaque variable 'arg'.
+// Returns:
+// * >=0: fills 'data', return value is number of bytes filled
+// * -E_NO_MEM: 'id' is supported, but 'size' is too small
+// * -E_NOT_FOUND: 'id' is not supported
+// * <0: implementation specific error
+typedef int (*get_metadata_t)(void * arg, uint32_t id, size_t size, void * data);
+
+struct metadata_set {
+	get_metadata_t get;
+	void * arg;
+};
+typedef struct metadata_set metadata_set_t;
+
 #ifndef __KERNEL__
 
 /* filetype values - large to avoid conflict with on-disk values */

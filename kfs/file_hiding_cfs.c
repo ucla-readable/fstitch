@@ -178,7 +178,7 @@ static int file_hiding_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc
 	return 0;
 }
 
-static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * ino)
+static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
@@ -190,7 +190,7 @@ static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, in
 	if (r >= 0 && hide_lookup(state->hide_table, temp_ino) >= 0)
 		return -E_NOT_FOUND;
 
-	if ((r = CALL(state->frontend_cfs, create, parent, name, mode, &inner, ino)) < 0)
+	if ((r = CALL(state->frontend_cfs, create, parent, name, mode, initialmd, &inner, ino)) < 0)
 		return r;
 
 	if ((r = file_hiding_fdesc_create(inner, *ino, fdesc)) < 0)
@@ -317,7 +317,7 @@ static int file_hiding_rename(CFS_t * cfs, inode_t oldparent, const char * oldna
 	return CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
 }
 
-static int file_hiding_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+static int file_hiding_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
@@ -328,7 +328,7 @@ static int file_hiding_mkdir(CFS_t * cfs, inode_t parent, const char * name, ino
 	if (r >= 0 && hide_lookup(state->hide_table, newino) >= 0)
 		return -E_NOT_FOUND;
 
-	return CALL(state->frontend_cfs, mkdir, parent, name, ino);
+	return CALL(state->frontend_cfs, mkdir, parent, name, initialmd, ino);
 }
 
 static int file_hiding_rmdir(CFS_t * cfs, inode_t parent, const char * name)

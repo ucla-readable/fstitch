@@ -151,6 +151,39 @@ static int feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
 }
 
 
+struct kernel_metadata {
+	int mode;
+};
+typedef struct kernel_metadata kernel_metadata_t;
+
+static int kernel_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+{
+	const kernel_metadata_t * kernelmd = (kernel_metadata_t *) arg;
+	if (KFS_feature_uid.id == id)
+	{
+		if (size < sizeof(current->euid))
+			return -E_NO_MEM;
+		*(typeof(current->euid) *) data = current->euid;
+		return sizeof(current->euid);
+	}
+	else if (KFS_feature_gid.id == id)
+	{
+		if (size < sizeof(current->egid))
+			return -E_NO_MEM;
+		*(typeof(current->egid) *) data = current->egid;
+		return sizeof(current->egid);
+	}
+	else if (KFS_feature_unix_permissions.id == id)
+	{
+		if (size < sizeof(kernelmd->mode))
+			return -E_NO_MEM;
+		*(typeof(kernelmd->mode) *) data = kernelmd->mode;
+		return sizeof(kernelmd->mode);
+	}	
+	return -E_NOT_FOUND;			
+}
+
+
 /* Looking at the NFS file system implementation was very helpful for some of these functions. */
 
 static int serve_set_super(struct super_block * sb, void * data)
@@ -834,6 +867,8 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 
 static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 {
+	kernel_metadata_t kernelmd = { .mode = mode };
+	metadata_set_t initialmd = { .get = kernel_get_metadata, .arg = &kernelmd };
 	inode_t cfs_ino;
 	struct inode * inode;
 	fdesc_t * fdesc;
@@ -841,8 +876,7 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
 
 	assert(kfsd_have_lock());
 
-	// TODO: set mode, uid, and gid
-	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &fdesc, &cfs_ino);
+	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &initialmd, &fdesc, &cfs_ino);
 	if (r < 0)
 		return r;
 	assert(cfs_ino != INODE_NONE);
@@ -895,20 +929,20 @@ static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev
 static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 {
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
+	kernel_metadata_t kernelmd = { .mode = mode };
+	metadata_set_t initialmd = { .get = kernel_get_metadata, .arg = &kernelmd };
 	inode_t cfs_ino;
 	struct inode * inode;
 	int r;
 
 	kfsd_enter();
 
-	r = CALL(dentry2cfs(dentry), mkdir, dir->i_ino, dentry->d_name.name, &cfs_ino);
+	r = CALL(dentry2cfs(dentry), mkdir, dir->i_ino, dentry->d_name.name, &initialmd, &cfs_ino);
 	if (r < 0)
 	{
 		kfsd_leave(1);
 		return r;
 	}
-
-	// TODO: set mode, uid, and gid
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)

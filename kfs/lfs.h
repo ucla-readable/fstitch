@@ -56,7 +56,7 @@ struct LFS {
 	DECLARE(LFS_t, uint32_t, get_file_block, fdesc_t * file, uint32_t offset);
 	DECLARE(LFS_t, int, get_dirent, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 	DECLARE(LFS_t, int, append_file_block, fdesc_t * file, uint32_t block, chdesc_t ** head);
-	DECLARE(LFS_t, fdesc_t *, allocate_name, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head);
+	DECLARE(LFS_t, fdesc_t *, allocate_name, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initial_metadata, inode_t * newino, chdesc_t ** head);
 	DECLARE(LFS_t, int, rename, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head);
 	DECLARE(LFS_t, uint32_t, truncate_file_block, fdesc_t * file, chdesc_t ** head);
 	DECLARE(LFS_t, int, free_block, fdesc_t * file, uint32_t block, chdesc_t ** head);

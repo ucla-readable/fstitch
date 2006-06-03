@@ -205,7 +205,7 @@ static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 	return 0;
 }
 
-static int devfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * new_inode)
+static int devfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * new_inode)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	return -E_PERM;
@@ -406,7 +406,7 @@ static int devfs_rename(CFS_t * cfs, inode_t old_parent, const char * old_name, 
 	return -E_PERM;
 }
 
-static int devfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * inode)
+static int devfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * inode)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	return -E_PERM;

@@ -371,6 +371,41 @@ static int init_fuse_entry(mount_t * mount, inode_t parent, inode_t cfs_ino, fus
 	return 0;
 }
 
+
+struct fuse_metadata {
+	const struct fuse_ctx * ctx;
+	mode_t mode;
+};
+typedef struct fuse_metadata fuse_metadata_t;
+
+static int fuse_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+{
+	const fuse_metadata_t * fusemd = (fuse_metadata_t *) arg;
+	if (KFS_feature_uid.id == id)
+	{
+		if (size < sizeof(fusemd->ctx->uid))
+			return -E_NO_MEM;
+		*(typeof(fusemd->ctx->gid) *) data = fusemd->ctx->uid;
+		return sizeof(fusemd->ctx->uid);
+	}
+	else if (KFS_feature_gid.id == id)
+	{
+		if (size < sizeof(fusemd->ctx->gid))
+			return -E_NO_MEM;
+		*(typeof(fusemd->ctx->gid) *) data = fusemd->ctx->gid;
+		return sizeof(fusemd->ctx->gid);
+	}
+	else if (KFS_feature_unix_permissions.id == id)
+	{
+		if (size < sizeof(fusemd->mode))
+			return -E_NO_MEM;
+		*(typeof(fusemd->mode) *) data = fusemd->mode;
+		return sizeof(fusemd->mode);
+	}	
+	return -E_NOT_FOUND;			
+}
+
+
 static void serve_statfs(fuse_req_t req)
 {
 	Dprintf("%s()\n", __FUNCTION__);
@@ -641,10 +676,12 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
 	inode_t cfs_ino;
 	inode_t parent_cfs_ino = fusecfsino(req, parent);
+	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode };
+	metadata_set_t initialmd = { .get = fuse_get_metadata, .arg = &fusemd };
 	int r;
 	struct fuse_entry_param e;
 
-	r = CALL(reqcfs(req), mkdir, parent_cfs_ino, local_name, &cfs_ino);
+	r = CALL(reqcfs(req), mkdir, parent_cfs_ino, local_name, &initialmd, &cfs_ino);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
@@ -670,10 +707,12 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
                   mode_t mode, struct fuse_entry_param * e, fdesc_t ** fdesc)
 {
 	inode_t cfs_parent = fusecfsino(req, parent);
+	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode };
+	metadata_set_t initialmd = { .get = fuse_get_metadata, .arg = &fusemd };
 	inode_t cfs_ino;
 	int r;
 
-	r = CALL(reqcfs(req), create, cfs_parent, local_name, 0, fdesc, &cfs_ino);
+	r = CALL(reqcfs(req), create, cfs_parent, local_name, 0, &initialmd, fdesc, &cfs_ino);
 	if (r < 0)
 		return r;
 	assert(cfs_ino != INODE_NONE);

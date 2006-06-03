@@ -919,7 +919,12 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	return 0;
 }
 
-static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
+static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+{
+	return -E_NOT_FOUND;
+}
+
+static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * nf;
@@ -929,8 +934,10 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	uint32_t inum = 0;
 	int r, createdot = 0, ex;
 	uint16_t mode;
+	uint32_t x;
 	struct dirent dirinfo;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
 	if (!head || check_name(name))
 		return NULL;
@@ -989,9 +996,30 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		nf->f_type = type;
 
 		memset(&nf->f_inode, 0, sizeof(struct UFS_dinode));
-		nf->f_inode.di_uid = 0; // FIXME set uid
-		nf->f_inode.di_gid = 0; // FIXME set gid
-		nf->f_inode.di_mode = mode | UFS_IREAD | UFS_IWRITE; // FIXME set permissions
+
+		r = initialmd->get(initialmd->arg, KFS_feature_uid.id, sizeof(x), &x);
+		if (r > 0)
+			nf->f_inode.di_uid = x;
+		else if (r == -E_NOT_FOUND)
+			nf->f_inode.di_uid = 0;
+		else
+			assert(0);
+
+		r = initialmd->get(initialmd->arg, KFS_feature_gid.id, sizeof(x), &x);
+		if (r > 0)
+			nf->f_inode.di_gid = x;
+		else if (r == -E_NOT_FOUND)
+			nf->f_inode.di_gid = 0;
+		else
+			assert(0);
+
+		nf->f_inode.di_mode = mode | UFS_IREAD | UFS_IWRITE;
+		r = initialmd->get(initialmd->arg, KFS_feature_unix_permissions.id, sizeof(x), &x);
+		if (r > 0)
+			nf->f_inode.di_mode |= x;
+		else if (r != -E_NOT_FOUND)
+			assert(0);
+			
 		nf->f_inode.di_nlink = 1;
 		nf->f_inode.di_gen = 0; // FIXME use random number?
 
@@ -1042,12 +1070,12 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		fdesc_t * cfdesc;
 		inode_t newino;
 
-		cfdesc = allocate_name(object, nf->f_num, ".", TYPE_DIR, (fdesc_t *) nf, &newino, head);
+		cfdesc = allocate_name(object, nf->f_num, ".", TYPE_DIR, (fdesc_t *) nf, &emptymd, &newino, head);
 		if (!cfdesc)
 			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
-		cfdesc = allocate_name(object, nf->f_num, "..", TYPE_DIR, (fdesc_t *) pf, &newino, head);
+		cfdesc = allocate_name(object, nf->f_num, "..", TYPE_DIR, (fdesc_t *) pf, &emptymd, &newino, head);
 		if (!cfdesc)
 			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
@@ -1068,7 +1096,7 @@ allocate_name_exit:
 	return NULL;
 }
 
-static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
+static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
 	int createdot = 0;
@@ -1085,7 +1113,7 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	if (createdot)
 		return NULL;
 
-	return allocate_name(object, parent, name, type, link, newino, head);
+	return allocate_name(object, parent, name, type, link, initialmd, newino, head);
 }
 
 static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
@@ -1100,6 +1128,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	uint32_t p;
 	int r, existing = 0, dir_offset;
 	inode_t ino, newino;
+	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
 	if (!head || check_name(oldname) || check_name(newname))
 		return -E_INVAL;
@@ -1165,7 +1194,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	}
 	else {
 		// Link files together
-		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent, newname, oldf->f_type, (fdesc_t *) oldf, &newino, head);
+		newf = (ufs_fdesc_t *) ufs_allocate_name(object, newparent, newname, oldf->f_type, (fdesc_t *) oldf, &emptymd, &newino, head);
 		if (!newf) {
 			r = -E_UNSPECIFIED;
 			goto ufs_rename_exit3;

@@ -322,12 +322,12 @@ static int opgroupscope_tracker_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t
 	return r;
 }
 
-static int opgroupscope_tracker_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
+static int opgroupscope_tracker_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * newino)
 {
 	int r = set_cur_opgroup_scope(cfs_ipc_serve_cur_envid());
 	if (r < 0)
 		return r;
-	r = CALL(this_state.frontend_cfs, create, parent, name, mode, fdesc, newino);
+	r = CALL(this_state.frontend_cfs, create, parent, name, mode, initialmd, fdesc, newino);
 	clear_cur_opgroup_scope();
 	return r;
 }
@@ -439,12 +439,12 @@ static int opgroupscope_tracker_rename(CFS_t * cfs, inode_t oldparent, const cha
 	return r;
 }
 
-static int opgroupscope_tracker_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+static int opgroupscope_tracker_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	int r = set_cur_opgroup_scope(cfs_ipc_serve_cur_envid());
 	if (r < 0)
 		return r;
-	r = CALL(this_state.frontend_cfs, mkdir, parent, name, ino);
+	r = CALL(this_state.frontend_cfs, mkdir, parent, name, initialmd, ino);
 	clear_cur_opgroup_scope();
 	return r;
 }

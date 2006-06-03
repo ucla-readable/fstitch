@@ -291,7 +291,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 	return r;
 }
 
-static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
+static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * newino)
 {
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
@@ -311,7 +311,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	}
 
 	prev_head = NULL;
-	inner = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, newino, &prev_head);
+	inner = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, initialmd, newino, &prev_head);
 	if (!inner)
 		return -E_UNSPECIFIED;
 
@@ -701,6 +701,11 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 	return unlink_file(cfs, ino, parent, name, f);
 }
 
+static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+{
+	return -E_NOT_FOUND;
+}
+
 static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
@@ -710,6 +715,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	bool type_supported;
 	uint32_t oldtype;
 	chdesc_t * prev_head = NULL;
+	metadata_set_t initialmd = { .get = empty_get_metadata, .arg = NULL };
 	int r;
 
 	oldf = CALL(state->lfs, lookup_inode, ino);
@@ -732,7 +738,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 		return -E_FILE_EXISTS;
 	}
 
-	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &newino, &prev_head);
+	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &initialmd, &newino, &prev_head);
 	if (!newf) {
 		CALL(state->lfs, free_fdesc, oldf);
 		return -E_UNSPECIFIED;
@@ -767,7 +773,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 	return 0;
 }
 
-static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
@@ -779,7 +785,7 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * 
 	if (CALL(state->lfs, lookup_name, parent, name, &existing_ino) >= 0)
 		return -E_FILE_EXISTS;
 
-	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, ino, &prev_head);
+	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, initialmd, ino, &prev_head);
 	if (!f)
 		return -E_UNSPECIFIED;
 

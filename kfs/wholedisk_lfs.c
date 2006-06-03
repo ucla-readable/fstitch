@@ -200,7 +200,7 @@ static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t 
 	return -E_INVAL;
 }
 
-static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
+static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	/* always fail - no filenames */
 	return NULL;

@@ -17,7 +17,7 @@ struct CFS {
 	DECLARE(CFS_t, int, get_root, inode_t * inode);
 	DECLARE(CFS_t, int, lookup, inode_t parent, const char * name, inode_t * inode);
 	DECLARE(CFS_t, int, open, inode_t inode, int mode, fdesc_t ** fdesc);
-	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * new_inode);
+	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, const metadata_set_t * initial_metadata, fdesc_t ** fdesc, inode_t * new_inode);
 	DECLARE(CFS_t, int, close, fdesc_t * fdesc);
 	DECLARE(CFS_t, int, read, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, write, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size);
@@ -26,7 +26,7 @@ struct CFS {
 	DECLARE(CFS_t, int, unlink, inode_t parent, const char * name);
 	DECLARE(CFS_t, int, link, inode_t inode, inode_t newparent, const char * newname);
 	DECLARE(CFS_t, int, rename, inode_t old_parent, const char * old_name, inode_t new_parent, const char * new_name);
-	DECLARE(CFS_t, int, mkdir, inode_t parent, const char * name, inode_t * inode);
+	DECLARE(CFS_t, int, mkdir, inode_t parent, const char * name, const metadata_set_t * initial_metadata, inode_t * inode);
 	DECLARE(CFS_t, int, rmdir, inode_t parent, const char * name);
 	DECLARE(CFS_t, size_t, get_num_features, inode_t inode);
 	DECLARE(CFS_t, const feature_t *, get_feature, inode_t inode, size_t num);

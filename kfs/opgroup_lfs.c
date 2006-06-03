@@ -128,7 +128,7 @@ static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_
 	return value;
 }
 
-static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, inode_t * newino, chdesc_t ** head)
+static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
 	fdesc_t * fdesc;
@@ -138,7 +138,7 @@ static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const
 	if(r < 0)
 		return NULL;
 
-	fdesc = CALL(info->lfs, allocate_name, parent, name, type, link, newino, head);
+	fdesc = CALL(info->lfs, allocate_name, parent, name, type, link, initialmd, newino, head);
 	if(fdesc)
 	{
 		r = opgroup_finish_head(*head);

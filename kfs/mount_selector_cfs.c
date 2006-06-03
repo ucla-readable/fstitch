@@ -226,7 +226,7 @@ static int mount_selector_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fd
 	return open_common(state, inner, fdesc);
 }
 
-static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, fdesc_t ** fdesc, inode_t * newino)
+static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * newino)
 {
 	Dprintf("%s(%u: \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
@@ -236,7 +236,7 @@ static int mount_selector_create(CFS_t * cfs, inode_t parent, const char * name,
 	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	if ((r = CALL(state->selected_cfs, create, parent, name, mode, &inner, newino)) < 0)
+	if ((r = CALL(state->selected_cfs, create, parent, name, mode, initialmd, &inner, newino)) < 0)
 		return r;
 	r = open_common(state, inner, fdesc);
 	if (r < 0)
@@ -319,7 +319,7 @@ static int mount_selector_rename(CFS_t * cfs, inode_t oldparent, const char * ol
 	return CALL(state->selected_cfs, rename, oldparent, oldname, newparent, newname);
 }
 
-static int mount_selector_mkdir(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
+static int mount_selector_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	Dprintf("%s(%u: \"%s\")\n", __FUNCTION__, parent, name);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);
@@ -327,7 +327,7 @@ static int mount_selector_mkdir(CFS_t * cfs, inode_t parent, const char * name, 
 	if (!state->selected_cfs)
 		return -E_NOT_FOUND;
 
-	return CALL(state->selected_cfs, mkdir, parent, name, ino);
+	return CALL(state->selected_cfs, mkdir, parent, name, initialmd, ino);
 }
 
 static int mount_selector_rmdir(CFS_t * cfs, inode_t parent, const char * name)

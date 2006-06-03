@@ -77,6 +77,12 @@ void cfs_ipc_serve_set_cur_cappa(uint32_t x)
 }
 
 
+static int cfs_ipc_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+{
+	return -E_NOT_FOUND;
+}
+
+
 static void cfs_ipc_serve_shutdown(void * arg)
 {
 	int i;
@@ -155,6 +161,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 		if (scfs->mode & O_CREAT)
 		{
+			metadata_set_t initialmd = { .get = cfs_ipc_get_metadata, .arg = NULL };
 			char * filename;
 			r = path_to_parent_and_name(scfs->path, &select_cfs, &parent, &filename);
 			if (r >= 0)
@@ -165,7 +172,7 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 				if (r < 0)
 				{
 					new_file = 1;
-					r = CALL(frontend_cfs, create, parent, filename, scfs->mode, &fdesc, &ino);
+					r = CALL(frontend_cfs, create, parent, filename, scfs->mode, &initialmd, &fdesc, &ino);
 				}
 			}
 		}
@@ -368,6 +375,7 @@ static void serve_rename(envid_t envid, struct Scfs_rename * req)
 
 static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 {
+	metadata_set_t initialmd = { .get = cfs_ipc_get_metadata, .arg = NULL };
 	int r;
 	inode_t ino, parent;
 	char * name;
@@ -377,7 +385,7 @@ static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 	r = path_to_parent_and_name(req->path, &select_cfs, &parent, &name);
 	if (r >= 0) {
 		kfsd_set_mount(select_cfs);
-		r = CALL(frontend_cfs, mkdir, parent, name, &ino);
+		r = CALL(frontend_cfs, mkdir, parent, name, &initialmd, &ino);
 	}
 	ipc_send(envid, r, NULL, 0, NULL);
 }
