@@ -367,7 +367,7 @@ static const feature_t * file_hiding_get_feature(CFS_t * cfs, inode_t ino, size_
 	return CALL(state->frontend_cfs, get_feature, ino, num);
 }
 
-static int file_hiding_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int file_hiding_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);

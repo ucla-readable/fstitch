@@ -54,20 +54,15 @@ static bool lfs_feature_supported(LFS_t * lfs, inode_t ino, int feature_id)
 
 static bool check_type_supported(LFS_t * lfs, inode_t ino, fdesc_t * f, uint32_t * filetype)
 {
-	bool type_supported = lfs_feature_supported(lfs, ino, KFS_feature_filetype.id);
-	size_t data_len;
-	void * data;
-	int r;
+	const bool type_supported = lfs_feature_supported(lfs, ino, KFS_feature_filetype.id);
 
 	if (type_supported)
 	{
-		r = CALL(lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, &data_len, &data);
-		assert(data_len == sizeof(*filetype));
+		int r = CALL(lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(*filetype), filetype);
 		if (r < 0)
 			*filetype = TYPE_INVAL;
 		else
-			*filetype = *(uint32_t *) data;
-		free(data);
+			assert(r == sizeof(*filetype));
 	}
 	else
 		*filetype = TYPE_INVAL;
@@ -185,16 +180,12 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	   the byte-level size (rather than block-level in the above) */
 	if (uf->size_id)
 	{
-		void * data;
-		size_t data_len;
 		size_t size;
 
-		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &data_len, &data);
+		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, sizeof(size), &size);
 		if (r < 0)
 			return r;
-		assert(data_len == sizeof(target_size));
-		size = *(size_t *) data;
-		free(data);
+		assert(r == sizeof(size));
 
 		if (target_size < size)
 		{
@@ -344,14 +335,11 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	/* if we have filesize, use it! */
 	if (uf->size_id)
 	{
-		size_t md_size;
-		void * data;
 		int r;
-		if ((r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &md_size, &data)) < 0)
+		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, sizeof(file_size), &file_size);
+		if (r < 0)
 			return r;
-		assert(md_size == sizeof(file_size));
-		file_size = *((uint32_t *) data);
-		free(data);
+		assert(r == sizeof(file_size));
 	}
 	while (size_read < size)
 	{
@@ -411,15 +399,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	int r;
 
 	if (uf->size_id) {
-		void * data;
-		size_t data_len;
-
-		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, &data_len, &data);
+		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, sizeof(filesize), &filesize);
 		if (r < 0)
 			goto uhfs_write_exit;
-		assert(data_len == sizeof(filesize));
-		filesize = *(size_t *) data;
-		free(data);
+		assert(r == sizeof(filesize));
 	}
 
 	// FIXME: support lfses that do not support file_size
@@ -622,20 +605,16 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 	int i, r;
 	uint32_t nblocks;
 	uint32_t nlinks;
-	size_t data_len;
-	void * data;
 	chdesc_t * prev_head = NULL, * save_head;
 
 	if (link_supported) {
-		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, &data_len, &data);
+		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
 		}
 
-		assert(data_len == sizeof(nlinks));
-		nlinks = *(uint32_t *) data;
-		free(data);
+		assert(r == sizeof(nlinks));
 
 		if (nlinks > 1) {
 			CALL(state->lfs, free_fdesc, f);
@@ -875,7 +854,7 @@ static const feature_t * uhfs_get_feature(CFS_t * cfs, inode_t ino, size_t num)
    return CALL(state->lfs, get_feature, ino, num);
 }
 
-static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);

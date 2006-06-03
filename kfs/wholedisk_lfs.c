@@ -249,75 +249,63 @@ static const feature_t * wholedisk_get_feature(LFS_t * object, inode_t inode, si
 	return wholedisk_features[num];
 }
 
-static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t * size, void ** data)
+static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, void * data)
 {
 	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
 
 	if (id == KFS_feature_size.id)
 	{
-		const size_t file_size = (inode == INODE_DISK) ? state->blocksize * CALL(state->bd, get_numblocks) : 0;
-		*data = malloc(sizeof(file_size));
-		if (!*data)
+		if (size < sizeof(size_t))
 			return -E_NO_MEM;
-		*size = sizeof(file_size);
-		memcpy(*data, &file_size, sizeof(file_size));
+		size = sizeof(size_t);
+		*((size_t *) data) = (inode == INODE_DISK) ? state->blocksize * CALL(state->bd, get_numblocks) : 0;
 	}
 	else if (id == KFS_feature_filetype.id)
 	{
-		const int32_t type = (inode == INODE_DISK) ? TYPE_DEVICE : TYPE_DIR;
-		*data = malloc(sizeof(type));
-		if (!*data)
+		if (size < sizeof(int32_t))
 			return -E_NO_MEM;
-		*size = sizeof(type);
-		memcpy(*data, &type, sizeof(type));
+		size = sizeof(int32_t);
+		*((int32_t *) data) = (inode == INODE_DISK) ? TYPE_DEVICE : TYPE_DIR;
 	}
 	else if (id == KFS_feature_freespace.id)
 	{
-		uint32_t free_space;
-		*data = malloc(sizeof(free_space));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(free_space);
-		free_space = 0;
-		memcpy(*data, &free_space, sizeof(free_space));
+		*((uint32_t *) data) = 0;
 	}
 	else if (id == KFS_feature_file_lfs.id)
 	{
-		*data = malloc(sizeof(object));
-		if (!*data)
+		if (size < sizeof(object))
 			return -E_NO_MEM;
+		size = sizeof(object);
 
-		*size = sizeof(object);
-		memcpy(*data, &object, sizeof(object));
+		*((typeof(object) *) data) = object;
 	}
 	else if (id == KFS_feature_blocksize.id)
 	{
-		uint32_t blocksize = CALL(state->bd, get_blocksize);
-		*data = malloc(sizeof(blocksize));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(blocksize);
-		memcpy(*data, &blocksize, sizeof(blocksize));
+		*((uint32_t *) data) = CALL(state->bd, get_blocksize);
 	}
 	else if (id == KFS_feature_devicesize.id)
 	{
-		uint32_t devicesize = CALL(state->bd, get_numblocks);
-		*data = malloc(sizeof(devicesize));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(devicesize);
-		memcpy(*data, &devicesize, sizeof(devicesize));
+		*((uint32_t *) data) = CALL(state->bd, get_numblocks);
 	}
 	else
 		return -E_INVAL;
 
-	return 0;
+	return size;
 }
 
-static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
+static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, void * data)
 {
 	inode_t inode = INODE_NONE;
 	if(file == (fdesc_t *) &root_fdesc)

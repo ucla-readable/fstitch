@@ -156,11 +156,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	Dprintf("%s(fuse_ino = %lu, cfs_ino = %u)\n", __FUNCTION__, fuse_ino, cfs_ino);
 	int r;
 	CFS_t * cfs = mount->cfs;
-	uint32_t type_size;
-	union {
-		uint32_t * type;
-		void * ptr;
-	} type;
+	uint32_t type;
 	bool nlinks_supported = feature_supported(cfs, cfs_ino, KFS_feature_nlinks.id);
 	bool uid_supported = feature_supported(cfs, cfs_ino, KFS_feature_uid.id);
 	bool gid_supported = feature_supported(cfs, cfs_ino, KFS_feature_gid.id);
@@ -172,7 +168,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	time_t mtime = time(NULL);
 	time_t atime = mtime;
 
-	r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
+	r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_filetype.id, sizeof(type), &type);
 	if (r < 0)
 	{
 		Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
@@ -181,20 +177,14 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (nlinks_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_nlinks.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(nlinks));
-			nlinks = *(uint32_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+		else
+			assert(r == sizeof(nlinks));
 	}
 
-	if (*type.type == TYPE_DIR)
+	if (type == TYPE_DIR)
 	{
 		if (!nlinks)
 		{
@@ -218,18 +208,14 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		stbuf->st_mode = S_IFDIR;
 		perms = 0777; // default, in case permissions are not supported
 	}
-	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
+	else if (type == TYPE_FILE || type == TYPE_DEVICE)
 	{
-		uint32_t filesize_size;
-		union {
-			int32_t * filesize;
-			void * ptr;
-		} filesize;
+		int32_t filesize;
 
 		if (!nlinks)
 			nlinks = 1;
 
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_size.id, sizeof(filesize), &filesize);
 		if (r < 0)
 		{
 			Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
@@ -238,10 +224,9 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 		stbuf->st_mode = S_IFREG;
 		perms = 0666; // default, in case permissions are not supported
-		stbuf->st_size = (off_t) *filesize.filesize;
-		free(filesize.filesize);
+		stbuf->st_size = (off_t) filesize;
 	}
-	else if (*type.type == TYPE_INVAL)
+	else if (type == TYPE_INVAL)
 	{
 		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): file type is invalid\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino);
 		r = -E_UNSPECIFIED;
@@ -249,22 +234,19 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	}
 	else
 	{
-		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, *type.type);
+		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, type);
 		r = -E_UNSPECIFIED;
 		goto err;
 	}
 
 	if (uid_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_uid.id, &data_len, &data);
+		uint32_t cfs_uid;
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_uid.id, sizeof(cfs_uid), &cfs_uid);
 		if (r >= 0)
 		{
-			uint32_t cfs_uid;
-			assert(data_len == sizeof(cfs_uid));
-			stbuf->st_uid = cfs_uid = *(uint32_t *) data;
-			free(data);
+			assert(r == sizeof(cfs_uid));
+			stbuf->st_uid = cfs_uid;
 			if (stbuf->st_uid != cfs_uid)
 				kdprintf(STDERR_FILENO, "%s: UID not large enough to hold CFS UID %u\n", __FUNCTION__, cfs_uid);
 		}
@@ -276,15 +258,12 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (gid_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_gid.id, &data_len, &data);
+		uint32_t cfs_gid;
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_gid.id, sizeof(cfs_gid), &cfs_gid);
 		if (r >= 0)
 		{
-			uint32_t cfs_gid;
-			assert(data_len == sizeof(cfs_gid));
-			stbuf->st_gid = cfs_gid = *(uint32_t *) data;
-			free(data);
+			assert(r == sizeof(cfs_gid));
+			stbuf->st_gid = cfs_gid;
 			if (stbuf->st_gid != cfs_gid)
 				kdprintf(STDERR_FILENO, "%s: GID not large enough to hold CFS GID %u\n", __FUNCTION__, cfs_gid);
 		}
@@ -296,47 +275,29 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (perms_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_unix_permissions.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(mode_t));
-			perms = *(mode_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(perms), &perms);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(mode_t));
 	}
 
 	if (mtime_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_mtime.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(time_t));
-			mtime = *(time_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_mtime.id, sizeof(mtime), &mtime);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(time_t));
 	}
 
 	if (atime_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_atime.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(time_t));
-			atime = *(time_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_atime.id, sizeof(atime), &atime);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(time_t));
 	}
 
 	stbuf->st_mode |= perms;
@@ -345,11 +306,9 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	stbuf->st_ino = fuse_ino;
 	stbuf->st_nlink = nlinks;
 
-	free(type.type);
 	return 0;
 
   err:
-	free(type.type);
 	return r;
 }
 
@@ -411,35 +370,27 @@ static void serve_statfs(fuse_req_t req)
 	Dprintf("%s()\n", __FUNCTION__);
 	struct statvfs st; // For more info, see: man 2 statvfs
 	int r;
-	size_t size;
-	void * data;
 
-	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_blocksize.id, &size, &data);
+	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_blocksize.id, sizeof(st.f_frsize), &st.f_frsize);
 	if (r < 0)
 		goto serve_statfs_err;
-	else if (sizeof(st.f_bsize) != size)
+	else if (sizeof(st.f_bsize) != r)
 	{
 		r = -E_UNSPECIFIED;
 		goto serve_statfs_err;
 	}
-	st.f_bsize = st.f_frsize = *(uint32_t *) data;
-	free(data);
+	st.f_bsize = st.f_frsize;
 
-	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
-	if (r < 0 || sizeof(st.f_blocks) < size)
+	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_devicesize.id, sizeof(st.f_blocks), &st.f_blocks);
+	if (sizeof(st.f_blocks) != r)
 		st.f_blocks = st.f_bfree = st.f_bavail = 0;
 	else
 	{
-		st.f_blocks = *(uint32_t *) data;
-		free(data);
-		r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_freespace.id, &size, &data);
-		if (r < 0 || sizeof(st.f_bfree) < size)
+		r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_freespace.id, sizeof(st.f_bavail), &st.f_bavail);
+		if (sizeof(st.f_bavail) != r)
 			st.f_bfree = st.f_bavail = 0;
 		else
-		{
-			st.f_bfree = st.f_bavail = *(uint32_t *) data;
-			free(data);
-		}
+			st.f_bfree = st.f_bavail;
 	}
 
 	// TODO - add lfs features for these guys
@@ -1028,9 +979,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
                        struct fuse_file_info * fi)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, fuse_ino);
-	uint32_t size;
 	inode_t cfs_ino;
-	void * data;
 	uint32_t type;
 	fdesc_t * fdesc;
 	int r;
@@ -1040,12 +989,8 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 
 	cfs_ino = fusecfsino(req, fuse_ino);
 
-	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, &size, &data);
-	assert(r >= 0);
-
-	type = *((uint32_t*) data);
-	free(data);
-	data = NULL;
+	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, sizeof(type), &type);
+	assert(r == sizeof(type));
 
 	if (type == TYPE_DIR)
 	{

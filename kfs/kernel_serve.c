@@ -203,37 +203,10 @@ static int serve_compare_super(struct super_block * sb, void * data)
 	return 1;
 }
 
-static uint32_t inode_get_size(struct inode * inode)
-{
-	uint32_t filesize_size;
-	union {
-		int32_t * filesize;
-		void * ptr;
-	} filesize;
-	uint32_t size;
-	int r;
-
-	assert(kfsd_have_lock());
-
-	r = CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_size.id, &filesize_size, &filesize.ptr);
-	if (r < 0)
-	{
-		Dprintf("%s: CALL(get_metadata, cfs_ino = %lu) = %d\n", __FUNCTION__, inode->i_ino, r);
-		return 0;
-	}
-	size = *filesize.filesize;
-	free(filesize.filesize);
-	return size;
-}
-
 static void read_inode_withlock(struct inode * inode)
 {
 	CFS_t * cfs;
-	uint32_t type_size;
-	union {
-		uint32_t * type;
-		void * ptr;
-	} type;
+	uint32_t type;
 	bool nlinks_supported, uid_supported, gid_supported, perms_supported, mtime_supported, atime_supported;
 	int r;
 
@@ -248,7 +221,7 @@ static void read_inode_withlock(struct inode * inode)
 	mtime_supported = feature_supported(cfs, inode->i_ino, KFS_feature_mtime.id);
 	atime_supported = feature_supported(cfs, inode->i_ino, KFS_feature_atime.id);
 
-	r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_filetype.id, &type_size, &type.ptr);
+	r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_filetype.id, sizeof(type), &type);
 	if (r < 0)
 	{
 		kdprintf(STDERR_FILENO, "%s: CALL(get_metadata, ino = %u) = %d\n", __FUNCTION__, inode->i_ino, r);
@@ -257,81 +230,51 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (nlinks_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_nlinks.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(inode->i_nlink));
-			inode->i_nlink = *(uint32_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_nlinks.id, sizeof(inode->i_nlink), &inode->i_nlink);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+		else
+			assert(r == sizeof(inode->i_nlink));
 	}
 
 	if (uid_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_uid.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(uint32_t));
-			inode->i_uid = *(uint32_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_uid.id, sizeof(inode->i_uid), &inode->i_uid);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(inode->i_uid));
 	}
 	else
 		inode->i_uid = 0;
 
 	if (gid_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_gid.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(uint32_t));
-			inode->i_gid = *(uint32_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_gid.id, sizeof(inode->i_gid), &inode->i_gid);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(inode->i_gid));
 	}
 	else
 		inode->i_gid = 0;
 
 	if (perms_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_unix_permissions.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(unsigned));
-			inode->i_mode = *(unsigned *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(inode->i_mode), &inode->i_mode);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(inode->i_mode));
 	}
 
 	if (mtime_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_mtime.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(time_t));
-			inode->i_mtime.tv_sec = *(time_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_mtime.id, sizeof(inode->i_mtime.tv_sec), &inode->i_mtime.tv_sec);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(inode->i_mtime.tv_sec));
 	}
 	else
 		inode->i_mtime = CURRENT_TIME;
@@ -339,22 +282,16 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (atime_supported)
 	{
-		size_t data_len;
-		void * data;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_atime.id, &data_len, &data);
-		if (r >= 0)
-		{
-			assert(data_len == sizeof(time_t));
-			inode->i_atime.tv_sec = *(time_t *) data;
-			free(data);
-		}
-		else
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_atime.id, sizeof(inode->i_atime.tv_sec), &inode->i_atime.tv_sec);
+		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+		else
+			assert(r == sizeof(inode->i_atime.tv_sec));
 	}
 	else
 		inode->i_atime = CURRENT_TIME;
 
-	if (*type.type == TYPE_DIR)
+	if (type == TYPE_DIR)
 	{
 		if (!nlinks_supported)
 		{
@@ -382,7 +319,7 @@ static void read_inode_withlock(struct inode * inode)
 		inode->i_op = &kfs_dir_inode_ops;
 		inode->i_fop = &kfs_dir_file_ops;
 	}
-	else if (*type.type == TYPE_FILE || *type.type == TYPE_DEVICE)
+	else if (type == TYPE_FILE || type == TYPE_DEVICE)
 	{
 		if (!nlinks_supported)
 			inode->i_nlink = 1;
@@ -393,7 +330,7 @@ static void read_inode_withlock(struct inode * inode)
 		inode->i_fop = &kfs_reg_file_ops;
 		inode->i_mapping->a_ops = &kfs_aops;
 	}
-	else if (*type.type == TYPE_INVAL)
+	else if (type == TYPE_INVAL)
 	{
 		kdprintf(STDERR_FILENO, "%s: inode %u has type invalid\n", __FUNCTION__, inode->i_ino);
 		goto exit;
@@ -404,10 +341,9 @@ static void read_inode_withlock(struct inode * inode)
 		goto exit;
 	}
 
-	inode->i_size = inode_get_size(inode);
+	CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_feature_size.id, sizeof(inode->i_size), &inode->i_size);
 
   exit:
-	free(type.type);
 	return;
 }
 
@@ -424,32 +360,26 @@ static int serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 	mount_desc_t * m = (mount_desc_t *) sb->s_fs_info;
 	Dprintf("%s(kfs:%s)\n", __FUNCTION__, m->path);
 	CFS_t * cfs = m->cfs;
-	size_t size;
-	void * data;
 	int r;
 	
 	kfsd_enter();
-	r = CALL(cfs, get_metadata, 0, KFS_feature_blocksize.id, &size, &data);
+	r = CALL(cfs, get_metadata, 0, KFS_feature_blocksize.id, sizeof(st->f_frsize), &st->f_frsize);
 	if (r < 0)
 		goto out;
-	assert(sizeof(st->f_bsize) >= size);
-	st->f_bsize = st->f_frsize = *(uint32_t *) data;
-	free(data);
+	assert(sizeof(st->f_frsize) == r);
+	st->f_bsize = st->f_frsize;
 	
-	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, &size, &data);
+	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, sizeof(st->f_blocks), &st->f_blocks);
 	if (r < 0)
 		goto out;
-	assert(sizeof(st->f_blocks) >= size);
-	st->f_blocks = *(uint32_t *) data;
-	free(data);
+	assert(sizeof(st->f_blocks) == r);
 	
-	r = CALL(cfs, get_metadata, 0, KFS_feature_freespace.id, &size, &data);
+	r = CALL(cfs, get_metadata, 0, KFS_feature_freespace.id, sizeof(st->f_bavail), &st->f_bavail);
 	if (r < 0)
 		goto out;
-	assert(sizeof(st->f_bfree) >= size);
+	assert(sizeof(st->f_bavail) == r);
 	/* what is the difference between bfree and bavail? */
-	st->f_bfree = st->f_bavail = *(uint32_t *) data;
-	free(data);
+	st->f_bfree = st->f_bavail;
 	
 	// TODO - add lfs features for these guys
 	st->f_files = 0;

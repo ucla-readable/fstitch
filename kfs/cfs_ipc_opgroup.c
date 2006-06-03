@@ -480,7 +480,7 @@ static const feature_t * opgroupscope_tracker_get_feature(CFS_t * cfs, inode_t i
 	return f;
 }
 
-static int opgroupscope_tracker_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int opgroupscope_tracker_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	int r = set_cur_opgroup_scope(cfs_ipc_serve_cur_envid());
 	if (r < 0)

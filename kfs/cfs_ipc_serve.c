@@ -451,7 +451,6 @@ static void serve_get_feature(envid_t envid, struct Scfs_get_feature * req)
 static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 {
 	struct Scfs_metadata *md = (struct Scfs_metadata*) PAGESNDVA;
-	void * data = NULL;
 	int r;
 	inode_t ino;
 	CFS_t * select_cfs;
@@ -467,16 +466,9 @@ static void serve_get_metadata(envid_t envid, struct Scfs_get_metadata * req)
 	r = path_to_inode(req->name, &select_cfs, &ino);
 	if (r >= 0) {
 		kfsd_set_mount(select_cfs);
-		r = CALL(frontend_cfs, get_metadata, ino, req->id, &md->size, &data);
-	}
-
-	assert((md->size > 0 && data) || (!md->size && !data));
-	if (data)
-	{
-		if (md->size > sizeof(md->data))
-			kdprintf(STDERR_FILENO, "kfsd cfs_ipc_serve: CFS->get_metadata() returned more data (%d) than serial_cfs allows (%d), truncating.\n", md->size, sizeof(md->data));
-		memcpy(md->data, data, MIN(md->size, sizeof(md->data)));
-		free(data);
+		md->size = CALL(frontend_cfs, get_metadata, ino, req->id, sizeof(md->data), md->data);
+		if (md->size < 0)
+			r = md->size;
 	}
 
 	ipc_send(envid, r, (void*) md, PTE_P|PTE_U, NULL);

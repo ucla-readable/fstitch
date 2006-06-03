@@ -1473,7 +1473,7 @@ static const feature_t * ufs_get_feature(LFS_t * object, inode_t ino, size_t num
 }
 
 // TODO (permission feature, etc)
-static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, size_t * size, void ** data)
+static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -1482,129 +1482,108 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		if (!f)
 			return -E_INVAL;
 
-		*data = malloc(sizeof(int32_t));
-		if (!*data)
+		if (size < sizeof(int32_t))
 			return -E_NO_MEM;
+		size = sizeof(int32_t);
 
-		*size = sizeof(int32_t);
-		memcpy(*data, &(f->f_inode.di_size), sizeof(int32_t));
+		*((int32_t *) data) = f->f_inode.di_size;
 	}
 	else if (id == KFS_feature_filetype.id) {
 		if (!f)
 			return -E_INVAL;
 
-		*data = malloc(sizeof(uint32_t));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(uint32_t);
-		*((uint32_t *) *data) = f->f_type;
+		*((uint32_t *) data) = f->f_type;
 	}
 	else if (id == KFS_feature_nlinks.id) {
 		if (!f)
 			return -E_INVAL;
 
-		uint32_t nlink;
-		*data = malloc(sizeof(uint32_t));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(uint32_t);
-		nlink = (uint32_t) f->f_inode.di_nlink;
-		memcpy(*data, &nlink, sizeof(uint32_t));
+		*((uint32_t *) data) = (uint32_t) f->f_inode.di_nlink;
 	}
 	else if (id == KFS_feature_freespace.id) {
-		uint32_t free_space;
-		*data = malloc(sizeof(free_space));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(free_space);
-		free_space = count_free_space(info);
-		memcpy(*data, &free_space, sizeof(free_space));
+		*((uint32_t *) data) = count_free_space(info);
 	}
 	else if (id == KFS_feature_file_lfs.id) {
-		*data = malloc(sizeof(object));
-		if (!*data)
+		if (size < sizeof(object))
 			return -E_NO_MEM;
+		size = sizeof(object);
 
-		*size = sizeof(object);
-		memcpy(*data, &object, sizeof(object));
+		*((typeof(object) *) data) = object;
 	}
 	else if (id == KFS_feature_uid.id) {
 		if (!f)
 			return -E_INVAL;
 
-		uint32_t uid = f->f_inode.di_uid;
-		*data = malloc(sizeof(uid));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(uid);
-		memcpy(*data, &uid, sizeof(uid));
+		*((uint32_t *) data) = f->f_inode.di_uid;
 	}
 	else if (id == KFS_feature_gid.id) {
 		if (!f)
 			return -E_INVAL;
 
-		uint32_t gid = f->f_inode.di_gid;
-		*data = malloc(sizeof(gid));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(gid);
-		memcpy(*data, &gid, sizeof(gid));
+		*((uint32_t *) data) = f->f_inode.di_gid;
 	}
 	else if (id == KFS_feature_unix_permissions.id) {
 		if (!f)
 			return -E_INVAL;
 
-		uint32_t perm = f->f_inode.di_mode & UFS_IPERM;
-		*data = malloc(sizeof(perm));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(perm);
-		memcpy(*data, &perm, sizeof(perm));
+		*((uint32_t *) data) = f->f_inode.di_mode & UFS_IPERM;
 	}
 	else if (id == KFS_feature_blocksize.id) {
-		uint32_t blocksize = ufs_get_blocksize(object);
-		*data = malloc(sizeof(blocksize));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(blocksize);
-		memcpy(*data, &blocksize, sizeof(blocksize));
+		*((uint32_t *) data) = ufs_get_blocksize(object);
 	}
 	else if (id == KFS_feature_devicesize.id) {
 		const struct UFS_Super * super = CALL(info->parts.p_super, read);
-		uint32_t devicesize = super->fs_dsize;
-		*data = malloc(sizeof(devicesize));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(devicesize);
-		memcpy(*data, &devicesize, sizeof(devicesize));
+		*((uint32_t *) data) = super->fs_dsize;
 	}
 	else if (id == KFS_feature_mtime.id) {
 		if (!f)
 			return -E_INVAL;
 
-		int32_t mtime = f->f_inode.di_mtime;
-		*data = malloc(sizeof(mtime));
-		if (!*data)
+		if (size < sizeof(int32_t))
 			return -E_NO_MEM;
+		size = sizeof(int32_t);
 
-		*size = sizeof(mtime);
-		memcpy(*data, &(f->f_inode.di_mtime), sizeof(f->f_inode.di_mtime));
+		*((int32_t *) data) = f->f_inode.di_mtime;
 	}
 	else
 		return -E_INVAL;
 
-	return 0;
+	return size;
 }
 
-static int ufs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int ufs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, ino);
 	int r;
@@ -1617,7 +1596,7 @@ static int ufs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size
 	return r;
 }
 
-static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
+static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, void * data)
 {
 	const ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	return ufs_get_metadata(object, f, id, size, data);

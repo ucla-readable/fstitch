@@ -1154,7 +1154,7 @@ static const feature_t * josfs_get_feature(LFS_t * object, inode_t ino, size_t n
 	return josfs_features[num];
 }
 
-static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t * size, void ** data)
+static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_metadata\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -1163,91 +1163,75 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		if (!f)
 			return -E_INVAL;
 
-		*data = malloc(sizeof(int32_t));
-		if (!*data)
+		if (size < sizeof(int32_t))
 			return -E_NO_MEM;
+		size = sizeof(int32_t);
 
-		*size = sizeof(int32_t);
-		memcpy(*data, &(f->file->f_size), sizeof(int32_t));
+		*((int32_t *) data) = f->file->f_size;
 	}
 	else if (id == KFS_feature_filetype.id) {
 		if (!f)
 			return -E_INVAL;
 
-		*data = malloc(sizeof(uint32_t));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(uint32_t);
-		switch(f->file->f_type)
-		{
-			case JOSFS_TYPE_FILE:
-				*((uint32_t *) *data) = TYPE_FILE;
-				break;
-			case JOSFS_TYPE_DIR:
-				*((uint32_t *) *data) = TYPE_DIR;
-				break;
-			default:
-				*((uint32_t *) *data) = TYPE_INVAL;
-		}
+		if (f->file->f_type == JOSFS_TYPE_FILE)
+			*((uint32_t *) data) = TYPE_FILE;
+		else if (f->file->f_type == JOSFS_TYPE_DIR)
+			*((uint32_t *) data) = TYPE_DIR;
+		else
+			*((uint32_t *) data) = TYPE_INVAL;
 	}
 	else if (id == KFS_feature_freespace.id) {
-		uint32_t free_space;
-		*data = malloc(sizeof(uint32_t));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(uint32_t);
-		free_space = count_free_space(object);
-		memcpy(*data, &free_space, sizeof(uint32_t));
+		*((uint32_t *) data) = count_free_space(object);
 	}
 	else if (id == KFS_feature_file_lfs.id) {
-		*data = malloc(sizeof(object));
-		if (!*data)
+		if (size < sizeof(object))
 			return -E_NO_MEM;
+		size = sizeof(object);
 
-		*size = sizeof(object);
-		memcpy(*data, &object, sizeof(object));
+		*((typeof(object) *) data) = object;
 	}
 	else if (id == KFS_feature_blocksize.id) {
-		uint32_t blocksize = josfs_get_blocksize(object);
-		*data = malloc(sizeof(blocksize));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(blocksize);
-		memcpy(*data, &blocksize, sizeof(blocksize));
+		*((uint32_t *) data) = josfs_get_blocksize(object);
 	}
 	else if (id == KFS_feature_devicesize.id) {
-		uint32_t devicesize = super->s_nblocks;
-		*data = malloc(sizeof(devicesize));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(devicesize);
-		memcpy(*data, &devicesize, sizeof(devicesize));
+		*((uint32_t *) data) = super->s_nblocks;
 	}
 	else if (id == KFS_feature_mtime.id || id == KFS_feature_atime.id) {
 		if (!f)
 			return -E_INVAL;
 
-		*data = malloc(sizeof(uint32_t));
-		if (!*data)
+		if (size < sizeof(uint32_t))
 			return -E_NO_MEM;
+		size = sizeof(uint32_t);
 
-		*size = sizeof(uint32_t);
 		if (id == KFS_feature_mtime.id)
-			memcpy(*data, &f->file->f_mtime, sizeof(uint32_t));
+			*((uint32_t *) data) = f->file->f_mtime;
 		else
-			memcpy(*data, &f->file->f_atime, sizeof(uint32_t));
+			*((uint32_t *) data) = f->file->f_atime;
 	}
 	else
 		return -E_INVAL;
 
-	return 0;
+	return size;
 }
 
-static int josfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int josfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_metadata_inode %u\n", ino);
 	int r;
@@ -1259,7 +1243,7 @@ static int josfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, si
 	
 }
 
-static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
+static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, void * data)
 {
 	const struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	return josfs_get_metadata(object, f, id, size, data);

@@ -363,7 +363,7 @@ static const feature_t * mount_selector_get_feature(CFS_t * cfs, inode_t ino, si
 	return CALL(state->selected_cfs, get_feature, ino, num);
 }
 
-static int mount_selector_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int mount_selector_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
 	mount_selector_state_t * state = (mount_selector_state_t *) OBJLOCAL(cfs);

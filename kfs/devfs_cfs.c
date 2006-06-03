@@ -439,7 +439,7 @@ static const feature_t * devfs_get_feature(CFS_t * cfs, inode_t inode, size_t nu
 	return devfs_features[num];
 }
 
-static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t * size, void ** data)
+static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, inode, id);
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
@@ -454,34 +454,29 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t * 
 	
 	if(id == KFS_feature_size.id)
 	{
-		const size_t file_size = fdesc ? CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks) : 0;
-		*data = malloc(sizeof(file_size));
-		if(!*data)
+		if(size < sizeof(size_t))
 			return -E_NO_MEM;
-		*size = sizeof(file_size);
-		memcpy(*data, &file_size, sizeof(file_size));
+		size = sizeof(size_t);
+		*((size_t *) data) = fdesc ? CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks) : 0;
 	}
 	else if(id == KFS_feature_filetype.id)
 	{
-		const int32_t type = fdesc ? TYPE_DEVICE : TYPE_DIR;
-		*data = malloc(sizeof(type));
-		if(!*data)
+		if(size < sizeof(int32_t))
 			return -E_NO_MEM;
-		*size = sizeof(type);
-		memcpy(*data, &type, sizeof(type));
+		size = sizeof(int32_t);
+		*((int32_t *) data) = fdesc ? TYPE_DEVICE : TYPE_DIR;
 	}
 	else if(id == KFS_feature_freespace.id || id == KFS_feature_blocksize.id || id == KFS_feature_devicesize.id)
 	{
-		*data = malloc(sizeof(uint32_t));
-		if(!*data)
+		if(size < sizeof(uint32_t))
 			return -E_NO_MEM;
-		*size = sizeof(uint32_t);
-		memset(*data, 0, sizeof(uint32_t));
+		size = sizeof(uint32_t);
+		*((uint32_t *) data) = 0;
 	}
 	else
 		return -E_INVAL;
 	
-	return 0;
+	return size;
 }
 
 static int devfs_set_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, const void * data)

@@ -254,12 +254,12 @@ static const feature_t * opgroup_lfs_get_feature(LFS_t * object, inode_t ino, si
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_feature, ino, num);
 }
 
-static int opgroup_lfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t * size, void ** data)
+static int opgroup_lfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_inode, ino, id, size, data);
 }
 
-static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t * size, void ** data)
+static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, void * data)
 {
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_fdesc, file, id, size, data);
 }
