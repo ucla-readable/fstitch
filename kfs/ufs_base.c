@@ -934,7 +934,8 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	uint32_t inum = 0;
 	int r, createdot = 0, ex;
 	uint16_t mode;
-	uint32_t x;
+	uint32_t x32;
+	uint16_t x16;
 	struct dirent dirinfo;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
@@ -997,26 +998,26 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 		memset(&nf->f_inode, 0, sizeof(struct UFS_dinode));
 
-		r = initialmd->get(initialmd->arg, KFS_feature_uid.id, sizeof(x), &x);
+		r = initialmd->get(initialmd->arg, KFS_feature_uid.id, sizeof(x32), &x32);
 		if (r > 0)
-			nf->f_inode.di_uid = x;
+			nf->f_inode.di_uid = x32;
 		else if (r == -E_NOT_FOUND)
 			nf->f_inode.di_uid = 0;
 		else
 			assert(0);
 
-		r = initialmd->get(initialmd->arg, KFS_feature_gid.id, sizeof(x), &x);
+		r = initialmd->get(initialmd->arg, KFS_feature_gid.id, sizeof(x32), &x32);
 		if (r > 0)
-			nf->f_inode.di_gid = x;
+			nf->f_inode.di_gid = x32;
 		else if (r == -E_NOT_FOUND)
 			nf->f_inode.di_gid = 0;
 		else
 			assert(0);
 
 		nf->f_inode.di_mode = mode | UFS_IREAD | UFS_IWRITE;
-		r = initialmd->get(initialmd->arg, KFS_feature_unix_permissions.id, sizeof(x), &x);
+		r = initialmd->get(initialmd->arg, KFS_feature_unix_permissions.id, sizeof(x16), &x16);
 		if (r > 0)
-			nf->f_inode.di_mode |= x;
+			nf->f_inode.di_mode |= x16;
 		else if (r != -E_NOT_FOUND)
 			assert(0);
 			
@@ -1546,9 +1547,9 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		if (!f)
 			return -E_INVAL;
 
-		if (size < sizeof(uint32_t))
+		if (size < sizeof(uint16_t))
 			return -E_NO_MEM;
-		size = sizeof(uint32_t);
+		size = sizeof(uint16_t);
 
 		*((uint16_t *) data) = f->f_inode.di_mode & UFS_IPERM;
 	}
@@ -1645,10 +1646,10 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_unix_permissions.id) {
-		if (sizeof(uint32_t) != size)
+		if (sizeof(uint16_t) != size)
 			return -E_INVAL;
 		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
-			| (*((uint32_t *) data) & UFS_IPERM);
+			| (*((uint16_t *) data) & UFS_IPERM);
 		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_mtime.id) {

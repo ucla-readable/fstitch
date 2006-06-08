@@ -164,7 +164,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	bool mtime_supported = feature_supported(cfs, cfs_ino, KFS_feature_mtime.id);
 	bool atime_supported = feature_supported(cfs, cfs_ino, KFS_feature_atime.id);
 	uint32_t nlinks = 0;
-	mode_t perms;
+	uint16_t perms;
 	time_t mtime = time(NULL);
 	time_t atime = mtime;
 
@@ -279,7 +279,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
-			assert(r == sizeof(mode_t));
+			assert(r == sizeof(perms));
 	}
 
 	if (mtime_supported)
