@@ -1550,7 +1550,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 			return -E_NO_MEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = f->f_inode.di_mode & UFS_IPERM;
+		*((uint16_t *) data) = f->f_inode.di_mode & UFS_IPERM;
 	}
 	else if (id == KFS_feature_blocksize.id) {
 		if (size < sizeof(uint32_t))
