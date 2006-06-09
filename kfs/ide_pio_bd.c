@@ -289,7 +289,12 @@ static uint32_t ide_pio_tune(uint8_t controller, uint8_t disk)
 	if(ide_notbusy(controller) == -1)
 		return -1;
 	
-	// PIO Mode 4 magic, needs refinement
+	// Enable IDE readahead
+	outb(base + 6, disk << 4);
+	outb(base + 1, 0xAA);
+	outb(base + 7, 0xEF);
+	
+	// PIO Mode 4 magic
 	outb(base + 2, 0x0C);
 	outb(base + 1, 0x03);
 	outb(base + 7, 0xEF);
