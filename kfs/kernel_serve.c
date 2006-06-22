@@ -152,7 +152,7 @@ static int feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
 
 
 struct kernel_metadata {
-	int mode;
+	uint16_t mode;
 };
 typedef struct kernel_metadata kernel_metadata_t;
 
@@ -261,11 +261,15 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (perms_supported)
 	{
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(inode->i_mode), &inode->i_mode);
+		uint16_t kfs_mode;
+		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(kfs_mode), &kfs_mode);
 		if (r < 0)
 			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
+		{
 			assert(r == sizeof(inode->i_mode));
+			inode->i_mode = kfs_mode;
+		}
 	}
 
 	if (mtime_supported)
@@ -675,8 +679,8 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 
 	if(attr->ia_valid & ATTR_MODE)
 	{
-		uint32_t cfs_mode = attr->ia_mode;
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(cfs_mode), &cfs_mode)) < 0)
+		uint16_t kfs_mode = attr->ia_mode;
+		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(kfs_mode), &kfs_mode)) < 0)
 			goto error;
 	}
 	if(attr->ia_valid & (ATTR_MTIME | ATTR_MTIME_SET))
@@ -795,7 +799,7 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 	return r;
 }
 
-static int create_withlock(struct inode * dir, struct dentry * dentry, int mode)
+static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t mode)
 {
 	kernel_metadata_t kernelmd = { .mode = mode };
 	metadata_set_t initialmd = { .get = kernel_get_metadata, .arg = &kernelmd };

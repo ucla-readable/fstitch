@@ -333,7 +333,7 @@ static int init_fuse_entry(mount_t * mount, inode_t parent, inode_t cfs_ino, fus
 
 struct fuse_metadata {
 	const struct fuse_ctx * ctx;
-	mode_t mode;
+	uint16_t mode;
 };
 typedef struct fuse_metadata fuse_metadata_t;
 
@@ -344,7 +344,7 @@ static int fuse_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 	{
 		if (size < sizeof(fusemd->ctx->uid))
 			return -E_NO_MEM;
-		*(typeof(fusemd->ctx->gid) *) data = fusemd->ctx->uid;
+		*(typeof(fusemd->ctx->uid) *) data = fusemd->ctx->uid;
 		return sizeof(fusemd->ctx->uid);
 	}
 	else if (KFS_feature_gid.id == id)
@@ -503,17 +503,6 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		}
 	}
 
-	if (to_set & FUSE_SET_ATTR_MODE)
-	{
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(attr->st_mode), &attr->st_mode);
-		if (r < 0)
-		{
-			r = fuse_reply_err(req, -r);
-			assert(!r);
-			return;
-		}
-	}
-
 	if (to_set & FUSE_SET_ATTR_UID)
 	{
 		uint32_t cfs_uid = attr->st_uid;
@@ -540,7 +529,8 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 
 	if (to_set & FUSE_SET_ATTR_MODE)
 	{
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(attr->st_mode), &attr->st_mode);
+		uint16_t kfs_mode = attr->st_mode;
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(kfs_mode), &kfs_mode);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -640,8 +630,6 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 		return;
 	}
 
-	// FIXME: set uid, gid, and mode
-
 	r = init_fuse_entry(reqmount(req), parent_cfs_ino, cfs_ino, cfsfuseino(req, cfs_ino), &e);
 	if (r < 0)
 	{
@@ -667,8 +655,6 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
 	if (r < 0)
 		return r;
 	assert(cfs_ino != INODE_NONE);
-
-	// FIXME: set uid, gid, and mode
 
 	r = init_fuse_entry(reqmount(req), cfs_parent, cfs_ino, cfsfuseino(req, cfs_ino), e);
 	if (r < 0)
