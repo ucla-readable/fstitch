@@ -1157,10 +1157,12 @@ static void ignore_shutdown_signals(void)
 	// Close the shutdown pipe; remove access from the signal handler before closing
 	shutdown_pipe_write = shutdown_pipe[1];
 	shutdown_pipe[1] = -1;
-	if (close(shutdown_pipe_write) == -1)
-		perror("fuse_serve_shutdown(): close(shutdown_pipe_write)");
-	if (close(shutdown_pipe[0]) == -1)
-		perror("fuse_serve_shutdown(): close(shutdown_pipe[0])");
+	if (shutdown_pipe_write >= 0)
+		if (close(shutdown_pipe_write) == -1)
+			perror("fuse_serve_shutdown(): close(shutdown_pipe_write)");
+	if (shutdown_pipe[0] >= 0)
+		if (close(shutdown_pipe[0]) == -1)
+			perror("fuse_serve_shutdown(): close(shutdown_pipe[0])");
 	shutdown_pipe[0] = -1;
 }
 
@@ -1229,6 +1231,7 @@ int fuse_serve_init(int argc, char ** argv)
   error_pipe:
 	close(shutdown_pipe[1]);
 	close(shutdown_pipe[0]);
+	shutdown_pipe[1] = shutdown_pipe[0] = -1;
 	return r;
 }
 

@@ -97,8 +97,11 @@ static void kfsd_shutdown(void)
 	destroy_all();
 
 	// Run bdesc autoreleasing
-	bdesc_autorelease_pool_pop();
-	assert(!bdesc_autorelease_pool_depth());
+	if (bdesc_autorelease_pool_depth() > 0)
+	{
+		bdesc_autorelease_pool_pop();
+		assert(!bdesc_autorelease_pool_depth());
+	}
 
 	// Run chdesc reclamation
 	chdesc_reclaim_written();
