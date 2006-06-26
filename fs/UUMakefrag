@@ -8,22 +8,19 @@ FSIMGFILES :=		fs/.journal \
 			fs/favicon.ico \
 			fs/goomba.spr \
 			fs/index.html \
-			fs/indy.0 \
 			fs/init.sh \
 			fs/k0 \
 			fs/k1 \
 			fs/k2 \
 			fs/kbear.jpg \
 			fs/kfsgraphviz.sh \
-			fs/kudos.0 \
 			fs/lady.img \
 			fs/lady.jpeg \
 			fs/lady.pal \
 			fs/lorem \
 			fs/mario.pal \
 			fs/mario.spr \
-			fs/motd \
-			fs/winamp.0
+			fs/motd
 
 -include fs/audio/Makefrag
 FSIMGFILES := $(FSIMGFILES) $(FSIMGTXTFILES)
