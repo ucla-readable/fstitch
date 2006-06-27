@@ -51,6 +51,8 @@
 #endif
 
 #define FUSE_ERR_SUCCESS 0
+// STDTIMEOUT is not 0 because of a fuse kernel module bug.
+// Miklos's 2006/06/27 email, E1FvBX0-0006PB-00@dorka.pomaz.szeredi.hu, fixes.
 #define STDTIMEOUT 1.0
 
 static CFS_t * root_cfs = NULL;
