@@ -934,7 +934,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 
 	r = josfs_lookup_name(object, oldparent, oldname, &inode);
 	if (r)
-		return -E_NOT_FOUND;
+		return r;
 
 	oldfdesc = josfs_lookup_inode(object, inode);
 	if (!oldfdesc)
@@ -1096,7 +1096,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 
 	r = josfs_lookup_name(object, parent, name, &inode);
 	if (r)
-		return -E_INVAL;
+		return r;
 
 	file = josfs_lookup_inode(object, inode);
 	if (!file)
