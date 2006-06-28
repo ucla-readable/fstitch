@@ -287,6 +287,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t existing_ino;
+	int type;
 	chdesc_t * prev_head;
 	fdesc_t * inner;
 	int r;
@@ -301,8 +302,13 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 		return -E_FILE_EXISTS;
 	}
 
+	r = initialmd->get(initialmd->arg, KFS_feature_filetype.id, sizeof(type), &type);
+	if (r < 0)
+		return r;
+	assert(type == TYPE_FILE || type == TYPE_SYMLINK);
+
 	prev_head = NULL;
-	inner = CALL(state->lfs, allocate_name, parent, name, TYPE_FILE, NULL, initialmd, newino, &prev_head);
+	inner = CALL(state->lfs, allocate_name, parent, name, type, NULL, initialmd, newino, &prev_head);
 	if (!inner)
 		return -E_UNSPECIFIED;
 
@@ -613,7 +619,6 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 			CALL(state->lfs, free_fdesc, f);
 			return r;
 		}
-
 		assert(r == sizeof(nlinks));
 
 		if (nlinks > 1) {

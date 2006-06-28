@@ -9,6 +9,7 @@
 #include <linux/mm.h>
 #include <linux/buffer_head.h>
 #include <linux/writeback.h>
+#include <linux/namei.h>
 #include <linux/mpage.h>
 #include <linux/statfs.h>
 #include <linux/vmalloc.h>
@@ -32,6 +33,7 @@
 static struct file_system_type  kfs_fs_type;
 static struct inode_operations  kfs_reg_inode_ops;
 static struct file_operations   kfs_reg_file_ops;
+static struct inode_operations  kfs_lnk_inode_ops;
 static struct inode_operations  kfs_dir_inode_ops;
 static struct file_operations   kfs_dir_file_ops;
 static struct address_space_operations kfs_aops;
@@ -153,6 +155,13 @@ static int feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
 
 struct kernel_metadata {
 	uint16_t mode;
+	int type;
+	union {
+		struct {
+			const char * link;
+			unsigned link_len;
+		} symlink;	
+	} type_info;
 };
 typedef struct kernel_metadata kernel_metadata_t;
 
@@ -179,8 +188,22 @@ static int kernel_get_metadata(void * arg, uint32_t id, size_t size, void * data
 			return -E_NO_MEM;
 		*(typeof(kernelmd->mode) *) data = kernelmd->mode;
 		return sizeof(kernelmd->mode);
-	}	
-	return -E_NOT_FOUND;			
+	}
+	else if (KFS_feature_filetype.id == id)
+	{
+		if (size < sizeof(kernelmd->type))
+			return -E_NO_MEM;
+		*(typeof(kernelmd->type) *) data = kernelmd->type;
+		return sizeof(kernelmd->type);
+	}
+	else if (KFS_feature_symlink.id == id && kernelmd->type == TYPE_SYMLINK)
+	{
+		if (size < kernelmd->type_info.symlink.link_len)
+			return -E_NO_MEM;
+		memcpy(data, kernelmd->type_info.symlink.link, kernelmd->type_info.symlink.link_len);
+		return kernelmd->type_info.symlink.link_len;
+	}
+	return -E_NOT_FOUND;
 }
 
 
@@ -323,14 +346,22 @@ static void read_inode_withlock(struct inode * inode)
 		inode->i_op = &kfs_dir_inode_ops;
 		inode->i_fop = &kfs_dir_file_ops;
 	}
-	else if (type == TYPE_FILE || type == TYPE_DEVICE)
+	else if (type == TYPE_FILE || type == TYPE_SYMLINK || type == TYPE_DEVICE)
 	{
 		if (!nlinks_supported)
 			inode->i_nlink = 1;
 		if (!perms_supported)
 			inode->i_mode = 0666; // default, in case permissions are not supported
-		inode->i_mode |= S_IFREG;
-		inode->i_op = &kfs_reg_inode_ops;
+		if (type == TYPE_SYMLINK)
+		{
+			inode->i_mode |= S_IFLNK;
+			inode->i_op = &kfs_lnk_inode_ops;
+		}
+		else
+		{
+			inode->i_mode |= S_IFREG;
+			inode->i_op = &kfs_reg_inode_ops;
+		}
 		inode->i_fop = &kfs_reg_file_ops;
 		inode->i_mapping->a_ops = &kfs_aops;
 	}
@@ -799,18 +830,20 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 	return r;
 }
 
-static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t mode)
+static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t mode, kernel_metadata_t * kernelmd)
 {
-	kernel_metadata_t kernelmd = { .mode = mode };
-	metadata_set_t initialmd = { .get = kernel_get_metadata, .arg = &kernelmd };
+	metadata_set_t initialmd = { .get = kernel_get_metadata, .arg = kernelmd };
+	CFS_t * cfs;
 	inode_t cfs_ino;
-	struct inode * inode;
 	fdesc_t * fdesc;
+	struct inode * inode;
 	int r;
 
 	assert(kfsd_have_lock());
 
-	r = CALL(dentry2cfs(dentry), create, dir->i_ino, dentry->d_name.name, 0, &initialmd, &fdesc, &cfs_ino);
+	cfs = dentry2cfs(dentry);
+
+	r = CALL(cfs, create, dir->i_ino, dentry->d_name.name, 0, &initialmd, &fdesc, &cfs_ino);
 	if (r < 0)
 		return r;
 	assert(cfs_ino != INODE_NONE);
@@ -818,7 +851,7 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t 
 	// TODO: recent 2.6s support lookup_instantiate_filp() for atomic create+open.
 	// Are there other approaches to do this that work with older 2.6s?
 	// To work with knoppix's 2.6.12 we do not currently support atomic create+open.
-	r = CALL(dentry2cfs(dentry), close, fdesc);
+	r = CALL(cfs, close, fdesc);
 	if (r < 0)
 		kdprintf(STDERR_FILENO, "%s(%s): unable to close created fdesc\n", __FUNCTION__, dentry->d_name.name);
 
@@ -837,10 +870,11 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t 
 static int serve_create(struct inode * dir, struct dentry * dentry, int mode, struct nameidata * nd)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_FILE };
 	int r;
 
 	kfsd_enter();
-	r = create_withlock(dir, dentry, mode);
+	r = create_withlock(dir, dentry, mode, &kernelmd);
 	kfsd_leave(1);
 
 	return r;
@@ -849,21 +883,44 @@ static int serve_create(struct inode * dir, struct dentry * dentry, int mode, st
 static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev_t dev)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_FILE };
 	int r;
 
 	if (!(mode & S_IFREG))
 		return -E_PERM;
 
 	kfsd_enter();
-	r = create_withlock(dir, dentry, mode);
+	r = create_withlock(dir, dentry, mode, &kernelmd);
 	kfsd_leave(1);
+	return r;
+}
+
+static int serve_symlink(struct inode * dir, struct dentry * dentry, const char * link)
+{
+	Dprintf("%s(\"%s\" -> \"%s\")\n", __FUNCTION__, dentry->d_name.name, link);
+	int mode = 777;
+	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_SYMLINK, .type_info.symlink = { .link = link, .link_len = strlen(link) } };
+	int r;
+
+	kfsd_enter();
+
+	if (!feature_supported(dentry2cfs(dentry), dir->i_ino, KFS_feature_symlink.id))
+	{
+		kfsd_leave(1);
+		return -E_NO_SYS;
+	}
+
+	r = create_withlock(dir, dentry, mode, &kernelmd);
+
+	kfsd_leave(1);
+
 	return r;
 }
 
 static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 {
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
-	kernel_metadata_t kernelmd = { .mode = mode };
+	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_DIR };
 	metadata_set_t initialmd = { .get = kernel_get_metadata, .arg = &kernelmd };
 	inode_t cfs_ino;
 	struct inode * inode;
@@ -961,6 +1018,102 @@ static int serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 	r = kfs_sync();
 	kfsd_leave(1);
 	return r;
+}
+
+static int read_link(struct dentry * dentry, char * buffer, int buflen)
+{
+	CFS_t * cfs;
+	inode_t cfs_ino;
+	int link_len;
+
+	cfs = dentry2cfs(dentry);
+	cfs_ino = dentry->d_inode->i_ino;
+
+	if (!feature_supported(cfs, cfs_ino, KFS_feature_symlink.id))
+		return -E_NO_SYS;
+
+	link_len = CALL(cfs, get_metadata, cfs_ino, KFS_feature_symlink.id, buflen - 1, buffer);
+	if (link_len < 0)
+	{
+		if (link_len == -E_NO_MEM)
+			return -ENAMETOOLONG;
+		return link_len;
+	}
+	buffer[link_len++] = '\0';
+	return link_len;
+}
+
+static char link_name[PATH_MAX];
+
+static int serve_readlink(struct dentry * dentry, char __user * buffer, int buflen)
+{
+	// We could implement this fn using generic_readlink(), but it would
+	// call serve_follow_link(), which uses dynamic memory allocation
+
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	int link_len;
+	int r;
+
+	// always true because sizeof(link_name) == PATH_MAX
+	assert(buflen <= sizeof(link_name));
+
+	kfsd_enter();
+
+	link_len = read_link(dentry, link_name, buflen);
+	if (link_len < 0)
+	{
+		kfsd_leave(1);
+		return link_len;
+	}
+
+	// do we need to NULL-terminate buffer? (read_link() does)
+	r = copy_to_user(buffer, link_name, link_len);
+	if (r > 0)
+	{
+		kfsd_leave(1);
+		return -EFAULT;
+	}
+
+	kfsd_leave(1);
+
+	return link_len;
+}
+
+static int serve_follow_link(struct dentry * dentry, struct nameidata * nd)
+{
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	int link_len;
+	char * nd_link_name;
+
+	kfsd_enter();
+
+	link_len = read_link(dentry, link_name, sizeof(link_name));
+	if (link_len < 0)
+	{
+		kfsd_leave(1);
+		return link_len;
+	}
+
+	nd_link_name = malloc(link_len);
+	if (!nd_link_name)
+	{
+		kfsd_leave(1);
+		return -E_NO_MEM;
+	}
+	memcpy(nd_link_name, link_name, link_len);
+	nd_set_link(nd, nd_link_name);
+
+	kfsd_leave(1);
+
+	return 0;
+}
+
+static void serve_put_link(struct dentry * dentry, struct nameidata * nd)
+{
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
+	char * s = nd_get_link(nd);
+	if (!IS_ERR(s))
+		free(s);
 }
 
 
@@ -1157,6 +1310,13 @@ static struct inode_operations kfs_reg_inode_ops = {
 	.setattr = serve_setattr
 };
 
+static struct inode_operations kfs_lnk_inode_ops = {
+	.setattr = serve_setattr,
+	.readlink = serve_readlink,
+	.follow_link = serve_follow_link,
+	.put_link = serve_put_link
+};
+
 static struct file_operations kfs_reg_file_ops = {
 	.open = serve_open,
 	.release = serve_release,
@@ -1173,6 +1333,7 @@ static struct inode_operations kfs_dir_inode_ops = {
 	.unlink	= serve_unlink,
 	.create	= serve_create,
 	.mknod = serve_mknod,
+	.symlink = serve_symlink,
 	.mkdir = serve_mkdir,
 	.rmdir = serve_rmdir,
 	.rename = serve_rename

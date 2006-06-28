@@ -13,6 +13,10 @@ struct feature {
 
 /* these are defined in lib/kfs_feature.c */
 extern const feature_t KFS_feature_size;
+// TODO: filetype should perhaps be broken into two features:
+// (1) filetype_create and (2) filetype_get.
+// Then directories would support create() and all files get().
+// For now, for symlinks, the symlink feature is checked to detect symlink creation support.
 extern const feature_t KFS_feature_filetype;
 extern const feature_t KFS_feature_nlinks;
 extern const feature_t KFS_feature_freespace;
@@ -24,6 +28,7 @@ extern const feature_t KFS_feature_blocksize;
 extern const feature_t KFS_feature_devicesize;
 extern const feature_t KFS_feature_mtime;
 extern const feature_t KFS_feature_atime;
+extern const feature_t KFS_feature_symlink;
 
 // Get metadata associated with the opaque variable 'arg'.
 // Returns:
@@ -31,6 +36,11 @@ extern const feature_t KFS_feature_atime;
 // * -E_NO_MEM: 'id' is supported, but 'size' is too small
 // * -E_NOT_FOUND: 'id' is not supported
 // * <0: implementation specific error
+//
+// Pros/cons for providing this interface in CFS/LFS as a function
+// vs as an array of features:
+// - function pro: general
+// - array pro: no need to create temporary copies of feature data (eg symlink)
 typedef int (*get_metadata_t)(void * arg, uint32_t id, size_t size, void * data);
 
 struct metadata_set {

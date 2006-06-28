@@ -12,3 +12,4 @@ const feature_t KFS_feature_blocksize = {id: 0x00000009, optional: 0, warn: 0, d
 const feature_t KFS_feature_devicesize = {id: 0x0000000A, optional: 0, warn: 0, description: "Device Size In Blocks"};
 const feature_t KFS_feature_mtime = {id: 0x0000000B, optional: 0, warn: 0, description: "File modification time"};
 const feature_t KFS_feature_atime = {id: 0x0000000B, optional: 0, warn: 0, description: "File access time"};
+const feature_t KFS_feature_symlink = {id: 0x0000000C, optional: 0, warn: 0, description: "Symbolic Link Name"};

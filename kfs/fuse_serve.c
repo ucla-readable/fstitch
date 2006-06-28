@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fuse.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -210,7 +211,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		stbuf->st_mode = S_IFDIR;
 		perms = 0777; // default, in case permissions are not supported
 	}
-	else if (type == TYPE_FILE || type == TYPE_DEVICE)
+	else if (type == TYPE_FILE || type == TYPE_SYMLINK || type == TYPE_DEVICE)
 	{
 		int32_t filesize;
 
@@ -224,7 +225,10 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 			goto err;
 		}
 
-		stbuf->st_mode = S_IFREG;
+		if (type == TYPE_SYMLINK)
+			stbuf->st_mode = S_IFLNK;
+		else
+			stbuf->st_mode = S_IFREG;
 		perms = 0666; // default, in case permissions are not supported
 		stbuf->st_size = (off_t) filesize;
 	}
@@ -336,6 +340,13 @@ static int init_fuse_entry(mount_t * mount, inode_t parent, inode_t cfs_ino, fus
 struct fuse_metadata {
 	const struct fuse_ctx * ctx;
 	uint16_t mode;
+	int type;
+	union {
+		struct {
+			const char * link;
+			unsigned link_len;
+		} symlink;
+	} type_info;
 };
 typedef struct fuse_metadata fuse_metadata_t;
 
@@ -362,7 +373,21 @@ static int fuse_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 			return -E_NO_MEM;
 		*(typeof(fusemd->mode) *) data = fusemd->mode;
 		return sizeof(fusemd->mode);
-	}	
+	}
+	else if (KFS_feature_filetype.id == id)
+	{
+		if (size < sizeof(fusemd->type))
+			return -E_NO_MEM;
+		*(typeof(fusemd->type) *) data = fusemd->type;
+		return sizeof(fusemd->type);
+	}
+	else if (KFS_feature_symlink.id == id && fusemd->type == TYPE_SYMLINK)
+	{
+		if (size < fusemd->type_info.symlink.link_len)
+			return -E_NO_MEM;
+		memcpy(data, fusemd->type_info.symlink.link, fusemd->type_info.symlink.link_len);
+		return fusemd->type_info.symlink.link_len;
+	}
 	return -E_NOT_FOUND;			
 }
 
@@ -399,7 +424,7 @@ static void serve_statfs(fuse_req_t req)
 	st.f_files = 0;
 	st.f_ffree = st.f_favail = 0;
 	st.f_flag = 0;
-	st.f_namemax = 256;
+	st.f_namemax = NAME_MAX;
 
 	r = fuse_reply_statfs(req, &st);
 	assert(!r);
@@ -606,6 +631,33 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	assert(!r);
 }
 
+static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
+{
+	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
+	bool symlink_supported = feature_supported(reqcfs(req), fusecfsino(req, ino), KFS_feature_symlink.id);
+	char link_name[PATH_MAX + 1];
+	int r;
+
+	if (!symlink_supported)
+	{
+		r = fuse_reply_err(req, E_NO_SYS);
+		assert(!r);
+		return;
+	}
+
+	r = CALL(reqcfs(req), get_metadata, fusecfsino(req, ino), KFS_feature_symlink.id, sizeof(link_name) - 1, link_name);
+	if (r < 0)
+	{
+		r = fuse_reply_err(req, -r);
+		assert(!r);
+		return;
+	}
+	link_name[r] = '\0';
+
+	r = fuse_reply_readlink(req, link_name);
+	assert(!r);
+}
+
 static void serve_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup)
 {
 	Dprintf("%s(ino = %lu, nlookup = %lu)\n", __FUNCTION__, ino, nlookup);
@@ -619,7 +671,7 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	Dprintf("%s(parent = %lu, local_name = \"%s\")\n", __FUNCTION__, parent, local_name);
 	inode_t cfs_ino;
 	inode_t parent_cfs_ino = fusecfsino(req, parent);
-	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode };
+	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode, .type = TYPE_DIR };
 	metadata_set_t initialmd = { .get = fuse_get_metadata, .arg = &fusemd };
 	int r;
 	struct fuse_entry_param e;
@@ -648,7 +700,7 @@ static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
                   mode_t mode, struct fuse_entry_param * e, fdesc_t ** fdesc)
 {
 	inode_t cfs_parent = fusecfsino(req, parent);
-	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode };
+	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode, .type = TYPE_FILE };
 	metadata_set_t initialmd = { .get = fuse_get_metadata, .arg = &fusemd };
 	inode_t cfs_ino;
 	int r;
@@ -692,6 +744,50 @@ static void serve_create(fuse_req_t req, fuse_ino_t parent,
 	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_create(req, &e, fi);
+	assert(!r);
+}
+
+static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
+                          const char * local_name)
+{
+	Dprintf("%s(parent = %lu, local_name = \"%s\", link = \"%s\")\n", __FUNCTION__, parent, local_name, link);
+	CFS_t * cfs = reqcfs(req);
+	inode_t cfs_parent = fusecfsino(req, parent);
+	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = 0, .type = TYPE_SYMLINK, .type_info.symlink = { .link = link, .link_len = strlen(link) } };
+	metadata_set_t initialmd = { .get = fuse_get_metadata, .arg = &fusemd };
+	inode_t cfs_ino;
+	fdesc_t * fdesc;
+	int r;
+	struct fuse_entry_param e;
+
+	if (!feature_supported(cfs, cfs_parent, KFS_feature_symlink.id))
+	{
+		r = -E_NO_SYS;
+		goto error;
+	}
+
+	r = CALL(cfs, create, cfs_parent, local_name, 0, &initialmd, &fdesc, &cfs_ino);
+	if (r < 0)
+		goto error;
+	assert(cfs_ino != INODE_NONE);
+	fdesc->common->parent = cfs_parent;
+	r = CALL(cfs, close, fdesc);
+	assert(r >= 0);
+	fdesc = NULL;
+
+	r = init_fuse_entry(reqmount(req), cfs_parent, cfs_ino, cfsfuseino(req, cfs_ino), &e);
+	if (r < 0)
+	{
+		(void) CALL(reqmount(req)->cfs, unlink, parent, local_name);
+		goto error;
+	}
+
+	r = fuse_reply_entry(req, &e);
+	assert(!r);
+	return;
+
+  error:
+	r = fuse_reply_err(req, -r);
 	assert(!r);
 }
 
@@ -1083,7 +1179,9 @@ static struct fuse_lowlevel_ops serve_oper =
 	.forget     = serve_forget,
 	.getattr    = serve_getattr,
 	.setattr    = serve_setattr,
+	.readlink   = serve_readlink,
 	.create     = serve_create,
+	.symlink    = serve_symlink,
 	.mknod      = serve_mknod,
 	.mkdir      = serve_mkdir,
 	.unlink     = serve_unlink,
