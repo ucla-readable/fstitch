@@ -743,9 +743,9 @@ uint8_t ufs_to_kfs_type(uint8_t type)
 			return TYPE_FILE;
 		case UFS_DT_DIR:
 			return TYPE_DIR;
+		case UFS_DT_LNK:
+			return TYPE_SYMLINK;
 			/*
-			   case UFS_DT_LNK:
-			   return TYPE_SYMLINK;
 			   case UFS_DT_CHR:
 			   case UFS_DT_BLK:
 			   // TYPE_DEVICE is unreliable and is treated like a file...

@@ -38,6 +38,7 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head);
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
+static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
 
 #if 0
 static void print_inode(struct UFS_dinode inode)
@@ -135,6 +136,8 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 	bdesc_t * block;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
+	assert(!file || f->f_type != TYPE_SYMLINK);
+
 	if (!head)
 		return INVALID_BLOCK;
 
@@ -181,6 +184,8 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 	int r;
 	uint32_t i;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	assert(!file || f->f_type != TYPE_SYMLINK);
 
 	if (!head || num == INVALID_BLOCK)
 		return -E_INVAL;
@@ -256,6 +261,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 	if (!head || !file || offset % super->fs_bsize)
 		return -E_INVAL;
+	assert(f->f_type != TYPE_SYMLINK);
 
 	nindirb = super->fs_nindir;
 	nindirf = nindirb / super->fs_frag;
@@ -350,6 +356,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 
 	if (!head || !file || offset % super->fs_bsize)
 		return -E_INVAL;
+	assert(f->f_type != TYPE_SYMLINK);
 
 	nindirb = super->fs_nindir;
 	nindirf = nindirb / super->fs_frag;
@@ -546,6 +553,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 
 	if (!head || !file)
 		return INVALID_BLOCK;
+	assert(f->f_type != TYPE_SYMLINK);
 
 	frags = f->f_numfrags % super->fs_frag;
 	offset = (f->f_numfrags - frags) * super->fs_size;
@@ -615,6 +623,9 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	uint32_t blockno;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	if (f->f_type == TYPE_SYMLINK)
+		return INVALID_BLOCK;
 
 	// FIXME require file to be non-null for now
 	if (!head || !file)
@@ -716,10 +727,10 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 		}
 		ef->file->f_lastalloc = INVALID_BLOCK;
 		ef->file->f_num = ino;
-		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
-		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * super->fs_fsize);
 		type = ef->file->f_inode.di_mode >> 12;
 		ef->file->f_type = ufs_to_kfs_type(type);
+		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
+		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * super->fs_fsize);
 		return (fdesc_t *) ef->file;
 	}
 
@@ -792,6 +803,9 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	uint32_t n;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
+	if (f->f_type == TYPE_SYMLINK)
+		return 0;
+
 	assert(ROUNDUP32(super->fs_fsize, 2) == super->fs_fsize);
 	n = f->f_inode.di_size >> super->fs_fshift;
 	if (f->f_inode.di_size != (n << super->fs_fshift))
@@ -811,7 +825,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 	bdesc_t * indirect[UFS_NIADDR];
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (offset % super->fs_fsize || offset >= f->f_inode.di_size)
+	if (offset % super->fs_fsize || offset >= f->f_inode.di_size || f->f_type == TYPE_SYMLINK)
 		return INVALID_BLOCK;
 
 	nindirb = super->fs_nindir;
@@ -890,6 +904,9 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
+	if (f->f_type == TYPE_SYMLINK)
+		return -E_INVAL;
+
 	if (!head || !f || block == INVALID_BLOCK)
 		return -E_INVAL;
 
@@ -924,6 +941,8 @@ static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 	return -E_NOT_FOUND;
 }
 
+static char link_buf[UFS_MAXPATHLEN];
+
 static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
@@ -947,6 +966,9 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	{
 		case TYPE_FILE:
 			mode = UFS_IFREG;
+			break;
+		case TYPE_SYMLINK:
+			mode = UFS_IFLNK;
 			break;
 		case TYPE_DIR:
 			mode = UFS_IFDIR;
@@ -1023,6 +1045,19 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 			
 		nf->f_inode.di_nlink = 1;
 		nf->f_inode.di_gen = 0; // FIXME use random number?
+
+		if (type == TYPE_SYMLINK)
+		{
+			r = initialmd->get(initialmd->arg, KFS_feature_symlink.id, sizeof(link_buf), link_buf);
+			if (r < 0)
+				goto allocate_name_exit2;
+			else
+			{
+				r = ufs_set_metadata(object, nf, KFS_feature_symlink.id, r, link_buf, head);
+				if (r < 0)
+					goto allocate_name_exit2;
+			}
+		}
 
 		// Write new inode to disk and allocate it
 		r = write_inode(info, inum, nf->f_inode, head);
@@ -1264,7 +1299,7 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (!head || !f || f->f_numfrags == 0)
+	if (!head || !f || f->f_numfrags == 0 || f->f_type == TYPE_SYMLINK)
 		return INVALID_BLOCK;
 
 	truncated = f->f_lastfrag;
@@ -1307,7 +1342,7 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (!head)
+	if (!head || f->f_type == TYPE_SYMLINK)
 		return -E_INVAL;
 
 	if (file) {
@@ -1459,7 +1494,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_uid, &KFS_feature_gid, &KFS_feature_unix_permissions, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime};
+static const feature_t * ufs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_nlinks, &KFS_feature_file_lfs, &KFS_feature_uid, &KFS_feature_gid, &KFS_feature_unix_permissions, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_symlink};
 
 static size_t ufs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1473,7 +1508,6 @@ static const feature_t * ufs_get_feature(LFS_t * object, inode_t ino, size_t num
 	return ufs_features[num];
 }
 
-// TODO (permission feature, etc)
 static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
@@ -1578,6 +1612,19 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((int32_t *) data) = f->f_inode.di_mtime;
 	}
+	else if (id == KFS_feature_symlink.id) {
+		if (!f || f->f_type != TYPE_SYMLINK)
+			return -E_INVAL;
+
+		if (size < f->f_inode.di_size)
+			return -E_NO_MEM;
+		size = f->f_inode.di_size;
+
+		if (size < CALL(info->parts.p_super, read)->fs_maxsymlinklen)
+			memcpy(data, (char *) f->f_inode.di_db, size);
+		else
+			assert(0); // TOOD: read(link, size)
+	}
 	else
 		return -E_INVAL;
 
@@ -1603,7 +1650,6 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 	return ufs_get_metadata(object, f, id, size, data);
 }
 
-// TODO (permission feature, etc)
 static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
@@ -1656,6 +1702,17 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 		if (sizeof(uint32_t) != size)
 			return -E_INVAL;
 		f->f_inode.di_mtime = f->f_inode.di_mtime;
+		return write_inode(info, f->f_num, f->f_inode, head);
+	}
+	else if (id == KFS_feature_symlink.id) {
+		if (!f || f->f_type != TYPE_SYMLINK)
+			return -E_INVAL;
+
+		f->f_inode.di_size = size;
+		if (size < CALL(info->parts.p_super, read)->fs_maxsymlinklen)
+			memcpy((char *) f->f_inode.di_db, data, size);
+		else
+			assert(0); // TODO: write(link, size)
 		return write_inode(info, f->f_num, f->f_inode, head);
 	}
 

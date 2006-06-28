@@ -188,6 +188,16 @@ struct UFS_dinode {
 	int32_t  di_spare[2];	/* 120: Reserved; currently unused */
 };
 
+/* di_db information from NetBSD's src/sys/ufs/ufs/dinode.h: */
+/*
+ * The di_db fields may be overlaid with other information for
+ * file types that do not have associated disk storage. Block
+ * and character devices overlay the first data block with their
+ * dev_t value. Short symbolic links place their path in the
+ * di_db area.
+ */
+#define MAXSYMLINKLEN_UFS ((NDADDR + NIADDR) * sizeof(uint32_t))
+
 struct  UFS_direct {
 	uint32_t d_ino;	/* inode number of entry */
 	uint16_t d_reclen;	/* length of this record */
