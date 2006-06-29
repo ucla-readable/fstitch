@@ -77,8 +77,22 @@ void cfs_ipc_serve_set_cur_cappa(uint32_t x)
 }
 
 
+struct cfs_ipc_metadata {
+	int type;
+};
+typedef struct cfs_ipc_metadata cfs_ipc_metadata_t;
+
 static int cfs_ipc_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
+	const cfs_ipc_metadata_t * cimd = (const cfs_ipc_metadata_t *) arg;
+	Dprintf("%s(id = %d)\n", __FUNCTION__, id);
+	if (KFS_feature_filetype.id == id)
+	{
+		if (size < sizeof(cimd->type))
+			return -E_NO_MEM;
+		*(typeof(cimd->type) *) data = cimd->type;
+		return sizeof(cimd->type);
+	}
 	return -E_NOT_FOUND;
 }
 
@@ -161,7 +175,8 @@ static void serve_open(envid_t envid, struct Scfs_open * req)
 
 		if (scfs->mode & O_CREAT)
 		{
-			metadata_set_t initialmd = { .get = cfs_ipc_get_metadata, .arg = NULL };
+			cfs_ipc_metadata_t cimd = { .type = TYPE_FILE };
+			metadata_set_t initialmd = { .get = cfs_ipc_get_metadata, .arg = &cimd };
 			char * filename;
 			r = path_to_parent_and_name(scfs->path, &select_cfs, &parent, &filename);
 			if (r >= 0)
@@ -375,7 +390,8 @@ static void serve_rename(envid_t envid, struct Scfs_rename * req)
 
 static void serve_mkdir(envid_t envid, struct Scfs_mkdir * req)
 {
-	metadata_set_t initialmd = { .get = cfs_ipc_get_metadata, .arg = NULL };
+	cfs_ipc_metadata_t cimd = { .type = TYPE_DIR };
+	metadata_set_t initialmd = { .get = cfs_ipc_get_metadata, .arg = &cimd };
 	int r;
 	inode_t ino, parent;
 	char * name;
