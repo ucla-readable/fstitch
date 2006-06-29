@@ -32,15 +32,11 @@
 // - Run with the -d flag to see FUSE messages coming in and going out
 
 // TODOs:
-// - Why does using a 0s timeout (instead of 1.0) not work? Is this a problem?
 // - Propagate errors rather than assert() in places where assert() is used for errors that can happen
 // - Send negative lookup answers (rather than ENOENT), right?
 // - Add support for the other fuse_lowlevel_ops that make sense
 // - Switch off kernel buffer cache for ourself? (direct_io)
 // - Be safer; eg call open() only when we should
-// - Speedup serve_readdir() when helpful (it runs O(n^2); a slightly more complex O(n) would work)
-// - Support multiple hard links (how do we deal with open() and opendir()?)
-// - Support more metadata; eg atime and mtime
 // - Support delayed event response or multiple threads
 
 #define FUSE_SERVE_DEBUG 0
@@ -868,7 +864,6 @@ static void serve_rename(fuse_req_t req,
 	r = CALL(reqcfs(req), rename, fusecfsino(req, old_parent), old_local_name, fusecfsino(req, new_parent), new_local_name);
 	if (r < 0)
 	{
-		// TODO: case -E_FILE_EXISTS: should we allow overwriting?
 		// TODO: case -E_INVAL: might mean files are on different filesystems
 		r = fuse_reply_err(req, -r);
 		assert(!r);
