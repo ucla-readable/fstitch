@@ -604,14 +604,14 @@ static int uhfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint1
 	return CALL(state->lfs, get_dirent, uf->inner, entry, size, basep);
 }
 
-static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f)
+static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f, chdesc_t ** prev_head)
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool link_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_nlinks.id);
 	int i, r;
 	uint32_t nblocks;
 	uint32_t nlinks;
-	chdesc_t * prev_head = NULL, * save_head;
+	chdesc_t ** save_head;
 
 	if (link_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
@@ -623,13 +623,13 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 		if (nlinks > 1) {
 			CALL(state->lfs, free_fdesc, f);
-			return CALL(state->lfs, remove_name, parent, name, &prev_head);
+			return CALL(state->lfs, remove_name, parent, name, prev_head);
 		}
 	}
 
 	nblocks = CALL(state->lfs, get_file_numblocks, f);
 	for (i = 0 ; i < nblocks; i++) {
-		uint32_t number = CALL(state->lfs, truncate_file_block, f, &prev_head);
+		uint32_t number = CALL(state->lfs, truncate_file_block, f, prev_head);
 		if (number == INVALID_BLOCK) {
 			CALL(state->lfs, free_fdesc, f);
 			return -E_INVAL;
@@ -637,7 +637,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 		save_head = prev_head;
 
-		r = CALL(state->lfs, free_block, f, number, &prev_head);
+		r = CALL(state->lfs, free_block, f, number, prev_head);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
@@ -648,10 +648,10 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 	CALL(state->lfs, free_fdesc, f);
 
-	return CALL(state->lfs, remove_name, parent, name, &prev_head);
+	return CALL(state->lfs, remove_name, parent, name, prev_head);
 }
 
-static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
+static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t ** head)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
@@ -682,7 +682,14 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 		}
 	}
 
-	return unlink_file(cfs, ino, parent, name, f);
+	return unlink_file(cfs, ino, parent, name, f, head);
+}
+
+static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
+{
+	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
+	chdesc_t * prev_head = NULL;
+	return unlink_name(cfs, parent, name, &prev_head);
 }
 
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
@@ -747,8 +754,19 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	inode_t ino;
 	chdesc_t * prev_head = NULL;
 	int r;
+
+	r = CALL(state->lfs, lookup_name, newparent, newname, &ino);
+	if (r < 0 && r != -E_NOT_FOUND)
+		return r;
+	if (r >= 0)
+	{
+		r = unlink_name(cfs, newparent, newname, &prev_head);
+		if (r < 0)
+			return r;
+	}
 
 	r = CALL(state->lfs, rename, oldparent, oldname, newparent, newname, &prev_head);
 	if (r < 0)
@@ -829,7 +847,8 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 					entry.d_name[0] = 0;
 				}
 				if (r < 0) {
-					return unlink_file(cfs, ino, parent, name, f);
+					chdesc_t * prev_head = NULL;
+					return unlink_file(cfs, ino, parent, name, f, &prev_head);
 				}
 			} while (r != 0);
 			retval = -E_NOT_EMPTY;
