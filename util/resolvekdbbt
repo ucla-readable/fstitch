@@ -1,0 +1,30 @@
+#!/bin/sh
+# read kdb backtrace and corresponding symbols
+
+BIN=obj/unix-user/kfs/kfsd
+
+if [ $# -ge 1 ] && [ "$1" == "-h" ] || [ "$1" == "--help" ]
+then
+	echo "About: read a KDB backtrace (eg [0]: 0x0804c5bb  [1]: 0x0804c8ae) from stdin" 1>&2
+	echo "or on the command line and output the corresponding function name-file pairs" 1>&2
+	echo "Usage: `basename "$0"` [-e PROGRAM] [BACKTRACE ...]" 1>&2
+	exit 0
+fi
+
+if [ $# -ge 2 ] && [ "$1" == "-e" ]
+then
+	BIN="$2"
+	shift
+	shift
+fi
+
+function resolve () {
+	sed -r 's/\[[0-9]*\]: /\n/g' | tail +2 | xargs addr2line -f -e "$BIN"
+}
+
+if [ $# -ge 1 ]
+then
+	echo "$@" | resolve
+else
+	resolve
+fi
