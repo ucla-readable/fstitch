@@ -9,6 +9,7 @@ LIB_SRCFILES :=		lib/console.c \
 			lib/printfmt.c \
 			lib/readline.c \
 			lib/string.c \
+			lib/ctype.c \
 			lib/memdup.c \
 			lib/memchr.c \
 			lib/syscall.c \
