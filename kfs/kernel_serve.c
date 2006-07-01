@@ -13,6 +13,7 @@
 #include <linux/mpage.h>
 #include <linux/statfs.h>
 #include <linux/vmalloc.h>
+#include <linux/version.h>
 #include <asm/uaccess.h>
 
 #include <kfs/feature.h>
@@ -1079,7 +1080,22 @@ static int serve_readlink(struct dentry * dentry, char __user * buffer, int bufl
 	return link_len;
 }
 
-static int serve_follow_link(struct dentry * dentry, struct nameidata * nd)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 13)
+// 2.6.13 introduced a follow_link/put_link cookie (the void*) to make
+// error recovery easier for some classes of filesystems:
+// Subj: "Kernel bug: Bad page state: related to generic symlink code and mmap"
+// http://www.gatago.com/linux/kernel/14688503.html
+#define FOLLOW_LINK_RET_TYPE void*
+#define FOLLOW_LINK_RET_VAL(x) ERR_PTR(x)
+#else
+#define FOLLOW_LINK_RET_TYPE int
+#define FOLLOW_LINK_RET_VAL(x) x
+#endif
+
+static
+FOLLOW_LINK_RET_TYPE
+serve_follow_link(struct dentry * dentry, struct nameidata * nd)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int link_len;
@@ -1091,25 +1107,31 @@ static int serve_follow_link(struct dentry * dentry, struct nameidata * nd)
 	if (link_len < 0)
 	{
 		kfsd_leave(1);
-		return link_len;
+		return FOLLOW_LINK_RET_VAL(link_len);
 	}
 
 	nd_link_name = malloc(link_len);
 	if (!nd_link_name)
 	{
 		kfsd_leave(1);
-		return -E_NO_MEM;
+		return FOLLOW_LINK_RET_VAL(-E_NO_MEM);
 	}
 	memcpy(nd_link_name, link_name, link_len);
 	nd_set_link(nd, nd_link_name);
 
 	kfsd_leave(1);
 
-	return 0;
+	return FOLLOW_LINK_RET_VAL(0);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 13)
+static void serve_put_link(struct dentry * dentry, struct nameidata * nd, void * cookie)
+{
+	(void) cookie;
+#else
 static void serve_put_link(struct dentry * dentry, struct nameidata * nd)
 {
+#endif
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	char * s = nd_get_link(nd);
 	if (!IS_ERR(s))
@@ -1307,6 +1329,7 @@ static struct file_system_type kfs_fs_type = {
 };
 
 static struct inode_operations kfs_reg_inode_ops = {
+	//.truncate =  // TODO: add? (what happens now?)
 	.setattr = serve_setattr
 };
 
