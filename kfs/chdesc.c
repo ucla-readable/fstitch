@@ -58,31 +58,6 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 	chdesc->free_next = NULL;
 }
 
-/* ensure bdesc->ddesc->changes has a noop chdesc */
-static int ensure_bdesc_has_changes(bdesc_t * block)
-{
-	chdesc_t * chdesc;
-	assert(block);
-	
-	if(block->ddesc->changes)
-	{
-		assert(block->ddesc->changes->type == NOOP);
-		return 0;
-	}
-	
-	chdesc = chdesc_create_noop(NULL, NULL);
-	if(!chdesc)
-		return -E_NO_MEM;
-	
-	if(chdesc_weak_retain(chdesc, &block->ddesc->changes) < 0)
-	{
-		chdesc_destroy(&chdesc);
-		return -E_NO_MEM;
-	}
-	
-	return 0;
-}
-
 /* ensure bdesc->ddesc->overlaps has a noop chdesc */
 static int ensure_bdesc_has_overlaps(bdesc_t * block)
 {
@@ -364,15 +339,6 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return chdesc_overlap_multiattach_slip(chdesc, block, 0);
 }
 
-int __ensure_bdesc_has_changes(bdesc_t * block)
-#if defined(__MACH__)
-{
-	return ensure_bdesc_has_changes(block);
-}
-#else
-	__attribute__ ((alias("ensure_bdesc_has_changes")));
-#endif
-
 int __ensure_bdesc_has_overlaps(bdesc_t * block)
 #if defined(__MACH__)
 {
@@ -418,6 +384,40 @@ int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	__attribute__((alias("chdesc_overlap_multiattach")));
 #endif
 
+void chdesc_link_all_changes(chdesc_t * chdesc)
+{
+	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+	if(chdesc->block)
+	{
+		datadesc_t * ddesc = chdesc->block->ddesc;
+		chdesc->ddesc_pprev = &ddesc->all_changes;
+		chdesc->ddesc_next = ddesc->all_changes;
+		ddesc->all_changes = chdesc;
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+		else
+			ddesc->all_changes_tail = &chdesc->ddesc_next;
+	}
+}
+
+void chdesc_unlink_all_changes(chdesc_t * chdesc)
+{
+	if(chdesc->ddesc_pprev)
+	{
+		datadesc_t * ddesc = chdesc->block->ddesc;
+		// remove from old ddesc changes list
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
+		else
+			ddesc->all_changes_tail = chdesc->ddesc_pprev;
+		*chdesc->ddesc_pprev = chdesc->ddesc_next;
+		chdesc->ddesc_next = NULL;
+		chdesc->ddesc_pprev = NULL;
+	}
+	else
+		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+}
+
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
 	chdesc_t * chdesc;
@@ -439,6 +439,8 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->free_next = NULL;
 	chdesc->stamps = 0;
 	chdesc->ready_epoch = 0;
+	chdesc->ddesc_next = NULL;
+	chdesc->ddesc_pprev = NULL;
 	
 	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
@@ -446,16 +448,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	if(block)
 	{
 		/* add chdesc to block's dependencies */
-		if(ensure_bdesc_has_changes(block) < 0)
-		{
-			free(chdesc);
-			return NULL;
-		}
-		if(chdesc_add_depend_fast(block->ddesc->changes, chdesc) < 0)
-		{
-			free(chdesc);
-			return NULL;
-		}
+		chdesc_link_all_changes(chdesc);
 		
 		/* make sure our block sticks around */
 		bdesc_retain(block);
@@ -491,6 +484,8 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->free_next = NULL;
 	chdesc->stamps = 0;
 	chdesc->ready_epoch = 0;
+	chdesc->ddesc_next = NULL;
+	chdesc->ddesc_pprev = NULL;
 	
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
@@ -504,10 +499,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 		goto error;
 	
 	/* add chdesc to block's dependencies */
-	if((r = ensure_bdesc_has_changes(block)) < 0)
-		goto error;
-	if((r = chdesc_add_depend_fast(block->ddesc->changes, chdesc)) < 0)
-		goto error;
+	chdesc_link_all_changes(chdesc);
 	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
 		goto error;
 	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
@@ -565,11 +557,6 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	if(&block->ddesc->data[offset] == data)
 		panic("Cannot create a change descriptor in place!");
 	
-	if((r = ensure_bdesc_has_changes(block)) < 0)
-	{
-		sfree(chdescs, chdescs_size);
-		return r;
-	}
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
 		sfree(chdescs, chdescs_size);
@@ -606,6 +593,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
 		chdescs[i]->ready_epoch = 0;
+		chdescs[i]->ddesc_next = NULL;
+		chdescs[i]->ddesc_pprev = NULL;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -619,15 +608,14 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 #endif
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
-		
-		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
+
+		chdesc_link_all_changes(chdescs[i]);
+		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 		{
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
-		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
-			goto destroy;
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
 		if(chdesc_overlap_multiattach(chdescs[i], block))
@@ -700,11 +688,6 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if((r = ensure_bdesc_has_changes(block)) < 0)
-	{
-		sfree(chdescs, chdescs_size);
-		return r;
-	}
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
 		sfree(chdescs, chdescs_size);
@@ -732,6 +715,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
 		chdescs[i]->ready_epoch = 0;
+		chdescs[i]->ddesc_next = NULL;
+		chdescs[i]->ddesc_pprev = NULL;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -746,14 +731,13 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 		
-		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
+		chdesc_link_all_changes(chdescs[i]);
+		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 		{
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
-		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
-			goto destroy;
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
 		if(chdesc_overlap_multiattach(chdescs[i], block))
@@ -822,11 +806,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	if((r = ensure_bdesc_has_changes(block)) < 0)
-	{
-		sfree(chdescs, chdescs_size);
-		return r;
-	}
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
 		sfree(chdescs, chdescs_size);
@@ -854,6 +833,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->free_next = NULL;
 		chdescs[i]->stamps = 0;
 		chdescs[i]->ready_epoch = 0;
+		chdescs[i]->ddesc_next = NULL;
+		chdescs[i]->ddesc_pprev = NULL;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -867,15 +848,14 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 #endif
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
-		
-		if((r = chdesc_add_depend_fast(block->ddesc->changes, chdescs[i])) < 0)
+
+		chdesc_link_all_changes(chdescs[i]);
+		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 		{
 		    destroy:
 			chdesc_destroy(&chdescs[i]);
 			break;
 		}
-		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
-			goto destroy;
 		
 		/* make sure it is dependent upon any pre-existing chdescs */
 		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
@@ -1279,6 +1259,8 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		}
 	}
 	
+	chdesc_unlink_all_changes(*chdesc);
+	
 	chdesc_weak_collect(*chdesc);
 	
 	if((*chdesc)->type == NOOP)
@@ -1388,6 +1370,8 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		chdesc_t * desc = *chdesc;
 		chdesc_satisfy(&desc);
 	}
+
+	chdesc_unlink_all_changes(*chdesc);
 	
 	chdesc_weak_collect(*chdesc);
 	

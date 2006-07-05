@@ -291,7 +291,7 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 				return r;
 			}
 			
-			if(slice->ready_size == slice->full_size)
+			if(slice->all_ready)
 			{
 				revision_slice_destroy(slice);
 				remove_block(info, block);
@@ -310,7 +310,7 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 		if(!slice)
 			return -E_NO_MEM;
 		/* when doing optimistic writes, only write while we can write everything */
-		if(slice->ready_size == slice->full_size)
+		if(slice->all_ready)
 		{
 			int r;
 			
@@ -412,9 +412,9 @@ static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	slot = lookup_block_slot(info, block->number, NULL);
 	if(!slot)
 	{
-		chmetadesc_t * scan = block->ddesc->changes->dependencies;
-		for(; scan; scan = scan->dependency.next)
-			if(scan->dependency.desc->owner == object)
+		chdesc_t * scan = block->ddesc->all_changes;
+		for(; scan; scan = scan->ddesc_next)
+			if(scan->owner == object)
 				break;
 		if(!scan)
 			/* the block is clean... no need to write it */

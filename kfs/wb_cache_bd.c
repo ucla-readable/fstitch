@@ -164,16 +164,14 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t * slice;
-	chmetadesc_t * meta;
+	chdesc_t * chdesc;
 	int r;
 	
 	/* already flushed? */
-	if(!slot->block->ddesc->changes)
-		return FLUSH_EMPTY;
-	for(meta = slot->block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
-		if(meta->dependency.desc->owner == object)
+	for(chdesc = slot->block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+		if(chdesc->owner == object)
 			break;
-	if(!meta)
+	if(!chdesc)
 		return FLUSH_EMPTY;
 	
 	/* honor external dependencies: 1 for the last parameter here */
@@ -187,7 +185,6 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	if(!slice->ready_size)
 	{
 		/* otherwise we would have caught it above... */
-		assert(slice->full_size);
 		r = FLUSH_NONE;
 	}
 	else
@@ -200,7 +197,7 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 			r = FLUSH_NONE;
 		}
 		else
-			r = (slice->ready_size == slice->full_size) ? FLUSH_DONE : FLUSH_SOME;
+			r = (slice->all_ready ? FLUSH_DONE : FLUSH_SOME);
 	}
 	
 	revision_slice_destroy(slice);
@@ -534,16 +531,16 @@ uint32_t wb_cache_dirty_count(BD_t * bd)
 		return INVALID_BLOCK;
 	
 	for(i = 1; i <= info->size; i++)
-		if(info->blocks[i].block && info->blocks[i].block->ddesc->changes)
+		if(info->blocks[i].block && info->blocks[i].block->ddesc->all_changes)
 		{
-			chmetadesc_t * meta = info->blocks[i].block->ddesc->changes->dependencies;
-			while(meta)
+			chdesc_t * scan = info->blocks[i].block->ddesc->all_changes;
+			while(scan)
 			{
-				if(meta->dependency.desc->owner == bd)
+				if(scan->owner == bd)
 					break;
-				meta = meta->dependency.next;
+				scan = scan->ddesc_next;
 			}
-			if(meta)
+			if(scan)
 			{
 				dirty++;
 				continue;

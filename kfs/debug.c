@@ -972,15 +972,15 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 #if defined(__KERNEL__)
 	kdprintf(STDERR_FILENO, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
 #else
-	if(block->ddesc->changes)
+	if(block->ddesc->all_changes)
 	{
-		chmetadesc_t * meta;
-		for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
+		chdesc_t * chdesc;
+		for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 		{
-			const uint16_t flags = meta->dependency.desc->flags;
+			const uint16_t flags = chdesc->flags;
 			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
 			{
-				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, meta->dependency.desc);
+				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, chdesc);
 				kfs_debug_wait();
 				break;
 			}

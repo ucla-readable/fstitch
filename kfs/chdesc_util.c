@@ -32,15 +32,15 @@ void chdesc_unmark_graph(chdesc_t * root)
 
 int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
 {
-	chdesc_t * root = current_block->ddesc->changes;
 	if(target_block->ddesc != current_block->ddesc)
 		return -E_INVAL;
-	if(root)
+	if(current_block->ddesc->all_changes)
 	{
-		chmetadesc_t * scan = root->dependencies;
-		while(scan)
+		chdesc_t * chdesc;
+		for (chdesc = current_block->ddesc->all_changes;
+		     chdesc;
+		     chdesc = chdesc->ddesc_next)
 		{
-			chdesc_t * chdesc = scan->dependency.desc;
 			if(chdesc->owner == current_bd)
 			{
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
@@ -51,7 +51,6 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 				chdesc->block = target_block;
 				bdesc_retain(target_block);
 			}
-			scan = scan->dependency.next;
 		}
 	}
 	return 0;
@@ -98,42 +97,23 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	
 	if(destination)
 	{
-		r = __ensure_bdesc_has_changes(destination);
-		if(r < 0)
-			return r;
-		r = __chdesc_add_depend_fast(destination->ddesc->changes, chdesc);
-		if(r < 0)
-			return r;
-		
 		if(chdesc->type == BYTE)
 		{
 			r = __ensure_bdesc_has_overlaps(destination);
 			if(r < 0)
-			{
-				chdesc_remove_depend(destination->ddesc->changes, chdesc);
 				return r;
-			}
 			r = __chdesc_add_depend_fast(destination->ddesc->overlaps, chdesc);
 			if(r < 0)
-			{
-				chdesc_remove_depend(destination->ddesc->changes, chdesc);
 				return r;
-			}
 		}
 		else if(chdesc->type == BIT)
 		{
 			bit_changes = __ensure_bdesc_has_bit_changes(destination, *offset - source_offset);
 			if(!bit_changes)
-			{
-				chdesc_remove_depend(destination->ddesc->changes, chdesc);
-				return r;
-			}
+				return -E_NO_MEM;
 			r = __chdesc_add_depend_fast(bit_changes, chdesc);
 			if(r < 0)
-			{
-				chdesc_remove_depend(destination->ddesc->changes, chdesc);
 				return r;
-			}
 		}
 		
 		/* set CHDESC_MOVED here to prevent trying to overlap attach to ourselves */
@@ -156,7 +136,6 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 			}
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_MOVED);
 			chdesc->flags &= ~CHDESC_MOVED;
-			chdesc_remove_depend(destination->ddesc->changes, chdesc);
 			if(chdesc->type == BYTE)
 				chdesc_remove_depend(destination->ddesc->overlaps, chdesc);
 			else if(chdesc->type == BIT)
@@ -166,10 +145,9 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	}
 	
 	/* at this point we have succeeded in moving the chdesc */
-	
+	chdesc_unlink_all_changes(chdesc);
 	if(chdesc->block)
 	{
-		chdesc_remove_depend(chdesc->block->ddesc->changes, chdesc);
 		if(chdesc->type == BYTE)
 			chdesc_remove_depend(chdesc->block->ddesc->overlaps, chdesc);
 		else if(chdesc->type == BIT)
@@ -185,20 +163,20 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	chdesc->block = destination;
 	if(destination)
 		bdesc_retain(destination);
+	chdesc_link_all_changes(chdesc);
 	
 	return 0;
 }
 
 void chdesc_finish_move(bdesc_t * destination)
 {
-	if(destination->ddesc->changes)
+	if(destination->ddesc->all_changes)
 	{
-		chmetadesc_t * scan = destination->ddesc->changes->dependencies;
-		while(scan)
+		chdesc_t * scan;
+		for (scan = destination->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		{
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, scan->dependency.desc, CHDESC_MOVED);
-			scan->dependency.desc->flags &= ~CHDESC_MOVED;
-			scan = scan->dependency.next;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, scan, CHDESC_MOVED);
+			scan->flags &= ~CHDESC_MOVED;
 		}
 	}
 }
@@ -221,25 +199,18 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 		return 0;
 	}
 	
-	if(block)
-	{
-		int r = __ensure_bdesc_has_changes(block);
-		if(r < 0)
-			return r;
-		
-		r = __chdesc_add_depend_fast(block->ddesc->changes, noop);
-		if(r < 0)
-			return r;
-	}
 	if(noop->block)
 	{
-		chdesc_remove_depend(noop->block->ddesc->changes, noop);
+		chdesc_unlink_all_changes(noop);
 		bdesc_release(&noop->block);
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, noop, block);
 	noop->block = block;
 	if(block)
+	{
+		chdesc_link_all_changes(noop);
 		bdesc_retain(block);
+	}
 	return 0;
 }
 
@@ -251,7 +222,7 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
  * *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	chmetadesc_t * meta;
+	chdesc_t * scan;
 	uint16_t range = block->ddesc->length;
 	
 	if(*head)
@@ -259,18 +230,18 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		kdprintf(STDERR_FILENO, "%s:%d %s() called with non-null *head!\n", __FILE__, __LINE__, __FUNCTION__);
 		return -E_PERM;
 	}
-	if(!block->ddesc->changes)
+	if(!block->ddesc->all_changes)
 		return chdesc_create_full(block, owner, data, head);
 	
 	/* FIXME: check for some other cases when we should just fall back on chdesc_create_full() */
 	
-	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
+	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 	{
 		uint16_t offset;
-		if(meta->dependency.desc->type != BYTE)
+		if(scan->type != BYTE)
 			continue;
-		offset = meta->dependency.desc->byte.length;
-		if(chdesc_rewrite_byte(meta->dependency.desc, 0, offset, data + offset) < 0)
+		offset = scan->byte.length;
+		if(chdesc_rewrite_byte(scan, 0, offset, data + offset) < 0)
 			continue;
 		if(offset > range)
 			panic("impossible change descriptor structure!");
@@ -376,7 +347,6 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 	 * because of the automatic dependencies generated by blocks */
 	int r;
 	chmetadesc_t ** scan;
-	chdesc_t * skip_noop = NULL;
 	chdesc_t * head;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_DEPENDENTS, chdesc);
 	head= chdesc_create_noop(chdesc->block, chdesc->owner);
@@ -389,18 +359,10 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 		return r;
 	}
 	assert(chdesc->dependents->dependent.desc == head);
-	/* be careful - some NOOP chdescs might not have a block */
-	if(chdesc->block)
-		skip_noop = chdesc->block->ddesc->changes;
 	scan = &chdesc->dependents;
 	while((*scan)->dependent.desc != head)
 	{
 		chmetadesc_t * meta = *scan;
-		if(meta->dependent.desc == skip_noop)
-		{
-			scan = &meta->dependent.next;
-			continue;
-		}
 		*scan = meta->dependent.next;
 		meta->dependent.next->dependent.ptr = scan;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, chdesc, meta->dependent.desc);
@@ -701,6 +663,7 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 	int i, r, newnoop = 0;
 	void * data;
 	chmetadesc_t * meta;
+	chdesc_t * scan;
 	chdesc_t * tail;
 	
 	panic("This function needs to be updated to work with ddesc->overlaps and ddesc->bit_changes");
@@ -764,8 +727,8 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 			break;
 	/* check all change descriptors on the block, to make sure the underlap
 	 * below will not create a cycle */
-	for(meta = chdescs[0]->block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
-		if(meta->dependency.desc->flags & CHDESC_MARKED)
+	for(scan = chdescs[0]->block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+		if(scan->flags & CHDESC_MARKED)
 		{
 			/* cause the error check below to catch this */
 			i = 0;
@@ -890,36 +853,31 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 		scan = &chdescs[i]->dependents;
 		while(*scan)
 		{
-			if((*scan)->dependent.desc == chdescs[i]->block->ddesc->changes)
-				scan = &(*scan)->dependent.next;
+			for(meta = (*head)->dependents; meta; meta = meta->dependent.next)
+				if(meta->dependent.desc == (*scan)->dependent.desc)
+					break;
+			if(meta)
+				/* we already have this dependent, so free the duplicate */
+				chdesc_remove_depend((*scan)->dependent.desc, chdescs[i]);
 			else
 			{
-				for(meta = (*head)->dependents; meta; meta = meta->dependent.next)
-					if(meta->dependent.desc == (*scan)->dependent.desc)
-						break;
-				if(meta)
-					/* we already have this dependent, so free the duplicate */
-					chdesc_remove_depend((*scan)->dependent.desc, chdescs[i]);
+				/* move the dependent pointer */
+				meta = *scan;
+				*scan = meta->dependent.next;
+				if(meta->dependent.next)
+					meta->dependent.next->dependent.ptr = scan;
 				else
-				{
-					/* move the dependent pointer */
-					meta = *scan;
-					*scan = meta->dependent.next;
-					if(meta->dependent.next)
-						meta->dependent.next->dependent.ptr = scan;
-					else
-						meta->dependency.desc->dependents_tail = scan;
-					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, chdescs[i], meta->dependent.desc);
-					meta->dependent.next = NULL;
-					meta->dependent.ptr = (*head)->dependents_tail;
-					*(*head)->dependents_tail = meta;
-					(*head)->dependents_tail = &meta->dependent.next;
-					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, *head, meta->dependent.desc);
-					/* set the dependency pointer */
-					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->dependency.desc, chdescs[i]);
-					KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, meta->dependency.desc, *head);
-					meta->dependency.desc = *head;
-				}
+					meta->dependency.desc->dependents_tail = scan;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, chdescs[i], meta->dependent.desc);
+				meta->dependent.next = NULL;
+				meta->dependent.ptr = (*head)->dependents_tail;
+				*(*head)->dependents_tail = meta;
+				(*head)->dependents_tail = &meta->dependent.next;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, *head, meta->dependent.desc);
+				/* set the dependency pointer */
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->dependency.desc, chdescs[i]);
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, meta->dependency.desc, *head);
+				meta->dependency.desc = *head;
 			}
 		}
 		

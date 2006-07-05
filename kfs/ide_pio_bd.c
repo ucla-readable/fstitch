@@ -445,7 +445,7 @@ static int ide_pio_bd_cancel_block(BD_t * object, uint32_t number)
 	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
 	if(ddesc)
 	{
-		assert(!ddesc->changes);
+		assert(!ddesc->all_changes);
 		blockman_remove(ddesc);
 	}
 	return 0;

@@ -17,7 +17,10 @@ typedef struct datadesc datadesc_t;
 struct datadesc {
 	uint8_t * data;
 	uint32_t ref_count;
-	chdesc_t * changes;
+
+	chdesc_t * all_changes;
+	chdesc_t ** all_changes_tail;
+
 	chdesc_t * overlaps;
 	hash_map_t * bit_changes;
 	blockman_t * manager;

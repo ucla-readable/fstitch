@@ -64,7 +64,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->ar_next = NULL;
 	bdesc->count = count;
 	bdesc->ddesc->ref_count = 1;
-	bdesc->ddesc->changes = NULL;
+	bdesc->ddesc->all_changes = NULL;
+	bdesc->ddesc->all_changes_tail = &bdesc->ddesc->all_changes;
 	bdesc->ddesc->overlaps = NULL;
 	bdesc->ddesc->manager = NULL;
 	bdesc->ddesc->managed_number = 0;
@@ -123,7 +124,7 @@ void bdesc_release(bdesc_t ** bdesc)
 		if(!(*bdesc)->ddesc->ref_count)
 		{
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
-			if((*bdesc)->ddesc->changes || (*bdesc)->ddesc->overlaps)
+			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlaps)
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);

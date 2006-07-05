@@ -66,6 +66,8 @@ struct chdesc {
 	chrefdesc_t * weak_refs;
 	chdesc_t * free_prev;
 	chdesc_t * free_next;
+	chdesc_t * ddesc_next;
+	chdesc_t ** ddesc_pprev;
 	uint32_t stamps;
 	uint16_t flags;
 	uint32_t ready_epoch;
@@ -129,8 +131,12 @@ void chdesc_autorelease_noop(chdesc_t * chdesc);
 /* reclaim written chdescs, by chdesc_destroy() on them */
 void chdesc_reclaim_written(void);
 
+/* link chdesc into its ddesc's all_changes list */
+void chdesc_link_all_changes(chdesc_t * chdesc);
+/* unlink chdesc from its ddesc's all_changes list */
+void chdesc_unlink_all_changes(chdesc_t * chdesc);
+
 /* hidden functions for use in chdesc_util.c */
-int __ensure_bdesc_has_changes(bdesc_t * block);
 int __ensure_bdesc_has_overlaps(bdesc_t * block);
 chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
 chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);

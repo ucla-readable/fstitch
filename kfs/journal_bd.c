@@ -750,7 +750,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	bdesc_t * journal_block;
-	chmetadesc_t * meta;
+	chdesc_t * chdesc, * chdesc_next;
 	chdesc_t * head = NULL;
 	uint32_t number;
 	int r, retried = 0;
@@ -769,7 +769,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	
 	/* why write a block with no changes? */
-	if(!block->ddesc->changes)
+	if(!block->ddesc->all_changes)
 		return 0;
 	
 	if(!info->keep)
@@ -782,20 +782,23 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		journal_bd_accept_request(object);
 	
 	/* add our (regular) stamp to all chdescs passing through */
-	for(meta = block->ddesc->changes->dependencies; meta; meta = meta->dependency.next)
-		if(meta->dependency.desc->owner == object)
+	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc_next)
+	{
+		chdesc_next = chdesc->ddesc_next; /* in case changes */
+		if(chdesc->owner == object)
 		{
-			int r = chdesc_add_depend(meta->dependency.desc, info->hold);
+			int r = chdesc_add_depend(chdesc, info->hold);
 			if(r < 0)
 				panic("Holy Mackerel!");
-			r = chdesc_add_depend(info->safe, meta->dependency.desc);
+			r = chdesc_add_depend(info->safe, chdesc);
 			if(r < 0)
 				panic("Holy Mackerel!");
-			r = chdesc_add_depend(info->unsafe, meta->dependency.desc);
+			r = chdesc_add_depend(info->unsafe, chdesc);
 			if(r < 0)
 				panic("Holy Mackerel!");
-			chdesc_stamp(meta->dependency.desc, info->stamp);
+			chdesc_stamp(chdesc, info->stamp);
 		}
+	}
 	
 retry:
 	number = journal_bd_lookup_block(object, block);

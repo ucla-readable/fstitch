@@ -1,6 +1,7 @@
 #ifndef __KUDOS_KFS_REVISION_H
 #define __KUDOS_KFS_REVISION_H
 
+#include <lib/types.h>
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 
@@ -33,7 +34,8 @@ int revision_tail_acknowledge(bdesc_t *block, BD_t *bd);
 typedef struct revision_slice {
 	BD_t * owner;
 	BD_t * target;
-	int full_size, ready_size;
+	int ready_size;
+	bool all_ready;
 	chdesc_t ** ready;
 } revision_slice_t;
 
