@@ -1760,14 +1760,15 @@ static int ufs_destroy(LFS_t * lfs)
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(lfs);
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+	int32_t super_fs_ncg = super->fs_ncg;
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
 
-	sfree(info->csums, sizeof(struct UFS_csum) * super->fs_ncg);
 	ufs_destroy_parts(lfs);
 	bdesc_release(&info->csum_block);
+	sfree(info->csums, sizeof(struct UFS_csum) * super_fs_ncg);
 	hash_map_destroy(info->filemap);
 
 	free(OBJLOCAL(lfs));
