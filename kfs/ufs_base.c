@@ -1765,9 +1765,9 @@ static int ufs_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
 
+	sfree(info->csums, sizeof(struct UFS_csum) * super->fs_ncg);
 	ufs_destroy_parts(lfs);
 	bdesc_release(&info->csum_block);
-	sfree(info->csums, sizeof(struct UFS_csum) * super->fs_ncg);
 	hash_map_destroy(info->filemap);
 
 	free(OBJLOCAL(lfs));
