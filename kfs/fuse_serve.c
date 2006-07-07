@@ -749,7 +749,8 @@ static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
 	Dprintf("%s(parent = %lu, local_name = \"%s\", link = \"%s\")\n", __FUNCTION__, parent, local_name, link);
 	CFS_t * cfs = reqcfs(req);
 	inode_t cfs_parent = fusecfsino(req, parent);
-	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = 0, .type = TYPE_SYMLINK, .type_info.symlink = { .link = link, .link_len = strlen(link) } };
+	int mode = S_IFLNK | (S_IRWXU | S_IRWXG | S_IRWXO);
+	fuse_metadata_t fusemd = { .ctx = fuse_req_ctx(req), .mode = mode, .type = TYPE_SYMLINK, .type_info.symlink = { .link = link, .link_len = strlen(link) } };
 	metadata_set_t initialmd = { .get = fuse_get_metadata, .arg = &fusemd };
 	inode_t cfs_ino;
 	fdesc_t * fdesc;

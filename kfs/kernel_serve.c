@@ -899,7 +899,7 @@ static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev
 static int serve_symlink(struct inode * dir, struct dentry * dentry, const char * link)
 {
 	Dprintf("%s(\"%s\" -> \"%s\")\n", __FUNCTION__, dentry->d_name.name, link);
-	int mode = 777;
+	int mode = S_IFLNK | S_IRWXUGO;
 	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_SYMLINK, .type_info.symlink = { .link = link, .link_len = strlen(link) } };
 	int r;
 
