@@ -1055,8 +1055,10 @@ static int serve_readlink(struct dentry * dentry, char __user * buffer, int bufl
 	int link_len;
 	int r;
 
-	// always true because sizeof(link_name) == PATH_MAX
-	assert(buflen <= sizeof(link_name));
+	// there should never be a link longer than sizeof(link_name),
+	// but users may create buffers that are larger:
+	if (buflen > sizeof(link_name))
+		buflen = sizeof(link_name);
 
 	kfsd_enter();
 
