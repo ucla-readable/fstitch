@@ -354,8 +354,6 @@ static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const
 			if(!states)
 			{
 				kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
-				if(states != static_states)
-					sfree(states, states_capacity * sizeof(*state));
 				return 0;
 			}
 			state = &states[next_index];
