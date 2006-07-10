@@ -6,6 +6,10 @@ EXTRA_CFLAGS += -DKFSD
 #GCC_VERSION := $(call cc-version)
 #ifeq ($(shell echo $(GCC_VERSION) -ge 0304),0)
 # The more appropriate "$(call cc-option,foo)" also does not work.
+              
+
+
+	#file_hiding_cfs.o \
 
 GCC_VERSION := $(shell $(CONFIG_SHELL) $(srctree)/scripts/gcc-version.sh $(CC))
 ifeq ($(shell [ $(GCC_VERSION) -ge 0304 ] && echo 1 || echo 0),1)
@@ -26,6 +30,7 @@ KKFSD_LIB_OBJS := \
               hash_set.o \
               kfs_feature.o \
               strtol.o \
+              strings.o \
               svnrevtol.o \
               sleep.o
 
@@ -67,10 +72,10 @@ KKFSD_KFS_OBJS := \
               ufs_dirent_linear.o \
               ufs_super_wb.o \
               ufs_cg_wb.o \
+              icase_cfs.o \
               opgroup_lfs.o \
               wholedisk_lfs.o \
               uhfs.o \
-              file_hiding_cfs.o \
               sched.o \
               sync.o \
               destroy.o
