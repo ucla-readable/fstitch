@@ -77,7 +77,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 int kfsd_init(int argc, char ** argv)
 {
-	const bool allow_journal = 0;
+	const bool allow_journal = 1;
 	const bool use_disk_0 = 1;
 #if defined(KUDOS)
 	const bool use_disk_1 = 0;

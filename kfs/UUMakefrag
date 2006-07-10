@@ -47,6 +47,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
+			$(OBJDIR)/kfs/file_hiding_cfs.o \
 			$(OBJDIR)/kfs/icase_cfs.o \
 			$(OBJDIR)/kfs/fuse_serve.o \
 			$(OBJDIR)/kfs/fuse_serve_mount.o \
