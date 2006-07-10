@@ -539,13 +539,13 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 			kdprintf(STDERR_FILENO, "uhfs() failed\n");
 			return -E_UNSPECIFIED;
 		}
-		#if USE_ICASE
+#if USE_ICASE
 		if (! (u = icase_cfs(u)) )
 		{
-			kdprintf(STDERR_FILENO, "uhfs() failed\n");
+			kdprintf(STDERR_FILENO, "icase_cfs() failed\n");
 			return -E_UNSPECIFIED;
 		}
-		#endif
+#endif
 		if (vector_push_back(uhfses, u) < 0)
 		{
 			kdprintf(STDERR_FILENO, "vector_push_back() failed\n");
