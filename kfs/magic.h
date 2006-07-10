@@ -25,6 +25,9 @@
 /* "FILEHIDE" */
 #define FILE_HIDING_MAGIC 0xF11E41DE
 
+/* "ICASE" */
+#define ICASE_MAGIC 0x1CA5E000
+
 /* "LEET0CFS" (because UHFS is leet) */
 #define UHFS_MAGIC 0x1EE70CF5
 

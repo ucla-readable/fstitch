@@ -9,6 +9,9 @@ BIN += $(OBJDIR)/kfs/kfsd
 #			$(OBJDIR)/kfs/kfs_ipc_serve.o \
 #			$(OBJDIR)/kfs/ipc_serve.o \
 
+
+			#$(OBJDIR)/kfs/file_hiding_cfs.o \
+
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc.o \
@@ -44,7 +47,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/wholedisk_lfs.o \
 			$(OBJDIR)/kfs/uhfs.o \
 			$(OBJDIR)/kfs/devfs_cfs.o \
-			$(OBJDIR)/kfs/file_hiding_cfs.o \
+			$(OBJDIR)/kfs/icase_cfs.o \
 			$(OBJDIR)/kfs/fuse_serve.o \
 			$(OBJDIR)/kfs/fuse_serve_mount.o \
 			$(OBJDIR)/kfs/sched.o \

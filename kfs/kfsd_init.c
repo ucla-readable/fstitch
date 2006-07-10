@@ -39,6 +39,7 @@
 #endif
 #ifdef UNIXUSER
 #include <kfs/fuse_serve.h>
+#include <kfs/icase_cfs.h>
 #endif
 #include <kfs/modman.h>
 #include <kfs/sched.h>
@@ -46,6 +47,7 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 #if defined(__KERNEL__)
+#include <kfs/icase_cfs.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ops.h>
 #include <kfs/kernel_opgroup_scopes.h>
@@ -65,6 +67,8 @@ struct kfsd_partition {
 };
 typedef struct kfsd_partition kfsd_partition_t;
 
+#define USE_ICASE 1
+
 //#define USE_MIRROR
 #define USE_WB_CACHE
 #ifndef USE_WB_CACHE
@@ -73,14 +77,14 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 int kfsd_init(int argc, char ** argv)
 {
-	const bool allow_journal = 1;
+	const bool allow_journal = 0;
 	const bool use_disk_0 = 1;
 #if defined(KUDOS)
 	const bool use_disk_1 = 0;
 #elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
 #elif defined(__KERNEL__)
-	const bool use_disk_1 = 0;
+	const bool use_disk_1 = 1;
 #else
 #error Unknown target system
 #endif
@@ -309,7 +313,6 @@ int kfsd_init(int argc, char ** argv)
 		return -E_UNSPECIFIED;
 	set_frontend_cfs(opgroupscope_tracker);
 #endif
-
 	return 0;
 }
 
@@ -531,12 +534,18 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		}
 		if (! (lfs = opgroup_lfs(lfs)))
 			return -E_UNSPECIFIED;
-
 		if (! (u = uhfs(lfs)) )
 		{
 			kdprintf(STDERR_FILENO, "uhfs() failed\n");
 			return -E_UNSPECIFIED;
 		}
+		#if USE_ICASE
+		if (! (u = icase_cfs(u)) )
+		{
+			kdprintf(STDERR_FILENO, "uhfs() failed\n");
+			return -E_UNSPECIFIED;
+		}
+		#endif
 		if (vector_push_back(uhfses, u) < 0)
 		{
 			kdprintf(STDERR_FILENO, "vector_push_back() failed\n");
