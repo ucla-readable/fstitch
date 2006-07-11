@@ -25,6 +25,7 @@ TOP = .
 # Native utilities
 FSFORMAT       := fsformat
 FSCKJOS        := fsck.jos
+GUNZIP_SPARSE  := gunzip_sparse
 ELFDUMP_SYMTAB := elfdump_symtab
 PTYPAIR        := ptypair
 BDSPLIT        := bdsplit

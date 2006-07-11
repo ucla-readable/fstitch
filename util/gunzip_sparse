@@ -1,0 +1,19 @@
+#!/bin/sh
+
+if [ $# -ne 2 ]
+then
+	echo "About: gunzip into a sparse file" 1>&2
+	echo "Usage: `basename "$0"` <GZIP_SOURCE> <SPARSE_TARGET>" 1>&2
+	exit 1
+fi
+
+GZ_SRC="$1"
+SPARSE_TARGET="$2"
+
+FIFO=`mktemp ${TMP:-/tmp}/sparse_gunzip.XXXXXX` || exit 1
+rm -f $FIFO && mkfifo $FIFO || exit 1
+trap "rm -f $FIFO" EXIT
+
+# Use GNU cp to create SPARSE_TARGET and let the OS know about its holes
+gunzip -c "$GZ_SRC" > $FIFO &
+cp --sparse=always $FIFO "$SPARSE_TARGET"
