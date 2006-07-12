@@ -67,7 +67,7 @@ struct kfsd_partition {
 };
 typedef struct kfsd_partition kfsd_partition_t;
 
-#define USE_ICASE 1
+#define USE_ICASE 0
 
 //#define USE_MIRROR
 #define USE_WB_CACHE
@@ -83,6 +83,7 @@ int kfsd_init(int argc, char ** argv)
 	const bool use_disk_1 = 0;
 #elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
+	const bool use_disk_2 = 0;
 #elif defined(__KERNEL__)
 	const bool use_disk_1 = 1;
 #else
@@ -260,7 +261,28 @@ int kfsd_init(int argc, char ** argv)
 				return r;
 		}
 	}
+#if defined(UNIXUSER)
+	if (use_disk_2)
+	{
+		BD_t * bd;
 
+		const char file[] = "obj/unix-user/fs/ext3.img";
+		if (! (bd = unix_file_bd(file, 4096)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 4096) failed\n", file);
+
+		if (bd)
+		{
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
+			bd = elevator_cache_bd(bd, 128, 64, 3);
+			if (!bd)
+				return -E_UNSPECIFIED;
+			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+				return r;
+		}
+	}
+#endif
 	if (use_mem_bd)
 	{
 		BD_t * bd;

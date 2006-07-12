@@ -12,6 +12,7 @@ FSIMGFILES :=		fs/.journal \
 			fs/k0 \
 			fs/k1 \
 			fs/k2 \
+			fs/k3 \
 			fs/kbear.jpg \
 			fs/kfsgraphviz.sh \
 			fs/lady.img \
@@ -47,11 +48,15 @@ $(OBJDIR)/fs/ufs.img: fs/ufs-clean.img.gz
 	@echo + mk $(OBJDIR)/fs/ufs.img
 	$(V)util/$(GUNZIP_SPARSE) fs/ufs-clean.img.gz $(OBJDIR)/fs/ufs.img
 
+$(OBJDIR)/fs/ext3.img: fs/ext3-clean.img.gz
+	@echo + mk $(OBJDIR)/fs/ext3.img
+	$(V)util/$(GUNZIP_SPARSE) fs/ext3-clean.img.gz $(OBJDIR)/fs/ext3.img
+
 fs/.journal:
 	@echo + dd if=/dev/zero of=fs/.journal
 	$(V)dd if=/dev/zero of=fs/.journal bs=1M count=4 2>/dev/null
 
-fs/dev fs/k0 fs/k1 fs/k2:
+fs/dev fs/k0 fs/k1 fs/k2 fs/k3:
 	$(V)mkdir $@
 
 all: $(OBJDIR)/fs/fs.img
