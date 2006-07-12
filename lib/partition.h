@@ -7,6 +7,7 @@
 #define PTABLE_KUDOS_TYPE       0xF8
 #define PTABLE_DOS_EXT_TYPE     0x05
 #define PTABLE_W95_EXT_TYPE     0x0F
+#define PTABLE_LINUX_TYPE       0x83
 #define PTABLE_LINUX_EXT_TYPE   0x85
 #define PTABLE_EZDRIVE_TYPE	0x55
 #define PTABLE_FREEBSD_TYPE     0xA5
