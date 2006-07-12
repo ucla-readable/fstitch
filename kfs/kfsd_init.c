@@ -83,7 +83,7 @@ int kfsd_init(int argc, char ** argv)
 	const bool use_disk_1 = 0;
 #elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
-	const bool use_disk_2 = 0;
+	const bool use_disk_2 = 1;
 #elif defined(__KERNEL__)
 	const bool use_disk_1 = 1;
 #else
@@ -265,10 +265,9 @@ int kfsd_init(int argc, char ** argv)
 	if (use_disk_2)
 	{
 		BD_t * bd;
-
 		const char file[] = "obj/unix-user/fs/ext3.img";
-		if (! (bd = unix_file_bd(file, 4096)) )
-			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 4096) failed\n", file);
+		if (! (bd = unix_file_bd(file, 512)) )
+			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 
 		if (bd)
 		{
@@ -278,6 +277,7 @@ int kfsd_init(int argc, char ** argv)
 			if (!bd)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+			printf("Using disk 2\n");
 			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
 				return r;
 		}
@@ -368,7 +368,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		{
 			uint8_t type = pc_ptable_type(ptbl, i);
 			printf("Partition %d has type %02x\n", i, type);
-			if (type == PTABLE_KUDOS_TYPE)
+			if (type == PTABLE_KUDOS_TYPE || type == PTABLE_LINUX_TYPE)
 			{
 				if (! (part = malloc(sizeof(kfsd_partition_t))) )
 				{
@@ -379,7 +379,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				if (part->bd)
 				{
 					OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
-					part->type = PTABLE_KUDOS_TYPE;
+					part->type = type;
 					part->subtype = 0;
 					snprintf(part->description, 32, "Partition %d", i);
 					if (vector_push_back(partitions, part))
@@ -548,6 +548,23 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
 				continue;
 			}
+		}
+		else if (part->type == PTABLE_LINUX_TYPE)
+		{
+			// TODO handle differnt block sizes
+			//cache = construct_cacheing(part->bd, cache_nblks, 4096);
+			//if (!cache)
+			//	return -E_UNSPECIFIED;
+			//lfs = ext2(cache);
+
+			printf("Could use ext2 on %s\n", part->description);
+			continue;
+			//if (lfs)
+			//else
+			//{
+			//	kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
+			//	continue;
+			//}
 		}
 		else
 		{
