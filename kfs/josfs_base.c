@@ -412,10 +412,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 	} else {
 		JOSFS_File_t *file = malloc(sizeof(JOSFS_File_t));
 		if (!file)
-		{
 			goto josfs_lookup_inode_exit;
-			return NULL;
-		}
 
 		dirblock = CALL(info->ubd, read_block, fd->dirb, 1);
 		if (!dirblock)
