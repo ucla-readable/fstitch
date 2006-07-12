@@ -30,6 +30,7 @@
 #include <kfs/ufs_base.h>
 #include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
+#include <kfs/icase_cfs.h>
 #include <kfs/mirror_bd.h>
 #ifdef KUDOS
 #include <kfs/mount_selector_cfs.h>
@@ -39,7 +40,6 @@
 #endif
 #ifdef UNIXUSER
 #include <kfs/fuse_serve.h>
-#include <kfs/icase_cfs.h>
 #endif
 #include <kfs/modman.h>
 #include <kfs/sched.h>
@@ -47,7 +47,6 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 #if defined(__KERNEL__)
-#include <kfs/icase_cfs.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ops.h>
 #include <kfs/kernel_opgroup_scopes.h>

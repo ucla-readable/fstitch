@@ -227,7 +227,7 @@ static int icase_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, in
 			return (r < 0) ? r : q;
 
 		if((r >= 0 && q >= 0) || q == -E_NOT_FOUND )
-			(const char *)actual_newname = newname;
+			actual_newname = (char *)newname;
 
 		r = CALL(state->frontend_cfs, rename, oldparent, actual_oldname, newparent, actual_newname);
 
