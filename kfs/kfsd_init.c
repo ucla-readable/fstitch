@@ -264,7 +264,7 @@ int kfsd_init(int argc, char ** argv)
 	if (use_disk_2)
 	{
 		BD_t * bd;
-		const char file[] = "obj/unix-user/fs/ext3.img";
+		const char file[] = "obj/unix-user/fs/ext2.img";
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 
