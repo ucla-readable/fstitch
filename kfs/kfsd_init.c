@@ -27,6 +27,7 @@
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
+#include <kfs/ext2_base.h>
 #include <kfs/ufs_base.h>
 #include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
@@ -82,7 +83,7 @@ int kfsd_init(int argc, char ** argv)
 	const bool use_disk_1 = 0;
 #elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
-	const bool use_disk_2 = 1;
+	const bool use_disk_2 = 0;
 #elif defined(__KERNEL__)
 	const bool use_disk_1 = 1;
 #else
@@ -551,19 +552,18 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		else if (part->type == PTABLE_LINUX_TYPE)
 		{
 			// TODO handle differnt block sizes
-			//cache = construct_cacheing(part->bd, cache_nblks, 4096);
-			//if (!cache)
-			//	return -E_UNSPECIFIED;
-			//lfs = ext2(cache);
+			cache = construct_cacheing(part->bd, cache_nblks, 4096);
+			if (!cache)
+				return -E_UNSPECIFIED;
+			lfs = ext2(cache);
 
-			printf("Could use ext2 on %s\n", part->description);
-			continue;
-			//if (lfs)
-			//else
-			//{
-			//	kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
-			//	continue;
-			//}
+			if (lfs)
+				printf("Using ext2 on %s\n", part->description);
+			else
+			{
+				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
+				continue;
+			}
 		}
 		else
 		{
