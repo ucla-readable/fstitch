@@ -59,7 +59,8 @@ static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_gro
 static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode);
 static uint8_t ext2_to_kfs_type(uint16_t type);
 
-static int read_bitmap(LFS_t * object, uint32_t blockno);
+static int read_block_bitmap(LFS_t * object, uint32_t blockno);
+static int read_inode_bitmap(LFS_t * object, uint32_t inode_no);
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head);
 
 // Equivalent to JOS's read_super
@@ -106,42 +107,72 @@ static int check_super(LFS_t * object)
 	return 0;
 }
 
-
-
-
 // Return 1 if block is free 
-static int read_bitmap(LFS_t * object, uint32_t blockno)
+static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 {
-/*	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	bdesc_t * bdesc;
-	uint32_t target;
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	EXT2_group_desc_t gdesc;
+	bdesc_t * bitmap;
 	uint32_t * ptr;
 
-	if (blockno >= super->s_nblocks) {
-		printf("ext2_base: requested status of block %u past end of file system!\n", blockno);
+	if (blockno >= info->super->s_blocks_count) 
+	{
+		printf("ext2_base: requested status of block %u too large block no!\n", blockno);
 		return -1;
 	}
 
-	target = 2 + (blockno / (EXT2_BLKBITSIZE));
-
-	if (info->bitmap_cache && info->bitmap_cache->number != target)
-		bdesc_release(&info->bitmap_cache);
-
-	if (! info->bitmap_cache) {
-		bdesc = CALL(info->ubd, read_block, target, 1);
-		if (!bdesc || bdesc->ddesc->length != EXT2_BLKSIZE) {
-			printf("ext2_base: trouble reading bitmap! (blockno = %u)\n", blockno);
-			return -1;
-		}
-		bdesc_retain(bdesc);
-		info->bitmap_cache = bdesc;
+	uint32_t block_group = blockno / info->super->s_blocks_per_group;
+	if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
+	{
+	       printf("unable to get group desc in %s\n", __FUNCTION__);
+		return -1;
 	}
 
-	ptr = ((uint32_t *) info->bitmap_cache->ddesc->data) + ((blockno % EXT2_BLKBITSIZE) / 32);
-	if (*ptr & (1 << (blockno % 32)))
-		return 1;
-		*/
-	return 0;
+	bitmap = CALL(info->ubd, read_block, gdesc.bg_block_bitmap, 1);
+	if (!bitmap)
+	{
+	       Dprintf("unable to read block bitmap in %s\n", __FUNCTION__);
+	       return -1;
+	}
+
+	uint32_t block_in_group  = blockno % info->super->s_blocks_per_group;	
+	ptr = ((uint32_t *) bitmap->ddesc->data) + (block_in_group/32);
+	return (*ptr & (1 << (block_in_group % 32)));
+}
+
+//Return 1 if free, 0 if not, -1 if error
+static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
+{
+       struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	EXT2_group_desc_t gdesc;
+	bdesc_t * bitmap;
+	uint32_t * ptr;
+
+	if ((inode_no - 1) >= info->super->s_inodes_count) 
+	{
+		printf("ext2_base:read_inode: inode %u past end of file system!\n", inode_no);
+		return -1;
+	}
+
+	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
+	if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
+	{
+	       printf("unable to get group desc in %s\n", __FUNCTION__);
+		return -1;
+	}
+
+	bitmap = CALL(info->ubd, read_block, gdesc.bg_inode_bitmap, 1);
+	if (!bitmap)
+	{
+	       Dprintf("unable to read inode bitmap in %s\n", __FUNCTION__);
+	       return -1;
+	}
+
+	//this drawn from fs/ext2/ialloc.c:150
+	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
+	ptr = ((uint32_t *) bitmap->ddesc->data) + (inode_in_group / 32);
+	return (*ptr & (1 << (inode_in_group % 32)));
+      
 }
 
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
@@ -588,41 +619,42 @@ static int fill_dirent(lfs_info_t * info, EXT2_Dir_entry_t * dirfile, inode_t in
 	return 0;
 }
 
-//so you pass in a file desc thats a directory... makes sense...
 static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-  	Dprintf("EXT2DEBUG: ext2_get_dirent %p, %u\n", basep, *basep);
+       Dprintf("EXT2DEBUG: ext2_get_dirent %p, %u\n", basep, *basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	bdesc_t *dirblock1, *dirblock2;
 	EXT2_Dir_entry_t dirfile;
-	uint32_t blockno, file_blockno1, file_blockno2;
-	uint32_t num_file_blocks, num_file_bytes;
+	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks;
 	int r = 0;
+
+	if (!basep || !object || !file || !entry)
+	       return -E_UNSPECIFIED;
 
 	if (f->f_type != TYPE_DIR)
 		return -E_NOT_DIR;
-
-	num_file_bytes = 0;
+ 
 	num_file_blocks = ext2_get_file_numblocks(object, (fdesc_t *)f);
 
 	do {
-	       
-	       blockno = *basep / (1024 << info->super->s_log_block_size);
-		
 		if (*basep >= f->f_inode.i_size)
-		  return -E_UNSPECIFIED;//-E_NOT_FOUND;
+		      return -E_UNSPECIFIED; // should be: -E_NOT_FOUND;
 
+   	       blockno = *basep / EXT2_BLOCK_SIZE;
 		file_blockno1 = get_file_block(object, f, *basep);
 
-		//handle overlap case:
-		if (blockno != INVALID_BLOCK){
+		if (blockno != INVALID_BLOCK)
+		{
 		      dirblock1 = CALL(info->ubd, read_block, file_blockno1, 1);
-    		      if (blockno < (num_file_blocks - 1) && (*basep % (EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t)) > EXT2_BLOCK_SIZE){
+    		      
+		      /*if the dirent could overlap two blocks, and isnt last block*/
+		      if (blockno < (num_file_blocks - 1) && (*basep % (EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t)) > EXT2_BLOCK_SIZE)
+		      {
 			     file_blockno2 = get_file_block(object, f, (*basep)+ sizeof(EXT2_Dir_entry_t));
 			     dirblock2 = CALL(info->ubd, read_block, file_blockno2, 1);
 			     if(!dirblock1 && !dirblock2)
-				return -E_UNSPECIFIED;//-E_NOT_FOUND;-E_NOT_FOUND;
+				     return -E_UNSPECIFIED;  // should be: -E_NOT_FOUND;
 
 			     uint32_t start = (*basep % EXT2_BLOCK_SIZE);
 			     uint32_t block1_len = EXT2_BLOCK_SIZE - (*basep % EXT2_BLOCK_SIZE);
@@ -631,23 +663,19 @@ static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry
 			     /* copy each part from each block into the dir entry */
 			     memcpy(&dirfile, dirblock1->ddesc->data + start, block1_len);
 			     memcpy((uint8_t*)(&dirfile) + block1_len, dirblock2->ddesc->data, block2_len);
-
 		      }
 		      else
 		      {
 			     if (!dirblock1)
-			           return -E_NOT_FOUND;
-
-			     uint32_t len_to_copy;
-			     /* calc the amount to copy, in case the dir entry is near the end of the file*/
-			     if ((*basep % EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t) > EXT2_BLOCK_SIZE)
-				len_to_copy = sizeof(EXT2_Dir_entry_t) - ((*basep % EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t) - EXT2_BLOCK_SIZE);
-			     else
-				len_to_copy = sizeof(EXT2_Dir_entry_t);
+			           return -E_UNSPECIFIED;
+			     
+			     uint32_t len_to_copy = sizeof(EXT2_Dir_entry_t) - ((*basep % EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t) - EXT2_BLOCK_SIZE);
 			     memcpy(&dirfile,  (EXT2_Dir_entry_t *) (dirblock1->ddesc->data + (*basep % EXT2_BLOCK_SIZE)), len_to_copy);
 		      }
 		}
- 
+		else
+		      return -E_UNSPECIFIED;
+
 		r = fill_dirent(info, &dirfile, dirfile.inode, entry, size, basep);
 	} while (r > 0);
 	return r;
@@ -1433,24 +1461,6 @@ static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_gro
 	return block_group;
 }
 
-
-void test_ext2_get_file_block(LFS_t * lfs)
-{
-	ext2_fdesc_t * fd;
-	assert(fd = (ext2_fdesc_t *)ext2_lookup_inode(lfs, 50243));
-	
-	get_file_block(lfs, fd, 0);
-	get_file_block(lfs, fd, 45056);
-	get_file_block(lfs, fd, 49152);
-	get_file_block(lfs, fd, 131072);
-	get_file_block(lfs, fd, 176128);
-	get_file_block(lfs, fd, 180224);
-	get_file_block(lfs, fd, 626688);
-	get_file_block(lfs, fd, 4370432);
-	free(fd);
-}
-
-
 LFS_t * ext2(BD_t * block_device)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
@@ -1509,7 +1519,6 @@ LFS_t * ext2(BD_t * block_device)
 		DESTROY(lfs);
 		return NULL;
 	}
-	
 	return lfs;
 }
 
