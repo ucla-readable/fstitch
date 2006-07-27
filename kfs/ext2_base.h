@@ -45,17 +45,17 @@
 // Maximum size of a filename (a single path component), including null
 #define EXT2_NAME_LEN 255
 
-#define S_IFMT  00170000
-#define S_IFSOCK 0140000
-#define S_IFLNK  0120000
-#define S_IFREG  0100000
-#define S_IFBLK  0060000
-#define S_IFDIR  0040000
-#define S_IFCHR  0020000
-#define S_IFIFO  0010000
-#define S_ISUID  0004000
-#define S_ISGID  0002000
-#define S_ISVTX  0001000
+#define S_IFMT   0xF000
+#define S_IFSOCK 0xC000
+#define S_IFLNK  0xA000
+#define S_IFREG  0x8000
+#define S_IFBLK  0x6000
+#define S_IFDIR  0x4000
+#define S_IFCHR  0x2000
+#define S_IFIFO  0x1000
+#define S_ISUID  0x0800
+#define S_ISGID  0x0400
+#define S_ISVTX  0x0200
 
 #define EXT2_TYPE_UNKNOWN  0
 #define EXT2_TYPE_FILE     1
@@ -71,6 +71,8 @@
 
 
 uint32_t EXT2_BLOCK_SIZE;
+//FIXME this is quite made up
+#define EXT2_MAX_FILE_SIZE 4294967000
 uint32_t EXT2_DESC_PER_BLOCK;
 
 struct EXT2_Super {
