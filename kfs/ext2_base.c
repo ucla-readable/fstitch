@@ -137,7 +137,10 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 
 	uint32_t block_in_group  = blockno % info->super->s_blocks_per_group;	
 	ptr = ((uint32_t *) bitmap->ddesc->data) + (block_in_group/32);
-	return (*ptr & (1 << (block_in_group % 32)));
+	if (*ptr & (1 << (block_in_group % 32)))
+	       return 1;
+	else
+	       return 0;
 }
 
 //Return 1 if free, 0 if not, -1 if error
@@ -171,54 +174,62 @@ static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 	//this drawn from fs/ext2/ialloc.c:150
 	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
 	ptr = ((uint32_t *) bitmap->ddesc->data) + (inode_in_group / 32);
-	return (*ptr & (1 << (inode_in_group % 32)));
-      
+	if(*ptr & (1 << (inode_in_group % 32)))
+	      return 1;
+	else
+	      return 0;
 }
 
-static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
+static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: write_bitmap %u\n", blockno);
-/*	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
-	uint32_t target;
 	chdesc_t * ch;
 	int r;
 
 	if (!head)
 		return -1;
 
-	if (blockno == 0) {
+	if (blockno == 0) 
+	{
 		printf("ext2_base: attempted to write status of zero block!\n");
 		return -1;
 	}
-	else if (blockno >= super->s_nblocks) {
-		printf("ext2_base: attempted to write status of block %u past end of file system!\n", blockno);
+	else if (blockno >= info->super->s_blocks_count) 
+	{
+		printf("ext2_base: requested status of block %u too large block no!\n", blockno);
+		return -1;
+	}
+	
+	uint32_t block_group = blockno / info->super->s_blocks_per_group;
+	EXT2_group_desc_t gdesc;
+	if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
+	{
+	       printf("unable to get group desc in %s\n", __FUNCTION__);
 		return -1;
 	}
 
-	target = 2 + (blockno / EXT2_BLKBITSIZE);
-
-	if (info->bitmap_cache && info->bitmap_cache->number == target)
-		bdesc = info->bitmap_cache;
-	else {
-		if(info->bitmap_cache)
-			bdesc_release(&info->bitmap_cache);
-		bdesc = CALL(info->ubd, read_block, target, 1);
-
-		if (!bdesc || bdesc->ddesc->length != EXT2_BLKSIZE) {
-			printf("ext2_base: trouble reading bitmap! (blockno = %u)\n", blockno);
-			return -1;
-		}
-
-		bdesc_retain(bdesc);
-		info->bitmap_cache = bdesc;
+	bdesc = CALL(info->ubd, read_block, gdesc.bg_block_bitmap, 1);
+	if (!bdesc)
+	{
+	       Dprintf("unable to read block bitmap in %s\n", __FUNCTION__);
+	       return -1;
 	}
 
+	uint32_t block_in_group  = blockno % info->super->s_blocks_per_group;	
+
 	// does it already have the right value? 
-	if (((uint32_t *) bdesc->ddesc->data)[(blockno % EXT2_BLKBITSIZE) / 32] >> (blockno % 32) == value)
-		return 0;
+	if (((uint32_t *) bdesc->ddesc->data)[(block_in_group) / 32] & (1 << (block_in_group % 32)))
+	{
+	       if ( value)
+		      return 0;
+	}
+	else if (!value)
+	       return 0;
+
 	// bit chdescs take offset in increments of 32 bits 
-	ch = chdesc_create_bit(bdesc, info->ubd, (blockno % EXT2_BLKBITSIZE) / 32, 1 << (blockno % 32));
+	ch = chdesc_create_bit(bdesc, info->ubd, (block_in_group) / 32, 1 << (block_in_group % 32));
 	if (!ch)
 		return -1;
 
@@ -231,8 +242,6 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	r = CALL(info->ubd, write_block, bdesc);
 
 	return r;
-*/
-	return 0;
 }
 
 static uint32_t count_free_space(LFS_t * object)
@@ -615,7 +624,7 @@ static int fill_dirent(lfs_info_t * info, EXT2_Dir_entry_t * dirfile, inode_t in
 
 	*basep += dirfile->rec_len;
 	if (old_basep >= *basep)
-	  return -E_UNSPECIFIED;
+	      return -E_UNSPECIFIED;
 	return 0;
 }
 
@@ -626,58 +635,71 @@ static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	bdesc_t *dirblock1, *dirblock2;
 	EXT2_Dir_entry_t dirfile;
-	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks;
+	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks, block_offset;
 	int r = 0;
 
-	if (!basep || !object || !file || !entry)
+	if (!basep || !file || !entry)
 	       return -E_UNSPECIFIED;
 
 	if (f->f_type != TYPE_DIR)
 		return -E_NOT_DIR;
  
 	num_file_blocks = ext2_get_file_numblocks(object, (fdesc_t *)f);
+	block_offset = (*basep % EXT2_BLOCK_SIZE);
 
-	do {
-		if (*basep >= f->f_inode.i_size)
-		      return -E_UNSPECIFIED; // should be: -E_NOT_FOUND;
+	if (*basep >= f->f_inode.i_size)
+	       return -E_UNSPECIFIED; // should be: -E_NOT_FOUND;
 
-   	       blockno = *basep / EXT2_BLOCK_SIZE;
-		file_blockno1 = get_file_block(object, f, *basep);
+	blockno = *basep / EXT2_BLOCK_SIZE;
+	file_blockno1 = get_file_block(object, f, *basep);
+	
+	if (file_blockno1 == INVALID_BLOCK)
+	       return -E_UNSPECIFIED;
+	
+	dirblock1 = CALL(info->ubd, read_block, file_blockno1, 1);
+	if (!dirblock1)
+	       return -E_UNSPECIFIED;
+	
+	/*check if the rec_len is available yet*/
+	uint16_t rec_len;
+	if (EXT2_BLOCK_SIZE - block_offset >= 6)
+	{
+	      rec_len = *((uint16_t *) (dirblock1->ddesc->data + block_offset + 4));
+	      if (*basep + rec_len > f->f_inode.i_size)
+	            return -E_UNSPECIFIED;
+	}
+	else
+	  rec_len = 0;
+	
+	/*if the dirent overlaps two blocks*/
+	if(rec_len == 0 || block_offset + rec_len > EXT2_BLOCK_SIZE)
+	{
+	      if (blockno + 1 >= f->f_inode.i_blocks)
+	            return -E_UNSPECIFIED;
+	    
+	      file_blockno2 = get_file_block(object, f, (*basep)+ sizeof(EXT2_Dir_entry_t));
+	      if (file_blockno2 == INVALID_BLOCK)
+	            return -E_UNSPECIFIED;
+	    
+	      dirblock2 = CALL(info->ubd, read_block, file_blockno2, 1);
+	      if(!dirblock2)
+		     return -E_UNSPECIFIED;  // should be: -E_NOT_FOUND;
+	    
+	      uint32_t block1_len = EXT2_BLOCK_SIZE - block_offset;
+	      uint32_t block2_len = sizeof(EXT2_Dir_entry_t) - block1_len;
+	    
+	      /* copy each part from each block into the dir entry */
+	      memcpy(&dirfile, dirblock1->ddesc->data + block_offset, block1_len);
+	      memcpy((uint8_t*)(&dirfile) + block1_len, dirblock2->ddesc->data, block2_len);
+	}
+	else
+	{
+	      EXT2_Dir_entry_t * pdirent =  (EXT2_Dir_entry_t *) (dirblock1->ddesc->data + block_offset);
+	      memcpy(&dirfile, pdirent, MIN(sizeof(EXT2_Dir_entry_t), pdirent->rec_len));
+	}
+	
+	r = fill_dirent(info, &dirfile, dirfile.inode, entry, size, basep);
 
-		if (blockno != INVALID_BLOCK)
-		{
-		      dirblock1 = CALL(info->ubd, read_block, file_blockno1, 1);
-    		      
-		      /*if the dirent could overlap two blocks, and isnt last block*/
-		      if (blockno < (num_file_blocks - 1) && (*basep % (EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t)) > EXT2_BLOCK_SIZE)
-		      {
-			     file_blockno2 = get_file_block(object, f, (*basep)+ sizeof(EXT2_Dir_entry_t));
-			     dirblock2 = CALL(info->ubd, read_block, file_blockno2, 1);
-			     if(!dirblock1 && !dirblock2)
-				     return -E_UNSPECIFIED;  // should be: -E_NOT_FOUND;
-
-			     uint32_t start = (*basep % EXT2_BLOCK_SIZE);
-			     uint32_t block1_len = EXT2_BLOCK_SIZE - (*basep % EXT2_BLOCK_SIZE);
-			     uint32_t block2_len = sizeof(EXT2_Dir_entry_t) - block1_len;
-
-			     /* copy each part from each block into the dir entry */
-			     memcpy(&dirfile, dirblock1->ddesc->data + start, block1_len);
-			     memcpy((uint8_t*)(&dirfile) + block1_len, dirblock2->ddesc->data, block2_len);
-		      }
-		      else
-		      {
-			     if (!dirblock1)
-			           return -E_UNSPECIFIED;
-			     
-			     uint32_t len_to_copy = sizeof(EXT2_Dir_entry_t) - ((*basep % EXT2_BLOCK_SIZE) + sizeof(EXT2_Dir_entry_t) - EXT2_BLOCK_SIZE);
-			     memcpy(&dirfile,  (EXT2_Dir_entry_t *) (dirblock1->ddesc->data + (*basep % EXT2_BLOCK_SIZE)), len_to_copy);
-		      }
-		}
-		else
-		      return -E_UNSPECIFIED;
-
-		r = fill_dirent(info, &dirfile, dirfile.inode, entry, size, basep);
-	} while (r > 0);
 	return r;
 }
 
