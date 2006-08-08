@@ -1147,7 +1147,6 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 */
 	return 0;
 }
-
 static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
@@ -1475,9 +1474,9 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		return -E_INVAL;
 
 	if (id == KFS_feature_size.id) {
-		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) >= EXT2_MAX_FILE_SIZE)
+		if (sizeof(uint32_t) != size || *((uint32_t *) data) < 0 || *((uint32_t *) data) >= EXT2_MAX_FILE_SIZE)
 			return -E_INVAL;
-		f->f_inode.i_size = *((int32_t *) data);
+		f->f_inode.i_size = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 	}
 	else if (id == KFS_feature_filetype.id) {

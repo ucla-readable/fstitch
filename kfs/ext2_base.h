@@ -72,7 +72,7 @@
 
 uint32_t EXT2_BLOCK_SIZE;
 //FIXME this is quite made up
-#define EXT2_MAX_FILE_SIZE 4294967000
+#define EXT2_MAX_FILE_SIZE 0xFFFFFFFF
 uint32_t EXT2_DESC_PER_BLOCK;
 
 struct EXT2_Super {
