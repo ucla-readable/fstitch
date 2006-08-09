@@ -62,7 +62,6 @@ static uint8_t ext2_to_kfs_type(uint16_t type);
 
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
 static int read_inode_bitmap(LFS_t * object, uint32_t inode_no);
-static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head);
 int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head);
 
 // Equivalent to JOS's read_super
@@ -1147,6 +1146,143 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 */
 	return 0;
 }
+
+static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_t offset, chdesc_t ** head)
+{
+       Dprintf("EXT2DEBUG: %s %p %d\n", __FUNCTION__, file, offset);
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	uint32_t blocknum, pointers_per_block;
+	bdesc_t * block_desc, * double_block_desc;
+	uint32_t * inode_nums,* double_inode_nums, target, indir_ptr, double_indir_ptr;
+	int r;
+	uint32_t invalid = INVALID_BLOCK;
+
+	pointers_per_block = EXT2_BLOCK_SIZE / (sizeof(uint32_t));
+
+	//non block aligned offsets suck (aka aren't supported)
+	       
+	blocknum = offset / EXT2_BLOCK_SIZE;
+
+	if (blocknum < EXT2_NDIRECT)
+	{
+	      target = file->f_inode.i_block[blocknum];
+	      file->f_inode.i_block[blocknum] = 0;
+		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+			file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
+		else
+			file->f_inode.i_size = 0;
+	      r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+	      if (r < 0)
+		     return INVALID_BLOCK;
+	}
+	else if (blocknum < EXT2_NDIRECT + pointers_per_block)
+	{
+	      blocknum -= EXT2_NDIRECT;
+	      block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_NINDIRECT], 1));
+	      if (!block_desc)
+		     return INVALID_BLOCK;	      
+	      inode_nums = (uint32_t *)block_desc->ddesc->data;
+	      target = inode_nums[blocknum];
+
+	      if (blocknum == 0)
+	      {
+		     indir_ptr = file->f_inode.i_block[EXT2_NDIRECT];
+		     if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+			    file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
+		     else
+			    file->f_inode.i_size = 0;
+		     r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+		     file->f_inode.i_block[EXT2_NDIRECT] = INVALID_BLOCK;
+		     r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+	      } else {
+		     if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+			    file->f_inode.i_size -= EXT2_BLOCK_SIZE;
+		     else
+			    file->f_inode.i_size = 0;
+		     r = chdesc_create_byte(block_desc, info->ubd, blocknum * sizeof(uint32_t), sizeof(uint32_t), &invalid, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+		     r = CALL(info->ubd, write_block, block_desc);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+		     r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+	      }
+	}
+	else if (blocknum < EXT2_NDIRECT + pointers_per_block + pointers_per_block * pointers_per_block)
+	{
+	      blocknum -= (EXT2_NDIRECT + pointers_per_block);
+	      block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_DINDIRECT], 1));
+	      if (!block_desc)
+		      return INVALID_BLOCK;
+	      inode_nums = (uint32_t *)block_desc->ddesc->data;
+	      indir_ptr = inode_nums[blocknum / pointers_per_block];
+	      double_block_desc = CALL(info->ubd, read_block, indir_ptr, 1);
+	      if (!block_desc)
+		      return INVALID_BLOCK;
+	      double_inode_nums = (uint32_t *)double_block_desc->ddesc->data;
+	      double_indir_ptr = blocknum % pointers_per_block;
+	      target = double_inode_nums[double_indir_ptr];
+	      
+	      if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+		      file->f_inode.i_size -= EXT2_BLOCK_SIZE;
+	      else
+		      file->f_inode.i_size = 0;
+
+	      if (blocknum % pointers_per_block == 0)
+	      {
+		     if (blocknum == 0)
+		     {
+			    r = ext2_free_block(object, (fdesc_t *) file, file->f_inode.i_block[EXT2_DINDIRECT], head);
+			    if (r < 0)
+				   return INVALID_BLOCK;
+			    file->f_inode.i_block[EXT2_DINDIRECT] = INVALID_BLOCK;
+			    r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+			    if (r < 0)
+				   return INVALID_BLOCK;
+		     }
+		     else
+		     {
+			    r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+			    if (r < 0)
+  			          return INVALID_BLOCK;
+			    r = chdesc_create_byte(block_desc, info->ubd, (blocknum / pointers_per_block) * sizeof(uint32_t), sizeof(uint32_t), &invalid, head);
+			    if (r < 0)
+				    return INVALID_BLOCK;
+			    r = CALL(info->ubd, write_block, block_desc);
+			    if (r < 0)
+				   return INVALID_BLOCK;
+		     }
+		     r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+	      }
+	      else
+	      {
+		     r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+		     r = chdesc_create_byte(double_block_desc, info->ubd, (double_indir_ptr) * sizeof(uint32_t), sizeof(uint32_t), &invalid, head);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+		     r = CALL(info->ubd, write_block, double_block_desc);
+		     if (r < 0)
+			    return INVALID_BLOCK;
+	      }
+	}
+	else
+	{
+	      Dprintf("Triply indirect blocks are not implemented.  I'll do it when I'm in Tripoli\n");
+	      assert(0);
+	}
+	return target;
+}
+     
 static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
@@ -1158,7 +1294,9 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 
 	if (f->f_inode.i_size == 0)
 	       return INVALID_BLOCK;
-	return 0;
+
+	//ext2_erase_block_ptr will either return INLID_BLOCK, or the block that was truncated...
+	return ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
 }
 
 /* so both ufs_free_block and fs/ext2/ext2_free_blocks dont erase the block pointer in the inode...
@@ -1179,16 +1317,16 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 
 	if(!head || block == INVALID_BLOCK)
 	      return -E_INVAL;
-
+	
+	if (f->f_inode.i_blocks)
+	      f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+	
 	r = write_block_bitmap(object, block, 0, head);
 	if (r < 0)
 	{
 	      Dprintf("failed to free block %d in bitmap\n", block);
 	      return r;
 	}
-	
-	if (f->f_inode.i_blocks)
-	      f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
 
        return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 }
