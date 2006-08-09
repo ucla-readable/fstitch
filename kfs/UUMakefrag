@@ -62,4 +62,7 @@ KFSOFILES := \
 $(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -lpthread -luser
+#	For normal usage:
+	$(V)$(CC) $(CFLAGS) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -luser -lpthread
+#	For profiling: (you'll need debian/ubuntu's libc6-prof package)
+#	$(V)$(CC) $(CFLAGS) -o $@ -pg -static $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -luser -lpthread_p -lc_p
