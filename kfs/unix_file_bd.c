@@ -16,6 +16,14 @@
 #include <kfs/unix_file_bd.h>
 #include <kfs/revision.h>
 
+// define as 1 to make writes and syncs non-synchronous
+#define RECKLESS_WRITE_SPEED 0
+
+// block io activity logging
+static FILE * block_log = NULL;
+static size_t block_log_users = 0;
+
+
 struct unix_file_info {
 	char *fname;
 	int fd;
@@ -109,6 +117,10 @@ unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 		assert(0);
 	}
 
+	if (block_log)
+		for (r = 0; r < count; r++)
+			fprintf(block_log, "%p read %u %d\n", object, number + r, r);
+
 	r = blockman_managed_add(info->blockman, ret);
 	if (r < 0)
 		return NULL;
@@ -186,6 +198,9 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 		assert(0);
 	}
 
+	if (block_log)
+		fprintf(block_log, "%p write %u\n", object, block->number);
+
 	r = revision_tail_acknowledge(block, object);
 	if (r != 0) {
 		panic("revision_tail_acknowledge gave error: %i\n", r);
@@ -204,12 +219,14 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 static int
 unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
+#if !RECKLESS_WRITE_SPEED
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	if (fsync(info->fd))
 	{
 		perror("fsync");
 		assert(0);
 	}
+#endif
 	/* FLUSH_EMPTY is OK even if we did flush something,
 	 * because unix_file_bd is a terminal BD */
 	return FLUSH_EMPTY;
@@ -230,6 +247,21 @@ unix_file_bd_destroy(BD_t * bd)
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
+
+	if (block_log)
+	{
+		block_log_users--;
+		if (!block_log)
+		{
+			r = fclose(block_log);
+			if (r == EOF)
+			{
+				perror("fclose(block_log)");
+				panic("unable to close block log\n");
+			}
+			block_log = NULL;
+		}
+	}
 	
 	return 0;
 }
@@ -270,7 +302,7 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 
 	// TODO: use O_DIRECT open flag on linux
 	// NOTE: linux implements O_DSYNC using O_SYNC :(
-#if defined(__MACH__)
+#if defined(__MACH__) || RECKLESS_WRITE_SPEED
 	info->fd = open(fname, O_RDWR, 0);
 #else
 	info->fd = open(fname, O_RDWR | O_DSYNC, 0);
@@ -281,7 +313,7 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-#if defined(__MACH__)
+#if defined(__MACH__) && !RECKLESS_WRITE_SPEED
 	// disable caching for file on Mac OS X
 	r = fcntl(info->fd, F_NOCACHE, 1);
 	if (r == -1) {
@@ -307,6 +339,18 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 	{
 		DESTROY(bd);
 		return NULL;
+	}
+
+	if (block_log || getenv("BLOCK_LOG"))
+	{
+		if (block_log)
+			block_log_users++;
+		else
+		{
+			block_log = fopen(getenv("BLOCK_LOG"), "a");
+			if (!block_log)
+				perror("fopen(block_log)");
+		}
 	}
 	
 	return bd;
