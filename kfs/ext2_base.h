@@ -57,6 +57,22 @@
 #define S_ISGID  0x0400
 #define S_ISVTX  0x0200
 
+#define EXT2_S_ISUID	0x0800	//SUID
+#define EXT2_S_ISGID	0x0400	//SGID
+#define EXT2_S_ISVTX	0x0200	//sticky bit
+#define EXT2_S_IRWXU	0x01C0	//user access rights mask
+#define EXT2_S_IRUSR	0x0100	//read
+#define EXT2_S_IWUSR	0x0080	//write
+#define EXT2_S_IXUSR	0x0040	//execute
+#define EXT2_S_IRWXG	0x0038	//group access rights mask
+#define EXT2_S_IRGRP	0x0020	//read
+#define EXT2_S_IWGRP	0x0010	//write
+#define EXT2_S_IXGRP	0x0008	//execute
+#define EXT2_S_IRWXO	0x0007	//others access rights mask
+#define EXT2_S_IROTH	0x0004	//read
+#define EXT2_S_IWOTH	0x0002	//write
+#define EXT2_S_IXOTH	0x0001	//execute
+
 #define EXT2_TYPE_UNKNOWN  0
 #define EXT2_TYPE_FILE     1
 #define EXT2_TYPE_DIR      2
