@@ -26,6 +26,12 @@ then
 	KFSD_WRAP_OPTS="--suppressions=conf/memcheck.supp --leak-check=full --show-reachable=yes --leak-resolution=high"
 	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS $@ \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
+elif [ "$KFSD_WRAP" == "time" ]
+then
+	LOG=time.log
+	NAME="$KFSD_WRAP_OPTS"
+	$KFSD_WRAP -f "kfsd-$NAME %e real %U user %S sys" -a -o "$LOG" "$KFSD" "$MNT" $KFSD_OPTS $@ \
+		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
 else
 	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS $@ \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
