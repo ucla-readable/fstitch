@@ -142,6 +142,8 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 {
 	int i, r;
 
+	panic("revision slices are now created on target instead of owner; this function needs to be updated.\n");
+
 	if (!block->ddesc->all_changes)
 		return 0;
 
@@ -225,14 +227,15 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 			if (forward->block)
 			{
-				/* create an internal slice */
-				revision_slice_t * slice = revision_slice_create(forward->block, barrier, forward->target, 0);
+				/* create an internal^Wexternal slice */
+				revision_slice_t * slice = revision_slice_create(forward->block, barrier, forward->target);
 				if (!slice)
 					panic("%s(): revision_slice_create() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__);
 
 				if (slice->ready_size)
 				{
-					revision_slice_push_down(slice);
+					/* FIXME: slices are now created down */
+					/* old code: revision_slice_push_down(slice); */
 
 					/* write the updated target_block */
 					r = CALL(forward->target, write_block, target_block);

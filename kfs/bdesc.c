@@ -32,6 +32,7 @@ static unsigned int autorelease_depth = 0;
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 {
 	bdesc_t * bdesc = malloc(sizeof(*bdesc));
+	uint16_t i;
 	if(!bdesc)
 		return NULL;
 	bdesc->ddesc = malloc(sizeof(*bdesc->ddesc));
@@ -66,6 +67,11 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->all_changes = NULL;
 	bdesc->ddesc->all_changes_tail = &bdesc->ddesc->all_changes;
+	for(i = 0; i < NBDLEVEL; i++)
+	{
+		bdesc->ddesc->ready_changes[i].head = NULL;
+		bdesc->ddesc->ready_changes[i].tail = &bdesc->ddesc->ready_changes[i].head;
+	}
 	bdesc->ddesc->overlaps = NULL;
 	bdesc->ddesc->manager = NULL;
 	bdesc->ddesc->managed_number = 0;
@@ -123,11 +129,14 @@ void bdesc_release(bdesc_t ** bdesc)
 		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, *bdesc, (*bdesc)->ddesc);
 		if(!(*bdesc)->ddesc->ref_count)
 		{
+			uint16_t i;
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlaps)
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+			for(i = 0; i < NBDLEVEL; i++)
+				assert(!(*bdesc)->ddesc->ready_changes[i].head);
 			hash_map_destroy((*bdesc)->ddesc->bit_changes);
 			if((*bdesc)->ddesc->manager)
 				blockman_remove((*bdesc)->ddesc);

@@ -5,6 +5,11 @@
 
 #include <kfs/oo.h>
 
+/* maximum number of BD levels */
+#define NBDLEVEL 4
+/* this value represents no level */
+#define BDLEVEL_NONE ((uint16_t) -1)
+
 struct BD;
 typedef struct BD BD_t;
 

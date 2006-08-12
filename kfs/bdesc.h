@@ -14,12 +14,22 @@ typedef struct datadesc datadesc_t;
 #include <kfs/chdesc.h>
 #include <kfs/blockman.h>
 
+struct chdesc_dlist {
+	chdesc_t * head;
+	chdesc_t ** tail;
+};
+typedef struct chdesc_dlist chdesc_dlist_t;
+
 struct datadesc {
 	uint8_t * data;
 	uint32_t ref_count;
 
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;
+
+	/* For each level (at most one BD per level), the level's ready chdescs.
+	 * ready chdesc: chdesc with no dependencies at its level or higher. */
+	chdesc_dlist_t ready_changes[NBDLEVEL];
 
 	chdesc_t * overlaps;
 	hash_map_t * bit_changes;

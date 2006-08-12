@@ -39,8 +39,7 @@ typedef struct revision_slice {
 	chdesc_t ** ready;
 } revision_slice_t;
 
-revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, bool external);
-void revision_slice_push_down(revision_slice_t * slice);
+revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target);
 void revision_slice_pull_up(revision_slice_t * slice);
 void revision_slice_destroy(revision_slice_t * slice);
 

@@ -174,8 +174,7 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	if(!chdesc)
 		return FLUSH_EMPTY;
 	
-	/* honor external dependencies: 1 for the last parameter here */
-	slice = revision_slice_create(slot->block, object, info->bd, 1);
+	slice = revision_slice_create(slot->block, object, info->bd);
 	if(!slice)
 	{
 		kdprintf(STDERR_FILENO, "%s(): OOM and can't flush!\n", __FUNCTION__);
@@ -184,12 +183,12 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	
 	if(!slice->ready_size)
 	{
+		revision_slice_pull_up(slice);
 		/* otherwise we would have caught it above... */
 		r = FLUSH_NONE;
 	}
 	else
 	{
-		revision_slice_push_down(slice);
 		r = CALL(info->bd, write_block, slot->block);
 		if(r < 0)
 		{

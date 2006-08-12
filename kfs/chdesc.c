@@ -3,6 +3,7 @@
 #include <lib/kdprintf.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
+#include <lib/types.h>
 #include <lib/memdup.h>
 #include <lib/panic.h>
 
@@ -133,6 +134,189 @@ static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 	return hash_map_find_val(block->ddesc->bit_changes, (void *) (uint32_t) offset);
 }
 
+
+#include <lib/string.h>
+/* TODO: should we (and how do we want to) optimize this in the kernel? */
+static void * srealloc(void * p, size_t p_size, size_t new_size)
+{
+	void * q = smalloc(new_size);
+	if(!q)
+		return NULL;
+	if(p)
+		memcpy(q, p, p_size);
+	sfree(p, p_size);
+	return q;
+}
+
+#define STATIC_STATES_CAPACITY 1024 /* 1024 is fairly arbitrary */
+
+static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev_level, uint16_t new_level)
+{
+	/* recursion-on-the-heap support */
+	struct state {
+		chmetadesc_t * noops_dependents;
+		uint16_t prev_level;
+		uint16_t new_level;
+	};
+	typedef struct state state_t;
+	static state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	state_t * states = static_states;
+	state_t * state = states;
+
+  recurse_start:
+	assert(!noop_dependent->owner);
+	assert(prev_level != new_level);
+	assert(prev_level != BDLEVEL_NONE || new_level != BDLEVEL_NONE);
+
+	chmetadesc_t * noops_dependents = noop_dependent->dependents;
+	for(; noops_dependents; noops_dependents = noops_dependents->dependent.next)
+	{
+		chdesc_t * c = noops_dependents->dependent.desc;
+		uint16_t c_prev_level = chdesc_level(c);
+
+		if(prev_level != BDLEVEL_NONE)
+		{
+			assert(c->befores[prev_level]);
+			c->befores[prev_level]--;
+		}
+		if(new_level != BDLEVEL_NONE)
+		{
+			c->befores[new_level]++;
+			assert(c->befores[new_level]);
+		}
+		chdesc_update_ready_changes(c);
+
+		if(!c->owner)
+		{
+			uint16_t c_new_level = chdesc_level(c);
+			if(c_prev_level != c_new_level)
+			{
+				/* Recursively propagate the level change; equivalent to
+				 * propagate_noop_level_change(c, c_prev_level, c_new_level).
+				 * We don't recursively call this function because we can
+				 * overflow the stack. We instead use the 'states' array
+				 * to hold this function's recursive state. */
+				size_t next_index = 1 + state - &states[0];
+
+				state->noops_dependents = noops_dependents;
+				state->prev_level = prev_level;
+				state->new_level = new_level;
+
+				noop_dependent = c;
+				prev_level = c_prev_level;
+				new_level = c_new_level;
+				
+				if(next_index < states_capacity)
+					state++;
+				else
+				{
+					size_t cur_size = states_capacity * sizeof(*state);
+					states_capacity *= 2;
+					if(states == static_states)
+					{
+						states = smalloc(states_capacity * sizeof(*state));
+						if(states)
+							memcpy(states, static_states, cur_size);
+					}
+					else
+						states == srealloc(states, cur_size, states_capacity * sizeof(*state));
+					if(!states)
+						panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
+					state = &states[next_index];
+				}
+				goto recurse_start;
+
+			  recurse_resume:
+				(void) 0; /* placate compiler re deprecated end labels */
+			}
+		}
+	}
+
+	if(state != &states[0])
+	{
+		state--;
+		noops_dependents = state->noops_dependents;
+		prev_level = state->prev_level;
+		new_level = state->new_level;
+		goto recurse_resume;
+	}
+
+	if(states != static_states)
+		sfree(states, states_capacity * sizeof(*state));
+}
+
+/* propagate the new dependency's level info for 'dependent' on 'dependency' */
+static void propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+{
+	uint16_t dependency_level = chdesc_level(dependency);
+	uint16_t dependent_prev_level;
+
+	if(dependency_level == BDLEVEL_NONE)
+		return;
+	dependent_prev_level = chdesc_level(dependent);
+
+	dependent->befores[dependency_level]++;
+	assert(dependent->befores[dependency_level]);
+	chdesc_update_ready_changes(dependent);
+	if(!dependent->owner)
+	{
+		if(dependency_level > dependent_prev_level || dependent_prev_level == BDLEVEL_NONE)
+			propagate_noop_level_change(dependent, dependent_prev_level, dependency_level);
+	}
+}
+
+/* unpropagate the dependency's level info for 'dependent' on 'dependency' */
+static void unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+{
+	uint16_t dependency_level = chdesc_level(dependency);
+	uint16_t dependent_prev_level;
+
+	if(dependency_level == BDLEVEL_NONE)
+		return;
+	dependent_prev_level = chdesc_level(dependent);
+
+	assert(dependent->befores[dependency_level]);
+	dependent->befores[dependency_level]--;
+	chdesc_update_ready_changes(dependent);
+	if(!dependent->owner)
+	{
+		if(dependency_level == dependent_prev_level && !dependent->befores[dependency_level])
+			propagate_noop_level_change(dependent, dependent_prev_level, chdesc_level(dependent));
+	}
+}
+
+void chdesc_propagate_level_change(chmetadesc_t * dependents, uint16_t prev_level, uint16_t new_level)
+{
+	assert(prev_level < NBDLEVEL || prev_level == BDLEVEL_NONE);
+	assert(new_level < NBDLEVEL || new_level == BDLEVEL_NONE);
+	assert(prev_level != new_level);
+	for(; dependents; dependents = dependents->dependent.next)
+	{
+		chdesc_t * c = dependents->dependent.desc;
+		uint16_t c_prev_level = chdesc_level(c);
+
+		if(prev_level != BDLEVEL_NONE)
+		{
+			assert(c->befores[prev_level]);
+			c->befores[prev_level]--;
+		}
+		if(new_level != BDLEVEL_NONE)
+		{
+			c->befores[new_level]++;
+			assert(c->befores[new_level]);
+		}
+		chdesc_update_ready_changes(c);
+
+		if(!c->owner)
+		{
+			uint16_t c_new_level = chdesc_level(c);
+			if(c_prev_level != c_new_level)
+				propagate_noop_level_change(c, c_prev_level, c_new_level);
+		}
+	}
+}
+
 /* add a dependency to a change descriptor without checking for cycles */
 static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 {
@@ -150,6 +334,9 @@ static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
 	meta = malloc(sizeof(*meta));
 	if(!meta)
 		return -E_NO_MEM;
+	
+	propagate_dependency(dependent, dependency);
+	
 	/* add the dependency to the dependent */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, dependent, dependency);
 	meta->dependency.desc = dependency;
@@ -339,6 +526,24 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return chdesc_overlap_multiattach_slip(chdesc, block, 0);
 }
 
+void __propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+#if defined(__MACH__)
+{
+	return propagate_dependency(dependent, dependency);
+}
+#else
+	__attribute__ ((alias("propagate_dependency")));
+#endif
+
+void __unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+#if defined(__MACH__)
+{
+	return unpropagate_dependency(dependent, dependency);
+}
+#else
+	__attribute__ ((alias("unpropagate_dependency")));
+#endif
+
 int __ensure_bdesc_has_overlaps(bdesc_t * block)
 #if defined(__MACH__)
 {
@@ -418,6 +623,111 @@ void chdesc_unlink_all_changes(chdesc_t * chdesc)
 		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
 }
 
+void chdesc_link_ready_changes(chdesc_t * chdesc)
+{
+	assert(!chdesc->ddesc_ready_next && !chdesc->ddesc_ready_pprev);
+	if(chdesc->block)
+	{
+		datadesc_t * ddesc = chdesc->block->ddesc;
+		chdesc_dlist_t * rcl = &ddesc->ready_changes[chdesc->owner->level];
+		chdesc->ddesc_ready_pprev = &rcl->head;
+		chdesc->ddesc_ready_next = rcl->head;
+		rcl->head = chdesc;
+		if(chdesc->ddesc_ready_next)
+			chdesc->ddesc_ready_next->ddesc_ready_pprev = &chdesc->ddesc_ready_next;
+		else
+			rcl->tail = &chdesc->ddesc_ready_next;
+	}
+}
+
+void chdesc_unlink_ready_changes(chdesc_t * chdesc)
+{
+	if(chdesc->ddesc_ready_pprev)
+	{
+		datadesc_t * ddesc = chdesc->block->ddesc;
+		chdesc_dlist_t * rcl = &ddesc->ready_changes[chdesc->owner->level];
+		// remove from old ddesc changes list
+		if(chdesc->ddesc_ready_next)
+			chdesc->ddesc_ready_next->ddesc_ready_pprev = chdesc->ddesc_ready_pprev;
+		else
+			rcl->tail = chdesc->ddesc_ready_pprev;
+		*chdesc->ddesc_ready_pprev = chdesc->ddesc_ready_next;
+		chdesc->ddesc_ready_next = NULL;
+		chdesc->ddesc_ready_pprev = NULL;
+	}
+	else
+		assert(!chdesc->ddesc_ready_next && !chdesc->ddesc_ready_pprev);
+}
+
+/* return whether chdesc is ready to go down one level */
+static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((always_inline));
+static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
+{
+	// empty noops are not on blocks and so can not be on a ready list
+	if(!chdesc->owner)
+		return 0;
+	uint16_t before_level = chdesc_before_level(chdesc);
+	return before_level < chdesc->owner->level || before_level == BDLEVEL_NONE;
+}
+
+void chdesc_update_ready_changes(chdesc_t * chdesc)
+{
+	bool is_ready = chdesc_is_ready(chdesc);
+	bool is_in_ready_list = chdesc->ddesc_ready_pprev != NULL;
+	if(is_in_ready_list)
+	{
+		if(!is_ready)
+			chdesc_unlink_ready_changes(chdesc);
+	}
+	else
+	{
+		if(is_ready)
+			chdesc_link_ready_changes(chdesc);
+	}
+}
+
+void chdesc_tmpize_all_changes(chdesc_t * chdesc)
+{
+	assert(!chdesc->tmp_next && !chdesc->tmp_pprev);
+
+	if(chdesc->ddesc_pprev)
+	{
+		chdesc->tmp_next = chdesc->ddesc_next;
+		chdesc->tmp_pprev = chdesc->ddesc_pprev;
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
+		else
+			chdesc->block->ddesc->all_changes_tail = chdesc->ddesc_pprev;
+		*chdesc->ddesc_pprev = chdesc->ddesc_next;
+
+		chdesc->ddesc_next = NULL;
+		chdesc->ddesc_pprev = NULL;
+	}
+	else
+		assert(!chdesc->ddesc_next);
+}
+
+void chdesc_untmpize_all_changes(chdesc_t * chdesc)
+{
+	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+
+	if(chdesc->tmp_pprev)
+	{
+		chdesc->ddesc_next = chdesc->tmp_next;
+		chdesc->ddesc_pprev = chdesc->tmp_pprev;
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+		else
+			chdesc->block->ddesc->all_changes_tail = &chdesc->ddesc_next;
+		*chdesc->ddesc_pprev = chdesc;
+
+		chdesc->tmp_next = NULL;
+		chdesc->tmp_pprev = NULL;
+	}
+	else
+		assert(!chdesc->tmp_next);
+}
+
 chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 {
 	chdesc_t * chdesc;
@@ -435,12 +745,16 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->dependents = NULL;
 	chdesc->dependents_tail = &chdesc->dependents;
 	chdesc->weak_refs = NULL;
+	memset(chdesc->befores, 0, sizeof(chdesc->befores));
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
-	chdesc->stamps = 0;
-	chdesc->ready_epoch = 0;
 	chdesc->ddesc_next = NULL;
 	chdesc->ddesc_pprev = NULL;
+	chdesc->ddesc_ready_next = NULL;
+	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->tmp_next = NULL;
+	chdesc->tmp_pprev = NULL;
+	chdesc->stamps = 0;
 	
 	/* NOOP chdescs start applied */
 	chdesc->flags = 0;
@@ -449,6 +763,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	{
 		/* add chdesc to block's dependencies */
 		chdesc_link_all_changes(chdesc);
+		chdesc_link_ready_changes(chdesc);
 		
 		/* make sure our block sticks around */
 		bdesc_retain(block);
@@ -480,15 +795,21 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->dependents = NULL;
 	chdesc->dependents_tail = &chdesc->dependents;
 	chdesc->weak_refs = NULL;
+	memset(chdesc->befores, 0, sizeof(chdesc->befores));
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
-	chdesc->stamps = 0;
-	chdesc->ready_epoch = 0;
 	chdesc->ddesc_next = NULL;
 	chdesc->ddesc_pprev = NULL;
-	
+	chdesc->ddesc_ready_next = NULL;
+	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->tmp_next = NULL;
+	chdesc->tmp_pprev = NULL;
+	chdesc->stamps = 0;
+
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
+
+	chdesc_link_ready_changes(chdesc);
 	
 	/* make sure it is dependent upon any pre-existing chdescs */
 	if(chdesc_overlap_multiattach(chdesc, block))
@@ -589,12 +910,16 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
 		chdescs[i]->weak_refs = NULL;
+		memset(chdescs[i]->befores, 0, sizeof(chdescs[i]->befores));
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
-		chdescs[i]->stamps = 0;
-		chdescs[i]->ready_epoch = 0;
 		chdescs[i]->ddesc_next = NULL;
 		chdescs[i]->ddesc_pprev = NULL;
+		chdescs[i]->ddesc_ready_next = NULL;
+		chdescs[i]->ddesc_ready_pprev = NULL;
+		chdescs[i]->tmp_next = NULL;
+		chdescs[i]->tmp_pprev = NULL;
+		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -610,6 +935,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
 
 		chdesc_link_all_changes(chdescs[i]);
+		chdesc_link_ready_changes(chdescs[i]);
 		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 		{
 		    destroy:
@@ -711,12 +1037,16 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
 		chdescs[i]->weak_refs = NULL;
+		memset(chdescs[i]->befores, 0, sizeof(chdescs[i]->befores));
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
-		chdescs[i]->stamps = 0;
-		chdescs[i]->ready_epoch = 0;
 		chdescs[i]->ddesc_next = NULL;
 		chdescs[i]->ddesc_pprev = NULL;
+		chdescs[i]->ddesc_ready_next = NULL;
+		chdescs[i]->ddesc_ready_pprev = NULL;
+		chdescs[i]->tmp_next = NULL;
+		chdescs[i]->tmp_pprev = NULL;
+		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -732,6 +1062,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 		
 		chdesc_link_all_changes(chdescs[i]);
+		chdesc_link_ready_changes(chdescs[i]);
 		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 		{
 		    destroy:
@@ -829,12 +1160,16 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		chdescs[i]->dependents = NULL;
 		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
 		chdescs[i]->weak_refs = NULL;
+		memset(chdescs[i]->befores, 0, sizeof(chdescs[i]->befores));
 		chdescs[i]->free_prev = NULL;
 		chdescs[i]->free_next = NULL;
-		chdescs[i]->stamps = 0;
-		chdescs[i]->ready_epoch = 0;
 		chdescs[i]->ddesc_next = NULL;
 		chdescs[i]->ddesc_pprev = NULL;
+		chdescs[i]->ddesc_ready_next = NULL;
+		chdescs[i]->ddesc_ready_pprev = NULL;
+		chdescs[i]->tmp_next = NULL;
+		chdescs[i]->tmp_pprev = NULL;
+		chdescs[i]->stamps = 0;
 		
 		/* start rolled back so we can apply it */
 		chdescs[i]->flags = CHDESC_ROLLBACK;
@@ -850,6 +1185,7 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
 
 		chdesc_link_all_changes(chdescs[i]);
+		chdesc_link_ready_changes(chdescs[i]);
 		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
 		{
 		    destroy:
@@ -1030,6 +1366,8 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 
 static void chdesc_meta_remove(chmetadesc_t * meta)
 {
+	unpropagate_dependency(meta->dependent.desc, meta->dependency.desc);
+	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->dependent.desc, meta->dependency.desc);
 	*meta->dependency.ptr = meta->dependency.next;
 	if(meta->dependency.next)
@@ -1259,6 +1597,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		}
 	}
 	
+	chdesc_unlink_ready_changes(*chdesc);
 	chdesc_unlink_all_changes(*chdesc);
 	
 	chdesc_weak_collect(*chdesc);
@@ -1371,6 +1710,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		chdesc_satisfy(&desc);
 	}
 
+	chdesc_unlink_ready_changes(*chdesc);
 	chdesc_unlink_all_changes(*chdesc);
 	
 	chdesc_weak_collect(*chdesc);
@@ -1409,6 +1749,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 void chdesc_claim_noop(chdesc_t * chdesc)
 {
 	assert(chdesc->type == NOOP && !chdesc->dependencies);
+	assert(chdesc_before_level(chdesc) == BDLEVEL_NONE);
 	if(chdesc->free_prev || free_head == chdesc)
 		chdesc_free_remove(chdesc);
 }
@@ -1416,6 +1757,7 @@ void chdesc_claim_noop(chdesc_t * chdesc)
 void chdesc_autorelease_noop(chdesc_t * chdesc)
 {
 	assert(chdesc->type == NOOP && !chdesc->dependencies && !(chdesc->flags & CHDESC_WRITTEN));
+	assert(chdesc_before_level(chdesc) == BDLEVEL_NONE);
 	while(chdesc->dependents)
 		chdesc_meta_remove(chdesc->dependents);
 	if(!chdesc->free_prev && free_head != chdesc)

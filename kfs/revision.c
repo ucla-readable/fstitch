@@ -238,204 +238,115 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
  * a particular time, organized in a nice way so that we can figure out which
  * ones are ready to be written down and which ones are not. */
 
-#include <lib/string.h>
-// TODO: how do we want to (and should we) optimize this in the kernel?
-static void * __srealloc(void * p, size_t p_size, size_t new_size)
+/* move 'chdesc' from its ddesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
+static void link_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)
 {
-	void * q = smalloc(new_size);
-	if(!q)
-		return NULL;
-	if(p)
-		memcpy(q, p, p_size);
-	sfree(p, p_size);
-	return q;
+	chdesc_tmpize_all_changes(chdesc);
+
+	chdesc->ddesc_pprev = tmp_ready;
+	chdesc->ddesc_next = *tmp_ready;
+	*tmp_ready = chdesc;
+	if(chdesc->ddesc_next)
+		chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+	else
+		*tmp_ready_tail = &chdesc->ddesc_next;
 }
 
-#define STATIC_STATES_CAPACITY 256
-
-static uint32_t ready_epoch = 1;
-
-/* A chdesc that is externally ready has one of these properties:
- *   1. It has no dependencies.
- *   2. It only has dependencies whose levels are less than or equal to its target level.
- *   3. It only has dependencies which are on the same block and which are ready.
- *   4. It only has dependencies as in #2 and #3 above.
- * A chdesc that is internally ready need not satisfy as much: dependencies on
- * chdescs owned by other block devices are ignored. Note that this causes
- * indirect dependencies on chdescs owned by this block device to be missed. */
-
-static bool revision_slice_chdesc_is_ready(chdesc_t * chdesc, const BD_t * const owner, const bdesc_t * const block, const uint16_t target_level, const bool external)
+/* move 'chdesc' back from the list 'tmp_ready' to its ddesc's all_changes */
+static void unlink_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)
 {
-	/* recursion-on-the-heap support */
-	struct chdesc_is_ready_state {
-			chdesc_t * chdesc;
-			chmetadesc_t * meta;
-	};
-	typedef struct chdesc_is_ready_state chdesc_is_ready_state_t;
-	static chdesc_is_ready_state_t static_states[STATIC_STATES_CAPACITY];
-	size_t states_capacity = STATIC_STATES_CAPACITY;
-	chdesc_is_ready_state_t * states = static_states;
-	chdesc_is_ready_state_t * state = states;
-	
-	chmetadesc_t * meta;
-	size_t next_index;
-
-	assert(external == 0 || external == 1);
-
- recurse_start:
-	if(chdesc->ready_epoch == ready_epoch)
+	assert(chdesc->block && chdesc->owner);
+	if(chdesc->ddesc_pprev)
 	{
-		if(chdesc->flags & CHDESC_READY)
-			goto recurse_done;
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
 		else
-			goto exit;
+			*tmp_ready_tail = chdesc->ddesc_pprev;
+		*chdesc->ddesc_pprev = chdesc->ddesc_next;
+		chdesc->ddesc_next = NULL;
+		chdesc->ddesc_pprev = NULL;
 	}
+	else
+		assert(!chdesc->ddesc_next);
 
-	chdesc->flags &= ~CHDESC_READY;
-	chdesc->ready_epoch = ready_epoch;
-	assert(!chdesc->block || chdesc->owner);
-	meta = chdesc->dependencies;
-
- recurse_meta:
-	for(; meta; meta = meta->dependency.next)
-	{
-		chdesc_t * dep = meta->dependency.desc;
-		
-		/* handle NOOP properly: it can have NULL block and owner */
-		
-		if(!dep->owner && !dep->block)
-			/* unmanaged NOOP: always recurse */
-			goto recurse_down;
-		else if(!external && dep->owner != owner)
-			continue;
-		else if(!dep->block)
-		{
-			/* managed NOOP: just check level */
-			if(dep->owner->level > target_level)
-				goto exit;
-		}
-		else
-		{
-			/* normal chdesc or on-block NOOP: recurse when
-			 * owner and block match, otherwise check level */
-			if(dep->owner == owner && dep->block->ddesc == block->ddesc)
-				goto recurse_down;
-			else if(dep->owner->level > target_level)
-				goto exit;
-		}
-
-		continue;
-
-	recurse_down:
-		/* recursively determine whether dep is ready.
-		 * we don't recursively call this function and use the stack because the
-		 * depth can grow large enough to overflow stacks that are just a few kB.
-		 * we instead use the 'states' array to hold this function's recursive
-		 * state */
-		next_index = 1 + state - &states[0];
-		state->chdesc = chdesc;
-		state->meta = meta->dependency.next;
-		chdesc = dep;
-		if(next_index < states_capacity)
-			state++;
-		else
-		{
-			size_t cur_size = states_capacity * sizeof(*state);
-			states_capacity *= 2;
-			if(states == static_states)
-			{
-				states = smalloc(states_capacity * sizeof(*state));
-				if(states)
-					memcpy(states, static_states, cur_size);
-			}
-			else
-				states = __srealloc(states, cur_size, states_capacity * sizeof(*state));
-
-			if(!states)
-			{
-				kdprintf(STDERR_FILENO, "%s: __realloc(%u bytes) failed\n", __FUNCTION__, states_capacity);
-				return 0;
-			}
-			state = &states[next_index];
-		}
-		goto recurse_start;
-	}
-	
-	/* At this point, we know the current chdesc is ready. */
-	chdesc->flags |= CHDESC_READY;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_READY);
-	
- recurse_done:
-	if(state != &states[0])
-	{
-		state--;
-		chdesc = state->chdesc;
-		meta = state->meta;
-		goto recurse_meta;
-	}
-	
- exit:
-	if(states != static_states)
-		sfree(states, states_capacity * sizeof(*state));
-	return (chdesc->flags & CHDESC_READY) != 0;
+	chdesc_untmpize_all_changes(chdesc);
 }
 
-revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, bool external)
+revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target)
 {
-	int j = 0;
-	chdesc_t * scan, ** scan_pprev;
-	uint16_t target_level = target->level;
+	chdesc_t * tmp_ready = NULL;
+	chdesc_t ** tmp_ready_tail = &tmp_ready;
+	chdesc_dlist_t * rcl = &block->ddesc->ready_changes[owner->level];
+	chdesc_t * scan;
 	revision_slice_t * slice = malloc(sizeof(*slice));
 	if(!slice)
 		return NULL;
+
+	assert(owner->level - 1 == target->level);
 	
 	slice->owner = owner;
 	slice->target = target;
 	slice->all_ready = 1;
 	slice->ready_size = 0;
 	slice->ready = NULL;
-	if(!block->ddesc->all_changes)
-		return slice;
 
-	/* update ready epoch */
-	if(++ready_epoch == 0)
-		++ready_epoch;
+	/* move all the chdescs down a level that can be moved down a level */
+	while((scan = rcl->head))
+	{
+		slice->ready_size++;
 
+		/* push down to update the ready list */
+		link_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
+		chdesc_unlink_ready_changes(scan);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
+		scan->owner = target;
+		chdesc_propagate_level_change(scan->dependents, owner->level, target->level);
+		chdesc_update_ready_changes(scan);
+	}
 
-	scan_pprev = &block->ddesc->all_changes;
-	while((scan = *scan_pprev))
+	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
+	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 	{
 		if(scan->owner == owner)
 		{
-			if(revision_slice_chdesc_is_ready(scan, owner, block, target_level, external))
-				slice->ready_size++;
-			else
-				slice->all_ready = 0;
-		}
-
-		if(*scan_pprev == scan)
-			scan_pprev = &scan->ddesc_next;
-	}
-	
-	while(scan && slice->all_ready)
-	{
-		if(scan->owner == owner)
 			slice->all_ready = 0;
-		scan = scan->ddesc_next;
+			break;
+		}
 	}
-		
+
 	if(slice->ready_size)
 	{
+		chdesc_t * scan;
+		int j = 0;
 		slice->ready = scalloc(slice->ready_size, sizeof(*slice->ready));
 		if(!slice->ready)
 		{
+			/* pull back up from push down */
+			/* it's sad that the tmp list exists solely for this error case.
+			 * and it's sad that this scalloc() exists solely for pull_up. */
+			for(scan = tmp_ready; scan;)
+			{
+				chdesc_t * next = scan->ddesc_next;
+				chdesc_unlink_ready_changes(scan);
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
+				scan->owner = owner;
+				chdesc_propagate_level_change(scan->dependents, target->level, owner->level);
+				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
+				chdesc_update_ready_changes(scan);
+				scan = next;
+			}
+
 			free(slice);
 			return NULL;
 		}
 
-		for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-			if(scan->owner == owner && (scan->flags & CHDESC_READY))
-				slice->ready[j++] = scan;
+		for(scan = tmp_ready; scan;)
+		{
+			chdesc_t * next = scan->ddesc_next;
+			slice->ready[j++] = scan;
+			unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
+			scan = next;
+		}
 		assert(j == slice->ready_size);
 	}
 	
@@ -447,7 +358,6 @@ void revision_slice_push_down(revision_slice_t * slice)
 	/* like chdesc_push_down, but without block reassignment (only needed
 	 * for things changing block numbers) and for slices instead of all
 	 * chdescs: it only pushes down the ready part of the slice */
-	/* CLEAR CHDESC_READY */
 	int i;
 	for(i = 0; i != slice->ready_size; i++)
 	{
@@ -455,11 +365,13 @@ void revision_slice_push_down(revision_slice_t * slice)
 			continue;
 		if(slice->ready[i]->owner == slice->owner)
 		{
+			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
+			chdesc_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->owner = slice->target;
-
-			/* KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, slice->ready[i], CHDESC_READY); */
-			/* XXX no longer needed slice->ready[i]->flags &= ~CHDESC_READY; */
+			chdesc_update_ready_changes(slice->ready[i]);
+			if(prev_level != chdesc_level(slice->ready[i]))
+				chdesc_propagate_level_change(slice->ready[i]->dependents, prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
@@ -469,7 +381,6 @@ void revision_slice_push_down(revision_slice_t * slice)
 void revision_slice_pull_up(revision_slice_t * slice)
 {
 	/* the reverse of revision_slice_push_down, in case write() fails */
-	/* SET CHDESC_READY */
 	int i;
 	for(i = 0; i != slice->ready_size; i++)
 	{
@@ -477,11 +388,13 @@ void revision_slice_pull_up(revision_slice_t * slice)
 			continue;
 		if(slice->ready[i]->owner == slice->target)
 		{
+			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
+			chdesc_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->owner = slice->owner;
-
-			/* KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, slice->ready[i], CHDESC_READY); */
-			/* XXX no longer needed slice->ready[i]->flags |= CHDESC_READY; */
+			chdesc_update_ready_changes(slice->ready[i]);
+			if(prev_level != chdesc_level(slice->ready[i]))
+				chdesc_propagate_level_change(slice->ready[i]->dependents, prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);

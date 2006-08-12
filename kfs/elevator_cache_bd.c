@@ -275,14 +275,13 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 	for(;;)
 	{
 		block = advance_head(info);
-		slice = revision_slice_create(block, object, info->bd, 0);
+		slice = revision_slice_create(block, object, info->bd);
 		if(!slice)
 			return -E_NO_MEM;
 		if(slice->ready_size)
 		{
 			int r;
 			
-			revision_slice_push_down(slice);
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
 			{
@@ -306,7 +305,7 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 		block = advance_head_limit(info, max_gap_size);
 		if(!block)
 			break;
-		slice = revision_slice_create(block, object, info->bd, 0);
+		slice = revision_slice_create(block, object, info->bd);
 		if(!slice)
 			return -E_NO_MEM;
 		/* when doing optimistic writes, only write while we can write everything */
@@ -314,7 +313,6 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 		{
 			int r;
 			
-			revision_slice_push_down(slice);
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
 			{
@@ -330,7 +328,10 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 			info->dirty--;
 		}
 		else
+		{
+			revision_slice_pull_up(slice);
 			revision_slice_destroy(slice);
+		}
 	}
 	
 	return 0;
