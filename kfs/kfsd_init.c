@@ -23,11 +23,11 @@
 #include <kfs/loop_bd.h>
 #ifdef UNIXUSER
 #include <kfs/unix_file_bd.h>
+#include <kfs/ext2_base.h>
 #endif
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
-#include <kfs/ext2_base.h>
 #include <kfs/ufs_base.h>
 #include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
@@ -549,6 +549,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				continue;
 			}
 		}
+#ifdef UNIXUSER
 		else if (part->type == PTABLE_LINUX_TYPE)
 		{
 			// TODO handle differnt block sizes
@@ -565,6 +566,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				continue;
 			}
 		}
+#endif
 		else
 		{
 			printf("Unknown partition type %x\n", part->type);
