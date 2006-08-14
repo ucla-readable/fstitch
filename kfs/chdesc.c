@@ -1458,7 +1458,7 @@ int chdesc_apply(chdesc_t * chdesc)
 #endif
 			break;
 		case NOOP:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): applying NOOP chdesc (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
+			/* NOOP application is easy! */
 			break;
 		default:
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
@@ -1492,7 +1492,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 #endif
 			break;
 		case NOOP:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): rolling back NOOP chdesc (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
+			/* NOOP rollback is easy! */
 			break;
 		default:
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
