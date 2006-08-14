@@ -52,6 +52,9 @@ fi
 
 echo "==== `date`" >> "$TIME_LOG"
 
+# load into cache
+cat "$TARFILE" > /dev/null
+
 for i in `seq $NRUNS`
 do
 	echo "==== start run $i"
