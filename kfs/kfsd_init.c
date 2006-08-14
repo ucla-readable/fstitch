@@ -70,6 +70,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define USE_ICASE 0
 
 //#define USE_MIRROR
+#define USE_ELEVATOR 0
 #define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
@@ -77,7 +78,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 int kfsd_init(int argc, char ** argv)
 {
-	const bool allow_journal = 1;
+	const bool allow_journal = 0;
 	const bool use_disk_0 = 1;
 #if defined(KUDOS)
 	const bool use_disk_1 = 0;
@@ -223,11 +224,13 @@ int kfsd_init(int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+#if USE_ELEVATOR
 			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
 			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+#endif
 			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
 				return r;
 		}
@@ -252,11 +255,13 @@ int kfsd_init(int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+#if USE_ELEVATOR
 			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
 			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+#endif
 			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
 				return r;
 		}
@@ -272,11 +277,13 @@ int kfsd_init(int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+#if USE_ELEVATOR
 			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
 			bd = elevator_cache_bd(bd, 128, 64, 3);
 			if (!bd)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
+#endif
 			printf("Using disk 2\n");
 			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
 				return r;

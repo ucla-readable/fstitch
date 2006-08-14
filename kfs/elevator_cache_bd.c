@@ -272,6 +272,17 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 	if(!info->dirty)
 		return 0;
 	
+	/* FIXME: it is possible for this function to not terminate, because
+	 * it can be impossible to evict an entire block.
+	 * For example, chdescs C[0]->B[1]->A[0] (notation: chdesc C on block 0)
+	 * with A, then B, then C pushed down before any are written.
+	 * I believe this problem existed even with internal readiness.
+	 * There is also a new problem class involving multiple elevator caches
+	 * with cross-device dependencies. Say C{0}->B{1}->A{0} exist (notation:
+	 * chdesc C on path 0) with A, then B, then C pushed down before any are
+	 * written. With internal readiness progress would be made, but only
+	 * because it ignores dependencies. */
+	
 	for(;;)
 	{
 		block = advance_head(info);
