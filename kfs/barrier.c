@@ -231,7 +231,7 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 				/* create an internal^Wexternal slice */
 				r = revision_slice_create(forward->block, barrier, forward->target, &slice);
 				if (r < 0)
-					panic("%s(): revision_slice_create() returned %e, but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
+					panic("%s(): revision_slice_create() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 
 				if (slice.ready_size)
 				{
