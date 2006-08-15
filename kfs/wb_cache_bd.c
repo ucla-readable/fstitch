@@ -163,7 +163,7 @@ static void touch_block(struct cache_info * info, uint32_t index)
 static int flush_block(BD_t * object, struct cache_slot * slot)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	revision_slice_t * slice;
+	revision_slice_t slice;
 	chdesc_t * chdesc;
 	int r;
 	
@@ -174,16 +174,16 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	if(!chdesc)
 		return FLUSH_EMPTY;
 	
-	slice = revision_slice_create(slot->block, object, info->bd);
-	if(!slice)
+	r = revision_slice_create(slot->block, object, info->bd, &slice);
+	if(r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): OOM and can't flush!\n", __FUNCTION__);
+		kdprintf(STDERR_FILENO, "%s() returned %i; can't flush!\n", __FUNCTION__, r);
 		return FLUSH_NONE;
 	}
 	
-	if(!slice->ready_size)
+	if(!slice.ready_size)
 	{
-		revision_slice_pull_up(slice);
+		revision_slice_pull_up(&slice);
 		/* otherwise we would have caught it above... */
 		r = FLUSH_NONE;
 	}
@@ -192,14 +192,14 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 		r = CALL(info->bd, write_block, slot->block);
 		if(r < 0)
 		{
-			revision_slice_pull_up(slice);
+			revision_slice_pull_up(&slice);
 			r = FLUSH_NONE;
 		}
 		else
-			r = (slice->all_ready ? FLUSH_DONE : FLUSH_SOME);
+			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
 	}
 	
-	revision_slice_destroy(slice);
+	revision_slice_destroy(&slice);
 	
 	return r;
 }

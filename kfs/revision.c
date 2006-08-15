@@ -272,15 +272,12 @@ static void unlink_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail,
 	chdesc_untmpize_all_changes(chdesc);
 }
 
-revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target)
+int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision_slice_t * slice)
 {
 	chdesc_t * tmp_ready = NULL;
 	chdesc_t ** tmp_ready_tail = &tmp_ready;
 	chdesc_dlist_t * rcl = &block->ddesc->ready_changes[owner->level];
 	chdesc_t * scan;
-	revision_slice_t * slice = malloc(sizeof(*slice));
-	if(!slice)
-		return NULL;
 
 	assert(owner->level - 1 == target->level);
 	
@@ -335,9 +332,7 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 				chdesc_update_ready_changes(scan);
 				scan = next;
 			}
-
-			free(slice);
-			return NULL;
+			return -ENOMEM;
 		}
 
 		for(scan = tmp_ready; scan;)
@@ -350,7 +345,7 @@ revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * t
 		assert(j == slice->ready_size);
 	}
 	
-	return slice;
+	return 0;
 }
 
 void revision_slice_push_down(revision_slice_t * slice)
@@ -403,7 +398,13 @@ void revision_slice_pull_up(revision_slice_t * slice)
 
 void revision_slice_destroy(revision_slice_t * slice)
 {
+	slice->owner = NULL;
+	slice->target = NULL;
+	slice->all_ready = 0;
+	slice->ready_size = 0;
 	if(slice->ready)
+	{
 		sfree(slice->ready, slice->ready_size * sizeof(*slice->ready));
-	free(slice);
+		slice->ready = NULL;
+	}
 }

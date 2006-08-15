@@ -39,8 +39,10 @@ typedef struct revision_slice {
 	chdesc_t ** ready;
 } revision_slice_t;
 
-revision_slice_t * revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target);
+/* create a new revision slice in 'new_slice' and push the slice down */
+int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision_slice_t * new_slice);
 void revision_slice_pull_up(revision_slice_t * slice);
+/* destroy the contents of 'slice' */
 void revision_slice_destroy(revision_slice_t * slice);
 
 #endif /* __KUDOS_KFS_REVISION_H */

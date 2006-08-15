@@ -265,8 +265,6 @@ static bdesc_t * advance_head_limit(struct cache_info * info, uint32_t limit)
 static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_size)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	revision_slice_t * slice;
-	bdesc_t * block;
 	Dprintf("%s()\n", __FUNCTION__);
 	
 	if(!info->dirty)
@@ -285,63 +283,71 @@ static int evict_block(BD_t * object, int optimistic_count, uint32_t max_gap_siz
 	
 	for(;;)
 	{
+		bdesc_t * block;
+		revision_slice_t slice;
+		int r;
+
 		block = advance_head(info);
-		slice = revision_slice_create(block, object, info->bd);
-		if(!slice)
-			return -E_NO_MEM;
-		if(slice->ready_size)
+		r = revision_slice_create(block, object, info->bd, &slice);
+		if(r < 0)
+			return r;
+		if(slice.ready_size)
 		{
 			int r;
 			
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
 			{
-				revision_slice_pull_up(slice);
-				revision_slice_destroy(slice);
+				revision_slice_pull_up(&slice);
+				revision_slice_destroy(&slice);
 				return r;
 			}
 			
-			if(slice->all_ready)
+			if(slice.all_ready)
 			{
-				revision_slice_destroy(slice);
+				revision_slice_destroy(&slice);
 				remove_block(info, block);
 				info->dirty--;
 				break;
 			}
 		}
-		revision_slice_destroy(slice);
+		revision_slice_destroy(&slice);
 	}
 	while(info->dirty && optimistic_count--)
 	{
+		bdesc_t * block;
+		revision_slice_t slice;
+		int r;
+
 		block = advance_head_limit(info, max_gap_size);
 		if(!block)
 			break;
-		slice = revision_slice_create(block, object, info->bd);
-		if(!slice)
-			return -E_NO_MEM;
+		r = revision_slice_create(block, object, info->bd, &slice);
+		if(r < 0)
+			return r;
 		/* when doing optimistic writes, only write while we can write everything */
-		if(slice->all_ready)
+		if(slice.all_ready)
 		{
 			int r;
 			
 			r = CALL(info->bd, write_block, block);
 			if(r < 0)
 			{
-				revision_slice_pull_up(slice);
-				revision_slice_destroy(slice);
+				revision_slice_pull_up(&slice);
+				revision_slice_destroy(&slice);
 				/* we have already evicted, so do not report
 				 * the failure of the optimistic write */
 				break;
 			}
 			
-			revision_slice_destroy(slice);
+			revision_slice_destroy(&slice);
 			remove_block(info, block);
 			info->dirty--;
 		}
 		else
 		{
-			revision_slice_pull_up(slice);
-			revision_slice_destroy(slice);
+			revision_slice_pull_up(&slice);
+			revision_slice_destroy(&slice);
 		}
 	}
 	

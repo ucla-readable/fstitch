@@ -227,12 +227,13 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 
 			if (forward->block)
 			{
+				revision_slice_t slice;
 				/* create an internal^Wexternal slice */
-				revision_slice_t * slice = revision_slice_create(forward->block, barrier, forward->target);
-				if (!slice)
-					panic("%s(): revision_slice_create() failed, but chdesc revert-move code for recovery is not implemented", __FUNCTION__);
+				r = revision_slice_create(forward->block, barrier, forward->target, &slice);
+				if (r < 0)
+					panic("%s(): revision_slice_create() returned %e, but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 
-				if (slice->ready_size)
+				if (slice.ready_size)
 				{
 					/* FIXME: slices are now created down */
 					/* old code: revision_slice_push_down(slice); */
@@ -243,11 +244,11 @@ int barrier_partial_forward(partial_forward_t forwards[], size_t nforwards, BD_t
 						panic("%s(): target->write_block() failed (%i), but chdesc revert-move code for recovery is not implemented", __FUNCTION__, r);
 				}
 
-				if (slice->all_ready)
+				if (slice.all_ready)
 					bdesc_release(&forward->block);
 				else
 					again = 1;
-				revision_slice_destroy(slice);
+				revision_slice_destroy(&slice);
 			}
 		}
 		if (!again)
