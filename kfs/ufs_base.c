@@ -100,7 +100,7 @@ static int check_super(LFS_t * object)
 	printf("Inodes per group: %d, fragments per group %d\n", super->fs_ipg, super->fs_fpg);
 	printf("Cylinder Groups: %d\n", super->fs_ncg);
 	printf("Cylinder group offset %d, inode table offset %d\n", super->fs_cblkno, super->fs_iblkno);
-	printf("cg_offset: %d, cgmask: 0x %x\n", super->fs_cgoffset, super->fs_cgmask);
+	printf("cg_offset: %d, cgmask: 0x%x\n", super->fs_cgoffset, super->fs_cgmask);
 	printf("internal symlink max length: %d\n", super->fs_maxsymlinklen);
 	printf("Flags: fmod: %d, clean: %d, ronly: %d, flags: %d\n",
 			super->fs_fmod, super->fs_clean, super->fs_ronly, super->fs_flags);
