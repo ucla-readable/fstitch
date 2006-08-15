@@ -5,13 +5,14 @@ NRUNS=1
 TIME_LOG=time.log
 MNT=mnt
 KDIR=k1
-TARFILE=~/amarok/amarok-1.4-beta3c.tar.bz2
-TAROUT=amarok-1.4-beta3c
+TARFILE=linux-2.6.15.tar
+TAROUT=linux-2.6.15
 
 WRAP_PID=0
 
 function start_kfsd() {
 	NAME="$1"
+	echo "---- $NAME"
 	KFSD_WRAP=time KFSD_WRAP_OPTS="$NAME" ./uukfsd.sh "$MNT/" &
 	WRAP_PID=$!
 	sleep 2 # wait for kfsd to export mounts
@@ -52,24 +53,28 @@ fi
 
 echo "==== `date`" >> "$TIME_LOG"
 
-# load into cache
-cat "$TARFILE" > /dev/null
-
 for i in `seq $NRUNS`
 do
 	echo "==== start run $i"
 	make BUILD=user fsclean && make user || exit 1
 
+	# load into cache
+	cat "$TARFILE" > /dev/null
+
 	start_kfsd tar
-	time_test tar bash -c "tar -C \"$MNT/$KDIR/\" -jxf \"$TARFILE\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
+	time_test tar bash -c "tar -C \"$MNT/$KDIR/\" -xf \"$TARFILE\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
 	stop_kfsd
+	[ -f gmon.out ] && mv gmon.out gmon-tar-$i.out
 
 	start_kfsd rm
 	time_test rm bash -c "rm -rf \"$MNT/$KDIR/$TAROUT/\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
 	stop_kfsd
+	[ -f gmon.out ] && mv gmon.out gmon-rm-$i.out
 done
 
+(
 echo -n "avg-tar "; avg "$TIME_LOG" tar 2
 echo -n "avg-kfsd-tar "; avg "$TIME_LOG" kfsd-tar 4
 echo -n "avg-rm "; avg "$TIME_LOG" rm 2
 echo -n "avg-kfsd-rm "; avg "$TIME_LOG" kfsd-rm 4
+) | tee -a "$TIME_LOG"
