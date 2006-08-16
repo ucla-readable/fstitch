@@ -85,6 +85,9 @@
 #define EXT2_FS_MAGIC	0xEF53	  
 #define EXT2_BLKFILES       (EXT2_BLKSIZE / sizeof(struct EXT2_File))
 
+/* for the bitmaps */
+#define EXT2_FREE	1
+#define EXT2_USED	0
 
 uint32_t EXT2_BLOCK_SIZE;
 //FIXME this is quite made up
