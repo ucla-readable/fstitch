@@ -26,6 +26,11 @@ then
 	KFSD_WRAP_OPTS="--suppressions=conf/memcheck.supp --leak-check=full --show-reachable=yes --leak-resolution=high"
 	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS $@ \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
+elif [ "$KFSD_WRAP" == "cachegrind" ] && [ "$KFSD_WRAP_OPTS" == "" ]
+then
+	KFSD_WRAP_OPTS="--suppressions=conf/memcheck.supp --tool=cachegrind"
+	valgrind $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS $@ \
+		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
 elif [ "$KFSD_WRAP" == "time" ]
 then
 	LOG=time.log
