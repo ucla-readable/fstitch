@@ -974,7 +974,7 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t blockno1, blockno2, offset, first_len, second_len;
+	uint32_t blockno1, blockno2, first_len;
 	bdesc_t * dirblock1, * dirblock2;
 	int r;
 	//check: off end of file?
@@ -1580,7 +1580,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 	}
 	return target;
 }
-     
+
 static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
@@ -1634,12 +1634,11 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 {
 	Dprintf("EXT2DEBUG: ext2_delete_dirent %\n", basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t i, zero_ino = 0;
+	uint32_t zero_ino = 0;
 	uint32_t basep_blockno, prev_basep_blockno;
 	uint16_t len;
 	bdesc_t * dirblock1, * dirblock2;
 	int r = 0;
-	struct dirent entry;
 
 	//TODO the second call to get file block can probably be avoided!
 	//get the blockno of the length of the previous dirent
@@ -1672,7 +1671,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 		if ((r = chdesc_create_byte(dirblock2, info->ubd, ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head )) < 0)
 			return r;
 		//basep might be off here
-		if ((r = chdesc_create_byte(dirblock1, info->ubd, basep % basep, sizeof(inode_t), (void *) &zero_ino, head )) < 0)
+		if ((r = chdesc_create_byte(dirblock1, info->ubd, basep % EXT2_BLOCK_SIZE, sizeof(inode_t), (void *) &zero_ino, head )) < 0)
 			return r;
 	      
 		r = CALL(info->ubd, write_block, dirblock1);
@@ -1712,7 +1711,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	Dprintf("EXT2DEBUG: ext2_remove_name %s\n", name);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	
-	ext2_fdesc_t * pfile, * file;
+	ext2_fdesc_t * pfile = NULL, * file = NULL;
 
 	int r;
 
@@ -1731,7 +1730,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	//put in sanity checks here!
 	struct dirent entry;
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep;
-	uint16_t len;
 	uint8_t minlinks = 1;
 
 	do {
