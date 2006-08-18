@@ -16,7 +16,7 @@ typedef struct UFSmod_cg UFSmod_cg_t;
 
 struct UFSmod_cg {
 	OBJECT(UFSmod_cg_t);
-	DECLARE(UFSmod_cg_t, const uint32_t, get_cylstart, int32_t num);
+	DECLARE(UFSmod_cg_t, uint32_t, get_cylstart, int32_t num);
 	DECLARE(UFSmod_cg_t, const struct UFS_cg *, read, int32_t num);
 	DECLARE(UFSmod_cg_t, int, write_time, int32_t num, int32_t time, chdesc_t ** head);
 	DECLARE(UFSmod_cg_t, int, write_cs, int32_t num, const struct UFS_csum * sum, chdesc_t ** head);

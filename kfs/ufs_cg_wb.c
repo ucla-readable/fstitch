@@ -37,7 +37,7 @@ struct local_info
 
 const int frsum_size = sizeof(int32_t) * UFS_MAXFRAG;
 
-static const uint32_t ufs_cg_wb_get_cylstart(UFSmod_cg_t * object, int32_t num)
+static uint32_t ufs_cg_wb_get_cylstart(UFSmod_cg_t * object, int32_t num)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
 
