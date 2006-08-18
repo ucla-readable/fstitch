@@ -565,7 +565,7 @@ static int dir_lookup(LFS_t * object, ext2_fdesc_t * dir, const char* name, ext2
 
 	for (i = 0; r >= 0; i++)
 	{
-		r = ext2_get_dirent(object, (fdesc_t *)dir, (struct dirent *) &(entry), sizeof(EXT2_Dir_entry_t), &basep);
+		r = ext2_get_dirent(object, (fdesc_t *)dir, &(entry), sizeof(struct dirent), &basep);
 		if (r == 0 && !strcmp(entry.d_name, name)) {
 			*file = (ext2_fdesc_t *)ext2_lookup_inode(object, entry.d_fileno);
 			if(!(*file)) {
@@ -739,7 +739,7 @@ static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * 
 	bdesc_t * dirblock1 = NULL, *dirblock2 = NULL;
 	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks, block_offset;
 
-	num_file_blocks = ext2_get_file_numblocks(object, (fdesc_t *)f);
+	num_file_blocks = f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512); 
 	block_offset = (*basep % EXT2_BLOCK_SIZE);
 
 	if (*basep >= f->f_inode.i_size)
@@ -1313,35 +1313,40 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	strncpy(new_dirent.name, name, EXT2_NAME_LEN);
 	r = ext2_insert_dirent(object, dir, &new_dirent, head);
 	if (r < 0) {
-		printf("OhOh!!\n");
+		printf("Inserting a dirent in allocate_name failed for \"%s\"!\n", name);
 		goto allocate_name_exit2;
 	}
 
 	// Increase link count
 	// TODO are symlinks in the link count??
 	if (ln) {
-		newf->f_inode.i_links_count++;
-		r = ext2_write_inode(info, newf->f_ino, newf->f_inode, head);
+		ln->f_inode.i_links_count++;
+		printf("parent's link count increased to %u by %s\n", newf->f_inode.i_links_count, name);
+		r = ext2_write_inode(info, ln->f_ino, ln->f_inode, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
 	
 	// Create . and ..
 	if (type == TYPE_DIR && !createdot) {
-		inode_t newino;
+		inode_t ino;
+		fdesc_t * cfdesc;
 		metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
 		//TODO could save time by not reopening the parent!
 		//in fact, just insert into the parent dirently!1
-		newf = (EXT2_File_t *) ext2_allocate_name(object, newf->f_ino, ".", TYPE_DIR, (fdesc_t *) newf, &emptymd, &newino, head);
-		if (!newf)
+		cfdesc = ext2_allocate_name(object, newf->f_ino, ".", TYPE_DIR, (fdesc_t *) newf, &emptymd, &ino, head);
+		if (!cfdesc)
 			goto allocate_name_exit2;
+		ext2_free_fdesc(object, (fdesc_t *)cfdesc);
 
-		newf = (EXT2_File_t *) ext2_allocate_name(object, newf->f_ino, "..", TYPE_DIR, (fdesc_t *) dir, &emptymd, &newino, head);
-		if (!newf)
+		cfdesc = ext2_allocate_name(object, newf->f_ino, "..", TYPE_DIR, (fdesc_t *) dir, &emptymd, &ino, head);
+		if (!cfdesc)
 			goto allocate_name_exit2;
+		ext2_free_fdesc(object, (fdesc_t *)cfdesc);
 	}
 
+	ext2_free_fdesc(object, (fdesc_t *)dir);
 	return (fdesc_t *)newf;
 
 allocate_name_exit2:
@@ -1635,7 +1640,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 	Dprintf("EXT2DEBUG: ext2_delete_dirent %\n", basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t zero_ino = 0;
-	uint32_t basep_blockno, prev_basep_blockno;
+	uint32_t basep_blockno, prev_basep_blockno, blockno;
 	uint16_t len;
 	bdesc_t * dirblock1, * dirblock2;
 	int r = 0;
@@ -1658,51 +1663,43 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 
 	dirblock2 = CALL(info->ubd, read_block, prev_basep_blockno, 1);
 	if (!dirblock2)
-		     return -E_UNSPECIFIED;
+		return -E_UNSPECIFIED;
+	
+	//get the reclen	
+	memcpy(&len, dirblock1->ddesc->data + ((basep + 4) % EXT2_BLOCK_SIZE), sizeof(len));
+	
+	prev_basep %= EXT2_BLOCK_SIZE;
 
-	//TODO there could be an overlap of three blocks! that would be annoying!  if fact it would break shit!
-	//FIXME: this can be much prettier and use less repition ie len is the only difference between
-	//the if blocks
+	//FIXME: if basep and prev_basep are in the same block no need to have two block descriptors
 	if (prev_basep_blockno == basep_blockno) {
-
-		memcpy(&len, dirblock1->ddesc->data + ((basep + 4) % EXT2_BLOCK_SIZE), sizeof(len));
-		len += basep - prev_basep;
-	      
-		if ((r = chdesc_create_byte(dirblock2, info->ubd, ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head )) < 0)
-			return r;
-		//basep might be off here
-		if ((r = chdesc_create_byte(dirblock1, info->ubd, basep % EXT2_BLOCK_SIZE, sizeof(inode_t), (void *) &zero_ino, head )) < 0)
-			return r;
-	      
-		r = CALL(info->ubd, write_block, dirblock1);
-		if (r < 0)
-			return r;
-		r = CALL(info->ubd, write_block, dirblock2);
-		if (r < 0)
-			return r;
+	      len += basep - prev_basep;
 	} else {
-		dirblock1 = CALL(info->ubd, read_block, basep_blockno, 1);
-		if (!dirblock2)
-			return -E_UNSPECIFIED;
-
-		memcpy(&len, dirblock1->ddesc->data + ((basep + 4) % EXT2_BLOCK_SIZE), sizeof(len));
-		//len += basep + (EXT2_BLOCK_SIZE - prev_basep);
-		len += basep - prev_basep;
-
-		if ((r = chdesc_create_byte(dirblock2, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head )) < 0)
-			return r;
-		//basep might be off here
-		if ((r = chdesc_create_byte(dirblock1, info->ubd, basep % EXT2_BLOCK_SIZE, sizeof(inode_t), (void *) &zero_ino, head )) < 0)
-			return r;
-			     
-		r = CALL(info->ubd, write_block, dirblock1);
-		if (r < 0)
-			return r;
-
-		r = CALL(info->ubd, write_block, dirblock2);
-		if (r < 0)
-			return r;
+	      len += (basep % EXT2_BLOCK_SIZE) + (EXT2_BLOCK_SIZE - prev_basep);
 	}
+	if ((r = chdesc_create_byte(dirblock2, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head )) < 0)
+		return r;
+	//so its possible that basep and (basep + 4) are not in the same block
+	blockno = get_file_block(object, dir_file, basep);
+	if (basep_blockno == INVALID_BLOCK)
+	      return -E_UNSPECIFIED;
+	
+	if(blockno != basep_blockno) {	
+		dirblock1 = CALL(info->ubd, read_block, blockno, 1);
+		if (!dirblock1)
+			return -E_UNSPECIFIED;
+	}
+
+	if ((r = chdesc_create_byte(dirblock1, info->ubd, (basep % EXT2_BLOCK_SIZE), sizeof(inode_t), (void *) &zero_ino, head )) < 0)
+		return r;
+
+	r = CALL(info->ubd, write_block, dirblock1);
+	if (r < 0)
+		return r;
+
+	r = CALL(info->ubd, write_block, dirblock2);
+	if (r < 0)
+		return r;
+
 	return 0;
 }
 
@@ -1748,7 +1745,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	      goto remove_name_exit;
 
 	if (file->f_type == TYPE_DIR) {
-	      if (file->f_inode.i_links_count > 2) {
+	      if (file->f_inode.i_links_count > 2 && !strcmp(name, "..")) {
 		     r = -E_NOT_EMPTY;
 		     goto remove_name_exit;
 	      }
@@ -1793,7 +1790,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		if (r < 0)
 			goto remove_name_exit;
 	} else {
-	      assert (file->f_inode.i_links_count != minlinks);
 	      file->f_inode.i_links_count--;
 	      r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
 	      if (r < 0)
@@ -1806,6 +1802,8 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	      if (r < 0)
 		     goto remove_name_exit;
 	}
+
+	r = 0;
 
 remove_name_exit:
 	ext2_free_fdesc(object, (fdesc_t *) pfile);
@@ -1824,7 +1822,7 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions};
+static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks};
 
 static size_t ext2_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1890,6 +1888,16 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = info->super->s_blocks_count;
+	}
+	else if (id == KFS_feature_nlinks.id) {
+		if (!f)
+			return -E_INVAL;
+
+		if (size < sizeof(uint32_t))
+			return -E_NO_MEM;
+		size = sizeof(uint32_t);
+
+		*((uint32_t *) data) = (uint32_t) f->f_inode.i_links_count;
 	}
 	else if (id == KFS_feature_uid.id) {
 		if (!f)
