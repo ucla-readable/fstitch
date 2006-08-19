@@ -484,7 +484,7 @@ static int ext2_cancel_synthetic_block(LFS_t * object, uint32_t number)
  */
 static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 {
-	ext2_fdesc_t * fd;
+	ext2_fdesc_t * fd = NULL;
 	uint32_t r;
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	
@@ -513,12 +513,13 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	r = ext2_get_inode(info, ino, &(fd->f_inode));
 	if(r < 0)
 		goto ext2_lookup_inode_exit;
-	
+		
 	fd->f_type = ext2_to_kfs_type(fd->f_inode.i_mode);
 
 	r = hash_map_insert(info->filemap, (void *) ino, fd);
 	if(r < 0)
 		goto ext2_lookup_inode_exit;
+	assert(r == 0);
 
 	return (fdesc_t*)fd;
 
@@ -1243,6 +1244,11 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		newf->f_prealloc_count = 0;
 
 		memset(&newf->f_inode, 0, sizeof(struct EXT2_inode));
+		
+		r = hash_map_insert(info->filemap, (void *) ino, newf);
+		if(r < 0)
+			goto allocate_name_exit2;
+		assert(r == 0);
 
 		/*SHANT TODO as you can see, i really dont fill in the inode correctly.  do so. */
 
@@ -1286,6 +1292,8 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 
 	} else {
 		newf = (ext2_fdesc_t *) ext2_lookup_inode(object, ln->f_ino);
+		
+		assert(ln == newf);
 		if (!newf)
 			goto allocate_name_exit;
 		*newino = ln->f_ino;
@@ -1321,7 +1329,6 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	// TODO are symlinks in the link count??
 	if (ln) {
 		ln->f_inode.i_links_count++;
-		printf("parent's link count increased to %u by %s\n", newf->f_inode.i_links_count, name);
 		r = ext2_write_inode(info, ln->f_ino, ln->f_inode, head);
 		if (r < 0)
 			goto allocate_name_exit2;
