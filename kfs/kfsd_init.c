@@ -48,6 +48,7 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 #if defined(__KERNEL__)
+#include <kfs/linux_bd.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ops.h>
 #include <kfs/kernel_opgroup_scopes.h>
@@ -248,7 +249,13 @@ int kfsd_init(int argc, char ** argv)
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #elif defined(__KERNEL__)
+# if 0
+		const char dev[] = "/dev/sdb";
+		if (! (bd = linux_bd(dev)) )
+			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", dev);
+# else
 		bd = NULL;
+# endif
 #else
 #error Unknown target system
 #endif
