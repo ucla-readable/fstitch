@@ -541,13 +541,11 @@ static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 			f->f_nopen--;
 			return;
 		}
-		if(f->f_prealloc_count > 0) {
-			for(i = 0; i < EXT2_PREALLOCATE; i++) {
-				if(f->f_prealloc_block[i] != INVALID_BLOCK) {	
-					write_block_bitmap(object, f->f_prealloc_block[i], 0, &(head));
-					f->f_prealloc_count--;
-					f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-				}
+		for(i = 0; i < EXT2_PREALLOCATE && f->f_prealloc_count > 0; i++) {
+			if(f->f_prealloc_block[i] != INVALID_BLOCK) {	
+				write_block_bitmap(object, f->f_prealloc_block[i], 0, &(head));
+				f->f_prealloc_count--;
+				f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
 			}
 		}
 		hash_map_erase(info->filemap, (void *) f->f_ino);
@@ -1470,8 +1468,14 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 	pointers_per_block = EXT2_BLOCK_SIZE / (sizeof(uint32_t));
 
 	//non block aligned offsets suck (aka aren't supported)
-	       
-	blocknum = offset / (EXT2_BLOCK_SIZE+1);
+	
+
+	if (offset <= EXT2_BLOCK_SIZE)
+		blocknum = 0;
+	else if ( (offset % EXT2_BLOCK_SIZE) == 0)
+		blocknum = (offset / EXT2_BLOCK_SIZE) - 1;
+	else
+		blocknum = offset / EXT2_BLOCK_SIZE;
 
 	if (blocknum < EXT2_NDIRECT)
 	{
@@ -1675,14 +1679,9 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 	//get the reclen	
 	memcpy(&len, dirblock1->ddesc->data + ((basep + 4) % EXT2_BLOCK_SIZE), sizeof(len));
 	
-	prev_basep %= EXT2_BLOCK_SIZE;
-
 	//FIXME: if basep and prev_basep are in the same block no need to have two block descriptors
-	if (prev_basep_blockno == basep_blockno) {
-	      len += basep - prev_basep;
-	} else {
-	      len += (basep % EXT2_BLOCK_SIZE) + (EXT2_BLOCK_SIZE - prev_basep);
-	}
+	len += basep - prev_basep;
+	
 	if ((r = chdesc_create_byte(dirblock2, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head )) < 0)
 		return r;
 	//so its possible that basep and (basep + 4) are not in the same block
