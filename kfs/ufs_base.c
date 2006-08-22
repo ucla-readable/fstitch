@@ -680,6 +680,8 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 		else // Next fragment is taken, move elsewhere
 			blockno = find_frags_new_home(object, file, purpose, head);
 	}
+	if(blockno == INVALID_BLOCK)
+		return INVALID_BLOCK;
 
 	r = write_fragment_bitmap(info, blockno, UFS_USED, head);
 	if (r != 0)
