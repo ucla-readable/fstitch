@@ -985,7 +985,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	else if (!strcmp(name, ".."))
 		createdot = 1;
 
-	// Don't .  and .. when we are linking to an existing directory
+	// Don't create .  and .. when we are linking to an existing directory
 	if (ln && !createdot && type == TYPE_DIR)
 		createdot = 1;
 
