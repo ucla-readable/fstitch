@@ -398,13 +398,13 @@ void revision_slice_pull_up(revision_slice_t * slice)
 
 void revision_slice_destroy(revision_slice_t * slice)
 {
-	slice->owner = NULL;
-	slice->target = NULL;
-	slice->all_ready = 0;
-	slice->ready_size = 0;
 	if(slice->ready)
 	{
 		sfree(slice->ready, slice->ready_size * sizeof(*slice->ready));
 		slice->ready = NULL;
 	}
+	slice->owner = NULL;
+	slice->target = NULL;
+	slice->all_ready = 0;
+	slice->ready_size = 0;
 }
