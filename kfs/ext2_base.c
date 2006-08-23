@@ -59,6 +59,7 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_group_desc_t * gdesc);
 static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode);
 static uint8_t ext2_to_kfs_type(uint16_t type);
+static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head);
 
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
 static int read_inode_bitmap(LFS_t * object, uint32_t inode_no);
@@ -802,7 +803,6 @@ static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * 
 	return 0;
 }
 
-/*SHANT: this now simply calls ext2_get_disk_dirent */
 static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
        Dprintf("EXT2DEBUG: ext2_get_dirent %p, %u\n", basep, *basep);
@@ -1208,8 +1208,9 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		default:
 			return NULL;
 	}
+
 	if (ln && !createdot && type == TYPE_DIR)
-		return NULL;
+		createdot = 1;
 
 	// Don't link files of different types
 	if (ln && file_type != ln->f_type)
@@ -1365,94 +1366,6 @@ allocate_name_exit:
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
 	return -E_NOT_FOUND;
-}
-
-static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
-{
-	Dprintf("EXT2DEBUG: ext2_rename\n");
-/*	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	fdesc_t * oldfdesc;
-	fdesc_t * newfdesc;
-	struct ext2_fdesc * old;
-	struct ext2_fdesc * new;
-	EXT2_File_t * oldfile;
-	EXT2_File_t temp_file;
-	bdesc_t * dirblock = NULL;
-	int i, r, offset;
-	uint8_t filetype;
-	inode_t inode;
-	inode_t not_used;
-	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
-
-	if (!head)
-		return -E_INVAL;
-
-	r = ext2_lookup_name(object, oldparent, oldname, &inode);
-	if (r)
-		return r;
-
-	oldfdesc = ext2_lookup_inode(object, inode);
-	if (!oldfdesc)
-		return -E_NOT_FOUND;
-
-	old = (struct ext2_fdesc *) oldfdesc;
-	dirblock = CALL(info->ubd, read_block, old->dirb, 1);
-	if (!dirblock) {
-		ext2_free_fdesc(object, oldfdesc);
-		return -E_INVAL;
-	}
-
-	oldfile = (EXT2_File_t *) (((uint8_t *) dirblock->ddesc->data) + old->index);
-	memcpy(&temp_file, oldfile, sizeof(EXT2_File_t));
-	ext2_free_fdesc(object, oldfdesc);
-
-	switch (temp_file.f_type)
-	{
-		case EXT2_TYPE_FILE:
-			filetype = TYPE_FILE;
-			break;
-		case EXT2_TYPE_DIR:
-			filetype = TYPE_DIR;
-			break;
-		default:
-			filetype = TYPE_INVAL;
-	}
-
-	newfdesc = ext2_allocate_name(object, newparent, newname, filetype, NULL, &emptymd, &not_used, head);
-	if (!newfdesc)
-		return -E_FILE_EXISTS;
-
-	new = (struct ext2_fdesc *) newfdesc;
-	strcpy(temp_file.f_name, new->file->f_name);
-	new->file->f_size = temp_file.f_size;
-	new->file->f_indirect = temp_file.f_indirect;
-	for (i = 0; i < EXT2_NDIRECT; i++)
-		new->file->f_direct[i] = temp_file.f_direct[i];
-
-	dirblock = CALL(info->ubd, read_block, new->dirb, 1);
-	if (!dirblock) {
-		ext2_free_fdesc(object, newfdesc);
-		return -E_INVAL;
-	}
-
-	offset = new->index;
-	if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(EXT2_File_t), &temp_file, head)) < 0) {
-		ext2_free_fdesc(object, newfdesc);
-		return r;
-	}
-
-	ext2_free_fdesc(object, newfdesc);
-	r = CALL(info->ubd, write_block, dirblock);
-
-	if (r < 0)
-		return r;
-
-	if (ext2_remove_name(object, oldparent, oldname, head) < 0)
-		return ext2_remove_name(object, newparent, newname, head);
-
-	return 0;
-*/
-	return 0;
 }
 
 static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_t offset, chdesc_t ** head)
@@ -1611,6 +1524,159 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 
 	//ext2_erase_block_ptr will either return INLID_BLOCK, or the block that was truncated...
 	return ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
+}
+
+static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
+{
+	Dprintf("EXT2DEBUG: ext2_rename\n");
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	ext2_fdesc_t * old, * new, * oldpar, * newpar;
+	int r, existing = 0;
+	uint32_t basep = 0, prev_basep = 0, prev_prev_basep = 0;
+	EXT2_Dir_entry_t old_dirent, new_dirent;
+	inode_t newino;
+	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
+	
+	if (!head || strlen(oldname) > EXT2_NAME_LEN || strlen(newname) > EXT2_NAME_LEN)
+		return -E_INVAL;
+
+	if (!strcmp(oldname, newname) && (oldparent == newparent))
+		return 0;
+
+	oldpar = (ext2_fdesc_t *)ext2_lookup_inode(object, oldparent);
+	if (!oldpar)
+		return -E_NOT_FOUND;
+
+	for (r = 0; r >= 0; )
+	{
+		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
+		if (r == 0 && strcmp(old_dirent.name, oldname) == 0)
+			break;
+		if (r < 0) 
+			goto ext2_rename_exit;
+	}
+
+	old = (ext2_fdesc_t *)ext2_lookup_inode(object, old_dirent.inode);
+	if (!old) {
+		r = -E_NOT_FOUND;
+		goto ext2_rename_exit;
+	}
+
+	newpar = (ext2_fdesc_t *)ext2_lookup_inode(object, newparent);
+	if (!newpar) {
+		r = -E_NOT_FOUND;
+		goto ext2_rename_exit2;
+	}
+	
+	basep = 0;
+	for (r = 0; r >= 0;)
+	{
+		r = ext2_get_disk_dirent(object, newpar, &basep, &new_dirent);
+		if (r == 0 && strcmp(new_dirent.name, newname) == 0) {
+			new = (ext2_fdesc_t *)ext2_lookup_inode(object, new_dirent.inode);
+			break;
+		}
+		
+		if (r == -E_NOT_FOUND || r == -E_UNSPECIFIED) {
+			new = NULL;
+			break;
+		}
+
+		if (r < 0)
+			goto ext2_rename_exit3;
+	}
+
+	if (new) {
+		// Overwriting a directory makes little sense
+		if (new->f_type == TYPE_DIR) {
+			r = -E_NOT_EMPTY;
+			goto ext2_rename_exit4;
+		}
+
+		// File already exists
+		existing = 1;
+
+		new_dirent.inode = old->f_ino;
+		r = ext2_write_dirent(object, newpar, &new_dirent, basep, head);
+		if (r < 0)
+			goto ext2_rename_exit4;
+
+		old->f_inode.i_links_count++;
+		r = ext2_write_inode(info, old->f_ino, old->f_inode, head);
+		if (r < 0)
+			goto ext2_rename_exit4;
+	}
+	else {
+		// Link files together
+		new = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, old->f_type, (fdesc_t *) old, &emptymd, &newino, head);
+		if (!new) {
+			r = -E_UNSPECIFIED;
+			goto ext2_rename_exit3;
+		}
+		//assert(new_dirent.inode == newino);
+	}
+
+	old->f_inode.i_links_count--;
+	r = ext2_write_inode(info, old->f_ino, old->f_inode, head);
+	if (r < 0)
+		goto ext2_rename_exit4;
+
+	basep = 0;
+	for (r = 0; r >= 0; )
+	{
+		prev_prev_basep = prev_basep;
+		prev_basep = basep;
+		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
+		if (r == 0 && strcmp(old_dirent.name, oldname) == 0)
+			break;
+		if (r < 0) 
+			goto ext2_rename_exit;
+	}
+	r = ext2_delete_dirent(object, oldpar, prev_basep, prev_prev_basep, head);
+	if (r < 0)
+		goto ext2_rename_exit4;
+
+	if (existing) {
+		new->f_inode.i_links_count--;
+		r = ext2_write_inode(info, new->f_ino, new->f_inode, head);
+		if (r < 0)
+			goto ext2_rename_exit4;
+
+	   if (new->f_inode.i_links_count == 0) {
+		   uint32_t block, i, n = ext2_get_file_numblocks(object, (fdesc_t *)new);
+		   for (i = 0; i < n; i++) {
+			   block = ext2_truncate_file_block(object, (fdesc_t *) new, head);
+			   if (block == INVALID_BLOCK) {
+				   r = -E_UNSPECIFIED;
+				   goto ext2_rename_exit4;
+			   }
+			   r = ext2_free_block(object, (fdesc_t *) new, block, head);
+			   if (r < 0)
+				   goto ext2_rename_exit4;
+		   }
+
+		   memset(&new->f_inode, 0, sizeof(EXT2_inode_t));
+		   r = ext2_write_inode(info, new->f_ino, new->f_inode, head);
+		   if (r < 0)
+			   goto ext2_rename_exit4;
+
+		   r = write_inode_bitmap(object, new->f_ino, EXT2_FREE, head);
+		   if (r < 0)
+			   goto ext2_rename_exit4;
+	   }
+	}
+
+	r = 0;
+
+ext2_rename_exit4:
+	ext2_free_fdesc(object, (fdesc_t *) new);
+ext2_rename_exit3:
+	ext2_free_fdesc(object, (fdesc_t *) newpar);
+ext2_rename_exit2:
+	ext2_free_fdesc(object, (fdesc_t *) old);
+ext2_rename_exit:
+	ext2_free_fdesc(object, (fdesc_t *) oldpar);
+	return r;
 }
 
 /* so both ufs_free_block and fs/ext2/ext2_free_blocks dont erase the block pointer in the inode...
