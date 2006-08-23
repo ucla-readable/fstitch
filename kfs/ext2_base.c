@@ -366,7 +366,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	uint32_t blockno, block_group, prealloc_blockno;
 	int r, i;
 
-	if (!head || !f || f->f_type == TYPE_SYMLINK )
+	if (!head || !f)
 		return INVALID_BLOCK;
 
 	if (f->f_prealloc_count > 0) {
@@ -1179,6 +1179,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	EXT2_Dir_entry_t new_dirent;
 	int createdot = 0;
 	uint8_t file_type;
+	char * link_buf = NULL;
 
 	//what is link?  link is a symlink fdesc.  dont deal with it, yet.
 	if (!head || strlen(name) > EXT2_NAME_LEN)
@@ -1279,6 +1280,23 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 
 		newf->f_inode.i_links_count = 1; 
 
+		if (type == TYPE_SYMLINK) {
+			link_buf = malloc(EXT2_BLOCK_SIZE);
+			if (!link_buf) {
+				r = -E_NO_MEM;
+				goto allocate_name_exit2;
+			}
+			r = initialmd->get(initialmd->arg, KFS_feature_symlink.id, EXT2_BLOCK_SIZE, link_buf);
+			if (r < 0)
+				goto allocate_name_exit2;
+			else {
+				r = ext2_set_metadata(object, newf, KFS_feature_symlink.id, r, link_buf, head);
+				if (r < 0)
+					goto allocate_name_exit2;
+			}
+			
+		}
+
 		r = write_inode_bitmap(object, ino, 1, head);
 		if (r != 0)
 			goto allocate_name_exit2;
@@ -1356,6 +1374,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	return (fdesc_t *)newf;
 
 allocate_name_exit2:
+	free(link_buf);
 	ext2_free_fdesc(object, (fdesc_t *)newf);
 
 allocate_name_exit:
@@ -1894,7 +1913,7 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks};
+static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks, &KFS_feature_symlink};
 
 static size_t ext2_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -2021,6 +2040,27 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_inode.i_atime;
 	}
+	else if (id == KFS_feature_symlink.id) {
+		struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+		if (!f || f->f_type != TYPE_SYMLINK)
+			return -E_INVAL;
+
+		//f->f_inode.i_size includes the zero byte!
+		if (size < f->f_inode.i_size) 
+			return -E_NO_MEM;
+		size = f->f_inode.i_size;
+
+		//size of the block pointer array in bytes:
+		if (size < EXT2_N_BLOCKS * sizeof(uint32_t))
+			memcpy(data, (char *) f->f_inode.i_block, size);
+		else {
+			bdesc_t * symlink_block;
+			symlink_block = CALL(info->ubd, read_block, f->f_inode.i_block[0], 1);
+			if (!symlink_block)
+				return -E_UNSPECIFIED;
+			memcpy(data, symlink_block->ddesc->data, f->f_inode.i_size);
+		}	
+	}
 	else
 		return -E_INVAL;
 
@@ -2042,6 +2082,33 @@ static int ext2_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_
 {
 	const ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	return ext2_get_metadata(object, f, id, size, data);
+}
+
+static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name, uint32_t name_len, chdesc_t ** head)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	int r = 0;
+	uint32_t new_block_no;
+	bdesc_t * new_block;
+	bool synthetic = 0;
+	
+	if (name_len > EXT2_BLOCK_SIZE)
+		return -ENAMETOOLONG;
+	new_block_no = ext2_allocate_block(object, (fdesc_t *) f, 1, head);
+	if (new_block_no == INVALID_BLOCK)
+		 return -E_INVAL;
+
+	//TODO dont assume this is written after this function returns! (BAD!!)
+	f->f_inode.i_block[0] = new_block_no;
+	new_block = CALL(info->ubd, synthetic_read_block, new_block_no, 1, &synthetic);
+	if (!new_block)
+		return -E_UNSPECIFIED;
+
+	r = chdesc_create_byte(new_block, info->ubd, 0, name_len, (void *) name, head);
+	if (r < 0)
+		return r;
+	
+	return CALL(info->ubd, write_block, new_block);
 }
 
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
@@ -2109,7 +2176,24 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		f->f_inode.i_atime = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 	}
-	return -E_INVAL;
+	else if (id == KFS_feature_symlink.id) {
+		int r;
+		if (!f || f->f_type != TYPE_SYMLINK)
+			return -E_INVAL;
+		
+		if (size < EXT2_N_BLOCKS * sizeof(uint32_t))
+			memcpy((char *) f->f_inode.i_block, data, size);
+		else {
+			//allocate a block, link it into the inode, write the file, write the inodeo
+			r = ext2_write_slow_symlink(object, f, (char *) data, size, head);
+			if (r < 0)
+				return r;
+		}
+		f->f_inode.i_size = size;  //size must include zerobyte!
+		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+	}
+	else
+		return -E_INVAL;
 }
 
 static int ext2_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
@@ -2339,4 +2423,3 @@ LFS_t * ext2(BD_t * block_device)
 	
 	return lfs;
 }
-
