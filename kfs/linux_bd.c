@@ -303,7 +303,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	spin_unlock(&dma_outstanding_lock);
 
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
-	assert((count * info->blocksize) <= 2048);
+	// assert((count * info->blocksize) <= 2048); Why was this assert here?
 	if (count != 4) read_ahead_count = 1;
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	start = current_kernel_time();
@@ -446,7 +446,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 				if (len == 0)
 					len = 4096;
 			}
-			assert(len <= 2048);
+			// assert(len <= 2048); Why was this assert here?
 
 			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
 
