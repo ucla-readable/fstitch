@@ -10,7 +10,7 @@ function usage() {
 function log() {
 	NB=$1
 	TEST=$2
-	TIME=`grep ^avg-$TEST "$OTUDIR"/time-$NB.log | awk '{print $2}'`
+	TIME=`grep ^avg-$TEST "$OUTDIR"/time-$NB.log | awk '{print $2}'`
 	echo "$NB $TIME"
 }
 
