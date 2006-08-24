@@ -77,7 +77,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define wb_cache_bd wt_cache_bd
 #endif
 
-int kfsd_init(int argc, char ** argv)
+int kfsd_init(int nwbblocks, int argc, char ** argv)
 {
 	const bool allow_journal = 1;
 	const bool use_disk_0 = 1;
@@ -184,6 +184,8 @@ int kfsd_init(int argc, char ** argv)
 	
 	printf("kfsd basic initialization complete!\n");
 	
+	printf("kfsd: default write back cache size = %d\n", nwbblocks);
+
 	//
 	// Setup uhfses
 
@@ -232,7 +234,7 @@ int kfsd_init(int argc, char ** argv)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 #endif
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -269,7 +271,7 @@ int kfsd_init(int argc, char ** argv)
 				return -E_UNSPECIFIED;
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 #endif
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -292,7 +294,7 @@ int kfsd_init(int argc, char ** argv)
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 #endif
 			printf("Using disk 2\n");
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -306,7 +308,7 @@ int kfsd_init(int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-			if ((r = construct_uhfses(bd, 128, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
 				return r;
 		}
 	}

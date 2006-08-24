@@ -13,7 +13,11 @@ TAROUT=linux-2.6.15
 WRAP_PID=0
 
 function start_kfsd() {
-	insmod kfs/kkfsd.ko || exit 1
+	if [ "$NWBBLOCKS" == "" ]; then
+		insmod kfs/kkfsd.ko || exit 1
+	else
+		insmod kfs/kkfsd.ko nwbblocks="$NWBBLOCKS" || exit 1
+	fi
 	mount -t kfs "$KMNT" "$MNT"
 	if [ $? -ne 0 ]; then rmmod kkfsd; exit 1; fi
 }

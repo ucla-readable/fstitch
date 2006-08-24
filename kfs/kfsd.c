@@ -81,7 +81,7 @@ static int kfsd_running = 0;
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
 static void kfsd_shutdown(void)
 {
-   	printf("Syncing and shutting down.\n");
+	printf("Syncing and shutting down.\n");
 	if(kfsd_running > 0)
 		kfsd_running = 0;
 	
@@ -131,13 +131,13 @@ uint32_t kfsd_get_request_id(void)
 	return kfsd_request_id;
 }
 
-void kfsd_main(int argc, char ** argv)
+void kfsd_main(int nwbblocks, int argc, char ** argv)
 {
 	int r;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
-	if ((r = kfsd_init(argc, argv)) < 0)
+	if ((r = kfsd_init(nwbblocks, argc, argv)) < 0)
 	{
 #ifdef __KERNEL__
 		printk("kfsd_init() failed in the kernel! (error = %d)\n", r);
@@ -215,10 +215,12 @@ void umain(int argc, char * argv[])
 		assert(r >= 0);
 	}
 
-	kfsd_main(argc, argv);
+	kfsd_main(128, argc, argv);
 }
 
 #elif defined(UNIXUSER)
+
+#include <limits.h>
 
 int main(int argc, char * argv[])
 {
@@ -229,17 +231,31 @@ int main(int argc, char * argv[])
 	rlim_t stack_limit = 6 * 1024;
 	struct rlimit rlimit = {.rlim_cur = stack_limit, .rlim_max = stack_limit};
 	int r = setrlimit(RLIMIT_STACK, &rlimit);
+	int nwbblocks = 128;
 	if(r < 0)
 	{
 		perror("setrlimit()");
 		return 1;
 	}
 
-	kfsd_main(argc, argv);
+	if(getenv("NWBBLOCKS"))
+	{
+		nwbblocks = strtol(getenv("NWBBLOCKS"), NULL, 0);
+		if(nwbblocks == LONG_MAX || nwbblocks == LONG_MIN)
+		{
+			perror("NWBBLOCKS not in range, strtol()");
+			return 1;
+		}
+	}
+
+	kfsd_main(nwbblocks, argc, argv);
 	return 0;
 }
 
 #elif defined(__KERNEL__)
+
+static int nwbblocks = 128;
+module_param(nwbblocks, int, 0);
 
 static int kfsd_is_shutdown = 0;
 
@@ -251,7 +267,7 @@ static int kfsd_thread(void * thunk)
 	spin_lock_init(&kfsd_global_lock.lock);
 	kfsd_global_lock.locked = 0;
 	kfsd_global_lock.process = 0;
-	kfsd_main(0, NULL);
+	kfsd_main(nwbblocks, 0, NULL);
 	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
 	kfsd_is_shutdown = 1;
 	return 0;
