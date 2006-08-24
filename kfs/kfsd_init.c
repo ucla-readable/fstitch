@@ -85,7 +85,7 @@ int kfsd_init(int argc, char ** argv)
 	const bool use_disk_1 = 0;
 #elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
-	const bool use_disk_2 = 0;
+	const bool use_disk_2 = 1;
 #elif defined(__KERNEL__)
 	const bool use_disk_1 = 1;
 #else
