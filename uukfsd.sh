@@ -18,7 +18,7 @@ KFSD_OPTS="-o allow_root"
 # TODO: from C we could use WIFEXITED() to know exactly when to fusermount.
 if [ "$KFSD_WRAP" == "gdb" ] && [ "$KFSD_WRAP_OPTS" == "" ]
 then
-	KFSD_WRAP_OPTS="--args"
+	KFSD_WRAP_OPTS="-q --args"
 	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS $@
 	[ "$MNT" != "-h" ] && fusermount -uz "$MNT"
 elif [ "$KFSD_WRAP" == "valgrind" ] && [ "$KFSD_WRAP_OPTS" == "" ]
