@@ -2134,7 +2134,7 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 	bool synthetic = 0;
 	
 	if (name_len > EXT2_BLOCK_SIZE)
-		return -E_BAD_PATH;
+		return -E_NAME_TOO_LONG;
 	new_block_no = ext2_allocate_block(object, (fdesc_t *) f, 1, head);
 	if (new_block_no == INVALID_BLOCK)
 		 return -E_INVAL;

@@ -21,28 +21,29 @@
 #define	E_NO_DISK	10	// No free space left on disk
 #define E_MAX_OPEN	11	// Too many files are open
 #define E_NOT_FOUND	12 	// File or block not found
-#define E_BAD_PATH	13	// Bad path
-#define E_FILE_EXISTS	14	// File already exists
-#define E_NOT_EXEC	15	// File not a valid executable
-#define E_NOT_DIR	16	// File is not a directory
-#define E_NOT_EMPTY	17	// Directory not empty
+#define E_NAME_TOO_LONG	13	// Bad path
+#define E_BAD_PATH	14	// Bad path
+#define E_FILE_EXISTS	15	// File already exists
+#define E_NOT_EXEC	16	// File not a valid executable
+#define E_NOT_DIR	17	// File is not a directory
+#define E_NOT_EMPTY	18	// Directory not empty
 
-#define E_BUSY		18	// Device is busy
-#define E_NO_DEV	19	// No such device
-#define E_PERM		20	// Operation not permitted
-#define E_ACCES		21	// Permission denied
-#define E_TIMEOUT	22	// Timed out
+#define E_BUSY		19	// Device is busy
+#define E_NO_DEV	20	// No such device
+#define E_PERM		21	// Operation not permitted
+#define E_ACCES		22	// Permission denied
+#define E_TIMEOUT	23	// Timed out
 
-#define E_BAD_SYM	23	// Elf symbol doesn't exist
-#define E_SYMTBL	24	// No elf symbol/symbol string table loaded in kernel
+#define E_BAD_SYM	24	// Elf symbol doesn't exist
+#define E_SYMTBL	25	// No elf symbol/symbol string table loaded in kernel
 
-#define E_NET_ABRT	25	// Net connection aborted
-#define E_NET_RST	26	// Net connection reset
-#define E_NET_CONN	27	// No connection
-#define E_NET_USE	28	// Net address in use
-#define E_NET_IF	29	// Net low-level netif error
+#define E_NET_ABRT	26	// Net connection aborted
+#define E_NET_RST	27	// Net connection reset
+#define E_NET_CONN	28	// No connection
+#define E_NET_USE	29	// Net address in use
+#define E_NET_IF	30	// Net low-level netif error
 
-#define MAXERROR	29
+#define MAXERROR	30
 
 #else
 
@@ -73,6 +74,7 @@
 #define E_PERM		EPERM
 #define E_ACCES		EACCES
 #define E_NO_SYS	ENOSYS
+#define E_NAME_TOO_LONG	ENAMETOOLONG
 
 /* not available on KudOS */
 #define E_INTR		EINTR
