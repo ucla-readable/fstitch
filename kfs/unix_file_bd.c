@@ -350,6 +350,9 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 			block_log = fopen(getenv("BLOCK_LOG"), "a");
 			if (!block_log)
 				perror("fopen(block_log)");
+
+			// separate multiple uses of a log file
+			fprintf(block_log, "block_log start\n");
 		}
 	}
 	
