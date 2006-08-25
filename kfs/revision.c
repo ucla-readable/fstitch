@@ -332,7 +332,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				chdesc_update_ready_changes(scan);
 				scan = next;
 			}
-			return -ENOMEM;
+			return -E_NO_MEM;
 		}
 
 		for(scan = tmp_ready; scan;)
