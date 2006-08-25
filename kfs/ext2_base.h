@@ -45,6 +45,9 @@
 // Maximum size of a filename (a single path component), including null
 #define EXT2_NAME_LEN 255
 
+
+#ifndef __KERNEL__
+
 #define S_IFMT   0xF000
 #define S_IFSOCK 0xC000
 #define S_IFLNK  0xA000
@@ -56,6 +59,8 @@
 #define S_ISUID  0x0800
 #define S_ISGID  0x0400
 #define S_ISVTX  0x0200
+
+#endif
 
 #define EXT2_S_ISUID	0x0800	//SUID
 #define EXT2_S_ISGID	0x0400	//SGID
@@ -83,16 +88,13 @@
 #define EXT2_TYPE_SYMLINK  7
 
 #define EXT2_FS_MAGIC	0xEF53	  
-#define EXT2_BLKFILES       (EXT2_BLKSIZE / sizeof(struct EXT2_File))
+//FIXME this is quite made up
+#define EXT2_MAX_FILE_SIZE 0xFFFFFFFF
 
 /* for the bitmaps */
 #define EXT2_FREE	1
 #define EXT2_USED	0
 
-uint32_t EXT2_BLOCK_SIZE;
-//FIXME this is quite made up
-#define EXT2_MAX_FILE_SIZE 0xFFFFFFFF
-uint32_t EXT2_DESC_PER_BLOCK;
 
 struct EXT2_Super {
 	uint32_t s_inodes_count;	/* Inodes count */

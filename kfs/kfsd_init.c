@@ -23,8 +23,9 @@
 #include <kfs/loop_bd.h>
 #ifdef UNIXUSER
 #include <kfs/unix_file_bd.h>
-#include <kfs/ext2_base.h>
 #endif
+
+#include <kfs/ext2_base.h>
 #include <kfs/journal_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
@@ -83,11 +84,13 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 	const bool use_disk_0 = 1;
 #if defined(KUDOS)
 	const bool use_disk_1 = 0;
+	const bool use_disk_2 = 0;
 #elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
 	const bool use_disk_2 = 1;
 #elif defined(__KERNEL__)
 	const bool use_disk_1 = 1;
+	const bool use_disk_2 = 1;
 #else
 #error Unknown target system
 #endif
@@ -275,14 +278,22 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 				return r;
 		}
 	}
-#if defined(UNIXUSER)
 	if (use_disk_2)
 	{
 		BD_t * bd;
+#if defined(UNIXUSER)
 		const char file[] = "obj/unix-user/fs/ext2.img";
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
-
+#elif defined(__KERNEL__)
+# if 0
+		const char dev[] = "/dev/sdb";
+		if (! (bd = linux_bd(dev)) )
+			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", dev);
+# else
+		bd = NULL;
+# endif
+#endif
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
@@ -298,7 +309,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 				return r;
 		}
 	}
-#endif
 	if (use_mem_bd)
 	{
 		BD_t * bd;
@@ -565,7 +575,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				continue;
 			}
 		}
-#ifdef UNIXUSER
 		else if (part->type == PTABLE_LINUX_TYPE)
 		{
 			// TODO handle differnt block sizes
@@ -582,7 +591,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				continue;
 			}
 		}
-#endif
 		else
 		{
 			printf("Unknown partition type %x\n", part->type);
