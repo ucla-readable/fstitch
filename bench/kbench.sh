@@ -38,14 +38,45 @@ function sigma() {
 	awk '{printf $1 "+"}' | sed 's/+$/\n/' | bc -lq
 }
 
+function extract_wall_time() {
+	FILE="$1"
+	MATCH="$2"
+	FIELD=2
+	grep "^$MATCH" "$FILE" | cut -d' ' -f $FIELD
+}
+
 function avg() {
 	FILE="$1"
 	MATCH="$2"
 	FIELD="$3"
 	N=`grep "^$MATCH" "$FILE" | wc -l`
-	SUM=`grep "^$MATCH" "$FILE" | cut -d' ' -f $FIELD | sigma`
+	SUM=`extract_wall_time "$FILE" "$MATCH" | sigma`
 	AVG=`echo "scale=2; $SUM/$N" | bc -lq`
 	echo $AVG
+}
+
+function min_helper() {
+	sort -n | head -1
+}
+
+function max_helper() {
+	sort -n | tail -1
+}
+
+function min() {
+	FILE="$1"
+	MATCH="$2"
+	FIELD="$3"
+	MIN=`extract_wall_time "$FILE" "$MATCH" | min_helper`
+	echo $MIN
+}
+
+function max() {
+	FILE="$1"
+	MATCH="$2"
+	FIELD="$3"
+	MAX=`extract_wall_time "$FILE" "$MATCH" | max_helper`
+	echo $MAX
 }
 
 function usage() {
@@ -112,7 +143,11 @@ done
 echo "---- complete"
 (
 echo -n "avg-tar "; avg "$TIME_LOG" tar 2
+echo -n "min-tar "; min "$TIME_LOG" tar 2
+echo -n "max-tar "; max "$TIME_LOG" tar 2
 echo -n "avg-rm "; avg "$TIME_LOG" rm 2
+echo -n "min-rm "; min "$TIME_LOG" rm 2
+echo -n "max-rm "; max "$TIME_LOG" rm 2
 ) | tee -a "$TIME_LOG"
 
 #chown "$REAL_USER" "$TIME_LOG"

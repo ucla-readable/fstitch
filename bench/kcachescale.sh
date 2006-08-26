@@ -10,8 +10,10 @@ function usage() {
 function log() {
 	NB=$1
 	TEST=$2
-	TIME=`grep ^avg-$TEST "$OUTDIR"/time-$NB.log | awk '{print $2}'`
-	echo "$NB $TIME"
+	AVG=`grep ^avg-$TEST "$OUTDIR"/time-$NB.log | tail -1 | awk '{print $2}'`
+	MIN=`grep ^min-$TEST "$OUTDIR"/time-$NB.log | tail -1 | awk '{print $2}'`
+	MAX=`grep ^max-$TEST "$OUTDIR"/time-$NB.log | tail -1 | awk '{print $2}'`
+	echo "$NB $AVG $MIN $MAX"
 }
 
 if [ $# -lt 3 ]; then usage "$0" 2>&1; exit 1; fi
