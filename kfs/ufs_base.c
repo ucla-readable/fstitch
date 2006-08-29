@@ -769,9 +769,11 @@ static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 
 	if (f) {
 		uf = hash_map_find_val(info->filemap, (void *) f->f_num);
-		if (uf->count < 2)
-			hash_map_erase(info->filemap, (void *) f->f_num);
-		open_ufsfile_destroy(uf);
+		if (uf) {
+			if (uf->count < 2)
+				hash_map_erase(info->filemap, (void *) f->f_num);
+			open_ufsfile_destroy(uf);
+		}
 	}
 }
 
