@@ -862,6 +862,69 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 	return -E_INVAL;
 }
 
+/* create a byte chdesc for a single sector in a block */
+static chdesc_t * chdesc_create_byte_sector(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t * head)
+{
+	chdesc_t * chdesc = malloc(sizeof(*chdesc));
+	if(!chdesc)
+		return NULL;
+	
+	chdesc->owner = owner;		
+	chdesc->block = block;
+	chdesc->type = BYTE;
+	chdesc->byte.offset = offset;
+	chdesc->byte.length = length;
+	
+	chdesc->dependencies = NULL;
+	chdesc->dependencies_tail = &chdesc->dependencies;
+	chdesc->dependents = NULL;
+	chdesc->dependents_tail = &chdesc->dependents;
+	chdesc->weak_refs = NULL;
+	memset(chdesc->befores, 0, sizeof(chdesc->befores));
+	chdesc->free_prev = NULL;
+	chdesc->free_next = NULL;
+	chdesc->ddesc_next = NULL;
+	chdesc->ddesc_pprev = NULL;
+	chdesc->ddesc_ready_next = NULL;
+	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->tmp_next = NULL;
+	chdesc->tmp_pprev = NULL;
+	chdesc->stamps = 0;
+	
+	/* start rolled back so we can apply it */
+	chdesc->flags = CHDESC_ROLLBACK;
+	
+	chdesc->byte.data = data;
+	
+#if CHDESC_BYTE_SUM
+	chdesc->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdesc->byte.offset], chdesc->byte.length);
+	chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length);
+#endif
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
+	
+	chdesc_link_all_changes(chdesc);
+	chdesc_link_ready_changes(chdesc);
+	if(chdesc_add_depend_fast(block->ddesc->overlaps, chdesc) < 0)
+		goto abort;
+	
+	/* make sure it is dependent upon any pre-existing chdescs */
+	if(chdesc_overlap_multiattach(chdesc, block))
+		goto abort;
+	
+	/* this is a new chdescs, so we don't need to check for loops.
+	 * but we should check to make sure head has not already been written. */
+	if(head)
+		if(chdesc_add_depend_fast(chdesc, head) < 0)
+			goto abort;
+	
+	return chdesc;
+	
+  abort:
+	chdesc_destroy(&chdesc);
+	return NULL;
+}
+
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
@@ -886,71 +949,30 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	
 	for(i = 0; i != count; i++)
 	{
-		chdescs[i] = malloc(sizeof(*chdescs[i]));
-		if(!chdescs[i])
-			break;
+		uint16_t i_offset = (index + i) * atomic_size + (i ? 0 : init_offset);
+		uint16_t i_length;
+		uint8_t * i_data;
+		chdesc_t * i_head = NULL;
 		
-		chdescs[i]->owner = owner;		
-		chdescs[i]->block = block;
-		chdescs[i]->type = BYTE;
-		chdescs[i]->byte.offset = (index + i) * atomic_size + (i ? 0 : init_offset);
 		if(count == 1)
-			chdescs[i]->byte.length = length;
+			i_length = length;
 		else if(i == count - 1)
 		{
-			chdescs[i]->byte.length = (init_offset + length) % atomic_size;
-			if(!chdescs[i]->byte.length)
-				chdescs[i]->byte.length = atomic_size;
+			i_length = (init_offset + length) % atomic_size;
+			if(!i_length)
+				i_length = atomic_size;
 		}
 		else
-			chdescs[i]->byte.length = atomic_size - (i ? 0 : init_offset);
+			i_length = atomic_size - (i ? 0 : init_offset);
 		
-		chdescs[i]->dependencies = NULL;
-		chdescs[i]->dependencies_tail = &chdescs[i]->dependencies;
-		chdescs[i]->dependents = NULL;
-		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
-		chdescs[i]->weak_refs = NULL;
-		memset(chdescs[i]->befores, 0, sizeof(chdescs[i]->befores));
-		chdescs[i]->free_prev = NULL;
-		chdescs[i]->free_next = NULL;
-		chdescs[i]->ddesc_next = NULL;
-		chdescs[i]->ddesc_pprev = NULL;
-		chdescs[i]->ddesc_ready_next = NULL;
-		chdescs[i]->ddesc_ready_pprev = NULL;
-		chdescs[i]->tmp_next = NULL;
-		chdescs[i]->tmp_pprev = NULL;
-		chdescs[i]->stamps = 0;
-		
-		/* start rolled back so we can apply it */
-		chdescs[i]->flags = CHDESC_ROLLBACK;
-		
-		chdescs[i]->byte.data = data ? memdup(&((uint8_t *) data)[copied], chdescs[i]->byte.length) : calloc(1, chdescs[i]->byte.length);
-		if(!chdescs[i]->byte.data)
-			goto destroy;
-#if CHDESC_BYTE_SUM
-		chdescs[i]->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdescs[i]->byte.offset], chdescs[i]->byte.length);
-		chdescs[i]->byte.new_sum = chdesc_byte_sum(chdescs[i]->byte.data, chdescs[i]->byte.length);
-#endif
-		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, chdescs[i]->byte.offset, chdescs[i]->byte.length);
-
-		chdesc_link_all_changes(chdescs[i]);
-		chdesc_link_ready_changes(chdescs[i]);
-		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
-		{
-		    destroy:
-			chdesc_destroy(&chdescs[i]);
+		i_data = data ? memdup(&((uint8_t *) data)[copied], i_length) : calloc(1, i_length);
+		if(!i_data)
 			break;
-		}
 		
-		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach(chdescs[i], block))
-			goto destroy;
+		if(i || (*head && !((*head)->flags & CHDESC_WRITTEN)))
+			i_head = i ? chdescs[i - 1] : *head;
 		
-		/* we are creating all new chdescs, so we don't need to check for loops */
-		/* but we should check to make sure *head has not already been written */
-		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
-			goto destroy;
+		chdescs[i] = chdesc_create_byte_sector(block, owner, i_offset, i_length, i_data, i_head);
 		
 		copied += chdescs[i]->byte.length;
 	}
@@ -1022,62 +1044,16 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	
 	for(i = 0; i != count; i++)
 	{
-		chdescs[i] = malloc(sizeof(*chdescs[i]));
-		if(!chdescs[i])
+		uint8_t * i_data = calloc(1, atomic_size);
+		chdesc_t * i_head = NULL;
+		
+		if(!i_data)
 			break;
 		
-		chdescs[i]->owner = owner;		
-		chdescs[i]->block = block;
-		chdescs[i]->type = BYTE;
-		chdescs[i]->byte.offset = i * atomic_size;
-		chdescs[i]->byte.length = atomic_size;
+		if(i || (*head && !((*head)->flags & CHDESC_WRITTEN)))
+			i_head = i ? chdescs[i - 1] : *head;
 		
-		chdescs[i]->dependencies = NULL;
-		chdescs[i]->dependencies_tail = &chdescs[i]->dependencies;
-		chdescs[i]->dependents = NULL;
-		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
-		chdescs[i]->weak_refs = NULL;
-		memset(chdescs[i]->befores, 0, sizeof(chdescs[i]->befores));
-		chdescs[i]->free_prev = NULL;
-		chdescs[i]->free_next = NULL;
-		chdescs[i]->ddesc_next = NULL;
-		chdescs[i]->ddesc_pprev = NULL;
-		chdescs[i]->ddesc_ready_next = NULL;
-		chdescs[i]->ddesc_ready_pprev = NULL;
-		chdescs[i]->tmp_next = NULL;
-		chdescs[i]->tmp_pprev = NULL;
-		chdescs[i]->stamps = 0;
-		
-		/* start rolled back so we can apply it */
-		chdescs[i]->flags = CHDESC_ROLLBACK;
-		
-		chdescs[i]->byte.data = calloc(1, atomic_size);
-		if(!chdescs[i]->byte.data)
-			goto destroy;
-#if CHDESC_BYTE_SUM
-		chdescs[i]->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdescs[i]->byte.offset], atomic_size);
-		chdescs[i]->byte.new_sum = chdesc_byte_sum(chdescs[i]->byte.data, atomic_size);
-#endif
-		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
-		
-		chdesc_link_all_changes(chdescs[i]);
-		chdesc_link_ready_changes(chdescs[i]);
-		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
-		{
-		    destroy:
-			chdesc_destroy(&chdescs[i]);
-			break;
-		}
-		
-		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach(chdescs[i], block))
-			goto destroy;
-		
-		/* we are creating all new chdescs, so we don't need to check for loops */
-		/* but we should check to make sure *head has not already been written */
-		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
-			goto destroy;
+		chdescs[i] = chdesc_create_byte_sector(block, owner, i * atomic_size, atomic_size, i_data, i_head);
 	}
 	
 	/* failed to create the chdescs */
@@ -1145,62 +1121,16 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	
 	for(i = 0; i != count; i++)
 	{
-		chdescs[i] = malloc(sizeof(*chdescs[i]));
-		if(!chdescs[i])
+		uint8_t * i_data = memdup(&((uint8_t *) data)[i * atomic_size], atomic_size);
+		chdesc_t * i_head = NULL;
+		
+		if(!i_data)
 			break;
 		
-		chdescs[i]->owner = owner;
-		chdescs[i]->block = block;
-		chdescs[i]->type = BYTE;
-		chdescs[i]->byte.offset = i * atomic_size;
-		chdescs[i]->byte.length = atomic_size;
+		if(i || (*head && !((*head)->flags & CHDESC_WRITTEN)))
+			i_head = i ? chdescs[i - 1] : *head;
 		
-		chdescs[i]->dependencies = NULL;
-		chdescs[i]->dependencies_tail = &chdescs[i]->dependencies;
-		chdescs[i]->dependents = NULL;
-		chdescs[i]->dependents_tail = &chdescs[i]->dependents;
-		chdescs[i]->weak_refs = NULL;
-		memset(chdescs[i]->befores, 0, sizeof(chdescs[i]->befores));
-		chdescs[i]->free_prev = NULL;
-		chdescs[i]->free_next = NULL;
-		chdescs[i]->ddesc_next = NULL;
-		chdescs[i]->ddesc_pprev = NULL;
-		chdescs[i]->ddesc_ready_next = NULL;
-		chdescs[i]->ddesc_ready_pprev = NULL;
-		chdescs[i]->tmp_next = NULL;
-		chdescs[i]->tmp_pprev = NULL;
-		chdescs[i]->stamps = 0;
-		
-		/* start rolled back so we can apply it */
-		chdescs[i]->flags = CHDESC_ROLLBACK;
-		
-		chdescs[i]->byte.data = memdup(&((uint8_t *) data)[i * atomic_size], atomic_size);
-		if(!chdescs[i]->byte.data)
-			goto destroy;
-#if CHDESC_BYTE_SUM
-		chdescs[i]->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdescs[i]->byte.offset], atomic_size);
-		chdescs[i]->byte.new_sum = chdesc_byte_sum(chdescs[i]->byte.data, atomic_size);
-#endif
-		
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdescs[i], block, owner, i * atomic_size, atomic_size);
-
-		chdesc_link_all_changes(chdescs[i]);
-		chdesc_link_ready_changes(chdescs[i]);
-		if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdescs[i])) < 0)
-		{
-		    destroy:
-			chdesc_destroy(&chdescs[i]);
-			break;
-		}
-		
-		/* make sure it is dependent upon any pre-existing chdescs */
-		if(chdesc_overlap_multiattach_slip(chdescs[i], block, slip_under))
-			goto destroy;
-		
-		/* we are creating all new chdescs, so we don't need to check for loops */
-		/* but we should check to make sure *head has not already been written */
-		if((i || (*head && !((*head)->flags & CHDESC_WRITTEN))) && chdesc_add_depend_fast(chdescs[i], i ? chdescs[i - 1] : *head))
-			goto destroy;
+		chdescs[i] = chdesc_create_byte_sector(block, owner, i * atomic_size, atomic_size, i_data, i_head);
 	}
 	
 	/* failed to create the chdescs */
