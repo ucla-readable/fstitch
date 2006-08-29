@@ -94,7 +94,7 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 #else
 #error Unknown target system
 #endif
-	const bool use_mem_bd = 1;
+	const bool use_mem_bd = 0;
 	const bool use_net    = 0;
 	vector_t * uhfses = NULL;
 
