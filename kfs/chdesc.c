@@ -867,7 +867,10 @@ static chdesc_t * chdesc_create_byte_sector(bdesc_t * block, BD_t * owner, uint1
 {
 	chdesc_t * chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
+	{
+		free(data);
 		return NULL;
+	}
 	
 	chdesc->owner = owner;		
 	chdesc->block = block;
@@ -973,6 +976,8 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 			i_head = i ? chdescs[i - 1] : *head;
 		
 		chdescs[i] = chdesc_create_byte_sector(block, owner, i_offset, i_length, i_data, i_head);
+		if(!chdescs[i])
+			break;
 		
 		copied += chdescs[i]->byte.length;
 	}
@@ -1054,6 +1059,8 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 			i_head = i ? chdescs[i - 1] : *head;
 		
 		chdescs[i] = chdesc_create_byte_sector(block, owner, i * atomic_size, atomic_size, i_data, i_head);
+		if(!chdescs[i])
+			break;
 	}
 	
 	/* failed to create the chdescs */
@@ -1131,6 +1138,8 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 			i_head = i ? chdescs[i - 1] : *head;
 		
 		chdescs[i] = chdesc_create_byte_sector(block, owner, i * atomic_size, atomic_size, i_data, i_head);
+		if(!chdescs[i])
+			break;
 	}
 	
 	/* failed to create the chdescs */
