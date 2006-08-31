@@ -197,7 +197,6 @@ void __unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
 int __ensure_bdesc_has_overlaps(bdesc_t * block);
 chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
 chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);
-int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under);
 int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
 int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 

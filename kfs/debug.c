@@ -112,7 +112,6 @@ static const struct param
 	param_owner =       {"owner",       UHEX32},
 	param_recent =      {"recent",      UHEX32},
 	param_ref_count =   {"ref_count",   UINT32},
-	param_slip_under =  {"slip_under",  BOOL},
 	param_source =      {"source",      UHEX32},
 	param_target =      {"target",      UHEX32},
 	param_xor =         {"xor",         UHEX32},
@@ -271,7 +270,6 @@ static const struct param * params_chdesc_overlap_attach[] = {
 static const struct param * params_chdesc_overlap_multiattach[] = {
 	&param_chdesc,
 	&param_block,
-	&param_slip_under,
 	&last_param
 };
 static const struct param * params_chdesc_duplicate[] = {

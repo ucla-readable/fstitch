@@ -72,11 +72,13 @@ public class Debugger extends OpcodeFactory
 			throw new UnsupportedStreamRevisionException(2142, 1991, 2583);
 		if(debugRev == 2297 && debugOpcodeRev == 1991)
 			throw new UnsupportedStreamRevisionException(2297, 1991, 2583);
+		if(debugRev == 2584 && debugOpcodeRev == 2584)
+			throw new UnsupportedStreamRevisionException(2584, 2584, 2692);
+		if(debugRev == 2612 && debugOpcodeRev == 2584)
+			throw new UnsupportedStreamRevisionException(2612, 2584, 2692);
 		
 		/* supported revisions */
-		if(debugRev == 2584 && debugOpcodeRev == 2584)
-			return;
-		if(debugRev == 2612 && debugOpcodeRev == 2584)
+		if(debugRev == 2693 && debugOpcodeRev == 2584)
 			return;
 		
 		/* 0 means "use a newer revision" */

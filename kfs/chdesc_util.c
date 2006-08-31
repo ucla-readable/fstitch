@@ -817,8 +817,8 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 		newnoop = 1;
 	}
 
-	/* use the hidden "slip under" feature */
-	r = __chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head, 1);
+	panic("This code used to call __chdesc_create_full() with 'slip_under' requested. 'slip_under' added to caller and __chdesc_create_full() in r1192. However, slip_under was never used by callee and so __chdesc_create_full() was removed in r2693. TODO: is slip_under needed here?");
+	r = chdesc_create_full(chdescs[0]->block, chdescs[0]->owner, data, head);
 	free(data);
 	if(r < 0)
 	{

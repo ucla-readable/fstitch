@@ -465,7 +465,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	return 0;
 }
 
-static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chdesc_t * list_chdesc, bool slip_under)
+static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc)
 {
 	chmetadesc_t * list = list_chdesc->dependencies;
 	chmetadesc_t * next = list;
@@ -486,30 +486,23 @@ static int __chdesc_overlap_multiattach_slip(chdesc_t * chdesc, chdesc_t * list_
 		if(list_chdesc->flags & CHDESC_MOVED || list_chdesc == chdesc)
 			continue;
 		
-		/* "Slip Under" allows us to create change descriptors
-		 * underneath existing ones. (That is, existing chdescs will
-		 * depend on the new one, not the other way around.) This is a
-		 * hidden feature for internal use only. */
-		if(slip_under)
-			r = chdesc_overlap_attach(list_chdesc, chdesc);
-		else
-			r = chdesc_overlap_attach(chdesc, list_chdesc);
+		r = chdesc_overlap_attach(chdesc, list_chdesc);
 		if(r < 0)
 			return r;
 	}
 	return 0;
 }
 
-static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, bool slip_under)
+static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 {
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block, slip_under);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block);
 	
 	if(chdesc->type == BIT)
 	{
 		chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->bit.offset);
 		if(bit_changes)
 		{
-			int r = __chdesc_overlap_multiattach_slip(chdesc, bit_changes, slip_under);
+			int r = _chdesc_overlap_multiattach(chdesc, bit_changes);
 			if(r < 0)
 				return r;
 		}
@@ -518,12 +511,7 @@ static int chdesc_overlap_multiattach_slip(chdesc_t * chdesc, bdesc_t * block, b
 	if(!block->ddesc->overlaps)
 		return 0;
 	
-	return __chdesc_overlap_multiattach_slip(chdesc, block->ddesc->overlaps, slip_under);
-}
-
-static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
-{
-	return chdesc_overlap_multiattach_slip(chdesc, block, 0);
+	return _chdesc_overlap_multiattach(chdesc, block->ddesc->overlaps);
 }
 
 void __propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
@@ -1109,7 +1097,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	return 0;
 }
 
-int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head, bool slip_under)
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
 	uint16_t atomic_size = CALL(owner, get_atomicsize);
 	uint16_t count = block->ddesc->length / atomic_size;
@@ -1186,11 +1174,6 @@ int __chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	sfree(chdescs, chdescs_size);
 	
 	return 0;
-}
-
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
-{
-	return __chdesc_create_full(block, owner, data, head, 0);
 }
 
 /* Rewrite a byte change descriptor to have an updated "new data" field,
