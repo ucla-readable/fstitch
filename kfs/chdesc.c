@@ -850,6 +850,49 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 	return -E_INVAL;
 }
 
+#if CHDESC_DATA_OMITTANCE
+static bool chdesc_has_external_dependents(const chdesc_t * chdesc, const bdesc_t * block)
+{
+	const chmetadesc_t * dependents;
+	for(dependents = chdesc->dependents; dependents; dependents = dependents->dependent.next)
+	{
+		const chdesc_t * dependent = dependents->dependent.desc;
+		if(dependent->type == NOOP)
+		{
+			if(dependent->block && dependent->block->number != block->number)
+				return 1;
+			/* XXX: stack usage */
+			if(chdesc_has_external_dependents(dependent, block))
+				return 1;
+		}
+		else if(dependent->block->number != block->number)
+			return 1;
+	}
+	return 0;
+}
+
+static bool bdesc_has_external_dependents(const bdesc_t * block)
+{
+	const chdesc_t * c;
+	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
+		if(chdesc_has_external_dependents(c, block))
+			return 1;
+	return 0;
+}
+#endif
+
+static bool new_chdescs_require_data(const bdesc_t * block)
+{
+#if CHDESC_DATA_OMITTANCE
+	/* Rule: When adding chdesc C to block B,
+	 * and forall C' on B, with C' != C: C' has no dependents on blocks != B,
+	 * then C will never need to be rolled back. */
+	return bdesc_has_external_dependents(block);
+#else
+	return 1;
+#endif
+}
+
 /* create a byte chdesc for a single sector in a block */
 static chdesc_t * chdesc_create_byte_sector(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t * head)
 {
@@ -925,6 +968,7 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	uint16_t copied = 0;
 	size_t chdescs_size = sizeof(chdesc_t *) * count;
 	chdesc_t ** chdescs = smalloc(chdescs_size);
+	bool data_required = new_chdescs_require_data(block);
 	int i, r;
 	
 	if(!chdescs)
@@ -990,6 +1034,11 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	{
 		if(chdesc_apply(chdescs[i]))
 			break;
+		if(!data_required)
+		{
+			free(chdescs[i]->byte.data);
+			chdescs[i]->byte.data = NULL;
+		}
 		/* make sure our block sticks around */
 		bdesc_retain(block);
 	}
@@ -1024,6 +1073,7 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	uint16_t count = block->ddesc->length / atomic_size;
 	size_t chdescs_size = sizeof(chdesc_t *) * count;
 	chdesc_t ** chdescs = smalloc(chdescs_size);
+	bool data_required = new_chdescs_require_data(block);
 	int i, r;
 	
 	if(!chdescs)
@@ -1069,6 +1119,11 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 	{
 		if(chdesc_apply(chdescs[i]))
 			break;
+		if(!data_required)
+		{
+			free(chdescs[i]->byte.data);
+			chdescs[i]->byte.data = NULL;
+		}
 		/* make sure our block sticks around */
 		bdesc_retain(block);
 	}
@@ -1103,6 +1158,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	uint16_t count = block->ddesc->length / atomic_size;
 	size_t chdescs_size = sizeof(chdesc_t *) * count;
 	chdesc_t ** chdescs = smalloc(chdescs_size);
+	bool data_required = new_chdescs_require_data(block);
 	int i, r;
 	
 	if(!chdescs)
@@ -1148,6 +1204,11 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	{
 		if(chdesc_apply(chdescs[i]))
 			break;
+		if(!data_required)
+		{
+			free(chdescs[i]->byte.data);
+			chdescs[i]->byte.data = NULL;
+		}
 		/* make sure our block sticks around */
 		bdesc_retain(block);
 	}
@@ -1474,6 +1535,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				{
 					free((*chdesc)->byte.data);
 					(*chdesc)->byte.data = NULL;
+					/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
 				}
 				chdesc_remove_depend((*chdesc)->block->ddesc->overlaps, *chdesc);
 				(*chdesc)->type = NOOP;
@@ -1508,6 +1570,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 			{
 				free((*chdesc)->byte.data);
 				(*chdesc)->byte.data = NULL;
+				/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
 			}
 		}
 		
@@ -1642,6 +1705,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	switch((*chdesc)->type)
 	{
 		case BYTE:
+			assert(!(*chdesc)->byte.data);
 			if((*chdesc)->byte.data)
 				free((*chdesc)->byte.data);
 			break;

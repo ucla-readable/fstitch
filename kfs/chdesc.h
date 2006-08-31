@@ -9,6 +9,12 @@
 /* values: 0 (disable), 1 (enable) */
 #define CHDESC_CYCLE_CHECK 1
 
+/* Set to allow chdesc data omittance when chdesc data is not required
+ * NOTE: the data omittance detection algorithm currently uses significant time
+ * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
+/* values: 0 (disable), 1 (enable) */
+#define CHDESC_DATA_OMITTANCE 0
+
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
@@ -47,6 +53,7 @@ struct chdesc {
 		struct {
 			/* offset is in bytes */
 			uint16_t offset, length;
+			/* NULL data implies chdesc need not (and cannot) be rolled back */
 			uint8_t * data;
 #if CHDESC_BYTE_SUM
 			uint16_t old_sum, new_sum;

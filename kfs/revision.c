@@ -278,6 +278,11 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 	chdesc_t ** tmp_ready_tail = &tmp_ready;
 	chdesc_dlist_t * rcl = &block->ddesc->ready_changes[owner->level];
 	chdesc_t * scan;
+	/* To write a block revision, all non-ready chdescs on the block must
+	 * first be rolled back. Thus when there are non-ready chdescs with
+	 * omitted data fields the revision cannot contain any chdescs.
+	 * 'nonready_nonrollbackable' implements this. */
+	bool nonready_nonrollbackable = 0;
 
 	assert(owner->level - 1 == target->level);
 	
@@ -307,7 +312,15 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		if(scan->owner == owner)
 		{
 			slice->all_ready = 0;
+#if CHDESC_DATA_OMITTANCE
+			if(scan->type == BYTE && !scan->byte.data)
+			{
+				nonready_nonrollbackable = 1;
+				break;
+			}
+#else
 			break;
+#endif
 		}
 	}
 
@@ -315,7 +328,8 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 	{
 		chdesc_t * scan;
 		int j = 0;
-		slice->ready = scalloc(slice->ready_size, sizeof(*slice->ready));
+		if(!nonready_nonrollbackable)
+			slice->ready = scalloc(slice->ready_size, sizeof(*slice->ready));
 		if(!slice->ready)
 		{
 			/* pull back up from push down */
@@ -331,6 +345,12 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 				chdesc_update_ready_changes(scan);
 				scan = next;
+			}
+			
+			if(nonready_nonrollbackable)
+			{
+				slice->ready_size = 0;
+				return 0;
 			}
 			return -E_NO_MEM;
 		}
