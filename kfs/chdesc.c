@@ -893,21 +893,52 @@ static bool new_chdescs_require_data(const bdesc_t * block)
 #endif
 }
 
-/* create a byte chdesc for a single sector in a block */
-static chdesc_t * chdesc_create_byte_sector(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t * head)
+/* common code to create a byte chdesc */
+static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t ** head)
 {
-	chdesc_t * chdesc = malloc(sizeof(*chdesc));
+	bool data_required = new_chdescs_require_data(block);
+	chdesc_t * chdesc;
+	int r;
+	
+	assert(block && block->ddesc && owner && head);
+	
+	if(offset + length > block->ddesc->length)
+		return -E_INVAL;
+	
+	if((r = ensure_bdesc_has_overlaps(block)) < 0)
+		return r;
+	
+	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
-	{
-		free(data);
-		return NULL;
-	}
+		return -E_NO_MEM;
 	
 	chdesc->owner = owner;		
 	chdesc->block = block;
 	chdesc->type = BYTE;
 	chdesc->byte.offset = offset;
 	chdesc->byte.length = length;
+	
+	if(data_required)
+	{
+		chdesc->byte.data = data ? memdup(data, length) : calloc(1, length);
+		if(!chdesc->byte.data)
+		{
+			free(chdesc);
+			return -E_NO_MEM;
+		}
+#if CHDESC_BYTE_SUM
+		chdesc->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[offset], length);
+		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, length);
+#endif
+	}
+	else
+	{
+		chdesc->byte.data = NULL;
+#if CHDESC_BYTE_SUM
+		chdesc->byte.old_sum = 0;
+		chdesc->byte.new_sum = 0;
+#endif
+	}
 	
 	chdesc->dependencies = NULL;
 	chdesc->dependencies_tail = &chdesc->dependencies;
@@ -927,314 +958,74 @@ static chdesc_t * chdesc_create_byte_sector(bdesc_t * block, BD_t * owner, uint1
 	
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK;
-	
-	chdesc->byte.data = data;
-	
-#if CHDESC_BYTE_SUM
-	chdesc->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[chdesc->byte.offset], chdesc->byte.length);
-	chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length);
-#endif
-	
+		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
 	
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
 	if(chdesc_add_depend_fast(block->ddesc->overlaps, chdesc) < 0)
-		goto abort;
+	{
+		chdesc_destroy(&chdesc);
+		return -E_NO_MEM;
+	}
 	
 	/* make sure it is dependent upon any pre-existing chdescs */
 	if(chdesc_overlap_multiattach(chdesc, block))
-		goto abort;
+	{
+		chdesc_destroy(&chdesc);
+		return -E_NO_MEM;
+	}
 	
-	/* this is a new chdescs, so we don't need to check for loops.
+	/* this is a new chdesc, so we don't need to check for loops.
 	 * but we should check to make sure head has not already been written. */
-	if(head)
-		if(chdesc_add_depend_fast(chdesc, head) < 0)
-			goto abort;
+	if(*head && !((*head)->flags & CHDESC_WRITTEN))
+		if((r = chdesc_add_depend_fast(chdesc, *head)) < 0)
+		{
+			chdesc_destroy(&chdesc);
+			return r;
+		}
 	
-	return chdesc;
+	if(data_required)
+	{	
+		if((r = chdesc_apply(chdesc)) < 0)
+		{
+			chdesc_destroy(&chdesc);
+			return r;
+		}
+	}
+	else
+	{
+		if(data)
+			memcpy(&chdesc->block->ddesc->data[offset], data, length);
+		else
+			memset(&chdesc->block->ddesc->data[offset], 0, length);
+		chdesc->flags &= ~CHDESC_ROLLBACK;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
+	}
 	
-  abort:
-	chdesc_destroy(&chdesc);
-	return NULL;
+	*head = chdesc;
+	
+	/* make sure our block sticks around */
+	bdesc_retain(block);
+	
+	return 0;
 }
 
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
-	uint16_t atomic_size = CALL(owner, get_atomicsize);
-	uint16_t init_offset = offset % atomic_size;
-	uint16_t index = offset / atomic_size;
-	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
-	uint16_t copied = 0;
-	size_t chdescs_size = sizeof(chdesc_t *) * count;
-	chdesc_t ** chdescs = smalloc(chdescs_size);
-	bool data_required = new_chdescs_require_data(block);
-	int i, r;
-	
-	if(!chdescs)
-		return -E_NO_MEM;
 	if(&block->ddesc->data[offset] == data)
 		panic("Cannot create a change descriptor in place!");
-	
-	if((r = ensure_bdesc_has_overlaps(block)) < 0)
-	{
-		sfree(chdescs, chdescs_size);
-		return r;
-	}
-	
-	for(i = 0; i != count; i++)
-	{
-		uint16_t i_offset = (index + i) * atomic_size + (i ? 0 : init_offset);
-		uint16_t i_length;
-		uint8_t * i_data;
-		chdesc_t * i_head = NULL;
-		
-		if(count == 1)
-			i_length = length;
-		else if(i == count - 1)
-		{
-			i_length = (init_offset + length) % atomic_size;
-			if(!i_length)
-				i_length = atomic_size;
-		}
-		else
-			i_length = atomic_size - (i ? 0 : init_offset);
-		
-		i_data = data ? memdup(&((uint8_t *) data)[copied], i_length) : calloc(1, i_length);
-		if(!i_data)
-			break;
-		
-		if(i || (*head && !((*head)->flags & CHDESC_WRITTEN)))
-			i_head = i ? chdescs[i - 1] : *head;
-		
-		chdescs[i] = chdesc_create_byte_sector(block, owner, i_offset, i_length, i_data, i_head);
-		if(!chdescs[i])
-			break;
-		
-		copied += chdescs[i]->byte.length;
-	}
-	
-	/* failed to create the chdescs */
-	if(i != count)
-	{
-		while(i--)
-		{
-			if(chdescs[i]->dependencies)
-				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
-			chdesc_destroy(&chdescs[i]);
-		}
-		sfree(chdescs, chdescs_size);
-		
-		return -E_NO_MEM;
-	}
-	
-	assert(copied == length);
-	
-	for(i = 0; i != count; i++)
-	{
-		if(chdesc_apply(chdescs[i]))
-			break;
-		if(!data_required)
-		{
-			free(chdescs[i]->byte.data);
-			chdescs[i]->byte.data = NULL;
-		}
-		/* make sure our block sticks around */
-		bdesc_retain(block);
-	}
-	
-	/* failed to apply the chdescs */
-	if(i != count)
-	{
-		while(i--)
-		{
-			/* we don't need the block after all... */
-			bdesc_t * temp = block;
-			bdesc_release(&temp);
-			chdesc_rollback(chdescs[i]);
-		}
-		for(i = 0; i != count; i++)
-			chdesc_destroy(&chdescs[i]);
-		sfree(chdescs, chdescs_size);
-		
-		return -E_INVAL;
-	}
-	
-	*head = chdescs[count - 1];
-	
-	sfree(chdescs, chdescs_size);
-	
-	return 0;
+	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, head);
 }
 
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
-	uint16_t atomic_size = CALL(owner, get_atomicsize);
-	uint16_t count = block->ddesc->length / atomic_size;
-	size_t chdescs_size = sizeof(chdesc_t *) * count;
-	chdesc_t ** chdescs = smalloc(chdescs_size);
-	bool data_required = new_chdescs_require_data(block);
-	int i, r;
-	
-	if(!chdescs)
-		return -E_NO_MEM;
-	
-	if((r = ensure_bdesc_has_overlaps(block)) < 0)
-	{
-		sfree(chdescs, chdescs_size);
-		return r;
-	}
-	
-	for(i = 0; i != count; i++)
-	{
-		uint8_t * i_data = calloc(1, atomic_size);
-		chdesc_t * i_head = NULL;
-		
-		if(!i_data)
-			break;
-		
-		if(i || (*head && !((*head)->flags & CHDESC_WRITTEN)))
-			i_head = i ? chdescs[i - 1] : *head;
-		
-		chdescs[i] = chdesc_create_byte_sector(block, owner, i * atomic_size, atomic_size, i_data, i_head);
-		if(!chdescs[i])
-			break;
-	}
-	
-	/* failed to create the chdescs */
-	if(i != count)
-	{
-		while(i--)
-		{
-			if(chdescs[i]->dependencies)
-				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
-			chdesc_destroy(&chdescs[i]);
-		}
-		sfree(chdescs, chdescs_size);
-		
-		return -E_NO_MEM;
-	}
-	
-	for(i = 0; i != count; i++)
-	{
-		if(chdesc_apply(chdescs[i]))
-			break;
-		if(!data_required)
-		{
-			free(chdescs[i]->byte.data);
-			chdescs[i]->byte.data = NULL;
-		}
-		/* make sure our block sticks around */
-		bdesc_retain(block);
-	}
-	
-	/* failed to apply the chdescs */
-	if(i != count)
-	{
-		while(i--)
-		{
-			/* we don't need the block after all... */
-			bdesc_t * temp = block;
-			bdesc_release(&temp);
-			chdesc_rollback(chdescs[i]);
-		}
-		for(i = 0; i != count; i++)
-			chdesc_destroy(&chdescs[i]);
-		sfree(chdescs, chdescs_size);
-		
-		return -E_INVAL;
-	}
-	
-	*head = chdescs[count - 1];
-	
-	sfree(chdescs, chdescs_size);
-	
-	return 0;
+	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, NULL, head);
 }
 
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	uint16_t atomic_size = CALL(owner, get_atomicsize);
-	uint16_t count = block->ddesc->length / atomic_size;
-	size_t chdescs_size = sizeof(chdesc_t *) * count;
-	chdesc_t ** chdescs = smalloc(chdescs_size);
-	bool data_required = new_chdescs_require_data(block);
-	int i, r;
-	
-	if(!chdescs)
-		return -E_NO_MEM;
-	
-	if((r = ensure_bdesc_has_overlaps(block)) < 0)
-	{
-		sfree(chdescs, chdescs_size);
-		return r;
-	}
-	
-	for(i = 0; i != count; i++)
-	{
-		uint8_t * i_data = memdup(&((uint8_t *) data)[i * atomic_size], atomic_size);
-		chdesc_t * i_head = NULL;
-		
-		if(!i_data)
-			break;
-		
-		if(i || (*head && !((*head)->flags & CHDESC_WRITTEN)))
-			i_head = i ? chdescs[i - 1] : *head;
-		
-		chdescs[i] = chdesc_create_byte_sector(block, owner, i * atomic_size, atomic_size, i_data, i_head);
-		if(!chdescs[i])
-			break;
-	}
-	
-	/* failed to create the chdescs */
-	if(i != count)
-	{
-		while(i--)
-		{
-			if(chdescs[i]->dependencies)
-				chdesc_remove_depend(chdescs[i], i ? chdescs[i - 1] : *head);
-			chdesc_destroy(&chdescs[i]);
-		}
-		sfree(chdescs, chdescs_size);
-		
-		return -E_NO_MEM;
-	}
-	
-	for(i = 0; i != count; i++)
-	{
-		if(chdesc_apply(chdescs[i]))
-			break;
-		if(!data_required)
-		{
-			free(chdescs[i]->byte.data);
-			chdescs[i]->byte.data = NULL;
-		}
-		/* make sure our block sticks around */
-		bdesc_retain(block);
-	}
-	
-	/* failed to apply the chdescs */
-	if(i != count)
-	{
-		while(i--)
-		{
-			/* we don't need the block after all... */
-			bdesc_t * temp = block;
-			bdesc_release(&temp);
-			chdesc_rollback(chdescs[i]);
-		}
-		for(i = 0; i != count; i++)
-			chdesc_destroy(&chdescs[i]);
-		sfree(chdescs, chdescs_size);
-		
-		return -E_INVAL;
-	}
-	
-	*head = chdescs[count - 1];
-	
-	sfree(chdescs, chdescs_size);
-	
-	return 0;
+	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
 }
 
 /* Rewrite a byte change descriptor to have an updated "new data" field,
