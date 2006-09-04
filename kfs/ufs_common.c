@@ -308,7 +308,7 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	uint32_t blockno, offset, * ptr;
 	int r, cyl, satisfaction, inode_offset;
 	bdesc_t * block;
-	chdesc_t * ch, * noophead, * drain_plug;
+	chdesc_t * noophead, * drain_plug;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -351,19 +351,13 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	if (r < 0)
 		return r;
 
-	ch = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32));
-	if (!ch) {
-		r = -E_NO_MEM;
-		goto write_inode_bitmap_end;
-	}
-
-	r = chdesc_add_depend(noophead, ch);
+	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		goto write_inode_bitmap_end;
 
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			goto write_inode_bitmap_end;
+	r = chdesc_add_depend(noophead, *head);
+	if (r < 0)
+		goto write_inode_bitmap_end;
 
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
@@ -391,7 +385,6 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	int r, nf, cyl = num / super->fs_fpg;
 	int nfrags_before, nfrags_after, unused_before = 0, unused_after = 0;
 	bdesc_t * block; // , * cgblock;
-	chdesc_t * ch;
 
 	// Counting bits set in a byte via lookup table...
 	// anyone know a faster/better way?
@@ -456,20 +449,13 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		return -E_NOT_FOUND;
 		*/
 
-	ch = chdesc_create_bit(block, info->ubd,
-			(offset % super->fs_fsize) / 4, 1 << (num % 32));
-	if (!ch)
-		return -E_NO_MEM;
+	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
+	if (r < 0)
+		return r;
 
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
 		return r;
-
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			return r;
-
-	*head = ch;
 
 	nfrags_after = BitsSetTable256[(*ptr >> ROUNDDOWN32(num % 32, 8)) & 0xFF];
 	if (nfrags_after == 8)
@@ -533,7 +519,7 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	uint16_t fbp;
 	int r, cyl, satisfaction, block_offset;
 	bdesc_t * block;
-	chdesc_t * ch, * noophead, * drain_plug;
+	chdesc_t * save_head, * noophead, * drain_plug;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -578,19 +564,15 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 	if (r < 0)
 		return r;
 
-	ch = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32));
-	if (!ch) {
-		r = -E_NO_MEM;
-		goto write_block_bitmap_end;
-	}
-
-	r = chdesc_add_depend(noophead, ch);
+	save_head = *head;
+	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		goto write_block_bitmap_end;
 
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			goto write_block_bitmap_end;
+	r = chdesc_add_depend(noophead, *head);
+	if (r < 0)
+		goto write_block_bitmap_end;
+	*head = save_head;
 
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)

@@ -762,7 +762,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	return chdesc;
 }
 
-chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor)
+int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
 {
 	chdesc_t * chdesc;
 	chdesc_t * bit_changes;
@@ -770,7 +770,7 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
-		return NULL;
+		return -E_NO_MEM;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
 	
 	chdesc->owner = owner;
@@ -800,28 +800,39 @@ chdesc_t * chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc_link_ready_changes(chdesc);
 	
 	/* make sure it is dependent upon any pre-existing chdescs */
-	if(chdesc_overlap_multiattach(chdesc, block))
+	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
 		goto error;
 	
+	/* this is a new chdesc, so we don't need to check for loops.
+	 * but we should check to make sure head has not already been written. */
+	if(*head && !((*head)->flags & CHDESC_WRITTEN))
+		if((r = chdesc_add_depend_fast(chdesc, *head)) < 0)
+			goto error;
+	
 	/* make sure it applies cleanly */
-	if(chdesc_apply(chdesc))
+	if((r = chdesc_apply(chdesc)) < 0)
 		goto error;
 	
 	/* add chdesc to block's dependencies */
 	chdesc_link_all_changes(chdesc);
 	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
+	{
+		r = -E_NO_MEM;
 		goto error;
+	}
 	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
 		goto error;
+	
+	*head = chdesc;
 	
 	/* make sure our block sticks around */
 	bdesc_retain(block);
 	
-	return chdesc;
+	return 0;
 	
   error:
 	chdesc_destroy(&chdesc);
-	return NULL;
+	return r;
 }
 
 #if CHDESC_BYTE_SUM

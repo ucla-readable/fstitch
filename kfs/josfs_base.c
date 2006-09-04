@@ -166,7 +166,6 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	uint32_t target;
-	chdesc_t * ch;
 	int r;
 
 	if (!head)
@@ -203,15 +202,9 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	if (((uint32_t *) bdesc->ddesc->data)[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value)
 		return 0;
 	/* bit chdescs take offset in increments of 32 bits */
-	ch = chdesc_create_bit(bdesc, info->ubd, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32));
-	if (!ch)
-		return -1;
-
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			return r;
-
-	*head = ch;
+	r = chdesc_create_bit(bdesc, info->ubd, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32), head);
+	if (r < 0)
+		return r;
 
 	r = CALL(info->ubd, write_block, bdesc);
 

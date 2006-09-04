@@ -215,7 +215,6 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	Dprintf("EXT2DEBUG: write_bitmap %u\n", blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bitmap;
-	chdesc_t * ch;
 	EXT2_group_desc_t gdesc;
 	int r;
 
@@ -262,15 +261,9 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	       return 0;
 
 	// bit chdescs take offset in increments of 32 bits 
-	ch = chdesc_create_bit(info->bitmap_cache, info->ubd, (block_in_group) / 32, 1 << (block_in_group % 32));
-	if (!ch)
-		return -1;
-
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			return r;
-
-	*head = ch;
+	r = chdesc_create_bit(info->bitmap_cache, info->ubd, (block_in_group) / 32, 1 << (block_in_group % 32), head);
+	if (r < 0)
+		return r;
 
 	r = CALL(info->ubd, write_block, info->bitmap_cache);
 
@@ -282,7 +275,6 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	Dprintf("EXT2DEBUG: write_inode_bitmap %u\n", inode_no);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bitmap;
-	chdesc_t * ch;
 	int r;
 
 	if (!head)
@@ -325,15 +317,9 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	       return 0;
 
 	// bit chdescs take offset in increments of 32 bits 
-	ch = chdesc_create_bit(bitmap, info->ubd, (inode_in_group) / 32, 1 << (inode_in_group % 32));
-	if (!ch)
-		return -1;
-
-	if (*head)
-		if ((r = chdesc_add_depend(ch, *head)) < 0)
-			return r;
-
-	*head = ch;
+	r = chdesc_create_bit(bitmap, info->ubd, (inode_in_group) / 32, 1 << (inode_in_group % 32), head);
+	if (r < 0)
+		return r;
 
 	r = CALL(info->ubd, write_block, bitmap);
 
