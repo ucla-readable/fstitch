@@ -1076,7 +1076,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	uint32_t new_prev_len, basep = 0, prev_basep = 0, new_block;
 	int r = 0;
 	int newdir = 0;
-	int synthetic = 0;
+	bool synthetic = 0;
 	bdesc_t * block;
 			
 
@@ -1112,21 +1112,26 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 			break;
 		prev_basep = basep;
 	}
-
-	//test the aligned case! test by having a 16 whatever file
 	new_block = ext2_allocate_block(object, (fdesc_t *) parent, 1, head);
-	if (new_block == INVALID_BLOCK)
-		return -E_INVAL;
+        if (new_block == INVALID_BLOCK)
+                return -E_INVAL;
         block = CALL(info->ubd, synthetic_read_block, new_block, 1, &synthetic);
         if (block == NULL)
                 return -E_NO_DISK;
-        r = chdesc_create_init(block, info->ubd, head);
-        if (r < 0)
-                return r;
-	parent->f_inode.i_size += EXT2_BLOCK_SIZE;
-	r = ext2_append_file_block(object, (fdesc_t *) parent, new_block, head);
-	if (r < 0)
-		return r;
+        if (synthetic == 1) {
+                chdesc_t * prev_head = *head;
+                r = chdesc_create_init(block, info->ubd, head);
+                *head = prev_head;
+                if (r < 0) {
+                        (void) CALL(info->ubd, cancel_block, new_block);
+                        return r;
+                }
+                r = CALL(info->ubd, write_block, block);
+                if (r < 0) {
+                        (void) CALL(info->ubd, cancel_block, new_block);
+                        return r;
+                }
+        }
 
 	if (newdir)
 	{	//fix the size of the dirent:
