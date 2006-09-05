@@ -460,17 +460,18 @@ void hash_map_it_init(hash_map_it_t * it, hash_map_t * hm)
 	it->elt = NULL;
 }
 
-void * hash_map_val_next(hash_map_it_t * it)
+hash_map_elt_t hash_map_elt_next(hash_map_it_t * it)
 {
-	size_t i;
+	hash_map_elt_t no_elt = { .key = NULL, .val = NULL };
 	chain_elt_t * head;
+	size_t i;
 
 	if (!it->bucket && !it->elt)
 	{
 		// New iterator
 
 		if (!it->hm)
-			return NULL;
+			return no_elt;
 
 		// Set it to the first elt
 		for (i=0; i < vector_size(it->hm->tbl); i++)
@@ -485,15 +486,15 @@ void * hash_map_val_next(hash_map_it_t * it)
 		}
 
 		if (!it->elt)
-			return NULL; // no elts in the hash map
-		return it->elt->elt.val;
+			return no_elt; // no elts in the hash map
+		return it->elt->elt;
 	}
 
 	// If there are more elts in this chain, return the next
 	if (it->elt->next)
 	{
 		it->elt = it->elt->next;
-		return it->elt->elt.val;
+		return it->elt->elt;
 	}
 
 	// Find the next bucket with an elt
@@ -504,10 +505,18 @@ void * hash_map_val_next(hash_map_it_t * it)
 		{
 			it->bucket = i;
 			it->elt = head;
-			return it->elt->elt.val;
+			return it->elt->elt;
 		}
 	}
 
+	return no_elt;
+}
+
+void * hash_map_val_next(hash_map_it_t * it)
+{
+	hash_map_elt_t elt = hash_map_elt_next(it);
+	if(elt.key)
+		return elt.val;
 	return NULL;
 }
 
