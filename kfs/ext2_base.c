@@ -1072,9 +1072,13 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 { 
 	Dprintf("EXT2DEBUG: ext2_insert_dirent %s\n", new_dirent->name);
 	EXT2_Dir_entry_t entry;
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t new_prev_len, basep = 0, prev_basep = 0, new_block;
 	int r = 0;
 	int newdir = 0;
+	int synthetic = 0;
+	bdesc_t * block;
+			
 
 	if (parent->f_inode.i_size == 0)
 		newdir = 1;	
@@ -1113,7 +1117,12 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	new_block = ext2_allocate_block(object, (fdesc_t *) parent, 1, head);
 	if (new_block == INVALID_BLOCK)
 		return -E_INVAL;
-	
+        block = CALL(info->ubd, synthetic_read_block, new_block, 1, &synthetic);
+        if (block == NULL)
+                return -E_NO_DISK;
+        r = chdesc_create_init(block, info->ubd, head);
+        if (r < 0)
+                return r;
 	parent->f_inode.i_size += EXT2_BLOCK_SIZE;
 	r = ext2_append_file_block(object, (fdesc_t *) parent, new_block, head);
 	if (r < 0)
