@@ -673,6 +673,7 @@ int linux_bd_destroy(BD_t * bd)
 	read_ahead_empty();
 	blockman_destroy(&info->blockman);
 
+	bd_release(info->bdev);
 	blkdev_put(info->bdev);
 	free(info);
 	memset(bd, 0, sizeof(*bd));
@@ -760,6 +761,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	info->blockman = blockman_create(512);
 	if (!info->blockman) {
+		bd_release(info->bdev);
 		blkdev_put(info->bdev);
 		free(info);
 		free(bd);
