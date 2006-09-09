@@ -30,5 +30,6 @@ public class ChdescAlterModule extends Module
 		addFactory(ChdescSetFreePrev.getFactory(input));
 		addFactory(ChdescSetFreeNext.getFactory(input));
 		addFactory(ChdescSetFreeHead.getFactory(input));
+		addFactory(ChdescSetLength.getFactory(input));
 	}
 }

@@ -164,6 +164,13 @@ public class Chdesc
 		this.offset = offset;
 	}
 	
+	public void setLength(short length)
+	{
+		if(type != TYPE_BYTE)
+			throw new RuntimeException("Attempt to set offset of non-BYTE chdesc!");
+		this.length = length;
+	}
+	
 	public void setFlags(int flags)
 	{
 		if(!isValid())
