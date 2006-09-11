@@ -394,6 +394,7 @@ static const struct opcode * opcodes_chdesc_alter[] = {
 	&opcode_chdesc_weak_retain,
 	&opcode_chdesc_weak_forget,
 	&opcode_chdesc_set_offset,
+	&opcode_chdesc_set_length,
 	&opcode_chdesc_set_block,
 	&opcode_chdesc_set_owner,
 	&opcode_chdesc_set_free_prev,
