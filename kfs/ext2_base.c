@@ -29,10 +29,14 @@
 struct lfs_info
 {
 	BD_t * ubd;
-	bdesc_t * super_block;
 	struct EXT2_Super * super;
+	//FIXME: we could improve mem usage by only storing the gdesc members
+	//that we care about
+	EXT2_group_desc_t group;
 	hash_map_t * filemap;
 	bdesc_t * bitmap_cache;
+	bdesc_t * inode_cache;
+	uint32_t group_num;
 	uint32_t gnum;
 	uint32_t inode_gdesc;
 	uint32_t inode_bitmap;
@@ -52,6 +56,7 @@ static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode);
 static uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head);
 
+static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, EXT2_Dir_entry_t * dirent);
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
 static int read_inode_bitmap(LFS_t * object, uint32_t inode_no);
 int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head);
@@ -95,18 +100,46 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	EXT2_group_desc_t gdesc;
 	bdesc_t * bitmap;
-	uint32_t * ptr = NULL;
-	uint32_t block_group, block_in_group = 0;
+	uint32_t ptr;
+	uint32_t block_group, block_in_group = 0, temp;
 	
 	if (*blockno >= info->super->s_blocks_count || *blockno < info->super->s_first_data_block) 
 	{
 		printf("%s requested status of block %u too large block no!\n",__FUNCTION__, *blockno);
 		return -E_INVAL;
 	}
+	
+	/*static const unsigned char lookup[] = 
+	{
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0, 
+	};*/
+	static const unsigned char lookup[] = 
+	{
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 6, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 7, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 6, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0 
+	};
+	temp = *blockno;
 
-	while (*blockno <= info->super->s_blocks_count) {
+	while (temp <= info->super->s_blocks_count) {
 
-		block_group = (*blockno) / info->super->s_blocks_per_group;
+		block_group = temp / info->super->s_blocks_per_group;
 		if(info->gnum != block_group || info->bitmap_cache == NULL) {
 			if (info->bitmap_cache != NULL)
 				bdesc_release(&info->bitmap_cache);	
@@ -119,27 +152,37 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			bdesc_retain(bitmap);
 			info->bitmap_cache = bitmap;
 		}
-
-		while ((*blockno % info->super->s_blocks_per_group) != 0) {
-			block_in_group  = (*blockno) % info->super->s_blocks_per_group;
-			ptr = ((uint32_t *) info->bitmap_cache->ddesc->data) + (block_in_group/32);
-			if (*ptr != 0xFFFFFFFF)
-				break;
-			*blockno += 32;
+		
+		
+		while (((temp) / info->super->s_blocks_per_group) == block_group) {
+			block_in_group  = (temp) % info->super->s_blocks_per_group;
+			ptr = *(((uint32_t *)info->bitmap_cache->ddesc->data) + (block_in_group/32));
+			
+			if (ptr != 0xFFFFFFFF) {
+				if((ptr & 255) != 0xFF) 
+					temp += lookup[ptr & 255];
+				else if(((ptr >> 8) & 255) != 0xFF)
+					temp += lookup[(ptr >> 8) & 255] + 8;
+				else if(((ptr >> 16) & 255) != 0xFF)
+					temp += lookup[(ptr >> 16) & 255] + 16;
+				else 
+					temp += lookup[(ptr >> 24) & 255] + 24;
+				//temp -= (block_in_group % 32);
+				*blockno = temp - (block_in_group % 32);
+				return EXT2_FREE;
+				
+			}
+			
+			temp += 32;
 		}
 		
-		if ((*blockno % info->super->s_blocks_per_group) == 0) {
-			(*blockno)++;
-			continue;
-		}
-
-		uint32_t mask =  1 << (block_in_group % 32);
-		while (mask != 0) {		
-			if (!(*ptr & mask))
-				return EXT2_FREE;
-			(*blockno)++;
-			mask <<= 1;
-		}
+		//uint32_t mask =  1 << (block_in_group % 32);
+		//while (mask != 0) {		
+		//	if (!(*ptr & mask))
+		//		return EXT2_FREE;
+		//	(*blockno)++;
+		//	mask <<= 1;
+		//}
 	}
 	
 	return -E_NO_DISK;
@@ -194,23 +237,23 @@ static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 	}
 
 	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
-	if(info->inode_gdesc != block_group || info->inode_bitmap == INVALID_BLOCK) {
+	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
+		if (info->inode_cache != NULL)
+			bdesc_release(&info->inode_cache);	
 		if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
 			return -E_NOT_FOUND;
 		info->inode_gdesc = block_group;
-		info->inode_bitmap = gdesc.bg_inode_bitmap;
+		bitmap = CALL(info->ubd, read_block, gdesc.bg_inode_bitmap, 1);
+		if (!bitmap)
+			return -E_NOT_FOUND;
+		bdesc_retain(bitmap);
+		info->inode_cache = bitmap;
 	}
 
-	bitmap = CALL(info->ubd, read_block, info->inode_bitmap, 1);
-	if (!bitmap)
-	{
-	       Dprintf("unable to read inode bitmap in %s\n", __FUNCTION__);
-	       return -1;
-	}
 
 	//this drawn from fs/ext2/ialloc.c:150
 	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
-	ptr = ((uint32_t *) bitmap->ddesc->data) + (inode_in_group / 32);
+	ptr = ((uint32_t *) info->inode_cache->ddesc->data) + (inode_in_group / 32);
 	if(*ptr & (1 << (inode_in_group % 32)))
 	      return 0;
 	else
@@ -298,24 +341,23 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	}
 
 	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
-	if(info->inode_gdesc != block_group || info->inode_bitmap == INVALID_BLOCK) {
+	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
+		if (info->inode_cache != NULL)
+			bdesc_release(&info->inode_cache);	
 		if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
 			return -E_NOT_FOUND;
 		info->inode_gdesc = block_group;
-		info->inode_bitmap = gdesc.bg_inode_bitmap;
-	}
-
-	bitmap = CALL(info->ubd, read_block, info->inode_bitmap, 1);
-	if (!bitmap)
-	{
-	       Dprintf("unable to read inode bitmap in %s\n", __FUNCTION__);
-	       return -1;
+		bitmap = CALL(info->ubd, read_block, gdesc.bg_inode_bitmap, 1);
+		if (!bitmap)
+			return -E_NOT_FOUND;
+		bdesc_retain(bitmap);
+		info->inode_cache = bitmap;
 	}
 
 	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
 
 	// does it already have the right value? 
-	if (((uint32_t *) bitmap->ddesc->data)[(inode_in_group) / 32] & (1 << (inode_in_group % 32)))
+	if (((uint32_t *) info->inode_cache->ddesc->data)[(inode_in_group) / 32] & (1 << (inode_in_group % 32)))
 	{
 	       if (value)
 		      return 0;
@@ -324,11 +366,11 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	       return 0;
 
 	// bit chdescs take offset in increments of 32 bits 
-	r = chdesc_create_bit(bitmap, info->ubd, (inode_in_group) / 32, 1 << (inode_in_group % 32), head);
+	r = chdesc_create_bit(info->inode_cache, info->ubd, (inode_in_group) / 32, 1 << (inode_in_group % 32), head);
 	if (r < 0)
 		return r;	
 
-	r = CALL(info->ubd, write_block, bitmap);
+	r = CALL(info->ubd, write_block, info->inode_cache);
 
 	return r;
 }
@@ -582,13 +624,14 @@ static int dir_lookup(LFS_t * object, ext2_fdesc_t * dir, const char* name, ext2
 	Dprintf("EXT2DEBUG: dir_lookup %s\n", name);
 	uint32_t i, basep = 0;
 	int r = 0;
-	struct dirent entry;
+	uint32_t name_length = strlen(name);
+	EXT2_Dir_entry_t entry;
 
 	for (i = 0; r >= 0; i++)
 	{
-		r = ext2_get_dirent(object, (fdesc_t *)dir, &(entry), sizeof(struct dirent), &basep);
-		if (r == 0 && !strcmp(entry.d_name, name)) {
-			*file = (ext2_fdesc_t *)ext2_lookup_inode(object, entry.d_fileno);
+		r = ext2_get_disk_dirent(object, dir, &basep, &entry);
+		if (r == 0  && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
+			*file = (ext2_fdesc_t *)ext2_lookup_inode(object, entry.inode);
 			if(!(*file)) {
 				free(*file);
 				return -E_NOT_FOUND;
@@ -1433,12 +1476,13 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 	bdesc_t * block_desc, * double_block_desc;
 	uint32_t * inode_nums,* double_inode_nums, indir_ptr, double_indir_ptr;
 	int r;
-	uint32_t zero = 0, target = INVALID_BLOCK;
+	uint32_t zero = 0;
+	uint32_t target = INVALID_BLOCK;
 
 	pointers_per_block = EXT2_BLOCK_SIZE / (sizeof(uint32_t));
 
 	//non block aligned offsets suck (aka aren't supported)
-	
+
 
 	if (offset <= EXT2_BLOCK_SIZE)
 		blocknum = 0;
@@ -1449,121 +1493,111 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 
 	if (blocknum < EXT2_NDIRECT)
 	{
-	      target = file->f_inode.i_block[blocknum];
-	      file->f_inode.i_block[blocknum] = 0;
+		target = file->f_inode.i_block[blocknum];
+		file->f_inode.i_block[blocknum] = 0;
 		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
 			file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
 		else
 			file->f_inode.i_size = 0;
-	      //r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-	      //if (r < 0)
-		//     return INVALID_BLOCK;
+
 	}
 	else if (blocknum < EXT2_NDIRECT + pointers_per_block)
 	{
-	      blocknum -= EXT2_NDIRECT;
-	      block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_NINDIRECT], 1));
-	      if (!block_desc)
-		     return INVALID_BLOCK;	      
-	      inode_nums = (uint32_t *)block_desc->ddesc->data;
-	      target = inode_nums[blocknum];
+		blocknum -= EXT2_NDIRECT;
+		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_NINDIRECT], 1));
+		if (!block_desc)
+			return INVALID_BLOCK;      
+		inode_nums = (uint32_t *)block_desc->ddesc->data;
+		target = inode_nums[blocknum];
 
-	      if (blocknum == 0)
-	      {
-		     indir_ptr = file->f_inode.i_block[EXT2_NDIRECT];
-		     if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-			    file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
-		     else
-			    file->f_inode.i_size = 0;
-		     r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
-		     if (r < 0)
-			    return INVALID_BLOCK;
-		     file->f_inode.i_block[EXT2_NDIRECT] = 0;
-		    // r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-		    // if (r < 0)
-		    //	    return INVALID_BLOCK;
-	      } else {
-		     if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-			    file->f_inode.i_size -= EXT2_BLOCK_SIZE;
-		     else
-			    file->f_inode.i_size = 0;
-		     r = chdesc_create_byte(block_desc, info->ubd, blocknum * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
-		     if (r < 0)
-			    return INVALID_BLOCK;
-		     r = CALL(info->ubd, write_block, block_desc);
-		     if (r < 0)
-			    return INVALID_BLOCK;
-		     //r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-		     //if (r < 0)
+		if (blocknum == 0)
+		{
+			indir_ptr = file->f_inode.i_block[EXT2_NDIRECT];
+			if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+				file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
+			else
+				file->f_inode.i_size = 0;
+			r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
+			if (r < 0)
+				return INVALID_BLOCK;
+			file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+			file->f_inode.i_block[EXT2_NDIRECT] = 0;
+		} else {
+			if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+				file->f_inode.i_size -= EXT2_BLOCK_SIZE;
+			else
+				file->f_inode.i_size = 0;
+			//r = chdesc_create_byte(block_desc, info->ubd, blocknum * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
+			//if (r < 0)
 			//    return INVALID_BLOCK;
-	      }
+			//   r = CALL(info->ubd, write_block, block_desc);
+			// if (r < 0)
+			//    return INVALID_BLOCK;
+		}
 	}
 	else if (blocknum < EXT2_NDIRECT + pointers_per_block + pointers_per_block * pointers_per_block)
 	{
-	      blocknum -= (EXT2_NDIRECT + pointers_per_block);
-	      block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_DINDIRECT], 1));
-	      if (!block_desc)
-		      return INVALID_BLOCK;
-	      inode_nums = (uint32_t *)block_desc->ddesc->data;
-	      indir_ptr = inode_nums[blocknum / pointers_per_block];
-	      double_block_desc = CALL(info->ubd, read_block, indir_ptr, 1);
-	      if (!block_desc)
-		      return INVALID_BLOCK;
-	      double_inode_nums = (uint32_t *)double_block_desc->ddesc->data;
-	      double_indir_ptr = (blocknum % pointers_per_block) - 1;
-	      target = double_inode_nums[double_indir_ptr];
-	      
-	      if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-		      file->f_inode.i_size -= EXT2_BLOCK_SIZE;
-	      else
-		      file->f_inode.i_size = 0;
+		blocknum -= (EXT2_NDIRECT + pointers_per_block);
+		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_DINDIRECT], 1));
+		if (!block_desc)
+			return INVALID_BLOCK;
+		inode_nums = (uint32_t *)block_desc->ddesc->data;
+		indir_ptr = inode_nums[blocknum / pointers_per_block];
+		double_block_desc = CALL(info->ubd, read_block, indir_ptr, 1);
+		if (!block_desc)
+			return INVALID_BLOCK;
+		double_inode_nums = (uint32_t *)double_block_desc->ddesc->data;
+		double_indir_ptr = (blocknum % pointers_per_block) - 1;
+		target = double_inode_nums[double_indir_ptr];
 
-	      if (blocknum % pointers_per_block == 0)
-	      {
-		     if (blocknum == 0)
-		     {
-			    r = ext2_free_block(object, (fdesc_t *) file, file->f_inode.i_block[EXT2_DINDIRECT], head);
-			    if (r < 0)
-				   return INVALID_BLOCK;
-			    file->f_inode.i_block[EXT2_DINDIRECT] = INVALID_BLOCK;
-			  //  r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-			   // if (r < 0)
-			//	   return INVALID_BLOCK;
-		     }
-		     else
-		     {
-			  //  r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-			   // if (r < 0)
-  			     //     return INVALID_BLOCK;
-			    r = chdesc_create_byte(block_desc, info->ubd, (blocknum / pointers_per_block) * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
-			    if (r < 0)
-				    return INVALID_BLOCK;
-			    r = CALL(info->ubd, write_block, block_desc);
-			    if (r < 0)
-				   return INVALID_BLOCK;
-		     }
-		     r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
-		     if (r < 0)
-			    return INVALID_BLOCK;
-	      }
-	      else
-	      {
-		    // r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-		    // if (r < 0)
-		//    return INVALID_BLOCK;
-		     r = chdesc_create_byte(double_block_desc, info->ubd, (blocknum % pointers_per_block) * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
-		     if (r < 0)
-			    return INVALID_BLOCK;
-		     r = CALL(info->ubd, write_block, double_block_desc);
-		     if (r < 0)
-			    return INVALID_BLOCK;
-	      }
+		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
+			file->f_inode.i_size -= EXT2_BLOCK_SIZE;
+		else
+			file->f_inode.i_size = 0;
+
+		if (blocknum % pointers_per_block == 0)
+		{
+			if (blocknum == 0)
+			{
+				r = ext2_free_block(object, (fdesc_t *) file, file->f_inode.i_block[EXT2_DINDIRECT], head);
+				if (r < 0)
+					return INVALID_BLOCK;
+				file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+				file->f_inode.i_block[EXT2_DINDIRECT] = 0;
+			}
+			else
+			{
+				//r = chdesc_create_byte(block_desc, info->ubd, (blocknum / pointers_per_block) * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
+				//if (r < 0)
+				//	return INVALID_BLOCK;
+				//r = CALL(info->ubd, write_block, block_desc);
+				//if (r < 0)
+				//	return INVALID_BLOCK;
+			}
+			r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
+			if (r < 0)
+				return INVALID_BLOCK;
+			file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+		}
+		else
+		{
+			//r = chdesc_create_byte(double_block_desc, info->ubd, (blocknum % pointers_per_block) * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
+			//if (r < 0)
+			//	return INVALID_BLOCK;
+			//r = CALL(info->ubd, write_block, double_block_desc);
+			//if (r < 0)
+			//	return INVALID_BLOCK;
+		}
 	}
 	else
 	{
-	      Dprintf("Triply indirect blocks are not implemented.  I'll do it when I'm in Tripoli\n");
-	      assert(0);
+		Dprintf("Triply indirect blocks are not implemented.  I'll do it when I'm in Tripoli\n");
+		assert(0);
 	}
+	file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+	r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+	if (r < 0)
+		return INVALID_BLOCK;
 	return target;
 }
 
@@ -1754,6 +1788,12 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 
 	if(!head || block == INVALID_BLOCK)
 	      return -E_INVAL;
+	
+	//r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
+	//if (r < 0)
+	//	return r;
+
+	chdesc_t * prev_head = *head;
 
 	r = write_block_bitmap(object, block, 0, head);
 	if (r < 0)
@@ -1761,11 +1801,9 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 	      Dprintf("failed to free block %d in bitmap\n", block);
 	      return r;
 	}
+	*head = prev_head;
 	
-	if (f->f_inode.i_blocks)
-	      f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-
-       return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+       return r;
 }
 
 //this could be made a whole lot better if it used write_dirent!
@@ -1773,7 +1811,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 {
 	Dprintf("EXT2DEBUG: ext2_delete_dirent %\n", basep);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	uint32_t zero_ino = 0;
+	//uint32_t zero_ino = 0;
 	uint32_t basep_blockno, prev_basep_blockno, blockno;
 	uint16_t len;
 	bdesc_t * dirblock1, * dirblock2;
@@ -1800,8 +1838,6 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 	if (!dirblock1)
 	      return -E_UNSPECIFIED;
 	if(basep_blockno != prev_basep_blockno) {
-		
-		
 		dirblock2 = CALL(info->ubd, read_block, prev_basep_blockno, 1);
 		if (!dirblock2)
 			return -E_UNSPECIFIED;
@@ -1812,7 +1848,6 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 	//get the reclen	
 	memcpy(&len, dirblock1->ddesc->data + ((basep + 4) % EXT2_BLOCK_SIZE), sizeof(len));
 	
-	//FIXME: if basep and prev_basep are in the same block no need to have two block descriptors
 	len += basep - prev_basep;
 	
 	chdesc_t * prev_head = *head;	
@@ -1833,16 +1868,18 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 		if (!dirblock1)
 			return -E_UNSPECIFIED;
 	}
+	
+	//prev_head = *head;	
+	//if ((r = chdesc_create_byte(dirblock1, info->ubd, (basep % EXT2_BLOCK_SIZE), sizeof(inode_t), (void *) &zero_ino, head)) < 0)
+	//	return r;
+	//*head = prev_head;
 
-	if ((r = chdesc_create_byte(dirblock1, info->ubd, (basep % EXT2_BLOCK_SIZE), sizeof(inode_t), (void *) &zero_ino, head)) < 0)
-		return r;
-
-	r = CALL(info->ubd, write_block, dirblock1);
+	r = CALL(info->ubd, write_block, dirblock2);
 	if (r < 0)
 		return r;
 
 	if (dirblock1->number != dirblock2->number) {
-		r = CALL(info->ubd, write_block, dirblock2);
+		r = CALL(info->ubd, write_block, dirblock1);
 		if (r < 0)
 			return r;
 	}
@@ -1870,18 +1907,19 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	      r  = -E_NOT_DIR;
 	      goto remove_name_exit;
 	}	
-
+	
 	//put in sanity checks here!
-	struct dirent entry;
+	EXT2_Dir_entry_t entry;
+	uint32_t name_length = strlen(name);
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep;
 	uint8_t minlinks = 1;
 
 	do {
 	      prev_prev_basep = prev_basep;
 	      prev_basep = basep;
-	      r = ext2_get_dirent(object, (fdesc_t *) pfile, &entry, sizeof(entry), &basep);
-	      if (r == 0 && !strcmp(entry.d_name, name)) {
-		     file = (ext2_fdesc_t *) ext2_lookup_inode(object, entry.d_fileno);
+	      r = ext2_get_disk_dirent(object, pfile, &basep, &entry);
+	      if (r == 0  && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
+		     file = (ext2_fdesc_t *) ext2_lookup_inode(object, entry.inode);
 		     if (!file)
 			    goto remove_name_exit;
 		     break;
@@ -1903,7 +1941,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	      else
 		     minlinks = 2;
 	}
-
 	r = ext2_delete_dirent(object, pfile, prev_basep, prev_prev_basep, head);
 	if (r < 0)
 	      goto remove_name_exit;
@@ -2279,11 +2316,13 @@ static int ext2_destroy(LFS_t * lfs)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
-
+	
 	free(info->super);
 	hash_map_destroy(info->filemap);
 	if(info->bitmap_cache != NULL)
 		bdesc_release(&info->bitmap_cache);
+	if(info->inode_cache != NULL)
+		bdesc_release(&info->inode_cache);
 	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
@@ -2349,7 +2388,14 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_group_desc_t * gdesc) {
 	
 	uint32_t blockoff, byteoff;
-	
+
+	if(block_group == info->group_num && info->group_num != INVALID_BLOCK) {
+		if (memcpy(gdesc, &(info->group), sizeof(EXT2_group_desc_t)) == NULL)
+			return -E_NOT_FOUND;
+		return block_group;
+	}
+
+
 	if(!info || !gdesc)
 		return -E_INVAL;
 
@@ -2368,6 +2414,9 @@ static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_gro
 		return -E_NOT_FOUND;
 	if (memcpy(gdesc, group->ddesc->data + byteoff, sizeof(EXT2_group_desc_t)) == NULL)
 		return -E_NOT_FOUND;
+	if (memcpy(&(info->group), group->ddesc->data + byteoff, sizeof(EXT2_group_desc_t)) == NULL)
+		return -E_NOT_FOUND;
+	info->group_num = block_group;
 	
 	return block_group;
 }
@@ -2408,7 +2457,7 @@ int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, ch
 LFS_t * ext2(BD_t * block_device)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
-	
+	bdesc_t * super_block;	
 	if (!block_device)
 		return NULL;
 	
@@ -2437,14 +2486,14 @@ LFS_t * ext2(BD_t * block_device)
 		return NULL;
 	}
 
-	info->super_block = CALL(info->ubd, read_block, 0, 1);
-	if (!info->super_block)
+	super_block = CALL(info->ubd, read_block, 0, 1);
+	if (!super_block)
 	{
 		printf("Unable to read superblock!\n");
 		return NULL;
 	}
 	//TODO Check return value of memcpy
-	memcpy(info->super, info->super_block->ddesc->data + 1024, sizeof(struct EXT2_Super));
+	memcpy(info->super, super_block->ddesc->data + 1024, sizeof(struct EXT2_Super));
 	
 	info->filemap = hash_map_create();
 	if (!info->filemap) {
@@ -2454,9 +2503,10 @@ LFS_t * ext2(BD_t * block_device)
 	}
 
 	info->bitmap_cache = NULL;
+	info->inode_cache = NULL;
+	info->group_num = INVALID_BLOCK;	
 	info->gnum = INVALID_BLOCK;	
 	info->inode_gdesc = INVALID_BLOCK;	
-	info->inode_bitmap = INVALID_BLOCK;	
 
 	if (check_super(lfs)) {
 		free(info);
