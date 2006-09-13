@@ -1476,7 +1476,6 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 	bdesc_t * block_desc, * double_block_desc;
 	uint32_t * inode_nums,* double_inode_nums, indir_ptr, double_indir_ptr;
 	int r;
-	uint32_t zero = 0;
 	uint32_t target = INVALID_BLOCK;
 
 	pointers_per_block = EXT2_BLOCK_SIZE / (sizeof(uint32_t));
@@ -1780,7 +1779,7 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 	Dprintf("EXT2DEBUG: ext2_free_block\n");
 
 	//this is inspired by erase_wholeblock:
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	//struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	int r;
 	EXT2_File_t * f = (EXT2_File_t *) file;
 	
