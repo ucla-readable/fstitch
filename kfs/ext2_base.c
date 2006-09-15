@@ -1225,7 +1225,7 @@ static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 	if ((parent % info->super->s_inodes_per_group) == 0 && parent >= info->super->s_inodes_per_group)
 		ino = parent - info->super->s_inodes_per_group;
 	else
-		ino = parent - (parent % info->super->s_inodes_per_group);
+		ino = 1;
 
 	for (; ino < parent; ino++) {
 		r = read_inode_bitmap(object, ino);
@@ -1235,7 +1235,7 @@ static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 			return EXT2_BAD_INO;
 	}
 	
-	for (ino = 0; ino < info->super->s_inodes_count; ino++) {
+	for (ino = 1; ino < info->super->s_inodes_count; ino++) {
 		r = read_inode_bitmap(object, ino);
 		if (r == 1)
 			return ino;
@@ -1375,7 +1375,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 			}
 			
 		}
-
+		
 		r = write_inode_bitmap(object, ino, 1, head);
 		if (r != 0)
 			goto allocate_name_exit2;
