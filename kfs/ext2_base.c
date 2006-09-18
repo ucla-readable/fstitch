@@ -2405,7 +2405,7 @@ static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_gro
 	//TODO do some sanity checks on block_group
 	//TODO if blocksize is not 4K things go bad
 	blockoff = (block_group / EXT2_DESC_PER_BLOCK) + 1;
-	byteoff = (block_group * sizeof(EXT2_group_desc_t) % EXT2_DESC_PER_BLOCK) ;
+	byteoff = (block_group * sizeof(EXT2_group_desc_t) % EXT2_BLOCK_SIZE) ;
 
 	bdesc_t * group;
 	group = CALL(info->ubd, read_block, blockoff, 1);
