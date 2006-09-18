@@ -65,7 +65,6 @@ static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 
 static uint32_t EXT2_BLOCK_SIZE;
 static uint32_t EXT2_DESC_PER_BLOCK;
-
 // Equivalent to JOS's read_super
 static int check_super(LFS_t * object)
 {
@@ -97,6 +96,7 @@ static int check_super(LFS_t * object)
 }
 static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
+	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	EXT2_group_desc_t gdesc;
 	bdesc_t * bitmap;
@@ -109,13 +109,6 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		return -E_INVAL;
 	}
 	
-	/*static const unsigned char lookup[] = 
-	{
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0, 
-	};*/
 	static const unsigned char lookup[] = 
 	{
 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
@@ -135,10 +128,10 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0 
 	};
-	temp = *blockno;
+	temp = *blockno + 1;
+	short reached_end = 0;
 
 	while (temp <= info->super->s_blocks_count) {
-
 		block_group = temp / info->super->s_blocks_per_group;
 		if(info->gnum != block_group || info->bitmap_cache == NULL) {
 			if (info->bitmap_cache != NULL)
@@ -153,11 +146,9 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			info->bitmap_cache = bitmap;
 		}
 		
-		
 		while (((temp) / info->super->s_blocks_per_group) == block_group) {
 			block_in_group  = (temp) % info->super->s_blocks_per_group;
 			ptr = *(((uint32_t *)info->bitmap_cache->ddesc->data) + (block_in_group/32));
-			
 			if (ptr != 0xFFFFFFFF) {
 				if((ptr & 255) != 0xFF) 
 					temp += lookup[ptr & 255];
@@ -175,6 +166,10 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			
 			temp += 32;
 		}
+		if (temp >= info->super->s_blocks_count - 1 && reached_end == 0) {
+			temp = 0;
+			reached_end = 1;
+		}
 		
 		//uint32_t mask =  1 << (block_in_group % 32);
 		//while (mask != 0) {		
@@ -184,7 +179,6 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		//	mask <<= 1;
 		//}
 	}
-	
 	return -E_NO_DISK;
 }
 
@@ -249,7 +243,6 @@ static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 		bdesc_retain(bitmap);
 		info->inode_cache = bitmap;
 	}
-
 
 	//this drawn from fs/ext2/ialloc.c:150
 	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
@@ -434,7 +427,6 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 
 	if (!head || !f)
 		return INVALID_BLOCK;
-
 	if (f->f_prealloc_count > 0) {
 		//FIXME this code could just use the prealloc_count directly to index the array
 		//but if the array is sorted then we'd like to use them in sorted order to prevent
@@ -619,28 +611,101 @@ static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
-static int dir_lookup(LFS_t * object, ext2_fdesc_t * dir, const char* name, ext2_fdesc_t** file)
+static int dir_lookup(LFS_t * object, ext2_fdesc_t * f, const char* name, uint32_t * basep, 
+		uint32_t * pbasep, uint32_t * ppbasep, ext2_fdesc_t** file)
 {
 	Dprintf("EXT2DEBUG: dir_lookup %s\n", name);
-	uint32_t i, basep = 0;
-	int r = 0;
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	uint32_t name_length = strlen(name);
+	bdesc_t * dirblock1 = NULL, *dirblock2 = NULL;
+	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks, block_offset;
 	EXT2_Dir_entry_t entry;
 
-	for (i = 0; r >= 0; i++)
-	{
-		r = ext2_get_disk_dirent(object, dir, &basep, &entry);
-		if (r == 0  && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
-			*file = (ext2_fdesc_t *)ext2_lookup_inode(object, entry.inode);
-			if(!(*file)) {
-				free(*file);
-				return -E_NOT_FOUND;
-			}
-			return 0;
-		}
-	}
+	num_file_blocks = f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512); 
+	
+	while (1) {
+		blockno = *basep / EXT2_BLOCK_SIZE;
+		file_blockno1 = get_file_block(object, f, *basep);
 
-	*file = NULL;
+		if (file_blockno1 == INVALID_BLOCK)
+			goto dir_lookup_error;
+		
+		dirblock1 = CALL(info->ubd, read_block, file_blockno1, 1);
+		if (!dirblock1)
+			goto dir_lookup_error;
+
+		while ( (*basep / EXT2_BLOCK_SIZE) == blockno ) {
+			*ppbasep = *pbasep;
+			*pbasep = *basep;
+
+			if (*basep >= f->f_inode.i_size)
+				goto dir_lookup_error;
+
+			block_offset = (*basep % EXT2_BLOCK_SIZE);
+
+			/*check if the rec_len is available yet*/
+			uint16_t rec_len;
+			if (EXT2_BLOCK_SIZE - block_offset >= 6)
+			{
+				rec_len = *((uint16_t *) (dirblock1->ddesc->data + block_offset + 4));
+				if (*basep + rec_len > f->f_inode.i_size)
+					goto dir_lookup_error;
+			}
+			else
+				rec_len = 0;
+
+			/*if the dirent overlaps two blocks*/
+			if(rec_len == 0 || block_offset + rec_len > EXT2_BLOCK_SIZE)
+			{
+				if (blockno + 1 >= f->f_inode.i_blocks)
+					return -E_UNSPECIFIED;
+
+				file_blockno2 = get_file_block(object, f, (*basep)+ sizeof(EXT2_Dir_entry_t));
+				if (file_blockno2 == INVALID_BLOCK)
+					return -E_UNSPECIFIED;
+
+				dirblock2 = CALL(info->ubd, read_block, file_blockno2, 1);
+				if(!dirblock2)
+					return -E_UNSPECIFIED;  // should be: -E_NOT_FOUND;
+				//TODO: Clean this up for the weird case of large rec_lens due to lots of deletes 
+				uint32_t block1_len;
+				block1_len = EXT2_BLOCK_SIZE - block_offset;
+				uint32_t block2_len;
+				block2_len = (sizeof(EXT2_Dir_entry_t) - block1_len);
+				if(block1_len > sizeof(EXT2_Dir_entry_t))
+					block2_len = 0;
+				if(block1_len > sizeof(EXT2_Dir_entry_t))
+					block1_len = sizeof(EXT2_Dir_entry_t);
+
+				/* copy each part from each block into the dir entry */
+				memcpy(&entry, dirblock1->ddesc->data + block_offset, block1_len);
+				memcpy((uint8_t*)(&entry) + block1_len, dirblock2->ddesc->data, block2_len);
+				*basep += entry.rec_len;
+				if (entry.name_len == name_length && strncmp(entry.name, name, entry.name_len) == 0) {
+					*file = (ext2_fdesc_t *)ext2_lookup_inode(object, entry.inode);
+					if(!(*file)) {
+						goto dir_lookup_error;
+					}
+					return 0;
+				}
+			}
+			else
+			{
+				EXT2_Dir_entry_t * pdirent =  (EXT2_Dir_entry_t *) (dirblock1->ddesc->data + block_offset);
+				*basep += pdirent->rec_len;
+				if (pdirent->name_len == name_length && strncmp(pdirent->name, name, pdirent->name_len) == 0) {
+					*file = (ext2_fdesc_t *)ext2_lookup_inode(object, pdirent->inode);
+					if(!(*file))
+						goto dir_lookup_error;
+					return 0;
+				}
+			}
+		}
+
+	}
+	
+
+dir_lookup_error:
 	Dprintf("EXT2DEBUG: dir_lookup done: NOT FOUND\n");
 	return -E_NOT_FOUND;
 }
@@ -650,6 +715,9 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 	Dprintf("EXT2DEBUG: ext2_lookup_name %s\n", name);
 	ext2_fdesc_t * fd;
 	ext2_fdesc_t * parent_file;
+	uint32_t basep = 0;
+	EXT2_Dir_entry_t entry;
+	uint32_t name_length = strlen(name);
 	int r;
 	
 	//TODO do some sanity checks on name
@@ -662,17 +730,25 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 		return -E_NOT_FOUND;
 	if (fd->f_type != TYPE_DIR)
 		return -E_NOT_DIR;
-
+	
 	parent_file = fd;
-	r = dir_lookup(object, parent_file, name, &fd);
+	for (r = 0; r >= 0;)
+	{
+	      r = ext2_get_disk_dirent(object, parent_file, &basep, &entry);
+	      if (r == 0  && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
+		     fd = (ext2_fdesc_t *) ext2_lookup_inode(object, entry.inode);
+		     break;
+	      }
+	}
 	if(fd && ino)
 		*ino = fd->f_ino;
+	if(fd != parent_file)
+		ext2_free_fdesc(object, (fdesc_t *) fd);
 	ext2_free_fdesc(object, (fdesc_t *) parent_file);
-	ext2_free_fdesc(object, (fdesc_t *) fd);
 	fd = NULL;
 	parent_file = NULL;
 	if (r < 0)
-		return r;
+		return -E_NOT_FOUND;
 	return 0;
 }
 
@@ -892,6 +968,7 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 	uint32_t blockno, nindirect, offset, nblocks;
 	bdesc_t * dindirect = NULL, * indirect = NULL;
 	uint32_t * dindir = NULL;
+	chdesc_t * prev_head = NULL;
 	int r;
 
 	nblocks = f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512);
@@ -919,11 +996,13 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 		dindir = (uint32_t *)indirect->ddesc->data;
 		if(indirect == NULL)
 			return -E_NO_DISK;
+		offset = (nblocks / (nindirect)) * sizeof(uint32_t);
+		prev_head = *head;
+		if ((r = chdesc_create_byte(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, head)) < 0)
+			return r;
+		*head = prev_head;
 		//add the block to the indirect pointer
 		if ((r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, head)) < 0)
-			return r;
-		offset = (nblocks / (nindirect)) * sizeof(uint32_t);
-		if ((r = chdesc_create_byte(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, head)) < 0)
 			return r;
 		if ((r = CALL(info->ubd, write_block, indirect)) < 0)
 			return r;
@@ -972,9 +1051,9 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 		if(blockno != 0)
 			blockno--;
 		f->f_inode.i_block[blockno] = block;
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 	} 
 	else if (nblocks > (EXT2_NDIRECT + nindirect + 1) ) {
+		
 		if(nblocks == (EXT2_NDIRECT+nindirect+2)) {	
 			//allocate the doubly indirect block pointer & the first indirect block
 			blockno = ext2_allocate_block(object, file, 0, head);
@@ -996,12 +1075,10 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 				return r;
 			if ((r = CALL(info->ubd, write_block, dindirect)) < 0)
 				return r;
-			allocated = 1;
-		} else {
-			blockno = f->f_inode.i_block[EXT2_DINDIRECT];
+			goto return_append;
 		}
-		if (allocated && ((r = ext2_write_inode(info, f->f_ino, f->f_inode, head)) < 0))
-			return r;
+		
+		blockno = f->f_inode.i_block[EXT2_DINDIRECT];
 		return add_indirect(object, f, block, head);
 	}
 	else if (nblocks > EXT2_NDIRECT) {
@@ -1011,7 +1088,6 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			if(blockno == INVALID_BLOCK)
 				return -E_NO_DISK;
 			f->f_inode.i_block[EXT2_NDIRECT] = blockno;
-			allocated = 1;
 		} else {
 			blockno = f->f_inode.i_block[EXT2_NDIRECT];
 		}
@@ -1024,11 +1100,12 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			offset -= sizeof(uint32_t);
 		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
-		if (allocated && ((r = ext2_write_inode(info, f->f_ino, f->f_inode, head)) < 0))
+		r = CALL(info->ubd, write_block, indirect);
+		if (r < 0)
 			return r;
-		return CALL(info->ubd, write_block, indirect);
 	}
-	return -E_INVAL;		
+return_append:
+	return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 }
 
 static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * dirent, 
@@ -1121,7 +1198,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	int newdir = 0;
 	bool synthetic = 0;
 	bdesc_t * block;
-
+	
 	if (parent->f_inode.i_size == 0)
 		newdir = 1;	
 	
@@ -1375,7 +1452,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 			}
 			
 		}
-		
+
 		r = write_inode_bitmap(object, ino, 1, head);
 		if (r != 0)
 			goto allocate_name_exit2;
@@ -1593,16 +1670,19 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 		Dprintf("Triply indirect blocks are not implemented.  I'll do it when I'm in Tripoli\n");
 		assert(0);
 	}
-	file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-	r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-	if (r < 0)
-		return INVALID_BLOCK;
+	//file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+	//r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+	//if (r < 0)
+	//	return INVALID_BLOCK;
 	return target;
 }
 
 static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
+	int r;
+	uint32_t target;
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 
 	EXT2_File_t * f = (EXT2_File_t *)file;
 
@@ -1613,7 +1693,12 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	       return INVALID_BLOCK;
 
 	//ext2_erase_block_ptr will either return INLID_BLOCK, or the block that was truncated...
-	return ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
+	target = ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
+	f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+	r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
+	if (r < 0)
+		return INVALID_BLOCK;
+	return target;
 }
 
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
@@ -1849,10 +1934,10 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 	
 	len += basep - prev_basep;
 	
-	chdesc_t * prev_head = *head;	
+//	chdesc_t * prev_head = *head;	
 	if ((r = chdesc_create_byte(dirblock2, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head )) < 0)
 		return r;
-	*head = prev_head;
+//	*head = prev_head;
 	//so its possible that basep and (basep + 4) are not in the same block
 	if(basep/EXT2_BLOCK_SIZE != (basep+4)/EXT2_BLOCK_SIZE) {
 		blockno = get_file_block(object, dir_file, basep);
@@ -1890,7 +1975,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 {
 	Dprintf("EXT2DEBUG: ext2_remove_name %s\n", name);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	
+	chdesc_t * prev_head;
 	ext2_fdesc_t * pfile = NULL, * file = NULL;
 
 	int r;
@@ -1908,12 +1993,11 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	}	
 	
 	//put in sanity checks here!
-	EXT2_Dir_entry_t entry;
-	uint32_t name_length = strlen(name);
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep;
 	uint8_t minlinks = 1;
-
-	do {
+	
+	//Lookup the inode of name
+	/*do {
 	      prev_prev_basep = prev_basep;
 	      prev_basep = basep;
 	      r = ext2_get_disk_dirent(object, pfile, &basep, &entry);
@@ -1923,10 +2007,16 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 			    goto remove_name_exit;
 		     break;
 	      }
-	} while (r >= 0);
-
+	} while (r >= 0);*/
+	r = dir_lookup(object, pfile, name, &basep, &prev_basep, &prev_prev_basep, &file);
 	if (r < 0)
 	      goto remove_name_exit;
+	
+
+	//r = dir_lookup(object, pfile, name, &basep, &file);
+	//if (r < 0 || file == NULL)
+	//	goto remove_name_exit;
+
 
 	if (file->f_type == TYPE_DIR) {
 	      if (file->f_inode.i_links_count > 2 && !strcmp(name, "..")) {
@@ -1934,31 +2024,47 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		     goto remove_name_exit;
 	      }
 	      else if (file->f_inode.i_links_count < 2) {
-		     printf("%s warning, directory with %d links\n", __FUNCTION__, file->f_inode.i_links_count);
+		     Dprintf("%s warning, directory with %d links\n", __FUNCTION__, file->f_inode.i_links_count);
 		     minlinks = file->f_inode.i_links_count;
 	      }
 	      else
 		     minlinks = 2;
 	}
+
 	r = ext2_delete_dirent(object, pfile, prev_basep, prev_prev_basep, head);
 	if (r < 0)
 	      goto remove_name_exit;
-
 	assert (file->f_inode.i_links_count >= minlinks);
+
+	//Remove link to parent directory
+	if (file->f_type == TYPE_DIR) {
+	      pfile->f_inode.i_links_count--;
+	      prev_head = *head;
+	      r = ext2_write_inode(info, pfile->f_ino, pfile->f_inode, head);
+	      if (r < 0)
+		     goto remove_name_exit;
+	      *head = prev_head;
+	}
+	
 	if (file->f_inode.i_links_count == minlinks) {
+
+		r = write_inode_bitmap(object, file->f_ino, 0, head);
+		if (r < 0)
+			goto remove_name_exit;
+		
 		// Truncate the directory
 		if (file->f_type == TYPE_DIR) {
 			uint32_t number, nblocks, j;
 			nblocks = ext2_get_file_numblocks(object, (fdesc_t *) file);
-			chdesc_t * prev_head;
 			
 			for (j = 0; j < nblocks; j++) {
 				prev_head = *head;
-				number = ext2_truncate_file_block(object, (fdesc_t *) file, head);
+				number = ext2_erase_block_ptr(object, file, file->f_inode.i_size, head);
 				if (number == INVALID_BLOCK) {
 					r = -E_INVAL;
 					goto remove_name_exit;
 				}
+				
 
 				r = ext2_free_block(object, (fdesc_t *) file, number, head);
 				if (r < 0)
@@ -1967,14 +2073,11 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 			}
 		}
 		
-		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
-		r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-		if (r < 0)
-			goto remove_name_exit;
+		//memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
+		//r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+		//if (r < 0)
+		//	goto remove_name_exit;
 
-		r = write_inode_bitmap(object, file->f_ino, 0, head);
-		if (r < 0)
-			goto remove_name_exit;
 	} else {
 	      file->f_inode.i_links_count--;
 	      r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
@@ -1982,12 +2085,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		     goto remove_name_exit;
 	}
 
-	if (file->f_type == TYPE_DIR) {
-	      pfile->f_inode.i_links_count--;
-	      r = ext2_write_inode(info, pfile->f_ino, pfile->f_inode, head);
-	      if (r < 0)
-		     goto remove_name_exit;
-	}
 
 	r = 0;
 
@@ -2405,7 +2502,7 @@ static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_gro
 	//TODO do some sanity checks on block_group
 	//TODO if blocksize is not 4K things go bad
 	blockoff = (block_group / EXT2_DESC_PER_BLOCK) + 1;
-	byteoff = (block_group * sizeof(EXT2_group_desc_t) % EXT2_BLOCK_SIZE) ;
+	byteoff = ((block_group * sizeof(EXT2_group_desc_t)) % EXT2_BLOCK_SIZE) ;
 
 	bdesc_t * group;
 	group = CALL(info->ubd, read_block, blockoff, 1);
