@@ -30,16 +30,13 @@ struct lfs_info
 {
 	BD_t * ubd;
 	struct EXT2_Super * super;
-	//FIXME: we could improve mem usage by only storing the gdesc members
-	//that we care about
-	EXT2_group_desc_t group;
+	EXT2_group_desc_t * groups;
+	uint32_t ngroups;
 	hash_map_t * filemap;
 	bdesc_t * bitmap_cache;
 	bdesc_t * inode_cache;
-	uint32_t group_num;
 	uint32_t gnum;
 	uint32_t inode_gdesc;
-	uint32_t inode_bitmap;
 };
 typedef struct lfs_info lfs_info_t;
 
@@ -51,7 +48,6 @@ static uint32_t ext2_get_file_block(LFS_t * object, fdesc_t * file, uint32_t off
 static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head);
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
 
-static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_group_desc_t * gdesc);
 static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode);
 static uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head);
@@ -98,7 +94,6 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
 	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	EXT2_group_desc_t gdesc;
 	bdesc_t * bitmap;
 	uint32_t ptr;
 	uint32_t block_group, block_in_group = 0, temp;
@@ -136,10 +131,8 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		if(info->gnum != block_group || info->bitmap_cache == NULL) {
 			if (info->bitmap_cache != NULL)
 				bdesc_release(&info->bitmap_cache);	
-			if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
-				return -E_NOT_FOUND;
 			info->gnum = block_group;
-			bitmap = CALL(info->ubd, read_block, gdesc.bg_block_bitmap, 1);
+			bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_block_bitmap, 1);
 			if (!bitmap)
 				return -E_NOT_FOUND;
 			bdesc_retain(bitmap);
@@ -185,7 +178,6 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	EXT2_group_desc_t gdesc;
 	bdesc_t * bitmap;
 	uint32_t * ptr;
 	uint32_t block_group, block_in_group;
@@ -200,10 +192,8 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 	if(info->gnum != block_group || info->bitmap_cache == NULL) {
 		if (info->bitmap_cache != NULL)
 			bdesc_release(&info->bitmap_cache);	
-		if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
-			return -E_NOT_FOUND;
 		info->gnum = block_group;
-		bitmap = CALL(info->ubd, read_block, gdesc.bg_block_bitmap, 1);
+		bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_block_bitmap, 1);
 		if (!bitmap)
 			return -E_NOT_FOUND;
 		bdesc_retain(bitmap);
@@ -220,7 +210,6 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	EXT2_group_desc_t gdesc;
 	bdesc_t * bitmap;
 	uint32_t * ptr;
 
@@ -234,10 +223,8 @@ static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
 		if (info->inode_cache != NULL)
 			bdesc_release(&info->inode_cache);	
-		if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
-			return -E_NOT_FOUND;
 		info->inode_gdesc = block_group;
-		bitmap = CALL(info->ubd, read_block, gdesc.bg_inode_bitmap, 1);
+		bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1);
 		if (!bitmap)
 			return -E_NOT_FOUND;
 		bdesc_retain(bitmap);
@@ -258,7 +245,6 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	Dprintf("EXT2DEBUG: write_bitmap %u\n", blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	bdesc_t * bitmap;
-	EXT2_group_desc_t gdesc;
 	int r;
 
 	if (!head)
@@ -279,10 +265,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	if(info->gnum != block_group || info->bitmap_cache == NULL) {
 		if (info->bitmap_cache != NULL)
 			bdesc_release(&info->bitmap_cache);	
-		if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
-			return -E_NOT_FOUND;
 		info->gnum = block_group;
-		bitmap = CALL(info->ubd, read_block, gdesc.bg_block_bitmap, 1);
+		bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_block_bitmap, 1);
 		if (!bitmap)
 		{
 			Dprintf("unable to read block bitmap in %s\n", __FUNCTION__);
@@ -323,7 +307,6 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	if (!head)
 		return -1;
 
-	EXT2_group_desc_t gdesc;
 
 	//check to make sure we're not writing too soon...
 
@@ -337,10 +320,8 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
 		if (info->inode_cache != NULL)
 			bdesc_release(&info->inode_cache);	
-		if (ext2_get_group_desc(info, block_group, &gdesc) < 0)
-			return -E_NOT_FOUND;
 		info->inode_gdesc = block_group;
-		bitmap = CALL(info->ubd, read_block, gdesc.bg_inode_bitmap, 1);
+		bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1);
 		if (!bitmap)
 			return -E_NOT_FOUND;
 		bdesc_retain(bitmap);
@@ -2414,6 +2395,7 @@ static int ext2_destroy(LFS_t * lfs)
 	modman_dec_bd(info->ubd, lfs);
 	
 	free(info->super);
+	free(info->groups);
 	hash_map_destroy(info->filemap);
 	if(info->bitmap_cache != NULL)
 		bdesc_release(&info->bitmap_cache);
@@ -2441,14 +2423,9 @@ static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode)
 		return -E_INVAL;
 	
 	//Get the group the inode belongs in
-	EXT2_group_desc_t gdesc;
 	block_group = (ino - 1) / info->super->s_inodes_per_group;
-	r = ext2_get_group_desc(info, block_group, &gdesc); 
-	if(r < 0)
-		return r;
-	
 	bitoffset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
-	block = gdesc.bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
+	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
 	bdesc = CALL(info->ubd, read_block, block, 1);
 	if(!bdesc)
 		return -E_INVAL;
@@ -2478,44 +2455,30 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 
 }
 
-//ext2_get_group_desc(object, block_group, gdesc) 
-//	This function sets gdesc to the group descriptor at block block_group.
-//	returns < 0 on error
-static int ext2_get_group_desc(lfs_info_t * info, uint32_t block_group, EXT2_group_desc_t * gdesc) {
-	
-	uint32_t blockoff, byteoff;
-
-	if(block_group == info->group_num && info->group_num != INVALID_BLOCK) {
-		if (memcpy(gdesc, &(info->group), sizeof(EXT2_group_desc_t)) == NULL)
-			return -E_NOT_FOUND;
-		return block_group;
-	}
-
-
-	if(!info || !gdesc)
-		return -E_INVAL;
-
-	if(block_group > (info->super->s_blocks_count / info->super->s_blocks_per_group) ||
-			block_group < 0)
-		return -E_INVAL;
-
-	//TODO do some sanity checks on block_group
-	//TODO if blocksize is not 4K things go bad
-	blockoff = (block_group / EXT2_DESC_PER_BLOCK) + 1;
-	byteoff = ((block_group * sizeof(EXT2_group_desc_t)) % EXT2_BLOCK_SIZE) ;
-
+static int ext2_load_groups(lfs_info_t * info) {
+	uint32_t block;
 	bdesc_t * group;
-	group = CALL(info->ubd, read_block, blockoff, 1);
+
+	if(info == NULL)
+		return -E_INVAL;
+	int ngroups = (info->super->s_blocks_count / info->super->s_blocks_per_group);
+	if (info->super->s_blocks_count % info->super->s_blocks_per_group != 0)
+		ngroups++;
+	info->ngroups = ngroups;
+	info->groups = calloc(ngroups, sizeof(EXT2_group_desc_t));
+	if (info->groups == NULL)
+		return -E_NO_MEM;
+
+	//This is where the group descs are stored
+	block = 1;	
+	group = CALL(info->ubd, read_block, block, (ngroups / EXT2_DESC_PER_BLOCK) + 1);
 	if(!group)
 		return -E_NOT_FOUND;
-	if (memcpy(gdesc, group->ddesc->data + byteoff, sizeof(EXT2_group_desc_t)) == NULL)
+	if (memcpy(info->groups, group->ddesc->data, sizeof(EXT2_group_desc_t) * ngroups) == NULL)
 		return -E_NOT_FOUND;
-	if (memcpy(&(info->group), group->ddesc->data + byteoff, sizeof(EXT2_group_desc_t)) == NULL)
-		return -E_NOT_FOUND;
-	info->group_num = block_group;
-	
-	return block_group;
+	return 0;
 }
+
 
 int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head)
 {
@@ -2531,14 +2494,10 @@ int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, ch
 		return -E_INVAL;
 
 	//Get the group the inode belongs in
-	EXT2_group_desc_t gdesc;
 	block_group = (ino - 1) / info->super->s_inodes_per_group;
-	r = ext2_get_group_desc(info, block_group, &gdesc); 
-	if(r < 0)
-		return r;
 	
 	bitoffset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
-	block = gdesc.bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
+	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
 	bdesc = CALL(info->ubd, read_block, block, 1);
 	if(!bdesc)
 		return -E_NOT_FOUND;
@@ -2600,7 +2559,7 @@ LFS_t * ext2(BD_t * block_device)
 
 	info->bitmap_cache = NULL;
 	info->inode_cache = NULL;
-	info->group_num = INVALID_BLOCK;	
+	info->groups = NULL;
 	info->gnum = INVALID_BLOCK;	
 	info->inode_gdesc = INVALID_BLOCK;	
 
@@ -2609,7 +2568,13 @@ LFS_t * ext2(BD_t * block_device)
 		free(lfs);
 		return NULL;
 	}
-
+	
+	if(ext2_load_groups(info) < 0) {
+		free(info);
+		free(lfs);
+		return NULL;
+	}
+	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{
 		DESTROY(lfs);
