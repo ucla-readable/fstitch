@@ -313,7 +313,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		{
 			slice->all_ready = 0;
 #if CHDESC_DATA_OMITTANCE
-			if(scan->type == BYTE && !scan->byte.data)
+			if(!chdesc_is_rollbackable(scan))
 			{
 				nonready_nonrollbackable = 1;
 				break;

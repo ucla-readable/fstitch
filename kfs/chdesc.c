@@ -19,6 +19,28 @@
  * speedup, even though we use more memory, so it is enabled by default. */
 #define CHDESC_ALLOW_MULTIGRAPH 1
 
+/* Set to make nonrollbackable chdescs always cover the entire block */
+/* TODO: should we or should we not do this? Pluses and minuses:
+ * + More chdecs can be merged
+ *   (though quick testing shows only a small increase)
+ * + Should allow for faster new chdesc merging
+ * + A higher percentage of rollbackables explicitly depend on nonrollbackables
+ *   (but still not all, eg a nonrollbackable created after a rollbackable)
+ * - Nonrollbackables claim to modify data that they may not
+ *   - barrier traversal implications?
+ *   - a synthetic block with a 1B nrb chdesc will appear to be inited
+ * - More dependencies will exist */
+#define CHDESC_NRB_WHOLEBLOCK 1
+
+/* Set to allow new chdescs to be merged into existing chdescs */
+#define CHDESC_MERGE_NEW 1
+/* Set to track new chdesc merge stats and print them after shutdown */
+#define CHDESC_MERGE_NEW_STATS 1
+
+#if CHDESC_MERGE_NEW_STATS && !CHDESC_MERGE_NEW
+# error CHDESC_MERGE_NEW_STATS requires CHDESC_MERGE_NEW
+#endif
+
 static chdesc_t * free_head = NULL;
 
 static void chdesc_free_push(chdesc_t * chdesc)
@@ -418,6 +440,55 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 	return (a_start <= b_start && start + b_len <= tag) ? 2 : 1;
 }
 
+#if !CHDESC_NRB_WHOLEBLOCK
+/* note that we don't check to see if these chdescs are for the same ddesc or not */
+/* returns 1 if a and b change contiguous bytes, 0 if they do not */
+static bool chdesc_byte_contiguous_check(chdesc_t * a, chdesc_t * b)
+{
+	uint16_t a_start, a_len;
+	uint16_t b_start, b_len;
+	
+	/* if either is a NOOP chdesc, they don't overlap */
+	if(a->type == NOOP || b->type == NOOP)
+		return 0;
+
+	/* let's say two bit chdescs are byte contiguous if they modify
+	 * contiguous words, because it is easy to check */
+	if(a->type == BIT && b->type == BIT)
+	{
+		int32_t offset_diff = a->bit.offset - b->bit.offset;
+		if(offset_diff == -1 || offset_diff == 0 || offset_diff == 1)
+			return 1;
+		return 0;
+	}
+
+	if(a->type == BIT)
+	{
+		a_len = sizeof(a->bit.xor);
+		a_start = a->bit.offset * a_len;
+	}
+	else
+	{
+		a_len = a->byte.length;
+		a_start = a->byte.offset;
+	}
+	if(b->type == BIT)
+	{
+		b_len = sizeof(b->bit.xor);
+		b_start = b->bit.offset * b_len;
+	}
+	else
+	{
+		b_len = b->byte.length;
+		b_start = b->byte.offset;
+	}
+
+	if(a_start + a_len < b_start || b_start + b_len < a_start)
+		return 0;
+	return 1;
+}
+#endif
+
 /* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
 static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 {
@@ -651,7 +722,7 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc)
 static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((always_inline));
 static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
 {
-	// empty noops are not on blocks and so can not be on a ready list
+	/* empty noops are not on blocks and so cannot be on a ready list */
 	if(!chdesc->owner)
 		return 0;
 	uint16_t before_level = chdesc_before_level(chdesc);
@@ -762,105 +833,6 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	return chdesc;
 }
 
-int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
-{
-	chdesc_t * chdesc;
-	chdesc_t * bit_changes;
-	int r;
-	
-	chdesc = malloc(sizeof(*chdesc));
-	if(!chdesc)
-		return -E_NO_MEM;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
-	
-	chdesc->owner = owner;
-	chdesc->block = block;
-	chdesc->type = BIT;
-	chdesc->bit.offset = offset;
-	chdesc->bit.xor = xor;
-	chdesc->dependencies = NULL;
-	chdesc->dependencies_tail = &chdesc->dependencies;
-	chdesc->dependents = NULL;
-	chdesc->dependents_tail = &chdesc->dependents;
-	chdesc->weak_refs = NULL;
-	memset(chdesc->befores, 0, sizeof(chdesc->befores));
-	chdesc->free_prev = NULL;
-	chdesc->free_next = NULL;
-	chdesc->ddesc_next = NULL;
-	chdesc->ddesc_pprev = NULL;
-	chdesc->ddesc_ready_next = NULL;
-	chdesc->ddesc_ready_pprev = NULL;
-	chdesc->tmp_next = NULL;
-	chdesc->tmp_pprev = NULL;
-	chdesc->stamps = 0;
-
-	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK;
-
-	chdesc_link_ready_changes(chdesc);
-	
-	/* make sure it is dependent upon any pre-existing chdescs */
-	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
-		goto error;
-	
-	/* this is a new chdesc, so we don't need to check for loops.
-	 * but we should check to make sure head has not already been written. */
-	if(*head && !((*head)->flags & CHDESC_WRITTEN))
-		if((r = chdesc_add_depend_fast(chdesc, *head)) < 0)
-			goto error;
-	
-	/* make sure it applies cleanly */
-	if((r = chdesc_apply(chdesc)) < 0)
-		goto error;
-	
-	/* add chdesc to block's dependencies */
-	chdesc_link_all_changes(chdesc);
-	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
-	{
-		r = -E_NO_MEM;
-		goto error;
-	}
-	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
-		goto error;
-	
-	*head = chdesc;
-	
-	/* make sure our block sticks around */
-	bdesc_retain(block);
-	
-	return 0;
-	
-  error:
-	chdesc_destroy(&chdesc);
-	return r;
-}
-
-#if CHDESC_BYTE_SUM
-/* stupid little checksum, just to try and make sure we get the same data */
-static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
-{
-	uint16_t sum = 0x5AFE;
-	while(length-- > 0)
-	{
-		/* ROL 3 */
-		sum = (sum << 3) | (sum >> 13);
-		sum ^= *(data++);
-	}
-	return sum;
-}
-#endif
-
-int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
-{
-	uint16_t atomic_size = CALL(owner, get_atomicsize);
-	uint16_t init_offset = offset % atomic_size;
-	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
-	
-	if(count == 1)
-		return chdesc_create_byte(block, owner, offset, length, data, head);
-	return -E_INVAL;
-}
-
 #if CHDESC_DATA_OMITTANCE
 static bool chdesc_has_external_dependents(const chdesc_t * chdesc, const bdesc_t * block)
 {
@@ -904,6 +876,380 @@ static bool new_chdescs_require_data(const bdesc_t * block)
 #endif
 }
 
+#include <time.h>
+
+/* Check whether a chdesc merge that adds a dependency on 'chdesc' to an
+ * existing chdesc on 'block' could lead to an indirect dependency cycle.
+ * Returns 0 if a cycle is not possible, <0 if a cycle is possible.
+ * Precondition: 0 == bdesc_has_external_dependents(block). */
+static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc_t * block)
+{
+#if 0
+	const chmetadesc_t * meta;
+	for(meta = chdesc->dependencies; meta; meta = meta->dependency.next)
+	{
+		chdesc_t * dependency = meta->dependency.desc;
+		int r;
+		
+		/* It is a precondition that dependencies on other blocks cannot
+		 * induce cycles. */
+		if(dependency->block && dependency->block->ddesc != block->ddesc)
+			continue;
+		
+#if 1
+		/* A rollbackable on 'block' that is a dependency could already
+		 * depend on the existing chdesc that is merged into. (Cycle!)
+		 * Dependencies on rollbakcables on 'block' rarely occur in practice,
+		 * so conservatively give up on them to make detection simple.
+		 * NOTE: this check could instead scan block->ddesc->all_changes */
+		if(dependency->block && dependency->block->ddesc == block->ddesc && chdesc_is_rollbackable(dependency))
+			return -1;
+#endif
+		
+		/* A NOOP could now, or later be made to, depend on a chdesc on block.
+		 * Conservatively say possible cycle for all NOOP dependencies
+		 * unless the NOOP is reachable only through chdescs on other blocks.
+		 * This check could be more lenient, but NOOPs can have complicated
+		 * relations and this check gives a low enough false negative rate. */
+		if(dependency->type == NOOP)
+			return -2;
+		
+		/* Check indirect dependencies for induced cycles */
+		/* XXX: stack usage */
+		if((r = merge_indirect_cycle_is_possible(dependency, block)) < 0)
+			return r;
+	}
+	return 0;
+#else
+	struct state {
+		const chmetadesc_t * meta;
+	};
+	typedef struct state state_t;
+	static state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	state_t * states = static_states;
+	state_t * state = states;
+
+	const chmetadesc_t * meta = chdesc->dependencies;
+	int r = 0;
+  recurse_start:
+	for(; meta; meta = meta->dependency.next)
+	{
+		const chdesc_t * dependency = meta->dependency.desc;
+		
+		if(dependency->block && dependency->block->ddesc != block->ddesc)
+			continue;
+		
+		if(dependency->block && dependency->block->ddesc == block->ddesc && chdesc_is_rollbackable(dependency))
+		{
+			r = -1;
+			goto exit;
+		}
+		if(dependency->type == NOOP)
+		{
+			r = -2;
+			goto exit;
+		}
+		
+		/* Check indirect dependencies for induced cycles
+		 * Equivalent to:
+		 * if((r = merge_indirect_cycle_is_possible(dependency, block)) < 0)
+		 *	return r;
+		 */
+		size_t next_index = 1 + state - &states[0];
+		
+		state->meta = meta;
+		
+		meta = dependency->dependencies;
+		
+		if(next_index < states_capacity)
+			state++;
+		else
+		{
+			size_t cur_size = states_capacity * sizeof(*state);
+			states_capacity *= 2;
+			if(states == static_states)
+			{
+				states = smalloc(states_capacity * sizeof(*state));
+				if(states)
+					memcpy(states, static_states, cur_size);
+			}
+			else
+				states == srealloc(states, cur_size, states_capacity * sizeof(*state));
+			if(!states)
+				panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
+			state = &states[next_index];
+			printf("%s: increase to %u at %lu s\n", __FUNCTION__, states_capacity, time(NULL));
+		}
+		goto recurse_start;
+		
+	  recurse_resume:
+		(void) 0; /* placate compiler re deprecated end labels */
+	}
+	
+	if(state != &states[0])
+	{
+		state--;
+		meta = state->meta;
+		goto recurse_resume;
+	}
+	
+  exit:
+	if(states != static_states)
+		sfree(states, states_capacity * sizeof(*state));
+	
+	return r;
+#endif
+}
+
+/* Check whether a chdesc merge that adds a dependency on 'dependency' to an
+ * existing chdesc on 'block' could lead to a dependency cycle.
+ * Returns 0 if a cycle is not possible, <0 if a cycle is possible.
+ * Precondition: 0 == bdesc_has_external_dependents(block). */
+/* TODO: unify this and merge_indirect_cycle_is_possible(). They are the same
+ * except that merge_indirect_cycle_is_possible() does not check
+ * for direct cycles. */
+static int merge_cycle_is_possible(const chdesc_t * dependency, const bdesc_t * block)
+{
+	/* It is a precondition that dependencies on other blocks cannot
+	 * induce cycles. */
+	if(dependency->block && dependency->block->ddesc != block->ddesc)
+		return 0;
+
+#if 1
+	/* A rollbackable on 'block' that is a dependency could already
+	 * depend on the existing chdesc that is merged into. (Cycle!)
+	 * Dependencies on rollbakcables on 'block' rarely occur in practice,
+	 * so conservatively give up on them to make detection simple.
+	 * NOTE: this check could instead scan block->ddesc->all_changes */
+	if(dependency->block && dependency->block->ddesc == block->ddesc && chdesc_is_rollbackable(dependency))
+		return -1;
+#endif
+	
+	/* A NOOP could now, or later be made to, depend on a chdesc on block.
+	 * Conservatively say possible cycle for all NOOP dependencies
+	 * unless the NOOP is reachable only through chdescs on other blocks.
+	 * This check could be more lenient, but NOOPs can have complicated
+	 * relations and this check gives a low enough false negative rate. */
+	if(dependency->type == NOOP)
+		return -2;
+	
+	/* Check indirect dependencies for induced cycles */
+	return merge_indirect_cycle_is_possible(dependency, block);
+}
+
+/* chdesc merge stat tracking definitions */
+#if CHDESC_MERGE_NEW_STATS
+# define N_CHDESC_MERGE_NEW_STATS 6
+static uint32_t chdesc_merge_new_stats[N_CHDESC_MERGE_NEW_STATS] = {0,0,0,0,0};
+static unsigned chdesc_merge_new_stats_idx = -1;
+static bool chdesc_merge_new_stats_callback_registered = 0;
+
+static void print_chdesc_merge_new_stats(void * ignore)
+{
+	unsigned i;
+	uint32_t nchdescs = 0;
+	uint32_t nchdescs_notmerged = 0;
+	(void) ignore;
+
+	for(i = 0; i < N_CHDESC_MERGE_NEW_STATS; i++)
+	{
+		nchdescs += chdesc_merge_new_stats[i];
+		if(i > 0)
+			nchdescs_notmerged += chdesc_merge_new_stats[i];
+	}
+	
+	printf("chdescs merge stats:\n");
+	
+	if(!nchdescs)
+	{
+		/* protect against divide by zero */
+		printf("\tno chdescs created\n");
+		return;
+	}
+	printf("\tmerged: %u (%3.1f%% all)\n", chdesc_merge_new_stats[0], 100 * ((float) chdesc_merge_new_stats[0]) / ((float) nchdescs));
+
+	if(!nchdescs_notmerged)
+	{
+		/* protect against divide by zero */
+		printf("\tall chdescs merged?!\n");
+		return;
+	}
+	for(i = 1; i < N_CHDESC_MERGE_NEW_STATS; i++)
+		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, chdesc_merge_new_stats[i], 100 * ((float) chdesc_merge_new_stats[i]) / ((float) nchdescs_notmerged));
+}
+
+# include <kfs/kfsd.h>
+static void chdesc_merge_new_stats_log(unsigned idx)
+{
+	if(!chdesc_merge_new_stats_callback_registered)
+	{
+		int r = kfsd_register_shutdown_module(print_chdesc_merge_new_stats, NULL, SHUTDOWN_POSTMODULES);
+		if(r < 0)
+			panic("kfsd_register_shutdown_module() = %i", r);
+		chdesc_merge_new_stats_callback_registered = 1;
+	}
+	chdesc_merge_new_stats_idx = idx;
+	chdesc_merge_new_stats[idx]++;
+}
+# define CHDESC_MERGE_NEW_STATS_LOG(_idx) chdesc_merge_new_stats_log(_idx)
+#else
+# define CHDESC_MERGE_NEW_STATS_LOG(_idx) do { } while(0)
+#endif
+
+/* Determine whether a new chdesc on 'block', with 'data_required',
+ * at 'offset' and 'length', and with the dependency 'dependency' can be merged
+ * into an existing chdesc. Return such a chdesc if so, else return NULL. */
+static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, uint16_t offset, uint16_t length, chdesc_t * dependency)
+{
+#if !CHDESC_NRB_WHOLEBLOCK
+	chdesc_t new;
+#endif
+	chdesc_t * chdesc;
+	chdesc_t * existing = NULL;
+	int r;
+	
+#if !CHDESC_MERGE_NEW
+	return NULL;
+#endif
+	
+	if(data_required)
+	{
+		/* rollbackable chdesc meta relations can be complicated, give up */
+		CHDESC_MERGE_NEW_STATS_LOG(1);
+		return NULL;
+	}
+	
+	if(dependency && ((r = merge_cycle_is_possible(dependency, block)) < 0))
+	{
+		CHDESC_MERGE_NEW_STATS_LOG(r == -1 ? 2 : 3);
+		return NULL;
+	}
+	
+#if !CHDESC_NRB_WHOLEBLOCK
+	new.type = BYTE;
+	new.byte.offset = offset;
+	new.byte.length = length;
+#endif
+	/* TODO: eliminate scan of all_changes? */
+	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+	{
+		/* rollbackable chdesc meta relations can be complicated */
+		if(chdesc_is_rollbackable(chdesc))
+		{
+			CHDESC_MERGE_NEW_STATS_LOG(4);
+			return NULL;
+		}
+
+#if CHDESC_NRB_WHOLEBLOCK
+		if(!chdesc_is_rollbackable(chdesc))
+#else
+		if(!chdesc_is_rollbackable(chdesc) && chdesc_byte_contiguous_check(chdesc, &new))
+#endif
+			/* merge with last nonrollbackable, they are all equally good */
+			existing = chdesc;
+	}
+	
+	if(existing)
+	{
+		CHDESC_MERGE_NEW_STATS_LOG(0);
+		return chdesc;
+	}
+	CHDESC_MERGE_NEW_STATS_LOG(5);
+	return NULL;
+}
+
+/* Merge what would be a new chdesc into an existing chdesc.
+ * Precondition: select_new_chdesc_merger() returned 'existing'. */
+static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_dependency)
+{
+#if !CHDESC_NRB_WHOLEBLOCK
+	uint16_t updated_offset = MIN(existing->byte.offset, new_offset);
+	uint16_t updated_length;
+#endif
+	int r;
+	
+	assert(existing && existing->type == BYTE);
+	assert(!chdesc_is_rollbackable(existing));
+#if CHDESC_NRB_WHOLEBLOCK
+	assert(existing->byte.offset == 0);
+	assert(existing->byte.length == existing->block->ddesc->length);
+#endif
+	
+	/* Ensure 'existing' depends on 'new_dependency', taking care to not
+	 * create a cycle. Cases for 'new_dependency':
+	 * - on this block: it is nonrollbackable, so it can be ignored
+	 * - on another block: it does not depend on chdescs on this block,
+	 *   so it can be added as a dependency
+	 * - is a noop: not possible */
+	assert(!new_dependency || new_dependency->type != NOOP);
+	if(new_dependency && (new_dependency->block->ddesc != existing->block->ddesc))
+		if ((r = chdesc_add_depend(existing, new_dependency)) < 0)
+			return r;
+	
+#if !CHDESC_NRB_WHOLEBLOCK
+	/* calculate existing's updated location */
+	if(new_offset < existing->byte.offset)
+	{
+		updated_length = existing->byte.length + new_length - (new_offset + new_length - existing->byte.offset);
+	}
+	else if(new_offset == existing->byte.offset)
+	{
+		updated_length = MAX(new_length, existing->byte.length);
+	}
+	else
+	{
+		assert(new_offset > existing->byte.offset);
+		if(new_offset + new_length <= existing->byte.offset + existing->byte.length)
+			updated_length = existing->byte.length;
+		else
+			updated_length = existing->byte.length + new_length - (existing->byte.offset + existing->byte.length - new_offset);
+	}
+
+	/* update existing's location */
+# if CHDESC_MERGE_NEW
+#  warning TODO: merge_new_chdesc() needs to add overlap dependencies
+# endif
+	if(existing->byte.offset != updated_offset)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, existing, updated_offset);
+		existing->byte.offset = updated_offset;
+	}
+	if(existing->byte.length != updated_length)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, existing, updated_length);
+		existing->byte.length = updated_length;
+	}
+#endif
+	return 0;
+}
+
+#if CHDESC_BYTE_SUM
+/* stupid little checksum, just to try and make sure we get the same data */
+static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
+{
+	uint16_t sum = 0x5AFE;
+	while(length-- > 0)
+	{
+		/* ROL 3 */
+		sum = (sum << 3) | (sum >> 13);
+		sum ^= *(data++);
+	}
+	return sum;
+}
+#endif
+
+int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
+{
+	uint16_t atomic_size = CALL(owner, get_atomicsize);
+	uint16_t init_offset = offset % atomic_size;
+	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
+	
+	if(count == 1)
+		return chdesc_create_byte(block, owner, offset, length, data, head);
+	return -E_INVAL;
+}
+
 /* common code to create a byte chdesc */
 static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t ** head)
 {
@@ -919,6 +1265,18 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 		return r;
 	
+	if((chdesc = select_new_chdesc_merger(block, data_required, offset, length, *head)))
+	{
+		if((r = merge_new_chdesc(chdesc, offset, length, *head)) < 0)
+			return r;
+		if(data)
+			memcpy(&block->ddesc->data[offset], data, length);
+		else
+			memset(&block->ddesc->data[offset], 0, length);
+		*head = chdesc;
+		return 0;
+	}
+	
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return -E_NO_MEM;
@@ -926,8 +1284,24 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->owner = owner;		
 	chdesc->block = block;
 	chdesc->type = BYTE;
+#if CHDESC_NRB_WHOLEBLOCK
+	if(data_required)
+	{
+		chdesc->byte.offset = offset;
+		chdesc->byte.length = length;
+	}
+	else
+	{
+		/* Expand to cover entire block. This is safe since all chdescs on
+		 * this block at least implicitly depend on all nonrollbackables.
+		 * Leave 'offset' and 'length' as is to copy source data. */
+		chdesc->byte.offset = 0;
+		chdesc->byte.length = block->ddesc->length;
+	}
+#else
 	chdesc->byte.offset = offset;
 	chdesc->byte.length = length;
+#endif
 	
 	if(data_required)
 	{
@@ -1037,6 +1411,98 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
 	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
+}
+
+int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
+{
+	bool data_required = new_chdescs_require_data(block);
+	chdesc_t * chdesc;
+	chdesc_t * bit_changes;
+	int r;
+	
+	if((chdesc = select_new_chdesc_merger(block, data_required, offset * 4, 4, *head)))
+	{
+		if((r = merge_new_chdesc(chdesc, offset * 4, 4, *head)) < 0)
+			return r;
+		((uint32_t *) block->ddesc->data)[offset] ^= xor;
+		*head = chdesc;
+		return 0;
+	}
+	
+	if(!data_required)
+	{
+		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+#if CHDESC_MERGE_NEW_STATS
+		chdesc_merge_new_stats[chdesc_merge_new_stats_idx]--; /* don't double count */
+#endif
+		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
+	}
+	
+	chdesc = malloc(sizeof(*chdesc));
+	if(!chdesc)
+		return -E_NO_MEM;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
+	
+	chdesc->owner = owner;
+	chdesc->block = block;
+	chdesc->type = BIT;
+	chdesc->bit.offset = offset;
+	chdesc->bit.xor = xor;
+	chdesc->dependencies = NULL;
+	chdesc->dependencies_tail = &chdesc->dependencies;
+	chdesc->dependents = NULL;
+	chdesc->dependents_tail = &chdesc->dependents;
+	chdesc->weak_refs = NULL;
+	memset(chdesc->befores, 0, sizeof(chdesc->befores));
+	chdesc->free_prev = NULL;
+	chdesc->free_next = NULL;
+	chdesc->ddesc_next = NULL;
+	chdesc->ddesc_pprev = NULL;
+	chdesc->ddesc_ready_next = NULL;
+	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->tmp_next = NULL;
+	chdesc->tmp_pprev = NULL;
+	chdesc->stamps = 0;
+
+	/* start rolled back so we can apply it */
+	chdesc->flags = CHDESC_ROLLBACK;
+
+	chdesc_link_ready_changes(chdesc);
+	
+	/* make sure it is dependent upon any pre-existing chdescs */
+	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
+		goto error;
+	
+	/* this is a new chdesc, so we don't need to check for loops.
+	 * but we should check to make sure head has not already been written. */
+	if(*head && !((*head)->flags & CHDESC_WRITTEN))
+		if((r = chdesc_add_depend_fast(chdesc, *head)) < 0)
+			goto error;
+	
+	/* make sure it applies cleanly */
+	if((r = chdesc_apply(chdesc)) < 0)
+		goto error;
+	
+	/* add chdesc to block's dependencies */
+	chdesc_link_all_changes(chdesc);
+	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
+	{
+		r = -E_NO_MEM;
+		goto error;
+	}
+	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
+		goto error;
+	
+	*head = chdesc;
+	
+	/* make sure our block sticks around */
+	bdesc_retain(block);
+	
+	return 0;
+	
+  error:
+	chdesc_destroy(&chdesc);
+	return r;
 }
 
 /* Rewrite a byte change descriptor to have an updated "new data" field,
