@@ -20,8 +20,8 @@
 /*
  * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
  */
-#define EXT2_PREALLOCATE		8
-#define EXT2_DEFAULT_PREALLOC_BLOCKS    8
+#define EXT2_PREALLOCATE		0
+#define EXT2_DEFAULT_PREALLOC_BLOCKS    0
 
 /*
  * Special inode numbers
@@ -253,6 +253,7 @@ struct EXT2_File {
 	uint8_t	f_prealloc_count; //Number of preallocated blocks remaining
 	inode_t	f_ino;		 //inode number
 	uint32_t f_nopen;
+	uint32_t f_lastblock;
 	uint32_t f_prealloc_block[EXT2_PREALLOCATE]; //block numbers of preallocated blocks
 
 };

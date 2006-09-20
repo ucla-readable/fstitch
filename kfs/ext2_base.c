@@ -427,7 +427,10 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 
 	//Get the block number of the last block of the inode
 	//FIXME this offset might be off
-	blockno = get_file_block(object, (EXT2_File_t *) f, (f->f_inode.i_size) - 1);	
+	if (f->f_lastblock != 0)
+		blockno = f->f_lastblock;
+	else
+		blockno = get_file_block(object, (EXT2_File_t *) f, (f->f_inode.i_size) - 1);	
 	if(blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
 	lastblock = blockno;
@@ -489,10 +492,11 @@ inode_search:
 	return INVALID_BLOCK;
 
 return_block:
-	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
-	r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
-	if(r < 0)
-		goto bad_block;
+//	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
+//	r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
+//	if(r < 0)
+//		goto bad_block;
+	f->f_lastblock = blockno;
 	return blockno;
 	
 bad_block:
@@ -545,6 +549,7 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	fd->base.parent = INODE_NONE;
 	fd->f_ino = ino;
 	fd->f_nopen = 1;
+	fd->f_lastblock = 0;
 	fd->f_prealloc_count = 0;
 
 	r = ext2_get_inode(info, ino, &(fd->f_inode));
@@ -699,7 +704,7 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 	uint32_t basep = 0;
 	EXT2_Dir_entry_t entry;
 	uint32_t name_length = strlen(name);
-	int r;
+	int r= 0;
 	
 	//TODO do some sanity checks on name
 
@@ -713,7 +718,7 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 		return -E_NOT_DIR;
 	
 	parent_file = fd;
-	for (r = 0; r >= 0;)
+	while (r >= 0)
 	{
 	      r = ext2_get_disk_dirent(object, parent_file, &basep, &entry);
 	      if (r == 0  && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
@@ -762,7 +767,6 @@ static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offs
 	pointers_per_block = EXT2_BLOCK_SIZE / (sizeof(uint32_t));
 
 	//non block aligned offsets suck (aka aren't supported)
-	       
 	blocknum = offset / EXT2_BLOCK_SIZE;
 
 	//TODO: compress this code, but right now its much easier to understand...
@@ -952,7 +956,7 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 	chdesc_t * prev_head = NULL;
 	int r;
 
-	nblocks = f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512);
+	nblocks = ((f->f_inode.i_blocks) / (EXT2_BLOCK_SIZE / 512)) + 1; //plus 1 to account for newly allocated block
 	nindirect = EXT2_BLOCK_SIZE / sizeof(uint32_t);
 		
 	dindirect = ext2_lookup_block(object, f->f_inode.i_block[EXT2_DINDIRECT]);
@@ -977,6 +981,7 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 		dindir = (uint32_t *)indirect->ddesc->data;
 		if(indirect == NULL)
 			return -E_NO_DISK;
+		f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 		offset = (nblocks / (nindirect)) * sizeof(uint32_t);
 		prev_head = *head;
 		if ((r = chdesc_create_byte(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, head)) < 0)
@@ -1008,7 +1013,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 	Dprintf("EXT2DEBUG: %s %d\n", __FUNCTION__, block);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	uint32_t nblocks = f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512);
+	uint32_t nblocks = ((f->f_inode.i_blocks) / (EXT2_BLOCK_SIZE / 512)) + 1; //plus 1 to account for newly allocated block
 	bdesc_t * indirect = NULL, * dindirect = NULL;
 	uint32_t blockno, nindirect;
 	int r, offset, allocated;
@@ -1040,12 +1045,13 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			blockno = ext2_allocate_block(object, file, 0, head);
 			if(blockno == INVALID_BLOCK)
 				return -E_NO_DISK;
-			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
 			dindirect = ext2_lookup_block(object, blockno);
 			if(dindirect == NULL) {
 				(void)ext2_free_block(object, file, blockno, head);
 				return -E_NO_DISK;
 			}
+			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
+			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
 			//first indirect block
 			blockno = ext2_allocate_block(object, file, 0, head);
 			if(blockno == INVALID_BLOCK) {
@@ -1056,6 +1062,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 				return r;
 			if ((r = CALL(info->ubd, write_block, dindirect)) < 0)
 				return r;
+			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 			goto return_append;
 		}
 		
@@ -1068,6 +1075,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			blockno = ext2_allocate_block(object, file, 0, head);
 			if(blockno == INVALID_BLOCK)
 				return -E_NO_DISK;
+			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 			f->f_inode.i_block[EXT2_NDIRECT] = blockno;
 		} else {
 			blockno = f->f_inode.i_block[EXT2_NDIRECT];
@@ -1086,6 +1094,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			return r;
 	}
 return_append:
+	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 	return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 }
 
@@ -1380,6 +1389,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		newf->common = &newf->base;
 		newf->base.parent = INODE_NONE;
 		newf->f_nopen = 1;
+		newf->f_lastblock = 0;
 		newf->f_ino = ino;
 		newf->f_type = file_type;
 		newf->f_prealloc_count = 0;
@@ -1993,11 +2003,9 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	if (r < 0)
 	      goto remove_name_exit;
 	
-
 	//r = dir_lookup(object, pfile, name, &basep, &file);
 	//if (r < 0 || file == NULL)
 	//	goto remove_name_exit;
-
 
 	if (file->f_type == TYPE_DIR) {
 	      if (file->f_inode.i_links_count > 2 && !strcmp(name, "..")) {
@@ -2415,7 +2423,6 @@ static int ext2_destroy(LFS_t * lfs)
 static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode)
 {
 	uint32_t block_group, bitoffset, block;
-	int r;
 	bdesc_t * bdesc;
 
 	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
