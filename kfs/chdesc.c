@@ -268,8 +268,125 @@ static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev
 		sfree(states, states_capacity * sizeof(*state));
 }
 
-/* propagate the new dependency's level info for 'dependent' on 'dependency' */
-static void propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+#if BDESC_EXTERN_DEPENDENT_COUNT
+/* return whether 'chdesc' is on a different block than 'block' */
+static bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
+{
+	assert(chdesc);
+	assert(block && block->ddesc);
+	if(chdesc->type == NOOP)
+	{
+		if(chdesc->block && chdesc->block->ddesc != block->ddesc)
+			return 1;
+	}
+	else if(chdesc->block->ddesc != block->ddesc)
+		return 1;
+	return 0;
+}
+
+#define BDESC_EXTERN_DEPENDENT_COUNT_DEBUG 0
+#if BDESC_EXTERN_DEPENDENT_COUNT_DEBUG
+/* return the number of external dependents 'chdesc' has with respect
+ * to 'block' */
+static bool count_chdesc_external_dependents(const chdesc_t * chdesc, const bdesc_t * block)
+{
+	const chmetadesc_t * dependents;
+	uint32_t n = 0;
+	for(dependents = chdesc->dependents; dependents; dependents = dependents->dependent.next)
+	{
+		const chdesc_t * dependent = dependents->dependent.desc;
+		if(dependent->type == NOOP)
+		{
+			if(dependent->block && dependent->block->ddesc != block->ddesc)
+				n++;
+			else
+				/* XXX: stack usage */
+				n += chdesc_has_external_dependents(dependent, block);
+		}
+		else if(dependent->block->ddesc != block->ddesc)
+			n++;
+	}
+	return n;
+}
+
+/* return the number of external dependents for 'block' */
+static uint32_t count_bdesc_external_dependents(const bdesc_t * block)
+{
+	const chdesc_t * c;
+	uint32_t n = 0;
+	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
+		n += count_chdesc_external_dependents(c, block);
+	return n;
+}
+
+/* return whether the external dependent count in 'block' agrees with
+ * an actual count */
+static bool extern_dependent_count_is_correct(const bdesc_t * block)
+{
+	return !block || (count_bdesc_external_dependents(block) == block->ddesc->extern_dependent_count);
+}
+#endif /* BDESC_EXTERN_DEPENDENT_COUNT_DEBUG */
+
+/* propagate a dependency addition/removal through a noop dependent to update
+ * block's extern count */
+static void propagate_dependent_external_change(const chdesc_t * dependent, bdesc_t * block, bool add)
+{
+	chmetadesc_t * meta;
+	assert(dependent->type == NOOP && !dependent->owner);
+	assert(block);
+	for(meta = dependent->dependents; meta; meta = meta->dependent.next)
+	{
+		chdesc_t * chdesc = meta->dependent.desc;
+		if(chdesc->block && chdesc_is_external(chdesc, block))
+		{
+			if(add)
+			{
+				block->ddesc->extern_dependent_count++;
+				assert(block->ddesc->extern_dependent_count);
+			}
+			else
+			{
+				assert(block->ddesc->extern_dependent_count);
+				block->ddesc->extern_dependent_count--;
+			}
+		}
+		if(!chdesc->owner)
+		{
+			assert(chdesc->type == NOOP);
+			/* XXX: stack usage */
+			propagate_dependent_external_change(chdesc, block, add);
+		}
+	}
+}
+
+/* propagate a dependency addition through a noop dependency to update
+ * extern counts for data dependencies */
+static void propagate_dependency_external_add(const chdesc_t * dependent, chdesc_t * dependency)
+{
+	chmetadesc_t * meta;
+	assert(dependent->type != NOOP);
+	assert(dependency->type == NOOP && !dependency->owner);
+	for(meta = dependency->dependencies; meta; meta = meta->dependency.next)
+	{
+		chdesc_t * chdesc = meta->dependency.desc;
+		if(chdesc->block && chdesc_is_external(dependent, chdesc->block))
+		{
+			chdesc->block->ddesc->extern_dependent_count++;
+			assert(chdesc->block->ddesc->extern_dependent_count);
+		}
+		if(!chdesc->owner)
+		{
+			assert(chdesc->type == NOOP);
+			/* XXX: stack usage */
+			propagate_dependency_external_add(dependent, chdesc);
+		}
+	}
+}
+#endif /* BDESC_EXTERN_DEPENDENT_COUNT */
+
+/* propagate the new dependency's level and extern count info for
+ * 'dependent' on 'dependency' */
+static void propagate_dependency(chdesc_t * dependent, chdesc_t * dependency)
 {
 	uint16_t dependency_level = chdesc_level(dependency);
 	uint16_t dependent_prev_level;
@@ -285,10 +402,24 @@ static void propagate_dependency(chdesc_t * dependent, const chdesc_t * dependen
 	{
 		if(dependency_level > dependent_prev_level || dependent_prev_level == BDLEVEL_NONE)
 			propagate_noop_level_change(dependent, dependent_prev_level, dependency_level);
+#if BDESC_EXTERN_DEPENDENT_COUNT
+		if(dependency->block)
+			propagate_dependent_external_change(dependent, dependency->block, 1);
+#endif
 	}
+#if BDESC_EXTERN_DEPENDENT_COUNT
+	if(dependent->owner && !dependency->owner)
+		propagate_dependency_external_add(dependent, dependency);
+	if(dependency->block && chdesc_is_external(dependent, dependency->block))
+	{
+		dependency->block->ddesc->extern_dependent_count++;
+		assert(dependency->block->ddesc->extern_dependent_count);
+	}
+#endif
 }
 
-/* unpropagate the dependency's level info for 'dependent' on 'dependency' */
+/* unpropagate the dependency's level and extern count info for
+ * 'dependent' on 'dependency' */
 static void unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
 {
 	uint16_t dependency_level = chdesc_level(dependency);
@@ -297,7 +428,15 @@ static void unpropagate_dependency(chdesc_t * dependent, const chdesc_t * depend
 	if(dependency_level == BDLEVEL_NONE)
 		return;
 	dependent_prev_level = chdesc_level(dependent);
-
+	
+#if BDESC_EXTERN_DEPENDENT_COUNT
+	if(dependency->block && chdesc_is_external(dependent, dependency->block))
+	{
+		assert(dependency->block->ddesc->extern_dependent_count);
+		dependency->block->ddesc->extern_dependent_count--;
+	}
+#endif
+	
 	assert(dependent->befores[dependency_level]);
 	dependent->befores[dependency_level]--;
 	chdesc_update_ready_changes(dependent);
@@ -305,6 +444,9 @@ static void unpropagate_dependency(chdesc_t * dependent, const chdesc_t * depend
 	{
 		if(dependency_level == dependent_prev_level && !dependent->befores[dependency_level])
 			propagate_noop_level_change(dependent, dependent_prev_level, chdesc_level(dependent));
+#if BDESC_EXTERN_DEPENDENT_COUNT
+		propagate_dependent_external_change(dependent, dependency->block, 0);
+#endif
 	}
 }
 
@@ -842,13 +984,13 @@ static bool chdesc_has_external_dependents(const chdesc_t * chdesc, const bdesc_
 		const chdesc_t * dependent = dependents->dependent.desc;
 		if(dependent->type == NOOP)
 		{
-			if(dependent->block && dependent->block->number != block->number)
+			if(dependent->block && dependent->block->ddesc != block->ddesc)
 				return 1;
 			/* XXX: stack usage */
 			if(chdesc_has_external_dependents(dependent, block))
 				return 1;
 		}
-		else if(dependent->block->number != block->number)
+		else if(dependent->block->ddesc != block->ddesc)
 			return 1;
 	}
 	return 0;
@@ -870,7 +1012,11 @@ static bool new_chdescs_require_data(const bdesc_t * block)
 	/* Rule: When adding chdesc C to block B,
 	 * and forall C' on B, with C' != C: C' has no dependents on blocks != B,
 	 * then C will never need to be rolled back. */
+# if BDESC_EXTERN_DEPENDENT_COUNT
+	return block->ddesc->extern_dependent_count > 0;
+# else
 	return bdesc_has_external_dependents(block);
+# endif
 #else
 	return 1;
 #endif
