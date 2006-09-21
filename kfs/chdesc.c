@@ -220,7 +220,7 @@ static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev
 							memcpy(states, static_states, cur_size);
 					}
 					else
-						states == srealloc(states, cur_size, states_capacity * sizeof(*state));
+						states = srealloc(states, cur_size, states_capacity * sizeof(*state));
 					if(!states)
 						panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
 					state = &states[next_index];
