@@ -21,7 +21,7 @@
 /*
  * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
  */
-#define EXT2_PREALLOCATE		8
+#define EXT2_PREALLOCATE		0
 #define EXT2_DEFAULT_PREALLOC_BLOCKS    8
 
 /*

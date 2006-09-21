@@ -2403,6 +2403,7 @@ static int ext2_destroy(LFS_t * lfs)
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
+		DESTROY(info->super_wb);
 	modman_dec_bd(info->ubd, lfs);
 	
 	free(info->groups);
@@ -2411,6 +2412,7 @@ static int ext2_destroy(LFS_t * lfs)
 		bdesc_release(&info->bitmap_cache);
 	if(info->inode_cache != NULL)
 		bdesc_release(&info->inode_cache);
+
 	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
