@@ -996,6 +996,7 @@ static bool chdesc_has_external_dependents(const chdesc_t * chdesc, const bdesc_
 	return 0;
 }
 
+# if !BDESC_EXTERN_DEPENDENT_COUNT
 static bool bdesc_has_external_dependents(const bdesc_t * block)
 {
 	const chdesc_t * c;
@@ -1004,6 +1005,7 @@ static bool bdesc_has_external_dependents(const bdesc_t * block)
 			return 1;
 	return 0;
 }
+# endif
 #endif
 
 static bool new_chdescs_require_data(const bdesc_t * block)
