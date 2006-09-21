@@ -11,6 +11,7 @@
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/modman.h>
+#include <kfs/ext2_super_wb.h>
 #include <kfs/ext2_base.h>
 #include <kfs/feature.h>
 
@@ -25,20 +26,6 @@
 #else
 #define Dprintf(x...)
 #endif
-
-struct lfs_info
-{
-	BD_t * ubd;
-	struct EXT2_Super * super;
-	EXT2_group_desc_t * groups;
-	uint32_t ngroups;
-	hash_map_t * filemap;
-	bdesc_t * bitmap_cache;
-	bdesc_t * inode_cache;
-	uint32_t gnum;
-	uint32_t inode_gdesc;
-};
-typedef struct lfs_info lfs_info_t;
 
 static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number);
 static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
@@ -65,27 +52,27 @@ static uint32_t EXT2_DESC_PER_BLOCK;
 static int check_super(LFS_t * object)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	
 	/* the superblock is in block 1 */
-	printf("\tMagic Number 0x%x \n", info->super->s_magic);
+	printf("\tMagic Number 0x%x \n", super->s_magic);
 	printf("\tBlocksize might be %i\n", CALL(info->ubd, get_blocksize));
-	printf("\tNumber of inodes %i\n", info->super->s_inodes_count);
-	printf("\tSize of inode sturcture %i\n", info->super->s_inode_size);
-	printf("\tNumber of free inodes %i\n", info->super->s_free_inodes_count);
-	printf("\tNumber of blocks %i\n", info->super->s_blocks_count);
-	printf("\tEXT2 Block size %i\n", 1024 << info->super->s_log_block_size);
-	printf("\tNumber of free blocks %i\n", info->super->s_free_blocks_count);
+	printf("\tNumber of inodes %i\n", super->s_inodes_count);
+	printf("\tSize of inode sturcture %i\n", super->s_inode_size);
+	printf("\tNumber of free inodes %i\n", super->s_free_inodes_count);
+	printf("\tNumber of blocks %i\n", super->s_blocks_count);
+	printf("\tEXT2 Block size %i\n", 1024 << super->s_log_block_size);
+	printf("\tNumber of free blocks %i\n", super->s_free_blocks_count);
 	printf("\tSize of block group is %i\n", sizeof(EXT2_group_desc_t));
-	printf("\tNumber of blocks per group %i\n", info->super->s_blocks_per_group);
-	printf("\tNumber of inodes per group %i\n", info->super->s_inodes_per_group);
+	printf("\tNumber of blocks per group %i\n", super->s_blocks_per_group);
+	printf("\tNumber of inodes per group %i\n", super->s_inodes_per_group);
 
-	if (info->super->s_magic != EXT2_FS_MAGIC) {
+	if (super->s_magic != EXT2_FS_MAGIC) {
 		printf("ext2_base: bad file system magic number\n");
 		return -1;
 	}
 	
-	EXT2_BLOCK_SIZE = (1024 << info->super->s_log_block_size);
+	EXT2_BLOCK_SIZE = (1024 << super->s_log_block_size);
 	EXT2_DESC_PER_BLOCK = EXT2_BLOCK_SIZE / sizeof(EXT2_group_desc_t);
 	
 	return 0;
@@ -94,11 +81,12 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
 	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	bdesc_t * bitmap;
 	uint32_t ptr;
 	uint32_t block_group, block_in_group = 0, temp;
 	
-	if (*blockno >= info->super->s_blocks_count || *blockno < info->super->s_first_data_block) 
+	if (*blockno >= super->s_blocks_count || *blockno < super->s_first_data_block) 
 	{
 		printf("%s requested status of block %u too large block no!\n",__FUNCTION__, *blockno);
 		return -E_INVAL;
@@ -126,8 +114,8 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 	temp = *blockno + 1;
 	short reached_end = 0;
 
-	while (temp <= info->super->s_blocks_count) {
-		block_group = temp / info->super->s_blocks_per_group;
+	while (temp <= super->s_blocks_count) {
+		block_group = temp / super->s_blocks_per_group;
 		if(info->gnum != block_group || info->bitmap_cache == NULL) {
 			if (info->bitmap_cache != NULL)
 				bdesc_release(&info->bitmap_cache);	
@@ -139,8 +127,8 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			info->bitmap_cache = bitmap;
 		}
 		
-		while (((temp) / info->super->s_blocks_per_group) == block_group) {
-			block_in_group  = (temp) % info->super->s_blocks_per_group;
+		while (((temp) / super->s_blocks_per_group) == block_group) {
+			block_in_group  = (temp) % super->s_blocks_per_group;
 			ptr = *(((uint32_t *)info->bitmap_cache->ddesc->data) + (block_in_group/32));
 			if (ptr != 0xFFFFFFFF) {
 				if((ptr & 255) != 0xFF) 
@@ -159,7 +147,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			
 			temp += 32;
 		}
-		if (temp >= info->super->s_blocks_count - 1 && reached_end == 0) {
+		if (temp >= super->s_blocks_count - 1 && reached_end == 0) {
 			temp = 0;
 			reached_end = 1;
 		}
@@ -178,17 +166,18 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	bdesc_t * bitmap;
 	uint32_t * ptr;
 	uint32_t block_group, block_in_group;
 		
-	if (blockno >= info->super->s_blocks_count || blockno < info->super->s_first_data_block) 
+	if (blockno >= super->s_blocks_count || blockno < super->s_first_data_block) 
 	{
 		printf("ext2: %s requested status of block %u too large block no!\n",__FUNCTION__, blockno);
 		return -E_INVAL;
 	}
 
-	block_group = blockno / info->super->s_blocks_per_group;
+	block_group = blockno / super->s_blocks_per_group;
 	if(info->gnum != block_group || info->bitmap_cache == NULL) {
 		if (info->bitmap_cache != NULL)
 			bdesc_release(&info->bitmap_cache);	
@@ -200,7 +189,7 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 		info->bitmap_cache = bitmap;
 	}
 
-	block_in_group  = blockno % info->super->s_blocks_per_group;
+	block_in_group  = blockno % super->s_blocks_per_group;
 	ptr = ((uint32_t *) info->bitmap_cache->ddesc->data) + (block_in_group/32);
 	if (*ptr & (1 << (block_in_group % 32)))
 		return EXT2_USED;
@@ -210,16 +199,17 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 {
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	bdesc_t * bitmap;
 	uint32_t * ptr;
 
-	if ((inode_no - 1) >= info->super->s_inodes_count) 
+	if ((inode_no - 1) >= super->s_inodes_count) 
 	{
 		printf("ext2_base:read_inode: inode %u past end of file system!\n", inode_no);
 		return -1;
 	}
 
-	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
+	uint32_t block_group = (inode_no - 1) / super->s_inodes_per_group;
 	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
 		if (info->inode_cache != NULL)
 			bdesc_release(&info->inode_cache);	
@@ -232,7 +222,7 @@ static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
 	}
 
 	//this drawn from fs/ext2/ialloc.c:150
-	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
+	uint32_t inode_in_group = (inode_no - 1) % super->s_inodes_per_group;
 	ptr = ((uint32_t *) info->inode_cache->ddesc->data) + (inode_in_group / 32);
 	if(*ptr & (1 << (inode_in_group % 32)))
 	      return 0;
@@ -244,6 +234,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 {
 	Dprintf("EXT2DEBUG: write_bitmap %u\n", blockno);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
+
 	bdesc_t * bitmap;
 	int r;
 
@@ -255,13 +247,13 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 		printf("ext2_base: attempted to write status of zero block!\n");
 		return -E_INVAL;
 	}
-	else if (blockno >= info->super->s_blocks_count) 
+	else if (blockno >= super->s_blocks_count) 
 	{
 		printf("ext2_base: requested status of block %u too large block no!\n", blockno);
 		return -E_INVAL;
 	}
 	
-	uint32_t block_group = blockno / info->super->s_blocks_per_group;
+	uint32_t block_group = blockno / super->s_blocks_per_group;
 	if(info->gnum != block_group || info->bitmap_cache == NULL) {
 		if (info->bitmap_cache != NULL)
 			bdesc_release(&info->bitmap_cache);	
@@ -276,7 +268,7 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 		info->bitmap_cache = bitmap;
 	}
 
-	uint32_t block_in_group  = blockno % info->super->s_blocks_per_group;	
+	uint32_t block_in_group  = blockno % super->s_blocks_per_group;	
 
 	// does it already have the right value? 
 	if (((uint32_t *) info->bitmap_cache->ddesc->data)[(block_in_group) / 32] & (1 << (block_in_group % 32)))
@@ -293,7 +285,10 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 		return r;	
 
 	r = CALL(info->ubd, write_block, info->bitmap_cache);
+	if (r < 0)
+		return r;
 
+	r = CALL(info->super_wb, blocks, -1);
 	return r;
 }
 
@@ -301,6 +296,8 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 {
 	Dprintf("EXT2DEBUG: write_inode_bitmap %u\n", inode_no);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
+
 	bdesc_t * bitmap;
 	int r;
 
@@ -310,13 +307,13 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 
 	//check to make sure we're not writing too soon...
 
-	if ((inode_no - 1) >= info->super->s_inodes_count) 
+	if ((inode_no - 1) >= super->s_inodes_count) 
 	{
 		printf("ext2_base:read_inode: inode %u past end of file system!\n", inode_no);
 		return -1;
 	}
 
-	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
+	uint32_t block_group = (inode_no - 1) / super->s_inodes_per_group;
 	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
 		if (info->inode_cache != NULL)
 			bdesc_release(&info->inode_cache);	
@@ -328,7 +325,7 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 		info->inode_cache = bitmap;
 	}
 
-	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
+	uint32_t inode_in_group = (inode_no - 1) % super->s_inodes_per_group;
 
 	// does it already have the right value? 
 	if (((uint32_t *) info->inode_cache->ddesc->data)[(inode_in_group) / 32] & (1 << (inode_in_group % 32)))
@@ -345,7 +342,10 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 		return r;	
 
 	r = CALL(info->ubd, write_block, info->inode_cache);
-
+	if (r < 0)
+		return r;
+	
+	r = CALL(info->super_wb, inodes, -1);
 	return r;
 }
 
@@ -353,7 +353,8 @@ static uint32_t count_free_space(LFS_t * object)
 {
 	//FIXME is this in bytes or blocks???
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return info->super->s_free_blocks_count;
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
+	return super->s_free_blocks_count;
 }
 
 static int ext2_get_config(void * object, int level, char * string, size_t length)
@@ -400,6 +401,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	chdesc_t * prev_head;
 	uint32_t lastblock = 0;; 
@@ -463,10 +465,10 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 
 inode_search:	
 	//Look for free blocks in same block group as the inode
-	block_group = (f->f_ino - 1) / info->super->s_inodes_per_group;
-	blockno = block_group * info->super->s_blocks_per_group;
+	block_group = (f->f_ino - 1) / super->s_inodes_per_group;
+	blockno = block_group * super->s_blocks_per_group;
 	//FIXME this should be slightly smarter
-	while(blockno < info->super->s_blocks_count) {
+	while(blockno < super->s_blocks_count) {
 		r = ext2_find_free_block(object, &blockno);
 		if (r < 0)
 			break;
@@ -478,7 +480,7 @@ inode_search:
 	}
 	//Start from the begining
 	blockno = 0;
-	while (blockno < info->super->s_blocks_count) {
+	while (blockno < super->s_blocks_count) {
 		r = ext2_find_free_block(object, &blockno);
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -1273,6 +1275,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 	Dprintf("EXT2DEBUG: %s parent is %u\n", __FUNCTION__, parent);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	inode_t ino;
 	int r;
 	
@@ -1281,7 +1284,7 @@ static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 	//TODO: Linux EXT2 uses a much more complicated inode allocation with debts and block
 	//density averages.  It would be nice to implement this eventually.
 
-	for (ino = parent+1; (ino % info->super->s_inodes_per_group) != 0; ino++) {
+	for (ino = parent+1; (ino % super->s_inodes_per_group) != 0; ino++) {
 		r = read_inode_bitmap(object, ino);
 		if (r == 1)
 			return ino;
@@ -1289,8 +1292,8 @@ static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 			return EXT2_BAD_INO;
 	}
 
-	if ((parent % info->super->s_inodes_per_group) == 0 && parent >= info->super->s_inodes_per_group)
-		ino = parent - info->super->s_inodes_per_group;
+	if ((parent % super->s_inodes_per_group) == 0 && parent >= super->s_inodes_per_group)
+		ino = parent - super->s_inodes_per_group;
 	else
 		ino = 1;
 
@@ -1302,7 +1305,7 @@ static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 			return EXT2_BAD_INO;
 	}
 	
-	for (ino = 1; ino < info->super->s_inodes_count; ino++) {
+	for (ino = 1; ino < super->s_inodes_count; ino++) {
 		r = read_inode_bitmap(object, ino);
 		if (r == 1)
 			return ino;
@@ -2112,7 +2115,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 {
 	Dprintf("EXT2DEBUG: ext2_get_metadata\n");
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	if (id == KFS_feature_size.id) {
 		if (!f)
 			return -E_INVAL;
@@ -2159,7 +2162,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 			return -E_NO_MEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = info->super->s_blocks_count;
+		*((uint32_t *) data) = super->s_blocks_count;
 	}
 	else if (id == KFS_feature_nlinks.id) {
 		if (!f)
@@ -2402,7 +2405,6 @@ static int ext2_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
 	
-	free(info->super);
 	free(info->groups);
 	hash_map_destroy(info->filemap);
 	if(info->bitmap_cache != NULL)
@@ -2424,15 +2426,16 @@ static int ext2_get_inode(lfs_info_t * info, inode_t ino, EXT2_inode_t * inode)
 {
 	uint32_t block_group, bitoffset, block;
 	bdesc_t * bdesc;
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 
-	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
-		       	|| ino > info->super->s_inodes_count)
+	if((ino != EXT2_ROOT_INO && ino < super->s_first_ino)
+		       	|| ino > super->s_inodes_count)
 		return -E_INVAL;
 	
 	//Get the group the inode belongs in
-	block_group = (ino - 1) / info->super->s_inodes_per_group;
-	bitoffset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
-	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
+	block_group = (ino - 1) / super->s_inodes_per_group;
+	bitoffset = ((ino - 1) % super->s_inodes_per_group) * super->s_inode_size;
+	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + super->s_log_block_size));
 	bdesc = CALL(info->ubd, read_block, block, 1);
 	if(!bdesc)
 		return -E_INVAL;
@@ -2465,11 +2468,12 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 static int ext2_load_groups(lfs_info_t * info) {
 	uint32_t block;
 	bdesc_t * group;
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 
 	if(info == NULL)
 		return -E_INVAL;
-	int ngroups = (info->super->s_blocks_count / info->super->s_blocks_per_group);
-	if (info->super->s_blocks_count % info->super->s_blocks_per_group != 0)
+	int ngroups = (super->s_blocks_count / super->s_blocks_per_group);
+	if (super->s_blocks_count % super->s_blocks_per_group != 0)
 		ngroups++;
 	info->ngroups = ngroups;
 	info->groups = calloc(ngroups, sizeof(EXT2_group_desc_t));
@@ -2492,19 +2496,19 @@ int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, ch
 	uint32_t block_group, bitoffset, block;
 	int r;
 	bdesc_t * bdesc;
-
+	const EXT2_Super_t * super = CALL(info->super_wb, read);
 	if (!head)
 		return -E_INVAL;
 	
-	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
-		       	|| ino > info->super->s_inodes_count)
+	if((ino != EXT2_ROOT_INO && ino < super->s_first_ino)
+		       	|| ino > super->s_inodes_count)
 		return -E_INVAL;
 
 	//Get the group the inode belongs in
-	block_group = (ino - 1) / info->super->s_inodes_per_group;
+	block_group = (ino - 1) / super->s_inodes_per_group;
 	
-	bitoffset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
-	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
+	bitoffset = ((ino - 1) % super->s_inodes_per_group) * super->s_inode_size;
+	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + super->s_log_block_size));
 	bdesc = CALL(info->ubd, read_block, block, 1);
 	if(!bdesc)
 		return -E_NOT_FOUND;
@@ -2516,10 +2520,16 @@ int ext2_write_inode(struct lfs_info * info, inode_t ino, EXT2_inode_t inode, ch
 	return CALL(info->ubd, write_block, bdesc);
 }
 
+static void ext2_destroy_super(LFS_t * lfs)
+{
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(lfs);
+	if (info->super_wb)
+		DESTROY(info->super_wb);
+}
+
 LFS_t * ext2(BD_t * block_device)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
-	bdesc_t * super_block;	
 	if (!block_device)
 		return NULL;
 	
@@ -2540,27 +2550,16 @@ LFS_t * ext2(BD_t * block_device)
 
 	info->ubd = block_device;
 
-	//Load the Super Block into memory
-	info->super = malloc(sizeof(struct EXT2_Super));
-	if(!info->super) {
+	info->filemap = hash_map_create();
+	if (!info->filemap) {
 		free(info);
 		free(lfs);
 		return NULL;
 	}
 
-	super_block = CALL(info->ubd, read_block, 0, 1);
-	if (!super_block)
-	{
-		printf("Unable to read superblock!\n");
-		return NULL;
-	}
-	//TODO Check return value of memcpy
-	memcpy(info->super, super_block->ddesc->data + 1024, sizeof(struct EXT2_Super));
-	
-	info->filemap = hash_map_create();
-	if (!info->filemap) {
-		free(info);
-		free(lfs);
+	info->super_wb = ext2_super_wb(info);
+	if (!info->super_wb) {
+		ext2_destroy_super(lfs);
 		return NULL;
 	}
 

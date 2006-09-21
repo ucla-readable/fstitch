@@ -4,6 +4,7 @@
 #include <lib/mmu.h>
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
+#include <kfs/ext2_super.h>
 
 /* This file is derived from JOS' kfs/josfs_base.h */
 
@@ -20,8 +21,8 @@
 /*
  * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
  */
-#define EXT2_PREALLOCATE		0
-#define EXT2_DEFAULT_PREALLOC_BLOCKS    0
+#define EXT2_PREALLOCATE		8
+#define EXT2_DEFAULT_PREALLOC_BLOCKS    8
 
 /*
  * Special inode numbers
@@ -100,20 +101,20 @@ struct EXT2_Super {
 	uint32_t s_inodes_count;	/* Inodes count */
 	uint32_t s_blocks_count;	/* Blocks count */
 	uint32_t s_r_blocks_count;	/* Reserved blocks count */
-	uint32_t s_free_blocks_count;	/* Free blocks count */
-	uint32_t s_free_inodes_count;	/* Free inodes count */
+	uint32_t s_free_blocks_count;		/* Free blocks count */
+	uint32_t s_free_inodes_count;		/* Free inodes count */
 	uint32_t s_first_data_block;	/* First Data Block */
 	uint32_t s_log_block_size;	/* Block size */
 	uint32_t s_log_frag_size;	/* Fragment size */
 	uint32_t s_blocks_per_group;	/* # Blocks per group */
 	uint32_t s_frags_per_group;	/* # Fragments per group */
 	uint32_t s_inodes_per_group;	/* # Inodes per group */
-	uint32_t s_mtime;		/* Mount time */
-	uint32_t s_wtime;		/* Write time */
-	uint16_t s_mnt_count;		/* Mount count */
+	uint32_t s_mtime;			/* Mount time */
+	uint32_t s_wtime;			/* Write time */
+	uint16_t s_mnt_count;			/* Mount count */
 	uint16_t s_max_mnt_count;	/* Maximal mount count */
 	uint16_t s_magic;		/* Magic signature */
-	uint16_t s_state;		/* File system state */
+	uint16_t s_state;			/* File system state */
 	uint16_t s_errors;		/* Behaviour when detecting errors */
 	uint16_t s_minor_rev_level; 	/* minor revision level */
 	uint32_t s_lastcheck;		/* time of last check */
@@ -167,6 +168,7 @@ struct EXT2_Super {
  	uint32_t s_first_meta_bg; 	/* First metablock block group */
 	uint32_t s_reserved[190];	/* Padding to the end of the block */
 };
+typedef struct EXT2_Super EXT2_Super_t;
 
 /*
  * Structure of a block's group descriptor
@@ -275,6 +277,21 @@ struct EXT2_Dir_entry {
 };
 typedef struct EXT2_Dir_entry EXT2_Dir_entry_t;
 
+struct lfs_info
+{
+	BD_t * ubd;
+	EXT2_group_desc_t * groups;
+	uint32_t ngroups;
+	hash_map_t * filemap;
+	bdesc_t * bitmap_cache;
+	bdesc_t * inode_cache;
+	uint32_t gnum;
+	uint32_t inode_gdesc;
+	struct EXT2mod_super * super_wb;
+};
+typedef struct lfs_info lfs_info_t;
+
 LFS_t * ext2(BD_t * block_device);
 
 #endif /* __KUDOS_KFS_EXT2FS_BASE_H */
+
