@@ -1065,11 +1065,10 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			if ((r = CALL(info->ubd, write_block, dindirect)) < 0)
 				return r;
 			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
-			goto return_append;
 		}
-		
-		blockno = f->f_inode.i_block[EXT2_DINDIRECT];
-		return add_indirect(object, f, block, head);
+		r = add_indirect(object, f, block, head);
+		if (r < 0)
+			return r;
 	}
 	else if (nblocks > EXT2_NDIRECT) {
 		if(nblocks == (EXT2_NDIRECT+1)) {	
@@ -1095,7 +1094,6 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 		if (r < 0)
 			return r;
 	}
-return_append:
 	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 	return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 }
