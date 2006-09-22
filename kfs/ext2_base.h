@@ -280,6 +280,7 @@ typedef struct EXT2_Dir_entry EXT2_Dir_entry_t;
 struct lfs_info
 {
 	BD_t * ubd;
+        EXT2_Super_t * super;
 	EXT2_group_desc_t * groups;
 	uint32_t ngroups;
 	hash_map_t * filemap;
