@@ -301,7 +301,7 @@ static bool count_chdesc_external_dependents(const chdesc_t * chdesc, const bdes
 				n++;
 			else
 				/* XXX: stack usage */
-				n += chdesc_has_external_dependents(dependent, block);
+				n += count_chdesc_external_dependents(dependent, block);
 		}
 		else if(dependent->block->ddesc != block->ddesc)
 			n++;
@@ -1024,7 +1024,33 @@ static bool new_chdescs_require_data(const bdesc_t * block)
 #endif
 }
 
+static void print_chdesc_dependencies(const chdesc_t * chdesc, uint32_t limit)
+{
+	const chmetadesc_t * meta;
+	uint32_t n = 0;
+	printf("%p dependencies:\n", chdesc);
+	for(meta = chdesc->dependencies; meta && n < limit; meta = meta->dependency.next, n++)
+		 printf("meta = %p next = %p\n", meta, meta->dependency.next);
+}
+
+static bool chdesc_has_many_dependencies(const chdesc_t * chdesc)
+{
+	const chmetadesc_t * meta;
+	uint32_t n = 0;
+	for(meta = chdesc->dependencies; meta; meta = meta->dependency.next)
+	{
+		if(++n > 50000)
+		{
+			print_chdesc_dependencies(chdesc, 50);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 #include <time.h>
+
+static bool merge_clear = 0;
 
 /* Check whether a chdesc merge that adds a dependency on 'chdesc' to an
  * existing chdesc on 'block' could lead to an indirect dependency cycle.
@@ -1034,6 +1060,7 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
 {
 #if 0
 	const chmetadesc_t * meta;
+	assert(!chdesc_has_many_dependencies(chdesc));
 	for(meta = chdesc->dependencies; meta; meta = meta->dependency.next)
 	{
 		chdesc_t * dependency = meta->dependency.desc;
@@ -1083,8 +1110,8 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
   recurse_start:
 	for(; meta; meta = meta->dependency.next)
 	{
-		const chdesc_t * dependency = meta->dependency.desc;
-		
+		chdesc_t * dependency = meta->dependency.desc;
+
 		if(dependency->block && dependency->block->ddesc != block->ddesc)
 			continue;
 		
@@ -1099,11 +1126,29 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
 			goto exit;
 		}
 		
+		assert(!chdesc_has_many_dependencies(dependency));
 		/* Check indirect dependencies for induced cycles
 		 * Equivalent to:
 		 * if((r = merge_indirect_cycle_is_possible(dependency, block)) < 0)
 		 *	return r;
 		 */
+
+		/* Mark visited chdescs to avoid revisits. This saves time and,
+		 * oddly, without marks this function sometimes appears to get
+		 * into an infinite loop. */
+		if(!merge_clear)
+		{
+			if(dependency->flags & CHDESC_MARKED)
+				continue;
+			dependency->flags |= CHDESC_MARKED;
+		}
+		else
+		{
+			if(!(dependency->flags & CHDESC_MARKED))
+				continue;
+			dependency->flags &= ~CHDESC_MARKED;
+		}
+
 		size_t next_index = 1 + state - &states[0];
 		
 		state->meta = meta;
@@ -1183,7 +1228,12 @@ static int merge_cycle_is_possible(const chdesc_t * dependency, const bdesc_t * 
 		return -2;
 	
 	/* Check indirect dependencies for induced cycles */
-	return merge_indirect_cycle_is_possible(dependency, block);
+	assert(!chdesc_has_many_dependencies(dependency));
+	int r = merge_indirect_cycle_is_possible(dependency, block);
+	merge_clear = 1;
+	merge_indirect_cycle_is_possible(dependency, block);
+	merge_clear = 0;
+	return r;
 }
 
 /* chdesc merge stat tracking definitions */
@@ -1754,6 +1804,7 @@ int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
 	if(dependent == dependency || chdesc_has_dependency(dependency, dependent))
 	{
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
+		assert(0);
 		return -E_INVAL;
 	}
 	/* chdesc_has_dependency() marks the DAG rooted at "dependency" so we must unmark it */
