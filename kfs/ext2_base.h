@@ -37,11 +37,11 @@
 
 
 // Maximal count of links to a file
-#define EXT2_LINK_MAX           32000
-
-#define EXT2_MIN_BLOCK_SIZE             1024
-#define EXT2_MAX_BLOCK_SIZE             4096
-#define EXT2_MIN_BLOCK_LOG_SIZE           10
+#define EXT2_LINK_MAX			32000
+#define EXT2_MIN_BLOCK_SIZE		1024
+#define EXT2_MAX_BLOCK_SIZE		4096
+#define EXT2_MIN_BLOCK_LOG_SIZE		10
+#define EXT2_MAX_REC_LEN		65535
 
 // Maximum size of a filename (a single path component), including null
 #define EXT2_NAME_LEN 255
