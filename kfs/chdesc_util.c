@@ -216,6 +216,10 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 		}
 		return 0;
 	}
+
+#if BDESC_EXTERN_DEPENDENT_COUNT	
+	panic("NOOP ddesc change support needs bdesc extern_dependent_count support");
+#endif
 	
 	if(noop->block)
 	{
@@ -325,6 +329,9 @@ int chdesc_detach_dependencies(chdesc_t * chdesc)
 {
 	int r;
 	chdesc_t * tail;
+#if BDESC_EXTERN_DEPENDENT_COUNT
+	panic("This function needs to be checked for working with ddesc->extern_dependent_count");
+#endif
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_DEPENDENCIES, chdesc);
 	if(!chdesc->dependencies || !chdesc->dependencies->dependency.next)
 		return 0;
@@ -370,6 +377,9 @@ int chdesc_detach_dependents(chdesc_t * chdesc)
 	int r;
 	chmetadesc_t ** scan;
 	chdesc_t * head;
+#if BDESC_EXTERN_DEPENDENT_COUNT
+	panic("This function needs to be checked for working with ddesc->extern_dependent_count");
+#endif
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_DEPENDENTS, chdesc);
 	head = chdesc_create_noop(chdesc->block, chdesc->owner);
 	if(!head)

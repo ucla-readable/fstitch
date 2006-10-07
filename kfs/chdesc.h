@@ -3,6 +3,7 @@
 
 #include <lib/types.h>
 #include <lib/hash_map.h>
+#include <lib/panic.h>
 
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
@@ -10,10 +11,14 @@
 #define CHDESC_CYCLE_CHECK 1
 
 /* Set to allow chdesc data omittance when chdesc data is not required
- * NOTE: the data omittance detection algorithm currently uses significant time
+ * NOTE: data omittance currently incurs a significant slow down
  * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
 /* values: 0 (disable), 1 (enable) */
 #define CHDESC_DATA_OMITTANCE 0
+/* BDESC_EXTERN_DEPENDENT_COUNT speeds up data omittance detection,
++  * but does not yet work with chdesc_noop_reassign() */
+/* values: 0 (disable), 1 (enable) */
+#define BDESC_EXTERN_DEPENDENT_COUNT CHDESC_DATA_OMITTANCE
 
 struct chdesc;
 typedef struct chdesc chdesc_t;
@@ -124,6 +129,22 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 
 /* like chdesc_create_byte(), but guarantees to only create a single chdesc */
 int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
+
+static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc) __attribute__((always_inline));
+static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
+{
+	switch(chdesc->type)
+	{
+		case BYTE:
+			return chdesc->byte.data != NULL;
+		case BIT:
+			/* BIT chdescs that are to be nonrollbackable become BYTE chdescs */
+		case NOOP:
+			return 1;
+		default:
+			panic("Unexpected chdesc of type %d\n", chdesc->type);
+	}
+}
 
 /* return the maximum dependency BD level */
 /* TODO: determine whether inlining affects runtime */
