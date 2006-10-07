@@ -1,22 +1,9 @@
 #include <inc/lib.h>
+#include <inc/math.h>
 
 /* from demo.c */
 int rand(int nseed);
 extern uint8_t demo_buffer[1][64000];
-
-#define M_PI 3.1415926
-
-static inline double cos(double a)
-{
-	asm("fcos" : "=t" (a) : "0" (a));
-	return a;
-}
-
-static inline double sin(double a)
-{
-	asm("fsin" : "=t" (a) : "0" (a));
-	return a;
-}
 
 typedef struct {
 	int cycle;
@@ -82,12 +69,14 @@ void explode(int argc, char * argv[])
 	int i;
 	uint8_t palette[768];
 	
+	/* this portion of the palette will become transparent */
 	for(i = 0; i != 64; i++)
 	{
 		palette[3 * i] = i;
 		palette[3 * i + 1] = 0;
 		palette[3 * i + 2] = 0;
 	}
+	/* the rest of the palette is opaque */
 	for(; i != 128; i++)
 	{
 		palette[3 * i] = 63;
@@ -100,6 +89,7 @@ void explode(int argc, char * argv[])
 		palette[3 * i + 1] = 63;
 		palette[3 * i + 2] = i;
 	}
+	/* this portion is not really used in practice... */
 	for(; i != 256; i++)
 	{
 		palette[3 * i] = 63;
