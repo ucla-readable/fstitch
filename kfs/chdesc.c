@@ -1,6 +1,7 @@
 #include <inc/error.h>
 #include <lib/assert.h>
 #include <lib/kdprintf.h>
+#include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/types.h>
