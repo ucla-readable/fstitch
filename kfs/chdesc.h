@@ -23,8 +23,8 @@
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
-struct chmetadesc;
-typedef struct chmetadesc chmetadesc_t;
+struct chdepdesc;
+typedef struct chdepdesc chdepdesc_t;
 
 struct chrefdesc;
 typedef struct chrefdesc chrefdesc_t;
@@ -70,11 +70,11 @@ struct chdesc {
 			void * hash_key;
 		} noop;
 	};
-	chmetadesc_t * befores;
-	chmetadesc_t ** befores_tail;
+	chdepdesc_t * befores;
+	chdepdesc_t ** befores_tail;
 
-	chmetadesc_t * afters;
-	chmetadesc_t ** afters_tail;
+	chdepdesc_t * afters;
+	chdepdesc_t ** afters_tail;
 
 	chrefdesc_t * weak_refs;
 
@@ -107,11 +107,11 @@ struct chdesc {
 	uint16_t flags;
 };
 
-struct chmetadesc {
+struct chdepdesc {
 	struct {
-		chmetadesc_t ** ptr;
+		chdepdesc_t ** ptr;
 		chdesc_t * desc;
-		chmetadesc_t * next;
+		chdepdesc_t * next;
 	} before, after;
 };
 
@@ -169,7 +169,7 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 })
 
 /* propagate the level change, from 'prev_level' to 'new_level', to 'afters' */
-void chdesc_propagate_level_change(chmetadesc_t * afters, uint16_t prev_level, uint16_t new_level);
+void chdesc_propagate_level_change(chdepdesc_t * afters, uint16_t prev_level, uint16_t new_level);
 
 
 /* check whether two change descriptors overlap, even on different blocks */

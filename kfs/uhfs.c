@@ -377,7 +377,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 
 static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
 {
-	chmetadesc_t * meta;
+	chdepdesc_t * dep;
 	if(head->flags & CHDESC_DATA)
 		return;
 	if(head->type != NOOP)
@@ -387,8 +387,8 @@ static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
 	}
 	if(head == tail)
 		return;
-	for(meta = head->befores; meta; meta = meta->before.next)
-		uhfs_mark_data(meta->before.desc, tail);
+	for(dep = head->befores; dep; dep = dep->before.next)
+		uhfs_mark_data(dep->before.desc, tail);
 }
 
 static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)

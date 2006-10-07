@@ -226,7 +226,7 @@ static int journal_bd_start_transaction(BD_t * object);
 static int journal_bd_stop_transaction_previous(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	chmetadesc_t * meta;
+	chdepdesc_t * dep;
 	chdesc_t * old_safe = info->safe;
 	chdesc_t * hold;
 	int r;
@@ -247,9 +247,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* roll the stuff back that's still a part of this request ID */
-	for(meta = info->unsafe->befores; meta; meta = meta->before.next)
+	for(dep = info->unsafe->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = meta->before.desc;
+		chdesc_t * chdesc = dep->before.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
@@ -305,9 +305,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	chdesc_satisfy(&info->hold);
 	info->hold = hold;
 	
-	for(meta = info->unsafe->befores; meta; meta = meta->before.next)
+	for(dep = info->unsafe->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = meta->before.desc;
+		chdesc_t * chdesc = dep->before.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
@@ -360,9 +360,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* one last pass to roll everything forward again */
-	for(meta = info->unsafe->befores; meta; meta = meta->before.next)
+	for(dep = info->unsafe->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = meta->before.desc;
+		chdesc_t * chdesc = dep->before.desc;
 		
 		/* have we done this block already? */
 		if(!(chdesc->flags & CHDESC_ROLLBACK))

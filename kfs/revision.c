@@ -50,7 +50,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		int again = 0;
 		for(i = 0; i != count; i++)
 		{
-			chmetadesc_t * scan;
+			chdepdesc_t * scan;
 			/* already rolled back? */
 			if(chdescs[i]->flags & CHDESC_ROLLBACK)
 				continue;
@@ -131,7 +131,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 		int again = 0;
 		for(i = count - 1; i != -1; i--)
 		{
-			chmetadesc_t * scan;
+			chdepdesc_t * scan;
 			/* already rolled forward? */
 			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
 				continue;
