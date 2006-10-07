@@ -1,7 +1,7 @@
 #ifndef KUDOS_INC_CONFIG_H
 #define KUDOS_INC_CONFIG_H
 
-#define RELEASE_NAME "cornsyrup"
+#define RELEASE_NAME "dextrin"
 
 //
 // Formatting options
