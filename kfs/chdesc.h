@@ -6,15 +6,15 @@
 #include <lib/panic.h>
 
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
-#define CHDESC_BYTE_SUM 0
+#define CHDESC_BYTE_SUM 1
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_CYCLE_CHECK 0
+#define CHDESC_CYCLE_CHECK 1
 
 /* Set to allow chdesc data omittance when chdesc data is not required
  * NOTE: data omittance currently incurs a significant slow down
  * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_DATA_OMITTANCE 1
+#define CHDESC_DATA_OMITTANCE 0
 /* BDESC_EXTERN_DEPENDENT_COUNT speeds up data omittance detection,
 +  * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */

@@ -33,9 +33,9 @@
 #define CHDESC_NRB_WHOLEBLOCK 1
 
 /* Set to allow new chdescs to be merged into existing chdescs */
-#define CHDESC_MERGE_NEW 1
+#define CHDESC_MERGE_NEW 0
 /* Set to track new chdesc merge stats and print them after shutdown */
-#define CHDESC_MERGE_NEW_STATS 1
+#define CHDESC_MERGE_NEW_STATS 0
 
 #if CHDESC_MERGE_NEW_STATS && !CHDESC_MERGE_NEW
 # error CHDESC_MERGE_NEW_STATS requires CHDESC_MERGE_NEW
