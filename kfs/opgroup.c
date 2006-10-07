@@ -367,7 +367,7 @@ static int opgroup_update_top_bottom(void)
 			count++;
 		}
 	
-	if(!bottom->dependencies)
+	if(!bottom->befores)
 	{
 		chdesc_remove_depend(top, bottom);
 		/* let it get garbage collected */

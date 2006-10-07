@@ -27,9 +27,9 @@ int chdesc_rollback_collection(int count, chdesc_t ** chdescs, void ** order);
 int chdesc_apply_collection(int count, chdesc_t ** chdescs, void ** order);
 void chdesc_order_destroy(void ** order);
 
-/* detach dependencies and dependents of change descriptors */
-int chdesc_detach_dependencies(chdesc_t * chdesc);
-int chdesc_detach_dependents(chdesc_t * chdesc);
+/* detach befores and afters of change descriptors */
+int chdesc_detach_befores(chdesc_t * chdesc);
+int chdesc_detach_afters(chdesc_t * chdesc);
 
 /* duplicate, split, and merge change descriptors */
 int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks);

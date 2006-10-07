@@ -27,12 +27,12 @@ struct datadesc {
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;
 
-#if BDESC_EXTERN_DEPENDENT_COUNT
-	uint32_t extern_dependent_count;
+#if BDESC_EXTERN_AFTER_COUNT
+	uint32_t extern_after_count;
 #endif
 	
 	/* For each level (at most one BD per level), the level's ready chdescs.
-	 * ready chdesc: chdesc with no dependencies at its level or higher. */
+	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
 	
 	chdesc_t * overlaps;

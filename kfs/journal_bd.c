@@ -30,9 +30,9 @@
 /* Theory of operation:
  * 
  * Basically, as chdescs pass through the journal_bd module, we copy their
- * blocks into a journal and add a dependency to each of the chdescs to keep
+ * blocks into a journal and add a before to each of the chdescs to keep
  * them from being written to disk. Then, when the transaction is over, we write
- * some bookkeeping stuff to the journal, hook it up to the waiting dependency
+ * some bookkeeping stuff to the journal, hook it up to the waiting before
  * of all the data, and watch the cache do all our dirty work as it sorts out
  * the chdescs.
  * 
@@ -247,15 +247,15 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* roll the stuff back that's still a part of this request ID */
-	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
+	for(meta = info->unsafe->befores; meta; meta = meta->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
+		chdesc_t * chdesc = meta->before.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
 		chdesc_t * head = NULL;
 		
-		/* first handle the chdesc's dependencies */
+		/* first handle the chdesc's befores */
 		r = chdesc_add_depend(chdesc, hold);
 		assert(r >= 0);
 		chdesc_remove_depend(chdesc, info->hold);
@@ -305,15 +305,15 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	chdesc_satisfy(&info->hold);
 	info->hold = hold;
 	
-	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
+	for(meta = info->unsafe->befores; meta; meta = meta->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
+		chdesc_t * chdesc = meta->before.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
 		chdesc_t * head = NULL;
 		
-		/* first handle the chdesc's dependencies */
+		/* first handle the chdesc's befores */
 		r = chdesc_add_depend(info->safe, chdesc);
 		assert(r >= 0);
 		
@@ -360,9 +360,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* one last pass to roll everything forward again */
-	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
+	for(meta = info->unsafe->befores; meta; meta = meta->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
+		chdesc_t * chdesc = meta->before.desc;
 		
 		/* have we done this block already? */
 		if(!(chdesc->flags & CHDESC_ROLLBACK))
@@ -385,12 +385,12 @@ static int journal_bd_accept_request(BD_t * object)
 	if(info->unsafe)
 	{
 		/* nothing to do? just return */
-		if(!info->unsafe->dependencies)
+		if(!info->unsafe->befores)
 			return 0;
 
-		while(info->unsafe && info->unsafe->dependencies)
+		while(info->unsafe && info->unsafe->befores)
 		{
-			chdesc_t * chdesc = info->unsafe->dependencies->dependency.desc;
+			chdesc_t * chdesc = info->unsafe->befores->before.desc;
 			chdesc_stamp(chdesc, info->safe_stamp);
 			chdesc_remove_depend(info->unsafe, chdesc);
 			/* FIXME: move all dependencies of them to "wait" so the transaction as a whole
@@ -1097,7 +1097,7 @@ static int replay_journal(BD_t * bd)
 			{
 				chdesc_satisfy(&info->keep);
 				info->safe = NULL;
-				if(!info->done->dependencies)
+				if(!info->done->befores)
 					chdesc_satisfy(&info->done);
 				else
 					info->done = NULL;

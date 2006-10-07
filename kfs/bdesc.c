@@ -72,8 +72,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		bdesc->ddesc->ready_changes[i].head = NULL;
 		bdesc->ddesc->ready_changes[i].tail = &bdesc->ddesc->ready_changes[i].head;
 	}
-#if BDESC_EXTERN_DEPENDENT_COUNT
-	bdesc->ddesc->extern_dependent_count = 0;
+#if BDESC_EXTERN_AFTER_COUNT
+	bdesc->ddesc->extern_after_count = 0;
 #endif
 	bdesc->ddesc->overlaps = NULL;
 	bdesc->ddesc->manager = NULL;
@@ -136,9 +136,9 @@ void bdesc_release(bdesc_t ** bdesc)
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlaps)
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
-#if BDESC_EXTERN_DEPENDENT_COUNT
-			if((*bdesc)->ddesc->extern_dependent_count)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has %u external dependents\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_dependent_count);
+#if BDESC_EXTERN_AFTER_COUNT
+			if((*bdesc)->ddesc->extern_after_count)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
 #endif
 			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);

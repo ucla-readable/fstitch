@@ -15,10 +15,10 @@
  * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
 /* values: 0 (disable), 1 (enable) */
 #define CHDESC_DATA_OMITTANCE 0
-/* BDESC_EXTERN_DEPENDENT_COUNT speeds up data omittance detection,
+/* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
 +  * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
-#define BDESC_EXTERN_DEPENDENT_COUNT CHDESC_DATA_OMITTANCE
+#define BDESC_EXTERN_AFTER_COUNT CHDESC_DATA_OMITTANCE
 
 struct chdesc;
 typedef struct chdesc chdesc_t;
@@ -70,16 +70,16 @@ struct chdesc {
 			void * hash_key;
 		} noop;
 	};
-	chmetadesc_t * dependencies;
-	chmetadesc_t ** dependencies_tail;
+	chmetadesc_t * befores;
+	chmetadesc_t ** befores_tail;
 
-	chmetadesc_t * dependents;
-	chmetadesc_t ** dependents_tail;
+	chmetadesc_t * afters;
+	chmetadesc_t ** afters_tail;
 
 	chrefdesc_t * weak_refs;
 
-	/* befores[i] is the number of direct dependencies at level i */
-	uint32_t befores[NBDLEVEL];
+	/* nbefores[i] is the number of direct dependencies at level i */
+	uint32_t nbefores[NBDLEVEL];
 
 	/* entry in the free list */
 	/* TODO: can a chdesc be an entry in the free list and all_changes at
@@ -112,7 +112,7 @@ struct chmetadesc {
 		chmetadesc_t ** ptr;
 		chdesc_t * desc;
 		chmetadesc_t * next;
-	} dependency, dependent;
+	} before, after;
 };
 
 struct chrefdesc {
@@ -146,14 +146,14 @@ static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
 	}
 }
 
-/* return the maximum dependency BD level */
+/* return the maximum before BD level */
 /* TODO: determine whether inlining affects runtime */
 static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc) __attribute__((always_inline));
 static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 {
 	int i;
 	for(i = NBDLEVEL; i > 0; i--)
-		if(chdesc->befores[i - 1])
+		if(chdesc->nbefores[i - 1])
 			return i - 1;
 	return BDLEVEL_NONE;
 }
@@ -168,8 +168,8 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 	__chdesc->owner ? __chdesc->owner->level : chdesc_before_level(__chdesc); \
 })
 
-/* propagate the level change, from 'prev_level' to 'new_level', to 'dependents' */
-void chdesc_propagate_level_change(chmetadesc_t * dependents, uint16_t prev_level, uint16_t new_level);
+/* propagate the level change, from 'prev_level' to 'new_level', to 'afters' */
+void chdesc_propagate_level_change(chmetadesc_t * afters, uint16_t prev_level, uint16_t new_level);
 
 
 /* check whether two change descriptors overlap, even on different blocks */
@@ -178,11 +178,11 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);
 /* rewrite a byte change descriptor, if it is safe to do so */
 int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data);
 
-/* add a dependency to a change descriptor */
-int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
+/* add a dependency from 'after' on 'before' */
+int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
 
-/* remove a dependency from a change descriptor */
-void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
+/* remove a dependency from 'after' on 'before' */
+void chdesc_remove_depend(chdesc_t * after, chdesc_t * before);
 
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);
@@ -220,12 +220,12 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 void chdesc_update_ready_changes(chdesc_t * chdesc);
 
 /* hidden functions for use in chdesc_util.c */
-void __propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency);
-void __unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency);
+void __propagate_dependency(chdesc_t * after, const chdesc_t * before);
+void __unpropagate_dependency(chdesc_t * after, const chdesc_t * before);
 int __ensure_bdesc_has_overlaps(bdesc_t * block);
 chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
 chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);
-int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
+int __chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before);
 int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 
 uint32_t chdesc_register_stamp(BD_t * bd);

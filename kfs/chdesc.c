@@ -25,7 +25,8 @@
  * + More chdecs can be merged
  *   (though quick testing shows only a small increase)
  * + Should allow for faster new chdesc merging
- * + A higher percentage of rollbackables explicitly depend on nonrollbackables
+ * + A higher percentage of rollbackables have nonrollbackables
+ *   as explicit befores
  *   (but still not all, eg a nonrollbackable created after a rollbackable)
  * - Nonrollbackables claim to modify data that they may not
  *   - barrier traversal implications?
@@ -173,11 +174,11 @@ static void * srealloc(void * p, size_t p_size, size_t new_size)
 
 #define STATIC_STATES_CAPACITY 1024 /* 1024 is fairly arbitrary */
 
-static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev_level, uint16_t new_level)
+static void propagate_noop_level_change(chdesc_t * noop_after, uint16_t prev_level, uint16_t new_level)
 {
 	/* recursion-on-the-heap support */
 	struct state {
-		chmetadesc_t * noops_dependents;
+		chmetadesc_t * noops_afters;
 		uint16_t prev_level;
 		uint16_t new_level;
 	};
@@ -188,25 +189,25 @@ static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev
 	state_t * state = states;
 
   recurse_start:
-	assert(!noop_dependent->owner);
+	assert(!noop_after->owner);
 	assert(prev_level != new_level);
 	assert(prev_level != BDLEVEL_NONE || new_level != BDLEVEL_NONE);
 
-	chmetadesc_t * noops_dependents = noop_dependent->dependents;
-	for(; noops_dependents; noops_dependents = noops_dependents->dependent.next)
+	chmetadesc_t * noops_afters = noop_after->afters;
+	for(; noops_afters; noops_afters = noops_afters->after.next)
 	{
-		chdesc_t * c = noops_dependents->dependent.desc;
+		chdesc_t * c = noops_afters->after.desc;
 		uint16_t c_prev_level = chdesc_level(c);
 
 		if(prev_level != BDLEVEL_NONE)
 		{
-			assert(c->befores[prev_level]);
-			c->befores[prev_level]--;
+			assert(c->nbefores[prev_level]);
+			c->nbefores[prev_level]--;
 		}
 		if(new_level != BDLEVEL_NONE)
 		{
-			c->befores[new_level]++;
-			assert(c->befores[new_level]);
+			c->nbefores[new_level]++;
+			assert(c->nbefores[new_level]);
 		}
 		chdesc_update_ready_changes(c);
 
@@ -222,11 +223,11 @@ static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev
 				 * to hold this function's recursive state. */
 				size_t next_index = 1 + state - &states[0];
 
-				state->noops_dependents = noops_dependents;
+				state->noops_afters = noops_afters;
 				state->prev_level = prev_level;
 				state->new_level = new_level;
 
-				noop_dependent = c;
+				noop_after = c;
 				prev_level = c_prev_level;
 				new_level = c_new_level;
 				
@@ -259,7 +260,7 @@ static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev
 	if(state != &states[0])
 	{
 		state--;
-		noops_dependents = state->noops_dependents;
+		noops_afters = state->noops_afters;
 		prev_level = state->prev_level;
 		new_level = state->new_level;
 		goto recurse_resume;
@@ -269,7 +270,7 @@ static void propagate_noop_level_change(chdesc_t * noop_dependent, uint16_t prev
 		sfree(states, states_capacity * sizeof(*state));
 }
 
-#if BDESC_EXTERN_DEPENDENT_COUNT
+#if BDESC_EXTERN_AFTER_COUNT
 /* return whether 'chdesc' is on a different block than 'block' */
 static bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
 {
@@ -285,191 +286,189 @@ static bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
 	return 0;
 }
 
-#define BDESC_EXTERN_DEPENDENT_COUNT_DEBUG 0
-#if BDESC_EXTERN_DEPENDENT_COUNT_DEBUG
-/* return the number of external dependents 'chdesc' has with respect
+#define BDESC_EXTERN_AFTER_COUNT_DEBUG 0
+#if BDESC_EXTERN_AFTER_COUNT_DEBUG
+/* return the number of external afters 'chdesc' has with respect
  * to 'block' */
-static bool count_chdesc_external_dependents(const chdesc_t * chdesc, const bdesc_t * block)
+static bool count_chdesc_external_afters(const chdesc_t * chdesc, const bdesc_t * block)
 {
-	const chmetadesc_t * dependents;
+	const chmetadesc_t * afters;
 	uint32_t n = 0;
-	for(dependents = chdesc->dependents; dependents; dependents = dependents->dependent.next)
+	for(afters = chdesc->afters; afters; afters = afters->after.next)
 	{
-		const chdesc_t * dependent = dependents->dependent.desc;
-		if(dependent->type == NOOP)
+		const chdesc_t * after = afters->after.desc;
+		if(after->type == NOOP)
 		{
-			if(dependent->block && dependent->block->ddesc != block->ddesc)
+			if(after->block && after->block->ddesc != block->ddesc)
 				n++;
 			else
 				/* XXX: stack usage */
-				n += count_chdesc_external_dependents(dependent, block);
+				n += count_chdesc_external_afters(after, block);
 		}
-		else if(dependent->block->ddesc != block->ddesc)
+		else if(after->block->ddesc != block->ddesc)
 			n++;
 	}
 	return n;
 }
 
-/* return the number of external dependents for 'block' */
-static uint32_t count_bdesc_external_dependents(const bdesc_t * block)
+/* return the number of external afters for 'block' */
+static uint32_t count_bdesc_external_afters(const bdesc_t * block)
 {
 	const chdesc_t * c;
 	uint32_t n = 0;
 	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
-		n += count_chdesc_external_dependents(c, block);
+		n += count_chdesc_external_afters(c, block);
 	return n;
 }
 
-/* return whether the external dependent count in 'block' agrees with
+/* return whether the external after count in 'block' agrees with
  * an actual count */
-static bool extern_dependent_count_is_correct(const bdesc_t * block)
+static bool extern_after_count_is_correct(const bdesc_t * block)
 {
-	return !block || (count_bdesc_external_dependents(block) == block->ddesc->extern_dependent_count);
+	return !block || (count_bdesc_external_afters(block) == block->ddesc->extern_after_count);
 }
-#endif /* BDESC_EXTERN_DEPENDENT_COUNT_DEBUG */
+#endif /* BDESC_EXTERN_AFTER_COUNT_DEBUG */
 
-/* propagate a dependency addition/removal through a noop dependent to update
+/* propagate a dependency addition/removal through a noop after to update
  * block's extern count */
-static void propagate_dependent_external_change(const chdesc_t * dependent, bdesc_t * block, bool add)
+static void propagate_after_external_change(const chdesc_t * after, bdesc_t * block, bool add)
 {
 	chmetadesc_t * meta;
-	assert(dependent->type == NOOP && !dependent->owner);
+	assert(after->type == NOOP && !after->owner);
 	assert(block);
-	for(meta = dependent->dependents; meta; meta = meta->dependent.next)
+	for(meta = after->afters; meta; meta = meta->after.next)
 	{
-		chdesc_t * chdesc = meta->dependent.desc;
+		chdesc_t * chdesc = meta->after.desc;
 		if(chdesc->block && chdesc_is_external(chdesc, block))
 		{
 			if(add)
 			{
-				block->ddesc->extern_dependent_count++;
-				assert(block->ddesc->extern_dependent_count);
+				block->ddesc->extern_after_count++;
+				assert(block->ddesc->extern_after_count);
 			}
 			else
 			{
-				assert(block->ddesc->extern_dependent_count);
-				block->ddesc->extern_dependent_count--;
+				assert(block->ddesc->extern_after_count);
+				block->ddesc->extern_after_count--;
 			}
 		}
 		if(!chdesc->owner)
 		{
 			assert(chdesc->type == NOOP);
 			/* XXX: stack usage */
-			propagate_dependent_external_change(chdesc, block, add);
+			propagate_after_external_change(chdesc, block, add);
 		}
 	}
 }
 
-/* propagate a dependency addition through a noop dependency to update
+/* propagate a dependency addition through a noop before to update
  * extern counts for data dependencies */
-static void propagate_dependency_external_add(const chdesc_t * dependent, chdesc_t * dependency)
+static void propagate_dependency_external_add(const chdesc_t * after, chdesc_t * before)
 {
 	chmetadesc_t * meta;
-	assert(dependent->type != NOOP);
-	assert(dependency->type == NOOP && !dependency->owner);
-	for(meta = dependency->dependencies; meta; meta = meta->dependency.next)
+	assert(after->type != NOOP);
+	assert(before->type == NOOP && !before->owner);
+	for(meta = before->befores; meta; meta = meta->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
-		if(chdesc->block && chdesc_is_external(dependent, chdesc->block))
+		chdesc_t * chdesc = meta->before.desc;
+		if(chdesc->block && chdesc_is_external(after, chdesc->block))
 		{
-			chdesc->block->ddesc->extern_dependent_count++;
-			assert(chdesc->block->ddesc->extern_dependent_count);
+			chdesc->block->ddesc->extern_after_count++;
+			assert(chdesc->block->ddesc->extern_after_count);
 		}
 		if(!chdesc->owner)
 		{
 			assert(chdesc->type == NOOP);
 			/* XXX: stack usage */
-			propagate_dependency_external_add(dependent, chdesc);
+			propagate_before_external_add(after, chdesc);
 		}
 	}
 }
-#endif /* BDESC_EXTERN_DEPENDENT_COUNT */
+#endif /* BDESC_EXTERN_AFTER_COUNT */
 
-/* propagate the new dependency's level and extern count info for
- * 'dependent' on 'dependency' */
-static void propagate_dependency(chdesc_t * dependent, chdesc_t * dependency)
+/* propagate dependency info for a new dependency from 'after' on 'before' */
+static void propagate_dependency(chdesc_t * after, chdesc_t * before)
 {
-	uint16_t dependency_level = chdesc_level(dependency);
-	uint16_t dependent_prev_level;
+	uint16_t before_level = chdesc_level(before);
+	uint16_t after_prev_level;
 
-	if(dependency_level == BDLEVEL_NONE)
+	if(before_level == BDLEVEL_NONE)
 		return;
-	dependent_prev_level = chdesc_level(dependent);
+	after_prev_level = chdesc_level(after);
 
-	dependent->befores[dependency_level]++;
-	assert(dependent->befores[dependency_level]);
-	chdesc_update_ready_changes(dependent);
-	if(!dependent->owner)
+	after->nbefores[before_level]++;
+	assert(after->nbefores[before_level]);
+	chdesc_update_ready_changes(after);
+	if(!after->owner)
 	{
-		if(dependency_level > dependent_prev_level || dependent_prev_level == BDLEVEL_NONE)
-			propagate_noop_level_change(dependent, dependent_prev_level, dependency_level);
-#if BDESC_EXTERN_DEPENDENT_COUNT
-		if(dependency->block)
-			propagate_dependent_external_change(dependent, dependency->block, 1);
+		if(before_level > after_prev_level || after_prev_level == BDLEVEL_NONE)
+			propagate_noop_level_change(after, after_prev_level, before_level);
+#if BDESC_EXTERN_AFTER_COUNT
+		if(before->block)
+			propagate_after_external_change(after, before->block, 1);
 #endif
 	}
-#if BDESC_EXTERN_DEPENDENT_COUNT
-	if(dependent->owner && !dependency->owner)
-		propagate_dependency_external_add(dependent, dependency);
-	if(dependency->block && chdesc_is_external(dependent, dependency->block))
+#if BDESC_EXTERN_AFTER_COUNT
+	if(after->owner && !before->owner)
+		propagate_before_external_add(after, before);
+	if(before->block && chdesc_is_external(after, before->block))
 	{
-		dependency->block->ddesc->extern_dependent_count++;
-		assert(dependency->block->ddesc->extern_dependent_count);
+		before->block->ddesc->extern_after_count++;
+		assert(before->block->ddesc->extern_after_count);
 	}
 #endif
 }
 
-/* unpropagate the dependency's level and extern count info for
- * 'dependent' on 'dependency' */
-static void unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+/* unpropagate dependency info for the dependency from 'after' on 'before' */
+static void unpropagate_dependency(chdesc_t * after, const chdesc_t * before)
 {
-	uint16_t dependency_level = chdesc_level(dependency);
-	uint16_t dependent_prev_level;
+	uint16_t before_level = chdesc_level(before);
+	uint16_t after_prev_level;
 
-	if(dependency_level == BDLEVEL_NONE)
+	if(before_level == BDLEVEL_NONE)
 		return;
-	dependent_prev_level = chdesc_level(dependent);
+	after_prev_level = chdesc_level(after);
 	
-#if BDESC_EXTERN_DEPENDENT_COUNT
-	if(dependency->block && chdesc_is_external(dependent, dependency->block))
+#if BDESC_EXTERN_AFTER_COUNT
+	if(before->block && chdesc_is_external(after, before->block))
 	{
-		assert(dependency->block->ddesc->extern_dependent_count);
-		dependency->block->ddesc->extern_dependent_count--;
+		assert(before->block->ddesc->extern_after_count);
+		before->block->ddesc->extern_after_count--;
 	}
 #endif
 	
-	assert(dependent->befores[dependency_level]);
-	dependent->befores[dependency_level]--;
-	chdesc_update_ready_changes(dependent);
-	if(!dependent->owner)
+	assert(after->nbefores[before_level]);
+	after->nbefores[before_level]--;
+	chdesc_update_ready_changes(after);
+	if(!after->owner)
 	{
-		if(dependency_level == dependent_prev_level && !dependent->befores[dependency_level])
-			propagate_noop_level_change(dependent, dependent_prev_level, chdesc_level(dependent));
-#if BDESC_EXTERN_DEPENDENT_COUNT
-		propagate_dependent_external_change(dependent, dependency->block, 0);
+		if(before_level == after_prev_level && !after->nbefores[before_level])
+			propagate_noop_level_change(after, after_prev_level, chdesc_level(after));
+#if BDESC_EXTERN_AFTER_COUNT
+		propagate_after_external_change(after, before->block, 0);
 #endif
 	}
 }
 
-void chdesc_propagate_level_change(chmetadesc_t * dependents, uint16_t prev_level, uint16_t new_level)
+void chdesc_propagate_level_change(chmetadesc_t * afters, uint16_t prev_level, uint16_t new_level)
 {
 	assert(prev_level < NBDLEVEL || prev_level == BDLEVEL_NONE);
 	assert(new_level < NBDLEVEL || new_level == BDLEVEL_NONE);
 	assert(prev_level != new_level);
-	for(; dependents; dependents = dependents->dependent.next)
+	for(; afters; afters = afters->after.next)
 	{
-		chdesc_t * c = dependents->dependent.desc;
+		chdesc_t * c = afters->after.desc;
 		uint16_t c_prev_level = chdesc_level(c);
 
 		if(prev_level != BDLEVEL_NONE)
 		{
-			assert(c->befores[prev_level]);
-			c->befores[prev_level]--;
+			assert(c->nbefores[prev_level]);
+			c->nbefores[prev_level]--;
 		}
 		if(new_level != BDLEVEL_NONE)
 		{
-			c->befores[new_level]++;
-			assert(c->befores[new_level]);
+			c->nbefores[new_level]++;
+			assert(c->nbefores[new_level]);
 		}
 		chdesc_update_ready_changes(c);
 
@@ -482,48 +481,48 @@ void chdesc_propagate_level_change(chmetadesc_t * dependents, uint16_t prev_leve
 	}
 }
 
-/* add a dependency to a change descriptor without checking for cycles */
-static int chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
+/* add a dependency between change descriptors without checking for cycles */
+static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 {
 	chmetadesc_t * meta;
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
-	for(meta = dependent->dependencies; meta; meta = meta->dependency.next)
-		if(meta->desc == dependency)
+	for(meta = after->befores; meta; meta = meta->before.next)
+		if(meta->desc == before)
 			return 0;
 	/* shouldn't be there */
-	for(meta = dependency->dependents; meta; meta = meta->dependent.next)
-		assert(meta->desc != dependent);
+	for(meta = before->afters; meta; meta = meta->after.next)
+		assert(meta->desc != after);
 #endif
 	meta = malloc(sizeof(*meta));
 	if(!meta)
 		return -E_NO_MEM;
 	
-	propagate_dependency(dependent, dependency);
+	propagate_dependency(after, before);
 	
-	/* add the dependency to the dependent */
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENCY, dependent, dependency);
-	meta->dependency.desc = dependency;
-	meta->dependency.next = NULL;
-	meta->dependency.ptr = dependent->dependencies_tail;
-	*dependent->dependencies_tail = meta;
-	dependent->dependencies_tail = &meta->dependency.next;
+	/* add the before to the after */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_BEFORE, after, before);
+	meta->before.desc = before;
+	meta->before.next = NULL;
+	meta->before.ptr = after->befores_tail;
+	*after->befores_tail = meta;
+	after->befores_tail = &meta->before.next;
 	
-	/* add the dependent to the dependency */
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_DEPENDENT, dependency, dependent);
-	meta->dependent.desc = dependent;
-	meta->dependent.next = NULL;
-	meta->dependent.ptr = dependency->dependents_tail;
-	*dependency->dependents_tail = meta;
-	dependency->dependents_tail = &meta->dependent.next;
+	/* add the after to the before */
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_AFTER, before, after);
+	meta->after.desc = after;
+	meta->after.next = NULL;
+	meta->after.ptr = before->afters_tail;
+	*before->afters_tail = meta;
+	before->afters_tail = &meta->after.next;
 	
-	/* virgin NOOP chdesc getting its first dependency */
-	if(free_head == dependent || dependent->free_prev)
+	/* virgin NOOP chdesc getting its first before */
+	if(free_head == after || after->free_prev)
 	{
-		assert(dependent->type == NOOP);
-		assert(!(dependent->flags & CHDESC_WRITTEN));
-		chdesc_free_remove(dependent);
+		assert(after->type == NOOP);
+		assert(!(after->flags & CHDESC_WRITTEN));
+		chdesc_free_remove(after);
 	}
 	
 	return 0;
@@ -681,7 +680,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 
 static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc)
 {
-	chmetadesc_t * list = list_chdesc->dependencies;
+	chmetadesc_t * list = list_chdesc->befores;
 	chmetadesc_t * next = list;
 	while((list = next))
 	{
@@ -690,9 +689,9 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 		/* this loop is tricky, because we might remove the item we're
 		 * looking at currently if we overlap it entirely - so we
 		 * prefetch the next pointer at the top of the loop */
-		next = list->dependency.next;
+		next = list->before.next;
 		
-		list_chdesc = list->dependency.desc;
+		list_chdesc = list->before.desc;
 		
 		/* skip moved chdescs - they have just been added to this block
 		 * by chdesc_move() and already have proper overlap dependency
@@ -728,19 +727,19 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return _chdesc_overlap_multiattach(chdesc, block->ddesc->overlaps);
 }
 
-void __propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+void __propagate_dependency(chdesc_t * after, const chdesc_t * before)
 #if defined(__MACH__)
 {
-	return propagate_dependency(dependent, dependency);
+	return propagate_dependency(after, before);
 }
 #else
 	__attribute__ ((alias("propagate_dependency")));
 #endif
 
-void __unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency)
+void __unpropagate_dependency(chdesc_t * after, const chdesc_t * before)
 #if defined(__MACH__)
 {
-	return unpropagate_dependency(dependent, dependency);
+	return unpropagate_dependency(after, before);
 }
 #else
 	__attribute__ ((alias("unpropagate_dependency")));
@@ -773,10 +772,10 @@ chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 	__attribute__ ((alias("chdesc_bit_changes")));
 #endif
 
-int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency)
+int __chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 #if defined(__MACH__)
 {
-	return chdesc_add_depend_fast(dependent, dependency);
+	return chdesc_add_depend_fast(after, before);
 }
 #else
 	__attribute__((alias("chdesc_add_depend_fast")));
@@ -942,12 +941,12 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	chdesc->owner = owner;
 	chdesc->block = block;
 	chdesc->type = NOOP;
-	chdesc->dependencies = NULL;
-	chdesc->dependencies_tail = &chdesc->dependencies;
-	chdesc->dependents = NULL;
-	chdesc->dependents_tail = &chdesc->dependents;
+	chdesc->befores = NULL;
+	chdesc->befores_tail = &chdesc->befores;
+	chdesc->afters = NULL;
+	chdesc->afters_tail = &chdesc->afters;
 	chdesc->weak_refs = NULL;
-	memset(chdesc->befores, 0, sizeof(chdesc->befores));
+	memset(chdesc->nbefores, 0, sizeof(chdesc->nbefores));
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
 	chdesc->ddesc_next = NULL;
@@ -963,7 +962,7 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 	
 	if(block)
 	{
-		/* add chdesc to block's dependencies */
+		/* add chdesc to block's befores */
 		chdesc_link_all_changes(chdesc);
 		chdesc_link_ready_changes(chdesc);
 		
@@ -977,32 +976,32 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 }
 
 #if CHDESC_DATA_OMITTANCE
-static bool chdesc_has_external_dependents(const chdesc_t * chdesc, const bdesc_t * block)
+static bool chdesc_has_external_afters(const chdesc_t * chdesc, const bdesc_t * block)
 {
-	const chmetadesc_t * dependents;
-	for(dependents = chdesc->dependents; dependents; dependents = dependents->dependent.next)
+	const chmetadesc_t * afters;
+	for(afters = chdesc->afters; afters; afters = afters->after.next)
 	{
-		const chdesc_t * dependent = dependents->dependent.desc;
-		if(dependent->type == NOOP)
+		const chdesc_t * after = afters->after.desc;
+		if(after->type == NOOP)
 		{
-			if(dependent->block && dependent->block->ddesc != block->ddesc)
+			if(after->block && after->block->ddesc != block->ddesc)
 				return 1;
 			/* XXX: stack usage */
-			if(chdesc_has_external_dependents(dependent, block))
+			if(chdesc_has_external_afters(after, block))
 				return 1;
 		}
-		else if(dependent->block->ddesc != block->ddesc)
+		else if(after->block->ddesc != block->ddesc)
 			return 1;
 	}
 	return 0;
 }
 
-# if !BDESC_EXTERN_DEPENDENT_COUNT
-static bool bdesc_has_external_dependents(const bdesc_t * block)
+# if !BDESC_EXTERN_AFTER_COUNT
+static bool bdesc_has_external_afters(const bdesc_t * block)
 {
 	const chdesc_t * c;
 	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
-		if(chdesc_has_external_dependents(c, block))
+		if(chdesc_has_external_afters(c, block))
 			return 1;
 	return 0;
 }
@@ -1013,36 +1012,36 @@ static bool new_chdescs_require_data(const bdesc_t * block)
 {
 #if CHDESC_DATA_OMITTANCE
 	/* Rule: When adding chdesc C to block B,
-	 * and forall C' on B, with C' != C: C' has no dependents on blocks != B,
+	 * and forall C' on B, with C' != C: C' has no afters on blocks != B,
 	 * then C will never need to be rolled back. */
-# if BDESC_EXTERN_DEPENDENT_COUNT
-	return block->ddesc->extern_dependent_count > 0;
+# if BDESC_EXTERN_AFTER_COUNT
+	return block->ddesc->extern_after_count > 0;
 # else
-	return bdesc_has_external_dependents(block);
+	return bdesc_has_external_afters(block);
 # endif
 #else
 	return 1;
 #endif
 }
 
-static void print_chdesc_dependencies(const chdesc_t * chdesc, uint32_t limit)
+static void print_chdesc_befores(const chdesc_t * chdesc, uint32_t limit)
 {
 	const chmetadesc_t * meta;
 	uint32_t n = 0;
-	printf("%p dependencies:\n", chdesc);
-	for(meta = chdesc->dependencies; meta && n < limit; meta = meta->dependency.next, n++)
-		 printf("meta = %p next = %p\n", meta, meta->dependency.next);
+	printf("%p befores:\n", chdesc);
+	for(meta = chdesc->befores; meta && n < limit; meta = meta->before.next, n++)
+		 printf("meta = %p next = %p\n", meta, meta->before.next);
 }
 
-static bool chdesc_has_many_dependencies(const chdesc_t * chdesc)
+static bool chdesc_has_many_befores(const chdesc_t * chdesc)
 {
 	const chmetadesc_t * meta;
 	uint32_t n = 0;
-	for(meta = chdesc->dependencies; meta; meta = meta->dependency.next)
+	for(meta = chdesc->befores; meta; meta = meta->before.next)
 	{
 		if(++n > 50000)
 		{
-			print_chdesc_dependencies(chdesc, 50);
+			print_chdesc_befores(chdesc, 50);
 			return 1;
 		}
 	}
@@ -1051,46 +1050,47 @@ static bool chdesc_has_many_dependencies(const chdesc_t * chdesc)
 
 static bool merge_clear = 0;
 
-/* Check whether a chdesc merge that adds a dependency on 'chdesc' to an
+/* Check whether a chdesc merge that adds a before on 'chdesc' to an
  * existing chdesc on 'block' could lead to an indirect dependency cycle.
  * Returns 0 if a cycle is not possible, <0 if a cycle is possible.
- * Precondition: 0 == bdesc_has_external_dependents(block). */
+ * Precondition: 0 == bdesc_has_external_afters(block). */
 static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc_t * block)
 {
 #if 0
 	const chmetadesc_t * meta;
-	assert(!chdesc_has_many_dependencies(chdesc));
-	for(meta = chdesc->dependencies; meta; meta = meta->dependency.next)
+	assert(!chdesc_has_many_befores(chdesc));
+	for(meta = chdesc->befores; meta; meta = meta->before.next)
 	{
-		chdesc_t * dependency = meta->dependency.desc;
+		chdesc_t * before = meta->before.desc;
 		int r;
 		
-		/* It is a precondition that dependencies on other blocks cannot
+		/* It is a precondition that befores on other blocks cannot
 		 * induce cycles. */
-		if(dependency->block && dependency->block->ddesc != block->ddesc)
+		if(before->block && before->block->ddesc != block->ddesc)
 			continue;
 		
 #if 1
-		/* A rollbackable on 'block' that is a dependency could already
-		 * depend on the existing chdesc that is merged into. (Cycle!)
-		 * Dependencies on rollbakcables on 'block' rarely occur in practice,
+		/* A rollbackable on 'block' that is a before could already
+		 * have a before on the existing chdesc that is merged into. (Cycle!)
+		 * Having befores on rollbakcables on 'block' rarely occur in practice,
 		 * so conservatively give up on them to make detection simple.
 		 * NOTE: this check could instead scan block->ddesc->all_changes */
-		if(dependency->block && dependency->block->ddesc == block->ddesc && chdesc_is_rollbackable(dependency))
+		if(before->block && before->block->ddesc == block->ddesc && chdesc_is_rollbackable(before))
 			return -1;
 #endif
 		
-		/* A NOOP could now, or later be made to, depend on a chdesc on block.
-		 * Conservatively say possible cycle for all NOOP dependencies
+		/* A NOOP could now, or later be made to, have a chdesc on block
+		 * as a before.
+		 * Conservatively say possible cycle for all NOOP befores
 		 * unless the NOOP is reachable only through chdescs on other blocks.
 		 * This check could be more lenient, but NOOPs can have complicated
 		 * relations and this check gives a low enough false negative rate. */
-		if(dependency->type == NOOP)
+		if(before->type == NOOP)
 			return -2;
 		
-		/* Check indirect dependencies for induced cycles */
+		/* Check indirect befores for induced cycles */
 		/* XXX: stack usage */
-		if((r = merge_indirect_cycle_is_possible(dependency, block)) < 0)
+		if((r = merge_indirect_cycle_is_possible(before, block)) < 0)
 			return r;
 	}
 	return 0;
@@ -1104,31 +1104,31 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
 	state_t * states = static_states;
 	state_t * state = states;
 
-	const chmetadesc_t * meta = chdesc->dependencies;
+	const chmetadesc_t * meta = chdesc->befores;
 	int r = 0;
   recurse_start:
-	for(; meta; meta = meta->dependency.next)
+	for(; meta; meta = meta->before.next)
 	{
-		chdesc_t * dependency = meta->dependency.desc;
+		chdesc_t * before = meta->before.desc;
 
-		if(dependency->block && dependency->block->ddesc != block->ddesc)
+		if(before->block && before->block->ddesc != block->ddesc)
 			continue;
 		
-		if(dependency->block && dependency->block->ddesc == block->ddesc && chdesc_is_rollbackable(dependency))
+		if(before->block && before->block->ddesc == block->ddesc && chdesc_is_rollbackable(before))
 		{
 			r = -1;
 			goto exit;
 		}
-		if(dependency->type == NOOP)
+		if(before->type == NOOP)
 		{
 			r = -2;
 			goto exit;
 		}
 		
-		assert(!chdesc_has_many_dependencies(dependency));
-		/* Check indirect dependencies for induced cycles
+		assert(!chdesc_has_many_befores(before));
+		/* Check indirect befores for induced cycles
 		 * Equivalent to:
-		 * if((r = merge_indirect_cycle_is_possible(dependency, block)) < 0)
+		 * if((r = merge_indirect_cycle_is_possible(before, block)) < 0)
 		 *	return r;
 		 */
 
@@ -1137,22 +1137,22 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
 		 * into an infinite loop. */
 		if(!merge_clear)
 		{
-			if(dependency->flags & CHDESC_MARKED)
+			if(before->flags & CHDESC_MARKED)
 				continue;
-			dependency->flags |= CHDESC_MARKED;
+			before->flags |= CHDESC_MARKED;
 		}
 		else
 		{
-			if(!(dependency->flags & CHDESC_MARKED))
+			if(!(before->flags & CHDESC_MARKED))
 				continue;
-			dependency->flags &= ~CHDESC_MARKED;
+			before->flags &= ~CHDESC_MARKED;
 		}
 
 		size_t next_index = 1 + state - &states[0];
 		
 		state->meta = meta;
 		
-		meta = dependency->dependencies;
+		meta = before->befores;
 		
 		if(next_index < states_capacity)
 			state++;
@@ -1193,43 +1193,44 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
 #endif
 }
 
-/* Check whether a chdesc merge that adds a dependency on 'dependency' to an
+/* Check whether a chdesc merge that adds a before on 'before' to an
  * existing chdesc on 'block' could lead to a dependency cycle.
  * Returns 0 if a cycle is not possible, <0 if a cycle is possible.
- * Precondition: 0 == bdesc_has_external_dependents(block). */
+ * Precondition: 0 == bdesc_has_external_afters(block). */
 /* TODO: unify this and merge_indirect_cycle_is_possible(). They are the same
  * except that merge_indirect_cycle_is_possible() does not check
  * for direct cycles. */
-static int merge_cycle_is_possible(const chdesc_t * dependency, const bdesc_t * block)
+static int merge_cycle_is_possible(const chdesc_t * before, const bdesc_t * block)
 {
-	/* It is a precondition that dependencies on other blocks cannot
+	/* It is a precondition that befores on other blocks cannot
 	 * induce cycles. */
-	if(dependency->block && dependency->block->ddesc != block->ddesc)
+	if(before->block && before->block->ddesc != block->ddesc)
 		return 0;
 
 #if 1
-	/* A rollbackable on 'block' that is a dependency could already
-	 * depend on the existing chdesc that is merged into. (Cycle!)
-	 * Dependencies on rollbakcables on 'block' rarely occur in practice,
+	/* A rollbackable on 'block' that is a before could already
+	 * have the existing chdesc that is merged into as a before. (Cycle!)
+	 * Rollbackables on 'block' are rarely befores in practice,
 	 * so conservatively give up on them to make detection simple.
 	 * NOTE: this check could instead scan block->ddesc->all_changes */
-	if(dependency->block && dependency->block->ddesc == block->ddesc && chdesc_is_rollbackable(dependency))
+	if(before->block && before->block->ddesc == block->ddesc && chdesc_is_rollbackable(before))
 		return -1;
 #endif
 	
-	/* A NOOP could now, or later be made to, depend on a chdesc on block.
-	 * Conservatively say possible cycle for all NOOP dependencies
+	/* A NOOP could now, or later be made to, have a chdesc on block
+	 * as a before.
+	 * Conservatively say possible cycle for all NOOP befores
 	 * unless the NOOP is reachable only through chdescs on other blocks.
 	 * This check could be more lenient, but NOOPs can have complicated
 	 * relations and this check gives a low enough false negative rate. */
-	if(dependency->type == NOOP)
+	if(before->type == NOOP)
 		return -2;
 	
-	/* Check indirect dependencies for induced cycles */
-	assert(!chdesc_has_many_dependencies(dependency));
-	int r = merge_indirect_cycle_is_possible(dependency, block);
+	/* Check indirect befores for induced cycles */
+	assert(!chdesc_has_many_befores(before));
+	int r = merge_indirect_cycle_is_possible(before, block);
 	merge_clear = 1;
-	merge_indirect_cycle_is_possible(dependency, block);
+	merge_indirect_cycle_is_possible(before, block);
 	merge_clear = 0;
 	return r;
 }
@@ -1294,9 +1295,9 @@ static void chdesc_merge_new_stats_log(unsigned idx)
 #endif
 
 /* Determine whether a new chdesc on 'block', with 'data_required',
- * at 'offset' and 'length', and with the dependency 'dependency' can be merged
+ * at 'offset' and 'length', and with the before 'before' can be merged
  * into an existing chdesc. Return such a chdesc if so, else return NULL. */
-static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, uint16_t offset, uint16_t length, chdesc_t * dependency)
+static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, uint16_t offset, uint16_t length, chdesc_t * before)
 {
 #if !CHDESC_NRB_WHOLEBLOCK
 	chdesc_t new;
@@ -1316,7 +1317,7 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
 		return NULL;
 	}
 	
-	if(dependency && ((r = merge_cycle_is_possible(dependency, block)) < 0))
+	if(before && ((r = merge_cycle_is_possible(before, block)) < 0))
 	{
 		CHDESC_MERGE_NEW_STATS_LOG(r == -1 ? 2 : 3);
 		return NULL;
@@ -1357,7 +1358,7 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
 
 /* Merge what would be a new chdesc into an existing chdesc.
  * Precondition: select_new_chdesc_merger() returned 'existing'. */
-static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_dependency)
+static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_before)
 {
 #if !CHDESC_NRB_WHOLEBLOCK
 	uint16_t updated_offset = MIN(existing->byte.offset, new_offset);
@@ -1372,15 +1373,15 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 	assert(existing->byte.length == existing->block->ddesc->length);
 #endif
 	
-	/* Ensure 'existing' depends on 'new_dependency', taking care to not
-	 * create a cycle. Cases for 'new_dependency':
+	/* Ensure 'existing' has 'new_before' as a before, taking care to not
+	 * create a cycle. Cases for 'new_before':
 	 * - on this block: it is nonrollbackable, so it can be ignored
-	 * - on another block: it does not depend on chdescs on this block,
-	 *   so it can be added as a dependency
+	 * - on another block: it does not have chdescs on this block as befores,
+	 *   so it can be added as a before
 	 * - is a noop: not possible */
-	assert(!new_dependency || new_dependency->type != NOOP);
-	if(new_dependency && (new_dependency->block->ddesc != existing->block->ddesc))
-		if ((r = chdesc_add_depend(existing, new_dependency)) < 0)
+	assert(!new_before || new_before->type != NOOP);
+	if(new_before && (new_before->block->ddesc != existing->block->ddesc))
+		if ((r = chdesc_add_depend(existing, new_before)) < 0)
 			return r;
 	
 #if !CHDESC_NRB_WHOLEBLOCK
@@ -1404,7 +1405,7 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 
 	/* update existing's location */
 # if CHDESC_MERGE_NEW
-#  warning TODO: merge_new_chdesc() needs to add overlap dependencies
+#  warning TODO: merge_new_chdesc() needs to add overlap befores
 # endif
 	if(existing->byte.offset != updated_offset)
 	{
@@ -1489,7 +1490,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	else
 	{
 		/* Expand to cover entire block. This is safe since all chdescs on
-		 * this block at least implicitly depend on all nonrollbackables.
+		 * this block at least implicitly have all nonrollbackables as befores.
 		 * Leave 'offset' and 'length' as is to copy source data. */
 		chdesc->byte.offset = 0;
 		chdesc->byte.length = block->ddesc->length;
@@ -1521,12 +1522,12 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 #endif
 	}
 	
-	chdesc->dependencies = NULL;
-	chdesc->dependencies_tail = &chdesc->dependencies;
-	chdesc->dependents = NULL;
-	chdesc->dependents_tail = &chdesc->dependents;
+	chdesc->befores = NULL;
+	chdesc->befores_tail = &chdesc->befores;
+	chdesc->afters = NULL;
+	chdesc->afters_tail = &chdesc->afters;
 	chdesc->weak_refs = NULL;
-	memset(chdesc->befores, 0, sizeof(chdesc->befores));
+	memset(chdesc->nbefores, 0, sizeof(chdesc->nbefores));
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
 	chdesc->ddesc_next = NULL;
@@ -1550,7 +1551,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		return -E_NO_MEM;
 	}
 	
-	/* make sure it is dependent upon any pre-existing chdescs */
+	/* make sure it is after upon any pre-existing chdescs */
 	if(chdesc_overlap_multiattach(chdesc, block))
 	{
 		chdesc_destroy(&chdesc);
@@ -1644,12 +1645,12 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->type = BIT;
 	chdesc->bit.offset = offset;
 	chdesc->bit.xor = xor;
-	chdesc->dependencies = NULL;
-	chdesc->dependencies_tail = &chdesc->dependencies;
-	chdesc->dependents = NULL;
-	chdesc->dependents_tail = &chdesc->dependents;
+	chdesc->befores = NULL;
+	chdesc->befores_tail = &chdesc->befores;
+	chdesc->afters = NULL;
+	chdesc->afters_tail = &chdesc->afters;
 	chdesc->weak_refs = NULL;
-	memset(chdesc->befores, 0, sizeof(chdesc->befores));
+	memset(chdesc->nbefores, 0, sizeof(chdesc->nbefores));
 	chdesc->free_prev = NULL;
 	chdesc->free_next = NULL;
 	chdesc->ddesc_next = NULL;
@@ -1665,7 +1666,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 
 	chdesc_link_ready_changes(chdesc);
 	
-	/* make sure it is dependent upon any pre-existing chdescs */
+	/* make sure it is after upon any pre-existing chdescs */
 	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
 		goto error;
 	
@@ -1679,7 +1680,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if((r = chdesc_apply(chdesc)) < 0)
 		goto error;
 	
-	/* add chdesc to block's dependencies */
+	/* add chdesc to block's befores */
 	chdesc_link_all_changes(chdesc);
 	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
 	{
@@ -1715,22 +1716,22 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 	if(offset + length > chdesc->byte.offset + chdesc->byte.length)
 		return -E_INVAL;
 	
-	/* scan for overlapping chdescs - they will all depend on us, or at
-	 * least, if there are any, at least one will depend directly on us */
-	if(chdesc->dependents)
+	/* scan for overlapping chdescs - they will all have us as a before, or at
+	 * least, if there are any, at least one will have us as a direct before */
+	if(chdesc->afters)
 	{
 		chmetadesc_t * meta;
-		for(meta = chdesc->dependents; meta; meta = meta->dependent.next)
+		for(meta = chdesc->afters; meta; meta = meta->after.next)
 		{
 			/* no block? doesn't overlap */
-			if(!meta->dependent.desc->block)
+			if(!meta->after.desc->block)
 				continue;
 			/* not the same block? doesn't overlap */
-			if(meta->dependent.desc->block->ddesc != chdesc->block->ddesc)
+			if(meta->after.desc->block->ddesc != chdesc->block->ddesc)
 				continue;
 			/* chdesc_overlap_check doesn't check that the block is
 			 * the same, which is why we just checked it by hand */
-			if(!chdesc_overlap_check(meta->dependent.desc, chdesc))
+			if(!chdesc_overlap_check(meta->after.desc, chdesc))
 				continue;
 			/* overlap detected! */
 			return -E_PERM;
@@ -1758,17 +1759,17 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 }
 
 #if CHDESC_CYCLE_CHECK
-static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
+static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 {
 	chmetadesc_t * meta;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, dependent, CHDESC_MARKED);
-	dependent->flags |= CHDESC_MARKED;
-	for(meta = dependent->dependencies; meta; meta = meta->dependency.next)
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, after, CHDESC_MARKED);
+	after->flags |= CHDESC_MARKED;
+	for(meta = after->befores; meta; meta = meta->before.next)
 	{
-		if(meta->dependency.desc == dependency)
+		if(meta->before.desc == before)
 			return 1;
-		if(!(meta->dependency.desc->flags & CHDESC_MARKED))
-			if(chdesc_has_dependency(meta->dependency.desc, dependency))
+		if(!(meta->before.desc->flags & CHDESC_MARKED))
+			if(chdesc_has_before(meta->before.desc, before))
 				return 1;
 	}
 	/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
@@ -1776,83 +1777,83 @@ static int chdesc_has_dependency(chdesc_t * dependent, chdesc_t * dependency)
 }
 #endif
 
-/* add a dependency to a change descriptor */
-int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency)
+/* add a dependency between change descriptors */
+int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 {
 	/* compensate for Heisenberg's uncertainty principle */
-	if(!dependent || !dependency)
+	if(!after || !before)
 	{
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
 	/* make sure we're not fiddling with chdescs that are already written */
-	if(dependent->flags & CHDESC_WRITTEN)
+	if(after->flags & CHDESC_WRITTEN)
 	{
-		if(dependency->flags & CHDESC_WRITTEN)
+		if(before->flags & CHDESC_WRITTEN)
 			return 0;
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Attempt to add dependency to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -E_INVAL;
 	}
-	if(dependency->flags & CHDESC_WRITTEN)
+	if(before->flags & CHDESC_WRITTEN)
 		return 0;
 	
 	/* avoid creating a dependency loop */
 #if CHDESC_CYCLE_CHECK
-	if(dependent == dependency || chdesc_has_dependency(dependency, dependent))
+	if(after == before || chdesc_has_before(before, after))
 	{
 		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
 		assert(0);
 		return -E_INVAL;
 	}
-	/* chdesc_has_dependency() marks the DAG rooted at "dependency" so we must unmark it */
-	chdesc_unmark_graph(dependency);
+	/* chdesc_has_before() marks the DAG rooted at "before" so we must unmark it */
+	chdesc_unmark_graph(before);
 #endif
 	
-	return chdesc_add_depend_fast(dependent, dependency);
+	return chdesc_add_depend_fast(after, before);
 }
 
 static void chdesc_meta_remove(chmetadesc_t * meta)
 {
-	unpropagate_dependency(meta->dependent.desc, meta->dependency.desc);
+	unpropagate_dependency(meta->after.desc, meta->before.desc);
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENCY, meta->dependent.desc, meta->dependency.desc);
-	*meta->dependency.ptr = meta->dependency.next;
-	if(meta->dependency.next)
-		meta->dependency.next->dependency.ptr = meta->dependency.ptr;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_BEFORE, meta->after.desc, meta->before.desc);
+	*meta->before.ptr = meta->before.next;
+	if(meta->before.next)
+		meta->before.next->before.ptr = meta->before.ptr;
 	else
-		meta->dependent.desc->dependencies_tail = meta->dependency.ptr;
+		meta->after.desc->befores_tail = meta->before.ptr;
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_DEPENDENT, meta->dependency.desc, meta->dependent.desc);
-	*meta->dependent.ptr = meta->dependent.next;
-	if(meta->dependent.next)
-		meta->dependent.next->dependent.ptr = meta->dependent.ptr;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_AFTER, meta->before.desc, meta->after.desc);
+	*meta->after.ptr = meta->after.next;
+	if(meta->after.next)
+		meta->after.next->after.ptr = meta->after.ptr;
 	else
-		meta->dependency.desc->dependents_tail = meta->dependent.ptr;
+		meta->before.desc->afters_tail = meta->after.ptr;
 	
-	if(meta->dependent.desc->type == NOOP && !meta->dependent.desc->dependencies)
-		/* we just removed the last dependency of a NOOP chdesc, so satisfy it */
-		chdesc_satisfy(&meta->dependent.desc);
+	if(meta->after.desc->type == NOOP && !meta->after.desc->befores)
+		/* we just removed the last before of a NOOP chdesc, so satisfy it */
+		chdesc_satisfy(&meta->after.desc);
 	
 	memset(meta, 0, sizeof(*meta));
 	free(meta);
 }
 
-void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency)
+void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
 {
-	chmetadesc_t * scan_dependencies = dependent->dependencies;
-	chmetadesc_t * scan_dependents = dependency->dependents;
-	while(scan_dependencies && scan_dependents &&
-	      scan_dependencies->dependency.desc != dependency &&
-	      scan_dependents->dependent.desc != dependent)
+	chmetadesc_t * scan_befores = after->befores;
+	chmetadesc_t * scan_afters = before->afters;
+	while(scan_befores && scan_afters &&
+	      scan_befores->before.desc != before &&
+	      scan_afters->after.desc != after)
 	{
-		scan_dependencies = scan_dependencies->dependency.next;
-		scan_dependents = scan_dependents->dependent.next;
+		scan_befores = scan_befores->before.next;
+		scan_afters = scan_afters->after.next;
 	}
-	if(scan_dependencies && scan_dependencies->dependency.desc == dependency)
-		chdesc_meta_remove(scan_dependencies);
-	else if(scan_dependents && scan_dependents->dependent.desc == dependent)
-		chdesc_meta_remove(scan_dependents);
+	if(scan_befores && scan_befores->before.desc == before)
+		chdesc_meta_remove(scan_befores);
+	else if(scan_afters && scan_afters->after.desc == after)
+		chdesc_meta_remove(scan_afters);
 }
 
 static void memxchg(void * p, void * q, size_t n)
@@ -1970,7 +1971,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 	}
 }
 
-/* satisfy a change descriptor, i.e. remove it from all others that depend on it and add it to the list of written chdescs */
+/* satisfy a change descriptor, i.e. remove it from all afters and add it to the list of written chdescs */
 int chdesc_satisfy(chdesc_t ** chdesc)
 {
 	if((*chdesc)->flags & CHDESC_WRITTEN)
@@ -1981,18 +1982,18 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, *chdesc);
 	
-	if((*chdesc)->dependencies)
+	if((*chdesc)->befores)
 	{
 		chdesc_t * bit_changes;
-		/* We are trying to satisfy a chdesc with dependencies, which
+		/* We are trying to satisfy a chdesc with befores, which
 		 * can happen if we have modules generating out-of-order chdescs
 		 * but no write-back caches. We need to convert it to a NOOP so
-		 * that any of its dependents will still have the indirect
-		 * dependencies on the dependencies of this chdesc. However, we
+		 * that any of its afters will still have the befores of this
+		 * chdescs as indirect befores. However, we
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc %p of type %d with dependencies!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
+			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc %p of type %d with befores!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
 		switch((*chdesc)->type)
 		{
 			case BYTE:
@@ -2023,8 +2024,8 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	}
 	else
 	{
-		while((*chdesc)->dependents)
-			chdesc_meta_remove((*chdesc)->dependents);
+		while((*chdesc)->afters)
+			chdesc_meta_remove((*chdesc)->afters);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_WRITTEN);
 		(*chdesc)->flags |= CHDESC_WRITTEN;
 		
@@ -2128,7 +2129,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	
 	if((*chdesc)->flags & CHDESC_WRITTEN)
 	{
-		assert(!(*chdesc)->dependents && !(*chdesc)->dependencies);
+		assert(!(*chdesc)->afters && !(*chdesc)->befores);
 		if(free_head == *chdesc || (*chdesc)->free_prev)
 			chdesc_free_remove(*chdesc);
 	}
@@ -2143,17 +2144,17 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		}
 		else if(free_head == *chdesc || (*chdesc)->free_prev)
 		{
-			assert(!(*chdesc)->dependencies);
+			assert(!(*chdesc)->befores);
 			chdesc_free_remove(*chdesc);
 		}
 	}
 	
-	if((*chdesc)->dependencies && (*chdesc)->dependents)
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both dependents and dependencies!\n", __FUNCTION__, __FILE__, __LINE__);
-	/* remove dependencies first, so chdesc_satisfy() won't just turn it to a NOOP */
-	while((*chdesc)->dependencies)
-		chdesc_meta_remove((*chdesc)->dependencies);
-	if((*chdesc)->dependents)
+	if((*chdesc)->befores && (*chdesc)->afters)
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both afters and befores!\n", __FUNCTION__, __FILE__, __LINE__);
+	/* remove befores first, so chdesc_satisfy() won't just turn it to a NOOP */
+	while((*chdesc)->befores)
+		chdesc_meta_remove((*chdesc)->befores);
+	if((*chdesc)->afters)
 	{
 		/* chdesc_satisfy will set it to NULL */
 		chdesc_t * desc = *chdesc;
@@ -2199,7 +2200,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 
 void chdesc_claim_noop(chdesc_t * chdesc)
 {
-	assert(chdesc->type == NOOP && !chdesc->dependencies);
+	assert(chdesc->type == NOOP && !chdesc->befores);
 	assert(chdesc_before_level(chdesc) == BDLEVEL_NONE);
 	if(chdesc->free_prev || free_head == chdesc)
 		chdesc_free_remove(chdesc);
@@ -2207,10 +2208,10 @@ void chdesc_claim_noop(chdesc_t * chdesc)
 
 void chdesc_autorelease_noop(chdesc_t * chdesc)
 {
-	assert(chdesc->type == NOOP && !chdesc->dependencies && !(chdesc->flags & CHDESC_WRITTEN));
+	assert(chdesc->type == NOOP && !chdesc->befores && !(chdesc->flags & CHDESC_WRITTEN));
 	assert(chdesc_before_level(chdesc) == BDLEVEL_NONE);
-	while(chdesc->dependents)
-		chdesc_meta_remove(chdesc->dependents);
+	while(chdesc->afters)
+		chdesc_meta_remove(chdesc->afters);
 	if(!chdesc->free_prev && free_head != chdesc)
 		chdesc_free_push(chdesc);
 }

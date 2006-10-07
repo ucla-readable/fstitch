@@ -34,10 +34,10 @@ public interface Constants
 	public static final short KDB_CHDESC_SET_FLAGS = 210;
 	public static final short KDB_CHDESC_CLEAR_FLAGS = 211;
 	public static final short KDB_CHDESC_DESTROY = 212;
-	public static final short KDB_CHDESC_ADD_DEPENDENCY = 213;
-	public static final short KDB_CHDESC_ADD_DEPENDENT = 214;
-	public static final short KDB_CHDESC_REM_DEPENDENCY = 215;
-	public static final short KDB_CHDESC_REM_DEPENDENT = 216;
+	public static final short KDB_CHDESC_ADD_BEFORE = 213;
+	public static final short KDB_CHDESC_ADD_AFTER = 214;
+	public static final short KDB_CHDESC_REM_BEFORE = 215;
+	public static final short KDB_CHDESC_REM_AFTER = 216;
 	public static final short KDB_CHDESC_WEAK_RETAIN = 217;
 	public static final short KDB_CHDESC_WEAK_FORGET = 218;
 	public static final short KDB_CHDESC_SET_OFFSET = 219;
@@ -54,8 +54,8 @@ public interface Constants
 	public static final short KDB_CHDESC_ROLLBACK_COLLECTION = 304;
 	public static final short KDB_CHDESC_APPLY_COLLECTION = 305;
 	public static final short KDB_CHDESC_ORDER_DESTROY = 306;
-	public static final short KDB_CHDESC_DETACH_DEPENDENCIES = 307;
-	public static final short KDB_CHDESC_DETACH_DEPENDENTS = 308;
+	public static final short KDB_CHDESC_DETACH_BEFORES = 307;
+	public static final short KDB_CHDESC_DETACH_AFTERS = 308;
 	public static final short KDB_CHDESC_OVERLAP_ATTACH = 309;
 	public static final short KDB_CHDESC_OVERLAP_MULTIATTACH = 310;
 	public static final short KDB_CHDESC_DUPLICATE = 311;

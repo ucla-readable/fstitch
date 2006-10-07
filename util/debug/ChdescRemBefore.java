@@ -1,8 +1,8 @@
-public class ChdescRemDependent extends Opcode
+public class ChdescRemBefore extends Opcode
 {
 	private final int source, target;
 	
-	public ChdescRemDependent(int source, int target)
+	public ChdescRemBefore(int source, int target)
 	{
 		this.source = source;
 		this.target = target;
@@ -12,17 +12,17 @@ public class ChdescRemDependent extends Opcode
 	{
 		Chdesc source = state.lookupChdesc(this.source);
 		if(source != null)
-			source.remDependent(target);
+			source.remBefore(target);
 	}
 	
 	public String toString()
 	{
-		return "KDB_CHDESC_REM_DEPENDENT: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);
+		return "KDB_CHDESC_REM_BEFORE: source = " + SystemState.hex(source) + ", target = " + SystemState.hex(target);
 	}
 	
 	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
-		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_REM_DEPENDENT, "KDB_CHDESC_REM_DEPENDENT", ChdescRemDependent.class);
+		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CHDESC_REM_BEFORE, "KDB_CHDESC_REM_BEFORE", ChdescRemBefore.class);
 		factory.addParameter("source", 4);
 		factory.addParameter("target", 4);
 		return factory;

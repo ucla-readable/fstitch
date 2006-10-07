@@ -24,9 +24,9 @@ having a color. When the outline is dashed, it means that the change descriptor
 is rolled back.
 
 The arrows between change descriptors can be any of four colors. Black and blue
-arrows are for dependencies; red and orange arrows are for free list pointers. A
-black arrow from A to B means that A has a dependency on B. A blue arrow from A
-to B means that B has A as a dependent. A red arrow from A to B means that the
+arrows are for befores; red and orange arrows are for free list pointers. A
+black arrow from A to B means that A has B as a before. A blue arrow from A
+to B means that B has A as an after. A red arrow from A to B means that the
 next change descriptor in the free list after A is B. An orange arrow from A to
 B means that the previous change descriptor in the free list before B is A.
 

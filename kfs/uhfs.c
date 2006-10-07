@@ -387,8 +387,8 @@ static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
 	}
 	if(head == tail)
 		return;
-	for(meta = head->dependencies; meta; meta = meta->dependency.next)
-		uhfs_mark_data(meta->dependency.desc, tail);
+	for(meta = head->befores; meta; meta = meta->before.next)
+		uhfs_mark_data(meta->before.desc, tail);
 }
 
 static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)

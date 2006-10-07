@@ -12,8 +12,8 @@ public class ChdescInfoModule extends Module
 		addFactory(ChdescRollbackCollection.getFactory(input));
 		addFactory(ChdescApplyCollection.getFactory(input));
 		addFactory(ChdescOrderDestroy.getFactory(input));
-		addFactory(ChdescDetachDependencies.getFactory(input));
-		addFactory(ChdescDetachDependents.getFactory(input));
+		addFactory(ChdescDetachBefores.getFactory(input));
+		addFactory(ChdescDetachAfters.getFactory(input));
 		addFactory(ChdescOverlapAttach.getFactory(input));
 		addFactory(ChdescOverlapMultiattach.getFactory(input));
 		addFactory(ChdescDuplicate.getFactory(input));
