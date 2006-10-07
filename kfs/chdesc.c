@@ -20,20 +20,6 @@
  * speedup, even though we use more memory, so it is enabled by default. */
 #define CHDESC_ALLOW_MULTIGRAPH 1
 
-/* Set to make nonrollbackable chdescs always cover the entire block */
-/* TODO: should we or should we not do this? Pluses and minuses:
- * + More chdecs can be merged
- *   (though quick testing shows only a small increase)
- * + Should allow for faster new chdesc merging
- * + A higher percentage of rollbackables have nonrollbackables
- *   as explicit befores
- *   (but still not all, eg a nonrollbackable created after a rollbackable)
- * - Nonrollbackables claim to modify data that they may not
- *   - barrier traversal implications?
- *   - a synthetic block with a 1B nrb chdesc will appear to be inited
- * - More dependencies will exist */
-#define CHDESC_NRB_WHOLEBLOCK 1
-
 /* Set to allow new chdescs to be merged into existing chdescs */
 #define CHDESC_MERGE_NEW 0
 /* Set to track new chdesc merge stats and print them after shutdown */
@@ -581,55 +567,6 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 		return 0;
 	return (a_start <= b_start && start + b_len <= tag) ? 2 : 1;
 }
-
-#if !CHDESC_NRB_WHOLEBLOCK
-/* note that we don't check to see if these chdescs are for the same ddesc or not */
-/* returns 1 if a and b change contiguous bytes, 0 if they do not */
-static bool chdesc_byte_contiguous_check(chdesc_t * a, chdesc_t * b)
-{
-	uint16_t a_start, a_len;
-	uint16_t b_start, b_len;
-	
-	/* if either is a NOOP chdesc, they don't overlap */
-	if(a->type == NOOP || b->type == NOOP)
-		return 0;
-
-	/* let's say two bit chdescs are byte contiguous if they modify
-	 * contiguous words, because it is easy to check */
-	if(a->type == BIT && b->type == BIT)
-	{
-		int32_t offset_diff = a->bit.offset - b->bit.offset;
-		if(offset_diff == -1 || offset_diff == 0 || offset_diff == 1)
-			return 1;
-		return 0;
-	}
-
-	if(a->type == BIT)
-	{
-		a_len = sizeof(a->bit.xor);
-		a_start = a->bit.offset * a_len;
-	}
-	else
-	{
-		a_len = a->byte.length;
-		a_start = a->byte.offset;
-	}
-	if(b->type == BIT)
-	{
-		b_len = sizeof(b->bit.xor);
-		b_start = b->bit.offset * b_len;
-	}
-	else
-	{
-		b_len = b->byte.length;
-		b_start = b->byte.offset;
-	}
-
-	if(a_start + a_len < b_start || b_start + b_len < a_start)
-		return 0;
-	return 1;
-}
-#endif
 
 /* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
 static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
@@ -1299,9 +1236,6 @@ static void chdesc_merge_new_stats_log(unsigned idx)
  * into an existing chdesc. Return such a chdesc if so, else return NULL. */
 static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, uint16_t offset, uint16_t length, chdesc_t * before)
 {
-#if !CHDESC_NRB_WHOLEBLOCK
-	chdesc_t new;
-#endif
 	chdesc_t * chdesc;
 	chdesc_t * existing = NULL;
 	int r;
@@ -1323,11 +1257,6 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
 		return NULL;
 	}
 	
-#if !CHDESC_NRB_WHOLEBLOCK
-	new.type = BYTE;
-	new.byte.offset = offset;
-	new.byte.length = length;
-#endif
 	/* TODO: eliminate scan of all_changes? */
 	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 	{
@@ -1338,11 +1267,7 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
 			return NULL;
 		}
 
-#if CHDESC_NRB_WHOLEBLOCK
 		if(!chdesc_is_rollbackable(chdesc))
-#else
-		if(!chdesc_is_rollbackable(chdesc) && chdesc_byte_contiguous_check(chdesc, &new))
-#endif
 			/* merge with last nonrollbackable, they are all equally good */
 			existing = chdesc;
 	}
@@ -1360,18 +1285,12 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
  * Precondition: select_new_chdesc_merger() returned 'existing'. */
 static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_before)
 {
-#if !CHDESC_NRB_WHOLEBLOCK
-	uint16_t updated_offset = MIN(existing->byte.offset, new_offset);
-	uint16_t updated_length;
-#endif
 	int r;
 	
 	assert(existing && existing->type == BYTE);
 	assert(!chdesc_is_rollbackable(existing));
-#if CHDESC_NRB_WHOLEBLOCK
 	assert(existing->byte.offset == 0);
 	assert(existing->byte.length == existing->block->ddesc->length);
-#endif
 	
 	/* Ensure 'existing' has 'new_before' as a before, taking care to not
 	 * create a cycle. Cases for 'new_before':
@@ -1384,40 +1303,6 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 		if ((r = chdesc_add_depend(existing, new_before)) < 0)
 			return r;
 	
-#if !CHDESC_NRB_WHOLEBLOCK
-	/* calculate existing's updated location */
-	if(new_offset < existing->byte.offset)
-	{
-		updated_length = existing->byte.length + new_length - (new_offset + new_length - existing->byte.offset);
-	}
-	else if(new_offset == existing->byte.offset)
-	{
-		updated_length = MAX(new_length, existing->byte.length);
-	}
-	else
-	{
-		assert(new_offset > existing->byte.offset);
-		if(new_offset + new_length <= existing->byte.offset + existing->byte.length)
-			updated_length = existing->byte.length;
-		else
-			updated_length = existing->byte.length + new_length - (existing->byte.offset + existing->byte.length - new_offset);
-	}
-
-	/* update existing's location */
-# if CHDESC_MERGE_NEW
-#  warning TODO: merge_new_chdesc() needs to add overlap befores
-# endif
-	if(existing->byte.offset != updated_offset)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, existing, updated_offset);
-		existing->byte.offset = updated_offset;
-	}
-	if(existing->byte.length != updated_length)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, existing, updated_length);
-		existing->byte.length = updated_length;
-	}
-#endif
 	return 0;
 }
 
@@ -1481,7 +1366,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->owner = owner;		
 	chdesc->block = block;
 	chdesc->type = BYTE;
-#if CHDESC_NRB_WHOLEBLOCK
 	if(data_required)
 	{
 		chdesc->byte.offset = offset;
@@ -1495,10 +1379,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		chdesc->byte.offset = 0;
 		chdesc->byte.length = block->ddesc->length;
 	}
-#else
-	chdesc->byte.offset = offset;
-	chdesc->byte.length = length;
-#endif
 	
 	if(data_required)
 	{
