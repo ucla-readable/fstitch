@@ -1048,8 +1048,6 @@ static bool chdesc_has_many_dependencies(const chdesc_t * chdesc)
 	return 0;
 }
 
-#include <time.h>
-
 static bool merge_clear = 0;
 
 /* Check whether a chdesc merge that adds a dependency on 'chdesc' to an
@@ -1172,7 +1170,6 @@ static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc
 			if(!states)
 				panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
 			state = &states[next_index];
-			printf("%s: increase to %u at %lu s\n", __FUNCTION__, states_capacity, time(NULL));
 		}
 		goto recurse_start;
 		
