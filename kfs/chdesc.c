@@ -160,7 +160,9 @@ static void * srealloc(void * p, size_t p_size, size_t new_size)
 
 #define STATIC_STATES_CAPACITY 1024 /* 1024 is fairly arbitrary */
 
-static void propagate_noop_level_change(chdesc_t * noop_after, uint16_t prev_level, uint16_t new_level)
+/* propagate a level change through the noop after,
+ * to update the ready state */
+static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t prev_level, uint16_t new_level)
 {
 	/* recursion-on-the-heap support */
 	struct state {
@@ -182,28 +184,29 @@ static void propagate_noop_level_change(chdesc_t * noop_after, uint16_t prev_lev
 	chdepdesc_t * noops_afters = noop_after->afters;
 	for(; noops_afters; noops_afters = noops_afters->after.next)
 	{
-		chdesc_t * c = noops_afters->after.desc;
-		uint16_t c_prev_level = chdesc_level(c);
+		chdesc_t * after = noops_afters->after.desc;
+		uint16_t after_prev_level = chdesc_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
 		{
-			assert(c->nbefores[prev_level]);
-			c->nbefores[prev_level]--;
+			assert(after->nbefores[prev_level]);
+			after->nbefores[prev_level]--;
 		}
 		if(new_level != BDLEVEL_NONE)
 		{
-			c->nbefores[new_level]++;
-			assert(c->nbefores[new_level]);
+			after->nbefores[new_level]++;
+			assert(after->nbefores[new_level]);
 		}
-		chdesc_update_ready_changes(c);
+		chdesc_update_ready_changes(after);
 
-		if(!c->owner)
+		if(!after->owner)
 		{
-			uint16_t c_new_level = chdesc_level(c);
-			if(c_prev_level != c_new_level)
+			uint16_t after_new_level = chdesc_level(after);
+			if(after_prev_level != after_new_level)
 			{
 				/* Recursively propagate the level change; equivalent to
-				 * propagate_noop_level_change(c, c_prev_level, c_new_level).
+				 * propagate_level_change_thru_noop
+				 *  (after, after_prev_level, after_new_level).
 				 * We don't recursively call this function because we can
 				 * overflow the stack. We instead use the 'states' array
 				 * to hold this function's recursive state. */
@@ -213,9 +216,9 @@ static void propagate_noop_level_change(chdesc_t * noop_after, uint16_t prev_lev
 				state->prev_level = prev_level;
 				state->new_level = new_level;
 
-				noop_after = c;
-				prev_level = c_prev_level;
-				new_level = c_new_level;
+				noop_after = after;
+				prev_level = after_prev_level;
+				new_level = after_new_level;
 				
 				if(next_index < states_capacity)
 					state++;
@@ -315,17 +318,17 @@ static bool extern_after_count_is_correct(const bdesc_t * block)
 }
 #endif /* BDESC_EXTERN_AFTER_COUNT_DEBUG */
 
-/* propagate a dependency addition/removal through a noop after to update
- * block's extern count */
-static void propagate_after_external_change(const chdesc_t * after, bdesc_t * block, bool add)
+/* propagate a depend add/remove through a noop after,
+ * to increment/decrement extern_after_count for 'block' */
+static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_after, bdesc_t * block, bool add)
 {
 	chdepdesc_t * dep;
-	assert(after->type == NOOP && !after->owner);
+	assert(noop_after->type == NOOP && !noop_after->owner);
 	assert(block);
-	for(dep = after->afters; dep; dep = dep->after.next)
+	for(dep = noop_after->afters; dep; dep = dep->after.next)
 	{
-		chdesc_t * chdesc = dep->after.desc;
-		if(chdesc->block && chdesc_is_external(chdesc, block))
+		chdesc_t * after = dep->after.desc;
+		if(after->block && chdesc_is_external(after, block))
 		{
 			if(add)
 			{
@@ -338,65 +341,65 @@ static void propagate_after_external_change(const chdesc_t * after, bdesc_t * bl
 				block->ddesc->extern_after_count--;
 			}
 		}
-		if(!chdesc->owner)
+		if(!after->owner)
 		{
-			assert(chdesc->type == NOOP);
+			assert(after->type == NOOP);
 			/* XXX: stack usage */
-			propagate_after_external_change(chdesc, block, add);
+			propagate_extern_after_change_thru_noop_after(after, block, add);
 		}
 	}
 }
 
-/* propagate a dependency addition through a noop before to update
- * extern counts for data dependencies */
-static void propagate_dependency_external_add(const chdesc_t * after, chdesc_t * before)
+/* propagate a depend add through a noop before,
+ * to increment extern_after_count for before's block */
+static void propagate_extern_after_add_thru_noop_before(chdesc_t * noop_before, const chdesc_t * after)
 {
 	chdepdesc_t * dep;
+	assert(noop_before->type == NOOP && !noop_before->owner);
 	assert(after->type != NOOP);
-	assert(before->type == NOOP && !before->owner);
-	for(dep = before->befores; dep; dep = dep->before.next)
+	for(dep = noop_before->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = dep->before.desc;
-		if(chdesc->block && chdesc_is_external(after, chdesc->block))
+		chdesc_t * before = dep->before.desc;
+		if(before->block && chdesc_is_external(after, before->block))
 		{
-			chdesc->block->ddesc->extern_after_count++;
-			assert(chdesc->block->ddesc->extern_after_count);
+			before->block->ddesc->extern_after_count++;
+			assert(before->block->ddesc->extern_after_count);
 		}
-		if(!chdesc->owner)
+		if(!before->owner)
 		{
-			assert(chdesc->type == NOOP);
+			assert(before->type == NOOP);
 			/* XXX: stack usage */
-			propagate_before_external_add(after, chdesc);
+			propagate_extern_after_add_thru_noop_before(before, after);
 		}
 	}
 }
 #endif /* BDESC_EXTERN_AFTER_COUNT */
 
-/* propagate dependency info for a new dependency from 'after' on 'before' */
-static void propagate_dependency(chdesc_t * after, chdesc_t * before)
+/* propagate a depend add, to update ready and extern_after state */
+static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 {
 	uint16_t before_level = chdesc_level(before);
 	uint16_t after_prev_level;
-
+	
 	if(before_level == BDLEVEL_NONE)
 		return;
 	after_prev_level = chdesc_level(after);
-
+	
 	after->nbefores[before_level]++;
 	assert(after->nbefores[before_level]);
 	chdesc_update_ready_changes(after);
 	if(!after->owner)
 	{
 		if(before_level > after_prev_level || after_prev_level == BDLEVEL_NONE)
-			propagate_noop_level_change(after, after_prev_level, before_level);
+			propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
 		if(before->block)
-			propagate_after_external_change(after, before->block, 1);
+			propagate_extern_after_change_thru_noop_after(after, before->block, 1);
 #endif
 	}
 #if BDESC_EXTERN_AFTER_COUNT
 	if(after->owner && !before->owner)
-		propagate_before_external_add(after, before);
+		propagate_extern_after_add_thru_noop_before(before, after);
 	if(before->block && chdesc_is_external(after, before->block))
 	{
 		before->block->ddesc->extern_after_count++;
@@ -405,23 +408,15 @@ static void propagate_dependency(chdesc_t * after, chdesc_t * before)
 #endif
 }
 
-/* unpropagate dependency info for the dependency from 'after' on 'before' */
-static void unpropagate_dependency(chdesc_t * after, const chdesc_t * before)
+/* propagate a depend remove, to update ready and extern_after state */
+static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 {
 	uint16_t before_level = chdesc_level(before);
 	uint16_t after_prev_level;
-
+	
 	if(before_level == BDLEVEL_NONE)
 		return;
 	after_prev_level = chdesc_level(after);
-	
-#if BDESC_EXTERN_AFTER_COUNT
-	if(before->block && chdesc_is_external(after, before->block))
-	{
-		assert(before->block->ddesc->extern_after_count);
-		before->block->ddesc->extern_after_count--;
-	}
-#endif
 	
 	assert(after->nbefores[before_level]);
 	after->nbefores[before_level]--;
@@ -429,40 +424,52 @@ static void unpropagate_dependency(chdesc_t * after, const chdesc_t * before)
 	if(!after->owner)
 	{
 		if(before_level == after_prev_level && !after->nbefores[before_level])
-			propagate_noop_level_change(after, after_prev_level, chdesc_level(after));
+			propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
-		propagate_after_external_change(after, before->block, 0);
+		if(before->block)
+			propagate_extern_after_change_thru_noop_after(after, before->block, 0);
 #endif
 	}
+#if BDESC_EXTERN_AFTER_COUNT
+	/* TODO: don't we need to propagate the extern_after remove through
+	 * a noop before? (The mirror of propagate_depend_add()'s action.) */
+	if(before->block && chdesc_is_external(after, before->block))
+	{
+		assert(before->block->ddesc->extern_after_count);
+		before->block->ddesc->extern_after_count--;
+	}
+#endif
 }
 
-void chdesc_propagate_level_change(chdepdesc_t * afters, uint16_t prev_level, uint16_t new_level)
+/* propagate a level change, to update ready state */
+void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level)
 {
+	chdepdesc_t * afters = chdesc->afters;
 	assert(prev_level < NBDLEVEL || prev_level == BDLEVEL_NONE);
 	assert(new_level < NBDLEVEL || new_level == BDLEVEL_NONE);
 	assert(prev_level != new_level);
 	for(; afters; afters = afters->after.next)
 	{
-		chdesc_t * c = afters->after.desc;
-		uint16_t c_prev_level = chdesc_level(c);
+		chdesc_t * after = afters->after.desc;
+		uint16_t after_prev_level = chdesc_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
 		{
-			assert(c->nbefores[prev_level]);
-			c->nbefores[prev_level]--;
+			assert(after->nbefores[prev_level]);
+			after->nbefores[prev_level]--;
 		}
 		if(new_level != BDLEVEL_NONE)
 		{
-			c->nbefores[new_level]++;
-			assert(c->nbefores[new_level]);
+			after->nbefores[new_level]++;
+			assert(after->nbefores[new_level]);
 		}
-		chdesc_update_ready_changes(c);
+		chdesc_update_ready_changes(after);
 
-		if(!c->owner)
+		if(!after->owner)
 		{
-			uint16_t c_new_level = chdesc_level(c);
-			if(c_prev_level != c_new_level)
-				propagate_noop_level_change(c, c_prev_level, c_new_level);
+			uint16_t after_new_level = chdesc_level(after);
+			if(after_prev_level != after_new_level)
+				propagate_level_change_thru_noop(after, after_prev_level, after_new_level);
 		}
 	}
 }
@@ -485,7 +492,7 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	if(!dep)
 		return -E_NO_MEM;
 	
-	propagate_dependency(after, before);
+	propagate_depend_add(after, before);
 	
 	/* add the before to the after */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_BEFORE, after, before);
@@ -664,22 +671,22 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return _chdesc_overlap_multiattach(chdesc, block->ddesc->overlaps);
 }
 
-void __propagate_dependency(chdesc_t * after, const chdesc_t * before)
+void __propagate_depend_add(chdesc_t * after, const chdesc_t * before)
 #if defined(__MACH__)
 {
-	return propagate_dependency(after, before);
+	return propagate_depend_add(after, before);
 }
 #else
-	__attribute__ ((alias("propagate_dependency")));
+	__attribute__ ((alias("propagate_depend_add")));
 #endif
 
-void __unpropagate_dependency(chdesc_t * after, const chdesc_t * before)
+void __propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 #if defined(__MACH__)
 {
-	return unpropagate_dependency(after, before);
+	return propagate_depend_remove(after, before);
 }
 #else
-	__attribute__ ((alias("unpropagate_dependency")));
+	__attribute__ ((alias("propagate_depend_remove")));
 #endif
 
 int __ensure_bdesc_has_overlaps(bdesc_t * block)
@@ -1695,7 +1702,7 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 
 static void chdesc_dep_remove(chdepdesc_t * dep)
 {
-	unpropagate_dependency(dep->after.desc, dep->before.desc);
+	propagate_depend_remove(dep->after.desc, dep->before.desc);
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_BEFORE, dep->after.desc, dep->before.desc);
 	*dep->before.ptr = dep->before.next;

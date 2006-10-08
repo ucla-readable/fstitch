@@ -16,7 +16,7 @@
 /* values: 0 (disable), 1 (enable) */
 #define CHDESC_DATA_OMITTANCE 0
 /* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
-+  * but does not yet work with chdesc_noop_reassign() */
+ * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
 #define BDESC_EXTERN_AFTER_COUNT CHDESC_DATA_OMITTANCE
 
@@ -168,8 +168,8 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 	__chdesc->owner ? __chdesc->owner->level : chdesc_before_level(__chdesc); \
 })
 
-/* propagate the level change, from 'prev_level' to 'new_level', to 'afters' */
-void chdesc_propagate_level_change(chdepdesc_t * afters, uint16_t prev_level, uint16_t new_level);
+/* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */
+void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
 
 
 /* check whether two change descriptors overlap, even on different blocks */
@@ -220,8 +220,8 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 void chdesc_update_ready_changes(chdesc_t * chdesc);
 
 /* hidden functions for use in chdesc_util.c */
-void __propagate_dependency(chdesc_t * after, const chdesc_t * before);
-void __unpropagate_dependency(chdesc_t * after, const chdesc_t * before);
+void __propagate_depend_add(chdesc_t * after, const chdesc_t * before);
+void __propagate_depend_remove(chdesc_t * after, const chdesc_t * before);
 int __ensure_bdesc_has_overlaps(bdesc_t * block);
 chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
 chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);

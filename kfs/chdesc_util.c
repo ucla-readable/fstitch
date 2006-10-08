@@ -57,7 +57,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 
 				new_level = chdesc_level(chdesc);
 				if(prev_level != new_level)
-					chdesc_propagate_level_change(chdesc->afters, prev_level, new_level);
+					chdesc_propagate_level_change(chdesc, prev_level, new_level);
 			}
 		}
 	}
@@ -181,7 +181,7 @@ int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint
 	
 	new_level = chdesc_level(chdesc);
 	if(prev_level != new_level)
-		chdesc_propagate_level_change(chdesc->afters, prev_level, new_level);
+		chdesc_propagate_level_change(chdesc, prev_level, new_level);
 
 	return 0;
 }
@@ -350,14 +350,14 @@ int chdesc_detach_befores(chdesc_t * chdesc)
 		chdesc->befores = dep->before.next;
 		dep->before.next->before.ptr = &chdesc->befores;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_BEFORE, chdesc, dep->before.desc);
-		__unpropagate_dependency(chdesc, dep->before.desc);
+		__propagate_depend_remove(chdesc, dep->before.desc);
 		
 		dep->before.next = NULL;
 		dep->before.ptr = tail->befores_tail;
 		*tail->befores_tail = dep;
 		tail->befores_tail = &dep->before.next;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_BEFORE, tail, dep->before.desc);
-		__propagate_dependency(tail, dep->before.desc);
+		__propagate_depend_add(tail, dep->before.desc);
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_AFTER, dep->after.desc, chdesc);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_AFTER, dep->after.desc, tail);
@@ -398,14 +398,14 @@ int chdesc_detach_afters(chdesc_t * chdesc)
 		*scan = dep->after.next;
 		dep->after.next->after.ptr = scan;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_AFTER, chdesc, dep->after.desc);
-		__unpropagate_dependency(dep->after.desc, chdesc);
+		__propagate_depend_remove(dep->after.desc, chdesc);
 		
 		dep->after.next = NULL;
 		dep->after.ptr = head->afters_tail;
 		*head->afters_tail = dep;
 		head->afters_tail = &dep->after.next;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_AFTER, head, dep->after.desc);
-		__propagate_dependency(dep->after.desc, head);
+		__propagate_depend_add(dep->after.desc, head);
 		
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_BEFORE, dep->before.desc, chdesc);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_BEFORE, dep->before.desc, head);

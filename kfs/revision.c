@@ -302,7 +302,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		chdesc_unlink_ready_changes(scan);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
 		scan->owner = target;
-		chdesc_propagate_level_change(scan->afters, owner->level, target->level);
+		chdesc_propagate_level_change(scan, owner->level, target->level);
 		chdesc_update_ready_changes(scan);
 	}
 
@@ -341,7 +341,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				chdesc_unlink_ready_changes(scan);
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
 				scan->owner = owner;
-				chdesc_propagate_level_change(scan->afters, target->level, owner->level);
+				chdesc_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 				chdesc_update_ready_changes(scan);
 				scan = next;
@@ -386,7 +386,7 @@ void revision_slice_push_down(revision_slice_t * slice)
 			slice->ready[i]->owner = slice->target;
 			chdesc_update_ready_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i]->afters, prev_level, chdesc_level(slice->ready[i]));
+				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
@@ -409,7 +409,7 @@ void revision_slice_pull_up(revision_slice_t * slice)
 			slice->ready[i]->owner = slice->owner;
 			chdesc_update_ready_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i]->afters, prev_level, chdesc_level(slice->ready[i]));
+				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
