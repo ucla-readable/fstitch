@@ -94,8 +94,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	if(copy->top)
 	{
 		/* we need our own top_keep */
-		copy->top_keep = chdesc_create_noop(NULL, NULL);
-		if(!copy->top_keep)
+		if(chdesc_create_noop_list(NULL, NULL, &copy->top_keep, NULL) < 0)
 			goto error_2;
 		chdesc_claim_noop(copy->top_keep);
 		if(chdesc_add_depend(copy->top, copy->top_keep) < 0)
@@ -224,22 +223,22 @@ opgroup_t * opgroup_create(int flags)
 	state->opgroup = op;
 	state->engaged = 0;
 	
-	if(!(op->head = chdesc_create_noop(NULL, NULL)))
+	if(chdesc_create_noop_list(NULL, NULL, &op->head, NULL) < 0)
 		goto error_3;
 	if(chdesc_weak_retain(op->head, &op->head) < 0)
 		goto error_4;
-	if(!(op->head_keep = chdesc_create_noop(NULL, NULL)))
+	if(chdesc_create_noop_list(NULL, NULL, &op->head_keep, NULL) < 0)
 		goto error_4;
 	chdesc_claim_noop(op->head_keep);
 	if(chdesc_add_depend(op->head, op->head_keep) < 0)
 		goto error_5;
-	if(!(op->tail = chdesc_create_noop(NULL, NULL)))
+	if(chdesc_create_noop_list(NULL, NULL, &op->tail, NULL) < 0)
 		goto error_6;
 	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
 		goto error_7;
 	if(chdesc_add_depend(op->head, op->tail) < 0)
 		goto error_7;
-	if(!(op->tail_keep = chdesc_create_noop(NULL, NULL)))
+	if(chdesc_create_noop_list(NULL, NULL, &op->tail_keep, NULL) < 0)
 		goto error_8;
 	chdesc_claim_noop(op->tail_keep);
 	if(chdesc_add_depend(op->tail, op->tail_keep) < 0)
@@ -320,17 +319,17 @@ static int opgroup_update_top_bottom(void)
 	int r, count = 0;
 	
 	/* create new top and bottom */
-	top = chdesc_create_noop(NULL, NULL);
-	if(!top)
+	r = chdesc_create_noop_list(NULL, NULL, &top, NULL);
+	if(r < 0)
 		goto error_1;
-	top_keep = chdesc_create_noop(NULL, NULL);
-	if(!top_keep)
+	r = chdesc_create_noop_list(NULL, NULL, &top_keep, NULL);
+	if(r < 0)
 		goto error_2;
 	chdesc_claim_noop(top_keep);
 	r = chdesc_add_depend(top, top_keep);
 	if(r < 0)
 		goto error_3;
-	bottom = chdesc_create_noop(NULL, NULL);
+	r = chdesc_create_noop_list(NULL, NULL, &bottom, NULL);
 	if(r < 0)
 		goto error_4;
 	r = chdesc_add_depend(top, bottom);
@@ -344,7 +343,7 @@ static int opgroup_update_top_bottom(void)
 	error_2:
 		chdesc_destroy(&top);
 	error_1:
-		return -E_NO_MEM;
+		return r;
 	}
 	
 	hash_map_it_init(&it, current_scope->id_map);
@@ -559,9 +558,10 @@ int opgroup_prepare_head(chdesc_t ** head)
 	if(*head)
 	{
 		int r;
-		chdesc_t * nh = chdesc_create_noop(NULL, NULL);
-		if(!nh)
-			return -E_NO_MEM;
+		chdesc_t * nh;
+		r = chdesc_create_noop_list(NULL, NULL, &nh, NULL);
+		if(r < 0)
+			return r;
 		r = chdesc_add_depend(nh, current_scope->bottom);
 		if(r < 0)
 			return r;

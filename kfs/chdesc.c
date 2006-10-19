@@ -7,6 +7,7 @@
 #include <lib/types.h>
 #include <lib/memdup.h>
 #include <lib/panic.h>
+#include <lib/stdarg.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -73,6 +74,7 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 static int ensure_bdesc_has_overlaps(bdesc_t * block)
 {
 	chdesc_t * chdesc;
+	int r;
 	assert(block);
 	
 	if(block->ddesc->overlaps)
@@ -81,14 +83,15 @@ static int ensure_bdesc_has_overlaps(bdesc_t * block)
 		return 0;
 	}
 	
-	chdesc = chdesc_create_noop(NULL, NULL);
-	if(!chdesc)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, NULL, &chdesc, NULL);
+	if(r < 0)
+		return r;
 	
-	if(chdesc_weak_retain(chdesc, &block->ddesc->overlaps) < 0)
+	r = chdesc_weak_retain(chdesc, &block->ddesc->overlaps);
+	if(r < 0)
 	{
 		chdesc_destroy(&chdesc);
-		return -E_NO_MEM;
+		return r;
 	}
 	
 	return 0;
@@ -100,6 +103,7 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	chdesc_t * chdesc;
 	hash_map_elt_t * elt;
 	void * key = (void *) (uint32_t) offset;
+	int r;
 	assert(block);
 	
 	chdesc = (chdesc_t *) hash_map_find_val(block->ddesc->bit_changes, key);
@@ -109,8 +113,8 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 		return chdesc;
 	}
 	
-	chdesc = chdesc_create_noop(NULL, NULL);
-	if(!chdesc)
+	r = chdesc_create_noop_list(NULL, NULL, &chdesc, NULL);
+	if(r < 0)
 		return NULL;
 	
 	if(hash_map_insert(block->ddesc->bit_changes, key, chdesc) < 0)
@@ -873,13 +877,16 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
 		assert(!chdesc->tmp_next);
 }
 
-chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
+int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, chdesc_t * befores[])
 {
 	chdesc_t * chdesc;
+	size_t i;
+	
+	assert(tail);
 	
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
-		return NULL;
+		return -E_NO_MEM;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, block, owner);
 	
 	chdesc->owner = owner;
@@ -914,9 +921,54 @@ chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner)
 		bdesc_retain(block);
 	}
 	
+	for(i = 0; befores[i]; i++)
+		if(chdesc_add_depend_fast(chdesc, befores[i]) < 0)
+		{
+			chdesc_destroy(&chdesc);
+			return -E_NO_MEM;
+		}
+	*tail = chdesc;
+	
 	chdesc_free_push(chdesc);
 	
-	return chdesc;
+	return 0;
+}
+
+#define STATIC_BEFORES_CAPACITY 10 /* 10 should cover most cases */
+
+int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...)
+{
+	static chdesc_t * static_befores[STATIC_BEFORES_CAPACITY];
+	chdesc_t ** befores;
+	size_t nbefores = 0;
+	size_t i;
+	va_list ap;
+	int r;
+	
+	va_start(ap, tail);
+	while(va_arg(ap, chdesc_t *))
+		nbefores++;
+	va_end(ap);
+	
+	if(nbefores <= STATIC_BEFORES_CAPACITY)
+		befores = static_befores;
+	else
+	{
+		befores = malloc((nbefores + 1) * sizeof(befores[0]));
+		if(!befores)
+			return -E_NO_MEM;
+	}
+	
+	va_start(ap, tail);
+	for(i = 0; i < nbefores; i++)
+		befores[i] = va_arg(ap, chdesc_t *);
+	va_end(ap);
+	
+	r = chdesc_create_noop_array(block, owner, tail, befores);
+	
+	if(befores != static_befores)
+		free(befores);
+	return r;
 }
 
 #if CHDESC_DATA_OMITTANCE

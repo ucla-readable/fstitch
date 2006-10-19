@@ -232,9 +232,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	int r;
 	
 	/* create a new hold chdesc */
-	hold = chdesc_create_noop(NULL, object);
-	if(!hold)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, object, &hold, NULL);
+	if(r < 0)
+		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, hold, "hold");
 	chdesc_claim_noop(hold);
 	
@@ -400,9 +400,9 @@ static int journal_bd_accept_request(BD_t * object)
 	}
 	
 	/* create a new NOOP for unsafe */
-	info->unsafe = chdesc_create_noop(NULL, object);
-	if(!info->unsafe)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, object, &info->unsafe, NULL);
+	if(r < 0)
+		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->unsafe, "unsafe");
 	r = chdesc_weak_retain(info->unsafe, &info->unsafe);
 	if(r < 0)
@@ -607,8 +607,8 @@ static int journal_bd_start_transaction(BD_t * object)
 		return 0;
 	
 #define CREATE_NOOP(name, fail_label, owner) do { \
-	info->name = chdesc_create_noop(NULL, owner); \
-	if(!info->name) \
+	r = chdesc_create_noop_list(NULL, owner, &info->name, NULL); \
+	if(r < 0) \
 		goto fail_##fail_label; \
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
 	chdesc_claim_noop(info->name); } while(0)
@@ -958,17 +958,17 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	if(expected_type == CRCOMMIT)
 	{
 		/* create the three NOOPs we will need for this chain */
-		info->keep = chdesc_create_noop(NULL, NULL);
-		if(!info->keep)
+		r = chdesc_create_noop_list(NULL, NULL, &info->keep, NULL);
+		if(r < 0)
 			goto error_1;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->keep, "keep");
 		chdesc_claim_noop(info->keep);
-		info->safe = chdesc_create_noop(NULL, NULL);
-		if(!info->safe)
+		r = chdesc_create_noop_list(NULL, NULL, &info->safe, NULL);
+		if(r < 0)
 			goto error_2;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->safe, "safe");
-		info->done = chdesc_create_noop(NULL, NULL);
-		if(!info->done)
+		r = chdesc_create_noop_list(NULL, NULL, &info->done, NULL);
+		if(r < 0)
 			goto error_3;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->done, "done");
 		chdesc_claim_noop(info->done);
@@ -1283,12 +1283,10 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	lock_block = CALL(journal, read_block, 0, 1);
 	if(!lock_block)
 		panic("Holy Mackerel!");
-	info->lock = chdesc_create_noop(lock_block, bd);
-	if(!info->lock)
+	if(chdesc_create_noop_list(lock_block, bd, &info->lock, NULL) < 0)
 		panic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock, "lock");
-	info->lock_hold = chdesc_create_noop(NULL, bd);
-	if(!info->lock_hold)
+	if(chdesc_create_noop_list(NULL, bd, &info->lock_hold, NULL) < 0)
 		panic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock_hold, "lock_hold");
 	chdesc_claim_noop(info->lock_hold);

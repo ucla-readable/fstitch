@@ -335,9 +335,9 @@ int chdesc_detach_befores(chdesc_t * chdesc)
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_BEFORES, chdesc);
 	if(!chdesc->befores || !chdesc->befores->before.next)
 		return 0;
-	tail = chdesc_create_noop(chdesc->block, chdesc->owner);
-	if(!tail)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(chdesc->block, chdesc->owner, &tail, NULL);
+	if(r < 0)
+		return r;
 	r = __chdesc_add_depend_fast(chdesc, tail);
 	if(r < 0)
 	{
@@ -381,9 +381,9 @@ int chdesc_detach_afters(chdesc_t * chdesc)
 	panic("This function needs to be checked for working with ddesc->extern_after_count");
 #endif
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_AFTERS, chdesc);
-	head = chdesc_create_noop(chdesc->block, chdesc->owner);
-	if(!head)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(chdesc->block, chdesc->owner, &head, NULL);
+	if(r < 0)
+		return r;
 	r = __chdesc_add_depend_fast(head, chdesc);
 	if(r < 0)
 	{
@@ -486,12 +486,9 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		case BIT:
 			for(i = 0; i != count; i++)
 			{
-				descs[i] = chdesc_create_noop(blocks[i], original->owner);
-				if(!descs[i])
-				{
-					r = -E_NO_MEM;
+				r = chdesc_create_noop_list(blocks[i], original->owner, &descs[i], NULL);
+				if(r < 0)
 					goto fail_first;
-				}
 				descs[i]->bit.offset = original->bit.offset;
 				descs[i]->bit.xor = original->bit.xor;
 				descs[i]->type = BIT;
@@ -520,12 +517,9 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		case BYTE:
 			for(i = 0; i != count; i++)
 			{
-				descs[i] = chdesc_create_noop(blocks[i], original->owner);
-				if(!descs[i])
-				{
-					r = -E_NO_MEM;
+				r = chdesc_create_noop_list(blocks[i], original->owner, &descs[i], NULL);
+				if(r < 0)
 					goto fail_first;
-				}
 				descs[i]->byte.offset = original->byte.offset;
 				descs[i]->byte.length = original->byte.length;
 				if(original->byte.data)
@@ -634,12 +628,9 @@ int chdesc_split(chdesc_t * original, int count)
 	
 	for(i = 0; i != count; i++)
 	{
-		descs[i] = chdesc_create_noop(original->block, original->owner);
-		if(!descs[i])
-		{
-			r = -E_NO_MEM;
+		r = chdesc_create_noop_list(original->block, original->owner, &descs[i], NULL);
+		if(r < 0)
 			goto fail;
-		}
 		r = __chdesc_add_depend_fast(original, descs[i]);
 		if(r >= 0 && tail)
 			r = __chdesc_add_depend_fast(descs[i], tail);
@@ -816,12 +807,9 @@ int chdesc_merge(int count, chdesc_t ** chdescs, chdesc_t ** head)
 		tail = *head;
 	else
 	{
-		tail = chdesc_create_noop(NULL, NULL);
-		if(!tail)
-		{
-			r = -E_NO_MEM;
+		r = chdesc_create_noop_list(NULL, NULL, &tail, NULL);
+		if(r < 0)
 			goto merge_chdesc_create_failed;
-		}
 		chdesc_claim_noop(tail);
 		*head = tail;
 		newnoop = 1;
@@ -959,9 +947,9 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		return -E_INVAL;
 
 	/* newhead will depend on all created chdescs */
-	newhead = chdesc_create_noop(NULL, NULL);
-	if(!newhead)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, NULL, &newhead, NULL);
+	if(r < 0)
+		return r;
 
 	while(i < length)
 	{
@@ -1012,12 +1000,12 @@ int chdesc_create_blocked_noop(chdesc_t ** noophead, chdesc_t ** drain_plug)
 	if (!noophead || !drain_plug)
 		return -E_INVAL;
 
-	*noophead = chdesc_create_noop(NULL, NULL);
-	if (!*noophead)
-		return -E_NO_MEM;
-	*drain_plug = chdesc_create_noop(NULL, NULL);
-	if (!*drain_plug)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, NULL, noophead, NULL);
+	if (r < 0)
+		return r;
+	r = chdesc_create_noop_list(NULL, NULL, drain_plug, NULL);
+	if (r < 0)
+		return r;
 	chdesc_claim_noop(*drain_plug);
 	r = chdesc_add_depend(*noophead, *drain_plug);
 	if (r < 0) {

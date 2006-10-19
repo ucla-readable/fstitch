@@ -121,7 +121,10 @@ struct chrefdesc {
 };
 
 /* create new chdescs */
-chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner);
+/* create a noop using the NULL-terminated befores array */
+int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, chdesc_t * befores[]);
+/* create a noop using the NULL-terminated befores var_arg */
+int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...);
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head);
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head);
