@@ -675,68 +675,13 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return _chdesc_overlap_multiattach(chdesc, block->ddesc->overlaps);
 }
 
-void __propagate_depend_add(chdesc_t * after, const chdesc_t * before)
-#if defined(__MACH__)
-{
-	return propagate_depend_add(after, before);
-}
-#else
-	__attribute__ ((alias("propagate_depend_add")));
-#endif
-
-void __propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
-#if defined(__MACH__)
-{
-	return propagate_depend_remove(after, before);
-}
-#else
-	__attribute__ ((alias("propagate_depend_remove")));
-#endif
-
-int __ensure_bdesc_has_overlaps(bdesc_t * block)
-#if defined(__MACH__)
-{
-	return ensure_bdesc_has_overlaps(block);
-}
-#else
-	__attribute__ ((alias("ensure_bdesc_has_overlaps")));
-#endif
-
-chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
-#if defined(__MACH__)
-{
-	return ensure_bdesc_has_bit_changes(block, offset);
-}
-#else
-	__attribute__ ((alias("ensure_bdesc_has_bit_changes")));
-#endif
-
-chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset)
-#if defined(__MACH__)
-{
-	return chdesc_bit_changes(block, offset);
-}
-#else
-	__attribute__ ((alias("chdesc_bit_changes")));
-#endif
-
-int __chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
-#if defined(__MACH__)
-{
-	return chdesc_add_depend_fast(after, before);
-}
-#else
-	__attribute__((alias("chdesc_add_depend_fast")));
-#endif
-
-int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
-#if defined(__MACH__)
-{
-	return chdesc_overlap_multiattach(chdesc, block);
-}
-#else
-	__attribute__((alias("chdesc_overlap_multiattach")));
-#endif
+void __propagate_depend_add(chdesc_t * after, const chdesc_t * before) __attribute__ ((alias("propagate_depend_add")));
+void __propagate_depend_remove(chdesc_t * after, const chdesc_t * before) __attribute__ ((alias("propagate_depend_remove")));
+int __ensure_bdesc_has_overlaps(bdesc_t * block) __attribute__ ((alias("ensure_bdesc_has_overlaps")));
+chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset) __attribute__ ((alias("ensure_bdesc_has_bit_changes")));
+chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset) __attribute__ ((alias("chdesc_bit_changes")));
+int __chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before) __attribute__((alias("chdesc_add_depend_fast")));
+int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block) __attribute__((alias("chdesc_overlap_multiattach")));
 
 void chdesc_link_all_changes(chdesc_t * chdesc)
 {
