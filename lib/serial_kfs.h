@@ -47,7 +47,6 @@
 #define SKFS_WT_CACHE_BD 22
 #define SKFS_ELEVATOR_CACHE_BD 23
 #define SKFS_BLOCK_RESIZER_BD 24
-#define SKFS_BARRIER_RESIZER_BD 25
 #define SKFS_MD_BD 26
 #define SKFS_MIRROR_BD 27
 #define SKFS_MIRROR_BD_ADD 28
@@ -239,12 +238,6 @@ typedef struct {
 	uint32_t bd;
 	uint16_t blocksize;
 } Skfs_block_resizer_bd_t;
-
-typedef struct {
-	SKFS_TYPE;
-	uint32_t bd;
-	uint16_t blocksize;
-} Skfs_barrier_resizer_bd_t;
 
 typedef struct {
 	SKFS_TYPE;
