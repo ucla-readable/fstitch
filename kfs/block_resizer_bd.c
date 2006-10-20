@@ -8,7 +8,6 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
-#include <kfs/barrier.h>
 #include <kfs/block_resizer_bd.h>
 
 /* This simple size converter can only convert up in size (i.e. aggregate blocks

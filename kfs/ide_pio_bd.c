@@ -464,7 +464,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	KFS_DEBUG_DBWAIT(block);
 	
-#warning The barrier resizer takes care of inter-sector dependency ordering when breaking blocks into sectors.
+#warning The old resizer took care of inter-sector dependency ordering when breaking blocks into sectors.
 #warning FIXME: We must now do it here, in ide_pio_bd (and in all other terminal BDs) via a utility function.
 	/* write it */
 	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, block->count) == -1)

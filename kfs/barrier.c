@@ -19,12 +19,6 @@
 #define Dprintf(x...)
 #endif
 
-/* barrier_simple_forward() is the single-case version of
- * barrier_partial_forward(). However, barrier_simple_forward() is able
- * to recover on BD::synthetic_read_block() failure and does slightly fewer
- * pointer dereferences. More importantly, it will likely be easier to
- * optimize the revision_*() calls away for the !synthetic case in
- * barrier_simple_forward. */
 int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block)
 {
 	bool synthetic;

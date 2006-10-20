@@ -70,6 +70,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
  * updated to reflect the presence of the change descriptor, and must be copied
  * manually from the source data descriptor. Also, the CHDESC_MOVED flag will be
  * set on the change descriptor if the destination block is non-NULL. */
+/* NOTE: this function is deprecated and should be removed as soon as possible */
 int chdesc_move(chdesc_t * chdesc, bdesc_t * destination, BD_t * target_bd, uint16_t source_offset)
 {
 	chdesc_t * bit_changes = NULL;

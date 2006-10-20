@@ -11,7 +11,7 @@
 
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
-static bool revision_barrier_decider(chdesc_t * chdesc, void * data)
+static bool revision_owner_decider(chdesc_t * chdesc, void * data)
 {
 	return chdesc->owner == (BD_t *) data;
 }
@@ -94,7 +94,7 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 		assert(r >= 0);
 	}
 #endif
-	return _revision_tail_prepare(block, revision_barrier_decider, bd);
+	return _revision_tail_prepare(block, revision_owner_decider, bd);
 }
 
 int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp)
@@ -165,7 +165,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 
 int revision_tail_revert(bdesc_t * block, BD_t * bd)
 {
-	return _revision_tail_revert(block, revision_barrier_decider, bd);
+	return _revision_tail_revert(block, revision_owner_decider, bd);
 }
 
 int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp)
