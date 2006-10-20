@@ -162,8 +162,8 @@ struct Scfs_opgroup_create {
 
 struct Scfs_opgroup_add_depend {
 	SCFS_TYPE;
-	opgroup_id_t dependent;
-	opgroup_id_t dependency;
+	opgroup_id_t after;
+	opgroup_id_t before;
 };
 
 struct Scfs_opgroup_engage {

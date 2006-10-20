@@ -24,7 +24,7 @@
 struct opgroup {
 	opgroup_id_t id;
 	chdesc_t * head;
-	/* head_keep stays until we get a dependent */
+	/* head_keep stays until we get an after */
 	chdesc_t * head_keep;
 	chdesc_t * tail;
 	/* tail_keep stays until we are released */
@@ -34,8 +34,8 @@ struct opgroup {
 	uint32_t has_data:1;
 	uint32_t is_released:1;
 	uint32_t engaged_count:30;
-	uint32_t has_dependents:1;
-	uint32_t has_dependencies:1;
+	uint32_t has_afters:1;
+	uint32_t has_befores:1;
 	int flags;
 };
 
@@ -217,8 +217,8 @@ opgroup_t * opgroup_create(int flags)
 	op->has_data = 0;
 	op->is_released = 0;
 	op->engaged_count = 0;
-	op->has_dependents = 0;
-	op->has_dependencies = 0;
+	op->has_afters = 0;
+	op->has_befores = 0;
 	op->flags = flags;
 	state->opgroup = op;
 	state->engaged = 0;
@@ -276,32 +276,32 @@ int opgroup_sync(opgroup_t * opgroup)
 	return kfs_sync();
 }
 
-int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
+int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 {
 	int r = 0;
-	if(!dependent || !dependency)
+	if(!after || !before)
 		return -E_INVAL;
-	/* from dependency's perspective, we are adding a dependent
-	 *   => dependency must not be engaged [anywhere] if it is not atomic */
-	if(!(dependency->flags & OPGROUP_FLAG_ATOMIC) && dependency->engaged_count)
+	/* from before's perspective, we are adding an after
+	 *   => before must not be engaged [anywhere] if it is not atomic */
+	if(!(before->flags & OPGROUP_FLAG_ATOMIC) && before->engaged_count)
 		return -E_BUSY;
-	/* from dependent's perspective, we are adding a dependency
-	 *   => dependent must not be released (standard case) or have a dependent (noop case) */
-	assert(!dependent->tail_keep == dependent->is_released);
-	if(dependent->is_released || dependent->has_dependents)
+	/* from after's perspective, we are adding a before
+	 *   => after must not be released (standard case) or have an after (noop case) */
+	assert(!after->tail_keep == after->is_released);
+	if(after->is_released || after->has_afters)
 		return -E_INVAL;
 	/* it might not have a head if it's already been written to disk */
 	/* (in this case, it won't be engaged again since it will have
-	 * dependents now, so we don't need to recreate it) */
-	if(dependency->head)
-		/* notice that this can fail if there is a dependency cycle */
-		r = chdesc_add_depend(dependent->tail, dependency->head);
+	 * afters now, so we don't need to recreate it) */
+	if(before->head)
+		/* notice that this can fail if there is a before cycle */
+		r = chdesc_add_depend(after->tail, before->head);
 	if(r >= 0)
 	{
-		dependent->has_dependencies = 1;
-		dependency->has_dependents = 1;
-		if(dependency->head_keep)
-			chdesc_satisfy(&dependency->head_keep);
+		after->has_befores = 1;
+		before->has_afters = 1;
+		if(before->head_keep)
+			chdesc_satisfy(&before->head_keep);
 	}
 	else
 		kdprintf(STDERR_FILENO, "%s: chdesc_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
@@ -356,7 +356,7 @@ static int opgroup_update_top_bottom(void)
 			{
 			error_loop:
 				chdesc_satisfy(&top_keep);
-				/* satisfy a chdesc with dependencies... is this OK? */
+				/* satisfy a chdesc with befores... is this OK? */
 				chdesc_satisfy(&bottom);
 				return r;
 			}
@@ -410,8 +410,8 @@ int opgroup_engage(opgroup_t * opgroup)
 	assert(state->opgroup == opgroup);
 	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && (!opgroup->is_released || !opgroup->is_released))
 		return -E_INVAL;
-	/* can't engage it if it is not atomic and it has dependents */
-	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_dependents)
+	/* can't engage it if it is not atomic and it has afters */
+	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_afters)
 		return -E_INVAL;
 	/* can't engage it if it is atomic and has been released */
 	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->is_released)

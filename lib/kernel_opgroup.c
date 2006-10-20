@@ -55,10 +55,10 @@ int opgroup_sync(opgroup_id_t opgroup)
 	return pass_request(OPGROUP_IOCTL_SYNC, opgroup, -1, -1);
 }
 
-int opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency)
+int opgroup_add_depend(opgroup_id_t after, opgroup_id_t before)
 {
-	Dprintf("%s%s(%d, %d)\n", PREFIX, __FUNCTION__, dependent, dependency);
-	return pass_request(OPGROUP_IOCTL_ADD_DEPEND, dependent, dependency, -1);
+	Dprintf("%s%s(%d, %d)\n", PREFIX, __FUNCTION__, after, before);
+	return pass_request(OPGROUP_IOCTL_ADD_DEPEND, after, before, -1);
 }
 
 int opgroup_engage(opgroup_id_t opgroup)

@@ -598,8 +598,8 @@ static void serve_opgroup_create(envid_t envid, struct Scfs_opgroup_create * req
 
 static void serve_opgroup_add_depend(envid_t envid, struct Scfs_opgroup_add_depend * req)
 {
-	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->dependent, req->dependency);
-	int r = cfs_ipc_opgroup_add_depend(envid, req->dependent, req->dependency);
+	Dprintf("%s: %08x, %d, %d\n", __FUNCTION__, envid, req->after, req->before);
+	int r = cfs_ipc_opgroup_add_depend(envid, req->after, req->before);
 	ipc_send(envid, r, NULL, 0, NULL);
 }
 
