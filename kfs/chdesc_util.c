@@ -284,6 +284,53 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	return 0;
 }
 
+/* Split a change descriptor into two change descriptors, such that the original
+ * change descriptor depends only on a new NOOP change descriptor which has all
+ * the befores of the original change descriptor. If the original change
+ * descriptor has no befores, or only one before, this function does
+ * nothing. */
+static int chdesc_detach_befores(chdesc_t * chdesc)
+{
+	int r;
+	chdesc_t * tail;
+#if BDESC_EXTERN_AFTER_COUNT
+	panic("This function needs to be checked for working with ddesc->extern_after_count");
+#endif
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_DETACH_BEFORES, chdesc);
+	if(!chdesc->befores || !chdesc->befores->before.next)
+		return 0;
+	r = chdesc_create_noop_list(chdesc->block, chdesc->owner, &tail, NULL);
+	if(r < 0)
+		return r;
+	r = __chdesc_add_depend_fast(chdesc, tail);
+	if(r < 0)
+	{
+		chdesc_destroy(&tail);
+		return r;
+	}
+	while(chdesc->befores->before.desc != tail)
+	{
+		chdepdesc_t * dep = chdesc->befores;
+		chdesc->befores = dep->before.next;
+		dep->before.next->before.ptr = &chdesc->befores;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_BEFORE, chdesc, dep->before.desc);
+		__propagate_depend_remove(chdesc, dep->before.desc);
+		
+		dep->before.next = NULL;
+		dep->before.ptr = tail->befores_tail;
+		*tail->befores_tail = dep;
+		tail->befores_tail = &dep->before.next;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_BEFORE, tail, dep->before.desc);
+		__propagate_depend_add(tail, dep->before.desc);
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_AFTER, dep->after.desc, chdesc);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_AFTER, dep->after.desc, tail);
+		dep->after.desc = tail;
+	}
+	assert(!chdesc->befores->before.next);
+	return 0;
+}
+
 /* Duplicate a change descriptor to two or more blocks. The original change
  * descriptor will be turned into a NOOP change descriptor which depends on all
  * the duplicates, each of which will be attached to a different block. Just as
