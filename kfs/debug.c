@@ -257,16 +257,6 @@ static const struct param * params_chdesc_move[] = {
 	&param_offset,
 	&last_param
 };
-static const struct param * params_chdesc_collection[] = {
-	&param_count,
-	&param_chdescs,
-	&param_order,
-	&last_param
-};
-static const struct param * params_chdesc_order_destroy[] = {
-	&param_order,
-	&last_param
-};
 static const struct param * params_chdesc_overlap_attach[] = {
 	&param_recent,
 	&param_original,
@@ -281,17 +271,6 @@ static const struct param * params_chdesc_duplicate[] = {
 	&param_original,
 	&param_count,
 	&param_blocks,
-	&last_param
-};
-static const struct param * params_chdesc_split[] = {
-	&param_original,
-	&param_count,
-	&last_param
-};
-static const struct param * params_chdesc_merge[] = {
-	&param_count,
-	&param_chdescs,
-	&param_head,
 	&last_param
 };
 
@@ -341,16 +320,9 @@ static const struct opcode
 	opcode_chdesc_move =                OPCODE(KDB_CHDESC_MOVE,                params_chdesc_move),
 	opcode_chdesc_satisfy =             OPCODE(KDB_CHDESC_SATISFY,             params_chdesc_only),
 	opcode_chdesc_weak_collect =        OPCODE(KDB_CHDESC_WEAK_COLLECT,        params_chdesc_only),
-	opcode_chdesc_rollback_collection = OPCODE(KDB_CHDESC_ROLLBACK_COLLECTION, params_chdesc_collection),
-	opcode_chdesc_apply_collection =    OPCODE(KDB_CHDESC_APPLY_COLLECTION,    params_chdesc_collection),
-	opcode_chdesc_order_destroy =       OPCODE(KDB_CHDESC_ORDER_DESTROY,       params_chdesc_order_destroy),
-	opcode_chdesc_detach_befores =      OPCODE(KDB_CHDESC_DETACH_BEFORES,      params_chdesc_only),
-	opcode_chdesc_detach_afters =       OPCODE(KDB_CHDESC_DETACH_AFTERS,       params_chdesc_only),
 	opcode_chdesc_overlap_attach =      OPCODE(KDB_CHDESC_OVERLAP_ATTACH,      params_chdesc_overlap_attach),
 	opcode_chdesc_overlap_multiattach = OPCODE(KDB_CHDESC_OVERLAP_MULTIATTACH, params_chdesc_overlap_multiattach),
 	opcode_chdesc_duplicate =           OPCODE(KDB_CHDESC_DUPLICATE,           params_chdesc_duplicate),
-	opcode_chdesc_split =               OPCODE(KDB_CHDESC_SPLIT,               params_chdesc_split),
-	opcode_chdesc_merge =               OPCODE(KDB_CHDESC_MERGE,               params_chdesc_merge),
 	last_opcode = {0, NULL, NULL};
 
 /* opcode combinations */
@@ -406,16 +378,9 @@ static const struct opcode * opcodes_chdesc_info[] = {
 	&opcode_chdesc_move,
 	&opcode_chdesc_satisfy,
 	&opcode_chdesc_weak_collect,
-	&opcode_chdesc_rollback_collection,
-	&opcode_chdesc_apply_collection,
-	&opcode_chdesc_order_destroy,
-	&opcode_chdesc_detach_befores,
-	&opcode_chdesc_detach_afters,
 	&opcode_chdesc_overlap_attach,
 	&opcode_chdesc_overlap_multiattach,
 	&opcode_chdesc_duplicate,
-	&opcode_chdesc_split,
-	&opcode_chdesc_merge,
 	&last_opcode
 };
 

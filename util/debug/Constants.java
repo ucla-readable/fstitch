@@ -51,14 +51,7 @@ public interface Constants
 	public static final short KDB_CHDESC_MOVE = 301;
 	public static final short KDB_CHDESC_SATISFY = 302;
 	public static final short KDB_CHDESC_WEAK_COLLECT = 303;
-	public static final short KDB_CHDESC_ROLLBACK_COLLECTION = 304;
-	public static final short KDB_CHDESC_APPLY_COLLECTION = 305;
-	public static final short KDB_CHDESC_ORDER_DESTROY = 306;
-	public static final short KDB_CHDESC_DETACH_BEFORES = 307;
-	public static final short KDB_CHDESC_DETACH_AFTERS = 308;
 	public static final short KDB_CHDESC_OVERLAP_ATTACH = 309;
 	public static final short KDB_CHDESC_OVERLAP_MULTIATTACH = 310;
 	public static final short KDB_CHDESC_DUPLICATE = 311;
-	public static final short KDB_CHDESC_SPLIT = 312;
-	public static final short KDB_CHDESC_MERGE = 313;
 }
