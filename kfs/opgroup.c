@@ -208,9 +208,9 @@ opgroup_t * opgroup_create(int flags)
 	}
 	
 	if(!(op = malloc(sizeof(*op))))
-		goto error_1;
+		return NULL;
 	if(!(state = malloc(sizeof(*state))))
-		goto error_2;
+		goto error_op;
 	
 	op->id = current_scope->next_id++;
 	op->references = 1;
@@ -223,50 +223,45 @@ opgroup_t * opgroup_create(int flags)
 	state->opgroup = op;
 	state->engaged = 0;
 	
-	if(chdesc_create_noop_list(NULL, NULL, &op->head, NULL) < 0)
-		goto error_3;
-	if(chdesc_weak_retain(op->head, &op->head) < 0)
-		goto error_4;
 	if(chdesc_create_noop_list(NULL, NULL, &op->head_keep, NULL) < 0)
-		goto error_4;
+		goto error_state;
 	chdesc_claim_noop(op->head_keep);
-	if(chdesc_add_depend(op->head, op->head_keep) < 0)
-		goto error_5;
-	if(chdesc_create_noop_list(NULL, NULL, &op->tail, NULL) < 0)
-		goto error_6;
-	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
-		goto error_7;
-	if(chdesc_add_depend(op->head, op->tail) < 0)
-		goto error_7;
+	
 	if(chdesc_create_noop_list(NULL, NULL, &op->tail_keep, NULL) < 0)
-		goto error_8;
+		goto error_head_keep;
 	chdesc_claim_noop(op->tail_keep);
-	if(chdesc_add_depend(op->tail, op->tail_keep) < 0)
-		goto error_9;
+	
+	if(chdesc_create_noop_list(NULL, NULL, &op->tail, op->tail_keep, NULL) < 0)
+		goto error_tail_keep;
+	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
+		goto error_tail;
+	
+	assert(op->head_keep && op->tail); /* head_keep must be non-NULL for create_noop */
+	if(chdesc_create_noop_list(NULL, NULL, &op->head, op->head_keep, op->tail, NULL) < 0)
+		goto error_tail;
+	if(chdesc_weak_retain(op->head, &op->head) < 0)
+		goto error_head;
+	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
-		goto error_10;
+		goto error_head;
 	
 	return op;
 	
-error_10:
-	chdesc_remove_depend(op->tail, op->tail_keep);
-error_9:
-	chdesc_destroy(&op->tail_keep);
-error_8:
-	chdesc_remove_depend(op->head, op->tail);
-error_7:
-	chdesc_destroy(&op->tail);
-error_6:
+error_head:
 	chdesc_remove_depend(op->head, op->head_keep);
-error_5:
-	chdesc_destroy(&op->head_keep);
-error_4:
+	chdesc_remove_depend(op->head, op->tail);
 	chdesc_destroy(&op->head);
-error_3:
+error_tail:
+	chdesc_remove_depend(op->tail, op->tail_keep);
+	chdesc_destroy(&op->tail);
+error_tail_keep:
+	chdesc_destroy(&op->tail_keep);
+error_head_keep:
+	chdesc_destroy(&op->head_keep);
+error_state:
 	free(state);
-error_2:
+error_op:
 	free(op);
-error_1:
 	return NULL;
 }
 
@@ -319,30 +314,22 @@ static int opgroup_update_top_bottom(void)
 	int r, count = 0;
 	
 	/* create new top and bottom */
-	r = chdesc_create_noop_list(NULL, NULL, &top, NULL);
-	if(r < 0)
-		goto error_1;
 	r = chdesc_create_noop_list(NULL, NULL, &top_keep, NULL);
 	if(r < 0)
-		goto error_2;
+		return r;
 	chdesc_claim_noop(top_keep);
-	r = chdesc_add_depend(top, top_keep);
-	if(r < 0)
-		goto error_3;
+
 	r = chdesc_create_noop_list(NULL, NULL, &bottom, NULL);
 	if(r < 0)
-		goto error_4;
-	r = chdesc_add_depend(top, bottom);
+		goto error_top_keep;
+
+	assert(top_keep && bottom); /* top_keep must be non-NULL for create_noop */
+	r = chdesc_create_noop_list(NULL, NULL, &top, top_keep, bottom, NULL);
 	if(r < 0)
 	{
 		chdesc_destroy(&bottom);
-	error_4:
-		chdesc_remove_depend(top, top_keep);
-	error_3:
+	error_top_keep:
 		chdesc_destroy(&top_keep);
-	error_2:
-		chdesc_destroy(&top);
-	error_1:
 		return r;
 	}
 	
@@ -557,19 +544,9 @@ int opgroup_prepare_head(chdesc_t ** head)
 	
 	if(*head)
 	{
-		int r;
-		chdesc_t * nh;
-		r = chdesc_create_noop_list(NULL, NULL, &nh, NULL);
+		int r = chdesc_create_noop_list(NULL, NULL, head, current_scope->bottom, *head, NULL);
 		if(r < 0)
 			return r;
-		r = chdesc_add_depend(nh, current_scope->bottom);
-		if(r < 0)
-			return r;
-		r = chdesc_add_depend(nh, *head);
-		if(r < 0)
-			/* let it get cleaned up automatically */
-			return r;
-		*head = nh;
 	}
 	else
 		*head = current_scope->bottom;

@@ -822,10 +822,11 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
 		assert(!chdesc->tmp_next);
 }
 
-int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, chdesc_t * befores[])
+int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 	chdesc_t * chdesc;
 	size_t i;
+	int r;
 	
 	assert(tail);
 	
@@ -866,15 +867,18 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ch
 		bdesc_retain(block);
 	}
 	
-	for(i = 0; befores[i]; i++)
-		if(chdesc_add_depend_fast(chdesc, befores[i]) < 0)
-		{
-			chdesc_destroy(&chdesc);
-			return -E_NO_MEM;
-		}
-	*tail = chdesc;
-	
 	chdesc_free_push(chdesc);
+	
+	for(i = 0; i < nbefores; i++)
+		/* it is convenient to allow NULL and written chdescs,
+		   so make sure here to not add these as befores: */
+		if(befores[i] && !(befores[i]->flags & CHDESC_WRITTEN))
+			if((r = chdesc_add_depend_fast(chdesc, befores[i])) < 0)
+			{
+				chdesc_destroy(&chdesc);
+				return r;
+			}
+	*tail = chdesc;
 	
 	return 0;
 }
@@ -899,7 +903,7 @@ int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...
 		befores = static_befores;
 	else
 	{
-		befores = malloc((nbefores + 1) * sizeof(befores[0]));
+		befores = smalloc(nbefores * sizeof(befores[0]));
 		if(!befores)
 			return -E_NO_MEM;
 	}
@@ -909,10 +913,10 @@ int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...
 		befores[i] = va_arg(ap, chdesc_t *);
 	va_end(ap);
 	
-	r = chdesc_create_noop_array(block, owner, tail, befores);
+	r = chdesc_create_noop_array(block, owner, tail, nbefores, befores);
 	
 	if(befores != static_befores)
-		free(befores);
+		sfree(befores, nbefores * sizeof(befores[0]));
 	return r;
 }
 
@@ -2034,7 +2038,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	}
 	
 	if((*chdesc)->befores && (*chdesc)->afters)
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both afters and befores!\n", __FUNCTION__, __FILE__, __LINE__);
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying chdesc with both afters and befores! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
 	/* remove befores first, so chdesc_satisfy() won't just turn it to a NOOP */
 	while((*chdesc)->befores)
 		chdesc_dep_remove((*chdesc)->befores);

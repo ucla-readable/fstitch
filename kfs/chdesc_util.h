@@ -28,7 +28,4 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks);
 /* create change descriptors based on the diff of two data regions */
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head);
 
-/* Create two noops, one of which prevents the other from being satified. */
-int chdesc_create_blocked_noop(chdesc_t ** noophead, chdesc_t ** drain_plug);
-
 #endif /* __KUDOS_KFS_CHDESC_UTIL_H */

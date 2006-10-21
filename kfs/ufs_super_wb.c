@@ -3,6 +3,7 @@
 #include <lib/jiffies.h>
 #include <lib/stdio.h>
 #include <lib/string.h>
+#include <lib/vector.h>
 
 #include <kfs/sched.h>
 #include <kfs/ufs_super_wb.h>
@@ -252,17 +253,16 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
-	int r, satisfaction;
-	uint32_t sync_count = 0;
 	chdesc_t ** oldhead;
-	chdesc_t * noophead, * drain_plug;
+	vector_t * oldheads;
+	int r;
 
 	if (!head)
 		return -E_INVAL;
 
-	r = chdesc_create_blocked_noop(&noophead, &drain_plug);
-	if (r < 0)
-		return r;
+	oldheads = vector_create();
+	if (!oldheads)
+		return -E_NO_MEM;
 
 	linfo->syncing = 1;
 
@@ -270,94 +270,90 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 		oldhead = head;
 		r = ufs_super_wb_write_time(object, 0, oldhead);
 		if (r < 0)
-			goto sync_failed;
+			goto exit;
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
-		sync_count++;
 	}
 	if (linfo->dirty[WB_CSTOTAL]) {
 		oldhead = head;
 		r = ufs_super_wb_write_cstotal(object, 0, oldhead);
 		if (r < 0)
-			goto sync_failed;
+			goto exit;
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
-		sync_count++;
 	}
 	if (linfo->dirty[WB_FMOD]) {
 		oldhead = head;
 		r = ufs_super_wb_write_fmod(object, 0, oldhead);
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
 		if (r < 0)
-			goto sync_failed;
-		sync_count++;
+			goto exit;
 	}
 	if (linfo->dirty[WB_CLEAN]) {
 		oldhead = head;
 		r = ufs_super_wb_write_clean(object, 0, oldhead);
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
 		if (r < 0)
-			goto sync_failed;
-		sync_count++;
+			goto exit;
 	}
 	if (linfo->dirty[WB_RONLY]) {
 		oldhead = head;
 		r = ufs_super_wb_write_ronly(object, 0, oldhead);
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
 		if (r < 0)
-			goto sync_failed;
-		sync_count++;
+			goto exit;
 	}
 	if (linfo->dirty[WB_FSMNT]) {
 		oldhead = head;
 		r = ufs_super_wb_write_fsmnt(object, 0, oldhead);
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
 		if (r < 0)
-			goto sync_failed;
-		sync_count++;
+			goto exit;
 	}
 	if (linfo->dirty[WB_CGROTOR]) {
 		oldhead = head;
 		r = ufs_super_wb_write_cgrotor(object, 0, oldhead);
 		if (*oldhead) {
-			r = chdesc_add_depend(noophead, *oldhead);
+			r = vector_push_back(oldheads, *oldhead);
 			if (r < 0)
-				goto sync_failed;
+				goto exit;
 		}
 		if (r < 0)
-			goto sync_failed;
-		sync_count++;
+			goto exit;
 	}
 
+	if (vector_size(oldheads))
+	{
+		r = chdesc_create_noop_array(NULL, NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		if (r < 0)
+			goto exit;
+	}
 	r = 0;
 
-sync_failed:
-	if (sync_count)
-		*head = noophead;
-	satisfaction = chdesc_satisfy(&drain_plug);
-	assert(satisfaction >= 0);
+exit:
+	vector_destroy(oldheads);
 	linfo->syncing = 0;
 	return r;
 }

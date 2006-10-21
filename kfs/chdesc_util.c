@@ -5,6 +5,7 @@
 #include <lib/string.h>
 #include <lib/memdup.h>
 #include <lib/panic.h>
+#include <lib/vector.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -403,7 +404,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		case BIT:
 			for(i = 0; i != count; i++)
 			{
-				r = chdesc_create_noop_list(blocks[i], original->owner, &descs[i], NULL);
+				r = chdesc_create_noop_list(blocks[i], original->owner, &descs[i], tail, NULL);
 				if(r < 0)
 					goto fail_first;
 				descs[i]->bit.offset = original->bit.offset;
@@ -418,12 +419,6 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
-				if(tail)
-				{
-					r = chdesc_add_depend(descs[i], tail);
-					if(r < 0)
-						goto fail_later;
-				}
 			}
 			/* change the original to a NOOP with no block */
 			original->type = NOOP;
@@ -434,7 +429,7 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 		case BYTE:
 			for(i = 0; i != count; i++)
 			{
-				r = chdesc_create_noop_list(blocks[i], original->owner, &descs[i], NULL);
+				r = chdesc_create_noop_list(blocks[i], original->owner, &descs[i], tail, NULL);
 				if(r < 0)
 					goto fail_first;
 				descs[i]->byte.offset = original->byte.offset;
@@ -460,12 +455,6 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 				r = chdesc_add_depend(original, descs[i]);
 				if(r < 0)
 					goto fail_later;
-				if(tail)
-				{
-					r = chdesc_add_depend(descs[i], tail);
-					if(r < 0)
-						goto fail_later;
-				}
 			}
 			/* change the original to a NOOP with no block */
 			if(original->byte.data)
@@ -502,22 +491,22 @@ int chdesc_duplicate(chdesc_t * original, int count, bdesc_t ** blocks)
 /* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head)
 {
-	int count = 0, i = 0, r, start;
+	int i = 0, r, start;
 	uint8_t * old = (uint8_t *) olddata;
 	uint8_t * new = (uint8_t *) newdata;
-	chdesc_t * oldhead;
-	chdesc_t * newhead;
-	
+	vector_t * oldheads;
+
 	if(!old || !new || !head || length < 1)
 		return -E_INVAL;
 
-	/* newhead will depend on all created chdescs */
-	r = chdesc_create_noop_list(NULL, NULL, &newhead, NULL);
-	if(r < 0)
-		return r;
+	oldheads = vector_create();
+	if(!oldheads)
+		return -E_NO_MEM;
 
 	while(i < length)
 	{
+		chdesc_t * oldhead = *head; /* use the original head */
+
 		if(old[i] == new[i])
 		{
 			i++;
@@ -528,55 +517,43 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		while(i < length && old[i] != new[i])
 			i++;
 
-		/* use the original head */
-		oldhead = *head;
 		r = chdesc_create_byte(block, owner, offset + start, i - start, new + start, &oldhead);
 		if(r < 0)
 			goto chdesc_create_diff_failed;
 
-		/* add before to newly created chdesc */
-		r = __chdesc_add_depend_fast(newhead, oldhead);
-		if(r < 0)
-			goto chdesc_create_diff_failed;
-		count++;
+		if(oldhead)
+		{
+			r = vector_push_back(oldheads, oldhead);
+			if(r < 0)
+			{
+				chdesc_remove_depend(oldhead, *head);
+				chdesc_destroy(&oldhead);
+				goto chdesc_create_diff_failed;
+			}
+		}
 	}
 
-	if(count == 1)
+	if(vector_size(oldheads) == 1)
 	{
-		chdesc_remove_depend(newhead, oldhead); /* no longer needed */
-		*head = oldhead;
+		*head = (chdesc_t *) vector_elt_front(oldheads);
 	}
-	else if (count > 1)
-		*head = newhead;
+	else if (vector_size(oldheads) > 1)
+	{
+		/* *head depends on all created chdescs */
+		r = chdesc_create_noop_array(NULL, NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		if(r < 0)
+			goto chdesc_create_diff_failed;
+	}
+	vector_destroy(oldheads);
 	return 0;
 
 chdesc_create_diff_failed:
-	/* we can't just use chdesc_destroy(), because some of the
-	 * regions above may have crossed atomic boundaries... */
-	panic("%s() failed, and we don't know how to recover!\n", __FUNCTION__);
-	return r;
-}
-
-/* Create two noops, one of which prevents the other from being satisfied. */
-int chdesc_create_blocked_noop(chdesc_t ** noophead, chdesc_t ** drain_plug)
-{
-	int r;
-
-	if (!noophead || !drain_plug)
-		return -E_INVAL;
-
-	r = chdesc_create_noop_list(NULL, NULL, noophead, NULL);
-	if (r < 0)
-		return r;
-	r = chdesc_create_noop_list(NULL, NULL, drain_plug, NULL);
-	if (r < 0)
-		return r;
-	chdesc_claim_noop(*drain_plug);
-	r = chdesc_add_depend(*noophead, *drain_plug);
-	if (r < 0) {
-		chdesc_autorelease_noop(*drain_plug);
-		return r;
+	for(i = 0; i < vector_size(oldheads); i++)
+	{
+		chdesc_t * oldhead = (chdesc_t *) vector_elt(oldheads, i);
+		chdesc_remove_depend(oldhead, *head);
+		chdesc_destroy(&oldhead);
 	}
-
-	return 0;
+	vector_destroy(oldheads);
+	return r;
 }
