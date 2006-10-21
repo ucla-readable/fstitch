@@ -32,6 +32,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		return 0;
 	
 	/* find out how many chdescs are to be rolled back */
+	/* TODO: look into using ready_changes here? */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(!decider(scan, data))
 			count++;
@@ -192,7 +193,6 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
 		return -E_NO_MEM;
-	
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(scan->owner == bd)

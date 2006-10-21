@@ -641,12 +641,6 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 		
 		list_chdesc = list->before.desc;
 		
-		/* skip moved chdescs - they have just been added to this block
-		 * by chdesc_move() and already have proper overlap dependency
-		 * information with respect to the chdesc now arriving */
-		if(list_chdesc->flags & CHDESC_MOVED || list_chdesc == chdesc)
-			continue;
-		
 		r = chdesc_overlap_attach(chdesc, list_chdesc);
 		if(r < 0)
 			return r;

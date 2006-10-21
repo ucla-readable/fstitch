@@ -95,7 +95,6 @@ static const struct param
 	param_dd_count =    {"dd_count",    UINT32},
 	param_ddesc =       {"ddesc",       UHEX32},
 	param_depth =       {"depth",       UINT32},
-	param_destination = {"destination", UHEX32},
 	param_flags =       {"flags",       UHEX32},
 	param_free_next =   {"free_next",   UHEX32},
 	param_free_prev =   {"free_prev",   UHEX32},
@@ -250,13 +249,6 @@ static const struct param * params_chdesc_set_length[] = {
 	&param_length,
 	&last_param
 };
-static const struct param * params_chdesc_move[] = {
-	&param_chdesc,
-	&param_destination,
-	&param_target,
-	&param_offset,
-	&last_param
-};
 static const struct param * params_chdesc_overlap_attach[] = {
 	&param_recent,
 	&param_original,
@@ -265,12 +257,6 @@ static const struct param * params_chdesc_overlap_attach[] = {
 static const struct param * params_chdesc_overlap_multiattach[] = {
 	&param_chdesc,
 	&param_block,
-	&last_param
-};
-static const struct param * params_chdesc_duplicate[] = {
-	&param_original,
-	&param_count,
-	&param_blocks,
 	&last_param
 };
 
@@ -317,13 +303,11 @@ static const struct opcode
 	opcode_chdesc_set_free_prev =       OPCODE(KDB_CHDESC_SET_FREE_PREV,       params_chdesc_set_free_prev),
 	opcode_chdesc_set_free_next =       OPCODE(KDB_CHDESC_SET_FREE_NEXT,       params_chdesc_set_free_next),
 	opcode_chdesc_set_free_head =       OPCODE(KDB_CHDESC_SET_FREE_HEAD,       params_chdesc_only),
-	opcode_chdesc_move =                OPCODE(KDB_CHDESC_MOVE,                params_chdesc_move),
 	opcode_chdesc_satisfy =             OPCODE(KDB_CHDESC_SATISFY,             params_chdesc_only),
 	opcode_chdesc_weak_collect =        OPCODE(KDB_CHDESC_WEAK_COLLECT,        params_chdesc_only),
 	opcode_chdesc_detach_befores =      OPCODE(KDB_CHDESC_DETACH_BEFORES,      params_chdesc_only),
 	opcode_chdesc_overlap_attach =      OPCODE(KDB_CHDESC_OVERLAP_ATTACH,      params_chdesc_overlap_attach),
 	opcode_chdesc_overlap_multiattach = OPCODE(KDB_CHDESC_OVERLAP_MULTIATTACH, params_chdesc_overlap_multiattach),
-	opcode_chdesc_duplicate =           OPCODE(KDB_CHDESC_DUPLICATE,           params_chdesc_duplicate),
 	last_opcode = {0, NULL, NULL};
 
 /* opcode combinations */
@@ -376,13 +360,11 @@ static const struct opcode * opcodes_chdesc_alter[] = {
 	&last_opcode
 };
 static const struct opcode * opcodes_chdesc_info[] = {
-	&opcode_chdesc_move,
 	&opcode_chdesc_satisfy,
 	&opcode_chdesc_weak_collect,
 	&opcode_chdesc_detach_befores,
 	&opcode_chdesc_overlap_attach,
 	&opcode_chdesc_overlap_multiattach,
-	&opcode_chdesc_duplicate,
 	&last_opcode
 };
 

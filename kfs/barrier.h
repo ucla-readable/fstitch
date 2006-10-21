@@ -6,18 +6,16 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 
-/* forward chdescs which are at the bottom of one barrier zone to the top of the
- * next barrier zone, performing a revision prepare/revert and using synthetic
- * blocks to avoid unnecessary reads */
-int barrier_simple_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block);
+int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block);
 
 typedef struct {
 	BD_t *   target;
 	uint32_t number;
+	/* these fields are used internally */
+	bool _synthetic;
+	bdesc_t * _block;
 } multiple_forward_t;
 
-/* forward chdescs as in barrier_simple_forward(), but now copy change
- * descriptors with chdesc_duplicate() and write them to multiple blocks */
 int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block);
 
 #endif /* __KUDOS_KFS_BARRIER_H */

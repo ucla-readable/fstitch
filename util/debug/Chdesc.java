@@ -12,14 +12,12 @@ public class Chdesc
 	/* these flags must be kept in sync with kfs/chdesc.h */
 	public static final int FLAG_MARKED = 0x01;
 	public static final int FLAG_INSET = 0x02;
-	public static final int FLAG_MOVED = 0x04;
-	public static final int FLAG_ROLLBACK = 0x08;
-	public static final int FLAG_READY = 0x10;
-	public static final int FLAG_WRITTEN = 0x20;
-	public static final int FLAG_FREEING = 0x40;
-	public static final int FLAG_DATA = 0x80;
-	public static final int FLAG_BIT_NOOP = 0x100;
-	public static final int FLAG_OVERLAP = 0x200;
+	public static final int FLAG_ROLLBACK = 0x04;
+	public static final int FLAG_WRITTEN = 0x08;
+	public static final int FLAG_FREEING = 0x10;
+	public static final int FLAG_DATA = 0x20;
+	public static final int FLAG_BIT_NOOP = 0x40;
+	public static final int FLAG_OVERLAP = 0x80;
 	public static final int FLAG_DBWAIT = 0x8000;
 	
 	public final int address, opcode;
@@ -398,8 +396,6 @@ public class Chdesc
 			links += ",dashed,bold";
 		if((flags & FLAG_MARKED) != 0)
 			links += ",bold\",color=red";
-		else if((flags & FLAG_READY) != 0)
-			links += ",bold\",color=green3";
 		else
 			links += "\"";
 		if((flags & FLAG_FREEING) != 0)
@@ -454,12 +450,8 @@ public class Chdesc
 			names += " | MARKED";
 		if((flags & FLAG_INSET) != 0)
 			names += " | INSET";
-		if((flags & FLAG_MOVED) != 0)
-			names += " | MOVED";
 		if((flags & FLAG_ROLLBACK) != 0)
 			names += " | ROLLBACK";
-		if((flags & FLAG_READY) != 0)
-			names += " | READY";
 		if((flags & FLAG_WRITTEN) != 0)
 			names += " | WRITTEN";
 		if((flags & FLAG_FREEING) != 0)

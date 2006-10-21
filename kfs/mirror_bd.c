@@ -19,7 +19,7 @@
 #define both_good (info->bad_disk == -1)
 #define disk_bad (info->bad_disk != -1)
 
-/* The mirror device must be a barrier. We will use barrier_multiple_forward(). */
+/* The mirror device must be a barrier, because there are two distinct copies of the block below it. */
 
 struct mirror_info {
 	BD_t * bd[2];
@@ -223,9 +223,9 @@ static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	if(disk1_bad)
-		value0 = barrier_simple_forward(info->bd[0], block->number, object, block);
+		value0 = barrier_single_forward(info->bd[0], block->number, object, block);
 	else if(disk0_bad)
-		value1 = barrier_simple_forward(info->bd[1], block->number, object, block);
+		value1 = barrier_single_forward(info->bd[1], block->number, object, block);
 	else
 	{
 		multiple_forward_t forwards[2];
@@ -286,7 +286,6 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 	uint32_t numblocks0 = 0, numblocks1 = 0;
 	uint16_t blocksize, blocksize0 = 0, blocksize1 = 0;
 	uint16_t atomicsize0 = 0, atomicsize1 = 0;
-	uint16_t devlevel0 = 0, devlevel1 = 0;
 	int8_t bad_disk = -1;
 	BD_t * bd;
 
@@ -306,14 +305,12 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 		numblocks0 = CALL(disk0, get_numblocks);
 		blocksize0 = CALL(disk0, get_blocksize);
 		atomicsize0 = CALL(disk0, get_atomicsize);
-		devlevel0 = disk0->level;
 	}
 	if(bad_disk != 1)
 	{
 		numblocks1 = CALL(disk1, get_numblocks);
 		blocksize1 = CALL(disk1, get_blocksize);
 		atomicsize1 = CALL(disk1, get_atomicsize);
-		devlevel1 = disk1->level;
 	}
 	
 	/* block sizes must be the same */
@@ -327,6 +324,7 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 	bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
+	bd->level = 0;
 	
 	info = malloc(sizeof(struct mirror_info));
 	if(!info)
@@ -357,19 +355,16 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 	{
 		info->numblocks = MIN(numblocks0, numblocks1);
 		info->atomicsize = MIN(atomicsize0, atomicsize1);
-		bd->level = MAX(devlevel0, devlevel1);
 	}
 	else if(bad_disk == 1)
 	{
 		info->numblocks = numblocks0;
 		info->atomicsize = atomicsize0;
-		bd->level = devlevel0;
 	}
 	else
 	{
 		info->numblocks = numblocks1;
 		info->atomicsize = atomicsize1;
-		bd->level = devlevel1;
 	}
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
@@ -395,7 +390,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(bd);
 	uint32_t numblocks;
-	uint16_t blocksize, atomicsize, devlevel;
+	uint16_t blocksize, atomicsize;
 	int8_t good_disk = 1 - info->bad_disk;
 	int i, r, progress = 0;
 
@@ -428,13 +423,6 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 	if(numblocks < info->numblocks)
 	{
 		printf("mirror_bd: disk not big enough\n");
-		return -E_INVAL;
-	}
-
-	devlevel = newdevice->level;
-	if(devlevel > bd->level)
-	{
-		printf("mirror_bd: device level too large\n");
 		return -E_INVAL;
 	}
 

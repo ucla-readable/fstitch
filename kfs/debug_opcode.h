@@ -57,12 +57,10 @@
 #define KDB_CHDESC_SET_FREE_HEAD   225
 
 /* chdesc info (3xx) */
-#define KDB_CHDESC_MOVE                 301
-#define KDB_CHDESC_SATISFY              302
-#define KDB_CHDESC_WEAK_COLLECT         303
-#define KDB_CHDESC_DETACH_BEFORES       304
-#define KDB_CHDESC_OVERLAP_ATTACH       305
-#define KDB_CHDESC_OVERLAP_MULTIATTACH  306
-#define KDB_CHDESC_DUPLICATE            307
+#define KDB_CHDESC_SATISFY              301
+#define KDB_CHDESC_WEAK_COLLECT         302
+#define KDB_CHDESC_DETACH_BEFORES       303
+#define KDB_CHDESC_OVERLAP_ATTACH       304
+#define KDB_CHDESC_OVERLAP_MULTIATTACH  305
 
 #endif /* KUDOS_KFS_DEBUG_OPCODE_H */
