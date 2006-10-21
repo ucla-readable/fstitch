@@ -8,7 +8,6 @@ public class ChdescInfoModule extends Module
 		
 		addFactory(ChdescSatisfy.getFactory(input));
 		addFactory(ChdescWeakCollect.getFactory(input));
-		addFactory(ChdescDetachBefores.getFactory(input));
 		addFactory(ChdescOverlapAttach.getFactory(input));
 		addFactory(ChdescOverlapMultiattach.getFactory(input));
 	}

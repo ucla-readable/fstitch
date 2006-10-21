@@ -305,7 +305,6 @@ static const struct opcode
 	opcode_chdesc_set_free_head =       OPCODE(KDB_CHDESC_SET_FREE_HEAD,       params_chdesc_only),
 	opcode_chdesc_satisfy =             OPCODE(KDB_CHDESC_SATISFY,             params_chdesc_only),
 	opcode_chdesc_weak_collect =        OPCODE(KDB_CHDESC_WEAK_COLLECT,        params_chdesc_only),
-	opcode_chdesc_detach_befores =      OPCODE(KDB_CHDESC_DETACH_BEFORES,      params_chdesc_only),
 	opcode_chdesc_overlap_attach =      OPCODE(KDB_CHDESC_OVERLAP_ATTACH,      params_chdesc_overlap_attach),
 	opcode_chdesc_overlap_multiattach = OPCODE(KDB_CHDESC_OVERLAP_MULTIATTACH, params_chdesc_overlap_multiattach),
 	last_opcode = {0, NULL, NULL};
@@ -362,7 +361,6 @@ static const struct opcode * opcodes_chdesc_alter[] = {
 static const struct opcode * opcodes_chdesc_info[] = {
 	&opcode_chdesc_satisfy,
 	&opcode_chdesc_weak_collect,
-	&opcode_chdesc_detach_befores,
 	&opcode_chdesc_overlap_attach,
 	&opcode_chdesc_overlap_multiattach,
 	&last_opcode

@@ -221,15 +221,6 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 /* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
 void chdesc_update_ready_changes(chdesc_t * chdesc);
 
-/* hidden functions for use in chdesc_util.c */
-void __propagate_depend_add(chdesc_t * after, const chdesc_t * before);
-void __propagate_depend_remove(chdesc_t * after, const chdesc_t * before);
-int __ensure_bdesc_has_overlaps(bdesc_t * block);
-chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
-chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);
-int __chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before);
-int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
-
 uint32_t chdesc_register_stamp(BD_t * bd);
 void chdesc_release_stamp(uint32_t stamp);
 

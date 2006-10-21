@@ -669,14 +669,6 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return _chdesc_overlap_multiattach(chdesc, block->ddesc->overlaps);
 }
 
-void __propagate_depend_add(chdesc_t * after, const chdesc_t * before) __attribute__ ((alias("propagate_depend_add")));
-void __propagate_depend_remove(chdesc_t * after, const chdesc_t * before) __attribute__ ((alias("propagate_depend_remove")));
-int __ensure_bdesc_has_overlaps(bdesc_t * block) __attribute__ ((alias("ensure_bdesc_has_overlaps")));
-chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset) __attribute__ ((alias("ensure_bdesc_has_bit_changes")));
-chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset) __attribute__ ((alias("chdesc_bit_changes")));
-int __chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before) __attribute__((alias("chdesc_add_depend_fast")));
-int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block) __attribute__((alias("chdesc_overlap_multiattach")));
-
 void chdesc_link_all_changes(chdesc_t * chdesc)
 {
 	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
