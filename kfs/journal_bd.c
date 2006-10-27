@@ -619,7 +619,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(keep, NULL, NULL);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	/* FIXME: this can be improved! often it is not necessary... */
-	assert(info->keep && info->prev_cr); /* keep must be non-NULL for create_noop */
+	assert(info->keep); /* keep must be non-NULL for create_noop */
 	CREATE_NOOP(wait, NULL, info->keep, info->prev_cr, NULL);
 	CREATE_NOOP(hold, object, NULL); /* this one is managed */
 	CREATE_NOOP(safe, NULL, NULL);

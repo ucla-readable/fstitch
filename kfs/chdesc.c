@@ -598,7 +598,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(original->flags & CHDESC_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
-		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc with a rolled-back chdesc! (debug = %d)\n", KFS_DEBUG_COUNT());
+		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc (%p) with a rolled-back chdesc (%p)! (debug = %d)\n", recent, original, KFS_DEBUG_COUNT());
 		return -E_BUSY;
 	}
 	
@@ -641,6 +641,8 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 		
 		list_chdesc = list->before.desc;
 		
+		if(chdesc == list_chdesc)
+			continue;
 		r = chdesc_overlap_attach(chdesc, list_chdesc);
 		if(r < 0)
 			return r;
