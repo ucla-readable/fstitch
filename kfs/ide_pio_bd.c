@@ -542,7 +542,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	
 	BD_INIT(bd, ide_pio_bd, info);
 	
-	info->blockman = blockman_create(IDE_SECTSIZE);
+	info->blockman = blockman_create(IDE_SECTSIZE, NULL);
 	if(!info->blockman)
 	{
 		free(info->ra_cache);

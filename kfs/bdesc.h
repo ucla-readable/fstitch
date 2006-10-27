@@ -39,7 +39,8 @@ struct datadesc {
 	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;
-	uint16_t length;
+	uint16_t length, lock_count;
+	BD_t * lock_owner;
 };
 
 struct bdesc {

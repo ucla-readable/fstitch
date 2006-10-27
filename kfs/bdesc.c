@@ -79,6 +79,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->ddesc->manager = NULL;
 	bdesc->ddesc->managed_number = 0;
 	bdesc->ddesc->length = length;
+	bdesc->ddesc->lock_count = 0;
+	bdesc->ddesc->lock_owner = NULL;
 	return bdesc;
 }
 
@@ -147,6 +149,8 @@ void bdesc_release(bdesc_t ** bdesc)
 			hash_map_destroy((*bdesc)->ddesc->bit_changes);
 			if((*bdesc)->ddesc->manager)
 				blockman_remove((*bdesc)->ddesc);
+			if((*bdesc)->ddesc->lock_count || (*bdesc)->ddesc->lock_owner)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying locked block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			free((*bdesc)->ddesc->data);
 			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
 			free((*bdesc)->ddesc);

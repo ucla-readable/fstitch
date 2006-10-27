@@ -3,15 +3,18 @@
 
 #include <lib/hash_map.h>
 
+typedef void (*destroy_notify_t)(uint32_t block);
+
 struct blockman {
 	uint16_t length;
+	destroy_notify_t destroy_notify;
 	hash_map_t * map;
 };
 typedef struct blockman blockman_t;
 
 #include <kfs/bdesc.h>
 
-blockman_t * blockman_create(uint16_t length);
+blockman_t * blockman_create(uint16_t length, destroy_notify_t destroy_notify);
 void blockman_destroy(blockman_t ** blockman);
 
 int blockman_add(blockman_t * blockman, uint32_t number, datadesc_t * ddesc);

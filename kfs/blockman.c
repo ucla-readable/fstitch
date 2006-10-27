@@ -15,7 +15,7 @@
 #endif
 
 /* the length parameter is for calculating how many blocks each bdesc_t represents */
-blockman_t * blockman_create(uint16_t length)
+blockman_t * blockman_create(uint16_t length, destroy_notify_t destroy_notify)
 {
 	blockman_t * man = malloc(sizeof(*man));
 	if(!man)
@@ -27,6 +27,7 @@ blockman_t * blockman_create(uint16_t length)
 		return NULL;
 	}
 	man->length = length;
+	man->destroy_notify = destroy_notify;
 	return man;
 }
 
@@ -72,6 +73,8 @@ int blockman_remove(datadesc_t * ddesc)
 	if(ddesc->manager)
 	{
 		hash_map_erase(ddesc->manager->map, (void *) ddesc->managed_number);
+		if(ddesc->manager->destroy_notify)
+			ddesc->manager->destroy_notify(ddesc->managed_number);
 		ddesc->manager = NULL;
 	}
 	return 0;

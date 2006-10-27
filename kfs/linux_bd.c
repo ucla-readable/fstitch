@@ -759,7 +759,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 	
-	info->blockman = blockman_create(512);
+	info->blockman = blockman_create(512, NULL);
 	if (!info->blockman) {
 		bd_release(info->bdev);
 		blkdev_put(info->bdev);
