@@ -50,7 +50,6 @@ public interface Constants
 	
 	public static final short KDB_CHDESC_SATISFY = 301;
 	public static final short KDB_CHDESC_WEAK_COLLECT = 302;
-	public static final short KDB_CHDESC_DETACH_BEFORES = 303;
-	public static final short KDB_CHDESC_OVERLAP_ATTACH = 304;
-	public static final short KDB_CHDESC_OVERLAP_MULTIATTACH = 305;
+	public static final short KDB_CHDESC_OVERLAP_ATTACH = 303;
+	public static final short KDB_CHDESC_OVERLAP_MULTIATTACH = 304;
 }
