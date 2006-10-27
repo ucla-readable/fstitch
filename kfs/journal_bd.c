@@ -606,9 +606,9 @@ static int journal_bd_start_transaction(BD_t * object)
 	if(info->keep)
 		return 0;
 
-#define CREATE_NOOP(name, owner, befores...) \
+#define CREATE_NOOP(name, owner) \
 	do { \
-		r = chdesc_create_noop_list(NULL, owner, &info->name, befores); \
+		r = chdesc_create_noop_list(NULL, owner, &info->name, NULL); \
 		if(r < 0) \
 			goto fail_##name; \
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
@@ -616,14 +616,16 @@ static int journal_bd_start_transaction(BD_t * object)
 	} while(0)
 	
 	/* this order is important due to the error recovery code */
-	CREATE_NOOP(keep, NULL, NULL);
+	CREATE_NOOP(keep, NULL);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	/* FIXME: this can be improved! often it is not necessary... */
 	assert(info->keep); /* keep must be non-NULL for create_noop */
-	CREATE_NOOP(wait, NULL, info->keep, info->prev_cr, NULL);
-	CREATE_NOOP(hold, object, NULL); /* this one is managed */
-	CREATE_NOOP(safe, NULL, NULL);
-	CREATE_NOOP(done, NULL, NULL);
+	r = chdesc_create_noop_list(NULL, NULL, &info->wait, info->keep, info->prev_cr, NULL);
+	if(r < 0)
+		goto fail_wait;
+	CREATE_NOOP(hold, object); /* this one is managed */
+	CREATE_NOOP(safe, NULL);
+	CREATE_NOOP(done, NULL);
 
 	r = journal_bd_grab_slot(object);
 	if(r < 0)
