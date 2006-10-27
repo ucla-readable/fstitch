@@ -808,6 +808,13 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
 		assert(!chdesc->tmp_next);
 }
 
+/* NOOP chdescs may have:
+ * - NULL block and owner, in which case it is a "normal" NOOP
+ * - NULL block and non-NULL owner, in which case it will have a device level
+ *   and thus prevent its afters from going lower than that device
+ * - non-NULL block and owner, in which case it also makes the block dirty and
+ *   can prevent the block from being evicted from a cache */
+
 int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 	chdesc_t * chdesc;
@@ -884,6 +891,11 @@ int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...
 	while(va_arg(ap, chdesc_t *))
 		nbefores++;
 	va_end(ap);
+	/* TODO: consider doing this instead of copying the array */
+	/*
+		va_start(ap, tail);
+		&va_arg(ap, chdesc_t *)
+	*/
 	
 	if(nbefores <= STATIC_BEFORES_CAPACITY)
 		befores = static_befores;
