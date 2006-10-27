@@ -619,10 +619,11 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(keep, NULL);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	/* FIXME: this can be improved! often it is not necessary... */
-	assert(info->keep); /* keep must be non-NULL for create_noop */
+	assert(info->keep); /* keep must be non-NULL for chdesc_create_noop_list */
 	r = chdesc_create_noop_list(NULL, NULL, &info->wait, info->keep, info->prev_cr, NULL);
 	if(r < 0)
 		goto fail_wait;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, wait);
 	CREATE_NOOP(hold, object); /* this one is managed */
 	CREATE_NOOP(safe, NULL);
 	CREATE_NOOP(done, NULL);
