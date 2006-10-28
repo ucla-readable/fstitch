@@ -442,7 +442,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	return block;
 }
 
-static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	bdesc_t * block;
@@ -457,28 +457,17 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(info->keep && info->request_id != kfsd_get_request_id())
 		journal_bd_accept_request(object);
 	
-	block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+	block = CALL(info->bd, synthetic_read_block, number, count);
 	if(!block && info->keep)
 	{
 		/* we couldn't do the read... stop the transaction at the previous request and retry */
 		journal_bd_stop_transaction_previous(object);
-		block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+		block = CALL(info->bd, synthetic_read_block, number, count);
 		if(!block)
 			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't synthetic read block %d! (debug = %d)\n", number, KFS_DEBUG_COUNT());
 	}
 	
 	return block;
-}
-
-static int journal_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	
-	/* make sure it's a valid block */
-	if(number >= info->length)
-		return -E_INVAL;
-	
-	return CALL(info->bd, cancel_block, number);
 }
 
 static int journal_bd_grab_slot(BD_t * object)

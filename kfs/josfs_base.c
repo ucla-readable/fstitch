@@ -362,18 +362,11 @@ static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(info->ubd, read_block, number, 1);
 }
 
-static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("JOSFSDEBUG: josfs_synthetic_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, 1, synthetic);
-}
-
-static int josfs_cancel_synthetic_block(LFS_t * object, uint32_t number)
-{
-	Dprintf("JOSFSDEBUG: josfs_cancel_synthetic_block %u\n", number);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, cancel_block, number);
+	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)

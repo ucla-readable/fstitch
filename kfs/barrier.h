@@ -11,8 +11,7 @@ int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 typedef struct {
 	BD_t *   target;
 	uint32_t number;
-	/* these fields are used internally */
-	bool _synthetic;
+	/* this field is used internally */
 	bdesc_t * _block;
 } multiple_forward_t;
 

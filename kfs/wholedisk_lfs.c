@@ -85,14 +85,9 @@ static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, read_block, number, 1);
 }
 
-static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, synthetic_read_block, number, 1, synthetic);
-}
-
-static int wholedisk_cancel_synthetic_block(LFS_t * object, uint32_t number)
-{
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, cancel_block, number);
+	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t inode)

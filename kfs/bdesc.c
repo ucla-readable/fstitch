@@ -81,6 +81,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->ddesc->length = length;
 	bdesc->ddesc->lock_count = 0;
 	bdesc->ddesc->lock_owner = NULL;
+	bdesc->ddesc->synthetic = 0;
 	return bdesc;
 }
 

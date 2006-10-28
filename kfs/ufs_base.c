@@ -131,7 +131,6 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
-	bool synthetic;
 	uint32_t i, num;
 	bdesc_t * block;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -153,7 +152,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 		assert(r != 1); // This should not happen
 
 		if (wipe) {
-			block = CALL(info->ubd, synthetic_read_block, i, 1, &synthetic);
+			block = CALL(info->ubd, synthetic_read_block, i, 1);
 			// FIXME revert all previously allocated blocks?
 			if (!block)
 				return INVALID_BLOCK;
@@ -547,7 +546,6 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t i, blockno, offset;
 	int r, frags;
-	bool synthetic = 0;
 	bdesc_t * block, * newblock;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -580,7 +578,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		if (!block)
 			return INVALID_BLOCK;
 		bdesc_retain(block);
-		newblock = CALL(info->ubd, synthetic_read_block, blockno + i, 1, &synthetic);
+		newblock = CALL(info->ubd, synthetic_read_block, blockno + i, 1);
 		if (!newblock)
 			goto find_frags_new_home_failed;
 
@@ -746,18 +744,11 @@ static bdesc_t * ufs_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(info->ubd, read_block, number, 1);
 }
 
-static bdesc_t * ufs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * ufs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, 1, synthetic);
-}
-
-static int ufs_cancel_synthetic_block(LFS_t * object, uint32_t number)
-{
-	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, number);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, cancel_block, number);
+	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
 static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)

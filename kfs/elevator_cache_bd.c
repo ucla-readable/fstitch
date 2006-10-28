@@ -231,14 +231,6 @@ static int remove_block(struct cache_info * info, bdesc_t * block)
 	return 0;
 }
 
-static void remove_block_number(struct cache_info * info, uint32_t number)
-{
-	Dprintf("%s(%d)\n", __FUNCTION__, number);
-	struct elevator_slot * slot = lookup_block_slot(info, number, NULL);
-	if(slot)
-		remove_slot(slot);
-}
-
 static bdesc_t * advance_head(struct cache_info * info)
 {
 	bdesc_t * block = lookup_block_larger(info, info->head_pos);
@@ -369,7 +361,8 @@ static bdesc_t * elevator_cache_bd_read_block(BD_t * object, uint32_t number, ui
 	{
 		/* in the cache, use it */
 		assert(block->count == count);
-		return block;
+		if(!block->ddesc->synthetic)
+			return block;
 	}
 	
 	/* not in the cache, need to read it */
@@ -378,7 +371,7 @@ static bdesc_t * elevator_cache_bd_read_block(BD_t * object, uint32_t number, ui
 	return CALL(info->bd, read_block, number, count);
 }
 
-static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	bdesc_t * block;
@@ -393,28 +386,13 @@ static bdesc_t * elevator_cache_bd_synthetic_read_block(BD_t * object, uint32_t 
 	{
 		/* in the cache, use it */
 		assert(block->count == count);
-		*synthetic = 0;
 		return block;
 	}
 	
 	/* not in the cache, need to read it */
 	/* notice that we do not reset the head position here, even though
 	 * technically the head may have been moved - this is for fairness */
-	return CALL(info->bd, synthetic_read_block, number, count, synthetic);
-}
-
-static int elevator_cache_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	Dprintf("%s(%d)\n", __FUNCTION__, number);
-	
-	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
-		return -E_INVAL;
-	
-	remove_block_number(info, number);
-	
-	return CALL(info->bd, cancel_block, number);
+	return CALL(info->bd, synthetic_read_block, number, count);
 }
 
 static int elevator_cache_bd_write_block(BD_t * object, bdesc_t * block)

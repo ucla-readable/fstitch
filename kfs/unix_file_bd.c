@@ -83,24 +83,28 @@ static bdesc_t *
 unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
-	bdesc_t * ret;
-	int r;
+	bdesc_t * bdesc;
 	off_t seeked;
-
-	if(!count || number + count > info->blockcount)
-		return NULL;
-
-	ret = blockman_managed_lookup(info->blockman, number);
-	if(ret)
+	int r;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
 	{
-		assert(ret->count == count);
-		return ret;
+		assert(bdesc->count == count);
+		if(!bdesc->ddesc->synthetic)
+			return bdesc;
 	}
-
-	ret = bdesc_alloc(number, info->blocksize, count);
-	if(ret == NULL)
-		return NULL;
-	bdesc_autorelease(ret);
+	else
+	{
+		/* make sure it's a valid block */
+		if(!count || number + count > info->blockcount)
+			return NULL;
+		
+		bdesc = bdesc_alloc(number, info->blocksize, count);
+		if(bdesc == NULL)
+			return NULL;
+		bdesc_autorelease(bdesc);
+	}
 	
 	seeked = lseek(info->fd, number * info->blocksize, SEEK_SET);
 	if(seeked != number * info->blocksize)
@@ -108,27 +112,30 @@ unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 		perror("lseek");
 		assert(0);
 	}
-
-	r = read(info->fd, ret->ddesc->data, ret->ddesc->length);
-	if(r != ret->ddesc->length)
+	
+	r = read(info->fd, bdesc->ddesc->data, bdesc->ddesc->length);
+	if(r != bdesc->ddesc->length)
 	{
 		if(r < 0)
 			perror("read");
 		assert(0);
 	}
-
+	
 	if(block_log)
-		for (r = 0; r < count; r++)
+		for(r = 0; r < count; r++)
 			fprintf(block_log, "%p read %u %d\n", object, number + r, r);
-
-	r = blockman_managed_add(info->blockman, ret);
-	if(r < 0)
+	
+	if(bdesc->ddesc->synthetic)
+		bdesc->ddesc->synthetic = 0;
+	else if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
 		return NULL;
-	return ret;
+	
+	return bdesc;
 }
 
 static bdesc_t *
-unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -141,7 +148,6 @@ unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 
@@ -150,22 +156,12 @@ unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count
 		return NULL;
 	bdesc_autorelease(bdesc);
 
+	bdesc->ddesc->synthetic = 1;
+
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		return NULL;
 
-	*synthetic = 1;
-
 	return bdesc;
-}
-
-static int
-unix_file_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-		blockman_remove(ddesc);
-	return 0;
 }
 
 static int

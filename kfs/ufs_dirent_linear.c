@@ -85,7 +85,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	uint32_t offset, len, prev_offset, last_basep = 0, basep = 0;
 	int r;
 	uint8_t fs_type;
-	bool alloc = 0, synthetic = 0;
+	bool alloc = 0;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf || check_name(dirinfo.d_name) || offset < 0)
@@ -144,7 +144,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			uint32_t blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
 				return -E_UNSPECIFIED;
-			block = CALL(info->ubd, synthetic_read_block, blockno, 1, &synthetic);
+			block = CALL(info->ubd, synthetic_read_block, blockno, 1);
 			assert(block); // FIXME Leiz == Lazy
 			r = chdesc_create_init(block, info->ubd, head);
 			assert(r >= 0); // FIXME Leiz == Lazy

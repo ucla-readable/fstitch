@@ -38,16 +38,11 @@ struct BD {
 	DECLARE(BD_t, uint16_t, get_atomicsize);
 	DECLARE(BD_t, bdesc_t *, read_block, uint32_t number, uint16_t count);
 	/* This function is used between barriers. If the block is already in
-	 * memory, it is returned and *synthetic is set to 0. If not, it is not
-	 * read in from disk: rather, it is synthesized and *synthetic is set to
-	 * 1. Note that this behavior is only actually necessary at the terminal
-	 * BD, because this is where it really hurts to do unnecessary reads. */
-	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint16_t count, bool * synthetic);
-	/* This function cancels a synthesized block, so that if for some reason
-	 * the write which is required to follow a synthetic read cannot be
-	 * completed, the synthesized block will not be returned as a normal
-	 * block by a subsequent read_block call. */
-	DECLARE(BD_t, int, cancel_block, uint32_t number);
+	 * memory, it is returned. If not, it is not read in from disk: rather,
+	 * it is synthesized and its synthetic bit is set. Note that this
+	 * behavior is only actually necessary at the terminal BD, because this
+	 * is where it really hurts to do unnecessary reads. */
+	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint16_t count);
 	DECLARE(BD_t, int, write_block, bdesc_t * block);
 	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
 };
@@ -59,7 +54,6 @@ struct BD {
 	ASSIGN(bd, module, get_atomicsize); \
 	ASSIGN(bd, module, read_block); \
 	ASSIGN(bd, module, synthetic_read_block); \
-	ASSIGN(bd, module, cancel_block); \
 	ASSIGN(bd, module, write_block); \
 	ASSIGN(bd, module, flush); \
 }

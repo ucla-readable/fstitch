@@ -266,13 +266,11 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	DEFINE_WAIT(wait);
 	int waited = 0;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
-	bdesc_t * ret;
+	bdesc_t * bdesc;
 	struct bio *bio;
 	struct bio_vec *bv;
 	int vec_len;
-	int r;
-	int i;
-	int j;
+	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	static int infty = 10;
 	bdesc_t *blocks[READ_AHEAD_COUNT];
@@ -283,17 +281,19 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int read_ahead_count = READ_AHEAD_COUNT;
 
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
-	if (!count || number + count > info->blockcount) {
-		printk(KERN_ERR "bailing on read 1\n");
-		return NULL;
-	}
 
-	ret = blockman_managed_lookup(info->blockman, number);
-	if (ret)
-	{
-		assert(ret->count == count);
-		KDprintk(KERN_ERR "already got it. done w/ read\n");
-		return ret;
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if (bdesc) {
+		assert(bdesc->count == count);
+		if (!bdesc->ddesc->synthetic) {
+			KDprintk(KERN_ERR "already got it. done w/ read\n");
+			return bdesc;
+		}
+	} else {
+		if (!count || number + count > info->blockcount) {
+			printk(KERN_ERR "bailing on read 1\n");
+			return NULL;
+		}
 	}
 
 	KDprintk(KERN_ERR "starting real read work\n");
@@ -304,7 +304,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
 	// assert((count * info->blocksize) <= 2048); Why was this assert here?
-	if (count != 4) read_ahead_count = 1;
+	if (count != 4)
+		read_ahead_count = 1;
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	start = current_kernel_time();
 #endif
@@ -313,19 +314,27 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		datadesc_t * dd;
 
 		dd = blockman_lookup(info->blockman, j_number);
-		if (dd) {
+		if (dd && !dd->synthetic) {
 			blocks[j] = NULL;
 			continue;
+		} else if (dd) {
+			if(bdesc->ddesc == dd)
+				blocks[j] = bdesc;
+			else {
+				/* blockman_managed_lookup? */
+				blocks[j] = bdesc_alloc_wrap(dd, j_number, dd->length / info->blockman->length);
+				if (blocks[j] == NULL)
+					return NULL;
+				bdesc_autorelease(blocks[j]);
+			}
+		} else {
+			blocks[j] = bdesc_alloc(j_number, info->blocksize, count);
+			if (blocks[j] == NULL)
+				return NULL;
+			bdesc_autorelease(blocks[j]);
 		}
-
-		blocks[j] = bdesc_alloc(j_number, info->blocksize, count);
-		if (blocks[j] == NULL)
-			return NULL;
-		bdesc_autorelease(blocks[j]);
 	
-		vec_len = (count * info->blocksize) / 4096;
-		if ((count * info->blocksize) % 4096)
-			vec_len++;
+		vec_len = (count * info->blocksize + 4095) / 4096;
 		assert(vec_len == 1);
 
 		bio = bio_alloc(GFP_KERNEL, vec_len);
@@ -446,7 +455,6 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 				if (len == 0)
 					len = 4096;
 			}
-			// assert(len <= 2048); Why was this assert here?
 
 			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
 
@@ -461,6 +469,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		bio_iovec_idx(bio, i)->bv_len = 0;
 		bio_iovec_idx(bio, i)->bv_offset = 0;
 	}
+	private->bdesc->ddesc->synthetic = 0;
 
 	if (dir == WRITE)
 		free(private);
@@ -484,9 +493,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	return error;
 }
 
-static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
-                                               uint16_t count,
-                                               bool * synthetic)
+static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -495,7 +502,6 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 	
@@ -508,24 +514,12 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
+	bdesc->ddesc->synthetic = 1;
+	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		return NULL;
 	
-	*synthetic = 1;
-	
 	return bdesc;
-}
-
-static int linux_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-	{
-		assert(!ddesc->all_changes);
-		blockman_remove(ddesc);
-	}
-	return 0;
 }
 
 static int linux_bd_write_block(BD_t * object, bdesc_t * block)

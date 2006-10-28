@@ -69,14 +69,9 @@ static bdesc_t * opgroup_lfs_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_block, number);
 }
 
-static bdesc_t * opgroup_lfs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * opgroup_lfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, synthetic_lookup_block, number, synthetic);
-}
-
-static int opgroup_lfs_cancel_synthetic_block(LFS_t * object, uint32_t number)
-{
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, cancel_synthetic_block, number);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, synthetic_lookup_block, number);
 }
 
 static fdesc_t * opgroup_lfs_lookup_inode(LFS_t * object, inode_t ino)

@@ -129,17 +129,20 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number, uint16_t c
 	if(block)
 	{
 		assert(block->count == count);
-		return block;
+		if(!block->ddesc->synthetic)
+			return block;
 	}
-	
-	/* make sure it's a valid block */
-	if(!count || number + count > info->numblocks)
-		return NULL;
-	
-	block = bdesc_alloc(number, info->blocksize, count);
-	if(!block)
-		return NULL;
-	bdesc_autorelease(block);
+	else
+	{
+		/* make sure it's a valid block */
+		if(!count || number + count > info->numblocks)
+			return NULL;
+
+		block = bdesc_alloc(number, info->blocksize, count);
+		if(!block)
+			return NULL;
+		bdesc_autorelease(block);
+	}
 	
 	if(disk0_bad)
 		orig = try_read(object, number, count, 1);
@@ -165,7 +168,9 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number, uint16_t c
 	assert(block->ddesc->length == orig->ddesc->length);
 	memcpy(block->ddesc->data, orig->ddesc->data, orig->ddesc->length);
 	
-	if(blockman_managed_add(info->blockman, block) < 0)
+	if(block->ddesc->synthetic)
+		block->ddesc->synthetic = 0;
+	else if(blockman_managed_add(info->blockman, block) < 0)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
@@ -173,7 +178,7 @@ static bdesc_t * mirror_bd_read_block(BD_t * object, uint32_t number, uint16_t c
 }
 
 /* we are a barrier, so just synthesize it if it's not already in this zone */
-static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -182,7 +187,6 @@ static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, 
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 	
@@ -195,22 +199,13 @@ static bdesc_t * mirror_bd_synthetic_read_block(BD_t * object, uint32_t number, 
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
+	bdesc->ddesc->synthetic = 1;
+	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
-	*synthetic = 1;
-	
 	return bdesc;
-}
-
-static int mirror_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct mirror_info * info = (struct mirror_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-		blockman_remove(ddesc);
-	return 0;
 }
 
 static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
@@ -452,7 +447,6 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 	
 	for(i = 0; i < info->numblocks; i++)
 	{
-		bool synthetic;
 		bdesc_t * source;
 		bdesc_t * destination;
 		chdesc_t * head = NULL;
@@ -477,7 +471,7 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 			return -E_UNSPECIFIED;
 		}
 
-		destination = CALL(newdevice, synthetic_read_block, i, 1, &synthetic);
+		destination = CALL(newdevice, synthetic_read_block, i, 1);
 		if(!destination)
 		{
 			printf("\nmirror_bd: uh oh, error getting block %d on sync\n", i);
@@ -488,8 +482,6 @@ int mirror_bd_add_device(BD_t * bd, BD_t * newdevice)
 		r = chdesc_create_full(destination, newdevice, source->ddesc->data, &head);
 		if(r < 0)
 		{
-			if(synthetic)
-				CALL(newdevice, cancel_block, i);
 			modman_dec_bd(newdevice, bd);
 			return r;
 		}

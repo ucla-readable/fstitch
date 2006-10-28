@@ -514,18 +514,11 @@ static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(info->ubd, read_block, number, 1);
 }
 
-static bdesc_t * ext2_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * ext2_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("EXT2DEBUG: ext2_synthetic_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, 1, synthetic);
-}
-
-static int ext2_cancel_synthetic_block(LFS_t * object, uint32_t number)
-{
-	Dprintf("EXT2DEBUG: ext2_cancel_synthetic_block %u\n", number);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, cancel_block, number);
+	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
@@ -1191,8 +1184,8 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	uint32_t new_prev_len, basep = 0, prev_basep = 0, new_block;
 	int r = 0;
 	int newdir = 0;
-	bool synthetic = 0;
 	bdesc_t * block;
+	chdesc_t * prev_head;
 	
 	if (parent->f_inode.i_size == 0)
 		newdir = 1;	
@@ -1231,27 +1224,22 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	new_block = ext2_allocate_block(object, (fdesc_t *) parent, 1, head);
 	if (new_block == INVALID_BLOCK)
 		return -E_INVAL;
-	block = CALL(info->ubd, synthetic_read_block, new_block, 1, &synthetic);
+	/* FIXME: these errors should all free the block we allocated! */
+	block = CALL(info->ubd, synthetic_read_block, new_block, 1);
 	if (block == NULL)
 		return -E_NO_DISK;
-	if (synthetic == 1) {
-		chdesc_t * prev_head = *head;
-		r = chdesc_create_init(block, info->ubd, head);
-		*head = prev_head;
-		if (r < 0) {
-			(void) CALL(info->ubd, cancel_block, new_block);
-			return r;
-		}
-		r = CALL(info->ubd, write_block, block);
-		if (r < 0) {
-			(void) CALL(info->ubd, cancel_block, new_block);
-			return r;
-		}
-	}
+	r = chdesc_create_init(block, info->ubd, head);
+	if (r < 0)
+		return r;
+	r = CALL(info->ubd, write_block, block);
+	if (r < 0)
+		return r;
 	parent->f_inode.i_size += EXT2_BLOCK_SIZE;
+	prev_head = *head;
 	r = ext2_append_file_block(object, (fdesc_t *) parent, new_block, head);
 	if (r < 0)
 		return r;
+	*head = prev_head;
 	
 	if (newdir)
 	{	//fix the size of the dirent:
@@ -1938,14 +1926,13 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 		uint32_t jump_block_no;
 		bdesc_t * jump_block;
 		uint32_t jump_basep = prev_basep + rec_len / 2;
-		bool synthetic = 0;
 		jump_basep -= jump_basep % EXT2_BLOCK_SIZE;
 		jump_dirent.inode = 0;
 		jump_dirent.rec_len = (uint16_t)(rec_len - (jump_basep - prev_basep));
 		jump_block_no = get_file_block(object, dir_file, jump_basep);
 		if (jump_block_no == INVALID_BLOCK )
 			return -E_UNSPECIFIED;
-		jump_block = CALL(info->ubd, synthetic_read_block, jump_block_no, 1, &synthetic);
+		jump_block = CALL(info->ubd, synthetic_read_block, jump_block_no, 1);
 		if (jump_block == NULL)
 			return -E_UNSPECIFIED;
 		if ((r = chdesc_create_byte(jump_block, info->ubd, 0, 6, &jump_dirent, head) < 0))
@@ -2273,7 +2260,6 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 	int r = 0;
 	uint32_t new_block_no;
 	bdesc_t * new_block;
-	bool synthetic = 0;
 	
 	if (name_len > EXT2_BLOCK_SIZE)
 		return -E_NAME_TOO_LONG;
@@ -2283,7 +2269,7 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 
 	//TODO dont assume this is written after this function returns! (BAD!!)
 	f->f_inode.i_block[0] = new_block_no;
-	new_block = CALL(info->ubd, synthetic_read_block, new_block_no, 1, &synthetic);
+	new_block = CALL(info->ubd, synthetic_read_block, new_block_no, 1);
 	if (!new_block)
 		return -E_UNSPECIFIED;
 

@@ -21,7 +21,6 @@
 
 int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block)
 {
-	bool synthetic;
 	bdesc_t * target_block;
 	chdesc_t * head = NULL;
 	chdesc_t * scan;
@@ -31,7 +30,7 @@ int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	if(!block->ddesc->all_changes)
 		return 0;
 	
-	target_block = CALL(target, synthetic_read_block, number, 1, &synthetic);
+	target_block = CALL(target, synthetic_read_block, number, 1);
 	if(!target_block)
 		return -E_UNSPECIFIED;
 	
@@ -104,14 +103,11 @@ error_chdesc:
 	}
 	chdesc_destroy(&head);
 error_block:
-	if(synthetic)
-		CALL(target, cancel_block, number);
 	return r;
 }
 
 int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block)
 {
-#define synthetic forwards[i]._synthetic
 #define target_block forwards[i]._block
 	chdesc_t ** heads;
 	chdesc_t * head;
@@ -131,7 +127,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	
 	for(i = 0; i != nforwards; i++)
 	{
-		target_block = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, 1, &synthetic);
+		target_block = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, 1);
 		if(!target_block)
 			goto error_block;
 		if(block == target_block)
@@ -142,7 +138,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	/* prepare the block */
 	r = revision_tail_prepare(block, barrier);
 	if(r < 0)
-		goto error_blocks;
+		goto error_block;
 	
 	for(i = 0; i != nforwards; i++)
 	{
@@ -215,12 +211,7 @@ error_chdescs:
 error_chdesc:
 	while(i--)
 		chdesc_destroy(&heads[i]);
-error_blocks:
-	i = nforwards;
 error_block:
-	while(i--)
-		if(synthetic)
-			CALL(forwards[i].target, cancel_block, forwards[i].number);
 	free(heads);
 	return r;
 }

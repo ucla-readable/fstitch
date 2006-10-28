@@ -86,7 +86,7 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uin
 	return new_bdesc;
 }
 
-static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	bdesc_t * bdesc, * new_bdesc;
@@ -95,7 +95,7 @@ static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t n
 	if(!count || number + count > info->block_count)
 		return NULL;
 	
-	bdesc = CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count, synthetic);
+	bdesc = CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
 	if(!bdesc)
 		return NULL;
 	
@@ -105,17 +105,6 @@ static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t n
 	bdesc_autorelease(new_bdesc);
 	
 	return new_bdesc;
-}
-
-static int block_resizer_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
-	
-	/* make sure it's a valid block */
-	if(number >= info->block_count)
-		return -E_INVAL;
-	
-	return CALL(info->bd, cancel_block, number * info->merge_count);
 }
 
 static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)

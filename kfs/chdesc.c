@@ -1486,6 +1486,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	/* make sure our block sticks around */
 	bdesc_retain(block);
+	block->ddesc->synthetic = 0;
 	
 	return 0;
 }
@@ -1597,6 +1598,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	
 	/* make sure our block sticks around */
 	bdesc_retain(block);
+	block->ddesc->synthetic = 0;
 	
 	return 0;
 	

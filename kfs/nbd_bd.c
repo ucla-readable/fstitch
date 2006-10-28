@@ -132,25 +132,28 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		return bdesc;
+		if(!bdesc->ddesc->synthetic)
+			return bdesc;
+	}
+	else
+	{
+		/* make sure it's a valid block */
+		if(!count || number + count > info->length)
+			return NULL;
+
+		bdesc = bdesc_alloc(number, info->blocksize, count);
+		if(!bdesc)
+			return NULL;
+		bdesc_autorelease(bdesc);
 	}
 	
-	/* make sure it's a valid block */
-	if(!count || number + count > info->length)
-		return NULL;
+	/* switch to network byte order */
+	number = htonl(number);
 	
 	for(tries = 0; tries != NBD_RETRIES; tries++)
 	{
 		uint8_t command = 0;
 		int r;
-		
-		bdesc = bdesc_alloc(number, info->blocksize, count);
-		if(!bdesc)
-			return NULL;
-		bdesc_autorelease(bdesc);
-		
-		/* switch to network byte order */
-		number = htonl(number);
 		
 		/* read it */
 		r = write(info->fd, &command, 1);
@@ -169,8 +172,9 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 		if(r != info->blocksize)
 			goto error;
 		
-		r = blockman_managed_add(info->blockman, bdesc);
-		if(r < 0)
+		if(bdesc->ddesc->synthetic)
+			bdesc->ddesc->synthetic = 0;
+		else if(blockman_managed_add(info->blockman, bdesc) < 0)
 			/* kind of a waste of the read... but we have to do it */
 			return NULL;
 		
@@ -185,7 +189,7 @@ static bdesc_t * nbd_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	return NULL;
 }
 
-static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -194,7 +198,6 @@ static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, uin
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 	
@@ -207,22 +210,13 @@ static bdesc_t * nbd_bd_synthetic_read_block(BD_t * object, uint32_t number, uin
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
+	bdesc->ddesc->synthetic = 1;
+	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
-	*synthetic = 1;
-	
 	return bdesc;
-}
-
-static int nbd_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct nbd_info * info = (struct nbd_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-		blockman_remove(ddesc);
-	return 0;
 }
 
 static int nbd_bd_write_block(BD_t * object, bdesc_t * block)

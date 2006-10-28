@@ -441,7 +441,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
-			bool synthetic;
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
 
 			save_head = prev_head;
@@ -452,7 +451,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 				goto uhfs_write_written_exit;
 
 			/* get the block to zero it */
-			block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
+			block = CALL(state->lfs, synthetic_lookup_block, number);
 			if (!block)
 			{
 				no_block:
@@ -473,8 +472,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			r = chdesc_create_init(block, bd, &prev_head);
 			if (r < 0)
 			{
-				if (synthetic)
-					CALL(state->lfs, cancel_synthetic_block, number);
 				goto no_block;
 			}
 			/* note that we do not write it - we will write it later */
@@ -512,40 +509,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			else
 			{
 				/* Since the entire block is to be overwritten we can
-				 * avoid a read and do a synthetic read. However,
-				 * we must init the disk so this introduces the possibility
-				 * that we order writes to write the zeros and then the data.
-				 * We could crash etc before the data write, corrupting the
-				 * file data! On the other hand, this removes the need to
-				 * read; a big win for randomized file overwritting. */
-				bool synthetic;
-				block = CALL(state->lfs, synthetic_lookup_block, number, &synthetic);
+				 * avoid a read and do a synthetic read. */
+				block = CALL(state->lfs, synthetic_lookup_block, number);
 				if (!block)
-				{
-					if (synthetic)
-						CALL(state->lfs, cancel_synthetic_block, number);
 					goto uhfs_write_written_exit;
-				}
-
-				if (synthetic)
-				{
-					r = opgroup_prepare_head(&prev_head);
-					/* can we do better than this? */
-					assert(r >= 0);
-
-					/* save the tail */
-					tail = prev_head;
-
-					r = chdesc_create_init(block, bd, &prev_head);
-					if (r < 0)
-						goto uhfs_write_written_exit;
-
-					uhfs_mark_data(prev_head, tail);
-
-					r = opgroup_finish_head(prev_head);
-					/* can we do better than this? */
-					assert(r >= 0);
-				}
 			}
 		}
 
