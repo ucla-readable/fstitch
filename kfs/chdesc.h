@@ -7,8 +7,6 @@
 
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
-/* values: 0 (disable), 1 (enable) */
-#define CHDESC_CYCLE_CHECK 1
 
 /* Set to allow chdesc data omittance when chdesc data is not required
  * NOTE: data omittance currently incurs a significant slow down

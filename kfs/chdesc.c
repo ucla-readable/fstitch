@@ -13,6 +13,9 @@
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 
+/* Set to check for chdesc dependency cycles. Values: 0 (disable), 1 (enable) */
+#define CHDESC_CYCLE_CHECK 0
+
 /* Change descriptor multigraphs allow more than one dependency between the same
  * two change descriptors. This currently saves us the trouble of making sure we
  * don't create a duplicate dependency between chdescs, though it also causes us
