@@ -17,7 +17,7 @@
 #include <kfs/revision.h>
 
 // define as 1 to make writes and syncs non-synchronous
-#define RECKLESS_WRITE_SPEED 0
+#define RECKLESS_WRITE_SPEED 1
 
 // block io activity logging
 static FILE * block_log = NULL;
