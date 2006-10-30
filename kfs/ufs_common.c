@@ -597,7 +597,7 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	struct UFS_csum * csum;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
-	chdesc_t * oldheads_array[3];
+	chdesc_t * oldheads_array[3] = {NULL, NULL, NULL};
 	chdesc_t ** oldheads = oldheads_array;
 	chdesc_t ** oldhead;
 	int r;
@@ -618,7 +618,8 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	r = CALL(info->parts.p_cg, write_cs, cyl, &sum, head);
 	if (r < 0)
 		return r;
-	*(oldheads++) = *head;
+	if (*head != *oldhead)
+		*(oldheads++) = *head;
 
 	// Update cylinder summary area
 	head = oldhead;
@@ -633,7 +634,8 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 			csum, head);
 	if (r < 0)
 		return r;
-	*(oldheads++) = *head;
+	if (*head != *oldhead)
+		*(oldheads++) = *head;
 
 	r = CALL(info->ubd, write_block, info->csum_block);
 	if (r < 0)
@@ -648,8 +650,14 @@ int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int ni
 	r = CALL(info->parts.p_super, write_cstotal, &sum, head);
 	if (r < 0)
 		return r;
-	*(oldheads++) = *head;
+	if (*head != *oldhead)
+		*(oldheads++) = *head;
 
+	if (oldheads == oldheads_array)
+	{
+		*head = NULL;
+		return 0;
+	}
 	return chdesc_create_noop_array(NULL, NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
 }
 
