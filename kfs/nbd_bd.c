@@ -336,7 +336,7 @@ BD_t * nbd_bd(const char * address, uint16_t port)
 	
 	bd->level = 0;
 	
-	info->blockman = blockman_create(info->blocksize, NULL);
+	info->blockman = blockman_create(info->blocksize, NULL, NULL);
 	if(!info->blockman)
 		goto error_connect;
 	

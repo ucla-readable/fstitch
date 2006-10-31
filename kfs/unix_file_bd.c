@@ -313,7 +313,7 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize, NULL);
+	info->blockman = blockman_create(blocksize, NULL, NULL);
 	if(!info->blockman)
 	{
 		close(info->fd);

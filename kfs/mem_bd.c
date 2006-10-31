@@ -223,7 +223,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize, NULL);
+	info->blockman = blockman_create(blocksize, NULL, NULL);
 	if (!info->blockman) {
 		free(info->blocks);
 		free(info);

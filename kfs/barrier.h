@@ -17,4 +17,7 @@ typedef struct {
 
 int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD_t * barrier, bdesc_t * block);
 
+int barrier_lock_block(bdesc_t * block, BD_t * owner);
+int barrier_unlock_block(bdesc_t * block, BD_t * owner);
+
 #endif /* __KUDOS_KFS_BARRIER_H */

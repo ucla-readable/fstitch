@@ -277,7 +277,13 @@ static int mirror_bd_destroy(BD_t * bd)
 
 /* TODO: implement this. note that we will need to fix synthetic reads as
  * well, so we can lock both blocks below us efficiently and correctly. */
-static void mirror_bd_block_destroy(uint32_t block)
+/* TODO: also, when a new mirror branch comes online, we need to iterate
+ * over blockman and pull in (synthetic) blocks to lock on it */
+/* TODO: whenever we load a block, synthetic or not, we should lock the
+ * block(s) below us that correspond to it */
+/* TODO: when a mirror branch goes offline, we need to unlock all our
+ * locked blocks on it */
+static void mirror_bd_block_destroy(BD_t * owner, uint32_t block)
 {
 }
 
@@ -334,7 +340,7 @@ BD_t * mirror_bd(BD_t * disk0, BD_t * disk1, uint8_t stride)
 		return NULL;
 	}
 	
-	info->blockman = blockman_create(blocksize, mirror_bd_block_destroy);
+	info->blockman = blockman_create(blocksize, bd, mirror_bd_block_destroy);
 	if(!info->blockman)
 	{
 		free(info);

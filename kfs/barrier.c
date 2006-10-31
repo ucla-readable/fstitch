@@ -215,3 +215,21 @@ error_block:
 	free(heads);
 	return r;
 }
+
+int barrier_lock_block(bdesc_t * block, BD_t * owner)
+{
+	if(block->ddesc->lock_owner && block->ddesc->lock_owner != owner)
+		return -E_BUSY;
+	block->ddesc->lock_owner = owner;
+	block->ddesc->lock_count++;
+	return 0;
+}
+
+int barrier_unlock_block(bdesc_t * block, BD_t * owner)
+{
+	if(!block->ddesc->lock_owner || block->ddesc->lock_owner != owner)
+		return -E_INVAL;
+	if(!--block->ddesc->lock_count)
+		block->ddesc->lock_owner = NULL;
+	return 0;
+}

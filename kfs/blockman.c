@@ -3,6 +3,7 @@
 #include <lib/kdprintf.h>
 #include <lib/hash_map.h>
 
+#include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/blockman.h>
 
@@ -15,9 +16,12 @@
 #endif
 
 /* the length parameter is for calculating how many blocks each bdesc_t represents */
-blockman_t * blockman_create(uint16_t length, destroy_notify_t destroy_notify)
+blockman_t * blockman_create(uint16_t length, BD_t * owner, destroy_notify_t destroy_notify)
 {
-	blockman_t * man = malloc(sizeof(*man));
+	blockman_t * man;
+	if(destroy_notify && !owner)
+		return NULL;
+	man = malloc(sizeof(*man));
 	if(!man)
 		return NULL;
 	man->map = hash_map_create();
@@ -27,6 +31,7 @@ blockman_t * blockman_create(uint16_t length, destroy_notify_t destroy_notify)
 		return NULL;
 	}
 	man->length = length;
+	man->owner = owner;
 	man->destroy_notify = destroy_notify;
 	return man;
 }
@@ -74,7 +79,7 @@ int blockman_remove(datadesc_t * ddesc)
 	{
 		hash_map_erase(ddesc->manager->map, (void *) ddesc->managed_number);
 		if(ddesc->manager->destroy_notify)
-			ddesc->manager->destroy_notify(ddesc->managed_number);
+			ddesc->manager->destroy_notify(ddesc->manager->owner, ddesc->managed_number);
 		ddesc->manager = NULL;
 	}
 	return 0;
