@@ -24,6 +24,9 @@
  * speedup, even though we use more memory, so it is enabled by default. */
 #define CHDESC_ALLOW_MULTIGRAPH 1
 
+/* Set to restrict adding a before only when a chdesc has no afters */
+#define CHDESC_ADD_DEPEND_DISALLOW_AFTERS 0
+
 /* Set to allow new chdescs to be merged into existing chdescs */
 #define CHDESC_MERGE_NEW 0
 /* Set to track new chdesc merge stats and print them after shutdown */
@@ -485,6 +488,12 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 {
 	chdepdesc_t * dep;
+
+#if CHDESC_ADD_DEPEND_DISALLOW_AFTERS
+	assert(!after->afters); /* quickly catch bugs for now */
+	if(after->afters)
+		return -E_INVAL;
+#endif
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
@@ -495,6 +504,7 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	for(dep = before->afters; dep; dep = dep->after.next)
 		assert(dep->desc != after);
 #endif
+	
 	dep = malloc(sizeof(*dep));
 	if(!dep)
 		return -E_NO_MEM;
@@ -1361,9 +1371,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if(block->ddesc->lock_owner && block->ddesc->lock_owner != owner)
 		return -E_BUSY;
 	
-	if((r = ensure_bdesc_has_overlaps(block)) < 0)
-		return r;
-	
 	if((chdesc = select_new_chdesc_merger(block, data_required, offset, length, *head)))
 	{
 		if((r = merge_new_chdesc(chdesc, offset, length, *head)) < 0)
@@ -1442,18 +1449,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
-	if(chdesc_add_depend_fast(block->ddesc->overlaps, chdesc) < 0)
-	{
-		chdesc_destroy(&chdesc);
-		return -E_NO_MEM;
-	}
-	
-	/* make sure it is after upon any pre-existing chdescs */
-	if(chdesc_overlap_multiattach(chdesc, block))
-	{
-		chdesc_destroy(&chdesc);
-		return -E_NO_MEM;
-	}
 	
 	/* this is a new chdesc, so we don't need to check for loops.
 	 * but we should check to make sure head has not already been written. */
@@ -1463,6 +1458,21 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			chdesc_destroy(&chdesc);
 			return r;
 		}
+
+	/* make sure it is after upon any pre-existing chdescs */
+	if(chdesc_overlap_multiattach(chdesc, block))
+	{
+		chdesc_destroy(&chdesc);
+		return -E_NO_MEM;
+	}
+
+	if((r = ensure_bdesc_has_overlaps(block)) < 0)
+		return r;
+	if(chdesc_add_depend_fast(block->ddesc->overlaps, chdesc) < 0)
+	{
+		chdesc_destroy(&chdesc);
+		return -E_NO_MEM;
+	}
 	
 	if(data_required)
 	{	
