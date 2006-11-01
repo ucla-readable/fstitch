@@ -34,6 +34,7 @@
 #include <kfs/uhfs.h>
 #include <kfs/icase_cfs.h>
 #include <kfs/mirror_bd.h>
+#include <kfs/xor_bd.h>
 #ifdef KUDOS
 #include <kfs/mount_selector_cfs.h>
 #include <kfs/cfs_ipc_opgroup.h>
@@ -394,7 +395,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		{
 			uint8_t type = pc_ptable_type(ptbl, i);
 			printf("Partition %d has type %02x\n", i, type);
-			if (type == PTABLE_KUDOS_TYPE || type == PTABLE_LINUX_TYPE)
+			if (type == PTABLE_KUDOS_TYPE || type == PTABLE_KUDOS_XOR_TYPE || type == PTABLE_LINUX_TYPE)
 			{
 				if (! (part = malloc(sizeof(kfsd_partition_t))) )
 				{
@@ -405,6 +406,16 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 				if (part->bd)
 				{
 					OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
+					if (type == PTABLE_KUDOS_XOR_TYPE)
+					{
+						part->bd = xor_bd(part->bd, 0xFFFFFFFF);
+						if (!part->bd)
+						{
+							kdprintf(STDERR_FILENO, "OOM, malloc\n");
+							return -E_NO_MEM;
+						}
+						OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
+					}
 					part->type = type;
 					part->subtype = 0;
 					snprintf(part->description, 32, "Partition %d", i);
@@ -432,9 +443,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 					bsd_ptable_free(bsdtbl);
 				}
 			}
-			else {
+			else
 				printf("Unknown partition type %x\n", type);
-			}
 		}
 		pc_ptable_free(ptbl);
 
@@ -474,7 +484,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 		if (!part)
 			continue;
 
-		if (part->type == PTABLE_KUDOS_TYPE)
+		if (part->type == PTABLE_KUDOS_TYPE || part->type == PTABLE_KUDOS_XOR_TYPE)
 		{
 			cache = construct_cacheing(part->bd, cache_nblks, 4096);
 			if (!cache)
