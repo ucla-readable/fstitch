@@ -1,23 +1,20 @@
 #include <inc/lib.h>
 #include <inc/fs.h>
 
-static void
-usage(char *s)
+static void usage(char *s)
 {
 	printf("usage: %s [existing filename|devicename]\n", s);
 	exit(0);
 }
 
-void
-umain(int argc, char *argv[])
+static uint32_t free_map[1024];
+
+void umain(int argc, char *argv[])
 {
 	struct Super s;
 	struct File *f;
 	struct Stat st;
-	int flen;
-	int r;
-	int fd;
-	int i;
+	int flen, r, fd, i;
 
 	if (argc != 2) usage(argv[0]);
 	fd = open(argv[1], O_WRONLY);
@@ -48,12 +45,24 @@ umain(int argc, char *argv[])
 	for (i = 0; i < NDIRECT; i++)
 		f->f_direct[i] = 0;
 	f->f_indirect = 0;
+	
+	memset(free_map, 0, sizeof(free_map));
+	for(i = 3; i < s.s_nblocks; i++)
+		free_map[i / 32] |= 1 << (i % 32);
 
+	seek(fd, 8192);
+	r = write(fd, free_map, sizeof(free_map));
+	if (r < sizeof(free_map)) {
+		kdprintf(STDERR_FILENO, "Error: Only wrote %d bytes to %s, needed %d\n",
+		                        r, argv[1], sizeof(free_map));
+		exit(1);
+	}
+	seek(fd, 4096);
 	r = write(fd, &s, sizeof(s));
 	if (r < sizeof(s)) {
 		kdprintf(STDERR_FILENO, "Error: Only wrote %d bytes to %s, needed %d\n",
-				r, argv[1], sizeof(s));
-		exit(0);
+		                        r, argv[1], sizeof(s));
+		exit(1);
 	}
 	close(fd);
 	printf("Success. New filesystem has %d blocks.\n", s.s_nblocks);

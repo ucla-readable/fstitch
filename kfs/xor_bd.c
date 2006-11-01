@@ -28,14 +28,14 @@ static int xor_bd_get_config(void * object, int level, char * string, size_t len
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "key: 0x%08X, count: %d, blocksize: %d", info->xor_key, info->numblocks, info->blocksize);
+			snprintf(string, length, "key: 0x%08x, count: %d, blocksize: %d", info->xor_key, info->numblocks, info->blocksize);
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "key: 0x%08X", info->xor_key);
+			snprintf(string, length, "key: 0x%08x", info->xor_key);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "key: 0x%08X, count: %d", info->xor_key, info->numblocks);
+			snprintf(string, length, "key: 0x%08x, count: %d", info->xor_key, info->numblocks);
 	}
 	return 0;
 }
@@ -231,6 +231,7 @@ BD_t * xor_bd(BD_t * disk, uint32_t xor_key)
 	BD_INIT(bd, xor_bd, info);
 	
 	info->bd = disk;
+	info->xor_key = xor_key;
 	info->numblocks = CALL(disk, get_numblocks);
 	info->atomicsize = CALL(disk, get_atomicsize);
 

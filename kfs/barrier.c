@@ -30,7 +30,7 @@ int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	if(!block->ddesc->all_changes)
 		return 0;
 	
-	target_block = CALL(target, synthetic_read_block, number, 1);
+	target_block = CALL(target, synthetic_read_block, number, block->count);
 	if(!target_block)
 		return -E_UNSPECIFIED;
 	
@@ -51,9 +51,12 @@ int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 		r = mangle(block, mangle_data, 1);
 		assert(r >= 0);
 	}
-	r = chdesc_create_full(target_block, target, block->ddesc->data, &head);
+	/* create the chdesc at the barrier, because we locked the block */
+	r = chdesc_create_full(target_block, barrier, block->ddesc->data, &head);
 	if(r < 0)
 		goto error_block;
+	if(head)
+		head->owner = target;
 	if(mangle)
 	{
 		r = mangle(block, mangle_data, 0);
@@ -137,7 +140,7 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	
 	for(i = 0; i != nforwards; i++)
 	{
-		target_block = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, 1);
+		target_block = CALL(forwards[i].target, synthetic_read_block, forwards[i].number, block->count);
 		if(!target_block)
 			goto error_block;
 		if(block == target_block)
@@ -152,9 +155,12 @@ int barrier_multiple_forward(multiple_forward_t forwards[], size_t nforwards, BD
 	
 	for(i = 0; i != nforwards; i++)
 	{
-		r = chdesc_create_full(target_block, forwards[i].target, block->ddesc->data, &heads[i]);
+		/* create the chdesc at the barrier, because we locked the block */
+		r = chdesc_create_full(target_block, barrier, block->ddesc->data, &heads[i]);
 		if(r < 0)
 			goto error_chdesc;
+		if(heads[i])
+			heads[i]->owner = forwards[i].target;
 	}
 	
 	r = chdesc_create_noop_array(NULL, NULL, &head, nforwards, heads);
