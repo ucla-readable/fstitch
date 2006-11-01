@@ -59,6 +59,7 @@ KKFSD_KFS_OBJS := \
               pc_ptable.o \
               bsd_ptable.o \
               mirror_bd.o \
+              xor_bd.o \
               wt_cache_bd.o \
               wb_cache_bd.o \
               journal_bd.o \

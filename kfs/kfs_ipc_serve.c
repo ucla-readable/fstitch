@@ -417,6 +417,20 @@ static void kis_mirror_bd_remove(envid_t whom, const Skfs_mirror_bd_remove_t * p
 	RETURN_IPC;
 }
 
+#include <kfs/xor_bd.h>
+static void kis_xor_bd(envid_t whom, const Skfs_xor_bd_t * pg)
+{
+	BD_t * bd = (BD_t *) pg->bd;
+	uint32_t val;
+	
+	if (!modman_name_bd(bd))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) xor_bd(bd, pg->xor_key);
+
+	RETURN_IPC;
+}
+
 #include <kfs/ide_pio_bd.h>
 static void kis_ide_pio_bd(envid_t whom, const Skfs_ide_pio_bd_t * pg)
 {
@@ -709,6 +723,7 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(MIRROR_BD,              mirror_bd);
 		SERVE(MIRROR_BD_ADD,          mirror_bd_add);
 		SERVE(MIRROR_BD_REMOVE,       mirror_bd_remove);
+		SERVE(XOR_BD,                 xor_bd);
 		SERVE(IDE_PIO_BD,             ide_pio_bd);
 
 		// modman

@@ -79,7 +79,7 @@ int blockman_remove(datadesc_t * ddesc)
 	{
 		hash_map_erase(ddesc->manager->map, (void *) ddesc->managed_number);
 		if(ddesc->manager->destroy_notify)
-			ddesc->manager->destroy_notify(ddesc->manager->owner, ddesc->managed_number);
+			ddesc->manager->destroy_notify(ddesc->manager->owner, ddesc->managed_number, ddesc->length);
 		ddesc->manager = NULL;
 	}
 	return 0;

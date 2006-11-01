@@ -7,7 +7,7 @@
  * until after we define blockman, because it includes blockman.h... sigh. */
 struct BD;
 
-typedef void (*destroy_notify_t)(struct BD * bd, uint32_t block);
+typedef void (*destroy_notify_t)(struct BD * bd, uint32_t block, uint16_t length);
 
 struct blockman {
 	uint16_t length;

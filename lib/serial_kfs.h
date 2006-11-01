@@ -47,10 +47,11 @@
 #define SKFS_WT_CACHE_BD 22
 #define SKFS_ELEVATOR_CACHE_BD 23
 #define SKFS_BLOCK_RESIZER_BD 24
-#define SKFS_MD_BD 26
-#define SKFS_MIRROR_BD 27
-#define SKFS_MIRROR_BD_ADD 28
-#define SKFS_MIRROR_BD_REMOVE 29
+#define SKFS_MD_BD 25
+#define SKFS_MIRROR_BD 26
+#define SKFS_MIRROR_BD_ADD 27
+#define SKFS_MIRROR_BD_REMOVE 28
+#define SKFS_XOR_BD 29
 #define SKFS_PARTITION_BD 30
 #define SKFS_IDE_PIO_BD 31
 
@@ -263,6 +264,12 @@ typedef struct {
 	uint32_t bd;
 	int diskno;
 } Skfs_mirror_bd_remove_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t bd;
+	uint32_t xor_key;
+} Skfs_xor_bd_t;
 
 // TODO: partition_bd
 // TODO: pc_ptable_bd

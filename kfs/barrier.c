@@ -19,7 +19,7 @@
 #define Dprintf(x...)
 #endif
 
-int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block)
+int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block, barrier_mangler_t mangle, void * mangle_data)
 {
 	bdesc_t * target_block;
 	chdesc_t * head = NULL;
@@ -46,9 +46,19 @@ int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc
 	if(r < 0)
 		goto error_block;
 	
+	if(mangle)
+	{
+		r = mangle(block, mangle_data, 1);
+		assert(r >= 0);
+	}
 	r = chdesc_create_full(target_block, target, block->ddesc->data, &head);
 	if(r < 0)
 		goto error_block;
+	if(mangle)
+	{
+		r = mangle(block, mangle_data, 0);
+		assert(r >= 0);
+	}
 	
 	/* now set the afters of all the old chdescs to depend on head */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
@@ -222,6 +232,7 @@ int barrier_lock_block(bdesc_t * block, BD_t * owner)
 		return -E_BUSY;
 	block->ddesc->lock_owner = owner;
 	block->ddesc->lock_count++;
+	bdesc_retain(block);
 	return 0;
 }
 
@@ -231,5 +242,6 @@ int barrier_unlock_block(bdesc_t * block, BD_t * owner)
 		return -E_INVAL;
 	if(!--block->ddesc->lock_count)
 		block->ddesc->lock_owner = NULL;
+	bdesc_release(&block);
 	return 0;
 }

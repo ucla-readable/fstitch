@@ -218,9 +218,9 @@ static int mirror_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	
 	if(disk1_bad)
-		value0 = barrier_single_forward(info->bd[0], block->number, object, block);
+		value0 = barrier_single_forward(info->bd[0], block->number, object, block, NULL, NULL);
 	else if(disk0_bad)
-		value1 = barrier_single_forward(info->bd[1], block->number, object, block);
+		value1 = barrier_single_forward(info->bd[1], block->number, object, block, NULL, NULL);
 	else
 	{
 		multiple_forward_t forwards[2];
@@ -283,7 +283,7 @@ static int mirror_bd_destroy(BD_t * bd)
  * block(s) below us that correspond to it */
 /* TODO: when a mirror branch goes offline, we need to unlock all our
  * locked blocks on it */
-static void mirror_bd_block_destroy(BD_t * owner, uint32_t block)
+static void mirror_bd_block_destroy(BD_t * owner, uint32_t block, uint16_t length)
 {
 }
 

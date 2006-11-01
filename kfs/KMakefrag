@@ -23,6 +23,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/nbd_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \
 			$(OBJDIR)/kfs/mirror_bd.o \
+			$(OBJDIR)/kfs/xor_bd.o \
 			$(OBJDIR)/kfs/loop_bd.o \
 			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \

@@ -6,7 +6,9 @@
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 
-int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block);
+typedef int (*barrier_mangler_t)(bdesc_t * block, void * data, int mangle);
+
+int barrier_single_forward(BD_t * target, uint32_t number, BD_t * barrier, bdesc_t * block, barrier_mangler_t mangle, void * mangle_data);
 
 typedef struct {
 	BD_t *   target;

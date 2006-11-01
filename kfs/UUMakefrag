@@ -1,17 +1,6 @@
 OBJDIRS += kfs
 BIN += $(OBJDIR)/kfs/kfsd
 
-#			$(OBJDIR)/kfs/ide_pio_bd.o \
-#			$(OBJDIR)/kfs/josfs_cfs.o \
-#			$(OBJDIR)/kfs/fidcloser_cfs.o \
-#			$(OBJDIR)/kfs/fidprotector_cfs.o \
-#			$(OBJDIR)/kfs/cfs_ipc_serve.o \
-#			$(OBJDIR)/kfs/kfs_ipc_serve.o \
-#			$(OBJDIR)/kfs/ipc_serve.o \
-
-
-			#$(OBJDIR)/kfs/file_hiding_cfs.o \
-
 KFSOFILES := \
 			$(OBJDIR)/kfs/bdesc.o \
 			$(OBJDIR)/kfs/chdesc.o \
@@ -33,6 +22,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/journal_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \
 			$(OBJDIR)/kfs/mirror_bd.o \
+			$(OBJDIR)/kfs/xor_bd.o \
 			$(OBJDIR)/kfs/loop_bd.o \
 			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/josfs_base.o \

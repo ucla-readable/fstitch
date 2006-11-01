@@ -715,6 +715,23 @@ int mirror_bd_remove_device(BD_t * bd, int diskno)
 	return RECV_PG();
 }
 
+#include <kfs/xor_bd.h>
+BD_t * xor_bd(BD_t * disk, uint32_t xor_key)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(MIRROR_BD, xor_bd);
+
+	pg->bd = (uint32_t) OBJLOCAL(disk);
+	pg->xor_key = xor_key;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
+}
+
 #include <kfs/ide_pio_bd.h>
 BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 {
