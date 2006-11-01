@@ -1244,7 +1244,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		return -E_INVAL;
 
 	if (id == KFS_feature_size.id) {
-		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) >= JOSFS_MAXFILESIZE)
+		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) > JOSFS_MAXFILESIZE)
 			return -E_INVAL;
 
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
