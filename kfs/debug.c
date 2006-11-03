@@ -24,11 +24,11 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd.h>
 
+#if KFS_DEBUG
+
 #if KFS_DEBUG_IO == KFS_DEBUG_IO_TCP
 #include <lib/netclient.h>
 #endif
-
-#if KFS_DEBUG
 
 /* For a lean and mean debug output stream, set all of these to 1. */
 #define KFS_DEBUG_BINARY 1
