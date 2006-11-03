@@ -65,8 +65,6 @@
 
 #define SKFS_SYNC 37
 
-#define SKFS_PERF_TEST 38
-
 #define SKFS_TYPE int skfs_type
 
 // SKFS_MAX_NAMELEN is the maxiumum length that fits in a method page, given
@@ -328,15 +326,5 @@ typedef struct {
 	char name[SKFS_MAX_NAMELEN];
 } Skfs_sync_t;
 
-
-//
-// perf testing
-
-typedef struct {
-	SKFS_TYPE;
-	int cfs_bd; // 0 CFS, 1 BD
-	int size;
-	char file[100];
-} Skfs_perf_test_t;
 
 #endif // __KUDOS_LIB_SERIAL_KFS_H

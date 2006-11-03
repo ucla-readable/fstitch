@@ -975,28 +975,3 @@ int kfs_sync(const char * name)
 	SEND_PG();
 	return RECV_PG();
 }
-
-
-//
-// Perf testing
-
-int perf_test(int cfs_bd, const char * file, int size)
-{
-	const envid_t fsid = find_fs();
-	const int file_len = strlen(file) + 1;
-
-	if (file_len > SKFS_MAX_NAMELEN)
-	{
-		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, file, file_len, SKFS_MAX_NAMELEN);
-		return -E_BAD_PATH;
-	}
-
-	INIT_PG(PERF_TEST, perf_test);
-
-	pg->cfs_bd = cfs_bd;
-	pg->size = size;
-	strncpy(pg->file, file, sizeof(pg->file));
-
-	SEND_PG();
-	return RECV_PG();
-}
