@@ -24,16 +24,24 @@
  * speedup, even though we use more memory, so it is enabled by default. */
 #define CHDESC_ALLOW_MULTIGRAPH 1
 
-/* Set to restrict adding a before only when a chdesc has no afters */
-#define CHDESC_ADD_DEPEND_DISALLOW_AFTERS 0
+/* Set to restrict adding a before allow only to noops with no afters */
+#define CHDESC_ADD_DEPEND_RESTRICTED (CHDESC_SINGLE_NRB || 0)
 
 /* Set to allow new chdescs to be merged into existing chdescs */
-#define CHDESC_MERGE_NEW 0
+#define CHDESC_MERGE_NEW (CHDESC_SINGLE_NRB || 0)
 /* Set to track new chdesc merge stats and print them after shutdown */
 #define CHDESC_MERGE_NEW_STATS 0
 
+#if CHDESC_SINGLE_NRB && !(CHDESC_ADD_DEPEND_RESTRICTED && CHDESC_MERGE_NEW)
+# error CHDESC_SINGLE_NRB requires CHDESC_ADD_DEPEND_RESTRICTED and CHDESC_MERGE_NEW
+#endif
+
 #if CHDESC_MERGE_NEW_STATS && !CHDESC_MERGE_NEW
 # error CHDESC_MERGE_NEW_STATS requires CHDESC_MERGE_NEW
+#endif
+
+#if CHDESC_SINGLE_NRB
+# define CHDESC_DATA_OMITTANCE_V2 1
 #endif
 
 static chdesc_t * free_head = NULL;
@@ -489,10 +497,13 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 {
 	chdepdesc_t * dep;
 
-#if CHDESC_ADD_DEPEND_DISALLOW_AFTERS
-	assert(!after->afters); /* quickly catch bugs for now */
-	if(after->afters)
-		return -E_INVAL;
+#if CHDESC_ADD_DEPEND_RESTRICTED
+	if(!(after->flags & CHDESC_CREATING))
+	{
+		assert(after->type == NOOP && !after->afters); /* quickly catch bugs for now */
+		if(after->type != NOOP || after->afters)
+			return -E_INVAL;
+	}
 #endif
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
@@ -863,7 +874,7 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 	chdesc->stamps = 0;
 	
 	/* NOOP chdescs start applied */
-	chdesc->flags = 0;
+	chdesc->flags = CHDESC_CREATING;
 	
 	if(block)
 	{
@@ -886,6 +897,7 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 				chdesc_destroy(&chdesc);
 				return r;
 			}
+	chdesc->flags &= ~CHDESC_CREATING;
 	*tail = chdesc;
 	
 	return 0;
@@ -982,6 +994,7 @@ static bool new_chdescs_require_data(const bdesc_t * block)
 #endif
 }
 
+#if !CHDESC_DATA_OMITTANCE_V2
 static void print_chdesc_befores(const chdesc_t * chdesc, uint32_t limit)
 {
 	const chdepdesc_t * dep;
@@ -1192,6 +1205,7 @@ static int merge_cycle_is_possible(const chdesc_t * before, const bdesc_t * bloc
 	merge_clear = 0;
 	return r;
 }
+#endif /* !CHDESC_DATA_OMITTANCE_V2 */
 
 /* chdesc merge stat tracking definitions */
 #if CHDESC_MERGE_NEW_STATS
@@ -1257,9 +1271,11 @@ static void chdesc_merge_new_stats_log(unsigned idx)
  * into an existing chdesc. Return such a chdesc if so, else return NULL. */
 static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, uint16_t offset, uint16_t length, chdesc_t * before)
 {
+#if !CHDESC_DATA_OMITTANCE_V2
 	chdesc_t * chdesc;
 	chdesc_t * existing = NULL;
 	int r;
+#endif
 	
 #if !CHDESC_MERGE_NEW
 	return NULL;
@@ -1272,6 +1288,15 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
 		return NULL;
 	}
 	
+#if CHDESC_DATA_OMITTANCE_V2
+# if CHDESC_MERGE_NEW_STATS
+	if(block->ddesc->nrb)
+		CHDESC_MERGE_NEW_STATS_LOG(0);
+	else
+		CHDESC_MERGE_NEW_STATS_LOG(5);
+# endif
+	return block->ddesc->nrb;
+#else
 	if(before && ((r = merge_cycle_is_possible(before, block)) < 0))
 	{
 		CHDESC_MERGE_NEW_STATS_LOG(r == -1 ? 2 : 3);
@@ -1300,7 +1325,133 @@ static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, 
 	}
 	CHDESC_MERGE_NEW_STATS_LOG(5);
 	return NULL;
+#endif
 }
+
+#if CHDESC_DATA_OMITTANCE_V2
+/* Move chdesc's (transitive) befores that cannot reach merge_target
+ * to be merge_target's befores, so that a merge into merge_target
+ * maintains the needed befores.
+ * Return whether chdesc should be moved to be a merge_target before. */
+bool move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
+{
+	/* recursion-on-the-heap support */
+	struct state {
+		chdepdesc_t * dep;
+		chdesc_t * chdesc;
+		bool reachable;
+	};
+	typedef struct state state_t;
+	static state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	state_t * states = static_states;
+	state_t * state = states;
+
+	chdepdesc_t * dep;
+	bool reachable = 0; /* whether target is reachable from chdesc */
+	
+	assert(merge_target);
+	
+  recurse_enter:
+	if(chdesc->flags & CHDESC_MARKED)
+		return 1;
+	if(chdesc == merge_target)
+	{
+		chdesc->flags |= CHDESC_MARKED;
+		return 1;
+	}
+	if(!chdesc || chdesc_is_external(chdesc, merge_target->block))
+		return 0;
+	
+	/* discover the subset of befores that cannot reach target */
+	/* TODO: do not scan a given dep->before.desc multiple times? */	
+	for(dep = chdesc->befores; dep; dep = dep->before.next)
+	{
+		/* TODO: stack space usage */
+		reachable |= move_befores_for_merge(dep->before.desc, merge_target);
+
+		/* Recursively move befores; equivalent to:
+		 * reachable |= move_befores_for_merge(dep->before.desc, merge_target).
+		 * We don't recursively call this function because we can
+		 * overflow the stack. We instead use the 'states' array
+		 * to hold this function's recursive state. */
+		size_t next_index = 1 + state - &states[0];
+		
+		state->dep = dep;
+		state->chdesc = chdesc;
+		state->reachable = reachable;
+		
+		chdesc = dep->before.desc;
+		reachable = 0;
+		
+		if(next_index < states_capacity)
+			state++;
+		else
+		{
+			size_t cur_size = states_capacity * sizeof(*state);
+			states_capacity *= 2;
+			if(states == static_states)
+			{
+				states = smalloc(states_capacity * sizeof(*state));
+				if(states)
+					memcpy(states, static_states, cur_size);
+			}
+			else
+				states = srealloc(states, cur_size, states_capacity * sizeof(*state));
+			if(!states)
+				panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
+			state = &states[next_index];
+		}
+		goto recurse_enter;
+			
+	  recurse_resume:
+		(void) 0; /* placate compiler re deprecated end labels */
+	}
+		
+	/* if only some befores can reach target, move all befores that cannot */
+	if(reachable)
+	{
+		chdesc->flags |= CHDESC_MARKED;
+		
+		dep = chdesc->befores;
+		while(dep)
+		{
+			if(dep->before.desc->flags & CHDESC_MARKED)
+				dep = dep->before.next;
+			else
+			{
+				chdesc_t * noreach = dep->before.desc;
+				int r;
+				if((dep = dep->before.next))
+					dep = dep->before.next;
+				chdesc_remove_depend(chdesc, noreach);
+				/* TODO: maybe assert no noreach to merge_target path? */
+				r = chdesc_add_depend_fast(merge_target, noreach);
+				/* TODO: should recover, but this case may be impossible */
+				assert(r >= 0); 
+			}
+		}
+		
+		/* remove marks only after the preceeding loop because of multipaths */
+		for(dep = chdesc->befores; dep; dep = dep->before.next)
+			dep->before.desc->flags &= ~CHDESC_MARKED;
+	}
+	
+	if(state != &states[0])
+	{
+		state--;
+		dep = state->dep;
+		chdesc = state->chdesc;
+		reachable |= state->reachable;
+		goto recurse_resume;
+	}
+	
+	if(states != static_states)
+		sfree(states, states_capacity * sizeof(*state));
+	
+	return reachable;
+}
+#endif
 
 /* Merge what would be a new chdesc into an existing chdesc.
  * Precondition: select_new_chdesc_merger() returned 'existing'. */
@@ -1313,6 +1464,22 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 	assert(existing->byte.offset == 0);
 	assert(existing->byte.length == existing->block->ddesc->length);
 	
+#if CHDESC_DATA_OMITTANCE_V2
+	if(new_before && !(new_before->flags & CHDESC_WRITTEN))
+	{
+		uint16_t saved_flags = existing->flags;
+		/* set CREATING to allow add_depends, which we know are safe */
+		existing->flags |= CHDESC_CREATING;
+		if(!move_befores_for_merge(new_before, existing))
+		{
+			if((r = chdesc_add_depend_fast(existing, new_before)) < 0)
+				return r;
+		}
+		else
+			new_before->flags &= ~CHDESC_MARKED;
+		existing->flags = saved_flags;
+	}
+#else	
 	/* Ensure 'existing' has 'new_before' as a before, taking care to not
 	 * create a cycle. Cases for 'new_before':
 	 * - on this block: it is nonrollbackable, so it can be ignored
@@ -1323,6 +1490,7 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 	if(new_before && (new_before->block->ddesc != existing->block->ddesc))
 		if ((r = chdesc_add_depend(existing, new_before)) < 0)
 			return r;
+#endif
 	
 	return 0;
 }
@@ -1443,7 +1611,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->stamps = 0;
 	
 	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK;
+	chdesc->flags = CHDESC_ROLLBACK | CHDESC_CREATING;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
 	
@@ -1490,8 +1658,17 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			memset(&chdesc->block->ddesc->data[offset], 0, length);
 		chdesc->flags &= ~CHDESC_ROLLBACK;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
+#if CHDESC_DATA_OMITTANCE_V2
+		assert(!block->ddesc->nrb);
+		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb)) < 0)
+		{
+			chdesc_destroy(&chdesc);
+			return r;
+		}
+#endif
 	}
 	
+	chdesc->flags &= ~CHDESC_CREATING;
 	*head = chdesc;
 	
 	/* make sure our block sticks around */
@@ -1576,7 +1753,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->stamps = 0;
 
 	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK;
+	chdesc->flags = CHDESC_ROLLBACK | CHDESC_CREATING;
 
 	chdesc_link_ready_changes(chdesc);
 	
@@ -1604,6 +1781,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
 		goto error;
 	
+	chdesc->flags &= ~CHDESC_CREATING;
 	*head = chdesc;
 	
 	/* make sure our block sticks around */

@@ -306,13 +306,18 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		chdesc_update_ready_changes(scan);
 	}
 
+#if CHDESC_SINGLE_NRB
+	if(block->ddesc->nrb && block->ddesc->nrb->owner == owner)
+		nonready_nonrollbackable = 1;
+#endif
+
 	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 	{
 		if(scan->owner == owner)
 		{
 			slice->all_ready = 0;
-#if CHDESC_DATA_OMITTANCE
+#if CHDESC_DATA_OMITTANCE && !CHDESC_SINGLE_NRB
 			if(!chdesc_is_rollbackable(scan))
 			{
 				nonready_nonrollbackable = 1;

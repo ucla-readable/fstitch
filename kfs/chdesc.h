@@ -13,6 +13,9 @@
  * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
 /* values: 0 (disable), 1 (enable) */
 #define CHDESC_DATA_OMITTANCE 0
+/* Set to allow at most one non-rollbackable chdesc per block */
+/* values: 0 (unlimited), 1 (limited) */
+#define CHDESC_SINGLE_NRB (CHDESC_DATA_OMITTANCE && 1)
 /* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
  * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
@@ -38,6 +41,7 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_DATA      0x20 /* user data change (not metadata) */
 #define CHDESC_BIT_NOOP  0x40 /* bit_changes NOOP chdesc */
 #define CHDESC_OVERLAP   0x80 /* overlaps another chdesc completely */
+#define CHDESC_CREATING 0x100 /* chdesc is being created */
 
 /* only effective in debugging mode */
 #define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */

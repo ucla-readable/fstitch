@@ -35,6 +35,10 @@ struct datadesc {
 	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
 	
+#if CHDESC_SINGLE_NRB
+	chdesc_t * nrb;
+#endif
+	
 	chdesc_t * overlaps;
 	hash_map_t * bit_changes;
 	blockman_t * manager;
