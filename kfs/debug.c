@@ -7,10 +7,8 @@
 #include <lib/stdio.h>
 #include <lib/svnrevtol.h>
 
-#ifdef __KERNEL__
+#if defined(__KERNEL__)
 #include <linux/config.h>
-#else
-#include <lib/netclient.h>
 #endif
 
 /* htons and htonl */
@@ -25,6 +23,10 @@
 #include <kfs/sched.h>
 #include <kfs/debug.h>
 #include <kfs/kfsd.h>
+
+#if KFS_DEBUG_IO == KFS_DEBUG_IO_TCP
+#include <lib/netclient.h>
+#endif
 
 #if KFS_DEBUG
 
@@ -376,7 +378,6 @@ static const struct module modules[] = {
 };
 static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
-static int debug_socket = -1;
 static int debug_count = 0;
 
 #if KFS_DEBUG_BINARY
@@ -387,15 +388,17 @@ static int debug_count = 0;
 #define LIT_STR (-3)
 #define END 0
 
+/* io system prototypes */
+static int kfs_debug_io_init(void);
+static int kfs_debug_io_write(void * data, uint32_t size);
+static void kfs_debug_io_command(void * arg);
+/* NOTE: also the non-static void kfs_debug_dbwait(const char *, bdesc_t *) */
 
-#if defined(__KERNEL__)
+#if KFS_DEBUG_IO == KFS_DEBUG_IO_PROC
 
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
-
-#define DEBUG_PROC_FILENAME "kkfsd_debug"
-#define DEBUG_PROC_SIZE (4 * 1024 * 1024)
 
 static uint8_t * proc_buffer;
 static off_t proc_buffer_rpos;
@@ -421,7 +424,7 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 	return count;
 }
 
-static int proc_buffer_write(void * data, size_t len)
+static int kfs_debug_io_write(void * data, uint32_t len)
 {
 	uint8_t * buf = data;
 	size_t i;
@@ -438,6 +441,16 @@ static int proc_buffer_write(void * data, size_t len)
 	return len;
 }
 
+static void kfs_debug_io_command(void * arg)
+{
+	// kkfsd does not currently support command reading
+}
+
+void kfs_debug_dbwait(const char * function, bdesc_t * block)
+{
+	kdprintf(STDERR_FILENO, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
+}
+
 static void kfs_debug_shutdown(void * ignore)
 {
 	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
@@ -445,99 +458,9 @@ static void kfs_debug_shutdown(void * ignore)
 	proc_buffer = NULL;
 }
 
-/* override write() and ignore the file descriptor */
-#define write(fd, data, size) proc_buffer_write(data, size)
-
-#endif
-
-
-/* This function is used like a binary version of kdprintf(). It takes a file
- * descriptor, and then a series of pairs of (size, pointer) of data to write to
- * it. The list is terminated by a 0 size. Also accepted are the special sizes
- * -1, -2, and -4, which indicate that the data is to be extracted from the
- * stack as a uint8_t, uint16_t, or uint32_t, respectively, and changed to
- * network byte order. Finally, the special size -3 means to write a
- * null-terminated string, whose size will be determined with strlen(). The
- * total number of bytes written is returned, or a negative value on error when
- * no bytes have been written. Note that an error may cause the number of bytes
- * written to be smaller than requested. */
-static int kfs_debug_write(int fd, ...)
+static int kfs_debug_io_init(void)
 {
-	int bytes = 0;
-	va_list ap;
-	va_start(ap, fd);
-	
-	for(;;)
-	{
-		int result, size = va_arg(ap, int);
-		
-		if(size > 0)
-		{
-			void * data = va_arg(ap, void *);
-			result = write(fd, data, size);
-		}
-		else if(size < 0)
-		{
-			/* negative size means on stack */
-			size = -size;
-			if(size == 1)
-			{
-				uint8_t data = va_arg(ap, uint8_t);
-				result = write(fd, &data, 1);
-			}
-			else if(size == 2)
-			{
-				uint16_t data = htons(va_arg(ap, uint16_t));
-				result = write(fd, &data, 2);
-			}
-			else if(size == 4)
-			{
-				uint32_t data = htonl(va_arg(ap, uint32_t));
-				result = write(fd, &data, 4);
-			}
-			else if(size == 3)
-			{
-				/* string */
-				char * string = va_arg(ap, char *);
-				int length = strlen(string);
-				size = length + 1;
-				result = write(fd, string, size);
-			}
-			else
-				/* restricted to 1, 2, and 4 bytes, or strings */
-				return bytes ? bytes : -E_INVAL;
-		}
-		else
-			break;
-		
-		if(result < 0)
-			return bytes ? bytes : result;
-		bytes += result;
-		if(result != size)
-			break;
-	}
-	
-	return bytes;
-}
-#endif
-
-static void kfs_debug_net_command(void * arg);
-
-int kfs_debug_init(const char * host, uint16_t port)
-{
-#if !defined(__KERNEL__)
-	struct ip_addr addr;
-#endif
-	int m, o, r;
-	int32_t debug_rev, debug_opcode_rev;
-	
-	printf("Initializing KFS debugging interface...\n");
-	
-	r = sched_register(kfs_debug_net_command, NULL, HZ / 10);
-	if(r < 0)
-		return r;
-	
-#if defined(__KERNEL__)
+	int r;
 	proc_buffer = vmalloc(DEBUG_PROC_SIZE);
 	if(!proc_buffer)
 		return -E_NO_MEM;
@@ -556,8 +479,130 @@ int kfs_debug_init(const char * host, uint16_t port)
 		remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);
 		return r;
 	}
+	
+	return 0;
+}
+
+#elif KFS_DEBUG_IO == KFS_DEBUG_IO_STREAMS
+
+static FILE * debug_stream = NULL;
+
+static int kfs_debug_io_write(void * data, uint32_t size)
+{
+	return fwrite(data, 1, size, debug_stream);
+}
+
+static void kfs_debug_io_command(void * arg)
+{
+	// uukfsd for streams does not currently support command reading
+}
+
+void kfs_debug_dbwait(const char * function, bdesc_t * block)
+{
+	kdprintf(STDERR_FILENO, "%s() not supported for unix-user streams, not waiting\n", __FUNCTION__);
+}
+
+static void kfs_debug_shutdown(void * ignore)
+{
+	int r = fclose(debug_stream);
+	if(r < 0)
+		kdprintf(STDERR_FILENO, "%s: fclose() = %s\n", __FUNCTION__, strerror(errno));
+	debug_stream = NULL;
+}
+
+static int kfs_debug_io_init(void)
+{
+	int r;
+	debug_stream = fopen(KFS_DEBUG_FILE, "w");
+	if(!debug_stream)
+		return -E_UNSPECIFIED;
+	
+	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	if(r < 0)
+	{
+		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);
+		return r;
+	}
+	
+	return 0;
+}
+
+#elif KFS_DEBUG_IO == KFS_DEBUG_IO_TCP
+
+static int debug_socket = -1;
+
+static void kfs_debug_wait(void)
+{
+	uint16_t command[2];
+	int bytes = 0;
+	while(bytes != 4)
+		bytes = read(debug_socket, &command, 4);
+	kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
+}
+
+static int kfs_debug_io_write(void * data, uint32_t size)
+{
+	return write(debug_socket, data, size);
+}
+
+#if defined(UNIXUSER)
+#include <unistd.h>
+#include <fcntl.h>
+#endif
+
+static void kfs_debug_io_command(void * arg)
+{
+	uint16_t command[2];
+	int bytes;
+
+#if defined(KUDOS)
+	bytes = read_nb(debug_socket, &command, 4);
+#elif defined(UNIXUSER)
+	if (fcntl(debug_socket, F_SETFL, O_NONBLOCK))
+		assert(0);
+	bytes = read(debug_socket, &command, 4);
+	if (fcntl(debug_socket, F_SETFL, 0)) // TODO: restore to original value
+		assert(0);
 #else
-	r = kgethostbyname(host, &addr);
+#error Unknown target
+#endif
+	
+	if(bytes == 4)
+		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
+}
+
+void kfs_debug_dbwait(const char * function, bdesc_t * block)
+{
+	if(block->ddesc->all_changes)
+	{
+		chdesc_t * chdesc;
+		for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+		{
+			const uint16_t flags = chdesc->flags;
+			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
+			{
+				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, chdesc);
+				kfs_debug_wait();
+				break;
+			}
+		}
+	}
+}
+
+static void kfs_debug_shutdown(void * ignore)
+{
+	int r = close(debug_socket);
+	if(r < 0)
+		kdprintf(STDERR_FILENO, "%s: close() = %d\n", __FUNCTION__, r);
+	debug_socket = -1;
+}
+
+static int kfs_debug_io_init(void)
+{
+	const char * host = KFS_DEBUG_HOST;
+	uint16_t port = KFS_DEBUG_PORT;
+	struct ip_addr addr;	
+	int r = kgethostbyname(host, &addr);
 	if(r < 0)
 	{
 		jsleep(2 * HZ);
@@ -573,28 +618,126 @@ int kfs_debug_init(const char * host, uint16_t port)
 		if(r < 0)
 			return r;
 	}
+	
+	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	if(r < 0)
+	{
+		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);
+		return r;
+	}
+	
+	return 0;
+}
+
 #endif
+
+
+/* This function is used like a binary version of kdprintf(). It takes a file
+ * descriptor, and then a series of pairs of (size, pointer) of data to write to
+ * it. The list is terminated by a 0 size. Also accepted are the special sizes
+ * -1, -2, and -4, which indicate that the data is to be extracted from the
+ * stack as a uint8_t, uint16_t, or uint32_t, respectively, and changed to
+ * network byte order. Finally, the special size -3 means to write a
+ * null-terminated string, whose size will be determined with strlen(). The
+ * total number of bytes written is returned, or a negative value on error when
+ * no bytes have been written. Note that an error may cause the number of bytes
+ * written to be smaller than requested. */
+static int kfs_debug_write(int size, ...)
+{
+	int bytes = 0;
+	va_list ap;
+	va_start(ap, size);
+	
+	for(;;)
+	{
+		int result;
+		
+		if(size > 0)
+		{
+			void * data = va_arg(ap, void *);
+			result = kfs_debug_io_write(data, size);
+		}
+		else if(size < 0)
+		{
+			/* negative size means on stack */
+			size = -size;
+			if(size == 1)
+			{
+				uint8_t data = va_arg(ap, uint8_t);
+				result = kfs_debug_io_write(&data, 1);
+			}
+			else if(size == 2)
+			{
+				uint16_t data = htons(va_arg(ap, uint16_t));
+				result = kfs_debug_io_write(&data, 2);
+			}
+			else if(size == 4)
+			{
+				uint32_t data = htonl(va_arg(ap, uint32_t));
+				result = kfs_debug_io_write(&data, 4);
+			}
+			else if(size == 3)
+			{
+				/* string */
+				char * string = va_arg(ap, char *);
+				int length = strlen(string);
+				size = length + 1;
+				result = kfs_debug_io_write(string, size);
+			}
+			else
+				/* restricted to 1, 2, and 4 bytes, or strings */
+				return bytes ? bytes : -E_INVAL;
+		}
+		else
+			break;
+		
+		if(result < 0)
+			return bytes ? bytes : result;
+		bytes += result;
+		if(result != size)
+			break;
+		size = va_arg(ap, int);
+	}
+	
+	return bytes;
+}
+#endif
+
+int kfs_debug_init(void)
+{
+	int m, o, r;
+	int32_t debug_rev, debug_opcode_rev;
+	
+	printf("Initializing KFS debugging interface...\n");
+	
+	r = sched_register(kfs_debug_io_command, NULL, HZ / 10);
+	if(r < 0)
+		return r;
+
+	r = kfs_debug_io_init();
+	if(r < 0)
+		return r;
 	
 	debug_rev = svnrevtol("$Rev$");
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
 	
 #if KFS_DEBUG_BINARY
-	kfs_debug_write(debug_socket, LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
+	kfs_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
 			int p;
-			kfs_debug_write(debug_socket, LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
+			kfs_debug_write(LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
 				/* TODO: maybe write the logical data type here as well */
-				kfs_debug_write(debug_socket, LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
+				kfs_debug_write(LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
 			}
-			kfs_debug_write(debug_socket, LIT_8, 0, END);
+			kfs_debug_write(LIT_8, 0, END);
 		}
-	kfs_debug_write(debug_socket, LIT_16, 0, END);
+	kfs_debug_write(LIT_16, 0, END);
 #else
 	kdprintf(debug_socket, "DEBUG %d\n", debug_rev);
 	kdprintf(debug_socket, "DEBUG_OPCODE %d\n", debug_opcode_rev);
@@ -651,45 +794,6 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 	}
 }
 
-#if defined(UNIXUSER)
-#include <unistd.h>
-#include <fcntl.h>
-#endif
-
-static void kfs_debug_net_command(void * arg)
-{
-	uint16_t command[2];
-	int bytes;
-
-#if defined(KUDOS)
-	bytes = read_nb(debug_socket, &command, 4);
-#elif defined(UNIXUSER)
-	if (fcntl(debug_socket, F_SETFL, O_NONBLOCK))
-		assert(0);
-	bytes = read(debug_socket, &command, 4);
-	if (fcntl(debug_socket, F_SETFL, 0)) // TODO: restore to original value
-		assert(0);
-#elif defined(__KERNEL__)
-	// kkfsd does not currently support command reading
-	bytes = 0;
-#else
-#error Unknown target
-#endif
-	if(bytes == 4)
-		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
-}
-
-#if !defined(__KERNEL__)
-static void kfs_debug_wait(void)
-{
-	uint16_t command[2];
-	int bytes = 0;
-	while(bytes != 4)
-		bytes = read(debug_socket, &command, 4);
-	kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
-}
-#endif
-
 #ifdef __i386__
 #define x86_get_ebp(bp) { void * __bp; __asm__ __volatile__ ("movl %%ebp, %0" : "=r" (__bp) : ); bp = __bp; }
 #endif
@@ -700,7 +804,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	va_list ap;
 	va_start(ap, function);
 	
-	kfs_debug_net_command(NULL);
+	kfs_debug_io_command(NULL);
 	
 	/* look up the right module and opcode indices */
 	for(m = 0; modules[m].opcodes; m++)
@@ -717,21 +821,21 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	debug_count++;
 #if KFS_DEBUG_BINARY
 #if KFS_OMIT_FILE_FUNC
-	kfs_debug_write(debug_socket, LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
 #else
-	kfs_debug_write(debug_socket, LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
 #endif
 	
 	if(!modules[m].opcodes)
 	{
 		/* unknown module */
-		kfs_debug_write(debug_socket, LIT_8, 0, LIT_8, 1, END);
+		kfs_debug_write(LIT_8, 0, LIT_8, 1, END);
 		r = -E_INVAL;
 	}
 	else if(!modules[m].opcodes[o]->params)
 	{
 		/* unknown opcode */
-		kfs_debug_write(debug_socket, LIT_8, 0, LIT_8, 2, END);
+		kfs_debug_write(LIT_8, 0, LIT_8, 2, END);
 		r = -E_INVAL;
 	}
 	else
@@ -744,34 +848,34 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			if(size == 4)
 			{
 				uint32_t param = va_arg(ap, uint32_t);
-				kfs_debug_write(debug_socket, LIT_8, 4, LIT_32, param, END);
+				kfs_debug_write(LIT_8, 4, LIT_32, param, END);
 			}
 			else if(size == 2)
 			{
 				uint16_t param = va_arg(ap, uint16_t);
-				kfs_debug_write(debug_socket, LIT_8, 2, LIT_16, param, END);
+				kfs_debug_write(LIT_8, 2, LIT_16, param, END);
 			}
 			else if(size == 1)
 			{
 				uint8_t param = va_arg(ap, uint8_t);
-				kfs_debug_write(debug_socket, LIT_8, 1, LIT_8, param, END);
+				kfs_debug_write(LIT_8, 1, LIT_8, param, END);
 			}
 			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == STRING)
 			{
 				char * param = va_arg(ap, char *);
-				kfs_debug_write(debug_socket, LIT_8, -1, LIT_STR, param, END);
+				kfs_debug_write(LIT_8, -1, LIT_STR, param, END);
 			}
 			else
 			{
 				/* unknown type */
-				kfs_debug_write(debug_socket, LIT_8, 0, LIT_8, 3, END);
+				kfs_debug_write(LIT_8, 0, LIT_8, 3, END);
 				r = -E_INVAL;
 			}
 		}
 	}
 	
 	/* TODO: not technically necessary, see above */
-	kfs_debug_write(debug_socket, LIT_16, 0, END);
+	kfs_debug_write(LIT_16, 0, END);
 	
 #if !KFS_OMIT_BTRACE
 	{
@@ -785,7 +889,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 				break;
 			if(!preamble || ebp[1] == __builtin_return_address(0))
 			{
-				kfs_debug_write(debug_socket, LIT_32, ebp[1], END);
+				kfs_debug_write(LIT_32, ebp[1], END);
 				preamble = 0;
 			}
 			last_ebp = ebp;
@@ -793,7 +897,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		}
 	}
 #endif
-	kfs_debug_write(debug_socket, LIT_32, 0, END);
+	kfs_debug_write(LIT_32, 0, END);
 #else
 #if KFS_OMIT_FILE_FUNC
 	kdprintf(debug_socket, "Line %d, type [%04x:%04x] ", line, module, opcode);
@@ -917,28 +1021,6 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 #endif
 	}
 	return r;
-}
-
-void kfs_debug_dbwait(const char * function, bdesc_t * block)
-{
-#if defined(__KERNEL__)
-	kdprintf(STDERR_FILENO, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
-#else
-	if(block->ddesc->all_changes)
-	{
-		chdesc_t * chdesc;
-		for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-		{
-			const uint16_t flags = chdesc->flags;
-			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
-			{
-				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, chdesc);
-				kfs_debug_wait();
-				break;
-			}
-		}
-	}
-#endif
 }
 
 int kfs_debug_count(void)
