@@ -26,7 +26,7 @@ public class LoadCommand implements Command
 				int count;
 				File file = new File(args[0]);
 				long size = file.length();
-				InputStream stream = new BufferedInputStream(new FileInputStream(file));
+				InputStream stream = new BufferedInputStream(new FileInputStream(file), 1024 * 1024);
 				DataInput input = new DataInputStream(stream);
 				
 				System.out.print("Reading debug signature... ");
