@@ -136,28 +136,60 @@ public class Debugger extends OpcodeFactory
 		return opcode;
 	}
 	
-	public int readOpcodes() throws BadInputException, IOException
+	public int readOpcodes(long size) throws BadInputException, IOException
 	{
+		long nextPercent = 1;
+		long nextOffset = size * nextPercent / 100;
+		boolean star = false;
 		try {
 			for(;;)
+			{
 				opcodes.add(readOpcode());
+				while(input.getOffset() >= nextOffset)
+				{
+					star = true;
+					System.out.print("*");
+					nextOffset = size * ++nextPercent / 100;
+				}
+			}
 		}
 		catch(EOFException e)
 		{
 			/* this is OK, we expect the end of the file sooner or later */
+		}
+		finally
+		{
+			if(star)
+				System.out.print(" ");
 		}
 		return opcodes.size();
 	}
 	
-	public int readOpcodes(int count) throws BadInputException, IOException
+	public int readOpcodes(int count, long size) throws BadInputException, IOException
 	{
+		long nextPercent = 1;
+		long nextOffset = size * nextPercent / 100;
+		boolean star = false;
 		try {
 			while(count-- > 0)
+			{
 				opcodes.add(readOpcode());
+				while(input.getOffset() >= nextOffset)
+				{
+					star = true;
+					System.out.print("*");
+					nextOffset = size * ++nextPercent / 100;
+				}
+			}
 		}
 		catch(EOFException e)
 		{
 			/* this is OK, we expect the end of the file sooner or later */
+		}
+		finally
+		{
+			if(star)
+				System.out.print(" ");
 		}
 		return opcodes.size();
 	}
