@@ -5,7 +5,7 @@
 
 #include <kfs/bdesc.h>
 
-#define KFS_DEBUG 1
+#define KFS_DEBUG 0
 
 #if KFS_DEBUG
 
