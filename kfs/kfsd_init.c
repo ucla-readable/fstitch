@@ -1,6 +1,8 @@
 #ifdef KUDOS
 #include <inc/lib.h>
 #endif
+/* config.h gets us RELEASE_NAME */
+#include <inc/config.h>
 #include <inc/error.h>
 #include <lib/assert.h>
 #include <lib/kdprintf.h>
@@ -104,6 +106,8 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 	CFS_t * opgroupscope_tracker = NULL;
 #endif
 	int r;
+
+	printf("kfsd (%s) starting\n", RELEASE_NAME);
 
 	/* we do kfsd_sched_init() before KFS_DEBUG_INIT() because the debugger
 	 * registers a periodic callback... but aside from this exception, the
