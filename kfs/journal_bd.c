@@ -612,7 +612,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	r = chdesc_create_noop_list(NULL, NULL, &info->wait, info->keep, info->prev_cr, NULL);
 	if(r < 0)
 		goto fail_wait;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, wait);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
 	CREATE_NOOP(hold, object); /* this one is managed */
 	CREATE_NOOP(safe, NULL);
 	CREATE_NOOP(done, NULL);
