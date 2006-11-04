@@ -469,9 +469,10 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		bio_iovec_idx(bio, i)->bv_len = 0;
 		bio_iovec_idx(bio, i)->bv_offset = 0;
 	}
-	private->bdesc->ddesc->synthetic = 0;
 
-	if (dir == WRITE)
+	if (dir == READ)
+		private->bdesc->ddesc->synthetic = 0;
+	else if (dir == WRITE)
 		free(private);
 	bio_put(bio);
 
