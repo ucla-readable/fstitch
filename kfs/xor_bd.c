@@ -185,6 +185,7 @@ static int xor_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->bd, bd);
+	blockman_destroy(&info->blockman);
 	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);

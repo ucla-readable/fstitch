@@ -269,6 +269,7 @@ static int mirror_bd_destroy(BD_t * bd)
 		modman_dec_bd(info->bd[1], bd);
 	if(info->bd[0])
 		modman_dec_bd(info->bd[0], bd);
+	blockman_destroy(&info->blockman);
 	free(OBJLOCAL(bd));
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
