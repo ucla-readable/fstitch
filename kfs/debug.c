@@ -59,6 +59,7 @@ struct param {
 	/* keep this in sync with the array below */
 	enum {
 		STRING = 0,
+		FORMAT, /* printf-style format string */
 		INT32,
 		UINT32,
 		UHEX32,
@@ -83,7 +84,7 @@ struct module {
 /* data declarations */
 
 /* keep this in sync with the enum above */
-const uint8_t type_sizes[] = {-1, 4, 4, 4, 2, 2, 2, 1};
+const uint8_t type_sizes[] = {-1, -1, 4, 4, 4, 2, 2, 2, 1};
 
 /* all parameters */
 static const struct param
@@ -101,7 +102,7 @@ static const struct param
 	param_free_next =   {"free_next",   UHEX32},
 	param_free_prev =   {"free_prev",   UHEX32},
 	param_head =        {"head",        UHEX32},
-	param_label =       {"label",       STRING},
+	param_label =       {"label",       FORMAT},
 	param_length =      {"length",      UINT16},
 	param_location =    {"location",    UHEX32},
 	param_module =      {"module",      UHEX16},
@@ -734,6 +735,12 @@ int kfs_debug_init(void)
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
 				/* TODO: maybe write the logical data type here as well */
 				kfs_debug_write(LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
+				if(modules[m].opcodes[o]->params[p]->type == FORMAT)
+					if(modules[m].opcodes[o]->params[p + 1]->name)
+					{
+						printf("WARNING: ignoring extra parameters after \"%s\" in module 0x%04x:0x%04x!\n", modules[m].opcodes[o]->params[p]->name, m, o);
+						break;
+					}
 			}
 			kfs_debug_write(LIT_8, 0, END);
 		}
@@ -864,6 +871,15 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			{
 				char * param = va_arg(ap, char *);
 				kfs_debug_write(LIT_8, -1, LIT_STR, param, END);
+			}
+			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == FORMAT)
+			{
+				char buffer[128] = {0};
+				char * param = va_arg(ap, char *);
+				vsnprintf(buffer, sizeof(buffer), param, ap);
+				kfs_debug_write(LIT_8, -1, LIT_STR, buffer, END);
+				/* FORMAT must be the last declared parameter */
+				break;
 			}
 			else
 			{
