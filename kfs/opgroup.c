@@ -4,6 +4,7 @@
 #include <lib/kdprintf.h>
 #include <lib/panic.h>
 
+#include <kfs/debug.h>
 #include <kfs/sync.h>
 #include <kfs/journal_bd.h>
 #include <kfs/opgroup.h>
@@ -20,6 +21,8 @@
  * - only add holds to the needed journal_bds
  * - make dependencies on an opgroup transaction depend on the commit record
  */
+
+/* TODO: describe big picture re why chdesc_add_depend() usage is safe */
 
 struct opgroup {
 	opgroup_id_t id;
@@ -87,21 +90,22 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	opgroup_state_t * state;
 	opgroup_scope_t * copy = opgroup_scope_create();
 	if(!copy)
-		goto error_1;
+		return NULL;
 	
 	copy->next_id = scope->next_id;
-	copy->top = scope->top;
-	if(copy->top)
+	if(scope->top)
 	{
 		/* we need our own top_keep */
 		if(chdesc_create_noop_list(NULL, NULL, &copy->top_keep, NULL) < 0)
-			goto error_2;
+			goto error_copy;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top_keep, "top_keep");
 		chdesc_claim_noop(copy->top_keep);
-		if(chdesc_add_depend(copy->top, copy->top_keep) < 0)
-			goto error_3;
+		if(chdesc_create_noop_list(NULL, NULL, &copy->top, copy->top_keep, NULL) < 0)
+			goto error_top_keep;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
 	}
 	if(chdesc_weak_retain(scope->bottom, &copy->bottom) < 0)
-		goto error_3;
+		goto error_top_keep;
 	
 	/* iterate over opgroups and increase reference counts */
 	hash_map_it_init(&it, scope->id_map);
@@ -109,12 +113,12 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	{
 		opgroup_state_t * dup = malloc(sizeof(*dup));
 		if(!dup)
-			goto error_4;
+			goto error_bottom;
 		*dup = *state;
 		if(hash_map_insert(copy->id_map, (void *) dup->opgroup->id, dup) < 0)
 		{
 			free(dup);
-			goto error_4;
+			goto error_bottom;
 		}
 		dup->opgroup->references++;
 		/* FIXME: can we do better than just assert? */
@@ -129,7 +133,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	
 	return copy;
 	
-error_4:
+  error_bottom:
 	hash_map_it_init(&it, copy->id_map);
 	while((state = hash_map_val_next(&it)))
 	{
@@ -142,12 +146,11 @@ error_4:
 	hash_map_destroy(copy->id_map);
 	
 	chdesc_weak_release(&copy->bottom);
-error_3:
+  error_top_keep:
 	if(copy->top_keep)
-		chdesc_satisfy(&copy->top_keep);
-error_2:
+		chdesc_satisfy(&copy->top_keep);	
+  error_copy:
 	free(copy);
-error_1:
 	return NULL;
 }
 
@@ -225,20 +228,23 @@ opgroup_t * opgroup_create(int flags)
 	
 	if(chdesc_create_noop_list(NULL, NULL, &op->head_keep, NULL) < 0)
 		goto error_state;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head_keep, "head_keep");
 	chdesc_claim_noop(op->head_keep);
 	
 	if(chdesc_create_noop_list(NULL, NULL, &op->tail_keep, NULL) < 0)
 		goto error_head_keep;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail_keep, "tail_keep");
 	chdesc_claim_noop(op->tail_keep);
 	
 	if(chdesc_create_noop_list(NULL, NULL, &op->tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail, "tail");
 	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
 		goto error_tail;
 	
-	assert(op->head_keep && op->tail); /* head_keep must be non-NULL for create_noop */
-	if(chdesc_create_noop_list(NULL, NULL, &op->head, op->head_keep, op->tail, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, NULL, &op->head, op->head_keep, NULL) < 0)
 		goto error_tail;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head, "head");
 	if(chdesc_weak_retain(op->head, &op->head) < 0)
 		goto error_head;
 	
@@ -285,6 +291,20 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	assert(!after->tail_keep == after->is_released);
 	if(after->is_released || after->has_afters)
 		return -E_INVAL;
+	/* we only create head => tail directly if we need to: when we are adding
+	 * an after to an opgroup and it still has both its head and tail */
+	if(after->head && before->head)
+	{
+		/* for efficiency, when that head and tail are not already connected
+		 * transitively: that is, head has only head_keep as a before */
+		if(before->head->befores && before->head->befores->before.next &&
+		   before->head->befores->before.desc == before->head_keep)
+		{
+			r = chdesc_add_depend(before->head, before->tail);
+			if(r < 0)
+				return r;
+		}
+	}
 	/* it might not have a head if it's already been written to disk */
 	/* (in this case, it won't be engaged again since it will have
 	 * afters now, so we don't need to recreate it) */
@@ -303,7 +323,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	return r;
 }
 
-static int opgroup_update_top_bottom(void)
+static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool was_engaged)
 {
 	hash_map_it_t it;
 	opgroup_state_t * state;
@@ -313,45 +333,61 @@ static int opgroup_update_top_bottom(void)
 	chdesc_t * save_top = current_scope->top;
 	int r, count = 0;
 	
+	/* attach heads to top only when done with the head so that
+	 * top can gain befores along the way */
+	hash_map_it_init(&it, current_scope->id_map);
+	while((state = hash_map_val_next(&it)))
+		if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
+		{
+			assert(state->opgroup->head);
+			r = chdesc_add_depend(state->opgroup->head, save_top);
+			if(r < 0)
+			{
+				chdesc_t * failure_head;
+			  error_changed_state:
+				failure_head = state ? state->opgroup->head : NULL;
+				hash_map_it_init(&it, current_scope->id_map);
+				while((state = hash_map_val_next(&it)))
+				{
+					if(state->opgroup->head == failure_head)
+						break;
+					if(state == changed_state ? was_engaged : state->engaged)
+						chdesc_remove_depend(state->opgroup->head, save_top);
+				}
+				return r;
+			}
+		}
+	
 	/* create new top and bottom */
 	r = chdesc_create_noop_list(NULL, NULL, &top_keep, NULL);
 	if(r < 0)
-		return r;
+		goto error_changed_state;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top_keep, "top_keep");
 	chdesc_claim_noop(top_keep);
-
+	
 	r = chdesc_create_noop_list(NULL, NULL, &bottom, NULL);
 	if(r < 0)
 		goto error_top_keep;
-
-	assert(top_keep && bottom); /* top_keep must be non-NULL for create_noop */
-	r = chdesc_create_noop_list(NULL, NULL, &top, top_keep, bottom, NULL);
-	if(r < 0)
-	{
-		chdesc_destroy(&bottom);
-	error_top_keep:
-		chdesc_destroy(&top_keep);
-		return r;
-	}
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
 	
 	hash_map_it_init(&it, current_scope->id_map);
 	while((state = hash_map_val_next(&it)))
 		if(state->engaged)
 		{
-			assert(state->opgroup->head);
-			r = chdesc_add_depend(state->opgroup->head, top);
-			if(r < 0)
-			{
-			error_loop:
-				chdesc_satisfy(&top_keep);
-				/* satisfy a chdesc with befores... is this OK? */
-				chdesc_satisfy(&bottom);
-				return r;
-			}
 			if(state->opgroup->tail)
 				if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
-					goto error_loop;
+				{
+					state = NULL;
+					goto error_bottom;
+				}
 			count++;
 		}
+	
+	assert(top_keep && bottom); /* top_keep must be non-NULL for create_noop */
+	r = chdesc_create_noop_list(NULL, NULL, &top, top_keep, bottom, NULL);
+	if(r < 0)
+		goto error_bottom;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
 	
 	if(!bottom->befores)
 	{
@@ -364,7 +400,7 @@ static int opgroup_update_top_bottom(void)
 	{
 		r = chdesc_weak_retain(save_top, &current_scope->top);
 		assert(r >= 0);
-		goto error_loop;
+		goto error_bottom;
 	}
 	
 	if(!count)
@@ -380,6 +416,12 @@ static int opgroup_update_top_bottom(void)
 	current_scope->top_keep = top_keep;
 	
 	return 0;
+	
+  error_bottom:
+	chdesc_destroy(&bottom);
+  error_top_keep:
+	chdesc_destroy(&top_keep);
+	goto error_changed_state;
 }
 
 int opgroup_engage(opgroup_t * opgroup)
@@ -411,7 +453,7 @@ int opgroup_engage(opgroup_t * opgroup)
 	/* FIXME: can we do better than just assert? */
 	assert(state->opgroup->engaged_count);
 	
-	r = opgroup_update_top_bottom();
+	r = opgroup_update_top_bottom(state, 0);
 	if(r < 0)
 	{
 		state->engaged = 0;
@@ -448,7 +490,7 @@ int opgroup_disengage(opgroup_t * opgroup)
 	state->engaged = 0;
 	opgroup->engaged_count--;
 	
-	r = opgroup_update_top_bottom();
+	r = opgroup_update_top_bottom(state, 1);
 	if(r < 0)
 	{
 		state->engaged = 1;
@@ -547,6 +589,7 @@ int opgroup_prepare_head(chdesc_t ** head)
 		int r = chdesc_create_noop_list(NULL, NULL, head, current_scope->bottom, *head, NULL);
 		if(r < 0)
 			return r;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");
 	}
 	else
 		*head = current_scope->bottom;
