@@ -100,7 +100,7 @@ static int ensure_bdesc_has_overlaps(bdesc_t * block)
 	r = chdesc_create_noop_list(NULL, NULL, &chdesc, NULL);
 	if(r < 0)
 		return r;
-	
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "overlaps");
 	r = chdesc_weak_retain(chdesc, &block->ddesc->overlaps);
 	if(r < 0)
 	{
@@ -130,6 +130,7 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	r = chdesc_create_noop_list(NULL, NULL, &chdesc, NULL);
 	if(r < 0)
 		return NULL;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "bit_changes");
 	
 	if(hash_map_insert(block->ddesc->bit_changes, key, chdesc) < 0)
 	{
