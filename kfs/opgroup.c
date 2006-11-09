@@ -293,7 +293,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 		return -E_INVAL;
 	/* we only create head => tail directly if we need to: when we are adding
 	 * an after to an opgroup and it still has both its head and tail */
-	if(after->head && before->head)
+	if(before->head && before->tail)
 	{
 		/* for efficiency, when that head and tail are not already connected
 		 * transitively: that is, head has only head_keep as a before */
