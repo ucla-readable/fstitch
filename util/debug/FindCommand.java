@@ -77,8 +77,21 @@ public class FindCommand implements Command
 		Debugger dbg = (Debugger) data;
 		if(dbg != null)
 		{
-			if(args.length == 0 || !("max".equals(args[0]) || "min".equals(args[0])))
-				System.out.println("Need \"max\" or \"min\" to find.");
+			if(args.length == 0 || !("max".equals(args[0]) || "min".equals(args[0]) || "writes".equals(args[0])))
+				System.out.println("Need \"max\" or \"min\" or \"writes\" to find.");
+			else if("writes".equals(args[0]))
+			{
+				if(args.length > 1)
+				{
+					int k = Integer.parseInt(args[1]);
+					SATWritesSolver.makeSATInstance(dbg.getState(), k, System.out);
+				}
+				else
+				{
+					int min = SATWritesSolver.findMinBlockWrites(dbg.getState());
+					System.out.println("Minimim number of block writes: " + min);
+				}
+			}
 			else if(args.length == 1 || args.length >= 3)
 			{
 				int opcode, start = 0, stop = dbg.getOpcodeCount();

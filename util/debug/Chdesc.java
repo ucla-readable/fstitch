@@ -276,6 +276,13 @@ public class Chdesc
 		return afters.iterator();
 	}
 	
+	public int getAfterCount()
+	{
+		if(!isValid())
+			throw new RuntimeException("Query for after count of invalid chdesc!");
+		return afters.size();
+	}
+	
 	public void weakRetain(int location)
 	{
 		if(!isValid())
