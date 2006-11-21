@@ -443,8 +443,12 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 			 done, error);
 	if (bio->bi_size)
 	{
-		// TODO: should we decrement info->outstanding_io_count at this exit?
-		kdprintf(STDOUT_FILENO, "%s: Should info->outstanding_io_count be decremented at this exit? You better hope not.\n", __FUNCTION__);
+		/* Everyone else in the [2.6.12] linux kernel returns one here;
+		 * we follow their lead. No one inspects bi_end_io()'s return value,
+		 * either. */
+		/* Should we decrement info->outstanding_io_count at this exit?
+		 * It sounds like non-zero bi_size may mean the i/o is not yet
+		 * complete. So we'll not and hope it works out. */
 		return 1;
 	}
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer 2\n", private->seq);
