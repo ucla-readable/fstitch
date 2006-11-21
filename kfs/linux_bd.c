@@ -17,6 +17,7 @@
 #include <linux/blkdev.h>
 #include <linux/namei.h>
 #include <linux/types.h>
+#include <asm/atomic.h>
 
 #ifndef __KERNEL__
 #error linux_bd must be compiled for the linux kernel
@@ -178,6 +179,8 @@ struct linux_info {
 
 	wait_queue_head_t waitq; // wait for DMA to complete
 	spinlock_t wait_lock; // lock for 'waitq'
+
+	atomic_t outstanding_io_count;
 
 	uint32_t blockcount;
 	uint16_t blocksize;
@@ -373,6 +376,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		dma_outstanding++;
 		spin_unlock(&dma_outstanding_lock);
 
+		atomic_inc(&info->outstanding_io_count);
+
 #if LINUX_BD_DEBUG_PRINT_EVERY_READ
 		printk(KERN_ERR "%d\n", j_number);
 #endif // LINUX_BD_DEBUG_PRINT_EVERY_READ
@@ -438,7 +443,11 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer (%d, %d)\n", private->seq,
 			 done, error);
 	if (bio->bi_size)
+	{
+		// TODO: should we decrement info->outstanding_io_count at this exit?
+		kdprintf(STDOUT_FILENO, "%s: Should info->outstanding_io_count be decremented at this exit? You better hope not.\n", __FUNCTION__);
 		return 1;
+	}
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer 2\n", private->seq);
 
 	assert(bio->bi_vcnt == 1);
@@ -491,6 +500,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		}
 	}
 
+	atomic_dec(&info->outstanding_io_count);
 	return error;
 }
 
@@ -604,6 +614,8 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_end_io = bio_end_io_fn;
 	bio->bi_private = private;
 
+	atomic_inc(&info->outstanding_io_count);
+
 	KDprintk(KERN_ERR "issuing DMA write request [%d]\n", private->seq);
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	start = current_kernel_time();
@@ -657,6 +669,18 @@ int linux_bd_destroy(BD_t * bd)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
 	int r;
+	bool wait_printed = 0;
+
+	while (atomic_read(&info->outstanding_io_count))
+	{
+		if (!wait_printed)
+		{
+			kdprintf(STDOUT_FILENO, "%s: waiting for %d outstanding I/Os\n", __FUNCTION__, atomic_read(&info->outstanding_io_count));
+			wait_printed = 1;
+		}
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ / 10);
+	}
 
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	stat_dump();
@@ -745,6 +769,8 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		free(bd);
 		return NULL;
 	}
+
+	atomic_set(&info->outstanding_io_count, 0);
 
 	r = open_bdev(linux_bdev_path, WRITE, &info->bdev);
 	if (r) {
