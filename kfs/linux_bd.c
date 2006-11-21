@@ -432,7 +432,6 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		(struct linux_bio_private *)(bio->bi_private);
 	struct linux_info * info = private->info;
 	int i;
-	static int infty = 2;
 	unsigned long flags;
 	int dir = bio->bi_rw;
 
@@ -466,11 +465,6 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 			}
 
 			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
-
-			if (infty > 0) {
-				infty--;
-				dump_page(p, 256, info->blocksize * private->number);
-			}
 		}
 		//bad_coffee(p);
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
