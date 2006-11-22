@@ -244,23 +244,6 @@ static uint32_t _seq = 0;
 static spinlock_t dma_outstanding_lock;
 static int dma_outstanding = 0;
 
-static void dump_page(unsigned char * p, int len, int off) {
-	int lines = len / 16;
-	int i;
-	printk(KERN_ERR "begin dump:\n");
-	for (i = 0; i < lines; i++) {
-		int j;
-		printk(KERN_ERR "%08x", off);
-		for (j = 0; j < 16; j++) {
-			if (!(j % 8)) printk(" ");
-			printk(" %02x", p[i*16 + j]);
-		}
-		printk("\n");
-		off += 16;
-	}
-	printk(KERN_ERR "dump done\n");
-}
-
 static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
 
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
