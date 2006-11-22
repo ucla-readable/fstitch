@@ -306,7 +306,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		chdesc_update_ready_changes(scan);
 	}
 
-#if CHDESC_SINGLE_NRB
+#if CHDESC_NRB
 	if(block->ddesc->nrb && block->ddesc->nrb->owner == owner)
 		nonready_nonrollbackable = 1;
 #endif
@@ -317,15 +317,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		if(scan->owner == owner)
 		{
 			slice->all_ready = 0;
-#if CHDESC_DATA_OMITTANCE && !CHDESC_SINGLE_NRB
-			if(!chdesc_is_rollbackable(scan))
-			{
-				nonready_nonrollbackable = 1;
-				break;
-			}
-#else
 			break;
-#endif
 		}
 	}
 

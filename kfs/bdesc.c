@@ -75,7 +75,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 #if BDESC_EXTERN_AFTER_COUNT
 	bdesc->ddesc->extern_after_count = 0;
 #endif
-#if CHDESC_SINGLE_NRB
+#if CHDESC_NRB
 	bdesc->ddesc->nrb = NULL;
 #endif
 	bdesc->ddesc->overlaps = NULL;
@@ -146,7 +146,7 @@ void bdesc_release(bdesc_t ** bdesc)
 			if((*bdesc)->ddesc->extern_after_count)
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
 #endif
-#if CHDESC_SINGLE_NRB
+#if CHDESC_NRB
 			if((*bdesc)->ddesc->nrb)
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif

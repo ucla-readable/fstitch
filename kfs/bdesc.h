@@ -35,7 +35,7 @@ struct datadesc {
 	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
 	
-#if CHDESC_SINGLE_NRB
+#if CHDESC_NRB
 	chdesc_t * nrb;
 #endif
 	

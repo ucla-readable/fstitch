@@ -8,18 +8,14 @@
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
 
-/* Set to allow chdesc data omittance when chdesc data is not required
- * NOTE: data omittance currently incurs a significant slow down
- * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
+/* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
+ * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_DATA_OMITTANCE 0
-/* Set to allow at most one non-rollbackable chdesc per block */
-/* values: 0 (unlimited), 1 (limited) */
-#define CHDESC_SINGLE_NRB (CHDESC_DATA_OMITTANCE && 1)
+#define CHDESC_NRB 0
 /* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
  * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
-#define BDESC_EXTERN_AFTER_COUNT CHDESC_DATA_OMITTANCE
+#define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
 
 struct chdesc;
 typedef struct chdesc chdesc_t;

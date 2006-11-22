@@ -24,25 +24,11 @@
  * speedup, even though we use more memory, so it is enabled by default. */
 #define CHDESC_ALLOW_MULTIGRAPH 1
 
-/* Set to restrict adding a before allow only to noops with no afters */
-#define CHDESC_ADD_DEPEND_RESTRICTED (CHDESC_SINGLE_NRB || 0)
+/* Set to restrict adding befores to only noops with no afters */
+#define CHDESC_ADD_DEPEND_RESTRICTED (CHDESC_NRB || 0)
 
-/* Set to allow new chdescs to be merged into existing chdescs */
-#define CHDESC_MERGE_NEW (CHDESC_SINGLE_NRB || 0)
-/* Set to track new chdesc merge stats and print them after shutdown */
-#define CHDESC_MERGE_NEW_STATS 0
-
-#if CHDESC_SINGLE_NRB && !(CHDESC_ADD_DEPEND_RESTRICTED && CHDESC_MERGE_NEW)
-# error CHDESC_SINGLE_NRB requires CHDESC_ADD_DEPEND_RESTRICTED and CHDESC_MERGE_NEW
-#endif
-
-#if CHDESC_MERGE_NEW_STATS && !CHDESC_MERGE_NEW
-# error CHDESC_MERGE_NEW_STATS requires CHDESC_MERGE_NEW
-#endif
-
-#if CHDESC_SINGLE_NRB
-# define CHDESC_DATA_OMITTANCE_V2 1
-#endif
+/* Set to track the nrb chdesc merge stats and print them after shutdown */
+#define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
 
 static chdesc_t * free_head = NULL;
 
@@ -946,287 +932,37 @@ int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...
 	return r;
 }
 
-#if CHDESC_DATA_OMITTANCE
-static bool chdesc_has_external_afters(const chdesc_t * chdesc, const bdesc_t * block)
-{
-	const chdepdesc_t * afters;
-	for(afters = chdesc->afters; afters; afters = afters->after.next)
-	{
-		const chdesc_t * after = afters->after.desc;
-		if(after->type == NOOP)
-		{
-			if(after->block && after->block->ddesc != block->ddesc)
-				return 1;
-			/* XXX: stack usage */
-			if(chdesc_has_external_afters(after, block))
-				return 1;
-		}
-		else if(after->block->ddesc != block->ddesc)
-			return 1;
-	}
-	return 0;
-}
-
-# if !BDESC_EXTERN_AFTER_COUNT
-static bool bdesc_has_external_afters(const bdesc_t * block)
-{
-	const chdesc_t * c;
-	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
-		if(chdesc_has_external_afters(c, block))
-			return 1;
-	return 0;
-}
-# endif
-#endif
-
 static bool new_chdescs_require_data(const bdesc_t * block)
 {
-#if CHDESC_DATA_OMITTANCE
+#if CHDESC_NRB
 	/* Rule: When adding chdesc C to block B,
 	 * and forall C' on B, with C' != C: C' has no afters on blocks != B,
 	 * then C will never need to be rolled back. */
-# if BDESC_EXTERN_AFTER_COUNT
 	return block->ddesc->extern_after_count > 0;
-# else
-	return bdesc_has_external_afters(block);
-# endif
 #else
 	return 1;
 #endif
 }
 
-#if !CHDESC_DATA_OMITTANCE_V2
-static void print_chdesc_befores(const chdesc_t * chdesc, uint32_t limit)
-{
-	const chdepdesc_t * dep;
-	uint32_t n = 0;
-	printf("%p befores:\n", chdesc);
-	for(dep = chdesc->befores; dep && n < limit; dep = dep->before.next, n++)
-		 printf("dep = %p next = %p\n", dep, dep->before.next);
-}
-
-static bool chdesc_has_many_befores(const chdesc_t * chdesc)
-{
-	const chdepdesc_t * dep;
-	uint32_t n = 0;
-	for(dep = chdesc->befores; dep; dep = dep->before.next)
-	{
-		if(++n > 50000)
-		{
-			print_chdesc_befores(chdesc, 50);
-			return 1;
-		}
-	}
-	return 0;
-}
-
-static bool merge_clear = 0;
-
-/* Check whether a chdesc merge that adds a before on 'chdesc' to an
- * existing chdesc on 'block' could lead to an indirect dependency cycle.
- * Returns 0 if a cycle is not possible, <0 if a cycle is possible.
- * Precondition: 0 == bdesc_has_external_afters(block). */
-static int merge_indirect_cycle_is_possible(const chdesc_t * chdesc, const bdesc_t * block)
-{
-#if 0
-	const chdepdesc_t * dep;
-	assert(!chdesc_has_many_befores(chdesc));
-	for(dep = chdesc->befores; dep; dep = dep->before.next)
-	{
-		chdesc_t * before = dep->before.desc;
-		int r;
-		
-		/* It is a precondition that befores on other blocks cannot
-		 * induce cycles. */
-		if(before->block && before->block->ddesc != block->ddesc)
-			continue;
-		
-#if 1
-		/* A rollbackable on 'block' that is a before could already
-		 * have a before on the existing chdesc that is merged into. (Cycle!)
-		 * Having befores on rollbakcables on 'block' rarely occur in practice,
-		 * so conservatively give up on them to make detection simple.
-		 * NOTE: this check could instead scan block->ddesc->all_changes */
-		if(before->block && before->block->ddesc == block->ddesc && chdesc_is_rollbackable(before))
-			return -1;
-#endif
-		
-		/* A NOOP could now, or later be made to, have a chdesc on block
-		 * as a before.
-		 * Conservatively say possible cycle for all NOOP befores
-		 * unless the NOOP is reachable only through chdescs on other blocks.
-		 * This check could be more lenient, but NOOPs can have complicated
-		 * relations and this check gives a low enough false negative rate. */
-		if(before->type == NOOP)
-			return -2;
-		
-		/* Check indirect befores for induced cycles */
-		/* XXX: stack usage */
-		if((r = merge_indirect_cycle_is_possible(before, block)) < 0)
-			return r;
-	}
-	return 0;
-#else
-	struct state {
-		const chdepdesc_t * dep;
-	};
-	typedef struct state state_t;
-	static state_t static_states[STATIC_STATES_CAPACITY];
-	size_t states_capacity = STATIC_STATES_CAPACITY;
-	state_t * states = static_states;
-	state_t * state = states;
-
-	const chdepdesc_t * dep = chdesc->befores;
-	int r = 0;
-  recurse_start:
-	for(; dep; dep = dep->before.next)
-	{
-		chdesc_t * before = dep->before.desc;
-
-		if(before->block && before->block->ddesc != block->ddesc)
-			continue;
-		
-		if(before->block && before->block->ddesc == block->ddesc && chdesc_is_rollbackable(before))
-		{
-			r = -1;
-			goto exit;
-		}
-		if(before->type == NOOP)
-		{
-			r = -2;
-			goto exit;
-		}
-		
-		assert(!chdesc_has_many_befores(before));
-		/* Check indirect befores for induced cycles
-		 * Equivalent to:
-		 * if((r = merge_indirect_cycle_is_possible(before, block)) < 0)
-		 *	return r;
-		 */
-
-		/* Mark visited chdescs to avoid revisits. This saves time and,
-		 * oddly, without marks this function sometimes appears to get
-		 * into an infinite loop. */
-		if(!merge_clear)
-		{
-			if(before->flags & CHDESC_MARKED)
-				continue;
-			before->flags |= CHDESC_MARKED;
-		}
-		else
-		{
-			if(!(before->flags & CHDESC_MARKED))
-				continue;
-			before->flags &= ~CHDESC_MARKED;
-		}
-
-		size_t next_index = 1 + state - &states[0];
-		
-		state->dep = dep;
-		
-		dep = before->befores;
-		
-		if(next_index < states_capacity)
-			state++;
-		else
-		{
-			size_t cur_size = states_capacity * sizeof(*state);
-			states_capacity *= 2;
-			if(states == static_states)
-			{
-				states = smalloc(states_capacity * sizeof(*state));
-				if(states)
-					memcpy(states, static_states, cur_size);
-			}
-			else
-				states = srealloc(states, cur_size, states_capacity * sizeof(*state));
-			if(!states)
-				panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
-			state = &states[next_index];
-		}
-		goto recurse_start;
-		
-	  recurse_resume:
-		(void) 0; /* placate compiler re deprecated end labels */
-	}
-	
-	if(state != &states[0])
-	{
-		state--;
-		dep = state->dep;
-		goto recurse_resume;
-	}
-	
-  exit:
-	if(states != static_states)
-		sfree(states, states_capacity * sizeof(*state));
-	
-	return r;
-#endif
-}
-
-/* Check whether a chdesc merge that adds a before on 'before' to an
- * existing chdesc on 'block' could lead to a dependency cycle.
- * Returns 0 if a cycle is not possible, <0 if a cycle is possible.
- * Precondition: 0 == bdesc_has_external_afters(block). */
-/* TODO: unify this and merge_indirect_cycle_is_possible(). They are the same
- * except that merge_indirect_cycle_is_possible() does not check
- * for direct cycles. */
-static int merge_cycle_is_possible(const chdesc_t * before, const bdesc_t * block)
-{
-	/* It is a precondition that befores on other blocks cannot
-	 * induce cycles. */
-	if(before->block && before->block->ddesc != block->ddesc)
-		return 0;
-
-#if 1
-	/* A rollbackable on 'block' that is a before could already
-	 * have the existing chdesc that is merged into as a before. (Cycle!)
-	 * Rollbackables on 'block' are rarely befores in practice,
-	 * so conservatively give up on them to make detection simple.
-	 * NOTE: this check could instead scan block->ddesc->all_changes */
-	if(before->block && before->block->ddesc == block->ddesc && chdesc_is_rollbackable(before))
-		return -1;
-#endif
-	
-	/* A NOOP could now, or later be made to, have a chdesc on block
-	 * as a before.
-	 * Conservatively say possible cycle for all NOOP befores
-	 * unless the NOOP is reachable only through chdescs on other blocks.
-	 * This check could be more lenient, but NOOPs can have complicated
-	 * relations and this check gives a low enough false negative rate. */
-	if(before->type == NOOP)
-		return -2;
-	
-	/* Check indirect befores for induced cycles */
-	assert(!chdesc_has_many_befores(before));
-	int r = merge_indirect_cycle_is_possible(before, block);
-	merge_clear = 1;
-	merge_indirect_cycle_is_possible(before, block);
-	merge_clear = 0;
-	return r;
-}
-#endif /* !CHDESC_DATA_OMITTANCE_V2 */
-
 /* chdesc merge stat tracking definitions */
-#if CHDESC_MERGE_NEW_STATS
-# define N_CHDESC_MERGE_NEW_STATS 6
-static uint32_t chdesc_merge_new_stats[N_CHDESC_MERGE_NEW_STATS] = {0,0,0,0,0};
-static unsigned chdesc_merge_new_stats_idx = -1;
-static bool chdesc_merge_new_stats_callback_registered = 0;
+#if CHDESC_NRB_MERGE_STATS
+# define N_CHDESC_NRB_MERGE_STATS 3
+static uint32_t chdesc_nrb_merge_stats[N_CHDESC_NRB_MERGE_STATS] = {0, 1, 2};
+static unsigned chdesc_nrb_merge_stats_idx = -1;
+static bool chdesc_nrb_merge_stats_callback_registered = 0;
 
-static void print_chdesc_merge_new_stats(void * ignore)
+static void print_chdesc_nrb_merge_stats(void * ignore)
 {
 	unsigned i;
 	uint32_t nchdescs = 0;
 	uint32_t nchdescs_notmerged = 0;
 	(void) ignore;
 
-	for(i = 0; i < N_CHDESC_MERGE_NEW_STATS; i++)
+	for(i = 0; i < N_CHDESC_NRB_MERGE_STATS; i++)
 	{
-		nchdescs += chdesc_merge_new_stats[i];
+		nchdescs += chdesc_nrb_merge_stats[i];
 		if(i > 0)
-			nchdescs_notmerged += chdesc_merge_new_stats[i];
+			nchdescs_notmerged += chdesc_nrb_merge_stats[i];
 	}
 	
 	printf("chdescs merge stats:\n");
@@ -1237,7 +973,7 @@ static void print_chdesc_merge_new_stats(void * ignore)
 		printf("\tno chdescs created\n");
 		return;
 	}
-	printf("\tmerged: %u (%3.1f%% all)\n", chdesc_merge_new_stats[0], 100 * ((float) chdesc_merge_new_stats[0]) / ((float) nchdescs));
+	printf("\tmerged: %u (%3.1f%% all)\n", chdesc_nrb_merge_stats[0], 100 * ((float) chdesc_nrb_merge_stats[0]) / ((float) nchdescs));
 
 	if(!nchdescs_notmerged)
 	{
@@ -1245,91 +981,48 @@ static void print_chdesc_merge_new_stats(void * ignore)
 		printf("\tall chdescs merged?!\n");
 		return;
 	}
-	for(i = 1; i < N_CHDESC_MERGE_NEW_STATS; i++)
-		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, chdesc_merge_new_stats[i], 100 * ((float) chdesc_merge_new_stats[i]) / ((float) nchdescs_notmerged));
+	for(i = 1; i < N_CHDESC_NRB_MERGE_STATS; i++)
+		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, chdesc_nrb_merge_stats[i], 100 * ((float) chdesc_nrb_merge_stats[i]) / ((float) nchdescs_notmerged));
 }
 
 # include <kfs/kfsd.h>
-static void chdesc_merge_new_stats_log(unsigned idx)
+static void chdesc_nrb_merge_stats_log(unsigned idx)
 {
-	if(!chdesc_merge_new_stats_callback_registered)
+	if(!chdesc_nrb_merge_stats_callback_registered)
 	{
-		int r = kfsd_register_shutdown_module(print_chdesc_merge_new_stats, NULL, SHUTDOWN_POSTMODULES);
+		int r = kfsd_register_shutdown_module(print_chdesc_nrb_merge_stats, NULL, SHUTDOWN_POSTMODULES);
 		if(r < 0)
 			panic("kfsd_register_shutdown_module() = %i", r);
-		chdesc_merge_new_stats_callback_registered = 1;
+		chdesc_nrb_merge_stats_callback_registered = 1;
 	}
-	chdesc_merge_new_stats_idx = idx;
-	chdesc_merge_new_stats[idx]++;
+	chdesc_nrb_merge_stats_idx = idx;
+	chdesc_nrb_merge_stats[idx]++;
 }
-# define CHDESC_MERGE_NEW_STATS_LOG(_idx) chdesc_merge_new_stats_log(_idx)
+# define CHDESC_NRB_MERGE_STATS_LOG(_idx) chdesc_nrb_merge_stats_log(_idx)
 #else
-# define CHDESC_MERGE_NEW_STATS_LOG(_idx) do { } while(0)
+# define CHDESC_NRB_MERGE_STATS_LOG(_idx) do { } while(0)
 #endif
 
-/* Determine whether a new chdesc on 'block', with 'data_required',
- * at 'offset' and 'length', and with the before 'before' can be merged
- * into an existing chdesc. Return such a chdesc if so, else return NULL. */
-static chdesc_t * select_new_chdesc_merger(bdesc_t * block, bool data_required, uint16_t offset, uint16_t length, chdesc_t * before)
+#if CHDESC_NRB
+/* Determine whether a new chdesc on 'block' and with the before 'before'
+ * can be merged into an existing chdesc.
+ * Return such a chdesc if so, else return NULL. */
+static chdesc_t * select_chdesc_merger(const bdesc_t * block, const chdesc_t * before)
 {
-#if !CHDESC_DATA_OMITTANCE_V2
-	chdesc_t * chdesc;
-	chdesc_t * existing = NULL;
-	int r;
-#endif
-	
-#if !CHDESC_MERGE_NEW
-	return NULL;
-#endif
-	
-	if(data_required)
+	if(new_chdescs_require_data(block))
 	{
 		/* rollbackable chdesc dep relations can be complicated, give up */
-		CHDESC_MERGE_NEW_STATS_LOG(1);
+		CHDESC_NRB_MERGE_STATS_LOG(1);
 		return NULL;
 	}
 	
-#if CHDESC_DATA_OMITTANCE_V2
-# if CHDESC_MERGE_NEW_STATS
 	if(block->ddesc->nrb)
-		CHDESC_MERGE_NEW_STATS_LOG(0);
+		CHDESC_NRB_MERGE_STATS_LOG(0);
 	else
-		CHDESC_MERGE_NEW_STATS_LOG(5);
-# endif
+		CHDESC_NRB_MERGE_STATS_LOG(2);	
 	return block->ddesc->nrb;
-#else
-	if(before && ((r = merge_cycle_is_possible(before, block)) < 0))
-	{
-		CHDESC_MERGE_NEW_STATS_LOG(r == -1 ? 2 : 3);
-		return NULL;
-	}
-	
-	/* TODO: eliminate scan of all_changes? */
-	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-	{
-		/* rollbackable chdesc dep relations can be complicated */
-		if(chdesc_is_rollbackable(chdesc))
-		{
-			CHDESC_MERGE_NEW_STATS_LOG(4);
-			return NULL;
-		}
-
-		if(!chdesc_is_rollbackable(chdesc))
-			/* merge with last nonrollbackable, they are all equally good */
-			existing = chdesc;
-	}
-	
-	if(existing)
-	{
-		CHDESC_MERGE_NEW_STATS_LOG(0);
-		return chdesc;
-	}
-	CHDESC_MERGE_NEW_STATS_LOG(5);
-	return NULL;
-#endif
 }
 
-#if CHDESC_DATA_OMITTANCE_V2
 /* Move chdesc's (transitive) befores that cannot reach merge_target
  * to be merge_target's befores, so that a merge into merge_target
  * maintains the needed befores.
@@ -1452,11 +1145,10 @@ bool move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	
 	return reachable;
 }
-#endif
 
 /* Merge what would be a new chdesc into an existing chdesc.
  * Precondition: select_new_chdesc_merger() returned 'existing'. */
-static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_before)
+static int merge_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_before)
 {
 	int r;
 	
@@ -1465,11 +1157,10 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 	assert(existing->byte.offset == 0);
 	assert(existing->byte.length == existing->block->ddesc->length);
 	
-#if CHDESC_DATA_OMITTANCE_V2
 	if(new_before && !(new_before->flags & CHDESC_WRITTEN))
 	{
 		uint16_t saved_flags = existing->flags;
-		/* set CREATING to allow add_depends, which we know are safe */
+		/* set CREATING to allow add_depend, which we know is safe */
 		existing->flags |= CHDESC_CREATING;
 		if(!move_befores_for_merge(new_before, existing))
 		{
@@ -1480,20 +1171,28 @@ static int merge_new_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t n
 			new_before->flags &= ~CHDESC_MARKED;
 		existing->flags = saved_flags;
 	}
-#else	
-	/* Ensure 'existing' has 'new_before' as a before, taking care to not
-	 * create a cycle. Cases for 'new_before':
-	 * - on this block: it is nonrollbackable, so it can be ignored
-	 * - on another block: it does not have chdescs on this block as befores,
-	 *   so it can be added as a before
-	 * - is a noop: not possible */
-	assert(!new_before || new_before->type != NOOP);
-	if(new_before && (new_before->block->ddesc != existing->block->ddesc))
-		if ((r = chdesc_add_depend(existing, new_before)) < 0)
-			return r;
-#endif
 	
 	return 0;
+}
+#endif
+
+/* Attempt to merge into an existing chdesc instead of create a new chdesc.
+ * Returns 1 on successful merge (*merged points merged chdesc),
+ * 0 if no merge could be made, or < 0 upon error. */
+static int chdesc_create_merge(bdesc_t * block, uint16_t offset, uint16_t length, chdesc_t * before, chdesc_t ** merged)
+{
+#if CHDESC_NRB
+	chdesc_t * merger;
+	int r;
+	if(!(merger = select_chdesc_merger(block, before)))
+		return 0;
+	r = merge_chdesc(merger, offset, length, before);
+	if(r >= 0)
+		*merged = merger;
+	return r < 0 ? r : 1;
+#else
+	return 0;
+#endif
 }
 
 #if CHDESC_BYTE_SUM
@@ -1540,15 +1239,15 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if(block->ddesc->lock_owner && block->ddesc->lock_owner != owner)
 		return -E_BUSY;
 	
-	if((chdesc = select_new_chdesc_merger(block, data_required, offset, length, *head)))
+	r = chdesc_create_merge(block, offset, length, *head, head);
+	if(r < 0)
+		return r;
+	else if(r == 1)
 	{
-		if((r = merge_new_chdesc(chdesc, offset, length, *head)) < 0)
-			return r;
 		if(data)
 			memcpy(&block->ddesc->data[offset], data, length);
 		else
 			memset(&block->ddesc->data[offset], 0, length);
-		*head = chdesc;
 		return 0;
 	}
 	
@@ -1653,19 +1352,21 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	}
 	else
 	{
+#if CHDESC_NRB
 		if(data)
 			memcpy(&chdesc->block->ddesc->data[offset], data, length);
 		else
 			memset(&chdesc->block->ddesc->data[offset], 0, length);
 		chdesc->flags &= ~CHDESC_ROLLBACK;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
-#if CHDESC_DATA_OMITTANCE_V2
 		assert(!block->ddesc->nrb);
 		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
 		}
+#else
+		assert(0);
 #endif
 	}
 	
@@ -1709,20 +1410,20 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if(block->ddesc->lock_owner && block->ddesc->lock_owner != owner)
 		return -E_BUSY;
 	
-	if((chdesc = select_new_chdesc_merger(block, data_required, offset * 4, 4, *head)))
+	r = chdesc_create_merge(block, offset * 4, 4, *head, head);
+	if(r < 0)
+		return r;
+	else if(r == 1)
 	{
-		if((r = merge_new_chdesc(chdesc, offset * 4, 4, *head)) < 0)
-			return r;
 		((uint32_t *) block->ddesc->data)[offset] ^= xor;
-		*head = chdesc;
 		return 0;
 	}
 	
 	if(!data_required)
 	{
 		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
-#if CHDESC_MERGE_NEW_STATS
-		chdesc_merge_new_stats[chdesc_merge_new_stats_idx]--; /* don't double count */
+#if CHDESC_NRB_MERGE_STATS
+		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
 #endif
 		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 	}
