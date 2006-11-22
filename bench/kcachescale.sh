@@ -4,7 +4,7 @@
 NRUNS=2
 
 function usage() {
-	echo "Usage: `basename \"$0\"` <MAKEUSER> <OUTDIR> <NBLIST>"
+	echo "Usage: `basename \"$0\"` <MAKEUSER> <OUTDIR> <ufs|ext2> <NBLIST>"
 }
 
 function log() {
@@ -23,7 +23,8 @@ if [ "`whoami`" != "root" ]; then echo "Must run as root" 2>&1; exit 1; fi
 
 MAKEUSER="$1"
 OUTDIR="$2"
-NBLIST="$3"
+FS="$3"
+NBLIST="$4"
 
 [ -d "$OUTDIR" ] || su "$MAKEUSER" -c mkdir "$OUTDIR" || exit 1
 su "$MAKEUSER" -c touch "$OUTDIR"/time_tar "$OUTDIR"/time_rm || exit 1
@@ -32,7 +33,7 @@ for NB in $NBLIST
 do
 	echo "======== $NB blocks"
 
-	NWBBLOCKS=$NB bench/kbench.sh "$MAKEUSER" $NRUNS || break
+	NWBBLOCKS=$NB bench/kbench.sh "$MAKEUSER" $FS $NRUNS || break
 
 	mv time.log "$OUTDIR"/time-$NB.log
 	log $NB tar >> "$OUTDIR"/time_tar

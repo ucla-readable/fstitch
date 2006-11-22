@@ -4,7 +4,6 @@
 NRUNS=1
 TIME_LOG=time.log
 DISK=/dev/sdb
-FSIMG=obj/unix-user/fs/ufs.img
 KMNT=kfs:/
 MNT=/mnt/test
 TARFILE=linux-2.6.15.tar
@@ -80,7 +79,7 @@ function max() {
 }
 
 function usage() {
-	echo "Usage: `basename \"$0\"` <MAKE_USER> [NRUNS=1]"
+	echo "Usage: `basename \"$0\"` <MAKE_USER> <ufs|ext2> [NRUNS=1]"
 	echo "       where MAKE_USER is the name of the user for running make"
 }
 
@@ -98,6 +97,16 @@ then
 fi
 
 REAL_USER="$1"
+
+FSIMG=
+if [ "$2" == "ufs" ]; then
+	FSIMG=obj/unix-user/fs/ufs.img
+elif [ "$2" == "ext2" ]; then
+	FSIMG=obj/unix-user/fs/ext2.img
+else
+	usage 2>&1
+	exit 1
+fi
 
 if [ $# -ge 3 ] && [ "$2" == "-h" ]
 then
