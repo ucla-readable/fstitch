@@ -11,7 +11,7 @@
 /* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
  * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_NRB 0
+#define CHDESC_NRB 1
 /* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
  * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
