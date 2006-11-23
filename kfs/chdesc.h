@@ -7,24 +7,21 @@
 
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 1
-/* values: 0 (disable), 1 (enable) */
-#define CHDESC_CYCLE_CHECK 1
 
-/* Set to allow chdesc data omittance when chdesc data is not required
- * NOTE: data omittance currently incurs a significant slow down
- * NOTE: a chdesc's data cannot be omitted if it will cross a barrier */
+/* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
+ * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_DATA_OMITTANCE 0
-/* BDESC_EXTERN_DEPENDENT_COUNT speeds up data omittance detection,
-+  * but does not yet work with chdesc_noop_reassign() */
+#define CHDESC_NRB 1
+/* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
+ * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
-#define BDESC_EXTERN_DEPENDENT_COUNT CHDESC_DATA_OMITTANCE
+#define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
 
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
-struct chmetadesc;
-typedef struct chmetadesc chmetadesc_t;
+struct chdepdesc;
+typedef struct chdepdesc chdepdesc_t;
 
 struct chrefdesc;
 typedef struct chrefdesc chrefdesc_t;
@@ -34,13 +31,13 @@ typedef struct chrefdesc chrefdesc_t;
 
 #define CHDESC_MARKED    0x01 /* marker for graph traversal */
 #define CHDESC_INSET     0x02 /* indicator for set membership */
-#define CHDESC_MOVED     0x04 /* flag for moving chdescs */
-#define CHDESC_ROLLBACK  0x08 /* chdesc is rolled back */
-#define CHDESC_WRITTEN   0x10 /* chdesc has been written to disk */
-#define CHDESC_FREEING   0x20 /* chdesc is being freed */
-#define CHDESC_DATA      0x40 /* user data change (not metadata) */
-#define CHDESC_BIT_NOOP  0x80 /* bit_changes NOOP chdesc */
-#define CHDESC_OVERLAP  0x100 /* overlaps another chdesc completely */
+#define CHDESC_ROLLBACK  0x04 /* chdesc is rolled back */
+#define CHDESC_WRITTEN   0x08 /* chdesc has been written to disk */
+#define CHDESC_FREEING   0x10 /* chdesc is being freed */
+#define CHDESC_DATA      0x20 /* user data change (not metadata) */
+#define CHDESC_BIT_NOOP  0x40 /* bit_changes NOOP chdesc */
+#define CHDESC_OVERLAP   0x80 /* overlaps another chdesc completely */
+#define CHDESC_CREATING 0x100 /* chdesc is being created */
 
 /* only effective in debugging mode */
 #define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */
@@ -70,16 +67,16 @@ struct chdesc {
 			void * hash_key;
 		} noop;
 	};
-	chmetadesc_t * dependencies;
-	chmetadesc_t ** dependencies_tail;
+	chdepdesc_t * befores;
+	chdepdesc_t ** befores_tail;
 
-	chmetadesc_t * dependents;
-	chmetadesc_t ** dependents_tail;
+	chdepdesc_t * afters;
+	chdepdesc_t ** afters_tail;
 
 	chrefdesc_t * weak_refs;
 
-	/* befores[i] is the number of direct dependencies at level i */
-	uint32_t befores[NBDLEVEL];
+	/* nbefores[i] is the number of direct dependencies at level i */
+	uint32_t nbefores[NBDLEVEL];
 
 	/* entry in the free list */
 	/* TODO: can a chdesc be an entry in the free list and all_changes at
@@ -107,12 +104,12 @@ struct chdesc {
 	uint16_t flags;
 };
 
-struct chmetadesc {
+struct chdepdesc {
 	struct {
-		chmetadesc_t ** ptr;
+		chdepdesc_t ** ptr;
 		chdesc_t * desc;
-		chmetadesc_t * next;
-	} dependency, dependent;
+		chdepdesc_t * next;
+	} before, after;
 };
 
 struct chrefdesc {
@@ -121,7 +118,10 @@ struct chrefdesc {
 };
 
 /* create new chdescs */
-chdesc_t * chdesc_create_noop(bdesc_t * block, BD_t * owner);
+/* create a noop using the NULL-terminated befores array */
+int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
+/* create a noop using the NULL-terminated befores var_arg */
+int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...);
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head);
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head);
@@ -146,14 +146,14 @@ static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
 	}
 }
 
-/* return the maximum dependency BD level */
+/* return the maximum before BD level */
 /* TODO: determine whether inlining affects runtime */
 static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc) __attribute__((always_inline));
 static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 {
 	int i;
 	for(i = NBDLEVEL; i > 0; i--)
-		if(chdesc->befores[i - 1])
+		if(chdesc->nbefores[i - 1])
 			return i - 1;
 	return BDLEVEL_NONE;
 }
@@ -168,8 +168,8 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 	__chdesc->owner ? __chdesc->owner->level : chdesc_before_level(__chdesc); \
 })
 
-/* propagate the level change, from 'prev_level' to 'new_level', to 'dependents' */
-void chdesc_propagate_level_change(chmetadesc_t * dependents, uint16_t prev_level, uint16_t new_level);
+/* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */
+void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
 
 
 /* check whether two change descriptors overlap, even on different blocks */
@@ -178,11 +178,11 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);
 /* rewrite a byte change descriptor, if it is safe to do so */
 int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data);
 
-/* add a dependency to a change descriptor */
-int chdesc_add_depend(chdesc_t * dependent, chdesc_t * dependency);
+/* add a dependency from 'after' on 'before' */
+int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
 
-/* remove a dependency from a change descriptor */
-void chdesc_remove_depend(chdesc_t * dependent, chdesc_t * dependency);
+/* remove a dependency from 'after' on 'before' */
+void chdesc_remove_depend(chdesc_t * after, chdesc_t * before);
 
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);
@@ -218,15 +218,6 @@ void chdesc_link_ready_changes(chdesc_t * chdesc);
 void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 /* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
 void chdesc_update_ready_changes(chdesc_t * chdesc);
-
-/* hidden functions for use in chdesc_util.c */
-void __propagate_dependency(chdesc_t * dependent, const chdesc_t * dependency);
-void __unpropagate_dependency(chdesc_t * dependent, const chdesc_t * dependency);
-int __ensure_bdesc_has_overlaps(bdesc_t * block);
-chdesc_t * __ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset);
-chdesc_t * __chdesc_bit_changes(bdesc_t * block, uint16_t offset);
-int __chdesc_add_depend_fast(chdesc_t * dependent, chdesc_t * dependency);
-int __chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block);
 
 uint32_t chdesc_register_stamp(BD_t * bd);
 void chdesc_release_stamp(uint32_t stamp);

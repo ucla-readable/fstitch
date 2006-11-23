@@ -33,7 +33,7 @@ opgroup_sync(opgroup_id_t opgroup)
 }
 
 int
-opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency)
+opgroup_add_depend(opgroup_id_t after, opgroup_id_t before)
 {
 	envid_t fsid;
 
@@ -45,8 +45,8 @@ opgroup_add_depend(opgroup_id_t dependent, opgroup_id_t dependency)
 		ROUNDUP32(__cfs_ipc_page, PGSIZE);
 	memset(pg, 0, PGSIZE);
 	pg->scfs_type = SCFS_OPGROUP_ADD_DEPEND;
-	pg->dependent = dependent;
-	pg->dependency = dependency;
+	pg->after = after;
+	pg->before = before;
 
 	ipc_send(fsid, SCFS_VAL, pg, PTE_U|PTE_P, NULL);
 

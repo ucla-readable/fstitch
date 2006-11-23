@@ -30,9 +30,9 @@
 /* Theory of operation:
  * 
  * Basically, as chdescs pass through the journal_bd module, we copy their
- * blocks into a journal and add a dependency to each of the chdescs to keep
+ * blocks into a journal and add a before to each of the chdescs to keep
  * them from being written to disk. Then, when the transaction is over, we write
- * some bookkeeping stuff to the journal, hook it up to the waiting dependency
+ * some bookkeeping stuff to the journal, hook it up to the waiting before
  * of all the data, and watch the cache do all our dirty work as it sorts out
  * the chdescs.
  * 
@@ -226,15 +226,15 @@ static int journal_bd_start_transaction(BD_t * object);
 static int journal_bd_stop_transaction_previous(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	chmetadesc_t * meta;
+	chdepdesc_t * dep;
 	chdesc_t * old_safe = info->safe;
 	chdesc_t * hold;
 	int r;
 	
 	/* create a new hold chdesc */
-	hold = chdesc_create_noop(NULL, object);
-	if(!hold)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, object, &hold, NULL);
+	if(r < 0)
+		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, hold, "hold");
 	chdesc_claim_noop(hold);
 	
@@ -247,15 +247,15 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* roll the stuff back that's still a part of this request ID */
-	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
+	for(dep = info->unsafe->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
+		chdesc_t * chdesc = dep->before.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
 		chdesc_t * head = NULL;
 		
-		/* first handle the chdesc's dependencies */
+		/* first handle the chdesc's befores */
 		r = chdesc_add_depend(chdesc, hold);
 		assert(r >= 0);
 		chdesc_remove_depend(chdesc, info->hold);
@@ -305,15 +305,15 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	chdesc_satisfy(&info->hold);
 	info->hold = hold;
 	
-	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
+	for(dep = info->unsafe->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
+		chdesc_t * chdesc = dep->before.desc;
 		bdesc_t * block = chdesc->block;
 		bdesc_t * journal_block;
 		uint32_t number;
 		chdesc_t * head = NULL;
 		
-		/* first handle the chdesc's dependencies */
+		/* first handle the chdesc's befores */
 		r = chdesc_add_depend(info->safe, chdesc);
 		assert(r >= 0);
 		
@@ -360,9 +360,9 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 	}
 	
 	/* one last pass to roll everything forward again */
-	for(meta = info->unsafe->dependencies; meta; meta = meta->dependency.next)
+	for(dep = info->unsafe->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * chdesc = meta->dependency.desc;
+		chdesc_t * chdesc = dep->before.desc;
 		
 		/* have we done this block already? */
 		if(!(chdesc->flags & CHDESC_ROLLBACK))
@@ -385,12 +385,12 @@ static int journal_bd_accept_request(BD_t * object)
 	if(info->unsafe)
 	{
 		/* nothing to do? just return */
-		if(!info->unsafe->dependencies)
+		if(!info->unsafe->befores)
 			return 0;
 
-		while(info->unsafe && info->unsafe->dependencies)
+		while(info->unsafe && info->unsafe->befores)
 		{
-			chdesc_t * chdesc = info->unsafe->dependencies->dependency.desc;
+			chdesc_t * chdesc = info->unsafe->befores->before.desc;
 			chdesc_stamp(chdesc, info->safe_stamp);
 			chdesc_remove_depend(info->unsafe, chdesc);
 			/* FIXME: move all dependencies of them to "wait" so the transaction as a whole
@@ -400,9 +400,9 @@ static int journal_bd_accept_request(BD_t * object)
 	}
 	
 	/* create a new NOOP for unsafe */
-	info->unsafe = chdesc_create_noop(NULL, object);
-	if(!info->unsafe)
-		return -E_NO_MEM;
+	r = chdesc_create_noop_list(NULL, object, &info->unsafe, NULL);
+	if(r < 0)
+		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->unsafe, "unsafe");
 	r = chdesc_weak_retain(info->unsafe, &info->unsafe);
 	if(r < 0)
@@ -442,7 +442,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	return block;
 }
 
-static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	bdesc_t * block;
@@ -457,28 +457,17 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(info->keep && info->request_id != kfsd_get_request_id())
 		journal_bd_accept_request(object);
 	
-	block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+	block = CALL(info->bd, synthetic_read_block, number, count);
 	if(!block && info->keep)
 	{
 		/* we couldn't do the read... stop the transaction at the previous request and retry */
 		journal_bd_stop_transaction_previous(object);
-		block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+		block = CALL(info->bd, synthetic_read_block, number, count);
 		if(!block)
 			kdprintf(STDERR_FILENO, "HOLY MACKEREL! We can't synthetic read block %d! (debug = %d)\n", number, KFS_DEBUG_COUNT());
 	}
 	
 	return block;
-}
-
-static int journal_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	
-	/* make sure it's a valid block */
-	if(number >= info->length)
-		return -E_INVAL;
-	
-	return CALL(info->bd, cancel_block, number);
 }
 
 static int journal_bd_grab_slot(BD_t * object)
@@ -605,36 +594,32 @@ static int journal_bd_start_transaction(BD_t * object)
 		return -E_INVAL;
 	if(info->keep)
 		return 0;
-	
-#define CREATE_NOOP(name, fail_label, owner) do { \
-	info->name = chdesc_create_noop(NULL, owner); \
-	if(!info->name) \
-		goto fail_##fail_label; \
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
-	chdesc_claim_noop(info->name); } while(0)
+
+#define CREATE_NOOP(name, owner) \
+	do { \
+		r = chdesc_create_noop_list(NULL, owner, &info->name, NULL); \
+		if(r < 0) \
+			goto fail_##name; \
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
+		chdesc_claim_noop(info->name); \
+	} while(0)
 	
 	/* this order is important due to the error recovery code */
-	CREATE_NOOP(keep, 1, NULL);
-	CREATE_NOOP(wait, 2, NULL);
-	CREATE_NOOP(hold, 3, object); /* this one is managed */
-	CREATE_NOOP(safe, 4, NULL);
-	CREATE_NOOP(done, 5, NULL);
-	
-	r = chdesc_add_depend(info->wait, info->keep);
-	if(r < 0)
-		goto fail_6;
-	/* make the new commit record (via wait) depend on the previous */
+	CREATE_NOOP(keep, NULL);
+	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	/* FIXME: this can be improved! often it is not necessary... */
-	if(info->prev_cr)
-	{
-		r = chdesc_add_depend(info->wait, info->prev_cr);
-		if(r < 0)
-			goto fail_6;
-	}
-	
+	assert(info->keep); /* keep must be non-NULL for chdesc_create_noop_list */
+	r = chdesc_create_noop_list(NULL, NULL, &info->wait, info->keep, info->prev_cr, NULL);
+	if(r < 0)
+		goto fail_wait;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
+	CREATE_NOOP(hold, object); /* this one is managed */
+	CREATE_NOOP(safe, NULL);
+	CREATE_NOOP(done, NULL);
+
 	r = journal_bd_grab_slot(object);
 	if(r < 0)
-		goto fail_6;
+		goto fail_postdone;
 	
 	/* terminate the chain */
 	info->prev_slot = info->trans_slot;
@@ -646,17 +631,17 @@ static int journal_bd_start_transaction(BD_t * object)
 	
 	return 0;
 	
-fail_6:
+fail_postdone:
 	chdesc_destroy(&info->done);
-fail_5:
+fail_done:
 	chdesc_destroy(&info->safe);
-fail_4:
+fail_safe:
 	chdesc_destroy(&info->hold);
-fail_3:
+fail_hold:
 	chdesc_destroy(&info->wait);
-fail_2:
+fail_wait:
 	chdesc_destroy(&info->keep);
-fail_1:
+fail_keep:
 	return r;
 }
 
@@ -958,31 +943,26 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	if(expected_type == CRCOMMIT)
 	{
 		/* create the three NOOPs we will need for this chain */
-		info->keep = chdesc_create_noop(NULL, NULL);
-		if(!info->keep)
+		r = chdesc_create_noop_list(NULL, NULL, &info->keep, NULL);
+		if(r < 0)
 			goto error_1;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->keep, "keep");
 		chdesc_claim_noop(info->keep);
-		info->safe = chdesc_create_noop(NULL, NULL);
-		if(!info->safe)
+		r = chdesc_create_noop_list(NULL, NULL, &info->safe, info->keep, NULL);
+		if(r < 0)
 			goto error_2;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->safe, "safe");
-		info->done = chdesc_create_noop(NULL, NULL);
-		if(!info->done)
-			goto error_3;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->done, "done");
-		chdesc_claim_noop(info->done);
-		r = chdesc_add_depend(info->safe, info->keep);
+		r = chdesc_create_noop_list(NULL, NULL, &info->done, NULL);
 		if(r < 0)
 		{
-			chdesc_destroy(&info->done);
-		error_3:
 			chdesc_destroy(&info->safe);
 		error_2:
 			chdesc_destroy(&info->keep);
 		error_1:
 			return r;
 		}
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->done, "done");
+		chdesc_claim_noop(info->done);
 	}
 	
 	/* check for chained transaction */
@@ -1097,7 +1077,7 @@ static int replay_journal(BD_t * bd)
 			{
 				chdesc_satisfy(&info->keep);
 				info->safe = NULL;
-				if(!info->done->dependencies)
+				if(!info->done->befores)
 					chdesc_satisfy(&info->done);
 				else
 					info->done = NULL;
@@ -1283,17 +1263,13 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	lock_block = CALL(journal, read_block, 0, 1);
 	if(!lock_block)
 		panic("Holy Mackerel!");
-	info->lock = chdesc_create_noop(lock_block, bd);
-	if(!info->lock)
-		panic("Holy Mackerel!");
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock, "lock");
-	info->lock_hold = chdesc_create_noop(NULL, bd);
-	if(!info->lock_hold)
+	if(chdesc_create_noop_list(NULL, bd, &info->lock_hold, NULL) < 0)
 		panic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock_hold, "lock_hold");
-	chdesc_claim_noop(info->lock_hold);
-	if(chdesc_add_depend(info->lock, info->lock_hold) < 0)
+	if(chdesc_create_noop_list(lock_block, bd, &info->lock, info->lock_hold, NULL) < 0)
 		panic("Holy Mackerel!");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock, "lock");
+	chdesc_claim_noop(info->lock_hold);
 	info->recursion = 1;
 	if(CALL(journal, write_block, lock_block) < 0)
 		panic("Holy Mackerel!");

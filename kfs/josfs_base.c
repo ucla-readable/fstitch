@@ -362,18 +362,11 @@ static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(info->ubd, read_block, number, 1);
 }
 
-static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number, bool * synthetic)
+static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("JOSFSDEBUG: josfs_synthetic_lookup_block %u\n", number);
 	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, 1, synthetic);
-}
-
-static int josfs_cancel_synthetic_block(LFS_t * object, uint32_t number)
-{
-	Dprintf("JOSFSDEBUG: josfs_cancel_synthetic_block %u\n", number);
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, cancel_block, number);
+	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
@@ -1251,7 +1244,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		return -E_INVAL;
 
 	if (id == KFS_feature_size.id) {
-		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) >= JOSFS_MAXFILESIZE)
+		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) > JOSFS_MAXFILESIZE)
 			return -E_INVAL;
 
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);

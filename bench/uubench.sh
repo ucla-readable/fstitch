@@ -4,7 +4,6 @@
 NRUNS=1
 TIME_LOG=time.log
 MNT=mnt
-KDIR=k1
 TARFILE=linux-2.6.15.tar
 TAROUT=linux-2.6.15
 
@@ -43,10 +42,18 @@ function avg() {
 	echo $AVG
 }
 
-if [ $# -ge 1 ] && [ "$1" == "-h" ]
+function usage() {
+	echo "Usage: `basename \"$0\"` <k1|k2> [NRUNS=1]"
+}
+
+if [ $# -ge 1 ] && [ "$1" == "-h" ] || [ $# -eq 0 ]
 then
-	echo "Usage: `basename \"$0\"` [NRUNS=1]"
-elif [ $# -eq 1 ]
+	usage 2>&1
+	exit 1
+fi
+
+KDIR="$1"
+if [ $# -eq 2 ]
 then
 	NRUNS=$1
 fi

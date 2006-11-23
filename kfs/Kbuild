@@ -55,11 +55,11 @@ KKFSD_KFS_OBJS := \
               md_bd.o \
               elevator_cache_bd.o \
               block_resizer_bd.o \
-              barrier_resizer_bd.o \
               partition_bd.o \
               pc_ptable.o \
               bsd_ptable.o \
               mirror_bd.o \
+              xor_bd.o \
               wt_cache_bd.o \
               wb_cache_bd.o \
               journal_bd.o \

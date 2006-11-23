@@ -29,7 +29,7 @@ int cfs_ipc_opgroup_scope_copy(envid_t parent, envid_t child, const void * child
 // Manipulate opgroups
 
 opgroup_id_t cfs_ipc_opgroup_create(envid_t envid, int flags);
-int cfs_ipc_opgroup_add_depend(envid_t envid, opgroup_id_t dependent, opgroup_id_t dependency);
+int cfs_ipc_opgroup_add_depend(envid_t envid, opgroup_id_t after, opgroup_id_t before);
 
 int cfs_ipc_opgroup_engage(envid_t envid, opgroup_id_t opgroup);
 int cfs_ipc_opgroup_disengage(envid_t envid, opgroup_id_t opgroup);

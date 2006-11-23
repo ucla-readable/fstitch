@@ -242,31 +242,36 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	if(index)
 	{
 		/* in the cache, use it */
-		assert(info->blocks[index].block->count == count);
+		block = info->blocks[index].block;
+		assert(block->count == count);
 		touch_block(info, index);
-		return info->blocks[index].block;
+		if(!block->ddesc->synthetic)
+			return block;
 	}
-	
-	if(hash_map_size(info->block_map) == info->size)
-		if(evict_block(object, 0) < 0)
-			/* no room in cache, and can't evict anything... */
-			return NULL;
-	assert(hash_map_size(info->block_map) < info->size);
+	else
+	{
+		if(hash_map_size(info->block_map) == info->size)
+			if(evict_block(object, 0) < 0)
+				/* no room in cache, and can't evict anything... */
+				return NULL;
+		assert(hash_map_size(info->block_map) < info->size);
+	}
 	
 	/* not in the cache, need to read it */
 	block = CALL(info->bd, read_block, number, count);
 	if(!block)
 		return NULL;
 	
-	index = push_block(info, block);
-	if(index == INVALID_BLOCK)
+	if(block->ddesc->synthetic)
+		block->ddesc->synthetic = 0;
+	else if(push_block(info, block) == INVALID_BLOCK)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
 	return block;
 }
 
-static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	bdesc_t * block;
@@ -282,7 +287,6 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 		/* in the cache, use it */
 		assert(info->blocks[index].block->count == count);
 		touch_block(info, index);
-		*synthetic = 0;
 		return info->blocks[index].block;
 	}
 	
@@ -293,36 +297,16 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	assert(hash_map_size(info->block_map) < info->size);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+	block = CALL(info->bd, synthetic_read_block, number, count);
 	if(!block)
 		return NULL;
 	
 	index = push_block(info, block);
 	if(index == INVALID_BLOCK)
-	{
 		/* kind of a waste of the read... but we have to do it */
-		if(*synthetic)
-			CALL(info->bd, cancel_block, number);
 		return NULL;
-	}
 	
 	return block;
-}
-
-static int wb_cache_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	uint32_t index;
-	
-	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
-		return -E_INVAL;
-	
-	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
-	if(index)
-		pop_block(info, number, index);
-	
-	return CALL(info->bd, cancel_block, number);
 }
 
 static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)

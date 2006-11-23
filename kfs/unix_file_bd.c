@@ -17,7 +17,7 @@
 #include <kfs/revision.h>
 
 // define as 1 to make writes and syncs non-synchronous
-#define RECKLESS_WRITE_SPEED 0
+#define RECKLESS_WRITE_SPEED 1
 
 // block io activity logging
 static FILE * block_log = NULL;
@@ -56,7 +56,7 @@ static int
 unix_file_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	/* no status to report */
-	if (length > 0)
+	if(length > 0)
 		string[0] = 0;
 	return 0;
 }
@@ -83,89 +83,85 @@ static bdesc_t *
 unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
-	bdesc_t * ret;
-	int r;
+	bdesc_t * bdesc;
 	off_t seeked;
-
-	if (!count || number + count > info->blockcount)
-		return NULL;
-
-	ret = blockman_managed_lookup(info->blockman, number);
-	if (ret)
+	int r;
+	
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if(bdesc)
 	{
-		assert(ret->count == count);
-		return ret;
+		assert(bdesc->count == count);
+		if(!bdesc->ddesc->synthetic)
+			return bdesc;
 	}
-
-	ret = bdesc_alloc(number, info->blocksize, count);
-	if (ret == NULL)
-		return NULL;
-	bdesc_autorelease(ret);
+	else
+	{
+		/* make sure it's a valid block */
+		if(!count || number + count > info->blockcount)
+			return NULL;
+		
+		bdesc = bdesc_alloc(number, info->blocksize, count);
+		if(bdesc == NULL)
+			return NULL;
+		bdesc_autorelease(bdesc);
+	}
 	
 	seeked = lseek(info->fd, number * info->blocksize, SEEK_SET);
-	if (seeked != number * info->blocksize)
+	if(seeked != number * info->blocksize)
 	{
 		perror("lseek");
 		assert(0);
 	}
-
-	r = read(info->fd, ret->ddesc->data, ret->ddesc->length);
-	if (r != ret->ddesc->length)
+	
+	r = read(info->fd, bdesc->ddesc->data, bdesc->ddesc->length);
+	if(r != bdesc->ddesc->length)
 	{
-		if (r < 0)
+		if(r < 0)
 			perror("read");
 		assert(0);
 	}
-
-	if (block_log)
-		for (r = 0; r < count; r++)
+	
+	if(block_log)
+		for(r = 0; r < count; r++)
 			fprintf(block_log, "%p read %u %d\n", object, number + r, r);
-
-	r = blockman_managed_add(info->blockman, ret);
-	if (r < 0)
+	
+	if(bdesc->ddesc->synthetic)
+		bdesc->ddesc->synthetic = 0;
+	else if(blockman_managed_add(info->blockman, bdesc) < 0)
+		/* kind of a waste of the read... but we have to do it */
 		return NULL;
-	return ret;
+	
+	return bdesc;
 }
 
 static bdesc_t *
-unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 
 	/* make sure it's a valid block */
-	if (!count || number + count > info->blockcount)
+	if(!count || number + count > info->blockcount)
 		return NULL;
 
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 
 	bdesc = bdesc_alloc(number, info->blocksize, count);
-	if (bdesc == NULL)
+	if(bdesc == NULL)
 		return NULL;
 	bdesc_autorelease(bdesc);
+
+	bdesc->ddesc->synthetic = 1;
 
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		return NULL;
 
-	*synthetic = 1;
-
 	return bdesc;
-}
-
-static int
-unix_file_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-		blockman_remove(ddesc);
-	return 0;
 }
 
 static int
@@ -175,34 +171,37 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	int r;
 	off_t seeked;
 	
-	if (block->number + block->count > info->blockcount) {
+	if(block->number + block->count > info->blockcount)
+	{
 		panic("wrote bad block number\n");
 		return -E_INVAL;
 	}
 
 	r = revision_tail_prepare(block, object);
-	if (r != 0) {
+	if(r != 0)
+	{
 		panic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
 
 	seeked = lseek(info->fd, block->number * info->blocksize, SEEK_SET);
-	if (seeked != block->number * info->blocksize)
+	if(seeked != block->number * info->blocksize)
 	{
 		perror("lseek");
 		assert(0);
 	}
-	if (write(info->fd, block->ddesc->data, block->ddesc->length) != block->ddesc->length)
+	if(write(info->fd, block->ddesc->data, block->ddesc->length) != block->ddesc->length)
 	{
 		perror("write");
 		assert(0);
 	}
 
-	if (block_log)
+	if(block_log)
 		fprintf(block_log, "%p write %u\n", object, block->number);
 
 	r = revision_tail_acknowledge(block, object);
-	if (r != 0) {
+	if(r != 0)
+	{
 		panic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
@@ -221,7 +220,7 @@ unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 #if !RECKLESS_WRITE_SPEED
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
-	if (fsync(info->fd))
+	if(fsync(info->fd))
 	{
 		perror("fsync");
 		assert(0);
@@ -239,7 +238,7 @@ unix_file_bd_destroy(BD_t * bd)
 	int r;
 
 	r = modman_rem_bd(bd);
-	if (r < 0) return r;
+	if(r < 0) return r;
 
 	blockman_destroy(&info->blockman);
 
@@ -248,13 +247,13 @@ unix_file_bd_destroy(BD_t * bd)
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
 
-	if (block_log)
+	if(block_log)
 	{
 		block_log_users--;
-		if (!block_log)
+		if(!block_log)
 		{
 			r = fclose(block_log);
-			if (r == EOF)
+			if(r == EOF)
 			{
 				perror("fclose(block_log)");
 				panic("unable to close block log\n");
@@ -279,15 +278,15 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 		return NULL;
 	
 	r = stat(fname, &sb);
-	if (r == -1) {
+	if(r == -1)
+	{
 		perror("stat");
 		panic("unable to stat %s\n", fname);
 	}
 	blocks = sb.st_size / blocksize;
-	if (sb.st_size != (blocks * blocksize)) {
+	if(sb.st_size != (blocks * blocksize))
 		panic("file %s's size is not block-aligned\n", fname);
-	}
-	if (blocks < 1)
+	if(blocks < 1)
 		return NULL;
 
 	info = malloc(sizeof(*info));
@@ -302,30 +301,21 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 
 	// TODO: use O_DIRECT open flag on linux
 	// NOTE: linux implements O_DSYNC using O_SYNC :(
-#if defined(__MACH__) || RECKLESS_WRITE_SPEED
+#if RECKLESS_WRITE_SPEED
 	info->fd = open(fname, O_RDWR, 0);
 #else
 	info->fd = open(fname, O_RDWR | O_DSYNC, 0);
 #endif
-	if (!info->fd == -1) {
+	if(!info->fd == -1)
+	{
 		perror("open");
 		free(info);
 		free(bd);
 		return NULL;
 	}
-#if defined(__MACH__) && !RECKLESS_WRITE_SPEED
-	// disable caching for file on Mac OS X
-	r = fcntl(info->fd, F_NOCACHE, 1);
-	if (r == -1) {
-		perror("fcntl");
-		close(info->fd);
-		free(info);
-		free(bd);
-		return NULL;
-	}
-#endif
-	info->blockman = blockman_create(blocksize);
-	if (!info->blockman) {
+	info->blockman = blockman_create(blocksize, NULL, NULL);
+	if(!info->blockman)
+	{
 		close(info->fd);
 		free(info);
 		free(bd);
@@ -341,14 +331,14 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 		return NULL;
 	}
 
-	if (block_log || getenv("BLOCK_LOG"))
+	if(block_log || getenv("BLOCK_LOG"))
 	{
-		if (block_log)
+		if(block_log)
 			block_log_users++;
 		else
 		{
 			block_log = fopen(getenv("BLOCK_LOG"), "a");
-			if (!block_log)
+			if(!block_log)
 				perror("fopen(block_log)");
 
 			// separate multiple uses of a log file

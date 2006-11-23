@@ -355,17 +355,20 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		return bdesc;
+		if(!bdesc->ddesc->synthetic)
+			return bdesc;
 	}
-	
-	/* make sure it's a valid block */
-	if(!count || number + count > info->length)
-		return NULL;
-	
-	bdesc = bdesc_alloc(number, IDE_SECTSIZE, count);
-	if(!bdesc)
-		return NULL;
-	bdesc_autorelease(bdesc);
+	else
+	{
+		/* make sure it's a valid block */
+		if(!count || number + count > info->length)
+			return NULL;
+
+		bdesc = bdesc_alloc(number, IDE_SECTSIZE, count);
+		if(!bdesc)
+			return NULL;
+		bdesc_autorelease(bdesc);
+	}
 	
 	if(count > info->ra_count)
 	{
@@ -401,15 +404,17 @@ static bdesc_t * ide_pio_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 			info->ra_sector = number;
 		}
 	}
-	
-	if(blockman_managed_add(info->blockman, bdesc) < 0)
+
+	if(bdesc->ddesc->synthetic)
+		bdesc->ddesc->synthetic = 0;
+	else if(blockman_managed_add(info->blockman, bdesc) < 0)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
 	return bdesc;
 }
 
-static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -418,7 +423,6 @@ static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 	
@@ -431,24 +435,12 @@ static bdesc_t * ide_pio_bd_synthetic_read_block(BD_t * object, uint32_t number,
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
+	bdesc->ddesc->synthetic = 1;
+	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		return NULL;
 	
-	*synthetic = 1;
-	
 	return bdesc;
-}
-
-static int ide_pio_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct ide_info * info = (struct ide_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-	{
-		assert(!ddesc->all_changes);
-		blockman_remove(ddesc);
-	}
-	return 0;
 }
 
 static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
@@ -464,7 +456,7 @@ static int ide_pio_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	KFS_DEBUG_DBWAIT(block);
 	
-#warning The barrier resizer takes care of inter-sector dependency ordering when breaking blocks into sectors.
+#warning The old resizer took care of inter-sector dependency ordering when breaking blocks into sectors.
 #warning FIXME: We must now do it here, in ide_pio_bd (and in all other terminal BDs) via a utility function.
 	/* write it */
 	if(ide_write(info->controller, info->disk, block->number, block->ddesc->data, block->count) == -1)
@@ -542,7 +534,7 @@ BD_t * ide_pio_bd(uint8_t controller, uint8_t disk, uint8_t readahead)
 	
 	BD_INIT(bd, ide_pio_bd, info);
 	
-	info->blockman = blockman_create(IDE_SECTSIZE);
+	info->blockman = blockman_create(IDE_SECTSIZE, NULL, NULL);
 	if(!info->blockman)
 	{
 		free(info->ra_cache);

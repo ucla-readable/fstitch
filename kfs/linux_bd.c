@@ -17,6 +17,7 @@
 #include <linux/blkdev.h>
 #include <linux/namei.h>
 #include <linux/types.h>
+#include <asm/atomic.h>
 
 #ifndef __KERNEL__
 #error linux_bd must be compiled for the linux kernel
@@ -179,6 +180,8 @@ struct linux_info {
 	wait_queue_head_t waitq; // wait for DMA to complete
 	spinlock_t wait_lock; // lock for 'waitq'
 
+	atomic_t outstanding_io_count;
+
 	uint32_t blockcount;
 	uint16_t blocksize;
 	blockman_t * blockman;
@@ -241,23 +244,6 @@ static uint32_t _seq = 0;
 static spinlock_t dma_outstanding_lock;
 static int dma_outstanding = 0;
 
-static void dump_page(unsigned char * p, int len, int off) {
-	int lines = len / 16;
-	int i;
-	printk(KERN_ERR "begin dump:\n");
-	for (i = 0; i < lines; i++) {
-		int j;
-		printk(KERN_ERR "%08x", off);
-		for (j = 0; j < 16; j++) {
-			if (!(j % 8)) printk(" ");
-			printk(" %02x", p[i*16 + j]);
-		}
-		printk("\n");
-		off += 16;
-	}
-	printk(KERN_ERR "dump done\n");
-}
-
 static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
 
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
@@ -266,13 +252,11 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	DEFINE_WAIT(wait);
 	int waited = 0;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
-	bdesc_t * ret;
+	bdesc_t * bdesc;
 	struct bio *bio;
 	struct bio_vec *bv;
 	int vec_len;
-	int r;
-	int i;
-	int j;
+	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	static int infty = 10;
 	bdesc_t *blocks[READ_AHEAD_COUNT];
@@ -283,17 +267,19 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int read_ahead_count = READ_AHEAD_COUNT;
 
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
-	if (!count || number + count > info->blockcount) {
-		printk(KERN_ERR "bailing on read 1\n");
-		return NULL;
-	}
 
-	ret = blockman_managed_lookup(info->blockman, number);
-	if (ret)
-	{
-		assert(ret->count == count);
-		KDprintk(KERN_ERR "already got it. done w/ read\n");
-		return ret;
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if (bdesc) {
+		assert(bdesc->count == count);
+		if (!bdesc->ddesc->synthetic) {
+			KDprintk(KERN_ERR "already got it. done w/ read\n");
+			return bdesc;
+		}
+	} else {
+		if (!count || number + count > info->blockcount) {
+			printk(KERN_ERR "bailing on read 1\n");
+			return NULL;
+		}
 	}
 
 	KDprintk(KERN_ERR "starting real read work\n");
@@ -304,7 +290,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
 	// assert((count * info->blocksize) <= 2048); Why was this assert here?
-	if (count != 4) read_ahead_count = 1;
+	if (count != 4)
+		read_ahead_count = 1;
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	start = current_kernel_time();
 #endif
@@ -313,19 +300,27 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		datadesc_t * dd;
 
 		dd = blockman_lookup(info->blockman, j_number);
-		if (dd) {
+		if (dd && !dd->synthetic) {
 			blocks[j] = NULL;
 			continue;
+		} else if (dd) {
+			if(bdesc->ddesc == dd)
+				blocks[j] = bdesc;
+			else {
+				/* blockman_managed_lookup? */
+				blocks[j] = bdesc_alloc_wrap(dd, j_number, dd->length / info->blockman->length);
+				if (blocks[j] == NULL)
+					return NULL;
+				bdesc_autorelease(blocks[j]);
+			}
+		} else {
+			blocks[j] = bdesc_alloc(j_number, info->blocksize, count);
+			if (blocks[j] == NULL)
+				return NULL;
+			bdesc_autorelease(blocks[j]);
 		}
-
-		blocks[j] = bdesc_alloc(j_number, info->blocksize, count);
-		if (blocks[j] == NULL)
-			return NULL;
-		bdesc_autorelease(blocks[j]);
 	
-		vec_len = (count * info->blocksize) / 4096;
-		if ((count * info->blocksize) % 4096)
-			vec_len++;
+		vec_len = (count * info->blocksize + 4095) / 4096;
 		assert(vec_len == 1);
 
 		bio = bio_alloc(GFP_KERNEL, vec_len);
@@ -363,6 +358,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		spin_lock(&dma_outstanding_lock);
 		dma_outstanding++;
 		spin_unlock(&dma_outstanding_lock);
+
+		atomic_inc(&info->outstanding_io_count);
 
 #if LINUX_BD_DEBUG_PRINT_EVERY_READ
 		printk(KERN_ERR "%d\n", j_number);
@@ -418,7 +415,6 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		(struct linux_bio_private *)(bio->bi_private);
 	struct linux_info * info = private->info;
 	int i;
-	static int infty = 2;
 	unsigned long flags;
 	int dir = bio->bi_rw;
 
@@ -429,7 +425,15 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer (%d, %d)\n", private->seq,
 			 done, error);
 	if (bio->bi_size)
+	{
+		/* Everyone else in the [2.6.12] linux kernel returns one here;
+		 * we follow their lead. No one inspects bi_end_io()'s return value,
+		 * either. */
+		/* Should we decrement info->outstanding_io_count at this exit?
+		 * It sounds like non-zero bi_size may mean the i/o is not yet
+		 * complete. So we'll not and hope it works out. */
 		return 1;
+	}
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer 2\n", private->seq);
 
 	assert(bio->bi_vcnt == 1);
@@ -446,14 +450,8 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 				if (len == 0)
 					len = 4096;
 			}
-			// assert(len <= 2048); Why was this assert here?
 
 			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
-
-			if (infty > 0) {
-				infty--;
-				dump_page(p, 256, info->blocksize * private->number);
-			}
 		}
 		//bad_coffee(p);
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
@@ -462,7 +460,9 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		bio_iovec_idx(bio, i)->bv_offset = 0;
 	}
 
-	if (dir == WRITE)
+	if (dir == READ)
+		private->bdesc->ddesc->synthetic = 0;
+	else if (dir == WRITE)
 		free(private);
 	bio_put(bio);
 
@@ -481,12 +481,11 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		}
 	}
 
+	atomic_dec(&info->outstanding_io_count);
 	return error;
 }
 
-static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
-                                               uint16_t count,
-                                               bool * synthetic)
+static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -495,7 +494,6 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(bdesc)
 	{
 		assert(bdesc->count == count);
-		*synthetic = 0;
 		return bdesc;
 	}
 	
@@ -508,24 +506,12 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number,
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
+	bdesc->ddesc->synthetic = 1;
+	
 	if(blockman_managed_add(info->blockman, bdesc) < 0)
 		return NULL;
 	
-	*synthetic = 1;
-	
 	return bdesc;
-}
-
-static int linux_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
-	datadesc_t * ddesc = blockman_lookup(info->blockman, number);
-	if(ddesc)
-	{
-		assert(!ddesc->all_changes);
-		blockman_remove(ddesc);
-	}
-	return 0;
 }
 
 static int linux_bd_write_block(BD_t * object, bdesc_t * block)
@@ -609,6 +595,8 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_end_io = bio_end_io_fn;
 	bio->bi_private = private;
 
+	atomic_inc(&info->outstanding_io_count);
+
 	KDprintk(KERN_ERR "issuing DMA write request [%d]\n", private->seq);
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	start = current_kernel_time();
@@ -662,6 +650,18 @@ int linux_bd_destroy(BD_t * bd)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
 	int r;
+	bool wait_printed = 0;
+
+	while (atomic_read(&info->outstanding_io_count))
+	{
+		if (!wait_printed)
+		{
+			kdprintf(STDOUT_FILENO, "%s: waiting for %d outstanding I/Os\n", __FUNCTION__, atomic_read(&info->outstanding_io_count));
+			wait_printed = 1;
+		}
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ / 10);
+	}
 
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	stat_dump();
@@ -751,6 +751,8 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 
+	atomic_set(&info->outstanding_io_count, 0);
+
 	r = open_bdev(linux_bdev_path, WRITE, &info->bdev);
 	if (r) {
 		printk(KERN_ERR "open_bdev() error\n");
@@ -759,7 +761,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 	
-	info->blockman = blockman_create(512);
+	info->blockman = blockman_create(512, NULL, NULL);
 	if (!info->blockman) {
 		bd_release(info->bdev);
 		blkdev_put(info->bdev);

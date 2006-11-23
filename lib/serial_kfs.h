@@ -47,11 +47,11 @@
 #define SKFS_WT_CACHE_BD 22
 #define SKFS_ELEVATOR_CACHE_BD 23
 #define SKFS_BLOCK_RESIZER_BD 24
-#define SKFS_BARRIER_RESIZER_BD 25
-#define SKFS_MD_BD 26
-#define SKFS_MIRROR_BD 27
-#define SKFS_MIRROR_BD_ADD 28
-#define SKFS_MIRROR_BD_REMOVE 29
+#define SKFS_MD_BD 25
+#define SKFS_MIRROR_BD 26
+#define SKFS_MIRROR_BD_ADD 27
+#define SKFS_MIRROR_BD_REMOVE 28
+#define SKFS_XOR_BD 29
 #define SKFS_PARTITION_BD 30
 #define SKFS_IDE_PIO_BD 31
 
@@ -64,8 +64,6 @@
 #define SKFS_MODMAN_RETURN_IT      36
 
 #define SKFS_SYNC 37
-
-#define SKFS_PERF_TEST 38
 
 #define SKFS_TYPE int skfs_type
 
@@ -242,12 +240,6 @@ typedef struct {
 
 typedef struct {
 	SKFS_TYPE;
-	uint32_t bd;
-	uint16_t blocksize;
-} Skfs_barrier_resizer_bd_t;
-
-typedef struct {
-	SKFS_TYPE;
 	uint32_t disk0;
 	uint32_t disk1;
 } Skfs_md_bd_t;
@@ -270,6 +262,12 @@ typedef struct {
 	uint32_t bd;
 	int diskno;
 } Skfs_mirror_bd_remove_t;
+
+typedef struct {
+	SKFS_TYPE;
+	uint32_t bd;
+	uint32_t xor_key;
+} Skfs_xor_bd_t;
 
 // TODO: partition_bd
 // TODO: pc_ptable_bd
@@ -328,15 +326,5 @@ typedef struct {
 	char name[SKFS_MAX_NAMELEN];
 } Skfs_sync_t;
 
-
-//
-// perf testing
-
-typedef struct {
-	SKFS_TYPE;
-	int cfs_bd; // 0 CFS, 1 BD
-	int size;
-	char file[100];
-} Skfs_perf_test_t;
 
 #endif // __KUDOS_LIB_SERIAL_KFS_H

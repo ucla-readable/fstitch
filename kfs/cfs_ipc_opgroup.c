@@ -583,21 +583,21 @@ opgroup_id_t cfs_ipc_opgroup_create(envid_t envid, int flags)
 	return opgroupid;
 }
 
-int cfs_ipc_opgroup_add_depend(envid_t envid, opgroup_id_t dependent_id, opgroup_id_t dependency_id)
+int cfs_ipc_opgroup_add_depend(envid_t envid, opgroup_id_t after_id, opgroup_id_t before_id)
 {
 	int r;
-	Dprintf("%s(env = %08x, dependent_id = %d, dependency_id = %d)\n", __FUNCTION__, envid, dependent_id, dependency_id);
+	Dprintf("%s(env = %08x, after_id = %d, before_id = %d)\n", __FUNCTION__, envid, after_id, before_id);
 
-	// Adding a dependent to dependency_id requires that dependency_id to
-	// be disengaged. Because exiting a process disengages, we must
-	// gc() all scopes that contain dependency_id to ensure it is
+	// Adding an after to before_id requires before_id to be
+	// disengaged. Because exiting a process disengages, we must
+	// gc() all scopes that contain after_id to ensure it is
 	// disengaged if it should be. Because we do not have a map of
 	// opgroup ids to scopes, gc() all scopes:
 	opgroup_scope_gc();
 
 	if ((r = set_cur_opgroup_scope_wrap(envid, __FUNCTION__)))
 		return r;
-	r = opgroup_add_depend(opgroup_lookup(dependent_id), opgroup_lookup(dependency_id));
+	r = opgroup_add_depend(opgroup_lookup(after_id), opgroup_lookup(before_id));
 	clear_cur_opgroup_scope();
 	return r;
 }

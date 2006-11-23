@@ -13,7 +13,7 @@
 // block and their dependencies, recursively. It then rolls back all
 // those chdescs that are not on the specified BD.
 // You should be careful, because this function can rollback chdescs without
-// rolling back their dependents.
+// rolling back their afters.
 int revision_tail_prepare(bdesc_t *block, BD_t *bd);
 int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp);
 

@@ -3,7 +3,7 @@ import java.io.*;
 public class CountingDataInput implements DataInput
 {
 	private DataInput input;
-	private int offset;
+	private long offset;
 	
 	public CountingDataInput(DataInput input)
 	{
@@ -99,7 +99,7 @@ public class CountingDataInput implements DataInput
 		return nn;
 	}
 	
-	public int getOffset()
+	public long getOffset()
 	{
 		return offset;
 	}

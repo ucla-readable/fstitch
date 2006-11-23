@@ -653,23 +653,6 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	return create_bd(bd_id);
 }
 
-#include <kfs/barrier_resizer_bd.h>
-BD_t * barrier_resizer_bd(BD_t * disk, uint16_t blocksize)
-{
-	const envid_t fsid = find_fs();
-	uint32_t bd_id;
-
-	INIT_PG(BARRIER_RESIZER_BD, barrier_resizer_bd);
-
-	pg->bd = (uint32_t) OBJLOCAL(disk);
-	pg->blocksize = blocksize;
-
-	SEND_PG();
-	bd_id = RECV_PG();
-
-	return create_bd(bd_id);
-}
-
 #include <kfs/md_bd.h>
 BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 {
@@ -730,6 +713,23 @@ int mirror_bd_remove_device(BD_t * bd, int diskno)
 
 	SEND_PG();
 	return RECV_PG();
+}
+
+#include <kfs/xor_bd.h>
+BD_t * xor_bd(BD_t * disk, uint32_t xor_key)
+{
+	const envid_t fsid = find_fs();
+	uint32_t bd_id;
+
+	INIT_PG(MIRROR_BD, xor_bd);
+
+	pg->bd = (uint32_t) OBJLOCAL(disk);
+	pg->xor_key = xor_key;
+
+	SEND_PG();
+	bd_id = RECV_PG();
+
+	return create_bd(bd_id);
 }
 
 #include <kfs/ide_pio_bd.h>
@@ -971,31 +971,6 @@ int kfs_sync(const char * name)
 		strncpy(pg->name, name, sizeof(pg->name));
 	else
 		pg->name[0] = 0;
-
-	SEND_PG();
-	return RECV_PG();
-}
-
-
-//
-// Perf testing
-
-int perf_test(int cfs_bd, const char * file, int size)
-{
-	const envid_t fsid = find_fs();
-	const int file_len = strlen(file) + 1;
-
-	if (file_len > SKFS_MAX_NAMELEN)
-	{
-		Dprintf("%s(): filename \"%s\" is too long for serial kfs (%u > %u)\n", __FUNCTION__, file, file_len, SKFS_MAX_NAMELEN);
-		return -E_BAD_PATH;
-	}
-
-	INIT_PG(PERF_TEST, perf_test);
-
-	pg->cfs_bd = cfs_bd;
-	pg->size = size;
-	strncpy(pg->file, file, sizeof(pg->file));
 
 	SEND_PG();
 	return RECV_PG();

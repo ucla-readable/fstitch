@@ -23,7 +23,7 @@ public abstract class OpcodeFactory implements Constants
 		return (result != null) ? result.intern() : null;
 	}
 	
-	public int getInputOffset()
+	public long getInputOffset()
 	{
 		return input.getOffset();
 	}

@@ -12,14 +12,12 @@ public class Chdesc
 	/* these flags must be kept in sync with kfs/chdesc.h */
 	public static final int FLAG_MARKED = 0x01;
 	public static final int FLAG_INSET = 0x02;
-	public static final int FLAG_MOVED = 0x04;
-	public static final int FLAG_ROLLBACK = 0x08;
-	public static final int FLAG_READY = 0x10;
-	public static final int FLAG_WRITTEN = 0x20;
-	public static final int FLAG_FREEING = 0x40;
-	public static final int FLAG_DATA = 0x80;
-	public static final int FLAG_BIT_NOOP = 0x100;
-	public static final int FLAG_OVERLAP = 0x200;
+	public static final int FLAG_ROLLBACK = 0x04;
+	public static final int FLAG_WRITTEN = 0x08;
+	public static final int FLAG_FREEING = 0x10;
+	public static final int FLAG_DATA = 0x20;
+	public static final int FLAG_BIT_NOOP = 0x40;
+	public static final int FLAG_OVERLAP = 0x80;
 	public static final int FLAG_DBWAIT = 0x8000;
 	
 	public final int address, opcode;
@@ -34,7 +32,7 @@ public class Chdesc
 	
 	private Chdesc free_prev, free_next;
 	
-	private ChdescCollection dependencies, dependents;
+	private ChdescCollection befores, afters;
 	private HashSet locations;
 	
 	public Chdesc(int address, int opcode)
@@ -50,8 +48,8 @@ public class Chdesc
 		this.block = block;
 		this.owner = owner;
 		this.opcode = opcode;
-		dependencies = new ChdescCollection();
-		dependents = new ChdescCollection();
+		befores = new ChdescCollection();
+		afters = new ChdescCollection();
 		locations = new HashSet();
 		changeToNoop();
 	}
@@ -236,46 +234,53 @@ public class Chdesc
 		type = TYPE_DESTROY;
 	}
 	
-	public void addDependency(Chdesc dependency)
+	public void addBefore(Chdesc before)
 	{
 		if(!isValid())
-			throw new RuntimeException("Attempt to add dependency to invalid chdesc!");
-		dependencies.add(dependency);
+			throw new RuntimeException("Attempt to add before to invalid chdesc!");
+		befores.add(before);
 	}
 	
-	public void addDependent(Chdesc dependent)
+	public void addAfter(Chdesc after)
 	{
 		if(!isValid())
-			throw new RuntimeException("Attempt to add dependent to invalid chdesc!");
-		dependents.add(dependent);
+			throw new RuntimeException("Attempt to add after to invalid chdesc!");
+		afters.add(after);
 	}
 	
-	public void remDependency(int dependency)
+	public void remBefore(int before)
 	{
 		if(!isValid())
-			throw new RuntimeException("Attempt to remove dependency from invalid chdesc!");
-		dependencies.remove(dependency);
+			throw new RuntimeException("Attempt to remove before from invalid chdesc!");
+		befores.remove(before);
 	}
 	
-	public void remDependent(int dependent)
+	public void remAfter(int after)
 	{
 		if(!isValid())
-			throw new RuntimeException("Attempt to remove dependent from invalid chdesc!");
-		dependents.remove(dependent);
+			throw new RuntimeException("Attempt to remove after from invalid chdesc!");
+		afters.remove(after);
 	}
 	
-	public Iterator getDependencies()
+	public Iterator getBefores()
 	{
 		if(!isValid())
-			throw new RuntimeException("Query for dependencies of invalid chdesc!");
-		return dependencies.iterator();
+			throw new RuntimeException("Query for befores of invalid chdesc!");
+		return befores.iterator();
 	}
 	
-	public Iterator getDependents()
+	public Iterator getAfters()
 	{
 		if(!isValid())
-			throw new RuntimeException("Query for dependents of invalid chdesc!");
-		return dependents.iterator();
+			throw new RuntimeException("Query for afters of invalid chdesc!");
+		return afters.iterator();
+	}
+	
+	public int getAfterCount()
+	{
+		if(!isValid())
+			throw new RuntimeException("Query for after count of invalid chdesc!");
+		return afters.size();
 	}
 	
 	public void weakRetain(int location)
@@ -398,8 +403,6 @@ public class Chdesc
 			links += ",dashed,bold";
 		if((flags & FLAG_MARKED) != 0)
 			links += ",bold\",color=red";
-		else if((flags & FLAG_READY) != 0)
-			links += ",bold\",color=green3";
 		else
 			links += "\"";
 		if((flags & FLAG_FREEING) != 0)
@@ -408,18 +411,18 @@ public class Chdesc
 			links += ",fontcolor=blue";
 		links += "]\n";
 		
-		Iterator i = dependencies.iterator();
+		Iterator i = befores.iterator();
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
-			/* we say we depend on you: black arrows */
+			/* we say you are a before for us: black arrows */
 			links += name + " -> " + chdesc.renderName() + " [color=black]\n";
 		}
-		i = dependents.iterator();
+		i = afters.iterator();
 		while(i.hasNext())
 		{
 			Chdesc chdesc = (Chdesc) i.next();
-			/* we say you depend on us: gray arrows */
+			/* we say you are an after for us: gray arrows */
 			links += chdesc.renderName() + " -> " + name + " [color=gray]\n";
 		}
 		i = locations.iterator();
@@ -454,12 +457,8 @@ public class Chdesc
 			names += " | MARKED";
 		if((flags & FLAG_INSET) != 0)
 			names += " | INSET";
-		if((flags & FLAG_MOVED) != 0)
-			names += " | MOVED";
 		if((flags & FLAG_ROLLBACK) != 0)
 			names += " | ROLLBACK";
-		if((flags & FLAG_READY) != 0)
-			names += " | READY";
 		if((flags & FLAG_WRITTEN) != 0)
 			names += " | WRITTEN";
 		if((flags & FLAG_FREEING) != 0)

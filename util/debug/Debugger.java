@@ -80,9 +80,23 @@ public class Debugger extends OpcodeFactory
 			throw new UnsupportedStreamRevisionException(2693, 2584, 2702);
 		if(debugRev == 2703 && debugOpcodeRev == 2703)
 			throw new UnsupportedStreamRevisionException(2703, 2703, -1);
+		if((debugRev == 2704 && debugOpcodeRev == 2703) || (debugRev == 2747 && debugOpcodeRev == 2747))
+			throw new UnsupportedStreamRevisionException(debugRev, debugOpcodeRev, 2756);
+		if(debugRev == 2757 && debugOpcodeRev == 2757)
+			throw new UnsupportedStreamRevisionException(2757, 2757, -1);
+		if(debugRev == 2760 && debugOpcodeRev == 2760)
+			throw new UnsupportedStreamRevisionException(2760, 2760, 2764);
+		if(debugRev == 2765 && debugOpcodeRev == 2765)
+			throw new UnsupportedStreamRevisionException(2765, 2765, 2765);
 		
 		/* supported revisions */
-		if(debugRev == 2704 && debugOpcodeRev == 2703)
+		if(debugRev == 2766 && debugOpcodeRev == 2766)
+			return;
+		if(debugRev == 2786 && debugOpcodeRev == 2766)
+			return;
+		if(debugRev == 2790 && debugOpcodeRev == 2766)
+			return;
+		if(debugRev == 2796 && debugOpcodeRev == 2766)
 			return;
 		
 		/* 0 means "use a newer revision" */
@@ -128,28 +142,60 @@ public class Debugger extends OpcodeFactory
 		return opcode;
 	}
 	
-	public int readOpcodes() throws BadInputException, IOException
+	public int readOpcodes(long size) throws BadInputException, IOException
 	{
+		long nextPercent = 1;
+		long nextOffset = size * nextPercent / 100;
+		boolean star = false;
 		try {
 			for(;;)
+			{
 				opcodes.add(readOpcode());
+				while(input.getOffset() >= nextOffset)
+				{
+					star = true;
+					System.out.print("*");
+					nextOffset = size * ++nextPercent / 100;
+				}
+			}
 		}
 		catch(EOFException e)
 		{
 			/* this is OK, we expect the end of the file sooner or later */
+		}
+		finally
+		{
+			if(star)
+				System.out.print(" ");
 		}
 		return opcodes.size();
 	}
 	
-	public int readOpcodes(int count) throws BadInputException, IOException
+	public int readOpcodes(int count, long size) throws BadInputException, IOException
 	{
+		long nextPercent = 1;
+		long nextOffset = size * nextPercent / 100;
+		boolean star = false;
 		try {
 			while(count-- > 0)
+			{
 				opcodes.add(readOpcode());
+				while(input.getOffset() >= nextOffset)
+				{
+					star = true;
+					System.out.print("*");
+					nextOffset = size * ++nextPercent / 100;
+				}
+			}
 		}
 		catch(EOFException e)
 		{
 			/* this is OK, we expect the end of the file sooner or later */
+		}
+		finally
+		{
+			if(star)
+				System.out.print(" ");
 		}
 		return opcodes.size();
 	}

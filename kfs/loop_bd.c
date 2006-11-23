@@ -104,7 +104,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	return block;
 }
 
-static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
@@ -118,33 +118,16 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	block = CALL(info->lfs, synthetic_lookup_block, lfs_bno, synthetic);
+	block = CALL(info->lfs, synthetic_lookup_block, lfs_bno);
 	if (!block)
 		return NULL;
 
 	block = bdesc_alloc_clone(block, number);
 	if (!block)
-	{
-		if(*synthetic)
-			CALL(info->lfs, cancel_synthetic_block, lfs_bno);
 		return NULL;
-	}
 	bdesc_autorelease(block);
 
 	return block;
-}
-
-static int loop_cancel_block(BD_t * bd, uint32_t number)
-{
-	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	uint32_t lfs_bno;
-
-	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
-	if (lfs_bno == INVALID_BLOCK)
-		return -E_INVAL;
-
-	return CALL(info->lfs, cancel_synthetic_block, lfs_bno);
 }
 
 static int loop_write_block(BD_t * bd, bdesc_t * block)

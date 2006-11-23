@@ -25,7 +25,8 @@ public class LoadCommand implements Command
 			try {
 				int count;
 				File file = new File(args[0]);
-				InputStream stream = new FileInputStream(file);
+				long size = file.length();
+				InputStream stream = new BufferedInputStream(new FileInputStream(file), 1024 * 1024);
 				DataInput input = new DataInputStream(stream);
 				
 				System.out.print("Reading debug signature... ");
@@ -35,14 +36,14 @@ public class LoadCommand implements Command
 				if(args.length == 1)
 				{
 					System.out.print("Reading debugging output... ");
-					count = dbg.readOpcodes();
+					count = dbg.readOpcodes(size);
 					System.out.println(count + " opcodes OK!");
 				}
 				else
 					try {
 						count = Integer.parseInt(args[1]);
 						System.out.print("Reading debugging output... ");
-						count = dbg.readOpcodes(count);
+						count = dbg.readOpcodes(count, size);
 						System.out.println(count + " opcodes OK!");
 					}
 					catch(NumberFormatException e)

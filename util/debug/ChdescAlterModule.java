@@ -18,10 +18,10 @@ public class ChdescAlterModule extends Module
 		addFactory(ChdescSetFlags.getFactory(input));
 		addFactory(ChdescClearFlags.getFactory(input));
 		addFactory(ChdescDestroy.getFactory(input));
-		addFactory(ChdescAddDependency.getFactory(input));
-		addFactory(ChdescAddDependent.getFactory(input));
-		addFactory(ChdescRemDependency.getFactory(input));
-		addFactory(ChdescRemDependent.getFactory(input));
+		addFactory(ChdescAddBefore.getFactory(input));
+		addFactory(ChdescAddAfter.getFactory(input));
+		addFactory(ChdescRemBefore.getFactory(input));
+		addFactory(ChdescRemAfter.getFactory(input));
 		addFactory(ChdescWeakRetain.getFactory(input));
 		addFactory(ChdescWeakForget.getFactory(input));
 		addFactory(ChdescSetOffset.getFactory(input));

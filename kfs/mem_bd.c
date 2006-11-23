@@ -73,47 +73,42 @@ static uint16_t mem_bd_get_atomicsize(BD_t * object)
 static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
-	bdesc_t * ret;
-	int r;
+	bdesc_t * bdesc;
 
-	if (!count || number + count > info->blockcount)
-		return NULL;
-
-	ret = blockman_managed_lookup(info->blockman, number);
-	if (ret)
+	bdesc = blockman_managed_lookup(info->blockman, number);
+	if (bdesc)
 	{
-		assert(ret->count == count);
-		return ret;
+		assert(bdesc->count == count);
+		if (!bdesc->ddesc->synthetic)
+			return bdesc;
+	}
+	else
+	{
+		/* make sure it's a valid block */
+		if (!count || number + count > info->blockcount)
+			return NULL;
+
+		bdesc = bdesc_alloc(number, info->blocksize, count);
+		if (bdesc == NULL)
+			return NULL;
+		bdesc_autorelease(bdesc);
 	}
 
-	ret = bdesc_alloc(number, info->blocksize, count);
-	if (ret == NULL)
-		return NULL;
-	bdesc_autorelease(ret);
-	
-	memcpy(ret->ddesc->data, &info->blocks[info->blocksize * number], info->blocksize * count);
+	memcpy(bdesc->ddesc->data, &info->blocks[info->blocksize * number], info->blocksize * count);
 
-	r = blockman_managed_add(info->blockman, ret);
-	if (r < 0)
+	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
+	if (bdesc->ddesc->synthetic)
+		bdesc->ddesc->synthetic = 0;
+	else if (blockman_managed_add(info->blockman, bdesc) < 0)
 		return NULL;
-	return ret;
+	return bdesc;
 }
 
-static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	/* mem_bd doesn't bother with synthetic blocks,
 	 * since it's just as fast to use real ones */
-	bdesc_t * ret = mem_bd_read_block(object, number, count);
-	if(ret)
-		*synthetic = 0;
-	return ret;
-}
-
-static int mem_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	/* cancel_block should never be called on mem_bd */
-	assert(0);
-	return -E_PERM;
+	return mem_bd_read_block(object, number, count);
 }
 
 static int mem_bd_write_block(BD_t * object, bdesc_t * block)
@@ -228,7 +223,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize);
+	info->blockman = blockman_create(blocksize, NULL, NULL);
 	if (!info->blockman) {
 		free(info->blocks);
 		free(info);

@@ -27,19 +27,25 @@ struct datadesc {
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;
 
-#if BDESC_EXTERN_DEPENDENT_COUNT
-	uint32_t extern_dependent_count;
+#if BDESC_EXTERN_AFTER_COUNT
+	uint32_t extern_after_count;
 #endif
 	
 	/* For each level (at most one BD per level), the level's ready chdescs.
-	 * ready chdesc: chdesc with no dependencies at its level or higher. */
+	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
+	
+#if CHDESC_NRB
+	chdesc_t * nrb;
+#endif
 	
 	chdesc_t * overlaps;
 	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;
-	uint16_t length;
+	/* Oh! The humanity! Scrounging for bits! */
+	uint16_t length, lock_count:15, synthetic:1;
+	BD_t * lock_owner;
 };
 
 struct bdesc {

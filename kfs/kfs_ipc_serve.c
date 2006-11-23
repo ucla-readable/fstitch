@@ -359,20 +359,6 @@ static void kis_block_resizer_bd(envid_t whom, const Skfs_block_resizer_bd_t * p
 	RETURN_IPC;
 }
 
-#include <kfs/barrier_resizer_bd.h>
-static void kis_barrier_resizer_bd(envid_t whom, const Skfs_barrier_resizer_bd_t * pg)
-{
-	BD_t * bd = (BD_t *) pg->bd;
-	uint32_t val;
-	
-	if (!modman_name_bd(bd))
-		RETURN_IPC_INVAL;
-
-	val = (uint32_t) barrier_resizer_bd(bd, pg->blocksize);
-
-	RETURN_IPC;
-}
-
 #include <kfs/md_bd.h>
 static void kis_md_bd(envid_t whom, const Skfs_md_bd_t * pg)
 {
@@ -427,6 +413,20 @@ static void kis_mirror_bd_remove(envid_t whom, const Skfs_mirror_bd_remove_t * p
 		RETURN_IPC_INVAL;
 
 	val = (uint32_t) mirror_bd_remove_device(bd, diskno);
+
+	RETURN_IPC;
+}
+
+#include <kfs/xor_bd.h>
+static void kis_xor_bd(envid_t whom, const Skfs_xor_bd_t * pg)
+{
+	BD_t * bd = (BD_t *) pg->bd;
+	uint32_t val;
+	
+	if (!modman_name_bd(bd))
+		RETURN_IPC_INVAL;
+
+	val = (uint32_t) xor_bd(bd, pg->xor_key);
 
 	RETURN_IPC;
 }
@@ -594,71 +594,6 @@ static void kis_sync(envid_t whom, const Skfs_sync_t * pg)
 
 
 //
-// Perf testing
-
-static char test_data[4096];
-int perf_test_cfs(const Skfs_perf_test_t * pg)
-{
-	modman_it_t it;
-	CFS_t * cfs, * selected_cfs;
-	fdesc_t * fdesc;
-	int time_start, time_end;
-	inode_t ino;
-	int s, size, r;
-
-	r = modman_it_init_cfs(&it);
-	assert(r >= 0);
-	while ((cfs = modman_it_next_cfs(&it)))
-		if (!strncmp("mount_selector_cfs-", modman_name_cfs(cfs), strlen("mount_selector_cfs-")))
-			break;
-	modman_it_destroy(&it);
-	assert(cfs);
-
-	if ((r = path_to_inode(pg->file, &selected_cfs, &ino)) < 0)
-		return r;
-	kfsd_set_mount(selected_cfs);
-	r = CALL(cfs, open, ino, O_CREAT|O_WRONLY, &fdesc);
-	if(r < 0)
-	{
-		kdprintf(STDERR_FILENO, "%s(): open %s: 0x%08x\n", __FUNCTION__, pg->file, fdesc);
-		return r;
-	}
-
-	time_start = env->env_jiffies;
-	for(size = 0; size + sizeof(test_data) < pg->size; )
-	{
-		s = CALL(cfs, write, fdesc, test_data, size, sizeof(test_data));
-		if (s < 0)
-		{
-			kdprintf(STDERR_FILENO, "%s(): write: %i\n", __FUNCTION__, s);
-			CALL(cfs, close, fdesc);
-			return s;
-		}
-		size += s;
-	}
-	time_end = env->env_jiffies;
-
-	r = CALL(cfs, close, fdesc);
-	if (r < 0)
-		kdprintf(STDERR_FILENO, "%s(): CALL(cfs, close): %i\n", __FUNCTION__, r);
-
-	return time_end - time_start;
-}
-
-static void kis_perf_test(envid_t whom, const Skfs_perf_test_t * pg)
-{
-	int val;
-
-	if (pg->cfs_bd == 0)
-		val = perf_test_cfs(pg);
-	else
-		val = -E_INVAL;
-
-	ipc_send(whom, val, NULL, 0, NULL);
-}
-
-
-//
 // kfs_ipc_serve
 
 #define SERVE(type, function) case SKFS_##type: kis_##function(whom, pg); break
@@ -719,11 +654,11 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(WT_CACHE_BD,            wt_cache_bd);
 		SERVE(ELEVATOR_CACHE_BD,      elevator_cache_bd);
 		SERVE(BLOCK_RESIZER_BD,       block_resizer_bd);
-		SERVE(BARRIER_RESIZER_BD,     barrier_resizer_bd);
 		SERVE(MD_BD,                  md_bd);
 		SERVE(MIRROR_BD,              mirror_bd);
 		SERVE(MIRROR_BD_ADD,          mirror_bd_add);
 		SERVE(MIRROR_BD_REMOVE,       mirror_bd_remove);
+		SERVE(XOR_BD,                 xor_bd);
 		SERVE(IDE_PIO_BD,             ide_pio_bd);
 
 		// modman
@@ -732,8 +667,6 @@ void kfs_ipc_serve_run(envid_t whom, const void * pg, int perm, uint32_t cur_cap
 		SERVE(MODMAN_REQUEST_ITS,    modman_request_its);
 
 		SERVE(SYNC, sync);
-
-		SERVE(PERF_TEST, perf_test);
 
 		default:
 			kdprintf(STDERR_FILENO, "kfs_ipc_serve: Unknown type %d\n", type);

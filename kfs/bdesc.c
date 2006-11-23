@@ -72,13 +72,19 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		bdesc->ddesc->ready_changes[i].head = NULL;
 		bdesc->ddesc->ready_changes[i].tail = &bdesc->ddesc->ready_changes[i].head;
 	}
-#if BDESC_EXTERN_DEPENDENT_COUNT
-	bdesc->ddesc->extern_dependent_count = 0;
+#if BDESC_EXTERN_AFTER_COUNT
+	bdesc->ddesc->extern_after_count = 0;
+#endif
+#if CHDESC_NRB
+	bdesc->ddesc->nrb = NULL;
 #endif
 	bdesc->ddesc->overlaps = NULL;
 	bdesc->ddesc->manager = NULL;
 	bdesc->ddesc->managed_number = 0;
 	bdesc->ddesc->length = length;
+	bdesc->ddesc->lock_count = 0;
+	bdesc->ddesc->lock_owner = NULL;
+	bdesc->ddesc->synthetic = 0;
 	return bdesc;
 }
 
@@ -136,9 +142,13 @@ void bdesc_release(bdesc_t ** bdesc)
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlaps)
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
-#if BDESC_EXTERN_DEPENDENT_COUNT
-			if((*bdesc)->ddesc->extern_dependent_count)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has %u external dependents\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_dependent_count);
+#if BDESC_EXTERN_AFTER_COUNT
+			if((*bdesc)->ddesc->extern_after_count)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
+#endif
+#if CHDESC_NRB
+			if((*bdesc)->ddesc->nrb)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
 			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
@@ -147,6 +157,8 @@ void bdesc_release(bdesc_t ** bdesc)
 			hash_map_destroy((*bdesc)->ddesc->bit_changes);
 			if((*bdesc)->ddesc->manager)
 				blockman_remove((*bdesc)->ddesc);
+			if((*bdesc)->ddesc->lock_count || (*bdesc)->ddesc->lock_owner)
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying locked block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			free((*bdesc)->ddesc->data);
 			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
 			free((*bdesc)->ddesc);

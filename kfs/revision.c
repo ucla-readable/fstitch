@@ -11,7 +11,7 @@
 
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
-static bool revision_barrier_decider(chdesc_t * chdesc, void * data)
+static bool revision_owner_decider(chdesc_t * chdesc, void * data)
 {
 	return chdesc->owner == (BD_t *) data;
 }
@@ -32,6 +32,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		return 0;
 	
 	/* find out how many chdescs are to be rolled back */
+	/* TODO: look into using ready_changes here? */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(!decider(scan, data))
 			count++;
@@ -50,18 +51,18 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		int again = 0;
 		for(i = 0; i != count; i++)
 		{
-			chmetadesc_t * scan;
+			chdepdesc_t * scan;
 			/* already rolled back? */
 			if(chdescs[i]->flags & CHDESC_ROLLBACK)
 				continue;
 			/* check for overlapping, non-rolled back chdescs above us */
-			for(scan = chdescs[i]->dependents; scan; scan = scan->dependent.next)
+			for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
 			{
-				if(scan->dependent.desc->flags & CHDESC_ROLLBACK)
+				if(scan->after.desc->flags & CHDESC_ROLLBACK)
 					continue;
-				if(!scan->dependent.desc->block || scan->dependent.desc->block->ddesc != block->ddesc)
+				if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
 					continue;
-				if(chdesc_overlap_check(scan->dependent.desc, chdescs[i]))
+				if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
 					break;
 			}
 			if(scan)
@@ -94,7 +95,7 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 		assert(r >= 0);
 	}
 #endif
-	return _revision_tail_prepare(block, revision_barrier_decider, bd);
+	return _revision_tail_prepare(block, revision_owner_decider, bd);
 }
 
 int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp)
@@ -131,18 +132,18 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 		int again = 0;
 		for(i = count - 1; i != -1; i--)
 		{
-			chmetadesc_t * scan;
+			chdepdesc_t * scan;
 			/* already rolled forward? */
 			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
 				continue;
 			/* check for overlapping, rolled back chdescs below us */
-			for(scan = chdescs[i]->dependencies; scan; scan = scan->dependency.next)
+			for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
 			{
-				if(!(scan->dependency.desc->flags & CHDESC_ROLLBACK))
+				if(!(scan->before.desc->flags & CHDESC_ROLLBACK))
 					continue;
-				if(!scan->dependency.desc->block || scan->dependency.desc->block->ddesc != block->ddesc)
+				if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
 					continue;
-				if(chdesc_overlap_check(scan->dependency.desc, chdescs[i]))
+				if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
 					break;
 			}
 			if(scan)
@@ -165,7 +166,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 
 int revision_tail_revert(bdesc_t * block, BD_t * bd)
 {
-	return _revision_tail_revert(block, revision_barrier_decider, bd);
+	return _revision_tail_revert(block, revision_owner_decider, bd);
 }
 
 int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp)
@@ -193,7 +194,6 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	if(!chdescs)
 		return -E_NO_MEM;
 	
-	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(scan->owner == bd)
 			chdescs[i++] = scan;
@@ -206,7 +206,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 		{
 			if(!chdescs[i])
 				continue;
-			if(chdescs[i]->dependencies)
+			if(chdescs[i]->befores)
 				again = 1;
 			else
 			{
@@ -302,9 +302,14 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		chdesc_unlink_ready_changes(scan);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
 		scan->owner = target;
-		chdesc_propagate_level_change(scan->dependents, owner->level, target->level);
+		chdesc_propagate_level_change(scan, owner->level, target->level);
 		chdesc_update_ready_changes(scan);
 	}
+
+#if CHDESC_NRB
+	if(block->ddesc->nrb && block->ddesc->nrb->owner == owner)
+		nonready_nonrollbackable = 1;
+#endif
 
 	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
@@ -312,15 +317,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		if(scan->owner == owner)
 		{
 			slice->all_ready = 0;
-#if CHDESC_DATA_OMITTANCE
-			if(!chdesc_is_rollbackable(scan))
-			{
-				nonready_nonrollbackable = 1;
-				break;
-			}
-#else
 			break;
-#endif
 		}
 	}
 
@@ -341,7 +338,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				chdesc_unlink_ready_changes(scan);
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
 				scan->owner = owner;
-				chdesc_propagate_level_change(scan->dependents, target->level, owner->level);
+				chdesc_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 				chdesc_update_ready_changes(scan);
 				scan = next;
@@ -386,7 +383,7 @@ void revision_slice_push_down(revision_slice_t * slice)
 			slice->ready[i]->owner = slice->target;
 			chdesc_update_ready_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i]->dependents, prev_level, chdesc_level(slice->ready[i]));
+				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
@@ -409,7 +406,7 @@ void revision_slice_pull_up(revision_slice_t * slice)
 			slice->ready[i]->owner = slice->owner;
 			chdesc_update_ready_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i]->dependents, prev_level, chdesc_level(slice->ready[i]));
+				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
 			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);

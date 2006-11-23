@@ -4,6 +4,7 @@
 #include <lib/kdprintf.h>
 #include <lib/panic.h>
 
+#include <kfs/debug.h>
 #include <kfs/sync.h>
 #include <kfs/journal_bd.h>
 #include <kfs/opgroup.h>
@@ -21,10 +22,12 @@
  * - make dependencies on an opgroup transaction depend on the commit record
  */
 
+/* TODO: describe big picture re why chdesc_add_depend() usage is safe */
+
 struct opgroup {
 	opgroup_id_t id;
 	chdesc_t * head;
-	/* head_keep stays until we get a dependent */
+	/* head_keep stays until we get an after */
 	chdesc_t * head_keep;
 	chdesc_t * tail;
 	/* tail_keep stays until we are released */
@@ -34,8 +37,8 @@ struct opgroup {
 	uint32_t has_data:1;
 	uint32_t is_released:1;
 	uint32_t engaged_count:30;
-	uint32_t has_dependents:1;
-	uint32_t has_dependencies:1;
+	uint32_t has_afters:1;
+	uint32_t has_befores:1;
 	int flags;
 };
 
@@ -87,22 +90,22 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	opgroup_state_t * state;
 	opgroup_scope_t * copy = opgroup_scope_create();
 	if(!copy)
-		goto error_1;
+		return NULL;
 	
 	copy->next_id = scope->next_id;
-	copy->top = scope->top;
-	if(copy->top)
+	if(scope->top)
 	{
 		/* we need our own top_keep */
-		copy->top_keep = chdesc_create_noop(NULL, NULL);
-		if(!copy->top_keep)
-			goto error_2;
+		if(chdesc_create_noop_list(NULL, NULL, &copy->top_keep, NULL) < 0)
+			goto error_copy;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top_keep, "top_keep");
 		chdesc_claim_noop(copy->top_keep);
-		if(chdesc_add_depend(copy->top, copy->top_keep) < 0)
-			goto error_3;
+		if(chdesc_create_noop_list(NULL, NULL, &copy->top, copy->top_keep, NULL) < 0)
+			goto error_top_keep;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
 	}
 	if(chdesc_weak_retain(scope->bottom, &copy->bottom) < 0)
-		goto error_3;
+		goto error_top_keep;
 	
 	/* iterate over opgroups and increase reference counts */
 	hash_map_it_init(&it, scope->id_map);
@@ -110,12 +113,12 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	{
 		opgroup_state_t * dup = malloc(sizeof(*dup));
 		if(!dup)
-			goto error_4;
+			goto error_bottom;
 		*dup = *state;
 		if(hash_map_insert(copy->id_map, (void *) dup->opgroup->id, dup) < 0)
 		{
 			free(dup);
-			goto error_4;
+			goto error_bottom;
 		}
 		dup->opgroup->references++;
 		/* FIXME: can we do better than just assert? */
@@ -130,7 +133,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	
 	return copy;
 	
-error_4:
+  error_bottom:
 	hash_map_it_init(&it, copy->id_map);
 	while((state = hash_map_val_next(&it)))
 	{
@@ -143,12 +146,11 @@ error_4:
 	hash_map_destroy(copy->id_map);
 	
 	chdesc_weak_release(&copy->bottom);
-error_3:
+  error_top_keep:
 	if(copy->top_keep)
-		chdesc_satisfy(&copy->top_keep);
-error_2:
+		chdesc_satisfy(&copy->top_keep);	
+  error_copy:
 	free(copy);
-error_1:
 	return NULL;
 }
 
@@ -209,65 +211,63 @@ opgroup_t * opgroup_create(int flags)
 	}
 	
 	if(!(op = malloc(sizeof(*op))))
-		goto error_1;
+		return NULL;
 	if(!(state = malloc(sizeof(*state))))
-		goto error_2;
+		goto error_op;
 	
 	op->id = current_scope->next_id++;
 	op->references = 1;
 	op->has_data = 0;
 	op->is_released = 0;
 	op->engaged_count = 0;
-	op->has_dependents = 0;
-	op->has_dependencies = 0;
+	op->has_afters = 0;
+	op->has_befores = 0;
 	op->flags = flags;
 	state->opgroup = op;
 	state->engaged = 0;
 	
-	if(!(op->head = chdesc_create_noop(NULL, NULL)))
-		goto error_3;
-	if(chdesc_weak_retain(op->head, &op->head) < 0)
-		goto error_4;
-	if(!(op->head_keep = chdesc_create_noop(NULL, NULL)))
-		goto error_4;
+	if(chdesc_create_noop_list(NULL, NULL, &op->head_keep, NULL) < 0)
+		goto error_state;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head_keep, "head_keep");
 	chdesc_claim_noop(op->head_keep);
-	if(chdesc_add_depend(op->head, op->head_keep) < 0)
-		goto error_5;
-	if(!(op->tail = chdesc_create_noop(NULL, NULL)))
-		goto error_6;
-	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
-		goto error_7;
-	if(chdesc_add_depend(op->head, op->tail) < 0)
-		goto error_7;
-	if(!(op->tail_keep = chdesc_create_noop(NULL, NULL)))
-		goto error_8;
+	
+	if(chdesc_create_noop_list(NULL, NULL, &op->tail_keep, NULL) < 0)
+		goto error_head_keep;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail_keep, "tail_keep");
 	chdesc_claim_noop(op->tail_keep);
-	if(chdesc_add_depend(op->tail, op->tail_keep) < 0)
-		goto error_9;
+	
+	if(chdesc_create_noop_list(NULL, NULL, &op->tail, op->tail_keep, NULL) < 0)
+		goto error_tail_keep;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail, "tail");
+	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
+		goto error_tail;
+	
+	if(chdesc_create_noop_list(NULL, NULL, &op->head, op->head_keep, NULL) < 0)
+		goto error_tail;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head, "head");
+	if(chdesc_weak_retain(op->head, &op->head) < 0)
+		goto error_head;
+	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
-		goto error_10;
+		goto error_head;
 	
 	return op;
 	
-error_10:
-	chdesc_remove_depend(op->tail, op->tail_keep);
-error_9:
-	chdesc_destroy(&op->tail_keep);
-error_8:
-	chdesc_remove_depend(op->head, op->tail);
-error_7:
-	chdesc_destroy(&op->tail);
-error_6:
+error_head:
 	chdesc_remove_depend(op->head, op->head_keep);
-error_5:
-	chdesc_destroy(&op->head_keep);
-error_4:
+	chdesc_remove_depend(op->head, op->tail);
 	chdesc_destroy(&op->head);
-error_3:
+error_tail:
+	chdesc_remove_depend(op->tail, op->tail_keep);
+	chdesc_destroy(&op->tail);
+error_tail_keep:
+	chdesc_destroy(&op->tail_keep);
+error_head_keep:
+	chdesc_destroy(&op->head_keep);
+error_state:
 	free(state);
-error_2:
+error_op:
 	free(op);
-error_1:
 	return NULL;
 }
 
@@ -277,39 +277,53 @@ int opgroup_sync(opgroup_t * opgroup)
 	return kfs_sync();
 }
 
-int opgroup_add_depend(opgroup_t * dependent, opgroup_t * dependency)
+int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 {
 	int r = 0;
-	if(!dependent || !dependency)
+	if(!after || !before)
 		return -E_INVAL;
-	/* from dependency's perspective, we are adding a dependent
-	 *   => dependency must not be engaged [anywhere] if it is not atomic */
-	if(!(dependency->flags & OPGROUP_FLAG_ATOMIC) && dependency->engaged_count)
+	/* from before's perspective, we are adding an after
+	 *   => before must not be engaged [anywhere] if it is not atomic */
+	if(!(before->flags & OPGROUP_FLAG_ATOMIC) && before->engaged_count)
 		return -E_BUSY;
-	/* from dependent's perspective, we are adding a dependency
-	 *   => dependent must not be released (standard case) or have a dependent (noop case) */
-	assert(!dependent->tail_keep == dependent->is_released);
-	if(dependent->is_released || dependent->has_dependents)
+	/* from after's perspective, we are adding a before
+	 *   => after must not be released (standard case) or have an after (noop case) */
+	assert(!after->tail_keep == after->is_released);
+	if(after->is_released || after->has_afters)
 		return -E_INVAL;
+	/* we only create head => tail directly if we need to: when we are adding
+	 * an after to an opgroup and it still has both its head and tail */
+	if(before->head && before->tail)
+	{
+		/* for efficiency, when that head and tail are not already connected
+		 * transitively: that is, head has only head_keep as a before */
+		if(before->head->befores && before->head->befores->before.next &&
+		   before->head->befores->before.desc == before->head_keep)
+		{
+			r = chdesc_add_depend(before->head, before->tail);
+			if(r < 0)
+				return r;
+		}
+	}
 	/* it might not have a head if it's already been written to disk */
 	/* (in this case, it won't be engaged again since it will have
-	 * dependents now, so we don't need to recreate it) */
-	if(dependency->head)
-		/* notice that this can fail if there is a dependency cycle */
-		r = chdesc_add_depend(dependent->tail, dependency->head);
+	 * afters now, so we don't need to recreate it) */
+	if(before->head)
+		/* notice that this can fail if there is a before cycle */
+		r = chdesc_add_depend(after->tail, before->head);
 	if(r >= 0)
 	{
-		dependent->has_dependencies = 1;
-		dependency->has_dependents = 1;
-		if(dependency->head_keep)
-			chdesc_satisfy(&dependency->head_keep);
+		after->has_befores = 1;
+		before->has_afters = 1;
+		if(before->head_keep)
+			chdesc_satisfy(&before->head_keep);
 	}
 	else
 		kdprintf(STDERR_FILENO, "%s: chdesc_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
 	return r;
 }
 
-static int opgroup_update_top_bottom(void)
+static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool was_engaged)
 {
 	hash_map_it_t it;
 	opgroup_state_t * state;
@@ -319,55 +333,63 @@ static int opgroup_update_top_bottom(void)
 	chdesc_t * save_top = current_scope->top;
 	int r, count = 0;
 	
+	/* attach heads to top only when done with the head so that
+	 * top can gain befores along the way */
+	hash_map_it_init(&it, current_scope->id_map);
+	while((state = hash_map_val_next(&it)))
+		if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
+		{
+			assert(state->opgroup->head);
+			r = chdesc_add_depend(state->opgroup->head, save_top);
+			if(r < 0)
+			{
+				chdesc_t * failure_head;
+			  error_changed_state:
+				failure_head = state ? state->opgroup->head : NULL;
+				hash_map_it_init(&it, current_scope->id_map);
+				while((state = hash_map_val_next(&it)))
+				{
+					if(state->opgroup->head == failure_head)
+						break;
+					if(state == changed_state ? was_engaged : state->engaged)
+						chdesc_remove_depend(state->opgroup->head, save_top);
+				}
+				return r;
+			}
+		}
+	
 	/* create new top and bottom */
-	top = chdesc_create_noop(NULL, NULL);
-	if(!top)
-		goto error_1;
-	top_keep = chdesc_create_noop(NULL, NULL);
-	if(!top_keep)
-		goto error_2;
+	r = chdesc_create_noop_list(NULL, NULL, &top_keep, NULL);
+	if(r < 0)
+		goto error_changed_state;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top_keep, "top_keep");
 	chdesc_claim_noop(top_keep);
-	r = chdesc_add_depend(top, top_keep);
+	
+	r = chdesc_create_noop_list(NULL, NULL, &bottom, NULL);
 	if(r < 0)
-		goto error_3;
-	bottom = chdesc_create_noop(NULL, NULL);
-	if(r < 0)
-		goto error_4;
-	r = chdesc_add_depend(top, bottom);
-	if(r < 0)
-	{
-		chdesc_destroy(&bottom);
-	error_4:
-		chdesc_remove_depend(top, top_keep);
-	error_3:
-		chdesc_destroy(&top_keep);
-	error_2:
-		chdesc_destroy(&top);
-	error_1:
-		return -E_NO_MEM;
-	}
+		goto error_top_keep;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
 	
 	hash_map_it_init(&it, current_scope->id_map);
 	while((state = hash_map_val_next(&it)))
 		if(state->engaged)
 		{
-			assert(state->opgroup->head);
-			r = chdesc_add_depend(state->opgroup->head, top);
-			if(r < 0)
-			{
-			error_loop:
-				chdesc_satisfy(&top_keep);
-				/* satisfy a chdesc with dependencies... is this OK? */
-				chdesc_satisfy(&bottom);
-				return r;
-			}
 			if(state->opgroup->tail)
 				if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
-					goto error_loop;
+				{
+					state = NULL;
+					goto error_bottom;
+				}
 			count++;
 		}
 	
-	if(!bottom->dependencies)
+	assert(top_keep && bottom); /* top_keep must be non-NULL for create_noop */
+	r = chdesc_create_noop_list(NULL, NULL, &top, top_keep, bottom, NULL);
+	if(r < 0)
+		goto error_bottom;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
+	
+	if(!bottom->befores)
 	{
 		chdesc_remove_depend(top, bottom);
 		/* let it get garbage collected */
@@ -378,7 +400,7 @@ static int opgroup_update_top_bottom(void)
 	{
 		r = chdesc_weak_retain(save_top, &current_scope->top);
 		assert(r >= 0);
-		goto error_loop;
+		goto error_bottom;
 	}
 	
 	if(!count)
@@ -394,6 +416,12 @@ static int opgroup_update_top_bottom(void)
 	current_scope->top_keep = top_keep;
 	
 	return 0;
+	
+  error_bottom:
+	chdesc_destroy(&bottom);
+  error_top_keep:
+	chdesc_destroy(&top_keep);
+	goto error_changed_state;
 }
 
 int opgroup_engage(opgroup_t * opgroup)
@@ -411,8 +439,8 @@ int opgroup_engage(opgroup_t * opgroup)
 	assert(state->opgroup == opgroup);
 	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && (!opgroup->is_released || !opgroup->is_released))
 		return -E_INVAL;
-	/* can't engage it if it is not atomic and it has dependents */
-	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_dependents)
+	/* can't engage it if it is not atomic and it has afters */
+	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_afters)
 		return -E_INVAL;
 	/* can't engage it if it is atomic and has been released */
 	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->is_released)
@@ -425,7 +453,7 @@ int opgroup_engage(opgroup_t * opgroup)
 	/* FIXME: can we do better than just assert? */
 	assert(state->opgroup->engaged_count);
 	
-	r = opgroup_update_top_bottom();
+	r = opgroup_update_top_bottom(state, 0);
 	if(r < 0)
 	{
 		state->engaged = 0;
@@ -462,7 +490,7 @@ int opgroup_disengage(opgroup_t * opgroup)
 	state->engaged = 0;
 	opgroup->engaged_count--;
 	
-	r = opgroup_update_top_bottom();
+	r = opgroup_update_top_bottom(state, 1);
 	if(r < 0)
 	{
 		state->engaged = 1;
@@ -558,18 +586,10 @@ int opgroup_prepare_head(chdesc_t ** head)
 	
 	if(*head)
 	{
-		int r;
-		chdesc_t * nh = chdesc_create_noop(NULL, NULL);
-		if(!nh)
-			return -E_NO_MEM;
-		r = chdesc_add_depend(nh, current_scope->bottom);
+		int r = chdesc_create_noop_list(NULL, NULL, head, current_scope->bottom, *head, NULL);
 		if(r < 0)
 			return r;
-		r = chdesc_add_depend(nh, *head);
-		if(r < 0)
-			/* let it get cleaned up automatically */
-			return r;
-		*head = nh;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");
 	}
 	else
 		*head = current_scope->bottom;

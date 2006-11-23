@@ -137,35 +137,38 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	struct cache_slot * slot;
 	bdesc_t * block;
-	int r;
-	
-	/* make sure it's a valid block */
-	if(!count || number + count > CALL(info->bd, get_numblocks))
-		return NULL;
 	
 	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
 		assert(slot->block->count == count);
 		touch_block(info, slot);
-		return slot->block;
+		if(!slot->block->ddesc->synthetic)
+			return slot->block;
 	}
-	
-	if(info->blocks[0].lru->block)
-		pop_block(info, info->blocks[0].lru);
+	else
+	{
+		/* make sure it's a valid block */
+		if(!count || number + count > CALL(info->bd, get_numblocks))
+			return NULL;
+		
+		if(info->blocks[0].lru->block)
+			pop_block(info, info->blocks[0].lru);
+	}
 	
 	block = CALL(info->bd, read_block, number, count);
 	if(!block)
 		return NULL;
 	
-	r = push_block(info, block);
-	if(r < 0)
+	if(block->ddesc->synthetic)
+		block->ddesc->synthetic = 0;
+	else if(push_block(info, block) < 0)
 		return NULL;
 	
 	return block;
 }
 
-static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, bool * synthetic)
+static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	struct cache_slot * slot;
@@ -181,43 +184,22 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	{
 		assert(slot->block->count == count);
 		touch_block(info, slot);
-		*synthetic = 0;
 		return slot->block;
 	}
 	
 	if(info->blocks[0].lru->block)
 		pop_block(info, info->blocks[0].lru);
 	
-	block = CALL(info->bd, synthetic_read_block, number, count, synthetic);
+	block = CALL(info->bd, synthetic_read_block, number, count);
 	if(!block)
 		return NULL;
 	
 	r = push_block(info, block);
 	if(r < 0)
-	{
 		/* kind of a waste of a read... but we have to do it */
-		if(*synthetic)
-			CALL(info->bd, cancel_block, number);
 		return NULL;
-	}
 	
 	return block;
-}
-
-static int wt_cache_bd_cancel_block(BD_t * object, uint32_t number)
-{
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	struct cache_slot * slot;
-	
-	/* make sure it's a valid block */
-	if(number >= CALL(info->bd, get_numblocks))
-		return -E_INVAL;
-	
-	slot = hash_map_find_val(info->block_map, (void *) number);
-	if(slot)
-		pop_block(info, slot);
-	
-	return CALL(info->bd, cancel_block, number);
 }
 
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
