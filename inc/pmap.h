@@ -172,5 +172,10 @@ struct Page {
 	uint16_t pp_ref;
 };
 
+struct Vm {
+	pde_t* vm_pgdir;		// Kernel virtual address of page dir
+	physaddr_t vm_cr3;		// Physical address of page dir
+};
+
 #endif /* !__ASSEMBLER__ */
 #endif /* !KUDOS_INC_PMAP_H */

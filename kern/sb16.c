@@ -214,7 +214,7 @@ int sb16_close(void)
 		/* implication: sb_env == curenv */
 		int i;
 		for(i = 0; i != SB16_BUFFER_PAGES; i++)
-			page_remove(sb_env->env_pgdir, sb_va + (i << PGSHIFT));
+			page_remove(sb_env->env_vm.vm_pgdir, sb_va + (i << PGSHIFT));
 	}
 	
 	sb_envid = 0;
@@ -246,10 +246,10 @@ int sb16_open(uint16_t rate, uint8_t output, uintptr_t address)
 	
 	for(i = 0; i != SB16_BUFFER_PAGES; i++)
 	{
-		if(page_insert(curenv->env_pgdir, &pages[(sb_buffer_addr >> PGSHIFT) + i], address + (i << PGSHIFT), PTE_U | PTE_W | PTE_P))
+		if(page_insert(curenv->env_vm.vm_pgdir, &pages[(sb_buffer_addr >> PGSHIFT) + i], address + (i << PGSHIFT), PTE_U | PTE_W | PTE_P))
 		{
 			while(i--)
-				page_remove(curenv->env_pgdir, address + (i << PGSHIFT));
+				page_remove(curenv->env_vm.vm_pgdir, address + (i << PGSHIFT));
 			return -E_NO_MEM;
 		}
 	}

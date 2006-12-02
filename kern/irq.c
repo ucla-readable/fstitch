@@ -139,7 +139,7 @@ int env_dispatch_irqs(void)
 		curenv->env_tf = *UTF;
 	*UTF = env->env_tf;
 	curenv = env;
-	lcr3(env->env_cr3);
+	lcr3(env->env_vm.vm_cr3);
 	
 	/* now push the handler onto the stack */
 	/* FIXME: if there is not enough space on the user stack, this will

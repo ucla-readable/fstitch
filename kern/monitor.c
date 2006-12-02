@@ -737,7 +737,7 @@ int mon_env_current(int argc, char ** argv, struct Trapframe * tf)
 		curenv->env_tf = *tf;
 	*tf = e->env_tf;
 	curenv = e;
-	lcr3(e->env_cr3);
+	lcr3(e->env_vm.vm_cr3);
 	
 	return 0;
 }

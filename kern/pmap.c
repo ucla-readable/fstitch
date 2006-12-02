@@ -91,9 +91,9 @@ i386_detect_memory(register_t boot_eax, register_t boot_ebx)
 	else
 		maxpa = basemem;
 
-	// Our kernel will crash (after "check_boot_pgdir() succeeded!" is printed)
-	// if it sees more than the amount of physical memory supported by
-	// KERNBASE's value. Lower maxpa if necessary, to avoid this crashing:
+	// Our kernel will crash if it sees more than the amount of physical
+	// memory supported by the value of KERNBASE. Lower maxpa if necessary,
+	// to avoid this crashing:
 	if (maxpa > max_maxpa)
 	{
 		printf("Enabling only %dK of %dK physical memory due to KERNBASE.\n",
@@ -114,8 +114,6 @@ i386_detect_memory(register_t boot_eax, register_t boot_ebx)
 // --------------------------------------------------------------
 // Set up initial memory mappings and turn on MMU.
 // --------------------------------------------------------------
-
-static void check_boot_pgdir(void);
 
 //
 // Allocate n bytes of physical memory aligned on an 
@@ -309,9 +307,6 @@ i386_vm_init(void)
 	memset(envs, 0, NENV * sizeof(struct Env));
 	boot_map_segment(pgdir, UENVS, NENV * sizeof(struct Env), PADDR(envs), PTE_U);
 	
-	// Check that the initial page directory has been set up correctly.
-	check_boot_pgdir();
-
 	//////////////////////////////////////////////////////////////////////
 	// On x86, segmentation maps a VA to a LA (linear addr) and
 	// paging maps the LA to a PA.  I.e. VA => LA => PA.  If paging is
@@ -336,7 +331,7 @@ i386_vm_init(void)
 
 	// Turn on paging.
 	cr0 = rcr0();
-	cr0 |= CR0_PE|CR0_PG|CR0_AM|CR0_WP|CR0_NE|CR0_TS|CR0_EM|CR0_MP;
+	cr0 |= CR0_PE|CR0_PG|CR0_AM|CR0_WP|CR0_NE|CR0_MP;
 	cr0 &= ~(CR0_TS|CR0_EM);
 	lcr0(cr0);
 
@@ -363,84 +358,8 @@ i386_vm_init(void)
 	lcr3(boot_cr3);
 }
 
-//
-// Checks that the kernel part of virtual address space
-// has been setup roughly correctly(by i386_vm_init()).
-//
-// This function doesn't test every corner case,
-// in fact it doesn't test the permission bits at all,
-// but it is a pretty good sanity check. 
-//
-static physaddr_t check_va2pa(pde_t* pgdir, uintptr_t va);
-
-static void
-check_boot_pgdir(void)
-{
-	uint32_t i, n;
-	pde_t *pgdir;
-
-	pgdir = boot_pgdir;
-
-	// check pages array
-	n = ROUNDUP32(npage*sizeof(struct Page), PGSIZE);
-	for (i = 0; i < n; i += PGSIZE)
-		assert(check_va2pa(pgdir, UPAGES + i) == PADDR(pages) + i);
-	
-	// check envs array
-	n = ROUNDUP32(NENV*sizeof(struct Env), PGSIZE);
-	for (i = 0; i < n; i += PGSIZE)
-		assert(check_va2pa(pgdir, UENVS + i) == PADDR(envs) + i);
-
-	// check phys mem
-	for (i = 0; KERNBASE + i != 0; i += PGSIZE)
-		assert(check_va2pa(pgdir, KERNBASE + i) == i);
-
-	// check kernel stack
-	for (i = 0; i < KSTKSIZE; i += PGSIZE)
-		assert(check_va2pa(pgdir, KSTACKTOP - KSTKSIZE + i) == PADDR(bootstack) + i);
-
-	// check for zero/non-zero in PDEs
-	for (i = 0; i < NPDENTRIES; i++) {
-		switch (i) {
-		case PDX(VPT):
-		case PDX(UVPT):
-		case PDX(KSTACKTOP-1):
-		case PDX(UPAGES):
-		case PDX(UENVS):
-			assert(pgdir[i]);
-			break;
-		default:
-			if (i >= PDX(KERNBASE))
-				assert(pgdir[i]);
-			else
-				assert(pgdir[i] == 0);
-			break;
-		}
-	}
-	//printf("check_boot_pgdir() succeeded!\n");
-}
-
-// This function returns the physical address of the page containing 'va',
-// defined by the page directory 'pgdir'.  The hardware normally performs
-// this functionality for us!  We define our own version to help check
-// the check_boot_pgdir() function; it shouldn't be used elsewhere.
-
-static physaddr_t
-check_va2pa(pde_t* pgdir, uintptr_t va)
-{
-	pte_t *p;
-
-	pgdir = &pgdir[PDX(va)];
-	if (!(*pgdir & PTE_P))
-		return ~0;
-	p = (pte_t*) KADDR(PTE_ADDR(*pgdir));
-	if (!(p[PTX(va)] & PTE_P))
-		return ~0;
-	return PTE_ADDR(p[PTX(va)]);
-}
-
 int
-check_user_access(struct Env *env, const void *ptr, size_t len, pte_t pte_bits)
+check_user_access(struct Vm* vm, const void *ptr, size_t len, pte_t pte_bits)
 {
 	uintptr_t addr = (uintptr_t) ptr;
 	uintptr_t end_addr = addr + len - 1;
@@ -450,7 +369,7 @@ check_user_access(struct Env *env, const void *ptr, size_t len, pte_t pte_bits)
 
 	while (addr <= end_addr)
 	{
-		pde_t pde = env->env_pgdir[PDX(addr)];
+		pde_t pde = vm->vm_pgdir[PDX(addr)];
 		pte_t *pgtbl, *end_pgtbl;
 
 		if ((pde & (PTE_P | PTE_U)) != (PTE_P | PTE_U)
@@ -735,6 +654,157 @@ void
 tlb_invalidate(pde_t* pgdir, uintptr_t va)
 {
 	// Flush the entry only if we're modifying the current address space.
-	if (!curenv || curenv->env_pgdir == pgdir)
+	if (!curenv || curenv->env_vm.vm_pgdir == pgdir)
 		invlpg(va);
+}
+
+//
+// Initializes the kernel virtual memory layout vm.
+// Allocates a page directory and initializes
+// the kernel portion of the new environment's address space.
+// Also sets vm->vm_cr3 and vm->vm_pgdir accordingly.
+// We do NOT (yet) map anything into the user portion
+// of the environment's virtual address space.
+//
+// RETURNS
+//   0 -- on sucess
+//   <0 -- otherwise 
+//
+int
+page_setup_vm(struct Vm* vm)
+{
+	int i, r;
+	struct Page* p = NULL;
+
+	// Allocate a page for the page directory
+	if ((r = page_alloc(&p)) < 0)
+		return r;
+
+	// Hint:
+	//    - The VA space of all envs is identical above UTOP
+	//      (except at VPT and UVPT, which we've set below).
+	//	See inc/pmap.h for permissions and layout.
+	//	Can you use boot_pgdir as a template?  Hint: Yes.
+	//	(Make sure you got the permissions right in Lab 2.)
+	//    - The initial VA below UTOP is empty.
+	//    - You do not need to make any more calls to page_alloc.
+	//    - Note: pp_ref is not maintained for physical pages
+	//	mapped above UTOP.
+
+	vm->vm_cr3 = page2pa(p);
+	vm->vm_pgdir = (pde_t *) KADDR(vm->vm_cr3);
+	/* manually increase reference count, because it is the page directory page */
+	p->pp_ref++;
+	
+	for(i = 0; i != PDX(UTOP); i++)
+		vm->vm_pgdir[i] = 0;
+	for(; i != NPDENTRIES; i++)
+		vm->vm_pgdir[i] = boot_pgdir[i];
+
+	// VPT and UVPT map the env's own page table, with
+	// different permissions.
+	vm->vm_pgdir[PDX(VPT)]   = vm->vm_cr3 | PTE_P | PTE_W;
+	vm->vm_pgdir[PDX(UVPT)]  = vm->vm_cr3 | PTE_P | PTE_U;
+
+	return 0;
+}
+
+void
+page_destroy_vm(struct Vm* vm)
+{
+	pte_t *pt;
+	uint32_t pdeno, pteno;
+	physaddr_t pa;
+
+	// Flush all mapped pages in the user portion of the address space
+	static_assert(UTOP % PTSIZE == 0);
+	for (pdeno = 0; pdeno < PDX(UTOP); pdeno++) {
+
+		// only look at mapped page tables
+		if (!(vm->vm_pgdir[pdeno] & PTE_P))
+			continue;
+
+		// find the pa and va of the page table
+		pa = PTE_ADDR(vm->vm_pgdir[pdeno]);
+		pt = (pte_t*)KADDR(pa);
+
+		// unmap all PTEs in this page table
+		for (pteno = 0; pteno <= PTX(~0); pteno++) {
+			if (pt[pteno] & PTE_P)
+				page_remove(vm->vm_pgdir,
+				            (pdeno << PDXSHIFT) |
+				            (pteno << PTXSHIFT));
+		}
+
+		// free the page table itself
+		vm->vm_pgdir[pdeno] = 0;
+		page_decref(pa2page(pa));
+	}
+
+	// free the page directory
+	pa = vm->vm_cr3;
+	vm->vm_pgdir = 0;
+	vm->vm_cr3 = 0;
+	page_decref(pa2page(pa));
+}
+
+int
+page_alloc_user(struct Vm* vm, uintptr_t va, int perm)
+{
+	struct Page * page;
+	
+	if(va >= UTOP || PTE_ADDR(va) != va)
+		return -E_INVAL;
+	if(!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_USER))
+		return -E_INVAL;
+	
+	if(page_alloc(&page))
+		return -E_NO_MEM;
+	memset((void *) KADDR(page2pa(page)), 0, PGSIZE);
+	if(page_insert(vm->vm_pgdir, page, va, perm))
+	{
+		page_free(page);
+		return -E_NO_MEM;
+	}
+	
+	return 0;
+}
+
+int
+page_map_user(struct Vm* srcvm, uintptr_t srcva, struct Vm* dstvm, uintptr_t dstva, int perm)
+{
+	struct Page * page;
+	pte_t * pte;
+	
+	if(srcva >= UTOP || PTE_ADDR(srcva) != srcva)
+		return -E_INVAL;
+	if(dstva >= UTOP || PTE_ADDR(dstva) != dstva)
+		return -E_INVAL;
+	
+	page = page_lookup(srcvm->vm_pgdir, srcva, &pte);
+	if(!pte)
+		return -E_INVAL;
+	
+	if(!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_USER))
+		return -E_INVAL;
+	/* we don't have to check the page directory permissions because
+	 * for all pages < UTOP, the directory entries are already UW */
+	if((perm & PTE_W) && !(*pte & PTE_W))
+		return -E_INVAL;
+	
+	if(page_insert(dstvm->vm_pgdir, page, dstva, perm))
+		return -E_NO_MEM;
+	
+	return 0;
+}
+
+int
+page_unmap_user(struct Vm* vm, uintptr_t va)
+{
+	if(va >= UTOP || PTE_ADDR(va) != va)
+		return -E_INVAL;
+	
+	page_remove(vm->vm_pgdir, va);
+	
+	return 0;
 }

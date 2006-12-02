@@ -62,12 +62,12 @@ extern struct Pseudodesc gdt_pd;
 void i386_vm_init();
 void i386_detect_memory(register_t boot_eax, register_t boot_ebx);
 
-int check_user_access(struct Env *env, const void *ptr, size_t len, pte_t pte_bits);
+int check_user_access(struct Vm* vm, const void *ptr, size_t len, pte_t pte_bits);
 
 static inline int
 check_user_page_access(struct Env *env, const void *ptr, pte_t pte_bits)
 {
-	pde_t pde = env->env_pgdir[PDX(ptr)];
+	pde_t pde = env->env_vm.vm_pgdir[PDX(ptr)];
 	pte_t *pgtbl = (pte_t *) KADDR(PTE_ADDR(pde));
 	pte_t pte;
 	if ((uintptr_t) ptr < ULIM
@@ -88,6 +88,12 @@ void page_remove(pde_t*, uintptr_t va);
 struct Page* page_lookup(pde_t*, uintptr_t va, pte_t**);
 void page_decref(struct Page*);
 void tlb_invalidate(pde_t*, uintptr_t va);
+
+int  page_setup_vm(struct Vm* vm);
+void page_destroy_vm(struct Vm* vm);
+int  page_alloc_user(struct Vm* vm, uintptr_t va, int perm);
+int  page_map_user(struct Vm* srcvm, uintptr_t srcva, struct Vm* dstvm, uintptr_t dstva, int perm);
+int  page_unmap_user(struct Vm* vm, uintptr_t va);
 
 static inline ppn_t
 page2ppn(struct Page* pp)

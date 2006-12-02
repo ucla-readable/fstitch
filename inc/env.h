@@ -54,8 +54,7 @@ struct Env {
 	char env_name[ENV_NAME_LENGTH];	// Environment name
 
 	// Address space
-	pde_t* env_pgdir;		// Kernel virtual address of page dir
-	physaddr_t env_cr3;		// Physical address of page dir
+	struct Vm env_vm;		// Virtual address space
 
 	// Exception handling
 	uintptr_t env_pgfault_upcall;	// page fault upcall entry point

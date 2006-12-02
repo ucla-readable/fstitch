@@ -189,33 +189,12 @@ sys_env_set_status(envid_t envid, int status)
 static int
 sys_page_alloc(envid_t envid, uintptr_t va, int perm)
 {
-	// Hint: This function is a wrapper around page_alloc() and
-	//   page_insert() from kern/pmap.c.
-	//   Most of the new code you write should be to check the
-	//   parameters for correctness.
-	//   If page_insert() fails, remember to free the page you
-	//   allocated!
-	
 	struct Env * e;
-	struct Page * page;
 	
 	if(envid2env(envid, &e, 1) || e->env_status == ENV_FREE)
 		return -E_BAD_ENV;
-	if(va >= UTOP || PTE_ADDR(va) != va)
-		return -E_INVAL;
-	if(!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_USER))
-		return -E_INVAL;
 	
-	if(page_alloc(&page))
-		return -E_NO_MEM;
-	memset((void *) KADDR(page2pa(page)), 0, PGSIZE);
-	if(page_insert(e->env_pgdir, page, va, perm))
-	{
-		page_free(page);
-		return -E_NO_MEM;
-	}
-	
-	return 0;
+	return page_alloc_user(&e->env_vm, va, perm);
 }
 
 // Exercise 9:
@@ -241,42 +220,15 @@ sys_page_map(envid_t srcenvid, uintptr_t srcva,
 	     envid_t dstenvid, uintptr_t dstva,
 	     int perm)
 {
-	// Hint: This function is a wrapper around page_lookup() and
-	//   page_insert() from kern/pmap.c.
-	//   Again, most of the new code you write should be to check the
-	//   parameters for correctness.
-	//   Use the third argument to page_lookup() to
-	//   check the current permissions on the page.
-	
 	struct Env * se;
 	struct Env * de;
-	struct Page * page;
-	pte_t * pte;
 	
 	if(envid2env(srcenvid, &se, 1) || se->env_status == ENV_FREE)
 		return -E_BAD_ENV;
 	if(envid2env(dstenvid, &de, 1) || de->env_status == ENV_FREE)
 		return -E_BAD_ENV;
-	if(srcva >= UTOP || PTE_ADDR(srcva) != srcva)
-		return -E_INVAL;
-	if(dstva >= UTOP || PTE_ADDR(dstva) != dstva)
-		return -E_INVAL;
 	
-	page = page_lookup(se->env_pgdir, srcva, &pte);
-	if(!pte)
-		return -E_INVAL;
-	
-	if(!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_USER))
-		return -E_INVAL;
-	/* we don't have to check the page directory permissions because
-	 * for all pages < UTOP, the directory entries are already UW */
-	if((perm & PTE_W) && !(*pte & PTE_W))
-		return -E_INVAL;
-	
-	if(page_insert(de->env_pgdir, page, dstva, perm))
-		return -E_NO_MEM;
-	
-	return 0;
+	return page_map_user(&se->env_vm, srcva, &de->env_vm, dstva, perm);
 }
 
 // Exercise 9:
@@ -290,18 +242,12 @@ sys_page_map(envid_t srcenvid, uintptr_t srcva,
 static int
 sys_page_unmap(envid_t envid, uintptr_t va)
 {
-	// Hint: This function is a wrapper around page_remove().
-	
 	struct Env * e;
 	
 	if(envid2env(envid, &e, 1) || e->env_status == ENV_FREE)
 		return -E_BAD_ENV;
-	if(va >= UTOP || PTE_ADDR(va) != va)
-		return -E_INVAL;
 	
-	page_remove(e->env_pgdir, va);
-	
-	return 0;
+	return page_unmap_user(&e->env_vm, va);
 }
 
 // Determine whether the page of memory mapped at 'va' in the current
@@ -329,13 +275,13 @@ sys_page_is_mapped(uintptr_t va, envid_t target, uintptr_t target_va)
 	if(target_va >= UTOP || PTE_ADDR(target_va) != target_va)
 		return -E_INVAL;
 	
-	page_cur = page_lookup(curenv->env_pgdir, va, &pte);
+	page_cur = page_lookup(curenv->env_vm.vm_pgdir, va, &pte);
 	if(!pte)
 		return -E_INVAL;
 	if(!(*pte & PTE_U) || !(*pte & PTE_P))
 		return -E_INVAL;
 
-	page_target = page_lookup(e->env_pgdir, target_va, &pte);
+	page_target = page_lookup(e->env_vm.vm_pgdir, target_va, &pte);
 	if(!pte)
 		return 0;
 	if(!(*pte & PTE_U) || !(*pte & PTE_P))
@@ -486,7 +432,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm, 
 	else
 	{
 		pte_t * pte;
-		page_lookup(curenv->env_pgdir, capva, &pte);
+		page_lookup(curenv->env_vm.vm_pgdir, capva, &pte);
 		if(!pte)
 			return -E_INVAL;
 		cappa = PTE_ADDR(*pte);
@@ -498,27 +444,17 @@ sys_ipc_try_send(envid_t envid, uint32_t value, uintptr_t srcva, unsigned perm, 
 		return -E_INVAL;
 	else
 	{
-		pte_t * pte;
-		struct Page * page = page_lookup(curenv->env_pgdir, srcva, &pte);
-		
-		if(!pte)
-			return -E_INVAL;
-		
-		if(!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_USER))
-			return -E_INVAL;
-		/* we don't have to check the page directory permissions because
-		 * for all pages < UTOP, the directory entries are already UW */
-		if((perm & PTE_W) && !(*pte & PTE_W))
-			return -E_INVAL;
-		
 		if(e->env_ipc_dstva != UTOP)
 		{
-			if(page_insert(e->env_pgdir, page, e->env_ipc_dstva, perm))
-				return -E_NO_MEM;
+			int r = page_map_user(&curenv->env_vm, srcva, &e->env_vm, e->env_ipc_dstva, perm);
+			if(r < 0)
+				return r;
 			e->env_ipc_perm = perm;
 			map = 1;
 		}
 		else
+			/* if we won't be sending the page, it's OK to have
+			 * invalid parameters for the source page */
 			e->env_ipc_perm = 0;
 	}
 	
@@ -617,7 +553,7 @@ sys_kernbin_page_alloc(envid_t envid, const char* name, uint32_t offset, uintptr
 	// Check the page cache
 	pgoff = offset >> PGSHIFT;
 	if (pgoff < KERNBIN_MAXPAGES && (pg = kernbin->pages[pgoff])) {
-		if ((retval = page_insert(env->env_pgdir, pg, va, perm)) < 0)
+		if ((retval = page_insert(env->env_vm.vm_pgdir, pg, va, perm)) < 0)
 			return retval;
 		return kernbin->size;
 	}
@@ -625,7 +561,7 @@ sys_kernbin_page_alloc(envid_t envid, const char* name, uint32_t offset, uintptr
 	// Allocate a page and map it at va
 	if ((retval = page_alloc(&pg)) < 0)
 		return retval;
-	if ((retval = page_insert(env->env_pgdir, pg, va, perm)) < 0) {
+	if ((retval = page_insert(env->env_vm.vm_pgdir, pg, va, perm)) < 0) {
 		page_free(pg);
 		return retval;
 	}
@@ -741,11 +677,11 @@ sys_vga_set_mode_320(uintptr_t address, int fade)
 	/* FIXME: this mapping won't be undone! */
 	for(page = 0; page != 16; page++)
 	{
-		r = page_insert(curenv->env_pgdir, &pages[(VGA_PMEM >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P);
+		r = page_insert(curenv->env_vm.vm_pgdir, &pages[(VGA_PMEM >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P);
 		if(r < 0)
 		{
 			while(page--)
-				page_remove(curenv->env_pgdir, address + (page << PGSHIFT));
+				page_remove(curenv->env_vm.vm_pgdir, address + (page << PGSHIFT));
 			vga_set_mode_text(fade);
 			return r;
 		}
@@ -782,11 +718,11 @@ sys_vga_map_text(uintptr_t address)
 	
 	for(page = 0; page != 4; page++)
 	{
-		int r = page_insert(curenv->env_pgdir, &pages[(0xB8000 >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P);
+		int r = page_insert(curenv->env_vm.vm_pgdir, &pages[(0xB8000 >> PGSHIFT) + page], address + (page << PGSHIFT), PTE_U | PTE_W | PTE_P);
 		if(r < 0)
 		{
 			while(page--)
-				page_remove(curenv->env_pgdir, address + (page << PGSHIFT));
+				page_remove(curenv->env_vm.vm_pgdir, address + (page << PGSHIFT));
 			return r;
 		}
 	}
@@ -918,7 +854,7 @@ sys_reg_serial(int port, uintptr_t buffer_pg)
 		return -E_INVAL;
 
 
-	struct Page *pp = page_lookup(curenv->env_pgdir, buffer_pg, NULL);
+	struct Page *pp = page_lookup(curenv->env_vm.vm_pgdir, buffer_pg, NULL);
 	if(pp == 0)
 		return -E_INVAL;
 	uintptr_t kbuffer_pg = page2kva(pp);

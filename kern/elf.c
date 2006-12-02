@@ -154,7 +154,7 @@ eip_to_fnsym(envid_t envid, uint32_t eip)
 		if((r=envid2env(envid, &env, 0)))
 			return 0;
 		cur_cr3 = rcr3();
-		lcr3(env->env_cr3);
+		lcr3(env->env_vm.vm_cr3);
 
 		prev_pfm = page_fault_mode;		
 		page_fault_mode = PFM_KILL;
@@ -284,7 +284,7 @@ name_to_symbol(envid_t envid, char *name, struct Sym **sym)
 		if((r=envid2env(envid, &env, 0)))
 			return r;
 		cur_cr3 = rcr3();
-		lcr3(env->env_cr3);
+		lcr3(env->env_vm.vm_cr3);
 
 		prev_pfm = page_fault_mode;		
 		page_fault_mode = PFM_KILL;

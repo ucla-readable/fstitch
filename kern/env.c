@@ -87,56 +87,6 @@ env_init(void)
 	}
 }
 
-//
-// Initializes the kernel virtual memory layout for environment e.
-// Allocates a page directory and initializes
-// the kernel portion of the new environment's address space.
-// Also sets e->env_cr3 and e->env_pgdir accordingly.
-// We do NOT (yet) map anything into the user portion
-// of the environment's virtual address space.
-//
-// RETURNS
-//   0 -- on sucess
-//   <0 -- otherwise 
-//
-static int
-env_setup_vm(struct Env* e)
-{
-	int i, r;
-	struct Page* p = NULL;
-
-	// Allocate a page for the page directory
-	if ((r = page_alloc(&p)) < 0)
-		return r;
-
-	// Hint:
-	//    - The VA space of all envs is identical above UTOP
-	//      (except at VPT and UVPT, which we've set below).
-	//	See inc/pmap.h for permissions and layout.
-	//	Can you use boot_pgdir as a template?  Hint: Yes.
-	//	(Make sure you got the permissions right in Lab 2.)
-	//    - The initial VA below UTOP is empty.
-	//    - You do not need to make any more calls to page_alloc.
-	//    - Note: pp_ref is not maintained for physical pages
-	//	mapped above UTOP.
-
-	e->env_cr3 = page2pa(p);
-	e->env_pgdir = (pde_t *) KADDR(e->env_cr3);
-	/* manually increase reference count, because it is the page directory page */
-	p->pp_ref++;
-	
-	for(i = 0; i != PDX(UTOP); i++)
-		e->env_pgdir[i] = 0;
-	for(; i != NPDENTRIES; i++)
-		e->env_pgdir[i] = boot_pgdir[i];
-
-	// VPT and UVPT map the env's own page table, with
-	// different permissions.
-	e->env_pgdir[PDX(VPT)]   = e->env_cr3 | PTE_P | PTE_W;
-	e->env_pgdir[PDX(UVPT)]  = e->env_cr3 | PTE_P | PTE_U;
-
-	return 0;
-}
 
 //
 // Allocates and initializes a new env.
@@ -161,7 +111,7 @@ env_alloc(struct Env** new, envid_t parent_id, int priority)
 		priority = ENV_DEFAULT_PRIORITY;
 
 	// Allocate and set up the page directory for this environment.
-	if ((r = env_setup_vm(e)) < 0)
+	if ((r = page_setup_vm(&e->env_vm)) < 0)
 		return r;
 
 	// Generate an env_id for this environment.
@@ -284,7 +234,7 @@ load_icode(struct Env* e, uint8_t* binary, size_t size)
 	/* FIXME check magic number */
 	
 	e->env_tf.tf_eip = elf->e_entry;
-	lcr3(e->env_cr3);
+	lcr3(e->env_vm.vm_cr3);
 	
 	for(i = 0; i < elf->e_phnum; i++)
 	{
@@ -300,24 +250,16 @@ load_icode(struct Env* e, uint8_t* binary, size_t size)
 		
 		/* FIXME make these panics go away */
 		if(end < start || end > UTOP)
-		{
 			panic("range problem with segment");
-		}
 		if(ph[i].p_filesz > ph[i].p_memsz)
-		{
 			panic("size problem with segment");
-		}
 		
 		for(j = 0; j < pages; j++)
 		{
 			if(page_alloc(&page))
-			{
 				panic("failed to allocate");
-			}
-			if(page_insert(e->env_pgdir, page, start + j * PGSIZE, PTE_W | PTE_U))
-			{
+			if(page_insert(e->env_vm.vm_pgdir, page, start + j * PGSIZE, PTE_W | PTE_U))
 				panic("failed to insert");
-			}
 		}
 		
 		memcpy((void *) ph[i].p_va, &binary[ph[i].p_offset], ph[i].p_filesz);
@@ -328,13 +270,9 @@ load_icode(struct Env* e, uint8_t* binary, size_t size)
 	// at virtual address USTACKTOP - PGSIZE.
 	
 	if(page_alloc(&page))
-	{
 		panic("no stack space");
-	}
-	if(page_insert(e->env_pgdir, page, USTACKTOP - PGSIZE, PTE_W | PTE_U))
-	{
+	if(page_insert(e->env_vm.vm_pgdir, page, USTACKTOP - PGSIZE, PTE_W | PTE_U))
 		panic("failed to insert");
-	}
 	
 	lcr3(old_cr3);
 }
@@ -366,10 +304,6 @@ env_create(uint8_t* binary, size_t size)
 void
 env_free(struct Env *e)
 {
-	pte_t *pt;
-	uint32_t pdeno, pteno;
-	physaddr_t pa;
-
 	// Note the environment's demise.
 	if(env_debug)
 		printf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
@@ -377,36 +311,7 @@ env_free(struct Env *e)
 	if(e == curenv)
 		lcr3(PADDR(boot_pgdir));
 
-	// Flush all mapped pages in the user portion of the address space
-	static_assert(UTOP % PTSIZE == 0);
-	for (pdeno = 0; pdeno < PDX(UTOP); pdeno++) {
-
-		// only look at mapped page tables
-		if (!(e->env_pgdir[pdeno] & PTE_P))
-			continue;
-
-		// find the pa and va of the page table
-		pa = PTE_ADDR(e->env_pgdir[pdeno]);
-		pt = (pte_t*)KADDR(pa);
-
-		// unmap all PTEs in this page table
-		for (pteno = 0; pteno <= PTX(~0); pteno++) {
-			if (pt[pteno] & PTE_P)
-				page_remove(e->env_pgdir,
-					(pdeno << PDXSHIFT) |
-					(pteno << PTXSHIFT));
-		}
-
-		// free the page table itself
-		e->env_pgdir[pdeno] = 0;
-		page_decref(pa2page(pa));
-	}
-
-	// free the page directory
-	pa = e->env_cr3;
-	e->env_pgdir = 0;
-	e->env_cr3 = 0;
-	page_decref(pa2page(pa));
+	page_destroy_vm(&e->env_vm);
 
 	// return the environment to the free list
 	sched_remove(e);
@@ -502,7 +407,7 @@ env_run(struct Env* e)
 	breakpoints_sched(e->env_id);
 	curenv->env_jiffies = jiffies;
 	env_tsc = read_tsc();
-	lcr3(e->env_cr3);
+	lcr3(e->env_vm.vm_cr3);
 #if ENABLE_INKERNEL_INTS
 	/* env_pop_tf() resets %esp, so we need it to be a
 	 * valid stack location in case of an interrupt */

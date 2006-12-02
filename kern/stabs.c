@@ -74,8 +74,8 @@ int stab_eip(uintptr_t addr, eipinfo_t *info)
 		stab_end = ((const stab_t **) thing)[1];
 		stabstr = ((const char **) thing)[2];
 		stabstr_end = ((const char **) thing)[3];
-		if (check_user_access(curenv, stabs, stab_end - stabs, 0) < 0
-		    || check_user_access(curenv, stabstr, stabstr_end - stabstr, 0) < 0
+		if (check_user_access(&curenv->env_vm, stabs, stab_end - stabs, 0) < 0
+		    || check_user_access(&curenv->env_vm, stabstr, stabstr_end - stabstr, 0) < 0
 		    || stabstr_end == stabstr
 		    || stabstr_end[-1])
 			return -E_FAULT;
