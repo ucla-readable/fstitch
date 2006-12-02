@@ -19,8 +19,7 @@ static size_t basemem;		// Amount of base memory (in bytes)
 static size_t extmem;		// Amount of extended memory (in bytes)
 
 // These variables are set in i386_vm_init()
-pde_t* boot_pgdir;		// Virtual address of boot time page directory
-physaddr_t boot_cr3;		// Physical address of boot time page directory
+struct Vm boot_vm;		// Boot time page directory
 static char* boot_freemem;	// Pointer to next byte of free mem
 
 struct Page* pages;		// Virtual address of physical page array
@@ -225,8 +224,8 @@ boot_map_segment(pde_t* pgdir, uintptr_t la, size_t size, physaddr_t pa, int per
 }
 
 // Set up a two-level page table:
-//    boot_pgdir is its linear (virtual) address of the root
-//    boot_cr3 is the physical adresss of the root
+//    boot_vm.vm_pgdir is its linear (virtual) address of the root
+//    boot_vm.vm_cr3 is the physical adresss of the root
 // Then turn on paging.  Then effectively turn off segmentation.
 // (i.e., the segment base addrs are set to zero).
 // 
@@ -247,8 +246,8 @@ i386_vm_init(void)
 	// create initial page directory.
 	pgdir = boot_alloc(PGSIZE, PGSIZE);
 	memset(pgdir, 0, PGSIZE);
-	boot_pgdir = pgdir;
-	boot_cr3 = PADDR(pgdir);
+	boot_vm.vm_pgdir = pgdir;
+	boot_vm.vm_cr3 = PADDR(pgdir);
 
 	//////////////////////////////////////////////////////////////////////
 	// Recursively insert PD in itself as a page table, to form
@@ -327,7 +326,7 @@ i386_vm_init(void)
 		pgdir[i] = pgdir[PDX(KERNBASE) + i];
 
 	// Install page table.
-	lcr3(boot_cr3);
+	lcr3(boot_vm.vm_cr3);
 
 	// Turn on paging.
 	cr0 = rcr0();
@@ -355,7 +354,7 @@ i386_vm_init(void)
 		pgdir[i] = 0;
 
 	// Flush the TLB for good measure, to kill the pgdir[0-N] mappings.
-	lcr3(boot_cr3);
+	lcr3(boot_vm.vm_cr3);
 }
 
 int
@@ -684,7 +683,7 @@ page_setup_vm(struct Vm* vm)
 	//    - The VA space of all envs is identical above UTOP
 	//      (except at VPT and UVPT, which we've set below).
 	//	See inc/pmap.h for permissions and layout.
-	//	Can you use boot_pgdir as a template?  Hint: Yes.
+	//	Can you use boot_vm.vm_pgdir as a template? Hint: Yes.
 	//	(Make sure you got the permissions right in Lab 2.)
 	//    - The initial VA below UTOP is empty.
 	//    - You do not need to make any more calls to page_alloc.
@@ -699,7 +698,7 @@ page_setup_vm(struct Vm* vm)
 	for(i = 0; i != PDX(UTOP); i++)
 		vm->vm_pgdir[i] = 0;
 	for(; i != NPDENTRIES; i++)
-		vm->vm_pgdir[i] = boot_pgdir[i];
+		vm->vm_pgdir[i] = boot_vm.vm_pgdir[i];
 
 	// VPT and UVPT map the env's own page table, with
 	// different permissions.

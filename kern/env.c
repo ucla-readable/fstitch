@@ -309,7 +309,7 @@ env_free(struct Env *e)
 		printf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 
 	if(e == curenv)
-		lcr3(PADDR(boot_pgdir));
+		lcr3(PADDR(boot_vm.vm_pgdir));
 
 	page_destroy_vm(&e->env_vm);
 

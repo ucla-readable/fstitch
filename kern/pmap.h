@@ -53,8 +53,7 @@ extern char bootstacktop[], bootstack[];
 extern struct Page* pages;
 extern size_t npage;
 
-extern physaddr_t boot_cr3;
-extern pde_t* boot_pgdir;
+extern struct Vm boot_vm;
 
 extern struct Segdesc gdt[];
 extern struct Pseudodesc gdt_pd;
