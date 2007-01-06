@@ -31,8 +31,11 @@
 typedef unsigned char bool;
 #elif defined(__KERNEL__)
 #include <linux/types.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 /* Represents true-or-false values */
 typedef unsigned char bool;
+#endif
 #else
 #error Unknown target system
 #endif

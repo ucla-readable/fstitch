@@ -1,6 +1,9 @@
 #include <kfs/kernel_opgroup_ops.h>
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 #include <linux/config.h>
+#endif
 
 #ifdef CONFIG_KUDOS_PROC
 #include <linux/blkdev.h>

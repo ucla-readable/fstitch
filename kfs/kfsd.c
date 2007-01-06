@@ -300,7 +300,7 @@ module_init(init_kfsd);
 module_exit(exit_kfsd);
 
 MODULE_AUTHOR("KudOS Team");
-MODULE_DESCRIPTION("KudOS File Server Architecture");
+MODULE_DESCRIPTION("KudOS File System Architecture");
 MODULE_LICENSE("GPL");
 
 #else

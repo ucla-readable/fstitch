@@ -16,6 +16,10 @@
 #include <linux/version.h>
 #include <asm/uaccess.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
+#include <linux/mount.h>
+#endif
+
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>
 #include <kfs/modman.h>
@@ -412,9 +416,15 @@ static void serve_read_inode(struct inode * inode)
 	kfsd_leave(1);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 static int serve_stat_fs(struct super_block * sb, struct kstatfs * st)
 {
 	mount_desc_t * m = (mount_desc_t *) sb->s_fs_info;
+#else
+static int serve_stat_fs(struct dentry * de, struct kstatfs * st)
+{
+	mount_desc_t * m = (mount_desc_t *) de->d_inode->i_sb->s_fs_info;
+#endif
 	Dprintf("%s(kfs:%s)\n", __FUNCTION__, m->path);
 	CFS_t * cfs = m->cfs;
 	int r;
@@ -486,12 +496,20 @@ static int serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 static struct super_block * serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name, void * data)
+#else
+static int serve_get_sb(struct file_system_type * fs_type, int flags, const char * dev_name, void * data, struct vfsmount * vfs)
+#endif
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	int i, size;
 	if (strncmp(dev_name, "kfs:", 4))
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 		return ERR_PTR(-E_INVAL);
+#else
+		return -E_INVAL;
+#endif
 	
 	kfsd_enter();
 	size = vector_size(mounts);
@@ -504,19 +522,32 @@ static struct super_block * serve_get_sb(struct file_system_type * fs_type, int 
 			if (m->mounted)
 			{
 				kfsd_leave(1);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return ERR_PTR(-E_BUSY);
+#else
+				return -E_BUSY;
+#endif
 			}
 			if (modman_inc_cfs(m->cfs, fs_type, m->path) < 0)
 			{
 				kfsd_leave(1);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return ERR_PTR(-E_NO_MEM);
+#else
+				return -E_NO_MEM;
+#endif
 			}
 			sb = sget(fs_type, serve_compare_super, serve_set_super, m);
 			if (IS_ERR(sb) || sb->s_root) /* sb->s_root means it is mounted already? */
 			{
 				modman_dec_cfs(m->cfs, fs_type);
 				kfsd_leave(1);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return sb;
+#else
+				vfs->mnt_sb = sb;
+				return 0;
+#endif
 			}
 			sb->s_flags = flags;
 			i = serve_fill_super(sb, m);
@@ -526,17 +557,30 @@ static struct super_block * serve_get_sb(struct file_system_type * fs_type, int 
 				up_write(&sb->s_umount);
 				deactivate_super(sb);
 				kfsd_leave(1);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return ERR_PTR(i);
+#else
+				return i;
+#endif
 			}
 			m->mounted = 1;
 			sb->s_flags |= MS_ACTIVE;
 			kfsd_leave(1);
 			printk("kkfsd: mounted \"kfs:%s\"\n", m->path);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 			return sb;
+#else
+			vfs->mnt_sb = sb;
+			return 0;
+#endif
 		}
 	}
 	kfsd_leave(1);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 	return ERR_PTR(-E_NO_DEV);
+#else
+	return -E_NO_DEV;
+#endif
 }
 
 static void serve_kill_sb(struct super_block * sb)
@@ -1368,7 +1412,11 @@ static struct file_operations kfs_reg_file_ops = {
 	.release = serve_release,
 	.llseek = generic_file_llseek,
 	.read = serve_read,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 	.write = generic_file_write, // kfs_aops requires going thru the pagecache
+#else
+	.write = do_sync_write, // kfs_aops requires going thru the pagecache
+#endif
 	.mmap = generic_file_mmap,
 	.fsync = serve_fsync
 };
