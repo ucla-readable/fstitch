@@ -353,28 +353,28 @@ static int fuse_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 	{
 		if (size < sizeof(fusemd->ctx->uid))
 			return -E_NO_MEM;
-		*(typeof(fusemd->ctx->uid) *) data = fusemd->ctx->uid;
+		*(uid_t *) data = fusemd->ctx->uid;
 		return sizeof(fusemd->ctx->uid);
 	}
 	else if (KFS_feature_gid.id == id)
 	{
 		if (size < sizeof(fusemd->ctx->gid))
 			return -E_NO_MEM;
-		*(typeof(fusemd->ctx->gid) *) data = fusemd->ctx->gid;
+		*(gid_t *) data = fusemd->ctx->gid;
 		return sizeof(fusemd->ctx->gid);
 	}
 	else if (KFS_feature_unix_permissions.id == id)
 	{
 		if (size < sizeof(fusemd->mode))
 			return -E_NO_MEM;
-		*(typeof(fusemd->mode) *) data = fusemd->mode;
+		*(uint16_t *) data = fusemd->mode;
 		return sizeof(fusemd->mode);
 	}
 	else if (KFS_feature_filetype.id == id)
 	{
 		if (size < sizeof(fusemd->type))
 			return -E_NO_MEM;
-		*(typeof(fusemd->type) *) data = fusemd->type;
+		*(int *) data = fusemd->type;
 		return sizeof(fusemd->type);
 	}
 	else if (KFS_feature_symlink.id == id && fusemd->type == TYPE_SYMLINK)

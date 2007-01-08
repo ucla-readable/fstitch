@@ -212,14 +212,14 @@ static int kernel_get_metadata(void * arg, uint32_t id, size_t size, void * data
 	{
 		if (size < sizeof(kernelmd->mode))
 			return -E_NO_MEM;
-		*(typeof(kernelmd->mode) *) data = kernelmd->mode;
+		*(uint16_t *) data = kernelmd->mode;
 		return sizeof(kernelmd->mode);
 	}
 	else if (KFS_feature_filetype.id == id)
 	{
 		if (size < sizeof(kernelmd->type))
 			return -E_NO_MEM;
-		*(typeof(kernelmd->type) *) data = kernelmd->type;
+		*(int *) data = kernelmd->type;
 		return sizeof(kernelmd->type);
 	}
 	else if (KFS_feature_symlink.id == id && kernelmd->type == TYPE_SYMLINK)
