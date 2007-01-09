@@ -427,6 +427,7 @@ static int serve_stat_fs(struct dentry * de, struct kstatfs * st)
 #endif
 	Dprintf("%s(kfs:%s)\n", __FUNCTION__, m->path);
 	CFS_t * cfs = m->cfs;
+	unsigned long temp;
 	int r;
 	
 	kfsd_enter();
@@ -436,16 +437,18 @@ static int serve_stat_fs(struct dentry * de, struct kstatfs * st)
 	assert(sizeof(st->f_frsize) == r);
 	st->f_bsize = st->f_frsize;
 	
-	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, sizeof(st->f_blocks), &st->f_blocks);
+	r = CALL(cfs, get_metadata, 0, KFS_feature_devicesize.id, sizeof(temp), &temp);
 	if (r < 0)
 		goto out;
-	assert(sizeof(st->f_blocks) == r);
+	assert(sizeof(temp) == r);
+	st->f_blocks = temp;
 	
-	r = CALL(cfs, get_metadata, 0, KFS_feature_freespace.id, sizeof(st->f_bavail), &st->f_bavail);
+	r = CALL(cfs, get_metadata, 0, KFS_feature_freespace.id, sizeof(temp), &temp);
 	if (r < 0)
 		goto out;
-	assert(sizeof(st->f_bavail) == r);
+	assert(sizeof(temp) == r);
 	/* what is the difference between bfree and bavail? */
+	st->f_bavail = temp;
 	st->f_bfree = st->f_bavail;
 	
 	// TODO - add lfs features for these guys
@@ -545,8 +548,7 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return sb;
 #else
-				vfs->mnt_sb = sb;
-				return 0;
+				return simple_set_mnt(vfs, sb);
 #endif
 			}
 			sb->s_flags = flags;
@@ -570,8 +572,7 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 			return sb;
 #else
-			vfs->mnt_sb = sb;
-			return 0;
+			return simple_set_mnt(vfs, sb);
 #endif
 		}
 	}
