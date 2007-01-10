@@ -23,6 +23,14 @@
 #error linux_bd must be compiled for the linux kernel
 #endif
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+#include <linux/config.h>
+#endif
+
+#ifdef CONFIG_MD
+#error linux_bd is (apparently) incompatible with RAID/LVM
+#endif
+
 #define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
 #define DEBUG_LINUX_BD 0
 #define LINUX_BD_DEBUG_COLLECT_STATS 0
