@@ -578,9 +578,9 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 	}
 	kfsd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-	return ERR_PTR(-E_NO_DEV);
+	return ERR_PTR(-E_NOT_FOUND);
 #else
-	return -E_NO_DEV;
+	return -E_NOT_FOUND;
 #endif
 }
 
