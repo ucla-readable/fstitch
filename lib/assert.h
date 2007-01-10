@@ -14,9 +14,12 @@
 			printk(KERN_EMERG \
 		           "Assertion failure in %s() at %s:%d: \"%s\"\n", \
 			       __FUNCTION__, __FILE__, __LINE__, # cond); \
+			kfsd_global_lock.locked = 0; \
 			BUG(); \
 		} \
 	} while (0)
+/* This must be after the definition of assert(). */
+#include <kfs/kernel_serve.h>
 #else
 #error Unknown target system
 #endif
