@@ -1417,6 +1417,7 @@ static struct file_operations kfs_reg_file_ops = {
 	.write = generic_file_write, // kfs_aops requires going thru the pagecache
 #else
 	.write = do_sync_write, // kfs_aops requires going thru the pagecache
+	.aio_write = generic_file_aio_write,
 #endif
 	.mmap = generic_file_mmap,
 	.fsync = serve_fsync
