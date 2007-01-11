@@ -249,7 +249,7 @@ struct linux_bio_private {
 
 static uint32_t _seq = 0;
 
-static spinlock_t dma_outstanding_lock;
+static spinlock_t dma_outstanding_lock = SPIN_LOCK_UNLOCKED;
 static int dma_outstanding = 0;
 
 static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
@@ -291,7 +291,6 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	}
 
 	KDprintk(KERN_ERR "starting real read work\n");
-	spin_lock_init(&dma_outstanding_lock);
 	spin_lock(&dma_outstanding_lock);
 	dma_outstanding = 0;
 	spin_unlock(&dma_outstanding_lock);
@@ -387,7 +386,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		spin_lock(&info->wait_lock);
 		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
 		spin_unlock(&info->wait_lock);
-		schedule_timeout(500);
+		schedule_timeout(HZ / 2);
 		waited = 1;
 		spin_lock(&dma_outstanding_lock);
 	}
@@ -737,6 +736,7 @@ static int open_bdev(const char *path, int mode, struct block_device **bdev)
 		printk(KERN_ERR "error from open_by_devnum()\n");
 		return PTR_ERR(*bdev);
 	}
+	/* NOTE: bd_claim() will/may return -EBUSY if raid/lvm are on */
 	r = bd_claim(*bdev, _claim_ptr);
 	if (r)
 		blkdev_put(*bdev);
