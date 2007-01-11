@@ -266,13 +266,13 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int vec_len;
 	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
-	static int infty = 10;
 	bdesc_t *blocks[READ_AHEAD_COUNT];
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	struct timespec start;
 	struct timespec stop;
 #endif
 	int read_ahead_count = READ_AHEAD_COUNT;
+	static int infty = 10;
 
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
 
@@ -378,7 +378,6 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	KDprintk(KERN_ERR "going to sleep! [%d]\n", private[0].seq);
 	spin_lock(&dma_outstanding_lock);
 	while (dma_outstanding > 0) {
-		spin_unlock(&dma_outstanding_lock);
 		if (infty > 0) {
 			infty--;
 			KDprintk(KERN_ERR "dma not done. sleeping\n");
@@ -386,7 +385,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		spin_lock(&info->wait_lock);
 		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
 		spin_unlock(&info->wait_lock);
-		schedule_timeout(HZ / 2);
+		spin_unlock(&dma_outstanding_lock);
+		schedule_timeout(HZ * 5);
+		/* FIXME: check signal_pending() */
 		waited = 1;
 		spin_lock(&dma_outstanding_lock);
 	}
@@ -421,9 +422,8 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	struct linux_bio_private * private =
 		(struct linux_bio_private *)(bio->bi_private);
 	struct linux_info * info = private->info;
-	int i;
 	unsigned long flags;
-	int dir = bio->bi_rw;
+	int i, dir = bio->bi_rw;
 
 	assert(info);
 	assert(info->waitq.task_list.next);
@@ -476,8 +476,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	if (dir == READ) {
 		int do_wake_up = 0;
 		spin_lock_irqsave(&dma_outstanding_lock, flags);
-		dma_outstanding--;
-		if (dma_outstanding == 0)
+		if (!--dma_outstanding)
 			do_wake_up = 1;
 		spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 
@@ -527,9 +526,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	struct bio *bio;
 	struct bio_vec *bv;
-	int vec_len;
-	int r;
-	int i;
+	int vec_len, r, i;
 	struct linux_bio_private * private;
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	struct timespec start;
@@ -559,9 +556,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	}
 
-	vec_len = block->ddesc->length / 4096;
-	if (block->ddesc->length % 4096)
-		vec_len++;
+	vec_len = (block->ddesc->length + 4095) / 4096;
 	assert(vec_len == 1);
 
 	bio = bio_alloc(GFP_KERNEL, vec_len);
