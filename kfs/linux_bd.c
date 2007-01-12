@@ -186,7 +186,6 @@ struct linux_info {
 	const char * path;
 
 	wait_queue_head_t waitq; // wait for DMA to complete
-	spinlock_t wait_lock; // lock for 'waitq'
 
 	atomic_t outstanding_io_count;
 
@@ -264,6 +263,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	struct bio *bio;
 	struct bio_vec *bv;
 	int vec_len;
+	int flags;
 	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t *blocks[READ_AHEAD_COUNT];
@@ -291,9 +291,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	}
 
 	KDprintk(KERN_ERR "starting real read work\n");
-	spin_lock(&dma_outstanding_lock);
+	spin_lock_irqsave(&dma_outstanding_lock, flags);
 	dma_outstanding = 0;
-	spin_unlock(&dma_outstanding_lock);
+	spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
 	// assert((count * info->blocksize) <= 2048); Why was this assert here?
@@ -362,9 +362,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		bio->bi_end_io = bio_end_io_fn;
 		bio->bi_private = &private[j];
 
-		spin_lock(&dma_outstanding_lock);
+		spin_lock_irqsave(&dma_outstanding_lock, flags);
 		dma_outstanding++;
-		spin_unlock(&dma_outstanding_lock);
+		spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 
 		atomic_inc(&info->outstanding_io_count);
 
@@ -376,22 +376,20 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 
 	// wait for it to complete
 	KDprintk(KERN_ERR "going to sleep! [%d]\n", private[0].seq);
-	spin_lock(&dma_outstanding_lock);
+	spin_lock_irqsave(&dma_outstanding_lock, flags);
 	while (dma_outstanding > 0) {
 		if (infty > 0) {
 			infty--;
 			KDprintk(KERN_ERR "dma not done. sleeping\n");
 		}
-		spin_lock(&info->wait_lock);
 		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
-		spin_unlock(&info->wait_lock);
-		spin_unlock(&dma_outstanding_lock);
+		spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 		schedule_timeout(HZ * 5);
 		/* FIXME: check signal_pending() */
 		waited = 1;
-		spin_lock(&dma_outstanding_lock);
+		spin_lock_irqsave(&dma_outstanding_lock, flags);
 	}
-	spin_unlock(&dma_outstanding_lock);
+	spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 	if (waited)
 		finish_wait(&info->waitq, &wait);
 	KDprintk(KERN_ERR "woke up!\n");
@@ -480,11 +478,8 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 			do_wake_up = 1;
 		spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 
-		if (do_wake_up) {
-			spin_lock_irqsave(&info->wait_lock, flags);
+		if (do_wake_up)
 			wake_up_all(&info->waitq);
-			spin_unlock_irqrestore(&info->wait_lock, flags);
-		}
 	}
 
 	atomic_dec(&info->outstanding_io_count);
@@ -609,21 +604,19 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	// wait for it to complete
 	/*
 	printk(KERN_ERR "going to sleep!\n");
-	spin_lock(&private.dma_done_lock);
+	spin_lock_irqsave(&private.dma_done_lock, flags);
 	while (private.dma_done == 0) {
-		spin_unlock(&private.dma_done_lock);
+		spin_unlock_irqrestore(&private.dma_done_lock, flags);
 		if (infty > 0) {
 			infty--;
 			printk(KERN_ERR "dma not done. sleeping\n");
 		}
-		spin_lock(&info->wait_lock);
 		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
-		spin_unlock(&info->wait_lock);
 		schedule_timeout(500);
 		waited = 1;
-		spin_lock(&private.dma_done_lock);
+		spin_lock_irqsave(&private.dma_done_lock, flags);
 	}
-	spin_unlock(&private.dma_done_lock);
+	spin_unlock_irqrestore(&private.dma_done_lock, flags);
 	if (waited)
 		finish_wait(&info->waitq, &wait);
 	printk(KERN_ERR "woke up!\n");
@@ -723,18 +716,21 @@ static int open_bdev(const char *path, int mode, struct block_device **bdev)
 
 	r = lookup_device(path, &dev);
 	if (r) {
-		printk(KERN_ERR "error from lookup_device()\n");
+		kdprintf(STDERR_FILENO, "error from lookup_device()\n");
 		return r;
 	}
 	*bdev = open_by_devnum(dev, mode);
 	if (IS_ERR(*bdev)) {
-		printk(KERN_ERR "error from open_by_devnum()\n");
+		kdprintf(STDERR_FILENO, "error from open_by_devnum()\n");
 		return PTR_ERR(*bdev);
 	}
 	/* NOTE: bd_claim() will/may return -EBUSY if raid/lvm are on */
 	r = bd_claim(*bdev, _claim_ptr);
-	if (r)
+	/* NOTE: bd_claim() will/may return -EBUSY if raid/lvm are on */
+	if (r) {
+		kdprintf(STDERR_FILENO, "error from bd_claim(): %d\n", r);
 		blkdev_put(*bdev);
+	}
 	return r;
 }
 
@@ -743,13 +739,17 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	struct linux_info * info;
 	BD_t * bd = malloc(sizeof(*bd));
 	int r;
-	
+
 	if(!bd)
+	{
+		kdprintf(STDERR_FILENO, "malloc() for bd failed\n");
 		return NULL;
+	}
 	
 	info = malloc(sizeof(*info));
 	if(!info)
 	{
+		kdprintf(STDERR_FILENO, "malloc for info failed\n");
 		free(bd);
 		return NULL;
 	}
@@ -758,7 +758,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 
 	r = open_bdev(linux_bdev_path, WRITE, &info->bdev);
 	if (r) {
-		printk(KERN_ERR "open_bdev() error\n");
+		kdprintf(STDERR_FILENO, "open_bdev() error\n");
 		free(info);
 		free(bd);
 		return NULL;
@@ -766,6 +766,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	info->blockman = blockman_create(512, NULL, NULL);
 	if (!info->blockman) {
+		kdprintf(STDERR_FILENO, "blockman_create() failed\n");
 		bd_release(info->bdev);
 		blkdev_put(info->bdev);
 		free(info);
@@ -778,12 +779,12 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	info->blocksize = 512;
 	info->blockcount = info->bdev->bd_disk->capacity;
 	init_waitqueue_head(&info->waitq);
-	spin_lock_init(&info->wait_lock);
 	
 	BD_INIT(bd, linux_bd, info);
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
+		kdprintf(STDERR_FILENO, "modman_add_anon_bd() error\n");
 		DESTROY(bd);
 		return NULL;
 	}
