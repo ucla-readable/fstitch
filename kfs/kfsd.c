@@ -16,6 +16,12 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
+#include <linux/sched.h>
+#include <linux/stacktrace.h>
+#include <linux/sysrq.h>
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
+#include <linux/config.h>
+#endif
 #include <kfs/kernel_serve.h>
 #endif
 
@@ -30,6 +36,56 @@
 #ifdef __KERNEL__
 struct task_struct * kfsd_task;
 struct stealth_lock kfsd_global_lock;
+
+static void kudos_sysrq_unlock(int key, struct tty_struct *tty)
+{
+	spin_lock(&kfsd_global_lock.lock);
+	kfsd_global_lock.locked = 0;
+	kfsd_global_lock.process = 0;
+	spin_unlock(&kfsd_global_lock.lock);
+}
+
+/* By default, print_stack_trace() is not exported to modules.
+ * It's defined in kernel/stacktrace.c, and you can just add
+ * #include <linux/module.h> and EXPORT_SYMBOL(print_stack_trace);
+ * there to export it. Afterward, change 0 to 1 below. */
+#define EXPORTED_PRINT_STACK 0
+#define PRINT_STACK_DEPTH 128
+
+#ifdef CONFIG_STACKTRACE && EXPORTED_PRINT_STACK
+static void kudos_sysrq_showlock(int key, struct tty_struct *tty)
+{
+	spin_lock(&kfsd_global_lock.lock);
+	if(kfsd_global_lock.locked)
+	{
+		struct task_struct * task;
+		unsigned long entries[PRINT_STACK_DEPTH];
+		struct stack_trace trace;
+		trace.nr_entries = 0;
+		trace.max_entries = PRINT_STACK_DEPTH;
+		trace.entries = entries;
+		trace.skip = 0;
+		trace.all_contexts = 0;
+		rcu_read_lock();
+		task = find_task_by_pid_type(PIDTYPE_PID, kfsd_global_lock.process);
+		save_stack_trace(&trace, task);
+		rcu_read_unlock();
+		print_stack_trace(&trace, 2);
+	}
+	spin_unlock(&kfsd_global_lock.lock);
+}
+#endif
+
+static struct {
+	int key;
+	struct sysrq_key_op op;
+} kfsd_sysrqs[2] = {
+	{'x', {handler: kudos_sysrq_unlock, help_msg: "unlock kfsd_lock (x)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
+#ifdef CONFIG_STACKTRACE && EXPORTED_PRINT_STACK
+	{'y', {handler: kudos_sysrq_showlock, help_msg: "trace kfsd_lock owner (y)", action_msg: "Showing kfsd_lock owner trace", enable_mask: 1}},
+#endif
+};
+#define KFSD_SYSRQS (sizeof(kfsd_sysrqs) / sizeof(kfsd_sysrqs[0]))
 #endif
 
 struct module_shutdown {
@@ -261,13 +317,20 @@ static int kfsd_is_shutdown = 0;
 
 static int kfsd_thread(void * thunk)
 {
+	int i;
 	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
 	daemonize("kkfsd");
 	kfsd_task = current;
 	spin_lock_init(&kfsd_global_lock.lock);
 	kfsd_global_lock.locked = 0;
 	kfsd_global_lock.process = 0;
+	for(i = 0; i < KFSD_SYSRQS; i++)
+		if(register_sysrq_key(kfsd_sysrqs[i].key, &kfsd_sysrqs[i].op) < 0)
+			printf("kkfsd unable to register sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
 	kfsd_main(nwbblocks, 0, NULL);
+	for(i = 0; i < KFSD_SYSRQS; i++)
+		if(unregister_sysrq_key(kfsd_sysrqs[i].key, &kfsd_sysrqs[i].op) < 0)
+			printf("kkfsd unable to unregister sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
 	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
 	kfsd_is_shutdown = 1;
 	return 0;
