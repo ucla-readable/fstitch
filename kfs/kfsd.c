@@ -17,10 +17,11 @@
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
 #include <linux/sched.h>
-#include <linux/stacktrace.h>
 #include <linux/sysrq.h>
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 #include <linux/config.h>
+#else
+#include <linux/stacktrace.h>
 #endif
 #include <kfs/kernel_serve.h>
 #endif
@@ -37,7 +38,11 @@
 struct task_struct * kfsd_task;
 struct stealth_lock kfsd_global_lock;
 
-static void kudos_sysrq_unlock(int key, struct tty_struct *tty)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
+static void kudos_sysrq_unlock(int key, struct pt_regs * regs, struct tty_struct * tty)
+#else
+static void kudos_sysrq_unlock(int key, struct tty_struct * tty)
+#endif
 {
 	spin_lock(&kfsd_global_lock.lock);
 	kfsd_global_lock.locked = 0;
@@ -45,6 +50,7 @@ static void kudos_sysrq_unlock(int key, struct tty_struct *tty)
 	spin_unlock(&kfsd_global_lock.lock);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
 /* By default, print_stack_trace() is not exported to modules.
  * It's defined in kernel/stacktrace.c, and you can just add
  * #include <linux/module.h> and EXPORT_SYMBOL(print_stack_trace);
@@ -53,7 +59,7 @@ static void kudos_sysrq_unlock(int key, struct tty_struct *tty)
 #define PRINT_STACK_DEPTH 128
 
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
-static void kudos_sysrq_showlock(int key, struct tty_struct *tty)
+static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
 {
 	spin_lock(&kfsd_global_lock.lock);
 	if(kfsd_global_lock.locked)
@@ -70,10 +76,11 @@ static void kudos_sysrq_showlock(int key, struct tty_struct *tty)
 		task = find_task_by_pid_type(PIDTYPE_PID, kfsd_global_lock.process);
 		save_stack_trace(&trace, task);
 		rcu_read_unlock();
-		print_stack_trace(&trace, 2);
+		print_stack_trace(&trace, 0);
 	}
 	spin_unlock(&kfsd_global_lock.lock);
 }
+#endif
 #endif
 
 static struct {
@@ -81,8 +88,10 @@ static struct {
 	struct sysrq_key_op op;
 } kfsd_sysrqs[2] = {
 	{'x', {handler: kudos_sysrq_unlock, help_msg: "unlock kfsd_lock (x)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
 	{'y', {handler: kudos_sysrq_showlock, help_msg: "trace kfsd_lock owner (y)", action_msg: "Showing kfsd_lock owner trace", enable_mask: 1}},
+#endif
 #endif
 };
 #define KFSD_SYSRQS (sizeof(kfsd_sysrqs) / sizeof(kfsd_sysrqs[0]))
