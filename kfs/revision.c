@@ -13,12 +13,49 @@ typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
 static bool revision_owner_decider(chdesc_t * chdesc, void * data)
 {
-	return chdesc->owner == (BD_t *) data;
+	return chdesc->owner == (BD_t *) data || !chdesc_is_rollbackable(chdesc);
 }
 
 static bool revision_stamp_decider(chdesc_t * chdesc, void * data)
 {
-	return chdesc_has_stamp(chdesc, (uint32_t) data);
+	return chdesc_has_stamp(chdesc, (uint32_t) data) || !chdesc_is_rollbackable(chdesc);
+}
+
+static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chdescs, const char * function)
+{
+	int i;
+	kdprintf(STDERR_FILENO, "%s() is very confused!\n", function);
+	for(i = 0; i != count; i++)
+	{
+		chdepdesc_t * scan;
+		kdprintf(STDERR_FILENO, "%p [%d, %x]", chdescs[i], chdescs[i]->type, chdescs[i]->flags);
+		if(!chdesc_is_rollbackable(chdescs[i]))
+			kdprintf(STDERR_FILENO, "!");
+		kdprintf(STDERR_FILENO, " (<-");
+		for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
+		{
+			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
+				continue;
+			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
+			if(!chdesc_is_rollbackable(scan->after.desc))
+				kdprintf(STDERR_FILENO, "!");
+			if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
+				kdprintf(STDERR_FILENO, "*");
+		}
+		kdprintf(STDERR_FILENO, ") (->");
+		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
+		{
+			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
+				continue;
+			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
+			if(!chdesc_is_rollbackable(scan->before.desc))
+				kdprintf(STDERR_FILENO, "!");
+			if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
+				kdprintf(STDERR_FILENO, "*");
+		}
+		kdprintf(STDERR_FILENO, ")\n");
+	}
+	panic("too confused to continue");
 }
 
 static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, void * data)
@@ -36,6 +73,8 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(!decider(scan, data))
 			count++;
+	if(!count)
+		return 0;
 	
 	chdescs_size = sizeof(*chdescs) * count;
 	chdescs = smalloc(chdescs_size);
@@ -49,6 +88,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	for(;;)
 	{
 		int again = 0;
+		int progress = 0;
 		for(i = 0; i != count; i++)
 		{
 			chdepdesc_t * scan;
@@ -71,11 +111,20 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 			{
 				int r = chdesc_rollback(chdescs[i]);
 				if(r < 0)
-					panic("chdesc_rollback() failed!");
+				{
+					kdprintf(STDERR_FILENO, "chdesc_rollback() failed!\n");
+					assert(0);
+				}
+				progress = 1;
 			}
 		}
 		if(!again)
 			break;
+		if(!progress)
+		{
+			dump_revision_loop_state(block, count, chdescs, __FUNCTION__);
+			break;
+		}
 	}
 	
 	sfree(chdescs, chdescs_size);
@@ -130,6 +179,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	for(;;)
 	{
 		int again = 0;
+		int progress = 0;
 		for(i = count - 1; i != -1; i--)
 		{
 			chdepdesc_t * scan;
@@ -152,11 +202,20 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 			{
 				int r = chdesc_apply(chdescs[i]);
 				if(r < 0)
-					panic("chdesc_apply() failed!");
+				{
+					kdprintf(STDERR_FILENO, "chdesc_apply() failed!\n");
+					assert(0);
+				}
+				progress = 1;
 			}
 		}
 		if(!again)
 			break;
+		if(!progress)
+		{
+			dump_revision_loop_state(block, count, chdescs, __FUNCTION__);
+			break;
+		}
 	}
 	
 	sfree(chdescs, chdescs_size);
