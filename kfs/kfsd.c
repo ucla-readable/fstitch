@@ -52,7 +52,7 @@ static void kudos_sysrq_unlock(int key, struct tty_struct *tty)
 #define EXPORTED_PRINT_STACK 0
 #define PRINT_STACK_DEPTH 128
 
-#ifdef CONFIG_STACKTRACE && EXPORTED_PRINT_STACK
+#if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
 static void kudos_sysrq_showlock(int key, struct tty_struct *tty)
 {
 	spin_lock(&kfsd_global_lock.lock);
@@ -81,7 +81,7 @@ static struct {
 	struct sysrq_key_op op;
 } kfsd_sysrqs[2] = {
 	{'x', {handler: kudos_sysrq_unlock, help_msg: "unlock kfsd_lock (x)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
-#ifdef CONFIG_STACKTRACE && EXPORTED_PRINT_STACK
+#if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
 	{'y', {handler: kudos_sysrq_showlock, help_msg: "trace kfsd_lock owner (y)", action_msg: "Showing kfsd_lock owner trace", enable_mask: 1}},
 #endif
 };
