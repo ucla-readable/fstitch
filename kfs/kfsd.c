@@ -137,6 +137,9 @@ void kfsd_main(int nwbblocks, int argc, char ** argv)
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
+#ifdef __KERNEL__
+	kfsd_enter();
+#endif
 	if ((r = kfsd_init(nwbblocks, argc, argv)) < 0)
 	{
 #ifdef __KERNEL__
@@ -154,9 +157,6 @@ void kfsd_main(int nwbblocks, int argc, char ** argv)
 		/* fuse_serve_loop() doesn't respect kfsd_running()... but that's OK */
 		fuse_serve_loop();
 #else
-#ifdef __KERNEL__
-		kfsd_enter();
-#endif
 		while(kfsd_running)
 		{
 			sched_run_callbacks();
@@ -172,11 +172,11 @@ void kfsd_main(int nwbblocks, int argc, char ** argv)
 #error Unknown target system
 #endif
 		}
-#ifdef __KERNEL__
-		kfsd_leave(0);
-#endif
 #endif
 	}
+#ifdef __KERNEL__
+	kfsd_leave(0);
+#endif
 	kfsd_shutdown();
 }
 
