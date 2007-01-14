@@ -174,10 +174,10 @@ void kfsd_main(int nwbblocks, int argc, char ** argv)
 		}
 #endif
 	}
+	kfsd_shutdown();
 #ifdef __KERNEL__
 	kfsd_leave(0);
 #endif
-	kfsd_shutdown();
 }
 
 #if defined(KUDOS)
