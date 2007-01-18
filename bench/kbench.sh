@@ -108,12 +108,14 @@ else
 	exit 1
 fi
 
-if [ $# -ge 3 ] && [ "$2" == "-h" ]
+if [ $# -ge 3 ]
+then
+	NRUNS=$3
+fi
+
+if [ $# -ge 4 ]
 then
 	usage
-elif [ $# -eq 2 ]
-then
-	NRUNS=$2
 fi
 
 su "$REAL_USER" -c "touch \"$TIME_LOG\""
