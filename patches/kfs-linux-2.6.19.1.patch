@@ -1,6 +1,6 @@
 diff -Nrud linux-2.6.19.1/fs/exec.c linux-2.6.19.1/fs/exec.c
 --- linux-2.6.19.1/fs/exec.c	2006-12-11 11:32:53.000000000 -0800
-+++ linux-2.6.19.1/fs/exec.c	2007-01-04 18:02:05.000000000 -0800
++++ linux-2.6.19.1/fs/exec.c	2007-01-19 14:00:05.000000000 -0800
 @@ -48,6 +48,7 @@
  #include <linux/rmap.h>
  #include <linux/tsacct_kern.h>
@@ -19,7 +19,7 @@ diff -Nrud linux-2.6.19.1/fs/exec.c linux-2.6.19.1/fs/exec.c
  			read_lock(&binfmt_lock);
 diff -Nrud linux-2.6.19.1/fs/Kconfig linux-2.6.19.1/fs/Kconfig
 --- linux-2.6.19.1/fs/Kconfig	2006-12-11 11:32:53.000000000 -0800
-+++ linux-2.6.19.1/fs/Kconfig	2007-01-04 17:59:10.000000000 -0800
++++ linux-2.6.19.1/fs/Kconfig	2007-01-19 14:00:05.000000000 -0800
 @@ -6,6 +6,8 @@
  
  if BLOCK
@@ -31,7 +31,7 @@ diff -Nrud linux-2.6.19.1/fs/Kconfig linux-2.6.19.1/fs/Kconfig
  	help
 diff -Nrud linux-2.6.19.1/fs/kudos/Kconfig linux-2.6.19.1/fs/kudos/Kconfig
 --- linux-2.6.19.1/fs/kudos/Kconfig	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.19.1/fs/kudos/Kconfig	2007-01-04 17:59:10.000000000 -0800
++++ linux-2.6.19.1/fs/kudos/Kconfig	2007-01-19 14:00:05.000000000 -0800
 @@ -0,0 +1,5 @@
 +config KUDOS_PROC
 +	boolean "Provide process event hooks for KudOS"
@@ -40,12 +40,12 @@ diff -Nrud linux-2.6.19.1/fs/kudos/Kconfig linux-2.6.19.1/fs/kudos/Kconfig
 +          about process events, which it needs to support opgroups.
 diff -Nrud linux-2.6.19.1/fs/kudos/kudos_proc.c linux-2.6.19.1/fs/kudos/kudos_proc.c
 --- linux-2.6.19.1/fs/kudos/kudos_proc.c	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.19.1/fs/kudos/kudos_proc.c	2007-01-04 17:59:10.000000000 -0800
-@@ -0,0 +1,102 @@
++++ linux-2.6.19.1/fs/kudos/kudos_proc.c	2007-01-19 14:00:05.000000000 -0800
+@@ -0,0 +1,97 @@
 +/*
 + * kudos_proc.c - provide process event hooks for KudOS
 + *
-+ * Copyright (C) 2006 Regents of the University of California
++ * Copyright (C) 2006, 2007 Regents of the University of California
 + * Based loosely on cn_proc.c by Matt Helsley
 + * 
 + * Copyright (C) 2005 Matt Helsley, IBM Corp.
@@ -76,68 +76,63 @@ diff -Nrud linux-2.6.19.1/fs/kudos/kudos_proc.c linux-2.6.19.1/fs/kudos/kudos_pr
 +
 +#include <linux/kudos_proc.h>
 +
-+static atomic_t kudos_module_loaded = ATOMIC_INIT(0);
 +static spinlock_t kudos_spinlock = SPIN_LOCK_UNLOCKED;
 +static struct kudos_proc_ops * kudos_module = NULL;
 +
 +void kudos_fork_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&kudos_module_loaded) < 1)
-+		return;
-+	
-+	kudos_module->fork(task);
++	read_lock(&kudos_spinlock);
++	if(kudos_module)
++		kudos_module->fork(task);
++	read_unlock(&kudos_spinlock);
 +}
 +
 +void kudos_exec_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&kudos_module_loaded) < 1)
-+		return;
-+	
-+	kudos_module->exec(task);
++	read_lock(&kudos_spinlock);	
++	if(kudos_module)
++		kudos_module->exec(task);
++	read_unlock(&kudos_spinlock);
 +}
 +
 +void kudos_exit_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&kudos_module_loaded) < 1)
-+		return;
-+	
-+	kudos_module->exit(task);
++	read_lock(&kudos_spinlock);
++	if(kudos_module)
++		kudos_module->exit(task);
++	read_unlock(&kudos_spinlock);
 +}
 +
 +int kudos_register_module(struct kudos_proc_ops * ops)
 +{
-+	spin_lock(&kudos_spinlock);
++	write_lock(&kudos_spinlock);
 +	
-+	if(atomic_read(&kudos_module_loaded) > 0)
++	if(kudos_module)
 +	{
-+		spin_unlock(&kudos_spinlock);
++		write_unlock(&kudos_spinlock);
 +		return -EBUSY;
 +	}
 +	
 +	kudos_module = ops;
 +	
-+	atomic_inc(&kudos_module_loaded);
-+	
-+	spin_unlock(&kudos_spinlock);
++	write_unlock(&kudos_spinlock);
 +	
 +	return 0;
 +}
 +
 +int kudos_unregister_module(struct kudos_proc_ops * ops)
 +{
-+	spin_lock(&kudos_spinlock);
++	write_lock(&kudos_spinlock);
 +	
-+	if(atomic_read(&kudos_module_loaded) < 1 || kudos_module != ops)
++	if(kudos_module != ops)
 +	{
-+		spin_unlock(&kudos_spinlock);
++		write_unlock(&kudos_spinlock);
 +		return -EINVAL;
 +	}
 +	
-+	atomic_dec(&kudos_module_loaded);
-+	
 +	kudos_module = NULL;
 +	
-+	spin_unlock(&kudos_spinlock);
++	write_unlock(&kudos_spinlock);
 +	
 +	return 0;
 +}
@@ -146,12 +141,12 @@ diff -Nrud linux-2.6.19.1/fs/kudos/kudos_proc.c linux-2.6.19.1/fs/kudos/kudos_pr
 +EXPORT_SYMBOL(kudos_unregister_module);
 diff -Nrud linux-2.6.19.1/fs/kudos/Makefile linux-2.6.19.1/fs/kudos/Makefile
 --- linux-2.6.19.1/fs/kudos/Makefile	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.19.1/fs/kudos/Makefile	2007-01-04 17:59:10.000000000 -0800
++++ linux-2.6.19.1/fs/kudos/Makefile	2007-01-19 14:00:05.000000000 -0800
 @@ -0,0 +1 @@
 +obj-$(CONFIG_KUDOS_PROC)	+= kudos_proc.o
 diff -Nrud linux-2.6.19.1/fs/Makefile linux-2.6.19.1/fs/Makefile
 --- linux-2.6.19.1/fs/Makefile	2006-12-11 11:32:53.000000000 -0800
-+++ linux-2.6.19.1/fs/Makefile	2007-01-04 17:59:10.000000000 -0800
++++ linux-2.6.19.1/fs/Makefile	2007-01-19 14:00:05.000000000 -0800
 @@ -18,6 +18,8 @@
  obj-y +=	no-block.o
  endif
@@ -163,12 +158,12 @@ diff -Nrud linux-2.6.19.1/fs/Makefile linux-2.6.19.1/fs/Makefile
  obj-$(CONFIG_EPOLL)		+= eventpoll.o
 diff -Nrud linux-2.6.19.1/include/linux/kudos_proc.h linux-2.6.19.1/include/linux/kudos_proc.h
 --- linux-2.6.19.1/include/linux/kudos_proc.h	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.19.1/include/linux/kudos_proc.h	2007-01-04 18:06:54.000000000 -0800
++++ linux-2.6.19.1/include/linux/kudos_proc.h	2007-01-19 14:00:05.000000000 -0800
 @@ -0,0 +1,59 @@
 +/*
 + * kudos_proc.h - provide process event hooks for KudOS
 + *
-+ * Copyright (C) 2006 Regents of the University of California
++ * Copyright (C) 2006, 2007 Regents of the University of California
 + * Based loosely on cn_proc.h by Matt Helsley
 + * 
 + * Copyright (C) Matt Helsley, IBM Corp. 2005
@@ -226,7 +221,7 @@ diff -Nrud linux-2.6.19.1/include/linux/kudos_proc.h linux-2.6.19.1/include/linu
 +#endif	/* KUDOS_PROC_H */
 diff -Nrud linux-2.6.19.1/kernel/exit.c linux-2.6.19.1/kernel/exit.c
 --- linux-2.6.19.1/kernel/exit.c	2006-12-11 11:32:53.000000000 -0800
-+++ linux-2.6.19.1/kernel/exit.c	2007-01-04 18:03:37.000000000 -0800
++++ linux-2.6.19.1/kernel/exit.c	2007-01-19 14:00:05.000000000 -0800
 @@ -34,6 +34,7 @@
  #include <linux/signal.h>
  #include <linux/posix-timers.h>
@@ -245,7 +240,7 @@ diff -Nrud linux-2.6.19.1/kernel/exit.c linux-2.6.19.1/kernel/exit.c
  #ifdef CONFIG_NUMA
 diff -Nrud linux-2.6.19.1/kernel/fork.c linux-2.6.19.1/kernel/fork.c
 --- linux-2.6.19.1/kernel/fork.c	2006-12-11 11:32:53.000000000 -0800
-+++ linux-2.6.19.1/kernel/fork.c	2007-01-04 18:04:34.000000000 -0800
++++ linux-2.6.19.1/kernel/fork.c	2007-01-19 14:00:05.000000000 -0800
 @@ -45,6 +45,7 @@
  #include <linux/acct.h>
  #include <linux/tsacct_kern.h>
