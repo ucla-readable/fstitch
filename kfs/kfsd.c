@@ -86,7 +86,7 @@ static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
 static struct {
 	int key;
 	struct sysrq_key_op op;
-} kfsd_sysrqs[2] = {
+} kfsd_sysrqs[] = {
 	{'x', {handler: kudos_sysrq_unlock, help_msg: "unlock kfsd_lock (x)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
