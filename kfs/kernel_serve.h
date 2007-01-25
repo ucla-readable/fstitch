@@ -43,6 +43,7 @@ static inline int kfsd_have_lock(void)
 
 static inline void kfsd_enter(void)
 {
+	int tries = 0;
 	assert(!kfsd_have_lock());
 
 	for(;;)
@@ -58,6 +59,8 @@ static inline void kfsd_enter(void)
 			kfsd_next_request_id();
 			return;
 		}
+		if(++tries > 2)
+			printk(KERN_EMERG "%s failed to acquire kfsd lock %d times\n", current->comm, tries);
 		spin_unlock(&kfsd_global_lock.lock);
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 100);
