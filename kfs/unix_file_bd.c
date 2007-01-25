@@ -169,7 +169,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	int r;
-	int revision_back, revision_back;
+	int revision_forward, revision_back;
 	off_t seeked;
 	
 	if(block->number + block->count > info->blockcount)
