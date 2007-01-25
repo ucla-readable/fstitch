@@ -263,7 +263,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	struct bio *bio;
 	struct bio_vec *bv;
 	int vec_len;
-	int flags;
+	unsigned long flags;
 	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t *blocks[READ_AHEAD_COUNT];
@@ -297,6 +297,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
 	// assert((count * info->blocksize) <= 2048); Why was this assert here?
+	// FIXME: 'count != 4' (and maybe READ_AHEAD_COUNT) is specific
+	// to 2kB blocks
 	if (count != 4)
 		read_ahead_count = 1;
 #if LINUX_BD_DEBUG_COLLECT_STATS
@@ -330,6 +332,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		vec_len = (count * info->blocksize + 4095) / 4096;
 		assert(vec_len == 1);
 
+		// FIXME: these error returns do not clean up
 		bio = bio_alloc(GFP_KERNEL, vec_len);
 		if (!bio) {
 			printk(KERN_ERR "bio_alloc() failed\n");
@@ -351,6 +354,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		private[j].bdesc = blocks[j];
 		private[j].number = j_number;
 		private[j].count = count;
+		// TODO: what happens if _seq wraps?
 		private[j].seq = _seq++;
 
 		bio->bi_idx = 0;
