@@ -249,7 +249,7 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 
 	if (use_disk_1)
 	{
-		BD_t * bd;
+		BD_t * bd = NULL;
 
 #if defined(KUDOS)
 		if (! (bd = ide_pio_bd(0, 1, 0)) )
@@ -259,14 +259,13 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		if (! (bd = unix_file_bd(file, 512)) )
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #elif defined(__KERNEL__)
-# if 0
 		extern char * linux_device;
-		printf("Using device %s\n", linux_device);
-		if (! (bd = linux_bd(linux_device)) )
-			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
-# else
-		bd = NULL;
-# endif
+		if (linux_device)
+		{
+			printf("Using device %s\n", linux_device);
+			if (! (bd = linux_bd(linux_device)) )
+				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
+		}
 #else
 #error Unknown target system
 #endif
@@ -286,7 +285,7 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 	}
 	if (use_disk_2)
 	{
-		BD_t * bd;
+		BD_t * bd = NULL;
 #if defined(UNIXUSER)
 		const char file[] = "obj/unix-user/fs/ext2.img";
 		if (! (bd = unix_file_bd(file, 512)) )
@@ -294,11 +293,12 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 #elif defined(__KERNEL__)
 # if 0
 		extern char * linux_device;
-		printf("Using device %s\n", linux_device);
-		if (! (bd = linux_bd(linux_device)) )
-			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
-# else
-		bd = NULL;
+		if (linux_device)
+		{
+			printf("Using device %s\n", linux_device);
+			if (! (bd = linux_bd(linux_device)) )
+				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
+		}
 # endif
 #endif
 		if (bd)

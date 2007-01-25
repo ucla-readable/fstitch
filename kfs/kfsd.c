@@ -323,7 +323,7 @@ static int nwbblocks = 128;
 module_param(nwbblocks, int, 0);
 MODULE_PARM_DESC(nwbblocks, "The number of write-back blocks to use");
 
-char * linux_device = "/dev/sdb";
+char * linux_device = NULL;
 module_param(linux_device, charp, 0);
 MODULE_PARM_DESC(linux_device, "The device to attach linux_bd to");
 
