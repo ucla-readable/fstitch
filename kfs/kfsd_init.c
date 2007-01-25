@@ -260,9 +260,10 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #elif defined(__KERNEL__)
 # if 0
-		const char dev[] = "/dev/sdb";
-		if (! (bd = linux_bd(dev)) )
-			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", dev);
+		extern char * linux_device;
+		printf("Using device %s\n", linux_device);
+		if (! (bd = linux_bd(linux_device)) )
+			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
 # else
 		bd = NULL;
 # endif
@@ -292,9 +293,10 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
 #elif defined(__KERNEL__)
 # if 0
-		const char dev[] = "/dev/sdb";
-		if (! (bd = linux_bd(dev)) )
-			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", dev);
+		extern char * linux_device;
+		printf("Using device %s\n", linux_device);
+		if (! (bd = linux_bd(linux_device)) )
+			kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
 # else
 		bd = NULL;
 # endif

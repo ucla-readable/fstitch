@@ -321,6 +321,11 @@ int main(int argc, char * argv[])
 
 static int nwbblocks = 128;
 module_param(nwbblocks, int, 0);
+MODULE_PARM_DESC(nwbblocks, "The number of write-back blocks to use");
+
+char * linux_device = "/dev/sdb";
+module_param(linux_device, charp, 0);
+MODULE_PARM_DESC(linux_device, "The device to attach linux_bd to");
 
 static int kfsd_is_shutdown = 0;
 
