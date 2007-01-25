@@ -25,6 +25,16 @@
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 #include <linux/config.h>
+#ifndef BIO_RW_SOFTBARRIER
+/* The soft barrier patch is apparently not needed on earlier kernels. This is
+ * probably by luck, but we won't force the matter. We set it to BIO_RW in that
+ * case so it will not set any extra bits (since WRITE is 1). */
+#define BIO_RW_SOFTBARRIER BIO_RW
+#endif
+#else
+#ifndef BIO_RW_SOFTBARRIER
+#error linux_bd requires the softbarrier patch in the kernel
+#endif
 #endif
 
 #ifdef CONFIG_MD
@@ -441,7 +451,7 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		(struct linux_bio_private *)(bio->bi_private);
 	struct linux_info * info = private->info;
 	unsigned long flags;
-	int i, dir = bio->bi_rw;
+	int i, dir = bio->bi_rw & (1 << BIO_RW);
 
 	assert(info);
 	assert(info->waitq.task_list.next);
@@ -642,7 +652,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_sector = block->number;
 	bio->bi_size = block->ddesc->length;
 	bio->bi_bdev = info->bdev;
-	bio->bi_rw = WRITE;
+	bio->bi_rw = WRITE | (1 << BIO_RW_SOFTBARRIER);
 	bio->bi_end_io = bio_end_io_fn;
 	bio->bi_private = private;
 
