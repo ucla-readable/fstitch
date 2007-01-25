@@ -202,7 +202,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 		fprintf(block_log, "%p write %u\n", object, block->number);
 
 	r = revision_tail_acknowledge(block, object);
-	if(r > 0)
+	if(r < 0)
 	{
 		panic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
