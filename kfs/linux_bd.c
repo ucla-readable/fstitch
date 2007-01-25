@@ -34,6 +34,7 @@
 #define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
 #define DEBUG_LINUX_BD 0
 #define LINUX_BD_DEBUG_COLLECT_STATS 0
+#define DEBUG_WRITES 0
 
 #define READ_AHEAD_COUNT 10
 
@@ -41,6 +42,15 @@
 #define KDprintk(x...) printk(x)
 #else
 #define KDprintk(x...)
+#endif
+
+#if DEBUG_WRITES
+# include <linux/debugfs.h>
+# include <kfs/linux_bd_debug.h>
+static struct linux_bd_writes debug_writes;
+static atomic_t debug_writes_ninflight[MAXBLOCKNO];
+static uint32_t debug_writes_completed;
+static struct dentry * debug_writes_dentry;
 #endif
 
 int linux_bd_destroy(BD_t * bd);
@@ -244,6 +254,9 @@ struct linux_bio_private {
 	bdesc_t * bdesc;
 	uint32_t number;
 	uint16_t count;
+#if DEBUG_WRITES
+	uint32_t issue;
+#endif
 };
 
 static uint32_t _seq = 0;
@@ -356,6 +369,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		private[j].count = count;
 		// TODO: what happens if _seq wraps?
 		private[j].seq = _seq++;
+#if DEBUG_WRITES
+		private[j].issue = -1;
+#endif
 
 		bio->bi_idx = 0;
 		bio->bi_vcnt = vec_len;
@@ -444,6 +460,20 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 		return 1;
 	}
 	KDprintk(KERN_ERR "[%d] done w/ bio transfer 2\n", private->seq);
+
+#if DEBUG_WRITES
+	if (dir == WRITE && private->issue < MAXWRITES)
+	{
+		struct bio_vec * bv = bio_iovec_idx(bio, 0);
+		struct linux_bd_write * write = &debug_writes.writes[private->issue];
+		uint32_t pre_checksum = write->checksum;
+		uint32_t post_checksum = block_checksum(page_address(bv->bv_page), bv->bv_len);
+		if (pre_checksum != post_checksum)
+			printf("pre- (0x%x) and post-write (0x%x) checksums differ for write %d (block %u)\n", pre_checksum, post_checksum, private->issue, write->blockno);
+		write->completed = debug_writes_completed++;
+		atomic_dec(&debug_writes_ninflight[write->blockno]);
+	}
+#endif
 
 	assert(bio->bi_vcnt == 1);
 	for (i = 0; i < bio->bi_vcnt; i++) {
@@ -556,6 +586,24 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	}
 	revision_back = r;
+
+#if DEBUG_WRITES
+	private->issue = debug_writes.next;
+	if (debug_writes.next < MAXWRITES)
+	{
+		struct linux_bd_write * write = &debug_writes.writes[debug_writes.next];
+		write->blockno = block->number;
+		write->checksum = block_checksum(block->ddesc->data, block->ddesc->length);
+		/* NOTE: ninflight may overcount as any inflight writes could complete before we actually make the request below... */
+		write->ninflight = atomic_inc_return(&debug_writes_ninflight[block->number]) - 1;
+		debug_writes.next++;
+	}
+	else if (debug_writes.next == MAXWRITES)
+	{
+		printf("linux_bd: number of writes has exceeded maximum supported by debugging (%u)\n", MAXWRITES);
+		debug_writes.next++;
+	}
+#endif
 
 	vec_len = (block->ddesc->length + 4095) / 4096;
 	assert(vec_len == 1);
@@ -671,6 +719,14 @@ int linux_bd_destroy(BD_t * bd)
 
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	stat_dump();
+#endif
+
+#if DEBUG_WRITES
+	if (debug_writes_dentry)
+	{
+		debugfs_remove(debug_writes_dentry);
+		debug_writes_dentry = NULL;
+	}
 #endif
 
 	r = modman_rem_bd(bd);
@@ -799,6 +855,18 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		DESTROY(bd);
 		return NULL;
 	}
+	
+#if DEBUG_WRITES
+	static struct debugfs_blob_wrapper debug_writes_blob = {
+		.data = &debug_writes, .size = sizeof(debug_writes)
+	};
+	debug_writes_dentry = debugfs_create_blob("linux_bd_writes", 0444, NULL, &debug_writes_blob);
+	if (IS_ERR(debug_writes_dentry))
+	{
+		printf("%s(): debugfs_create_blob(\"linux_bd_writes\") = error %d\n", __FUNCTION__, PTR_ERR(debug_writes_dentry));
+		debug_writes_dentry = NULL;
+	}
+#endif
 	
 	return bd;
 }

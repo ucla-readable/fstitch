@@ -1,0 +1,13 @@
+
+OBJDIRS += fs
+
+# ufs.img is largely a sparse file
+$(OBJDIR)/fs/ufs.img: fs/ufs-clean.img.gz
+	@echo + mk $(OBJDIR)/fs/ufs.img
+	@mkdir -p $(@D)
+	$(V)util/$(GUNZIP_SPARSE) fs/ufs-clean.img.gz $(OBJDIR)/fs/ufs.img
+
+$(OBJDIR)/fs/ext2.img: fs/ext2-clean.img.gz
+	@echo + mk $(OBJDIR)/fs/ext2.img
+	@mkdir -p $(@D)
+	$(V)util/$(GUNZIP_SPARSE) fs/ext2-clean.img.gz $(OBJDIR)/fs/ext2.img

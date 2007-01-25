@@ -1,0 +1,76 @@
+#!/bin/bash
+
+function assert()
+{
+	echo "+ $@" >&2
+	"$@"
+	V=$?
+	if [ $V != 0 ]
+	then
+		echo "FAIL: $@" >&2
+		mount | grep -q /mnt/test && sudo umount /mnt/test
+		lsmod | grep -q kkfsd && sudo rmmod kkfsd
+		exit $V
+	fi
+}
+
+function warning()
+{
+	echo "+ $@" >&2
+	"$@"
+	V=$?
+	[ $V != 0 ] && echo "WANING: $@" >&2
+}
+
+DISKIMG=obj/kernel/fs/ufs.img
+PRISTINE=~mdm2000/linux-2.6.15
+DISK=${1:-/dev/sdb}
+
+if [ $# -gt 2 ]; then
+	echo "About: run a kkfsd test" 1>&2
+	echo "Usage: `basename "$0"` [DISK]" 1>&2
+	exit 1
+fi
+
+if lsmod | grep -q kkfsd; then
+	echo "kkfsd is already loaded" 1>&2
+	exit 1
+fi
+
+echo "Using disk $DISK"
+
+DEBUGDIR=`mktemp -d -p . debug.XXXXXX`
+assert rm -f debug
+assert ln -s $DEBUGDIR debug
+echo "DEBUGDIR=$DEBUGDIR"
+
+assert sudo echo sudo auth cached
+
+assert make kernel
+assert sudo dd if=$DISKIMG of=$DISK bs=512k
+DISKIMGSIZE=`du -m --apparent-size $DISKIMG | cut -f 1`
+mount | grep -q /debug || sudo mount /debug
+assert sync
+
+assert sudo insmod kfs/kkfsd.ko linux_device=$DISK
+assert sudo mount kfs:/ /mnt/test -t kfs
+assert time sudo tar -C /mnt/test -xf linux-2.6.15.tar
+assert time obj/kernel/user/fsync /mnt/test
+assert sudo umount /mnt/test
+cp /debug/* debug/
+assert sync
+assert sudo rmmod kkfsd
+sudo dd if=$DISK of=debug/disk.img bs=1M count=$DISKIMGSIZE
+assert sync
+
+assert sudo insmod kfs/kkfsd.ko
+assert sudo mount kfs:/ /mnt/test -t kfs
+warning find /mnt/test > list
+[ `wc -l list | cut -f 1 -d\ ` -eq 20158 ] || echo "list length mismatch: `wc -l list`"
+[ "`md5sum list | cut -f 1 -d\ `" == "1562f3a4a17b6d72f8672d5e22d8a46f" ] || echo "list hash mismatch"
+warning diff -Nurd $PRISTINE /mnt/test/linux-2.6.15 | tee diff
+warning sudo umount /mnt/test
+warning sudo rmmod kkfsd
+if [ -f debug/linux_bd_writes ]; then
+	assert obj/util/check_writes debug/linux_bd_writes debug/disk.img | tee debug/check_writes
+fi

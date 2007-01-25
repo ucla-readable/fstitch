@@ -1,13 +1,14 @@
+# kernel kfs makefile
+
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kernel
 UTILDIR := $(BASE_OBJDIR)/util
 
 -include conf/env.mk
 
-CTAGS	:= ctags
-CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Makefile.kernel\).mk
+TOP = .
 
-BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so $(OBJDIR)/user/testopgroup
+BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
 
 ifeq ($(KERNELRELEASE),)
 KERNELRELEASE = $(shell uname -r)
@@ -17,7 +18,48 @@ ifeq ($(KERNELPATH),)
 KERNELPATH = /lib/modules/${KERNELRELEASE}/build
 endif
 
-all: $(BIN) tags TAGS
+# Native utilities
+FSFORMAT       := fsformat
+FSCKJOS        := fsck.jos
+GUNZIP_SPARSE  := gunzip_sparse
+ELFDUMP_SYMTAB := elfdump_symtab
+PTYPAIR        := ptypair
+BDSPLIT        := bdsplit
+KNBD_SERVER    := knbd-server
+KDB_SERVER     := kdb-server
+HEX2BIN        := hex2bin
+
+UTILS := \
+	$(UTILDIR)/check_writes \
+	$(UTILDIR)/kdb.jar
+
+# Native commands
+NCC	:= gcc $(CC_VER) -pipe
+NCXX	:= g++ $(CC_VER) -pipe
+ANT	:= ant
+TAR	:= gtar
+PERL	:= perl
+CTAGS	:= ctags
+
+# Native command flags
+NCFLAGS	:= -Wall -pedantic -DKUTIL
+NCXXFLAGS	:= $(NCFLAGS)
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Makefile.kernel\).mk
+
+# Lists that the */LMakefrag makefile fragments will add to
+OBJDIRS :=
+
+all: tags TAGS
+
+# Eliminate default suffix rules
+.SUFFIXES:
+
+# Delete target files if there is an error (or make is interrupted)
+.DELETE_ON_ERROR:
+
+# make it so that no intermediate .o files are never deleted
+.PRECIOUS: %.o \
+	$(OBJDIR)/lib/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
 
 kfs/kkfsd.ko: always
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
@@ -35,13 +77,14 @@ $(OBJDIR)/user/%.o: user/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -c -o $@ $<
 
-$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/libopgroup.so
-	@echo + ld $@
-	$(V)$(CC) $(CFLAGS) -o $@ $@.o -L$(OBJDIR)/lib -lopgroup
+# Include LMakefrags for subdirectories
+include user/LMakefrag
+include fs/LMakefrag
+include util/Makefrag
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(BIN)
+TAGDEPS := $(OBJDIR)/fs/ufs.img $(OBJDIR)/fs/ext2.img $(BIN) $(UTILS)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -53,9 +96,31 @@ TAGS: $(TAGDEPS)
 		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) $(CTAGSFLAGS) -L - -e 
 
+# For deleting the build
+fsclean:
+	rm -f $(OBJDIR)/fs/ufs.img  $(OBJDIR)/fs/ext2.img 
+
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	rm -rf $(OBJDIR)/
 	rm -f tags TAGS
 
-.PHONY: all always install clean
+realclean: clean
+
+distclean: realclean
+
+
+# This magic automatically generates makefile dependencies
+# for header files included from C source files we compile,
+# and keeps those dependencies up-to-date every time we recompile.
+# See 'mergedep.pl' for more information.
+$(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
+	@mkdir -p $(@D)
+	@$(PERL) util/mergedep.pl $@ $^
+
+-include $(OBJDIR)/.deps
+
+always:
+	@:
+
+.PHONY: all always install clean realclean distclean

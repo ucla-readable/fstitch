@@ -1,5 +1,5 @@
 #!/bin/sh
-# kkkfsd benchmark automater
+# kkfsd benchmark automater
 
 NRUNS=1
 TIME_LOG=time.log
@@ -100,9 +100,9 @@ REAL_USER="$1"
 
 FSIMG=
 if [ "$2" == "ufs" ]; then
-	FSIMG=obj/unix-user/fs/ufs.img
+	FSIMG=obj/kernel/fs/ufs.img
 elif [ "$2" == "ext2" ]; then
-	FSIMG=obj/unix-user/fs/ext2.img
+	FSIMG=obj/kernel/fs/ext2.img
 else
 	usage 2>&1
 	exit 1
@@ -121,8 +121,6 @@ fi
 su "$REAL_USER" -c "touch \"$TIME_LOG\""
 echo "==== `date`" >> "$TIME_LOG"
 
-su "$REAL_USER" -c "make BUILD=user fsclean && make BUILD=user \"$FSIMG\"" || exit 1
-su "$REAL_USER" -c "make BUILD=user obj/unix-user/user/fsync" || exit 1
 su "$REAL_USER" -c "make kernel" || exit 1
 
 for i in `seq $NRUNS`
@@ -145,8 +143,8 @@ do
 
 	start_kfsd
 
-	time_test tar bash -c "tar -C \"$MNT/\" -xf \"$TARFILE\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
-	time_test rm bash -c "rm -rf \"$MNT/$TAROUT/\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
+	time_test tar bash -c "tar -C \"$MNT/\" -xf \"$TARFILE\"; echo syncing; obj/kernel/user/fsync \"$MNT/\""
+	time_test rm bash -c "rm -rf \"$MNT/$TAROUT/\"; echo syncing; obj/kernel/user/fsync \"$MNT/\""
 
 	stop_kfsd
 done
