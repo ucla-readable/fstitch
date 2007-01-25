@@ -7,6 +7,7 @@
 #define HASH_MAP_DEBUG 0
 
 #if HASH_MAP_DEBUG
+#include <lib/stdio.h>
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
@@ -169,7 +170,7 @@ bool hash_map_empty(const hash_map_t * hm)
 
 int hash_map_insert(hash_map_t * hm, void * k, void * v)
 {
-	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
+	Dprintf("%s(%p, %p, %p)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 	size_t ns;
@@ -221,7 +222,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 // thus no malloc()/free() overhead and the elt maintains its memory location.
 static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 {
-	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, k, v);
+	Dprintf("%s(%p, %p)\n", __FUNCTION__, hm, elt);
 	const size_t elt_num = hash_ptr(elt->elt.key, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
@@ -239,7 +240,7 @@ static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 // Erase the key-value pair for k from hm, return the element.
 static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 {
-	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
+	Dprintf("%s(%p, %p)\n", __FUNCTION__, hm, k);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 	chain_elt_t * k_chain;
@@ -268,7 +269,7 @@ static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 
 void * hash_map_erase(hash_map_t * hm, const void * k)
 {
-	Dprintf("%s(0x%08x, 0x%08x)\n", __FUNCTION__, hm, k);
+	Dprintf("%s(%p, %p)\n", __FUNCTION__, hm, k);
 	chain_elt_t * k_chain;
 	void * v;
 
@@ -297,7 +298,7 @@ void * hash_map_erase(hash_map_t * hm, const void * k)
 
 int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 {
-	Dprintf("%s(0x%08x, 0x%08x, 0x%08x)\n", __FUNCTION__, hm, oldk, newk);
+	Dprintf("%s(%p, %p, %p)\n", __FUNCTION__, hm, oldk, newk);
 	chain_elt_t * head;
 	chain_elt_t * elt;
 
@@ -346,7 +347,7 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 
 void hash_map_clear(hash_map_t * hm)
 {
-	Dprintf("%s(0x%08x)\n", __FUNCTION__, hm);
+	Dprintf("%s(%p)\n", __FUNCTION__, hm);
 	size_t i;
 
 	for (i=0; i < vector_size(hm->tbl); i++)
