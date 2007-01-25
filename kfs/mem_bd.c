@@ -126,7 +126,7 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 
 	r = revision_tail_prepare(block, object);
-	if (r != 0) {
+	if (r < 0) {
 		panic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
@@ -136,7 +136,7 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 	       info->blocksize);
 
 	r = revision_tail_acknowledge(block, object);
-	if (r != 0) {
+	if (r < 0) {
 		panic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
