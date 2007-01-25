@@ -129,7 +129,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	
 	sfree(chdescs, chdescs_size);
 	
-	return 0;
+	return count;
 }
 
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
@@ -220,7 +220,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	
 	sfree(chdescs, chdescs_size);
 	
-	return 0;
+	return count;
 }
 
 int revision_tail_revert(bdesc_t * block, BD_t * bd)

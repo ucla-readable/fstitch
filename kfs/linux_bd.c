@@ -526,6 +526,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	struct bio *bio;
 	struct bio_vec *bv;
 	int vec_len, r, i;
+	int revision_forward, revision_back;
 	struct linux_bio_private * private;
 #if LINUX_BD_DEBUG_COLLECT_STATS
 	struct timespec start;
@@ -550,10 +551,11 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 
 	KDprintk(KERN_ERR "starting real work for the write\n");
 	r = revision_tail_prepare(block, object);
-	if (r != 0) {
+	if (r < 0) {
 		panic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
+	revision_back = r;
 
 	vec_len = (block->ddesc->length + 4095) / 4096;
 	assert(vec_len == 1);
@@ -632,10 +634,15 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 #endif
 
 	r = revision_tail_acknowledge(block, object);
-	if (r != 0) {
+	if (r < 0) {
 		panic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
+	revision_forward = r;
+
+	if (revision_back != revision_forward)
+		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
+
 	KDprintk(KERN_ERR "exiting write\n");
 	return 0;
 }

@@ -169,6 +169,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	int r;
+	int revision_back, revision_back;
 	off_t seeked;
 	
 	if(block->number + block->count > info->blockcount)
@@ -178,11 +179,12 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 
 	r = revision_tail_prepare(block, object);
-	if(r != 0)
+	if(r < 0)
 	{
 		panic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
+	revision_back = r;
 
 	seeked = lseek(info->fd, block->number * info->blocksize, SEEK_SET);
 	if(seeked != block->number * info->blocksize)
@@ -200,11 +202,15 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 		fprintf(block_log, "%p write %u\n", object, block->number);
 
 	r = revision_tail_acknowledge(block, object);
-	if(r != 0)
+	if(r > 0)
 	{
 		panic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
+	revision_forward = r;
+
+	if (revision_back != revision_forward)
+		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
 
 	return 0;
 }
