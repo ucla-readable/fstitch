@@ -11,13 +11,13 @@ public class Chdesc
 	
 	/* these flags must be kept in sync with kfs/chdesc.h */
 	public static final int FLAG_MARKED = 0x01;
-	public static final int FLAG_INSET = 0x02;
-	public static final int FLAG_ROLLBACK = 0x04;
-	public static final int FLAG_WRITTEN = 0x08;
-	public static final int FLAG_FREEING = 0x10;
-	public static final int FLAG_DATA = 0x20;
-	public static final int FLAG_BIT_NOOP = 0x40;
-	public static final int FLAG_OVERLAP = 0x80;
+	public static final int FLAG_ROLLBACK = 0x02;
+	public static final int FLAG_WRITTEN = 0x04;
+	public static final int FLAG_FREEING = 0x08;
+	public static final int FLAG_DATA = 0x10;
+	public static final int FLAG_BIT_NOOP = 0x20;
+	public static final int FLAG_OVERLAP = 0x40;
+	public static final int FLAG_CREATING = 0x80;
 	public static final int FLAG_DBWAIT = 0x8000;
 	
 	public final int address, opcode;
@@ -455,8 +455,6 @@ public class Chdesc
 		String names = "";
 		if((flags & FLAG_MARKED) != 0)
 			names += " | MARKED";
-		if((flags & FLAG_INSET) != 0)
-			names += " | INSET";
 		if((flags & FLAG_ROLLBACK) != 0)
 			names += " | ROLLBACK";
 		if((flags & FLAG_WRITTEN) != 0)
@@ -471,6 +469,8 @@ public class Chdesc
 			names += " | FLAG_OVERLAP";
 		if((flags & FLAG_DBWAIT) != 0)
 			names += " | DBWAIT";
+		if((flags & FLAG_CREATING) != 0)
+			names += " | CREATING";
 		names += " = " + SystemState.hex(flags);
 		return names.substring(3);
 	}
