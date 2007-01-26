@@ -11,6 +11,10 @@
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
 
+#define DEBUG_TIMING 0
+#include <kfs/kernel_timing.h>
+KERNEL_TIMING(timing);
+
 struct fn_entry {
 	sched_callback fn;
 	void * arg;
@@ -79,6 +83,7 @@ static void kfsd_sched_shutdown(void * ignore)
 
 	vector_destroy(fes);
 	fes = NULL;
+	TIMING_DUMP(timing, "CALLBACK", "callbacks");
 }
 
 int kfsd_sched_init(void)
@@ -107,6 +112,7 @@ void sched_run_callbacks(void)
 {
 	int32_t cur_ncs;
 	size_t i, fes_size;
+	KERNEL_INTERVAL(interval);
 
 	// Run other fes scheduled to have run by now
 	cur_ncs = jiffy_time();
@@ -118,8 +124,10 @@ void sched_run_callbacks(void)
 		{
 			/* starting a new callback, so set a new request ID */
 			kfsd_next_request_id();
+			TIMING_START(interval);
 			fe->fn(fe->arg);
 			sched_run_cleanup();
+			TIMING_STOP(interval, timing);
 
 			cur_ncs = jiffy_time();
 			// Set up the next callback time based on when the timer
