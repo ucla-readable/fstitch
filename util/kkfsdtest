@@ -57,13 +57,13 @@ assert sudo mount kfs:/ /mnt/test -t kfs
 assert time sudo tar -C /mnt/test -xf linux-2.6.15.tar
 assert time obj/kernel/user/fsync /mnt/test
 assert sudo umount /mnt/test
-cp /debug/* debug/
+mount | grep -q /debug && cp /debug/* debug/
 assert sync
 assert sudo rmmod kkfsd
 sudo dd if=$DISK of=debug/disk.img bs=1M count=$DISKIMGSIZE
 assert sync
 
-assert sudo insmod kfs/kkfsd.ko
+assert sudo insmod kfs/kkfsd.ko linux_device=$DISK
 assert sudo mount kfs:/ /mnt/test -t kfs
 warning find /mnt/test > list
 [ `wc -l list | cut -f 1 -d\ ` -eq 20158 ] || echo "list length mismatch: `wc -l list`"
