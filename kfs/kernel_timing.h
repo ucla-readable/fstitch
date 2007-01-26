@@ -61,11 +61,11 @@ static inline void timing_dump(const struct kernel_timing * timing, const char *
 	printk(KERN_ERR "%s: %d %s\n", name, timing->count, count);
 }
 
-#define KERNEL_TIMING(name) static struct kernel_timing name = {.total = {0, 0}, .min = {99, 0}, .max = {0, 0}, .count = 0}
+#define KERNEL_TIMING(name) static struct kernel_timing timing_##name = {.total = {0, 0}, .min = {99, 0}, .max = {0, 0}, .count = 0}
 #define KERNEL_INTERVAL(name) struct kernel_interval name
 #define TIMING_START(interval) timing_start(&interval)
-#define TIMING_STOP(interval, timing) timing_stop(&interval, &timing)
-#define TIMING_DUMP(timing, name, count) timing_dump(&timing, name, count)
+#define TIMING_STOP(interval, timing) timing_stop(&interval, &timing_##timing)
+#define TIMING_DUMP(timing, name, count) timing_dump(&timing_##timing, name, count)
 
 #else
 

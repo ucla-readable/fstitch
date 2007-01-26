@@ -23,6 +23,12 @@
 #error linux_bd must be compiled for the linux kernel
 #endif
 
+/* The old LINUX_BD_DEBUG_COLLECT_STATS is now DEBUG_TIMING */
+#define DEBUG_TIMING 0
+#include <kfs/kernel_timing.h>
+KERNEL_TIMING(read);
+KERNEL_TIMING(write);
+
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 #include <linux/config.h>
 #ifndef BIO_RW_SOFTBARRIER
@@ -42,12 +48,11 @@
 #endif
 
 #define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
-#define DEBUG_LINUX_BD 0
-#define LINUX_BD_DEBUG_COLLECT_STATS 0
 #define DEBUG_WRITES 0
 
 #define READ_AHEAD_COUNT 10
 
+#define DEBUG_LINUX_BD 0
 #if DEBUG_LINUX_BD
 #define KDprintk(x...) printk(x)
 #else
@@ -103,103 +108,6 @@ read_ahead_empty(void)
 			look_ahead_store[i] = 0;
 		}
 }
-
-// STATS
-#if LINUX_BD_DEBUG_COLLECT_STATS
-static struct timespec stat_read_total = {0, 0};
-static struct timespec stat_read_min = {99, 0};
-static struct timespec stat_read_max = {0, 0};
-static uint32_t stat_read_cnt = 0;
-static struct timespec stat_write_total = {0, 0};
-static struct timespec stat_write_min = {99, 0};
-static struct timespec stat_write_max = {0, 0};
-static uint32_t stat_write_cnt = 0;
-
-static void
-stat_dump(void)
-{
-	printk(KERN_ERR "READ: min:   %ld.%09ld\n", stat_read_min.tv_sec,
-		   stat_read_min.tv_nsec);
-	printk(KERN_ERR "READ: max:   %ld.%09ld\n", stat_read_max.tv_sec,
-		   stat_read_max.tv_nsec);
-	printk(KERN_ERR "READ: total: %ld.%09ld\n", stat_read_total.tv_sec,
-		   stat_read_total.tv_nsec);
-	printk(KERN_ERR "READ: %d reads\n", stat_read_cnt);
-	printk(KERN_ERR "WRITE: min:   %ld.%09ld\n", stat_write_min.tv_sec,
-		   stat_write_min.tv_nsec);
-	printk(KERN_ERR "WRITE: max:   %ld.%09ld\n", stat_write_max.tv_sec,
-		   stat_write_max.tv_nsec);
-	printk(KERN_ERR "WRITE: total: %ld.%09ld\n", stat_write_total.tv_sec,
-		   stat_write_total.tv_nsec);
-	printk(KERN_ERR "WRITE: %d writes\n", stat_write_cnt);
-}
-
-static void
-stat_update_min(struct timespec *oldmin, struct timespec *sample)
-{
-	if (oldmin->tv_sec < sample->tv_sec) return;
-	if ((oldmin->tv_sec > sample->tv_sec) ||
-		(oldmin->tv_nsec > sample->tv_nsec)) {
-		oldmin->tv_sec = sample->tv_sec;
-		oldmin->tv_nsec = sample->tv_nsec;
-	}
-}
-
-static void
-stat_update_max(struct timespec *oldmax, struct timespec *sample)
-{
-	if (oldmax->tv_sec > sample->tv_sec) return;
-	if ((oldmax->tv_sec < sample->tv_sec) ||
-		(oldmax->tv_nsec < sample->tv_nsec)) {
-		oldmax->tv_sec = sample->tv_sec;
-		oldmax->tv_nsec = sample->tv_nsec;
-	}
-}
-
-// sum += sample
-static void
-stat_add(struct timespec *sum, struct timespec *sample)
-{
-	sum->tv_sec += sample->tv_sec;
-	sum->tv_nsec += sample->tv_nsec;
-	if (sum->tv_nsec >= NSEC_PER_SEC) {
-		sum->tv_sec++;
-		sum->tv_nsec -= NSEC_PER_SEC;
-	}
-}
-
-// base -= sample
-static void
-stat_sub(struct timespec *base, struct timespec *sample)
-{
-	base->tv_sec -= sample->tv_sec;
-	base->tv_nsec -= sample->tv_nsec;
-	if (base->tv_nsec < 0) {
-		base->tv_sec--;
-		base->tv_nsec += NSEC_PER_SEC;
-	}
-}
-
-static void
-stat_process_read(struct timespec *start, struct timespec *stop)
-{
-	stat_sub(stop, start); // stop -= start;
-	stat_update_min(&stat_read_min, stop);
-	stat_update_max(&stat_read_max, stop);
-	stat_add(&stat_read_total, stop);
-	stat_read_cnt++;
-}
-
-static void
-stat_process_write(struct timespec *start, struct timespec *stop)
-{
-	stat_sub(stop, start); // stop -= start;
-	stat_update_min(&stat_write_min, stop);
-	stat_update_max(&stat_write_max, stop);
-	stat_add(&stat_write_total, stop);
-	stat_write_cnt++;
-}
-#endif // LINUX_BD_DEBUG_COLLECT_STATS
 
 struct linux_info {
 	struct block_device *bdev;
@@ -290,12 +198,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t *blocks[READ_AHEAD_COUNT];
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	struct timespec start;
-	struct timespec stop;
-#endif
 	int read_ahead_count = READ_AHEAD_COUNT;
 	static int infty = 10;
+	KERNEL_INTERVAL(read);
 
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
 
@@ -324,9 +229,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	// to 2kB blocks
 	if (count != 4)
 		read_ahead_count = 1;
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	start = current_kernel_time();
-#endif
+	TIMING_START(read);
 	for (j = 0; j < read_ahead_count; j++) {
 		uint32_t j_number = number + (count * j);
 		datadesc_t * dd;
@@ -424,10 +327,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		finish_wait(&info->waitq, &wait);
 	KDprintk(KERN_ERR "woke up!\n");
 
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	stop = current_kernel_time();
-	stat_process_read(&start, &stop);
-#endif
+	TIMING_STOP(read, read);
 
 	for (j = 0; j < read_ahead_count; j++) {
 		if (j != 0) {
@@ -568,10 +468,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	int vec_len, r, i;
 	int revision_forward, revision_back;
 	struct linux_bio_private * private;
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	struct timespec start;
-	struct timespec stop;
-#endif
+	KERNEL_INTERVAL(write);
 	
 	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n",
 			 block->number, block->count);
@@ -659,9 +556,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	atomic_inc(&info->outstanding_io_count);
 
 	KDprintk(KERN_ERR "issuing DMA write request [%d]\n", private->seq);
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	start = current_kernel_time();
-#endif
+	TIMING_START(write);
 	//printk(KERN_ERR "WRITE %d\n", block->number);
 	generic_make_request(bio);
 
@@ -686,10 +581,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	printk(KERN_ERR "woke up!\n");
 	*/
 
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	stop = current_kernel_time();
-	stat_process_write(&start, &stop);
-#endif
+	TIMING_STOP(write, write);
 
 	r = revision_tail_acknowledge(block, object);
 	if (r < 0) {
@@ -727,9 +619,8 @@ int linux_bd_destroy(BD_t * bd)
 		schedule_timeout(HZ / 10);
 	}
 
-#if LINUX_BD_DEBUG_COLLECT_STATS
-	stat_dump();
-#endif
+	TIMING_DUMP(read, "READ", "reads");
+	TIMING_DUMP(write, "WRITE", "writes");
 
 #if DEBUG_WRITES
 	if (debug_writes_dentry)
@@ -787,9 +678,10 @@ static int lookup_device(const char *path, dev_t *dev)
 
 static int open_bdev(const char *path, int mode, struct block_device **bdev)
 {
-	static char *_claim_ptr = "I belong to kkfsd";
+	static char *_claim_ptr = "kkfsd/linux_bd";
+	/* initialize to make the compiler happy */
+	dev_t dev = 0;
 	int r;
-	dev_t dev;
 
 	r = lookup_device(path, &dev);
 	if (r) {
