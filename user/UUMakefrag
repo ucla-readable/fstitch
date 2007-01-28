@@ -1,6 +1,0 @@
-OBJDIRS += user
-BIN += $(OBJDIR)/user/fsync
-
-$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(OBJDIR)/lib/libuser.a
-	@echo + ld $@
-	$(V)$(CC) $(CFLAGS) -o $@ $@.o -L$(OBJDIR)/lib -luser

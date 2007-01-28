@@ -1,7 +1,0 @@
-#!/bin/sh
-
-# This script exists as a workaround for valgrind 3.1.0 tracing a fuse
-# server; valgrind incorrectly attempts to trace the suid fusermount.
-# http://bugs.kde.org/show_bug.cgi?id=119404
-
-exec /usr/local/bin/fusermount $@

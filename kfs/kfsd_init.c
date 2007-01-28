@@ -1,6 +1,3 @@
-#ifdef KUDOS
-#include <inc/lib.h>
-#endif
 /* config.h gets us RELEASE_NAME */
 #include <inc/config.h>
 #include <inc/error.h>
@@ -13,19 +10,14 @@
 #include <lib/disklabel.h>
 #include <lib/stdio.h>
 
-#include <kfs/ide_pio_bd.h>
 #include <kfs/pc_ptable.h>
 #include <kfs/bsd_ptable.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
 #include <kfs/elevator_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
-#include <kfs/nbd_bd.h>
 #include <kfs/mem_bd.h>
 #include <kfs/loop_bd.h>
-#ifdef UNIXUSER
-#include <kfs/unix_file_bd.h>
-#endif
 
 #include <kfs/ext2_base.h>
 #include <kfs/journal_bd.h>
@@ -37,26 +29,16 @@
 #include <kfs/icase_cfs.h>
 #include <kfs/mirror_bd.h>
 #include <kfs/xor_bd.h>
-#ifdef KUDOS
-#include <kfs/mount_selector_cfs.h>
-#include <kfs/cfs_ipc_opgroup.h>
-#include <kfs/cfs_ipc_serve.h>
-#include <kfs/ipc_serve.h>
-#endif
-#ifdef UNIXUSER
-#include <kfs/fuse_serve.h>
-#endif
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
-#if defined(__KERNEL__)
+
 #include <kfs/linux_bd.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ops.h>
 #include <kfs/kernel_opgroup_scopes.h>
-#endif
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
@@ -84,27 +66,10 @@ typedef struct kfsd_partition kfsd_partition_t;
 int kfsd_init(int nwbblocks, int argc, char ** argv)
 {
 	const bool allow_journal = 0;
-	const bool use_disk_0 = 1;
-#if defined(KUDOS)
-	const bool use_disk_1 = 0;
-	const bool use_disk_2 = 0;
-#elif defined(UNIXUSER)
 	const bool use_disk_1 = 1;
 	const bool use_disk_2 = 1;
-#elif defined(__KERNEL__)
-	const bool use_disk_1 = 1;
-	const bool use_disk_2 = 1;
-#else
-#error Unknown target system
-#endif
 	const bool use_mem_bd = 0;
-	const bool use_net    = 0;
 	vector_t * uhfses = NULL;
-
-#ifdef KUDOS
-	CFS_t * table_class = NULL;
-	CFS_t * opgroupscope_tracker = NULL;
-#endif
 	int r;
 
 	printf("kfsd (%s) starting\n", RELEASE_NAME);
@@ -122,21 +87,7 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 	if((r = KFS_DEBUG_INIT()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "kfs_debug_init: %i\n", r);
-#ifdef KUDOS
-		int c = 0;
-		while(c != 'y' && c != 'n')
-		{
-			kdprintf(STDERR_FILENO, "Start anyway? [Y/n] ");
-			c = 0;
-			while(c <= 0)
-				c = sys_cgetc_nb();
-			if(c == '\n')
-				c = 'y';
-			kdprintf(STDERR_FILENO, "%c\n", c);
-		}
-		if(c == 'n')
-#endif
-			return r;
+		return r;
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
@@ -146,25 +97,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		return r;
 	}
 
-#if defined(KUDOS)
-	if ((r = ipc_serve_init()) < 0)
-	{
-		kdprintf(STDERR_FILENO, "ipc_serve_init: %i\n", r);
-		return r;
-	}
-
-	if (!cfs_ipc_serve_init())
-	{
-		kdprintf(STDERR_FILENO, "cfs_ipc_serve_init failed\n");
-		return -E_UNSPECIFIED;
-	}
-#elif defined(UNIXUSER)
-	if ((r = fuse_serve_init(argc, argv)) < 0)
-	{
-		kdprintf(STDERR_FILENO, "fuse_serve_init: %d\n", r);
-		return r;
-	}
-#elif defined(__KERNEL__)
 	if ((r = kernel_serve_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "kernel_serve_init: %d\n", r);
@@ -180,9 +112,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		kdprintf(STDERR_FILENO, "kernel_opgroup_scopes_init: %d\n", r);
 		return r;
 	}
-#else
-#error Unknown target system
-#endif
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{
@@ -203,62 +132,9 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		return -E_NO_MEM;
 	}
 
-	if (use_net)
-	{
-		BD_t * bd;
-
-		/* delay kfsd startup slightly for netd to start */
-		jsleep(2 * HZ);
-
-		if (! (bd = nbd_bd("192.168.1.2", 2492)) )
-			kdprintf(STDERR_FILENO, "nbd_bd failed\n");
-		if (bd && (r = construct_uhfses(bd, 512, allow_journal, uhfses)) < 0)
-			return r;
-	}
-
-	if (use_disk_0)
-	{
-		BD_t * bd;
-
-#if defined(KUDOS)
-		if (! (bd = ide_pio_bd(0, 0, 80)) )
-			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 0, 0) failed\n");
-#elif defined(UNIXUSER)
-		const char file[] = "obj/unix-user/fs/fs.img";
-		if (! (bd = unix_file_bd(file, 512)) )
-			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
-#elif defined(__KERNEL__)
-		bd = NULL;
-#else
-#error Unknown target system
-#endif
-		if (bd)
-		{
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-#if USE_ELEVATOR
-			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
-			bd = elevator_cache_bd(bd, 128, 64, 3);
-			if (!bd)
-				return -E_UNSPECIFIED;
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-#endif
-			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
-				return r;
-		}
-	}
-
 	if (use_disk_1)
 	{
 		BD_t * bd = NULL;
-
-#if defined(KUDOS)
-		if (! (bd = ide_pio_bd(0, 1, 0)) )
-			kdprintf(STDERR_FILENO, "ide_pio_bd(0, 1, 0) failed\n");
-#elif defined(UNIXUSER)
-		const char file[] = "obj/unix-user/fs/ufs.img";
-		if (! (bd = unix_file_bd(file, 512)) )
-			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
-#elif defined(__KERNEL__)
 		extern char * linux_device;
 		if (linux_device)
 		{
@@ -266,9 +142,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 			if (! (bd = linux_bd(linux_device)) )
 				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
 		}
-#else
-#error Unknown target system
-#endif
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
@@ -286,12 +159,7 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 	if (use_disk_2)
 	{
 		BD_t * bd = NULL;
-#if defined(UNIXUSER)
-		const char file[] = "obj/unix-user/fs/ext2.img";
-		if (! (bd = unix_file_bd(file, 512)) )
-			kdprintf(STDERR_FILENO, "unix_file_bd(\"%s\", 512) failed\n", file);
-#elif defined(__KERNEL__)
-# if 0
+#if 0
 		extern char * linux_device;
 		if (linux_device)
 		{
@@ -299,7 +167,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 			if (! (bd = linux_bd(linux_device)) )
 				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
 		}
-# endif
 #endif
 		if (bd)
 		{
@@ -333,12 +200,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 	//
 	// Mount uhfses
 
-#ifdef KUDOS
-	if (! (table_class = mount_selector_cfs()) )
-		return -E_UNSPECIFIED;
-	assert(!get_frontend_cfs());
-	set_frontend_cfs(table_class);
-#endif
 	{
 		const size_t uhfses_size = vector_size(uhfses);
 		size_t i;
@@ -363,11 +224,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		return r;
 	}
 
-#ifdef KUDOS
-	if (! (opgroupscope_tracker = opgroupscope_tracker_cfs(get_frontend_cfs())) )
-		return -E_UNSPECIFIED;
-	set_frontend_cfs(opgroupscope_tracker);
-#endif
 	return 0;
 }
 

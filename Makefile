@@ -103,7 +103,7 @@ fsclean:
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	rm -rf $(OBJDIR)/
-	rm -f tags TAGS
+	rm -f tags TAGS Module.symvers
 
 realclean: clean
 
