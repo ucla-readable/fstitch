@@ -46,7 +46,7 @@ NCFLAGS	:= -Wall -pedantic -DKUTIL
 NCXXFLAGS	:= $(NCFLAGS)
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Makefile.kernel\).mk
 
-# Lists that the */LMakefrag makefile fragments will add to
+# Lists that the */Makefrag makefile fragments will add to
 OBJDIRS :=
 
 all: tags TAGS
@@ -77,9 +77,9 @@ $(OBJDIR)/user/%.o: user/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -c -o $@ $<
 
-# Include LMakefrags for subdirectories
-include user/LMakefrag
-include fs/LMakefrag
+# Include Makefrags for subdirectories
+include user/Makefrag
+include fs/Makefrag
 include util/Makefrag
 
 # Build vi/emacs tag files
