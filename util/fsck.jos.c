@@ -2,22 +2,6 @@
  * JOS file system fsck
  */
 
-#ifdef KUDOS
-
-#include <inc/lib.h>
-#include <inc/fs.h>
-
-/* make POSIX code compile on KudOS */
-#define fprintf kdprintf
-#define stderr STDERR_FILENO
-#define stat Stat
-#define main umain
-/* ignore whence... it is SEEK_SET */
-#define lseek(fd, offset, whence) seek(fd, offset)
-#define perror(str) fprintf(stderr, "%s: error\n", str)
-
-#else
-
 #define _BSD_EXTENSION
 
 /* We don't actually want to define off_t or register_t! */
@@ -35,22 +19,7 @@
 #undef off_t
 #undef register_t
 
-/* Prevent lib/types.h, included from inc/fs.h, */
-/* from attempting to redefine types defined in the host's inttypes.h. */
-#define KUDOS_LIB_TYPES_H
-#define KUDOS_INC_TYPES_H
-/* Typedef the types that inc/mmu.h needs. */
-typedef uint16_t segment_t;
-typedef uint32_t physaddr_t;
-typedef uint32_t off_t;
-typedef uint32_t register_t;
-
-#define KUDOS
-#include <lib/mmu.h>
 #include <inc/fs.h>
-#undef KUDOS
-
-#endif
 
 static int diskfd;
 static int nblocks;
@@ -72,10 +41,9 @@ typedef struct {
 } Block;
 
 #define CACHE_BLOCKS 64
-static Block cache[CACHE_BLOCKS] = {{busy: 0, used: 0, bno: 0}};
+static Block cache[CACHE_BLOCKS];
 static uint32_t * referenced_bitmap = NULL;
 
-#ifndef KUDOS
 static ssize_t readn(int f, void * av, size_t n)
 {
 	uint8_t * a;
@@ -152,7 +120,6 @@ static void swizzle_block(Block * b)
 			break;
 	}
 }
-#endif
 
 static Block * get_block(uint32_t bno, Type type)
 {
@@ -205,9 +172,7 @@ static Block * get_block(uint32_t bno, Type type)
 	}
 	b->type = type;
 	b->bno = bno;
-#ifndef KUDOS
 	swizzle_block(b);
-#endif
 	
 out:
 	b->busy++;
@@ -257,7 +222,7 @@ static int open_disk(const char * name)
 	/* minimally, we have a reserved block, a superblock, and a bitmap block */
 	if(s.st_size < 3 * BLKSIZE)
 	{
-		fprintf(stderr, "Bad disk size %llu\n", (unsigned long long) s.st_size);
+		fprintf(stderr, "Bad disk size %lu\n", (unsigned long) s.st_size);
 		return -1;
 	}
 	nblocks = s.st_size / BLKSIZE;

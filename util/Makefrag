@@ -1,58 +1,42 @@
-#
-# Makefile fragment for KudOS utilities.
-# This is NOT a complete makefile;
-# you must run GNU make in the top-level directory
-# where the GNUmakefile is located.
-#
-
 OBJDIRS += util
+BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/leakfilt $(UTILDIR)/testopgroup $(UTILDIR)/kdb.jar
 
-$(UTILDIR)/$(FSFORMAT): util/$(FSFORMAT).c lib/mmu.h inc/fs.h
-	@echo + cc[UTIL] $<
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<
-
-$(UTILDIR)/$(FSCKJOS): util/$(FSCKJOS).c lib/mmu.h inc/fs.h
-	@echo + cc[UTIL] $<
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<
-
-$(UTILDIR)/$(BDSPLIT): util/$(BDSPLIT).c
+$(UTILDIR)/bdsplit: util/bdsplit.c
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -o $@ $<
 
-$(UTILDIR)/$(ELFDUMP_SYMTAB) : util/$(ELFDUMP_SYMTAB).cpp
+$(UTILDIR)/check_writes: util/check_writes.c kfs/linux_bd_debug.h
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
-	$(V)$(NCXX) $(NCXXFLAGS) -o $@ $<
+	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/$(PTYPAIR) : util/$(PTYPAIR).cpp
+$(UTILDIR)/fsck.jos: util/fsck.jos.c inc/fs.h
 	@echo + cc[UTIL] $<
-	@mkdir -p $(@D)
-	$(V)$(NCXX) $(NCXXFLAGS) $(LIBUTIL) -o  $@ $<
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/$(KNBD_SERVER) : util/$(KNBD_SERVER).c
+$(UTILDIR)/fsformat: util/fsformat.c inc/fs.h
 	@echo + cc[UTIL] $<
-	@mkdir -p $(@D)
+	$(V)mkdir -p $(@D)
+	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
+
+$(UTILDIR)/fsync: util/fsync.c
+	@echo + cc[UTIL] $<
+	$(V)mkdir -p $(@D)
+	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -o $@ $<
+
+$(UTILDIR)/leakfilt: util/leakfilt.c
+	@echo + cc[UTIL] $<
+	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -o $@ $<
 
-$(UTILDIR)/$(KDB_SERVER) : util/$(KDB_SERVER).c
+$(UTILDIR)/testopgroup: util/testopgroup.c $(OBJDIR)/lib/libopgroup.so
 	@echo + cc[UTIL] $<
-	@mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -o $@ $<
-
-$(UTILDIR)/$(HEX2BIN) : util/$(HEX2BIN).c
-	@echo + cc[UTIL] $<
-	@mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -o $@ $<
+	$(V)mkdir -p $(@D)
+	$(V)$(CC) $(CFLAGS) -I. -o $@ $< -L$(OBJDIR)/lib -lopgroup
 
 $(UTILDIR)/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/*.java)
 	@echo + ant[UTIL/DEBUG]
 	@mkdir -p $(@D)
 	$(V)$(ANT) -f util/debug/build.xml
-
-$(UTILDIR)/check_writes: util/check_writes.c kfs/linux_bd_debug.h
-	@echo + cc[UTIL] $<
-	@mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I$(TOP) -o $@ $<

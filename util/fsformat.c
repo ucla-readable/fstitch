@@ -20,22 +20,7 @@
 #undef off_t
 #undef register_t
 
-/* Prevent lib/types.h, included from inc/fs.h, */
-/* from attempting to redefine types defined in the host's inttypes.h. */
-#define KUDOS_LIB_TYPES_H
-#define KUDOS_INC_TYPES_H
-/* Typedef the types that inc/mmu.h needs. */
-typedef uint16_t segment_t;
-typedef uint32_t physaddr_t;
-typedef uint32_t off_t;
-typedef uint32_t register_t;
-
-#define KUDOS
-#undef UNIXUSER
-#include <lib/mmu.h>
 #include <inc/fs.h>
-#define UNIXUSER
-#undef KUDOS
 
 #define nelem(x)	(sizeof(x) / sizeof((x)[0]))
 typedef struct Super Super;

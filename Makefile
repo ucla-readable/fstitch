@@ -1,12 +1,10 @@
-# kernel kfs makefile
+# Linux kernel KFS Makefile
 
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kernel
 UTILDIR := $(BASE_OBJDIR)/util
 
 -include conf/env.mk
-
-TOP = .
 
 BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
 
@@ -17,21 +15,6 @@ endif
 ifeq ($(KERNELPATH),)
 KERNELPATH = /lib/modules/${KERNELRELEASE}/build
 endif
-
-# Native utilities
-FSFORMAT       := fsformat
-FSCKJOS        := fsck.jos
-GUNZIP_SPARSE  := gunzip_sparse
-ELFDUMP_SYMTAB := elfdump_symtab
-PTYPAIR        := ptypair
-BDSPLIT        := bdsplit
-KNBD_SERVER    := knbd-server
-KDB_SERVER     := kdb-server
-HEX2BIN        := hex2bin
-
-UTILS := \
-	$(UTILDIR)/check_writes \
-	$(UTILDIR)/kdb.jar
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
@@ -44,7 +27,7 @@ CTAGS	:= ctags
 # Native command flags
 NCFLAGS	:= -Wall -pedantic -DKUTIL
 NCXXFLAGS	:= $(NCFLAGS)
-CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile.kudos\)\(Makefile.user\)\(Makefile.kernel\).mk
+CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile\).mk
 
 # Lists that the */Makefrag makefile fragments will add to
 OBJDIRS :=
@@ -58,8 +41,7 @@ all: tags TAGS
 .DELETE_ON_ERROR:
 
 # make it so that no intermediate .o files are never deleted
-.PRECIOUS: %.o \
-	$(OBJDIR)/lib/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
+.PRECIOUS: %.o
 
 kfs/kkfsd.ko: always
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
@@ -72,19 +54,13 @@ $(OBJDIR)/lib/libopgroup.so: lib/kernel_opgroup.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -o $@ $< -shared
 
-$(OBJDIR)/user/%.o: user/%.c
-	@echo + cc[USER] $<
-	@mkdir -p $(@D)
-	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -c -o $@ $<
-
 # Include Makefrags for subdirectories
-include user/Makefrag
 include fs/Makefrag
 include util/Makefrag
 
 # Build vi/emacs tag files
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(OBJDIR)/fs/ufs.img $(OBJDIR)/fs/ext2.img $(BIN) $(UTILS)
+TAGDEPS := $(OBJDIR)/fs/ufs.img $(OBJDIR)/fs/ext2.img $(BIN)
 tags: $(TAGDEPS)
 	@echo + ctags [VI]
 	$(V)find . -type f \
@@ -102,8 +78,7 @@ fsclean:
 
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
-	rm -rf $(OBJDIR)/
-	rm -f tags TAGS Module.symvers
+	rm -rf $(BASE_OBJDIR) tags TAGS Module.symvers
 
 realclean: clean
 

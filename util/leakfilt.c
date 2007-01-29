@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* This small program parses the output of using the diagnostic malloc code in
  * lib/malloc.c and displays a summary of the memory allocated and freed. The
@@ -50,7 +51,7 @@ static void process_malloc(char * line)
 	int size;
 	void * addr;
 	void * caller;
-	int i = sscanf(line, "malloc(%d) = 0x%x, from 0x%x", &size, &addr, &caller);
+	int i = sscanf(line, "malloc(%d) = %p, from %p", &size, &addr, &caller);
 	if(i == 3)
 		push_malloc(size, addr, caller);
 }
@@ -59,7 +60,7 @@ static void process_free(char * line)
 {
 	void * addr;
 	void * caller;
-	int i = sscanf(line, "free(0x%x), from 0x%x", &addr, &caller);
+	int i = sscanf(line, "free(%p), from %p", &addr, &caller);
 	if(i == 2)
 		clear_malloc(addr, caller);
 }
@@ -87,9 +88,9 @@ static void _display_leaks(int all, struct allocation * scan)
 	{
 		_display_leaks(all, scan->next);
 		if(all)
-			printf("#%d, 0x%08x: size %d, allocated by 0x%08x, freed by 0x%08x\n", scan->number, scan->addr, scan->size, scan->allocator, scan->freer);
+			printf("#%d, %p: size %d, allocated by %p, freed by %p\n", scan->number, scan->addr, scan->size, scan->allocator, scan->freer);
 		else if(!scan->freer)
-			printf("#%d, 0x%08x: size %d, allocated by 0x%08x\n", scan->number, scan->addr, scan->size, scan->allocator);
+			printf("#%d, %p: size %d, allocated by %p\n", scan->number, scan->addr, scan->size, scan->allocator);
 	}
 }
 
