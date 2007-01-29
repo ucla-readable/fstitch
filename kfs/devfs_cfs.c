@@ -4,7 +4,7 @@
 #include <lib/stdio.h>
 #include <lib/string.h>
 #include <lib/vector.h>
-#include <lib/fcntl.h>
+#include <linux/fcntl.h>
 #include <lib/dirent.h>
 
 #include <kfs/chdesc.h>

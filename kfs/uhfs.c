@@ -1,7 +1,7 @@
 #include <inc/fd.h>
 #include <inc/error.h>
 #include <lib/assert.h>
-#include <lib/fcntl.h>
+#include <linux/fcntl.h>
 #include <lib/panic.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>

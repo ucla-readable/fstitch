@@ -124,7 +124,7 @@ static int create_fd_page(const struct Fd ** fd_page)
 	assert(cap_page && va_is_mapped(cap_page));
 
 	// find a free slot to cache cap_page
-	for(cache = FIDMAN_FD_MAP; cache != FIDMAN_FD_END; cache += PGSIZE)
+	for(cache = FIDMAN_FD_MAP; cache != FIDMAN_FD_END; cache += PAGE_SIZE)
 		if(!va_is_mapped(cache))
 			break;
 	if(cache == FIDMAN_FD_END)

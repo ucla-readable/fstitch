@@ -2,7 +2,6 @@
 #include <lib/stdlib.h>
 #include <lib/memdup.h>
 
-#ifndef KUDOS_KERNEL
 void *
 memdup(const void *src, size_t len)
 {
@@ -11,4 +10,3 @@ memdup(const void *src, size_t len)
 		memcpy(copy, src, len);
 	return copy;
 }
-#endif

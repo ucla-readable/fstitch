@@ -1,13 +1,5 @@
-#if defined(KUDOS)
-#include <inc/string.h>
-#elif defined(UNIXUSER)
-#include <stdlib.h>
-#elif defined(__KERNEL__)
 #include <lib/strtol.h>
 #include <lib/stdlib.h> // for NULL
-#else
-#error Unknown target
-#endif
 
 #include <lib/svnrevtol.h>
 

@@ -8,10 +8,3 @@
 # For overview commands only, the line should read 'V = @'.
 # For overview and verbose commands, the line should read 'V ='.
 V = @
-
-
-# '$(USE_STABS)' controls whether stabs is built in and used for enhanced
-# backtraces. Define to enable, do not define to disable.
-# Stabs use is optional because the stabs sections substantially increase
-# a binary's size.
-USE_STABS = 1

@@ -1,14 +1,6 @@
 #ifndef __KUDOS_LIB_STDLIB_H
 #define __KUDOS_LIB_STDLIB_H
 
-#if defined(KUDOS)
-#include <inc/stdlib.h>
-
-#elif defined(UNIXUSER)
-#include <stdlib.h>
-
-#elif defined(__KERNEL__)
-
 #include <linux/slab.h>
 // for non-huge regions only
 #define malloc(size) kmalloc(size, GFP_KERNEL)
@@ -20,10 +12,6 @@
 // greater than 'b', respectively.
 void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 
-#else
-#error Unknown target system
-#endif
-
 
 // "size malloc" or "smal-oc".
 // malloc implementation may easily depend on allocation size.
@@ -32,7 +20,6 @@ static __inline void * smalloc(size_t size) __attribute__((always_inline));
 static __inline void * scalloc(size_t nmemb, size_t size) __attribute__((always_inline));
 static __inline void sfree(void * p, size_t size) __attribute__((always_inline));
 
-#ifdef __KERNEL__
 
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
@@ -71,24 +58,5 @@ static __inline void sfree(void * p, size_t size)
 	else
 		vfree(p);
 }
-
-#else
-
-static __inline void * smalloc(size_t size)
-{
-	return malloc(size);
-}
-
-static __inline void * scalloc(size_t nmemb, size_t size)
-{
-	return calloc(nmemb, size);
-}
-
-static __inline void sfree(void * p, size_t size)
-{
-	free(p);
-}
-
-#endif
 
 #endif

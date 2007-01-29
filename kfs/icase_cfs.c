@@ -5,8 +5,8 @@
 #include <lib/strings.h>
 #include <lib/vector.h>
 #include <lib/dirent.h>
-#include <lib/ctype.h>
-#include <lib/fcntl.h>
+#include <linux/ctype.h>
+#include <linux/fcntl.h>
 
 #include <kfs/fidman.h>
 #include <kfs/modman.h>

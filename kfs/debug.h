@@ -11,31 +11,8 @@
 
 #include <kfs/debug_opcode.h>
 
-/* KFS Debug IO systems */
-#define KFS_DEBUG_IO_TCP 0
-#define KFS_DEBUG_IO_STREAMS 1
-#define KFS_DEBUG_IO_PROC 2
-
-/* Select KFS Debug IO system */
-#if defined(KUDOS)
-# define KFS_DEBUG_IO KFS_DEBUG_IO_TCP
-#elif defined(UNIXUSER)
-/* streams (fast) or tcp (non-buffered so slow, but writes are immediate
- * and interactive commands are supported */
-# define KFS_DEBUG_IO KFS_DEBUG_IO_STREAMS
-#elif defined(__KERNEL__)
-# define KFS_DEBUG_IO KFS_DEBUG_IO_PROC
-#endif
-
-#if KFS_DEBUG_IO == KFS_DEBUG_IO_TCP
-# define KFS_DEBUG_HOST "127.0.0.1"
-# define KFS_DEBUG_PORT 15166
-#elif KFS_DEBUG_IO == KFS_DEBUG_IO_STREAMS
-# define KFS_DEBUG_FILE "debug.log"
-#elif KFS_DEBUG_IO == KFS_DEBUG_IO_PROC
-# define DEBUG_PROC_FILENAME "kkfsd_debug"
-# define DEBUG_PROC_SIZE (4 * 1024 * 1024)
-#endif
+#define DEBUG_PROC_FILENAME "kkfsd_debug"
+#define DEBUG_PROC_SIZE (4 * 1024 * 1024)
 
 #define KFS_DEBUG_MARK 0
 #define KFS_DEBUG_DISABLE 1

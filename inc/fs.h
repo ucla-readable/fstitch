@@ -4,7 +4,7 @@
 #define KUDOS_INC_FS_H
 
 #include <lib/types.h>
-#include <lib/mmu.h>
+#include <linux/pagemap.h>
 
 /* File nodes (both in-memory and on-disk) */
 

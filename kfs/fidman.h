@@ -1,7 +1,7 @@
 #ifndef __KUDOS_KFS_FIDMAN_H
 #define __KUDOS_KFS_FIDMAN_H
 
-#include <lib/mmu.h>
+#include <linux/pagemap.h>
 #include <kfs/fdesc.h>
 
 // fidman manages fids:
@@ -14,7 +14,7 @@
 #define MAX_OPEN_FIDS 512
 
 // The range used by fidman for mapping client Fd pages
-#define FIDMAN_FD_MAP (FIDMAN_FD_END - MAX_OPEN_FIDS*PGSIZE)
+#define FIDMAN_FD_MAP (FIDMAN_FD_END - MAX_OPEN_FIDS*PAGE_SIZE)
 #define FIDMAN_FD_END ((void *) 0xC0000000)
 
 // Return a kfsd-unique fid

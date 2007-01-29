@@ -1,30 +1,21 @@
 #include <inc/error.h>
 #include <lib/assert.h>
-#include <lib/mmu.h>
+#include <linux/pagemap.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 
-#if defined(KUDOS)
-#include <kfs/ipc_serve.h>
-#elif defined(UNIXUSER)
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <unistd.h>
-#include <kfs/fuse_serve.h>
-#elif defined(__KERNEL__)
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/sysrq.h>
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-#include <linux/config.h>
+# include <linux/config.h>
 #else
-#include <linux/stacktrace.h>
+# include <linux/stacktrace.h>
 #endif
 #include <kfs/kernel_serve.h>
-#endif
 
 #include <kfs/sync.h>
 #include <kfs/sched.h>
@@ -34,7 +25,6 @@
 #include <kfs/kfsd_init.h>
 #include <kfs/destroy.h>
 
-#ifdef __KERNEL__
 struct task_struct * kfsd_task;
 struct stealth_lock kfsd_global_lock;
 
@@ -80,7 +70,6 @@ static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
 	}
 	spin_unlock(&kfsd_global_lock.lock);
 }
-#endif
 #endif
 
 static struct {
@@ -202,122 +191,27 @@ void kfsd_main(int nwbblocks, int argc, char ** argv)
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
-#ifdef __KERNEL__
 	kfsd_enter();
-#endif
 	if ((r = kfsd_init(nwbblocks, argc, argv)) < 0)
 	{
-#ifdef __KERNEL__
 		printk("kfsd_init() failed in the kernel! (error = %d)\n", r);
 		kfsd_running = r;
-#else
-		kfsd_shutdown();
-		exit(r);
-#endif
 	}
 	else
 	{
 		kfsd_running = 1;
-#if defined(UNIXUSER)
-		/* fuse_serve_loop() doesn't respect kfsd_running()... but that's OK */
-		fuse_serve_loop();
-#else
 		while(kfsd_running)
 		{
 			sched_run_callbacks();
-#if defined(KUDOS)
-			ipc_serve_run(); // Run ipc_serve (which will sleep for a bit)
-			sched_run_cleanup();
-#elif defined(__KERNEL__)
 			kfsd_leave(0);
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ / 25);
 			kfsd_enter();
-#else
-#error Unknown target system
-#endif
 		}
-#endif
 	}
 	kfsd_shutdown();
-#ifdef __KERNEL__
 	kfsd_leave(0);
-#endif
 }
-
-#if defined(KUDOS)
-
-#include <inc/lib.h> // binaryname
-void umain(int argc, char * argv[])
-{
-	int r, i;
-
-	if(!argc)
-	{
-		binaryname = "kfsd";
-		if((r = sys_env_set_name(0, "kfsd")) < 0)
-		{
-			printf("Failed to set env name: %i\n", r);
-			return;
-		}
-	}
-	
-	if((r = sys_grant_io(0)) < 0)
-	{
-		printf("Failed to get I/O priveleges: %i\n", r);
-		return;
-	}
-	/*if((r = sys_env_set_priority(0, ENV_MAX_PRIORITY)) < 0)
-	{
-		printf("Failed to set priority: %i\n", r);
-		return;
-	}*/
-
-	// Allocate more pages for the stack because we sometimes need it (for chdesc graph traversal)
-	for(i = 2; i != 33; i++)
-	{
-		r = sys_page_alloc(0, (void *) (USTACKTOP - i * PGSIZE), PTE_U | PTE_W | PTE_P);
-		assert(r >= 0);
-	}
-
-	kfsd_main(128, argc, argv);
-}
-
-#elif defined(UNIXUSER)
-
-#include <limits.h>
-
-int main(int argc, char * argv[])
-{
-	// Limit stack size to "not exceed" the linux kernel's 8kB stack.
-	// NOTE: linux appears to allocate a "large" initial stack (on chris's
-	// laptop, 80kB). setrlimit() does not appear to shrink this allocation,
-	// merely prevent its growth.
-	rlim_t stack_limit = 6 * 1024;
-	struct rlimit rlimit = {.rlim_cur = stack_limit, .rlim_max = stack_limit};
-	int r = setrlimit(RLIMIT_STACK, &rlimit);
-	int nwbblocks = 128;
-	if(r < 0)
-	{
-		perror("setrlimit()");
-		return 1;
-	}
-
-	if(getenv("NWBBLOCKS"))
-	{
-		nwbblocks = strtol(getenv("NWBBLOCKS"), NULL, 0);
-		if(nwbblocks == LONG_MAX || nwbblocks == LONG_MIN)
-		{
-			perror("NWBBLOCKS not in range, strtol()");
-			return 1;
-		}
-	}
-
-	kfsd_main(nwbblocks, argc, argv);
-	return 0;
-}
-
-#elif defined(__KERNEL__)
 
 static int nwbblocks = 128;
 module_param(nwbblocks, int, 0);
@@ -379,7 +273,3 @@ module_exit(exit_kfsd);
 MODULE_AUTHOR("KudOS Team");
 MODULE_DESCRIPTION("KudOS File System Architecture");
 MODULE_LICENSE("GPL");
-
-#else
-#error Unknown target system
-#endif

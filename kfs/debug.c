@@ -7,20 +7,17 @@
 #include <lib/stdio.h>
 #include <lib/svnrevtol.h>
 
-#if defined(__KERNEL__)
 #include <linux/version.h>
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 #include <linux/config.h>
 #endif
-#endif
+
+#include <linux/proc_fs.h>
+#include <linux/sched.h>
+#include <linux/vmalloc.h>
 
 /* htons and htonl */
 #include <lib/string.h>
-#if defined(KUDOS)
-#include <inc/josnic.h>
-#elif defined(UNIXUSER)
-#include <netinet/in.h>
-#endif
 
 #include <kfs/chdesc.h>
 #include <kfs/sched.h>
@@ -29,20 +26,9 @@
 
 #if KFS_DEBUG
 
-#if KFS_DEBUG_IO == KFS_DEBUG_IO_TCP
-#include <lib/netclient.h>
-#endif
-
 /* For a lean and mean debug output stream, set all of these to 1. */
-#define KFS_DEBUG_BINARY 1
 #define KFS_OMIT_FILE_FUNC 0
 #define KFS_OMIT_BTRACE 0
-
-#if !KFS_DEBUG_BINARY && defined(__KERNEL__)
-#warning No kernel support for text debugging; using binary debugging
-#undef KFS_DEBUG_BINARY
-#define KFS_DEBUG_BINARY 1
-#endif
 
 #if !KFS_OMIT_BTRACE && !defined(__i386__)
 #warning Debug backtraces only available on x86 platforms; disabling
@@ -50,8 +36,8 @@
 #define KFS_OMIT_BTRACE 1
 #endif
 
-#if !KFS_OMIT_BTRACE && defined(__KERNEL__) && !defined(CONFIG_FRAME_POINTER)
-#warning In the kernel, frame pointers are required for backtraces; disabling
+#if !KFS_OMIT_BTRACE && !defined(CONFIG_FRAME_POINTER)
+#warning Frame pointers are required for backtraces; disabling
 #undef KFS_OMIT_BTRACE
 #define KFS_OMIT_BTRACE 1
 #endif
@@ -384,8 +370,6 @@ static bool modules_ignore[sizeof(modules) / sizeof(modules[0])] = {0};
 	
 static int debug_count = 0;
 
-#if KFS_DEBUG_BINARY
-
 #define LIT_8 (-1)
 #define LIT_16 (-2)
 #define LIT_32 (-4)
@@ -397,12 +381,6 @@ static int kfs_debug_io_init(void);
 static int kfs_debug_io_write(void * data, uint32_t size);
 static void kfs_debug_io_command(void * arg);
 /* NOTE: also the non-static void kfs_debug_dbwait(const char *, bdesc_t *) */
-
-#if KFS_DEBUG_IO == KFS_DEBUG_IO_PROC
-
-#include <linux/proc_fs.h>
-#include <linux/sched.h>
-#include <linux/vmalloc.h>
 
 static uint8_t * proc_buffer;
 static off_t proc_buffer_rpos;
@@ -487,154 +465,6 @@ static int kfs_debug_io_init(void)
 	return 0;
 }
 
-#elif KFS_DEBUG_IO == KFS_DEBUG_IO_STREAMS
-
-static FILE * debug_stream = NULL;
-
-static int kfs_debug_io_write(void * data, uint32_t size)
-{
-	return fwrite(data, 1, size, debug_stream);
-}
-
-static void kfs_debug_io_command(void * arg)
-{
-	// uukfsd for streams does not currently support command reading
-}
-
-void kfs_debug_dbwait(const char * function, bdesc_t * block)
-{
-	kdprintf(STDERR_FILENO, "%s() not supported for unix-user streams, not waiting\n", __FUNCTION__);
-}
-
-static void kfs_debug_shutdown(void * ignore)
-{
-	int r = fclose(debug_stream);
-	if(r < 0)
-		kdprintf(STDERR_FILENO, "%s: fclose() = %s\n", __FUNCTION__, strerror(errno));
-	debug_stream = NULL;
-}
-
-static int kfs_debug_io_init(void)
-{
-	int r;
-	debug_stream = fopen(KFS_DEBUG_FILE, "w");
-	if(!debug_stream)
-		return -E_UNSPECIFIED;
-	
-	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
-	if(r < 0)
-	{
-		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);
-		return r;
-	}
-	
-	return 0;
-}
-
-#elif KFS_DEBUG_IO == KFS_DEBUG_IO_TCP
-
-static int debug_socket = -1;
-
-static void kfs_debug_wait(void)
-{
-	uint16_t command[2];
-	int bytes = 0;
-	while(bytes != 4)
-		bytes = read(debug_socket, &command, 4);
-	kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
-}
-
-static int kfs_debug_io_write(void * data, uint32_t size)
-{
-	return write(debug_socket, data, size);
-}
-
-#if defined(UNIXUSER)
-#include <unistd.h>
-#include <fcntl.h>
-#endif
-
-static void kfs_debug_io_command(void * arg)
-{
-	uint16_t command[2];
-	int bytes;
-
-#if defined(KUDOS)
-	bytes = read_nb(debug_socket, &command, 4);
-#elif defined(UNIXUSER)
-	if (fcntl(debug_socket, F_SETFL, O_NONBLOCK))
-		assert(0);
-	bytes = read(debug_socket, &command, 4);
-	if (fcntl(debug_socket, F_SETFL, 0)) // TODO: restore to original value
-		assert(0);
-#else
-#error Unknown target
-#endif
-	
-	if(bytes == 4)
-		kfs_debug_command(ntohs(command[0]), ntohs(command[1]), "<net>", 0, "<net>");
-}
-
-void kfs_debug_dbwait(const char * function, bdesc_t * block)
-{
-	if(block->ddesc->all_changes)
-	{
-		chdesc_t * chdesc;
-		for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-		{
-			const uint16_t flags = chdesc->flags;
-			if((flags & CHDESC_DBWAIT) && !(flags & CHDESC_ROLLBACK))
-			{
-				printf("%s(): waiting for debug mark... (%p has DBWAIT)\n", function, chdesc);
-				kfs_debug_wait();
-				break;
-			}
-		}
-	}
-}
-
-static void kfs_debug_shutdown(void * ignore)
-{
-	int r = close(debug_socket);
-	if(r < 0)
-		kdprintf(STDERR_FILENO, "%s: close() = %d\n", __FUNCTION__, r);
-	debug_socket = -1;
-}
-
-static int kfs_debug_io_init(void)
-{
-	const char * host = KFS_DEBUG_HOST;
-	uint16_t port = KFS_DEBUG_PORT;
-	struct ip_addr addr;	
-	int r = kgethostbyname(host, &addr);
-	if(r < 0)
-	{
-		jsleep(2 * HZ);
-		r = kgethostbyname(host, &addr);
-		if(r < 0)
-			return r;
-	}
-	r = kconnect(addr, port, &debug_socket);
-	if(r < 0)
-	{
-		jsleep(2 * HZ);
-		r = kconnect(addr, port, &debug_socket);
-		if(r < 0)
-			return r;
-	}
-	
-	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
-	if(r < 0)
-	{
-		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);
-		return r;
-	}
-	
-	return 0;
-}
-
-#endif
-
 
 /* This function is used like a binary version of kdprintf(). It takes a file
  * descriptor, and then a series of pairs of (size, pointer) of data to write to
@@ -705,7 +535,6 @@ static int kfs_debug_write(int size, ...)
 	
 	return bytes;
 }
-#endif
 
 int kfs_debug_init(void)
 {
@@ -725,7 +554,6 @@ int kfs_debug_init(void)
 	debug_rev = svnrevtol("$Rev$");
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
 	
-#if KFS_DEBUG_BINARY
 	kfs_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
 	
 	for(m = 0; modules[m].opcodes; m++)
@@ -748,21 +576,6 @@ int kfs_debug_init(void)
 			kfs_debug_write(LIT_8, 0, END);
 		}
 	kfs_debug_write(LIT_16, 0, END);
-#else
-	kdprintf(debug_socket, "DEBUG %d\n", debug_rev);
-	kdprintf(debug_socket, "DEBUG_OPCODE %d\n", debug_opcode_rev);
-
-	for(m = 0; modules[m].opcodes; m++)
-		for(o = 0; modules[m].opcodes[o]->params; o++)
-		{
-			int p;
-			kdprintf(debug_socket, "[%04x:%04x] %s", modules[m].module, modules[m].opcodes[o]->opcode, modules[m].opcodes[o]->name);
-			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
-				kdprintf(debug_socket, "%s%s", p ? ", " : " (", modules[m].opcodes[o]->params[p]->name);
-			kdprintf(debug_socket, ")\n");
-		}
-	kdprintf(debug_socket, "\n");
-#endif
 	
 	printf("Debugging interface initialized OK\n");
 	
@@ -829,7 +642,6 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		}
 	
 	debug_count++;
-#if KFS_DEBUG_BINARY
 #if KFS_OMIT_FILE_FUNC
 	kfs_debug_write(LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
 #else
@@ -917,112 +729,6 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	}
 #endif
 	kfs_debug_write(LIT_32, 0, END);
-#else
-#if KFS_OMIT_FILE_FUNC
-	kdprintf(debug_socket, "Line %d, type [%04x:%04x] ", line, module, opcode);
-#else
-	kdprintf(debug_socket, "%s:%d in %s(), type [%04x:%04x] ", file, line, function, module, opcode);
-#endif
-
-	if(!modules[m].opcodes)
-	{
-		/* unknown module */
-		kdprintf(debug_socket, "!module");
-		r = -E_INVAL;
-	}
-	else if(!modules[m].opcodes[o]->params)
-	{
-		/* unknown opcode */
-		kdprintf(debug_socket, "!opcode");
-		r = -E_INVAL;
-	}
-	else
-	{
-		int p;
-		for(p = 0; !r && modules[m].opcodes[o]->params[p]->name; p++)
-		{
-			if(p)
-				kdprintf(debug_socket, ", ");
-			switch(modules[m].opcodes[o]->params[p]->type)
-			{
-				case STRING:
-				{
-					char * param = va_arg(ap, char *);
-					kdprintf(debug_socket, "%s", param);
-					break;
-				}
-				case INT32:
-				{
-					int32_t param = va_arg(ap, int32_t);
-					kdprintf(debug_socket, "%d", param);
-					break;
-				}
-				case UINT32:
-				{
-					uint32_t param = va_arg(ap, uint32_t);
-					kdprintf(debug_socket, "%u", param);
-					break;
-				}
-				case UHEX32:
-				{
-					uint32_t param = va_arg(ap, uint32_t);
-					kdprintf(debug_socket, "0x%08x", param);
-					break;
-				}
-				case INT16:
-				{
-					int16_t param = va_arg(ap, int16_t);
-					kdprintf(debug_socket, "%d", param);
-					break;
-				}
-				case UINT16:
-				{
-					uint16_t param = va_arg(ap, uint16_t);
-					kdprintf(debug_socket, "%u", param);
-					break;
-				}
-				case UHEX16:
-				{
-					uint16_t param = va_arg(ap, uint16_t);
-					kdprintf(debug_socket, "0x%04x", param);
-					break;
-				}
-				case BOOL:
-				{
-					bool param = va_arg(ap, bool);
-					kdprintf(debug_socket, param ? "true" : "false");
-					break;
-				}
-				default:
-					/* unknown type */
-					kdprintf(debug_socket, "!type");
-					r = -E_INVAL;
-					break;
-			}
-		}
-	}
-	
-	kdprintf(debug_socket, "\n");
-	
-#if !KFS_OMIT_BTRACE
-	{
-		int frame = 0;
-		void ** ebp;
-		void ** last_ebp = NULL;
-		x86_get_ebp(ebp);
-		while(ebp >= last_ebp)
-		{
-			if(!ebp[1])
-				break;
-			if(frame || ebp[1] == __builtin_return_address(0))
-				kdprintf(debug_socket, "  [%d]: 0x%08x", frame++, ebp[1]);
-			last_ebp = ebp;
-			ebp = *ebp;
-		}
-	}
-	kdprintf(debug_socket, "\n");
-#endif
-#endif
 	
 	va_end(ap);
 	
@@ -1030,14 +736,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	if(r < 0)
 	{
 		printf("kfs_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %i\n", file, line, function, module, opcode, r);
-#if defined(KUDOS)
-		sys_print_backtrace();
-		exit(0);
-#elif defined(UNIXUSER) || defined(__KERNEL__)
 		assert(0);
-#else
-#error Unknown target
-#endif
 	}
 	return r;
 }

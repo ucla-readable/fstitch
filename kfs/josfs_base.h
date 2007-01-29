@@ -1,14 +1,14 @@
 #ifndef __KUDOS_KFS_JOSFS_BASE_H
 #define __KUDOS_KFS_JOSFS_BASE_H
 
-#include <lib/mmu.h>
+#include <linux/pagemap.h>
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 
 /* This file is derived from JOS' inc/fs.h */
 
 // Bytes per file system block - same as page size
-#define JOSFS_BLKSIZE	PGSIZE
+#define JOSFS_BLKSIZE	PAGE_SIZE
 #define JOSFS_BLKBITSIZE	(JOSFS_BLKSIZE * 8)
 
 // Maximum size of a filename (a single path component), including null

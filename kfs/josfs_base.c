@@ -1363,9 +1363,9 @@ LFS_t * josfs(BD_t * block_device)
 	struct lfs_info * info;
 	LFS_t * lfs = malloc(sizeof(*lfs));
 
-	if (PGSIZE != 4096) {
+	if (PAGE_SIZE != 4096) {
 		free(lfs);
-		Dprintf("JOSFSDEBUG: PGSIZE != 4096\n");
+		Dprintf("JOSFSDEBUG: PAGE_SIZE != 4096\n");
 		return NULL;
 	}
 	
