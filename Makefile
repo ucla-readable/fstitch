@@ -4,7 +4,7 @@ BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kernel
 UTILDIR := $(BASE_OBJDIR)/util
 
--include conf/env.mk
+V = @
 
 BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
 
