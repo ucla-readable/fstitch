@@ -1,6 +1,6 @@
 /* config.h gets us RELEASE_NAME */
-#include <inc/config.h>
-#include <inc/error.h>
+#include <lib/config.h>
+#include <lib/error.h>
 #include <lib/assert.h>
 #include <lib/kdprintf.h>
 #include <lib/vector.h>

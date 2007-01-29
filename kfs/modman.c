@@ -3,7 +3,7 @@
 #include <lib/stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
-#include <inc/error.h>
+#include <lib/error.h>
 
 #ifdef __KERNEL__
 #include <asm/page.h> // for PAGE_OFFSET

@@ -9,7 +9,7 @@
 #include <linux/blkdev.h>
 #include <linux/spinlock.h>
 
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/assert.h>
 #include <lib/stdio.h>
 #include <kfs/kfsd.h>

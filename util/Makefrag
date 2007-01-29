@@ -11,12 +11,12 @@ $(UTILDIR)/check_writes: util/check_writes.c kfs/linux_bd_debug.h
 	@mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/fsck.jos: util/fsck.jos.c inc/fs.h
+$(UTILDIR)/fsck.jos: util/fsck.jos.c lib/fs.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/fsformat: util/fsformat.c inc/fs.h
+$(UTILDIR)/fsformat: util/fsformat.c lib/fs.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<

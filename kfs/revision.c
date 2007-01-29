@@ -2,7 +2,7 @@
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/panic.h>
-#include <inc/error.h>
+#include <lib/error.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>

@@ -4,7 +4,7 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/stdio.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>

@@ -1,5 +1,4 @@
-/* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/assert.h>
 #include <lib/hash_set.h>
 #include <lib/jiffies.h>
@@ -85,7 +84,12 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 	uint32_t ptr;
 	uint32_t block_group, block_in_group = 0, temp;
 	
-	if (*blockno >= info->super->s_blocks_count || *blockno < info->super->s_first_data_block) 
+	if (*blockno < info->super->s_first_data_block) 
+	{
+		printf("%s requested status of block %u too small block no!\n",__FUNCTION__, *blockno);
+		return -E_INVAL;
+	}
+	if (*blockno >= info->super->s_blocks_count) 
 	{
 		printf("%s requested status of block %u too large block no!\n",__FUNCTION__, *blockno);
 		return -E_INVAL;
@@ -169,7 +173,12 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 	uint32_t * ptr;
 	uint32_t block_group, block_in_group;
 		
-	if (blockno >= info->super->s_blocks_count || blockno < info->super->s_first_data_block) 
+	if (blockno < info->super->s_first_data_block) 
+	{
+		printf("ext2: %s requested status of block %u too small block no!\n",__FUNCTION__, blockno);
+		return -E_INVAL;
+	}
+	if (blockno >= info->super->s_blocks_count) 
 	{
 		printf("ext2: %s requested status of block %u too large block no!\n",__FUNCTION__, blockno);
 		return -E_INVAL;

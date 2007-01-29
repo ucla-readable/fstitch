@@ -19,7 +19,7 @@
 #undef off_t
 #undef register_t
 
-#include <inc/fs.h>
+#include <lib/fs.h>
 
 static int diskfd;
 static int nblocks;

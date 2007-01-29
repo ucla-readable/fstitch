@@ -1,4 +1,4 @@
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/kdprintf.h>
 #include <lib/vector.h>
 #include <lib/string.h>

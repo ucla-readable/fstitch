@@ -2,7 +2,7 @@
 #include <lib/jiffies.h>
 #include <lib/sleep.h>
 #include <lib/types.h>
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/stdarg.h>
 #include <lib/stdio.h>
 #include <lib/svnrevtol.h>

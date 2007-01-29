@@ -1,5 +1,4 @@
-/* Avoid #including <inc/lib.h> to keep <inc/fs.h> out */
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/assert.h>
 #include <lib/hash_set.h>
 #include <lib/jiffies.h>

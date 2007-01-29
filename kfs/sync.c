@@ -1,4 +1,4 @@
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/stdio.h>
 
 #include <kfs/bd.h>

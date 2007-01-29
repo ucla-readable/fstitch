@@ -1,4 +1,4 @@
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
@@ -8,7 +8,6 @@
 #include <linux/ctype.h>
 #include <linux/fcntl.h>
 
-#include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/icase_cfs.h>

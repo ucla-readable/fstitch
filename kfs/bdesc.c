@@ -1,4 +1,4 @@
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/kdprintf.h>
 #include <lib/hash_map.h>
 #include <lib/panic.h>

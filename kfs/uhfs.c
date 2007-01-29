@@ -1,5 +1,4 @@
-#include <inc/fd.h>
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/assert.h>
 #include <linux/fcntl.h>
 #include <lib/panic.h>

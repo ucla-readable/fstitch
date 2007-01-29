@@ -8,7 +8,7 @@
 #ifdef CONFIG_KUDOS_PROC
 #include <linux/kudos_proc.h>
 
-#include <inc/error.h>
+#include <lib/error.h>
 #include <lib/hash_map.h>
 #include <lib/stdio.h>
 #include <kfs/kfsd.h>
