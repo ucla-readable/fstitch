@@ -46,7 +46,7 @@ echo "DEBUGDIR=$DEBUGDIR"
 
 assert sudo echo sudo auth cached
 
-assert make kernel
+assert make
 assert sudo dd if=$DISKIMG of=$DISK bs=512k
 DISKIMGSIZE=`du -m --apparent-size $DISKIMG | cut -f 1`
 mount | grep -q /debug || sudo mount /debug
@@ -55,7 +55,7 @@ assert sync
 assert sudo insmod kfs/kkfsd.ko linux_device=$DISK
 assert sudo mount kfs:/ /mnt/test -t kfs
 assert time sudo tar -C /mnt/test -xf linux-2.6.15.tar
-assert time obj/kernel/user/fsync /mnt/test
+assert time obj/kernel/util/fsync /mnt/test
 assert sudo umount /mnt/test
 mount | grep -q /debug && cp /debug/* debug/
 assert sync
