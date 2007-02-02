@@ -71,6 +71,7 @@ static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
 	spin_unlock(&kfsd_global_lock.lock);
 }
 #endif
+#endif
 
 static struct {
 	int key;
@@ -84,7 +85,6 @@ static struct {
 #endif
 };
 #define KFSD_SYSRQS (sizeof(kfsd_sysrqs) / sizeof(kfsd_sysrqs[0]))
-#endif
 
 struct module_shutdown {
 	kfsd_shutdown_module shutdown;
