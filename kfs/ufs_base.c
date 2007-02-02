@@ -1329,6 +1329,7 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 	return truncated;
 }
 
+/* FIXME: we need to unset f_lastalloc (i.e. to INVALID_BLOCK) here somehow */
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
