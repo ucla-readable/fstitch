@@ -28,6 +28,7 @@
 #include <kfs/kernel_timing.h>
 KERNEL_TIMING(read);
 KERNEL_TIMING(write);
+KERNEL_TIMING(wait);
 
 #ifdef CONFIG_MD
 #error linux_bd is (apparently) incompatible with RAID/LVM
@@ -462,18 +463,6 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	}
 
-	if(block->ddesc->in_flight)
-	{
-		while(block->ddesc->in_flight)
-		{
-			printk(KERN_ERR "waiting for landing requests\n");
-			revision_tail_wait_for_landing_requests();
-			printk(KERN_ERR "processing landing requests\n");
-			revision_tail_process_landing_requests();
-		}
-		printk(KERN_ERR "block has landed, continuing\n");
-	}
-
 	private = (struct linux_bio_private *)
 		malloc(sizeof(struct linux_bio_private));
 	assert(private);
@@ -545,6 +534,18 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_end_io = linux_bd_end_io;
 	bio->bi_private = private;
 
+	if(block->ddesc->in_flight)
+	{
+		KERNEL_INTERVAL(wait);
+		TIMING_START(wait);
+		while(block->ddesc->in_flight)
+		{
+			revision_tail_wait_for_landing_requests();
+			revision_tail_process_landing_requests();
+		}
+		TIMING_STOP(wait, wait);
+	}
+
 	r = revision_tail_schedule_flight();
 	assert(!r);
 	atomic_inc(&info->outstanding_io_count);
@@ -614,8 +615,9 @@ int linux_bd_destroy(BD_t * bd)
 		schedule_timeout(HZ / 10);
 	}
 
-	TIMING_DUMP(read, "READ", "reads");
-	TIMING_DUMP(write, "WRITE", "writes");
+	TIMING_DUMP(read, "linux_bd read", "reads");
+	TIMING_DUMP(write, "linux_bd write", "writes");
+	TIMING_DUMP(wait, "linux_bd wait", "waits");
 
 #if DEBUG_WRITES
 	if (debug_writes_dentry)

@@ -55,16 +55,19 @@ static inline void timing_stop(const struct kernel_interval * interval, struct k
 static inline void timing_dump(const struct kernel_timing *, const char *, const char *) __attribute__((always_inline));
 static inline void timing_dump(const struct kernel_timing * timing, const char * name, const char * count)
 {
-	printk(KERN_ERR "%s: min:   %ld.%09ld\n", name, timing->min.tv_sec, timing->min.tv_nsec);
-	printk(KERN_ERR "%s: max:   %ld.%09ld\n", name, timing->max.tv_sec, timing->max.tv_nsec);
-	printk(KERN_ERR "%s: total: %ld.%09ld\n", name, timing->total.tv_sec, timing->total.tv_nsec);
 	printk(KERN_ERR "%s: %d %s\n", name, timing->count, count);
+	printk(KERN_ERR "%s: total: %ld.%09ld\n", name, timing->total.tv_sec, timing->total.tv_nsec);
+	if(timing->count)
+	{
+		printk(KERN_ERR "%s: min:   %ld.%09ld\n", name, timing->min.tv_sec, timing->min.tv_nsec);
+		printk(KERN_ERR "%s: max:   %ld.%09ld\n", name, timing->max.tv_sec, timing->max.tv_nsec);
+	}
 }
 
 #define KERNEL_TIMING(name) static struct kernel_timing timing_##name = {.total = {0, 0}, .min = {99, 0}, .max = {0, 0}, .count = 0}
-#define KERNEL_INTERVAL(name) struct kernel_interval name
-#define TIMING_START(interval) timing_start(&interval)
-#define TIMING_STOP(interval, timing) timing_stop(&interval, &timing_##timing)
+#define KERNEL_INTERVAL(name) struct kernel_interval interval_##name
+#define TIMING_START(interval) timing_start(&interval_##interval)
+#define TIMING_STOP(interval, timing) timing_stop(&interval_##interval, &timing_##timing)
 #define TIMING_DUMP(timing, name, count) timing_dump(&timing_##timing, name, count)
 
 #else

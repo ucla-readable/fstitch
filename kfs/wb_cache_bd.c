@@ -26,6 +26,10 @@
  * problem, an appropriate error message is displayed on the console and -E_BUSY
  * is returned. */
 
+#define DEBUG_TIMING 0
+#include <kfs/kernel_timing.h>
+KERNEL_TIMING(wait);
+
 /* This structure is optimized for memory footprint with unions.
  * The items in each union are never used at the same time. */
 struct cache_slot {
@@ -236,8 +240,11 @@ static int evict_block(BD_t * object, bool only_dirty)
 		 * we do not have stacked caches. */
 		if(revision_tail_flights_exist())
 		{
+			KERNEL_INTERVAL(wait);
+			TIMING_START(wait);
 			revision_tail_wait_for_landing_requests();
 			revision_tail_process_landing_requests();
+			TIMING_STOP(wait, wait);
 		}
 		else if(r == FLUSH_NONE)
 			return -E_BUSY;
@@ -428,6 +435,8 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
+	
+	TIMING_DUMP(wait, "wb_cache wait", "waits");
 	
 	return 0;
 }
