@@ -53,11 +53,17 @@ mount | grep -q /debug || sudo mount /debug
 assert sync
 
 assert sudo insmod kfs/kkfsd.ko linux_device=$DISK
+if [ -f /proc/kkfsd_debug ]
+then
+	sudo cat /proc/kkfsd_debug > debug/kkfsd_debug &
+	CAT=$!
+fi
 assert sudo mount kfs:/ /mnt/test -t kfs
 assert time sudo tar -C /mnt/test -xf linux-2.6.15.tar
-assert time obj/kernel/util/fsync /mnt/test
+assert time obj/util/fsync /mnt/test
 assert sudo umount /mnt/test
 mount | grep -q /debug && cp /debug/* debug/
+[ "$CAT" ] && kill $CAT
 assert sync
 assert sudo rmmod kkfsd
 sudo dd if=$DISK of=debug/disk.img bs=1M count=$DISKIMGSIZE
