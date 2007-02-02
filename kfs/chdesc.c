@@ -1234,12 +1234,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if(offset + length > block->ddesc->length)
 		return -E_INVAL;
 	
-	/* to create chdescs on a locked block, you must be the owner - note
-	 * that barriers must pass themselves even if they really want to create
-	 * chdescs on a different device */
-	if(block->ddesc->lock_owner && block->ddesc->lock_owner != owner)
-		return -E_BUSY;
-	
 	r = chdesc_create_merge(block, offset, length, *head, head);
 	if(r < 0)
 		return r;
@@ -1404,12 +1398,6 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc_t * chdesc;
 	chdesc_t * bit_changes;
 	int r;
-	
-	/* to create chdescs on a locked block, you must be the owner - note
-	 * that barriers must pass themselves even if they really want to create
-	 * chdescs on a different device */
-	if(block->ddesc->lock_owner && block->ddesc->lock_owner != owner)
-		return -E_BUSY;
 	
 	r = chdesc_create_merge(block, offset * 4, 4, *head, head);
 	if(r < 0)

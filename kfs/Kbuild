@@ -46,7 +46,6 @@ KKFSD_KFS_OBJS := \
               chdesc.o \
               chdesc_util.o \
               revision.o \
-              barrier.o \
               modman.o \
               opgroup.o \
               devfs_cfs.o \
@@ -58,8 +57,6 @@ KKFSD_KFS_OBJS := \
               partition_bd.o \
               pc_ptable.o \
               bsd_ptable.o \
-              mirror_bd.o \
-              xor_bd.o \
               wt_cache_bd.o \
               wb_cache_bd.o \
               journal_bd.o \

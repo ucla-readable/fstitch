@@ -470,7 +470,7 @@ void revision_tail_wait_for_landing_requests(void)
 }
 
 
-/* ---- Revision slices: library functions for use inside barrier zones ---- */
+/* ---- Revision slices ---- */
 
 /* Unless we use chdesc stamps, of which there are a limited number, we don't
  * know whether chdescs that we don't own are above or below us. But that's OK,

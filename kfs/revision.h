@@ -42,7 +42,7 @@ void revision_tail_process_landing_requests(void);
 /* this function waits for landing requests to be set up */
 void revision_tail_wait_for_landing_requests(void);
 
-/* ---- Revision slices: library functions for use inside barrier zones ---- */
+/* ---- Revision slices ---- */
 
 typedef struct revision_slice {
 	BD_t * owner;

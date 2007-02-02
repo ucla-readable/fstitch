@@ -22,7 +22,7 @@ typedef struct chdesc_dlist chdesc_dlist_t;
 
 struct datadesc {
 	uint8_t * data;
-	uint32_t ref_count:31, in_flight:1;
+	uint32_t ref_count:30, in_flight:1, synthetic:1;
 
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;
@@ -43,9 +43,7 @@ struct datadesc {
 	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;
-	/* Oh! The humanity! Scrounging for bits! */
-	uint16_t length, lock_count:15, synthetic:1;
-	BD_t * lock_owner;
+	uint16_t length;
 };
 
 struct bdesc {
