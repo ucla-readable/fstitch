@@ -46,6 +46,8 @@ static size_t destroy_all_##type(void) \
 		if (!modman_entry->usage) \
 		{ \
 			r = DESTROY(mod); \
+			if (r) \
+				kdprintf(STDERR_FILENO, "%s(): failed to destroy %s\n", __FUNCTION__, modman_name_##type(mod)); \
 			assert(!r); \
 			ndestroyed++; \
 		} \

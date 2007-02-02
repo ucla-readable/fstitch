@@ -57,10 +57,12 @@ static inline void kfsd_enter(void)
 			opgroup_scope_set_current(process_opgroup_scope(current));
 			/* starting a new request, so set a new request ID */
 			kfsd_next_request_id();
+			if(tries >= 5)
+				printk(KERN_EMERG "%s failed to acquire kfsd lock %d times\n", current->comm, tries);
 			return;
 		}
-		if(++tries > 2)
-			printk(KERN_EMERG "%s failed to acquire kfsd lock %d times\n", current->comm, tries);
+		if(++tries == 5)
+			printk(KERN_EMERG "kfsd_global_lock contention detected! (%s)\n", current->comm);
 		spin_unlock(&kfsd_global_lock.lock);
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 100);

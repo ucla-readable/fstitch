@@ -103,9 +103,7 @@ error_name:
 static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
 {
 	char name[64];
-	size_t offset = PAGE_OFFSET;
-	/* subtract offset to make the generated names have fewer digits */
-	snprintf(name, 64, "%s-%x", prefix, ((size_t) module) - offset);
+	snprintf(name, 64, "%s-%x", prefix, (size_t) module);
 	return modman_add(map, module, name);
 }
 

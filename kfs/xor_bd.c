@@ -43,7 +43,7 @@ static int xor_bd_get_config(void * object, int level, char * string, size_t len
 static int xor_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	/* no status to report */
-	snprintf(string, length, "");
+	*string = 0;
 	return 0;
 }
 
