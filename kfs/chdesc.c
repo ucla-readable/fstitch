@@ -1019,7 +1019,8 @@ static chdesc_t * select_chdesc_merger(const bdesc_t * block, const chdesc_t * b
 	if(block->ddesc->nrb)
 		CHDESC_NRB_MERGE_STATS_LOG(0);
 	else
-		CHDESC_NRB_MERGE_STATS_LOG(2);	
+		CHDESC_NRB_MERGE_STATS_LOG(2);
+	assert(!block->ddesc->nrb || !(block->ddesc->nrb->flags & CHDESC_INFLIGHT));
 	return block->ddesc->nrb;
 }
 

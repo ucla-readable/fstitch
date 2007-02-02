@@ -18,6 +18,7 @@ public class Chdesc
 	public static final int FLAG_BIT_NOOP = 0x20;
 	public static final int FLAG_OVERLAP = 0x40;
 	public static final int FLAG_CREATING = 0x80;
+	public static final int FLAG_INFLIGHT = 0x100;
 	public static final int FLAG_DBWAIT = 0x8000;
 	
 	public final int address, opcode;
@@ -471,6 +472,8 @@ public class Chdesc
 			names += " | DBWAIT";
 		if((flags & FLAG_CREATING) != 0)
 			names += " | CREATING";
+		if((flags & FLAG_INFLIGHT) != 0)
+			names += " | INFLIGHT";
 		names += " = " + SystemState.hex(flags);
 		return names.substring(3);
 	}

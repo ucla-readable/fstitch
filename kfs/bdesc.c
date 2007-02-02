@@ -65,6 +65,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->ar_next = NULL;
 	bdesc->count = count;
 	bdesc->ddesc->ref_count = 1;
+	bdesc->ddesc->in_flight = 0;
 	bdesc->ddesc->all_changes = NULL;
 	bdesc->ddesc->all_changes_tail = &bdesc->ddesc->all_changes;
 	for(i = 0; i < NBDLEVEL; i++)
@@ -80,7 +81,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 #endif
 	bdesc->ddesc->overlaps = NULL;
 	bdesc->ddesc->manager = NULL;
-	bdesc->ddesc->managed_number = 0;
+	/* it has no manager, but give it a managed number anyway */
+	bdesc->ddesc->managed_number = number;
 	bdesc->ddesc->length = length;
 	bdesc->ddesc->lock_count = 0;
 	bdesc->ddesc->lock_owner = NULL;

@@ -10,6 +10,7 @@
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
 #include <kfs/debug.h>
+#include <kfs/revision.h>
 
 #define DEBUG_TIMING 0
 #include <kfs/kernel_timing.h>
@@ -140,6 +141,8 @@ void sched_run_callbacks(void)
 void sched_run_cleanup(void)
 {
 	int r;
+
+	revision_tail_process_landing_requests();
 
 	// Run bdesc autoreleasing
 	bdesc_autorelease_pool_pop();

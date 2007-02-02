@@ -37,6 +37,7 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_BIT_NOOP  0x20 /* bit_changes NOOP chdesc */
 #define CHDESC_OVERLAP   0x40 /* overlaps another chdesc completely */
 #define CHDESC_CREATING  0x80 /* chdesc is being created */
+#define CHDESC_INFLIGHT 0x100 /* chdesc is being written to disk */
 
 /* only effective in debugging mode */
 #define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */
@@ -164,7 +165,8 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 ({ \
 	const chdesc_t * __chdesc = (chdesc); \
 	assert(!__chdesc->block || __chdesc->owner); \
-	__chdesc->owner ? __chdesc->owner->level : chdesc_before_level(__chdesc); \
+	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */ \
+	__chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc); \
 })
 
 /* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */

@@ -29,20 +29,6 @@
 KERNEL_TIMING(read);
 KERNEL_TIMING(write);
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-#include <linux/config.h>
-#ifndef BIO_RW_SOFTBARRIER
-/* The soft barrier patch is apparently not needed on earlier kernels. This is
- * probably by luck, but we won't force the matter. We set it to BIO_RW in that
- * case so it will not set any extra bits (since WRITE is 1). */
-#define BIO_RW_SOFTBARRIER BIO_RW
-#endif
-#else
-#ifndef BIO_RW_SOFTBARRIER
-#error linux_bd requires the softbarrier patch in the kernel
-#endif
-#endif
-
 #ifdef CONFIG_MD
 #error linux_bd is (apparently) incompatible with RAID/LVM
 #endif
@@ -89,9 +75,8 @@ static void
 read_ahead_insert(bdesc_t *b)
 {
 	bdesc_retain(b);
-	if (look_ahead_store[look_ahead_idx]) {
+	if (look_ahead_store[look_ahead_idx])
 		bdesc_release(&look_ahead_store[look_ahead_idx]);
-	}
 	look_ahead_store[look_ahead_idx] = b;
 	look_ahead_idx++;
 	if (look_ahead_idx == 100)
@@ -182,13 +167,12 @@ static uint32_t _seq = 0;
 static spinlock_t dma_outstanding_lock = SPIN_LOCK_UNLOCKED;
 static int dma_outstanding = 0;
 
-static int bio_end_io_fn(struct bio *bio, unsigned int done, int error);
+static int linux_bd_end_io(struct bio *bio, unsigned int done, int error);
 
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
                                      uint16_t count)
 {
 	DEFINE_WAIT(wait);
-	int waited = 0;
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
 	struct bio *bio;
@@ -199,7 +183,6 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t *blocks[READ_AHEAD_COUNT];
 	int read_ahead_count = READ_AHEAD_COUNT;
-	static int infty = 10;
 	KERNEL_INTERVAL(read);
 
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
@@ -292,7 +275,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		bio->bi_size = info->blocksize * count;
 		bio->bi_bdev = info->bdev;
 		bio->bi_rw = READ;
-		bio->bi_end_io = bio_end_io_fn;
+		bio->bi_end_io = linux_bd_end_io;
 		bio->bi_private = &private[j];
 
 		spin_lock_irqsave(&dma_outstanding_lock, flags);
@@ -311,20 +294,14 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	KDprintk(KERN_ERR "going to sleep! [%d]\n", private[0].seq);
 	spin_lock_irqsave(&dma_outstanding_lock, flags);
 	while (dma_outstanding > 0) {
-		if (infty > 0) {
-			infty--;
-			KDprintk(KERN_ERR "dma not done. sleeping\n");
-		}
 		prepare_to_wait(&info->waitq, &wait, TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&dma_outstanding_lock, flags);
-		schedule_timeout(HZ * 5);
+		schedule();
 		/* FIXME: check signal_pending() */
-		waited = 1;
 		spin_lock_irqsave(&dma_outstanding_lock, flags);
 	}
 	spin_unlock_irqrestore(&dma_outstanding_lock, flags);
-	if (waited)
-		finish_wait(&info->waitq, &wait);
+	finish_wait(&info->waitq, &wait);
 	KDprintk(KERN_ERR "woke up!\n");
 
 	TIMING_STOP(read, read);
@@ -345,7 +322,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 }
 
 static int
-bio_end_io_fn(struct bio *bio, unsigned int done, int error)
+linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 {
 	struct linux_bio_private * private =
 		(struct linux_bio_private *)(bio->bi_private);
@@ -412,7 +389,10 @@ bio_end_io_fn(struct bio *bio, unsigned int done, int error)
 	if (dir == READ)
 		private->bdesc->ddesc->synthetic = 0;
 	else if (dir == WRITE)
+	{
+		revision_tail_request_landing(private->bdesc);
 		free(private);
+	}
 	bio_put(bio);
 
 	if (dir == READ) {
@@ -482,6 +462,18 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		return -E_INVAL;
 	}
 
+	if(block->ddesc->in_flight)
+	{
+		while(block->ddesc->in_flight)
+		{
+			printk(KERN_ERR "waiting for landing requests\n");
+			revision_tail_wait_for_landing_requests();
+			printk(KERN_ERR "processing landing requests\n");
+			revision_tail_process_landing_requests();
+		}
+		printk(KERN_ERR "block has landed, continuing\n");
+	}
+
 	private = (struct linux_bio_private *)
 		malloc(sizeof(struct linux_bio_private));
 	assert(private);
@@ -549,10 +541,12 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_sector = block->number;
 	bio->bi_size = block->ddesc->length;
 	bio->bi_bdev = info->bdev;
-	bio->bi_rw = WRITE | (1 << BIO_RW_SOFTBARRIER);
-	bio->bi_end_io = bio_end_io_fn;
+	bio->bi_rw = WRITE;
+	bio->bi_end_io = linux_bd_end_io;
 	bio->bi_private = private;
 
+	r = revision_tail_schedule_flight();
+	assert(!r);
 	atomic_inc(&info->outstanding_io_count);
 
 	KDprintk(KERN_ERR "issuing DMA write request [%d]\n", private->seq);
@@ -583,7 +577,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 
 	TIMING_STOP(write, write);
 
-	r = revision_tail_acknowledge(block, object);
+	r = revision_tail_inflight_ack(block, object);
 	if (r < 0) {
 		panic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
@@ -599,6 +593,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int linux_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
+	/* FIXME: technically we should wait for all pending DMA writes to complete */
 	return FLUSH_EMPTY;
 }
 
@@ -634,6 +629,12 @@ int linux_bd_destroy(BD_t * bd)
 	if (r < 0) return r;
 
 	read_ahead_empty();
+	while(revision_tail_flights_exist())
+	{
+		revision_tail_wait_for_landing_requests();
+		revision_tail_process_landing_requests();
+	}
+	chdesc_reclaim_written();
 	blockman_destroy(&info->blockman);
 
 	bd_release(info->bdev);

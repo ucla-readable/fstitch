@@ -167,6 +167,10 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	chdesc_t * chdesc;
 	int r;
 	
+	/* in flight? */
+	if(slot->block->ddesc->in_flight)
+		return FLUSH_NONE;
+	
 	/* already flushed? */
 	for(chdesc = slot->block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 		if(chdesc->owner == object)
@@ -209,6 +213,7 @@ static int evict_block(BD_t * object, bool only_dirty)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	
+	revision_tail_process_landing_requests();
 	for(;;)
 	{
 		int r = FLUSH_EMPTY;
@@ -223,7 +228,18 @@ static int evict_block(BD_t * object, bool only_dirty)
 			}
 			r |= code;
 		}
-		if(r == FLUSH_NONE)
+		/* For both FLUSH_NONE and FLUSH_SOME we must wait to make
+		 * progress if there are any flights in progress. For FLUSH_NONE
+		 * this is obvious; for FLUSH_SOME you must consider that the
+		 * only way more blocks can be written is by waiting for the
+		 * blocks that were just written to be completed, assuming that
+		 * we do not have stacked caches. */
+		if(revision_tail_flights_exist())
+		{
+			revision_tail_wait_for_landing_requests();
+			revision_tail_process_landing_requests();
+		}
+		else if(r == FLUSH_NONE)
 			return -E_BUSY;
 	}
 }
@@ -373,7 +389,10 @@ static void wb_cache_bd_callback(void * arg)
 	/* FIXME: make this more efficient by only doing dirty blocks? */
 	/* FIXME: try to come up with a good flush ordering, instead of waiting for the next callback? */
 	for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
+	{
+		revision_tail_process_landing_requests();
 		flush_block(object, slot);
+	}
 }
 
 static int wb_cache_bd_destroy(BD_t * bd)

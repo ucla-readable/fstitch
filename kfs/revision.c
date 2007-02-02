@@ -9,11 +9,15 @@
 #include <kfs/debug.h>
 #include <kfs/revision.h>
 
+#include <linux/reboot.h>
+
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
 static bool revision_owner_decider(chdesc_t * chdesc, void * data)
 {
-	return chdesc->owner == (BD_t *) data || !chdesc_is_rollbackable(chdesc);
+	/* it had better be either owned by us or rollbackable */
+	assert(chdesc->owner == (BD_t *) data || chdesc_is_rollbackable(chdesc));
+	return chdesc->owner == (BD_t *) data;
 }
 
 static bool revision_stamp_decider(chdesc_t * chdesc, void * data)
@@ -21,19 +25,31 @@ static bool revision_stamp_decider(chdesc_t * chdesc, void * data)
 	return chdesc_has_stamp(chdesc, (uint32_t) data) || !chdesc_is_rollbackable(chdesc);
 }
 
+static bool revision_flight_decider(chdesc_t * chdesc, void * data)
+{
+	return (chdesc->flags & CHDESC_INFLIGHT) != 0;
+}
+
 static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chdescs, const char * function)
 {
 	int i;
-	kdprintf(STDERR_FILENO, "%s() is very confused!\n", function);
+	kdprintf(STDERR_FILENO, "%s() is very confused! (debug = %d)\n", function, KFS_DEBUG_COUNT());
 	for(i = 0; i != count; i++)
 	{
 		chdepdesc_t * scan;
-		kdprintf(STDERR_FILENO, "%p [%d, %x]", chdescs[i], chdescs[i]->type, chdescs[i]->flags);
+		int total = 0;
+		if(!chdescs[i])
+		{
+			kdprintf(STDERR_FILENO, "(slot null)\n");
+			continue;
+		}
+		kdprintf(STDERR_FILENO, "%p [T%d, L%d, F%x]", chdescs[i], chdescs[i]->type, chdesc_level(chdescs[i]), chdescs[i]->flags);
 		if(!chdesc_is_rollbackable(chdescs[i]))
 			kdprintf(STDERR_FILENO, "!");
 		kdprintf(STDERR_FILENO, " (<-");
 		for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
 		{
+			total++;
 			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
 				continue;
 			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
@@ -41,10 +57,14 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 				kdprintf(STDERR_FILENO, "!");
 			if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
 				kdprintf(STDERR_FILENO, "*");
+			if(scan->after.desc->block->ddesc->in_flight)
+				kdprintf(STDERR_FILENO, "^");
 		}
-		kdprintf(STDERR_FILENO, ") (->");
+		kdprintf(STDERR_FILENO, ")%d (->", total);
+		total = 0;
 		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
 		{
+			total++;
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
 				continue;
 			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
@@ -52,10 +72,29 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 				kdprintf(STDERR_FILENO, "!");
 			if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
 				kdprintf(STDERR_FILENO, "*");
+			if(scan->before.desc->block->ddesc->in_flight)
+				kdprintf(STDERR_FILENO, "^");
+		}
+		kdprintf(STDERR_FILENO, ")%d (-->", total);
+		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
+		{
+			if(!scan->before.desc->block || scan->before.desc->block->ddesc == block->ddesc)
+				continue;
+			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
+			if(!chdesc_is_rollbackable(scan->before.desc))
+				kdprintf(STDERR_FILENO, "!");
+			if(scan->before.desc->block->ddesc->in_flight)
+				kdprintf(STDERR_FILENO, "^");
 		}
 		kdprintf(STDERR_FILENO, ")\n");
 	}
-	panic("too confused to continue");
+	kdprintf(STDERR_FILENO, "Waiting 1 seconds before reboot...\n");
+	current->state = TASK_INTERRUPTIBLE;
+	kfsd_task->state = TASK_STOPPED;
+	schedule_timeout(HZ);
+	kernel_restart(NULL);
+	/* WTF? */
+	for(;;);
 }
 
 static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, void * data)
@@ -134,6 +173,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 {
+	assert(!block->ddesc->in_flight);
 #if CHDESC_BYTE_SUM > 1
 	/* be paranoid and rollback/reapply all chdescs to check their sums */
 	if(bd)
@@ -233,7 +273,7 @@ int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp)
 	return _revision_tail_revert(block, revision_stamp_decider, (void *) stamp);
 }
 
-int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
+static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decider, void * data)
 {
 	chdesc_t * scan;
 	size_t chdescs_size;
@@ -245,7 +285,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	
 	/* find out how many chdescs are to be satisfied */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(scan->owner == bd)
+		if(decider(scan, data))
 			count++;
 	
 	chdescs_size = sizeof(*chdescs) * count;
@@ -254,7 +294,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 		return -E_NO_MEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(scan->owner == bd)
+		if(decider(scan, data))
 			chdescs[i++] = scan;
 	
 	for(;;)
@@ -277,13 +317,156 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 			break;
 		if(!progress)
 		{
-			kdprintf(STDERR_FILENO, "%s(): there exist unsatisfied chdescs but no progress was made! (debug = %d)\n", __FUNCTION__, KFS_DEBUG_COUNT());
+			dump_revision_loop_state(block, count, chdescs, __FUNCTION__);
 			break;
 		}
 	}
 	sfree(chdescs, chdescs_size);
 	
+	return 0;
+}
+
+int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
+{
+	int r = _revision_tail_acknowledge(block, revision_owner_decider, bd);
+	if(r < 0)
+		return r;
 	return revision_tail_revert(block, bd);
+}
+
+struct flight {
+	bdesc_t * block;
+	struct flight * next;
+};
+static spinlock_t flight_plan = SPIN_LOCK_UNLOCKED;
+static struct flight * scheduled_flights = NULL;
+static struct flight * holding_pattern = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(control_tower);
+
+int revision_tail_schedule_flight(void)
+{
+	unsigned long flags;
+	struct flight * slot = malloc(sizeof(*slot));
+	if(!slot)
+		return -E_NO_MEM;
+	spin_lock_irqsave(&flight_plan, flags);
+	slot->next = scheduled_flights;
+	scheduled_flights = slot;
+	spin_unlock_irqrestore(&flight_plan, flags);
+	return 0;
+}
+
+void revision_tail_cancel_flight(void)
+{
+	unsigned long flags;
+	struct flight * slot;
+	spin_lock_irqsave(&flight_plan, flags);
+	slot = scheduled_flights;
+	scheduled_flights = slot->next;
+	spin_unlock_irqrestore(&flight_plan, flags);
+	free(slot);
+}
+
+int revision_tail_flights_exist(void)
+{
+	unsigned long flags;
+	int exist;
+	spin_lock_irqsave(&flight_plan, flags);
+	exist = scheduled_flights || holding_pattern;
+	spin_unlock_irqrestore(&flight_plan, flags);
+	return exist;
+}
+
+int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
+{
+	chdesc_t * scan;
+	int r;
+	
+	if(!block->ddesc->all_changes)
+		return 0;
+	
+	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+		if(scan->owner == bd)
+		{
+			uint16_t level = chdesc_level(scan);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, scan, CHDESC_INFLIGHT);
+			scan->flags |= CHDESC_INFLIGHT;
+			/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
+			chdesc_propagate_level_change(scan, level, chdesc_level(scan));
+#if CHDESC_NRB
+			/* if this chdesc was the NRB for the block, we allow a
+			 * new NRB at this point because merging into this
+			 * chdesc is not allowed while it is in flight (and
+			 * merges are attempted to the block's NRB chdesc) */
+			if(scan == block->ddesc->nrb)
+				chdesc_weak_release(&block->ddesc->nrb);
+#endif
+		}
+		else if(!chdesc_is_rollbackable(scan))
+			kdprintf(STDERR_FILENO, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
+	
+	block->ddesc->in_flight = 1;
+	bdesc_retain(block);
+	
+	/* FIXME: recover if we fail here */
+	r = revision_tail_revert(block, bd);
+	assert(r >= 0);
+	return r;
+}
+
+static int revision_tail_ack_landed(bdesc_t * block)
+{
+	int r = _revision_tail_acknowledge(block, revision_flight_decider, NULL);
+	assert(r >= 0);
+	block->ddesc->in_flight = 0;
+	bdesc_release(&block);
+	return 0;
+}
+
+void revision_tail_request_landing(bdesc_t * block)
+{
+	unsigned long flags;
+	struct flight * slot;
+	spin_lock_irqsave(&flight_plan, flags);
+	slot = scheduled_flights;
+	scheduled_flights = slot->next;
+	slot->block = block;
+	slot->next = holding_pattern;
+	holding_pattern = slot;
+	wake_up_all(&control_tower);
+	spin_unlock_irqrestore(&flight_plan, flags);
+}
+
+void revision_tail_process_landing_requests(void)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&flight_plan, flags);
+	while(holding_pattern)
+	{
+		struct flight * slot = holding_pattern;
+		holding_pattern = slot->next;
+		spin_unlock_irqrestore(&flight_plan, flags);
+		revision_tail_ack_landed(slot->block);
+		free(slot);
+		spin_lock_irqsave(&flight_plan, flags);
+	}
+	spin_unlock_irqrestore(&flight_plan, flags);
+}
+
+void revision_tail_wait_for_landing_requests(void)
+{
+	unsigned long flags;
+	DEFINE_WAIT(wait);
+	spin_lock_irqsave(&flight_plan, flags);
+	while(!holding_pattern)
+	{
+		prepare_to_wait(&control_tower, &wait, TASK_INTERRUPTIBLE);
+		spin_unlock_irqrestore(&flight_plan, flags);
+		schedule();
+		spin_lock_irqsave(&flight_plan, flags);
+	}
+	finish_wait(&control_tower, &wait);
+	spin_unlock_irqrestore(&flight_plan, flags);
 }
 
 
@@ -372,13 +555,11 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 
 	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-	{
 		if(scan->owner == owner)
 		{
 			slice->all_ready = 0;
 			break;
 		}
-	}
 
 	if(slice->ready_size)
 	{
@@ -389,7 +570,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		if(!slice->ready)
 		{
 			/* pull back up from push down */
-			/* it's sad that the tmp list exists solely for this error case.
+			/* it's sad that the tmp list exists solely for this error case,
 			 * and it's sad that this scalloc() exists solely for pull_up. */
 			for(scan = tmp_ready; scan;)
 			{

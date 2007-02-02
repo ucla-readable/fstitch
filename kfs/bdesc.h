@@ -22,7 +22,7 @@ typedef struct chdesc_dlist chdesc_dlist_t;
 
 struct datadesc {
 	uint8_t * data;
-	uint32_t ref_count;
+	uint32_t ref_count:31, in_flight:1;
 
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;

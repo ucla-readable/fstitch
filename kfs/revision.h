@@ -5,31 +5,44 @@
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 
-// we should have comments that describe what these functions do, and
-// when they (typically) should be called. I have put the first
-// part. -adlr
-
-// revision_tail_prepare makes a DAG of all chdescs on the specified
-// block and their dependencies, recursively. It then rolls back all
-// those chdescs that are not on the specified BD.
-// You should be careful, because this function can rollback chdescs without
-// rolling back their afters.
+/* these functions roll back change descriptors on the passed blocks which are
+ * not yet ready to go to disk (the non-stamp case) or do not yet have the stamp */
 int revision_tail_prepare(bdesc_t *block, BD_t *bd);
 int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp);
 
-// revision_tail_revert undoes all of the rollbacks from
-// revision_tail_prepare. Specifically, it makes a DAG of all chdescs
-// on the block (and their dependencies, recursively) specified and
-// rolls all chdescs forward that are not on the specified BD.
+/* these functions undo everything done by the _prepare functions above */
 int revision_tail_revert(bdesc_t *block, BD_t *bd);
 int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp);
 
-// revision_tail_acknowledge commits all the chdescs that were rolled
-// back with revision_tail_prepare. Specifically, it makes a DAG of
-// all chdescs on the block (and their dependencies, recursively)
-// specified and calls chdesc_destroy() on them. For chdescs not on
-// BD, it calls chdesc_apply() on them.
+/* this function calls chdesc_satisfy() on all the non-rolled back change
+ * descriptors on the block, and rolls the others forward again */
 int revision_tail_acknowledge(bdesc_t *block, BD_t *bd);
+
+/* this function marks the non-rolled back change descriptors as "in flight" and
+ * rolls the others forward again */
+int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd);
+
+/* this function schedules a flight slot to receive the interrupt-time
+ * notification that a block has been written to the controller or (with
+ * sufficient hardware support) to the disk */
+int revision_tail_schedule_flight(void);
+
+/* this function cancels the scheduled flight set up by revision_tail_schedule_flight() */
+void revision_tail_cancel_flight(void);
+
+/* this function returns true iff there are any scheduled or holding flights */
+int revision_tail_flights_exist(void);
+
+/* this function should be called at interrupt time to notify the system that a
+ * block has been written to the controller or (with NCQ) to the disk */
+void revision_tail_request_landing(bdesc_t * block);
+
+/* this function processes pending landing requests */
+void revision_tail_process_landing_requests(void);
+/* this function waits for landing requests to be set up */
+void revision_tail_wait_for_landing_requests(void);
+
+/* ---- Revision slices: library functions for use inside barrier zones ---- */
 
 typedef struct revision_slice {
 	BD_t * owner;
