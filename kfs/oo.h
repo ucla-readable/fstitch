@@ -50,12 +50,4 @@ struct object {
 };
 typedef struct { struct object uniform; } object_t;
 
-// DESTROY_LOCAL is only for use outside of KFSD
-#ifndef KFSD
-extern void delete_obj(uint32_t id);
-#define DESTROY_LOCAL(object) do { delete_obj((uint32_t) object->uniform.local); free(object); } while(0)
-#else
-#define DESTROY_LOCAL(object) static_assert(0)
-#endif
-
 #endif /* __KUDOS_KFS_OO_H */
