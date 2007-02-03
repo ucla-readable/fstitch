@@ -34,16 +34,16 @@ diff -Nrud linux-2.6.19.1/fs/kudos/Kconfig linux-2.6.19.1/fs/kudos/Kconfig
 +++ linux-2.6.19.1/fs/kudos/Kconfig	2007-01-19 14:00:05.000000000 -0800
 @@ -0,0 +1,5 @@
 +config KUDOS_PROC
-+	boolean "Provide process event hooks for KudOS"
++	boolean "Provide process event hooks for Kudos"
 +	---help---
-+	  This option provides hooks for the KudOS kernel module to find out
++	  This option provides hooks for the Kudos kernel module to find out
 +          about process events, which it needs to support opgroups.
 diff -Nrud linux-2.6.19.1/fs/kudos/kudos_proc.c linux-2.6.19.1/fs/kudos/kudos_proc.c
 --- linux-2.6.19.1/fs/kudos/kudos_proc.c	1969-12-31 16:00:00.000000000 -0800
 +++ linux-2.6.19.1/fs/kudos/kudos_proc.c	2007-02-02 16:05:42.000000000 -0800
 @@ -0,0 +1,97 @@
 +/*
-+ * kudos_proc.c - provide process event hooks for KudOS
++ * kudos_proc.c - provide process event hooks for Kudos
 + *
 + * Copyright (C) 2006, 2007 Regents of the University of California
 + * Based loosely on cn_proc.c by Matt Helsley
@@ -161,7 +161,7 @@ diff -Nrud linux-2.6.19.1/include/linux/kudos_proc.h linux-2.6.19.1/include/linu
 +++ linux-2.6.19.1/include/linux/kudos_proc.h	2007-01-19 14:00:05.000000000 -0800
 @@ -0,0 +1,59 @@
 +/*
-+ * kudos_proc.h - provide process event hooks for KudOS
++ * kudos_proc.h - provide process event hooks for Kudos
 + *
 + * Copyright (C) 2006, 2007 Regents of the University of California
 + * Based loosely on cn_proc.h by Matt Helsley
