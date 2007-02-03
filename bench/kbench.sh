@@ -3,26 +3,35 @@
 
 NRUNS=1
 TIME_LOG=time.log
-DISK=/dev/sdb
+DISK=${DISK:-/dev/sdb}
 KMNT=kfs:/
 MNT=/mnt/test
 TARFILE=linux-2.6.15.tar
 TAROUT=linux-2.6.15
+VMLINUX=/lib/modules/`uname -r`/source/vmlinux
+PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 
 WRAP_PID=0
 
 function start_kfsd() {
+	#mkfs.ext3 -b 4096 $DISK || exit 1
+	#mount -t ext3 $DISK $MNT || exit 1
+	#~frost/acctrd/acctrdctl -s $DISK || exit 1
+
 	if [ "$NWBBLOCKS" == "" ]; then
-		insmod kfs/kkfsd.ko || exit 1
+		insmod kfs/kkfsd.ko linux_device=$DISK || exit 1
 	else
-		insmod kfs/kkfsd.ko nwbblocks="$NWBBLOCKS" || exit 1
+		insmod kfs/kkfsd.ko linux_device=$DISK nwbblocks="$NWBBLOCKS" || exit 1
 	fi
 	mount -t kfs "$KMNT" "$MNT"
 	if [ $? -ne 0 ]; then rmmod kkfsd; exit 1; fi
+	[ $PROFILE -eq 1 ] && (opcontrol --start; opcontrol --reset)
 }
 
 function stop_kfsd() {
+	[ $PROFILE -eq 1 ] && (opcontrol --stop; opcontrol --dump)
 	umount "$MNT" || echo "umount "$MNT" failed: $?"
+	#~frost/acctrd/acctrdctl -s $DISK || exit 1
 	rmmod kkfsd || echo "rmmod kkfsd failed: $?"
 }
 
@@ -118,10 +127,22 @@ then
 	usage
 fi
 
+echo "Using disk $DISK"
+
 su "$REAL_USER" -c "touch \"$TIME_LOG\""
 echo "==== `date`" >> "$TIME_LOG"
 
-su "$REAL_USER" -c "make kernel" || exit 1
+su "$REAL_USER" -c "make" || exit 1
+
+if [ $PROFILE -eq 1 ]; then
+	if [ ! $VMLINUX ]; then
+		echo "vmlinux \"$VMLINUX\" does not exist, cannot profile" 1>&2
+		exit 1
+	fi
+	#opcontrol --deinit
+	opcontrol --init
+	opcontrol --setup --separate=kernel --vmlinux=$VMLINUX
+fi
 
 for i in `seq $NRUNS`
 do
@@ -143,10 +164,12 @@ do
 
 	start_kfsd
 
-	time_test tar bash -c "tar -C \"$MNT/\" -xf \"$TARFILE\"; echo syncing; obj/kernel/user/fsync \"$MNT/\""
-	time_test rm bash -c "rm -rf \"$MNT/$TAROUT/\"; echo syncing; obj/kernel/user/fsync \"$MNT/\""
+	time_test tar bash -c "time tar -C \"$MNT/\" -xf \"$TARFILE\"; time obj/util/fsync \"$MNT/\""
+	time_test rm bash -c "time rm -rf \"$MNT/$TAROUT/\"; time obj/util/fsync \"$MNT/\""
 
 	stop_kfsd
+
+	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t 1
 done
 
 echo "---- complete"
