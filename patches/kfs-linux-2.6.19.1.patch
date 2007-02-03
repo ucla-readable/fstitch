@@ -40,7 +40,7 @@ diff -Nrud linux-2.6.19.1/fs/kudos/Kconfig linux-2.6.19.1/fs/kudos/Kconfig
 +          about process events, which it needs to support opgroups.
 diff -Nrud linux-2.6.19.1/fs/kudos/kudos_proc.c linux-2.6.19.1/fs/kudos/kudos_proc.c
 --- linux-2.6.19.1/fs/kudos/kudos_proc.c	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.19.1/fs/kudos/kudos_proc.c	2007-01-19 14:00:05.000000000 -0800
++++ linux-2.6.19.1/fs/kudos/kudos_proc.c	2007-02-02 16:05:42.000000000 -0800
 @@ -0,0 +1,97 @@
 +/*
 + * kudos_proc.c - provide process event hooks for KudOS
@@ -76,7 +76,7 @@ diff -Nrud linux-2.6.19.1/fs/kudos/kudos_proc.c linux-2.6.19.1/fs/kudos/kudos_pr
 +
 +#include <linux/kudos_proc.h>
 +
-+static spinlock_t kudos_spinlock = SPIN_LOCK_UNLOCKED;
++static rwlock_t kudos_spinlock = RW_LOCK_UNLOCKED;
 +static struct kudos_proc_ops * kudos_module = NULL;
 +
 +void kudos_fork_hook(struct task_struct * task)
