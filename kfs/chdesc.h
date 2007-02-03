@@ -6,7 +6,7 @@
 #include <lib/panic.h>
 
 /* values: 0 (disable), 1 (enable), 2 (paranoid) */
-#define CHDESC_BYTE_SUM 1
+#define CHDESC_BYTE_SUM 0
 
 /* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
  * and mulitple NRBs on a given ddesc are merged into one */
