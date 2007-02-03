@@ -118,7 +118,7 @@ struct chrefdesc {
 };
 
 /* create new chdescs */
-/* create a noop using the NULL-terminated befores array */
+/* create a noop using befores array */
 int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
 /* create a noop using the NULL-terminated befores var_arg */
 int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...);
