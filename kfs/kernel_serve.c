@@ -486,6 +486,8 @@ static int serve_fill_super(struct super_block * sb, mount_desc_t * m)
 		sb->s_dev = 0;
 		return -E_NO_MEM;
 	}
+	/* is this next line really necessary? */
+	k_root->i_sb = sb;
 	k_root->i_ino = cfs_root;
 	read_inode_withlock(k_root);
 
