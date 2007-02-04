@@ -14,7 +14,6 @@
 #include <kfs/bsd_ptable.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
-#include <kfs/elevator_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/mem_bd.h>
 #include <kfs/loop_bd.h>
@@ -54,8 +53,6 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 #define USE_ICASE 0
 
-//#define USE_MIRROR
-#define USE_ELEVATOR 0
 #define USE_WB_CACHE
 #ifndef USE_WB_CACHE
 #define wb_cache_bd wt_cache_bd
@@ -143,13 +140,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-#if USE_ELEVATOR
-			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
-			bd = elevator_cache_bd(bd, 128, 64, 3);
-			if (!bd)
-				return -E_UNSPECIFIED;
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-#endif
 			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
 				return r;
 		}
@@ -169,13 +159,6 @@ int kfsd_init(int nwbblocks, int argc, char ** argv)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-#if USE_ELEVATOR
-			printf("Using elevator scheduler on disk %s.\n", modman_name_bd(bd));
-			bd = elevator_cache_bd(bd, 128, 64, 3);
-			if (!bd)
-				return -E_UNSPECIFIED;
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-#endif
 			printf("Using disk 2\n");
 			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
 				return r;
