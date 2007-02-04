@@ -5,7 +5,6 @@
 #include <lib/hash_map.h>
 #include <lib/panic.h>
 
-/* values: 0 (disable), 1 (enable), 2 (paranoid) */
 #define CHDESC_BYTE_SUM 0
 
 /* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
