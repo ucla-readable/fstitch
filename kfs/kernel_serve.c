@@ -229,7 +229,7 @@ static int kernel_get_metadata(void * arg, uint32_t id, size_t size, void * data
 		memcpy(data, kernelmd->type_info.symlink.link, kernelmd->type_info.symlink.link_len);
 		return kernelmd->type_info.symlink.link_len;
 	}
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 }
 
 
@@ -580,9 +580,9 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 	}
 	kfsd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-	return ERR_PTR(-E_NOT_FOUND);
+	return ERR_PTR(-E_NO_ENT);
 #else
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 #endif
 }
 
@@ -666,7 +666,7 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 	kfsd_enter();
 	assert(dentry2cfs(dentry));
 	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
-	if (r == -E_NOT_FOUND)
+	if (r == -E_NO_ENT)
 		cfs_ino = 0;
 	else if (r < 0)
 	{

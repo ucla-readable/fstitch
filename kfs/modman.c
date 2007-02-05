@@ -111,7 +111,7 @@ static int modman_inc(hash_map_t * map, void * module, void * user, const char *
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	if(user)
 	{
 		char * copy = NULL;
@@ -146,7 +146,7 @@ static int modman_dec(hash_map_t * map, void * module, void * user)
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	if(!mod->usage)
 		return -E_INVAL;
 	if(user)
@@ -173,7 +173,7 @@ static int modman_rem(hash_map_t * map, void * module)
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	
 	if(!mod)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	if(mod->usage)
 		return -E_BUSY;
 	

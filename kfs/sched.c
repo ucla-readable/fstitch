@@ -68,7 +68,7 @@ int sched_unregister(const sched_callback fn, void * arg)
 		}
 	}
 
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 }
 
 static void kfsd_sched_shutdown(void * ignore)

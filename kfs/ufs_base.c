@@ -238,7 +238,7 @@ static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil,
 
 		newblock = allocate_wholeblock(object, 1, file, head);
 		if (newblock == INVALID_BLOCK)
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 		f->f_inode.di_ib[n] = newblock;
 		return write_inode(info, f->f_num, f->f_inode, head);
 	}
@@ -284,7 +284,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		indirect[0] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[0] + frag_off[0], 1);
 		if (!indirect[0])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		return update_indirect_block(info, indirect[0], pt_off[0], value, head);
 	}
@@ -306,7 +306,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		indirect[1] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[1] + frag_off[1], 1);
 		if (!indirect[1])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 
@@ -314,7 +314,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		if (!block_off[0]) {
 			block_off[0] = allocate_wholeblock(object, 1, file, head);
 			if (block_off[0] == INVALID_BLOCK)
-				return -E_NOT_FOUND;
+				return -E_NO_ENT;
 			r = update_indirect_block(info, indirect[1], pt_off[1], block_off[0], head);
 			if (r < 0)
 				return r;
@@ -322,7 +322,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		return update_indirect_block(info, indirect[0], pt_off[0], value, head);
 	}
@@ -373,7 +373,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		indirect[0] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[0] + frag_off[0], 1);
 		if (!indirect[0])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head);
 		// Deallocate indirect block if necessary
@@ -396,14 +396,14 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		indirect[1] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[1] + frag_off[1], 1);
 		if (!indirect[1])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 		num[0] = block_off[0] / super->fs_frag;
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head);
 
@@ -779,7 +779,7 @@ static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, in
 
 	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
 	if (!pfile)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	if (pfile->f_type != TYPE_DIR)
 		return -E_NOT_DIR;
@@ -838,7 +838,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		indirect[0] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[0] + frag_off[0], 1);
 		if (!indirect[0])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
 	}
@@ -853,13 +853,13 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		indirect[1] = CALL(info->ubd, read_block,
 				f->f_inode.di_ib[1] + frag_off[1], 1);
 		if (!indirect[1])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], 1);
 		if (!indirect[0])
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 
 		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
 	}
@@ -932,7 +932,7 @@ static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block,
 
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 }
 
 static char link_buf[UFS_MAXPATHLEN];
@@ -1018,7 +1018,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		r = initialmd->get(initialmd->arg, KFS_feature_uid.id, sizeof(x32), &x32);
 		if (r > 0)
 			nf->f_inode.di_uid = x32;
-		else if (r == -E_NOT_FOUND)
+		else if (r == -E_NO_ENT)
 			nf->f_inode.di_uid = 0;
 		else
 			assert(0);
@@ -1026,7 +1026,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		r = initialmd->get(initialmd->arg, KFS_feature_gid.id, sizeof(x32), &x32);
 		if (r > 0)
 			nf->f_inode.di_gid = x32;
-		else if (r == -E_NOT_FOUND)
+		else if (r == -E_NO_ENT)
 			nf->f_inode.di_gid = 0;
 		else
 			assert(0);
@@ -1035,7 +1035,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		r = initialmd->get(initialmd->arg, KFS_feature_unix_permissions.id, sizeof(x16), &x16);
 		if (r > 0)
 			nf->f_inode.di_mode |= x16;
-		else if (r != -E_NOT_FOUND)
+		else if (r != -E_NO_ENT)
 			assert(0);
 			
 		nf->f_inode.di_nlink = 1;
@@ -1169,7 +1169,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 
 	old_pfdesc = (ufs_fdesc_t *) ufs_lookup_inode(object, oldparent);
 	if (!old_pfdesc)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	r = CALL(info->parts.p_dirent, search_dirent, old_pfdesc, oldname, &ino, NULL);
 	if (r < 0)
@@ -1177,19 +1177,19 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 
 	oldf = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
 	if (!oldf) {
-		r = -E_NOT_FOUND;
+		r = -E_NO_ENT;
 		goto ufs_rename_exit;
 	}
 
 	new_pfdesc = (ufs_fdesc_t *) ufs_lookup_inode(object, newparent);
 	if (!new_pfdesc) {
-		r = -E_NOT_FOUND;
+		r = -E_NO_ENT;
 		goto ufs_rename_exit2;
 	}
 
 	r = CALL(info->parts.p_dirent, search_dirent, new_pfdesc, newname, &ino, &dir_offset);
 	if (r < 0)
-		if (r == -E_NOT_FOUND)
+		if (r == -E_NO_ENT)
 			newf = NULL;
 		else
 			goto ufs_rename_exit3;
@@ -1383,7 +1383,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 
 	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
 	if (!pfile)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	if (pfile->f_type != TYPE_DIR) {
 		r = -E_NOT_DIR;
@@ -1396,7 +1396,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 
 	f = (ufs_fdesc_t *) ufs_lookup_inode(object, filenum);
 	if (!f) {
-		r = -E_NOT_FOUND;
+		r = -E_NO_ENT;
 		goto ufs_remove_name_error2;
 	}
 

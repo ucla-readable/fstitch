@@ -171,7 +171,7 @@ static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 		name++;
 	fdesc = devfd_lookup_name(state, name, NULL);
 	if(!fdesc)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	
 	*inode = fdesc->inode;
 	return 0;
@@ -193,7 +193,7 @@ static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 	
 	devfd = devfd_lookup_inode(state, inode);
 	if(!devfd)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	
 	/* don't allow writing to a BD that is used by another BD */
 	if((mode & O_ACCMODE) != O_RDONLY)
@@ -444,7 +444,7 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 	{
 		fdesc = devfd_lookup_inode(state, inode);
 		if(!fdesc)
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 	}
 	
 	if(id == KFS_feature_size.id)

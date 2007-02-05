@@ -248,7 +248,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 	/* look up the ino */
 	inner = CALL(state->lfs, lookup_inode, ino);
 	if (!inner)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	if ((mode & O_WRONLY) || (mode & O_RDWR))
 	{
@@ -296,7 +296,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	if (r >= 0)
 	{
 		kdprintf(STDERR_FILENO, "%s(%u, \"%s\"): file already exists. What should we do? (Returning error)\n", __FUNCTION__, parent, name);
-		return -E_FILE_EXISTS;
+		return -E_EXIST;
 	}
 
 	r = initialmd->get(initialmd->arg, KFS_feature_filetype.id, sizeof(type), &type);
@@ -659,7 +659,7 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 }
 
 static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
@@ -691,7 +691,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 
 	if (CALL(state->lfs, lookup_name, newparent, newname, &newino) >= 0) {
 		CALL(state->lfs, free_fdesc, oldf);
-		return -E_FILE_EXISTS;
+		return -E_EXIST;
 	}
 
 	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &initialmd, &newino, &prev_head);
@@ -724,7 +724,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 	int r;
 
 	r = CALL(state->lfs, lookup_name, newparent, newname, &ino);
-	if (r < 0 && r != -E_NOT_FOUND)
+	if (r < 0 && r != -E_NO_ENT)
 		return r;
 	if (r >= 0)
 	{
@@ -750,7 +750,7 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 	int r;
 
 	if (CALL(state->lfs, lookup_name, parent, name, &existing_ino) >= 0)
-		return -E_FILE_EXISTS;
+		return -E_EXIST;
 
 	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, initialmd, ino, &prev_head);
 	if (!f)

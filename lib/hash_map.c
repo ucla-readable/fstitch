@@ -307,18 +307,18 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	const size_t newk_elt_num = hash_ptr(newk, vector_size(hm->tbl));
 	head = vector_elt(hm->tbl, newk_elt_num);
 	if (head && chain_search_key(head, newk))
-		return -E_FILE_EXISTS;
+		return -E_EXIST;
 
 	// Find oldk
 
 	const size_t oldk_elt_num = hash_ptr(oldk, vector_size(hm->tbl));
 	head = vector_elt(hm->tbl, oldk_elt_num);
 	if (!head)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	head = chain_search_key(head, oldk);
 	if (!head)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	// The hashmap has oldk, move elt to its new home
 

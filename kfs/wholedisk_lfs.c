@@ -103,7 +103,7 @@ static int wholedisk_lookup_name(LFS_t * object, inode_t parent, const char * na
 {
 	/* only allow the fixed disk name */
 	if(parent != INODE_ROOT || strcmp(name, DISK_NAME))
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	if(inode)
 		*inode = INODE_DISK;
 	return 0;

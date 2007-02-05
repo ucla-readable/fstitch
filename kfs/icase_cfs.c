@@ -55,7 +55,7 @@ static int icase_ignore (CFS_t * object, inode_t parent, const char * name, char
 	do {
 		r = CALL(object, get_dirent, f, &dir, sizeof(struct dirent), &bp);
 		if (r < 0) {
-			r = -E_NOT_FOUND;
+			r = -E_NO_ENT;
 			break;
 		}
 	} while (strcasecmp(name, dir.d_name) != 0);
@@ -106,7 +106,7 @@ static int icase_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 	int r;
 
 	r =  CALL(state->frontend_cfs, lookup, parent, name, ino);
-	if(r == -E_NOT_FOUND)
+	if(r == -E_NO_ENT)
 	{
 		char * actual_name = NULL;
 		r = icase_ignore(cfs, parent, name, &(actual_name));
@@ -174,7 +174,7 @@ static int icase_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 	r = CALL(state->frontend_cfs, unlink, parent, name);
 	
-	if(r == -E_NOT_FOUND)
+	if(r == -E_NO_ENT)
 	{
 		char * actual_name = NULL;
 		r = icase_ignore(cfs, parent, name, &(actual_name));
@@ -215,17 +215,17 @@ static int icase_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, in
 
 	r = CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
 
-	if (r == -E_NOT_FOUND) {
+	if (r == -E_NO_ENT) {
 		char * actual_newname = NULL;
 		char * actual_oldname = NULL;
 
 		r = icase_ignore(cfs, oldparent, oldname, &(actual_oldname));
 		q = icase_ignore(cfs, newparent, newname, &(actual_newname));	
 		
-		if ((r < 0) || (q < 0 && q != -E_NOT_FOUND))
+		if ((r < 0) || (q < 0 && q != -E_NO_ENT))
 			return (r < 0) ? r : q;
 
-		if((r >= 0 && q >= 0) || q == -E_NOT_FOUND )
+		if((r >= 0 && q >= 0) || q == -E_NO_ENT )
 			actual_newname = (char *)newname;
 
 		r = CALL(state->frontend_cfs, rename, oldparent, actual_oldname, newparent, actual_newname);
@@ -253,7 +253,7 @@ static int icase_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 
 	r = CALL(state->frontend_cfs, rmdir, parent, name);
 	
-	if(r == -E_NOT_FOUND)
+	if(r == -E_NO_ENT)
 	{
 		char * actual_name = NULL;
 		r = icase_ignore(cfs, parent, name, &(actual_name));

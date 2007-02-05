@@ -259,7 +259,7 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 
 	*file = NULL;
 	Dprintf("JOSFSDEBUG: dir_lookup done: NOT FOUND\n");
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 }
 
 static int josfs_get_config(void * object, int level, char * string, size_t length)
@@ -587,7 +587,7 @@ static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** na
 	if (blockno != INVALID_BLOCK)
 		dirblock = josfs_lookup_block(object, blockno);
 	if (!dirblock)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
 
 	(*basep)++;
@@ -664,7 +664,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		if (blockno != INVALID_BLOCK)
 			dirblock = josfs_lookup_block(object, blockno);
 		if (!dirblock)
-			return -E_NOT_FOUND;
+			return -E_NO_ENT;
 		dirfile = &((JOSFS_File_t *) dirblock->ddesc->data)[(*basep - 2) % JOSFS_BLKFILES];
 
 		r = fill_dirent(dirfile, f->ino, entry, size, basep);
@@ -687,7 +687,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	if (nblocks > JOSFS_NDIRECT) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
 		if (!indirect)
-			return -E_NO_DISK;
+			return -E_NO_SPC;
 
 		offset = nblocks * sizeof(uint32_t);
 		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
@@ -700,7 +700,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		chdesc_t * temp_head = *head;
 		bdesc_t * indirect;
 		if (inumber == INVALID_BLOCK)
-			return -E_NO_DISK;
+			return -E_NO_SPC;
 		indirect = josfs_lookup_block(object, inumber);
 
 		// Initialize the new indirect block
@@ -710,7 +710,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		// Initialize the structure, then point to it
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_NO_DISK;
+			return -E_NO_SPC;
 
 		// this head is from josfs_allocate_block() above
 		offset = nblocks * sizeof(uint32_t);
@@ -734,7 +734,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	else {
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_NO_DISK;
+			return -E_NO_SPC;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks];
@@ -891,7 +891,7 @@ allocate_name_exit:
 
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
-	return -E_NOT_FOUND;
+	return -E_NO_ENT;
 }
 
 static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
@@ -920,7 +920,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 
 	oldfdesc = josfs_lookup_inode(object, inode);
 	if (!oldfdesc)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	old = (struct josfs_fdesc *) oldfdesc;
 	dirblock = CALL(info->ubd, read_block, old->dirb, 1);
@@ -947,7 +947,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 
 	newfdesc = josfs_allocate_name(object, newparent, newname, filetype, NULL, &emptymd, &not_used, head);
 	if (!newfdesc)
-		return -E_FILE_EXISTS;
+		return -E_EXIST;
 
 	new = (struct josfs_fdesc *) newfdesc;
 	strcpy(temp_file.f_name, new->file->f_name);
@@ -1088,7 +1088,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 
 	dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 	if (!dirblock) {
-		r = -E_NO_DISK;
+		r = -E_NO_SPC;
 		goto remove_name_exit;
 	}
 

@@ -31,7 +31,7 @@ int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode)
 
 	inode_table = CALL(info->ubd, read_block, fragno, 1);
 	if (!inode_table)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	wanted = (struct UFS_dinode *) (inode_table->ddesc->data);
 	wanted += frag_off;
 	memcpy(inode, wanted, sizeof(struct UFS_dinode));
@@ -66,7 +66,7 @@ int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, c
 
 	inode_table = CALL(info->ubd, read_block, fragno, 1);
 	if (!inode_table)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	offset = sizeof(struct UFS_dinode) * frag_off;
 	//r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head);
 	r = chdesc_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode_table->ddesc->data[offset], &inode, head);
@@ -159,7 +159,7 @@ int read_inode_bitmap(struct lfs_info * info, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -190,7 +190,7 @@ int read_fragment_bitmap(struct lfs_info * info, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -222,7 +222,7 @@ int read_block_bitmap(struct lfs_info * info, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -256,7 +256,7 @@ int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t **
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
 	if (r >= 0)
@@ -292,7 +292,7 @@ int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** 
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
 	if (r >= 0)
@@ -339,7 +339,7 @@ int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		+ super->fs_cblkno + offset / super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -423,7 +423,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 		+ super->fs_cblkno + offset / super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -440,7 +440,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 	blockno = CALL(info->parts.p_cg, get_cylstart, cyl) + super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno, 1);
 	if (!cgblock)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 		*/
 
 	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
@@ -546,7 +546,7 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 		+ super->fs_cblkno + offset / super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	ptr = ((uint32_t *) block->ddesc->data)
 		+ (offset % super->fs_fsize) / 4;

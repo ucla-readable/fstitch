@@ -434,7 +434,7 @@ int opgroup_engage(opgroup_t * opgroup)
 		return -E_INVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
 	if(!state)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	assert(state->opgroup == opgroup);
 	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && (!opgroup->is_released || !opgroup->is_released))
 		return -E_INVAL;
@@ -481,7 +481,7 @@ int opgroup_disengage(opgroup_t * opgroup)
 		return -E_INVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
 	if(!state)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	assert(state->opgroup == opgroup);
 	if(!state->engaged)
 		return 0;
@@ -525,7 +525,7 @@ int opgroup_abandon(opgroup_t ** opgroup)
 		return -E_INVAL;
 	state = hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
 	if(!state)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	assert(state->opgroup == *opgroup);
 	/* can't abandon a non-released atomic opgroup */
 	if(((*opgroup)->flags & OPGROUP_FLAG_ATOMIC) && !(*opgroup)->is_released)

@@ -27,7 +27,7 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 	if (blockno != INVALID_BLOCK)
 		dirblock = CALL(info->parts.base, lookup_block, blockno);
 	if (!dirblock)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	offset = *basep % super->fs_fsize;
 	dirent = (struct UFS_direct *) (dirblock->ddesc->data + offset);
@@ -66,10 +66,10 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	foffset = basep - offset;
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, foffset);
 	if (blockno == INVALID_BLOCK)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NOT_FOUND;
+		return -E_NO_ENT;
 
 	r = chdesc_create_byte(block, info->ubd, offset, actual_len, &entry, head);
 	if (r < 0)
@@ -240,7 +240,7 @@ static int ufs_dirent_linear_search_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 		if (r < 0)
 		{
 			if (r == -E_EOF)
-				return -E_NOT_FOUND;
+				return -E_NO_ENT;
 			else
 				return r;
 		}
