@@ -133,14 +133,10 @@ static chdesc_t * md_bd_get_write_head(BD_t * object)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
 	chdesc_t * result = NULL;
-	chdesc_t * head_1;
-	chdesc_t * head_2;
-	head_1 = CALL(info->bd[0], get_write_head);
-	head_2 = CALL(info->bd[1], get_write_head);
-	if(head_1 && head_2)
-		chdesc_create_noop_list(NULL, NULL, &result, head_1, head_2, NULL);
-	else if(head_1 || head_2)
-		chdesc_create_noop_list(NULL, NULL, &result, head_1 ? head_1 : head_2, NULL);
+	chdesc_t * head[2];
+	head[0] = CALL(info->bd[0], get_write_head);
+	head[1] = CALL(info->bd[1], get_write_head);
+	chdesc_create_noop_array(NULL, NULL, &result, 2, head);
 	return result;
 }
 
