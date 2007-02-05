@@ -4,7 +4,6 @@
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/memdup.h>
-#include <lib/panic.h>
 #include <lib/vector.h>
 
 #include <kfs/debug.h>

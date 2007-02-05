@@ -3,7 +3,6 @@
 #include <lib/types.h>
 #include <lib/jiffies.h> // HZ
 #include <lib/hash_map.h>
-#include <lib/panic.h>
 #include <lib/kdprintf.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>

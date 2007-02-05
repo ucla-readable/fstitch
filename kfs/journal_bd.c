@@ -5,7 +5,6 @@
 #include <lib/string.h>
 #include <lib/types.h>
 #include <lib/jiffies.h> // HZ
-#include <lib/panic.h>
 #include <lib/hash_map.h>
 #include <lib/kdprintf.h>
 

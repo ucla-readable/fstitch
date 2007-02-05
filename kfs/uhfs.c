@@ -1,7 +1,6 @@
 #include <lib/error.h>
 #include <lib/assert.h>
 #include <linux/fcntl.h>
-#include <lib/panic.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>

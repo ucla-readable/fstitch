@@ -6,7 +6,6 @@
 #include <lib/string.h>
 #include <lib/types.h>
 #include <lib/memdup.h>
-#include <lib/panic.h>
 #include <lib/stdarg.h>
 
 #include <kfs/debug.h>

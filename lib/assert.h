@@ -3,6 +3,7 @@
 
 #include <linux/kernel.h> // printk()
 #include <asm/bug.h>
+
 #define assert(cond) \
 	do { \
 		if (unlikely(!(cond))) { \
@@ -13,6 +14,10 @@
 			BUG(); \
 		} \
 	} while (0)
+
+// static_assert(x) will generate a compile-time error if 'x' is false.
+#define static_assert(x) switch (x) case 0: case (x):
+
 /* This must be after the definition of assert(). */
 #include <kfs/kernel_serve.h>
 

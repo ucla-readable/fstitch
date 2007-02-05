@@ -3,7 +3,6 @@
 
 #include <lib/types.h>
 #include <lib/hash_map.h>
-#include <lib/panic.h>
 
 #define CHDESC_BYTE_SUM 0
 
