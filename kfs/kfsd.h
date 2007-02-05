@@ -8,7 +8,8 @@
 #define SHUTDOWN_POSTMODULES 2 // after modules are deconstructed
 
 typedef void (*kfsd_shutdown_module)(void * arg);
-int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg, int when);
+int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, void * arg, int when);
+#define kfsd_register_shutdown_module(fn, arg, when) _kfsd_register_shutdown_module(#fn, fn, arg, when)
 
 void kfsd_request_shutdown(void);
 int kfsd_is_running(void);

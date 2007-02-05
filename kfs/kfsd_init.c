@@ -58,7 +58,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define wb_cache_bd wt_cache_bd
 #endif
 
-int kfsd_init(int nwbblocks, int argc, char ** argv)
+int kfsd_init(int nwbblocks)
 {
 	const bool allow_journal = 0;
 	const bool use_disk_1 = 1;

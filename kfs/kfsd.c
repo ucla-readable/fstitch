@@ -25,6 +25,13 @@
 #include <kfs/kfsd_init.h>
 #include <kfs/destroy.h>
 
+#define DEBUG_TOPLEVEL 0
+#if DEBUG_TOPLEVEL
+#define Kprintf(format, args...) printk(KERN_ERR format, ##args)
+#else
+#define Kprintf(...)
+#endif
+
 struct task_struct * kfsd_task;
 struct stealth_lock kfsd_global_lock;
 
@@ -77,34 +84,38 @@ static struct {
 	int key;
 	struct sysrq_key_op op;
 } kfsd_sysrqs[] = {
-	{'x', {handler: kudos_sysrq_unlock, help_msg: "unlock kfsd_lock (x)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
+	{'c', {handler: kudos_sysrq_unlock, help_msg: "kfsd_unlock(C)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
-	{'y', {handler: kudos_sysrq_showlock, help_msg: "trace kfsd_lock owner (y)", action_msg: "Showing kfsd_lock owner trace", enable_mask: 1}},
+	{'w', {handler: kudos_sysrq_showlock, help_msg: "kfsd_tracelock(W)", action_msg: "Showing kfsd_lock owner trace", enable_mask: 1}},
 #endif
 #endif
 };
 #define KFSD_SYSRQS (sizeof(kfsd_sysrqs) / sizeof(kfsd_sysrqs[0]))
 
 struct module_shutdown {
+	const char * name;
 	kfsd_shutdown_module shutdown;
 	void * arg;
 	int when;
 };
 
-static struct module_shutdown module_shutdowns[10];
+#define MAX_NR_SHUTDOWNS 10
+static struct module_shutdown module_shutdowns[MAX_NR_SHUTDOWNS];
 
-int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg, int when)
+int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, void * arg, int when)
 {
 	int i;
 
 	if (when != SHUTDOWN_PREMODULES && when != SHUTDOWN_POSTMODULES)
 		return -E_INVAL;
 
-	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
+	for (i = 0; i < MAX_NR_SHUTDOWNS; i++)
 	{
 		if (!module_shutdowns[i].shutdown)
 		{
+			Kprintf("Registering shutdown callback: %s\n", name);
+			module_shutdowns[i].name = name;
 			module_shutdowns[i].shutdown = fn;
 			module_shutdowns[i].arg = arg;
 			module_shutdowns[i].when = when;
@@ -112,16 +123,18 @@ int kfsd_register_shutdown_module(kfsd_shutdown_module fn, void * arg, int when)
 		}
 	}
 
+	printk(KERN_ERR "%s(): too many shutdown modules!\n", __FUNCTION__);
 	return -E_NO_MEM;
 }
 
 static void kfsd_callback_shutdowns(int when)
 {
-	size_t i;
-	for (i = 0; i < sizeof(module_shutdowns)/sizeof(module_shutdowns[0]); i++)
+	int i;
+	for (i = MAX_NR_SHUTDOWNS - 1; i >= 0; i--)
 	{
 		if (module_shutdowns[i].shutdown && module_shutdowns[i].when == when)
 		{
+			Kprintf("Calling shutdown callback: %s\n", module_shutdowns[i].name);
 			module_shutdowns[i].shutdown(module_shutdowns[i].arg);
 			module_shutdowns[i].shutdown = NULL;
 			module_shutdowns[i].arg = NULL;
@@ -142,14 +155,18 @@ static void kfsd_shutdown(void)
 	if(kfs_sync() < 0)
 		kdprintf(STDERR_FILENO, "Sync failed!\n");
 
+	Kprintf("Calling pre-shutdown callbacks.\n");
 	kfsd_callback_shutdowns(SHUTDOWN_PREMODULES);
 
 	// Reclaim chdescs written by sync and shutdowns so that when destroy_all()
 	// destroys BDs that destroy a blockman no ddescs are orphaned.
+	Kprintf("Reclaiming written change descriptors.\n");
 	chdesc_reclaim_written();
 
+	Kprintf("Destroying all modules.\n");
 	destroy_all();
 
+	Kprintf("Running block descriptor autoreleasing.\n");
 	// Run bdesc autoreleasing
 	if (bdesc_autorelease_pool_depth() > 0)
 	{
@@ -158,8 +175,10 @@ static void kfsd_shutdown(void)
 	}
 
 	// Run chdesc reclamation
+	Kprintf("Reclaiming written change descriptors.\n");
 	chdesc_reclaim_written();
 
+	Kprintf("Calling post-shutdown callbacks.\n");
 	kfsd_callback_shutdowns(SHUTDOWN_POSTMODULES);
 }
 
@@ -185,16 +204,16 @@ uint32_t kfsd_get_request_id(void)
 	return kfsd_request_id;
 }
 
-void kfsd_main(int nwbblocks, int argc, char ** argv)
+static void kfsd_main(int nwbblocks)
 {
 	int r;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
 	kfsd_enter();
-	if ((r = kfsd_init(nwbblocks, argc, argv)) < 0)
+	if ((r = kfsd_init(nwbblocks)) < 0)
 	{
-		printk("kfsd_init() failed in the kernel! (error = %d)\n", r);
+		printk(KERN_ERR "kfsd_init() failed in the kernel! (error = %d)\n", r);
 		kfsd_running = r;
 	}
 	else
@@ -234,11 +253,13 @@ static int kfsd_thread(void * thunk)
 	kfsd_global_lock.process = 0;
 	for(i = 0; i < KFSD_SYSRQS; i++)
 		if(register_sysrq_key(kfsd_sysrqs[i].key, &kfsd_sysrqs[i].op) < 0)
-			printf("kkfsd unable to register sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
-	kfsd_main(nwbblocks, 0, NULL);
+			printk(KERN_ERR "kkfsd unable to register sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
+	Kprintf("Running kfsd_main()\n");
+	kfsd_main(nwbblocks);
+	Kprintf("kfsd_main() completed\n");
 	for(i = 0; i < KFSD_SYSRQS; i++)
 		if(unregister_sysrq_key(kfsd_sysrqs[i].key, &kfsd_sysrqs[i].op) < 0)
-			printf("kkfsd unable to unregister sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
+			printk(KERN_ERR "kkfsd unable to unregister sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
 	printk("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
 	kfsd_is_shutdown = 1;
 	return 0;
@@ -254,6 +275,7 @@ static int __init init_kfsd(void)
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 10);
 	}
+	/* FIXME: we should kill the kernel thread if kfsd_running is false */
 	return (kfsd_running > 0) ? 0 : kfsd_running;
 }
 
@@ -270,6 +292,6 @@ static void __exit exit_kfsd(void)
 module_init(init_kfsd);
 module_exit(exit_kfsd);
 
-MODULE_AUTHOR("KudOS Team");
-MODULE_DESCRIPTION("KudOS File System Architecture");
+MODULE_AUTHOR("Kudos Team");
+MODULE_DESCRIPTION("Kudos File System Architecture");
 MODULE_LICENSE("GPL");
