@@ -20,13 +20,13 @@
 #undef off_t
 #undef register_t
 
-#include <lib/fs.h>
+#include <kfs/josfs_base.h>
 
 #define nelem(x)	(sizeof(x) / sizeof((x)[0]))
-typedef struct Super Super;
-typedef struct File File;
+typedef struct JOSFS_Super Super;
+typedef struct JOSFS_File File;
 
-struct Super super;
+struct JOSFS_Super super;
 int diskfd;
 uint32_t nblock;
 uint32_t nbitblock;
@@ -46,7 +46,7 @@ struct Block
 	uint32_t busy;
 	uint32_t bno;
 	uint32_t used;
-	uint8_t buf[BLKSIZE];
+	uint8_t buf[JOSFS_BLKSIZE];
 	uint32_t type;
 };
 
@@ -88,7 +88,7 @@ swizzle(uint32_t* x)
 }
 
 void
-swizzlefile(struct File* f)
+swizzlefile(struct JOSFS_File* f)
 {
 	int i;
 
@@ -96,7 +96,7 @@ swizzlefile(struct File* f)
 		return;
 	swizzle((uint32_t*) &f->f_size);
 	swizzle(&f->f_type);
-	for (i = 0; i < NDIRECT; i++)
+	for (i = 0; i < JOSFS_NDIRECT; i++)
 		swizzle(&f->f_direct[i]);
 	swizzle(&f->f_indirect);
 	swizzle(&f->f_mtime);
@@ -107,25 +107,25 @@ void
 swizzleblock(Block* b)
 {
 	int i;
-	struct Super* s;
-	struct File* f;
+	struct JOSFS_Super* s;
+	struct JOSFS_File* f;
 	uint32_t* u;
 
 	switch (b->type) {
 	case BLOCK_SUPER:
-		s = (struct Super*) b->buf;
+		s = (struct JOSFS_Super*) b->buf;
 		swizzle(&s->s_magic);
 		swizzle(&s->s_nblocks);
 		swizzlefile(&s->s_root);
 		break;
 	case BLOCK_DIR:
-		f = (struct File*) b->buf;
-		for (i = 0; i < BLKFILES; i++)
+		f = (struct JOSFS_File*) b->buf;
+		for (i = 0; i < JOSFS_BLKFILES; i++)
 			swizzlefile(f + i);
 		break;
 	case BLOCK_BITS:
 		u = (uint32_t*) b->buf;
-		for(i = 0; i < BLKSIZE / 4; i++)
+		for(i = 0; i < JOSFS_BLKSIZE / 4; i++)
 			swizzle(u + i);
 		break;
 	}
@@ -135,8 +135,8 @@ void
 flushb(Block* b)
 {
 	swizzleblock(b);
-	if (lseek(diskfd, b->bno * BLKSIZE, 0) < 0
-	    || write(diskfd, b->buf, BLKSIZE) != BLKSIZE) {
+	if (lseek(diskfd, b->bno * JOSFS_BLKSIZE, 0) < 0
+	    || write(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE) {
 		perror("flushb");
 		fprintf(stderr, "\n");
 		exit(1);
@@ -177,8 +177,8 @@ getblk(uint32_t bno, uint32_t clr, uint32_t type)
 	if(b->used)
 		flushb(b);
 
-	if (lseek(diskfd, bno*BLKSIZE, 0) < 0
-	    || readn(diskfd, b->buf, BLKSIZE) != BLKSIZE) {
+	if (lseek(diskfd, bno*JOSFS_BLKSIZE, 0) < 0
+	    || readn(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE) {
 		fprintf(stderr, "read block %d: ", bno);
 		perror("");
 		fprintf(stderr, "\n");
@@ -236,19 +236,19 @@ opendisk(const char* name)
 		exit(1);
 	}
 
-	nblock = s.st_size/BLKSIZE;
-	nbitblock = (nblock + BLKBITSIZE - 1) / BLKBITSIZE;
+	nblock = s.st_size/JOSFS_BLKSIZE;
+	nbitblock = (nblock + JOSFS_BLKBITSIZE - 1) / JOSFS_BLKBITSIZE;
 	for (i = 0; i < nbitblock; i++){
 		b = getblk(2 + i, 0, BLOCK_BITS);
-		memset(b->buf, 0xFF, BLKSIZE);
+		memset(b->buf, 0xFF, JOSFS_BLKSIZE);
 		putblk(b);
 	}
 
 	nextb = 2 + nbitblock;
 
-	super.s_magic = FS_MAGIC;
+	super.s_magic = JOSFS_FS_MAGIC;
 	super.s_nblocks = nblock;
-	super.s_root.f_type = FTYPE_DIR;
+	super.s_root.f_type = JOSFS_TYPE_DIR;
 	strcpy(super.s_root.f_name, "/");
 }
 
@@ -274,9 +274,9 @@ writefile(char* name)
 		last = name;
 
 	if(super.s_root.f_size > 0){
-		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/BLKSIZE-1], 0, BLOCK_DIR);
+		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/JOSFS_BLKSIZE-1], 0, BLOCK_DIR);
 		f = (File*)dirb->buf;
-		for (i = 0; i < BLKFILES; i++)
+		for (i = 0; i < JOSFS_BLKFILES; i++)
 			if (f[i].f_name[0] == 0) {
 				f = &f[i];
 				goto gotit;
@@ -284,8 +284,8 @@ writefile(char* name)
 	}
 	/* allocate new block */
 	dirb = getblk(nextb, 1, BLOCK_DIR);
-	super.s_root.f_direct[super.s_root.f_size / BLKSIZE] = nextb++;
-	super.s_root.f_size += BLKSIZE;
+	super.s_root.f_direct[super.s_root.f_size / JOSFS_BLKSIZE] = nextb++;
+	super.s_root.f_size += JOSFS_BLKSIZE;
 	f = (File*)dirb->buf;
 	
 gotit:
@@ -293,7 +293,7 @@ gotit:
 	n = 0;
 	for(nblk=0;; nblk++){
 		b = getblk(nextb, 1, BLOCK_FILE);
-		n = readn(fd, b->buf, BLKSIZE);
+		n = readn(fd, b->buf, JOSFS_BLKSIZE);
 		if(n < 0){
 			fprintf(stderr, "reading %s: ", name);
 			perror("");
@@ -304,9 +304,9 @@ gotit:
 			break;
 		}
 		nextb++;
-		if(nblk < NDIRECT)
+		if(nblk < JOSFS_NDIRECT)
 			f->f_direct[nblk] = b->bno;
-		else if(nblk < NINDIRECT){
+		else if(nblk < JOSFS_NINDIRECT){
 			if(f->f_indirect == 0){
 				bindir = getblk(nextb++, 1, BLOCK_BITS);
 				f->f_indirect = bindir->bno;
@@ -320,10 +320,11 @@ gotit:
 		}
 		
 		putblk(b);
-		if(n < BLKSIZE)
+		if(n < JOSFS_BLKSIZE)
 			break;
 	}
-	f->f_size = nblk*BLKSIZE + n;
+	f->f_size = nblk*JOSFS_BLKSIZE + n;
+	f->f_type = JOSFS_TYPE_FILE;
 	f->f_mtime = time(NULL);
 	f->f_atime = f->f_mtime;
 	putblk(dirb);
@@ -345,9 +346,9 @@ makedir(char* name)
 		last = name;
 
 	if(super.s_root.f_size > 0){
-		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/BLKSIZE-1], 0, BLOCK_DIR);
+		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/JOSFS_BLKSIZE-1], 0, BLOCK_DIR);
 		f = (File*)dirb->buf;
-		for (i = 0; i < BLKFILES; i++)
+		for (i = 0; i < JOSFS_BLKFILES; i++)
 			if (f[i].f_name[0] == 0) {
 				f = &f[i];
 				goto gotit;
@@ -355,14 +356,14 @@ makedir(char* name)
 	}
 	/* allocate new block */
 	dirb = getblk(nextb, 1, BLOCK_DIR);
-	super.s_root.f_direct[super.s_root.f_size / BLKSIZE] = nextb++;
-	super.s_root.f_size += BLKSIZE;
+	super.s_root.f_direct[super.s_root.f_size / JOSFS_BLKSIZE] = nextb++;
+	super.s_root.f_size += JOSFS_BLKSIZE;
 	f = (File*)dirb->buf;
 	
 gotit:
 	strcpy(f->f_name, last);
 	f->f_size = 0;
-	f->f_type = FTYPE_DIR;
+	f->f_type = JOSFS_TYPE_DIR;
 	putblk(dirb);
 }
 
@@ -373,15 +374,15 @@ finishfs(void)
 	Block* b;
 
 	for (i = 0; i < nextb; i++) {
-		b = getblk(2 + i/BLKBITSIZE, 0, BLOCK_BITS);
-		((u_int*)b->buf)[(i%BLKBITSIZE)/32] &= ~(1<<(i%32));
+		b = getblk(2 + i/JOSFS_BLKBITSIZE, 0, BLOCK_BITS);
+		((u_int*)b->buf)[(i%JOSFS_BLKBITSIZE)/32] &= ~(1<<(i%32));
 		putblk(b);
 	}
 
 	/* this is slow but not too slow.  i do not care */
-	if(nblock != nbitblock*BLKBITSIZE){
+	if(nblock != nbitblock*JOSFS_BLKBITSIZE){
 		b = getblk(2+nbitblock-1, 0, BLOCK_BITS);
-		for (i = nblock % BLKBITSIZE; i < BLKBITSIZE; i++)
+		for (i = nblock % JOSFS_BLKBITSIZE; i < JOSFS_BLKBITSIZE; i++)
 			((u_int*)b->buf)[i/32] &= ~(1<<(i%32));
 		putblk(b);
 	}
@@ -406,7 +407,7 @@ main(int argc, char **argv)
 {
 	int i;
 
-	assert(BLKSIZE % sizeof(struct File) == 0);
+	assert(JOSFS_BLKSIZE % sizeof(struct JOSFS_File) == 0);
 
 	if(argc < 2)
 	{

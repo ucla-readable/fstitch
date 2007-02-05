@@ -19,7 +19,7 @@
 #undef off_t
 #undef register_t
 
-#include <lib/fs.h>
+#include <kfs/josfs_base.h>
 
 static int diskfd;
 static int nblocks;
@@ -37,7 +37,7 @@ typedef struct {
 	uint32_t busy;
 	uint32_t used;
 	uint32_t bno;
-	uint8_t buf[BLKSIZE];
+	uint8_t buf[JOSFS_BLKSIZE];
 } Block;
 
 #define CACHE_BLOCKS 64
@@ -79,7 +79,7 @@ static void swizzle(uint32_t * x)
 	z[3] = (y >> 24) & 0xFF;
 }
 
-static void swizzle_file(struct File * f)
+static void swizzle_file(struct JOSFS_File * f)
 {
 	int i;
 
@@ -87,7 +87,7 @@ static void swizzle_file(struct File * f)
 		return;
 	swizzle((uint32_t *) &f->f_size);
 	swizzle(&f->f_type);
-	for(i = 0; i < NDIRECT; i++)
+	for(i = 0; i < JOSFS_NDIRECT; i++)
 		swizzle(&f->f_direct[i]);
 	swizzle(&f->f_indirect);
 }
@@ -95,27 +95,27 @@ static void swizzle_file(struct File * f)
 static void swizzle_block(Block * b)
 {
 	int i;
-	struct Super * s;
-	struct File * f;
+	struct JOSFS_Super * s;
+	struct JOSFS_File * f;
 	uint32_t * u;
 
 	switch (b->type)
 	{
 		case BLOCK_SUPER:
-			s = (struct Super *) b->buf;
+			s = (struct JOSFS_Super *) b->buf;
 			swizzle(&s->s_magic);
 			swizzle(&s->s_nblocks);
 			swizzle_file(&s->s_root);
 			break;
 		case BLOCK_DIR:
-			f = (struct File *) b->buf;
-			for (i = 0; i < BLKFILES; i++)
+			f = (struct JOSFS_File *) b->buf;
+			for (i = 0; i < JOSFS_BLKFILES; i++)
 				swizzle_file(&f[i]);
 			break;
 		case BLOCK_BITS:
 		case BLOCK_INDIR:
 			u = (uint32_t *) b->buf;
-			for(i = 0; i < BLKSIZE / 4; i++)
+			for(i = 0; i < JOSFS_BLKSIZE / 4; i++)
 				swizzle(&u[i]);
 			break;
 	}
@@ -164,7 +164,7 @@ static Block * get_block(uint32_t bno, Type type)
 	
 	/* if b->used, evict block b... nothing to do though */
 	
-	if(lseek(diskfd, bno * BLKSIZE, SEEK_SET) < 0 || readn(diskfd, b->buf, BLKSIZE) != BLKSIZE)
+	if(lseek(diskfd, bno * JOSFS_BLKSIZE, SEEK_SET) < 0 || readn(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE)
 	{
 		fprintf(stderr, "read block %d: ", bno);
 		perror("");
@@ -188,8 +188,8 @@ static void put_block(Block * b)
 
 static int block_marked_free(uint32_t bno)
 {
-	uint32_t bitblk = bno / BLKBITSIZE;
-	uint32_t offset = bno % BLKBITSIZE;
+	uint32_t bitblk = bno / JOSFS_BLKBITSIZE;
+	uint32_t offset = bno % JOSFS_BLKBITSIZE;
 	Block * b = get_block(2 + bitblk, BLOCK_BITS);
 	if(!b)
 		return -1;
@@ -203,7 +203,7 @@ static int open_disk(const char * name)
 	int i;
 	struct stat s;
 	Block * b;
-	struct Super * super;
+	struct JOSFS_Super * super;
 	
 	if((diskfd = open(name, O_RDONLY)) < 0)
 	{
@@ -220,20 +220,20 @@ static int open_disk(const char * name)
 	}
 	
 	/* minimally, we have a reserved block, a superblock, and a bitmap block */
-	if(s.st_size < 3 * BLKSIZE)
+	if(s.st_size < 3 * JOSFS_BLKSIZE)
 	{
 		fprintf(stderr, "Bad disk size %lu\n", (unsigned long) s.st_size);
 		return -1;
 	}
-	nblocks = s.st_size / BLKSIZE;
+	nblocks = s.st_size / JOSFS_BLKSIZE;
 	
 	/* superblock */
 	b = get_block(1, BLOCK_SUPER);
 	if(!b)
 		return -1;
-	super = (struct Super *) b->buf;
+	super = (struct JOSFS_Super *) b->buf;
 	
-	if(super->s_magic != FS_MAGIC)
+	if(super->s_magic != JOSFS_FS_MAGIC)
 	{
 		fprintf(stderr, "Bad magic number 0x%08x\n", super->s_magic);
 		return -1;
@@ -259,7 +259,7 @@ static int open_disk(const char * name)
 	}
 	memset(referenced_bitmap, 0, (nblocks + 7) / 8);
 	
-	if(super->s_root.f_type != FTYPE_DIR)
+	if(super->s_root.f_type != JOSFS_TYPE_DIR)
 	{
 		fprintf(stderr, "Bad file type %u on root entry\n", super->s_root.f_type);
 		return -1;
@@ -273,7 +273,7 @@ static int open_disk(const char * name)
 	
 	put_block(b);
 	
-	nbitblocks = (nblocks + BLKBITSIZE - 1) / BLKBITSIZE;
+	nbitblocks = (nblocks + JOSFS_BLKBITSIZE - 1) / JOSFS_BLKBITSIZE;
 	
 	for(i = 0; i < 2 + nbitblocks; i++)
 		if(block_marked_free(i))
@@ -281,7 +281,7 @@ static int open_disk(const char * name)
 			fprintf(stderr, "Reserved block %u is marked available\n", i);
 			return -1;
 		}
-	for(i = nblocks; i < nbitblocks * BLKBITSIZE; i++)
+	for(i = nblocks; i < nbitblocks * JOSFS_BLKBITSIZE; i++)
 		if(block_marked_free(i))
 		{
 			fprintf(stderr, "Trailing block %u is marked available\n", i);
@@ -338,26 +338,26 @@ static int scan_free(void)
 }
 
 /* make sure the size matches the block count and record what blocks are used */
-static int scan_file(struct File * file)
+static int scan_file(struct JOSFS_File * file)
 {
 	int i, size_blocks, count_blocks = 0;
-	for(i = 0; i < MAXNAMELEN; i++)
+	for(i = 0; i < JOSFS_MAXNAMELEN; i++)
 		if(!file->f_name[i])
 			break;
-	if(i == MAXNAMELEN)
+	if(i == JOSFS_MAXNAMELEN)
 	{
 		fprintf(stderr, "File name is not null-terminated\n");
 		return -1;
 	}
 	printf("Scanning file %s\n", file->f_name);
 	
-	if(file->f_type != FTYPE_REG && file->f_type != FTYPE_DIR)
+	if(file->f_type != JOSFS_TYPE_FILE && file->f_type != JOSFS_TYPE_DIR)
 	{
 		fprintf(stderr, "File %s has invalid type %d\n", file->f_name, file->f_type);
 		return -1;
 	}
 	
-	for(i = 0; i < NDIRECT; i++)
+	for(i = 0; i < JOSFS_NDIRECT; i++)
 	{
 		if(!file->f_direct[i])
 			break;
@@ -366,7 +366,7 @@ static int scan_file(struct File * file)
 		if(set_block_referenced(file->f_direct[i], file->f_name) < 0)
 			return -1;
 	}
-	if(i == NDIRECT)
+	if(i == JOSFS_NDIRECT)
 	{
 		if(file->f_indirect)
 		{
@@ -376,13 +376,13 @@ static int scan_file(struct File * file)
 				return -1;
 			blocks = (uint32_t *) b->buf;
 			set_block_referenced(file->f_indirect, file->f_name);
-			for(i = 0; i < NDIRECT; i++)
+			for(i = 0; i < JOSFS_NDIRECT; i++)
 				if(blocks[i])
 				{
 					fprintf(stderr, "File %s has hidden indirect block %u\n", file->f_name, blocks[i]);
 					return -1;
 				}
-			for(; i < NINDIRECT; i++)
+			for(; i < JOSFS_NINDIRECT; i++)
 			{
 				if(!blocks[i])
 					break;
@@ -391,7 +391,7 @@ static int scan_file(struct File * file)
 				if(set_block_referenced(blocks[i], file->f_name) < 0)
 					return -1;
 			}
-			for(; i < NINDIRECT; i++)
+			for(; i < JOSFS_NINDIRECT; i++)
 				if(blocks[i])
 				{
 					fprintf(stderr, "File %s has sparse indirect blocks\n", file->f_name);
@@ -402,7 +402,7 @@ static int scan_file(struct File * file)
 	}
 	else
 	{
-		for(; i < NDIRECT; i++)
+		for(; i < JOSFS_NDIRECT; i++)
 			if(file->f_direct[i])
 			{
 				fprintf(stderr, "File %s has sparse direct blocks\n", file->f_name);
@@ -415,7 +415,7 @@ static int scan_file(struct File * file)
 		}
 	}
 	
-	size_blocks = (file->f_size + BLKSIZE - 1) / BLKSIZE;
+	size_blocks = (file->f_size + JOSFS_BLKSIZE - 1) / JOSFS_BLKSIZE;
 	if(count_blocks != size_blocks)
 	{
 		fprintf(stderr, "File %s has %d blocks, but should have %d blocks\n", file->f_name, count_blocks, size_blocks);
@@ -425,12 +425,12 @@ static int scan_file(struct File * file)
 	return 0;
 }
 
-static Block * get_dir_block(struct File * file, uint32_t offset)
+static Block * get_dir_block(struct JOSFS_File * file, uint32_t offset)
 {
-	offset /= BLKSIZE;
-	if(offset < NDIRECT)
+	offset /= JOSFS_BLKSIZE;
+	if(offset < JOSFS_NDIRECT)
 		return get_block(file->f_direct[offset], BLOCK_DIR);
-	if(offset < NINDIRECT)
+	if(offset < JOSFS_NINDIRECT)
 	{
 		uint32_t * blocks;
 		uint32_t block;
@@ -446,28 +446,28 @@ static Block * get_dir_block(struct File * file, uint32_t offset)
 	return NULL;
 }
 
-static int scan_dir(struct File * file)
+static int scan_dir(struct JOSFS_File * file)
 {
 	uint32_t offset;
-	assert(file->f_type == FTYPE_DIR);
+	assert(file->f_type == JOSFS_TYPE_DIR);
 	printf("Scanning directory %s\n", file->f_name);
-	if(file->f_size % sizeof(struct File))
+	if(file->f_size % sizeof(struct JOSFS_File))
 	{
 		fprintf(stderr, "Directory %s has invalid size %d\n", file->f_name, file->f_size);
 		return -1;
 	}
-	for(offset = 0; offset < file->f_size; offset += sizeof(struct File))
+	for(offset = 0; offset < file->f_size; offset += sizeof(struct JOSFS_File))
 	{
-		struct File * entry;
+		struct JOSFS_File * entry;
 		Block * b = get_dir_block(file, offset);
 		if(!b)
 			return -1;
-		entry = &((struct File *) b->buf)[(offset / sizeof(struct File)) % BLKFILES];
+		entry = &((struct JOSFS_File *) b->buf)[(offset / sizeof(struct JOSFS_File)) % JOSFS_BLKFILES];
 		if(entry->f_name[0])
 		{
 			if(scan_file(entry) < 0)
 				return -1;
-			if(entry->f_type == FTYPE_DIR)
+			if(entry->f_type == JOSFS_TYPE_DIR)
 				if(scan_dir(entry) < 0)
 					return -1;
 		}
@@ -479,11 +479,11 @@ static int scan_dir(struct File * file)
 
 static int scan_tree(void)
 {
-	struct Super * super;
+	struct JOSFS_Super * super;
 	Block * b = get_block(1, BLOCK_SUPER);
 	if(!b)
 		return -1;
-	super = (struct Super *) b->buf;
+	super = (struct JOSFS_Super *) b->buf;
 	if(scan_file(&super->s_root) < 0)
 		return -1;
 	if(scan_dir(&super->s_root) < 0)
@@ -494,7 +494,7 @@ static int scan_tree(void)
 
 int main(int argc, char * argv[])
 {
-	assert(BLKSIZE % sizeof(struct File) == 0);
+	assert(JOSFS_BLKSIZE % sizeof(struct JOSFS_File) == 0);
 	
 	if(argc != 2)
 	{
