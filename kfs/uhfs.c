@@ -152,7 +152,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = CALL(state->lfs, get_blocksize);
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
-	chdesc_t * prev_head = NULL, * save_head;
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head), * save_head;
 	int r;
 
 	nblks = CALL(state->lfs, get_file_numblocks, uf->inner);
@@ -286,10 +286,9 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	inode_t existing_ino;
-	int type;
-	chdesc_t * prev_head;
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 	fdesc_t * inner;
-	int r;
+	int type, r;
 
 	*newino = INODE_NONE;
 	*fdesc = NULL;
@@ -306,7 +305,6 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 		return r;
 	assert(type == TYPE_FILE || type == TYPE_SYMLINK);
 
-	prev_head = NULL;
 	inner = CALL(state->lfs, allocate_name, parent, name, type, NULL, initialmd, newino, &prev_head);
 	if (!inner)
 		return -E_UNSPECIFIED;
@@ -400,7 +398,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * prev_head = NULL, * tail;
+	chdesc_t * orig_head = CALL(state->lfs, get_write_head);
+	chdesc_t * prev_head = orig_head, * tail;
 	int r;
 
 	if (uf->size_id) {
@@ -443,7 +442,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			const int type = TYPE_FILE; /* TODO: can this be other types? */
 
 			save_head = prev_head;
-			prev_head = NULL; /* no need to link with previous chains here */
+			prev_head = orig_head; /* no need to link with previous chains here */
 
 			number = CALL(state->lfs, allocate_block, uf->inner, type, &prev_head);
 			if (number == INVALID_BLOCK)
@@ -454,7 +453,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			if (!block)
 			{
 				no_block:
-				prev_head = NULL;
+				prev_head = orig_head;
 				r = CALL(state->lfs, free_block, uf->inner, number, &prev_head);
 				assert(r >= 0);
 				goto uhfs_write_written_exit;
@@ -488,7 +487,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 				/* we don't need to worry about unzeroing the
 				 * block - it was free anyhow, so we can leave
 				 * it alone if we write it as-is */
-				prev_head = NULL;
+				prev_head = orig_head;
 				CALL(state->lfs, write_block, block, &prev_head);
 				goto no_block;
 			}
@@ -654,7 +653,8 @@ static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t 
 static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	chdesc_t * prev_head = NULL;
+	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 	return unlink_name(cfs, parent, name, &prev_head);
 }
 
@@ -671,7 +671,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	fdesc_t * oldf, * newf;
 	bool type_supported;
 	uint32_t oldtype;
-	chdesc_t * prev_head = NULL;
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 	metadata_set_t initialmd = { .get = empty_get_metadata, .arg = NULL };
 	int r;
 
@@ -720,8 +720,8 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 	inode_t ino;
-	chdesc_t * prev_head = NULL;
 	int r;
 
 	r = CALL(state->lfs, lookup_name, newparent, newname, &ino);
@@ -745,9 +745,9 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 	inode_t existing_ino;
 	fdesc_t * f;
-	chdesc_t * prev_head = NULL;
 	int r;
 
 	if (CALL(state->lfs, lookup_name, parent, name, &existing_ino) >= 0)
@@ -813,7 +813,7 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 					entry.d_name[0] = 0;
 				}
 				if (r < 0) {
-					chdesc_t * prev_head = NULL;
+					chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 					return unlink_file(cfs, ino, parent, name, f, &prev_head);
 				}
 			} while (r != 0);
@@ -856,7 +856,7 @@ static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, size, data);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = NULL;
+	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 
 	return CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head);
 }

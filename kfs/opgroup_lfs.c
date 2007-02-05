@@ -15,6 +15,8 @@ struct opgroup_info {
 	LFS_t * lfs;
 };
 
+/* TODO: convert this file to use get_write_head instead of opgroup_prepare_head? */
+
 static int opgroup_lfs_get_config(void * object, int level, char * string, size_t length)
 {
 	if (length >= 1)
@@ -237,6 +239,12 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 		assert(r >= 0);
 	}
 	return value;
+}
+
+static chdesc_t * opgroup_lfs_get_write_head(LFS_t * object)
+{
+	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	return CALL(info->lfs, get_write_head);
 }
 
 static size_t opgroup_lfs_get_num_features(LFS_t * object, inode_t ino)

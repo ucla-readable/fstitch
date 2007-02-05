@@ -598,6 +598,11 @@ static int linux_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
+static chdesc_t * linux_bd_get_write_head(BD_t * object)
+{
+	return NULL;
+}
+
 int linux_bd_destroy(BD_t * bd)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);

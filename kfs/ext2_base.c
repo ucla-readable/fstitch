@@ -2093,6 +2093,13 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
+static chdesc_t * ext2_get_write_head(LFS_t * object)
+{
+	Dprintf("EXT2DEBUG: ext2_get_write_head\n");
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	return CALL(info->ubd, get_write_head);
+}
+
 static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks, &KFS_feature_symlink};
 
 static size_t ext2_get_num_features(LFS_t * object, inode_t ino)

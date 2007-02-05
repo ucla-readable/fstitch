@@ -61,6 +61,7 @@ struct LFS {
 	DECLARE(LFS_t, int, free_block, fdesc_t * file, uint32_t block, chdesc_t ** head);
 	DECLARE(LFS_t, int, remove_name, inode_t parent, const char * name, chdesc_t ** head);
 	DECLARE(LFS_t, int, write_block, bdesc_t * block, chdesc_t ** head);
+	DECLARE(LFS_t, chdesc_t *, get_write_head);
 	DECLARE(LFS_t, size_t, get_num_features, inode_t ino);
 	DECLARE(LFS_t, const feature_t *, get_feature, inode_t ino, size_t num);
 	DECLARE(LFS_t, int, get_metadata_inode, inode_t ino, uint32_t id, size_t size, void * data);
@@ -90,6 +91,7 @@ struct LFS {
 	ASSIGN(lfs, module, free_block); \
 	ASSIGN(lfs, module, remove_name); \
 	ASSIGN(lfs, module, write_block); \
+	ASSIGN(lfs, module, get_write_head); \
 	ASSIGN(lfs, module, get_num_features); \
 	ASSIGN(lfs, module, get_feature); \
 	ASSIGN(lfs, module, get_metadata_inode); \

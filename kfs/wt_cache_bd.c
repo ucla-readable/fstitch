@@ -243,6 +243,12 @@ static int wt_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
+static chdesc_t * wt_cache_bd_get_write_head(BD_t * object)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	return CALL(info->bd, get_write_head);
+}
+
 static int wt_cache_bd_destroy(BD_t * bd)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);

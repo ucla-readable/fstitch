@@ -1122,6 +1122,13 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
+static chdesc_t * josfs_get_write_head(LFS_t * object)
+{
+	Dprintf("JOSFSDEBUG: josfs_get_write_head\n");
+	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	return CALL(info->ubd, get_write_head);
+}
+
 static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime};
 
 static size_t josfs_get_num_features(LFS_t * object, inode_t ino)

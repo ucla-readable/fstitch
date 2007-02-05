@@ -230,6 +230,12 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** he
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, write_block, block);
 }
 
+static chdesc_t * wholedisk_get_write_head(LFS_t * object)
+{
+	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
+	return CALL(state->bd, get_write_head);
+}
+
 static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize};
 
 static size_t wholedisk_get_num_features(LFS_t * object, inode_t inode)

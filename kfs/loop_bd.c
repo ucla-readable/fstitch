@@ -161,6 +161,12 @@ static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
+static chdesc_t * loop_get_write_head(BD_t * bd)
+{
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	return CALL(info->lfs, get_write_head);
+}
+
 static int loop_destroy(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);

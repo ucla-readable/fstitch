@@ -848,6 +848,14 @@ static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
+static chdesc_t * journal_bd_get_write_head(BD_t * object)
+{
+	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+#warning do something interesting here
+	(void) info;
+	return NULL;
+}
+
 static void journal_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
