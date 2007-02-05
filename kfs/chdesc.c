@@ -148,19 +148,31 @@ static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 	return hash_map_find_val(block->ddesc->bit_changes, (void *) (uint32_t) offset);
 }
 
-
-#include <lib/string.h>
-/* TODO: should we (and how do we want to) optimize this in the kernel? */
-static void * srealloc(void * p, size_t p_size, size_t new_size)
-{
-	void * q = smalloc(new_size);
-	if(!q)
-		return NULL;
-	if(p)
-		memcpy(q, p, p_size);
-	sfree(p, p_size);
-	return q;
-}
+/* Helper macro for recursion-on-the-heap support:
+ * Increment 'state' pointer and, if needed, enlarge the 'states'
+ * array (and 'states_capacity', accordingly) */
+#define INCREMENT_STATE(state, static_states, states, states_capacity) \
+	do { \
+		size_t next_index = 1 + state - &states[0]; \
+		if(next_index < states_capacity) \
+			state++; \
+		else \
+		{ \
+			size_t cur_size = states_capacity * sizeof(*states); \
+			states_capacity *= 2; \
+			if(states == static_states) \
+			{ \
+				states = smalloc(states_capacity * sizeof(*states)); \
+				if(states) \
+					memcpy(states, static_states, cur_size); \
+			} \
+			else \
+				states = srealloc(states, cur_size, states_capacity * sizeof(*states)); \
+			if(!states) \
+				panic("%s(): smalloc/srealloc(%u bytes) failed", __FUNCTION__, states_capacity * sizeof(states)); \
+			state = &states[next_index]; \
+		} \
+	} while(0)
 
 #define STATIC_STATES_CAPACITY 1024 /* 1024 is fairly arbitrary */
 
@@ -210,12 +222,7 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 			{
 				/* Recursively propagate the level change; equivalent to
 				 * propagate_level_change_thru_noop
-				 *  (after, after_prev_level, after_new_level).
-				 * We don't recursively call this function because we can
-				 * overflow the stack. We instead use the 'states' array
-				 * to hold this function's recursive state. */
-				size_t next_index = 1 + state - &states[0];
-
+				 *  (after, after_prev_level, after_new_level) */
 				state->noops_afters = noops_afters;
 				state->prev_level = prev_level;
 				state->new_level = new_level;
@@ -223,25 +230,8 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 				noop_after = after;
 				prev_level = after_prev_level;
 				new_level = after_new_level;
-				
-				if(next_index < states_capacity)
-					state++;
-				else
-				{
-					size_t cur_size = states_capacity * sizeof(*state);
-					states_capacity *= 2;
-					if(states == static_states)
-					{
-						states = smalloc(states_capacity * sizeof(*state));
-						if(states)
-							memcpy(states, static_states, cur_size);
-					}
-					else
-						states = srealloc(states, cur_size, states_capacity * sizeof(*state));
-					if(!states)
-						panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
-					state = &states[next_index];
-				}
+
+				INCREMENT_STATE(state, static_states, states, states_capacity);
 				goto recurse_start;
 
 			  recurse_resume:
@@ -295,6 +285,7 @@ static bool count_chdesc_external_afters(const chdesc_t * chdesc, const bdesc_t 
 			if(after->block && after->block->ddesc != block->ddesc)
 				n++;
 			else
+				/* TODO: should this run only when '!after->block'? Not also when 'ddesc == ddesc'? */
 				/* XXX: stack usage */
 				n += count_chdesc_external_afters(after, block);
 		}
@@ -345,7 +336,7 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 				block->ddesc->extern_after_count--;
 			}
 		}
-		if(!after->owner)
+		else if(!after->owner)
 		{
 			assert(after->type == NOOP);
 			/* XXX: stack usage */
@@ -369,7 +360,7 @@ static void propagate_extern_after_add_thru_noop_before(chdesc_t * noop_before, 
 			before->block->ddesc->extern_after_count++;
 			assert(before->block->ddesc->extern_after_count);
 		}
-		if(!before->owner)
+		else if(!before->owner)
 		{
 			assert(before->type == NOOP);
 			/* XXX: stack usage */
@@ -397,12 +388,18 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 		if(before_level > after_prev_level || after_prev_level == BDLEVEL_NONE)
 			propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
+		/* TODO: this should also propagate thru noops to before blocks */
+		/* TODO: it seems likely that the propagate_extern_after_*() functions
+		 * should be merged into a single interface function that handles all
+		 * data/noop -before and -after combinations */
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, 1);
 #endif
 	}
 #if BDESC_EXTERN_AFTER_COUNT
-	if(after->owner && !before->owner)
+	/* TODO: this propagation would be handled by the single
+	 * propagate extern_after function */
+	else if(!before->owner)
 		propagate_extern_after_add_thru_noop_before(before, after);
 	if(before->block && chdesc_is_external(after, before->block))
 	{
@@ -430,6 +427,8 @@ static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 		if(before_level == after_prev_level && !after->nbefores[before_level])
 			propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
+		/* TODO: as in propagate_depend_add, this call does not handle
+		 * removing a noop->noop from a data->noop->noop->data */
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, 0);
 #endif
@@ -1014,20 +1013,29 @@ static chdesc_t * select_chdesc_merger(const bdesc_t * block, const chdesc_t * b
 		CHDESC_NRB_MERGE_STATS_LOG(1);
 		return NULL;
 	}
-	
-	if(block->ddesc->nrb)
-		CHDESC_NRB_MERGE_STATS_LOG(0);
-	else
+	if(!block->ddesc->nrb)
+	{
 		CHDESC_NRB_MERGE_STATS_LOG(2);
-	assert(!block->ddesc->nrb || !(block->ddesc->nrb->flags & CHDESC_INFLIGHT));
+		return NULL;
+	}
+	CHDESC_NRB_MERGE_STATS_LOG(0);
+	assert(!(block->ddesc->nrb->flags & CHDESC_INFLIGHT));
 	return block->ddesc->nrb;
+}
+
+static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, chdesc_t * before)
+{
+	int r;
+	chdesc_remove_depend(old_after, before);
+	r = chdesc_add_depend_fast(new_after, before);
+	assert(r >= 0); /* failure should be impossible */
 }
 
 /* Move chdesc's (transitive) befores that cannot reach merge_target
  * to be merge_target's befores, so that a merge into merge_target
  * maintains the needed befores.
  * Return whether chdesc should be moved to be a merge_target before. */
-bool move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
+static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 {
 	/* recursion-on-the-heap support */
 	struct state {
@@ -1040,37 +1048,38 @@ bool move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	size_t states_capacity = STATIC_STATES_CAPACITY;
 	state_t * states = static_states;
 	state_t * state = states;
-
+	
+	uint16_t saved_flags;
+	
 	chdepdesc_t * dep;
 	bool reachable = 0; /* whether target is reachable from chdesc */
 	
-	assert(merge_target);
+	/* set CREATING to allow add_depend, which we know is safe */
+	saved_flags = merge_target->flags;
+	merge_target->flags |= CHDESC_CREATING;
 	
   recurse_enter:
+	/* Use CHDESC_MARKED to indicate merge_target is reachable */
 	if(chdesc->flags & CHDESC_MARKED)
-		return 1;
+	{
+		reachable = 1;
+		goto recurse_return;
+	}
 	if(chdesc == merge_target)
 	{
 		chdesc->flags |= CHDESC_MARKED;
-		return 1;
+		reachable = 1;
+		goto recurse_return;
 	}
-	if(!chdesc || chdesc_is_external(chdesc, merge_target->block))
-		return 0;
+	if(chdesc_is_external(chdesc, merge_target->block))
+		goto recurse_return;
 	
 	/* discover the subset of befores that cannot reach target */
 	/* TODO: do not scan a given dep->before.desc multiple times? */	
 	for(dep = chdesc->befores; dep; dep = dep->before.next)
 	{
-		/* TODO: stack space usage */
-		reachable |= move_befores_for_merge(dep->before.desc, merge_target);
-
-		/* Recursively move befores; equivalent to:
-		 * reachable |= move_befores_for_merge(dep->before.desc, merge_target).
-		 * We don't recursively call this function because we can
-		 * overflow the stack. We instead use the 'states' array
-		 * to hold this function's recursive state. */
-		size_t next_index = 1 + state - &states[0];
-		
+		// Recursively move befores; equivalent to:
+		// reachable |= move_befores_for_merge(dep->before.desc, merge_target)
 		state->dep = dep;
 		state->chdesc = chdesc;
 		state->reachable = reachable;
@@ -1078,59 +1087,27 @@ bool move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 		chdesc = dep->before.desc;
 		reachable = 0;
 		
-		if(next_index < states_capacity)
-			state++;
-		else
-		{
-			size_t cur_size = states_capacity * sizeof(*state);
-			states_capacity *= 2;
-			if(states == static_states)
-			{
-				states = smalloc(states_capacity * sizeof(*state));
-				if(states)
-					memcpy(states, static_states, cur_size);
-			}
-			else
-				states = srealloc(states, cur_size, states_capacity * sizeof(*state));
-			if(!states)
-				panic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(*state));
-			state = &states[next_index];
-		}
+		INCREMENT_STATE(state, static_states, states, states_capacity);
 		goto recurse_enter;
 			
 	  recurse_resume:
 		(void) 0; /* placate compiler re deprecated end labels */
 	}
-		
-	/* if only some befores can reach target, move all befores that cannot */
+	
+	/* if only some befores can reach target, move them.
+	 * if none can reach target, caller will move chdesc. */
 	if(reachable)
 	{
 		chdesc->flags |= CHDESC_MARKED;
-		
-		dep = chdesc->befores;
-		while(dep)
-		{
-			if(dep->before.desc->flags & CHDESC_MARKED)
-				dep = dep->before.next;
-			else
-			{
-				chdesc_t * noreach = dep->before.desc;
-				int r;
-				if((dep = dep->before.next))
-					dep = dep->before.next;
-				chdesc_remove_depend(chdesc, noreach);
-				/* TODO: maybe assert no noreach to merge_target path? */
-				r = chdesc_add_depend_fast(merge_target, noreach);
-				/* TODO: should recover, but this case may be impossible */
-				assert(r >= 0); 
-			}
-		}
-		
+		for(dep = chdesc->befores; dep; dep = dep->before.next)
+			if(!(dep->before.desc->flags & CHDESC_MARKED))
+				chdesc_move_before_fast(chdesc, merge_target, dep->before.desc);
 		/* remove marks only after the preceeding loop because of multipaths */
 		for(dep = chdesc->befores; dep; dep = dep->before.next)
 			dep->before.desc->flags &= ~CHDESC_MARKED;
 	}
 	
+  recurse_return:
 	if(state != &states[0])
 	{
 		state--;
@@ -1142,54 +1119,33 @@ bool move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	
 	if(states != static_states)
 		sfree(states, states_capacity * sizeof(*state));
-	
-	return reachable;
-}
 
-/* Merge what would be a new chdesc into an existing chdesc.
- * Precondition: select_new_chdesc_merger() returned 'existing'. */
-static int merge_chdesc(chdesc_t * existing, uint16_t new_offset, uint16_t new_length, chdesc_t * new_before)
-{
-	int r;
-	
-	assert(existing && existing->type == BYTE);
-	assert(!chdesc_is_rollbackable(existing));
-	assert(existing->byte.offset == 0);
-	assert(existing->byte.length == existing->block->ddesc->length);
-	
-	if(new_before && !(new_before->flags & CHDESC_WRITTEN))
+	/* take care of the intial before */
+	if(reachable)
+		chdesc->flags &= ~CHDESC_MARKED;
+	else
 	{
-		uint16_t saved_flags = existing->flags;
-		/* set CREATING to allow add_depend, which we know is safe */
-		existing->flags |= CHDESC_CREATING;
-		if(!move_befores_for_merge(new_before, existing))
-		{
-			if((r = chdesc_add_depend_fast(existing, new_before)) < 0)
-				return r;
-		}
-		else
-			new_before->flags &= ~CHDESC_MARKED;
-		existing->flags = saved_flags;
+		int r = chdesc_add_depend_fast(merge_target, chdesc);
+		assert(r >= 0);
 	}
 	
-	return 0;
+	merge_target->flags = saved_flags;
 }
 #endif
 
 /* Attempt to merge into an existing chdesc instead of create a new chdesc.
  * Returns 1 on successful merge (*merged points merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_merge(bdesc_t * block, uint16_t offset, uint16_t length, chdesc_t * before, chdesc_t ** merged)
+static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** merged)
 {
 #if CHDESC_NRB
 	chdesc_t * merger;
-	int r;
 	if(!(merger = select_chdesc_merger(block, before)))
 		return 0;
-	r = merge_chdesc(merger, offset, length, before);
-	if(r >= 0)
-		*merged = merger;
-	return r < 0 ? r : 1;
+	if(before && !(before->flags & CHDESC_WRITTEN))
+		move_befores_for_merge(before, merger);
+	*merged = merger;
+	return 1;
 #else
 	return 0;
 #endif
@@ -1233,7 +1189,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if(offset + length > block->ddesc->length)
 		return -E_INVAL;
 	
-	r = chdesc_create_merge(block, offset, length, *head, head);
+	r = chdesc_create_merge(block, *head, head);
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -1398,7 +1354,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc_t * bit_changes;
 	int r;
 	
-	r = chdesc_create_merge(block, offset * 4, 4, *head, head);
+	r = chdesc_create_merge(block, *head, head);
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -1491,6 +1447,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
  * never need to be rolled back independently from the new data). The change
  * descriptor must not be overlapped by any other change descriptors. The offset
  * and length parameters are relative to the change descriptor itself. */
+/* NOTE: chdesc_create_byte() with NRBs could likely replace this function if
+ * more general merging were supported (eg merge if no additional befores). */
 int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data)
 {
 	/* sanity checks */
@@ -1580,6 +1538,8 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 	}
 	if(before->flags & CHDESC_WRITTEN)
 		return 0;
+	if(after->flags & CHDESC_INFLIGHT)
+		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Adding non-written before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
 	
 	/* avoid creating a dependency loop */
 #if CHDESC_CYCLE_CHECK

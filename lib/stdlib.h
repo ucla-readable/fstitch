@@ -18,10 +18,10 @@ void qsort(void * base, size_t nmemb, size_t size, int (*compar)(const void *, c
 
 static __inline void * smalloc(size_t size) __attribute__((always_inline));
 static __inline void * scalloc(size_t nmemb, size_t size) __attribute__((always_inline));
+static __inline void * srealloc(void * p, size_t p_size, size_t new_size) __attribute__((always_inline));
 static __inline void sfree(void * p, size_t size) __attribute__((always_inline));
 
 
-#include <linux/slab.h>
 #include <linux/vmalloc.h>
 
 // Use kmalloc iff size is leq KMALLOC_MAX; must be <= kmalloc's max size
@@ -49,6 +49,18 @@ static __inline void * scalloc(size_t nmemb, size_t size)
 		return NULL;
 	memset(p, 0, total);
 	return p;
+}
+
+/* TODO: should/can we optimize? */
+static __inline void * srealloc(void * p, size_t p_size, size_t new_size)
+{
+	void * q = smalloc(new_size);
+	if(!q)
+		return NULL;
+	if(p)
+		memcpy(q, p, p_size);
+	sfree(p, p_size);
+	return q;
 }
 
 static __inline void sfree(void * p, size_t size)
