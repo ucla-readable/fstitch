@@ -28,15 +28,15 @@ typedef struct chrefdesc chrefdesc_t;
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 
-#define CHDESC_MARKED    0x01 /* marker for graph traversal */
-#define CHDESC_ROLLBACK  0x02 /* chdesc is rolled back */
-#define CHDESC_WRITTEN   0x04 /* chdesc has been written to disk */
-#define CHDESC_FREEING   0x08 /* chdesc is being freed */
-#define CHDESC_DATA      0x10 /* user data change (not metadata) */
-#define CHDESC_BIT_NOOP  0x20 /* bit_changes NOOP chdesc */
-#define CHDESC_OVERLAP   0x40 /* overlaps another chdesc completely */
-#define CHDESC_CREATING  0x80 /* chdesc is being created */
-#define CHDESC_INFLIGHT 0x100 /* chdesc is being written to disk */
+#define CHDESC_MARKED     0x01 /* marker for graph traversal */
+#define CHDESC_ROLLBACK   0x02 /* chdesc is rolled back */
+#define CHDESC_WRITTEN    0x04 /* chdesc has been written to disk */
+#define CHDESC_FREEING    0x08 /* chdesc is being freed */
+#define CHDESC_DATA       0x10 /* user data change (not metadata) */
+#define CHDESC_BIT_NOOP   0x20 /* bit_changes NOOP chdesc */
+#define CHDESC_OVERLAP    0x40 /* overlaps another chdesc completely */
+#define CHDESC_SAFE_AFTER 0x80 /* add depend: assume this is a safe after */
+#define CHDESC_INFLIGHT  0x100 /* chdesc is being written to disk */
 
 /* only effective in debugging mode */
 #define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */
@@ -170,7 +170,6 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 
 /* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */
 void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
-
 
 /* check whether two change descriptors overlap, even on different blocks */
 int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);

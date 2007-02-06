@@ -493,8 +493,8 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 {
 	chdepdesc_t * dep;
-
-	if(!(after->flags & CHDESC_CREATING))
+	
+	if(!(after->flags & CHDESC_SAFE_AFTER))
 	{
 		assert(after->type == NOOP && !after->afters); /* quickly catch bugs for now */
 		if(after->type != NOOP || after->afters)
@@ -869,7 +869,7 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 	chdesc->stamps = 0;
 	
 	/* NOOP chdescs start applied */
-	chdesc->flags = CHDESC_CREATING;
+	chdesc->flags = CHDESC_SAFE_AFTER;
 	
 	if(block)
 	{
@@ -892,7 +892,7 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 				chdesc_destroy(&chdesc);
 				return r;
 			}
-	chdesc->flags &= ~CHDESC_CREATING;
+	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*tail = chdesc;
 	
 	return 0;
@@ -1064,9 +1064,8 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	chdepdesc_t * dep;
 	bool reachable = 0; /* whether target is reachable from chdesc */
 	
-	/* set CREATING to allow add_depend, which we know is safe */
 	saved_flags = merge_target->flags;
-	merge_target->flags |= CHDESC_CREATING;
+	merge_target->flags |= CHDESC_SAFE_AFTER;
 	
   recurse_enter:
 	/* Use CHDESC_MARKED to indicate merge_target is reachable */
@@ -1271,7 +1270,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->stamps = 0;
 	
 	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK | CHDESC_CREATING;
+	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
 	
@@ -1330,7 +1329,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 #endif
 	}
 	
-	chdesc->flags &= ~CHDESC_CREATING;
+	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
 	
 	/* make sure our block sticks around */
@@ -1409,7 +1408,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->stamps = 0;
 
 	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK | CHDESC_CREATING;
+	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
 
 	chdesc_link_ready_changes(chdesc);
 	
@@ -1437,7 +1436,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
 		goto error;
 	
-	chdesc->flags &= ~CHDESC_CREATING;
+	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
 	
 	/* make sure our block sticks around */
