@@ -1,10 +1,11 @@
 #include <lib/error.h>
 #include <lib/assert.h>
-#include <linux/pagemap.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 
+#include <linux/version.h>
+#include <linux/pagemap.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/spinlock.h>

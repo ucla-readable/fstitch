@@ -547,7 +547,7 @@ int opgroup_abandon(opgroup_t ** opgroup)
 			if(!state->opgroup->has_data)
 				opgroup_release(state->opgroup);
 			else
-				panic("Don't know how to roll back an abandoned opgroup!");
+				kpanic("Don't know how to roll back an abandoned opgroup!");
 		}
 		if(state->opgroup->head_keep)
 			chdesc_satisfy(&state->opgroup->head_keep);

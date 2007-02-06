@@ -83,7 +83,7 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 	}
 
 #if BDESC_EXTERN_AFTER_COUNT	
-	panic("NOOP ddesc change support needs bdesc extern_after_count support");
+	kpanic("NOOP ddesc change support needs bdesc extern_after_count support");
 #endif
 	
 	if(noop->block)
@@ -133,7 +133,7 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 		if(chdesc_rewrite_byte(scan, 0, offset, data + offset) < 0)
 			continue;
 		if(offset > range)
-			panic("impossible change descriptor structure!");
+			kpanic("impossible change descriptor structure!");
 		range -= offset;
 	}
 	
@@ -143,7 +143,7 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	
 	/* if there's anything left, it is an error... */
 	if(range)
-		panic("%s() called on non-layered block!\n", __FUNCTION__);
+		kpanic("%s() called on non-layered block!\n", __FUNCTION__);
 	
 	return 0;
 }

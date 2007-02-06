@@ -453,12 +453,12 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n",
 			 block->number, block->count);
 	if((info->blocksize * block->count) != block->ddesc->length) {
-		panic("wrote block with bad length (%d bytes)\n",
+		kpanic("wrote block with bad length (%d bytes)\n",
 			  block->ddesc->length);
 		return -E_INVAL;
 	}
 	if (block->number >= info->blockcount) {
-		panic("wrote bad block number\n");
+		kpanic("wrote bad block number\n");
 		return -E_INVAL;
 	}
 
@@ -469,7 +469,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	KDprintk(KERN_ERR "starting real work for the write\n");
 	r = revision_tail_prepare(block, object);
 	if (r < 0) {
-		panic("revision_tail_prepare gave: %i\n", r);
+		kpanic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
 	revision_back = r;
@@ -579,7 +579,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 
 	r = revision_tail_inflight_ack(block, object);
 	if (r < 0) {
-		panic("revision_tail_acknowledge gave error: %i\n", r);
+		kpanic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
 	revision_forward = r;

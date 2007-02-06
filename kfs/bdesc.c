@@ -178,7 +178,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 	if(!bdesc->ar_count++)
 	{
 		if(!autorelease_stack)
-			panic("%s() called with no current autorelease pool!", __FUNCTION__);
+			kpanic("no current autorelease pool!");
 		bdesc->ar_next = autorelease_stack->list;
 		autorelease_stack->list = bdesc;
 	}

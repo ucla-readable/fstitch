@@ -22,6 +22,7 @@ kfsobj = $(src)/$(kfsobjrel)
 obj-m += kkfsd.o
 
 KKFSD_LIB_OBJS := \
+              assert.o \
               kdprintf.o \
               memdup.o \
               qsort.o \

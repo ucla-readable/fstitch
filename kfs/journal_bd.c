@@ -674,28 +674,28 @@ static int journal_bd_stop_transaction(BD_t * object)
 	head = info->wait;
 	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "commit");
 	/* ...and make hold depend on it */
 	r = chdesc_add_depend(info->hold, head);
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	/* set the new previous commit record */
 	r = chdesc_weak_retain(head, &info->prev_cr);
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	
 	/* create cancellation, make it depend on safe */
 	commit.type = CREMPTY;
 	head = info->safe;
 	r = chdesc_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "complete");
 	/* ...and make done depend on it */
 	r = chdesc_add_depend(info->done, head);
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 #if KFS_DEBUG && JOURNAL_COMMIT_DBWAIT
 	/* for debugging, add DBWAIT to the cancellation */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DBWAIT);
@@ -713,7 +713,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	r = CALL(info->journal, write_block, block);
 	info->recursion = 0;
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	
 	hash_map_clear(info->block_map);
 	
@@ -773,13 +773,13 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		{
 			int r = chdesc_add_depend(chdesc, info->hold);
 			if(r < 0)
-				panic("Holy Mackerel!");
+				kpanic("Holy Mackerel!");
 			r = chdesc_add_depend(info->safe, chdesc);
 			if(r < 0)
-				panic("Holy Mackerel!");
+				kpanic("Holy Mackerel!");
 			r = chdesc_add_depend(info->unsafe, chdesc);
 			if(r < 0)
-				panic("Holy Mackerel!");
+				kpanic("Holy Mackerel!");
 			chdesc_stamp(chdesc, info->stamp);
 		}
 	}
@@ -822,7 +822,7 @@ retry:
 	if(r < 0)
 	{
 		if(retried)
-			panic("HOLY MACKEREL! We can't write block %d! (debug = %d)\n", block->number, KFS_DEBUG_COUNT());
+			kpanic("HOLY MACKEREL! We can't write block %d! (debug = %d)\n", block->number, KFS_DEBUG_COUNT());
 		retried = 1;
 		/* we couldn't do the write... stop the transaction at the previous request and retry */
 		/* FIXME: check return value */
@@ -866,7 +866,7 @@ static void journal_bd_callback(void * arg)
 		journal_bd_accept_request(object);
 		r = journal_bd_stop_transaction(object);
 		if(r < 0 && r != -E_BUSY)
-			panic("Holy Mackerel!");
+			kpanic("Holy Mackerel!");
 	}
 }
 
@@ -1040,7 +1040,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	
 	r = chdesc_weak_retain(info->done, &info->cr_retain[transaction_start / info->trans_total_blocks]);
 	if(r < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	
 	/* only CRCOMMIT records need to be cancelled */
 	if(cr->type == CRCOMMIT)
@@ -1049,11 +1049,11 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		head = info->safe;
 		r = chdesc_create_byte_atomic(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head);
 		if(r < 0)
-			panic("Holy Mackerel!");
+			kpanic("Holy Mackerel!");
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "complete");
 		r = chdesc_add_depend(info->done, head);
 		if(r < 0)
-			panic("Holy Mackerel!");
+			kpanic("Holy Mackerel!");
 		/* clean up the transaction state */
 		chdesc_satisfy(&info->keep);
 		info->safe = NULL;
@@ -1063,7 +1063,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		r = CALL(info->journal, write_block, commit_block);
 		info->recursion = 0;
 		if(r < 0)
-			panic("Holy Mackerel!");
+			kpanic("Holy Mackerel!");
 	}
 	
 	return 0;
@@ -1258,28 +1258,28 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	
 	info->cr_count = CALL(journal, get_numblocks) / info->trans_total_blocks;
 	if(!info->cr_count)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	
 	info->cr_retain = scalloc(info->cr_count, sizeof(*info->cr_retain));
 	if(!info->cr_retain)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	
 	replay_journal(bd);
 	
 	/* push a NOOP into the cache that depends on us */
 	lock_block = CALL(journal, read_block, 0, 1);
 	if(!lock_block)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	if(chdesc_create_noop_list(NULL, bd, &info->lock_hold, NULL) < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock_hold, "lock_hold");
 	if(chdesc_create_noop_list(lock_block, bd, &info->lock, info->lock_hold, NULL) < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->lock, "lock");
 	chdesc_claim_noop(info->lock_hold);
 	info->recursion = 1;
 	if(CALL(journal, write_block, lock_block) < 0)
-		panic("Holy Mackerel!");
+		kpanic("Holy Mackerel!");
 	info->recursion = 0;
 	/* and finally unlock it, now that it is set up */
 	chdesc_noop_reassign(info->lock, NULL);

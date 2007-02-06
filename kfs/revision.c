@@ -8,8 +8,6 @@
 #include <kfs/debug.h>
 #include <kfs/revision.h>
 
-#include <linux/reboot.h>
-
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
 static bool revision_owner_decider(chdesc_t * chdesc, void * data)
@@ -87,13 +85,7 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 		}
 		kdprintf(STDERR_FILENO, ")\n");
 	}
-	kdprintf(STDERR_FILENO, "Waiting 1 seconds before reboot...\n");
-	current->state = TASK_INTERRUPTIBLE;
-	kfsd_task->state = TASK_STOPPED;
-	schedule_timeout(HZ);
-	kernel_restart(NULL);
-	/* WTF? */
-	for(;;);
+	kpanic("too confused to continue");
 }
 
 static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, void * data)

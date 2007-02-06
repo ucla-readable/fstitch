@@ -116,17 +116,17 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 	int r;
 	
 	if(block->ddesc->length != info->blocksize) {
-		panic("wrote block with bad length\n");
+		kpanic("wrote block with bad length\n");
 		return -E_INVAL;
 	}
 	if (block->number >= info->blockcount) {
-		panic("wrote bad block number\n");
+		kpanic("wrote bad block number\n");
 		return -E_INVAL;
 	}
 
 	r = revision_tail_prepare(block, object);
 	if (r < 0) {
-		panic("revision_tail_prepare gave: %i\n", r);
+		kpanic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
 
@@ -136,7 +136,7 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 
 	r = revision_tail_acknowledge(block, object);
 	if (r < 0) {
-		panic("revision_tail_acknowledge gave error: %i\n", r);
+		kpanic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
 

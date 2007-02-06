@@ -681,21 +681,22 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	type_supported = check_type_supported(state->lfs, ino, oldf, &oldtype);
 	/* determine old's type to set new's type */
 	if (!type_supported)
-		panic("%s() requires LFS filetype feature support to determine whether newname is to be a file or directory", __FUNCTION__);
+		kpanic("%s() requires LFS filetype feature support to determine whether newname is to be a file or directory", __FUNCTION__);
+	if (oldtype == TYPE_INVAL)
 	{
-		if (oldtype == TYPE_INVAL) {
-			CALL(state->lfs, free_fdesc, oldf);
-			return -E_UNSPECIFIED;
-		}
+		CALL(state->lfs, free_fdesc, oldf);
+		return -E_UNSPECIFIED;
 	}
 
-	if (CALL(state->lfs, lookup_name, newparent, newname, &newino) >= 0) {
+	if (CALL(state->lfs, lookup_name, newparent, newname, &newino) >= 0)
+	{
 		CALL(state->lfs, free_fdesc, oldf);
 		return -E_EXIST;
 	}
 
 	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &initialmd, &newino, &prev_head);
-	if (!newf) {
+	if (!newf)
+	{
 		CALL(state->lfs, free_fdesc, oldf);
 		return -E_UNSPECIFIED;
 	}
@@ -703,7 +704,8 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	if (type_supported)
 	{
 		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &prev_head);
-		if (r < 0) {
+		if (r < 0)
+		{
 			CALL(state->lfs, free_fdesc, oldf);
 			CALL(state->lfs, free_fdesc, newf);
 			return r;

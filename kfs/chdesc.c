@@ -166,7 +166,7 @@ static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 			else \
 				states = srealloc(states, cur_size, states_capacity * sizeof(*states)); \
 			if(!states) \
-				panic("%s(): smalloc/srealloc(%u bytes) failed", __FUNCTION__, states_capacity * sizeof(states)); \
+				kpanic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(states)); \
 			state = &states[next_index]; \
 		} \
 	} while(0)
@@ -1000,7 +1000,7 @@ static void chdesc_nrb_merge_stats_log(unsigned idx)
 	{
 		int r = kfsd_register_shutdown_module(print_chdesc_nrb_merge_stats, NULL, SHUTDOWN_POSTMODULES);
 		if(r < 0)
-			panic("kfsd_register_shutdown_module() = %i", r);
+			kpanic("kfsd_register_shutdown_module() = %i", r);
 		chdesc_nrb_merge_stats_callback_registered = 1;
 	}
 	chdesc_nrb_merge_stats_idx = idx;
@@ -1343,7 +1343,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
 	if(&block->ddesc->data[offset] == data)
-		panic("Cannot create a change descriptor in place!");
+		kpanic("Cannot create a change descriptor in place!");
 	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, head);
 }
 

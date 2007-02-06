@@ -3,6 +3,7 @@
 
 #include <lib/types.h>
 #include <lib/hash_map.h>
+#include <lib/assert.h>
 
 #define CHDESC_BYTE_SUM 0
 
@@ -140,7 +141,7 @@ static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
 		case NOOP:
 			return 1;
 		default:
-			panic("Unexpected chdesc of type %d\n", chdesc->type);
+			kpanic("Unexpected chdesc of type %d\n", chdesc->type);
 	}
 }
 
