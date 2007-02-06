@@ -23,9 +23,6 @@
  * speedup, even though we use more memory, so it is enabled by default. */
 #define CHDESC_ALLOW_MULTIGRAPH 1
 
-/* Set to restrict adding befores to only noops with no afters */
-#define CHDESC_ADD_DEPEND_RESTRICTED (CHDESC_NRB || 0)
-
 /* Set to track the nrb chdesc merge stats and print them after shutdown */
 #define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
 
@@ -388,17 +385,21 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 		if(before_level > after_prev_level || after_prev_level == BDLEVEL_NONE)
 			propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
-		/* TODO: this should also propagate thru noops to before blocks */
-		/* TODO: it seems likely that the propagate_extern_after_*() functions
-		 * should be merged into a single interface function that handles all
-		 * data/noop -before and -after combinations */
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, 1);
+		else
+		{
+			/* Note: if we allow adding a dependency from data->NOOP
+			 * to NOOP->data, propagate_extern_after_change_thru_noop_after()
+			 * should also propagate thru before noops to before blocks.
+			 * It seems likely that the propagate_extern_after_*() functions
+			 * should be merged into a single interface function that handles
+			 * all data/noop -before and -after combinations */
+			assert(!after->afters || !before->befores);
+		}
 #endif
 	}
 #if BDESC_EXTERN_AFTER_COUNT
-	/* TODO: this propagation would be handled by the single
-	 * propagate extern_after function */
 	else if(!before->owner)
 		propagate_extern_after_add_thru_noop_before(before, after);
 	if(before->block && chdesc_is_external(after, before->block))
@@ -427,15 +428,26 @@ static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 		if(before_level == after_prev_level && !after->nbefores[before_level])
 			propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
-		/* TODO: as in propagate_depend_add, this call does not handle
-		 * removing a noop->noop from a data->noop->noop->data */
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, 0);
+		else
+		{
+			/* Note: if we remove a dependency from data->NOOP to NOOP->data,
+			 * propagate_extern_after_change_thru_noop_after() should
+			 * also propagate thru noops to before blocksf, as in
+			 * propagate_depend_add().
+			 * TODO: Can move_befores_for_merge() remove such dependencies? */
+			assert(!after->afters || !before->befores);
+		}
 #endif
 	}
 #if BDESC_EXTERN_AFTER_COUNT
-	/* TODO: don't we need to propagate the extern_after remove through
-	 * a noop before? (The mirror of propagate_depend_add()'s action.) */
+	else if(!before->owner)
+	{
+		/* TODO: don't we need to propagate the extern_after remove through
+		 * a noop before? (The mirror of propagate_depend_add()'s action.) */
+		assert(!before->befores);
+	}
 	if(before->block && chdesc_is_external(after, before->block))
 	{
 		assert(before->block->ddesc->extern_after_count);
@@ -482,14 +494,12 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 {
 	chdepdesc_t * dep;
 
-#if CHDESC_ADD_DEPEND_RESTRICTED
 	if(!(after->flags & CHDESC_CREATING))
 	{
 		assert(after->type == NOOP && !after->afters); /* quickly catch bugs for now */
 		if(after->type != NOOP || after->afters)
 			return -E_INVAL;
 	}
-#endif
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
