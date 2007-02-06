@@ -4,9 +4,6 @@
 
 #define _BSD_EXTENSION
 
-/* We don't actually want to define off_t or register_t! */
-#define off_t		xxx_off_t
-#define register_t	xxx_register_t
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -16,12 +13,12 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
-#undef off_t
-#undef register_t
 
+#include <lib/partition.h>
 #include <kfs/josfs_base.h>
 
 static int diskfd;
+static off_t diskoff;
 static int nblocks;
 static int nbitblocks;
 
@@ -164,7 +161,7 @@ static Block * get_block(uint32_t bno, Type type)
 	
 	/* if b->used, evict block b... nothing to do though */
 	
-	if(lseek(diskfd, bno * JOSFS_BLKSIZE, SEEK_SET) < 0 || readn(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE)
+	if(lseek(diskfd, diskoff + bno * JOSFS_BLKSIZE, SEEK_SET) < 0 || readn(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE)
 	{
 		fprintf(stderr, "read block %d: ", bno);
 		perror("");
@@ -197,6 +194,31 @@ static int block_marked_free(uint32_t bno)
 	return (((uint32_t *) b->buf)[offset / 32] >> (offset % 32)) & 1;
 }
 
+/* check for a partition table and use the first JOSFS partition if there is one */
+static void partition_adjust(off_t * size)
+{
+	unsigned char mbr[512];
+	struct pc_ptable * ptable;
+	int i = read(diskfd, mbr, 512);
+	if(i != 512)
+		return;
+	if(mbr[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
+	   mbr[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
+		return;
+	ptable = (struct pc_ptable *) &mbr[PTABLE_OFFSET];
+	for(i = 0; i < 4; i++)
+		if(ptable[i].type == PTABLE_KUDOS_TYPE)
+			break;
+	if(i == 4)
+		return;
+	swizzle(&ptable[i].lba_start);
+	swizzle(&ptable[i].lba_length);
+	printf("Using JOSFS partition %d, sector offset %d, size %d (%d blocks)\n", i + 1,
+	       ptable[i].lba_start, ptable[i].lba_length, ptable[i].lba_length / (JOSFS_BLKSIZE / 512));
+	diskoff = ptable[i].lba_start * 512;
+	*size = ptable[i].lba_length * 512;
+}
+
 /* open the disk, check the superblock, and check the block bitmap for sanity */
 static int open_disk(const char * name)
 {
@@ -218,6 +240,9 @@ static int open_disk(const char * name)
 		perror(name);
 		return -1;
 	}
+	
+	/* if there is a partition table, use only the JOSFS partition */
+	partition_adjust(&s.st_size);
 	
 	/* minimally, we have a reserved block, a superblock, and a bitmap block */
 	if(s.st_size < 3 * JOSFS_BLKSIZE)

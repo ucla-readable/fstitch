@@ -4,9 +4,6 @@
 
 #define _BSD_EXTENSION
 
-/* We don't actually want to define off_t or register_t! */
-#define off_t		xxx_off_t
-#define register_t	xxx_register_t
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -17,20 +14,18 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
-#undef off_t
-#undef register_t
 
+#include <lib/partition.h>
 #include <kfs/josfs_base.h>
 
 #define nelem(x)	(sizeof(x) / sizeof((x)[0]))
-typedef struct JOSFS_Super Super;
-typedef struct JOSFS_File File;
 
-struct JOSFS_Super super;
-int diskfd;
-uint32_t nblock;
-uint32_t nbitblock;
-uint32_t nextb;
+static struct JOSFS_Super super;
+static int diskfd;
+static off_t diskoff;
+static uint32_t nblock;
+static uint32_t nbitblock;
+static uint32_t nextb;
 
 enum
 {
@@ -40,7 +35,6 @@ enum
 	BLOCK_BITS
 };
 
-typedef struct Block Block;
 struct Block
 {
 	uint32_t busy;
@@ -50,10 +44,9 @@ struct Block
 	uint32_t type;
 };
 
-struct Block cache[16];
+static struct Block cache[16];
 
-ssize_t
-readn(int f, void* av, size_t n)
+static ssize_t readn(int f, void* av, size_t n)
 {
 	uint8_t* a;
 	size_t t;
@@ -73,8 +66,7 @@ readn(int f, void* av, size_t n)
 }
 
 /* make little-endian */
-void
-swizzle(uint32_t* x)
+static void swizzle(uint32_t* x)
 {
 	uint32_t y;
 	uint8_t* z;
@@ -87,8 +79,7 @@ swizzle(uint32_t* x)
 	z[3] = (y >> 24) & 0xFF;
 }
 
-void
-swizzlefile(struct JOSFS_File* f)
+static void swizzlefile(struct JOSFS_File* f)
 {
 	int i;
 
@@ -103,8 +94,7 @@ swizzlefile(struct JOSFS_File* f)
 	swizzle(&f->f_atime);
 }
 
-void
-swizzleblock(Block* b)
+static void swizzleblock(struct Block* b)
 {
 	int i;
 	struct JOSFS_Super* s;
@@ -131,11 +121,10 @@ swizzleblock(Block* b)
 	}
 }
 
-void
-flushb(Block* b)
+static void flushb(struct Block* b)
 {
 	swizzleblock(b);
-	if (lseek(diskfd, b->bno * JOSFS_BLKSIZE, 0) < 0
+	if (lseek(diskfd, diskoff + b->bno * JOSFS_BLKSIZE, 0) < 0
 	    || write(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE) {
 		perror("flushb");
 		fprintf(stderr, "\n");
@@ -144,12 +133,11 @@ flushb(Block* b)
 	swizzleblock(b);
 }
 
-Block*
-getblk(uint32_t bno, uint32_t clr, uint32_t type)
+static struct Block* getblk(uint32_t bno, uint32_t clr, uint32_t type)
 {
 	int i, least;
 	static int t = 1;
-	Block* b;
+	struct Block* b;
 
 	if (bno >= nblock) {
 		fprintf(stderr, "attempt to access past end of disk bno=%d\n", bno);
@@ -177,7 +165,7 @@ getblk(uint32_t bno, uint32_t clr, uint32_t type)
 	if(b->used)
 		flushb(b);
 
-	if (lseek(diskfd, bno*JOSFS_BLKSIZE, 0) < 0
+	if (lseek(diskfd, diskoff + bno * JOSFS_BLKSIZE, 0) < 0
 	    || readn(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE) {
 		fprintf(stderr, "read block %d: ", bno);
 		perror("");
@@ -204,18 +192,46 @@ out:
 	return b;
 }
 
-void
-putblk(Block* b)
+static void putblk(struct Block* b)
 {
 	b->busy = 0;
 }
 
-void
-opendisk(const char* name)
+/* check for a partition table and use the first JOSFS partition if there is one */
+static void partition_adjust(off_t * size)
+{
+	unsigned char mbr[512];
+	struct pc_ptable * ptable;
+	int i = read(diskfd, mbr, 512);
+	off_t end;
+	if(i != 512)
+		return;
+	if(mbr[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
+	   mbr[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
+		return;
+	ptable = (struct pc_ptable *) &mbr[PTABLE_OFFSET];
+	for(i = 0; i < 4; i++)
+		if(ptable[i].type == PTABLE_KUDOS_TYPE)
+			break;
+	if(i == 4)
+		return;
+	swizzle(&ptable[i].lba_start);
+	swizzle(&ptable[i].lba_length);
+	printf("Using JOSFS partition %d, sector offset %d, size %d (%d blocks)\n", i + 1,
+	       ptable[i].lba_start, ptable[i].lba_length, ptable[i].lba_length / (JOSFS_BLKSIZE / 512));
+	/* make sure the file is large enough */
+	end = (ptable[i].lba_start + ptable[i].lba_length) * 512;
+	if(*size < end)
+		ftruncate(diskfd, end);
+	diskoff = ptable[i].lba_start * 512;
+	*size = ptable[i].lba_length * 512;
+}
+
+static void opendisk(const char* name)
 {
 	int i;
 	struct stat s;
-	Block* b;
+	struct Block* b;
 
 	if ((diskfd = open(name, O_RDWR)) < 0) {
 		fprintf(stderr, "open %s: ", name);
@@ -231,7 +247,10 @@ opendisk(const char* name)
 		exit(1);
 	}
 
-	if (s.st_size < 1024 || s.st_size > 128*1024*1024) {
+	/* if there is a partition table, use only the JOSFS partition */
+	partition_adjust(&s.st_size);
+
+	if (s.st_size < 1024 || s.st_size > 512*1024*1024) {
 		fprintf(stderr, "bad disk size %d\n", (int) s.st_size);
 		exit(1);
 	}
@@ -252,14 +271,13 @@ opendisk(const char* name)
 	strcpy(super.s_root.f_name, "/");
 }
 
-void
-writefile(char* name)
+static void writefile(char* name)
 {
 	int fd;
 	char *last;
-	File *f;
+	struct JOSFS_File *f;
 	int i, n, nblk;
-	Block *dirb, *b, *bindir;
+	struct Block *dirb, *b, *bindir;
 
 	if((fd = open(name, O_RDONLY)) < 0){
 		fprintf(stderr, "open %s:", name);
@@ -275,7 +293,7 @@ writefile(char* name)
 
 	if(super.s_root.f_size > 0){
 		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/JOSFS_BLKSIZE-1], 0, BLOCK_DIR);
-		f = (File*)dirb->buf;
+		f = (struct JOSFS_File*)dirb->buf;
 		for (i = 0; i < JOSFS_BLKFILES; i++)
 			if (f[i].f_name[0] == 0) {
 				f = &f[i];
@@ -286,7 +304,7 @@ writefile(char* name)
 	dirb = getblk(nextb, 1, BLOCK_DIR);
 	super.s_root.f_direct[super.s_root.f_size / JOSFS_BLKSIZE] = nextb++;
 	super.s_root.f_size += JOSFS_BLKSIZE;
-	f = (File*)dirb->buf;
+	f = (struct JOSFS_File*)dirb->buf;
 	
 gotit:
 	strcpy(f->f_name, last);
@@ -331,13 +349,12 @@ gotit:
 	close(fd);
 }
 
-void
-makedir(char* name)
+static void makedir(char* name)
 {
 	char *last;
-	File *f;
+	struct JOSFS_File *f;
 	int i;
-	Block *dirb;
+	struct Block *dirb;
 
 	last = strrchr(name, '/');
 	if(last)
@@ -347,7 +364,7 @@ makedir(char* name)
 
 	if(super.s_root.f_size > 0){
 		dirb = getblk(super.s_root.f_direct[super.s_root.f_size/JOSFS_BLKSIZE-1], 0, BLOCK_DIR);
-		f = (File*)dirb->buf;
+		f = (struct JOSFS_File*)dirb->buf;
 		for (i = 0; i < JOSFS_BLKFILES; i++)
 			if (f[i].f_name[0] == 0) {
 				f = &f[i];
@@ -358,7 +375,7 @@ makedir(char* name)
 	dirb = getblk(nextb, 1, BLOCK_DIR);
 	super.s_root.f_direct[super.s_root.f_size / JOSFS_BLKSIZE] = nextb++;
 	super.s_root.f_size += JOSFS_BLKSIZE;
-	f = (File*)dirb->buf;
+	f = (struct JOSFS_File*)dirb->buf;
 	
 gotit:
 	strcpy(f->f_name, last);
@@ -367,11 +384,10 @@ gotit:
 	putblk(dirb);
 }
 
-void
-finishfs(void)
+static void finishfs(void)
 {
 	int i;
-	Block* b;
+	struct Block* b;
 
 	for (i = 0; i < nextb; i++) {
 		b = getblk(2 + i/JOSFS_BLKBITSIZE, 0, BLOCK_BITS);
@@ -388,12 +404,11 @@ finishfs(void)
 	}
 
 	b = getblk(1, 1, BLOCK_SUPER);
-	memmove(b->buf, &super, sizeof(Super));
+	memmove(b->buf, &super, sizeof(struct JOSFS_Super));
 	putblk(b);
 }
 
-void
-flushdisk(void)
+static void flushdisk(void)
 {
 	int i;
 
@@ -402,8 +417,7 @@ flushdisk(void)
 			flushb(&cache[i]);
 }
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	int i;
 
@@ -411,7 +425,7 @@ main(int argc, char **argv)
 
 	if(argc < 2)
 	{
-		fprintf(stderr, "usage: fsformat kern/fs.img [files...]\n");
+		fprintf(stderr, "usage: fsformat fs.img [files...]\n");
 		return 1;
 	}
 
@@ -434,4 +448,3 @@ main(int argc, char **argv)
 	exit(0);
 	return 0;
 }
-
