@@ -82,8 +82,13 @@ int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
 		return 0;
 	}
 
-#if BDESC_EXTERN_AFTER_COUNT	
-	kpanic("NOOP ddesc change support needs bdesc extern_after_count support");
+#if BDESC_EXTERN_AFTER_COUNT
+	{
+		/* ddesc->extern_after_count updates are only supported for
+		 * specific journal_bd uses */
+		chdesc_t * before = noop->befores ? noop->befores->before.desc : NULL;
+		assert(!noop->afters && (!noop->befores || (!noop->befores->before.next && before->type == NOOP && !before->block && !before->befores)));
+	}
 #endif
 	
 	if(noop->block)
