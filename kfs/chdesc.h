@@ -64,6 +64,8 @@ struct chdesc {
 			/* used by bit_changes NOOPs */
 			hash_map_t * bit_changes;
 			void * hash_key;
+			/* Perhaps NOOP chdescs not on blocks should track their
+			 * extern_after_counts to avoid NOOP after recursion? */
 		} noop;
 	};
 	chdepdesc_t * befores;
