@@ -215,8 +215,8 @@ static void partition_adjust(off_t * size)
 	swizzle(&ptable[i].lba_length);
 	printf("Using JOSFS partition %d, sector offset %d, size %d (%d blocks)\n", i + 1,
 	       ptable[i].lba_start, ptable[i].lba_length, ptable[i].lba_length / (JOSFS_BLKSIZE / 512));
-	diskoff = ptable[i].lba_start * 512;
-	*size = ptable[i].lba_length * 512;
+	diskoff = ptable[i].lba_start << 9;
+	*size = ptable[i].lba_length << 9;
 }
 
 /* open the disk, check the superblock, and check the block bitmap for sanity */
