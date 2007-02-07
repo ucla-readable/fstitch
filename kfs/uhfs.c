@@ -399,7 +399,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	uint32_t size_written = 0, filesize = 0, target_size;
 	chdesc_t * orig_head = CALL(state->lfs, get_write_head);
 	chdesc_t * prev_head = orig_head, * tail;
-	int r;
+	int r = 0;
 
 	if (uf->size_id) {
 		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, sizeof(filesize), &filesize);
@@ -451,11 +451,14 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			block = CALL(state->lfs, synthetic_lookup_block, number);
 			if (!block)
 			{
+				int t;
 				no_block:
 				prev_head = orig_head;
-				r = CALL(state->lfs, free_block, uf->inner, number, &prev_head);
-				assert(r >= 0);
-				goto uhfs_write_written_exit;
+				t = CALL(state->lfs, free_block, uf->inner, number, &prev_head);
+				assert(t >= 0);
+				if(size_written)
+					goto uhfs_write_written_exit;
+				goto uhfs_write_exit;
 			}
 
 			r = opgroup_prepare_head(&prev_head);
@@ -468,9 +471,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			/* zero it */
 			r = chdesc_create_init(block, bd, &prev_head);
 			if (r < 0)
-			{
 				goto no_block;
-			}
 			/* note that we do not write it - we will write it later */
 
 			uhfs_mark_data(prev_head, tail);

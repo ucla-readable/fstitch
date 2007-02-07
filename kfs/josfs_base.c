@@ -683,8 +683,10 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	bdesc_t * indirect = NULL, * dirblock = NULL;
 	int r, offset;
 
-	if (!head || nblocks >= JOSFS_NINDIRECT || nblocks < 0)
+	if (!head || nblocks < 0)
 		return -E_INVAL;
+	if (nblocks >= JOSFS_NINDIRECT)
+		return -E_NO_SPC;
 
 	if (nblocks > JOSFS_NDIRECT) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
