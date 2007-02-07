@@ -255,8 +255,12 @@ static int journal_bd_stop_transaction_previous(BD_t * object)
 		chdesc_t * head = NULL;
 		
 		/* first handle the chdesc's befores */
+		chdesc->flags |= CHDESC_SAFE_AFTER;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SAFE_AFTER);
 		r = chdesc_add_depend(chdesc, hold);
 		assert(r >= 0);
+		chdesc->flags &= ~CHDESC_SAFE_AFTER;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
 		chdesc_remove_depend(chdesc, info->hold);
 		chdesc_remove_depend(old_safe, chdesc);
 		
@@ -677,9 +681,13 @@ static int journal_bd_stop_transaction(BD_t * object)
 		kpanic("Holy Mackerel!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "commit");
 	/* ...and make hold depend on it */
+	info->hold->flags |= CHDESC_SAFE_AFTER;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_SAFE_AFTER);
 	r = chdesc_add_depend(info->hold, head);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
+	info->hold->flags &= ~CHDESC_SAFE_AFTER;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, info->hold, CHDESC_SAFE_AFTER);
 	/* set the new previous commit record */
 	r = chdesc_weak_retain(head, &info->prev_cr);
 	if(r < 0)
@@ -756,13 +764,8 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	if(!block->ddesc->all_changes)
 		return 0;
 	
-	if(!info->keep)
-	{
-		r = journal_bd_start_transaction(object);
-		if(r < 0)
-			return r;
-	}
-	else if(info->request_id != kfsd_get_request_id())
+	assert(info->keep);
+	if(info->request_id != kfsd_get_request_id())
 		journal_bd_accept_request(object);
 	
 	/* add our (regular) stamp to all chdescs passing through */
@@ -771,10 +774,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		chdesc_next = chdesc->ddesc_next; /* in case changes */
 		if(chdesc->owner == object)
 		{
-			int r = chdesc_add_depend(chdesc, info->hold);
-			if(r < 0)
-				kpanic("Holy Mackerel!");
-			r = chdesc_add_depend(info->safe, chdesc);
+			int r = chdesc_add_depend(info->safe, chdesc);
 			if(r < 0)
 				kpanic("Holy Mackerel!");
 			r = chdesc_add_depend(info->unsafe, chdesc);
@@ -850,9 +850,13 @@ static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 static chdesc_t * journal_bd_get_write_head(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-#warning do something interesting here
-	(void) info;
-	return NULL;
+	assert(!CALL(info->bd, get_write_head));
+	if(!info->keep)
+	{
+		int r = journal_bd_start_transaction(object);
+		assert(r >= 0);
+	}
+	return info->hold;
 }
 
 static void journal_bd_callback(void * arg)
