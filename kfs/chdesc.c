@@ -15,6 +15,9 @@
 /* Set to check for chdesc dependency cycles. Values: 0 (disable), 1 (enable) */
 #define CHDESC_CYCLE_CHECK 0
 
+/* Set to count change descriptors by type and display periodic output */
+#define COUNT_CHDESCS 0
+
 /* Change descriptor multigraphs allow more than one dependency between the same
  * two change descriptors. This currently saves us the trouble of making sure we
  * don't create a duplicate dependency between chdescs, though it also causes us
@@ -25,6 +28,25 @@
 
 /* Set to track the nrb chdesc merge stats and print them after shutdown */
 #define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
+
+#if COUNT_CHDESCS
+#include <lib/jiffies.h>
+/* indices match chdesc->type */
+static uint32_t chdesc_counts[3];
+static void dump_counts(void)
+{
+	static int last_count_dump = 0;
+	int jiffies = jiffy_time();
+	if(!last_count_dump)
+		last_count_dump = jiffies;
+	else if(jiffies - last_count_dump >= HZ)
+	{
+		while(jiffies - last_count_dump >= HZ)
+			last_count_dump += HZ;
+		printk(KERN_ERR "Bit: %4d, Byte: %4d, Noop: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP]);
+	}
+}
+#endif
 
 static chdesc_t * free_head = NULL;
 
@@ -848,6 +870,10 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 	if(!chdesc)
 		return -E_NO_MEM;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, block, owner);
+#if COUNT_CHDESCS
+	chdesc_counts[NOOP]++;
+	dump_counts();
+#endif
 	
 	chdesc->owner = owner;
 	chdesc->block = block;
@@ -1273,6 +1299,10 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
+#if COUNT_CHDESCS
+	chdesc_counts[BYTE]++;
+	dump_counts();
+#endif
 	
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
@@ -1385,6 +1415,10 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if(!chdesc)
 		return -E_NO_MEM;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
+#if COUNT_CHDESCS
+	chdesc_counts[BIT]++;
+	dump_counts();
+#endif
 	
 	chdesc->owner = owner;
 	chdesc->block = block;
@@ -1758,6 +1792,11 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				chdesc_remove_depend((*chdesc)->block->ddesc->overlaps, *chdesc);
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
+#if COUNT_CHDESCS
+				chdesc_counts[BYTE]--;
+				chdesc_counts[NOOP]++;
+				dump_counts();
+#endif
 				break;
 			case BIT:
 				bit_changes = chdesc_bit_changes((*chdesc)->block, (*chdesc)->bit.offset);
@@ -1766,6 +1805,11 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
 				/* fall through */
+#if COUNT_CHDESCS
+				chdesc_counts[BIT]--;
+				chdesc_counts[NOOP]++;
+				dump_counts();
+#endif
 			case NOOP:
 				break;
 			default:
@@ -1945,6 +1989,10 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	if((*chdesc)->block)
 		bdesc_release(&(*chdesc)->block);
 	
+#if COUNT_CHDESCS
+	chdesc_counts[(*chdesc)->type]--;
+	dump_counts();
+#endif
 	memset(*chdesc, 0, sizeof(**chdesc));
 	free(*chdesc);
 	*chdesc = NULL;
