@@ -233,7 +233,7 @@ static void kfsd_main(int nwbblocks)
 	kfsd_leave(0);
 }
 
-static int nwbblocks = 128;
+static int nwbblocks = 512;
 module_param(nwbblocks, int, 0);
 MODULE_PARM_DESC(nwbblocks, "The number of write-back blocks to use");
 

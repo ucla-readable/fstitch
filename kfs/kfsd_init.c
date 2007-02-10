@@ -14,6 +14,7 @@
 #include <kfs/bsd_ptable.h>
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
+#include <kfs/wb2_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/mem_bd.h>
 #include <kfs/loop_bd.h>
@@ -477,12 +478,12 @@ BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 			return NULL;
 
 		/* create a cache above the resizer */
-		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
+		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 2)) )
 			return NULL;
 	}
 	else
 	{
-		if (! (bd = wb_cache_bd(bd, cache_nblks)) )
+		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 2)) )
 			return NULL;
 	}
 
