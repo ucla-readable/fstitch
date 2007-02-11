@@ -173,7 +173,8 @@ do
 
 	stop_kfsd
 
-	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t 1 | su $REAL_USER -c "tee -a $PROF_LOG"
+	echo "==== `date`" >> "$PROF_LOG"
+	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t 1 | su $REAL_USER -c "tee -a \"$PROF_LOG\""
 done
 
 echo "---- complete"
