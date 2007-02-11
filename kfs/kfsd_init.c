@@ -54,9 +54,11 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 #define USE_ICASE 0
 
-#define USE_WB_CACHE
+#define USE_WB_CACHE 2
 #ifndef USE_WB_CACHE
-#define wb_cache_bd wt_cache_bd
+#define wb2_cache_bd(bd, dblocks, blocks) wt_cache_bd(bd, dblocks)
+#elif USE_WB_CACHE != 2
+#define wb2_cache_bd(bd, dblocks, blocks) wb_cache_bd(bd, dblocks)
 #endif
 
 int kfsd_init(int nwbblocks)
