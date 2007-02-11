@@ -211,7 +211,7 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 	state_t * states = static_states;
 	state_t * state = states;
 
-  recurse_start:
+  recurse_enter:
 	assert(!noop_after->owner);
 	assert(prev_level != new_level);
 	assert(prev_level != BDLEVEL_NONE || new_level != BDLEVEL_NONE);
@@ -251,7 +251,7 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 				new_level = after_new_level;
 
 				INCREMENT_STATE(state, static_states, states, states_capacity);
-				goto recurse_start;
+				goto recurse_enter;
 
 			  recurse_resume:
 				(void) 0; /* placate compiler re deprecated end labels */
@@ -1545,19 +1545,61 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 #if CHDESC_CYCLE_CHECK
 static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 {
+	/* recursion-on-the-heap support */
+	struct state {
+		chdesc_t * after;
+		chdepdesc_t * dep;
+	};
+	typedef struct state state_t;
+	static state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	state_t * states = static_states;
+	state_t * state = states;
+	
+	int has_before = 0;
 	chdepdesc_t * dep;
+	
+  recurse_enter:
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, after, CHDESC_MARKED);
 	after->flags |= CHDESC_MARKED;
 	for(dep = after->befores; dep; dep = dep->before.next)
 	{
 		if(dep->before.desc == before)
-			return 1;
+		{
+			has_before = 1;
+			goto recurse_done;
+		}
 		if(!(dep->before.desc->flags & CHDESC_MARKED))
-			if(chdesc_has_before(dep->before.desc, before))
-				return 1;
+		{
+			/* Recursively check befores; equivalent to:
+			 * if(chdesc_has_before(dep->before.desc, before))
+			 *	return 1; */
+			state->after = after;
+			state->dep = dep;
+			
+			after = dep->before.desc;
+			
+			INCREMENT_STATE(state, static_states, states, states_capacity);
+			goto recurse_enter;
+			
+		  recurse_resume:
+			(void) 0; /* placate compiler re deprecated end labels */
+		}
 	}
-	/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
-	return 0;
+	
+	if(state != &states[0])
+	{
+		state--;
+		after = state->after;
+		dep = state->dep;
+		/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
+		goto recurse_resume;
+	}
+	
+  recurse_done:
+	if(states != static_states)
+		sfree(states, states_capacity * sizeof(*state));
+	return has_before;
 }
 #endif
 
