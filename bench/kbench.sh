@@ -3,12 +3,16 @@
 
 NRUNS=1
 TIME_LOG=time.log
+PROF_LOG=prof.log
 DISK=${DISK:-/dev/sdb}
 KMNT=kfs:/
 MNT=/mnt/test
 TARFILE=linux-2.6.15.tar
 TAROUT=linux-2.6.15
 VMLINUX=/lib/modules/`uname -r`/source/vmlinux
+
+# Try to load oprofile, then detect whether it worked
+zgrep -q OPROFILE /proc/config.gz && modprobe oprofile
 PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 
 WRAP_PID=0
@@ -169,7 +173,7 @@ do
 
 	stop_kfsd
 
-	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t 1
+	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t 1 | su $REAL_USER -c "tee -a $PROF_LOG"
 done
 
 echo "---- complete"
