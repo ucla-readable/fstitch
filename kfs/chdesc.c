@@ -29,6 +29,11 @@
 /* Set to track the nrb chdesc merge stats and print them after shutdown */
 #define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
 
+/* Set to merge all existing RBs into a NRB when creating a NRB on the block */
+#define CHDESC_MERGE_RBS (CHDESC_NRB && 0)
+
+static void chdesc_dep_remove(chdepdesc_t * dep);
+
 #if COUNT_CHDESCS
 #include <lib/jiffies.h>
 /* indices match chdesc->type */
@@ -366,7 +371,7 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 
 /* propagate a depend add through a noop before,
  * to increment extern_after_count for before's block */
-static void propagate_extern_after_add_thru_noop_before(chdesc_t * noop_before, const chdesc_t * after)
+static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_before, const chdesc_t * after, bool add)
 {
 	chdepdesc_t * dep;
 	assert(noop_before->type == NOOP && !noop_before->owner);
@@ -376,14 +381,22 @@ static void propagate_extern_after_add_thru_noop_before(chdesc_t * noop_before, 
 		chdesc_t * before = dep->before.desc;
 		if(before->block && chdesc_is_external(after, before->block))
 		{
-			before->block->ddesc->extern_after_count++;
-			assert(before->block->ddesc->extern_after_count);
+			if(add)
+			{
+				before->block->ddesc->extern_after_count++;
+				assert(before->block->ddesc->extern_after_count);
+			}
+			else
+			{
+				assert(before->block->ddesc->extern_after_count);
+				before->block->ddesc->extern_after_count--;
+			}
 		}
 		else if(!before->owner)
 		{
 			assert(before->type == NOOP);
 			/* XXX: stack usage */
-			propagate_extern_after_add_thru_noop_before(before, after);
+			propagate_extern_after_change_thru_noop_before(before, after, add);
 		}
 	}
 }
@@ -423,7 +436,7 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 	}
 #if BDESC_EXTERN_AFTER_COUNT
 	else if(!before->owner)
-		propagate_extern_after_add_thru_noop_before(before, after);
+		propagate_extern_after_change_thru_noop_before(before, after, 1);
 	if(before->block && chdesc_is_external(after, before->block))
 	{
 		before->block->ddesc->extern_after_count++;
@@ -456,7 +469,7 @@ static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 		{
 			/* Note: if we remove a dependency from data->NOOP to NOOP->data,
 			 * propagate_extern_after_change_thru_noop_after() should
-			 * also propagate thru noops to before blocksf, as in
+			 * also propagate thru noops to before blocks, as in
 			 * propagate_depend_add().
 			 * TODO: Can move_befores_for_merge() remove such dependencies? */
 			assert(!after->afters || !before->befores);
@@ -1069,8 +1082,7 @@ static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, 
 
 /* Move chdesc's (transitive) befores that cannot reach merge_target
  * to be merge_target's befores, so that a merge into merge_target
- * maintains the needed befores.
- * Return whether chdesc should be moved to be a merge_target before. */
+ * maintains the needed befores. */
 static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 {
 	/* recursion-on-the-heap support */
@@ -1108,6 +1120,14 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	}
 	if(chdesc_is_external(chdesc, merge_target->block))
 		goto recurse_return;
+	if(chdesc->type != NOOP)
+	{
+		/* Treat same-block, data chdescs as able to reach merge_target for
+		 * move_befores_for_rb_merge(), which will take care of them. */
+		chdesc->flags |= CHDESC_MARKED;
+		reachable = 1;
+		goto recurse_return;
+	}
 	
 	/* discover the subset of befores that cannot reach target */
 	/* TODO: do not scan a given dep->before.desc multiple times? */	
@@ -1168,6 +1188,208 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 }
 #endif
 
+#if CHDESC_MERGE_RBS
+/* Return whether 'after' depends on any data chdesc on its block.
+ * Requires 'bdesc' to have no external afters. */
+static bool chdesc_has_block_befores(const chdesc_t * after, const bdesc_t * bdesc)
+{
+	chdepdesc_t * dep;
+	for(dep = after->befores; dep; dep = dep->before.next)
+	{
+		const chdesc_t * before = dep->before.desc;
+		if(chdesc_is_external(before, bdesc) || (before->flags & CHDESC_INFLIGHT))
+			continue;
+		if(before->type != NOOP)
+			return 1;
+		if(chdesc_has_block_befores(before, bdesc))
+			return 1;
+	}
+	return 0;
+}
+
+/* Return the address of the chdesc containing the pointed to ddesc_next */
+static chdesc_t * pprev2chdesc(chdesc_t ** chdesc_ddesc_pprev)
+{
+	return container_of(chdesc_ddesc_pprev, chdesc_t, ddesc_next);
+}
+
+/* Return a data chdesc on 'block' that has no before path to a chdesc
+ * on its block. Return NULL if there are no data chdescs on 'block'. */
+static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
+{
+	/* The last data chdesc should be the oldest chdesc on 'block'
+	 * and, since it is not an NRB, thus have no block befores */
+	chdesc_t ** pprev = block->ddesc->all_changes_tail;
+	chdesc_t * chdesc;
+	for(; pprev != &block->ddesc->all_changes; pprev = chdesc->ddesc_pprev)
+	{
+		chdesc = pprev2chdesc(pprev);
+		if(chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT))
+		{
+			assert(chdesc->type == BYTE || chdesc->type == BIT);
+			assert(!chdesc_has_block_befores(chdesc, block));
+			return chdesc;
+		}
+		if(chdesc == block->ddesc->all_changes)
+			break;
+	}
+	return NULL;
+}
+
+/* Remove all block bit_changes befores */
+static void empty_bit_changes(bdesc_t * block)
+{
+	hash_map_it_t it;
+	chdesc_t * chdesc;
+	if(!block->ddesc->bit_changes)
+		return;
+	hash_map_it_init(&it, block->ddesc->bit_changes);
+	while((chdesc = hash_map_val_next(&it)))
+	{
+		chdesc_destroy(&chdesc);
+		/* TODO: re-init is necessary since chdesc_destroy() removes chdesc,
+		 * but it may be more efficient to not have to re-init... */
+		hash_map_it_init(&it, block->ddesc->bit_changes);
+	}
+}
+
+/* Merge all RBs on 'block' into a single NRB */
+static void merge_rbs(bdesc_t * block)
+{
+	static uint32_t ncalls = 0, nmerged_total = 0;
+	uint32_t nmerged = 0;
+	chdesc_t * merger, * chdesc, * next;
+	int r;
+	
+	/* choose merger so that it does not depend on any other data chdescs
+	 * on the block to simplify before merging */ 
+	if(!(merger = find_chdesc_without_block_befores(block)))
+		return;
+
+	/* move the befores of each RB for their merge */
+	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+		if(chdesc != merger && chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT))
+			move_befores_for_merge(chdesc, merger);
+	
+	/* convert RB merger into a NRB (except overlaps, done later) */
+	if(merger->type == BYTE)
+		free(merger->byte.data);
+	else if(merger->type == BIT)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, merger, 0, merger->owner->level);
+# if COUNT_CHDESCS
+		chdesc_counts[BIT]--;
+		chdesc_counts[BYTE]++;
+		dump_counts();
+# endif
+		merger->type = BYTE;
+	}
+	else
+		assert(0);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, chdesc, 0);
+	merger->byte.offset = 0;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, chdesc, block->ddesc->length);
+	merger->byte.length = block->ddesc->length;
+	merger->byte.data = NULL;
+# if CHDESC_BYTE_SUM
+	merger->byte.old_sum = 0;
+	merger->byte.new_sum = 0;
+# endif
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, merger, CHDESC_OVERLAP);
+	merger->flags &= ~CHDESC_OVERLAP;
+	assert(!block->ddesc->nrb);
+	r = chdesc_weak_retain(merger, &block->ddesc->nrb);
+	assert(r >= 0);
+	
+	/* convert non-merger data chdescs into noops so that pointers to them
+	 * remain valid.
+	 * TODO: could we destroy the noops with no afters after the runloop? */
+
+	/* first: remove all overlaps in one run (for O(N) instead of O(N^2) time)
+	 * and add merger to overlaps to complete NRB construction.
+	 * this will remove deps on internal inflight chdescs, but that is ok. */
+	empty_bit_changes(block);
+	while(block->ddesc->overlaps)
+	{
+		assert(block->ddesc->overlaps->befores);
+		chdesc_dep_remove(block->ddesc->overlaps->befores);
+	}
+	r = ensure_bdesc_has_overlaps(block);
+	assert(r >= 0);
+	r = chdesc_add_depend_fast(block->ddesc->overlaps, merger);
+	assert(r >= 0);
+
+	/* second: convert data chdescs into noops
+	 * part a: unpropagate extern after counts (no more data chdesc afters)
+	 * (do before rest of conversion to correctly (not) recurse) */
+	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+	{
+		chdepdesc_t * dep;
+		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
+			continue;
+		for(dep = chdesc->befores; dep; dep = dep->before.next)
+		{
+			chdesc_t * before = dep->before.desc;
+			if(!before->owner)
+				propagate_extern_after_change_thru_noop_before(before, chdesc, 0);
+			else if(before->block && chdesc_is_external(chdesc, before->block))
+			{
+				assert(before->block->ddesc->extern_after_count);
+				before->block->ddesc->extern_after_count--;
+			}
+		}
+	}
+	/* second, part b: convert into noops */
+	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = next)
+	{
+		uint16_t level;
+		uint16_t flags;
+		next = chdesc->ddesc_next;
+		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
+			continue;
+		
+		nmerged++;
+		
+		/* ensure chdesc depends on merger. add dep prior to noop conversion
+		 * to do correct level propagation inside chdesc_add_depend(). */
+		flags = chdesc->flags;
+		chdesc->flags |= CHDESC_SAFE_AFTER;
+		r = chdesc_add_depend(chdesc, merger);
+		assert(r >= 0);
+		chdesc->flags = flags;
+		
+		chdesc_unlink_ready_changes(chdesc);
+		chdesc_unlink_all_changes(chdesc);		
+		if(chdesc->type == BYTE)
+			free(chdesc->byte.data);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
+# if COUNT_CHDESCS
+		chdesc_counts[chdesc->type]--;
+		chdesc_counts[NOOP]++;
+		dump_counts();
+# endif
+		chdesc->type = NOOP;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, NULL);
+		bdesc_release(&chdesc->block);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, NULL);
+		chdesc->owner = NULL;
+		chdesc->noop.bit_changes = NULL;
+		chdesc->noop.hash_key = NULL;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_OVERLAP);
+		chdesc->flags &= ~CHDESC_OVERLAP;
+		
+		if(merger->owner->level != (level = chdesc_level(chdesc)))
+			propagate_level_change_thru_noop(chdesc, merger->owner->level, level);
+	}
+	if(nmerged)
+	{
+		ncalls++;
+		nmerged_total += nmerged;
+		printf("%s(block %u). merged: %u now, %u total, %u avg.\n", __FUNCTION__, block->number, nmerged, nmerged_total, nmerged_total / ncalls);
+	}
+}
+#endif
+
 /* Attempt to merge into an existing chdesc instead of create a new chdesc.
  * Returns 1 on successful merge (*merged points merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
@@ -1175,6 +1397,10 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 {
 #if CHDESC_NRB
 	chdesc_t * merger;
+# if CHDESC_MERGE_RBS
+	if(!new_chdescs_require_data(block) && !block->ddesc->nrb)
+		merge_rbs(block);
+# endif
 	if(!(merger = select_chdesc_merger(block, before)))
 		return 0;
 	if(before && !(before->flags & CHDESC_WRITTEN))
