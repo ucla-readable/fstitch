@@ -179,6 +179,22 @@ static void pop_slot(struct cache_info * info, struct lru_slot * slot)
 	hash_map_erase(info->block_map, (void *) number);
 }
 
+static void pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
+{
+	assert(dirty_slot(info, slot));
+	if(slot->dirty.prev)
+		slot->dirty.prev->dirty.next = slot->dirty.next;
+	else
+		info->dirty.first = slot->dirty.next;
+	if(slot->dirty.next)
+		slot->dirty.next->dirty.prev = slot->dirty.prev;
+	else
+		info->dirty.last = slot->dirty.prev;
+	slot->dirty.prev = NULL;
+	slot->dirty.next = NULL;
+	info->dblocks--;
+}
+
 static void touch_block_read(struct cache_info * info, struct lru_slot * slot)
 {
 	/* already the first? */
@@ -200,29 +216,6 @@ static void touch_block_read(struct cache_info * info, struct lru_slot * slot)
 		slot->all.next->all.prev = slot;
 	else
 		info->all.last = slot;
-}
-
-static void touch_block_write(struct cache_info * info, struct lru_slot * slot)
-{
-	/* already the first? */
-	if(info->dirty.first == slot)
-		return;
-	
-	/* must have a prev, so detach it */
-	slot->dirty.prev->dirty.next = slot->dirty.next;
-	if(slot->dirty.next)
-		slot->dirty.next->dirty.prev = slot->dirty.prev;
-	else
-		info->dirty.last = slot->dirty.prev;
-	
-	/* now re-add it */
-	slot->dirty.prev = NULL;
-	slot->dirty.next = info->dirty.first;
-	info->dirty.first = slot;
-	if(slot->dirty.next)
-		slot->dirty.next->dirty.prev = slot;
-	else
-		info->dirty.last = slot;
 }
 
 static int flush_block(BD_t * object, bdesc_t * block, int * delay)
@@ -305,18 +298,26 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			slot = slot->dirty.prev;
 		else
 		{
+			uint32_t number = slot->block->number;
 			struct lru_slot * prev = slot->dirty.prev;
-			if(slot->dirty.prev)
-				slot->dirty.prev->dirty.next = slot->dirty.next;
-			else
-				info->dirty.first = slot->dirty.next;
-			if(slot->dirty.next)
-				slot->dirty.next->dirty.prev = slot->dirty.prev;
-			else
-				info->dirty.last = slot->dirty.prev;
-			slot->dirty.prev = NULL;
-			slot->dirty.next = NULL;
-			info->dblocks--;
+			pop_slot_dirty(info, slot);
+			/* now try and find sequential blocks to write */
+			while((slot = hash_map_find_val(info->block_map, (void *) ++number)))
+			{
+				if(!dirty_slot(info, slot))
+					break;
+				/* if we were about to examine this block, don't */
+				if(slot == prev)
+					prev = prev->dirty.prev;
+				/* assume it will be merged, so don't ask for delay */
+				status = flush_block(object, slot->block, NULL);
+				/* clean slot now? */
+				if(status >= 0)
+					pop_slot_dirty(info, slot);
+				/* if we didn't actually write it, stop looking */
+				if(status == FLUSH_EMPTY || status == FLUSH_NONE)
+					break;
+			}
 			slot = prev;
 		}
 		/* if we're just preening, then stop if there was I/O delay */
@@ -450,7 +451,6 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		 * it later when a revision slice has zero size */
 		if(!dirty_slot(info, slot))
 			push_slot_dirty(info, slot);
-		touch_block_write(info, slot);
 	}
 	else
 	{
@@ -514,6 +514,10 @@ static void wb2_cache_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
 	shrink_dblocks(object, PREEN);
+#if DEBUG_TIMING
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	printk(KERN_ERR "%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
+#endif
 }
 
 static int wb2_cache_bd_destroy(BD_t * bd)

@@ -511,12 +511,12 @@ BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 			return NULL;
 
 		/* create a cache above the resizer */
-		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 2)) )
+		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 4)) )
 			return NULL;
 	}
 	else
 	{
-		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 2)) )
+		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 4)) )
 			return NULL;
 	}
 
