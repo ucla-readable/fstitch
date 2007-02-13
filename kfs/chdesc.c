@@ -304,14 +304,10 @@ static bool count_chdesc_external_afters(const chdesc_t * chdesc, const bdesc_t 
 	for(afters = chdesc->afters; afters; afters = afters->after.next)
 	{
 		const chdesc_t * after = afters->after.desc;
-		if(after->type == NOOP)
+		if(!after->block)
 		{
-			if(after->block && after->block->ddesc != block->ddesc)
-				n++;
-			else
-				/* TODO: should this run only when '!after->block'? Not also when 'ddesc == ddesc'? */
-				/* XXX: stack usage */
-				n += count_chdesc_external_afters(after, block);
+			/* XXX: stack usage */
+			n += count_chdesc_external_afters(after, block);
 		}
 		else if(after->block->ddesc != block->ddesc)
 			n++;
@@ -342,12 +338,18 @@ static bool extern_after_count_is_correct(const bdesc_t * block)
 static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_after, bdesc_t * block, bool add)
 {
 	chdepdesc_t * dep;
-	assert(noop_after->type == NOOP && !noop_after->owner);
+	assert(noop_after->type == NOOP && !noop_after->block);
 	assert(block);
 	for(dep = noop_after->afters; dep; dep = dep->after.next)
 	{
 		chdesc_t * after = dep->after.desc;
-		if(after->block && chdesc_is_external(after, block))
+		if(!after->block)
+		{
+			assert(after->type == NOOP);
+			/* XXX: stack usage */
+			propagate_extern_after_change_thru_noop_after(after, block, add);
+		}
+		else if(chdesc_is_external(after, block))
 		{
 			if(add)
 			{
@@ -360,12 +362,6 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 				block->ddesc->extern_after_count--;
 			}
 		}
-		else if(!after->owner)
-		{
-			assert(after->type == NOOP);
-			/* XXX: stack usage */
-			propagate_extern_after_change_thru_noop_after(after, block, add);
-		}
 	}
 }
 
@@ -374,12 +370,18 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_before, const chdesc_t * after, bool add)
 {
 	chdepdesc_t * dep;
-	assert(noop_before->type == NOOP && !noop_before->owner);
+	assert(noop_before->type == NOOP && !noop_before->block);
 	assert(after->type != NOOP);
 	for(dep = noop_before->befores; dep; dep = dep->before.next)
 	{
 		chdesc_t * before = dep->before.desc;
-		if(before->block && chdesc_is_external(after, before->block))
+		if(!before->block)
+		{
+			assert(before->type == NOOP);
+			/* XXX: stack usage */
+			propagate_extern_after_change_thru_noop_before(before, after, add);
+		}
+		else if(chdesc_is_external(after, before->block))
 		{
 			if(add)
 			{
@@ -391,12 +393,6 @@ static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_befor
 				assert(before->block->ddesc->extern_after_count);
 				before->block->ddesc->extern_after_count--;
 			}
-		}
-		else if(!before->owner)
-		{
-			assert(before->type == NOOP);
-			/* XXX: stack usage */
-			propagate_extern_after_change_thru_noop_before(before, after, add);
 		}
 	}
 }
@@ -415,11 +411,11 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 	after->nbefores[before_level]++;
 	assert(after->nbefores[before_level]);
 	chdesc_update_ready_changes(after);
-	if(!after->owner)
-	{
-		if(before_level > after_prev_level || after_prev_level == BDLEVEL_NONE)
+	if(!after->owner && (before_level > after_prev_level || after_prev_level == BDLEVEL_NONE))
 			propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
+	if(!after->block)
+	{
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, 1);
 		else
@@ -432,12 +428,10 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 			 * all data/noop -before and -after combinations */
 			assert(!after->afters || !before->befores);
 		}
-#endif
 	}
-#if BDESC_EXTERN_AFTER_COUNT
-	else if(!before->owner)
+	else if(!before->block)
 		propagate_extern_after_change_thru_noop_before(before, after, 1);
-	if(before->block && chdesc_is_external(after, before->block))
+	else if(chdesc_is_external(after, before->block))
 	{
 		before->block->ddesc->extern_after_count++;
 		assert(before->block->ddesc->extern_after_count);
@@ -458,11 +452,11 @@ static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 	assert(after->nbefores[before_level]);
 	after->nbefores[before_level]--;
 	chdesc_update_ready_changes(after);
-	if(!after->owner)
-	{
-		if(before_level == after_prev_level && !after->nbefores[before_level])
-			propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
+	if(!after->owner && (before_level == after_prev_level && !after->nbefores[before_level]))
+		propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
+	if(!after->block)
+	{
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, 0);
 		else
@@ -474,16 +468,14 @@ static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 			 * TODO: Can move_befores_for_merge() remove such dependencies? */
 			assert(!after->afters || !before->befores);
 		}
-#endif
 	}
-#if BDESC_EXTERN_AFTER_COUNT
-	else if(!before->owner)
+	else if(!before->block)
 	{
 		/* TODO: don't we need to propagate the extern_after remove through
 		 * a noop before? (The mirror of propagate_depend_add()'s action.) */
 		assert(!before->befores);
 	}
-	if(before->block && chdesc_is_external(after, before->block))
+	else if(chdesc_is_external(after, before->block))
 	{
 		assert(before->block->ddesc->extern_after_count);
 		before->block->ddesc->extern_after_count--;
@@ -865,11 +857,14 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
 }
 
 /* NOOP chdescs may have:
- * - NULL block and owner, in which case it is a "normal" NOOP
- * - NULL block and non-NULL owner, in which case it will have a device level
- *   and thus prevent its afters from going lower than that device
- * - non-NULL block and owner, in which case it also makes the block dirty and
- *   can prevent the block from being evicted from a cache */
+ * - NULL block and owner, in which case it is a "normal" NOOP.
+ *   (propagates before/after counts. propagates external counts.)
+ * - NULL block and non-NULL owner: has a device level and thus prevents its afters
+ *   from going lower than that device.
+ *   (counts towards before/after counts. propagates external counts.)
+ * - non-NULL block and owner: makes the block dirty and can prevent the block from
+ *   being evicted from a cache, is internal/external.
+ *   (counts towards before/after counts. counts towards external counts.) */
 
 int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
@@ -1157,7 +1152,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 		for(dep = chdesc->befores; dep; dep = dep->before.next)
 			if(!(dep->before.desc->flags & CHDESC_MARKED))
 				chdesc_move_before_fast(chdesc, merge_target, dep->before.desc);
-		/* remove marks only after the preceeding loop because of multipaths */
+		/* remove marks only after the preceding loop because of multipaths */
 		for(dep = chdesc->befores; dep; dep = dep->before.next)
 			dep->before.desc->flags &= ~CHDESC_MARKED;
 	}
@@ -1330,9 +1325,9 @@ static void merge_rbs(bdesc_t * block)
 		for(dep = chdesc->befores; dep; dep = dep->before.next)
 		{
 			chdesc_t * before = dep->before.desc;
-			if(!before->owner)
+			if(!before->block)
 				propagate_extern_after_change_thru_noop_before(before, chdesc, 0);
-			else if(before->block && chdesc_is_external(chdesc, before->block))
+			else if(chdesc_is_external(chdesc, before->block))
 			{
 				assert(before->block->ddesc->extern_after_count);
 				before->block->ddesc->extern_after_count--;
