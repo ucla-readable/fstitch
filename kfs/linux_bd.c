@@ -155,17 +155,20 @@ static uint16_t linux_bd_get_atomicsize(BD_t * object)
 
 struct linux_bio_private {
 	struct linux_info * info;
-
-	uint32_t seq;
 	bdesc_t * bdesc;
 	uint32_t number;
 	uint16_t count;
 #if DEBUG_WRITES
 	uint32_t issue;
 #endif
+#if DEBUG_LINUX_BD
+	uint32_t seq;
+#endif
 };
 
+#if DEBUG_LINUX_BD
 static uint32_t _seq = 0;
+#endif
 
 static spinlock_t dma_outstanding_lock = SPIN_LOCK_UNLOCKED;
 static int dma_outstanding = 0;
@@ -266,8 +269,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		private[j].bdesc = blocks[j];
 		private[j].number = j_number;
 		private[j].count = count;
-		// TODO: what happens if _seq wraps?
+#if DEBUG_LINUX_BD
 		private[j].seq = _seq++;
+#endif
 #if DEBUG_WRITES
 		private[j].issue = -1;
 #endif
@@ -337,15 +341,14 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 	assert(info->waitq.task_list.next);
 	assert(info->waitq.task_list.next->next);
 
-	KDprintk(KERN_ERR "[%d] done w/ bio transfer (%d, %d)\n", private->seq,
-			 done, error);
+	KDprintk(KERN_ERR "[%d] done w/ bio transfer (%d, %d)\n", private->seq, done, error);
 	if (bio->bi_size)
 	{
-		/* Everyone else in the [2.6.12] linux kernel returns one here;
+		/* Everyone else in the [2.6.12] Linux kernel returns 1 here;
 		 * we follow their lead. No one inspects bi_end_io()'s return value,
 		 * either. */
 		/* Should we decrement info->outstanding_io_count at this exit?
-		 * It sounds like non-zero bi_size may mean the i/o is not yet
+		 * It sounds like non-zero bi_size may mean the I/O is not yet
 		 * complete. So we'll not and hope it works out. */
 		return 1;
 	}
@@ -543,7 +546,9 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	private->bdesc = block;
 	private->number = block->number;
 	private->count = block->count;
+#if DEBUG_LINUX_BD
 	private->seq = _seq++;
+#endif
 
 	bio->bi_idx = 0;
 	bio->bi_vcnt = vec_len;
