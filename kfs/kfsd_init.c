@@ -27,6 +27,7 @@
 #include <kfs/opgroup_lfs.h>
 #include <kfs/uhfs.h>
 #include <kfs/icase_cfs.h>
+#include <kfs/revision.h>
 #include <kfs/modman.h>
 #include <kfs/sched.h>
 #include <kfs/kfsd.h>
@@ -37,6 +38,8 @@
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ops.h>
 #include <kfs/kernel_opgroup_scopes.h>
+
+#define LINUX_BD_TIMING_TEST 0
 
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
@@ -139,6 +142,34 @@ int kfsd_init(int nwbblocks)
 			printf("Using device %s\n", linux_device);
 			if (! (bd = linux_bd(linux_device)) )
 				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
+#if LINUX_BD_TIMING_TEST
+			int jiffies = jiffy_time();
+			uint32_t number;
+			bdesc_autorelease_pool_push();
+			printf("Timing test: writing 200000 sequential 8-sector blocks\n");
+			for(number = 0; number < 200000; number++)
+			{
+				bdesc_t * block;
+				chdesc_t * init = NULL;
+				block = CALL(bd, synthetic_read_block, number * 8, 8);
+				chdesc_create_init(block, bd, &init);
+				CALL(bd, write_block, block);
+				if(number % 10000 == 9999)
+				{
+					printf("Timing test: %d blocks written\n", number + 1);
+					revision_tail_process_landing_requests();
+					chdesc_reclaim_written();
+					bdesc_autorelease_pool_pop();
+					bdesc_autorelease_pool_push();
+				}
+			}
+			chdesc_reclaim_written();
+			bdesc_autorelease_pool_pop();
+			jiffies = jiffy_time() - jiffies;
+			printf("Timing test complete! Total time: %d.%02d seconds\n", jiffies / HZ, (jiffies % HZ) * 100 / HZ);
+			DESTROY(bd);
+			bd = NULL;
+#endif
 		}
 		if (bd)
 		{

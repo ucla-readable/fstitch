@@ -28,6 +28,9 @@
 KERNEL_TIMING(read);
 KERNEL_TIMING(write);
 KERNEL_TIMING(wait);
+#if DEBUG_TIMING
+#include <lib/jiffies.h>
+#endif
 
 #ifdef CONFIG_MD
 #error linux_bd is (apparently) incompatible with RAID/LVM
@@ -249,7 +252,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 		}
 		for (i = 0; i < vec_len; i++) {
 			bv = bio_iovec_idx(bio, i);
-			bv->bv_page = alloc_page((GFP_KERNEL | GFP_DMA));
+			bv->bv_page = alloc_page(GFP_KERNEL);
 			if (!bv->bv_page) {
 				printk(KERN_ERR "alloc_page() failed\n");
 				return NULL;
@@ -395,7 +398,8 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 	}
 	bio_put(bio);
 
-	if (dir == READ) {
+	if (dir == READ)
+	{
 		int do_wake_up = 0;
 		spin_lock_irqsave(&dma_outstanding_lock, flags);
 		if (!--dma_outstanding)
@@ -405,6 +409,23 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 		if (do_wake_up)
 			wake_up_all(&info->waitq);
 	}
+#if DEBUG_TIMING
+	else
+	{
+		static int last_jif = 0;
+		static int jif_writes = 0;
+		int now = jiffy_time();
+		if(!last_jif)
+			last_jif = now;
+		jif_writes++;
+		if(now - last_jif >= HZ)
+		{
+			printf("linux_bd: writes/sec = %d\n", jif_writes * HZ / (now - last_jif));
+			last_jif = now;
+			jif_writes = 0;
+		}
+	}
+#endif
 
 	atomic_dec(&info->outstanding_io_count);
 	return error;
@@ -502,7 +523,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	for (i = 0; i < vec_len; i++) {
 		bv = bio_iovec_idx(bio, i);
-		bv->bv_page = alloc_page(GFP_KERNEL | GFP_DMA);
+		bv->bv_page = alloc_page(GFP_KERNEL);
 		if (!bv->bv_page) {
 			printk(KERN_ERR "alloc_page() failed\n");
 			return -E_NO_MEM;
