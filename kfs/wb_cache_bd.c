@@ -180,6 +180,8 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 			break;
 	if(!chdesc)
 		return FLUSH_EMPTY;
+	if(!slot->block->ddesc->ready_changes[object->level].head)
+		return FLUSH_NONE;
 	
 	r = revision_slice_create(slot->block, object, info->bd, &slice);
 	if(r < 0)
