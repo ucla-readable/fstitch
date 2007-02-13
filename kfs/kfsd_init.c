@@ -41,7 +41,7 @@
 
 #define LINUX_BD_TIMING_TEST 0
 
-int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses);
+int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 int handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
@@ -56,6 +56,7 @@ struct kfsd_partition {
 typedef struct kfsd_partition kfsd_partition_t;
 
 #define USE_ICASE 0
+#define USE_JOURNAL 0
 
 #define USE_WB_CACHE 2
 #ifndef USE_WB_CACHE
@@ -64,9 +65,12 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define wb2_cache_bd(bd, dblocks, blocks) wb_cache_bd(bd, dblocks)
 #endif
 
+#if USE_WB_CACHE != 2 && USE_JOURNAL
+#error The journal requires a wb2_cache to function
+#endif
+
 int kfsd_init(int nwbblocks)
 {
-	const bool allow_journal = 0;
 	const bool use_disk_1 = 1;
 	const bool use_disk_2 = 1;
 	const bool use_mem_bd = 0;
@@ -174,7 +178,7 @@ int kfsd_init(int nwbblocks)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -194,7 +198,7 @@ int kfsd_init(int nwbblocks)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 			printf("Using disk 2\n");
-			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -207,7 +211,7 @@ int kfsd_init(int nwbblocks)
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
-			if ((r = construct_uhfses(bd, nwbblocks, allow_journal, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
 				return r;
 		}
 	}
@@ -244,7 +248,7 @@ int kfsd_init(int nwbblocks)
 
 
 // Bring up the filesystems for bd and add them to uhfses.
-int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector_t * uhfses)
+int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 {
 	void * ptbl = NULL;
 	void * bsdtbl = NULL;
@@ -353,19 +357,18 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, bool allow_journal, vector
 			if (!cache)
 				return -E_UNSPECIFIED;
 
-			if (allow_journal)
-			{
-				journal = journal_bd(cache);
-				if (journal)
-					is_journaled = 1;
-				else
-				{
-					kdprintf(STDERR_FILENO, "journal_bd failed, not journaling\n");
-					journal = cache;
-				}
-			}
+#if USE_JOURNAL
+			journal = journal_bd(cache);
+			if (journal)
+				is_journaled = 1;
 			else
+			{
+				kdprintf(STDERR_FILENO, "journal_bd failed, not journaling\n");
 				journal = cache;
+			}
+#else
+			journal = cache;
+#endif
 
 			lfs = josfs_lfs = josfs(journal);
 
