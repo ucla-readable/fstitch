@@ -247,6 +247,12 @@ static chdesc_t * opgroup_lfs_get_write_head(LFS_t * object)
 	return CALL(info->lfs, get_write_head);
 }
 
+static int32_t opgroup_lfs_get_block_space(LFS_t * object)
+{
+	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	return CALL(info->lfs, get_block_space);
+}
+
 static size_t opgroup_lfs_get_num_features(LFS_t * object, inode_t ino)
 {
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_num_features, ino);

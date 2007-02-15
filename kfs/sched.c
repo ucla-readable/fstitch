@@ -123,8 +123,6 @@ void sched_run_callbacks(void)
 		fn_entry_t * fe = vector_elt(fes, i);
 		if (fe->next - cur_ncs <= 0)
 		{
-			/* starting a new callback, so set a new request ID */
-			kfsd_next_request_id();
 			TIMING_START(interval);
 			fe->fn(fe->arg);
 			sched_run_cleanup();

@@ -5,6 +5,7 @@
 #include <asm/current.h>
 #include <linux/sched.h>
 #include <lib/assert.h>
+#include <lib/error.h>
 #include <kfs/cfs.h>
 #include <kfs/kfsd.h>
 #include <kfs/sched.h>
@@ -22,6 +23,14 @@ int kernel_serve_init(void);
 struct task_struct;
 extern struct task_struct * kfsd_task;
 
+typedef void (*unlock_callback_t)(void *, int);
+struct callback_list {
+	unlock_callback_t callback;
+	void * data;
+	int count;
+	struct callback_list * next;
+};
+
 /* Linux doesn't like us scheduling while we hold a lock. We want to be able to
  * do it anyway, so we build a spinlock out of a spinlock. While we're at it,
  * add the PID of the process holding the lock. This structure is initialized by
@@ -30,6 +39,7 @@ struct stealth_lock {
 	spinlock_t lock;
 	int locked;
 	pid_t process;
+	struct callback_list * callbacks;
 };
 
 extern struct stealth_lock kfsd_global_lock;
@@ -59,8 +69,6 @@ static inline void kfsd_enter(void)
 			kfsd_global_lock.process = current->pid;
 			spin_unlock(&kfsd_global_lock.lock);
 			opgroup_scope_set_current(process_opgroup_scope(current));
-			/* starting a new request, so set a new request ID */
-			kfsd_next_request_id();
 #if CONTENTION_WARNING
 			if(tries >= 5)
 				printk(KERN_EMERG "%s failed to acquire kfsd lock %d times\n", current->comm, tries);
@@ -77,10 +85,37 @@ static inline void kfsd_enter(void)
 	}
 }
 
+static inline int kfsd_unlock_callback(unlock_callback_t callback, void * data)
+{
+	assert(kfsd_global_lock.locked);
+	assert(kfsd_global_lock.process == current->pid);
+	if(kfsd_global_lock.callbacks && kfsd_global_lock.callbacks->callback == callback && kfsd_global_lock.callbacks->data == data)
+		kfsd_global_lock.callbacks->count++;
+	else
+	{
+		struct callback_list * list = malloc(sizeof(*list));
+		if(!list)
+			return -E_NO_MEM;
+		list->callback = callback;
+		list->data = data;
+		list->count = 1;
+		list->next = kfsd_global_lock.callbacks;
+		kfsd_global_lock.callbacks = list;
+	}
+	return 0;
+}
+
 static inline void kfsd_leave(int cleanup)
 {
 	assert(kfsd_global_lock.locked);
 	assert(kfsd_global_lock.process == current->pid);
+	while(kfsd_global_lock.callbacks)
+	{
+		struct callback_list * first = kfsd_global_lock.callbacks;
+		kfsd_global_lock.callbacks = first->next;
+		first->callback(first->data, first->count);
+		free(first);
+	}
 	opgroup_scope_set_current(NULL);
 	if(cleanup)
 		sched_run_cleanup();

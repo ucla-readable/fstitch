@@ -394,6 +394,12 @@ static chdesc_t * wb_cache_bd_get_write_head(BD_t * object)
 	return CALL(info->bd, get_write_head);
 }
 
+static int32_t wb_cache_bd_get_block_space(BD_t * object)
+{
+	/* the classic wb_cache does not support get_block_space, so it returns 0 */
+	return 0;
+}
+
 static void wb_cache_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;

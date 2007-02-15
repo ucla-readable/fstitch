@@ -141,6 +141,15 @@ static chdesc_t * md_bd_get_write_head(BD_t * object)
 	return result;
 }
 
+static int32_t md_bd_get_block_space(BD_t * object)
+{
+	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	int32_t result[2];
+	result[0] = CALL(info->bd[0], get_block_space);
+	result[1] = CALL(info->bd[1], get_block_space);
+	return (result[0] > result[1]) ? result[1] : result[0];
+}
+
 static int md_bd_destroy(BD_t * bd)
 {
 	int r = modman_rem_bd(bd);

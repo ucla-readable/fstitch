@@ -153,6 +153,11 @@ static chdesc_t * mem_bd_get_write_head(BD_t * object)
 	return NULL;
 }
 
+static int32_t mem_bd_get_block_space(BD_t * object)
+{
+	return 0;
+}
+
 static int mem_bd_destroy(BD_t * bd)
 {
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);

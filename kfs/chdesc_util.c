@@ -119,15 +119,23 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	chdesc_t * scan;
 	uint16_t range = block->ddesc->length;
 	
-	if(*head)
-	{
-		kdprintf(STDERR_FILENO, "%s:%d %s() called with non-null *head!\n", __FILE__, __LINE__, __FUNCTION__);
-		return -E_PERM;
-	}
 	if(!block->ddesc->all_changes)
 		return chdesc_create_full(block, owner, data, head);
 	
-	/* FIXME: check for some other cases when we should just fall back on chdesc_create_full() */
+	if(*head)
+		/* check to see whether *head is compatible with the existing chdescs */
+		for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+		{
+			chdepdesc_t * befores;
+			if(scan->type != BYTE)
+				continue;
+			for(befores = scan->befores; befores; befores = befores->before.next)
+				if(befores->before.desc == *head)
+					break;
+			if(!befores)
+				/* we did not find *head among existing befores */
+				return chdesc_create_full(block, owner, data, head);
+		}
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 	{

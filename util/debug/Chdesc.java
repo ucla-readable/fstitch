@@ -19,7 +19,6 @@ public class Chdesc
 	public static final int FLAG_OVERLAP = 0x40;
 	public static final int FLAG_SAFE_AFTER = 0x80;
 	public static final int FLAG_INFLIGHT = 0x100;
-	public static final int FLAG_DBWAIT = 0x8000;
 	
 	public final int address, opcode;
 	
@@ -468,8 +467,6 @@ public class Chdesc
 			names += " | BIT_NOOP";
 		if((flags & FLAG_OVERLAP) != 0)
 			names += " | FLAG_OVERLAP";
-		if((flags & FLAG_DBWAIT) != 0)
-			names += " | DBWAIT";
 		if((flags & FLAG_SAFE_AFTER) != 0)
 			names += " | SAFE_AFTER";
 		if((flags & FLAG_INFLIGHT) != 0)

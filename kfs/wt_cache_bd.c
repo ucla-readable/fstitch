@@ -249,6 +249,12 @@ static chdesc_t * wt_cache_bd_get_write_head(BD_t * object)
 	return CALL(info->bd, get_write_head);
 }
 
+static int32_t wt_cache_bd_get_block_space(BD_t * object)
+{
+	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	return CALL(info->bd, get_block_space);
+}
+
 static int wt_cache_bd_destroy(BD_t * bd)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);

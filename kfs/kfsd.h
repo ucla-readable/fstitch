@@ -14,8 +14,4 @@ int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, v
 void kfsd_request_shutdown(void);
 int kfsd_is_running(void);
 
-/* every userspace request gets a unique ID */
-void kfsd_next_request_id(void);
-uint32_t kfsd_get_request_id(void);
-
 #endif // not __KUDOS_KFS_KFSD

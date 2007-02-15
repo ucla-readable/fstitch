@@ -166,6 +166,12 @@ static chdesc_t * loop_get_write_head(BD_t * bd)
 	return CALL(info->lfs, get_write_head);
 }
 
+static int32_t loop_get_block_space(BD_t * bd)
+{
+	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	return CALL(info->lfs, get_block_space);
+}
+
 static int loop_destroy(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);

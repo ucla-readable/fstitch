@@ -38,9 +38,6 @@ typedef struct chrefdesc chrefdesc_t;
 #define CHDESC_SAFE_AFTER 0x80 /* add depend: assume this is a safe after */
 #define CHDESC_INFLIGHT  0x100 /* chdesc is being written to disk */
 
-/* only effective in debugging mode */
-#define CHDESC_DBWAIT  0x8000 /* wait for debug mark before this gets written (in debug mode) */
-
 struct chdesc {
 	BD_t * owner;
 	bdesc_t * block;

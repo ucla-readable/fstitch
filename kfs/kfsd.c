@@ -193,18 +193,6 @@ int kfsd_is_running(void)
 	return kfsd_running > 0;
 }
 
-static uint32_t kfsd_request_id = 0;
-
-void kfsd_next_request_id(void)
-{
-	kfsd_request_id++;
-}
-
-uint32_t kfsd_get_request_id(void)
-{
-	return kfsd_request_id;
-}
-
 static void kfsd_main(int nwbblocks)
 {
 	int r;

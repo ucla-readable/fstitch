@@ -2013,7 +2013,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 		{
 			/* ...but check for this anyway */
 			chrefdesc_t * next = chdesc->weak_refs;
-			kdprintf(STDERR_FILENO, "%s: (%s:%d): dangling chdesc weak reference!\n", __FUNCTION__, __FILE__, __LINE__);
+			kdprintf(STDERR_FILENO, "%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 			chdesc->weak_refs = next->next;
 			free(next);
 		}
@@ -2131,6 +2131,14 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 
 int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 {
+	if(*location && *location == chdesc)
+	{
+		chrefdesc_t * ref = chdesc->weak_refs;
+		for(; ref; ref = ref->next)
+			if(ref->desc == location)
+				return 0;
+	}
+	
 	if(chdesc)
 	{
 		chrefdesc_t * ref = malloc(sizeof(*ref));

@@ -46,6 +46,10 @@ struct BD {
 	DECLARE(BD_t, int, write_block, bdesc_t * block);
 	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
 	DECLARE(BD_t, chdesc_t *, get_write_head);
+	/* This function returns the number of dirtyable cache blocks in the
+	 * earliest cache. It returns negative numbers to indicate that a cache
+	 * already holds more dirty blocks than it wants. */
+	DECLARE(BD_t, int32_t, get_block_space);
 };
 
 #define BD_INIT(bd, module, info) { \
@@ -58,6 +62,7 @@ struct BD {
 	ASSIGN(bd, module, write_block); \
 	ASSIGN(bd, module, flush); \
 	ASSIGN(bd, module, get_write_head); \
+	ASSIGN(bd, module, get_block_space); \
 }
 
 #endif /* __KUDOS_KFS_BD_H */

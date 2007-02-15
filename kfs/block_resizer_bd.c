@@ -143,6 +143,12 @@ static chdesc_t * block_resizer_bd_get_write_head(BD_t * object)
 	return CALL(info->bd, get_write_head);
 }
 
+static int32_t block_resizer_bd_get_block_space(BD_t * object)
+{
+	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
+	return CALL(info->bd, get_block_space) / info->merge_count;
+}
+
 static int block_resizer_bd_destroy(BD_t * bd)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
