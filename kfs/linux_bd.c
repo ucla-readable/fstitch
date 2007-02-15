@@ -628,6 +628,11 @@ static chdesc_t * linux_bd_get_write_head(BD_t * object)
 	return NULL;
 }
 
+static int32_t linux_bd_get_block_space(BD_t * object)
+{
+	return 0;
+}
+
 int linux_bd_destroy(BD_t * bd)
 {
 	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
