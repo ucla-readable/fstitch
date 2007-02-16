@@ -246,6 +246,98 @@ int kfsd_init(int nwbblocks)
 	return 0;
 }
 
+static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_t * (*fs)(BD_t *), const char * name, uint16_t blocksize)
+{
+	LFS_t * plain_lfs;
+	LFS_t * lfs = NULL;
+	
+	bool is_journaled = 0;
+	BD_t * journal;
+	BD_t * cache = construct_cacheing(part->bd, cache_nblks, blocksize);
+	if (!cache)
+		return NULL;
+
+#if USE_JOURNAL
+	journal = journal_bd(cache);
+	if (journal)
+		is_journaled = 1;
+	else
+	{
+		kdprintf(STDERR_FILENO, "journal_bd failed, not journaling\n");
+		journal = cache;
+	}
+#else
+	journal = cache;
+#endif
+
+	lfs = plain_lfs = fs(journal);
+
+	if (is_journaled)
+	{
+		BD_t * journalbd = NULL;
+		if (plain_lfs)
+		{
+			inode_t root_ino, journal_ino;
+			int r;
+
+			r = CALL(plain_lfs, get_root, &root_ino);
+			if (r < 0)
+			{
+				kdprintf(STDERR_FILENO, "get_root: %i\n", r);
+				return NULL;
+			}
+			r = CALL(plain_lfs, lookup_name, root_ino, ".journal", &journal_ino);
+			if (r < 0)
+			{
+				kdprintf(STDERR_FILENO, "No journal file; restarting modules\n");
+				goto disable_journal;
+			}
+
+			journalbd = loop_bd(plain_lfs, journal_ino);
+			if (!journalbd)
+			{
+				kdprintf(STDERR_FILENO, "loop_bd failed\n");
+				goto disable_journal;
+			}
+			r = journal_bd_set_journal(journal, journalbd);
+			if (r < 0)
+			{
+				kdprintf(STDERR_FILENO, "journal_bd_set_journal: %i\n");
+				goto disable_journal;
+			}
+		}
+		else
+		{
+		  disable_journal:
+			if (journalbd)
+				(void) DESTROY(journalbd);
+			if (plain_lfs)
+				(void) DESTROY(plain_lfs);
+			(void) DESTROY(journal);
+			journal = cache;
+			lfs = plain_lfs = fs(cache);
+			is_journaled = 0;
+		}
+	}
+
+	if (lfs)
+		printf("Using %s on %s", name, part->description);
+	else if ((lfs = wholedisk(cache)))
+		printf("Using wholedisk on %s", part->description);
+	else
+	{
+		kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
+		return NULL;
+	}
+	if (is_journaled)
+		printf(" (journaled)");
+	else
+		printf(" (not journaled)");
+	printf("\n");
+
+	return lfs;
+}
+#define construct_lfs(part, cache_nblks, fs, blocksize) construct_lfs(part, cache_nblks, fs, #fs, blocksize)
 
 // Bring up the filesystems for bd and add them to uhfses.
 int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
@@ -341,137 +433,35 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	/* setup each partition's cache, basefs, and uhfs */
 	for (i = 0; i < vector_size(partitions); i++)
 	{
-		BD_t * cache, * journal;
-		LFS_t * josfs_lfs;
-		LFS_t * lfs = NULL;
+		LFS_t * lfs;
 		CFS_t * u;
-		bool is_journaled = 0;
-			
+		
 		part = vector_elt(partitions, i);
 		if (!part)
 			continue;
 
 		if (part->type == PTABLE_KUDOS_TYPE)
 		{
-			cache = construct_cacheing(part->bd, cache_nblks, 4096);
-			if (!cache)
-				return -E_UNSPECIFIED;
-
-#if USE_JOURNAL
-			journal = journal_bd(cache);
-			if (journal)
-				is_journaled = 1;
-			else
-			{
-				kdprintf(STDERR_FILENO, "journal_bd failed, not journaling\n");
-				journal = cache;
-			}
-#else
-			journal = cache;
-#endif
-
-			lfs = josfs_lfs = josfs(journal);
-
-			if (is_journaled)
-			{
-				BD_t * journalbd = NULL;
-				if (josfs_lfs)
-				{
-					inode_t root_ino, journal_ino;
-					int r;
-
-					r = CALL(josfs_lfs, get_root, &root_ino);
-					if (r < 0)
-					{
-						kdprintf(STDERR_FILENO, "get_root: %i\n", r);
-						return r;
-					}
-					r = CALL(josfs_lfs, lookup_name, root_ino, ".journal", &journal_ino);
-					if (r < 0)
-					{
-						kdprintf(STDERR_FILENO, "No journal file; restarting modules\n");
-						goto disable_journal;
-					}
-
-					journalbd = loop_bd(josfs_lfs, journal_ino);
-					if (!journalbd)
-					{
-						kdprintf(STDERR_FILENO, "loop_bd failed\n");
-						goto disable_journal;
-					}
-					r = journal_bd_set_journal(journal, journalbd);
-					if (r < 0)
-					{
-						kdprintf(STDERR_FILENO, "journal_bd_set_journal: %i\n");
-						goto disable_journal;
-					}
-				}
-				else
-				{
-				  disable_journal:
-					if (journalbd)
-						(void) DESTROY(journalbd);
-					if (josfs_lfs)
-						(void) DESTROY(josfs_lfs);
-					(void) DESTROY(journal);
-					journal = cache;
-					lfs = josfs_lfs = josfs(cache);
-					is_journaled = 0;
-				}
-			}
-
-			if (lfs)
-				printf("Using josfs on %s", part->description);
-			else if ((lfs = wholedisk(cache)))
-				printf("Using wholedisk on %s", part->description);
-			else
-			{
-				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
-				return -E_UNSPECIFIED;
-			}
-			if (is_journaled)
-				printf(" (journaled)");
-			else
-				printf(" (not journaled)");
-			printf("\n");
+			lfs = construct_lfs(part, cache_nblks, josfs, 4096);
 		}
 		else if (part->type == PTABLE_FREEBSD_TYPE)
 		{
 			// TODO handle 1K fragment size in UFS?
-			cache = construct_cacheing(part->bd, cache_nblks, 2048);
-			if (!cache)
-				return -E_UNSPECIFIED;
-			lfs = ufs(cache);
-
-			if (lfs)
-				printf("Using ufs on %s\n", part->description);
-			else
-			{
-				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
-				continue;
-			}
+			lfs = construct_lfs(part, cache_nblks, ufs, 2048);
 		}
 		else if (part->type == PTABLE_LINUX_TYPE)
 		{
 			// TODO handle differnt block sizes
-			cache = construct_cacheing(part->bd, cache_nblks, 4096);
-			if (!cache)
-				return -E_UNSPECIFIED;
-			lfs = ext2(cache);
-
-			if (lfs)
-				printf("Using ext2 on %s\n", part->description);
-			else
-			{
-				kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
-				continue;
-			}
+			lfs = construct_lfs(part, cache_nblks, ext2, 4096);
 		}
 		else
 		{
 			printf("Unknown partition type %x\n", part->type);
-			continue;
+			lfs = NULL;
 		}
+		if(!lfs)
+			continue;
+
 		if (! (lfs = opgroup_lfs(lfs)))
 			return -E_UNSPECIFIED;
 		if (! (u = uhfs(lfs)) )
