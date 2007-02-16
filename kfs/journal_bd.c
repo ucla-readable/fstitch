@@ -6,7 +6,6 @@
 #include <lib/types.h>
 #include <lib/jiffies.h>
 #include <lib/hash_map.h>
-#include <lib/kdprintf.h>
 
 #include <kfs/bd.h>
 #include <kfs/kfsd.h>
@@ -447,7 +446,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 	if(!block)
 	{
-		kdprintf(STDERR_FILENO, "Can't get the commit record block!\n");
+		printf("Can't get the commit record block!\n");
 		return -E_UNSPECIFIED;
 	}
 	
@@ -456,6 +455,9 @@ static int journal_bd_stop_transaction(BD_t * object)
 	commit.next = info->prev_slot;
 	commit.nblocks = hash_map_size(info->block_map) % info->trans_data_blocks;
 	commit.seq = info->trans_seq++;
+	/* skip 0 */
+	if(!info->trans_seq)
+		info->trans_seq = 1;
 	
 	/* create commit record, make it depend on wait */
 	head = info->wait;
@@ -846,14 +848,44 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	return 0;
 }
 
+/* these macros are for the circular sequence number space */
+#define GT32(a, b) (((int32_t) ((a) - (b))) > 0)
+#define GE32(a, b) (((int32_t) ((a) - (b))) >= 0)
+#define LT32(a, b) (((int32_t) ((a) - (b))) < 0)
+#define LE32(a, b) (((int32_t) ((a) - (b))) <= 0)
+
 static int replay_journal(BD_t * bd)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
 	uint32_t transaction;
+	uint32_t min_trans = 0;
+	uint32_t min_idx = 0;
+	uint16_t recover_count = 0;
 	
 	for(transaction = 0; transaction < info->cr_count; transaction++)
 	{
-#warning use transaction sequence numbers to replay them in the correct order
+		struct commit_record * cr;
+		bdesc_t * commit_block = CALL(info->journal, read_block, transaction * info->trans_total_blocks, 1);
+		
+		if(!commit_block)
+			return -E_UNSPECIFIED;
+		
+		cr = (struct commit_record *) commit_block->ddesc->data;
+		if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
+			continue;
+		
+		recover_count++;
+		info->cr_retain[transaction].seq = cr->seq;
+		if(!min_trans || LT32(cr->seq, min_trans))
+		{
+			min_trans = cr->seq;
+			min_idx = transaction;
+		}
+	}
+	
+	transaction = min_idx;
+	while(recover_count)
+	{
 		int r = replay_single_transaction(bd, transaction * info->trans_total_blocks, CRCOMMIT);
 		if(r < 0)
 		{
@@ -867,6 +899,41 @@ static int replay_journal(BD_t * bd)
 					info->done = NULL;
 			}
 			return r;
+		}
+		if(--recover_count)
+		{
+			uint32_t scan = transaction + 1;
+			uint32_t next_seq = info->cr_retain[transaction].seq + 1;
+			if(scan == info->cr_count)
+				scan = 0;
+			/* skip 0 */
+			if(!next_seq)
+				next_seq = 1;
+			if(info->cr_retain[scan].seq != next_seq)
+			{
+				printf("%s(): found non-linear transaction!\n", __FUNCTION__);
+				min_trans = 0;
+				/* find lowest remaining sequence number */
+				while(scan != transaction)
+				{
+					if(info->cr_retain[scan].seq)
+						if(!min_trans || LT32(info->cr_retain[scan].seq, min_trans))
+						{
+							min_trans = info->cr_retain[scan].seq;
+							min_idx = scan;
+						}
+					if(++scan == info->cr_count)
+						scan = 0;
+				}
+				assert(min_trans);
+			}
+			transaction = min_idx;
+		}
+		else
+		{
+			info->trans_seq = info->cr_retain[transaction].seq + 1;
+			if(!info->trans_seq)
+				info->trans_seq = 1;
 		}
 	}
 	
@@ -1039,7 +1106,7 @@ void journal_bd_remove_hold(void)
 {
 	assert(nholds > 0);
 	if(!nholds)
-		kdprintf(STDERR_FILENO, "%s: nholds already 0\n", __FUNCTION__);
+		printf("%s: nholds already 0\n", __FUNCTION__);
 	else
 		nholds--;
 }
