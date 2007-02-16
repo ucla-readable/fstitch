@@ -30,7 +30,12 @@
 #define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
 
 /* Set to merge all existing RBs into a NRB when creating a NRB on the block */
-#define CHDESC_MERGE_RBS (CHDESC_NRB && 0)
+#define CHDESC_MERGE_RBS_NRB (CHDESC_NRB && 0)
+/* Set to track RBs->NRB merge stats */
+#define CHDESC_MERGE_RBS_NRB_STATS (CHDESC_MERGE_RBS_NRB && 0)
+
+/* Set to merge a simple overlapping RB into the underlying chdesc */
+#define CHDESC_MERGE_OVERLAP 1
 
 static void chdesc_dep_remove(chdepdesc_t * dep);
 
@@ -1183,7 +1188,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 }
 #endif
 
-#if CHDESC_MERGE_RBS
+#if CHDESC_MERGE_RBS_NRB
 /* Return whether 'after' depends on any data chdesc on its block.
  * Requires 'bdesc' to have no external afters. */
 static bool chdesc_has_block_befores(const chdesc_t * after, const bdesc_t * bdesc)
@@ -1251,8 +1256,10 @@ static void empty_bit_changes(bdesc_t * block)
 /* Merge all RBs on 'block' into a single NRB */
 static void merge_rbs(bdesc_t * block)
 {
+# if CHDESC_MERGE_RBS_NRB_STATS
 	static uint32_t ncalls = 0, nmerged_total = 0;
 	uint32_t nmerged = 0;
+# endif
 	chdesc_t * merger, * chdesc, * next;
 	int r;
 	
@@ -1343,7 +1350,9 @@ static void merge_rbs(bdesc_t * block)
 		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
 			continue;
 		
+# if CHDESC_MERGE_RBS_NRB_STATS
 		nmerged++;
+# endif
 		
 		/* ensure chdesc depends on merger. add dep prior to noop conversion
 		 * to do correct level propagation inside chdesc_add_depend(). */
@@ -1376,12 +1385,14 @@ static void merge_rbs(bdesc_t * block)
 		if(merger->owner->level != (level = chdesc_level(chdesc)))
 			propagate_level_change_thru_noop(chdesc, merger->owner->level, level);
 	}
+# if CHDESC_MERGE_RBS_NRB_STATS
 	if(nmerged)
 	{
 		ncalls++;
 		nmerged_total += nmerged;
 		printf("%s(block %u). merged: %u now, %u total, %u avg.\n", __FUNCTION__, block->number, nmerged, nmerged_total, nmerged_total / ncalls);
 	}
+# endif
 }
 #endif
 
@@ -1392,7 +1403,7 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 {
 #if CHDESC_NRB
 	chdesc_t * merger;
-# if CHDESC_MERGE_RBS
+# if CHDESC_MERGE_RBS_NRB
 	if(!new_chdescs_require_data(block) && !block->ddesc->nrb)
 		merge_rbs(block);
 # endif
@@ -1406,6 +1417,91 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 	return 0;
 #endif
 }
+
+#if CHDESC_MERGE_OVERLAP
+/* A simple RB merge opportunity:
+ * chdesc has no explicit befores and has a single overlap.
+ * Returns 1 on successful merge (*merge points to merged chdesc),
+ * 0 if no merge could be made, or < 0 upon error. */
+static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** merge)
+{
+	chdepdesc_t * dep;
+	chdesc_t * overlap = NULL;
+	uint16_t overlap_end, new_end, merge_offset, merge_length, merge_end;
+	datadesc_t * ddesc = (*new)->block->ddesc;
+	int r;
+	
+	/* determine whether we can merge new into an overlap */
+	for(dep = (*new)->befores; dep; dep = dep->before.next)
+	{
+		chdesc_t * before = dep->before.desc;
+		if(before->flags & CHDESC_WRITTEN)
+			continue;
+		if(before->flags & CHDESC_INFLIGHT)
+			return 0;
+		if(overlap && overlap != before)
+			return 0;
+		overlap = before;
+	}
+	if(!overlap || overlap->type != BYTE)
+		return 0;
+	
+	overlap_end = overlap->byte.offset + overlap->byte.length;
+	new_end = (*new)->byte.offset + (*new)->byte.length;
+	merge_offset = MIN(overlap->byte.offset, (*new)->byte.offset);
+	merge_length = MAX(overlap_end, new_end) - merge_offset;
+	merge_end = merge_offset + merge_length;
+	
+	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->byte.offset, overlap->byte.length, overlap, merge_offset, merge_length, (*new)->block->number);
+	
+	/* Restore ddesc->overlaps if new completely overlapped.
+	 * Restore before the size update to simplify error recovery. */
+	if((*new)->flags & CHDESC_OVERLAP)
+	{
+		if((r = ensure_bdesc_has_overlaps(overlap->block)) < 0)
+			return r;
+		if((r = chdesc_add_depend_fast(ddesc->overlaps, overlap)) < 0)
+			return r;
+	}
+	
+	if(merge_offset != overlap->byte.offset || merge_length != overlap->byte.length)
+	{
+		/* handle updated data size change */
+		void * merge_data;
+		assert(chdesc_is_rollbackable(overlap));
+		assert(!(overlap->flags & CHDESC_ROLLBACK));
+		
+		if(!(merge_data = malloc(merge_length)))
+		{
+			if((*new)->flags & CHDESC_OVERLAP)
+				chdesc_remove_depend(ddesc->overlaps, overlap);
+			return -E_NO_MEM;
+		}
+		memcpy(merge_data + overlap->byte.offset - merge_offset, overlap->byte.data, overlap->byte.length);
+		if(merge_offset < overlap->byte.offset)
+			memcpy(merge_data, &ddesc->data[merge_offset], overlap->byte.offset - merge_offset);
+		if(overlap_end < merge_end)
+			memcpy(merge_data + overlap_end - merge_offset, &ddesc->data[overlap_end], merge_end - overlap_end);
+		free(overlap->byte.data);
+		overlap->byte.data = merge_data;
+		
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, overlap, merge_offset);
+		overlap->byte.offset = merge_offset;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, overlap, merge_length);
+		overlap->byte.length = merge_length;
+# if CHDESC_BYTE_SUM
+		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
+		overlap->byte.new_sum = chdesc_byte_sum(&ddesc->data[merge_offset], merge_length);
+# endif
+	}
+	
+	memcpy(&ddesc->data[(*new)->byte.offset], (*new)->byte.data, (*new)->byte.length);
+	
+	chdesc_destroy(new);
+	*merge = overlap;
+	return 1;
+}
+#endif
 
 #if CHDESC_BYTE_SUM
 /* stupid little checksum, just to try and make sure we get the same data */
@@ -1525,6 +1621,9 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	dump_counts();
 #endif
 	
+	/* make sure our block sticks around */
+	bdesc_retain(block);
+	
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
 	
@@ -1536,20 +1635,38 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			chdesc_destroy(&chdesc);
 			return r;
 		}
-
+	
 	/* make sure it is after upon any pre-existing chdescs */
-	if(chdesc_overlap_multiattach(chdesc, block))
+	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
 	{
 		chdesc_destroy(&chdesc);
-		return -E_NO_MEM;
-	}
-
-	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 		return r;
-	if(chdesc_add_depend_fast(block->ddesc->overlaps, chdesc) < 0)
+	}
+	
+#if CHDESC_MERGE_OVERLAP
+	/* after the above work towards chdesc to avoid multiple overlap scans */
+	if(!*head && data_required)
+	{
+		r = chdesc_create_merge_overlap(&chdesc, head);
+		if(r < 0)
+		{
+			chdesc_destroy(&chdesc);
+			return r;
+		}
+		else if(r == 1)
+			return 0;
+	}
+#endif
+	
+	if((r = ensure_bdesc_has_overlaps(block)) < 0)
 	{
 		chdesc_destroy(&chdesc);
-		return -E_NO_MEM;
+		return r;
+	}
+	if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdesc)) < 0)
+	{
+		chdesc_destroy(&chdesc);
+		return r;
 	}
 	
 	if(data_required)
@@ -1579,12 +1696,9 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		assert(0);
 #endif
 	}
-	
+
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
-	
-	/* make sure our block sticks around */
-	bdesc_retain(block);
 	block->ddesc->synthetic = 0;
 	
 	return 0;
@@ -2202,12 +2316,15 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	}
 	else
 	{
-		/* this is perfectly allowed, but while we are switching to this new system, print a warning */
 		if((*chdesc)->type != NOOP)
 		{
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
-			if((*chdesc)->flags & CHDESC_OVERLAP)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying completely overlapping unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+			if((*chdesc)->afters)
+			{
+				/* this is perfectly allowed, but while we are switching to this new system, print a warning */
+				kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+				if((*chdesc)->flags & CHDESC_OVERLAP)
+					kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying completely overlapping unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+			}
 		}
 		else if(free_head == *chdesc || (*chdesc)->free_prev)
 		{
@@ -2238,9 +2355,9 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	switch((*chdesc)->type)
 	{
 		case BYTE:
-			assert(!(*chdesc)->byte.data);
-			if((*chdesc)->byte.data)
-				free((*chdesc)->byte.data);
+			/* chdesc_satisfy() does free 'data', but error cases may not */
+			free((*chdesc)->byte.data);
+			(*chdesc)->byte.data = NULL;
 			break;
 		case NOOP:
 			if((*chdesc)->flags & CHDESC_BIT_NOOP)
