@@ -361,8 +361,9 @@ exit:
 static void ufs_super_wb_sync_callback(void * arg)
 {
 	UFSmod_super_t * object = (UFSmod_super_t *) arg;
+	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	chdesc_t * head = CALL(linfo->global_info->parts.base, get_write_head);
 	int r;
-	chdesc_t * head = NULL;
 
 	r = ufs_super_wb_sync(object, &head);
 	if (r < 0)
@@ -443,4 +444,3 @@ UFSmod_super_t * ufs_super_wb(struct lfs_info * info)
 
 	return obj;
 }
-

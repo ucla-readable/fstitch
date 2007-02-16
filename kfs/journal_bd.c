@@ -886,12 +886,14 @@ static int replay_journal(BD_t * bd)
 	transaction = min_idx;
 	while(recover_count)
 	{
+		printf("%s(): request recovery of transaction %d (%d left)\n", __FUNCTION__, transaction, recover_count - 1);
 		int r = replay_single_transaction(bd, transaction * info->trans_total_blocks, CRCOMMIT);
 		if(r < 0)
 		{
 			if(info->keep_w)
 			{
 				chdesc_satisfy(&info->keep_w);
+				chdesc_satisfy(&info->keep_d);
 				info->data = NULL;
 				if(!info->done->befores)
 					chdesc_satisfy(&info->done);
