@@ -8,6 +8,7 @@
 #include <kfs/blockman.h>
 
 #define BLOCKMAN_DEBUG 0
+#define DISABLE_ORPHAN_WARNING 0
 
 #if BLOCKMAN_DEBUG
 #define Dprintf(x...) printf(x)
@@ -45,8 +46,10 @@ void blockman_destroy(blockman_t ** blockman)
 	hash_map_it_init(&it, hash);
 	while((ddesc = hash_map_val_next(&it)))
 	{
+#if !DISABLE_ORPHAN_WARNING
 		if(bdesc_autorelease_poolstack_scan(ddesc) < ddesc->ref_count)
 			kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning data descriptor 0x%08x (manager 0x%08x, #%d, count %d)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman, ddesc->managed_number, ddesc->ref_count - bdesc_autorelease_poolstack_scan(ddesc));
+#endif
 		ddesc->manager = NULL;
 	}
 	hash_map_destroy(hash);
