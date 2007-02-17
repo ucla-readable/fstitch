@@ -21,7 +21,7 @@
 
 struct local_info
 {
-	struct lfs_info * global_info;
+	struct ufs_info * global_info;
 	bdesc_t * super_block;
 	struct UFS_Super super; /* In memory super block */
 	struct UFS_csum oldsum; /* On disk version of the summary */
@@ -403,7 +403,7 @@ static int ufs_super_wb_destroy(UFSmod_super_t * obj)
 	return 0;
 }
 
-UFSmod_super_t * ufs_super_wb(struct lfs_info * info)
+UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 {
 	UFSmod_super_t * obj;
 	struct local_info * linfo;

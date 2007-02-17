@@ -277,7 +277,7 @@ struct EXT2_Dir_entry {
 };
 typedef struct EXT2_Dir_entry EXT2_Dir_entry_t;
 
-struct lfs_info
+struct ext2_info
 {
 	BD_t * ubd;
         EXT2_Super_t * super;
@@ -290,7 +290,7 @@ struct lfs_info
 	uint32_t inode_gdesc;
 	struct EXT2mod_super * super_wb;
 };
-typedef struct lfs_info lfs_info_t;
+typedef struct ext2_info ext2_info_t;
 
 LFS_t * ext2(BD_t * block_device);
 

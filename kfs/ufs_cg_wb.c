@@ -30,7 +30,7 @@ struct cyl_info
 
 struct local_info
 {
-	struct lfs_info * global_info;
+	struct ufs_info * global_info;
 	struct cyl_info * cg;
 	int32_t ncg;
 	bool syncing; /* Indicates whether to write to memory or disk */
@@ -425,7 +425,7 @@ static int ufs_cg_wb_destroy(UFSmod_cg_t * obj)
 	return 0;
 }
 
-UFSmod_cg_t * ufs_cg_wb(struct lfs_info * info)
+UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
 {
 	UFSmod_cg_t * obj;
 	struct local_info * linfo;

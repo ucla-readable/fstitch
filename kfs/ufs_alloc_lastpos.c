@@ -4,7 +4,7 @@
 
 static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	static uint32_t savenum = INVALID_BLOCK;
 	uint32_t start, num;
 	int r;
@@ -41,7 +41,7 @@ static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc
 
 static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	static uint32_t savenum = INVALID_BLOCK;
 	uint32_t start, num;
 	int r;
@@ -78,7 +78,7 @@ static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_
 
 static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	static uint32_t num = UFS_ROOT_INODE + 1;
 	uint32_t start;
 	int r;
@@ -125,7 +125,7 @@ static int ufs_alloc_lastpos_destroy(UFSmod_alloc_t * obj)
 	return 0;
 }
 
-UFSmod_alloc_t * ufs_alloc_lastpos(struct lfs_info * info)
+UFSmod_alloc_t * ufs_alloc_lastpos(struct ufs_info * info)
 {
 	UFSmod_alloc_t * obj;
 

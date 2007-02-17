@@ -7,7 +7,7 @@
 
 static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct * entry, uint32_t * basep)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	struct UFS_direct * dirent;
 	bdesc_t * dirblock = NULL;
 	uint32_t blockno, offset;
@@ -50,7 +50,7 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 // Writes a directory entry, does not check for free space
 static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct entry, uint32_t basep, chdesc_t ** head)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	bdesc_t * block;
 	uint32_t foffset, blockno;
 	uint16_t offset, actual_len;
@@ -80,7 +80,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 
 static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	struct UFS_direct entry, last_entry;
 	uint32_t offset, len, prev_offset, last_basep = 0, basep = 0;
 	int r;
@@ -181,7 +181,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 
 static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	struct lfs_info * info = (struct lfs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
 	struct UFS_direct dirent;
 	struct UFS_dinode inode;
 	uint32_t actual_len;
@@ -345,7 +345,7 @@ static int ufs_dirent_linear_destroy(UFSmod_dirent_t * obj)
 	return 0;
 }
 
-UFSmod_dirent_t * ufs_dirent_linear(struct lfs_info * info)
+UFSmod_dirent_t * ufs_dirent_linear(struct ufs_info * info)
 {
 	UFSmod_dirent_t * obj;
    

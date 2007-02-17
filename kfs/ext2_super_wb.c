@@ -15,7 +15,8 @@ uint32_t EXT2_DESC_PER_BLOCK;
 
 struct local_info
 {
-	struct lfs_info * global_info;
+	LFS_t * global_lfs;
+	struct ext2_info * global_info;
 	bdesc_t * super_block;
 	EXT2_Super_t super; /* In memory super block */
 	EXT2_group_desc_t * groups;	
@@ -140,8 +141,9 @@ static int ext2_super_wb_gdesc_sync(EXT2mod_super_t * object, chdesc_t ** head)
 static void ext2_super_wb_sync_callback(void * arg)
 {
 	EXT2mod_super_t * object = (EXT2mod_super_t *) arg;
+	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);	
+	chdesc_t * head = CALL(linfo->global_lfs, get_write_head);
 	int r;
-	chdesc_t * head = NULL;
 
 	r = ext2_super_wb_sync(object, &head);
 	if (r < 0)
@@ -186,7 +188,7 @@ static int ext2_super_wb_get_status(void * object, int level, char * string,
 	return 0;
 }
 
-EXT2mod_super_t * ext2_super_wb(struct lfs_info * info)
+EXT2mod_super_t * ext2_super_wb(LFS_t * lfs, struct ext2_info * info)
 {
 	EXT2mod_super_t * obj;
 	struct local_info * linfo;
@@ -202,6 +204,7 @@ EXT2mod_super_t * ext2_super_wb(struct lfs_info * info)
 		free(obj);
 		return NULL;
 	}
+	linfo->global_lfs = lfs;
 	linfo->global_info = info;
 
 	/* the superblock is 1024 bytes from the start of the partition */
@@ -231,6 +234,7 @@ EXT2mod_super_t * ext2_super_wb(struct lfs_info * info)
 	if (!linfo->groups)
 		goto wb_fail1;
 	block = 1;
+#warning FIXME counts other than 1 are incompatible with the journal_bd module
 	linfo->gdescs = CALL(info->ubd, read_block, block, (ngroups / EXT2_DESC_PER_BLOCK) + 1);
 	if(!linfo->gdescs)
 		goto wb_fail1;

@@ -10,7 +10,7 @@
 // Assuming fixed number of inodes per cylinder group, so we don't have
 // to read the cylinder group descriptor and confirm this every time.
 // The last cylinder group may have less inodes?
-int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode)
+int read_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode * inode)
 {
 	int cg, cg_off, fragno, frag_off;
 	struct UFS_dinode * wanted;
@@ -43,7 +43,7 @@ int read_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode * inode)
 	return 0;
 }
 
-int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head)
+int write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head)
 {
 	int cg, cg_off, fragno, frag_off, r, offset;
 	bdesc_t * inode_table;
@@ -76,7 +76,7 @@ int write_inode(struct lfs_info * info, uint32_t num, struct UFS_dinode inode, c
 	return CALL(info->ubd, write_block, inode_table);
 }
 
-uint32_t read_btot(struct lfs_info * info, uint32_t num)
+uint32_t read_btot(struct ufs_info * info, uint32_t num)
 {
 	uint32_t blockno, offset;
 	uint32_t * ptr;
@@ -106,7 +106,7 @@ uint32_t read_btot(struct lfs_info * info, uint32_t num)
 	return *ptr;
 }
 
-uint16_t read_fbp(struct lfs_info * info, uint32_t num)
+uint16_t read_fbp(struct ufs_info * info, uint32_t num)
 {
 	uint32_t blockno, offset;
 	uint32_t * ptr;
@@ -137,7 +137,7 @@ uint16_t read_fbp(struct lfs_info * info, uint32_t num)
 	return (*ptr & 0xFFFF);
 }
 
-int read_inode_bitmap(struct lfs_info * info, uint32_t num)
+int read_inode_bitmap(struct ufs_info * info, uint32_t num)
 {
 	uint32_t blockno, offset;
 	uint32_t * ptr;
@@ -168,7 +168,7 @@ int read_inode_bitmap(struct lfs_info * info, uint32_t num)
 	return UFS_FREE;
 }
 
-int read_fragment_bitmap(struct lfs_info * info, uint32_t num)
+int read_fragment_bitmap(struct ufs_info * info, uint32_t num)
 {
 	uint32_t blockno, offset;
 	uint32_t * ptr;
@@ -199,7 +199,7 @@ int read_fragment_bitmap(struct lfs_info * info, uint32_t num)
 	return UFS_USED;
 }
 
-int read_block_bitmap(struct lfs_info * info, uint32_t num)
+int read_block_bitmap(struct ufs_info * info, uint32_t num)
 {
 	uint32_t blockno, offset, blocknum;
 	uint32_t * ptr;
@@ -231,7 +231,7 @@ int read_block_bitmap(struct lfs_info * info, uint32_t num)
 	return UFS_USED;
 }
 
-int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t ** head)
+int write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_t ** head)
 {
 	uint32_t blockno, offset;
 	int r;
@@ -267,7 +267,7 @@ int write_btot(struct lfs_info * info, uint32_t num, uint32_t value, chdesc_t **
 	return 0;
 }
 
-int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** head)
+int write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t ** head)
 {
 	uint32_t blockno, offset;
 	int r;
@@ -303,7 +303,7 @@ int write_fbp(struct lfs_info * info, uint32_t num, uint16_t value, chdesc_t ** 
 	return 0;
 }
 
-int write_inode_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
+int write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	uint32_t blockno, offset, * ptr;
 	int r, cyl, inode_offset;
@@ -371,7 +371,7 @@ write_inode_bitmap_end:
 }
 
 #warning frsum code needs to be correctly reimplemented
-int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
+int write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	const struct UFS_cg * cg;
 	uint32_t blockno, offset, * ptr;
@@ -507,7 +507,7 @@ int write_fragment_bitmap(struct lfs_info * info, uint32_t num, bool value, chde
 
 // This is the 'raw' function to write the block bitmap
 // You probably want allocate_wholeblock()
-int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_t ** head)
+int write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	uint32_t blocknum, blockno, offset, * ptr, btot;
 	uint16_t fbp;
@@ -591,7 +591,7 @@ int write_block_bitmap(struct lfs_info * info, uint32_t num, bool value, chdesc_
 }
 
 // [ndir, ..., nffree] parameters are deltas
-int update_summary(struct lfs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head)
+int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head)
 {
 	struct UFS_csum sum;
 	struct UFS_csum * csum;
