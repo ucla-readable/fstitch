@@ -1421,9 +1421,9 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 #if CHDESC_MERGE_OVERLAP
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
- * Returns 1 on successful merge (*merge points to merged chdesc),
+ * Returns 1 on successful merge (*head points to merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** merge)
+static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 {
 	chdepdesc_t * dep;
 	chdesc_t * overlap = NULL;
@@ -1432,18 +1432,30 @@ static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** merge)
 	int r;
 	
 	/* determine whether we can merge new into an overlap */
+	/* NOTE: if *head has a before and there are many overlaps, it may be
+	 * be wise to check *head for befores before looking at overlaps */
 	for(dep = (*new)->befores; dep; dep = dep->before.next)
 	{
 		chdesc_t * before = dep->before.desc;
 		if(before->flags & CHDESC_WRITTEN)
 			continue;
-		if(before->flags & CHDESC_INFLIGHT)
-			return 0;
-		if(overlap && overlap != before)
-			return 0;
-		overlap = before;
+		if(chdesc_overlap_check(*new, before))
+		{
+			/* note: *new may overlap *head */
+			if((before->flags & CHDESC_INFLIGHT) || before->type != BYTE)
+				return 0;
+			if(overlap && overlap != before)
+				return 0;
+			overlap = before;
+		}
+		else
+		{
+			assert(*head == before);
+			if(before->befores)
+				return 0;
+		}
 	}
-	if(!overlap || overlap->type != BYTE)
+	if(!overlap)
 		return 0;
 	
 	overlap_end = overlap->byte.offset + overlap->byte.length;
@@ -1453,6 +1465,15 @@ static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** merge)
 	merge_end = merge_offset + merge_length;
 	
 	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->byte.offset, overlap->byte.length, overlap, merge_offset, merge_length, (*new)->block->number);
+	
+	if(*head && overlap != *head)
+	{
+		uint16_t flags = overlap->flags;
+		overlap->flags |= CHDESC_SAFE_AFTER;
+		if((r = chdesc_add_depend(overlap, *head)) < 0)
+			return r;
+		overlap->flags = flags;
+	}
 	
 	/* Restore ddesc->overlaps if new completely overlapped.
 	 * Restore before the size update to simplify error recovery. */
@@ -1496,9 +1517,9 @@ static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** merge)
 	}
 	
 	memcpy(&ddesc->data[(*new)->byte.offset], (*new)->byte.data, (*new)->byte.length);
-	
+
 	chdesc_destroy(new);
-	*merge = overlap;
+	*head = overlap;
 	return 1;
 }
 #endif
@@ -1645,10 +1666,9 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 #if CHDESC_MERGE_OVERLAP
 	/* after the above work towards chdesc to avoid multiple overlap scans */
-	if(!*head && data_required)
+	if(data_required)
 	{
-		r = chdesc_create_merge_overlap(&chdesc, head);
-		if(r < 0)
+		if((r = chdesc_create_merge_overlap(&chdesc, head)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
@@ -1696,7 +1716,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		assert(0);
 #endif
 	}
-
+	
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
 	block->ddesc->synthetic = 0;
