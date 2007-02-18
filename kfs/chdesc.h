@@ -15,6 +15,10 @@
  * but does not yet work with chdesc_noop_reassign() */
 /* values: 0 (disable), 1 (enable) */
 #define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
+/* Set to ensure that, for a block with a NRB, all RBs on the block depend
+ * on the NRB, thereby ensuring the ready list contains only ready chdescs */
+/* values: 0 (do not ensure), 1 (do ensure) */
+#define CHDESC_RB_NRB_READY (CHDESC_NRB && 1)
 
 struct chdesc;
 typedef struct chdesc chdesc_t;

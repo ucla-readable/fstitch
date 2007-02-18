@@ -529,7 +529,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		chdesc_update_ready_changes(scan);
 	}
 
-#if CHDESC_NRB
+#if CHDESC_NRB && !CHDESC_RB_NRB_READY
 	if(block->ddesc->nrb && block->ddesc->nrb->owner == owner)
 		nonready_nonrollbackable = 1;
 #endif

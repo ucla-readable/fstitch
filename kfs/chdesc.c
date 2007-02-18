@@ -30,7 +30,7 @@
 #define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
 
 /* Set to merge all existing RBs into a NRB when creating a NRB on the block */
-#define CHDESC_MERGE_RBS_NRB (CHDESC_NRB && 0)
+#define CHDESC_MERGE_RBS_NRB CHDESC_RB_NRB_READY
 /* Set to track RBs->NRB merge stats */
 #define CHDESC_MERGE_RBS_NRB_STATS (CHDESC_MERGE_RBS_NRB && 0)
 
@@ -445,7 +445,7 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 }
 
 /* propagate a depend remove, to update ready and extern_after state */
-static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
+static void propagate_depend_remove(chdesc_t * after, chdesc_t * before)
 {
 	uint16_t before_level = chdesc_level(before);
 	uint16_t after_prev_level;
@@ -475,11 +475,7 @@ static void propagate_depend_remove(chdesc_t * after, const chdesc_t * before)
 		}
 	}
 	else if(!before->block)
-	{
-		/* TODO: don't we need to propagate the extern_after remove through
-		 * a noop before? (The mirror of propagate_depend_add()'s action.) */
-		assert(!before->befores);
-	}
+		propagate_extern_after_change_thru_noop_before(before, after, 0);
 	else if(chdesc_is_external(after, before->block))
 	{
 		assert(before->block->ddesc->extern_after_count);
@@ -1072,18 +1068,21 @@ static chdesc_t * select_chdesc_merger(const bdesc_t * block, const chdesc_t * b
 	return block->ddesc->nrb;
 }
 
-static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, chdesc_t * before)
+static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, chdepdesc_t * depbefore)
 {
+	chdesc_t * before = depbefore->before.desc;
 	int r;
-	chdesc_remove_depend(old_after, before);
+	chdesc_dep_remove(depbefore);
 	r = chdesc_add_depend_fast(new_after, before);
 	assert(r >= 0); /* failure should be impossible */
 }
 
 /* Move chdesc's (transitive) befores that cannot reach merge_target
  * to be merge_target's befores, so that a merge into merge_target
- * maintains the needed befores. */
-static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
+ * maintains the needed befores. root_chdesc_stays == 0 implies that
+ * chdesc is a before (the new chdesc does not yet exist) and == 1 implies
+ * that chdesc is a pre-existing chdesc (that can thus not be moved)*/
+static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, bool root_chdesc_stays)
 {
 	/* recursion-on-the-heap support */
 	struct state {
@@ -1097,6 +1096,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	state_t * states = static_states;
 	state_t * state = states;
 	
+	chdesc_t * root_chdesc = chdesc;
 	uint16_t saved_flags;
 	
 	chdepdesc_t * dep;
@@ -1120,13 +1120,18 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	}
 	if(chdesc_is_external(chdesc, merge_target->block))
 		goto recurse_return;
-	if(chdesc->type != NOOP)
+	if(root_chdesc_stays && chdesc != root_chdesc)
 	{
-		/* Treat same-block, data chdescs as able to reach merge_target for
-		 * move_befores_for_rb_merge(), which will take care of them. */
-		chdesc->flags |= CHDESC_MARKED;
-		reachable = 1;
-		goto recurse_return;
+		if(chdesc->flags & CHDESC_INFLIGHT)
+			goto recurse_return;
+		if(chdesc->type != NOOP)
+		{
+			/* Treat same-block, data chdescs as able to reach merge_target.
+			 * Caller will ensure they do reach merge_target. */
+			chdesc->flags |= CHDESC_MARKED;
+			reachable = 1;
+			goto recurse_return;
+		}
 	}
 	
 	/* discover the subset of befores that cannot reach target */
@@ -1153,10 +1158,14 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	 * if none can reach target, caller will move chdesc. */
 	if(reachable)
 	{
+		chdepdesc_t * next;
 		chdesc->flags |= CHDESC_MARKED;
-		for(dep = chdesc->befores; dep; dep = dep->before.next)
+		for(dep = chdesc->befores; dep; dep = next)
+		{
+			next = dep->before.next;
 			if(!(dep->before.desc->flags & CHDESC_MARKED))
-				chdesc_move_before_fast(chdesc, merge_target, dep->before.desc);
+				chdesc_move_before_fast(chdesc, merge_target, dep);
+		}
 		/* remove marks only after the preceding loop because of multipaths */
 		for(dep = chdesc->befores; dep; dep = dep->before.next)
 			dep->before.desc->flags &= ~CHDESC_MARKED;
@@ -1175,13 +1184,27 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target)
 	if(states != static_states)
 		sfree(states, states_capacity * sizeof(*state));
 
-	/* take care of the intial before */
+	/* take care of the intial before/chdesc */
 	if(reachable)
 		chdesc->flags &= ~CHDESC_MARKED;
 	else
 	{
-		int r = chdesc_add_depend_fast(merge_target, chdesc);
-		assert(r >= 0);
+		if(!root_chdesc_stays)
+		{
+			int r = chdesc_add_depend_fast(merge_target, chdesc);
+			assert(r >= 0);
+		}
+		else
+		{
+			chdepdesc_t * next;
+			for(dep = chdesc->befores; dep; dep = next)
+			{
+				chdesc_t * before = dep->before.desc;
+				next = dep->before.next;
+				if(chdesc_is_external(before, merge_target->block) || (before->flags & CHDESC_INFLIGHT))
+					chdesc_move_before_fast(chdesc, merge_target, dep);
+			}
+		}
 	}
 	
 	merge_target->flags = saved_flags;
@@ -1267,11 +1290,11 @@ static void merge_rbs(bdesc_t * block)
 	 * on the block to simplify before merging */ 
 	if(!(merger = find_chdesc_without_block_befores(block)))
 		return;
-
+	
 	/* move the befores of each RB for their merge */
 	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 		if(chdesc != merger && chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT))
-			move_befores_for_merge(chdesc, merger);
+			move_befores_for_merge(chdesc, merger, 1);
 	
 	/* convert RB merger into a NRB (except overlaps, done later) */
 	if(merger->type == BYTE)
@@ -1326,18 +1349,26 @@ static void merge_rbs(bdesc_t * block)
 	 * (do before rest of conversion to correctly (not) recurse) */
 	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 	{
-		chdepdesc_t * dep;
+		chdepdesc_t * dep, * next;
 		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
 			continue;
-		for(dep = chdesc->befores; dep; dep = dep->before.next)
+		for(dep = chdesc->befores; dep; dep = next)
 		{
 			chdesc_t * before = dep->before.desc;
+			next = dep->before.next;
 			if(!before->block)
 				propagate_extern_after_change_thru_noop_before(before, chdesc, 0);
 			else if(chdesc_is_external(chdesc, before->block))
 			{
 				assert(before->block->ddesc->extern_after_count);
 				before->block->ddesc->extern_after_count--;
+			}
+			else
+			{
+				assert(!(before->flags & CHDESC_INFLIGHT));
+				/* intra-block noop dependencies, other than noop->merger, are
+				 * unnecessary & can lead to noop path blowup. Remove them. */
+				chdesc_dep_remove(dep);
 			}
 		}
 	}
@@ -1410,7 +1441,7 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 	if(!(merger = select_chdesc_merger(block, before)))
 		return 0;
 	if(before && !(before->flags & CHDESC_WRITTEN))
-		move_befores_for_merge(before, merger);
+		move_befores_for_merge(before, merger, 0);
 	*merged = merger;
 	return 1;
 #else
@@ -1517,7 +1548,7 @@ static int chdesc_create_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 	}
 	
 	memcpy(&ddesc->data[(*new)->byte.offset], (*new)->byte.data, (*new)->byte.length);
-
+	
 	chdesc_destroy(new);
 	*head = overlap;
 	return 1;
