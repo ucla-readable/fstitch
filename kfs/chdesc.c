@@ -1775,6 +1775,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
 }
 
+#if CHDESC_MERGE_OVERLAP
 static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
 {
 	chdepdesc_t * dep;
@@ -1803,12 +1804,13 @@ static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes,
 	*head = overlap;
 	return 1;
 }
+#endif
 
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
 {
 	bool data_required = new_chdescs_require_data(block);
 	chdesc_t * chdesc;
-	chdesc_t * bit_changes;
+	chdesc_t * bit_changes = NULL;
 	int r;
 	
 	r = chdesc_create_merge(block, *head, head);
@@ -1829,6 +1831,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 	}
 	
+#if CHDESC_MERGE_OVERLAP	
 	bit_changes = chdesc_bit_changes(block, offset);
 	if(bit_changes)
 	{
@@ -1838,6 +1841,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		else if(r == 1)
 			return 0;
 	}
+#endif
 	
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
@@ -1890,7 +1894,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	
 	/* add chdesc to block's befores */
 	chdesc_link_all_changes(chdesc);
-	if(!(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
+	if(!bit_changes && !(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
 	{
 		r = -E_NO_MEM;
 		goto error;
