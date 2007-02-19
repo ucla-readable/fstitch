@@ -20,10 +20,11 @@ struct local_info
 	bdesc_t * super_block;
 	EXT2_Super_t super; /* In memory super block */
 	EXT2_group_desc_t * groups;	
-	bdesc_t * gdescs;
+	bdesc_t** gdescs;
 	int ngroups;
+	int ngroupblocks;
 	int super_dirty;
-	int gdesc_dirty;
+	int* gdesc_dirty;
 };
 
 static EXT2_Super_t * ext2_super_wb_read(EXT2mod_super_t * object)
@@ -84,7 +85,7 @@ static int ext2_super_wb_mount_time(EXT2mod_super_t * object, int mount_time)
 static int ext2_super_wb_write_gdesc(EXT2mod_super_t * object, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
-	linfo->gdesc_dirty = 1;
+	linfo->gdesc_dirty[group/EXT2_DESC_PER_BLOCK] = 1;
 	linfo->groups[group].bg_free_blocks_count += blocks;
 	linfo->groups[group].bg_free_inodes_count += inodes;
 	linfo->groups[group].bg_used_dirs_count += dirs;
@@ -117,23 +118,32 @@ static int ext2_super_wb_sync(EXT2mod_super_t * object, chdesc_t ** head)
 static int ext2_super_wb_gdesc_sync(EXT2mod_super_t * object, chdesc_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);	
-	int r;
+	int r,i;
 
 	if (!head)
 		return -E_INVAL;
+	int nbytes = 0;
+	for(i = 0; i < linfo->ngroupblocks; i++) {
+		if (linfo->gdesc_dirty[i] == 0)
+			continue;
 
-	if (!linfo->gdesc_dirty)
-		return 0;
+		if ( (sizeof(EXT2_group_desc_t) * linfo->ngroups) < (EXT2_BLOCK_SIZE*(i+1)) )
+			nbytes = (sizeof(EXT2_group_desc_t) * linfo->ngroups) % EXT2_BLOCK_SIZE;
+		else
+			nbytes = EXT2_BLOCK_SIZE;
+		
+		r = chdesc_create_diff(linfo->gdescs[i], linfo->global_info->ubd, 
+					(i*EXT2_BLOCK_SIZE), nbytes, 
+					linfo->gdescs[i]->ddesc->data, 
+					linfo->groups + (i*EXT2_DESC_PER_BLOCK), head);
+		if (r < 0)
+			return r;
+		r = CALL(linfo->global_info->ubd, write_block, linfo->gdescs[i]);
+		if (r < 0)
+			return r;
 
-	r = chdesc_create_diff(linfo->gdescs, linfo->global_info->ubd, 0, linfo->ngroups * sizeof(EXT2_group_desc_t), 
-				linfo->gdescs->ddesc->data, linfo->groups, head);
-	if (r < 0)
-		return r;
-	r = CALL(linfo->global_info->ubd, write_block, linfo->gdescs);
-	if (r < 0)
-		return r;
-
-	linfo->gdesc_dirty = 0; 
+		linfo->gdesc_dirty[i] = 0; 
+	}
 	return 0;
 }
 
@@ -164,15 +174,19 @@ static int ext2_super_wb_get_config(void * object, int level, char * string,
 static int ext2_super_wb_destroy(EXT2mod_super_t * obj)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(obj);
-	int r;
+	int r,i;
 
 	r = sched_unregister(ext2_super_wb_sync_callback, obj);
 	if (r < 0)
 		return r;
 
 	bdesc_release(&linfo->super_block);
-	bdesc_release(&linfo->gdescs);
+	for(i = 0; i < linfo->ngroupblocks; i++) {
+		bdesc_release(&(linfo->gdescs[i]));
+	}
 	free(linfo->groups);
+	free(linfo->gdesc_dirty);
+	free(linfo->gdescs);
 	free(OBJLOCAL(obj));
 	memset(obj, 0, sizeof(*obj));
 	free(obj);
@@ -222,10 +236,11 @@ EXT2mod_super_t * ext2_super_wb(LFS_t * lfs, struct ext2_info * info)
 	linfo->super_dirty = 0;
 
 	//now load the gdescs
-	uint32_t block;
+	uint32_t block, i;
+	uint32_t ngroupblocks;
 	EXT2_BLOCK_SIZE = (1024 << linfo->super.s_log_block_size);
 	EXT2_DESC_PER_BLOCK = EXT2_BLOCK_SIZE / sizeof(EXT2_group_desc_t);
-
+		
 	int ngroups = (linfo->super.s_blocks_count / linfo->super.s_blocks_per_group);
 	if (linfo->super.s_blocks_count % linfo->super.s_blocks_per_group != 0)
 		ngroups++;
@@ -233,16 +248,31 @@ EXT2mod_super_t * ext2_super_wb(LFS_t * lfs, struct ext2_info * info)
 	linfo->groups = calloc(ngroups, sizeof(EXT2_group_desc_t));
 	if (!linfo->groups)
 		goto wb_fail1;
+	//Block 1 is where the gdescs are stored, which is right after the superblock
 	block = 1;
-#warning FIXME counts other than 1 are incompatible with the journal_bd module
-	linfo->gdescs = CALL(info->ubd, read_block, block, (ngroups / EXT2_DESC_PER_BLOCK) + 1);
-	if(!linfo->gdescs)
-		goto wb_fail1;
-	if (memcpy(linfo->groups, linfo->gdescs->ddesc->data, sizeof(EXT2_group_desc_t) * ngroups) == NULL)
-		goto wb_fail2;
-	bdesc_retain(linfo->gdescs);
-	linfo->gdesc_dirty = 0;
-
+	
+	ngroupblocks = ngroups / EXT2_DESC_PER_BLOCK;
+	if (ngroups % EXT2_DESC_PER_BLOCK != 0)
+		ngroupblocks++;
+	linfo->gdescs = malloc(ngroupblocks*sizeof(bdesc_t*));
+	int nbytes = 0;
+	for(i = 0; i < ngroupblocks; i++) {
+		linfo->gdescs[i] = CALL(info->ubd, read_block, (block + i), 1);
+		if(!linfo->gdescs[i])
+			goto wb_fail2;
+		
+		if ( (sizeof(EXT2_group_desc_t) * ngroups) < (EXT2_BLOCK_SIZE*(i+1)) )
+			nbytes = (sizeof(EXT2_group_desc_t) * ngroups) % EXT2_BLOCK_SIZE;
+		else
+			nbytes = EXT2_BLOCK_SIZE;
+		
+		if (memcpy(linfo->groups + (i*EXT2_DESC_PER_BLOCK), 
+				linfo->gdescs[i]->ddesc->data, nbytes) == NULL)
+			goto wb_fail2;
+		bdesc_retain(linfo->gdescs[i]);
+	}
+	linfo->gdesc_dirty = calloc(ngroupblocks, sizeof(int));
+	linfo->ngroupblocks = ngroupblocks;	
 	EXT2_SUPER_INIT(obj, ext2_super_wb, linfo);
 	r = sched_register(ext2_super_wb_sync_callback, obj, SYNC_PERIOD);
 	assert(r >= 0);
@@ -250,9 +280,12 @@ EXT2mod_super_t * ext2_super_wb(LFS_t * lfs, struct ext2_info * info)
 	return obj;
 
  wb_fail2:
-	bdesc_release(&linfo->super_block);
+	for(i = 0; i < ngroupblocks; i++)
+		bdesc_release(&(linfo->gdescs[i]));
+	free(linfo->gdescs);
+	free(linfo->groups);
  wb_fail1:
-	bdesc_release(&linfo->gdescs);
+	bdesc_release(&linfo->super_block);
 	free(obj);
 	free(linfo);
 	return NULL;

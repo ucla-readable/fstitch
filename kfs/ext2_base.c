@@ -52,7 +52,7 @@ static uint32_t EXT2_DESC_PER_BLOCK;
 static int check_super(LFS_t * object)
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-		
+	
 	/* the superblock is in block 1 */
 	printf("\tMagic Number 0x%x \n", info->super->s_magic);
 	printf("\tBlocksize might be %i\n", CALL(info->ubd, get_blocksize));
@@ -2575,15 +2575,6 @@ LFS_t * ext2(BD_t * block_device)
 		DESTROY(lfs);
 		return NULL;
 	}
-
-	//chdesc_t * head = NULL;
-	//ext2_fdesc_t * fd;
-	//const char * name = "lalala12";
-	//metadata_set_t initialmd;
-	//inode_t inode = 1234;
-
-	//this will add file lalala to the 'foo' directory
-	//ext2_allocate_name(lfs, 25121, name, TYPE_FILE, NULL, &initialmd, &inode, &head);
 	
 	return lfs;
 }
