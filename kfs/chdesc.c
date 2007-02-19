@@ -1398,6 +1398,7 @@ static void merge_rbs(bdesc_t * block)
 		if(chdesc->type == BYTE)
 			free(chdesc->byte.data);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "rb->nrb mergee");
 # if COUNT_CHDESCS
 		chdesc_counts[chdesc->type]--;
 		chdesc_counts[NOOP]++;
