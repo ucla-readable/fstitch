@@ -162,6 +162,13 @@ public class Chdesc
 		this.offset = offset;
 	}
 	
+	public void setXor(int xor)
+	{
+		if(type != TYPE_BIT)
+			throw new RuntimeException("Attempt to set xor of non-BIT chdesc!");
+		this.xor = xor;
+	}
+
 	public void setLength(short length)
 	{
 		if(type != TYPE_BYTE)

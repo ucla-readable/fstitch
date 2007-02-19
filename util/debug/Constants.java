@@ -41,12 +41,13 @@ public interface Constants
 	public static final short KDB_CHDESC_WEAK_RETAIN = 217;
 	public static final short KDB_CHDESC_WEAK_FORGET = 218;
 	public static final short KDB_CHDESC_SET_OFFSET = 219;
-	public static final short KDB_CHDESC_SET_LENGTH = 220;
-	public static final short KDB_CHDESC_SET_BLOCK = 221;
-	public static final short KDB_CHDESC_SET_OWNER = 222;
-	public static final short KDB_CHDESC_SET_FREE_PREV = 223;
-	public static final short KDB_CHDESC_SET_FREE_NEXT = 224;
-	public static final short KDB_CHDESC_SET_FREE_HEAD = 225;
+	public static final short KDB_CHDESC_SET_XOR = 221;
+	public static final short KDB_CHDESC_SET_LENGTH = 222;
+	public static final short KDB_CHDESC_SET_BLOCK = 223;
+	public static final short KDB_CHDESC_SET_OWNER = 224;
+	public static final short KDB_CHDESC_SET_FREE_PREV = 225;
+	public static final short KDB_CHDESC_SET_FREE_NEXT = 226;
+	public static final short KDB_CHDESC_SET_FREE_HEAD = 227;
 	
 	public static final short KDB_CHDESC_SATISFY = 301;
 	public static final short KDB_CHDESC_WEAK_COLLECT = 302;
