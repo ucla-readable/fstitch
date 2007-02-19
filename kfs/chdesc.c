@@ -35,7 +35,10 @@
 #define CHDESC_MERGE_RBS_NRB_STATS (CHDESC_MERGE_RBS_NRB && 0)
 
 /* Set to merge a simple overlapping RB into the underlying chdesc */
-#define CHDESC_MERGE_OVERLAP 1
+#define CHDESC_BYTE_MERGE_OVERLAP 1
+/* FIXME: bit merging does not preserve overlap detection (eg equal xors).
+ * TODO: Correct merge code, make overlap detection less fine grained, or ... */
+#define CHDESC_BIT_MERGE_OVERLAP 0
 
 static void chdesc_dep_remove(chdepdesc_t * dep);
 
@@ -594,7 +597,7 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 		if(!shared)
 			return 0;
 		/* check for complete overlap */
-		return (shared == b->bit.offset) ? 2 : 1;
+		return (shared == b->bit.xor) ? 2 : 1;
 	}
 	
 	if(a->type == BIT)
@@ -1450,7 +1453,7 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 #endif
 }
 
-#if CHDESC_MERGE_OVERLAP
+#if CHDESC_BYTE_MERGE_OVERLAP
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
  * Returns 1 on successful merge (*head points to merged chdesc),
@@ -1698,7 +1701,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		return r;
 	}
 	
-#if CHDESC_MERGE_OVERLAP
+#if CHDESC_BYTE_MERGE_OVERLAP
 	/* after the above work towards chdesc to avoid multiple overlap scans */
 	if(data_required)
 	{
@@ -1775,7 +1778,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
 }
 
-#if CHDESC_MERGE_OVERLAP
+#if CHDESC_BIT_MERGE_OVERLAP
 static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
 {
 	chdepdesc_t * dep;
@@ -1831,7 +1834,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 	}
 	
-#if CHDESC_MERGE_OVERLAP	
+#if CHDESC_BIT_MERGE_OVERLAP	
 	bit_changes = chdesc_bit_changes(block, offset);
 	if(bit_changes)
 	{
