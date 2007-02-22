@@ -575,7 +575,7 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	return 0;
 }
 
-/* note that we don't check to see if these chdescs are for the same ddesc or not */
+/* CRUCIAL NOTE: does *not* check whether the chdescs are on the same ddesc */
 /* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
 int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 {
@@ -1483,12 +1483,13 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 	for(dep = (*new)->befores; dep; dep = dep->before.next)
 	{
 		chdesc_t * before = dep->before.desc;
-		if(before->flags & CHDESC_WRITTEN)
+		if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
 			continue;
-		if(chdesc_overlap_check(*new, before))
+		if(before->block && (*new)->block->ddesc == before->block->ddesc
+		   && chdesc_overlap_check(*new, before))
 		{
 			/* note: *new may overlap *head */
-			if((before->flags & CHDESC_INFLIGHT) || before->type != BYTE)
+			if(before->type != BYTE)
 				return 0;
 			if(overlap && overlap != before)
 				return 0;
