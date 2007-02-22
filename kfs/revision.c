@@ -8,6 +8,8 @@
 #include <kfs/debug.h>
 #include <kfs/revision.h>
 
+#include <linux/sched.h>
+
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
 
 static bool revision_owner_decider(chdesc_t * chdesc, void * data)
