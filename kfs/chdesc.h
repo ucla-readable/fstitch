@@ -48,9 +48,11 @@ struct chdesc {
 	enum {BIT, BYTE, NOOP} type;
 	union {
 		struct {
-			/* offset is in units of 32-bit words */
+			/* offset is in units of sizeof(xor) */
 			uint16_t offset;
 			uint32_t xor;
+			/* or allows merging */
+			uint32_t or;
 		} bit;
 		struct {
 			/* offset is in bytes */

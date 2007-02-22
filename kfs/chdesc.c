@@ -36,9 +36,7 @@
 
 /* Set to merge a simple overlapping RB into the underlying chdesc */
 #define CHDESC_BYTE_MERGE_OVERLAP 1
-/* FIXME: bit merging does not preserve overlap detection (eg equal xors).
- * TODO: Correct merge code, make overlap detection less fine grained, or ... */
-#define CHDESC_BIT_MERGE_OVERLAP 0
+#define CHDESC_BIT_MERGE_OVERLAP 1
 
 static void chdesc_dep_remove(chdepdesc_t * dep);
 
@@ -593,11 +591,11 @@ int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
 		uint32_t shared;
 		if(a->bit.offset != b->bit.offset)
 			return 0;
-		shared = a->bit.xor & b->bit.xor;
+		shared = a->bit.or & b->bit.or;
 		if(!shared)
 			return 0;
 		/* check for complete overlap */
-		return (shared == b->bit.xor) ? 2 : 1;
+		return (shared == b->bit.or) ? 2 : 1;
 	}
 	
 	if(a->type == BIT)
@@ -1799,24 +1797,41 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
 {
 	chdepdesc_t * dep;
-	chdesc_t * overlap = NULL;
+	chdesc_t * overlap_bit = NULL;
+	chdesc_t * overlap_word = NULL;
+	chdesc_t * overlap;
 	
 	for(dep = bit_changes->befores; dep; dep = dep->before.next)
 	{
 		chdesc_t * before = dep->before.desc;
-		if(before->flags & CHDESC_WRITTEN)
+		if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
 			continue;
-		if(before->flags & CHDESC_INFLIGHT)
-			return 0;
-		if(overlap)
-			return 0;
-		overlap = before;
+		overlap_word = overlap_word ? (chdesc_t *) 1 : before;
+		if(xor & before->bit.or)
+			overlap_bit = overlap_bit ? (chdesc_t *) 1 : before;
 	}
-	if(!overlap)
-		return 0;
-	if(*head && *head != overlap && (*head)->befores)
+	if(overlap_bit > (chdesc_t *) 1)
+		overlap = overlap_bit;
+	else if(overlap_word > (chdesc_t *) 1)
+		overlap = overlap_word;
+	else
 		return 0;
 	
+	if(*head && *head != overlap && !((*head)->flags & CHDESC_INFLIGHT) && (*head)->befores)
+		return 0;
+	
+	if(overlap->block->ddesc->overlaps)
+		for(dep = overlap->block->ddesc->overlaps->befores; dep; dep = dep->before.next)
+		{
+			chdesc_t * before = dep->before.desc;
+			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+				continue;
+			if(chdesc_overlap_check(overlap, before))
+				/* uncommon. 'before' may need a rollback update. */
+				return 0;
+		}
+	
+	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
 	((uint32_t *) overlap->block->ddesc->data)[overlap->bit.offset] ^= xor;
@@ -1877,6 +1892,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->type = BIT;
 	chdesc->bit.offset = offset;
 	chdesc->bit.xor = xor;
+	chdesc->bit.or = xor;
 	chdesc->befores = NULL;
 	chdesc->befores_tail = &chdesc->befores;
 	chdesc->afters = NULL;
