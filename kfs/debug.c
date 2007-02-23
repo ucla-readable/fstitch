@@ -15,7 +15,9 @@
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
-
+#ifdef CONFIG_DEBUG_FS
+#include <linux/debugfs.h>
+#endif
 /* htons and htonl */
 #include <lib/string.h>
 
@@ -393,6 +395,10 @@ static uint8_t * proc_buffer;
 static off_t proc_buffer_rpos;
 static off_t proc_buffer_wpos;
 
+#ifdef CONFIG_DEBUG_FS
+static struct dentry * debug_count_dentry;
+#endif
+
 static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
 {
 	off_t size;
@@ -445,6 +451,14 @@ static void kfs_debug_shutdown(void * ignore)
 	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
 	vfree(proc_buffer);
 	proc_buffer = NULL;
+	
+#if CONFIG_DEBUG_FS
+	if(debug_count_dentry)
+	{
+		debugfs_remove(debug_count_dentry);
+		debug_count_dentry = NULL;
+	}
+#endif
 }
 
 static int kfs_debug_io_init(void)
@@ -461,6 +475,16 @@ static int kfs_debug_io_init(void)
 		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
 		return -E_UNSPECIFIED;
 	}
+	
+#ifdef CONFIG_DEBUG_FS
+	debug_count_dentry = debugfs_create_u32(DEBUG_COUNT_FILENAME, 0444, NULL, &debug_count);
+	if(IS_ERR(debug_count_dentry))
+	{
+		printf("%s(): debugfs_create_u32(\"%s\") = error %d\n", __FUNCTION__, DEBUG_COUNT_FILENAME, PTR_ERR(debug_count_dentry));
+		debug_count_dentry = NULL;
+	}
+#endif
+	
 	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if(r < 0)
 	{

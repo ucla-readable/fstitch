@@ -13,6 +13,7 @@
 
 #define DEBUG_PROC_FILENAME "kkfsd_debug"
 #define DEBUG_PROC_SIZE (4 * 1024 * 1024)
+#define DEBUG_COUNT_FILENAME "kkfsd_count"
 
 #define KFS_DEBUG_MARK 0
 #define KFS_DEBUG_DISABLE 1
