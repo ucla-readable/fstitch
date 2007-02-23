@@ -83,7 +83,7 @@ public class StatusCommand implements Command
 			System.out.print(", name = " + bdName);
 		System.out.println();
 		
-		System.out.println("Flags: " + chdesc.renderFlags(chdesc.getFlags()));
+		System.out.println("Flags: " + Chdesc.renderFlags(chdesc.getFlags()));
 		
 		System.out.println("Afters:");
 		for(Iterator it = chdesc.getAfters(); it.hasNext();)
