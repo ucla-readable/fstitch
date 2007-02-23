@@ -367,7 +367,7 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 		uint32_t pre_checksum = write->checksum;
 		uint32_t post_checksum = block_checksum(page_address(bv->bv_page), bv->bv_len);
 		if (pre_checksum != post_checksum)
-			printf("pre- (0x%x) and post-write (0x%x) checksums differ for write %d (block %u)\n", pre_checksum, post_checksum, private->issue, write->blockno);
+			printk("pre- (0x%x) and post-write (0x%x) checksums differ for write %d (block %u)\n", pre_checksum, post_checksum, private->issue, write->blockno);
 		write->completed = debug_writes_completed++;
 		atomic_dec(&debug_writes_ninflight[write->blockno]);
 	}
@@ -428,7 +428,7 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 		jif_writes++;
 		if(now - last_jif >= HZ)
 		{
-			printf("linux_bd: writes/sec = %d\n", jif_writes * HZ / (now - last_jif));
+			printk("linux_bd: writes/sec = %d\n", jif_writes * HZ / (now - last_jif));
 			last_jif = now;
 			jif_writes = 0;
 		}
@@ -516,7 +516,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	else if (debug_writes.next == MAXWRITES)
 	{
-		printf("linux_bd: number of writes has exceeded maximum supported by debugging (%u)\n", MAXWRITES);
+		printk("linux_bd: number of writes has exceeded maximum supported by debugging (%u)\n", MAXWRITES);
 		debug_writes.next++;
 	}
 #endif
@@ -812,7 +812,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	debug_writes_dentry = debugfs_create_blob("linux_bd_writes", 0444, NULL, &debug_writes_blob);
 	if (IS_ERR(debug_writes_dentry))
 	{
-		printf("%s(): debugfs_create_blob(\"linux_bd_writes\") = error %d\n", __FUNCTION__, PTR_ERR(debug_writes_dentry));
+		printk("%s(): debugfs_create_blob(\"linux_bd_writes\") = error %d\n", __FUNCTION__, PTR_ERR(debug_writes_dentry));
 		debug_writes_dentry = NULL;
 	}
 #endif
