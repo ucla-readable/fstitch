@@ -51,7 +51,7 @@ public class BlockGrouper extends AbstractGrouper
 	protected void renderGroup(Object groupKey, Grouper subGrouper, String clusterPrefix, Writer output) throws IOException
 	{
 		int block = ((Integer) groupKey).intValue();
-		String clusterName = clusterPrefix + block;
+		String clusterName = clusterPrefix + SystemState.hex(block);
 		if(block != 0)
 		{
 			output.write("subgraph cluster" + clusterName + " {\n");

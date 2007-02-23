@@ -51,7 +51,7 @@ public class OwnerGrouper extends AbstractGrouper
 	protected void renderGroup(Object groupKey, Grouper subGrouper, String clusterPrefix, Writer output) throws IOException
 	{
 		int owner = ((Integer) groupKey).intValue();
-		String clusterName = clusterPrefix + owner;
+		String clusterName = clusterPrefix + SystemState.hex(owner);
 		if(owner != 0)
 		{
 			output.write("subgraph cluster" + clusterName + " {\n");
