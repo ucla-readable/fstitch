@@ -104,6 +104,12 @@ int opgroup_disengage(opgroup_id_t opgroup);
 int opgroup_release(opgroup_id_t opgroup);
 int opgroup_abandon(opgroup_id_t opgroup);
 
+/* Create a linear dependency chain:
+ * Create, release, and engage a new opgroup.
+ * If 'previous >= 0' then the new opgroup will depend on previous
+ * and previous will be disengaged and abandoned. */
+int opgroup_linear(opgroup_id_t previous);
+
 #endif /* KFSD */
 
 #endif /* __KUDOS_KFS_OPGROUP_H */

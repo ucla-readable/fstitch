@@ -84,3 +84,30 @@ int opgroup_abandon(opgroup_id_t opgroup)
 	Dprintf("%s%s(%d)\n", PREFIX, __FUNCTION__, opgroup);
 	return pass_request(OPGROUP_IOCTL_ABANDON, opgroup, -1, -1);
 }
+
+
+int opgroup_linear(opgroup_id_t previous)
+{
+	opgroup_id_t new;
+	int r;
+
+	if ((new = opgroup_create(0)) < 0)
+		return new;
+	if (previous >= 0)
+	{
+		if ((r = opgroup_add_depend(new, previous)) < 0)
+			goto error_abandon;
+		if ((r = opgroup_abandon(previous)) < 0)
+			goto error_abandon;
+		previous = -1;
+	}
+	if ((r = opgroup_release(new)) < 0)
+		goto error_abandon; /* Bad: can't unabandon previous */
+	if ((r = opgroup_engage(new)) < 0)
+		goto error_abandon; /* Bad: can't unabandon previous */
+	return new;
+
+  error_abandon:
+	(void) opgroup_abandon(new);
+	return r;
+}
