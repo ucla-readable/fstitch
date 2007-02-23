@@ -599,7 +599,7 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	chdesc_t * oldheads_array[3] = {NULL, NULL, NULL};
 	chdesc_t ** oldheads = oldheads_array;
-	chdesc_t ** oldhead;
+	chdesc_t * oldhead;
 	int r;
 
 	if (!head || cyl < 0 || cyl >= super->fs_ncg)
@@ -610,7 +610,7 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 		return -E_UNSPECIFIED;
 
 	// Update cylinder group
-	oldhead = head;
+	oldhead = *head;
 	sum.cs_ndir = cg->cg_cs.cs_ndir + ndir;
 	sum.cs_nbfree = cg->cg_cs.cs_nbfree + nbfree;
 	sum.cs_nifree = cg->cg_cs.cs_nifree + nifree;
@@ -618,11 +618,11 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 	r = CALL(info->parts.p_cg, write_cs, cyl, &sum, head);
 	if (r < 0)
 		return r;
-	if (*head != *oldhead)
+	if (*head != oldhead)
 		*(oldheads++) = *head;
 
 	// Update cylinder summary area
-	head = oldhead;
+	*head = oldhead;
 	csum = info->csums + cyl;
 	csum->cs_ndir += ndir;
 	csum->cs_nbfree += nbfree;
@@ -634,7 +634,7 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 			csum, head);
 	if (r < 0)
 		return r;
-	if (*head != *oldhead)
+	if (*head != oldhead)
 		*(oldheads++) = *head;
 
 	r = CALL(info->ubd, write_block, info->csum_block);
@@ -642,7 +642,7 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 		return r;
 
 	// Update superblock
-	head = oldhead;
+	*head = oldhead;
 	sum.cs_ndir = super->fs_cstotal.cs_ndir + ndir;
 	sum.cs_nbfree = super->fs_cstotal.cs_nbfree + nbfree;
 	sum.cs_nifree = super->fs_cstotal.cs_nifree + nifree;
@@ -650,12 +650,12 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 	r = CALL(info->parts.p_super, write_cstotal, &sum, head);
 	if (r < 0)
 		return r;
-	if (*head != *oldhead)
+	if (*head != oldhead)
 		*(oldheads++) = *head;
 
 	if (oldheads == oldheads_array)
 	{
-		*head = NULL;
+		assert(*head == oldhead);
 		return 0;
 	}
 	return chdesc_create_noop_array(NULL, NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
