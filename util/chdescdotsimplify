@@ -1,0 +1,29 @@
+#! /usr/bin/env perl
+# Filter unnecessary chdesc dot elements from stdin and write to stdout
+
+my %overlaps = ();
+
+while(<STDIN>)
+{
+	my $line = $_;
+	if ($line =~ m/^\".+\" -> \".+\" \[color=gray\]$/) {
+		next; # after
+	}
+	if ($line =~ m/^\".+\" \[shape=box,fillcolor=yellow,style=filled\]$/) {
+		next; # weak ref
+	}
+	if ($line =~ m/^\".+\" -> \".+\" \[color=green\]$/) {
+		next; # weak ref pointer
+	}
+	if ($line =~ m/^\"(.+)\" -> \".+\"/ && exists $overlaps{$1}) {
+		next; # overlap before
+	}
+	if ($line =~ m/^\"(.+)\"$/ && exists $overlaps{$1}) {
+		next; # overlap in a group
+	}
+	if ($line =~ m/^\"(.+)\" \[.*(?:overlaps|bit_changes).*\]$/) {
+		$overlaps{$1} = 1;
+		next; # overlap
+	}
+	print $line;
+}
