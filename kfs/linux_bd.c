@@ -812,7 +812,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	debug_writes_dentry = debugfs_create_blob("linux_bd_writes", 0444, NULL, &debug_writes_blob);
 	if (IS_ERR(debug_writes_dentry))
 	{
-		printk("%s(): debugfs_create_blob(\"linux_bd_writes\") = error %d\n", __FUNCTION__, PTR_ERR(debug_writes_dentry));
+		printk("%s(): debugfs_create_blob(\"linux_bd_writes\") = error %d\n", __FUNCTION__, (int) PTR_ERR(debug_writes_dentry));
 		debug_writes_dentry = NULL;
 	}
 #endif
