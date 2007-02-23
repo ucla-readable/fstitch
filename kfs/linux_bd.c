@@ -1,6 +1,5 @@
 #include <lib/error.h>
 #include <lib/assert.h>
-#include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/types.h>
@@ -34,6 +33,12 @@ KERNEL_TIMING(wait);
 
 #ifdef CONFIG_MD
 #error linux_bd is (apparently) incompatible with RAID/LVM
+#endif
+
+#ifndef BIO_RW_FUA
+#warning BIO_RW_FUA is not available: writes will be unsafe across power outage
+/* WRITE is 1, so 1 << 0 == WRITE and thus WRITE | (1 << BIO_RW_FUA) == WRITE */
+#define BIO_RW_FUA 0
 #endif
 
 #define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
@@ -555,7 +560,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	bio->bi_sector = block->number;
 	bio->bi_size = block->ddesc->length;
 	bio->bi_bdev = info->bdev;
-	bio->bi_rw = WRITE;
+	bio->bi_rw = WRITE | (1 << BIO_RW_FUA);
 	bio->bi_end_io = linux_bd_end_io;
 	bio->bi_private = private;
 
@@ -611,7 +616,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_forward = r;
 
 	if (revision_back != revision_forward)
-		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
+		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
 
 	KDprintk(KERN_ERR "exiting write\n");
 	return 0;
@@ -643,7 +648,7 @@ int linux_bd_destroy(BD_t * bd)
 	{
 		if (!wait_printed)
 		{
-			kdprintf(STDOUT_FILENO, "%s: waiting for %d outstanding I/Os\n", __FUNCTION__, atomic_read(&info->outstanding_io_count));
+			printk("%s: waiting for %d outstanding I/Os\n", __FUNCTION__, atomic_read(&info->outstanding_io_count));
 			wait_printed = 1;
 		}
 		current->state = TASK_INTERRUPTIBLE;
@@ -723,19 +728,19 @@ static int open_bdev(const char *path, int mode, struct block_device **bdev)
 
 	r = lookup_device(path, &dev);
 	if (r) {
-		kdprintf(STDERR_FILENO, "error from lookup_device()\n");
+		printk("error from lookup_device()\n");
 		return r;
 	}
 	*bdev = open_by_devnum(dev, mode);
 	if (IS_ERR(*bdev)) {
-		kdprintf(STDERR_FILENO, "error from open_by_devnum()\n");
+		printk("error from open_by_devnum()\n");
 		return PTR_ERR(*bdev);
 	}
 	/* NOTE: bd_claim() will/may return -EBUSY if raid/lvm are on */
 	r = bd_claim(*bdev, _claim_ptr);
 	/* NOTE: bd_claim() will/may return -EBUSY if raid/lvm are on */
 	if (r) {
-		kdprintf(STDERR_FILENO, "error from bd_claim(): %d\n", r);
+		printk("error from bd_claim(): %d\n", r);
 		blkdev_put(*bdev);
 	}
 	return r;
@@ -747,16 +752,20 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	BD_t * bd = malloc(sizeof(*bd));
 	int r;
 
+#ifndef BIO_RW_FUA
+	printk("Warning: not compiled with BIO_RW_FUA: writes will not be 100%% safe\n");
+#endif
+
 	if(!bd)
 	{
-		kdprintf(STDERR_FILENO, "malloc() for bd failed\n");
+		printk("malloc() for bd failed\n");
 		return NULL;
 	}
 	
 	info = malloc(sizeof(*info));
 	if(!info)
 	{
-		kdprintf(STDERR_FILENO, "malloc for info failed\n");
+		printk("malloc for info failed\n");
 		free(bd);
 		return NULL;
 	}
@@ -765,7 +774,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 
 	r = open_bdev(linux_bdev_path, WRITE, &info->bdev);
 	if (r) {
-		kdprintf(STDERR_FILENO, "open_bdev() error\n");
+		printk("open_bdev() error\n");
 		free(info);
 		free(bd);
 		return NULL;
@@ -773,7 +782,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	info->blockman = blockman_create(512, NULL, NULL);
 	if (!info->blockman) {
-		kdprintf(STDERR_FILENO, "blockman_create() failed\n");
+		printk("blockman_create() failed\n");
 		bd_release(info->bdev);
 		blkdev_put(info->bdev);
 		free(info);
@@ -791,7 +800,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
-		kdprintf(STDERR_FILENO, "modman_add_anon_bd() error\n");
+		printk("modman_add_anon_bd() error\n");
 		DESTROY(bd);
 		return NULL;
 	}

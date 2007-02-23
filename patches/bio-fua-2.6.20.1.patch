@@ -1,0 +1,57 @@
+diff -urd orig/linux-2.6.20.1/block/ll_rw_blk.c linux-2.6.20.1/block/ll_rw_blk.c
+--- orig/linux-2.6.20.1/block/ll_rw_blk.c	2007-02-19 22:34:32.000000000 -0800
++++ linux-2.6.20.1/block/ll_rw_blk.c	2007-02-22 18:15:02.000000000 -0800
+@@ -2888,6 +2888,8 @@
+ 		req->cmd_flags |= REQ_RW_SYNC;
+ 	if (bio_rw_meta(bio))
+ 		req->cmd_flags |= REQ_RW_META;
++	if (bio_rw_fua(bio))
++		req->cmd_flags |= REQ_FUA;
+ 
+ 	req->errors = 0;
+ 	req->hard_sector = req->sector = bio->bi_sector;
+diff -urd orig/linux-2.6.20.1/drivers/ata/libata-core.c linux-2.6.20.1/drivers/ata/libata-core.c
+--- orig/linux-2.6.20.1/drivers/ata/libata-core.c	2007-02-19 22:34:32.000000000 -0800
++++ linux-2.6.20.1/drivers/ata/libata-core.c	2007-02-22 18:53:01.000000000 -0800
+@@ -335,8 +335,12 @@
+ 		tf->lbal = block & 0xff;
+ 
+ 		tf->device = 1 << 6;
+-		if (tf->flags & ATA_TFLAG_FUA)
+-			tf->device |= 1 << 7;
++		if (tf->flags & ATA_TFLAG_FUA) {
++			if (tf->flags & ATA_TFLAG_WRITE)
++				tf->device |= 1 << 7;
++			else
++				printk("%s(): ignoring FUA read request!\n", __FUNCTION__);
++		}
+ 	} else if (dev->flags & ATA_DFLAG_LBA) {
+ 		tf->flags |= ATA_TFLAG_LBA;
+ 
+diff -urd orig/linux-2.6.20.1/include/linux/bio.h linux-2.6.20.1/include/linux/bio.h
+--- orig/linux-2.6.20.1/include/linux/bio.h	2007-02-19 22:34:32.000000000 -0800
++++ linux-2.6.20.1/include/linux/bio.h	2007-02-22 18:14:39.000000000 -0800
+@@ -143,6 +143,7 @@
+  * bit 2 -- barrier
+  * bit 3 -- fail fast, don't want low level driver retries
+  * bit 4 -- synchronous I/O hint: the block layer will unplug immediately
++ * bit 6 -- force unit access
+  */
+ #define BIO_RW		0
+ #define BIO_RW_AHEAD	1
+@@ -150,6 +151,7 @@
+ #define BIO_RW_FAILFAST	3
+ #define BIO_RW_SYNC	4
+ #define BIO_RW_META	5
++#define BIO_RW_FUA	6
+ 
+ /*
+  * upper 16 bits of bi_rw define the io priority of this bio
+@@ -181,6 +183,7 @@
+ #define bio_failfast(bio)	((bio)->bi_rw & (1 << BIO_RW_FAILFAST))
+ #define bio_rw_ahead(bio)	((bio)->bi_rw & (1 << BIO_RW_AHEAD))
+ #define bio_rw_meta(bio)	((bio)->bi_rw & (1 << BIO_RW_META))
++#define bio_rw_fua(bio)		((bio)->bi_rw & (1 << BIO_RW_FUA))
+ 
+ /*
+  * will die
