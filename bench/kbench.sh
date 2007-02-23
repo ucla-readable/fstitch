@@ -11,10 +11,6 @@ TARFILE=linux-2.6.15.tar
 TAROUT=linux-2.6.15
 VMLINUX=/lib/modules/`uname -r`/source/vmlinux
 
-# Try to load oprofile, then detect whether it worked
-zgrep -q OPROFILE /proc/config.gz && modprobe oprofile
-PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
-
 WRAP_PID=0
 
 function start_kfsd() {
@@ -130,6 +126,10 @@ if [ $# -ge 4 ]
 then
 	usage
 fi
+
+# Try to load oprofile, then detect whether it worked
+zgrep -q OPROFILE /proc/config.gz && modprobe oprofile
+PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 
 echo "Using disk $DISK"
 
