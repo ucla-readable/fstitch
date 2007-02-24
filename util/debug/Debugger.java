@@ -225,6 +225,13 @@ public class Debugger extends OpcodeFactory
 		return change;
 	}
 	
+	public boolean replay(Opcode opcode)
+	{
+		opcode.applyTo(state);
+		applied++;
+		return opcode.hasEffect();
+	}
+	
 	public boolean replay(int count)
 	{
 		boolean change = false;
@@ -318,7 +325,7 @@ public class Debugger extends OpcodeFactory
 	public void render(Writer output, boolean landscape) throws IOException
 	{
 		String title = "";
-		if(applied > 0)
+		if(applied > 0 && applied <= opcodes.size())
 			title = opcodes.get(applied - 1).toString();
 		state.render(output, title, renderFree, renderBlock, renderOwner, grouperFactory.newInstance(), landscape);
 	}
@@ -346,6 +353,7 @@ public class Debugger extends OpcodeFactory
 			interpreter.addCommand(new ListCommand());
 			interpreter.addCommand(new FindCommand());
 			interpreter.addCommand(new LoadCommand());
+			interpreter.addCommand(new StreamCommand());
 			interpreter.addCommand(new OptionCommand());
 			interpreter.addCommand(new PSCommand());
 			interpreter.addCommand(new RenderCommand());
