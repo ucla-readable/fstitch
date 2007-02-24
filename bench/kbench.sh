@@ -134,6 +134,7 @@ PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 echo "Using disk $DISK"
 
 su "$REAL_USER" -c "touch \"$TIME_LOG\""
+su "$REAL_USER" -c "touch \"$PROF_LOG\""
 echo "==== `date`" >> "$TIME_LOG"
 
 su "$REAL_USER" -c "make" || exit 1
