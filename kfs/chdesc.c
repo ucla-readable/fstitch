@@ -38,8 +38,6 @@
 #define CHDESC_BYTE_MERGE_OVERLAP 1
 #define CHDESC_BIT_MERGE_OVERLAP 1
 
-static void chdesc_dep_remove(chdepdesc_t * dep);
-
 #if COUNT_CHDESCS
 #include <lib/jiffies.h>
 /* indices match chdesc->type */
@@ -538,6 +536,17 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	/* shouldn't be there */
 	for(dep = before->afters; dep; dep = dep->after.next)
 		assert(dep->desc != after);
+#else
+	/* how frequently do these happen? more frequently than you'd think! */
+	if(before->afters && before->afters->after.desc == after)
+		return 0;
+	if(after->befores && after->befores->before.desc == before)
+		return 0;
+	
+	if(before->afters && container_of(before->afters_tail, chdepdesc_t, after.next)->after.desc == after)
+		return 0;
+	if(after->befores && container_of(after->befores_tail, chdepdesc_t, before.next)->before.desc == before)
+		return 0;
 #endif
 	
 	dep = malloc(sizeof(*dep));
@@ -2109,7 +2118,7 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 	return chdesc_add_depend_fast(after, before);
 }
 
-static void chdesc_dep_remove(chdepdesc_t * dep)
+void chdesc_dep_remove(chdepdesc_t * dep)
 {
 	propagate_depend_remove(dep->after.desc, dep->before.desc);
 	

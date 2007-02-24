@@ -185,6 +185,8 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
 
 /* remove a dependency from 'after' on 'before' */
 void chdesc_remove_depend(chdesc_t * after, chdesc_t * before);
+/* remove the given dependency */
+void chdesc_dep_remove(chdepdesc_t * dep);
 
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);
