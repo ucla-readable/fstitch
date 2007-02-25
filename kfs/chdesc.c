@@ -810,6 +810,8 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc)
 }
 
 /* return whether chdesc is ready to go down one level */
+/* FIXME: Can be incorrect when the below module's level differs by >1
+ * (eg the current module has multiple paths to stable storage). */
 static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((always_inline));
 static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
 {

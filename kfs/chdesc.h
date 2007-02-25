@@ -162,6 +162,8 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 
 /* return the BD level of chdesc_t * 'chdesc' */
 /* define as a macro instead of inline function because of include orderings */
+/* FIXME: INFLIGHT's l+1 can be incorrect when the module above l has multiple
+ * paths to stable storage. */
 /* TODO: determine whether inlining affects runtime */
 #define chdesc_level(chdesc) \
 ({ \
