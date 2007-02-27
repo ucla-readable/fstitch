@@ -346,7 +346,7 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 
 	if (vector_size(oldheads))
 	{
-		r = chdesc_create_noop_array(NULL, NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		r = chdesc_create_noop_array(NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
 		if (r < 0)
 			goto exit;
 	}

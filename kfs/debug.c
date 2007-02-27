@@ -162,7 +162,6 @@ static const struct param * params_bdesc_ar_push_pop[] = {
 };
 static const struct param * params_chdesc_create_noop[] = {
 	&param_chdesc,
-	&param_block,
 	&param_owner,
 	&last_param
 };

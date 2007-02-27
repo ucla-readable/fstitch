@@ -362,7 +362,7 @@ int write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_
 		goto write_inode_bitmap_end;
 	*(oldheads++) = *head;
 
-	r = chdesc_create_noop_array(NULL, NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
+	r = chdesc_create_noop_array(NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
 	if (r < 0)
 		goto write_inode_bitmap_end;
 
@@ -587,7 +587,7 @@ int write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_
 		return r;
 	*(oldheads++) = *head;
 
-	return chdesc_create_noop_array(NULL, NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
+	return chdesc_create_noop_array(NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
 }
 
 // [ndir, ..., nffree] parameters are deltas
@@ -658,7 +658,7 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 		assert(*head == oldhead);
 		return 0;
 	}
-	return chdesc_create_noop_array(NULL, NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
+	return chdesc_create_noop_array(NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
 }
 
 int check_name(const char * p)

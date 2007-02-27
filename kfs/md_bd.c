@@ -137,7 +137,7 @@ static chdesc_t * md_bd_get_write_head(BD_t * object)
 	head[0] = CALL(info->bd[0], get_write_head);
 	head[1] = CALL(info->bd[1], get_write_head);
 	if(head[0] || head[1])
-		chdesc_create_noop_array(NULL, NULL, &result, 2, head);
+		chdesc_create_noop_array(NULL, &result, 2, head);
 	return result;
 }
 

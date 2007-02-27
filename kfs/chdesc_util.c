@@ -64,50 +64,6 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 	return 0;
 }
 
-int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block)
-{
-	if(noop->type != NOOP)
-		return -E_INVAL;
-	
-	/* special case for reassigning to the same ddesc */
-	if(noop->block && block && noop->block->ddesc == block->ddesc)
-	{
-		if(noop->block != block)
-		{
-			bdesc_retain(block);
-			bdesc_release(&noop->block);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, noop, block);
-			noop->block = block;
-		}
-		return 0;
-	}
-
-#if BDESC_EXTERN_AFTER_COUNT
-	{
-		/* ddesc->extern_after_count updates are only supported for
-		 * specific journal_bd uses */
-		chdesc_t * before = noop->befores ? noop->befores->before.desc : NULL;
-		assert(!noop->afters && (!noop->befores || (!noop->befores->before.next && before->type == NOOP && !before->block && !before->befores)));
-	}
-#endif
-	
-	if(noop->block)
-	{
-		chdesc_unlink_ready_changes(noop);
-		chdesc_unlink_all_changes(noop);
-		bdesc_release(&noop->block);
-	}
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, noop, block);
-	noop->block = block;
-	if(block)
-	{
-		bdesc_retain(block);
-		chdesc_link_all_changes(noop);
-		chdesc_update_ready_changes(noop);
-	}
-	return 0;
-}
-
 /* Write an entire block with new data, assuming that either A) no change
  * descriptors exist on the block or B) the entire block has a single layer of
  * BYTE change descriptors on it. In case B, use chdesc_rewrite_byte() to
@@ -215,7 +171,7 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	else if (vector_size(oldheads) > 1)
 	{
 		/* *head depends on all created chdescs */
-		r = chdesc_create_noop_array(NULL, NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		r = chdesc_create_noop_array(NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
 		if(r < 0)
 			goto chdesc_create_diff_failed;
 	}

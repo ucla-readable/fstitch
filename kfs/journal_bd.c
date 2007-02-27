@@ -381,7 +381,7 @@ static int journal_bd_start_transaction(BD_t * object)
 
 #define CREATE_NOOP(name, owner) \
 	do { \
-		r = chdesc_create_noop_list(NULL, owner, &info->name, NULL); \
+		r = chdesc_create_noop_list(owner, &info->name, NULL); \
 		if(r < 0) \
 			goto fail_##name; \
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
@@ -392,7 +392,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(keep_w, NULL);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	assert(info->keep_w); /* keep_w must be non-NULL for chdesc_create_noop_list */
-	r = chdesc_create_noop_list(NULL, NULL, &info->wait, info->keep_w, info->prev_cr, NULL);
+	r = chdesc_create_noop_list(NULL, &info->wait, info->keep_w, info->prev_cr, NULL);
 	if(r < 0)
 		goto fail_wait;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
@@ -400,7 +400,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(keep_d, NULL);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
 	assert(info->keep_d); /* keep_d must be non-NULL for chdesc_create_noop_list */
-	r = chdesc_create_noop_list(NULL, NULL, &info->data, info->keep_d, info->prev_cancel, NULL);
+	r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, info->prev_cancel, NULL);
 	if(r < 0)
 		goto fail_data;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->data, "data");
@@ -716,7 +716,10 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	
 	cr = (struct commit_record *) commit_block->ddesc->data;
 	if(cr->magic != JOURNAL_MAGIC || cr->type != expected_type)
+	{
+		printf("%s(): journal subtransaction %d signature mismatch! (0x%08x:%d)\n", __FUNCTION__, transaction_number, cr->magic, cr->type);
 		return 0;
+	}
 	
 	/* make sure our block doesn't go anywhere for a while */
 	bdesc_autorelease(bdesc_retain(commit_block));
@@ -724,17 +727,17 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	if(expected_type == CRCOMMIT)
 	{
 		/* create the three NOOPs we will need for this chain */
-		r = chdesc_create_noop_list(NULL, NULL, &info->keep_d, NULL);
+		r = chdesc_create_noop_list(NULL, &info->keep_d, NULL);
 		if(r < 0)
 			goto error_1;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->keep_d, "keep_d");
 		chdesc_claim_noop(info->keep_d);
 		/* make the new complete record (via data) depend on the previous via info->prev_cancel */
-		r = chdesc_create_noop_list(NULL, NULL, &info->data, info->keep_d, info->prev_cancel, NULL);
+		r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, info->prev_cancel, NULL);
 		if(r < 0)
 			goto error_2;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->data, "data");
-		r = chdesc_create_noop_list(NULL, NULL, &info->done, NULL);
+		r = chdesc_create_noop_list(NULL, &info->done, NULL);
 		if(r < 0)
 		{
 			chdesc_destroy(&info->data);
@@ -757,7 +760,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			return r;
 	}
 	
-	printf("%s(): recovering journal transaction %d (%u data blocks)\n", __FUNCTION__, transaction_number, cr->nblocks);
+	printf("%s(): recovering journal subtransaction %d (%d data blocks)\n", __FUNCTION__, transaction_number, cr->nblocks);
 	
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
@@ -873,6 +876,7 @@ static int replay_journal(BD_t * bd)
 		cr = (struct commit_record *) commit_block->ddesc->data;
 		if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
 			continue;
+		printf("%s(): transaction %d (sequence %u) will be recovered\n", __FUNCTION__, transaction, cr->seq);
 		
 		recover_count++;
 		info->cr_retain[transaction].seq = cr->seq;
@@ -882,6 +886,7 @@ static int replay_journal(BD_t * bd)
 			min_idx = transaction;
 		}
 	}
+	printf("%s(): %d transactions will be recovered\n", __FUNCTION__, recover_count);
 	
 	transaction = min_idx;
 	while(recover_count)
@@ -913,27 +918,31 @@ static int replay_journal(BD_t * bd)
 				next_seq = 1;
 			if(info->cr_retain[scan].seq != next_seq)
 			{
-				printf("%s(): found non-linear transaction!\n", __FUNCTION__);
+				/* FIXME: this case will generally always happen, and is O(n^2) */
 				min_trans = 0;
 				/* find lowest remaining sequence number */
 				while(scan != transaction)
 				{
-					if(info->cr_retain[scan].seq)
+					if(info->cr_retain[scan].seq && GT32(info->cr_retain[scan].seq, info->cr_retain[transaction].seq))
+					{
 						if(!min_trans || LT32(info->cr_retain[scan].seq, min_trans))
 						{
 							min_trans = info->cr_retain[scan].seq;
 							min_idx = scan;
 						}
+					}
 					if(++scan == info->cr_count)
 						scan = 0;
 				}
 				assert(min_trans);
+				transaction = min_idx;
 			}
-			transaction = min_idx;
+			else
+				transaction = scan;
 		}
 		else
 		{
-			info->trans_seq = info->cr_retain[transaction].seq + 1;
+			info->trans_seq = min_trans + 1;
 			if(!info->trans_seq)
 				info->trans_seq = 1;
 		}

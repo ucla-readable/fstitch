@@ -110,7 +110,7 @@ static int ensure_bdesc_has_overlaps(bdesc_t * block)
 		return 0;
 	}
 	
-	r = chdesc_create_noop_list(NULL, NULL, &chdesc, NULL);
+	r = chdesc_create_noop_list(NULL, &chdesc, NULL);
 	if(r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "overlaps");
@@ -140,7 +140,7 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 		return chdesc;
 	}
 	
-	r = chdesc_create_noop_list(NULL, NULL, &chdesc, NULL);
+	r = chdesc_create_noop_list(NULL, &chdesc, NULL);
 	if(r < 0)
 		return NULL;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "bit_changes");
@@ -890,7 +890,7 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
  *   being evicted from a cache, is internal/external.
  *   (counts towards before/after counts. counts towards external counts.) */
 
-int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
+int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 	chdesc_t * chdesc;
 	size_t i;
@@ -901,14 +901,14 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 	chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return -E_NO_MEM;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, block, owner);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, owner);
 #if COUNT_CHDESCS
 	chdesc_counts[NOOP]++;
 	dump_counts();
 #endif
 	
 	chdesc->owner = owner;
-	chdesc->block = block;
+	chdesc->block = NULL;
 	chdesc->type = NOOP;
 	chdesc->befores = NULL;
 	chdesc->befores_tail = &chdesc->befores;
@@ -929,16 +929,6 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 	/* NOOP chdescs start applied */
 	chdesc->flags = CHDESC_SAFE_AFTER;
 	
-	if(block)
-	{
-		/* add chdesc to block's befores */
-		chdesc_link_all_changes(chdesc);
-		chdesc_link_ready_changes(chdesc);
-		
-		/* make sure our block sticks around */
-		bdesc_retain(block);
-	}
-	
 	chdesc_free_push(chdesc);
 	
 	for(i = 0; i < nbefores; i++)
@@ -958,7 +948,7 @@ int chdesc_create_noop_array(bdesc_t * block, BD_t * owner, chdesc_t ** tail, si
 
 #define STATIC_BEFORES_CAPACITY 10 /* 10 should cover most cases */
 
-int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...)
+int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...)
 {
 	static chdesc_t * static_befores[STATIC_BEFORES_CAPACITY];
 	chdesc_t ** befores;
@@ -991,7 +981,7 @@ int chdesc_create_noop_list(bdesc_t * block, BD_t * owner, chdesc_t ** tail, ...
 		befores[i] = va_arg(ap, chdesc_t *);
 	va_end(ap);
 	
-	r = chdesc_create_noop_array(block, owner, tail, nbefores, befores);
+	r = chdesc_create_noop_array(owner, tail, nbefores, befores);
 	
 	if(befores != static_befores)
 		sfree(befores, nbefores * sizeof(befores[0]));

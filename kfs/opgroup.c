@@ -95,11 +95,11 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	if(scope->top)
 	{
 		/* we need our own top_keep */
-		if(chdesc_create_noop_list(NULL, NULL, &copy->top_keep, NULL) < 0)
+		if(chdesc_create_noop_list(NULL, &copy->top_keep, NULL) < 0)
 			goto error_copy;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top_keep, "top_keep");
 		chdesc_claim_noop(copy->top_keep);
-		if(chdesc_create_noop_list(NULL, NULL, &copy->top, copy->top_keep, NULL) < 0)
+		if(chdesc_create_noop_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
 			goto error_top_keep;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
 	}
@@ -225,23 +225,23 @@ opgroup_t * opgroup_create(int flags)
 	state->opgroup = op;
 	state->engaged = 0;
 	
-	if(chdesc_create_noop_list(NULL, NULL, &op->head_keep, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, &op->head_keep, NULL) < 0)
 		goto error_state;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head_keep, "head_keep");
 	chdesc_claim_noop(op->head_keep);
 	
-	if(chdesc_create_noop_list(NULL, NULL, &op->tail_keep, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, &op->tail_keep, NULL) < 0)
 		goto error_head_keep;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail_keep, "tail_keep");
 	chdesc_claim_noop(op->tail_keep);
 	
-	if(chdesc_create_noop_list(NULL, NULL, &op->tail, op->tail_keep, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, &op->tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail, "tail");
 	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
 		goto error_tail;
 	
-	if(chdesc_create_noop_list(NULL, NULL, &op->head, op->head_keep, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, &op->head, op->head_keep, NULL) < 0)
 		goto error_tail;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head, "head");
 	if(chdesc_weak_retain(op->head, &op->head) < 0)
@@ -358,13 +358,13 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		}
 	
 	/* create new top and bottom */
-	r = chdesc_create_noop_list(NULL, NULL, &top_keep, NULL);
+	r = chdesc_create_noop_list(NULL, &top_keep, NULL);
 	if(r < 0)
 		goto error_changed_state;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top_keep, "top_keep");
 	chdesc_claim_noop(top_keep);
 	
-	r = chdesc_create_noop_list(NULL, NULL, &bottom, NULL);
+	r = chdesc_create_noop_list(NULL, &bottom, NULL);
 	if(r < 0)
 		goto error_top_keep;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
@@ -383,7 +383,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		}
 	
 	assert(top_keep && bottom); /* top_keep must be non-NULL for create_noop */
-	r = chdesc_create_noop_list(NULL, NULL, &top, top_keep, bottom, NULL);
+	r = chdesc_create_noop_list(NULL, &top, top_keep, bottom, NULL);
 	if(r < 0)
 		goto error_bottom;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
@@ -585,7 +585,7 @@ int opgroup_prepare_head(chdesc_t ** head)
 	
 	if(*head)
 	{
-		int r = chdesc_create_noop_list(NULL, NULL, head, current_scope->bottom, *head, NULL);
+		int r = chdesc_create_noop_list(NULL, head, current_scope->bottom, *head, NULL);
 		if(r < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");

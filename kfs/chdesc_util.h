@@ -15,9 +15,6 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 /* write an entire block without creating many layers of change descriptors */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
 
-/* reassign the block pointer in a NOOP chdesc */
-int chdesc_noop_reassign(chdesc_t * noop, bdesc_t * block);
-
 /* create change descriptors based on the diff of two data regions */
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head);
 
