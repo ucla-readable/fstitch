@@ -92,9 +92,9 @@ static struct kudos_proc_ops ops = {
 
 static void kernel_opgroup_scopes_shutdown(void * ignore)
 {
-	hash_map_destroy(scope_map);
 	/* check return value? */
 	kudos_unregister_module(&ops);
+	hash_map_destroy(scope_map);
 	scope_map = NULL;
 }
 
