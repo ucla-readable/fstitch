@@ -18,6 +18,13 @@
 #include <kfs/kernel_serve.h>
 #include <kfs/journal_bd.h>
 
+#define DEBUG_JOURNAL 0
+#if DEBUG_JOURNAL
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
 /* transaction period of 5 seconds */
 #define TRANSACTION_PERIOD (5 * HZ)
 /* transaction slot size of 64 x 4K */
@@ -55,8 +62,8 @@
  * slot, and continue. In this way, when the whole transaction is done, we will
  * be able to do a relatively small amount of work to complete the picture. Note
  * that when subcommit records are written, we must weak retain "done" in their
- * slot so that we won't reuse those slots until after the entire transaction is
- * finished.
+ * slot so that we can make any reuse of those slots depend on the previous
+ * transaction having completed by creating a dependency to it.
  * 
  * Here is the chdesc structure of a transaction:
  * 
@@ -259,6 +266,7 @@ static int journal_bd_grab_slot(BD_t * object)
 			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr);
 			if(r < 0)
 				return r;
+			Dprintf("%s(): using unused transaction slot %d (sequence %u)\n", __FUNCTION__, scan, info->trans_seq);
 			info->cr_retain[scan].seq = info->trans_seq;
 			info->prev_slot = info->trans_slot;
 			info->trans_slot = scan;
@@ -282,6 +290,7 @@ static int journal_bd_grab_slot(BD_t * object)
 			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr);
 			if(r < 0)
 				return r;
+			Dprintf("%s(): reusing currently used transaction slot %d (sequence %u, old %u)\n", __FUNCTION__, scan, info->trans_seq, info->cr_retain[scan].seq);
 			info->cr_retain[scan].seq = info->trans_seq;
 			info->prev_slot = info->trans_slot;
 			info->trans_slot = scan;
@@ -296,7 +305,7 @@ static int journal_bd_grab_slot(BD_t * object)
 	} while(scan != info->trans_slot);
 	
 	/* this should probably never happen */
-	kpanic("all transaction slots used by the current transaction (%d)", info->trans_seq);
+	kpanic("all transaction slots used by the current transaction (%u)", info->trans_seq);
 }
 
 static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
@@ -397,6 +406,8 @@ static int journal_bd_start_transaction(BD_t * object)
 		goto fail_wait;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
 	CREATE_NOOP(hold, object); /* this one is managed */
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_FUTURE_BEFORES);
+	info->hold->flags |= CHDESC_FUTURE_BEFORES;
 	CREATE_NOOP(keep_d, NULL);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
 	assert(info->keep_d); /* keep_d must be non-NULL for chdesc_create_noop_list */
@@ -406,6 +417,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->data, "data");
 	CREATE_NOOP(done, NULL);
 
+	Dprintf("%s(): starting new transaction (sequence %u, wait %p, hold %p, data %p, done %p)\n", __FUNCTION__, info->trans_seq, info->wait, info->hold, info->data, info->done);
 	info->trans_slot_count = 0;
 	r = journal_bd_grab_slot(object);
 	if(r < 0)
@@ -450,6 +462,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 		return -E_UNSPECIFIED;
 	}
 	
+	Dprintf("%s(): ending transaction (sequence %u, debug = %d)\n", __FUNCTION__, info->trans_seq, KFS_DEBUG_COUNT());
 	commit.magic = JOURNAL_MAGIC;
 	commit.type = CRCOMMIT;
 	commit.next = info->prev_slot;
@@ -566,16 +579,43 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	 * which would start a transaction for us */
 	assert(info->keep_w);
 	
-	/* add our stamp to all chdescs passing through */
+	/* add our stamp to all chdescs passing through, and adjust their befores */
 	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc_next)
 	{
 		chdesc_next = chdesc->ddesc_next; /* in case changes */
 		if(chdesc->owner == object)
 		{
+			int needs_hold = 0;
+			chdepdesc_t ** deps = &chdesc->befores;
 			int r = chdesc_add_depend(info->data, chdesc);
 			if(r < 0)
 				kpanic("Holy Mackerel!");
 			chdesc_stamp(chdesc, info->stamp);
+			while(*deps)
+			{
+				chdesc_t * dep = (*deps)->before.desc;
+				/* if it's hold, or if it's on the same block, leave it alone */
+				if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
+				{
+					deps = &(*deps)->before.next;
+					continue;
+				}
+				/* otherwise remove this dependency */
+				/* WARNING: this makes the journal incompatible
+				 * with opgroups between different file systems */
+				chdesc_dep_remove(*deps);
+				needs_hold = 1;
+			}
+			if(needs_hold)
+			{
+				chdesc->flags |= CHDESC_SAFE_AFTER;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SAFE_AFTER);
+				r = chdesc_add_depend(chdesc, info->hold);
+				if(r < 0)
+					kpanic("Holy Mackerel!");
+				chdesc->flags &= ~CHDESC_SAFE_AFTER;
+				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
+			}
 		}
 	}
 	
@@ -760,7 +800,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			return r;
 	}
 	
-	printf("%s(): recovering journal subtransaction %d (%d data blocks)\n", __FUNCTION__, transaction_number, cr->nblocks);
+	Dprintf("%s(): recovering journal subtransaction %d (%d data blocks)\n", __FUNCTION__, transaction_number, cr->nblocks);
 	
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
@@ -876,7 +916,7 @@ static int replay_journal(BD_t * bd)
 		cr = (struct commit_record *) commit_block->ddesc->data;
 		if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
 			continue;
-		printf("%s(): transaction %d (sequence %u) will be recovered\n", __FUNCTION__, transaction, cr->seq);
+		Dprintf("%s(): transaction %d (sequence %u) will be recovered\n", __FUNCTION__, transaction, cr->seq);
 		
 		recover_count++;
 		info->cr_retain[transaction].seq = cr->seq;
