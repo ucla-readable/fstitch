@@ -1,6 +1,5 @@
 #include <lib/error.h>
 #include <lib/assert.h>
-#include <lib/kdprintf.h>
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
@@ -14,6 +13,8 @@
 
 /* Set to check for chdesc dependency cycles. Values: 0 (disable), 1 (enable) */
 #define CHDESC_CYCLE_CHECK 0
+/* Set to print out chdesc cycles when they are discovered by the above check. */
+#define CHDESC_CYCLE_PRINT 1
 
 /* Set to count change descriptors by type and display periodic output */
 #define COUNT_CHDESCS 0
@@ -645,7 +646,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	
 	/* if either is a NOOP chdesc, warn about it */
 	if(recent->type == NOOP || original->type == NOOP)
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
 	
 	/* if they don't overlap, we are done */
 	overlap = chdesc_overlap_check(recent, original);
@@ -655,7 +656,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(original->flags & CHDESC_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
-		kdprintf(STDERR_FILENO, "Attempt to overlap a new chdesc (%p) with a rolled-back chdesc (%p)! (debug = %d)\n", recent, original, KFS_DEBUG_COUNT());
+		printf("Attempt to overlap a new chdesc (%p) with a rolled-back chdesc (%p)! (debug = %d)\n", recent, original, KFS_DEBUG_COUNT());
 		return -E_BUSY;
 	}
 	
@@ -675,7 +676,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 			chdesc_remove_depend(bit_changes, original);
 		}
 		else
-			kdprintf(STDERR_FILENO, "Complete overlap of unhandled chdesc type!\n");
+			printf("Complete overlap of unhandled chdesc type!\n");
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, recent, CHDESC_OVERLAP);
 		recent->flags |= CHDESC_OVERLAP;
 	}
@@ -2036,6 +2037,16 @@ static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 	{
 		if(dep->before.desc == before)
 		{
+#if CHDESC_CYCLE_PRINT
+			static const char * names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [NOOP] = "NOOP"};
+			state_t * scan = state;
+			printf("%p[%s] <- %p[%s]", before, names[before->type], after, names[after->type]);
+			do {
+				scan--;
+				printf(" <- %p[%s]", scan->after, names[scan->after->type]);
+			} while(scan != states);
+			printf("\n");
+#endif
 			has_before = 1;
 			goto recurse_done;
 		}
@@ -2079,7 +2090,7 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 	/* compensate for Heisenberg's uncertainty principle */
 	if(!after || !before)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
@@ -2088,19 +2099,19 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 	{
 		if(before->flags & CHDESC_WRITTEN)
 			return 0;
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -E_INVAL;
 	}
 	if(before->flags & CHDESC_WRITTEN)
 		return 0;
 	if(after->flags & CHDESC_INFLIGHT)
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Adding non-written before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): Adding non-written before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
 	
 	/* avoid creating a dependency loop */
 #if CHDESC_CYCLE_CHECK
 	if(after == before || chdesc_has_before(before, after))
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): Avoided recursive dependency!\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): Avoided recursive dependency! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
 		assert(0);
 		return -E_INVAL;
 	}
@@ -2196,19 +2207,19 @@ int chdesc_apply(chdesc_t * chdesc)
 				return -E_INVAL;
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
 			/* NOOP application is easy! */
 			break;
 		default:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return -E_INVAL;
 	}
 	chdesc->flags &= ~CHDESC_ROLLBACK;
@@ -2230,19 +2241,19 @@ int chdesc_rollback(chdesc_t * chdesc)
 				return -E_INVAL;
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
 			/* NOOP rollback is easy! */
 			break;
 		default:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return -E_INVAL;
 	}
 	chdesc->flags |= CHDESC_ROLLBACK;
@@ -2262,7 +2273,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 		{
 			/* ...but check for this anyway */
 			chrefdesc_t * next = chdesc->weak_refs;
-			kdprintf(STDERR_FILENO, "%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
+			printf("%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 			chdesc->weak_refs = next->next;
 			free(next);
 		}
@@ -2274,7 +2285,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 {
 	if((*chdesc)->flags & CHDESC_WRITTEN)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfaction of already satisfied chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): satisfaction of already satisfied chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
@@ -2291,7 +2302,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		 * still need to collect any weak references to it in case
 		 * anybody was watching it to see when it got satisfied. */
 		if((*chdesc)->type != NOOP)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): satisfying chdesc %p of type %d with befores!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
+			printf("%s(): (%s:%d): satisfying chdesc %p of type %d with befores!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
 		switch((*chdesc)->type)
 		{
 			case BYTE:
@@ -2325,7 +2336,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 			case NOOP:
 				break;
 			default:
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
+				printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 				return -E_INVAL;
 		}
 		
@@ -2420,7 +2431,7 @@ void chdesc_weak_forget(chdesc_t ** location)
 		}
 		if(!scan)
 		{
-			kdprintf(STDERR_FILENO, "%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
+			printf("%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
 			return;
 		}
 		*prev = scan->next;
@@ -2456,7 +2467,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 			if((*chdesc)->afters && (*chdesc)->flags & CHDESC_OVERLAP)
 			{
 				/* this is perfectly allowed, but while we are switching to this new system, print a warning */
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): destroying completely overlapping unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+				printf("%s(): (%s:%d): destroying completely overlapping unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
 			}
 		}
 		else if(free_head == *chdesc || (*chdesc)->free_prev)
@@ -2502,7 +2513,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		case BIT:
 			break;
 		default:
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
+			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 	}
 	
 	if((*chdesc)->block)
