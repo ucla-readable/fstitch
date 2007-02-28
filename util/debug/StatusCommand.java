@@ -25,11 +25,16 @@ public class StatusCommand implements Command
 				/* display status of chdescs */
 				SystemState state = dbg.getState();
 				int i = 0;
-				boolean verbose = false;
+				int verbose = 0;
 				
-				if(args[0].equals("-v"))
+				if("-v".equals(args[0]))
 				{
-					verbose = true;
+					verbose = 1;
+					i++;
+				}
+				else if("-vv".equals(args[0]) || "-V".equals(args[0]))
+				{
+					verbose = 2;
 					i++;
 				}
 				
@@ -49,8 +54,8 @@ public class StatusCommand implements Command
 					if(chdesc != null)
 					{
 						System.out.println("Chdesc " + SystemState.hex(chdesc.address) + " was created by opcode " + chdesc.opcode);
-						if(verbose)
-							printChdesc(state, chdesc);
+						if(verbose != 0)
+							printChdesc(state, chdesc, verbose > 1);
 					}
 					else
 						System.out.println("No such chdesc: " + SystemState.hex(number));
@@ -64,7 +69,7 @@ public class StatusCommand implements Command
 		return data;
 	}
 
-	private void printChdesc(SystemState state, Chdesc chdesc)
+	private void printChdesc(SystemState state, Chdesc chdesc, boolean verbose)
 	{
 		System.out.println(ChdescTypeToString(state, chdesc));
 		
@@ -85,13 +90,16 @@ public class StatusCommand implements Command
 		
 		System.out.println("Flags: " + Chdesc.renderFlags(chdesc.getFlags()));
 		
-		System.out.println("Afters:");
-		for(Iterator it = chdesc.getAfters(); it.hasNext();)
-			printChdescBrief(state, (Chdesc) it.next());
-		
-		System.out.println("Befores:");
-		for(Iterator it = chdesc.getBefores(); it.hasNext();)
-			printChdescBrief(state, (Chdesc) it.next());
+		if(verbose)
+		{
+			System.out.println("Afters:");
+			for(Iterator it = chdesc.getAfters(); it.hasNext();)
+				printChdescBrief(state, (Chdesc) it.next());
+			
+			System.out.println("Befores:");
+			for(Iterator it = chdesc.getBefores(); it.hasNext();)
+				printChdescBrief(state, (Chdesc) it.next());
+		}
 	}
 	
 	private void printChdescBrief(SystemState state, Chdesc chdesc)
