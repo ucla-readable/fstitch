@@ -2,8 +2,8 @@
 #define __KUDOS_KFS_LINUX_BD_DEBUG_H
 
 /* Acceptable constants for UFS and ext2 linux-2.6.15 untar */
-#define MAXBLOCKNO 550000
-#define MAXWRITES  145000
+#define MAXBLOCKNO 557056
+#define MAXWRITES  327680
 
 struct linux_bd_writes {
 	int32_t next; /* next free index of writes array */
