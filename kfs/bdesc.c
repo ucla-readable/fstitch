@@ -48,6 +48,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		free(bdesc);
 		return NULL;
 	}
+	/* FIXME: we don't need this on most blocks; create it on demand */
 	bdesc->ddesc->bit_changes = hash_map_create();
 	if(!bdesc->ddesc->bit_changes)
 	{
