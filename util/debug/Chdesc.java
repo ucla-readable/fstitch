@@ -18,7 +18,8 @@ public class Chdesc
 	public static final int FLAG_BIT_NOOP = 0x20;
 	public static final int FLAG_OVERLAP = 0x40;
 	public static final int FLAG_SAFE_AFTER = 0x80;
-	public static final int FLAG_INFLIGHT = 0x100;
+	public static final int FLAG_FUTURE_BEFORES = 0x100;
+	public static final int FLAG_INFLIGHT = 0x200;
 	
 	public final int address, opcode;
 	
@@ -476,6 +477,8 @@ public class Chdesc
 			names += " | FLAG_OVERLAP";
 		if((flags & FLAG_SAFE_AFTER) != 0)
 			names += " | SAFE_AFTER";
+		if((flags & FLAG_FUTURE_BEFORES) != 0)
+			names += " | FUTURE_BEFORES";
 		if((flags & FLAG_INFLIGHT) != 0)
 			names += " | INFLIGHT";
 		names += " = " + SystemState.hex(flags);

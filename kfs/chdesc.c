@@ -1497,7 +1497,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 		else
 		{
 			assert(*head == before);
-			if(before->befores)
+			if(before->befores || before->flags & CHDESC_FUTURE_BEFORES)
 				return 0;
 		}
 	}
@@ -1818,8 +1818,9 @@ static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes,
 	else
 		return 0;
 	
-	if(*head && *head != overlap && !((*head)->flags & CHDESC_INFLIGHT) && (*head)->befores)
-		return 0;
+	if(*head && *head != overlap && !((*head)->flags & CHDESC_INFLIGHT))
+		if((*head)->befores || (*head)->flags & CHDESC_FUTURE_BEFORES)
+			return 0;
 	
 	if(overlap->block->ddesc->overlaps)
 		for(dep = overlap->block->ddesc->overlaps->befores; dep; dep = dep->before.next)
