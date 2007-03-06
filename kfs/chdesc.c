@@ -1261,10 +1261,12 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 	for(; pprev != &block->ddesc->all_changes; pprev = chdesc->ddesc_pprev)
 	{
 		chdesc = pprev2chdesc(pprev);
-		if(chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT))
+		/* PERFORMANCE NOTE: If merge code did not move merge_target to the
+		 * start of the ddesc.all_changes list then the last
+		 * non-noop non-inflight would have no befores (by definition). */
+		if(chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT) && !chdesc_has_block_befores(chdesc, block))
 		{
 			assert(chdesc->type == BYTE || chdesc->type == BIT);
-			assert(!chdesc_has_block_befores(chdesc, block));
 			return chdesc;
 		}
 		if(chdesc == block->ddesc->all_changes)
@@ -1408,7 +1410,7 @@ static void merge_rbs(bdesc_t * block)
 		chdesc->flags = flags;
 		
 		chdesc_unlink_ready_changes(chdesc);
-		chdesc_unlink_all_changes(chdesc);		
+		chdesc_unlink_all_changes(chdesc);
 		if(chdesc->type == BYTE)
 			free(chdesc->byte.data);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
@@ -1445,7 +1447,7 @@ static void merge_rbs(bdesc_t * block)
 /* Attempt to merge into an existing chdesc instead of create a new chdesc.
  * Returns 1 on successful merge (*merged points merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** merged)
+static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t * before, chdesc_t ** merged)
 {
 #if CHDESC_NRB
 	chdesc_t * merger;
@@ -1457,6 +1459,13 @@ static int chdesc_create_merge(bdesc_t * block, chdesc_t * before, chdesc_t ** m
 		return 0;
 	if(before && !(before->flags & CHDESC_WRITTEN))
 		move_befores_for_merge(before, merger, 0);
+	
+	/* move merger to correct owner */
+	merger->owner = owner;
+	/* move merger to start of all_changes for easy finding as a new chdesc */
+	chdesc_unlink_all_changes(merger);
+	chdesc_link_all_changes(merger);
+	
 	*merged = merger;
 	return 1;
 #else
@@ -1572,6 +1581,12 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 	
 	memcpy(&ddesc->data[(*new)->byte.offset], (*new)->byte.data, (*new)->byte.length);
 	
+	/* move merger to correct owner */
+	overlap->owner = (*new)->owner;
+	/* move merger to start of all_changes for easy finding as a new chdesc */
+	chdesc_unlink_all_changes(overlap);
+	chdesc_link_all_changes(overlap);
+	
 	chdesc_destroy(new);
 	*head = overlap;
 	return 1;
@@ -1616,7 +1631,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if(offset + length > block->ddesc->length)
 		return -E_INVAL;
 	
-	r = chdesc_create_merge(block, *head, head);
+	r = chdesc_create_merge(block, owner, *head, head);
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -1796,7 +1811,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP
-static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
+static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
 {
 	chdepdesc_t * dep;
 	chdesc_t * overlap_bit = NULL;
@@ -1839,6 +1854,12 @@ static int chdesc_create_bit_merge_overlap(uint32_t xor, chdesc_t * bit_changes,
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
 	((uint32_t *) overlap->block->ddesc->data)[overlap->bit.offset] ^= xor;
 	
+	/* move merger to correct owner */
+	overlap->owner = owner;
+	/* move merger to start of all_changes for easy finding as a new chdesc */
+	chdesc_unlink_all_changes(overlap);
+	chdesc_link_all_changes(overlap);
+	
 	*head = overlap;
 	return 1;
 }
@@ -1851,7 +1872,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc_t * bit_changes = NULL;
 	int r;
 	
-	r = chdesc_create_merge(block, *head, head);
+	r = chdesc_create_merge(block, owner, *head, head);
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -1873,7 +1894,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	bit_changes = chdesc_bit_changes(block, offset);
 	if(bit_changes)
 	{
-		r = chdesc_create_bit_merge_overlap(xor, bit_changes, head);
+		r = chdesc_create_bit_merge_overlap(owner, xor, bit_changes, head);
 		if(r < 0)
 			return r;
 		else if(r == 1)
