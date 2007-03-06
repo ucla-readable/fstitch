@@ -13,7 +13,7 @@ public class InfoChdescLabel extends Opcode
 	{
 		Chdesc chdesc = state.lookupChdesc(this.chdesc);
 		if(chdesc != null)
-			chdesc.setLabel(label);
+			chdesc.addLabel(label);
 	}
 	
 	public String toString()

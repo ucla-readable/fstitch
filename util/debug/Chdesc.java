@@ -1,3 +1,4 @@
+import java.util.Vector;
 import java.util.HashSet;
 import java.util.Iterator;
 
@@ -25,7 +26,7 @@ public class Chdesc
 	
 	private int type, flags;
 	private int block, owner;
-	private String label;
+	private Vector labels;
 	
 	private short offset; /* for bit, byte */
 	private int xor; /* for bit */
@@ -41,6 +42,7 @@ public class Chdesc
 		this.address = address;
 		this.opcode = opcode;
 		type = TYPE_DANGLING;
+		labels = new Vector();
 	}
 	
 	public Chdesc(int address, int block, int owner, int opcode)
@@ -49,6 +51,7 @@ public class Chdesc
 		this.block = block;
 		this.owner = owner;
 		this.opcode = opcode;
+		labels = new Vector();
 		befores = new ChdescCollection();
 		afters = new ChdescCollection();
 		locations = new HashSet();
@@ -123,9 +126,14 @@ public class Chdesc
 		return length;
 	}
 	
-	public String getLabel()
+	public int getLabels()
 	{
-		return label;
+		return labels.size();
+	}
+	
+	public String getLabel(int which)
+	{
+		return (String) labels.elementAt(which);
 	}
 	
 	public Chdesc getFreePrev()
@@ -191,9 +199,10 @@ public class Chdesc
 		this.flags &= ~flags;
 	}
 	
-	public void setLabel(String label)
+	public void addLabel(String label)
 	{
-		this.label = label;
+		if(!labels.contains(label))
+			labels.add(label);
 	}
 	
 	public void setFreePrev(Chdesc free_prev)
@@ -387,8 +396,8 @@ public class Chdesc
 		String name = renderName();
 		
 		String links = name + " [label=\"" + SystemState.hex(address);
-		if(label != null)
-			links += "\\n\\\"" + label + "\\\"";
+		for(int i = 0; i < labels.size(); i++)
+			links += "\\n\\\"" + labels.elementAt(i) + "\\\"";
 		switch(type)
 		{
 			case TYPE_NOOP:

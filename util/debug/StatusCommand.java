@@ -73,8 +73,8 @@ public class StatusCommand implements Command
 	{
 		System.out.println(ChdescTypeToString(state, chdesc));
 		
-		if(chdesc.getLabel() != null)
-			System.out.println("Label = \"" + chdesc.getLabel() + "\"");
+		for(int i = 0; i < chdesc.getLabels(); i++)
+			System.out.println("Label = \"" + chdesc.getLabel(i) + "\"");
 		
 		System.out.print("block address = " + SystemState.hex(chdesc.getBlock()));
 		Bdesc bdesc = state.lookupBdesc(chdesc.getBlock());
