@@ -1239,12 +1239,12 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		assert(ino == newino);
 	}
 
-	oldf->f_inode.di_nlink--;
-	r = write_inode(info, oldf->f_num, oldf->f_inode, head);
+	r = CALL(info->parts.p_dirent, delete_dirent, old_pfdesc, oldname, head);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
-	r = CALL(info->parts.p_dirent, delete_dirent, old_pfdesc, oldname, head);
+	oldf->f_inode.di_nlink--;
+	r = write_inode(info, oldf->f_num, oldf->f_inode, head);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
