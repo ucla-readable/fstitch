@@ -5,6 +5,7 @@
 #include <lib/string.h>
 #include <lib/vector.h>
 
+#include <kfs/debug.h>
 #include <kfs/sched.h>
 #include <kfs/ufs_super_wb.h>
 
@@ -57,6 +58,7 @@ static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc
 			sizeof(linfo->super.fs_time), &linfo->super.fs_time, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock timestamp");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -89,6 +91,7 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 			head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CStotal");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -121,6 +124,7 @@ static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_
 			sizeof(linfo->super.fs_fmod), &linfo->super.fs_fmod, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock fmod");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -150,6 +154,7 @@ static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdes
 			sizeof(linfo->super.fs_clean), &linfo->super.fs_clean, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock clean");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -179,6 +184,7 @@ static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdes
 			sizeof(linfo->super.fs_ronly), &linfo->super.fs_ronly, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock readonly");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -211,6 +217,7 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 			strlen(linfo->super.fs_fsmnt) + 1, &linfo->super.fs_fsmnt, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock FSmount");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -240,6 +247,7 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 			sizeof(linfo->super.fs_cgrotor), &linfo->super.fs_cgrotor, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CGrotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;

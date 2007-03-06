@@ -5,6 +5,7 @@
 #include <lib/stdlib.h>
 #include <lib/string.h>
 
+#include <kfs/debug.h>
 #include <kfs/ufs_common.h>
 
 // Assuming fixed number of inodes per cylinder group, so we don't have
@@ -68,10 +69,13 @@ int write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inode, c
 	if (!inode_table)
 		return -E_NO_ENT;
 	offset = sizeof(struct UFS_dinode) * frag_off;
-	//r = chdesc_create_byte(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode, head);
 	r = chdesc_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode_table->ddesc->data[offset], &inode, head);
 	if (r < 0)
 		return r;
+#if KFS_DEBUG
+	if(r > 0)
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "update inode");
+#endif
 
 	return CALL(info->ubd, write_block, inode_table);
 }
@@ -260,7 +264,10 @@ int write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_t **
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
 	if (r >= 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write btotal");
 		r = CALL(info->ubd, write_block, block);
+	}
 	if (r < 0)
 		return r;
 
@@ -296,7 +303,10 @@ int write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t ** 
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
 	if (r >= 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write fbp");
 		r = CALL(info->ubd, write_block, block);
+	}
 	if (r < 0)
 		return r;
 
@@ -351,6 +361,7 @@ int write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_
 	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		goto write_inode_bitmap_end;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate inode" : "free inode");
 	*(oldheads++) = *head;
 
 	r = CALL(info->ubd, write_block, block);
@@ -446,6 +457,7 @@ int write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chde
 	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "free fragment" : "allocate fragment");
 
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
@@ -485,7 +497,7 @@ int write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chde
 				&cg->cg_frsum[nfrags_before], head);
 		if (r < 0)
 			return r;
-
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write frsum before");
 	}
 	if (nfrags_after > 0 && nfrags_after < 8) {
 		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_after];
@@ -495,6 +507,7 @@ int write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chde
 				&cg->cg_frsum[nfrags_after], head);
 		if (r < 0)
 			return r;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write frsum after");
 	}
 
 	r = CALL(info->ubd, write_block, cgblock);
@@ -560,6 +573,7 @@ int write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_
 	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "free block" : "allocate block");
 	*(oldheads++) = *head;
 	*head = save_head;
 
@@ -634,6 +648,7 @@ int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int ni
 			csum, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "update summary");
 	if (*head != oldhead)
 		*(oldheads++) = *head;
 

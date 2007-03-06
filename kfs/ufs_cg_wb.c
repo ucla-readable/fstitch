@@ -5,6 +5,7 @@
 #include <lib/string.h>
 #include <lib/vector.h>
 
+#include <kfs/debug.h>
 #include <kfs/sched.h>
 #include <kfs/ufs_cg_wb.h>
 
@@ -84,6 +85,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 			&linfo->cg[num].cgdata.cg_time, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg timestamp");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
 	if (r < 0)
 		return r;
@@ -119,6 +121,7 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 			&linfo->cg[num].cgdata.cg_cs, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg checksum");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
 	if (r < 0)
 		return r;
@@ -155,6 +158,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 			&linfo->cg[num].cgdata.cg_rotor, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg rotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
 	if (r < 0)
 		return r;
@@ -188,6 +192,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 			&linfo->cg[num].cgdata.cg_frotor, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
 	if (r < 0)
 		return r;
@@ -221,6 +226,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 			&linfo->cg[num].cgdata.cg_irotor, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg irotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
 	if (r < 0)
 		return r;
@@ -255,6 +261,7 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 			&linfo->cg[num].oldfrsum, &linfo->cg[num].cgdata.cg_frsum, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frsum");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
 	if (r < 0)
 		return r;

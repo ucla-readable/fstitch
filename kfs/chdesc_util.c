@@ -49,11 +49,11 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 				chdesc_unlink_ready_changes(chdesc);
 				chdesc->owner = target_bd;
 				assert(chdesc->block);
+				bdesc_retain(target_block);
 				bdesc_release(&chdesc->block);
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, target_block);
 				chdesc->block = target_block;
 				chdesc_update_ready_changes(chdesc);
-				bdesc_retain(target_block);
 
 				new_level = chdesc_level(chdesc);
 				if(prev_level != new_level)
@@ -164,19 +164,18 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		}
 	}
 
-	if(vector_size(oldheads) == 1)
-	{
+	i = vector_size(oldheads);
+	if(i == 1)
 		*head = (chdesc_t *) vector_elt_front(oldheads);
-	}
-	else if (vector_size(oldheads) > 1)
+	else if (i > 1)
 	{
 		/* *head depends on all created chdescs */
-		r = chdesc_create_noop_array(NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		r = chdesc_create_noop_array(NULL, head, i, (chdesc_t **) oldheads->elts);
 		if(r < 0)
 			goto chdesc_create_diff_failed;
 	}
 	vector_destroy(oldheads);
-	return 0;
+	return i;
 
 chdesc_create_diff_failed:
 	for(i = 0; i < vector_size(oldheads); i++)

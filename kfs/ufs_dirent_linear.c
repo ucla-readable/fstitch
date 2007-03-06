@@ -3,6 +3,7 @@
 #include <lib/stdio.h>
 #include <lib/string.h>
 
+#include <kfs/debug.h>
 #include <kfs/ufs_dirent_linear.h>
 
 static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct * entry, uint32_t * basep)
@@ -74,6 +75,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	r = chdesc_create_byte(block, info->ubd, offset, actual_len, &entry, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent");
 
 	return CALL(info->ubd, write_block, block);
 }
@@ -148,6 +150,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			assert(block); // FIXME Leiz == Lazy
 			r = chdesc_create_init(block, info->ubd, head);
 			assert(r >= 0); // FIXME Leiz == Lazy
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "clear dirblock");
 			r = CALL(info->parts.base, append_file_block, (fdesc_t *) dirf, blockno, head);
 			if (r < 0)
 				return r;
