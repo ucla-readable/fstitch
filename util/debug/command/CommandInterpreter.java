@@ -15,6 +15,7 @@ public class CommandInterpreter
 	private Vector commands;
 	private boolean quit;
 	private TokenizerFactory factory;
+	private CommandHistory history;
 	
 	private Command findCommand(String name, boolean prefix) throws NoSuchCommandException
 	{
@@ -64,6 +65,29 @@ public class CommandInterpreter
 		commands = new Vector();
 		quit = false;
 		factory = f;
+	}
+	
+	/**
+	 * A constructor taking a CommandHistory.
+	 *
+	 * @param h The CommandHistory object to use for expanding past commands.
+	 * */
+	public CommandInterpreter(CommandHistory h)
+	{
+		this();
+		history = h;
+	}
+	
+	/**
+	 * A constructor taking a TokenizerFactory and a CommandHistory.
+	 *
+	 * @param f The TokenizerFactory to use when creating a tokenizer for each command line.
+	 * @param h The CommandHistory object to use for expanding past commands.
+	 * */
+	public CommandInterpreter(TokenizerFactory f, CommandHistory h)
+	{
+		this(f);
+		history = h;
 	}
 	
 	/**
@@ -124,6 +148,16 @@ public class CommandInterpreter
 	}
 	
 	/**
+	 * Returns the CommandHistory in use by this CommandInterpreter.
+	 *
+	 * @return The CommandHistory being used.
+	 * */
+	public CommandHistory getCommandHistory()
+	{
+		return history;
+	}
+	
+	/**
 	 * Runs a command line.
 	 *
 	 * This is the method to be called from a main control loop.
@@ -145,7 +179,14 @@ public class CommandInterpreter
 	 * */
 	public Object runCommandLine(String line, Object data, boolean prefix) throws CommandException
 	{
-		CommandTokenizer tokenizer = factory.createTokenizer(line);
+		CommandTokenizer tokenizer;
+		if(history != null)
+		{
+			String expand = history.expandLine(line);
+			if(expand != null)
+				line = expand;
+		}
+		tokenizer = factory.createTokenizer(line);
 		if(tokenizer.hasMoreTokens())
 		{
 			String name = tokenizer.nextToken().toLowerCase();
@@ -153,6 +194,8 @@ public class CommandInterpreter
 			String args[] = new String[tokenizer.countTokens()];
 			for(int i = 0; tokenizer.hasMoreTokens(); i++)
 				args[i] = tokenizer.nextToken();
+			if(history != null)
+				history.addLine(line);
 			return command.runCommand(args, data, this);
 		}
 		return data;
@@ -194,6 +237,10 @@ public class CommandInterpreter
 			catch(NoSuchCommandException e)
 			{
 				System.out.println("No such command.");
+			}
+			catch(HistoryException e)
+			{
+				System.out.println("Bad history expansion.");
 			}
 		}
 		return data;

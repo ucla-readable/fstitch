@@ -346,7 +346,7 @@ public class Debugger extends OpcodeFactory
 		}
 		
 		try {
-			CommandInterpreter interpreter = new CommandInterpreter();
+			CommandInterpreter interpreter = new CommandInterpreter(new TwoCommandHistory());
 			Debugger dbg = null;
 			
 			interpreter.addCommand(new CloseCommand());
