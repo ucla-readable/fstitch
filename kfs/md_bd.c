@@ -171,8 +171,6 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	uint16_t blocksize = CALL(disk0, get_blocksize);
 	uint16_t atomicsize0 = CALL(disk0, get_atomicsize);
 	uint16_t atomicsize1 = CALL(disk1, get_atomicsize);
-	uint16_t level0 = disk0->level;
-	uint16_t level1 = disk1->level;
 	BD_t * bd;
 	
 	/* block sizes must be the same */
@@ -199,10 +197,16 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	info->blocksize = blocksize;
 	info->atomicsize = MIN(atomicsize0, atomicsize1);
 	
-	if (level0 > level1)
-		bd->level = level0;
+	if (disk0->level > disk1->level)
+		bd->level = disk0->level;
 	else
-		bd->level = level1;
+		bd->level = disk1->level;
+	if (disk0->graph_index > disk1->graph_index)
+		bd->graph_index = disk0->graph_index + 1;
+	else
+		bd->graph_index = disk1->graph_index + 1;
+	if(bd->graph_index >= NBDINDEX)
+		goto error_add;
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 		goto error_add;

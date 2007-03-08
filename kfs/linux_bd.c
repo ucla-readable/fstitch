@@ -428,7 +428,8 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 		jif_writes++;
 		if(now - last_jif >= HZ)
 		{
-			printk("linux_bd: writes/sec = %d\n", jif_writes * HZ / (now - last_jif));
+			int wpds = jif_writes * HZ * 10 / (now - last_jif);
+			printk("linux_bd: writes/sec = %d.%d\n", wpds / 10, wpds % 10);
 			last_jif = now;
 			jif_writes = 0;
 		}
@@ -789,14 +790,20 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		free(bd);
 		return NULL;
 	}
-
+	
+	BD_INIT(bd, linux_bd, info);
+	
 	memset(look_ahead_store, 0, sizeof(look_ahead_store));
-	bd->level = 0;
 	info->blocksize = 512;
 	info->blockcount = info->bdev->bd_disk->capacity;
 	init_waitqueue_head(&info->waitq);
-	
-	BD_INIT(bd, linux_bd, info);
+	bd->level = 0;
+	bd->graph_index = 0;
+	if(bd->graph_index >= NBDINDEX)
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

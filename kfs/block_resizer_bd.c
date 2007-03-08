@@ -198,6 +198,12 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	info->atomic_size = CALL(disk, get_atomicsize);
 	info->block_count = CALL(disk, get_numblocks) / info->merge_count;
 	bd->level = disk->level;
+	bd->graph_index = disk->graph_index + 1;
+	if(bd->graph_index >= NBDINDEX)
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

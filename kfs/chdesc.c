@@ -774,41 +774,49 @@ void chdesc_unlink_all_changes(chdesc_t * chdesc)
 		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
 }
 
-void chdesc_link_ready_changes(chdesc_t * chdesc)
-{
-	assert(!chdesc->ddesc_ready_next && !chdesc->ddesc_ready_pprev);
-	if(chdesc->block)
-	{
-		datadesc_t * ddesc = chdesc->block->ddesc;
-		chdesc_dlist_t * rcl = &ddesc->ready_changes[chdesc->owner->level];
-		chdesc->ddesc_ready_pprev = &rcl->head;
-		chdesc->ddesc_ready_next = rcl->head;
-		rcl->head = chdesc;
-		if(chdesc->ddesc_ready_next)
-			chdesc->ddesc_ready_next->ddesc_ready_pprev = &chdesc->ddesc_ready_next;
-		else
-			rcl->tail = &chdesc->ddesc_ready_next;
-	}
+#define DEFINE_LINK_CHANGES(name, index) \
+void chdesc_link_##name##_changes(chdesc_t * chdesc) \
+{ \
+	assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
+	if(chdesc->block) \
+	{ \
+		datadesc_t * ddesc = chdesc->block->ddesc; \
+		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->owner->index]; \
+		chdesc->ddesc_##name##_pprev = &rcl->head; \
+		chdesc->ddesc_##name##_next = rcl->head; \
+		rcl->head = chdesc; \
+		if(chdesc->ddesc_##name##_next) \
+			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = &chdesc->ddesc_##name##_next; \
+		else \
+			rcl->tail = &chdesc->ddesc_##name##_next; \
+	} \
 }
 
-void chdesc_unlink_ready_changes(chdesc_t * chdesc)
-{
-	if(chdesc->ddesc_ready_pprev)
-	{
-		datadesc_t * ddesc = chdesc->block->ddesc;
-		chdesc_dlist_t * rcl = &ddesc->ready_changes[chdesc->owner->level];
-		// remove from old ddesc changes list
-		if(chdesc->ddesc_ready_next)
-			chdesc->ddesc_ready_next->ddesc_ready_pprev = chdesc->ddesc_ready_pprev;
-		else
-			rcl->tail = chdesc->ddesc_ready_pprev;
-		*chdesc->ddesc_ready_pprev = chdesc->ddesc_ready_next;
-		chdesc->ddesc_ready_next = NULL;
-		chdesc->ddesc_ready_pprev = NULL;
-	}
-	else
-		assert(!chdesc->ddesc_ready_next && !chdesc->ddesc_ready_pprev);
+#define DEFINE_UNLINK_CHANGES(name, index) \
+void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
+{ \
+	if(chdesc->ddesc_##name##_pprev) \
+	{ \
+		datadesc_t * ddesc = chdesc->block->ddesc; \
+		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->owner->index]; \
+		/* remove from old ddesc changes list */ \
+		if(chdesc->ddesc_##name##_next) \
+			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = chdesc->ddesc_##name##_pprev; \
+		else \
+			rcl->tail = chdesc->ddesc_##name##_pprev; \
+		*chdesc->ddesc_##name##_pprev = chdesc->ddesc_##name##_next; \
+		chdesc->ddesc_##name##_next = NULL; \
+		chdesc->ddesc_##name##_pprev = NULL; \
+	} \
+	else \
+		assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
 }
+
+/* confuse ctags */
+DEFINE_LINK_CHANGES(ready, level);
+DEFINE_UNLINK_CHANGES(ready, level);
+DEFINE_LINK_CHANGES(index, graph_index);
+DEFINE_UNLINK_CHANGES(index, graph_index);
 
 /* return whether chdesc is ready to go down one level */
 /* FIXME: Can be incorrect when the below module's level differs by >1
@@ -923,6 +931,8 @@ int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, ch
 	chdesc->ddesc_pprev = NULL;
 	chdesc->ddesc_ready_next = NULL;
 	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->ddesc_index_next = NULL;
+	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->stamps = 0;
@@ -1409,6 +1419,7 @@ static void merge_rbs(bdesc_t * block)
 		assert(r >= 0);
 		chdesc->flags = flags;
 		
+		chdesc_unlink_index_changes(chdesc);
 		chdesc_unlink_ready_changes(chdesc);
 		chdesc_unlink_all_changes(chdesc);
 		if(chdesc->type == BYTE)
@@ -1460,11 +1471,11 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t * before,
 	if(before && !(before->flags & CHDESC_WRITTEN))
 		move_befores_for_merge(before, merger, 0);
 	
+	chdesc_unlink_index_changes(merger);
 	/* move merger to correct owner */
 	merger->owner = owner;
-	/* move merger to start of all_changes for easy finding as a new chdesc */
-	chdesc_unlink_all_changes(merger);
-	chdesc_link_all_changes(merger);
+	
+	chdesc_link_index_changes(merger);
 	
 	*merged = merger;
 	return 1;
@@ -1581,11 +1592,11 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 	
 	memcpy(&ddesc->data[(*new)->byte.offset], (*new)->byte.data, (*new)->byte.length);
 	
+	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
 	overlap->owner = (*new)->owner;
-	/* move merger to start of all_changes for easy finding as a new chdesc */
-	chdesc_unlink_all_changes(overlap);
-	chdesc_link_all_changes(overlap);
+
+	chdesc_link_index_changes(overlap);
 	
 	chdesc_destroy(new);
 	*head = overlap;
@@ -1698,6 +1709,8 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->ddesc_pprev = NULL;
 	chdesc->ddesc_ready_next = NULL;
 	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->ddesc_index_next = NULL;
+	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->stamps = 0;
@@ -1716,6 +1729,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
+	chdesc_link_index_changes(chdesc);
 	
 	/* this is a new chdesc, so we don't need to check for loops.
 	 * but we should check to make sure head has not already been written. */
@@ -1854,11 +1868,11 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
 	((uint32_t *) overlap->block->ddesc->data)[overlap->bit.offset] ^= xor;
 	
+	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
 	overlap->owner = owner;
-	/* move merger to start of all_changes for easy finding as a new chdesc */
-	chdesc_unlink_all_changes(overlap);
-	chdesc_link_all_changes(overlap);
+	
+	chdesc_link_index_changes(overlap);
 	
 	*head = overlap;
 	return 1;
@@ -1929,6 +1943,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->ddesc_pprev = NULL;
 	chdesc->ddesc_ready_next = NULL;
 	chdesc->ddesc_ready_pprev = NULL;
+	chdesc->ddesc_index_next = NULL;
+	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->stamps = 0;
@@ -1938,6 +1954,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
+	chdesc_link_index_changes(chdesc);
 	
 	/* add chdesc to block's befores */
 	if(!bit_changes && !(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
@@ -2388,6 +2405,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		}
 	}
 	
+	chdesc_unlink_index_changes(*chdesc);
 	chdesc_unlink_ready_changes(*chdesc);
 	chdesc_unlink_all_changes(*chdesc);
 	

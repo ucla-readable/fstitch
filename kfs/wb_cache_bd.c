@@ -523,6 +523,12 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	
 	/* we generally delay blocks, so our level goes up */
 	bd->level = disk->level + 1;
+	bd->graph_index = disk->graph_index + 1;
+	if(bd->graph_index >= NBDINDEX)
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	/* set up the callback */
 	if(sched_register(wb_cache_bd_callback, bd, FLUSH_PERIOD) < 0)

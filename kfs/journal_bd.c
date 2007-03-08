@@ -114,7 +114,6 @@ struct journal_info {
 	uint32_t length;
 	uint32_t trans_total_blocks;
 	uint32_t trans_data_blocks;
-	uint32_t stamp;
 	/* state information below */
 	chdesc_t * keep_w;
 	chdesc_t * wait;
@@ -406,7 +405,7 @@ static int journal_bd_start_transaction(BD_t * object)
 		goto fail_wait;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
 	CREATE_NOOP(hold, object); /* this one is managed */
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_FUTURE_BEFORES);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_FUTURE_BEFORES);
 	info->hold->flags |= CHDESC_FUTURE_BEFORES;
 	CREATE_NOOP(keep_d, NULL);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
@@ -553,8 +552,9 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	bdesc_t * journal_block;
-	chdesc_t * chdesc, * chdesc_next;
 	chdesc_t * head;
+	chdesc_t * chdesc;
+	chdesc_t * chdesc_index_next;
 	uint32_t number;
 	int r;
 	
@@ -567,55 +567,57 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	if(info->recursion)
 	{
+		/* only used to write the journal itself: many fewer change descriptors there! */
 		chdesc_push_down(object, block, info->bd, block);
 		return CALL(info->bd, write_block, block);
 	}
 	
-	/* why write a block with no changes? */
-	if(!block->ddesc->all_changes)
+	/* why write a block with no new changes? */
+	if(!block->ddesc->index_changes[object->graph_index].head)
 		return 0;
 	
 	/* we should have gotten a get_write_head call,
 	 * which would start a transaction for us */
 	assert(info->keep_w);
 	
-	/* add our stamp to all chdescs passing through, and adjust their befores */
-	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc_next)
+	/* inspect and modify all chdescs passing through */
+	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc_index_next)
 	{
-		chdesc_next = chdesc->ddesc_next; /* in case changes */
-		if(chdesc->owner == object)
+		int r, needs_hold = 0;
+		chdepdesc_t ** deps = &chdesc->befores;
+		
+		assert(chdesc->owner == object);
+		chdesc_index_next = chdesc->ddesc_index_next; /* in case changes */
+		
+		r = chdesc_add_depend(info->data, chdesc);
+		if(r < 0)
+			kpanic("Holy Mackerel!");
+		
+		while(*deps)
 		{
-			int needs_hold = 0;
-			chdepdesc_t ** deps = &chdesc->befores;
-			int r = chdesc_add_depend(info->data, chdesc);
+			chdesc_t * dep = (*deps)->before.desc;
+			/* if it's hold, or if it's on the same block, leave it alone */
+			if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
+			{
+				deps = &(*deps)->before.next;
+				continue;
+			}
+			/* otherwise remove this dependency */
+			/* WARNING: this makes the journal incompatible
+			 * with opgroups between different file systems */
+			chdesc_dep_remove(*deps);
+			needs_hold = 1;
+		}
+		
+		if(needs_hold)
+		{
+			chdesc->flags |= CHDESC_SAFE_AFTER;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SAFE_AFTER);
+			r = chdesc_add_depend(chdesc, info->hold);
 			if(r < 0)
 				kpanic("Holy Mackerel!");
-			chdesc_stamp(chdesc, info->stamp);
-			while(*deps)
-			{
-				chdesc_t * dep = (*deps)->before.desc;
-				/* if it's hold, or if it's on the same block, leave it alone */
-				if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
-				{
-					deps = &(*deps)->before.next;
-					continue;
-				}
-				/* otherwise remove this dependency */
-				/* WARNING: this makes the journal incompatible
-				 * with opgroups between different file systems */
-				chdesc_dep_remove(*deps);
-				needs_hold = 1;
-			}
-			if(needs_hold)
-			{
-				chdesc->flags |= CHDESC_SAFE_AFTER;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SAFE_AFTER);
-				r = chdesc_add_depend(chdesc, info->hold);
-				if(r < 0)
-					kpanic("Holy Mackerel!");
-				chdesc->flags &= ~CHDESC_SAFE_AFTER;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
-			}
+			chdesc->flags &= ~CHDESC_SAFE_AFTER;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
 		}
 	}
 	
@@ -624,14 +626,9 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	journal_block = CALL(info->journal, read_block, number, 1);
 	assert(journal_block);
 	
-	/* rewind the data to the state that is (now) below us... */
-	r = revision_tail_prepare_stamp(block, info->stamp);
-	assert(r >= 0);
-	/* ...and copy it to the journal */
+	/* copy it to the journal */
 	head = info->jdata_head;
 	r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
-	assert(r >= 0);
-	r = revision_tail_revert_stamp(block, info->stamp);
 	assert(r >= 0);
 	if(head)
 	{
@@ -688,7 +685,7 @@ static void journal_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	if(info->keep_w)
+	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		int r;
 		r = journal_bd_stop_transaction(object);
@@ -728,8 +725,6 @@ static int journal_bd_destroy(BD_t * bd)
 	/* might not exist if we are destroying because of failed creation */
 	if(info->block_map)
 		hash_map_destroy(info->block_map);
-	
-	chdesc_release_stamp(info->stamp);
 	
 	free(info);
 	memset(bd, 0, sizeof(*bd));
@@ -1010,14 +1005,6 @@ BD_t * journal_bd(BD_t * disk)
 		return NULL;
 	}
 	
-	info->stamp = chdesc_register_stamp(bd);
-	if(!info->stamp)
-	{
-		free(info);
-		free(bd);
-		return NULL;
-	}
-	
 	BD_INIT(bd, journal_bd, info);
 	OBJMAGIC(bd) = JOURNAL_MAGIC;
 	
@@ -1025,7 +1012,6 @@ BD_t * journal_bd(BD_t * disk)
 	info->journal = NULL;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->length = CALL(disk, get_numblocks);
-	bd->level = disk->level;
 	info->trans_total_blocks = (TRANSACTION_SIZE + info->blocksize - 1) / info->blocksize;
 	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(info->blocksize);
 	info->keep_w = NULL;
@@ -1041,6 +1027,16 @@ BD_t * journal_bd(BD_t * disk)
 	info->jdata_head = NULL;
 	info->prev_cr = NULL;
 	info->prev_cancel = NULL;
+	info->cr_count = 0;
+	info->cr_retain = NULL;
+	info->recursion = 0;
+	bd->level = disk->level;
+	bd->graph_index = disk->graph_index + 1;
+	if(bd->graph_index >= NBDINDEX)
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 	
 	info->block_map = hash_map_create();
 	if(!info->block_map)
@@ -1048,10 +1044,6 @@ BD_t * journal_bd(BD_t * disk)
 		DESTROY(bd);
 		return NULL;
 	}
-	
-	info->cr_count = 0;
-	info->cr_retain = NULL;
-	info->recursion = 0;
 	
 	/* set up transaction callback */
 	if(sched_register(journal_bd_callback, bd, TRANSACTION_PERIOD) < 0)
@@ -1129,6 +1121,10 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	level = journal->level;
 	if(!level || level > bd->level)
 		return -E_INVAL;
+	/* The graph index of the journal must be allowed to be larger than the
+	 * BD: it will be in the common case of an internal journal, for
+	 * instance. But we're more like an LFS module in our use of the
+	 * journal; we create the chdescs, not just forward them. So it's OK. */
 	
 	if(modman_inc_bd(journal, bd, "journal") < 0)
 		return -E_INVAL;

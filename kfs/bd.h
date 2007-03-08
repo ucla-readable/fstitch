@@ -6,7 +6,9 @@
 #include <kfs/oo.h>
 
 /* maximum number of BD levels */
-#define NBDLEVEL 4
+#define NBDLEVEL 2
+/* maximum number of BD graph indices */
+#define NBDINDEX 8
 /* this value represents no level */
 #define BDLEVEL_NONE ((uint16_t) -1)
 
@@ -32,7 +34,7 @@ typedef struct BD BD_t;
 
 struct BD {
 	OBJECT(BD_t);
-	uint16_t level;
+	uint16_t level, graph_index;
 	DECLARE(BD_t, uint32_t, get_numblocks);
 	DECLARE(BD_t, uint16_t, get_blocksize);
 	DECLARE(BD_t, uint16_t, get_atomicsize);
@@ -54,6 +56,7 @@ struct BD {
 
 #define BD_INIT(bd, module, info) { \
 	OBJ_INIT(bd, module, info); \
+	bd->level = -1; bd->graph_index = -1; \
 	ASSIGN(bd, module, get_numblocks); \
 	ASSIGN(bd, module, get_blocksize); \
 	ASSIGN(bd, module, get_atomicsize); \

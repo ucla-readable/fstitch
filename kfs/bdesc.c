@@ -74,6 +74,11 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		bdesc->ddesc->ready_changes[i].head = NULL;
 		bdesc->ddesc->ready_changes[i].tail = &bdesc->ddesc->ready_changes[i].head;
 	}
+	for(i = 0; i < NBDINDEX; i++)
+	{
+		bdesc->ddesc->index_changes[i].head = NULL;
+		bdesc->ddesc->index_changes[i].tail = &bdesc->ddesc->index_changes[i].head;
+	}
 #if BDESC_EXTERN_AFTER_COUNT
 	bdesc->ddesc->extern_after_count = 0;
 #endif

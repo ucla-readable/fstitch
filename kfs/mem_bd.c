@@ -266,6 +266,12 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 
 	BD_INIT(bd, mem_bd, info);
 	bd->level = 0;
+	bd->graph_index = 0;
+	if(bd->graph_index >= NBDINDEX)
+	{
+		DESTROY(bd);
+		return NULL;
+	}
 		
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

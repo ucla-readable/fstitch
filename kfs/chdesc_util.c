@@ -32,34 +32,49 @@ void chdesc_unmark_graph(chdesc_t * root)
 
 int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
 {
+	chdesc_dlist_t * dlist = current_block->ddesc->index_changes;
 	if(target_block->ddesc != current_block->ddesc)
 		return -E_INVAL;
-	if(current_block->ddesc->all_changes)
+	if(dlist[current_bd->graph_index].head)
 	{
 		chdesc_t * chdesc;
-		for (chdesc = current_block->ddesc->all_changes;
+		for (chdesc = dlist[current_bd->graph_index].head;
 		     chdesc;
-		     chdesc = chdesc->ddesc_next)
+		     chdesc = chdesc->ddesc_index_next)
 		{
-			if(chdesc->owner == current_bd)
-			{
-				uint16_t prev_level = chdesc_level(chdesc);
-				uint16_t new_level;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
-				chdesc_unlink_ready_changes(chdesc);
-				chdesc->owner = target_bd;
-				assert(chdesc->block);
-				bdesc_retain(target_block);
-				bdesc_release(&chdesc->block);
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, target_block);
-				chdesc->block = target_block;
-				chdesc_update_ready_changes(chdesc);
-
-				new_level = chdesc_level(chdesc);
-				if(prev_level != new_level)
-					chdesc_propagate_level_change(chdesc, prev_level, new_level);
-			}
+			uint16_t prev_level = chdesc_level(chdesc);
+			uint16_t new_level;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
+			/* don't unlink them from index here */
+			chdesc_unlink_ready_changes(chdesc);
+			chdesc->owner = target_bd;
+			assert(chdesc->block);
+			bdesc_retain(target_block);
+			bdesc_release(&chdesc->block);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, target_block);
+			chdesc->block = target_block;
+			chdesc_update_ready_changes(chdesc);
+			/* don't link them to index here */
+			
+			new_level = chdesc_level(chdesc);
+			if(prev_level != new_level)
+				chdesc_propagate_level_change(chdesc, prev_level, new_level);
 		}
+		
+		/* append the target index list to ours */
+		*dlist[current_bd->graph_index].tail = dlist[target_bd->graph_index].head;
+		if(dlist[target_bd->graph_index].head)
+			dlist[target_bd->graph_index].head->ddesc_index_pprev = dlist[current_bd->graph_index].tail;
+		else
+			dlist[target_bd->graph_index].tail = dlist[current_bd->graph_index].tail;
+		
+		/* make target index point at our list */
+		dlist[target_bd->graph_index].head = dlist[current_bd->graph_index].head;
+		dlist[current_bd->graph_index].head->ddesc_index_pprev = &dlist[target_bd->graph_index].head;
+		
+		/* make current index empty */
+		dlist[current_bd->graph_index].head = NULL;
+		dlist[current_bd->graph_index].tail = &dlist[current_bd->graph_index].head;
 	}
 	return 0;
 }
@@ -167,7 +182,7 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	i = vector_size(oldheads);
 	if(i == 1)
 		*head = (chdesc_t *) vector_elt_front(oldheads);
-	else if (i > 1)
+	else if(i > 1)
 	{
 		/* *head depends on all created chdescs */
 		r = chdesc_create_noop_array(NULL, head, i, (chdesc_t **) oldheads->elts);
