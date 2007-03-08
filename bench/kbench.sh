@@ -112,6 +112,8 @@ if [ "$2" == "ufs" ]; then
 	FSIMG=obj/kernel/fs/ufs.img
 elif [ "$2" == "ext2" ]; then
 	FSIMG=obj/kernel/fs/ext2.img
+elif [ "$2" != "${2#=}" ]; then
+	FSIMG="${2#=}"
 else
 	usage 2>&1
 	exit 1
