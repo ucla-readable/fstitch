@@ -27,8 +27,8 @@
 
 /* transaction period of 5 seconds */
 #define TRANSACTION_PERIOD (5 * HZ)
-/* transaction slot size of 64 x 4K */
-#define TRANSACTION_SIZE (64 * 4096)
+/* transaction slot size of 512 x 4K */
+#define TRANSACTION_SIZE (512 * 4096)
 
 /* Theory of operation:
  * 
@@ -318,6 +318,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		bdesc_t * number_block;
 		size_t blocks = hash_map_size(info->block_map);
 		size_t last = blocks % info->trans_data_blocks;
+		uint16_t npb = numbers_per_block(info->blocksize);
 		uint32_t data;
 		int r;
 		
@@ -353,11 +354,11 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		
 		/* get next journal block, write block number to journal block number map */
 		number = info->trans_slot * info->trans_total_blocks + 1;
-		number_block = CALL(info->journal, read_block, number + last / numbers_per_block(info->blocksize), 1);
+		number_block = CALL(info->journal, read_block, number + last / npb, 1);
 		assert(number_block);
 		
 		data = block->number;
-		r = chdesc_create_byte(number_block, info->journal, last * sizeof(uint32_t), sizeof(uint32_t), &data, &head);
+		r = chdesc_create_byte(number_block, info->journal, (last % npb) * sizeof(uint32_t), sizeof(uint32_t), &data, &head);
 		assert(r >= 0);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "journal number");
 		r = chdesc_add_depend(info->wait, head);
@@ -1132,8 +1133,14 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	info->journal = journal;
 	
 	info->cr_count = CALL(journal, get_numblocks) / info->trans_total_blocks;
-	if(!info->cr_count)
-		kpanic("Holy Mackerel!");
+	if(info->cr_count < 3)
+	{
+		printf("%s(): journal is too small (only %d slots)\n", __FUNCTION__, info->cr_count);
+		info->cr_count = 0;
+		info->journal = NULL;
+		modman_dec_bd(journal, bd);
+		return -E_NO_SPC;
+	}
 	
 	info->cr_retain = scalloc(info->cr_count, sizeof(*info->cr_retain));
 	if(!info->cr_retain)
