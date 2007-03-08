@@ -90,7 +90,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	bool alloc = 0;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (!head || !dirf || check_name(dirinfo.d_name) || offset < 0)
+	if (!head || !dirf || ufs_check_name(dirinfo.d_name) || offset < 0)
 		return -E_INVAL;
 
 	// Prepare the UFS_direct entry
@@ -204,7 +204,7 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 		return -E_INVAL;
 
 	if (dirent.d_ino) {
-		r = read_inode(info, dirent.d_ino, &inode); 
+		r = ufs_read_inode(info, dirent.d_ino, &inode); 
 		if (r < 0)
 			return r;
 
@@ -234,7 +234,7 @@ static int ufs_dirent_linear_search_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	struct dirent entry;
 	int r = 0;
 
-	if (!dirf || check_name(name))
+	if (!dirf || ufs_check_name(name))
 		return -E_INVAL;
 
 	while (r >= 0) {
@@ -267,7 +267,7 @@ static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	uint32_t basep, last_basep, p;
 	int r, offset;
 
-	if (!head || !dirf || check_name(name))
+	if (!head || !dirf || ufs_check_name(name))
 		return -E_INVAL;
 
 	r = ufs_dirent_linear_search_dirent(object, dirf, name, NULL, &offset);

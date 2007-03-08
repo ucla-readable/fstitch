@@ -17,7 +17,7 @@ static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc
 
 	// Find free block
 	for (start = num; num < super->fs_size / super->fs_frag; num++) {
-		r = read_block_bitmap(info, num);
+		r = ufs_read_block_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE) {
@@ -27,7 +27,7 @@ static uint32_t ufs_alloc_lastpos_find_free_block(UFSmod_alloc_t * object, fdesc
 	}
 
 	for (num = super->fs_dblkno / super->fs_frag; num < start; num++) {
-		r = read_block_bitmap(info, num);
+		r = ufs_read_block_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE) {
@@ -54,7 +54,7 @@ static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_
 
 	// Find free fragment
 	for (start = num; num < super->fs_size; num++) {
-		r = read_fragment_bitmap(info, num);
+		r = ufs_read_fragment_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE) {
@@ -64,7 +64,7 @@ static uint32_t ufs_alloc_lastpos_find_free_frag(UFSmod_alloc_t * object, fdesc_
 	}
 
 	for (num = super->fs_dblkno; num < start; num++) {
-		r = read_fragment_bitmap(info, num);
+		r = ufs_read_fragment_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE) {
@@ -86,7 +86,7 @@ static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc
 
 	// Find free inode
 	for (start = num; num < super->fs_ipg * super->fs_ncg; num++) {
-		r = read_inode_bitmap(info, num);
+		r = ufs_read_inode_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
@@ -94,7 +94,7 @@ static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc
 	}
 
 	for (num = UFS_ROOT_INODE + 1; num < start; num++) {
-		r = read_inode_bitmap(info, num);
+		r = ufs_read_inode_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)

@@ -30,20 +30,20 @@ struct ufs_info
 	hash_map_t * filemap; // keep track of in-memory struct UFS_Files
 };
 
-int read_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode * inode);
-int write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head);
-uint32_t read_btot(struct ufs_info * info, uint32_t num);
-uint16_t read_fbp(struct ufs_info * info, uint32_t num);
-int read_inode_bitmap(struct ufs_info * info, uint32_t num);
-int read_fragment_bitmap(struct ufs_info * info, uint32_t num);
-int read_block_bitmap(struct ufs_info * info, uint32_t num);
-int write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_t ** head);
-int write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t ** head);
-int write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
-int write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
-int write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
-int update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head);
-int check_name(const char * p);
+int ufs_read_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode * inode);
+int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head);
+uint32_t ufs_read_btot(struct ufs_info * info, uint32_t num);
+uint16_t ufs_read_fbp(struct ufs_info * info, uint32_t num);
+int ufs_read_inode_bitmap(struct ufs_info * info, uint32_t num);
+int ufs_read_fragment_bitmap(struct ufs_info * info, uint32_t num);
+int ufs_read_block_bitmap(struct ufs_info * info, uint32_t num);
+int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_t ** head);
+int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t ** head);
+int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
+int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
+int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
+int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head);
+int ufs_check_name(const char * p);
 uint8_t kfs_to_ufs_type(uint8_t type);
 uint8_t ufs_to_kfs_type(uint8_t type);
 

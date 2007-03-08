@@ -14,7 +14,7 @@ static uint32_t ufs_alloc_linear_find_free_block(UFSmod_alloc_t * object, fdesc_
 
 	// Find free block
 	for (; num < super->fs_size / super->fs_frag; num++) {
-		r = read_block_bitmap(info, num);
+		r = ufs_read_block_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
@@ -36,7 +36,7 @@ static uint32_t ufs_alloc_linear_find_free_frag(UFSmod_alloc_t * object, fdesc_t
 
 	// Find free fragment
 	for (; num < super->fs_size; num++) {
-		r = read_fragment_bitmap(info, num);
+		r = ufs_read_fragment_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)
@@ -56,7 +56,7 @@ static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_
 
 	// Find free inode
 	for (; num < super->fs_ipg * super->fs_ncg; num++) {
-		r = read_inode_bitmap(info, num);
+		r = ufs_read_inode_bitmap(info, num);
 		if (r < 0)
 			return INVALID_BLOCK;
 		if (r == UFS_FREE)

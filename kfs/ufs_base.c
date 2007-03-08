@@ -146,7 +146,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 
 	// Mark the fragments as used
 	for (i = num * super->fs_frag; i < (num + 1) * super->fs_frag; i++) {
-		r = write_fragment_bitmap(info, i, UFS_USED, head);
+		r = ufs_write_fragment_bitmap(info, i, UFS_USED, head);
 		if (r < 0)
 			return INVALID_BLOCK;
 		assert(r != 1); // This should not happen
@@ -169,7 +169,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 
 	if (file) {
 		f->f_inode.di_blocks += 32; // charge the fragments to the file
-		r = write_inode(info, f->f_num, f->f_inode, head);
+		r = ufs_write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			return INVALID_BLOCK;
 	}
@@ -194,7 +194,7 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 
 	// Mark the fragments as used
 	for (i = num * super->fs_frag; i < (num + 1) * super->fs_frag; i++) {
-		r = write_fragment_bitmap(info, i, UFS_FREE, head);
+		r = ufs_write_fragment_bitmap(info, i, UFS_FREE, head);
 		if (r < 0)
 			return r;
 		assert(r != 1); // This should not happen
@@ -202,7 +202,7 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 
 	if (file) {
 		f->f_inode.di_blocks -= 32; // charge the fragments to the file
-		r = write_inode(info, f->f_num, f->f_inode, head);
+		r = ufs_write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			return r;
 	}
@@ -234,7 +234,7 @@ static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil,
 	if (evil) {
 		// Clears the indirect pointer...
 		f->f_inode.di_ib[n] = 0;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else {
 		// Allocates an indirect pointer block
@@ -245,7 +245,7 @@ static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil,
 		if (newblock == INVALID_BLOCK)
 			return -E_NO_ENT;
 		f->f_inode.di_ib[n] = newblock;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 }
 
@@ -272,7 +272,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 	if (blockno < UFS_NDADDR) {
 		f->f_inode.di_db[blockno] = value;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb) {
 		block_off[0] = blockno - UFS_NDADDR;
@@ -367,7 +367,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 
 	if (blockno < UFS_NDADDR) {
 		f->f_inode.di_db[blockno] = 0;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb) {
 		block_off[0] = blockno - UFS_NDADDR;
@@ -571,7 +571,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 
 	// allocate some fragments
 	for (i = 0 ; i < frags; i++) {
-		r = write_fragment_bitmap(info, blockno + i, UFS_USED, head);
+		r = ufs_write_fragment_bitmap(info, blockno + i, UFS_USED, head);
 		if (r != 0)
 			return INVALID_BLOCK;
 	}
@@ -602,7 +602,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 
 	// free old fragments
 	for (i = 0 ; i < frags; i++) {
-		r = write_fragment_bitmap(info, f->f_lastfrag - frags + i + 1, UFS_FREE, head);
+		r = ufs_write_fragment_bitmap(info, f->f_lastfrag - frags + i + 1, UFS_FREE, head);
 		if (r != 0)
 			return INVALID_BLOCK;
 	}
@@ -675,7 +675,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	}
 	// Use the next fragment
 	else {
-		r = read_fragment_bitmap(info, f->f_lastfrag + 1);
+		r = ufs_read_fragment_bitmap(info, f->f_lastfrag + 1);
 		if (r < 0)
 			return r;
 		else if (r == UFS_FREE)
@@ -686,15 +686,15 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	if(blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
 
-	r = write_fragment_bitmap(info, blockno, UFS_USED, head);
+	r = ufs_write_fragment_bitmap(info, blockno, UFS_USED, head);
 	if (r != 0)
 		return INVALID_BLOCK;
 
-	r = read_fragment_bitmap(info, blockno);
+	r = ufs_read_fragment_bitmap(info, blockno);
 	assert(r == UFS_USED);
 
 	f->f_inode.di_blocks += 4; // grr, di_blocks counts 512 byte blocks
-	r = write_inode(info, f->f_num, f->f_inode, head);
+	r = ufs_write_inode(info, f->f_num, f->f_inode, head);
 	if (r < 0)
 		goto allocate_block_cleanup;
 
@@ -702,7 +702,7 @@ static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, 
 	return blockno;
 
 allocate_block_cleanup:
-	r = write_fragment_bitmap(info, blockno, UFS_FREE, head);
+	r = ufs_write_fragment_bitmap(info, blockno, UFS_FREE, head);
 	assert(r == 0);
 	return INVALID_BLOCK;
 }
@@ -725,7 +725,7 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 	if (exists == 1)
 		return (fdesc_t *) ef->file;
 	else if (exists == 0) {
-		r = read_inode(info, ino, &ef->file->f_inode);
+		r = ufs_read_inode(info, ino, &ef->file->f_inode);
 		if (r < 0) {
 			open_ufsfile_destroy(ef);
 			return NULL;
@@ -780,7 +780,7 @@ static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, in
 	ufs_fdesc_t * pfile;
 	int r;
 
-	if (!ino || check_name(name))
+	if (!ino || ufs_check_name(name))
 		return -E_INVAL;
 
 	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
@@ -959,7 +959,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
-	if (!head || check_name(name))
+	if (!head || ufs_check_name(name))
 		return NULL;
 
 	switch (type)
@@ -1061,11 +1061,11 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		}
 
 		// Write new inode to disk and allocate it
-		r = write_inode(info, inum, nf->f_inode, head);
+		r = ufs_write_inode(info, inum, nf->f_inode, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 
-		r = write_inode_bitmap(info, inum, UFS_USED, head);
+		r = ufs_write_inode_bitmap(info, inum, UFS_USED, head);
 		if (r != 0)
 			goto allocate_name_exit2;
 
@@ -1090,14 +1090,14 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 	r = CALL(info->parts.p_dirent, insert_dirent, pf, dirinfo, head);
 	if (r < 0) {
 		if (!ln)
-			write_inode_bitmap(info, inum, UFS_FREE, head);
+			ufs_write_inode_bitmap(info, inum, UFS_FREE, head);
 		goto allocate_name_exit2;
 	}
 
 	// Increase link count
 	if (ln) {
 		nf->f_inode.di_nlink++;
-		r = write_inode(info, nf->f_num, nf->f_inode, head);
+		r = ufs_write_inode(info, nf->f_num, nf->f_inode, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1117,7 +1117,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 			goto allocate_name_exit2;
 		ufs_free_fdesc(object, cfdesc);
 
-		r = update_summary(info, inum / super->fs_ipg, 1, 0, 0, 0, head);
+		r = ufs_update_summary(info, inum / super->fs_ipg, 1, 0, 0, 0, head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1138,7 +1138,7 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
 	int createdot = 0;
 
-	if (!head || check_name(name))
+	if (!head || ufs_check_name(name))
 		return NULL;
 
 	// Users cannot create . and ..
@@ -1167,7 +1167,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 	inode_t ino, newino;
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
-	if (!head || check_name(oldname) || check_name(newname))
+	if (!head || ufs_check_name(oldname) || ufs_check_name(newname))
 		return -E_INVAL;
 
 	if (!strcmp(oldname, newname) && (oldparent == newparent)) // Umm, ok
@@ -1225,7 +1225,7 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 			goto ufs_rename_exit4;
 
 		oldf->f_inode.di_nlink++;
-		r = write_inode(info, oldf->f_num, oldf->f_inode, head);
+		r = ufs_write_inode(info, oldf->f_num, oldf->f_inode, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 	}
@@ -1244,13 +1244,13 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		goto ufs_rename_exit4;
 
 	oldf->f_inode.di_nlink--;
-	r = write_inode(info, oldf->f_num, oldf->f_inode, head);
+	r = ufs_write_inode(info, oldf->f_num, oldf->f_inode, head);
 	if (r < 0)
 		goto ufs_rename_exit4;
 
 	if (existing) {
 		newf->f_inode.di_nlink--;
-		r = write_inode(info, newf->f_num, newf->f_inode, head);
+		r = ufs_write_inode(info, newf->f_num, newf->f_inode, head);
 		if (r < 0)
 			goto ufs_rename_exit4;
 
@@ -1268,11 +1268,11 @@ static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, i
 		   }
 
 		   memset(&newf->f_inode, 0, sizeof(struct UFS_dinode));
-		   r = write_inode(info, newf->f_num, newf->f_inode, head);
+		   r = ufs_write_inode(info, newf->f_num, newf->f_inode, head);
 		   if (r < 0)
 			   goto ufs_rename_exit4;
 
-		   r = write_inode_bitmap(info, newf->f_num, UFS_FREE, head);
+		   r = ufs_write_inode_bitmap(info, newf->f_num, UFS_FREE, head);
 		   if (r < 0)
 			   goto ufs_rename_exit4;
 	   }
@@ -1363,15 +1363,15 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 		}
 		else {
 			f->f_inode.di_blocks -= 4;
-			r = write_inode(info, f->f_num, f->f_inode, head);
+			r = ufs_write_inode(info, f->f_num, f->f_inode, head);
 			if (r < 0)
 				return r;
-			return write_fragment_bitmap(info, block, UFS_FREE, head);
+			return ufs_write_fragment_bitmap(info, block, UFS_FREE, head);
 		}
 	}
 
 	// Free the fragment, no questions asked
-	return write_fragment_bitmap(info, block, UFS_FREE, head);
+	return ufs_write_fragment_bitmap(info, block, UFS_FREE, head);
 }
 
 static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
@@ -1384,7 +1384,7 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 	int r, minlinks = 1;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
-	if (!head || check_name(name))
+	if (!head || ufs_check_name(name))
 		return -E_INVAL;
 
 	pfile = (ufs_fdesc_t *) ufs_lookup_inode(object, parent);
@@ -1447,17 +1447,17 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 
 		// Clear inode
 		memset(&f->f_inode, 0, sizeof(struct UFS_dinode));
-		r = write_inode(info, f->f_num, f->f_inode, head);
+		r = ufs_write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 
-		r = write_inode_bitmap(info, f->f_num, UFS_FREE, head);
+		r = ufs_write_inode_bitmap(info, f->f_num, UFS_FREE, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 	}
 	else {
 		f->f_inode.di_nlink--;
-		r = write_inode(info, f->f_num, f->f_inode, head);
+		r = ufs_write_inode(info, f->f_num, f->f_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 	}
@@ -1466,12 +1466,12 @@ static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, ch
 		int cyl = f->f_num / super->fs_ipg;
 
 		pfile->f_inode.di_nlink--;
-		r = write_inode(info, pfile->f_num, pfile->f_inode, head);
+		r = ufs_write_inode(info, pfile->f_num, pfile->f_inode, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 
 		// Update group summary
-		r = update_summary(info, cyl, -1, 0, 0, 0, head);
+		r = ufs_update_summary(info, cyl, -1, 0, 0, 0, head);
 		if (r < 0)
 			goto ufs_remove_name_error;
 	}
@@ -1679,7 +1679,7 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 			return -E_INVAL;
 
 		f->f_inode.di_size = *((uint32_t *) data);
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_filetype.id) {
 		uint8_t fs_type;
@@ -1699,26 +1699,26 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 		if (sizeof(uint32_t) != size)
 			return -E_INVAL;
 		f->f_inode.di_uid = *(uint32_t *) data;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_gid.id) {
 		if (sizeof(uint32_t) != size)
 			return -E_INVAL;
 		f->f_inode.di_gid = *(uint32_t *) data;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_unix_permissions.id) {
 		if (sizeof(uint16_t) != size)
 			return -E_INVAL;
 		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
 			| (*((uint16_t *) data) & UFS_IPERM);
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_mtime.id) {
 		if (sizeof(uint32_t) != size)
 			return -E_INVAL;
 		f->f_inode.di_mtime = f->f_inode.di_mtime;
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 	else if (id == KFS_feature_symlink.id) {
 		if (!f || f->f_type != TYPE_SYMLINK)
@@ -1729,7 +1729,7 @@ static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t
 			memcpy((char *) f->f_inode.di_db, data, size);
 		else
 			assert(0); // TODO: write(link, size)
-		return write_inode(info, f->f_num, f->f_inode, head);
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	}
 
 	return -E_INVAL;
