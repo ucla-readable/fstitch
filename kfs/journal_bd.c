@@ -18,6 +18,8 @@
 #include <kfs/kernel_serve.h>
 #include <kfs/journal_bd.h>
 
+#define ONLY_METADATA 0
+
 #define DEBUG_JOURNAL 0
 #if DEBUG_JOURNAL
 #define Dprintf(x...) printf(x)
@@ -558,6 +560,9 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	chdesc_t * chdesc_index_next;
 	uint32_t number;
 	int r;
+#if ONLY_METADATA
+	int metadata = 0;
+#endif
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(block->count == 1);
@@ -581,18 +586,38 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	 * which would start a transaction for us */
 	assert(info->keep_w);
 	
+#if ONLY_METADATA
+	number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
+	/* if we already have the block in the journal, it must have metadata */
+	if(number)
+		metadata = 1;
+	else
+		/* otherwise, scan for metadata */
+		for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
+			if(!(chdesc->flags & CHDESC_DATA))
+			{
+				metadata = 1;
+				break;
+			}
+#endif
+	
 	/* inspect and modify all chdescs passing through */
 	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc_index_next)
 	{
-		int r, needs_hold = 0;
+		int needs_hold = 0;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
 		assert(chdesc->owner == object);
 		chdesc_index_next = chdesc->ddesc_index_next; /* in case changes */
 		
-		r = chdesc_add_depend(info->data, chdesc);
-		if(r < 0)
-			kpanic("Holy Mackerel!");
+#if ONLY_METADATA
+		if(metadata)
+#endif
+		{
+			r = chdesc_add_depend(info->data, chdesc);
+			if(r < 0)
+				kpanic("Holy Mackerel!");
+		}
 		
 		while(*deps)
 		{
@@ -622,25 +647,30 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		}
 	}
 	
-	number = journal_bd_lookup_block(object, block);
-	assert(number != INVALID_BLOCK);
-	journal_block = CALL(info->journal, read_block, number, 1);
-	assert(journal_block);
-	
-	/* copy it to the journal */
-	head = info->jdata_head;
-	r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
-	assert(r >= 0);
-	if(head)
+#if ONLY_METADATA
+	if(metadata)
+#endif
 	{
-		r = chdesc_add_depend(info->wait, head);
+		number = journal_bd_lookup_block(object, block);
+		assert(number != INVALID_BLOCK);
+		journal_block = CALL(info->journal, read_block, number, 1);
+		assert(journal_block);
+		
+		/* copy it to the journal */
+		head = info->jdata_head;
+		r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
+		assert(r >= 0);
+		if(head)
+		{
+			r = chdesc_add_depend(info->wait, head);
+			assert(r >= 0);
+		}
+		
+		info->recursion = 1;
+		r = CALL(info->journal, write_block, journal_block);
+		info->recursion = 0;
 		assert(r >= 0);
 	}
-	
-	info->recursion = 1;
-	r = CALL(info->journal, write_block, journal_block);
-	info->recursion = 0;
-	assert(r >= 0);
 	
 	chdesc_push_down(object, block, info->bd, block);
 	
