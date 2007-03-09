@@ -147,17 +147,15 @@ int opgroup_linear(opgroup_id_t previous)
 	if ((new = opgroup_create(0)) < 0)
 		return new;
 	if (previous >= 0)
-	{
 		if ((r = opgroup_add_depend(new, previous)) < 0)
 			goto error_abandon;
+	if ((r = opgroup_release(new)) < 0)
+		goto error_abandon;
+	if ((r = opgroup_engage(new)) < 0)
+		goto error_abandon;
+	if (previous >= 0)
 		if ((r = opgroup_abandon(previous)) < 0)
 			goto error_abandon;
-		previous = -1;
-	}
-	if ((r = opgroup_release(new)) < 0)
-		goto error_abandon; /* Bad: can't unabandon previous */
-	if ((r = opgroup_engage(new)) < 0)
-		goto error_abandon; /* Bad: can't unabandon previous */
 	return new;
 
   error_abandon:
