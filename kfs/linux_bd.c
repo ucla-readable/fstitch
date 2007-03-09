@@ -512,7 +512,10 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		write->blockno = block->number;
 		write->checksum = block_checksum(block->ddesc->data, block->ddesc->length);
 		/* NOTE: ninflight may overcount as any inflight writes could complete before we actually make the request below... */
-		write->ninflight = atomic_inc_return(&debug_writes_ninflight[block->number]) - 1;
+		if(block->number < MAXBLOCKNO)
+			write->ninflight = atomic_inc_return(&debug_writes_ninflight[block->number]) - 1;
+		else
+			write->ninflight = -1;
 		debug_writes.next++;
 	}
 	else if (debug_writes.next == MAXWRITES)
