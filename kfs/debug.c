@@ -469,7 +469,7 @@ static int kfs_debug_io_init(void)
 	proc_buffer_wpos = 0;
 	proc_buffer_rpos = 0;
 	
-	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0400, &proc_root, kfs_debug_proc_read, NULL))
+	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0444, &proc_root, kfs_debug_proc_read, NULL))
 	{
 		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
 		return -E_UNSPECIFIED;
