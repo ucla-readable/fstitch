@@ -302,7 +302,7 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 			r = journal_bd_set_journal(journal, journalbd);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "journal_bd_set_journal: %i\n");
+				kdprintf(STDERR_FILENO, "journal_bd_set_journal: error %d\n", -r);
 				goto disable_journal;
 			}
 		}
