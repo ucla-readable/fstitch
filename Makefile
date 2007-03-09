@@ -52,7 +52,7 @@ install: kfs/kkfsd.ko
 $(OBJDIR)/lib/libopgroup.so: lib/kernel_opgroup.c
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -o $@ $< -shared
+	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -g -o $@ $< -shared
 
 # Include Makefrags for subdirectories
 include fs/Makefrag

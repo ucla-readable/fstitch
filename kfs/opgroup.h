@@ -92,6 +92,8 @@ opgroup_id_t opgroup_id(const opgroup_t * opgroup);
 int opgroup_prepare_head(chdesc_t ** head);
 int opgroup_finish_head(chdesc_t * head);
 
+int opgroup_label(opgroup_t * opgroup, const char * label);
+
 #else /* KFSD */
 
 opgroup_id_t opgroup_create(int flags);
@@ -104,11 +106,19 @@ int opgroup_disengage(opgroup_id_t opgroup);
 int opgroup_release(opgroup_id_t opgroup);
 int opgroup_abandon(opgroup_id_t opgroup);
 
+int opgroup_label(opgroup_id_t opgroup, const char * label);
+
+
+/* Create, release, and engage a new opgroup.
+ * Make the new opgroup depend on previous... until <0.
+ * Each previous must be disengaged. Does not abandon previous. */
+opgroup_id_t opgroup_create_engage(opgroup_id_t previous, ...);
+
 /* Create a linear dependency chain:
  * Create, release, and engage a new opgroup.
  * If 'previous >= 0' then the new opgroup will depend on previous
  * and previous will be disengaged and abandoned. */
-int opgroup_linear(opgroup_id_t previous);
+opgroup_id_t opgroup_linear(opgroup_id_t previous);
 
 #endif /* KFSD */
 

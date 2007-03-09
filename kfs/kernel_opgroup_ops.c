@@ -17,12 +17,15 @@
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ioctl.h>
 
+/* Limit strings to something quite reasonable */
+#define STR_LEN_MAX 128
 
 static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsigned int cmd, unsigned long arg)
 {
 	opgroup_ioctl_cmd_t cmd_args;
 	opgroup_t * opgroup_a = NULL;
 	opgroup_t * opgroup_b = NULL;
+	char str[STR_LEN_MAX];
 	int r;
 
 	if (copy_from_user((void *) &cmd_args, (void __user *) arg, sizeof(cmd_args)))
@@ -33,6 +36,14 @@ static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsign
 		opgroup_a = opgroup_lookup(cmd_args.opgroup_a);
 	if (cmd_args.opgroup_b >= 0)
 		opgroup_b = opgroup_lookup(cmd_args.opgroup_b);
+	if (cmd_args.str)
+	{
+		long len = strnlen_user(cmd_args.str, STR_LEN_MAX);
+		if (len < 1 || STR_LEN_MAX < len)
+			return -E_FAULT;
+		if (copy_from_user(str, (void __user *) cmd_args.str, len))
+			return -E_FAULT;
+	}
 
 	switch (cmd)
 	{
@@ -56,6 +67,9 @@ static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsign
 			break;
 		case OPGROUP_IOCTL_ABANDON:
 			r = opgroup_abandon(&opgroup_a);
+			break;
+		case OPGROUP_IOCTL_LABEL:
+			r = opgroup_label(opgroup_a, str);
 			break;
 		default:
 			r = -ENOTTY;

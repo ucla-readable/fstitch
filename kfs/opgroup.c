@@ -602,3 +602,12 @@ int opgroup_finish_head(chdesc_t * head)
 		return 0;
 	return chdesc_add_depend(current_scope->top, head);
 }
+
+int opgroup_label(opgroup_t * opgroup, const char * label)
+{
+	if(!opgroup)
+		return -E_INVAL;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, opgroup->head, "og head: %s", label);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, opgroup->tail, "og tail: %s", label);
+	return 0;
+}
