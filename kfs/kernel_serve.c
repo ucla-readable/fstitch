@@ -1044,7 +1044,7 @@ static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, stru
 		kfsd_leave(1);
 		return -E_PERM;
 	}
-	r = CALL(dentry2cfs(old_dentry), rename, new_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
+	r = CALL(dentry2cfs(old_dentry), rename, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
 	kfsd_leave(1);
 	return r;
 }
