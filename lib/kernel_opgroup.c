@@ -12,9 +12,9 @@
 
 /* Set to emulate opgroup operations for opgroup development on systems
  * without opgroup support */
-#define OPGROUP_EMULATE 1
+#define OPGROUP_EMULATE 0
 
-#define OPGROUP_DEBUG 1
+#define OPGROUP_DEBUG 0
 #if OPGROUP_DEBUG
 #include <stdio.h>
 #define Dprintf(x...) fprintf(stderr, x)
