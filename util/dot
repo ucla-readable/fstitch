@@ -1,0 +1,17 @@
+#!/bin/bash
+
+SIMPLIFY=~/trunk/kudos/util/chdescdotsimplify
+DOT="`which -a dot | tail +2 | head -n 1`"
+
+if [ "${!#%.dot}" != "${!#}" ]
+then
+	P=()
+	while [ $# -gt 1 ]
+	do
+		P[${#P}]="$1"
+		shift
+	done
+	"$SIMPLIFY" < "$1" | "$DOT" "${P[@]}"
+else
+	"$SIMPLIFY" | "$DOT" "$@"
+fi
