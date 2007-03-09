@@ -57,6 +57,8 @@ void * vector_elt_front(vector_t * v) __attribute__((always_inline));
 // Return the last elt.
 static __inline
 void * vector_elt_end(vector_t * v) __attribute__((always_inline));
+// Returns whether the vector contains the specified element.
+bool   vector_contains(vector_t * v, void * elt);
 
 // Return the current capacity of the vector.
 size_t vector_capacity(const vector_t * v);

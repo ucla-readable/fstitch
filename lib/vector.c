@@ -156,6 +156,14 @@ void vector_sort(vector_t *v, int (*compar)(const void *a, const void *b))
 
 // vector_elt_end() inlined
 
+bool vector_contains(vector_t * v, void * elt)
+{
+	size_t i;
+	for (i = 0; i < v->size; i++)
+		if(v->elts[i] == elt)
+			return 1;
+	return 0;
+}
 
 //
 // Growing/shrinking

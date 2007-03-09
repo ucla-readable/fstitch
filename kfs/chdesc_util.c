@@ -167,7 +167,9 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 		if(r < 0)
 			goto chdesc_create_diff_failed;
 
-		if(oldhead)
+		/* doing this check in this loop is O(n^2) but n will
+		 * be small, and it avoids lots of extra NOOPs */
+		if(oldhead && !vector_contains(oldheads, oldhead))
 		{
 			r = vector_push_back(oldheads, oldhead);
 			if(r < 0)
