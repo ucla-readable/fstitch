@@ -36,7 +36,7 @@ KERNEL_TIMING(wait);
 #endif
 
 #ifndef BIO_RW_FUA
-#warning BIO_RW_FUA is not available: writes will be unsafe across power outage
+#warning BIO_RW_FUA is not available: writes will be unsafe across power outage unless the disk write cache is disabled
 /* WRITE is 1, so 1 << 0 == WRITE and thus WRITE | (1 << BIO_RW_FUA) == WRITE */
 #define BIO_RW_FUA 0
 #endif
@@ -44,7 +44,8 @@ KERNEL_TIMING(wait);
 #define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
 #define DEBUG_WRITES 0
 
-#define READ_AHEAD_COUNT 10
+#define READ_AHEAD_COUNT 32
+#define READ_AHEAD_BUFFER 320
 
 #define DEBUG_LINUX_BD 0
 #if DEBUG_LINUX_BD
@@ -76,7 +77,7 @@ bad_coffee(char *p)
 #endif
 
 // READ AHEAD
-static bdesc_t *look_ahead_store[100];
+static bdesc_t *look_ahead_store[READ_AHEAD_BUFFER];
 static uint32_t look_ahead_idx = 0;
 
 static void
@@ -86,8 +87,7 @@ read_ahead_insert(bdesc_t *b)
 	if (look_ahead_store[look_ahead_idx])
 		bdesc_release(&look_ahead_store[look_ahead_idx]);
 	look_ahead_store[look_ahead_idx] = b;
-	look_ahead_idx++;
-	if (look_ahead_idx == 100)
+	if (++look_ahead_idx == READ_AHEAD_BUFFER)
 		look_ahead_idx = 0;
 }
 
@@ -193,7 +193,6 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	int r, i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t *blocks[READ_AHEAD_COUNT];
-	int read_ahead_count = READ_AHEAD_COUNT;
 	KERNEL_INTERVAL(read);
 
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
@@ -218,15 +217,15 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 	spin_unlock_irqrestore(&dma_outstanding_lock, flags);
 
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
-	// assert((count * info->blocksize) <= 2048); Why was this assert here?
-	// FIXME: 'count != 4' (and maybe READ_AHEAD_COUNT) is specific
-	// to 2kB blocks
-	if (count != 4)
-		read_ahead_count = 1;
 	TIMING_START(read);
-	for (j = 0; j < read_ahead_count; j++) {
+	for (j = 0; j < READ_AHEAD_COUNT; j++) {
 		uint32_t j_number = number + (count * j);
 		datadesc_t * dd;
+
+		if (j_number + count > info->blockcount) {
+			blocks[j] = NULL;
+			continue;
+		}
 
 		dd = blockman_lookup(info->blockman, j_number);
 		if (dd && !dd->synthetic) {
@@ -318,12 +317,12 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 
 	TIMING_STOP(read, read);
 
-	for (j = 0; j < read_ahead_count; j++) {
-		if (j != 0) {
-			if (blocks[j] == NULL) continue;
+	for (j = 0; j < READ_AHEAD_COUNT; j++) {
+		if (!blocks[j])
+			continue;
+		if (j)
 			read_ahead_insert(blocks[j]);
-		}
-	
+		
 		r = blockman_managed_add(info->blockman, blocks[j]);
 		assert(r >= 0);
 		if (r < 0)
@@ -757,7 +756,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	int r;
 
 #ifndef BIO_RW_FUA
-	printk("Warning: not compiled with BIO_RW_FUA: writes will not be 100%% safe\n");
+	printk("Warning: not compiled with BIO_RW_FUA: writes will not be safe unless the disk write cache is disabled\n");
 #endif
 
 	if(!bd)
