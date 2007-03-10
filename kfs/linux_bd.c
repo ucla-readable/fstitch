@@ -21,7 +21,6 @@
 #error linux_bd must be compiled for the linux kernel
 #endif
 
-/* The old LINUX_BD_DEBUG_COLLECT_STATS is now DEBUG_TIMING */
 #define DEBUG_TIMING 0
 #include <kfs/kernel_timing.h>
 KERNEL_TIMING(read);
@@ -65,17 +64,6 @@ static struct dentry * debug_writes_dentry;
 
 int linux_bd_destroy(BD_t * bd);
 
-#if 0
-static void
-bad_coffee(char *p)
-{
-	uint32_t *x = (uint32_t *)p;
-	int i;
-	for (i = 0; i < 1024; i++)
-		x[i] = 0xFE0FDCBA; // little endian BADC0FFE
-}
-#endif
-
 // READ AHEAD
 static bdesc_t *look_ahead_store[READ_AHEAD_BUFFER];
 static uint32_t look_ahead_idx = 0;
@@ -95,11 +83,9 @@ static void
 read_ahead_empty(void)
 {
 	int i;
-	for (i = 0; i < 100; i++)
-		if (look_ahead_store[i]) {
+	for (i = 0; i < READ_AHEAD_BUFFER; i++)
+		if (look_ahead_store[i])
 			bdesc_release(&look_ahead_store[i]);
-			look_ahead_store[i] = 0;
-		}
 }
 
 struct linux_info {
@@ -264,7 +250,6 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number,
 				printk(KERN_ERR "alloc_page() failed\n");
 				return NULL;
 			}
-			//bad_coffee(page_address(bv->bv_page));
 			bv->bv_len = info->blocksize * count;
 			bv->bv_offset = 0;
 		}
@@ -389,7 +374,6 @@ linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 
 			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
 		}
-		//bad_coffee(p);
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
 		bio_iovec_idx(bio, i)->bv_page = NULL;
 		bio_iovec_idx(bio, i)->bv_len = 0;
