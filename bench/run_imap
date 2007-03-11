@@ -17,7 +17,7 @@ rm -f $MAILPATH/mailbox.dst
 
 sync
 if [ "$KFSPATH" != "" ]; then
-	$KFSPATH/obj/unix-user/user/fsync $MAILPATH
+	$KFSPATH/obj/util/fsync $MAILPATH
 fi
 
 echo -n "Press return to run test: "
