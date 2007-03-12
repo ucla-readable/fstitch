@@ -41,7 +41,6 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, EXT2_Dir_entry_t * dirent);
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
-static int read_inode_bitmap(LFS_t * object, uint32_t inode_no);
 int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head);
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent);
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data);
@@ -53,7 +52,7 @@ static uint32_t EXT2_DESC_PER_BLOCK;
 static int check_super(LFS_t * object)
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	
+		
 	/* the superblock is in block 1 */
 	printf("\tMagic Number 0x%x \n", info->super->s_magic);
 	printf("\tBlocksize might be %i\n", CALL(info->ubd, get_blocksize));
@@ -77,13 +76,37 @@ static int check_super(LFS_t * object)
 	
 	return 0;
 }
+//Stolen from Linux kernel include/asm-i386/bitops.h 2.6.20
+static inline int find_zero_bit( const unsigned long *addr, unsigned size )
+{
+	int d0, d1, d2;
+	int res;
+
+	if (!size)
+		return 0;
+	// This looks at memory. Mark it volatile to tell gcc not to move it around
+	__asm__ __volatile__(
+			"movl $-1,%%eax\n\t"
+			"xorl %%edx,%%edx\n\t"
+			"repe; scasl\n\t"
+			"je 1f\n\t"
+			"xorl -4(%%edi),%%eax\n\t"
+			"subl $4,%%edi\n\t"
+			"bsfl %%eax,%%edx\n"
+			"1:\tsubl %%ebx,%%edi\n\t"
+			"shll $3,%%edi\n\t"
+			"addl %%edi,%%edx"
+			:"=d" (res), "=&c" (d0), "=&D" (d1), "=&a" (d2)
+			:"1" ((size + 31) >> 5), "2" (addr), "b" (addr) : "memory");
+	return res;
+}
+
 static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
 	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	bdesc_t * bitmap;
-	uint32_t ptr;
-	uint32_t block_group, block_in_group = 0, temp;
+	uint32_t block_group;
 	
 	if (*blockno < info->super->s_first_data_block) 
 	{
@@ -95,31 +118,11 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		printf("%s requested status of block %u too large block no!\n",__FUNCTION__, *blockno);
 		return -E_INVAL;
 	}
-	
-	static const unsigned char lookup[] = 
-	{
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 6, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 7, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 6, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
-		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0 
-	};
-	temp = *blockno + 1;
-	short reached_end = 0;
-
-	while (temp <= info->super->s_blocks_count) {
-		block_group = temp / info->super->s_blocks_per_group;
+	uint32_t curr = *blockno;
+	short firstrun = 1;
+	block_group = curr / info->super->s_blocks_per_group;
+	while(block_group != ( (*blockno) / info->super->s_blocks_per_group) || firstrun) {
+		//Read in the block bitmap for this group
 		if(info->gnum != block_group || info->bitmap_cache == NULL) {
 			if (info->bitmap_cache != NULL)
 				bdesc_release(&info->bitmap_cache);	
@@ -131,39 +134,20 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			info->bitmap_cache = bitmap;
 		}
 		
-		while (((temp) / info->super->s_blocks_per_group) == block_group) {
-			block_in_group  = (temp) % info->super->s_blocks_per_group;
-			ptr = *(((uint32_t *)info->bitmap_cache->ddesc->data) + (block_in_group/32));
-			if (ptr != 0xFFFFFFFF) {
-				if((ptr & 255) != 0xFF) 
-					temp += lookup[ptr & 255];
-				else if(((ptr >> 8) & 255) != 0xFF)
-					temp += lookup[(ptr >> 8) & 255] + 8;
-				else if(((ptr >> 16) & 255) != 0xFF)
-					temp += lookup[(ptr >> 16) & 255] + 16;
-				else 
-					temp += lookup[(ptr >> 24) & 255] + 24;
-				//temp -= (block_in_group % 32);
-				*blockno = temp - (block_in_group % 32);
-				return EXT2_FREE;
-				
-			}
-			
-			temp += 32;
-		}
-		if (temp >= info->super->s_blocks_count - 1 && reached_end == 0) {
-			temp = 0;
-			reached_end = 1;
-		}
+		const unsigned long * foo = (const unsigned long *)info->bitmap_cache->ddesc->data;
+		int bar = 0;
+		bar = find_zero_bit(foo, info->super->s_blocks_per_group );
+		if (bar < (info->super->s_blocks_per_group)) {
+			curr += bar; 
+			*blockno = curr;
+			return EXT2_FREE;
+	       	}
 		
-		//uint32_t mask =  1 << (block_in_group % 32);
-		//while (mask != 0) {		
-		//	if (!(*ptr & mask))
-		//		return EXT2_FREE;
-		//	(*blockno)++;
-		//	mask <<= 1;
-		//}
+		firstrun = 0;
+		block_group = (block_group + 1) % info->ngroups;
+		curr = block_group * info->super->s_blocks_per_group;	
 	}
+		
 	return -E_NO_SPC;
 }
 
@@ -202,39 +186,6 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 	if (*ptr & (1 << (block_in_group % 32)))
 		return EXT2_USED;
 	return EXT2_FREE;
-}
-
-static int read_inode_bitmap(LFS_t * object, uint32_t inode_no)
-{
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	bdesc_t * bitmap;
-	uint32_t * ptr;
-
-	if ((inode_no - 1) >= info->super->s_inodes_count) 
-	{
-		printf("ext2_base:read_inode: inode %u past end of file system!\n", inode_no);
-		return -1;
-	}
-
-	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
-	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
-		if (info->inode_cache != NULL)
-			bdesc_release(&info->inode_cache);	
-		info->inode_gdesc = block_group;
-		bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1);
-		if (!bitmap)
-			return -E_NO_ENT;
-		bdesc_retain(bitmap);
-		info->inode_cache = bitmap;
-	}
-
-	//this drawn from fs/ext2/ialloc.c:150
-	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
-	ptr = ((uint32_t *) info->inode_cache->ddesc->data) + (inode_in_group / 32);
-	if(*ptr & (1 << (inode_in_group % 32)))
-	      return 0;
-	else
-	      return 1;
 }
 
 static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
@@ -317,13 +268,13 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 
 	//check to make sure we're not writing too soon...
 
-	if ((inode_no - 1) >= info->super->s_inodes_count) 
+	if (inode_no >= info->super->s_inodes_count) 
 	{
 		printf("ext2_base:read_inode: inode %u past end of file system!\n", inode_no);
 		return -1;
 	}
 
-	uint32_t block_group = (inode_no - 1) / info->super->s_inodes_per_group;
+	uint32_t block_group = inode_no  / info->super->s_inodes_per_group;
 	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
 		if (info->inode_cache != NULL)
 			bdesc_release(&info->inode_cache);	
@@ -335,7 +286,7 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 		info->inode_cache = bitmap;
 	}
 
-	uint32_t inode_in_group = (inode_no - 1) % info->super->s_inodes_per_group;
+	uint32_t inode_in_group = inode_no  % info->super->s_inodes_per_group;
 
 	// does it already have the right value? 
 	if (((uint32_t *) info->inode_cache->ddesc->data)[(inode_in_group) / 32] & (1 << (inode_in_group % 32)))
@@ -485,18 +436,6 @@ inode_search:
 		r = ext2_find_free_block(object, &blockno);
 		if (r < 0)
 			break;
-		if (r == EXT2_FREE) {
-			write_block_bitmap(object, blockno, 1, head);
-			goto return_block;
-		}
-		blockno++;
-	}
-	//Start from the begining
-	blockno = 0;
-	while (blockno < info->super->s_blocks_count) {
-		r = ext2_find_free_block(object, &blockno);
-		if (r < 0)
-			return INVALID_BLOCK;
 		if (r == EXT2_FREE) {
 			write_block_bitmap(object, blockno, 1, head);
 			goto return_block;
@@ -1281,48 +1220,69 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	return 0;
 }
 
+static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
+	Dprintf("EXT2DEBUG: %s inode number is %u\n", __FUNCTION__, *ino);
+	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	bdesc_t * bitmap;
+	inode_t curr = 0;
+
+	if (*ino >= info->super->s_inodes_count) 
+	{
+		printf("%s requested status of inode %u too large!\n",__FUNCTION__, *ino);
+		return -E_NO_SPC;
+	}
+	
+	curr = *ino;
+	
+	uint32_t block_group = curr  / info->super->s_inodes_per_group;
+	
+	
+	short firstrun = 1;
+	while(block_group != ( (*ino) / info->super->s_inodes_per_group) || firstrun) {
+		if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
+			if (info->inode_cache != NULL)
+				bdesc_release(&info->inode_cache);	
+			info->inode_gdesc = block_group;
+			bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1);
+			if (!bitmap)
+				return -E_NO_SPC;
+			bdesc_retain(bitmap);
+			info->inode_cache = bitmap;
+		}
+		
+		const unsigned long * foo = (const unsigned long *)info->inode_cache->ddesc->data;
+		//assert((curr % info->super->s_inodes_per_group) == 0);
+		int bar = 0;
+		bar = find_zero_bit(foo, info->super->s_inodes_per_group/*, (curr % info->super->s_inodes_per_group)*/ );
+		if (bar < (info->super->s_inodes_per_group)) {
+			curr += bar; 
+			*ino = curr;
+			//printf("returning inode number %d\n",*ino);
+			return EXT2_FREE;
+	       	}
+		
+		firstrun = 0;
+		block_group = (block_group + 1) % info->ngroups;
+		curr = block_group * info->super->s_inodes_per_group;	
+	}
+		
+
+	return -E_NO_SPC;
+}
+
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 	Dprintf("EXT2DEBUG: %s parent is %u\n", __FUNCTION__, parent);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	inode_t ino;
+	inode_t ino = 0;
 	int r;
 	
-	//We assume that the parent inode is valid
-	
-	//TODO: Linux EXT2 uses a much more complicated inode allocation with debts and block
-	//density averages.  It would be nice to implement this eventually.
-
-	for (ino = parent+1; (ino % info->super->s_inodes_per_group) != 0; ino++) {
-		r = read_inode_bitmap(object, ino);
-		if (r == 1)
-			return ino;
-		else if (r < 0)
-			return EXT2_BAD_INO;
-	}
-
-	if ((parent % info->super->s_inodes_per_group) == 0 && parent >= info->super->s_inodes_per_group)
-		ino = parent - info->super->s_inodes_per_group;
-	else
-		ino = 1;
-
-	for (; ino < parent; ino++) {
-		r = read_inode_bitmap(object, ino);
-		if (r == 1)
-			return ino;
-		else if (r < 0)
-			return EXT2_BAD_INO;
+	ino = (parent / info->super->s_inodes_per_group) * info->super->s_inodes_per_group;
+	r = find_free_inode_block_group(object, &ino);
+	if (r != -E_NO_SPC) {
+		return ino;
 	}
 	
-	for (ino = 1; ino < info->super->s_inodes_count; ino++) {
-		r = read_inode_bitmap(object, ino);
-		if (r == 1)
-			return ino;
-		else if (r < 0)
-			return EXT2_BAD_INO;
-	}
-
 	return EXT2_BAD_INO;
-
 }
 
 static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link,
@@ -1844,7 +1804,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		   if (r < 0)
 			   goto ext2_rename_exit4;
 
-		   r = write_inode_bitmap(object, new->f_ino, EXT2_FREE, head);
+		   r = write_inode_bitmap(object, new->f_ino, 0, head);
 		   if (r < 0)
 			   goto ext2_rename_exit4;
 	   }
@@ -2558,7 +2518,7 @@ LFS_t * ext2(BD_t * block_device)
 		return NULL;
 	}
 	info->super = CALL(info->super_wb, read);
-
+	info->ngroups = info->super->s_blocks_count / info->super->s_blocks_per_group;
 	info->bitmap_cache = NULL;
 	info->inode_cache = NULL;
 	info->groups = NULL;
