@@ -1257,15 +1257,8 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 		if (r < 0)
 			return r;
 	} else {
-		new_prev_len =  8 + ((entry.name_len - 1) / 4 + 1) * 4;
-		new_dirent->rec_len = parent->f_inode.i_size - (prev_basep + new_prev_len);
-		entry.rec_len = new_prev_len;
-
-		//should be prev_basep????
-		r = ext2_write_dirent(object, parent, &entry, prev_basep, head);
-		if (r < 0)
-			return r;
-		r = ext2_write_dirent(object, parent, new_dirent, prev_basep + entry.rec_len, head); 
+		new_dirent->rec_len = EXT2_BLOCK_SIZE;
+		r = ext2_write_dirent(object, parent, new_dirent, prev_basep + entry.rec_len, head);
 		if (r < 0)
 			return r;
 	}
