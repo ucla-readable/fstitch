@@ -10,6 +10,7 @@
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/modman.h>
+#include <kfs/debug.h>
 #include <kfs/ext2_super_wb.h>
 #include <kfs/ext2_base.h>
 #include <kfs/feature.h>
@@ -289,6 +290,7 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	if (r < 0)
 		return r;	
 
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate block" : "free block");
 	r = CALL(info->ubd, write_block, info->bitmap_cache);
 	if (r < 0)
 		return r;
@@ -349,6 +351,7 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	if (r < 0)
 		return r;	
 
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate inode" : "free inode");
 	r = CALL(info->ubd, write_block, info->inode_cache);
 	if (r < 0)
 		return r;
@@ -999,8 +1002,12 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 		//add the block to the indirect pointer
 		if ((r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, head)) < 0)
 			return r;
+
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add double indirect block");
 		if ((r = CALL(info->ubd, write_block, indirect)) < 0)
 			return r;
+
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add double indirect ptr block");
 		return CALL(info->ubd, write_block, dindirect);
 	} else {
 		dindir = (uint32_t *)dindirect->ddesc->data;
@@ -1012,6 +1019,8 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 		offset = (nblocks % (nindirect)) * sizeof(uint32_t);
 		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
+
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add double indirect block");
 		return CALL(info->ubd, write_block, indirect);
 	}
 	return -E_INVAL;
@@ -1069,6 +1078,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			}
 			if ((r = chdesc_create_byte(dindirect, info->ubd, 0, sizeof(uint32_t), &blockno, head)) < 0)
 				return r;
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add first double indirect block");
 			if ((r = CALL(info->ubd, write_block, dindirect)) < 0)
 				return r;
 			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
@@ -1097,6 +1107,8 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			offset -= sizeof(uint32_t);
 		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
+
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write block ptr to indirect block");
 		r = CALL(info->ubd, write_block, indirect);
 		if (r < 0)
 			return r;
@@ -1139,7 +1151,8 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 	     
 		if ((r = chdesc_create_byte(dirblock1, info->ubd, basep, actual_rec_len, (void *) dirent, head )) < 0)
 			return r;
-	     
+
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent, normal case");	     	     
 		r = CALL(info->ubd, write_block, dirblock1);
 		if (r < 0)
 			return r;
@@ -1174,10 +1187,12 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 		if (r < 0)
 			return r;
 	     
+     		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent, overlap case 1");	     
 		r = CALL(info->ubd, write_block, dirblock1);
 		if (r < 0)
 			return r;
 
+     		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent, overlap case 2");
 		r = CALL(info->ubd, write_block, dirblock2);
 		if (r < 0)
 			return r;
@@ -1240,6 +1255,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	r = chdesc_create_init(block, info->ubd, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent to new block");
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
 		return r;
@@ -1941,6 +1957,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 			return r;
 		len = jump_basep - prev_basep;
 
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent, add jump dirent");
 		r = CALL(info->ubd, write_block, jump_block);
 		if (r < 0)
 			return r;
@@ -1951,6 +1968,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 	if ((r = chdesc_create_byte(dirblock2, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head) < 0))
 		return r;
 
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
 	return CALL(info->ubd, write_block, dirblock2);
 }
 
@@ -2083,6 +2101,7 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	if (!head)
 		return -E_INVAL;
 
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write block");
 	return CALL(info->ubd, write_block, block);
 }
 
@@ -2292,7 +2311,8 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 	r = chdesc_create_byte(new_block, info->ubd, 0, name_len, (void *) name, head);
 	if (r < 0)
 		return r;
-	
+
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add slow symlink");	
 	return CALL(info->ubd, write_block, new_block);
 }
 
@@ -2491,6 +2511,7 @@ int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, c
 	if (r < 0)
 		return r;
 
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write inode");
 	return CALL(info->ubd, write_block, bdesc);
 }
 

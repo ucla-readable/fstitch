@@ -6,6 +6,7 @@
 #include <lib/hash_map.h>
 
 #include <kfs/sched.h>
+#include <kfs/debug.h>
 #include <kfs/ext2_super_wb.h>
 
 #define SYNC_PERIOD HZ
@@ -108,6 +109,7 @@ static int ext2_super_wb_sync(EXT2mod_super_t * object, chdesc_t ** head)
 				linfo->super_block->ddesc->data + 1024, &linfo->super, head);
 	if (r < 0)
 		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write superblock");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
 	if (r < 0)
 		return r;
@@ -138,6 +140,7 @@ static int ext2_super_wb_gdesc_sync(EXT2mod_super_t * object, chdesc_t ** head)
 					linfo->groups + (i*EXT2_DESC_PER_BLOCK), head);
 		if (r < 0)
 			return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write group desc");
 		r = CALL(linfo->global_info->ubd, write_block, linfo->gdescs[i]);
 		if (r < 0)
 			return r;
