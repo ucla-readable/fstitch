@@ -702,16 +702,15 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
 		uint32_t inumber = josfs_allocate_block(object, NULL, 0, head);
-		chdesc_t * temp_head = *head;
 		bdesc_t * indirect;
 		if (inumber == INVALID_BLOCK)
 			return -E_NO_SPC;
 		indirect = josfs_lookup_block(object, inumber);
 
 		// Initialize the new indirect block
-		if ((r = chdesc_create_init(indirect, info->ubd, &temp_head)) < 0)
+		if ((r = chdesc_create_init(indirect, info->ubd, head)) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, temp_head, "init indirect block");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init indirect block");
 
 		// Initialize the structure, then point to it
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
@@ -853,27 +852,29 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		blk = NULL;
 	if (!blk)
 		goto allocate_name_exit2;
-	temp_head = *head;
-	if (chdesc_create_init(blk, info->ubd, &temp_head) < 0)
+	if (chdesc_create_init(blk, info->ubd, head) < 0)
 		goto allocate_name_exit3;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, temp_head, "init dir block");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init dir block");
 
-	/* TODO: change the order of the chdescs in this function! we "lose" the metadata update in the eventual head... */
 	dir_fdesc = (struct josfs_fdesc *) josfs_lookup_inode(object, parent);
 	assert(dir_fdesc && dir_fdesc->file);
 	dir = dir_fdesc->file;
 	updated_size = dir->f_size + JOSFS_BLKSIZE;
+	temp_head = *head;
 	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &updated_size, &temp_head);
 	josfs_free_fdesc(object, (fdesc_t *) dir_fdesc);
 	dir_fdesc = NULL;
 	dir = NULL;
 	if (r < 0)
 		goto allocate_name_exit3;
+	r = lfs_add_fork_head(temp_head);
+	assert(r >= 0);
 
 	memset(&temp_file, 0, sizeof(JOSFS_File_t));
 	strcpy(temp_file.f_name, name);
 	temp_file.f_type = type;
 
+	temp_head = *head;
 	if (chdesc_create_byte(blk, info->ubd, 0, sizeof(JOSFS_File_t), &temp_file, head) < 0)
 		goto allocate_name_exit3;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init dirent");
@@ -881,7 +882,9 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	if ((r = CALL(info->ubd, write_block, blk)) < 0)
 		goto allocate_name_exit3;
 		
-	if (josfs_append_file_block(object, pdir_fdesc, number, head) >= 0) {
+	if (josfs_append_file_block(object, pdir_fdesc, number, &temp_head) >= 0) {
+		r = lfs_add_fork_head(temp_head);
+		assert(r >= 0);
 		new_fdesc->file = malloc(sizeof(JOSFS_File_t));
 		memcpy(new_fdesc->file, &temp_file, sizeof(JOSFS_File_t));
 		new_fdesc->dirb = blk->number;
@@ -974,6 +977,10 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 		return -E_INVAL;
 	}
 
+	/* WARNING: JOSFS has no inodes, so we write a copy of the combined
+	 * inode/dirent before freeing the old one in order to avoid losing the
+	 * file. But this is not soft updates safe, as we might crash and later
+	 * delete one of the files, marking its resources as free. Oh well. */
 	offset = new->index;
 	if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(JOSFS_File_t), &temp_file, head)) < 0) {
 		josfs_free_fdesc(object, newfdesc);
@@ -1343,13 +1350,16 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_atime;
 		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), data, head)) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "set file mtime");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, (id == KFS_feature_mtime.id) ? "set file mtime" : "set file atime");
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
 			return r;
 
-		f->file->f_mtime = *((uint32_t *) data);
+		if (id == KFS_feature_mtime.id)
+			f->file->f_mtime = *((uint32_t *) data);
+		else
+			f->file->f_atime = *((uint32_t *) data);
 		return 0;
 	}
 

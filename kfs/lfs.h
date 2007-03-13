@@ -11,7 +11,12 @@
 #include <kfs/fdesc.h>
 #include <kfs/feature.h>
 #include <kfs/inode.h>
+#include <kfs/opgroup.h>
 #include <lib/dirent.h>
+
+/* lfs_add_fork_head() should be called inside an LFS operation for each
+ * chdesc graph fork head not reachable from *head upon return */
+#define lfs_add_fork_head(head) opgroup_finish_head(head)
 
 struct LFS;
 typedef struct LFS LFS_t;
