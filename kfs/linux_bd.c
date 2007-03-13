@@ -719,7 +719,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	BD_t * bd = malloc(sizeof(*bd));
 	int r;
 	
-#ifndef BIO_RW_FUA
+#if !BIO_RW_FUA
 	printk("Warning: not compiled with BIO_RW_FUA: writes will not be safe unless the disk write cache is disabled\n");
 #endif
 	
