@@ -274,7 +274,7 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 		return -1;
 	}
 
-	uint32_t block_group = inode_no  / info->super->s_inodes_per_group;
+	uint32_t block_group = (inode_no - 1)  / info->super->s_inodes_per_group;
 	if(info->inode_gdesc != block_group || info->inode_cache == NULL) {
 		if (info->inode_cache != NULL)
 			bdesc_release(&info->inode_cache);	
@@ -286,17 +286,18 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 		info->inode_cache = bitmap;
 	}
 
-	uint32_t inode_in_group = inode_no  % info->super->s_inodes_per_group;
+	uint32_t inode_in_group = (inode_no - 1)  % info->super->s_inodes_per_group;
 
 	// does it already have the right value? 
 	if (((uint32_t *) info->inode_cache->ddesc->data)[(inode_in_group) / 32] & (1 << (inode_in_group % 32)))
 	{
-	       if (value)
-		      return 0;
+		if (value)
+		       return 0;
+	} else { 
+		if (!value)
+		       return 0;
 	}
-	else if (!value)
-	       return 0;
-
+	
 	// bit chdescs take offset in increments of 32 bits 
 	r = chdesc_create_bit(info->inode_cache, info->ubd, (inode_in_group) / 32, 1 << (inode_in_group % 32), head);
 	if (r < 0)
@@ -306,12 +307,16 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	r = CALL(info->ubd, write_block, info->inode_cache);
 	if (r < 0)
 		return r;
-	
-	r = CALL(info->super_wb, inodes, -1);
+	int inode_delta = 1;
+	if (value == 0) 
+		inode_delta = -1;
+		
+		
+	r = CALL(info->super_wb, inodes, inode_delta);
 	if (r < 0)
 		return r;
 
-	r = CALL(info->super_wb, write_gdesc, block_group, 0, -1, 0);
+	r = CALL(info->super_wb, write_gdesc, block_group, 0, inode_delta, 0);
 	return r;
 }
 
@@ -1255,7 +1260,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 		int bar = 0;
 		bar = find_zero_bit(foo, info->super->s_inodes_per_group/*, (curr % info->super->s_inodes_per_group)*/ );
 		if (bar < (info->super->s_inodes_per_group)) {
-			curr += bar; 
+			curr += bar + 1; 
 			*ino = curr;
 			//printf("returning inode number %d\n",*ino);
 			return EXT2_FREE;
@@ -2010,7 +2015,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		r = write_inode_bitmap(object, file->f_ino, 0, head);
 		if (r < 0)
 			goto remove_name_exit;
-		
 		// Truncate the directory
 		if (file->f_type == TYPE_DIR) {
 			uint32_t number, nblocks, j;
