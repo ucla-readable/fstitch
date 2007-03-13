@@ -16,10 +16,6 @@
 #include <kfs/ufs_cg_wb.h>
 #include <kfs/ufs_super_wb.h>
 
-#ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in __FILE__
-#endif
-
 #define UFS_BASE_DEBUG 0
 
 #if UFS_BASE_DEBUG

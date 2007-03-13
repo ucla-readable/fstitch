@@ -6,7 +6,7 @@
 #include <kfs/lfs.h>
 #include <kfs/ext2_super.h>
 
-/* This file is derived from JOS' kfs/josfs_base.h */
+/* This file is derived from kfs/josfs_base.h */
 
 
 /*
@@ -17,12 +17,6 @@
 #define EXT2_DINDIRECT			(EXT2_NINDIRECT + 1)
 #define EXT2_TINDIRECT			(EXT2_DINDIRECT + 1)
 #define EXT2_N_BLOCKS			(EXT2_TINDIRECT + 1)
-
-/*
- * Define EXT2_PREALLOCATE to preallocate data blocks for expanding files
- */
-#define EXT2_PREALLOCATE		0
-#define EXT2_DEFAULT_PREALLOC_BLOCKS    8
 
 /*
  * Special inode numbers
@@ -252,12 +246,9 @@ struct EXT2_File {
 	
 	EXT2_inode_t f_inode;		 //inode
 	uint8_t f_type;		 //file type
-	uint8_t	f_prealloc_count; //Number of preallocated blocks remaining
 	inode_t	f_ino;		 //inode number
 	uint32_t f_nopen;
 	uint32_t f_lastblock;
-	uint32_t f_prealloc_block[EXT2_PREALLOCATE]; //block numbers of preallocated blocks
-
 };
 typedef struct EXT2_File EXT2_File_t;
 typedef struct EXT2_File ext2_fdesc_t;

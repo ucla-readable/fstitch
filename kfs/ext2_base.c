@@ -15,10 +15,6 @@
 #include <kfs/ext2_base.h>
 #include <kfs/feature.h>
 
-#ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in ext2_base.c
-#endif
-
 #define EXT2_BASE_DEBUG 0
 
 #if EXT2_BASE_DEBUG
@@ -265,7 +261,6 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	if (!head)
 		return -1;
 
-
 	//check to make sure we're not writing too soon...
 
 	if (inode_no >= info->super->s_inodes_count) 
@@ -372,26 +367,12 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	chdesc_t * prev_head;
 	uint32_t lastblock = 0;; 
-	uint32_t blockno, block_group, prealloc_blockno;
-	int r, i;
+	uint32_t blockno, block_group;
+	int r;
 
 	if (!head || !f)
 		return INVALID_BLOCK;
-	if (f->f_prealloc_count > 0) {
-		//FIXME this code could just use the prealloc_count directly to index the array
-		//but if the array is sorted then we'd like to use them in sorted order to prevent
-		//fragmentation.
-		for(i = 0; i < EXT2_PREALLOCATE; i++) {
-			if(f->f_prealloc_block[i] != INVALID_BLOCK) {
-				blockno = f->f_prealloc_block[i];
-				--(f->f_prealloc_count);
-				f->f_prealloc_block[i] = INVALID_BLOCK;
-				goto return_block;
-			}
-		}
-	}
 	
 	if(f->f_inode.i_size == 0)
 		goto inode_search;
@@ -410,26 +391,8 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	//there is no check to make sure that these blocks are all in the same block group
 	while(blockno - lastblock < 32) {
 		blockno++;
-		if(read_block_bitmap(object, blockno) == EXT2_FREE) {
-			prev_head = *head;
-			if(write_block_bitmap(object, blockno, 1, head) < 0)
-				goto bad_block;
-			//Try to preallocate some blocks near blockno
-			prealloc_blockno = blockno + 1;
-			for(i = 0; i < EXT2_PREALLOCATE; i++, prealloc_blockno++) {
-				if(read_block_bitmap(object, prealloc_blockno) == EXT2_FREE) {
-					f->f_prealloc_block[i] = prealloc_blockno;
-					if(write_block_bitmap(object, prealloc_blockno, 1, head) < 0)
-						break;
-					*head = prev_head;
-					f->f_prealloc_count++;
-				} else {
-					break;
-				}
-			}
-
-			goto return_block;
-		}
+		if(read_block_bitmap(object, blockno) == EXT2_FREE)
+			goto claim_block;
 	}
 
 inode_search:	
@@ -441,26 +404,20 @@ inode_search:
 		r = ext2_find_free_block(object, &blockno);
 		if (r < 0)
 			break;
-		if (r == EXT2_FREE) {
-			write_block_bitmap(object, blockno, 1, head);
-			goto return_block;
-		}
+		if (r == EXT2_FREE)
+			goto claim_block;
 		blockno++;
 	}
 
 	return INVALID_BLOCK;
 
-return_block:
-//	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
-//	r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
-//	if(r < 0)
-//		goto bad_block;
+claim_block:
+	if(write_block_bitmap(object, blockno, 1, head) < 0) {
+		write_block_bitmap(object, blockno, 0, head);
+		return INVALID_BLOCK;
+	}
 	f->f_lastblock = blockno;
 	return blockno;
-	
-bad_block:
-	write_block_bitmap(object, blockno, 0, head);
-	return INVALID_BLOCK;
 }
 
 static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number)
@@ -502,7 +459,6 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	fd->f_ino = ino;
 	fd->f_nopen = 1;
 	fd->f_lastblock = 0;
-	fd->f_prealloc_count = 0;
 
 	r = ext2_get_inode(info, ino, &(fd->f_inode));
 	if(r < 0)
@@ -527,25 +483,15 @@ static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 	Dprintf("EXT2DEBUG: ext2_free_fdesc %p\n", fdesc);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) fdesc;
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	int i;
-	chdesc_t * head = NULL;
 	
 	if (f) {
 		if(f->f_nopen > 1) {
 			f->f_nopen--;
 			return;
 		}
-		for(i = 0; i < EXT2_PREALLOCATE && f->f_prealloc_count > 0; i++) {
-			if(f->f_prealloc_block[i] != INVALID_BLOCK) {	
-				write_block_bitmap(object, f->f_prealloc_block[i], 0, &(head));
-				f->f_prealloc_count--;
-				f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-			}
-		}
 		hash_map_erase(info->filemap, (void *) f->f_ino);
 		free(f);
 	}
-
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
@@ -1368,7 +1314,6 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		newf->f_lastblock = 0;
 		newf->f_ino = ino;
 		newf->f_type = file_type;
-		newf->f_prealloc_count = 0;
 
 		memset(&newf->f_inode, 0, sizeof(struct EXT2_inode));
 		

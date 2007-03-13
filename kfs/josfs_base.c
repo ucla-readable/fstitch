@@ -13,10 +13,6 @@
 #include <kfs/modman.h>
 #include <kfs/josfs_base.h>
 
-#ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in josfs_base.c
-#endif
-
 #define JOSFS_BASE_DEBUG 0
 
 #if JOSFS_BASE_DEBUG

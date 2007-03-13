@@ -13,11 +13,6 @@
 #include <kfs/revision.h>
 #include <kfs/josfs_base.h>
 
-/* We can remove this part once we no longer format as JOS by default */
-#ifdef KUDOS_INC_FS_H
-#error inc/fs.h got included in mem_bd.c
-#endif
-
 #ifdef __KERNEL__
 #include <linux/vmalloc.h>
 #endif
