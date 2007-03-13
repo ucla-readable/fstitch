@@ -576,7 +576,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 	int i, r;
 	uint32_t nblocks;
 	uint32_t nlinks;
-	chdesc_t ** save_head;
+	chdesc_t * save_head;
 
 	if (link_supported) {
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
@@ -600,7 +600,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 			return -E_INVAL;
 		}
 
-		save_head = prev_head;
+		save_head = *prev_head;
 
 		r = CALL(state->lfs, free_block, f, number, prev_head);
 		if (r < 0) {
@@ -608,7 +608,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 			return r;
 		}
 
-		prev_head = save_head;
+		*prev_head = save_head;
 	}
 
 	CALL(state->lfs, free_fdesc, f);
