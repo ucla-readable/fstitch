@@ -1907,26 +1907,10 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep;
 	uint8_t minlinks = 1;
 	
-	//Lookup the inode of name
-	/*do {
-	      prev_prev_basep = prev_basep;
-	      prev_basep = basep;
-	      r = ext2_get_disk_dirent(object, pfile, &basep, &entry);
-	      if (r == 0  && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
-		     file = (ext2_fdesc_t *) ext2_lookup_inode(object, entry.inode);
-		     if (!file)
-			    goto remove_name_exit;
-		     break;
-	      }
-	} while (r >= 0);*/
 	r = dir_lookup(object, pfile, name, &basep, &prev_basep, &prev_prev_basep, &file);
 	if (r < 0)
 	      goto remove_name_exit;
 	
-	//r = dir_lookup(object, pfile, name, &basep, &file);
-	//if (r < 0 || file == NULL)
-	//	goto remove_name_exit;
-
 	if (file->f_type == TYPE_DIR) {
 	      if (file->f_inode.i_links_count > 2 && !strcmp(name, "..")) {
 		     r = -E_NOT_EMPTY;
@@ -1956,10 +1940,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	}
 	
 	if (file->f_inode.i_links_count == minlinks) {
-
-		r = write_inode_bitmap(object, file->f_ino, 0, head);
-		if (r < 0)
-			goto remove_name_exit;
 		// Truncate the directory
 		if (file->f_type == TYPE_DIR) {
 			uint32_t number, nblocks, j;
@@ -1972,7 +1952,6 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 					r = -E_INVAL;
 					goto remove_name_exit;
 				}
-				
 
 				r = ext2_free_block(object, (fdesc_t *) file, number, head);
 				if (r < 0)
@@ -1981,10 +1960,15 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 			}
 		}
 		
-		//memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
-		//r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-		//if (r < 0)
-		//	goto remove_name_exit;
+		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
+		r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+		if (r < 0)
+			goto remove_name_exit;
+
+		r = write_inode_bitmap(object, file->f_ino, 0, head);
+		if (r < 0)
+			goto remove_name_exit;
+		
 
 	} else {
 	      file->f_inode.i_links_count--;
