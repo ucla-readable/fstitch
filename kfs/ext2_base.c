@@ -242,11 +242,11 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	if (r < 0)
 		return r;
 
-	r = CALL(info->super_wb, blocks, -1);
+	r = CALL(info->super_wb, blocks, value ? -1 : 1);
 	if (r < 0)
 		return r;
 
-	r = CALL(info->super_wb, write_gdesc, block_group, -1, 0, 0);
+	r = CALL(info->super_wb, write_gdesc, block_group, value ? -1 : 1, 0, 0);
 	return r;
 }
 
@@ -1942,7 +1942,8 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	if (file->f_inode.i_links_count == minlinks) {
 		// Truncate the directory
 		if (file->f_type == TYPE_DIR) {
-			uint32_t number, nblocks, j;
+			uint32_t number, nblocks, j, group;
+			group = (file->f_ino - 1) / info->super->s_inodes_per_group;
 			nblocks = ext2_get_file_numblocks(object, (fdesc_t *) file);
 			
 			for (j = 0; j < nblocks; j++) {
@@ -1958,6 +1959,9 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 					goto remove_name_exit;
 				*head = prev_head;
 			}
+			r = CALL(info->super_wb, write_gdesc, group, 0, 0, -1);
+			if(r < 0)
+				goto remove_name_exit;				
 		}
 		
 		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
