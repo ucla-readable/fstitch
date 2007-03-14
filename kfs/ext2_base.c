@@ -648,7 +648,7 @@ static uint32_t ext2_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	//return f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512);
 	if (f->f_inode.i_size == 0)
 		return 0;
-	return (f->f_inode.i_size / (EXT2_BLOCK_SIZE+1)) + 1;
+	return ((f->f_inode.i_size + EXT2_BLOCK_SIZE - 1) / EXT2_BLOCK_SIZE);
 }
 
 static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offset)
