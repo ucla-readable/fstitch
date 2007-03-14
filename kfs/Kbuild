@@ -44,6 +44,7 @@ KKFSD_KFS_OBJS := \
               kernel_opgroup_scopes.o \
               bdesc.o \
               blockman.o \
+              block_alloc.o \
               chdesc.o \
               chdesc_util.o \
               revision.o \
