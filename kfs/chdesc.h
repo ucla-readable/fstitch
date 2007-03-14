@@ -119,8 +119,15 @@ struct chdepdesc {
 	} before, after;
 };
 
+/* If the callback returns 0, then proceed and clear the weak reference.
+ * If it returns any other value, then do not clear the weak reference:
+ * the callback has done that itself, and the storage may now be gone. */
+typedef int (*chdesc_satisfy_callback_t)(chdesc_t ** location, void * data);
+
 struct chrefdesc {
 	chdesc_t ** desc;
+	chdesc_satisfy_callback_t callback;
+	void * callback_data;
 	chrefdesc_t * next;
 };
 
@@ -203,9 +210,9 @@ int chdesc_rollback(chdesc_t * chdesc);
 int chdesc_satisfy(chdesc_t ** chdesc);
 
 /* create and remove weak references to a chdesc */
-int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location);
-void chdesc_weak_forget(chdesc_t ** location);
-void chdesc_weak_release(chdesc_t ** location);
+int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_callback_t callback, void * callback_data);
+int chdesc_weak_forget(chdesc_t ** location, bool callback);
+int chdesc_weak_release(chdesc_t ** location, bool callback);
 
 /* destroy a chdesc, actually freeing it - be careful calling this function */
 void chdesc_destroy(chdesc_t ** chdesc);

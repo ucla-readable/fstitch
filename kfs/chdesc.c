@@ -115,7 +115,7 @@ static int ensure_bdesc_has_overlaps(bdesc_t * block)
 	if(r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "overlaps");
-	r = chdesc_weak_retain(chdesc, &block->ddesc->overlaps);
+	r = chdesc_weak_retain(chdesc, &block->ddesc->overlaps, NULL, NULL);
 	if(r < 0)
 	{
 		chdesc_destroy(&chdesc);
@@ -161,7 +161,8 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	chdesc->noop.bit_changes = block->ddesc->bit_changes;
 	chdesc->noop.hash_key = key;
 	
-	if(chdesc_weak_retain(chdesc, (chdesc_t **) &elt->val) < 0)
+	/* FIXME: we could use the weak reference callbacks here... */
+	if(chdesc_weak_retain(chdesc, (chdesc_t **) &elt->val, NULL, NULL) < 0)
 	{
 		hash_map_erase(block->ddesc->bit_changes, key);
 		chdesc_destroy(&chdesc);
@@ -1349,7 +1350,7 @@ static void merge_rbs(bdesc_t * block)
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, merger, CHDESC_OVERLAP);
 	merger->flags &= ~CHDESC_OVERLAP;
 	assert(!block->ddesc->nrb);
-	r = chdesc_weak_retain(merger, &block->ddesc->nrb);
+	r = chdesc_weak_retain(merger, &block->ddesc->nrb, NULL, NULL);
 	assert(r >= 0);
 	
 	/* convert non-merger data chdescs into noops so that pointers to them
@@ -1790,7 +1791,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		chdesc->flags &= ~CHDESC_ROLLBACK;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
 		assert(!block->ddesc->nrb);
-		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb)) < 0)
+		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb, NULL, NULL)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
@@ -2306,7 +2307,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 	{
 		/* in theory, this is all that is necessary... */
 		if(*chdesc->weak_refs->desc == chdesc)
-			chdesc_weak_release(chdesc->weak_refs->desc);
+			chdesc_weak_release(chdesc->weak_refs->desc, 1);
 		else
 		{
 			/* ...but check for this anyway */
@@ -2428,14 +2429,20 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	return 0;
 }
 
-int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
+int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_callback_t callback, void * callback_data)
 {
 	if(*location && *location == chdesc)
 	{
 		chrefdesc_t * ref = chdesc->weak_refs;
 		for(; ref; ref = ref->next)
 			if(ref->desc == location)
+			{
+				if(ref->callback)
+					return -E_BUSY;
+				ref->callback = callback;
+				ref->callback_data = callback_data;
 				return 0;
+			}
 	}
 	
 	if(chdesc)
@@ -2445,20 +2452,24 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location)
 			return -E_NO_MEM;
 		
 		ref->desc = location;
+		ref->callback = callback;
+		ref->callback_data = callback_data;
 		ref->next = chdesc->weak_refs;
 		chdesc->weak_refs = ref;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, location);
 	}
 	
+	/* should we even really allow this? */
 	if(*location && *location != chdesc)
-		chdesc_weak_release(location);
+		chdesc_weak_release(location, 0);
 	*location = chdesc;
 	
 	return 0;
 }
 
-void chdesc_weak_forget(chdesc_t ** location)
+int chdesc_weak_forget(chdesc_t ** location, bool callback)
 {
+	int value = 0;
 	if(*location)
 	{
 		chrefdesc_t ** prev = &(*location)->weak_refs;
@@ -2471,18 +2482,23 @@ void chdesc_weak_forget(chdesc_t ** location)
 		if(!scan)
 		{
 			printf("%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
-			return;
+			return -E_BUSY;
 		}
 		*prev = scan->next;
+		if(callback && scan->callback)
+			value = scan->callback(location, scan->callback_data);
 		free(scan);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, *location, location);
 	}
+	return value;
 }
 
-void chdesc_weak_release(chdesc_t ** location)
+int chdesc_weak_release(chdesc_t ** location, bool callback)
 {
-	chdesc_weak_forget(location);
-	*location = NULL;
+	int value = chdesc_weak_forget(location, callback);
+	if(!value)
+		*location = NULL;
+	return value;
 }
 
 void chdesc_destroy(chdesc_t ** chdesc)

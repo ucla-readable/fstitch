@@ -263,8 +263,8 @@ static int journal_bd_grab_slot(BD_t * object)
 		if(!info->cr_retain[scan].cr && info->cr_retain[scan].seq != info->trans_seq)
 		{
 			if(info->jdata_head)
-				chdesc_weak_release(&info->jdata_head);
-			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr);
+				chdesc_weak_release(&info->jdata_head, 0);
+			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
 			if(r < 0)
 				return r;
 			Dprintf("%s(): using unused transaction slot %d (sequence %u)\n", __FUNCTION__, scan, info->trans_seq);
@@ -285,10 +285,10 @@ static int journal_bd_grab_slot(BD_t * object)
 	do {
 		if(info->cr_retain[scan].seq != info->trans_seq)
 		{
-			r = chdesc_weak_retain(info->cr_retain[scan].cr, &info->jdata_head);
+			r = chdesc_weak_retain(info->cr_retain[scan].cr, &info->jdata_head, NULL, NULL);
 			if(r < 0)
 				return r;
-			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr);
+			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
 			if(r < 0)
 				return r;
 			Dprintf("%s(): reusing currently used transaction slot %d (sequence %u, old %u)\n", __FUNCTION__, scan, info->trans_seq, info->cr_retain[scan].seq);
@@ -489,7 +489,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	info->hold->flags &= ~CHDESC_SAFE_AFTER;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, info->hold, CHDESC_SAFE_AFTER);
 	/* set the new previous commit record */
-	r = chdesc_weak_retain(head, &info->prev_cr);
+	r = chdesc_weak_retain(head, &info->prev_cr, NULL, NULL);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	
@@ -505,7 +505,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	/* set the new previous cancellation record */
-	r = chdesc_weak_retain(head, &info->prev_cancel);
+	r = chdesc_weak_retain(head, &info->prev_cancel, NULL, NULL);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	
@@ -881,7 +881,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		bdesc_release(&number_block);
 	}
 	
-	r = chdesc_weak_retain(info->done, &info->cr_retain[transaction_start / info->trans_total_blocks].cr);
+	r = chdesc_weak_retain(info->done, &info->cr_retain[transaction_start / info->trans_total_blocks].cr, NULL, NULL);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	info->cr_retain[transaction_start / info->trans_total_blocks].seq = cr->seq;
@@ -899,7 +899,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		if(r < 0)
 			kpanic("Holy Mackerel!");
 		/* set the new previous cancellation record */
-		r = chdesc_weak_retain(head, &info->prev_cancel);
+		r = chdesc_weak_retain(head, &info->prev_cancel, NULL, NULL);
 		if(r < 0)
 			kpanic("Holy Mackerel!");
 		/* clean up the transaction state */
@@ -1123,12 +1123,12 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 			}
 			modman_dec_bd(info->journal, bd);
 			info->journal = NULL;
-			chdesc_weak_release(&info->jdata_head);
-			chdesc_weak_release(&info->prev_cr);
-			chdesc_weak_release(&info->prev_cancel);
+			chdesc_weak_release(&info->jdata_head, 0);
+			chdesc_weak_release(&info->prev_cr, 0);
+			chdesc_weak_release(&info->prev_cancel, 0);
 			for(i = 0; i != info->cr_count; i++)
 				if(info->cr_retain[i].cr)
-					chdesc_weak_release(&info->cr_retain[i].cr);
+					chdesc_weak_release(&info->cr_retain[i].cr, 0);
 			sfree(info->cr_retain, info->cr_count * sizeof(*info->cr_retain));
 			info->cr_retain = NULL;
 			info->cr_count = 0;

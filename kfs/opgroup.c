@@ -103,7 +103,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 			goto error_top_keep;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
 	}
-	if(chdesc_weak_retain(scope->bottom, &copy->bottom) < 0)
+	if(chdesc_weak_retain(scope->bottom, &copy->bottom, NULL, NULL) < 0)
 		goto error_top_keep;
 	
 	/* iterate over opgroups and increase reference counts */
@@ -144,7 +144,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	}
 	hash_map_destroy(copy->id_map);
 	
-	chdesc_weak_release(&copy->bottom);
+	chdesc_weak_release(&copy->bottom, 0);
   error_top_keep:
 	if(copy->top_keep)
 		chdesc_satisfy(&copy->top_keep);	
@@ -183,7 +183,7 @@ void opgroup_scope_destroy(opgroup_scope_t * scope)
 	
 	if(scope->top_keep)
 		chdesc_satisfy(&scope->top_keep);
-	chdesc_weak_release(&scope->bottom);
+	chdesc_weak_release(&scope->bottom, 0);
 	free(scope);
 }
 
@@ -238,13 +238,13 @@ opgroup_t * opgroup_create(int flags)
 	if(chdesc_create_noop_list(NULL, &op->tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail, "tail");
-	if(chdesc_weak_retain(op->tail, &op->tail) < 0)
+	if(chdesc_weak_retain(op->tail, &op->tail, NULL, NULL) < 0)
 		goto error_tail;
 	
 	if(chdesc_create_noop_list(NULL, &op->head, op->head_keep, NULL) < 0)
 		goto error_tail;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head, "head");
-	if(chdesc_weak_retain(op->head, &op->head) < 0)
+	if(chdesc_weak_retain(op->head, &op->head, NULL, NULL) < 0)
 		goto error_head;
 	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
@@ -395,9 +395,9 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		bottom = NULL;
 	}
 	
-	if(chdesc_weak_retain(bottom, &current_scope->bottom) < 0)
+	if(chdesc_weak_retain(bottom, &current_scope->bottom, NULL, NULL) < 0)
 	{
-		r = chdesc_weak_retain(save_top, &current_scope->top);
+		r = chdesc_weak_retain(save_top, &current_scope->top, NULL, NULL);
 		assert(r >= 0);
 		goto error_bottom;
 	}
@@ -551,8 +551,8 @@ int opgroup_abandon(opgroup_t ** opgroup)
 		}
 		if(state->opgroup->head_keep)
 			chdesc_satisfy(&state->opgroup->head_keep);
-		chdesc_weak_release(&state->opgroup->head);
-		chdesc_weak_release(&state->opgroup->tail);
+		chdesc_weak_release(&state->opgroup->head, 0);
+		chdesc_weak_release(&state->opgroup->tail, 0);
 		free(state->opgroup);
 	}
 

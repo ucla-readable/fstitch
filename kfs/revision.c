@@ -382,7 +382,7 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 			 * chdesc is not allowed while it is in flight (and
 			 * merges are attempted to the block's NRB chdesc) */
 			if(scan == block->ddesc->nrb)
-				chdesc_weak_release(&block->ddesc->nrb);
+				chdesc_weak_release(&block->ddesc->nrb, 0);
 #endif
 		}
 		else if(!chdesc_is_rollbackable(scan))
