@@ -390,6 +390,7 @@ static int kfs_debug_io_write(void * data, uint32_t size);
 static void kfs_debug_io_command(void * arg);
 /* NOTE: also the non-static void kfs_debug_dbwait(const char *, bdesc_t *) */
 
+static struct proc_dir_entry * proc_entry;
 static uint8_t * proc_buffer;
 static off_t proc_buffer_rpos;
 static off_t proc_buffer_wpos;
@@ -447,6 +448,12 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 
 static void kfs_debug_shutdown(void * ignore)
 {
+	if(atomic_read(proc_entry->count) > 0)
+	{
+		printf("Please kill /proc/" DEBUG_PROC_FILENAME " reader.\n");
+		while (atomic_read(proc_entry->count) > 0)
+			jsleep(HZ / 4);
+	}
 	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
 	vfree(proc_buffer);
 	proc_buffer = NULL;
@@ -469,7 +476,8 @@ static int kfs_debug_io_init(void)
 	proc_buffer_wpos = 0;
 	proc_buffer_rpos = 0;
 	
-	if(!create_proc_read_entry(DEBUG_PROC_FILENAME, 0444, &proc_root, kfs_debug_proc_read, NULL))
+	proc_entry = create_proc_read_entry(DEBUG_PROC_FILENAME, 0444, &proc_root, kfs_debug_proc_read, NULL);
+	if(!proc_entry)
 	{
 		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
 		return -E_UNSPECIFIED;
