@@ -374,15 +374,13 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
 {
 	chdepdesc_t * dep;
-	if(head->flags & CHDESC_DATA)
+	if(head == tail || (head->flags & CHDESC_DATA))
 		return;
 	if(head->type != NOOP)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
 		head->flags |= CHDESC_DATA;
 	}
-	if(head == tail)
-		return;
 	for(dep = head->befores; dep; dep = dep->before.next)
 		uhfs_mark_data(dep->before.desc, tail);
 }
