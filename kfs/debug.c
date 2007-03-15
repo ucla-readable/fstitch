@@ -448,7 +448,7 @@ void kfs_debug_dbwait(const char * function, bdesc_t * block)
 
 static void kfs_debug_shutdown(void * ignore)
 {
-	if(atomic_read(proc_entry->count) > 0)
+	if(atomic_read(&proc_entry->count) > 0)
 	{
 		printf("Please kill /proc/" DEBUG_PROC_FILENAME " reader.\n");
 		while (atomic_read(proc_entry->count) > 0)
