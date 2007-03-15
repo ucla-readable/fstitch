@@ -18,6 +18,8 @@
 
 /* Set to count change descriptors by type and display periodic output */
 #define COUNT_CHDESCS 0
+/* Set for count to be a total instead of the current */
+#define COUNT_CHDESCS_IS_TOTAL 0
 
 /* Change descriptor multigraphs allow more than one dependency between the same
  * two change descriptors. This currently saves us the trouble of making sure we
@@ -1825,6 +1827,14 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
 }
 
+static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * overlap)
+{
+	if(head && head != overlap && !(head->flags & CHDESC_INFLIGHT))
+		if(head->befores || head->flags & CHDESC_FUTURE_BEFORES)
+			return 0;
+	return 1;
+}
+
 #if CHDESC_BIT_MERGE_OVERLAP
 static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
 {
@@ -1849,14 +1859,18 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	else
 		return 0;
 	
-	if(*head && *head != overlap && !((*head)->flags & CHDESC_INFLIGHT))
-		if((*head)->befores || (*head)->flags & CHDESC_FUTURE_BEFORES)
-			return 0;
+	if(!bit_merge_overlap_ok_head(*head, overlap))
+		return 0;
 	
 	if(overlap->block->ddesc->overlaps)
 		for(dep = overlap->block->ddesc->overlaps->befores; dep; dep = dep->before.next)
 		{
 			chdesc_t * before = dep->before.desc;
+#if CHDESC_RB_NRB_READY
+			/* nrb is guaranteed to not depend on overlap */
+			if(before == overlap->block->ddesc->nrb)
+				continue;
+#endif
 			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
 				continue;
 			if(chdesc_overlap_check(overlap, before))
@@ -1886,7 +1900,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc_t * chdesc;
 	chdesc_t * bit_changes = NULL;
 	int r;
-	
+
 	r = chdesc_create_merge(block, owner, *head, head);
 	if(r < 0)
 		return r;
@@ -1915,6 +1929,13 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		else if(r == 1)
 			return 0;
 	}
+# if CHDESC_NRB
+	else if(block->ddesc->all_changes == block->ddesc->nrb && !block->ddesc->nrb->ddesc_next && bit_merge_overlap_ok_head(*head, block->ddesc->nrb))
+	{
+		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
+	}
+# endif
 #endif
 	
 	chdesc = malloc(sizeof(*chdesc));
@@ -2574,7 +2595,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	if((*chdesc)->block)
 		bdesc_release(&(*chdesc)->block);
 	
-#if COUNT_CHDESCS
+#if COUNT_CHDESCS && !COUNT_CHDESCS_IS_TOTAL
 	chdesc_counts[(*chdesc)->type]--;
 	dump_counts();
 #endif
