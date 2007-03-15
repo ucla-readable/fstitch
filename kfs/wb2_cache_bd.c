@@ -7,6 +7,7 @@
 #include <lib/stdlib.h>
 #include <lib/string.h>
 
+#include <kfs/kfsd.h>
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/modman.h>
@@ -21,6 +22,9 @@
 #define DEBUG_TIMING 0
 #include <kfs/kernel_timing.h>
 KERNEL_TIMING(wait);
+
+/* useful for looking at chdesc graphs */
+#define DELAY_FLUSH_UNTIL_EXIT 0
 
 /* each block in the cache has an lru_slot, and the dirty blocks are
  * hooked up using the dirty links in addition to the all links */
@@ -225,6 +229,11 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 	chdesc_t * chdesc;
 	int r;
 	
+#if DELAY_FLUSH_UNTIL_EXIT
+	if(kfsd_is_running())
+		return FLUSH_NONE;
+#endif
+
 	if(delay)
 		*delay = 0;
 	
