@@ -4,7 +4,6 @@
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/types.h>
-#include <lib/memdup.h>
 #include <lib/stdarg.h>
 
 #include <kfs/debug.h>
@@ -1676,10 +1675,25 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->owner = owner;		
 	chdesc->block = block;
 	chdesc->type = BYTE;
+	
 	if(data_required)
 	{
 		chdesc->byte.offset = offset;
 		chdesc->byte.length = length;
+		chdesc->byte.data = malloc(length);
+		if(!chdesc->byte.data)
+		{
+			free(chdesc);
+			return -E_NO_MEM;
+		}
+		if(data)
+			memcpy(chdesc->byte.data, data, length);
+		else
+			memset(chdesc->byte.data, 0, length);
+#if CHDESC_BYTE_SUM
+		chdesc->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[offset], length);
+		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, length);
+#endif
 	}
 	else
 	{
@@ -1688,23 +1702,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		 * Leave 'offset' and 'length' as is to copy source data. */
 		chdesc->byte.offset = 0;
 		chdesc->byte.length = block->ddesc->length;
-	}
-	
-	if(data_required)
-	{
-		chdesc->byte.data = data ? memdup(data, length) : calloc(1, length);
-		if(!chdesc->byte.data)
-		{
-			free(chdesc);
-			return -E_NO_MEM;
-		}
-#if CHDESC_BYTE_SUM
-		chdesc->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[offset], length);
-		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, length);
-#endif
-	}
-	else
-	{
 		chdesc->byte.data = NULL;
 #if CHDESC_BYTE_SUM
 		chdesc->byte.old_sum = 0;
