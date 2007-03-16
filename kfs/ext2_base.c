@@ -1483,7 +1483,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	uint32_t blocknum, pointers_per_block;
 	bdesc_t * block_desc, * double_block_desc;
-	uint32_t * inode_nums,* double_inode_nums, indir_ptr, double_indir_ptr;
+	uint32_t * block_nums,* double_block_nums, indir_ptr, double_indir_ptr;
 	int r;
 	uint32_t target = INVALID_BLOCK;
 
@@ -1515,8 +1515,8 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_NINDIRECT], 1));
 		if (!block_desc)
 			return INVALID_BLOCK;      
-		inode_nums = (uint32_t *)block_desc->ddesc->data;
-		target = inode_nums[blocknum];
+		block_nums = (uint32_t *)block_desc->ddesc->data;
+		target = block_nums[blocknum];
 
 		if (blocknum == 0)
 		{
@@ -1549,14 +1549,14 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_DINDIRECT], 1));
 		if (!block_desc)
 			return INVALID_BLOCK;
-		inode_nums = (uint32_t *)block_desc->ddesc->data;
-		indir_ptr = inode_nums[blocknum / pointers_per_block];
+		block_nums = (uint32_t *)block_desc->ddesc->data;
+		indir_ptr = block_nums[blocknum / pointers_per_block];
 		double_block_desc = CALL(info->ubd, read_block, indir_ptr, 1);
 		if (!block_desc)
 			return INVALID_BLOCK;
-		double_inode_nums = (uint32_t *)double_block_desc->ddesc->data;
+		double_block_nums = (uint32_t *)double_block_desc->ddesc->data;
 		double_indir_ptr = (blocknum % pointers_per_block);
-		target = double_inode_nums[double_indir_ptr];
+		target = double_block_nums[double_indir_ptr];
 
 		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
 			file->f_inode.i_size -= EXT2_BLOCK_SIZE;
