@@ -1,5 +1,5 @@
 OBJDIRS += util
-BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/leakfilt $(UTILDIR)/testopgroup $(UTILDIR)/kdb.jar
+BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/testopgroup $(UTILDIR)/kdb.jar
 
 $(UTILDIR)/bdsplit: util/bdsplit.c
 	@echo + cc[UTIL] $<
@@ -25,11 +25,6 @@ $(UTILDIR)/fsync: util/fsync.c
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -o $@ $<
-
-$(UTILDIR)/leakfilt: util/leakfilt.c
-	@echo + cc[UTIL] $<
-	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -o $@ $<
 
 $(UTILDIR)/testopgroup: util/testopgroup.c $(OBJDIR)/lib/libopgroup.so
 	@echo + cc[UTIL] $<
