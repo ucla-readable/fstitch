@@ -18,7 +18,7 @@
 #include <kfs/kernel_serve.h>
 #include <kfs/journal_bd.h>
 
-#define ONLY_METADATA 0
+#define ONLY_METADATA 1
 
 #define DEBUG_JOURNAL 0
 #if DEBUG_JOURNAL
@@ -328,7 +328,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		{
 			/* we need to allocate a new transaction slot */
 			struct commit_record commit;
-			bdesc_t * record = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
+			bdesc_t * record = CALL(info->journal, synthetic_read_block, info->trans_slot * info->trans_total_blocks, 1);
 			if(!record)
 				return INVALID_BLOCK;
 			
@@ -356,7 +356,10 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		
 		/* get next journal block, write block number to journal block number map */
 		number = info->trans_slot * info->trans_total_blocks + 1;
-		number_block = CALL(info->journal, read_block, number + last / npb, 1);
+		if(last % npb)
+			number_block = CALL(info->journal, read_block, number + last / npb, 1);
+		else
+			number_block = CALL(info->journal, synthetic_read_block, number + last / npb, 1);
 		assert(number_block);
 		
 		data = block->number;
@@ -653,7 +656,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	{
 		number = journal_bd_lookup_block(object, block);
 		assert(number != INVALID_BLOCK);
-		journal_block = CALL(info->journal, read_block, number, 1);
+		journal_block = CALL(info->journal, synthetic_read_block, number, 1);
 		assert(journal_block);
 		
 		/* copy it to the journal */
