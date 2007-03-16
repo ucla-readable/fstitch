@@ -4,7 +4,6 @@
 #include <lib/stdlib.h>
 #include <lib/string.h>
 #include <lib/memdup.h>
-#include <lib/vector.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -132,75 +131,24 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 	return 0;
 }
 
-/* Take two byte arrays of size 'length' and create byte chdescs for
- * non-consecutive ranges that differ. */
 /* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head)
 {
-	int i = 0, r, start;
+	int r, start, end;
 	uint8_t * old = (uint8_t *) olddata;
 	uint8_t * new = (uint8_t *) newdata;
-	vector_t * oldheads;
 
 	if(!old || !new || !head || length < 1)
 		return -E_INVAL;
 
-	oldheads = vector_create();
-	if(!oldheads)
-		return -E_NO_MEM;
-
-	while(i < length)
-	{
-		chdesc_t * oldhead = *head; /* use the original head */
-
-		if(old[i] == new[i])
-		{
-			i++;
-			continue;
-		}
-		
-		start = i;
-		while(i < length && old[i] != new[i])
-			i++;
-
-		r = chdesc_create_byte(block, owner, offset + start, i - start, new + start, &oldhead);
-		if(r < 0)
-			goto chdesc_create_diff_failed;
-
-		/* doing this check in this loop is O(n^2) but n will
-		 * be small, and it avoids lots of extra NOOPs */
-		if(oldhead && !vector_contains(oldheads, oldhead))
-		{
-			r = vector_push_back(oldheads, oldhead);
-			if(r < 0)
-			{
-				chdesc_remove_depend(oldhead, *head);
-				chdesc_destroy(&oldhead);
-				goto chdesc_create_diff_failed;
-			}
-		}
-	}
-
-	i = vector_size(oldheads);
-	if(i == 1)
-		*head = (chdesc_t *) vector_elt_front(oldheads);
-	else if(i > 1)
-	{
-		/* *head depends on all created chdescs */
-		r = chdesc_create_noop_array(NULL, head, i, (chdesc_t **) oldheads->elts);
-		if(r < 0)
-			goto chdesc_create_diff_failed;
-	}
-	vector_destroy(oldheads);
-	return i;
-
-chdesc_create_diff_failed:
-	for(i = 0; i < vector_size(oldheads); i++)
-	{
-		chdesc_t * oldhead = (chdesc_t *) vector_elt(oldheads, i);
-		chdesc_remove_depend(oldhead, *head);
-		chdesc_destroy(&oldhead);
-	}
-	vector_destroy(oldheads);
-	return r;
+	for(start = 0; start < length && old[start] == new[start]; start++);
+	if(start >= length)
+		return 0;
+	for(end = length - 1; end >= start && old[end] == new[end]; end--);
+	assert(start <= end);
+	
+	r = chdesc_create_byte(block, owner, offset + start, end - start + 1, &new[start], head);
+	if(r < 0)
+		return r;
+	return 1;
 }
