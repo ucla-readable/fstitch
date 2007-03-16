@@ -244,11 +244,6 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 	chdesc_t * chdesc;
 	int r;
 	
-#if DELAY_FLUSH_UNTIL_EXIT
-	if(kfsd_is_running())
-		return FLUSH_NONE;
-#endif
-
 	if(delay)
 		*delay = 0;
 	
@@ -356,6 +351,11 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		pass = 1;
 #else
 #define STOP NULL
+#endif
+	
+#if DELAY_FLUSH_UNTIL_EXIT
+	if(kfsd_is_running())
+		return FLUSH_NONE;
 #endif
 	
 	revision_tail_process_landing_requests();
