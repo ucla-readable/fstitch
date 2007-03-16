@@ -3,6 +3,7 @@
 
 #include <linux/kernel.h>
 
+#ifndef NDEBUG
 #define assert(cond) \
 	do { \
 		if (unlikely(!(cond))) { \
@@ -12,6 +13,9 @@
 			assert_fail(); \
 		} \
 	} while (0)
+#else
+#define assert(cond) do { } while(0)
+#endif
 
 // static_assert(x) will generate a compile-time error if 'x' is false.
 #define static_assert(x) switch (x) case 0: case (x):
