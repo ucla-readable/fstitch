@@ -451,7 +451,7 @@ static void kfs_debug_shutdown(void * ignore)
 	if(atomic_read(&proc_entry->count) > 0)
 	{
 		printf("Please kill /proc/" DEBUG_PROC_FILENAME " reader.\n");
-		while (atomic_read(proc_entry->count) > 0)
+		while (atomic_read(&proc_entry->count) > 0)
 			jsleep(HZ / 4);
 	}
 	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
