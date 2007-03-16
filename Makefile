@@ -59,18 +59,28 @@ include fs/Makefrag
 include util/Makefrag
 
 # Build vi/emacs tag files
+# thetags - for if your source does not build
+thetags::
+	@echo + ctags [vi]
+	$(V)find . -type f \
+		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
+		| $(CTAGS) $(CTAGSFLAGS) -L -
+	@echo + ctags [emacs]
+	$(V)find . -type f \
+		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
+		| $(CTAGS) $(CTAGSFLAGS) -L - -e
 # TODO: can we give these targets more correct dependencies
 TAGDEPS := $(OBJDIR)/fs/ufs.img $(OBJDIR)/fs/ext2.img $(BIN)
 tags: $(TAGDEPS)
-	@echo + ctags [VI]
+	@echo + ctags [vi]
 	$(V)find . -type f \
 		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) $(CTAGSFLAGS) -L -
 TAGS: $(TAGDEPS)
-	@echo + ctags [EMACS]
+	@echo + ctags [emacs]
 	$(V)find . -type f \
 		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
-		| $(CTAGS) $(CTAGSFLAGS) -L - -e 
+		| $(CTAGS) $(CTAGSFLAGS) -L - -e
 
 # For deleting the build
 fsclean:
