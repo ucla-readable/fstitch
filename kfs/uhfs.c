@@ -470,6 +470,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			r = chdesc_create_init(block, bd, &prev_head);
 			if (r < 0)
 				goto no_block;
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "init data block");
 			/* note that we do not write it - we will write it later */
 
 			uhfs_mark_data(prev_head, tail);
@@ -523,6 +524,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &prev_head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "write file data");
 
 		uhfs_mark_data(prev_head, tail);
 
