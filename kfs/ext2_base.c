@@ -1555,7 +1555,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 		if (!block_desc)
 			return INVALID_BLOCK;
 		double_inode_nums = (uint32_t *)double_block_desc->ddesc->data;
-		double_indir_ptr = (blocknum % pointers_per_block) - 1;
+		double_indir_ptr = (blocknum % pointers_per_block);
 		target = double_inode_nums[double_indir_ptr];
 
 		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
