@@ -3,7 +3,6 @@
 #include <lib/stdio.h>
 #include <lib/stdlib.h>
 #include <lib/string.h>
-#include <lib/memdup.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
