@@ -35,7 +35,7 @@ static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
 static uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head);
 
-static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, EXT2_Dir_entry_t * dirent);
+static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
 int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head);
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent);
@@ -600,7 +600,7 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 	ext2_fdesc_t * fd;
 	ext2_fdesc_t * parent_file;
 	uint32_t basep = 0;
-	EXT2_Dir_entry_t entry;
+	const EXT2_Dir_entry_t * entry;
 	uint32_t name_length = strlen(name);
 	int r= 0;
 	
@@ -619,8 +619,8 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 	while (r >= 0)
 	{
 		r = ext2_get_disk_dirent(object, parent_file, &basep, &entry);
-		if (entry.inode != 0 && r == 0 && entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len)) {
-			fd = (ext2_fdesc_t *) ext2_lookup_inode(object, entry.inode);
+		if (!r && entry->inode && entry->name_len == name_length && !strncmp(entry->name, name, entry->name_len)) {
+			fd = (ext2_fdesc_t *) ext2_lookup_inode(object, entry->inode);
 			break;
 		}
 	}
@@ -718,7 +718,7 @@ static uint32_t ext2_get_file_block(LFS_t * object, fdesc_t * file, uint32_t off
 	return get_file_block(object, (EXT2_File_t *)file, offset);
 }
 
-static int fill_dirent(ext2_info_t * info, EXT2_Dir_entry_t * dirfile, inode_t ino, struct dirent * entry, uint16_t size, uint32_t * basep)
+static int fill_dirent(ext2_info_t * info, const EXT2_Dir_entry_t * dirfile, inode_t ino, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("EXT2DEBUG: %s inode number %u, %u\n", __FUNCTION__, ino, *basep);
 	uint16_t namelen = MIN(dirfile->name_len, sizeof(entry->d_name) - 1);
@@ -753,13 +753,13 @@ static int fill_dirent(ext2_info_t * info, EXT2_Dir_entry_t * dirfile, inode_t i
 }
 
 //TODO really, this shouldnt return inode == 0, since its annoying, but then to iterate to find free space its more work =(
-static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, EXT2_Dir_entry_t * dirent)
+static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent)
 {
   	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	bdesc_t * dirblock1 = NULL, *dirblock2 = NULL;
-	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks, block_offset;
+	bdesc_t * dirblock = NULL;
+	uint32_t blockno, file_blockno, num_file_blocks, block_offset;
 
 	num_file_blocks = f->f_inode.i_blocks / (EXT2_BLOCK_SIZE / 512); 
 	block_offset = (*basep % EXT2_BLOCK_SIZE);
@@ -768,61 +768,17 @@ static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * 
 		return -E_UNSPECIFIED; // should be: -E_NO_ENT;
 
 	blockno = *basep / EXT2_BLOCK_SIZE;
-	file_blockno1 = get_file_block(object, f, *basep);
+	file_blockno = get_file_block(object, f, *basep);
 	
-	if (file_blockno1 == INVALID_BLOCK)
+	if (file_blockno == INVALID_BLOCK)
 		return -E_UNSPECIFIED;
 
-	dirblock1 = CALL(info->ubd, read_block, file_blockno1, 1);
-	if (!dirblock1)
+	dirblock = CALL(info->ubd, read_block, file_blockno, 1);
+	if (!dirblock)
 		return -E_UNSPECIFIED;
 	
-	/*check if the rec_len is available yet*/
-	uint16_t rec_len;
-	if (EXT2_BLOCK_SIZE - block_offset >= 6)
-	{
-		rec_len = *((uint16_t *) (dirblock1->ddesc->data + block_offset + 4));
-		if (*basep + rec_len > f->f_inode.i_size)
-			return  -E_UNSPECIFIED;
-	}
-	else
-		rec_len = 0;
-	
-	/* if the dirent overlaps two blocks*/
-	//TODO this shouldnt use the rec_len, it should be name_len
-	if(rec_len == 0 || block_offset + rec_len > EXT2_BLOCK_SIZE)
-	{
-		if (blockno + 1 >= f->f_inode.i_blocks)
-			return -E_UNSPECIFIED;
-	
-		file_blockno2 = get_file_block(object, f, (*basep)+ sizeof(EXT2_Dir_entry_t));
-		if (file_blockno2 == INVALID_BLOCK)
-			return -E_UNSPECIFIED;
-    
-		dirblock2 = CALL(info->ubd, read_block, file_blockno2, 1);
-		if(!dirblock2)
-			return -E_UNSPECIFIED;  // should be: -E_NO_ENT;
-		//TODO: Clean this up for the weird case of large rec_lens due to lots of deletes 
-		uint32_t block1_len;
-		block1_len = EXT2_BLOCK_SIZE - block_offset;
-		uint32_t block2_len;
-		block2_len = (sizeof(EXT2_Dir_entry_t) - block1_len);
-		if(block1_len > sizeof(EXT2_Dir_entry_t))
-			block2_len = 0;
-		if(block1_len > sizeof(EXT2_Dir_entry_t))
-			block1_len = sizeof(EXT2_Dir_entry_t);
-	      
-		/* copy each part from each block into the dir entry */
-		memcpy(dirent, dirblock1->ddesc->data + block_offset, block1_len);
-		memcpy((uint8_t*)(dirent) + block1_len, dirblock2->ddesc->data, block2_len);
-	}
-	else
-	{
-		EXT2_Dir_entry_t * pdirent =  (EXT2_Dir_entry_t *) (dirblock1->ddesc->data + block_offset);
-		memcpy(dirent, pdirent, MIN(sizeof(EXT2_Dir_entry_t), pdirent->rec_len));
-	}
-
-	*basep += dirent->rec_len;
+	*dirent = (EXT2_Dir_entry_t *) (dirblock->ddesc->data + block_offset);
+	*basep += (*dirent)->rec_len;
 	return 0;
 }
 
@@ -831,7 +787,7 @@ static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry
        Dprintf("EXT2DEBUG: ext2_get_dirent %p, %u\n", basep, *basep);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	EXT2_Dir_entry_t dirent;
+	const EXT2_Dir_entry_t * dirent;
 	int r = 0;
 
 	if (!basep || !file || !entry)
@@ -844,9 +800,9 @@ static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry
 		r = ext2_get_disk_dirent(object, f, basep, &dirent);
 		if (r < 0)
 			return r;
-	} while (dirent.inode == 0); /* rec_len is zero if a dirent is used to fill a large gap */
+	} while (!dirent->inode); /* rec_len is zero if a dirent is used to fill a large gap */
 
-	return fill_dirent(info, &dirent, dirent.inode, entry, size, basep);
+	return fill_dirent(info, dirent, dirent->inode, entry, size, basep);
 }
 
 static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc_t ** head) {
@@ -1031,8 +987,8 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	uint32_t blockno1, blockno2, first_len;
-	bdesc_t * dirblock1, * dirblock2;
+	uint32_t blockno;
+	bdesc_t * dirblock;
 	int r;
 	//check: off end of file?
 	if (!parent || !dirent || !head)
@@ -1041,78 +997,36 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 	if (basep + dirent->rec_len > parent->f_inode.i_size)
 		return -E_INVAL;
 
-	//two cases: single block, and overlap
-	//could be shortend a bit (but not simplified)
 	//dirent is in a single block:
-
 	uint32_t actual_rec_len = 8 + ((dirent->name_len - 1) / 4 + 1) * 4;
 	if (basep % EXT2_BLOCK_SIZE + actual_rec_len <= EXT2_BLOCK_SIZE) {
 		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
-		blockno1 = get_file_block(object, parent, basep);
-		if (blockno1 == INVALID_BLOCK)
+		blockno = get_file_block(object, parent, basep);
+		if (blockno == INVALID_BLOCK)
 			return -E_UNSPECIFIED;
 
 		basep %= EXT2_BLOCK_SIZE;
 
-		dirblock1 = CALL(info->ubd, read_block, blockno1, 1);
-		if (!dirblock1)
+		dirblock = CALL(info->ubd, read_block, blockno, 1);
+		if (!dirblock)
 			return -E_UNSPECIFIED;
 	     
-		if ((r = chdesc_create_byte(dirblock1, info->ubd, basep, actual_rec_len, (void *) dirent, head )) < 0)
+		if ((r = chdesc_create_byte(dirblock, info->ubd, basep, actual_rec_len, (void *) dirent, head )) < 0)
 			return r;
 
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent, normal case");	     	     
-		r = CALL(info->ubd, write_block, dirblock1);
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent");
+		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
 			return r;
-	} else {
-		//dirent overlaps blocks:
-		blockno1 = get_file_block(object, parent, basep);
-		if (blockno1 == INVALID_BLOCK)
-			return -E_UNSPECIFIED;
-	     
-		blockno2 = get_file_block(object, parent, basep + dirent->rec_len % EXT2_BLOCK_SIZE);
-		if (blockno2 == INVALID_BLOCK)
-			return -E_UNSPECIFIED;
-	     
-		basep %= EXT2_BLOCK_SIZE;
-
-		dirblock1 = CALL(info->ubd, read_block, blockno1, 1);
-		if (!dirblock1)
-			return -E_UNSPECIFIED;
-
-		dirblock2 = CALL(info->ubd, read_block, blockno2, 1);
-		if (!dirblock2)
-			return -E_UNSPECIFIED;
-	     
-		//write the first bit:
-		first_len = EXT2_BLOCK_SIZE - basep;
-		r = chdesc_create_byte(dirblock1, info->ubd, basep, first_len, (void *) dirent, head);
-		if (r < 0)
-			return r;
-     		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent, overlap case 1");	     
-		
-		//write the second bit
-		r = chdesc_create_byte(dirblock2, info->ubd, 0, actual_rec_len - first_len, (void *) dirent + first_len, head);
-		if (r < 0)
-			return r;
-     		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent, overlap case 2");
-	     
-		r = CALL(info->ubd, write_block, dirblock1);
-		if (r < 0)
-			return r;
-
-		r = CALL(info->ubd, write_block, dirblock2);
-		if (r < 0)
-			return r;
-	}
+	} else
+		panic("overlapping dirent");
 	return 0;
 }
 
 static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * new_dirent, chdesc_t ** head)
 { 
 	Dprintf("EXT2DEBUG: ext2_insert_dirent %s\n", new_dirent->name);
-	EXT2_Dir_entry_t entry;
+	const EXT2_Dir_entry_t * entry;
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	uint32_t new_prev_len, basep = 0, prev_basep = 0, new_block;
 	int r = 0;
@@ -1132,23 +1046,24 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 
 		//check if we can insert the dirent:
 		//if we can, then we dont need to allocate a new block =)
-		if (entry.inode == 0) {
-			new_dirent->rec_len = entry.rec_len;
+		if (!entry->inode) {
+			new_dirent->rec_len = entry->rec_len;
 			return ext2_write_dirent(object, parent, new_dirent, prev_basep, head);
 		}
-		else if ((entry.rec_len - (8 + entry.name_len)) > new_dirent->rec_len) {
-			new_prev_len =  8 + ((entry.name_len - 1) / 4 + 1) * 4;
-			new_dirent->rec_len = entry.rec_len - new_prev_len;
-			entry.rec_len = new_prev_len;
+		else if ((entry->rec_len - (8 + entry->name_len)) > new_dirent->rec_len) {
+			EXT2_Dir_entry_t copy = *entry;
+			new_prev_len =  8 + ((copy.name_len - 1) / 4 + 1) * 4;
+			new_dirent->rec_len = copy.rec_len - new_prev_len;
+			copy.rec_len = new_prev_len;
 
-			r = ext2_write_dirent(object, parent, &entry, prev_basep, head);
+			r = ext2_write_dirent(object, parent, &copy, prev_basep, head);
 			if (r < 0)
 				return r;
 
-			return ext2_write_dirent(object, parent, new_dirent, prev_basep + entry.rec_len, head);
+			return ext2_write_dirent(object, parent, new_dirent, prev_basep + copy.rec_len, head);
 		}
 		//detect the end of file, and break
-		if (prev_basep + entry.rec_len == parent->f_inode.i_size)
+		if (prev_basep + entry->rec_len == parent->f_inode.i_size)
 			break;
 		prev_basep = basep;
 	}
@@ -1183,7 +1098,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 			return r;
 	} else {
 		new_dirent->rec_len = EXT2_BLOCK_SIZE;
-		r = ext2_write_dirent(object, parent, new_dirent, prev_basep + entry.rec_len, head);
+		r = ext2_write_dirent(object, parent, new_dirent, prev_basep + entry->rec_len, head);
 		if (r < 0)
 			return r;
 	}
@@ -1640,7 +1555,8 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	ext2_fdesc_t * old, * new, * oldpar, * newpar;
 	int r, existing = 0;
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep = 0;
-	EXT2_Dir_entry_t old_dirent, new_dirent;
+	const EXT2_Dir_entry_t * old_dirent;
+	const EXT2_Dir_entry_t * new_dirent;
 	inode_t newino;
 	chdesc_t * prev_head = NULL;
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
@@ -1658,13 +1574,13 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	for (r = 0; r >= 0; )
 	{
 		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
-		if (r == 0 && old_dirent.name != 0 && strcmp(old_dirent.name, oldname) == 0)
+		if (!r && strcmp(old_dirent->name, oldname) == 0)
 			break;
 		if (r < 0) 
 			goto ext2_rename_exit;
 	}
 
-	old = (ext2_fdesc_t *)ext2_lookup_inode(object, old_dirent.inode);
+	old = (ext2_fdesc_t *)ext2_lookup_inode(object, old_dirent->inode);
 	if (!old) {
 		r = -E_NO_ENT;
 		goto ext2_rename_exit;
@@ -1680,8 +1596,8 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	for (r = 0; r >= 0;)
 	{
 		r = ext2_get_disk_dirent(object, newpar, &basep, &new_dirent);
-		if (r == 0 && old_dirent.name != 0 && strcmp(new_dirent.name, newname) == 0) {
-			new = (ext2_fdesc_t *)ext2_lookup_inode(object, new_dirent.inode);
+		if (!r && strcmp(new_dirent->name, newname) == 0) {
+			new = (ext2_fdesc_t *)ext2_lookup_inode(object, new_dirent->inode);
 			break;
 		}
 		
@@ -1695,6 +1611,8 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	}
 
 	if (new) {
+		EXT2_Dir_entry_t copy = *new_dirent;
+
 		// Overwriting a directory makes little sense
 		if (new->f_type == TYPE_DIR) {
 			r = -E_NOT_EMPTY;
@@ -1704,8 +1622,8 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		// File already exists
 		existing = 1;
 
-		new_dirent.inode = old->f_ino;
-		r = ext2_write_dirent(object, newpar, &new_dirent, basep, head);
+		copy.inode = old->f_ino;
+		r = ext2_write_dirent(object, newpar, &copy, basep, head);
 		if (r < 0)
 			goto ext2_rename_exit4;
 		prev_head = *head;
@@ -1722,7 +1640,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 			r = -E_UNSPECIFIED;
 			goto ext2_rename_exit3;
 		}
-		//assert(new_dirent.inode == newino);
+		//assert(new_dirent->inode == newino);
 	}
 
 	basep = 0;
@@ -1731,7 +1649,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		prev_prev_basep = prev_basep;
 		prev_basep = basep;
 		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
-		if (r == 0 && old_dirent.name != 0 && strcmp(old_dirent.name, oldname) == 0)
+		if (!r && strcmp(old_dirent->name, oldname) == 0)
 			break;
 		if (r < 0) 
 			goto ext2_rename_exit;
@@ -1797,21 +1715,11 @@ an above module can call to free a block, completely ignoring the file system. B
 static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_free_block\n");
-
-	//this is inspired by erase_wholeblock:
-	//struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	int r;
-	EXT2_File_t * f = (EXT2_File_t *) file;
-	
-	assert(!file || f->f_type != TYPE_SYMLINK);
 
 	if(!head || block == INVALID_BLOCK)
 	      return -E_INVAL;
 	
-	//r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
-	//if (r < 0)
-	//	return r;
-
 	r = write_block_bitmap(object, block, 0, head);
 	if (r < 0)
 	{
