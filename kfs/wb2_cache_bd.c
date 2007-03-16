@@ -23,6 +23,9 @@
 #include <kfs/kernel_timing.h>
 KERNEL_TIMING(wait);
 
+/* reorder the queue to try and find a better flush order */
+#define DIRTY_QUEUE_REORDERING 0
+
 /* useful for looking at chdesc graphs */
 #define DELAY_FLUSH_UNTIL_EXIT 0
 
@@ -30,6 +33,13 @@ KERNEL_TIMING(wait);
  * hooked up using the dirty links in addition to the all links */
 struct lru_slot {
 	bdesc_t * block;
+#if DIRTY_QUEUE_REORDERING
+	uint32_t pass;
+	/* if we've put a block after this one already during this pass through
+	 * the dirty blocks, put further blocks after that one instead */
+	uint32_t block_after_number;
+	uint32_t block_after_pass;
+#endif
 	struct {
 		struct lru_slot * prev;
 		struct lru_slot * next;
@@ -113,6 +123,11 @@ static struct lru_slot * push_block(struct cache_info * info, bdesc_t * block)
 		return NULL;
 	
 	slot->block = block;
+#if DIRTY_QUEUE_REORDERING
+	slot->pass = 0;
+	slot->block_after_number = INVALID_BLOCK;
+	slot->block_after_pass = 0;
+#endif
 	slot->all.prev = NULL;
 	slot->all.next = info->all.first;
 	slot->dirty.prev = NULL;
@@ -283,6 +298,44 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 	return r;
 }
 
+#if DIRTY_QUEUE_REORDERING
+static bdesc_t * find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * start_block)
+{
+	chdepdesc_t * dep = chdesc->befores;
+	for(; dep; dep = dep->before.next)
+	{
+		chdesc_t * before = dep->before.desc;
+		if(before->owner != object)
+			continue;
+		if(!before->block)
+		{
+			bdesc_t * block = find_block_before(object, before, start_block);
+			if(block)
+				return block;
+		}
+		else if(before->block->ddesc != start_block->ddesc)
+			return before->block;
+	}
+	return NULL;
+}
+
+/* move "slot" to before "before" */
+static void bounce_block_write(struct cache_info * info, struct lru_slot * slot, struct lru_slot * before)
+{
+	pop_slot_dirty(info, slot);
+	slot->dirty.next = before;
+	slot->dirty.prev = before->dirty.prev;
+	before->dirty.prev = slot;
+	if(slot->dirty.prev)
+		slot->dirty.prev->dirty.next = slot;
+	else
+		info->dirty.first = slot;
+	/* there is no way we could be putting this block at the end
+	 * of the queue, since it's going before some other block */
+	info->dblocks++;
+}
+#endif
+
 enum dshrink_strategy {
 	CLIP,  /* just get below the soft limit */
 	FLUSH, /* flush as much as possible */
@@ -295,16 +348,90 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	struct lru_slot * slot = info->dirty.last;
 	
+#if DIRTY_QUEUE_REORDERING
+	struct lru_slot * stop = NULL;
+#define STOP stop
+	static uint32_t pass = 0;
+	if(!++pass)
+		pass = 1;
+#else
+#define STOP NULL
+#endif
+	
 	revision_tail_process_landing_requests();
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
-	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && slot)
+	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && slot != STOP)
 	{
-		int delay = 0;
-		int status = flush_block(object, slot->block, &delay);
+		int status, delay = 0;
+#if DIRTY_QUEUE_REORDERING
+		if(slot->pass == pass)
+		{
+			slot = slot->dirty.prev;
+			assert(slot || !stop);
+			continue;
+		}
+		slot->pass = pass;
+#endif
+		status = flush_block(object, slot->block, &delay);
 		/* still dirty? */
 		if(status < 0)
-			slot = slot->dirty.prev;
+		{
+#if DIRTY_QUEUE_REORDERING
+			/* pick somewhere later in the queue to move it */
+			bdesc_t * block = NULL;
+			if(!slot->block->ddesc->in_flight)
+			{
+				chdesc_t * scan = slot->block->ddesc->index_changes[object->graph_index].head;
+				for(; !block && scan; scan = scan->ddesc_index_next)
+					block = find_block_before(object, scan, slot->block);
+			}
+			if(block)
+			{
+				struct lru_slot * before_slot = NULL;
+				before_slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) block->number);
+				assert(slot != before_slot);
+				if(before_slot)
+				{
+					struct lru_slot * prev = slot->dirty.prev;
+					/* it had better be in the dirty list */
+					assert(before_slot->dirty.prev || info->dirty.first == before_slot);
+					if(before_slot->block_after_pass == pass)
+					{
+						struct lru_slot * try;
+						try = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) before_slot->block_after_number);
+						if(try)
+						{
+							assert(slot != try);
+							assert(try->dirty.prev || info->dirty.first == try);
+							before_slot->block_after_number = slot->block->number;
+							before_slot = try;
+						}
+					}
+					else
+					{
+						before_slot->block_after_number = slot->block->number;
+						before_slot->block_after_pass = pass;
+					}
+					bounce_block_write(info, slot, before_slot);
+					if(info->dirty.first == slot && !stop && prev)
+						stop = slot;
+					slot = prev;
+					assert(slot || !stop);
+				}
+				else
+				{
+					slot = slot->dirty.prev;
+					assert(slot || !stop);
+				}
+			}
+			else
+#endif
+			{
+				slot = slot->dirty.prev;
+				assert(slot || !STOP);
+			}
+		}
 		else
 		{
 			uint32_t number = slot->block->number;
@@ -328,6 +455,7 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 					break;
 			}
 			slot = prev;
+			assert(slot || !STOP);
 		}
 		/* if we're just preening, then stop if there was I/O delay */
 		if(strategy == PREEN && delay > 1)
