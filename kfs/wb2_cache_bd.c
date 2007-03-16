@@ -355,7 +355,7 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	
 #if DELAY_FLUSH_UNTIL_EXIT
 	if(kfsd_is_running())
-		return FLUSH_NONE;
+		return;
 #endif
 	
 	revision_tail_process_landing_requests();
