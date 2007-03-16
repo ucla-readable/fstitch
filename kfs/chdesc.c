@@ -1521,8 +1521,20 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 		else
 		{
 			assert(*head == before);
-			if(before->befores || before->flags & CHDESC_FUTURE_BEFORES)
+			if(before->flags & CHDESC_FUTURE_BEFORES)
 				return 0;
+			if(before->befores)
+			{
+				chdesc_t * before2 = before->befores->before.desc;
+				if(before->befores->before.next)
+					return 0; /* could iterate, but it has not helped */
+				if(before2->befores)
+					return 0; /* could recurse, but it has not helped */
+				if(before2->block && before2->block->ddesc == ddesc)
+					return 0;
+				if(before2->flags & CHDESC_FUTURE_BEFORES)
+					return 0;
+			}
 		}
 	}
 	if(!overlap)
