@@ -1,7 +1,3 @@
-#if defined(__linux__)
-#define _GNU_SOURCE /* for vasprintf() */
-#endif
-
 #include <lib/kdprintf.h>
 
 #include <linux/kernel.h>
