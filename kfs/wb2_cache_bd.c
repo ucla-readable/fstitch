@@ -241,7 +241,6 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t slice;
-	chdesc_t * chdesc;
 	int r;
 	
 	if(delay)
@@ -252,10 +251,7 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-		if(chdesc->owner == object)
-			break;
-	if(!chdesc)
+	if(!block->ddesc->index_changes[object->graph_index].head)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->bd, &slice);
