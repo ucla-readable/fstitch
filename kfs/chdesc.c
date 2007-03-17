@@ -45,8 +45,111 @@
 #define CHDESC_ACCOUNT 0
 
 
+#if CHDESC_ACCOUNT
+static inline u64 u64_diff(u64 start, u64 end)
+{
+	if(start <= end)
+		return end - start;
+	return ULLONG_MAX - end + start;
+}
 
-#define CHDEPDESCPOOLSIZE 170
+# include <asm/tsc.h>
+typedef struct account {
+	const char * name;
+	u64 space_time; /* total 'space * time' */
+	u64 space_total;
+	u32 space_max, space_last;
+	cycles_t time_first, time_last;
+} account_t;
+
+static inline void account_init(const char * name, account_t * act)
+{
+	act->name = name;
+	act->space_time = 0;
+	act->space_total = 0;
+	act->space_max = act->space_last = 0;
+	act->time_first = act->time_last = 0;
+}
+
+static inline void account_update(account_t * act, int32_t space_change)
+{
+	cycles_t time_current = get_cycles();
+	u64 diff = u64_diff(act->time_last, time_current);
+	u64 spacetime_prev = act->space_time;
+	
+	if(!act->time_first)
+		act->time_first = act->time_last = get_cycles();
+	
+	act->space_time += act->space_last * diff;
+	assert(act->space_time >= spacetime_prev);
+	act->space_last += space_change;
+	act->time_last = time_current;
+	if(act->space_last > act->space_max)
+		act->space_max = act->space_last;
+	if(space_change > 0)
+		act->space_total += space_change; /* FIXME: sort of */
+}
+
+static account_t act_nchdescs[4], act_ndeps, act_nwrefs;
+static account_t act_data;
+//static account_t act_nnrb;
+
+static account_t * act_all[] =
+	{ &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
+	  &act_nchdescs[3], &act_ndeps, &act_nwrefs, &act_data };
+
+static inline void account_nchdescs(int type, int add)
+{
+	account_update(&act_nchdescs[type], add);
+	account_update(&act_nchdescs[3], add);
+}
+
+static u64 do_div64(u64 n, u64 base)
+{
+	u64 count = 0;
+	u64 prev;
+	do {
+		prev = n;
+		n -= base;
+		count++;
+	} while (n <= prev);
+	return count - 1;
+}
+
+static void account_print(const account_t * act)
+{
+	u64 mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
+	printf("account: %s: mean=%llu max=%u total=%llu\n", act->name, mean, act->space_max, act->space_total);
+}
+
+static void account_print_all(void * ignore)
+{
+	int i;
+	for(i = 0; i < sizeof(act_all) / sizeof(*act_all); i++)
+		account_print(act_all[i]);
+}
+
+static int account_init_all(void)
+{
+	account_init("nchdescs (total)", &act_nchdescs[3]);
+	account_init("nchdescs (byte)", &act_nchdescs[BYTE]);
+	account_init("nchdescs (bit)", &act_nchdescs[BIT]);
+	account_init("nchdescs (noop)", &act_nchdescs[NOOP]);
+	//account_init("nnrb", &act_nnrb);
+	account_init("data", &act_data);
+	account_init("ndeps", &act_ndeps);
+	account_init("nwrefs", &act_nwrefs);
+	return kfsd_register_shutdown_module(account_print_all, NULL, SHUTDOWN_POSTMODULES);
+}
+#else
+# define account_init(x) do {} while(0)
+# define account_update(act, sc) do {} while(0)
+# define account_nchdescs(type, add) do {} while (0)
+# define account_init_all() 0
+#endif
+
+
+#define CHDEPDESCPOOLSIZE ((int) ((PAGE_SIZE - sizeof(void*)) / sizeof(chdepdesc_t)))
 typedef struct chdepdescpool {
 		struct chdepdescpool *next;
 		chdepdesc_t chdeps[CHDEPDESCPOOLSIZE];
@@ -79,6 +182,7 @@ static __inline chdepdesc_t *chdepdesc_alloc(void)
 			return NULL;
 	d = free_chdeps;
 	free_chdeps = * ((chdepdesc_t **) d);
+	account_update(&act_ndeps, 1);
 	return d;
 }
 
@@ -87,11 +191,11 @@ static __inline void chdepdesc_free(chdepdesc_t *d)
 {
 	* ((chdepdesc_t **) d) = free_chdeps;
 	free_chdeps = d;
+	account_update(&act_ndeps, -1);
 }
 
 
-
-#define CHDESCPOOLSIZE ((int) (4094 / sizeof(chdesc_t)))
+#define CHDESCPOOLSIZE ((int) ((PAGE_SIZE - sizeof(void*)) / sizeof(chdesc_t)))
 typedef struct chdescpool {
 		struct chdescpool *next;
 		chdesc_t chdescs[CHDESCPOOLSIZE];
@@ -135,113 +239,22 @@ static __inline void chdesc_free(chdesc_t *d)
 }
 
 
-static void chpools_free_all(void * crap)
+static void chpools_free_all(void * ignore)
 {
 	chdepdescpool_t *p;
 	chdescpool_t *q;
-	while ((p = free_chdeps_pool)) {
+	while ((p = free_chdeps_pool))
+	{
 		free_chdeps_pool = p->next;
 		free(p);
 	}
-	while ((q = free_chdescs_pool)) {
+	while ((q = free_chdescs_pool))
+	{
 		free_chdescs_pool = q->next;
 		free(q);
 	}
 }
 
-
-
-#if CHDESC_ACCOUNT
-#include <asm/tsc.h>
-typedef struct account {
-	const char * name;
-	u64 space_time; /* total space * time */
-	u64 space_total;
-	u32 space_max, space_last;
-	cycles_t time_first, time_last;
-} account_t;
-
-static inline void account_init(const char * name, account_t * act)
-{
-	act->name = name;
-	act->space_time = 0;
-	act->space_total = 0;
-	act->space_max = act->space_last = 0;
-	act->time_first = act->time_last = 0;
-}
-
-static inline u64 u64_diff(u64 start, u64 end)
-{
-	if(start <= end)
-		return end - start;
-	return ULLONG_MAX - end + start;
-}
-
-static inline void account_update(account_t * act, int32_t space_change)
-{
-	cycles_t time_current = get_cycles();
-	u64 diff = u64_diff(act->time_last, time_current);
-	u64 spacetime_prev = act->space_time;
-	
-	if(!act->time_first)
-		act->time_first = act->time_last = get_cycles();
-	
-	act->space_time += act->space_last * diff;
-	assert(act->space_time >= spacetime_prev);
-	act->space_last += space_change;
-	act->time_last = time_current;
-	if(act->space_last > act->space_max)
-		act->space_max = act->space_last;
-	if(space_change > 0)
-		act->space_total += space_change; /* FIXME: sort of */
-}
-
-static account_t act_nchdescs[4], act_ndeps, act_nrefs;
-static account_t act_data;
-//static account_t act_nnrb;
-
-static account_t * act_all[] =
-	{ &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
-	  &act_nchdescs[3], &act_ndeps, &act_nrefs, &act_data };
-
-static inline void account_nchdescs(int type, int add)
-{
-	account_update(&act_nchdescs[type], add);
-	account_update(&act_nchdescs[3], add);
-}
-
-#include <asm/div64.h>
-static void account_print(const account_t * act)
-{
-	printf("accounting for %s: space*time=%llu, time=%llu, mean space=%llu/%llu, max=%u, total=%u\n", act->name, act->space_time, u64_diff(act->time_first, act->time_last), act->space_max, act->space_total);
-}
-
-static void account_finish_all(void * ignore)
-{
-	int i;
-	for(i = 0; i < sizeof(act_all) / sizeof(*act_all); i++)
-		account_print(act_all[i]);
-}
-
-#include <kfs/kfsd.h>
-static int account_init_all(void)
-{
-	account_init("nchdescs (total)", &act_nchdescs[3]);
-	account_init("nchdescs (byte)", &act_nchdescs[BYTE]);
-	account_init("nchdescs (bit)", &act_nchdescs[BIT]);
-	account_init("nchdescs (noop)", &act_nchdescs[NOOP]);
-	//account_init("nnrb", &act_nnrb);
-	account_init("data", &act_data);
-	account_init("ndeps", &act_ndeps);
-	account_init("nwrefs", &act_nrefs);
-	return kfsd_register_shutdown_module(account_finish_all, NULL, SHUTDOWN_POSTMODULES);
-}
-#else
-#define account_init(x) do {} while(0)
-#define account_update(act, sc) do {} while(0)
-#define account_nchdescs(type, add) do {} while (0)
-#define account_init_all() 0
-#endif
 
 #if COUNT_CHDESCS
 #include <lib/jiffies.h>
@@ -759,7 +772,6 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	dep = chdepdesc_alloc();
 	if(!dep)
 		return -E_NO_MEM;
-	account_update(&act_ndeps, 1);
 	
 	propagate_depend_add(after, before);
 	
@@ -1799,13 +1811,16 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 
 		if(merge_length <= CHDESC_LOCALDATA)
 			merge_data = &overlap->byte.ldata[0];
-		else if(!(merge_data = malloc(merge_length)))
+		else
 		{
-			if((*new)->flags & CHDESC_OVERLAP)
-				chdesc_remove_depend(ddesc->overlaps, overlap);
-			return -E_NO_MEM;
+			if(!(merge_data = malloc(merge_length)))
+			{
+				if((*new)->flags & CHDESC_OVERLAP)
+					chdesc_remove_depend(ddesc->overlaps, overlap);
+				return -E_NO_MEM;
+			}
+			account_update(&act_data, merge_length);
 		}
-		account_update(&act_data, merge_length);
 		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.xdata, overlap->byte.length);
 		if(merge_offset < overlap->byte.offset)
 			memcpy(merge_data, &ddesc->data[merge_offset], overlap->byte.offset - merge_offset);
@@ -2002,26 +2017,27 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	if(data_required)
 	{	
-		void *crap;
+		void * block_data = &chdesc->block->ddesc->data[offset];
 
 		if(length <= CHDESC_LOCALDATA)
 			chdesc->byte.xdata = &chdesc->byte.ldata[0];
-		else if(!(chdesc->byte.xdata = malloc(length)))
+		else
 		{
-			chdesc_destroy(&chdesc);
-			return -E_NO_MEM;
+			account_update(&act_data, length);
+			if(!(chdesc->byte.xdata = malloc(length)))
+			{
+				chdesc_destroy(&chdesc);
+				return -E_NO_MEM;
+			}
 		}
 
-		crap = &chdesc->block->ddesc->data[offset];
-		memcpy(crap, chdesc->byte.xdata, length);
+		memcpy(block_data, chdesc->byte.xdata, length);
 		if(data)
-			memcpy(crap, data, length);
+			memcpy(block_data, data, length);
 		else
-			memset(crap, 0, length);
-		account_update(&act_data, length);
-		/* FIXME Chris: account for allocations */
+			memset(block_data, 0, length);
 #if CHDESC_BYTE_SUM
-		chdesc->byte.new_sum = chdesc_byte_sum(crap, length);
+		chdesc->byte.new_sum = chdesc_byte_sum(block_data, length);
 		chdesc->byte.old_sum = chdesc_byte_sum(chdesc->byte.xdata, length);
 #endif
 	}
@@ -2453,7 +2469,6 @@ void chdesc_dep_remove(chdepdesc_t * dep)
 	memset(dep, 0, sizeof(*dep));
 #endif
 	chdepdesc_free(dep);
-	account_update(&act_ndeps, -1);
 }
 
 void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
@@ -2584,7 +2599,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 			printf("%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 			chdesc->weak_refs = next->next;
 			free(next);
-			account_update(&act_nrefs, -1);
+			account_update(&act_nwrefs, -1);
 		}
 	}
 }
@@ -2727,7 +2742,7 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_c
 		chrefdesc_t * ref = malloc(sizeof(*ref));
 		if(!ref)
 			return -E_NO_MEM;
-		account_update(&act_nrefs, 1);
+		account_update(&act_nwrefs, 1);
 		
 		ref->desc = location;
 		ref->callback = callback;
@@ -2766,7 +2781,7 @@ int chdesc_weak_forget(chdesc_t ** location, bool callback)
 		if(callback && scan->callback)
 			value = scan->callback(location, scan->callback_data);
 		free(scan);
-		account_update(&act_nrefs, -1);
+		account_update(&act_nwrefs, -1);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, *location, location);
 	}
 	return value;
@@ -2930,7 +2945,6 @@ void chdesc_release_stamp(uint32_t stamp)
 int chdesc_init(void)
 {
 	int r = kfsd_register_shutdown_module(chpools_free_all, NULL, SHUTDOWN_POSTMODULES);
-	printk("<1>%d size\n", sizeof(chdesc_t));
 	if (r < 0)
 		return r;
 	return account_init_all();
