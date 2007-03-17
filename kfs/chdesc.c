@@ -2031,7 +2031,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			}
 		}
 
-		memcpy(block_data, chdesc->byte.xdata, length);
+		memcpy(chdesc->byte.xdata, block_data, length);
 		if(data)
 			memcpy(block_data, data, length);
 		else
