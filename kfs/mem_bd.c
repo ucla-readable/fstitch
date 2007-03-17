@@ -13,9 +13,7 @@
 #include <kfs/revision.h>
 #include <kfs/josfs_base.h>
 
-#ifdef __KERNEL__
 #include <linux/vmalloc.h>
-#endif
 
 struct mem_info {
 	uint8_t *blocks;
@@ -163,11 +161,7 @@ static int mem_bd_destroy(BD_t * bd)
 
 	blockman_destroy(&info->blockman);
 
-#ifndef __KERNEL__
-	free(info->blocks);
-#else
 	vfree(info->blocks);
-#endif
 	free(info);
 	memset(bd, 0, sizeof(*bd));
 	free(bd);
@@ -215,13 +209,9 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	info->blockcount = blocks;
 	info->blocksize = blocksize;
 
-#ifndef __KERNEL__
-	info->blocks = malloc(blocks * blocksize);
-#else
 	/* When running in the Linux kernel, we can't allocate this much
 	 * memory with kmalloc(). So, we use vmalloc() instead. */
 	info->blocks = vmalloc(blocks * blocksize);
-#endif
 	if (!info->blocks) {
 		free(info);
 		free(bd);

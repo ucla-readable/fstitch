@@ -81,13 +81,13 @@ static vector_t * mounts = NULL;
 
 static mount_desc_t * mount_desc_create(const char * path, CFS_t * cfs)
 {
-	mount_desc_t * m = kmalloc(sizeof(*m), GFP_KERNEL);
+	mount_desc_t * m = malloc(sizeof(*m));
 	if (!m)
 		return NULL;
 	m->path = strdup(path);
 	if (!m->path)
 	{
-		kfree(m);
+		free(m);
 		return NULL;
 	}
 	m->cfs = cfs;
@@ -98,7 +98,7 @@ static mount_desc_t * mount_desc_create(const char * path, CFS_t * cfs)
 static void mount_desc_destroy(mount_desc_t * m)
 {
 	free(m->path);
-	kfree(m);
+	free(m);
 }
 
 int kernel_serve_add_mount(const char * path, CFS_t * cfs)
