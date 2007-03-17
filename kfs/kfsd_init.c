@@ -96,6 +96,12 @@ int kfsd_init(int nwbblocks)
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
+	if ((r = chdesc_init()) < 0)
+	{
+		kdprintf(STDERR_FILENO, "chdesc_init: %i\n", r);
+		return r;
+	}
+
 	if((r = modman_init()) < 0)
 	{
 		kdprintf(STDERR_FILENO, "modman_init: %i\n", r);

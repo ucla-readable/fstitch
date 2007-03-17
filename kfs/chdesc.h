@@ -63,6 +63,7 @@ struct chdesc {
 			/* NULL data implies chdesc need not (and cannot) be rolled back */
 			uint8_t * xdata;
 			uint8_t ldata[CHDESC_LOCALDATA];
+			//uint16_t satisfy_freed;
 #if CHDESC_BYTE_SUM
 			uint16_t old_sum, new_sum;
 #endif
@@ -133,6 +134,8 @@ struct chrefdesc {
 	void * callback_data;
 	chrefdesc_t * next;
 };
+
+int chdesc_init(void);
 
 /* create new chdescs */
 /* create a noop using befores array */

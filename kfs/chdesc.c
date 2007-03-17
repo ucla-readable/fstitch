@@ -9,6 +9,7 @@
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
+#include <kfs/kfsd.h>
 
 /* Set to check for chdesc dependency cycles. Values: 0 (disable), 1 (enable) */
 #define CHDESC_CYCLE_CHECK 0
@@ -40,10 +41,213 @@
 #define CHDESC_BYTE_MERGE_OVERLAP 1
 #define CHDESC_BIT_MERGE_OVERLAP 1
 
+/* Set to enable chdesc accounting */
+#define CHDESC_ACCOUNT 0
+
+
+
+#define CHDEPDESCPOOLSIZE 170
+typedef struct chdepdescpool {
+		struct chdepdescpool *next;
+		chdepdesc_t chdeps[CHDEPDESCPOOLSIZE];
+} chdepdescpool_t;
+
+static chdepdesc_t *free_chdeps;
+static chdepdescpool_t *free_chdeps_pool;
+
+static chdepdesc_t *chdepdesc_pool_alloc(void)
+{
+	chdepdescpool_t *pool;
+	int i;
+	if (!(pool = malloc(sizeof(chdepdescpool_t))))
+		return NULL;
+	pool->next = free_chdeps_pool;
+	free_chdeps_pool = pool;
+	for (i = 1; i < CHDEPDESCPOOLSIZE; i++)
+		* ((chdepdesc_t **) &pool->chdeps[i]) = &pool->chdeps[i-1];
+	* ((chdepdesc_t **) &pool->chdeps[0]) = free_chdeps;
+	free_chdeps = &pool->chdeps[CHDEPDESCPOOLSIZE - 1];
+	return free_chdeps;
+}
+
+static __inline chdepdesc_t *chdepdesc_alloc(void) __attribute__((always_inline));
+static __inline chdepdesc_t *chdepdesc_alloc(void)
+{
+	chdepdesc_t *d;
+	if (unlikely(!free_chdeps))
+		if (unlikely(!chdepdesc_pool_alloc()))
+			return NULL;
+	d = free_chdeps;
+	free_chdeps = * ((chdepdesc_t **) d);
+	return d;
+}
+
+static __inline void chdepdesc_free(chdepdesc_t *d) __attribute__((always_inline));
+static __inline void chdepdesc_free(chdepdesc_t *d)
+{
+	* ((chdepdesc_t **) d) = free_chdeps;
+	free_chdeps = d;
+}
+
+
+
+#define CHDESCPOOLSIZE ((int) (4094 / sizeof(chdesc_t)))
+typedef struct chdescpool {
+		struct chdescpool *next;
+		chdesc_t chdescs[CHDESCPOOLSIZE];
+} chdescpool_t;
+
+static chdesc_t *free_chdescs;
+static chdescpool_t *free_chdescs_pool;
+
+static chdesc_t *chdesc_pool_alloc(void)
+{
+	chdescpool_t *pool;
+	int i;
+	if (!(pool = malloc(sizeof(chdescpool_t))))
+		return NULL;
+	pool->next = free_chdescs_pool;
+	free_chdescs_pool = pool;
+	for (i = 1; i < CHDESCPOOLSIZE; i++)
+		* ((chdesc_t **) &pool->chdescs[i]) = &pool->chdescs[i-1];
+	* ((chdesc_t **) &pool->chdescs[0]) = free_chdescs;
+	free_chdescs = &pool->chdescs[CHDESCPOOLSIZE - 1];
+	return free_chdescs;
+}
+
+static __inline chdesc_t *chdesc_alloc(void) __attribute__((always_inline));
+static __inline chdesc_t *chdesc_alloc(void)
+{
+	chdesc_t *d;
+	if (unlikely(!free_chdescs))
+		if (unlikely(!chdesc_pool_alloc()))
+			return NULL;
+	d = free_chdescs;
+	free_chdescs = * ((chdesc_t **) d);
+	return d;
+}
+
+static __inline void chdesc_free(chdesc_t *d) __attribute__((always_inline));
+static __inline void chdesc_free(chdesc_t *d)
+{
+	* ((chdesc_t **) d) = free_chdescs;
+	free_chdescs = d;
+}
+
+
+static void chpools_free_all(void * crap)
+{
+	chdepdescpool_t *p;
+	chdescpool_t *q;
+	while ((p = free_chdeps_pool)) {
+		free_chdeps_pool = p->next;
+		free(p);
+	}
+	while ((q = free_chdescs_pool)) {
+		free_chdescs_pool = q->next;
+		free(q);
+	}
+}
+
+
+
+#if CHDESC_ACCOUNT
+#include <asm/tsc.h>
+typedef struct account {
+	const char * name;
+	u64 space_time; /* total space * time */
+	u64 space_total;
+	u32 space_max, space_last;
+	cycles_t time_first, time_last;
+} account_t;
+
+static inline void account_init(const char * name, account_t * act)
+{
+	act->name = name;
+	act->space_time = 0;
+	act->space_total = 0;
+	act->space_max = act->space_last = 0;
+	act->time_first = act->time_last = 0;
+}
+
+static inline u64 u64_diff(u64 start, u64 end)
+{
+	if(start <= end)
+		return end - start;
+	return ULLONG_MAX - end + start;
+}
+
+static inline void account_update(account_t * act, int32_t space_change)
+{
+	cycles_t time_current = get_cycles();
+	u64 diff = u64_diff(act->time_last, time_current);
+	u64 spacetime_prev = act->space_time;
+	
+	if(!act->time_first)
+		act->time_first = act->time_last = get_cycles();
+	
+	act->space_time += act->space_last * diff;
+	assert(act->space_time >= spacetime_prev);
+	act->space_last += space_change;
+	act->time_last = time_current;
+	if(act->space_last > act->space_max)
+		act->space_max = act->space_last;
+	if(space_change > 0)
+		act->space_total += space_change; /* FIXME: sort of */
+}
+
+static account_t act_nchdescs[4], act_ndeps, act_nrefs;
+static account_t act_data;
+//static account_t act_nnrb;
+
+static account_t * act_all[] =
+	{ &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
+	  &act_nchdescs[3], &act_ndeps, &act_nrefs, &act_data };
+
+static inline void account_nchdescs(int type, int add)
+{
+	account_update(&act_nchdescs[type], add);
+	account_update(&act_nchdescs[3], add);
+}
+
+#include <asm/div64.h>
+static void account_print(const account_t * act)
+{
+	printf("accounting for %s: space*time=%llu, time=%llu, mean space=%llu/%llu, max=%u, total=%u\n", act->name, act->space_time, u64_diff(act->time_first, act->time_last), act->space_max, act->space_total);
+}
+
+static void account_finish_all(void * ignore)
+{
+	int i;
+	for(i = 0; i < sizeof(act_all) / sizeof(*act_all); i++)
+		account_print(act_all[i]);
+}
+
+#include <kfs/kfsd.h>
+static int account_init_all(void)
+{
+	account_init("nchdescs (total)", &act_nchdescs[3]);
+	account_init("nchdescs (byte)", &act_nchdescs[BYTE]);
+	account_init("nchdescs (bit)", &act_nchdescs[BIT]);
+	account_init("nchdescs (noop)", &act_nchdescs[NOOP]);
+	//account_init("nnrb", &act_nnrb);
+	account_init("data", &act_data);
+	account_init("ndeps", &act_ndeps);
+	account_init("nwrefs", &act_nrefs);
+	return kfsd_register_shutdown_module(account_finish_all, NULL, SHUTDOWN_POSTMODULES);
+}
+#else
+#define account_init(x) do {} while(0)
+#define account_update(act, sc) do {} while(0)
+#define account_nchdescs(type, add) do {} while (0)
+#define account_init_all() 0
+#endif
+
 #if COUNT_CHDESCS
 #include <lib/jiffies.h>
 /* indices match chdesc->type */
 static uint32_t chdesc_counts[3];
+static uint32_t nbyte_created, nbyte_not_created;
 static void dump_counts(void)
 {
 	static int last_count_dump = 0;
@@ -54,7 +258,7 @@ static void dump_counts(void)
 	{
 		while(jiffies - last_count_dump >= HZ)
 			last_count_dump += HZ;
-		printk(KERN_ERR "Bit: %4d, Byte: %4d, Noop: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP]);
+		printk(KERN_ERR "Bit: %4d, Byte: %4d, Noop: %4d, ByteTot: %4d, ByteWaste: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP], nbyte_created, nbyte_not_created);
 	}
 }
 #endif
@@ -552,9 +756,10 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 		return 0;
 #endif
 	
-	dep = malloc(sizeof(*dep));
+	dep = chdepdesc_alloc();
 	if(!dep)
 		return -E_NO_MEM;
+	account_update(&act_ndeps, 1);
 	
 	propagate_depend_add(after, before);
 	
@@ -909,9 +1114,10 @@ int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, ch
 	
 	assert(tail);
 	
-	chdesc = malloc(sizeof(*chdesc));
+	chdesc = chdesc_alloc();
 	if(!chdesc)
 		return -E_NO_MEM;
+	account_nchdescs(NOOP, 1);
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, owner);
 #if COUNT_CHDESCS
 	chdesc_counts[NOOP]++;
@@ -1326,10 +1532,15 @@ static void merge_rbs(bdesc_t * block)
 	
 	/* convert RB merger into a NRB (except overlaps, done later) */
 	if(merger->type == BYTE)
+	{
 		chdesc_free_byte_data(merger);
+		account_update(&act_data, -merger->byte.length);
+	}
 	else if(merger->type == BIT)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, merger, 0, merger->owner->level);
+		account_nchdescs(BIT, -1);
+		account_nchdescs(BYTE, 1);
 # if COUNT_CHDESCS
 		chdesc_counts[BIT]--;
 		chdesc_counts[BYTE]++;
@@ -1353,6 +1564,7 @@ static void merge_rbs(bdesc_t * block)
 	assert(!block->ddesc->nrb);
 	r = chdesc_weak_retain(merger, &block->ddesc->nrb, NULL, NULL);
 	assert(r >= 0);
+	//account_update(&act_nnrb, 1);
 	
 	/* convert non-merger data chdescs into noops so that pointers to them
 	 * remain valid.
@@ -1425,9 +1637,14 @@ static void merge_rbs(bdesc_t * block)
 		chdesc_unlink_ready_changes(chdesc);
 		chdesc_unlink_all_changes(chdesc);
 		if(chdesc->type == BYTE)
+		{
 			chdesc_free_byte_data(chdesc);
+			account_update(&act_data, -chdesc->byte.length);
+		}
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "rb->nrb mergee");
+		account_nchdescs(chdesc->type, -1);
+		account_nchdescs(NOOP, 1);
 # if COUNT_CHDESCS
 		chdesc_counts[chdesc->type]--;
 		chdesc_counts[NOOP]++;
@@ -1491,7 +1708,7 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t * before,
  * chdesc has no explicit befores and has a single overlap.
  * Returns 1 on successful merge (*head points to merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
+static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, const void *data)
 {
 	chdepdesc_t * dep;
 	chdesc_t * overlap = NULL;
@@ -1588,11 +1805,13 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 				chdesc_remove_depend(ddesc->overlaps, overlap);
 			return -E_NO_MEM;
 		}
+		account_update(&act_data, merge_length);
 		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.xdata, overlap->byte.length);
 		if(merge_offset < overlap->byte.offset)
 			memcpy(merge_data, &ddesc->data[merge_offset], overlap->byte.offset - merge_offset);
 		if(overlap_end < merge_end)
 			memcpy(merge_data + overlap_end - merge_offset, &ddesc->data[overlap_end], merge_end - overlap_end);
+		account_update(&act_data, -overlap->byte.length);
 		chdesc_free_byte_data(overlap);
 		overlap->byte.xdata = merge_data;
 		
@@ -1606,7 +1825,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head)
 # endif
 	}
 	
-	memcpy(&ddesc->data[(*new)->byte.offset], (*new)->byte.xdata, (*new)->byte.length);
+	memcpy(&ddesc->data[(*new)->byte.offset], data, (*new)->byte.length);
 	
 	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
@@ -1670,33 +1889,24 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		return 0;
 	}
 	
-	chdesc = malloc(sizeof(*chdesc));
+#if COUNT_CHDESCS
+	nbyte_created++;
+#endif
+	chdesc = chdesc_alloc();
 	if(!chdesc)
 		return -E_NO_MEM;
+	account_nchdescs(BYTE, 1);
 	
 	chdesc->owner = owner;		
 	chdesc->block = block;
 	chdesc->type = BYTE;
+	//chdesc->byte.satisfy_freed = 0;
 	
 	if(data_required)
 	{
 		chdesc->byte.offset = offset;
 		chdesc->byte.length = length;
-		if(length <= CHDESC_LOCALDATA)
-			chdesc->byte.xdata = &chdesc->byte.ldata[0];
-		else if(!(chdesc->byte.xdata = malloc(length)))
-		{
-			free(chdesc);
-			return -E_NO_MEM;
-		}
-		if(data)
-			memcpy(chdesc->byte.xdata, data, length);
-		else
-			memset(chdesc->byte.xdata, 0, length);
-#if CHDESC_BYTE_SUM
-		chdesc->byte.old_sum = chdesc_byte_sum(&block->ddesc->data[offset], length);
-		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.xdata, length);
-#endif
+		chdesc->byte.xdata = NULL; /* XXX Is this OK? */
 	}
 	else
 	{
@@ -1710,6 +1920,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		chdesc->byte.old_sum = 0;
 		chdesc->byte.new_sum = 0;
 #endif
+		//account_update(&act_nnrb, 1);
 	}
 	
 	chdesc->befores = NULL;
@@ -1729,9 +1940,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->stamps = 0;
-	
-	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
+	chdesc->flags = CHDESC_SAFE_AFTER;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
 #if COUNT_CHDESCS
@@ -1777,23 +1986,44 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	/* after the above work towards chdesc to avoid multiple overlap scans */
 	if(data_required)
 	{
-		if((r = chdesc_create_byte_merge_overlap(&chdesc, head)) < 0)
+		if((r = chdesc_create_byte_merge_overlap(&chdesc, head, data)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
 		}
-		else if(r == 1)
+		else if(r == 1) {
+#if COUNT_CHDESCS
+			nbyte_not_created++;
+#endif
 			return 0;
+		}
 	}
 #endif
 	
 	if(data_required)
 	{	
-		if((r = chdesc_apply(chdesc)) < 0)
+		void *crap;
+
+		if(length <= CHDESC_LOCALDATA)
+			chdesc->byte.xdata = &chdesc->byte.ldata[0];
+		else if(!(chdesc->byte.xdata = malloc(length)))
 		{
 			chdesc_destroy(&chdesc);
-			return r;
+			return -E_NO_MEM;
 		}
+
+		crap = &chdesc->block->ddesc->data[offset];
+		memcpy(crap, chdesc->byte.xdata, length);
+		if(data)
+			memcpy(crap, data, length);
+		else
+			memset(crap, 0, length);
+		account_update(&act_data, length);
+		/* FIXME Chris: account for allocations */
+#if CHDESC_BYTE_SUM
+		chdesc->byte.new_sum = chdesc_byte_sum(crap, length);
+		chdesc->byte.old_sum = chdesc_byte_sum(chdesc->byte.xdata, length);
+#endif
 	}
 	else
 	{
@@ -1802,7 +2032,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			memcpy(&chdesc->block->ddesc->data[offset], data, length);
 		else
 			memset(&chdesc->block->ddesc->data[offset], 0, length);
-		chdesc->flags &= ~CHDESC_ROLLBACK;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
 		assert(!block->ddesc->nrb);
 		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb, NULL, NULL)) < 0)
@@ -1908,6 +2137,9 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
 {
+	//uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+	//return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
+
 	bool data_required = new_chdescs_require_data(block);
 	chdesc_t * chdesc;
 	chdesc_t * bit_changes = NULL;
@@ -1950,9 +2182,10 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 # endif
 #endif
 	
-	chdesc = malloc(sizeof(*chdesc));
+	chdesc = chdesc_alloc();
 	if(!chdesc)
 		return -E_NO_MEM;
+	account_nchdescs(BIT, 1);
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
 #if COUNT_CHDESCS
 	chdesc_counts[BIT]++;
@@ -2215,9 +2448,12 @@ void chdesc_dep_remove(chdepdesc_t * dep)
 	if(dep->after.desc->type == NOOP && !dep->after.desc->befores)
 		/* we just removed the last before of a NOOP chdesc, so satisfy it */
 		chdesc_satisfy(&dep->after.desc);
-	
+
+#if 0 /* YOU_HAVE_TIME_TO_WASTE */
 	memset(dep, 0, sizeof(*dep));
-	free(dep);
+#endif
+	chdepdesc_free(dep);
+	account_update(&act_ndeps, -1);
 }
 
 void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
@@ -2317,7 +2553,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 #endif
 			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.xdata, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
+			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
@@ -2348,6 +2584,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 			printf("%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 			chdesc->weak_refs = next->next;
 			free(next);
+			account_update(&act_nrefs, -1);
 		}
 	}
 }
@@ -2378,12 +2615,21 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		switch((*chdesc)->type)
 		{
 			case BYTE:
-				chdesc_free_byte_data(*chdesc);
-				(*chdesc)->byte.xdata = NULL;
-				/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
+				if(chdesc_is_rollbackable(*chdesc))
+				{
+					chdesc_free_byte_data(*chdesc);
+					(*chdesc)->byte.xdata = NULL;
+					account_update(&act_data, -(*chdesc)->byte.length);
+					/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
+				}
+				//else
+				//	account_update(&act_nnrb, -1);
+				//(*chdesc)->byte.satisfy_freed = 1;
 				chdesc_remove_depend((*chdesc)->block->ddesc->overlaps, *chdesc);
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
+				account_nchdescs(BYTE, -1);
+				account_nchdescs(NOOP, 1);
 #if COUNT_CHDESCS
 				chdesc_counts[BYTE]--;
 				chdesc_counts[NOOP]++;
@@ -2420,9 +2666,13 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		/* we don't need the data in byte change descriptors anymore */
 		if((*chdesc)->type == BYTE)
 		{
-			chdesc_free_byte_data(*chdesc);
-			(*chdesc)->byte.xdata = NULL;
-			/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
+			if((*chdesc)->byte.xdata)
+			{
+				chdesc_free_byte_data(*chdesc);
+				account_update(&act_data, -(*chdesc)->byte.length);
+				(*chdesc)->byte.xdata = NULL;
+				/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
+			}
 		}
 		
 		/* make sure we're not already destroying this chdesc */
@@ -2477,6 +2727,7 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_c
 		chrefdesc_t * ref = malloc(sizeof(*ref));
 		if(!ref)
 			return -E_NO_MEM;
+		account_update(&act_nrefs, 1);
 		
 		ref->desc = location;
 		ref->callback = callback;
@@ -2515,6 +2766,7 @@ int chdesc_weak_forget(chdesc_t ** location, bool callback)
 		if(callback && scan->callback)
 			value = scan->callback(location, scan->callback_data);
 		free(scan);
+		account_update(&act_nrefs, -1);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, *location, location);
 	}
 	return value;
@@ -2580,8 +2832,17 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	{
 		case BYTE:
 			/* chdesc_satisfy() does free 'data', but error cases may not */
-			chdesc_free_byte_data(*chdesc);
-			(*chdesc)->byte.xdata = NULL;
+			//if(!(*chdesc)->byte.satisfy_freed)
+			{
+				if(chdesc_is_rollbackable(*chdesc))
+				{
+					chdesc_free_byte_data(*chdesc);
+					(*chdesc)->byte.xdata = NULL;
+					account_update(&act_data, -(*chdesc)->byte.length);
+				}
+				//else
+				//	account_update(&act_nnrb, -1);
+			}
 			break;
 		case NOOP:
 			if((*chdesc)->flags & CHDESC_BIT_NOOP)
@@ -2605,8 +2866,11 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	chdesc_counts[(*chdesc)->type]--;
 	dump_counts();
 #endif
+	account_nchdescs((*chdesc)->type, -1);
+#if 0 /* YOU_HAVE_TIME_TO_WASTE */
 	memset(*chdesc, 0, sizeof(**chdesc));
-	free(*chdesc);
+#endif
+	chdesc_free(*chdesc);
 	*chdesc = NULL;
 }
 
@@ -2661,4 +2925,13 @@ void chdesc_release_stamp(uint32_t stamp)
 			stamp >>= 1;
 		stamps[i] = NULL;
 	}
+}
+
+int chdesc_init(void)
+{
+	int r = kfsd_register_shutdown_module(chpools_free_all, NULL, SHUTDOWN_POSTMODULES);
+	printk("<1>%d size\n", sizeof(chdesc_t));
+	if (r < 0)
+		return r;
+	return account_init_all();
 }
