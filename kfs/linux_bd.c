@@ -31,7 +31,7 @@ KERNEL_TIMING(wait);
 #endif
 
 #ifdef CONFIG_MD
-#error linux_bd is (apparently) incompatible with RAID/LVM
+#warning linux_bd is (apparently) incompatible with RAID/LVM
 #endif
 
 #ifndef BIO_RW_FUA
