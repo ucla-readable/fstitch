@@ -1019,7 +1019,7 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 		if (r < 0)
 			return r;
 	} else
-		panic("overlapping dirent");
+		kpanic("overlapping dirent");
 	return 0;
 }
 
