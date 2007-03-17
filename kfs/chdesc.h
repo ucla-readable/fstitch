@@ -20,6 +20,8 @@
 /* values: 0 (do not ensure), 1 (do ensure) */
 #define CHDESC_RB_NRB_READY (CHDESC_NRB && 1)
 
+#define CHDESC_LOCALDATA 4
+
 struct chdesc;
 typedef struct chdesc chdesc_t;
 
@@ -59,7 +61,8 @@ struct chdesc {
 			/* offset is in bytes */
 			uint16_t offset, length;
 			/* NULL data implies chdesc need not (and cannot) be rolled back */
-			uint8_t * data;
+			uint8_t * xdata;
+			uint8_t ldata[CHDESC_LOCALDATA];
 #if CHDESC_BYTE_SUM
 			uint16_t old_sum, new_sum;
 #endif
@@ -147,18 +150,17 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc) __attribute__((always_inline));
 static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
 {
-	switch(chdesc->type)
-	{
-		case BYTE:
-			return chdesc->byte.data != NULL;
-		case BIT:
-			/* BIT chdescs that are to be nonrollbackable become BYTE chdescs */
-		case NOOP:
-			return 1;
-		default:
-			kpanic("Unexpected chdesc of type %d\n", chdesc->type);
-	}
+	return chdesc->type != BYTE || chdesc->byte.xdata;
 }
+
+static __inline void chdesc_free_byte_data(chdesc_t *chdesc) __attribute((always_inline));
+static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
+{
+	assert(chdesc->type == BYTE);
+	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.xdata)
+		kfree(chdesc->byte.xdata);
+}
+
 
 /* return the maximum before BD level */
 /* TODO: determine whether inlining affects runtime */
