@@ -108,6 +108,10 @@ static u64 do_div64(u64 n, u64 base)
 {
 	u64 count = 0;
 	u64 prev;
+	if(!n)
+		return 0;
+	if(!base)
+		return ULLONG_MAX;
 	do {
 		prev = n;
 		n -= base;
