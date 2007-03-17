@@ -23,6 +23,11 @@ function start_kfsd() {
 	else
 		insmod kfs/kkfsd.ko linux_device=$DISK nwbblocks="$NWBBLOCKS" || exit 1
 	fi
+	if [ -f /proc/kkfsd_debug ]
+	then
+		echo "Start reading from /proc/kkfsd_debug, then press enter."
+		read
+	fi
 	mount -t kfs "$KMNT" "$MNT"
 	if [ $? -ne 0 ]; then rmmod kkfsd; exit 1; fi
 	[ $PROFILE -eq 1 ] && (opcontrol --start; opcontrol --reset)
