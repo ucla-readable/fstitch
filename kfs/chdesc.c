@@ -1159,7 +1159,6 @@ int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, ch
 	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
-	chdesc->stamps = 0;
 	
 	/* NOOP chdescs start applied */
 	chdesc->flags = CHDESC_SAFE_AFTER;
@@ -1958,7 +1957,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
-	chdesc->stamps = 0;
 	chdesc->flags = CHDESC_SAFE_AFTER;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
@@ -2234,7 +2232,6 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
-	chdesc->stamps = 0;
 
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
@@ -2918,31 +2915,6 @@ void chdesc_reclaim_written(void)
 		chdesc_t * first = free_head;
 		chdesc_free_remove(first);
 		chdesc_destroy(&first);
-	}
-}
-
-static BD_t * stamps[32] = {0};
-
-uint32_t chdesc_register_stamp(BD_t * bd)
-{
-	int i;
-	for(i = 0; i != 32; i++)
-		if(!stamps[i])
-		{
-			stamps[i] = bd;
-			return 1 << i;
-		}
-	return 0;
-}
-
-void chdesc_release_stamp(uint32_t stamp)
-{
-	if(stamp)
-	{
-		int i;
-		for(i = -1; stamp; i++)
-			stamp >>= 1;
-		stamps[i] = NULL;
 	}
 }
 

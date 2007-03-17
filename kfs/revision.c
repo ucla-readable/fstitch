@@ -19,11 +19,6 @@ static bool revision_owner_decider(chdesc_t * chdesc, void * data)
 	return chdesc->owner == (BD_t *) data;
 }
 
-static bool revision_stamp_decider(chdesc_t * chdesc, void * data)
-{
-	return chdesc_has_stamp(chdesc, (uint32_t) data) || !chdesc_is_rollbackable(chdesc);
-}
-
 static bool revision_flight_decider(chdesc_t * chdesc, void * data)
 {
 	return (chdesc->flags & CHDESC_INFLIGHT) != 0;
@@ -170,11 +165,6 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 	return _revision_tail_prepare(block, revision_owner_decider, bd);
 }
 
-int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp)
-{
-	return _revision_tail_prepare(block, revision_stamp_decider, (void *) stamp);
-}
-
 static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, void * data)
 {
 	chdesc_t * scan;
@@ -249,11 +239,6 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 int revision_tail_revert(bdesc_t * block, BD_t * bd)
 {
 	return _revision_tail_revert(block, revision_owner_decider, bd);
-}
-
-int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp)
-{
-	return _revision_tail_revert(block, revision_stamp_decider, (void *) stamp);
 }
 
 static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decider, void * data)
@@ -455,13 +440,13 @@ void revision_tail_wait_for_landing_requests(void)
 
 /* ---- Revision slices ---- */
 
-/* Unless we use chdesc stamps, of which there are a limited number, we don't
- * know whether chdescs that we don't own are above or below us. But that's OK,
- * because we don't need to. Hence there is no revision_slice_prepare()
- * function, because we don't need to apply or roll back any chdescs to use
- * revision slices. Basically a revision slice is a set of change descriptors at
- * a particular time, organized in a nice way so that we can figure out which
- * ones are ready to be written down and which ones are not. */
+/* Modules don't in general know whether chdescs that they don't own are above
+ * or below them. But that's OK, because they don't need to. Hence there is no
+ * revision_slice_prepare() function, because modules don't need to apply or
+ * roll back any chdescs to use revision slices. Basically a revision slice is a
+ * set of change descriptors at a particular time, organized in a nice way so
+ * that we can figure out which ones are ready to be written down and which ones
+ * are not. */
 
 /* move 'chdesc' from its ddesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
 static void link_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)

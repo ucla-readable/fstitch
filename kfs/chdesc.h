@@ -111,7 +111,6 @@ struct chdesc {
 	chdesc_t * tmp_next;
 	chdesc_t ** tmp_pprev;
 
-	uint32_t stamps;
 	uint16_t flags;
 };
 
@@ -246,21 +245,6 @@ void chdesc_update_ready_changes(chdesc_t * chdesc);
 void chdesc_link_index_changes(chdesc_t * chdesc);
 /* unlink chdesc from its ddesc's index_changes list */
 void chdesc_unlink_index_changes(chdesc_t * chdesc);
-
-uint32_t chdesc_register_stamp(BD_t * bd);
-void chdesc_release_stamp(uint32_t stamp);
-
-static __inline void chdesc_stamp(chdesc_t * chdesc, uint32_t stamp) __attribute__((always_inline));
-static __inline void chdesc_stamp(chdesc_t * chdesc, uint32_t stamp)
-{
-	chdesc->stamps |= stamp;
-}
-
-static __inline int chdesc_has_stamp(chdesc_t * chdesc, uint32_t stamp) __attribute__((always_inline));
-static __inline int chdesc_has_stamp(chdesc_t * chdesc, uint32_t stamp)
-{
-	return chdesc->stamps & stamp;
-}
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc);
 void chdesc_untmpize_all_changes(chdesc_t * chdesc);

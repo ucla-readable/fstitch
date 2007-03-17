@@ -5,14 +5,12 @@
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 
-/* these functions roll back change descriptors on the passed blocks which are
- * not yet ready to go to disk (the non-stamp case) or do not yet have the stamp */
+/* roll back change descriptors on the passed block which are not yet ready to
+ * go to disk */
 int revision_tail_prepare(bdesc_t *block, BD_t *bd);
-int revision_tail_prepare_stamp(bdesc_t * block, uint32_t stamp);
 
-/* these functions undo everything done by the _prepare functions above */
+/* undo everything done by revision_tail_prepare() above */
 int revision_tail_revert(bdesc_t *block, BD_t *bd);
-int revision_tail_revert_stamp(bdesc_t * block, uint32_t stamp);
 
 /* this function calls chdesc_satisfy() on all the non-rolled back change
  * descriptors on the block, and rolls the others forward again */
