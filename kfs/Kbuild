@@ -61,6 +61,7 @@ KKFSD_KFS_OBJS := \
               wb_cache_bd.o \
               wb2_cache_bd.o \
               journal_bd.o \
+              unlink_bd.o \
               loop_bd.o \
               josfs_base.o \
               ext2_base.o \
