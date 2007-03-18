@@ -156,6 +156,10 @@ static void account_print_all(void * ignore)
 	int i;
 	for(i = 0; i < sizeof(act_all) / sizeof(*act_all); i++)
 		account_print(act_all[i]);
+	printf("account totals headers: bit byte noop bit->byte ->noop total ndeps nwrefs data\n");
+	printf("account totals data: %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+	        act_nchdescs[BIT].space_total, act_nchdescs[BYTE].space_total, act_nchdescs[NOOP].space_total, act_nchdescs[NC_CONVERT_BIT_BYTE].space_total, act_nchdescs[NC_CONVERT_NOOP].space_total, act_nchdescs[NC_TOTAL].space_total,
+	        act_ndeps.space_total, act_nwrefs.space_total, act_data.space_total);
 }
 
 static int account_init_all(void)
@@ -176,6 +180,8 @@ static int account_init_all(void)
 # define account_init(x) do {} while(0)
 # define account_update(act, sc) do {} while(0)
 # define account_nchdescs(type, add) do {} while (0)
+# define account_nchdescs_undo(type) do {} while (0)
+# define account_nchdescs_convert(type_old, type_new) do {} while (0)
 # define account_init_all() 0
 #endif
 
@@ -1779,6 +1785,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 			if(overlap && overlap != before)
 			{
 #if CHDESC_RB_NRB_READY
+				/* TODO: does this actually require CHDESC_RB_NRB_READY? */
 				/* nrb depends on nothing on this block so an above is ok */
 				if(before == before->block->ddesc->nrb)
 					continue;
@@ -2121,6 +2128,7 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
 }
 
+#if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
 static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * overlap)
 {
 	if(head && head != overlap && !(head->flags & CHDESC_INFLIGHT))
@@ -2128,6 +2136,7 @@ static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * ov
 			return 0;
 	return 1;
 }
+#endif
 
 #if CHDESC_BIT_MERGE_OVERLAP
 static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
@@ -2161,6 +2170,8 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 		{
 			chdesc_t * before = dep->before.desc;
 #if CHDESC_RB_NRB_READY
+			/* NOTE: this wouldn't need CHDESC_RB_NRB_READY if an NRB
+			 * CHDESC_OVERLAPed the underlying bits */
 			/* nrb is guaranteed to not depend on overlap */
 			if(before == overlap->block->ddesc->nrb)
 				continue;
