@@ -89,7 +89,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
 			needs_head = 1;
 		}
 		
-		if(needs_head)
+		if(needs_head && write_head)
 		{
 			chdesc->flags |= CHDESC_SAFE_AFTER;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SAFE_AFTER);
