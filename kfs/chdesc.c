@@ -1777,7 +1777,19 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 			if(before->type != BYTE)
 				return 0;
 			if(overlap && overlap != before)
+			{
+#if CHDESC_RB_NRB_READY
+				/* nrb depends on nothing on this block so an above is ok */
+				if(before == before->block->ddesc->nrb)
+					continue;
+				if(overlap == before->block->ddesc->nrb)
+				{
+					overlap = before;
+					continue;
+				}
+#endif
 				return 0;
+			}
 			overlap = before;
 		}
 		else
