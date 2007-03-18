@@ -21,6 +21,7 @@
 
 #include <kfs/ext2_base.h>
 #include <kfs/journal_bd.h>
+#include <kfs/unlink_bd.h>
 #include <kfs/wholedisk_lfs.h>
 #include <kfs/josfs_base.h>
 #include <kfs/ufs_base.h>
@@ -57,6 +58,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 #define USE_ICASE 0
 #define USE_JOURNAL 0
+#define USE_UNLINK 0
 
 #define USE_WB_CACHE 2
 #ifndef USE_WB_CACHE
@@ -67,6 +69,10 @@ typedef struct kfsd_partition kfsd_partition_t;
 
 #if USE_WB_CACHE != 2 && USE_JOURNAL
 #error The journal requires a wb2_cache to function
+#endif
+
+#if USE_JOURNAL && USE_UNLINK
+#error The journal is incompatible with the unlink device
 #endif
 
 int kfsd_init(int nwbblocks)
@@ -153,28 +159,45 @@ int kfsd_init(int nwbblocks)
 			if (! (bd = linux_bd(linux_device)) )
 				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
 #if LINUX_BD_TIMING_TEST
-			int jiffies = jiffy_time();
-			uint32_t number;
-			bdesc_autorelease_pool_push();
-			printf("Timing test: writing 200000 sequential 8-sector blocks\n");
-			for(number = 0; number < 200000; number++)
+			const uint32_t block_numbers[4][30] = {
+				{10, 12, 14, 16, 18, 20, 22, 24,
+				 26, 28, 30, 32, 34, 36, 38,
+				 10000000, 10000002, 10000004, 10000006,
+				 10000008, 10000010, 10000012, 10000014,
+				 10000016, 10000018, 10000020, 10000022,
+				 10000024, 10000026, 10000028},
+				{10, 10000000, 12, 10000002, 14, 10000004, 16, 10000006,
+				 18, 10000008, 20, 10000010, 22, 10000012, 24, 10000014,
+				 26, 10000016, 28, 10000018, 30, 10000020, 32, 10000022,
+				 34, 10000024, 36, 10000026, 38, 10000028},
+				{10, 12, 14, 16, 18, 20, 22, 24,
+				 26, 28, 30, 32, 34, 36, 38, 40,
+				 42, 44, 46, 48, 50, 52, 54, 56,
+				 58, 60, 62, 64, 66, 68},
+				{68, 66, 64, 62, 60, 58, 56, 54,
+				 52, 50, 48, 46, 44, 42, 40, 38,
+				 36, 34, 32, 30, 28, 26, 24, 22,
+				 20, 18, 16, 14, 12, 10},
+			};
+			int seq, jiffies = jiffy_time();
+			printf("Timing test: running...\n");
+			for(seq = 0; seq < 75; seq++)
 			{
-				bdesc_t * block;
-				chdesc_t * init = NULL;
-				block = CALL(bd, synthetic_read_block, number * 8, 8);
-				chdesc_create_init(block, bd, &init);
-				CALL(bd, write_block, block);
-				if(number % 10000 == 9999)
+				uint32_t number;
+				for(number = 0; number < 30; number++)
 				{
-					printf("Timing test: %d blocks written\n", number + 1);
+					bdesc_t * block;
+					chdesc_t * init = NULL;
+					block = CALL(bd, synthetic_read_block, block_numbers[0][number] * 8, 8);
+					chdesc_create_init(block, bd, &init);
+					CALL(bd, write_block, block);
+				}
+				while(revision_tail_flights_exist())
+				{
+					revision_tail_wait_for_landing_requests();
 					revision_tail_process_landing_requests();
-					chdesc_reclaim_written();
-					bdesc_autorelease_pool_pop();
-					bdesc_autorelease_pool_push();
 				}
 			}
-			chdesc_reclaim_written();
-			bdesc_autorelease_pool_pop();
 			jiffies = jiffy_time() - jiffies;
 			printf("Timing test complete! Total time: %d.%02d seconds\n", jiffies / HZ, (jiffies % HZ) * 100 / HZ);
 			DESTROY(bd);
@@ -518,6 +541,11 @@ BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 		if (! (bd = wb2_cache_bd(bd, cache_nblks, cache_nblks * 4)) )
 			return NULL;
 	}
+
+#if USE_UNLINK
+	if (! (bd = unlink_bd(bd)) )
+		return NULL;
+#endif
 
 	return bd;
 }
