@@ -1,5 +1,5 @@
-#ifndef __KFS_BLOCK_ALLOC_H
-#define __KFS_BLOCK_ALLOC_H
+#ifndef __KUDOS_KFS_BLOCK_ALLOC_H
+#define __KUDOS_KFS_BLOCK_ALLOC_H
 
 #include <lib/hash_map.h>
 #include <kfs/chdesc.h>
@@ -26,4 +26,4 @@ int block_alloc_notify_alloc(block_alloc_head_t * alloc, uint32_t block);
 int block_alloc_head_init(block_alloc_head_t * alloc);
 void block_alloc_head_destroy(block_alloc_head_t * alloc);
 
-#endif /* __KFS_BLOCK_ALLOC_H */
+#endif /* __KUDOS_KFS_BLOCK_ALLOC_H */
