@@ -90,18 +90,43 @@ static inline void account_update(account_t * act, int32_t space_change)
 		act->space_total += space_change; /* FIXME: sort of */
 }
 
-static account_t act_nchdescs[4], act_ndeps, act_nwrefs;
+static account_t act_nchdescs[6], act_ndeps, act_nwrefs;
 static account_t act_data;
 //static account_t act_nnrb;
 
+#define NC_CONVERT_BIT_BYTE 3
+#define NC_CONVERT_NOOP 4
+#define NC_TOTAL 5
 static account_t * act_all[] =
-	{ &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
-	  &act_nchdescs[3], &act_ndeps, &act_nwrefs, &act_data };
+    { &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
+      &act_nchdescs[NC_CONVERT_BIT_BYTE], &act_nchdescs[NC_CONVERT_NOOP],
+      &act_nchdescs[NC_TOTAL],
+      &act_ndeps, &act_nwrefs, &act_data };
 
 static inline void account_nchdescs(int type, int add)
 {
 	account_update(&act_nchdescs[type], add);
-	account_update(&act_nchdescs[3], add);
+	account_update(&act_nchdescs[NC_TOTAL], add);
+}
+
+static inline void account_nchdescs_undo(int type)
+{
+	account_update(&act_nchdescs[type], -1);
+	act_nchdescs[type].space_total--;
+	account_update(&act_nchdescs[NC_TOTAL], -1);
+	act_nchdescs[NC_TOTAL].space_total--;
+}
+
+static inline void account_nchdescs_convert(int type_old, int type_new)
+{
+	account_update(&act_nchdescs[type_old], -1);
+	account_update(&act_nchdescs[type_new], 1);
+	if(type_old == BIT && type_new == BYTE)
+		account_update(&act_nchdescs[NC_CONVERT_BIT_BYTE], 1);
+	else if(type_new == NOOP)
+		account_update(&act_nchdescs[NC_CONVERT_NOOP], 1);
+	else
+		assert(0);
 }
 
 static u64 do_div64(u64 n, u64 base)
@@ -135,10 +160,12 @@ static void account_print_all(void * ignore)
 
 static int account_init_all(void)
 {
-	account_init("nchdescs (total)", &act_nchdescs[3]);
 	account_init("nchdescs (byte)", &act_nchdescs[BYTE]);
 	account_init("nchdescs (bit)", &act_nchdescs[BIT]);
 	account_init("nchdescs (noop)", &act_nchdescs[NOOP]);
+	account_init("nchdescs (bit->byte)", &act_nchdescs[NC_CONVERT_BIT_BYTE]);
+	account_init("nchdescs (->noop)", &act_nchdescs[NC_CONVERT_NOOP]);
+	account_init("nchdescs (total)", &act_nchdescs[NC_TOTAL]);
 	//account_init("nnrb", &act_nnrb);
 	account_init("data", &act_data);
 	account_init("ndeps", &act_ndeps);
@@ -264,7 +291,6 @@ static void chpools_free_all(void * ignore)
 #include <lib/jiffies.h>
 /* indices match chdesc->type */
 static uint32_t chdesc_counts[3];
-static uint32_t nbyte_created, nbyte_not_created;
 static void dump_counts(void)
 {
 	static int last_count_dump = 0;
@@ -275,10 +301,23 @@ static void dump_counts(void)
 	{
 		while(jiffies - last_count_dump >= HZ)
 			last_count_dump += HZ;
-		printk(KERN_ERR "Bit: %4d, Byte: %4d, Noop: %4d, ByteTot: %4d, ByteWaste: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP], nbyte_created, nbyte_not_created);
+		printk(KERN_ERR "Bit: %4d, Byte: %4d, Noop: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP]);
 	}
 }
 #endif
+
+
+static __inline void chdesc_free_byte_data(chdesc_t *chdesc) __attribute((always_inline));
+static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
+{
+	assert(chdesc->type == BYTE);
+	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.xdata)
+	{
+		kfree(chdesc->byte.xdata);
+		account_update(&act_data, -chdesc->byte.length);
+	}
+}
+
 
 static chdesc_t * free_head = NULL;
 
@@ -1547,15 +1586,11 @@ static void merge_rbs(bdesc_t * block)
 	
 	/* convert RB merger into a NRB (except overlaps, done later) */
 	if(merger->type == BYTE)
-	{
 		chdesc_free_byte_data(merger);
-		account_update(&act_data, -merger->byte.length);
-	}
 	else if(merger->type == BIT)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, merger, 0, merger->owner->level);
-		account_nchdescs(BIT, -1);
-		account_nchdescs(BYTE, 1);
+		account_nchdescs_convert(BIT, BYTE);
 # if COUNT_CHDESCS
 		chdesc_counts[BIT]--;
 		chdesc_counts[BYTE]++;
@@ -1652,14 +1687,10 @@ static void merge_rbs(bdesc_t * block)
 		chdesc_unlink_ready_changes(chdesc);
 		chdesc_unlink_all_changes(chdesc);
 		if(chdesc->type == BYTE)
-		{
 			chdesc_free_byte_data(chdesc);
-			account_update(&act_data, -chdesc->byte.length);
-		}
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "rb->nrb mergee");
-		account_nchdescs(chdesc->type, -1);
-		account_nchdescs(NOOP, 1);
+		account_nchdescs_convert(chdesc->type, NOOP);
 # if COUNT_CHDESCS
 		chdesc_counts[chdesc->type]--;
 		chdesc_counts[NOOP]++;
@@ -1829,7 +1860,6 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 			memcpy(merge_data, &ddesc->data[merge_offset], overlap->byte.offset - merge_offset);
 		if(overlap_end < merge_end)
 			memcpy(merge_data + overlap_end - merge_offset, &ddesc->data[overlap_end], merge_end - overlap_end);
-		account_update(&act_data, -overlap->byte.length);
 		chdesc_free_byte_data(overlap);
 		overlap->byte.xdata = merge_data;
 		
@@ -1907,13 +1937,10 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		return 0;
 	}
 	
-#if COUNT_CHDESCS
-	nbyte_created++;
-#endif
 	chdesc = chdesc_alloc();
 	if(!chdesc)
 		return -E_NO_MEM;
-	account_nchdescs(BYTE, 1);
+	account_nchdescs(BYTE, 1);	
 	
 	chdesc->owner = owner;		
 	chdesc->block = block;
@@ -2008,12 +2035,8 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			chdesc_destroy(&chdesc);
 			return r;
 		}
-		else if(r == 1) {
-#if COUNT_CHDESCS
-			nbyte_not_created++;
-#endif
+		else if(r == 1)
 			return 0;
-		}
 	}
 #endif
 	
@@ -2025,12 +2048,12 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			chdesc->byte.xdata = &chdesc->byte.ldata[0];
 		else
 		{
-			account_update(&act_data, length);
 			if(!(chdesc->byte.xdata = malloc(length)))
 			{
 				chdesc_destroy(&chdesc);
 				return -E_NO_MEM;
 			}
+			account_update(&act_data, length);
 		}
 
 		memcpy(chdesc->byte.xdata, block_data, length);
@@ -2635,7 +2658,6 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				{
 					chdesc_free_byte_data(*chdesc);
 					(*chdesc)->byte.xdata = NULL;
-					account_update(&act_data, -(*chdesc)->byte.length);
 					/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
 				}
 				//else
@@ -2644,8 +2666,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				chdesc_remove_depend((*chdesc)->block->ddesc->overlaps, *chdesc);
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
-				account_nchdescs(BYTE, -1);
-				account_nchdescs(NOOP, 1);
+				account_nchdescs_convert(BYTE, NOOP);
 #if COUNT_CHDESCS
 				chdesc_counts[BYTE]--;
 				chdesc_counts[NOOP]++;
@@ -2659,6 +2680,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
 				/* fall through */
+				account_nchdescs_convert(BIT, NOOP);
 #if COUNT_CHDESCS
 				chdesc_counts[BIT]--;
 				chdesc_counts[NOOP]++;
@@ -2685,7 +2707,6 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 			if((*chdesc)->byte.xdata)
 			{
 				chdesc_free_byte_data(*chdesc);
-				account_update(&act_data, -(*chdesc)->byte.length);
 				(*chdesc)->byte.xdata = NULL;
 				/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
 			}
@@ -2809,6 +2830,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		assert(!(*chdesc)->afters && !(*chdesc)->befores);
 		if(free_head == *chdesc || (*chdesc)->free_prev)
 			chdesc_free_remove(*chdesc);
+		account_nchdescs((*chdesc)->type, -1);
 	}
 	else
 	{
@@ -2825,6 +2847,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 			assert(!(*chdesc)->befores);
 			chdesc_free_remove(*chdesc);
 		}
+		account_nchdescs_undo((*chdesc)->type);
 	}
 	
 	/* remove befores first, so chdesc_satisfy() won't just turn it to a NOOP */
@@ -2854,7 +2877,6 @@ void chdesc_destroy(chdesc_t ** chdesc)
 				{
 					chdesc_free_byte_data(*chdesc);
 					(*chdesc)->byte.xdata = NULL;
-					account_update(&act_data, -(*chdesc)->byte.length);
 				}
 				//else
 				//	account_update(&act_nnrb, -1);
@@ -2882,7 +2904,6 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	chdesc_counts[(*chdesc)->type]--;
 	dump_counts();
 #endif
-	account_nchdescs((*chdesc)->type, -1);
 #if 0 /* YOU_HAVE_TIME_TO_WASTE */
 	memset(*chdesc, 0, sizeof(**chdesc));
 #endif

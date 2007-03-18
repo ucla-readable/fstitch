@@ -155,15 +155,6 @@ static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
 	return chdesc->type != BYTE || chdesc->byte.xdata;
 }
 
-static __inline void chdesc_free_byte_data(chdesc_t *chdesc) __attribute((always_inline));
-static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
-{
-	assert(chdesc->type == BYTE);
-	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.xdata)
-		kfree(chdesc->byte.xdata);
-}
-
-
 /* return the maximum before BD level */
 /* TODO: determine whether inlining affects runtime */
 static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc) __attribute__((always_inline));
