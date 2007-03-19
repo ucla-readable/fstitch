@@ -20,4 +20,4 @@ sync
 ../obj/util/fsync /mnt/test
 
 END="`date --iso=seconds`"
-timediff "$START" "$END"
+echo "Time: `timediff "$START" "$END"`"
