@@ -1044,12 +1044,13 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 		else if (r < 0)
 			return r;
 
-		//check if we can insert the dirent:
-		//if we can, then we dont need to allocate a new block =)
-		if (!entry->inode) {
+		//check if we can overwrite a jump dirent:
+		if (!entry->inode && entry->rec_len >= new_dirent->rec_len) {
 			new_dirent->rec_len = entry->rec_len;
 			return ext2_write_dirent(object, parent, new_dirent, prev_basep, head);
 		}
+
+		//check if we can insert the dirent:
 		else if ((entry->rec_len - (8 + entry->name_len)) > new_dirent->rec_len) {
 			EXT2_Dir_entry_t copy = *entry;
 			new_prev_len =  8 + ((copy.name_len - 1) / 4 + 1) * 4;
@@ -1730,77 +1731,61 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 	return r;
 }
 
-//this could be made a whole lot better if it used write_dirent!
-//but does not for efficiency's sake
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_delete_dirent %\n", basep);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	//uint32_t zero_ino = 0;
 	uint32_t basep_blockno, prev_basep_blockno;
 	uint16_t len;
-	bdesc_t * dirblock1, * dirblock2;
+	bdesc_t * dirblock;
 	int r = 0;
 
-	//get the blockno of the length of the previous dirent
-	//prev_basep + 4 since we only care about the previous length:
-	prev_basep_blockno = get_file_block(object, dir_file, prev_basep + 4);
-	if (prev_basep_blockno == INVALID_BLOCK)
-	      return -E_UNSPECIFIED;
-	
-	//get the blockno of the dirent being deleted
-	if(((prev_basep+4)/EXT2_BLOCK_SIZE) != ((basep+4)/EXT2_BLOCK_SIZE)) {
-		basep_blockno = get_file_block(object, dir_file, basep + 4);
-		if (basep_blockno == INVALID_BLOCK)
-			return -E_UNSPECIFIED;
-	} else
-		basep_blockno = prev_basep_blockno;
-		
-	dirblock1 = CALL(info->ubd, read_block, basep_blockno, 1);
-	if (!dirblock1)
-	      return -E_UNSPECIFIED;
-	if(basep_blockno != prev_basep_blockno) {
-		dirblock2 = CALL(info->ubd, read_block, prev_basep_blockno, 1);
-		if (!dirblock2)
-			return -E_UNSPECIFIED;
-	} else
-		dirblock2 = dirblock1;
 
-	len = *((uint16_t *)(dirblock1->ddesc->data + ((basep + sizeof(inode_t)) % EXT2_BLOCK_SIZE)));
-	uint32_t rec_len = len;
-	rec_len += basep - prev_basep;
-	if (rec_len > EXT2_MAX_REC_LEN)
-	{
+	//if the basep is at the start of a block, zero it out.
+	if(basep % EXT2_BLOCK_SIZE == 0) {
 		EXT2_Dir_entry_t jump_dirent;
-		uint32_t jump_block_no;
-		bdesc_t * jump_block;
-		uint32_t jump_basep = prev_basep + rec_len / 2;
-		jump_basep -= jump_basep % EXT2_BLOCK_SIZE;
+
+		basep_blockno = get_file_block(object, dir_file, basep);
+		if (basep_blockno == INVALID_BLOCK)
+
+			return -E_UNSPECIFIED;
+		dirblock = CALL(info->ubd, read_block, basep_blockno, 1);
+		if(!dirblock)
+			return -E_UNSPECIFIED;
+		len = *((uint16_t *)(dirblock->ddesc->data + (sizeof(inode_t))));
+		jump_dirent.rec_len = len;
 		jump_dirent.inode = 0;
-		jump_dirent.rec_len = (uint16_t)(rec_len - (jump_basep - prev_basep));
-		jump_block_no = get_file_block(object, dir_file, jump_basep);
-		if (jump_block_no == INVALID_BLOCK )
-			return -E_UNSPECIFIED;
-		jump_block = CALL(info->ubd, synthetic_read_block, jump_block_no, 1);
-		if (jump_block == NULL)
-			return -E_UNSPECIFIED;
-		if ((r = chdesc_create_byte(jump_block, info->ubd, 0, 6, &jump_dirent, head) < 0))
+
+		if ((r = chdesc_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, head) < 0))
 			return r;
-		len = jump_basep - prev_basep;
 
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent, add jump dirent");
-		r = CALL(info->ubd, write_block, jump_block);
-		if (r < 0)
-			return r;
-	}
-	else
-		len += basep - prev_basep;
-	
-	if ((r = chdesc_create_byte(dirblock2, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head) < 0))
-		return r;
+		return CALL(info->ubd, write_block, dirblock);
+	} 
 
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
-	return CALL(info->ubd, write_block, dirblock2);
+	//if deleting in the middle of a block, increase length of previous dirent
+	else {
+		prev_basep_blockno = get_file_block(object, dir_file, prev_basep);
+		if (prev_basep_blockno == INVALID_BLOCK)
+			return -E_UNSPECIFIED;
+		dirblock = CALL(info->ubd, read_block, prev_basep_blockno, 1);
+		if(!dirblock)
+			return -E_UNSPECIFIED;
+
+		//get the length of the deleted dirent
+
+		len = *((uint16_t *)(dirblock->ddesc->data + basep % EXT2_BLOCK_SIZE + (sizeof(inode_t))));
+
+		//get the length of the previous dirent:
+		len += basep - prev_basep;
+		
+		//update the length of the previous dirent:
+		if ((r = chdesc_create_byte(dirblock, info->ubd,  ((prev_basep + 4) % EXT2_BLOCK_SIZE), sizeof(len), (void *) &len, head) < 0))
+			return r;
+	
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
+		return CALL(info->ubd, write_block, dirblock);
+	}
 }
 
 static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
