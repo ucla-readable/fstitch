@@ -62,16 +62,12 @@ public class Chdesc
 	{
 		this(address, block, owner, opcode);
 		changeToBit(offset, xor);
-		/* BIT chdescs start rolled back */
-		setFlags(FLAG_ROLLBACK);
 	}
 	
 	public Chdesc(int address, int block, int owner, int opcode, short offset, short length)
 	{
 		this(address, block, owner, opcode);
 		changeToByte(offset, length);
-		/* BYTE chdescs start rolled back */
-		setFlags(FLAG_ROLLBACK);
 	}
 	
 	public int getType()
