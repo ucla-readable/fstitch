@@ -1,0 +1,35 @@
+#!/bin/bash
+
+TYPE=${TYPE:-ext2}
+DEV=${DEV:-/dev/sdb}
+PART=${DEV}1
+KMNT=kfs:/
+MNT=/mnt/test
+
+function try () {
+	echo "+ $@"
+	$@ || exit 1
+}
+
+if [ $# -ne 1 ]; then
+	echo "Usage: `basename "$0"` <start|stop>" 1>&2
+	exit 1
+fi
+
+if [ "$1" == "start" ]; then
+	sync
+	try sudo mkfs.$TYPE $PART
+	if [ "$NWBBLOCKS" == "" ]; then
+		try sudo insmod ../kfs/kkfsd.ko linux_device=$DEV
+	else
+		try sudo insmod ../kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS"
+	fi
+	try sudo mount -t kfs $KMNT $MNT
+	try sudo chmod 777 $MNT
+elif [ "$1" == "stop" ]; then
+	try sudo umount $MNT
+	try sudo rmmod kkfsd
+else
+	echo "Unknown action \"$1\"" 1>&2
+	exit 1
+fi
