@@ -1,23 +1,21 @@
 #!/bin/bash
 
+function run_sync () {
+	./postmark-1_5 <<- EOF
+		set location /mnt/test
+		set number 500
+		set size 500 2000000
+		set write 4096
+		set read 4096
+		run
+	EOF
+	sync
+	../obj/util/fsync /mnt/test
+}
+
 set -x
 
 CFLAGS=-O2 make postmark-1_5
 sync # sync outstandings so later sync only sends postmark to disk
 
-START="`date --iso=seconds`"
-
-./postmark-1_5 <<- EOF
-	set location /mnt/test
-	set number 500
-	set size 500 2000000
-	set write 4096
-	set read 4096
-	run
-	EOF
-
-sync
-../obj/util/fsync /mnt/test
-
-END="`date --iso=seconds`"
-echo "Time: `timediff "$START" "$END"`"
+time run_sync
