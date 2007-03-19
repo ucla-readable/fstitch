@@ -17,10 +17,6 @@
 #include <linux/types.h>
 #include <asm/atomic.h>
 
-#ifndef __KERNEL__
-#error linux_bd must be compiled for the linux kernel
-#endif
-
 #define DEBUG_TIMING 0
 #include <kfs/kernel_timing.h>
 KERNEL_TIMING(read);
@@ -40,7 +36,7 @@ KERNEL_TIMING(wait);
 #define BIO_RW_FUA 0
 #endif
 
-#define LINUX_BD_DEBUG_PRINT_EVERY_READ 0
+#define PRINT_EVERY_READ 0
 #define DEBUG_WRITES 0
 
 #define READ_AHEAD_COUNT 32
@@ -169,7 +165,8 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 		if(pre_checksum != post_checksum)
 			printk("pre- (0x%x) and post-write (0x%x) checksums differ for write %d (block %u)\n", pre_checksum, post_checksum, private->issue, write->blockno);
 		write->completed = debug_writes_completed++;
-		atomic_dec(&debug_writes_ninflight[write->blockno]);
+		if(write->blockno < MAXBLOCKNO)
+			atomic_dec(&debug_writes_ninflight[write->blockno]);
 	}
 #endif
 	
@@ -366,7 +363,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		
 		atomic_inc(&info->outstanding_io_count);
 		
-#if LINUX_BD_DEBUG_PRINT_EVERY_READ
+#if PRINT_EVERY_READ
 		printk(KERN_ERR "%d\n", j_number);
 #endif
 		generic_make_request(bio);
