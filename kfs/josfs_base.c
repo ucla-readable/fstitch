@@ -107,7 +107,7 @@ static int check_bitmap(LFS_t * object)
 
 	// Make sure the reserved and root blocks are marked in-use.
 	if (block_is_free(object, 0) || block_is_free(object, 1)) {
-		printf("josfs_base: Boot Sector or Parition Table marked free!\n");
+		printf("josfs_base: Boot Sector or Partition Table marked free!\n");
 		return -1;
 	}
 
