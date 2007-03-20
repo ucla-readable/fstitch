@@ -58,6 +58,13 @@ static uint32_t debug_writes_completed;
 static struct dentry * debug_writes_dentry;
 #endif
 
+#define RANDOM_REBOOT 0
+#if RANDOM_REBOOT
+# include <lib/stdio.h>
+# include <linux/random.h>
+# include <linux/reboot.h>
+#endif
+
 struct linux_info {
 	struct block_device * bdev;
 	const char * path;
@@ -450,6 +457,15 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	struct linux_bio_private * private;
 	KERNEL_INTERVAL(write);
 	
+#if RANDOM_REBOOT
+	u32 ru32;
+	if ((ru32 = random32()) < 100000)
+	{
+		printf("DEATH TO YOUR BOOT (random says %u)\n", ru32);
+		emergency_restart();
+	}
+#endif
+
 	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n", block->number, block->count);
 	if((info->blocksize * block->count) != block->ddesc->length)
 	{
