@@ -78,56 +78,31 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 }
 
 /* Write an entire block with new data, assuming that either A) no change
- * descriptors exist on the block or B) the entire block has a single layer of
- * BYTE change descriptors on it. In case B, use chdesc_rewrite_byte() to
- * rewrite the existing change descriptors to reflect the new data, and return
- * NULL in *head. In case A, return the newly created change descriptors in
- * *head. */
+ * descriptors exist on the block or B) the entire block has a single BYTE
+ * change descriptor on it. In case B, use chdesc_rewrite_byte() to rewrite
+ * the existing change descriptor to reflect the new data, and return NULL
+ * in *head. In case A, return the newly created change descriptor in *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	chdesc_t * scan;
-	uint16_t range = block->ddesc->length;
+	chdesc_t * rewrite = block->ddesc->index_changes[owner->graph_index].head;
 	
-	if(!block->ddesc->all_changes)
+	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->ddesc->length || (rewrite->flags & CHDESC_INFLIGHT))
 		return chdesc_create_full(block, owner, data, head);
 	
 	if(*head)
-		/* check to see whether *head is compatible with the existing chdescs */
-		for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		{
-			chdepdesc_t * befores;
-			if(scan->type != BYTE)
-				continue;
-			for(befores = scan->befores; befores; befores = befores->before.next)
-				if(befores->before.desc == *head)
-					break;
-			if(!befores)
-				/* we did not find *head among existing befores */
-				return chdesc_create_full(block, owner, data, head);
-		}
-	
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 	{
-		uint16_t offset;
-		if(scan->type != BYTE)
-			continue;
-		offset = scan->byte.length;
-		if(chdesc_rewrite_byte(scan, 0, offset, data + offset) < 0)
-			continue;
-		if(offset > range)
-			kpanic("impossible change descriptor structure!");
-		range -= offset;
+		/* check to see whether *head is compatible with the existing chdesc */
+		chdepdesc_t * befores;
+		for(befores = rewrite->befores; befores; befores = befores->before.next)
+			if(befores->before.desc == *head)
+				break;
+		if(!befores)
+			/* we did not find *head among existing befores */
+			return chdesc_create_full(block, owner, data, head);
 	}
 	
-	/* if we didn't touch anything, go ahead and use chdesc_create_full() */
-	if(range == block->ddesc->length)
-		return chdesc_create_full(block, owner, data, head);
-	
-	/* if there's anything left, it is an error... */
-	if(range)
-		kpanic("%s() called on non-layered block!\n", __FUNCTION__);
-	
-	return 0;
+	*head = NULL;
+	return chdesc_rewrite_byte(rewrite, 0, rewrite->byte.length, data);
 }
 
 /* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
