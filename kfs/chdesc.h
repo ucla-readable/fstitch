@@ -111,6 +111,9 @@ struct chdesc {
 	chdesc_t * tmp_next;
 	chdesc_t ** tmp_pprev;
 
+	chdesc_t * overlap_next;
+	chdesc_t ** overlap_pprev;
+
 	uint16_t flags;
 };
 

@@ -42,7 +42,7 @@ struct datadesc {
 	chdesc_t * nrb;
 #endif
 	
-	chdesc_t * overlaps;
+	chdesc_t * overlap0;
 	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;

@@ -365,31 +365,27 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 	chdesc->free_next = NULL;
 }
 
-/* ensure bdesc->ddesc->overlaps has a noop chdesc */
-static int ensure_bdesc_has_overlaps(bdesc_t * block)
+static void chdesc_link_overlap(chdesc_t *chdesc, datadesc_t *ddesc)
 {
-	chdesc_t * chdesc;
-	int r;
-	assert(block);
-	
-	if(block->ddesc->overlaps)
-	{
-		assert(block->ddesc->overlaps->type == NOOP);
-		return 0;
-	}
-	
-	r = chdesc_create_noop_list(NULL, &chdesc, NULL);
-	if(r < 0)
-		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "overlaps");
-	r = chdesc_weak_retain(chdesc, &block->ddesc->overlaps, NULL, NULL);
-	if(r < 0)
-	{
-		chdesc_destroy(&chdesc);
-		return r;
-	}
-	
-	return 0;
+	assert(chdesc->type == BYTE);
+	assert(chdesc->block && chdesc->block->ddesc == ddesc);
+	assert(!chdesc->overlap_pprev && !chdesc->overlap_next);
+	chdesc->overlap_pprev = &ddesc->overlap0;
+	chdesc->overlap_next = ddesc->overlap0;
+	ddesc->overlap0 = chdesc;
+	if(chdesc->overlap_next)
+		chdesc->overlap_next->overlap_pprev = &chdesc->overlap_next;
+}
+
+static void chdesc_unlink_overlap(chdesc_t *chdesc)
+{
+	assert((!chdesc->overlap_pprev && !chdesc->overlap_next) || (chdesc->block && chdesc->block->ddesc));
+	if(chdesc->overlap_pprev)
+		*chdesc->overlap_pprev = chdesc->overlap_next;
+	if(chdesc->overlap_next)
+		chdesc->overlap_next->overlap_pprev = chdesc->overlap_pprev;
+	chdesc->overlap_next = NULL;
+	chdesc->overlap_pprev = NULL;
 }
 
 /* ensure bdesc->ddesc->bit_changes[offset] has a noop chdesc */
@@ -936,7 +932,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(overlap == 2)
 	{
 		if(original->type == BYTE)
-			chdesc_remove_depend(original->block->ddesc->overlaps, original);
+			chdesc_unlink_overlap(original);
 		else if(original->type == BIT)
 		{
 			chdesc_t * bit_changes = chdesc_bit_changes(original->block, original->bit.offset);
@@ -976,6 +972,19 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 	return 0;
 }
 
+static int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **list)
+{
+	int r;
+	while(*list) {
+		chdesc_t *c = *list;
+		if(c != chdesc && (r = chdesc_overlap_attach(chdesc, c)) < 0)
+			return r;
+		if(*list == c)
+			list = &c->overlap_next;
+	}
+	return 0;
+}
+
 static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 {
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block);
@@ -1002,10 +1011,10 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 					return 0;
 	}
 	
-	if(!block->ddesc->overlaps)
+	if(!block->ddesc->overlap0)
 		return 0;
 	
-	return _chdesc_overlap_multiattach(chdesc, block->ddesc->overlaps);
+	return _chdesc_overlap_multiattach_x(chdesc, &block->ddesc->overlap0);
 }
 
 void chdesc_link_all_changes(chdesc_t * chdesc)
@@ -1204,6 +1213,8 @@ int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, ch
 	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
+	chdesc->overlap_next = NULL;
+	chdesc->overlap_pprev = NULL;
 	
 	/* NOOP chdescs start applied */
 	chdesc->flags = CHDESC_SAFE_AFTER;
@@ -1626,19 +1637,10 @@ static void merge_rbs(bdesc_t * block)
 	 * remain valid.
 	 * TODO: could we destroy the noops with no afters after the runloop? */
 
-	/* first: remove all overlaps in one run (for O(N) instead of O(N^2) time)
-	 * and add merger to overlaps to complete NRB construction.
-	 * this will remove deps on internal inflight chdescs, but that is ok. */
+	/* first: remove bit overlaps and ensure merger is in overlaps to complete NRB construction. */
 	empty_bit_changes(block);
-	while(block->ddesc->overlaps)
-	{
-		assert(block->ddesc->overlaps->befores);
-		chdesc_dep_remove(block->ddesc->overlaps->befores);
-	}
-	r = ensure_bdesc_has_overlaps(block);
-	assert(r >= 0);
-	r = chdesc_add_depend_fast(block->ddesc->overlaps, merger);
-	assert(r >= 0);
+	if(!merger->overlap_pprev)
+		chdesc_link_overlap(merger, block->ddesc);
 
 	/* second: convert data chdescs into noops
 	 * part a: unpropagate extern after counts (no more data chdesc afters)
@@ -1688,7 +1690,8 @@ static void merge_rbs(bdesc_t * block)
 		r = chdesc_add_depend(chdesc, merger);
 		assert(r >= 0);
 		chdesc->flags = flags;
-		
+
+		chdesc_unlink_overlap(chdesc);
 		chdesc_unlink_index_changes(chdesc);
 		chdesc_unlink_ready_changes(chdesc);
 		chdesc_unlink_all_changes(chdesc);
@@ -1847,10 +1850,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 	{
 		if(chdesc_overlap_check(*new, overlap) == 2)
 		{
-			if((r = ensure_bdesc_has_overlaps(overlap->block)) < 0)
-				return r;
-			if((r = chdesc_add_depend_fast(ddesc->overlaps, overlap)) < 0)
-				return r;
+			chdesc_link_overlap(overlap, ddesc);
 		}
 		/* note: no need to restore fully overlapped WRITTENs or INFLIGHTs */
 		(*new)->flags &= ~CHDESC_OVERLAP;
@@ -1869,7 +1869,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 			if(!(merge_data = malloc(merge_length)))
 			{
 				if((*new)->flags & CHDESC_OVERLAP)
-					chdesc_remove_depend(ddesc->overlaps, overlap);
+					chdesc_unlink_overlap(overlap); /* XXX? */
 				return -E_NO_MEM;
 			}
 			account_update(&act_data, merge_length);
@@ -2003,6 +2003,8 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
+	chdesc->overlap_next = NULL;
+	chdesc->overlap_pprev = NULL;
 	chdesc->flags = CHDESC_SAFE_AFTER;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
@@ -2026,17 +2028,8 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			chdesc_destroy(&chdesc);
 			return r;
 		}
-	
-	if((r = ensure_bdesc_has_overlaps(block)) < 0)
-	{
-		chdesc_destroy(&chdesc);
-		return r;
-	}
-	if((r = chdesc_add_depend_fast(block->ddesc->overlaps, chdesc)) < 0)
-	{
-		chdesc_destroy(&chdesc);
-		return r;
-	}
+
+	chdesc_link_overlap(chdesc, block->ddesc);
 	
 	/* make sure it is after upon any pre-existing chdescs */
 	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
@@ -2165,10 +2158,10 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	if(!bit_merge_overlap_ok_head(*head, overlap))
 		return 0;
 	
-	if(overlap->block->ddesc->overlaps)
-		for(dep = overlap->block->ddesc->overlaps->befores; dep; dep = dep->before.next)
+	if(overlap->block->ddesc->overlap0) {
+		chdesc_t * before;
+		for(before = overlap->block->ddesc->overlap0; before; before = before->overlap_next)
 		{
-			chdesc_t * before = dep->before.desc;
 #if CHDESC_RB_NRB_READY
 			/* NOTE: this wouldn't need CHDESC_RB_NRB_READY if an NRB
 			 * CHDESC_OVERLAPed the underlying bits */
@@ -2182,6 +2175,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 				/* uncommon. 'before' may need a rollback update. */
 				return 0;
 		}
+	}
 	
 	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
@@ -2278,6 +2272,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->ddesc_index_pprev = NULL;
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
+	chdesc->overlap_next = NULL;
+	chdesc->overlap_pprev = NULL;
 
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
@@ -2662,6 +2658,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, *chdesc);
 	
+	chdesc_unlink_overlap(*chdesc);
 	if((*chdesc)->befores)
 	{
 		chdesc_t * bit_changes;
@@ -2686,7 +2683,6 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				//else
 				//	account_update(&act_nnrb, -1);
 				//(*chdesc)->byte.satisfy_freed = 1;
-				chdesc_remove_depend((*chdesc)->block->ddesc->overlaps, *chdesc);
 				(*chdesc)->type = NOOP;
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
 				account_nchdescs_convert(BYTE, NOOP);
@@ -2715,7 +2711,6 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 				printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 				return -E_INVAL;
 		}
-		
 	}
 	else
 	{
@@ -2883,6 +2878,8 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		chdesc_satisfy(&desc);
 	}
 
+	chdesc_unlink_overlap(*chdesc);
+	chdesc_unlink_index_changes(*chdesc);
 	chdesc_unlink_ready_changes(*chdesc);
 	chdesc_unlink_all_changes(*chdesc);
 	
