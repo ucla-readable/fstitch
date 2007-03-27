@@ -365,14 +365,32 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 	chdesc->free_next = NULL;
 }
 
+static int chdesc_overlap_list(const chdesc_t *c)
+{
+	int sz = c->block->ddesc->length >> OVERLAP1SHIFT;
+	if (c->type == BIT)
+		// but this will not be executed at the moment
+		return (c->bit.offset << 2) / sz + 1;
+	else if (c->type == BYTE) {
+		if ((c->byte.offset ^ (c->byte.offset + c->byte.length - 1))
+		    & ~(sz - 1))
+			return 0;
+		else
+			return c->byte.offset / sz + 1;
+	} else
+		return -1;
+}
+
 static void chdesc_link_overlap(chdesc_t *chdesc, datadesc_t *ddesc)
 {
 	assert(chdesc->type == BYTE);
 	assert(chdesc->block && chdesc->block->ddesc == ddesc);
 	assert(!chdesc->overlap_pprev && !chdesc->overlap_next);
-	chdesc->overlap_pprev = &ddesc->overlap0;
-	chdesc->overlap_next = ddesc->overlap0;
-	ddesc->overlap0 = chdesc;
+	int list = chdesc_overlap_list(chdesc);
+	assert(list >= 0);
+	chdesc->overlap_pprev = &ddesc->overlap1[list];
+	chdesc->overlap_next = *chdesc->overlap_pprev;
+	*chdesc->overlap_pprev = chdesc;
 	if(chdesc->overlap_next)
 		chdesc->overlap_next->overlap_pprev = &chdesc->overlap_next;
 }
@@ -1010,11 +1028,24 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 				if((r = _chdesc_overlap_multiattach(chdesc, bit_changes)) < 0)
 					return 0;
 	}
-	
-	if(!block->ddesc->overlap0)
-		return 0;
-	
-	return _chdesc_overlap_multiattach_x(chdesc, &block->ddesc->overlap0);
+
+	// get range of buckets touched by this chdesc
+	int list1 = chdesc_overlap_list(chdesc), list2;
+	assert(list1 >= 0);
+	if (list1 == 0) {
+		assert(chdesc->type == BYTE);
+		int sz = block->ddesc->length >> OVERLAP1SHIFT;
+		list1 = chdesc->byte.offset / sz + 1;
+		list2 = (chdesc->byte.offset + chdesc->byte.length - 1) / sz + 1;
+	} else
+		list2 = list1;
+
+	int r;
+	for (; list1 <= list2; list1++)
+		if ((r = _chdesc_overlap_multiattach_x(chdesc, &block->ddesc->overlap1[list1])) < 0)
+			return r;
+
+	return _chdesc_overlap_multiattach_x(chdesc, &block->ddesc->overlap1[0]);
 }
 
 void chdesc_link_all_changes(chdesc_t * chdesc)
@@ -1639,8 +1670,8 @@ static void merge_rbs(bdesc_t * block)
 
 	/* first: remove bit overlaps and ensure merger is in overlaps to complete NRB construction. */
 	empty_bit_changes(block);
-	if(!merger->overlap_pprev)
-		chdesc_link_overlap(merger, block->ddesc);
+	chdesc_unlink_overlap(merger);
+	chdesc_link_overlap(merger, block->ddesc);
 
 	/* second: convert data chdescs into noops
 	 * part a: unpropagate extern after counts (no more data chdesc afters)
@@ -1881,7 +1912,8 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 			memcpy(merge_data + overlap_end - merge_offset, &ddesc->data[overlap_end], merge_end - overlap_end);
 		chdesc_free_byte_data(overlap);
 		overlap->byte.xdata = merge_data;
-		
+
+		chdesc_unlink_overlap(overlap);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, overlap, merge_offset);
 		overlap->byte.offset = merge_offset;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, overlap, merge_length);
@@ -1890,6 +1922,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.xdata, merge_length);
 		overlap->byte.new_sum = chdesc_byte_sum(&ddesc->data[merge_offset], merge_length);
 # endif
+		chdesc_link_overlap(overlap, overlap->block->ddesc);
 	}
 	
 	memcpy(&ddesc->data[(*new)->byte.offset], data, (*new)->byte.length);
@@ -2157,11 +2190,13 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	
 	if(!bit_merge_overlap_ok_head(*head, overlap))
 		return 0;
-	
-	if(overlap->block->ddesc->overlap0) {
-		chdesc_t * before;
-		for(before = overlap->block->ddesc->overlap0; before; before = before->overlap_next)
-		{
+
+	{
+		int list = 0;
+		chdesc_t *before;
+
+	    retry:
+		for (before = overlap->block->ddesc->overlap1[list]; before; before = before->overlap_next) {
 #if CHDESC_RB_NRB_READY
 			/* NOTE: this wouldn't need CHDESC_RB_NRB_READY if an NRB
 			 * CHDESC_OVERLAPed the underlying bits */
@@ -2175,6 +2210,9 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 				/* uncommon. 'before' may need a rollback update. */
 				return 0;
 		}
+
+		if (list == 0 && (list = chdesc_overlap_list(overlap)))
+			goto retry;
 	}
 	
 	overlap->bit.or |= xor;

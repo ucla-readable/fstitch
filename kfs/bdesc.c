@@ -85,7 +85,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 #if CHDESC_NRB
 	bdesc->ddesc->nrb = NULL;
 #endif
-	bdesc->ddesc->overlap0 = NULL;
+	for (i = 0; i < NOVERLAP1 + 1; i++)
+		bdesc->ddesc->overlap1[i] = NULL;
 	bdesc->ddesc->manager = NULL;
 	/* it has no manager, but give it a managed number anyway */
 	bdesc->ddesc->managed_number = number;
@@ -145,7 +146,7 @@ void bdesc_release(bdesc_t ** bdesc)
 		{
 			uint16_t i;
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
-			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap0)
+			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
 				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 #if BDESC_EXTERN_AFTER_COUNT
 			if((*bdesc)->ddesc->extern_after_count)

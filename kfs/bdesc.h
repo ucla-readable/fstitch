@@ -41,8 +41,11 @@ struct datadesc {
 #if CHDESC_NRB
 	chdesc_t * nrb;
 #endif
+
+#define OVERLAP1SHIFT	5
+#define NOVERLAP1	32
+	chdesc_t *overlap1[1 + NOVERLAP1];
 	
-	chdesc_t * overlap0;
 	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;
