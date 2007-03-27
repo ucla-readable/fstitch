@@ -137,6 +137,7 @@ fi
 # Try to load oprofile, then detect whether it worked
 zgrep -q OPROFILE /proc/config.gz && modprobe oprofile
 PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
+grep -q idle=poll /proc/cmdline && TP=.2 || TP=1
 
 echo "Using disk $DISK"
 
@@ -182,7 +183,7 @@ do
 	stop_kfsd
 
 	echo "==== `date`" >> "$PROF_LOG"
-	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t 1 | su $REAL_USER -c "tee -a \"$PROF_LOG\""
+	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t $TP | su $REAL_USER -c "tee -a \"$PROF_LOG\""
 done
 
 echo "---- complete"
