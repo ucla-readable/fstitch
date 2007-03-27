@@ -1,25 +1,28 @@
 OBJDIRS += util
-BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/testopgroup $(UTILDIR)/kdb.jar
+BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/kdb.jar
+ifeq ($(OBJDIR),$(BASE_OBJDIR)/kernel)
+BIN += $(UTILDIR)/testopgroup
+endif
 
 $(UTILDIR)/bdsplit: util/bdsplit.c
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -o $@ $<
+	$(V)$(CC) $(CFLAGS) -o $@ $<
 
 $(UTILDIR)/check_writes: util/check_writes.c kfs/linux_bd_debug.h
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
 $(UTILDIR)/fsck.jos: util/fsck.jos.c kfs/josfs_base.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
 $(UTILDIR)/fsformat: util/fsformat.c kfs/josfs_base.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(NCC) $(NCFLAGS) -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
 $(UTILDIR)/fsync: util/fsync.c
 	@echo + cc[UTIL] $<

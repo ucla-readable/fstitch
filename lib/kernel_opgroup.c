@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,9 +18,9 @@
 #define OPGROUP_DEBUG 0
 #if OPGROUP_DEBUG
 #include <stdio.h>
-#define Dprintf(x...) fprintf(stderr, x)
+#define Dprintf(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
 #else
-#define Dprintf(x...) 
+#define Dprintf(fmt, ...)
 #endif
 #define PREFIX "## "
 

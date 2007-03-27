@@ -1,0 +1,16 @@
+OBJDIRS += lib
+
+LIB_SRCFILES := \
+			lib/kdprintf.c \
+			lib/qsort.c \
+			lib/vector.c \
+			lib/hash_map.c \
+			lib/hash_set.c \
+			lib/kfs_feature.c \
+			lib/svnrevtol.c
+
+LIB_OBJFILES := $(patsubst lib/%.c, $(OBJDIR)/lib/%.o, $(LIB_SRCFILES))
+
+$(OBJDIR)/lib/libuser.a: $(LIB_OBJFILES)
+	@echo + ar $@
+	$(V)$(AR) r $@ $(LIB_OBJFILES)

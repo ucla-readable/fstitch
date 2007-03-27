@@ -1,35 +1,36 @@
-# Linux kernel KFS Makefile
+# unix-user KFS Makefile
 
 BASE_OBJDIR := obj
-OBJDIR := $(BASE_OBJDIR)/kernel
+OBJDIR := $(BASE_OBJDIR)/unix-user
 UTILDIR := $(BASE_OBJDIR)/util
 
 V = @
 
-BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
-
-ifeq ($(KERNELRELEASE),)
-KERNELRELEASE = $(shell uname -r)
-endif
-
-ifeq ($(KERNELPATH),)
-KERNELPATH = /lib/modules/${KERNELRELEASE}/build
-endif
+UTILS := \
+	$(UTILDIR)/fsformat \
+	$(UTILDIR)/fsck.jos \
+	$(UTILDIR)/kdb.jar
 
 # Commands
 CC	:= gcc $(CC_VER) -pipe
+AR	:= ar
 ANT	:= ant
 TAR	:= tar
 PERL	:= perl
 CTAGS	:= ctags
 
 # Command flags
-CFLAGS	:= -Wall -pedantic
+CFLAGS	:= -Wall -std=gnu99
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile\)\(Makefile.user\).mk
 
-# Lists that the */Makefrag makefile fragments will add to
+# Compiler flags
+CFLAGS	:= $(CFLAGS) $(DEFS) -I. -MD -g -DUNIXUSER
+CFLAGS	:= $(CFLAGS) -O2 -march=pentium3
+
+# Lists that the */UUMakefrag makefile fragments will add to
 OBJDIRS :=
 
+# Make sure that 'all' is the first target
 all: tags TAGS
 
 # Eliminate default suffix rules
@@ -39,22 +40,29 @@ all: tags TAGS
 .DELETE_ON_ERROR:
 
 # make it so that no intermediate .o files are never deleted
-.PRECIOUS: %.o
+.PRECIOUS: %.o \
+	$(OBJDIR)/lib/%.o $(OBJDIR)/kfs/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
 
-kfs/kkfsd.ko: always
-	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
+BIN :=
 
-install: kfs/kkfsd.ko
-	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
-
-$(OBJDIR)/lib/libopgroup.so: lib/kernel_opgroup.c
+$(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -std=gnu99 -g -o $@ $< -shared
+	$(V)$(CC) $(CFLAGS) -c -o $@ $<
 
-# Include Makefrags for subdirectories
+FUSE_CFLAGS := $(shell pkg-config fuse --cflags) -DFUSE_USE_VERSION=25
+FUSE_LDFLAGS := $(shell pkg-config fuse --libs)
+
+$(OBJDIR)/kfs/%.o: kfs/%.c
+	@echo + cc[KFS] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -DKFSD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
+
+# Include [UU]Makefrags for subdirectories
 include fs/Makefrag
 include util/Makefrag
+include lib/UUMakefrag
+include kfs/UUMakefrag
 
 # Build vi/emacs tag files
 # thetags - for if your source does not build
@@ -85,8 +93,7 @@ fsclean:
 	rm -f $(OBJDIR)/fs/ufs.img  $(OBJDIR)/fs/ext2.img 
 
 clean:
-	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
-	rm -rf $(BASE_OBJDIR) tags TAGS Module.symvers
+	rm -rf $(OBJDIR) tags TAGS Module.symvers
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,
@@ -101,4 +108,4 @@ $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 always:
 	@:
 
-.PHONY: all always install clean
+.PHONY: all always clean
