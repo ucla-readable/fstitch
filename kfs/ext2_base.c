@@ -302,16 +302,12 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	r = CALL(info->ubd, write_block, info->inode_cache);
 	if (r < 0)
 		return r;
-	int inode_delta = 1;
-	if (value == 0) 
-		inode_delta = -1;
 		
-		
-	r = CALL(info->super_wb, inodes, inode_delta);
+	r = CALL(info->super_wb, inodes, value ? -1 : 1);
 	if (r < 0)
 		return r;
 
-	r = CALL(info->super_wb, write_gdesc, block_group, 0, inode_delta, 0);
+	r = CALL(info->super_wb, write_gdesc, block_group, 0, value ? -1 : 1, 0);
 	return r;
 }
 
