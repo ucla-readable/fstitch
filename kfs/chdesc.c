@@ -2658,59 +2658,14 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, *chdesc);
 	
-	chdesc_unlink_overlap(*chdesc);
 	if((*chdesc)->befores)
 	{
-		chdesc_t * bit_changes;
-		/* We are trying to satisfy a chdesc with befores, which
-		 * can happen if we have modules generating out-of-order chdescs
-		 * but no write-back caches. We need to convert it to a NOOP so
-		 * that any of its afters will still have the befores of this
-		 * chdescs as indirect befores. However, we
-		 * still need to collect any weak references to it in case
-		 * anybody was watching it to see when it got satisfied. */
-		if((*chdesc)->type != NOOP)
-			printf("%s(): (%s:%d): satisfying chdesc %p of type %d with befores!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc, (*chdesc)->type);
-		switch((*chdesc)->type)
-		{
-			case BYTE:
-				if(chdesc_is_rollbackable(*chdesc))
-				{
-					chdesc_free_byte_data(*chdesc);
-					(*chdesc)->byte.xdata = NULL;
-					/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
-				}
-				//else
-				//	account_update(&act_nnrb, -1);
-				//(*chdesc)->byte.satisfy_freed = 1;
-				(*chdesc)->type = NOOP;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
-				account_nchdescs_convert(BYTE, NOOP);
-#if COUNT_CHDESCS
-				chdesc_counts[BYTE]--;
-				chdesc_counts[NOOP]++;
-				dump_counts();
-#endif
-				break;
-			case BIT:
-				bit_changes = chdesc_bit_changes((*chdesc)->block, (*chdesc)->bit.offset);
-				assert(bit_changes);
-				chdesc_remove_depend(bit_changes, *chdesc);
-				(*chdesc)->type = NOOP;
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, *chdesc);
-				/* fall through */
-				account_nchdescs_convert(BIT, NOOP);
-#if COUNT_CHDESCS
-				chdesc_counts[BIT]--;
-				chdesc_counts[NOOP]++;
-				dump_counts();
-#endif
-			case NOOP:
-				break;
-			default:
-				printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
-				return -E_INVAL;
-		}
+		/* We are trying to satisfy a chdesc with befores, which means
+		 * we are writing data out of order. If it is a NOOP, allow it
+		 * silently, but otherwise this is an error. If it is a NOOP,
+		 * collect any weak references to it in case anybody is watching
+		 * it to see when it gets "satisfied." */
+		assert((*chdesc)->type == NOOP);
 	}
 	else
 	{
@@ -2738,6 +2693,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		}
 	}
 	
+	chdesc_unlink_overlap(*chdesc);
 	chdesc_unlink_index_changes(*chdesc);
 	chdesc_unlink_ready_changes(*chdesc);
 	chdesc_unlink_all_changes(*chdesc);
