@@ -1,13 +1,10 @@
-#include <string.h>
-#include <assert.h>
-#include <errno.h>
-#include <pthread.h>
-#include <fuse/fuse_lowlevel.h>
-#include <inc/error.h>
-#include <lib/panic.h>
-#include <lib/stdio.h>
+#include <lib/platform.h>
 #include <lib/sleep.h>
 #include <lib/jiffies.h>
+
+#include <pthread.h>
+#include <fuse/fuse_lowlevel.h>
+
 #include <kfs/modman.h>
 #include <kfs/fuse_serve_mount.h>
 

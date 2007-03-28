@@ -56,7 +56,6 @@ static struct dentry * debug_writes_dentry;
 
 #define RANDOM_REBOOT 0
 #if RANDOM_REBOOT
-# include <lib/stdio.h>
 # include <linux/random.h>
 # include <linux/reboot.h>
 #endif

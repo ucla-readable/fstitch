@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_MODMAN_BD_H
 #define __KUDOS_KFS_MODMAN_BD_H
 
-#include <lib/types.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
 

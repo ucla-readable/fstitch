@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_BDESC_H
 #define __KUDOS_KFS_BDESC_H
 
-#include <lib/types.h>
 #include <lib/hash_map.h>
 
 struct bdesc;

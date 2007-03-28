@@ -1,8 +1,6 @@
 #ifndef __KUDOS_KFS_KFSD
 #define __KUDOS_KFS_KFSD
 
-#include <lib/types.h>
-
 // When a shutdown_module callback will be made
 #define SHUTDOWN_PREMODULES  1 // before modules are deconstructed
 #define SHUTDOWN_POSTMODULES 2 // after modules are deconstructed

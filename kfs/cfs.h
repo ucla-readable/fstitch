@@ -1,8 +1,6 @@
 #ifndef __KUDOS_KFS_CFS_H
 #define __KUDOS_KFS_CFS_H
 
-#include <lib/types.h>
-
 #include <kfs/oo.h>
 #include <kfs/feature.h>
 #include <kfs/inode.h>

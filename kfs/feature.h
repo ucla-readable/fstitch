@@ -1,8 +1,6 @@
 #ifndef __KUDOS_KFS_FEATURE_H
 #define __KUDOS_KFS_FEATURE_H
 
-#include <lib/types.h>
-
 struct feature;
 typedef struct feature feature_t;
 

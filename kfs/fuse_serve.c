@@ -1,22 +1,15 @@
 #define __USE_BSD // for timersub()
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
+#include <lib/platform.h>
+#include <lib/dirent.h>
+#include <lib/jiffies.h>
+#include <lib/hash_set.h>
+
 #include <fuse.h>
 #include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
-#include <lib/dirent.h>
-#include <lib/fcntl.h>
-#include <lib/jiffies.h>
-#include <lib/kdprintf.h>
-#include <lib/panic.h>
-#include <lib/hash_set.h>
-#include <inc/error.h>
+
 #include <kfs/cfs.h>
 #include <kfs/feature.h>
 #include <kfs/kfsd.h>

@@ -1,11 +1,7 @@
-#include <lib/error.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 #include <lib/vector.h>
 #include <lib/dirent.h>
 
-#include <kfs/fidman.h>
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
 #include <kfs/file_hiding_cfs.h>
@@ -79,7 +75,7 @@ static int hide_lookup(vector_t * hide_table, inode_t ino)
 			return i;
 	}
 
-	return -E_NOT_FOUND;
+	return -ENOENT;
 }
 
 
@@ -90,7 +86,7 @@ static int file_hiding_fdesc_create(fdesc_t * inner, inode_t ino, fdesc_t ** fde
 {
 	file_hiding_fdesc_t * fhf = malloc(sizeof(*fhf));
 	if (!fhf)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	fhf->common = inner->common;
 	fhf->inner = inner;
@@ -116,7 +112,7 @@ static int file_hiding_get_config(void * object, int level, char * string, size_
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (length >= 1)
 		string[0] = 0;
@@ -127,7 +123,7 @@ static int file_hiding_get_status(void * object, int level, char * string, size_
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 
 	snprintf(string, length, "open fdescs: %u", state->nopen);
@@ -151,7 +147,7 @@ static int file_hiding_lookup(CFS_t * cfs, inode_t parent, const char * name, in
 
 	r = CALL(state->frontend_cfs, lookup, parent, name, &temp_ino);
 	if (r >= 0 && hide_lookup(state->hide_table, temp_ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, lookup, parent, name, ino);
 }
@@ -164,7 +160,7 @@ static int file_hiding_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc
 	int r;
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	if ((r = CALL(state->frontend_cfs, open, ino, mode, &inner)) < 0)
 		return r;
@@ -188,7 +184,7 @@ static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, in
 
 	r = CALL(state->frontend_cfs, lookup, parent, name, &temp_ino);
 	if (r >= 0 && hide_lookup(state->hide_table, temp_ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	if ((r = CALL(state->frontend_cfs, create, parent, name, mode, initialmd, &inner, ino)) < 0)
 		return r;
@@ -224,7 +220,7 @@ static int file_hiding_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t 
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
 	if (fhf->ino == INODE_NONE)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, read, fhf->inner, data, ofhfset, size);
 }
@@ -236,7 +232,7 @@ static int file_hiding_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, ui
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
 	if (fhf->ino == INODE_NONE)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, write, fhf->inner, data, ofhfset, size);
 }
@@ -249,7 +245,7 @@ static int file_hiding_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry
 	int r;
 
 	if (fhf->ino == INODE_NONE)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	// Look for hidden files
 	do {
@@ -264,7 +260,7 @@ static int file_hiding_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
 	if (fhf->ino == INODE_NONE)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, truncate, fhf->inner, size);
 }
@@ -278,7 +274,7 @@ static int file_hiding_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 	r = CALL(state->frontend_cfs, lookup, parent, name, &ino);
 	if (r >= 0 && hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, unlink, parent, name);
 }
@@ -291,11 +287,11 @@ static int file_hiding_link(CFS_t * cfs, inode_t ino, inode_t newparent, const c
 	int r;
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	r = CALL(state->frontend_cfs, lookup, newparent, newname, &newino);
 	if (r >= 0 && hide_lookup(state->hide_table, newino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, link, ino, newparent, newname);
 }
@@ -309,10 +305,10 @@ static int file_hiding_rename(CFS_t * cfs, inode_t oldparent, const char * oldna
 
 	r = CALL(state->frontend_cfs, lookup, oldparent, oldname, &ino);
 	if (r >= 0 && hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 	r = CALL(state->frontend_cfs, lookup, newparent, newname, &ino);
 	if (r >= 0 && hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
 }
@@ -326,7 +322,7 @@ static int file_hiding_mkdir(CFS_t * cfs, inode_t parent, const char * name, con
 
 	r = CALL(state->frontend_cfs, lookup, parent, name, &newino);
 	if (r >= 0 && hide_lookup(state->hide_table, newino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, mkdir, parent, name, initialmd, ino);
 }
@@ -340,7 +336,7 @@ static int file_hiding_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 
 	r = CALL(state->frontend_cfs, lookup, parent, name, &ino);
 	if (r >= 0 && hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, rmdir, parent, name);
 }
@@ -351,7 +347,7 @@ static size_t file_hiding_get_num_features(CFS_t * cfs, inode_t ino)
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, get_num_features, ino);
 }
@@ -373,7 +369,7 @@ static int file_hiding_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, get_metadata, ino, id, size, data);
 }
@@ -383,7 +379,7 @@ static int file_hiding_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
 	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
 	if (hide_lookup(state->hide_table, ino) >= 0)
-		return -E_NOT_FOUND;
+		return -ENOENT;
 
 	return CALL(state->frontend_cfs, set_metadata, ino, id, size, data);
 }
@@ -461,17 +457,17 @@ int file_hiding_cfs_hide(CFS_t * cfs, inode_t ino)
 
 	/* make sure this is really a table classifier */
 	if (OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	/* NOTE: hiding ino only prevents future actions from seeing/using ino */
 
 	const int already_hidden = hide_lookup(state->hide_table, ino);
 	if (0 <= already_hidden)
-		return -E_INVAL;
+		return -EINVAL;
 
 	hide_entry_t * me = hide_entry_create(ino);
 	if (!me)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	if ((r = vector_push_back(state->hide_table, me)) < 0)
 	{
@@ -479,7 +475,7 @@ int file_hiding_cfs_hide(CFS_t * cfs, inode_t ino)
 		return r;
 	}
 
-	kdprintf(STDERR_FILENO, "file_hiding_cfs: hiding %u\n", ino);
+	fprintf(stderr, "file_hiding_cfs: hiding %u\n", ino);
 	return 0;
 }
 
@@ -491,14 +487,14 @@ int file_hiding_cfs_unhide(CFS_t * cfs, inode_t ino)
 
 	/* make sure this is really a table classifier */
 	if (OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	int idx = hide_lookup(state->hide_table, ino);
 	if (idx < 0)
 		return idx;
 	me = vector_elt(state->hide_table, idx);
 
-	kdprintf(STDERR_FILENO,"file_hiding_cfs: unhiding %u\n", ino);
+	fprintf(stderr,"file_hiding_cfs: unhiding %u\n", ino);
 	vector_erase(state->hide_table, idx);
 	hide_entry_destroy(me);
 

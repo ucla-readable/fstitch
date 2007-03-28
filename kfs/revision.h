@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_REVISION_H
 #define __KUDOS_KFS_REVISION_H
 
-#include <lib/types.h>
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 

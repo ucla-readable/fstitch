@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_BSD_PTABLE_BD_H
 #define __KUDOS_KFS_BSD_PTABLE_BD_H
 
-#include <lib/types.h>
 #include <kfs/bd.h>
 
 #define  DKTYPENAMES

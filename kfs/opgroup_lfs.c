@@ -1,5 +1,4 @@
 #include <lib/platform.h>
-#include <lib/types.h>
 
 #include <kfs/lfs.h>
 #include <kfs/feature.h>

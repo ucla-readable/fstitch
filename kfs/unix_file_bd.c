@@ -1,11 +1,6 @@
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <lib/platform.h>
+
 #include <unistd.h>
-#include <inc/error.h>
-#include <lib/types.h>
-#include <lib/panic.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 

@@ -1,17 +1,5 @@
 #include <lib/platform.h>
 
-#include <linux/version.h>
-#include <linux/pagemap.h>
-#include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/spinlock.h>
-#include <linux/sched.h>
-#include <linux/sysrq.h>
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-# include <linux/config.h>
-#else
-# include <linux/stacktrace.h>
-#endif
 #include <kfs/kernel_serve.h>
 
 #include <kfs/sync.h>
@@ -21,6 +9,19 @@
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 #include <kfs/destroy.h>
+
+#ifdef __KERNEL__
+#include <linux/version.h>
+#include <linux/pagemap.h>
+#include <linux/module.h>
+#include <linux/moduleparam.h>
+#include <linux/spinlock.h>
+#include <linux/sched.h>
+#include <linux/sysrq.h>
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 18)
+# include <linux/stacktrace.h>
+#endif
+#endif
 
 #define DEBUG_TOPLEVEL 0
 #if DEBUG_TOPLEVEL

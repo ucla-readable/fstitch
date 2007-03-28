@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_MEM_DISK_BD_H
 #define __KUDOS_KFS_MEM_DISK_BD_H
 
-#include <lib/types.h>
 #include <kfs/bd.h>
 
 BD_t * mem_bd(uint32_t blocks, uint16_t blocksize);

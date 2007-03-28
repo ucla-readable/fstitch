@@ -1,8 +1,6 @@
 #ifndef __KUDOS_KFS_UFS_COMMON_H
 #define __KUDOS_KFS_UFS_COMMON_H
 
-#include <lib/types.h>
-
 #include <kfs/lfs.h>
 #include <kfs/ufs_base.h>
 #include <kfs/ufs_alloc.h>

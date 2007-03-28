@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_EXT2_SUPER_H
 #define __KUDOS_KFS_EXT2_SUPER_H
 
-#include <lib/types.h>
 #include <kfs/oo.h>
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

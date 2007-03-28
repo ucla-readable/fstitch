@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_CHDESC_H
 #define __KUDOS_KFS_CHDESC_H
 
-#include <lib/types.h>
 #include <lib/hash_map.h>
 #include <lib/assert.h>
 

@@ -1,4 +1,3 @@
-#include <lib/assert.h>
 #include <lib/jiffies.h>
 #include <lib/sleep.h>
 #include <lib/platform.h>

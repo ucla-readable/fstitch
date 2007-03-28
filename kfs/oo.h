@@ -1,9 +1,6 @@
 #ifndef __KUDOS_KFS_OO_H
 #define __KUDOS_KFS_OO_H
 
-#include <lib/types.h>
-#include <lib/stdlib.h>
-
 #include <kfs/magic.h>
 
 #define OBJECT(interface) struct object uniform; int (*__destroy_type)(interface * object)
