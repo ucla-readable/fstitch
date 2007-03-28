@@ -403,7 +403,7 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 50);
 		if(signal_pending(current))
-			return -E_INTR;
+			return -EINTR;
 	}
 	size = proc_buffer_wpos - proc_buffer_rpos;
 	if(size > count)
@@ -438,7 +438,7 @@ static void kfs_debug_io_command(void * arg)
 
 void kfs_debug_dbwait(const char * function, bdesc_t * block)
 {
-	kdprintf(STDERR_FILENO, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
+	fprintf(stderr, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
 }
 
 static void kfs_debug_shutdown(void * ignore)
@@ -467,22 +467,22 @@ static int kfs_debug_io_init(void)
 	int r;
 	proc_buffer = vmalloc(DEBUG_PROC_SIZE);
 	if(!proc_buffer)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	proc_buffer_wpos = 0;
 	proc_buffer_rpos = 0;
 	
 	proc_entry = create_proc_read_entry(DEBUG_PROC_FILENAME, 0444, &proc_root, kfs_debug_proc_read, NULL);
 	if(!proc_entry)
 	{
-		kdprintf(STDERR_FILENO, "%s: unable to create proc entry\n", __FUNCTION__);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s: unable to create proc entry\n", __FUNCTION__);
+		return -1;
 	}
 	
 #ifdef CONFIG_DEBUG_FS
 	debug_count_dentry = debugfs_create_u32(DEBUG_COUNT_FILENAME, 0444, NULL, &debug_count);
 	if(IS_ERR(debug_count_dentry))
 	{
-		printf("%s(): debugfs_create_u32(\"%s\") = error %d\n", __FUNCTION__, DEBUG_COUNT_FILENAME, PTR_ERR(debug_count_dentry));
+		printf("%s(): debugfs_create_u32(\"%s\") = error %ld\n", __FUNCTION__, DEBUG_COUNT_FILENAME, PTR_ERR(debug_count_dentry));
 		debug_count_dentry = NULL;
 	}
 #endif
@@ -490,7 +490,7 @@ static int kfs_debug_io_init(void)
 	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if(r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s: unable to register shutdown callback\n", __FUNCTION__);
+		fprintf(stderr, "%s: unable to register shutdown callback\n", __FUNCTION__);
 		remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);
 		return r;
 	}
@@ -553,7 +553,7 @@ static int kfs_debug_write(int size, ...)
 			}
 			else
 				/* restricted to 1, 2, and 4 bytes, or strings */
-				return bytes ? bytes : -E_INVAL;
+				return bytes ? bytes : -EINVAL;
 		}
 		else
 			break;
@@ -685,13 +685,13 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	{
 		/* unknown module */
 		kfs_debug_write(LIT_8, 0, LIT_8, 1, END);
-		r = -E_INVAL;
+		r = -EINVAL;
 	}
 	else if(!modules[m].opcodes[o]->params)
 	{
 		/* unknown opcode */
 		kfs_debug_write(LIT_8, 0, LIT_8, 2, END);
-		r = -E_INVAL;
+		r = -EINVAL;
 	}
 	else
 	{
@@ -733,7 +733,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			{
 				/* unknown type */
 				kfs_debug_write(LIT_8, 0, LIT_8, 3, END);
-				r = -E_INVAL;
+				r = -EINVAL;
 			}
 		}
 	}
