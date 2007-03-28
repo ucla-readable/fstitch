@@ -1,0 +1,31 @@
+#!/bin/bash
+
+if [ ! -f .copy_to_kudos ]
+then
+	echo "No .copy_to_kudos file."
+	echo -n "Please enter target directory: "
+	read TARGET
+	echo "$TARGET" > .copy_to_kudos
+fi
+
+TARGET="`cat .copy_to_kudos`"
+
+function arg_error() {
+	echo "Usage: `basename "$0"` <pb|mm>" 1>&2
+	exit 1
+}
+
+if [ $# -ne 1 ]; then arg_error "$0"; fi
+
+KMACHINE=$1
+
+if [ "$KMACHINE" != "pb" ] && [ "$KMACHINE" != "mm" ]; then arg_error "$0"; fi
+
+rsync --rsh=ssh -vaSz \
+	--exclude=/TAGS --exclude=/tags \
+	--exclude=/obj/ --exclude=/emukern/ \
+	--exclude=/kfs/kkfsd.ko --exclude=/kfs/kkfsd.o \
+	--exclude=/kfs/kkfsd.mod.c --exclude=/kfs/kkfsd.mod.o \
+	--exclude=/kfs/.kkfsd.*.cmd \
+	--exclude=/.tmp_versions/ \
+	. kudos-${KMACHINE}:$TARGET/
