@@ -32,10 +32,15 @@
 #include <kfs/debug.h>
 #include <kfs/kfsd_init.h>
 
+#ifdef __KERNEL__
 #include <kfs/linux_bd.h>
 #include <kfs/kernel_serve.h>
 #include <kfs/kernel_opgroup_ops.h>
 #include <kfs/kernel_opgroup_scopes.h>
+#elif defined(UNIXUSER)
+#include <kfs/unix_file_bd.h>
+#include <kfs/fuse_serve.h>
+#endif
 
 #define LINUX_BD_TIMING_TEST 0
 
@@ -111,6 +116,7 @@ int kfsd_init(int nwbblocks)
 		return r;
 	}
 
+#ifdef __KERNEL__
 	if ((r = kernel_serve_init()) < 0)
 	{
 		fprintf(stderr, "kernel_serve_init: %d\n", r);
@@ -126,6 +132,14 @@ int kfsd_init(int nwbblocks)
 		fprintf(stderr, "kernel_opgroup_scopes_init: %d\n", r);
 		return r;
 	}
+#elif defined(UNIXUSER)
+	/* FIXME: get the command line arguments */
+	if ((r = fuse_serve_init(0, NULL)) < 0)
+	{
+		fprintf(stderr, "fuse_serve_init: %d\n", r);
+		return r;
+	}
+#endif
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{
@@ -149,6 +163,7 @@ int kfsd_init(int nwbblocks)
 	if (use_disk_1)
 	{
 		BD_t * bd = NULL;
+#ifdef __KERNEL__
 		extern char * linux_device;
 		if (linux_device)
 		{
@@ -199,6 +214,14 @@ int kfsd_init(int nwbblocks)
 			printf("Timing test complete! Total time: %d.%02d seconds\n", jiffies / HZ, (jiffies % HZ) * 100 / HZ);
 			DESTROY(bd);
 			bd = NULL;
+#endif
+#elif defined(UNIXUSER)
+		extern char * unix_file;
+		if (unix_file)
+		{
+			printf("Using file %s\n", unix_file);
+			if (! (bd = unix_file_bd(unix_file, 512)) )
+				fprintf(stderr, "unix_file(\"%s\") failed\n", unix_file);
 #endif
 		}
 		if (bd)

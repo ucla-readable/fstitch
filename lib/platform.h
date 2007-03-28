@@ -11,7 +11,7 @@
 #include <linux/ctype.h>
 #include <linux/fcntl.h>
 
-#define printf(format, ...) printk(KERN_ERR format, ## __VA_ARGS__)
+#define printf(format, ...) printk(format, ## __VA_ARGS__)
 /* assume that fprintf is only used for stderr */
 #define fprintf(stream, format, ...) printk(KERN_EMERG format, ## __VA_ARGS__)
 
@@ -50,6 +50,13 @@ static __inline int strcasecmp(const char * s1, const char * s2)
 #include <errno.h>
 #include <assert.h>
 #include <stdint.h>
+#include <stdarg.h>
+
+/* Duplicate some Linux kernel things */
+#define PAGE_SIZE 4096
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#define container_of(ptr, type, member) ({typeof(((type *) 0)->member) * __mptr = (ptr); (type *) (unsigned long) ((char *) __mptr - offsetof(type,member));})
 
 #endif
 

@@ -1,7 +1,6 @@
 #ifndef __KUDOS_KFS_EXT2FS_BASE_H
 #define __KUDOS_KFS_EXT2FS_BASE_H
 
-#include <linux/pagemap.h>
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 #include <kfs/ext2_super.h>

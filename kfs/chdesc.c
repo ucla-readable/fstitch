@@ -39,6 +39,10 @@
 /* Set to enable chdesc accounting */
 #define CHDESC_ACCOUNT 0
 
+#if CHDESC_ACCOUNT && !defined(__KERNEL__)
+#error chdesc accounting only works in the kernel
+#endif
+
 
 #if CHDESC_ACCOUNT
 static inline u64 u64_diff(u64 start, u64 end)

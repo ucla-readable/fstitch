@@ -3,6 +3,7 @@
 #include <lib/jiffies.h>
 
 #include <pthread.h>
+#include <unistd.h>
 #include <fuse/fuse_lowlevel.h>
 
 #include <kfs/modman.h>
@@ -81,9 +82,9 @@ int fuse_serve_mount_set_root(CFS_t * root_cfs)
 	int r;
 	Dprintf("%s(%s)\n", __FUNCTION__, modman_name_cfs(root_cfs));
 	if (!root)
-		return -E_UNSPECIFIED;
+		return -1;
 	if (root_service_started)
-		return -E_BUSY;
+		return -EBUSY;
 
 	if ((r = CALL(root_cfs, get_root, &root->root_ino)) < 0)
 		return r;
@@ -99,7 +100,7 @@ int fuse_serve_mount_set_root(CFS_t * root_cfs)
 int fuse_serve_mount_load_mounts(void)
 {
 	if (!root || !root->mounted)
-		return -E_UNSPECIFIED;
+		return -1;
 	root_service_started = 1;
 	return ensure_helper_is_running();
 }
@@ -179,7 +180,7 @@ static int fuse_args_copy(const struct fuse_args * src, struct fuse_args * copy)
 	while (src->argv[argv_len++]);
 
 	if (!(copy->argv = malloc(argv_len * sizeof(char*))))
-		return -E_NO_MEM;
+		return -ENOMEM;
 	for (i = 0; i < argv_len - 1; i++)
 		if (!(copy->argv[i] = strdup(src->argv[i])))
 			goto error;
@@ -193,7 +194,7 @@ static int fuse_args_copy(const struct fuse_args * src, struct fuse_args * copy)
 	while (--i >= 0)
 		free(copy->argv[i]);
 	free(copy->argv);
-	return -E_NO_MEM;
+	return -ENOMEM;
 }
 
 int fuse_serve_mount_add(CFS_t * cfs, const char * path)
@@ -204,13 +205,13 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 	Dprintf("%s(%s, \"%s\")\n", __FUNCTION__, modman_name_cfs(cfs), path);
 
 	if (shutdown_has_started())
-		return -E_BUSY; // We might be able to allow this; but at least for now, reject
+		return -EBUSY; // We might be able to allow this; but at least for now, reject
 
 	if (!(m = calloc(1, sizeof(*m))))
-		return -E_NO_MEM;
+		return -ENOMEM;
 	if (!(qe = calloc(1, sizeof(*qe))))
 	{
-		r = -E_NO_MEM;
+		r = -ENOMEM;
 		goto error_m;
 	}
 
@@ -221,13 +222,13 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 
 	if (!(m->kfs_path = strdup(path)))
 	{
-		r = -E_NO_MEM;
+		r = -ENOMEM;
 		goto error_qe;
 	}
 
 	if (!(m->parents = hash_map_create()))
 	{
-		r = -E_NO_MEM;
+		r = -ENOMEM;
 		goto error_path;
 	}
 
@@ -245,7 +246,7 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 	m->mountpoint = malloc(strlen(root->mountpoint) + strlen(path) + 1);
 	if (!m->mountpoint)
 	{
-		r = -E_NO_MEM;
+		r = -ENOMEM;
 		goto error_args;
 	}
 	strcpy(m->mountpoint, root->mountpoint);
@@ -262,7 +263,7 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 		// As it is not expected that ensure_helper_is_running() will error
 		// and as recovering would require a single-use dequeue function,
 		// for now we just error and let things go as they will.
-		kdprintf(STDERR_FILENO, "%s: ensure_helper_is_running failed. WARNING: request remains in the queue.\n", __FUNCTION__);
+		fprintf(stderr, "%s: ensure_helper_is_running failed. WARNING: request remains in the queue.\n", __FUNCTION__);
 		goto error_insert;
 	}
 
@@ -294,20 +295,20 @@ int fuse_serve_mount_remove(mount_t * m)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->kfs_path);
 
 	if (!m || !m->mounted)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (shutdown_has_started())
 		return 0; // m is already scheduled to be unmounted
 
 	if (!(qe = calloc(1, sizeof(*qe))))
-		return -E_NO_MEM;
+		return -ENOMEM;
 	qe->mount = m;
 	qe->action = QEUNMOUNT;
 
 	if (write(unmount_pipe[1], &b, 1) != 1)
 	{
 		perror("fuse_serve_mount_remove(): write");
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	return vector_push_back(remove_queue, qe);
@@ -320,7 +321,7 @@ static int mount_root(int argc, char ** argv)
 	Dprintf("%s()\n", __FUNCTION__);
 
 	if (!(root = calloc(1, sizeof(*root))))
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	// We can't use FUSE_ARGS_INIT() here so assert we are initing the
 	// whole structure
@@ -330,42 +331,42 @@ static int mount_root(int argc, char ** argv)
 	root->args.allocated = 0;
 
 	if (!(root->kfs_path = strdup("")))
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	if (!(root->parents = hash_map_create()))
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	root->cfs = NULL; // set later via fuse_serve_mount_set_root()
 
 	if (fuse_parse_cmdline(&root->args, &root->mountpoint, NULL, NULL) == -1)
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_parse_cmdline() failed\n", __FUNCTION__);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s(): fuse_parse_cmdline() failed\n", __FUNCTION__);
+		return -1;
 	}
 
 	if ((root->channel_fd = fuse_mount(root->mountpoint, &root->args)) == -1)
 	{
-		kdprintf(STDERR_FILENO, "%s():%d: fuse_mount(\"%s\") failed\n", __FUNCTION__, __LINE__, root->mountpoint);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s():%d: fuse_mount(\"%s\") failed\n", __FUNCTION__, __LINE__, root->mountpoint);
+		return -1;
 	}
 
 	if (!(root->session = fuse_lowlevel_new(&root->args, ops, ops_len, root)))
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_lowlevel_new() failed\n", __FUNCTION__);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s(): fuse_lowlevel_new() failed\n", __FUNCTION__);
+		return -1;
 	}
 
 	if (!(root->channel = fuse_kern_chan_new(root->channel_fd)))
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_kern_chan_new() failed\n", __FUNCTION__);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s(): fuse_kern_chan_new() failed\n", __FUNCTION__);
+		return -1;
 	}
 
 	fuse_session_add_chan(root->session, root->channel);
 
 	if ((r = hash_set_insert(mounts, root)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): hash_set_insert(): %d\n", __FUNCTION__, r);
+		fprintf(stderr, "%s(): hash_set_insert(): %d\n", __FUNCTION__, r);
 		return r;
 	}
 
@@ -396,10 +397,10 @@ static int unmount_root(void)
 	int r;
 
 	if (!root->mounted)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (hash_set_erase(mounts, root) != root)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (root->session)
 		fuse_session_destroy(root->session); // also destroys root->channel
@@ -421,7 +422,7 @@ static int unmount_root(void)
 	root = NULL;
 
 	if ((r = helper_shutdown()) < 0)
-		kdprintf(STDERR_FILENO, "%s(): helper_shutdown() failed (%d), continuing anyway\n", __FUNCTION__, r);
+		fprintf(stderr, "%s(): helper_shutdown() failed (%d), continuing anyway\n", __FUNCTION__, r);
 
 	destroy_locals();
 
@@ -438,18 +439,18 @@ int fuse_serve_mount_init(int argc, char ** argv, struct fuse_lowlevel_ops * _op
 	root_service_started = 0;
 
 	if (!(mounts = hash_set_create()))
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	if (pipe(unmount_pipe) == -1)
 	{
 		perror("fuse_serve_mount_init(): pipe");
-		r = -E_UNSPECIFIED;
+		r = -1;
 		goto error_mounts;
 	}
 
 	if (!(remove_queue = vector_create()))
 	{
-		r = -E_NO_MEM;
+		r = -ENOMEM;
 		goto error_pipe;
 	}
 
@@ -508,7 +509,7 @@ void fuse_serve_mount_instant_shutdown(void)
 			strcat(unmount, unmount_templ);
 			strcat(unmount, root->mountpoint);
 			if ((r = system(unmount)) < 0)
-				kdprintf(STDERR_FILENO, "system(\"%s\") = %d\n", unmount, r);
+				fprintf(stderr, "system(\"%s\") = %d\n", unmount, r);
 			free(unmount);
 		}
 
@@ -525,7 +526,7 @@ int fuse_serve_mount_step_remove(void)
 	Dprintf("%s()\n", __FUNCTION__);
 
 	if (unmount_pipe[0] == -1)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	// Read the byte from helper to zero the read fd's level
 	if (read(unmount_pipe[0], &b, 1) != 1)
@@ -533,7 +534,7 @@ int fuse_serve_mount_step_remove(void)
 		perror("fuse_serve_mount_step_shutdown(): read");
 		if (write(unmount_pipe[1], &b, 1) != 1)
 			assert(0);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	if (vector_size(remove_queue) > 0)
@@ -556,13 +557,13 @@ int fuse_serve_mount_step_remove(void)
 		if (!(qe = calloc(1, sizeof(*qe))))
 		{
 			(void) write(unmount_pipe[1], &b, 1); // unzero the read fd's level
-			return -E_NO_MEM;
+			return -ENOMEM;
 		}
 		if (!(vmounts = vector_create_hashset(mounts)))
 		{
 			free(qe);
 			(void) write(unmount_pipe[1], &b, 1); // unzero the read fd's level
-			return -E_NO_MEM;
+			return -ENOMEM;
 		}
 		vector_sort(vmounts, mount_path_compar);
 		qe->mount = vector_elt(vmounts, vector_size(vmounts) - 1);
@@ -582,14 +583,14 @@ int fuse_serve_mount_step_remove(void)
 
 	if (enqueue_helper_request(qe) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): enqueue_helper_request failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->kfs_path);
+		fprintf(stderr, "%s(): enqueue_helper_request failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->kfs_path);
 		free(qe);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 	if (ensure_helper_is_running() < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): ensure_helper_is_running failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->kfs_path);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s(): ensure_helper_is_running failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->kfs_path);
+		return -1;
 	}
 
 	return 0;
@@ -612,26 +613,26 @@ static void helper_thread_mount(mount_t * m)
 
 	if ((m->channel_fd = fuse_mount(m->mountpoint, &m->args)) == -1)
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_mount(\"%s\") failed. (Does the mountpoint exist?)\n", __FUNCTION__, m->mountpoint);
+		fprintf(stderr, "%s(): fuse_mount(\"%s\") failed. (Does the mountpoint exist?)\n", __FUNCTION__, m->mountpoint);
 		return;
 	}
 
 	if (!(m->session = fuse_lowlevel_new(&m->args, ops, ops_len, m)))
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_lowlevel_new() failed\n", __FUNCTION__);
+		fprintf(stderr, "%s(): fuse_lowlevel_new() failed\n", __FUNCTION__);
 		return;
 	}
 
 	if (!(m->channel = fuse_kern_chan_new(m->channel_fd)))
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_kern_chan_new() failed\n", __FUNCTION__);
+		fprintf(stderr, "%s(): fuse_kern_chan_new() failed\n", __FUNCTION__);
 		return;
 	}
 
 	fuse_session_add_chan(m->session, m->channel);
 
 	if (fuse_chan_bufsize(m->channel) != fuse_serve_mount_chan_bufsize())
-		kdprintf(STDERR_FILENO, "bufsizes differ!\n");
+		fprintf(stderr, "bufsizes differ!\n");
 
 	m->mounted = 1;
 
@@ -664,18 +665,18 @@ static int helper_init(void)
 	int r;
 
 	if (helper.alive || helper.shutdown_started || helper.queue)
-		return -E_BUSY;
+		return -EBUSY;
 
 	if ((r = pthread_mutex_init(&helper.mutex, NULL)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): pthread_mutex_init: %d\n", r);
+		fprintf(stderr, "%s(): pthread_mutex_init: %d\n", __FUNCTION__, r);
 		return r;
 	}
 
 	if (!(helper.queue = vector_create()))
 	{
 		(void) pthread_mutex_destroy(&helper.mutex);
-		return -E_NO_MEM;
+		return -ENOMEM;
 	}
 	
 	helper.alive = 0;
@@ -691,7 +692,7 @@ static int helper_shutdown(void)
 	{
 		if (++r > 4*MAX_HELPER_SHUTDOWN_WAIT)
 		{
-			kdprintf(STDERR_FILENO, "%s(): helper thread does not seem to be exiting, continuing shutdown behind its back.\n", __FUNCTION__);
+			fprintf(stderr, "%s(): helper thread does not seem to be exiting, continuing shutdown behind its back.\n", __FUNCTION__);
 			break;
 		}
 		jsleep(HZ / 4);
@@ -699,8 +700,8 @@ static int helper_shutdown(void)
 
 	if ((r = pthread_mutex_destroy(&helper.mutex)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): pthread_mutex_destroy: %d\n", __FUNCTION__, r);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s(): pthread_mutex_destroy: %d\n", __FUNCTION__, r);
+		return -1;
 	}
 	vector_destroy(helper.queue);
 	memset(&helper, 0, sizeof(helper));
@@ -711,7 +712,7 @@ static int helper_shutdown(void)
 	do { \
 		int r = pthread_mutex_lock(m); \
 		if (r < 0) { \
-			kdprintf(STDERR_FILENO, "%s():%d: pthread_mutex_lock: %d\n", __FUNCTION__, __LINE__, r); \
+			fprintf(stderr, "%s():%d: pthread_mutex_lock: %d\n", __FUNCTION__, __LINE__, r); \
 			assert(0); \
 		} \
 	} while(0)
@@ -720,7 +721,7 @@ static int helper_shutdown(void)
 	do { \
 		int r = pthread_mutex_unlock(m); \
 		if (r < 0) { \
-			kdprintf(STDERR_FILENO, "%s():%d: pthread_mutex_unlock: %d\n", __FUNCTION__, __LINE__, r); \
+			fprintf(stderr, "%s():%d: pthread_mutex_unlock: %d\n", __FUNCTION__, __LINE__, r); \
 			assert(0); \
 		} \
 	} while(0)
@@ -773,7 +774,7 @@ int fuse_serve_mount_start_shutdown(void)
 	Dprintf("%s()\n", __FUNCTION__);
 
 	if (shutdown_has_started())
-		return -E_UNSPECIFIED;
+		return -1;
 
 	helper.shutdown_started = 1;
 
@@ -784,7 +785,7 @@ int fuse_serve_mount_start_shutdown(void)
 	{
 		if (++i > 4*MAX_START_SHUTDOWN_WAIT)
 		{
-			kdprintf(STDERR_FILENO, "%s(): Mounts or unmounts still in progress. Good luck with the shutdown!\n", __FUNCTION__);
+			fprintf(stderr, "%s(): Mounts or unmounts still in progress. Good luck with the shutdown!\n", __FUNCTION__);
 			break;
 		}
 		jsleep(HZ / 4);
@@ -822,7 +823,7 @@ int fuse_serve_mount_start_shutdown(void)
 	{
 		perror("fuse_serve_mount_start_shutdown(): write");
 		helper.shutdown_started = 0;
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	return 0;
@@ -858,13 +859,13 @@ static int ensure_helper_is_running(void)
 	helper.alive = 1;
 	if ((r = pthread_create(&thread, NULL, &helper_thread, NULL)))
 	{
-		kdprintf(STDERR_FILENO, "%s: pthread_create: %d\n", __FUNCTION__, r);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s: pthread_create: %d\n", __FUNCTION__, r);
+		return -1;
 	}
 	if ((r = pthread_detach(thread)) && errno != ESRCH)
 	{
-		kdprintf(STDERR_FILENO, "%s: pthread_detach: %d\n", __FUNCTION__, r);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s: pthread_detach: %d\n", __FUNCTION__, r);
+		return -1;
 	}
 
 	return 0;

@@ -15,6 +15,7 @@ int revision_tail_revert(bdesc_t *block, BD_t *bd);
  * descriptors on the block, and rolls the others forward again */
 int revision_tail_acknowledge(bdesc_t *block, BD_t *bd);
 
+#if __KERNEL__
 /* this function marks the non-rolled back change descriptors as "in flight" and
  * rolls the others forward again */
 int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd);
@@ -38,6 +39,7 @@ void revision_tail_request_landing(bdesc_t * block);
 void revision_tail_process_landing_requests(void);
 /* this function waits for landing requests to be set up */
 void revision_tail_wait_for_landing_requests(void);
+#endif /* __KERNEL__ */
 
 /* ---- Revision slices ---- */
 

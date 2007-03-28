@@ -76,10 +76,10 @@ int fuse_serve_add_mount(const char * path, CFS_t * cfs)
 	// With a good bit of work we can probably allow mount adds from
 	// within fuse requests.
 	if (serving)
-		return -E_BUSY;
+		return -EBUSY;
 
 	if (!cfs)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!strcmp("", path) || !strcmp("/", path))
 	{
@@ -171,7 +171,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	{
 		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+			fprintf(stderr, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
 		else
 			assert(r == sizeof(nlinks));
 	}
@@ -223,14 +223,14 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	}
 	else if (type == TYPE_INVAL)
 	{
-		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): file type is invalid\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino);
-		r = -E_UNSPECIFIED;
+		fprintf(stderr, "%s:%s(fuse_ino = %lu, cfs_ino = %u): file type is invalid\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino);
+		r = -1;
 		goto err;
 	}
 	else
 	{
-		kdprintf(STDERR_FILENO, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, type);
-		r = -E_UNSPECIFIED;
+		fprintf(stderr, "%s:%s(fuse_ino = %lu, cfs_ino = %u): unsupported file type %u\n", __FILE__, __FUNCTION__, fuse_ino, cfs_ino, type);
+		r = -1;
 		goto err;
 	}
 
@@ -243,10 +243,10 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 			assert(r == sizeof(cfs_uid));
 			stbuf->st_uid = cfs_uid;
 			if (stbuf->st_uid != cfs_uid)
-				kdprintf(STDERR_FILENO, "%s: UID not large enough to hold CFS UID %u\n", __FUNCTION__, cfs_uid);
+				fprintf(stderr, "%s: UID not large enough to hold CFS UID %u\n", __FUNCTION__, cfs_uid);
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed uid but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed uid but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
 	else
 		stbuf->st_uid = 0;
@@ -260,10 +260,10 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 			assert(r == sizeof(cfs_gid));
 			stbuf->st_gid = cfs_gid;
 			if (stbuf->st_gid != cfs_gid)
-				kdprintf(STDERR_FILENO, "%s: GID not large enough to hold CFS GID %u\n", __FUNCTION__, cfs_gid);
+				fprintf(stderr, "%s: GID not large enough to hold CFS GID %u\n", __FUNCTION__, cfs_gid);
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed gid but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed gid but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 	}
 	else
 		stbuf->st_gid = 0;
@@ -272,7 +272,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	{
 		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(perms), &perms);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(perms));
 	}
@@ -281,7 +281,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	{
 		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_mtime.id, sizeof(mtime), &mtime);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(time_t));
 	}
@@ -290,7 +290,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	{
 		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_atime.id, sizeof(atime), &atime);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(time_t));
 	}
@@ -345,39 +345,39 @@ static int fuse_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 	if (KFS_feature_uid.id == id)
 	{
 		if (size < sizeof(fusemd->ctx->uid))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(uid_t *) data = fusemd->ctx->uid;
 		return sizeof(fusemd->ctx->uid);
 	}
 	else if (KFS_feature_gid.id == id)
 	{
 		if (size < sizeof(fusemd->ctx->gid))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(gid_t *) data = fusemd->ctx->gid;
 		return sizeof(fusemd->ctx->gid);
 	}
 	else if (KFS_feature_unix_permissions.id == id)
 	{
 		if (size < sizeof(fusemd->mode))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(uint16_t *) data = fusemd->mode;
 		return sizeof(fusemd->mode);
 	}
 	else if (KFS_feature_filetype.id == id)
 	{
 		if (size < sizeof(fusemd->type))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(int *) data = fusemd->type;
 		return sizeof(fusemd->type);
 	}
 	else if (KFS_feature_symlink.id == id && fusemd->type == TYPE_SYMLINK)
 	{
 		if (size < fusemd->type_info.symlink.link_len)
-			return -E_NO_MEM;
+			return -ENOMEM;
 		memcpy(data, fusemd->type_info.symlink.link, fusemd->type_info.symlink.link_len);
 		return fusemd->type_info.symlink.link_len;
 	}
-	return -E_NOT_FOUND;			
+	return -ENOENT;			
 }
 
 
@@ -392,7 +392,7 @@ static void serve_statfs(fuse_req_t req)
 		goto serve_statfs_err;
 	else if (sizeof(st.f_bsize) != r)
 	{
-		r = -E_UNSPECIFIED;
+		r = -1;
 		goto serve_statfs_err;
 	}
 	st.f_bsize = st.f_frsize;
@@ -469,7 +469,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 
 	if (to_set != (to_set & supported))
 	{
-		r = fuse_reply_err(req, E_NO_SYS);
+		r = fuse_reply_err(req, ENOSYS);
 		assert(!r);
 		return;
 	}
@@ -609,7 +609,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	if (r < 0)
 	{
 		// TODO: is it safe to remove cfs_ino from the parents map if fill_stat() failed?
-		kdprintf(STDERR_FILENO, "%s(): possible parents entry leak for cfs inode %u\n", cfs_ino);
+		fprintf(stderr, "%s(): possible parents entry leak for cfs inode %u\n", __FUNCTION__, cfs_ino);
 
 		r = fuse_reply_err(req, -r);
 		assert(!r);
@@ -629,7 +629,7 @@ static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 
 	if (!symlink_supported)
 	{
-		r = fuse_reply_err(req, E_NO_SYS);
+		r = fuse_reply_err(req, ENOSYS);
 		assert(!r);
 		return;
 	}
@@ -752,7 +752,7 @@ static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
 
 	if (!feature_supported(cfs, cfs_parent, KFS_feature_symlink.id))
 	{
-		r = -E_NO_SYS;
+		r = -ENOSYS;
 		goto error;
 	}
 
@@ -791,7 +791,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 
 	if (!(mode & S_IFREG))
 	{
-		r = fuse_reply_err(req, E_NO_SYS);
+		r = fuse_reply_err(req, ENOSYS);
 		assert(!r);
 		return;
 	}
@@ -858,7 +858,7 @@ static void serve_rename(fuse_req_t req,
 	r = CALL(reqcfs(req), rename, fusecfsino(req, old_parent), old_local_name, fusecfsino(req, new_parent), new_local_name);
 	if (r < 0)
 	{
-		// TODO: case -E_INVAL: might mean files are on different filesystems
+		// TODO: case -EINVAL: might mean files are on different filesystems
 		r = fuse_reply_err(req, -r);
 		assert(!r);
 		return;
@@ -944,7 +944,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 	r = CALL(reqcfs(req), open, cfs_ino, 0, &fdesc);
 	if (r < 0)
 	{
-		// TODO: fid could be E_NOT_FOUND, E_NOT_FOUND, or other
+		// TODO: fid could be ENOENT, ENOENT, or other
 		// TODO: fuse_reply_err(req, ENOTDIR);
 		r = fuse_reply_err(req, -r);
 		assert(!r);
@@ -954,9 +954,9 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 	parent_cfs_ino = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
 	if (parent_cfs_ino == INODE_NONE)
 	{
-		kdprintf(STDERR_FILENO, "%s(): no parent ino for ino %u\n", __FUNCTION__, cfs_ino);
+		fprintf(stderr, "%s(): no parent ino for ino %u\n", __FUNCTION__, cfs_ino);
 		(void) CALL(reqcfs(req), close, fdesc);
-		r = fuse_reply_err(req, E_UNSPECIFIED);
+		r = fuse_reply_err(req, 1);
 		assert(!r);
 		return;
 	}
@@ -1008,12 +1008,11 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 		size_t oldsize = total_size;
 
 		nbytes = CALL(reqcfs(req), get_dirent, fdesc, &dirent, sizeof(dirent), &off);
-		if (nbytes == -E_UNSPECIFIED)
+		if (nbytes == -1)
 			break;
 		else if (nbytes < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s:%s(): CALL(cfs, get_dirent, fdesc = %p, off = %lld) = %d\n",
-					 __FILE__, __FUNCTION__, fdesc, off, nbytes);
+			fprintf(stderr, "%s:%s(): CALL(cfs, get_dirent, fdesc = %p, off = %d) = %d\n", __FILE__, __FUNCTION__, fdesc, off, nbytes);
 			assert(nbytes >= 0);
 		}
 
@@ -1024,7 +1023,7 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 		total_size += fuse_dirent_size(dirent.d_namelen);
 		buf = (char *) realloc(buf, total_size);
 		if (!buf)
-			panic("realloc() failed");
+			kpanic("realloc() failed");
 
 		memset(&stbuf, 0, sizeof(stbuf));
 		// Generate "." and ".." here rather than in the base file system
@@ -1103,8 +1102,8 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 
 	if (offset != off)
 	{
-		kdprintf(STDERR_FILENO, "%s:%d: KFSD offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
-		r = fuse_reply_err(req, E_INVAL);
+		fprintf(stderr, "%s:%d: kfsd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
+		r = fuse_reply_err(req, EINVAL);
 		assert(!r);
 		return;
 	}
@@ -1115,7 +1114,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	r = CALL(reqcfs(req), read, fdesc, buf, off, size);
 	if (r <= 0)
 	{
-		// TODO: handle -E_EOF?
+		// TODO: handle EOF?
 		r = fuse_reply_buf(req, NULL, 0);
 		assert(!r);
 		return;
@@ -1139,8 +1138,8 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 
 	if (offset != off)
 	{
-		kdprintf(STDERR_FILENO, "%s:%d: KFSD offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
-		r = fuse_reply_err(req, E_INVAL);
+		fprintf(stderr, "%s:%d: kfsd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
+		r = fuse_reply_err(req, EINVAL);
 		assert(!r);
 		return;
 	}
@@ -1196,7 +1195,7 @@ static void signal_handler(int sig)
 		return;
 	if (write(shutdown_pipe[1], &buf, sizeof(buf)) != sizeof(buf))
 	{
-		kdprintf(STDERR_FILENO, "%s(%d): write() failed\n", __FUNCTION__, sig);
+		fprintf(stderr, "%s(%d): write() failed\n", __FUNCTION__, sig);
 		perror("write");
 	}
 	printf("Shutdown started.\n");
@@ -1283,19 +1282,19 @@ int fuse_serve_init(int argc, char ** argv)
 
 	if ((r = kfsd_register_shutdown_module(fuse_serve_shutdown, NULL, SHUTDOWN_PREMODULES)) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): kfsd_register_shutdown_module() = %d\n", __FUNCTION__, r);
+		fprintf(stderr, "%s(): kfsd_register_shutdown_module() = %d\n", __FUNCTION__, r);
 		return r;
 	}
 
 	if ((r = pipe(shutdown_pipe)) < 0)
 	{
 		perror("fuse_serve_init(): pipe:");
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	if ((r = fuse_serve_mount_init(argc, argv, &serve_oper, sizeof(serve_oper))) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_serve_mount_init() = %d\n", __FUNCTION__, r);
+		fprintf(stderr, "%s(): fuse_serve_mount_init() = %d\n", __FUNCTION__, r);
 		goto error_pipe;
 	}
 	remove_activity = r;
@@ -1303,7 +1302,7 @@ int fuse_serve_init(int argc, char ** argv)
 	channel_buf_len = fuse_serve_mount_chan_bufsize();
     if (!(channel_buf = (char *) malloc(channel_buf_len)))
 	{
-        kdprintf(STDERR_FILENO, "%s(): malloc(%u) failed to allocate read buffer\n", __FUNCTION__, channel_buf_len);
+        fprintf(stderr, "%s(): malloc(%u) failed to allocate read buffer\n", __FUNCTION__, channel_buf_len);
 		goto error_buf_len;
     }
 
@@ -1365,13 +1364,13 @@ int fuse_serve_loop(void)
 
 	if (!root_cfs)
 	{
-		kdprintf(STDERR_FILENO, "%s(): no root cfs was specified; not running.\n", __FUNCTION__);
-		return -E_UNSPECIFIED;
+		fprintf(stderr, "%s(): no root cfs was specified; not running.\n", __FUNCTION__);
+		return -1;
 	}
 
 	if ((r = fuse_serve_mount_load_mounts()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): fuse_serve_load_mounts: %d\n", __FUNCTION__, r);
+		fprintf(stderr, "%s(): fuse_serve_load_mounts: %d\n", __FUNCTION__, r);
 		return r;
 	}
 
@@ -1440,8 +1439,6 @@ int fuse_serve_loop(void)
 			{
 				if (mount->mounted && FD_ISSET(mount->channel_fd, &rfds))
 				{
-					/* starting a new request, so set a new request ID */
-					kfsd_next_request_id();
 					r = fuse_chan_receive(mount->channel, channel_buf, channel_buf_len);
 					assert(r > 0); // what would this error mean?
 
@@ -1458,8 +1455,8 @@ int fuse_serve_loop(void)
 				ignore_shutdown_signals();
 				if (fuse_serve_mount_start_shutdown() < 0)
 				{
-					kdprintf(STDERR_FILENO, "fuse_serve_mount_start_shutdown() failed, exiting fuse_serve_loop()\n");
-					return -E_UNSPECIFIED;
+					fprintf(stderr, "fuse_serve_mount_start_shutdown() failed, exiting fuse_serve_loop()\n");
+					return -1;
 				}
 			}
 
@@ -1467,8 +1464,8 @@ int fuse_serve_loop(void)
 			{
 				if (fuse_serve_mount_step_remove() < 0)
 				{
-					kdprintf(STDERR_FILENO, "fuse_serve_mount_step_remove() failed, exiting fuse_serve_loop()\n");
-					return -E_UNSPECIFIED;
+					fprintf(stderr, "fuse_serve_mount_step_remove() failed, exiting fuse_serve_loop()\n");
+					return -1;
 				}
 			}
 

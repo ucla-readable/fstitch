@@ -5,21 +5,7 @@
 #include <kfs/debug.h>
 #include <kfs/revision.h>
 
-#include <linux/sched.h>
-
 typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
-
-static bool revision_owner_decider(chdesc_t * chdesc, void * data)
-{
-	/* it had better be either owned by us or rollbackable */
-	assert(chdesc->owner == (BD_t *) data || chdesc_is_rollbackable(chdesc));
-	return chdesc->owner == (BD_t *) data;
-}
-
-static bool revision_flight_decider(chdesc_t * chdesc, void * data)
-{
-	return (chdesc->flags & CHDESC_INFLIGHT) != 0;
-}
 
 static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chdescs, const char * function)
 {
@@ -154,6 +140,13 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	sfree(chdescs, chdescs_size);
 	
 	return count;
+}
+
+static bool revision_owner_decider(chdesc_t * chdesc, void * data)
+{
+	/* it had better be either owned by us or rollbackable */
+	assert(chdesc->owner == (BD_t *) data || chdesc_is_rollbackable(chdesc));
+	return chdesc->owner == (BD_t *) data;
 }
 
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
@@ -299,6 +292,9 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 	return revision_tail_revert(block, bd);
 }
 
+#ifdef __KERNEL__
+#include <linux/sched.h>
+
 struct flight {
 	bdesc_t * block;
 	struct flight * next;
@@ -379,6 +375,11 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 	return r;
 }
 
+static bool revision_flight_decider(chdesc_t * chdesc, void * data)
+{
+	return (chdesc->flags & CHDESC_INFLIGHT) != 0;
+}
+
 static int revision_tail_ack_landed(bdesc_t * block)
 {
 	int r = _revision_tail_acknowledge(block, revision_flight_decider, NULL);
@@ -433,6 +434,7 @@ void revision_tail_wait_for_landing_requests(void)
 	finish_wait(&control_tower, &wait);
 	spin_unlock_irqrestore(&flight_plan, flags);
 }
+#endif /* __KERNEL__ */
 
 
 /* ---- Revision slices ---- */
