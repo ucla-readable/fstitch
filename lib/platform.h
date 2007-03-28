@@ -40,7 +40,7 @@ static __inline int strcasecmp(const char * s1, const char * s2)
 #include <lib/assert.h>
 #include <lib/types.h>
 
-#elif defined(UNIX_USER)
+#elif defined(UNIXUSER)
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -49,7 +49,7 @@ static __inline int strcasecmp(const char * s1, const char * s2)
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
-#include <types.h>
+#include <stdint.h>
 
 #endif
 

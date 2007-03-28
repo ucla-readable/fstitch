@@ -2,7 +2,6 @@
 #define __KUDOS_KFS_CHDESC_H
 
 #include <lib/hash_map.h>
-#include <lib/assert.h>
 
 #define CHDESC_BYTE_SUM 0
 
