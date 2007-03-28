@@ -1,8 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -470,12 +466,12 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	if((info->blocksize * block->count) != block->ddesc->length)
 	{
 		kpanic("wrote block with bad length (%d bytes)\n", block->ddesc->length);
-		return -E_INVAL;
+		return -EINVAL;
 	}
 	if(block->number >= info->blockcount)
 	{
 		kpanic("wrote bad block number\n");
-		return -E_INVAL;
+		return -EINVAL;
 	}
 	
 	private = (struct linux_bio_private *) malloc(sizeof(struct linux_bio_private));
@@ -518,7 +514,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	if(!bio)
 	{
 		printk(KERN_ERR "bio_alloc() failed()\n");
-		return -E_NO_MEM;
+		return -ENOMEM;
 	}
 	for(i = 0; i < vec_len; i++)
 	{
@@ -527,7 +523,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		if(!bv->bv_page)
 		{
 			printk(KERN_ERR "alloc_page() failed\n");
-			return -E_NO_MEM;
+			return -ENOMEM;
 		}
 		/* this memcpy always writes to the beginning of the page,
 		 * which works fine if you just have one block, but is a

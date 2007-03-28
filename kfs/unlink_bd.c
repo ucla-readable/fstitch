@@ -1,8 +1,4 @@
-#include <lib/error.h>
-#include <lib/types.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>

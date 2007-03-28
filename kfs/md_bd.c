@@ -1,8 +1,4 @@
-#include <lib/error.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -108,11 +104,11 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > info->numblocks)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	wblock = bdesc_alloc_clone(block, block->number >> 1);
 	if(!wblock)
-		return -E_UNSPECIFIED;
+		return -1;
 	bdesc_autorelease(wblock);
 	
 	/* this should never fail */

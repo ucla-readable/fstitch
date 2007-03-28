@@ -1,8 +1,5 @@
-#include <lib/error.h>
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
 #include <lib/vector.h>
 
 #include <kfs/debug.h>
@@ -66,7 +63,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->syncing) {
 		linfo->cg[num].cgdata.cg_time = time;
@@ -75,7 +72,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->cg[num].dirty[WB_TIME])
 		return 0;
 
@@ -100,18 +97,18 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->syncing) {
 		if (!sum)
-			return -E_INVAL;
+			return -EINVAL;
 		memcpy(&linfo->cg[num].cgdata.cg_cs, sum, sizeof(struct UFS_csum));
 		linfo->cg[num].dirty[WB_CS] = 1;
 		return 0;
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->cg[num].dirty[WB_CS])
 		return 0;
 
@@ -139,7 +136,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->syncing) {
 		linfo->cg[num].cgdata.cg_rotor = rotor;
@@ -148,7 +145,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->cg[num].dirty[WB_ROTOR])
 		return 0;
 
@@ -173,7 +170,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->syncing) {
 		linfo->cg[num].cgdata.cg_frotor = frotor;
@@ -182,7 +179,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->cg[num].dirty[WB_FROTOR])
 		return 0;
 
@@ -207,7 +204,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->syncing) {
 		linfo->cg[num].cgdata.cg_irotor = irotor;
@@ -216,7 +213,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->cg[num].dirty[WB_IROTOR])
 		return 0;
 
@@ -241,18 +238,18 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->syncing) {
 		if (!frsum)
-			return -E_INVAL;
+			return -EINVAL;
 		memcpy(&linfo->cg[num].cgdata.cg_frsum, frsum, frsum_size);
 		linfo->cg[num].dirty[WB_FRSUM] = 1;
 		return 0;
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->cg[num].dirty[WB_FRSUM])
 		return 0;
 
@@ -284,11 +281,11 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 	vector_t * oldheads;
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	oldheads = vector_create();
 	if (!oldheads)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	if (num < 0 || num >= linfo->ncg) {
 		begin = 0;

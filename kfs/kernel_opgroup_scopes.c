@@ -1,3 +1,6 @@
+#include <lib/platform.h>
+#include <lib/hash_map.h>
+
 #include <kfs/kernel_opgroup_scopes.h>
 
 #include <linux/version.h>
@@ -8,9 +11,6 @@
 #ifdef CONFIG_KUDOS_PROC
 #include <linux/kudos_proc.h>
 
-#include <lib/error.h>
-#include <lib/hash_map.h>
-#include <lib/stdio.h>
 #include <kfs/kfsd.h>
 #include <kfs/kernel_serve.h>
 
@@ -38,7 +38,7 @@ static void fork_handler(struct task_struct * child)
 		}
 		else
 fail:
-			kdprintf(STDERR_FILENO, "error creating child scope for PID %d!\n", child->pid);
+			fprintf(stderr, "error creating child scope for PID %d!\n", child->pid);
 	}
 	
 	kfsd_leave(0);
@@ -104,7 +104,7 @@ int kernel_opgroup_scopes_init(void)
 	
 	scope_map = hash_map_create();
 	if (!scope_map)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	r = kudos_register_module(&ops);
 	if (r < 0)

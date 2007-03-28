@@ -1,10 +1,5 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdlib.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 #include <lib/vector.h>
-#include <linux/fcntl.h>
 #include <lib/dirent.h>
 
 #include <kfs/chdesc.h>
@@ -116,7 +111,7 @@ static int devfs_get_config(void * object, int level, char * string, size_t leng
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (length >= 1)
 		string[0] = 0;
@@ -127,7 +122,7 @@ static int devfs_get_status(void * object, int level, char * string, size_t leng
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "devices: %u", vector_size(state->bd_table));
@@ -159,7 +154,7 @@ static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 	devfs_fdesc_t * fdesc;
 	
 	if(parent != state->root_fdesc.inode)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	if(!name[0] || !strcmp(name, "/"))
 	{
@@ -171,7 +166,7 @@ static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 		name++;
 	fdesc = devfd_lookup_name(state, name, NULL);
 	if(!fdesc)
-		return -E_NO_ENT;
+		return -ENOENT;
 	
 	*inode = fdesc->inode;
 	return 0;
@@ -193,12 +188,12 @@ static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 	
 	devfd = devfd_lookup_inode(state, inode);
 	if(!devfd)
-		return -E_NO_ENT;
+		return -ENOENT;
 	
 	/* don't allow writing to a BD that is used by another BD */
 	if((mode & O_ACCMODE) != O_RDONLY)
 		if(devfs_bd_in_use(devfd->bd))
-			return -E_PERM;
+			return -EPERM;
 	
 	*fdesc = (fdesc_t *) devfd;
 	devfd->open_count++;
@@ -208,7 +203,7 @@ static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 static int devfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * new_inode)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
-	return -E_PERM;
+	return -EPERM;
 }
 
 static int devfs_close(CFS_t * cfs, fdesc_t * fdesc)
@@ -216,7 +211,7 @@ static int devfs_close(CFS_t * cfs, fdesc_t * fdesc)
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, fdesc);
 	devfs_fdesc_t * devfd = (devfs_fdesc_t *) fdesc;
 	if(!devfd->open_count)
-		return -E_INVAL;
+		return -EINVAL;
 	devfd->open_count--;
 	return 0;
 }
@@ -234,7 +229,7 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 	bdesc_t * bdesc;
 
 	if(file_size <= offset)
-		return -E_EOF;
+		return -1;
 	if(offset + size > file_size)
 		size = file_size - offset;
 	while(size_read < size)
@@ -244,7 +239,7 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 
 		bdesc = CALL(devfd->bd, read_block, read_byte / blocksize, 1);
 		if(!bdesc)
-			return size_read ? size_read : -E_EOF;
+			return size_read ? size_read : -1;
 
 		limit = MIN(bdesc->ddesc->length - dataoffset, size - size_read);
 		memcpy((uint8_t *) data + size_read, bdesc->ddesc->data + dataoffset, limit);
@@ -253,7 +248,7 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 		dataoffset = 0;
 	}
 
-	return size_read ? size_read : (size ? -E_EOF : 0);
+	return size_read ? size_read : (size ? -1 : 0);
 }
 
 static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
@@ -270,11 +265,11 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 
 	/* don't allow writing to a BD that is used by another BD */
 	if(devfs_bd_in_use(devfd->bd))
-		return -E_PERM;
+		return -EPERM;
 
 	/* now do the actual write */
 	if(file_size <= offset)
-		return -E_EOF;
+		return -1;
 	if(offset + size > file_size)
 		size = file_size - offset;
 	while(size_written < size)
@@ -289,7 +284,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 		else
 			bdesc = CALL(devfd->bd, read_block, write_byte / blocksize, 1);
 		if(!bdesc)
-			return size_written ? size_written : -E_EOF;
+			return size_written ? size_written : -1;
 		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);
 		if(r < 0)
 			break;
@@ -305,7 +300,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 		dataoffset = 0;
 	}
 
-	return size_written ? size_written : (size ? ((r < 0) ? r : -E_EOF) : 0);
+	return size_written ? size_written : (size ? ((r < 0) ? r : -1) : 0);
 }
 
 static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int nbytes, uint32_t * basep)
@@ -319,7 +314,7 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 	uint8_t namelen;
 	
 	if(*basep < 0 || size + 2 <= *basep)
-		return -E_UNSPECIFIED;
+		return -1;
 	
 	if(*basep == 0)
 	{
@@ -347,7 +342,7 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 	namelen = strlen(name);
 	reclen += namelen;
 	if(reclen > nbytes)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	(*basep)++;
 	
@@ -368,7 +363,7 @@ static int devfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint
 	
 	/* check for the special file / */
 	if(fdesc != (fdesc_t *) &state->root_fdesc)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if(!size)
 		return 0;
@@ -385,32 +380,32 @@ static int devfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	/* I suppose we could support removing block devices. It might pose some issues however. */
-	return -E_PERM;
+	return -EPERM;
 }
 
 static int devfs_link(CFS_t * cfs, inode_t inode, inode_t new_parent, const char * new_name)
 {
 	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, inode, new_parent, new_name);
-	return -E_PERM;
+	return -EPERM;
 }
 
 static int devfs_rename(CFS_t * cfs, inode_t old_parent, const char * old_name, inode_t new_parent, const char * new_name)
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, old_parent, old_name, new_parent, new_name);
 	/* I suppose we could support renaming block devices. It might pose some issues however. */
-	return -E_PERM;
+	return -EPERM;
 }
 
 static int devfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * inode)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	return -E_PERM;
+	return -EPERM;
 }
 
 static int devfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	return -E_PERM;
+	return -EPERM;
 }
 
 static const feature_t * devfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_blocksize, &KFS_feature_devicesize};
@@ -444,32 +439,32 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 	{
 		fdesc = devfd_lookup_inode(state, inode);
 		if(!fdesc)
-			return -E_NO_ENT;
+			return -ENOENT;
 	}
 	
 	if(id == KFS_feature_size.id)
 	{
 		if(size < sizeof(size_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(size_t);
 		*((size_t *) data) = fdesc ? CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks) : 0;
 	}
 	else if(id == KFS_feature_filetype.id)
 	{
 		if(size < sizeof(int32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(int32_t);
 		*((int32_t *) data) = fdesc ? TYPE_DEVICE : TYPE_DIR;
 	}
 	else if(id == KFS_feature_freespace.id || id == KFS_feature_blocksize.id || id == KFS_feature_devicesize.id)
 	{
 		if(size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 		*((uint32_t *) data) = 0;
 	}
 	else
-		return -E_INVAL;
+		return -EINVAL;
 	
 	return size;
 }
@@ -477,7 +472,7 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 static int devfs_set_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, inode, id, size, data);
-	return -E_PERM;
+	return -EPERM;
 }
 
 static void devfs_real_destroy(void * void_devfs_cfs)
@@ -562,19 +557,19 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 	
 	/* make sure this is really a device FS */
 	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	/* don't allow / in names */
 	if(strchr(name, '/'))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	fdesc = devfd_lookup_name(state, name, NULL);
 	if(fdesc)
-		return -E_BUSY;
+		return -EBUSY;
 	
 	fdesc = devfs_fdesc_create(state->root_fdesc.inode, name, bd);
 	if(!fdesc)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	if((r = vector_push_back(state->bd_table, fdesc)) < 0)
 	{

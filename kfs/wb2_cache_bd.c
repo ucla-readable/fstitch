@@ -1,11 +1,6 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/hash_map.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
 
 #include <kfs/kfsd.h>
 #include <kfs/bd.h>
@@ -571,7 +566,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > CALL(info->bd, get_numblocks))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) block->number);
 	if(slot)
@@ -598,7 +593,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		
 		slot = push_block(info, block);
 		if(!slot)
-			return -E_NO_MEM;
+			return -ENOMEM;
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
 		push_slot_dirty(info, slot);
@@ -668,7 +663,7 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 	{
 		r = CALL(bd, flush, FLUSH_DEVICE, NULL);
 		if(r < 0)
-			return -E_BUSY;
+			return -EBUSY;
 	}
 	assert(!info->dblocks);
 	

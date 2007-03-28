@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <linux/fcntl.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
@@ -103,7 +98,7 @@ static int uhfs_get_config(void * object, int level, char * string, size_t lengt
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != UHFS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (length >= 1)
 		string[0] = 0;
@@ -114,7 +109,7 @@ static int uhfs_get_status(void * object, int level, char * string, size_t lengt
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != UHFS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	
 	snprintf(string, length, "open files: %u", state->nopen);
@@ -162,7 +157,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 		/* Truncate the block */
 		uint32_t block = CALL(state->lfs, truncate_file_block, uf->inner, &prev_head);
 		if (block == INVALID_BLOCK)
-			return -E_UNSPECIFIED;
+			return -1;
 
 		save_head = prev_head;
 
@@ -224,7 +219,7 @@ static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, 
 	{
 		CALL(state->lfs, free_fdesc, inner);
 		*outer = NULL;
-		return -E_NO_MEM;
+		return -ENOMEM;
 	}
 
 	state->nopen++;
@@ -243,21 +238,21 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 	uint32_t filetype;
 
 	if ((mode & O_CREAT))
-		return -E_INVAL;
+		return -EINVAL;
 
 	/* look up the ino */
 	inner = CALL(state->lfs, lookup_inode, ino);
 	if (!inner)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	if ((mode & O_WRONLY) || (mode & O_RDWR))
 	{
 		if (check_type_supported(state->lfs, ino, inner, &filetype))
 		{
 			if (filetype == TYPE_DIR)
-				return -E_UNSPECIFIED; // -E_EISDIR
+				return -1; // -E_EISDIR
 			else if (filetype == TYPE_INVAL)
-				return -E_UNSPECIFIED; // This seems bad too
+				return -1; // This seems bad too
 		}
 	}
 
@@ -295,8 +290,8 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	r = CALL(state->lfs, lookup_name, parent, name, &existing_ino);
 	if (r >= 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(%u, \"%s\"): file already exists. What should we do? (Returning error)\n", __FUNCTION__, parent, name);
-		return -E_EXIST;
+		fprintf(stderr, "%s(%u, \"%s\"): file already exists. What should we do? (Returning error)\n", __FUNCTION__, parent, name);
+		return -EEXIST;
 	}
 
 	r = initialmd->get(initialmd->arg, KFS_feature_filetype.id, sizeof(type), &type);
@@ -306,7 +301,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 
 	inner = CALL(state->lfs, allocate_name, parent, name, type, NULL, initialmd, newino, &prev_head);
 	if (!inner)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	r = open_common(state, inner, *newino, fdesc);
 	if (r < 0)
@@ -329,9 +324,9 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	if (check_type_supported(state->lfs, uf->inode, uf->inner, &filetype))
 	{
 		if (filetype == TYPE_DIR)
-			return -E_UNSPECIFIED; // -E_EISDIR
+			return -1; // -E_EISDIR
 		else if (filetype == TYPE_INVAL)
-			return -E_UNSPECIFIED; // This seems bad too
+			return -1; // This seems bad too
 	}
 
 	/* if we have filesize, use it! */
@@ -352,7 +347,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 		if (number != INVALID_BLOCK)
 			block = CALL(state->lfs, lookup_block, number);
 		if (!block)
-			return size_read ? size_read : -E_EOF;
+			return size_read ? size_read : -1;
 
 		limit = MIN(block->ddesc->length - dataoffset, size - size_read);
 		if (uf->size_id)
@@ -368,7 +363,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 			break;
 	}
 
-	return size_read ? size_read : (size ? -E_EOF : 0);
+	return size_read ? size_read : (size ? -1 : 0);
 }
 
 static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
@@ -417,7 +412,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			if (r < 0)
 				return r;
 			if (r == 0)
-				return -E_UNSPECIFIED;
+				return -1;
 			filesize += r;
 		}
 	}
@@ -597,7 +592,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 		uint32_t number = CALL(state->lfs, truncate_file_block, f, prev_head);
 		if (number == INVALID_BLOCK) {
 			CALL(state->lfs, free_fdesc, f);
-			return -E_INVAL;
+			return -EINVAL;
 		}
 
 		save_head = *prev_head;
@@ -632,18 +627,18 @@ static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t 
 
 	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	dir_supported = check_type_supported(state->lfs, ino, f, &filetype);
 	if (dir_supported) {
 		if (filetype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, f);
-			return -E_UNSPECIFIED;
+			return -1;
 		}
 
 		if (filetype == TYPE_DIR) {
 			CALL(state->lfs, free_fdesc, f);
-			return -E_INVAL;
+			return -EINVAL;
 		}
 	}
 
@@ -660,7 +655,7 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
-	return -E_NO_ENT;
+	return -ENOENT;
 }
 
 static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
@@ -677,7 +672,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 
 	oldf = CALL(state->lfs, lookup_inode, ino);
 	if (!oldf)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	type_supported = check_type_supported(state->lfs, ino, oldf, &oldtype);
 	/* determine old's type to set new's type */
@@ -686,20 +681,20 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	if (oldtype == TYPE_INVAL)
 	{
 		CALL(state->lfs, free_fdesc, oldf);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	if (CALL(state->lfs, lookup_name, newparent, newname, &newino) >= 0)
 	{
 		CALL(state->lfs, free_fdesc, oldf);
-		return -E_EXIST;
+		return -EEXIST;
 	}
 
 	newf = CALL(state->lfs, allocate_name, newparent, newname, oldtype, oldf, &initialmd, &newino, &prev_head);
 	if (!newf)
 	{
 		CALL(state->lfs, free_fdesc, oldf);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	if (type_supported)
@@ -727,7 +722,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 	int r;
 
 	r = CALL(state->lfs, lookup_name, newparent, newname, &ino);
-	if (r < 0 && r != -E_NO_ENT)
+	if (r < 0 && r != -ENOENT)
 		return r;
 	if (r >= 0)
 	{
@@ -753,11 +748,11 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 	int r;
 
 	if (CALL(state->lfs, lookup_name, parent, name, &existing_ino) >= 0)
-		return -E_EXIST;
+		return -EEXIST;
 
 	f = CALL(state->lfs, allocate_name, parent, name, TYPE_DIR, NULL, initialmd, ino, &prev_head);
 	if (!f)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	/* set the filetype metadata */
 	if (lfs_feature_supported(state->lfs, *ino, KFS_feature_filetype.id))
@@ -788,7 +783,7 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	struct dirent entry;
 	uint32_t filetype;
 	uint32_t basep = 0;
-	int r, retval = -E_INVAL;
+	int r, retval = -EINVAL;
 
 	r = CALL(state->lfs, lookup_name, parent, name, &ino);
 	if (r < 0)
@@ -796,14 +791,14 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 
 	f = CALL(state->lfs, lookup_inode, ino);
 	if (!f)
-		return -E_UNSPECIFIED;
+		return -1;
 	f->common->parent = parent;
 
 	dir_supported = check_type_supported(state->lfs, ino, f, &filetype);
 	if (dir_supported) {
 		if (filetype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, f);
-			return -E_UNSPECIFIED;
+			return -1;
 		}
 
 		if (filetype == TYPE_DIR) {
@@ -819,10 +814,10 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 					return unlink_file(cfs, ino, parent, name, f, &prev_head);
 				}
 			} while (r != 0);
-			retval = -E_NOT_EMPTY;
+			retval = -ENOTEMPTY;
 		}
 		else {
-			retval = -E_NOT_DIR;
+			retval = -ENOTDIR;
 		}
 	}
 
@@ -869,7 +864,7 @@ static int uhfs_destroy(CFS_t * cfs)
 	int r;
 
 	if (state->nopen > 0)
-		kdprintf(STDERR_FILENO, "%s(%s): orphaning %u open fdescs\n", __FUNCTION__, modman_name_cfs(cfs), state->nopen);
+		fprintf(stderr, "%s(%s): orphaning %u open fdescs\n", __FUNCTION__, modman_name_cfs(cfs), state->nopen);
 
 	r = modman_rem_cfs(cfs);
 	if(r < 0)

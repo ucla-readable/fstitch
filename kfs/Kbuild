@@ -23,14 +23,12 @@ obj-m += kkfsd.o
 
 KKFSD_LIB_OBJS := \
               assert.o \
-              kdprintf.o \
               qsort.o \
               vector.o \
               hash_map.o \
               hash_set.o \
               kfs_feature.o \
               strtol.o \
-              strings.o \
               svnrevtol.o \
               sleep.o
 

@@ -1,6 +1,4 @@
-#include <lib/assert.h>
-#include <lib/kdprintf.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 #include <lib/vector.h>
 
 #include <kfs/cfs.h>
@@ -47,7 +45,7 @@ static size_t destroy_all_##type(void) \
 		{ \
 			r = DESTROY(mod); \
 			if (r) \
-				kdprintf(STDERR_FILENO, "%s(): failed to destroy %s\n", __FUNCTION__, modman_name_##type(mod)); \
+				fprintf(stderr, "%s(): failed to destroy %s\n", __FUNCTION__, modman_name_##type(mod)); \
 			assert(!r); \
 			ndestroyed++; \
 		} \
@@ -110,9 +108,9 @@ void destroy_all(void)
 	} while (ndestroyed);
 
 	if (!destroyed_all_cfs_p())
-		kdprintf(STDERR_FILENO, "%s: some CFS modules remain\n", __FUNCTION__);
+		fprintf(stderr, "%s: some CFS modules remain\n", __FUNCTION__);
 	if (!destroyed_all_lfs_p())
-		kdprintf(STDERR_FILENO, "%s: some LFS modules remain\n", __FUNCTION__);
+		fprintf(stderr, "%s: some LFS modules remain\n", __FUNCTION__);
 	if (!destroyed_all_bd_p())
-		kdprintf(STDERR_FILENO, "%s: some BD modules remain\n", __FUNCTION__);
+		fprintf(stderr, "%s: some BD modules remain\n", __FUNCTION__);
 }

@@ -1,8 +1,5 @@
-#include <lib/error.h>
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
 #include <lib/vector.h>
 
 #include <kfs/debug.h>
@@ -49,7 +46,7 @@ static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_TIME])
 		return 0;
 
@@ -74,14 +71,14 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 
 	if (!linfo->syncing) {
 		if (!sum)
-			return -E_INVAL;
+			return -EINVAL;
 		memcpy(&linfo->super.fs_cstotal, sum, sizeof(struct UFS_csum));
 		linfo->dirty[WB_CSTOTAL] = 1;
 		return 0;
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_CSTOTAL])
 		return 0;
 
@@ -115,7 +112,7 @@ static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_FMOD])
 		return 0;
 
@@ -145,7 +142,7 @@ static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdes
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_CLEAN])
 		return 0;
 
@@ -175,7 +172,7 @@ static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdes
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_RONLY])
 		return 0;
 
@@ -201,14 +198,14 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 	if (!linfo->syncing) {
 		len = strlen(fsmnt);
 		if (len >= UFS_MAXMNTLEN)
-			return -E_INVAL;
+			return -EINVAL;
 		strcpy(linfo->super.fs_fsmnt, fsmnt);
 		linfo->dirty[WB_FSMNT] = 1;
 		return 0;
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_FSMNT])
 		return 0;
 
@@ -238,7 +235,7 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 	}
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	if (!linfo->dirty[WB_CGROTOR])
 		return 0;
 
@@ -266,11 +263,11 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 	int r;
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	oldheads = vector_create();
 	if (!oldheads)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	linfo->syncing = 1;
 

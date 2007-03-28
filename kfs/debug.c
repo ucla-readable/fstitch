@@ -1,25 +1,20 @@
 #include <lib/assert.h>
 #include <lib/jiffies.h>
 #include <lib/sleep.h>
-#include <lib/types.h>
-#include <lib/error.h>
+#include <lib/platform.h>
 #include <lib/stdarg.h>
-#include <lib/stdio.h>
 #include <lib/svnrevtol.h>
 
-#include <linux/version.h>
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
-#include <linux/config.h>
-#endif
+#include <lib/platform.h>
 
+#ifdef __KERNEL__
 #include <linux/proc_fs.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 #endif
-/* htons and htonl */
-#include <lib/string.h>
+#endif
 
 #include <kfs/chdesc.h>
 #include <kfs/sched.h>

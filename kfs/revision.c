@@ -1,7 +1,4 @@
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/error.h>
+#include <lib/platform.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>
@@ -27,60 +24,60 @@ static bool revision_flight_decider(chdesc_t * chdesc, void * data)
 static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chdescs, const char * function)
 {
 	int i;
-	kdprintf(STDERR_FILENO, "%s() is very confused! (debug = %d)\n", function, KFS_DEBUG_COUNT());
+	fprintf(stderr, "%s() is very confused! (debug = %d)\n", function, KFS_DEBUG_COUNT());
 	for(i = 0; i != count; i++)
 	{
 		chdepdesc_t * scan;
 		int total = 0;
 		if(!chdescs[i])
 		{
-			kdprintf(STDERR_FILENO, "(slot null)\n");
+			fprintf(stderr, "(slot null)\n");
 			continue;
 		}
-		kdprintf(STDERR_FILENO, "%p [T%d, L%d, F%x]", chdescs[i], chdescs[i]->type, chdesc_level(chdescs[i]), chdescs[i]->flags);
+		fprintf(stderr, "%p [T%d, L%d, F%x]", chdescs[i], chdescs[i]->type, chdesc_level(chdescs[i]), chdescs[i]->flags);
 		if(!chdesc_is_rollbackable(chdescs[i]))
-			kdprintf(STDERR_FILENO, "!");
-		kdprintf(STDERR_FILENO, " (<-");
+			fprintf(stderr, "!");
+		fprintf(stderr, " (<-");
 		for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
 		{
 			total++;
 			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
 				continue;
-			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
+			fprintf(stderr, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
 			if(!chdesc_is_rollbackable(scan->after.desc))
-				kdprintf(STDERR_FILENO, "!");
+				fprintf(stderr, "!");
 			if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
-				kdprintf(STDERR_FILENO, "*");
+				fprintf(stderr, "*");
 			if(scan->after.desc->block->ddesc->in_flight)
-				kdprintf(STDERR_FILENO, "^");
+				fprintf(stderr, "^");
 		}
-		kdprintf(STDERR_FILENO, ")%d (->", total);
+		fprintf(stderr, ")%d (->", total);
 		total = 0;
 		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
 		{
 			total++;
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
 				continue;
-			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
+			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
 			if(!chdesc_is_rollbackable(scan->before.desc))
-				kdprintf(STDERR_FILENO, "!");
+				fprintf(stderr, "!");
 			if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
-				kdprintf(STDERR_FILENO, "*");
+				fprintf(stderr, "*");
 			if(scan->before.desc->block->ddesc->in_flight)
-				kdprintf(STDERR_FILENO, "^");
+				fprintf(stderr, "^");
 		}
-		kdprintf(STDERR_FILENO, ")%d (-->", total);
+		fprintf(stderr, ")%d (-->", total);
 		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
 		{
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc == block->ddesc)
 				continue;
-			kdprintf(STDERR_FILENO, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
+			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
 			if(!chdesc_is_rollbackable(scan->before.desc))
-				kdprintf(STDERR_FILENO, "!");
+				fprintf(stderr, "!");
 			if(scan->before.desc->block->ddesc->in_flight)
-				kdprintf(STDERR_FILENO, "^");
+				fprintf(stderr, "^");
 		}
-		kdprintf(STDERR_FILENO, ")\n");
+		fprintf(stderr, ")\n");
 	}
 	kpanic("too confused to continue");
 }
@@ -106,7 +103,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	chdescs_size = sizeof(*chdescs) * count;
 	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(!decider(scan, data))
@@ -139,7 +136,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 				int r = chdesc_rollback(chdescs[i]);
 				if(r < 0)
 				{
-					kdprintf(STDERR_FILENO, "chdesc_rollback() failed!\n");
+					fprintf(stderr, "chdesc_rollback() failed!\n");
 					assert(0);
 				}
 				progress = 1;
@@ -183,7 +180,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	chdescs_size = sizeof(*chdescs) * count;
 	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(!decider(scan, data))
@@ -216,7 +213,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 				int r = chdesc_apply(chdescs[i]);
 				if(r < 0)
 				{
-					kdprintf(STDERR_FILENO, "chdesc_apply() failed!\n");
+					fprintf(stderr, "chdesc_apply() failed!\n");
 					assert(0);
 				}
 				progress = 1;
@@ -259,7 +256,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decide
 	chdescs_size = sizeof(*chdescs) * count;
 	chdescs = smalloc(chdescs_size);
 	if(!chdescs)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(decider(scan, data))
@@ -316,7 +313,7 @@ int revision_tail_schedule_flight(void)
 	unsigned long flags;
 	struct flight * slot = malloc(sizeof(*slot));
 	if(!slot)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	spin_lock_irqsave(&flight_plan, flags);
 	slot->next = scheduled_flights;
 	scheduled_flights = slot;
@@ -371,7 +368,7 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 #endif
 		}
 		else if(!chdesc_is_rollbackable(scan))
-			kdprintf(STDERR_FILENO, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
+			fprintf(stderr, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
 	
 	block->ddesc->in_flight = 1;
 	bdesc_retain(block);
@@ -561,7 +558,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				slice->ready_size = 0;
 				return 0;
 			}
-			return -E_NO_MEM;
+			return -ENOMEM;
 		}
 
 		for(scan = tmp_ready; scan;)
@@ -600,7 +597,7 @@ void revision_slice_push_down(revision_slice_t * slice)
 				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
+			fprintf(stderr, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
 	}
 }
 
@@ -625,7 +622,7 @@ void revision_slice_pull_up(revision_slice_t * slice)
 				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
 		else
-			kdprintf(STDERR_FILENO, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
+			fprintf(stderr, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
 	}
 }
 

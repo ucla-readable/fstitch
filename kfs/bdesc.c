@@ -1,11 +1,5 @@
-#include <lib/error.h>
-#include <lib/kdprintf.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
 
 #include <kfs/bd.h>
 #include <kfs/blockman.h>
@@ -135,7 +129,7 @@ void bdesc_release(bdesc_t ** bdesc)
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ddesc->ref_count);
 	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): block %p had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+		fprintf(stderr, "%s(): (%s:%d): block %p had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
 		(*bdesc)->ref_count = (*bdesc)->ar_count;
 	}
@@ -147,17 +141,17 @@ void bdesc_release(bdesc_t ** bdesc)
 			uint16_t i;
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
 			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+				fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 #if BDESC_EXTERN_AFTER_COUNT
 			if((*bdesc)->ddesc->extern_after_count)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
+				fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
 #endif
 #if CHDESC_NRB
 			if((*bdesc)->ddesc->nrb)
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
+				fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
 			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
-				kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+				fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			for(i = 0; i < NBDLEVEL; i++)
 				assert(!(*bdesc)->ddesc->ready_changes[i].head);
 			hash_map_destroy((*bdesc)->ddesc->bit_changes);
@@ -179,7 +173,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 {
 	if(bdesc->ar_count == bdesc->ref_count)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): bdesc %p autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
+		fprintf(stderr, "%s(): (%s:%d): bdesc %p autorelease count would exceed reference count!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
 		return bdesc;
 	}
 	if(!bdesc->ar_count++)
@@ -202,7 +196,7 @@ int bdesc_autorelease_pool_push(void)
 	else
 		pool = malloc(sizeof(*pool));
 	if(!pool)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	pool->list = NULL;
 	pool->next = autorelease_stack;
 	autorelease_stack = pool;
@@ -218,7 +212,7 @@ void bdesc_autorelease_pool_pop(void)
 	struct auto_pool * pool = autorelease_stack;
 	if(!pool)
 	{
-		kdprintf(STDERR_FILENO, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
+		fprintf(stderr, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
 		return;
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_POP, bdesc_autorelease_pool_depth() - 1);

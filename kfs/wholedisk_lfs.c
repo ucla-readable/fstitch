@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
@@ -40,7 +35,7 @@ static int wholedisk_get_config(void * object, int level, char * string, size_t 
 {
 	LFS_t * lfs = (LFS_t *) object;
 	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (length >= 1)
 		string[0] = 0;
@@ -51,7 +46,7 @@ static int wholedisk_get_status(void * object, int level, char * string, size_t 
 {
 	LFS_t * lfs = (LFS_t *) object;
 	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	if (length >= 1)
 		string[0] = 0;
@@ -103,7 +98,7 @@ static int wholedisk_lookup_name(LFS_t * object, inode_t parent, const char * na
 {
 	/* only allow the fixed disk name */
 	if(parent != INODE_ROOT || strcmp(name, DISK_NAME))
-		return -E_NO_ENT;
+		return -ENOENT;
 	if(inode)
 		*inode = INODE_DISK;
 	return 0;
@@ -135,10 +130,10 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 	size_t namelen;
 	
 	if(file != (fdesc_t *) &root_fdesc)
-		return -E_NOT_DIR;
+		return -ENOTDIR;
 	
 	if(size < sizeof(*entry) - sizeof(entry->d_name))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	switch(*basep)
 	{
@@ -172,14 +167,14 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			name = DISK_NAME;
 			break;
 		default:
-			return -E_EOF;
+			return -1;
 	}
 	
 	entry->d_reclen = sizeof(*entry) - sizeof(entry->d_name) + entry->d_namelen + 1;
 	if(entry->d_reclen > size)
 	{
 		memset(entry, 0, size);
-		return -E_INVAL;
+		return -EINVAL;
 	}
 	strcpy(entry->d_name, name);
 	entry->d_name[entry->d_namelen] = 0;
@@ -192,7 +187,7 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	/* always fail - size immutable */
-	return -E_INVAL;
+	return -EINVAL;
 }
 
 static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
@@ -204,7 +199,7 @@ static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const c
 static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	/* always fail - no filenames */
-	return -E_PERM;
+	return -EPERM;
 }
 
 static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
@@ -216,13 +211,13 @@ static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, ch
 static int wholedisk_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	/* always fail - no block accounting */
-	return -E_INVAL;
+	return -EINVAL;
 }
 
 static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
 	/* always fail - no filenames */
-	return -E_PERM;
+	return -EPERM;
 }
 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
@@ -263,21 +258,21 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 	if (id == KFS_feature_size.id)
 	{
 		if (size < sizeof(size_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(size_t);
 		*((size_t *) data) = (inode == INODE_DISK) ? state->blocksize * CALL(state->bd, get_numblocks) : 0;
 	}
 	else if (id == KFS_feature_filetype.id)
 	{
 		if (size < sizeof(int32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(int32_t);
 		*((int32_t *) data) = (inode == INODE_DISK) ? TYPE_DEVICE : TYPE_DIR;
 	}
 	else if (id == KFS_feature_freespace.id)
 	{
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = 0;
@@ -285,7 +280,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 	else if (id == KFS_feature_file_lfs.id)
 	{
 		if (size < sizeof(object))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(object);
 
 		*((typeof(object) *) data) = object;
@@ -293,7 +288,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 	else if (id == KFS_feature_blocksize.id)
 	{
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = CALL(state->bd, get_blocksize);
@@ -301,13 +296,13 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 	else if (id == KFS_feature_devicesize.id)
 	{
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = CALL(state->bd, get_numblocks);
 	}
 	else
-		return -E_INVAL;
+		return -EINVAL;
 
 	return size;
 }
@@ -324,7 +319,7 @@ static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 
 static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
-	return -E_INVAL;
+	return -EINVAL;
 }
 
 static int wholedisk_set_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, const void * data, chdesc_t ** head)

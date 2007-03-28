@@ -1,5 +1,4 @@
-#include <lib/error.h>
-#include <lib/stdio.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/modman.h>
@@ -21,6 +20,6 @@ int kfs_sync(void)
 		if(r == FLUSH_EMPTY)
 			return 0;
 		if(r == FLUSH_NONE)
-			return -E_BUSY;
+			return -EBUSY;
 	}
 }

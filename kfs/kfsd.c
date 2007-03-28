@@ -1,8 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <linux/version.h>
 #include <linux/pagemap.h>
@@ -109,7 +105,7 @@ int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, v
 	int i;
 
 	if (when != SHUTDOWN_PREMODULES && when != SHUTDOWN_POSTMODULES)
-		return -E_INVAL;
+		return -EINVAL;
 
 	for (i = 0; i < MAX_NR_SHUTDOWNS; i++)
 	{
@@ -125,7 +121,7 @@ int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, v
 	}
 
 	printk(KERN_ERR "%s(): too many shutdown modules!\n", __FUNCTION__);
-	return -E_NO_MEM;
+	return -ENOMEM;
 }
 
 static void kfsd_callback_shutdowns(int when)
@@ -154,7 +150,7 @@ static void kfsd_shutdown(void)
 		kfsd_running = 0;
 	
 	if(kfs_sync() < 0)
-		kdprintf(STDERR_FILENO, "Sync failed!\n");
+		fprintf(stderr, "Sync failed!\n");
 
 	Kprintf("Calling pre-shutdown callbacks.\n");
 	kfsd_callback_shutdowns(SHUTDOWN_PREMODULES);

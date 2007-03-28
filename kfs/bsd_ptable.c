@@ -1,14 +1,12 @@
+#include <lib/platform.h>
+#include <lib/vector.h>
+
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/partition_bd.h>
 #include <kfs/bsd_ptable.h>
 
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
 #include <lib/disklabel.h>
-#include <lib/vector.h>
 
 struct bsdpart {
 	uint32_t start, length;

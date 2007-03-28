@@ -1,9 +1,5 @@
-#include <lib/error.h>
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
-#include <lib/hash_map.h>
 
 #include <kfs/sched.h>
 #include <kfs/debug.h>
@@ -100,7 +96,7 @@ static int ext2_super_wb_sync(EXT2mod_super_t * object, chdesc_t ** head)
 	int r;
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (!linfo->super_dirty)
 		return 0;
@@ -123,7 +119,7 @@ static int ext2_super_wb_gdesc_sync(EXT2mod_super_t * object, chdesc_t ** head)
 	int r,i;
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 	int nbytes = 0;
 	for(i = 0; i < linfo->ngroupblocks; i++) {
 		if (linfo->gdesc_dirty[i] == 0)

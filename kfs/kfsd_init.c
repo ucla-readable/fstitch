@@ -1,14 +1,11 @@
 /* config.h gets us RELEASE_NAME */
 #include <lib/config.h>
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/kdprintf.h>
+#include <lib/platform.h>
 #include <lib/vector.h>
 #include <lib/partition.h>
 #include <lib/sleep.h>
 #include <lib/jiffies.h>
 #include <lib/disklabel.h>
-#include <lib/stdio.h>
 
 #include <kfs/pc_ptable.h>
 #include <kfs/bsd_ptable.h>
@@ -91,48 +88,48 @@ int kfsd_init(int nwbblocks)
 	 * events by accident */
 	if ((r = kfsd_sched_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "sched_init: %i\n", r);
+		fprintf(stderr, "sched_init: %i\n", r);
 		return r;
 	}
 
 	if((r = KFS_DEBUG_INIT()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "kfs_debug_init: %i\n", r);
+		fprintf(stderr, "kfs_debug_init: %i\n", r);
 		return r;
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
 	if ((r = chdesc_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "chdesc_init: %i\n", r);
+		fprintf(stderr, "chdesc_init: %i\n", r);
 		return r;
 	}
 
 	if((r = modman_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "modman_init: %i\n", r);
+		fprintf(stderr, "modman_init: %i\n", r);
 		return r;
 	}
 
 	if ((r = kernel_serve_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "kernel_serve_init: %d\n", r);
+		fprintf(stderr, "kernel_serve_init: %d\n", r);
 		return r;
 	}
 	if ((r = kernel_opgroup_ops_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "kernel_opgroup_ops_init: %d\n", r);
+		fprintf(stderr, "kernel_opgroup_ops_init: %d\n", r);
 		return r;
 	}
 	if ((r = kernel_opgroup_scopes_init()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "kernel_opgroup_scopes_init: %d\n", r);
+		fprintf(stderr, "kernel_opgroup_scopes_init: %d\n", r);
 		return r;
 	}
 
 	if ((r = bdesc_autorelease_pool_push()) < 0)
 	{
-		kdprintf(STDERR_FILENO, "bdesc_autorelease_pool_push: %i\n");
+		fprintf(stderr, "bdesc_autorelease_pool_push: %i\n", r);
 		return r;
 	}
 	
@@ -145,8 +142,8 @@ int kfsd_init(int nwbblocks)
 
 	if (! (uhfses = vector_create()) )
 	{
-		kdprintf(STDERR_FILENO, "OOM, vector_create\n");
-		return -E_NO_MEM;
+		fprintf(stderr, "OOM, vector_create\n");
+		return -ENOMEM;
 	}
 
 	if (use_disk_1)
@@ -157,7 +154,7 @@ int kfsd_init(int nwbblocks)
 		{
 			printf("Using device %s\n", linux_device);
 			if (! (bd = linux_bd(linux_device)) )
-				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
+				fprintf(stderr, "linux_bd(\"%s\") failed\n", linux_device);
 #if LINUX_BD_TIMING_TEST
 			const uint32_t block_numbers[4][30] = {
 				{10, 12, 14, 16, 18, 20, 22, 24,
@@ -220,7 +217,7 @@ int kfsd_init(int nwbblocks)
 		{
 			printf("Using device %s\n", linux_device);
 			if (! (bd = linux_bd(linux_device)) )
-				kdprintf(STDERR_FILENO, "linux_bd(\"%s\") failed\n", linux_device);
+				fprintf(stderr, "linux_bd(\"%s\") failed\n", linux_device);
 		}
 #endif
 		if (bd)
@@ -236,7 +233,7 @@ int kfsd_init(int nwbblocks)
 		BD_t * bd;
 
 		if (! (bd = mem_bd(1024, 4096)) )
-			kdprintf(STDERR_FILENO, "mem_bd(1024, 4096) failed\n");
+			fprintf(stderr, "mem_bd(1024, 4096) failed\n");
 		if (bd)
 		{
 			OBJFLAGS(bd) |= OBJ_PERSISTENT;
@@ -256,7 +253,7 @@ int kfsd_init(int nwbblocks)
 			r = kfsd_add_mount(fspaths[i], vector_elt(uhfses, i));
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "kfsd_add_mount: %i\n", r);
+				fprintf(stderr, "kfsd_add_mount: %i\n", r);
 				return r;
 			}
 		}
@@ -268,7 +265,7 @@ int kfsd_init(int nwbblocks)
 	r = kfsd_add_mount("/dev", modman_devfs);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "kfsd_add_mount: %i\n", r);
+		fprintf(stderr, "kfsd_add_mount: %i\n", r);
 		return r;
 	}
 
@@ -292,7 +289,7 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 		is_journaled = 1;
 	else
 	{
-		kdprintf(STDERR_FILENO, "journal_bd failed, not journaling\n");
+		fprintf(stderr, "journal_bd failed, not journaling\n");
 		journal = cache;
 	}
 #else
@@ -312,26 +309,26 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 			r = CALL(plain_lfs, get_root, &root_ino);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "get_root: %i\n", r);
+				fprintf(stderr, "get_root: %i\n", r);
 				return NULL;
 			}
 			r = CALL(plain_lfs, lookup_name, root_ino, ".journal", &journal_ino);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "No journal file; restarting modules\n");
+				fprintf(stderr, "No journal file; restarting modules\n");
 				goto disable_journal;
 			}
 
 			journalbd = loop_bd(plain_lfs, journal_ino);
 			if (!journalbd)
 			{
-				kdprintf(STDERR_FILENO, "loop_bd failed\n");
+				fprintf(stderr, "loop_bd failed\n");
 				goto disable_journal;
 			}
 			r = journal_bd_set_journal(journal, journalbd);
 			if (r < 0)
 			{
-				kdprintf(STDERR_FILENO, "journal_bd_set_journal: error %d\n", -r);
+				fprintf(stderr, "journal_bd_set_journal: error %d\n", -r);
 				goto disable_journal;
 			}
 		}
@@ -355,7 +352,7 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 		printf("Using wholedisk on %s", part->description);
 	else
 	{
-		kdprintf(STDERR_FILENO, "\nlfs creation failed\n");
+		fprintf(stderr, "\nlfs creation failed\n");
 		return NULL;
 	}
 	if (is_journaled)
@@ -379,8 +376,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 	if (! (partitions = vector_create()) )
 	{
-		kdprintf(STDERR_FILENO, "OOM, vector_create\n");
-		return -E_NO_MEM;
+		fprintf(stderr, "OOM, vector_create\n");
+		return -ENOMEM;
 	}
 
 	/* discover pc partitions */
@@ -397,8 +394,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			{
 				if (! (part = malloc(sizeof(kfsd_partition_t))) )
 				{
-					kdprintf(STDERR_FILENO, "OOM, malloc\n");
-					return -E_NO_MEM;
+					fprintf(stderr, "OOM, malloc\n");
+					return -ENOMEM;
 				}
 				part->bd = pc_ptable_bd(ptbl, i);
 				if (part->bd)
@@ -409,8 +406,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 					snprintf(part->description, 32, "Partition %d", i);
 					if (vector_push_back(partitions, part))
 					{
-						kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
-						return -E_NO_MEM;
+						fprintf(stderr, "OOM, vector_push_back\n");
+						return -ENOMEM;
 					}
 				}
 			}
@@ -444,8 +441,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		printf("Using whole disk.\n");
 		if (! (part = malloc(sizeof(kfsd_partition_t))) )
 		{
-			kdprintf(STDERR_FILENO, "OOM, malloc\n");
-			return -E_NO_MEM;
+			fprintf(stderr, "OOM, malloc\n");
+			return -ENOMEM;
 		}
 		// No partition table, make it look like a KudOS partition...
 		part->bd = bd;
@@ -454,8 +451,8 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		snprintf(part->description, 32, "<entire disk>");
 		if (vector_push_back(partitions, part))
 		{
-			kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
-			return -E_NO_MEM;
+			fprintf(stderr, "OOM, vector_push_back\n");
+			return -ENOMEM;
 		}
 	}
 
@@ -492,23 +489,23 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			continue;
 
 		if (! (lfs = opgroup_lfs(lfs)))
-			return -E_UNSPECIFIED;
+			return -1;
 		if (! (u = uhfs(lfs)) )
 		{
-			kdprintf(STDERR_FILENO, "uhfs() failed\n");
-			return -E_UNSPECIFIED;
+			fprintf(stderr, "uhfs() failed\n");
+			return -1;
 		}
 #if USE_ICASE
 		if (! (u = icase_cfs(u)) )
 		{
-			kdprintf(STDERR_FILENO, "icase_cfs() failed\n");
-			return -E_UNSPECIFIED;
+			fprintf(stderr, "icase_cfs() failed\n");
+			return -1;
 		}
 #endif
 		if (vector_push_back(uhfses, u) < 0)
 		{
-			kdprintf(STDERR_FILENO, "vector_push_back() failed\n");
-			return -E_UNSPECIFIED;
+			fprintf(stderr, "vector_push_back() failed\n");
+			return -1;
 		}
 	}
 
@@ -560,8 +557,8 @@ int handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 		{
 			if (! (part = malloc(sizeof(kfsd_partition_t))) )
 			{
-				kdprintf(STDERR_FILENO, "OOM, malloc\n");
-				return -E_NO_MEM;
+				fprintf(stderr, "OOM, malloc\n");
+				return -ENOMEM;
 			}
 			part->bd = bsd_ptable_bd(bsdtbl, j);
 			if (part->bd)
@@ -572,8 +569,8 @@ int handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 				snprintf(part->description, 32, "BSD Partition %d", j);
 				if (vector_push_back(partitions, part))
 				{
-					kdprintf(STDERR_FILENO, "OOM, vector_push_back\n");
-					return -E_NO_MEM;
+					fprintf(stderr, "OOM, vector_push_back\n");
+					return -ENOMEM;
 				}
 			}
 		}

@@ -1,7 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <kfs/debug.h>
 #include <kfs/ufs_dirent_linear.h>
@@ -15,27 +12,27 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!entry)
-		return -E_INVAL;
+		return -EINVAL;
 
 	// Make sure it's a directory and we can read from it
 	if (dirf->f_type != TYPE_DIR)
-		return -E_NOT_DIR;
+		return -ENOTDIR;
 
 	if (*basep >= dirf->f_inode.di_size)
-		return -E_EOF;
+		return -1;
 
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, ROUNDDOWN32(*basep, super->fs_fsize));
 	if (blockno != INVALID_BLOCK)
 		dirblock = CALL(info->parts.base, lookup_block, blockno);
 	if (!dirblock)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	offset = *basep % super->fs_fsize;
 	dirent = (struct UFS_direct *) (dirblock->ddesc->data + offset);
 
 	if (offset + dirent->d_reclen > super->fs_fsize
 			|| dirent->d_reclen < dirent->d_namlen)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	entry->d_ino = dirent->d_ino;
 	entry->d_reclen = dirent->d_reclen;
@@ -59,7 +56,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf)
-		return -E_INVAL;
+		return -EINVAL;
 
 	actual_len = sizeof(struct UFS_direct) + entry.d_namlen - UFS_MAXNAMELEN;
 
@@ -67,10 +64,10 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	foffset = basep - offset;
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, foffset);
 	if (blockno == INVALID_BLOCK)
-		return -E_NO_ENT;
+		return -ENOENT;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	r = chdesc_create_byte(block, info->ubd, offset, actual_len, &entry, head);
 	if (r < 0)
@@ -91,12 +88,12 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || !dirf || ufs_check_name(dirinfo.d_name) || offset < 0)
-		return -E_INVAL;
+		return -EINVAL;
 
 	// Prepare the UFS_direct entry
 	fs_type = kfs_to_ufs_type(dirinfo.d_type);
-	if (fs_type == (uint8_t) -E_INVAL)
-		return -E_INVAL;
+	if (fs_type == (uint8_t) -EINVAL)
+		return -EINVAL;
 
 	entry.d_type = fs_type;
 	entry.d_ino = dirinfo.d_fileno;
@@ -110,9 +107,9 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 		prev_offset = last_basep;
 		last_basep = basep;
 		r = read_dirent(object, dirf, &last_entry, &basep);
-		if (r < 0 && r != -E_EOF)
+		if (r < 0 && r != -1)
 			return r;
-		if (r == -E_EOF) { // EOF, return where next entry starts
+		if (r == -1) { // EOF, return where next entry starts
 			offset = ROUNDUP32(basep, 512);
 			alloc = 1;
 			break;
@@ -145,7 +142,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			bdesc_t * block;
 			uint32_t blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
-				return -E_UNSPECIFIED;
+				return -1;
 			block = CALL(info->ubd, synthetic_read_block, blockno, 1);
 			assert(block); // FIXME Leiz == Lazy
 			r = chdesc_create_init(block, info->ubd, head);
@@ -192,7 +189,7 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 	int r;
 
 	if (!entry)
-		return -E_INVAL;
+		return -EINVAL;
 
 	new_basep = *basep;
 	r = read_dirent(object, dirf, &dirent, &new_basep);
@@ -201,7 +198,7 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 
 	actual_len = sizeof(struct dirent) + dirent.d_namlen - DIRENT_MAXNAMELEN;
 	if (size < actual_len)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (dirent.d_ino) {
 		r = ufs_read_inode(info, dirent.d_ino, &inode); 
@@ -235,15 +232,15 @@ static int ufs_dirent_linear_search_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	int r = 0;
 
 	if (!dirf || ufs_check_name(name))
-		return -E_INVAL;
+		return -EINVAL;
 
 	while (r >= 0) {
 		last_basep = basep;
 		r = ufs_dirent_linear_get_dirent(object, dirf, &entry, sizeof(struct dirent), &basep);
 		if (r < 0)
 		{
-			if (r == -E_EOF)
-				return -E_NO_ENT;
+			if (r == -1)
+				return -ENOENT;
 			else
 				return r;
 		}
@@ -268,7 +265,7 @@ static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	int r, offset;
 
 	if (!head || !dirf || ufs_check_name(name))
-		return -E_INVAL;
+		return -EINVAL;
 
 	r = ufs_dirent_linear_search_dirent(object, dirf, name, NULL, &offset);
 	if (r < 0)
@@ -297,7 +294,7 @@ static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	// we went past the entry somehow?
 	if (basep != offset) {
 		printf("%s: went past the directory entry\n", __FUNCTION__);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 
 	// Get our entry
@@ -316,8 +313,8 @@ static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	struct UFS_direct e;
 
 	e.d_type = kfs_to_ufs_type(entry.d_type);
-	if (e.d_type == (uint8_t) -E_INVAL)
-		return -E_INVAL;
+	if (e.d_type == (uint8_t) -EINVAL)
+		return -EINVAL;
 
 	e.d_ino = entry.d_fileno;
 	e.d_reclen = ROUNDUP32(sizeof(struct UFS_direct) + entry.d_namelen - UFS_MAXNAMELEN, 4);

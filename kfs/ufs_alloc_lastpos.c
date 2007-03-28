@@ -1,4 +1,4 @@
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <kfs/ufs_alloc_lastpos.h>
 

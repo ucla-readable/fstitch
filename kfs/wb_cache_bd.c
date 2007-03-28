@@ -1,12 +1,6 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h> // HZ
 #include <lib/hash_map.h>
-#include <lib/kdprintf.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -186,7 +180,7 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 	r = revision_slice_create(slot->block, object, info->bd, &slice);
 	if(r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s() returned %i; can't flush!\n", __FUNCTION__, r);
+		fprintf(stderr, "%s() returned %i; can't flush!\n", __FUNCTION__, r);
 		return FLUSH_NONE;
 	}
 	
@@ -248,7 +242,7 @@ static int evict_block(BD_t * object, bool only_dirty)
 			TIMING_STOP(wait, wait);
 		}
 		else if(r == FLUSH_NONE)
-			return -E_BUSY;
+			return -EBUSY;
 	}
 }
 
@@ -340,7 +334,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > CALL(info->bd, get_numblocks))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
 	if(index)
@@ -357,12 +351,12 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		if(hash_map_size(info->block_map) == info->size)
 			if(evict_block(object, 0) < 0)
 				/* no room in cache, and can't evict anything... */
-				return -E_BUSY;
+				return -EBUSY;
 		assert(hash_map_size(info->block_map) < info->size);
 		
 		index = push_block(info, block);
 		if(index == INVALID_BLOCK)
-			return -E_NO_MEM;
+			return -ENOMEM;
 		
 		return 0;
 	}
@@ -425,7 +419,7 @@ static int wb_cache_bd_destroy(BD_t * bd)
 	{
 		r = CALL(bd, flush, FLUSH_DEVICE, NULL);
 		if(r < 0)
-			return -E_BUSY;
+			return -EBUSY;
 	}
 	assert(!wb_cache_dirty_count(bd));
 	

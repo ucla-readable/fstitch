@@ -1,8 +1,5 @@
-#include <lib/error.h>
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h>
-#include <lib/kdprintf.h>
-#include <lib/stdlib.h>
 #include <lib/vector.h>
 
 #include <kfs/kfsd.h>
@@ -32,7 +29,7 @@ int sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies)
 	int r;
 	fn_entry_t * fe = malloc(sizeof(*fe));
 	if (!fe)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	// Note: no check [currently] to see if fn is already in fes
 
@@ -68,7 +65,7 @@ int sched_unregister(const sched_callback fn, void * arg)
 		}
 	}
 
-	return -E_NO_ENT;
+	return -ENOENT;
 }
 
 static void kfsd_sched_shutdown(void * ignore)
@@ -96,7 +93,7 @@ int kfsd_sched_init(void)
 
 	fes = vector_create();
 	if (!fes)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	r = kfsd_register_shutdown_module(kfsd_sched_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if (r < 0)

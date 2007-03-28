@@ -1,11 +1,12 @@
 #ifndef __KUDOS_KFS_KERNEL_SERVE_H
 #define __KUDOS_KFS_KERNEL_SERVE_H
 
+#include <lib/platform.h>
+
 #include <linux/kernel.h>
 #include <asm/current.h>
 #include <linux/sched.h>
-#include <lib/assert.h>
-#include <lib/error.h>
+
 #include <kfs/cfs.h>
 #include <kfs/kfsd.h>
 #include <kfs/sched.h>
@@ -95,7 +96,7 @@ static inline int kfsd_unlock_callback(unlock_callback_t callback, void * data)
 	{
 		struct callback_list * list = malloc(sizeof(*list));
 		if(!list)
-			return -E_NO_MEM;
+			return -ENOMEM;
 		list->callback = callback;
 		list->data = data;
 		list->count = 1;

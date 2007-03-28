@@ -1,9 +1,6 @@
-#include <lib/error.h>
-#include <lib/kdprintf.h>
+#include <lib/platform.h>
 #include <lib/vector.h>
-#include <lib/string.h>
-#include <lib/stdio.h>
-#include <lib/assert.h>
+
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
@@ -107,11 +104,11 @@ int kernel_serve_add_mount(const char * path, CFS_t * cfs)
 	mount_desc_t * m;
 	int r;
 	if (!path || !cfs)
-		return -E_INVAL;
+		return -EINVAL;
 	/* TODO: make sure there is no mount at this path already */
 	m = mount_desc_create(path, cfs);
 	if (!m)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	r = vector_push_back(mounts, m);
 	if (r < 0)
 	{
@@ -127,7 +124,7 @@ static void kernel_serve_shutdown(void * ignore)
 	Dprintf("%s()\n", __FUNCTION__);
 	int r = unregister_filesystem(&kfs_fs_type);
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "kernel_serve_shutdown(): unregister_filesystem: %d\n", r);
+		fprintf(stderr, "kernel_serve_shutdown(): unregister_filesystem: %d\n", r);
 }
 
 int kernel_serve_init(void)
@@ -135,7 +132,7 @@ int kernel_serve_init(void)
 	int r;
 	mounts = vector_create();
 	if (!mounts)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	r = kfsd_register_shutdown_module(kernel_serve_shutdown, NULL, SHUTDOWN_PREMODULES);
 	if (r < 0)
 	{
@@ -196,39 +193,39 @@ static int kernel_get_metadata(void * arg, uint32_t id, size_t size, void * data
 	if (KFS_feature_uid.id == id)
 	{
 		if (size < sizeof(current->euid))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(typeof(current->euid) *) data = current->euid;
 		return sizeof(current->euid);
 	}
 	else if (KFS_feature_gid.id == id)
 	{
 		if (size < sizeof(current->egid))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(typeof(current->egid) *) data = current->egid;
 		return sizeof(current->egid);
 	}
 	else if (KFS_feature_unix_permissions.id == id)
 	{
 		if (size < sizeof(kernelmd->mode))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(uint16_t *) data = kernelmd->mode;
 		return sizeof(kernelmd->mode);
 	}
 	else if (KFS_feature_filetype.id == id)
 	{
 		if (size < sizeof(kernelmd->type))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		*(int *) data = kernelmd->type;
 		return sizeof(kernelmd->type);
 	}
 	else if (KFS_feature_symlink.id == id && kernelmd->type == TYPE_SYMLINK)
 	{
 		if (size < kernelmd->type_info.symlink.link_len)
-			return -E_NO_MEM;
+			return -ENOMEM;
 		memcpy(data, kernelmd->type_info.symlink.link, kernelmd->type_info.symlink.link_len);
 		return kernelmd->type_info.symlink.link_len;
 	}
-	return -E_NO_ENT;
+	return -ENOENT;
 }
 
 
@@ -272,7 +269,7 @@ static void read_inode_withlock(struct inode * inode)
 	r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_filetype.id, sizeof(type), &type);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s: CALL(get_metadata, ino = %u) = %d\n", __FUNCTION__, inode->i_ino, r);
+		fprintf(stderr, "%s: CALL(get_metadata, ino = %lu) = %d\n", __FUNCTION__, inode->i_ino, r);
 		return;
 	}
 
@@ -280,7 +277,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_nlinks.id, sizeof(inode->i_nlink), &inode->i_nlink);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
+			fprintf(stderr, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
 		else
 			assert(r == sizeof(inode->i_nlink));
 	}
@@ -289,7 +286,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_uid.id, sizeof(inode->i_uid), &inode->i_uid);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_uid));
 	}
@@ -300,7 +297,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_gid.id, sizeof(inode->i_gid), &inode->i_gid);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_gid));
 	}
@@ -312,7 +309,7 @@ static void read_inode_withlock(struct inode * inode)
 		uint16_t kfs_mode;
 		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_unix_permissions.id, sizeof(kfs_mode), &kfs_mode);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 		{
 			assert(r == sizeof(inode->i_mode));
@@ -324,7 +321,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_mtime.id, sizeof(inode->i_mtime.tv_sec), &inode->i_mtime.tv_sec);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_mtime.tv_sec));
 	}
@@ -336,7 +333,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, KFS_feature_atime.id, sizeof(inode->i_atime.tv_sec), &inode->i_atime.tv_sec);
 		if (r < 0)
-			kdprintf(STDERR_FILENO, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_atime.tv_sec));
 	}
@@ -392,12 +389,12 @@ static void read_inode_withlock(struct inode * inode)
 	}
 	else if (type == TYPE_INVAL)
 	{
-		kdprintf(STDERR_FILENO, "%s: inode %u has type invalid\n", __FUNCTION__, inode->i_ino);
+		fprintf(stderr, "%s: inode %lu has type invalid\n", __FUNCTION__, inode->i_ino);
 		goto exit;
 	}
 	else
 	{
-		kdprintf(STDERR_FILENO, "%s: inode %u has unsupported type\n", __FUNCTION__, inode->i_ino);
+		fprintf(stderr, "%s: inode %lu has unsupported type\n", __FUNCTION__, inode->i_ino);
 		goto exit;
 	}
 
@@ -483,7 +480,7 @@ static int serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	if (!k_root)
 	{
 		sb->s_dev = 0;
-		return -E_NO_MEM;
+		return -ENOMEM;
 	}
 	/* is this next line really necessary? */
 	k_root->i_sb = sb;
@@ -495,7 +492,7 @@ static int serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	{
 		iput(k_root);
 		sb->s_dev = 0;
-		return -E_NO_MEM;
+		return -ENOMEM;
 	}
 	return 0;
 }
@@ -510,9 +507,9 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 	int i, size;
 	if (strncmp(dev_name, "kfs:", 4))
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-		return ERR_PTR(-E_INVAL);
+		return ERR_PTR(-EINVAL);
 #else
-		return -E_INVAL;
+		return -EINVAL;
 #endif
 	
 	kfsd_enter();
@@ -527,18 +524,18 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 			{
 				kfsd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-				return ERR_PTR(-E_BUSY);
+				return ERR_PTR(-EBUSY);
 #else
-				return -E_BUSY;
+				return -EBUSY;
 #endif
 			}
 			if (modman_inc_cfs(m->cfs, fs_type, m->path) < 0)
 			{
 				kfsd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-				return ERR_PTR(-E_NO_MEM);
+				return ERR_PTR(-ENOMEM);
 #else
-				return -E_NO_MEM;
+				return -ENOMEM;
 #endif
 			}
 			sb = sget(fs_type, serve_compare_super, serve_set_super, m);
@@ -579,9 +576,9 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 	}
 	kfsd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-	return ERR_PTR(-E_NO_ENT);
+	return ERR_PTR(-ENOENT);
 #else
-	return -E_NO_ENT;
+	return -ENOENT;
 #endif
 }
 
@@ -645,7 +642,7 @@ static int serve_release(struct inode * inode, struct file * filp)
 	r = serve_filemap_write_and_wait(inode->i_mapping);
 	kfsd_fdesc = NULL;
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "%s(filp = \"%s\"): serve_filemap_write_and_wait() = %d\n", __FUNCTION__, filp->f_dentry->d_name.name, r);
+		fprintf(stderr, "%s(filp = \"%s\"): serve_filemap_write_and_wait() = %d\n", __FUNCTION__, filp->f_dentry->d_name.name, r);
 
 	r = CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
 
@@ -665,7 +662,7 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 	kfsd_enter();
 	assert(dentry2cfs(dentry));
 	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
-	if (r == -E_NO_ENT)
+	if (r == -ENOENT)
 		cfs_ino = 0;
 	else if (r < 0)
 	{
@@ -679,7 +676,7 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 	{
 		inode = iget(dir->i_sb, k_ino); 
 		if (!inode)
-			return ERR_PTR(-E_PERM);
+			return ERR_PTR(-EPERM);
 	}
 	if (inode)
 	{
@@ -730,7 +727,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	{
 		Dprintf("%s: attribute set %u not supported\n", __FUNCTION__, attr->ia_valid);
 		kfsd_leave(0);
-		return -E_NO_SYS;
+		return -ENOSYS;
 	}
 
 #if ATTR_FILE != 0
@@ -757,7 +754,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	{
 		if(inode->i_mode & S_IFDIR)
 		{
-			r = -E_PERM; /* operation not permitted */
+			r = -EPERM; /* operation not permitted */
 			goto error;
 		}
 
@@ -810,7 +807,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 error:
 	if(!(attr->ia_valid & ATTR_FILE))
 		if(CALL(cfs, close, fdesc) < 0)
-			kdprintf(STDERR_FILENO, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
+			fprintf(stderr, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
 	kfsd_leave(1);
 	return r;
 }
@@ -829,14 +826,14 @@ static ssize_t serve_read(struct file * filp, char __user * buffer, size_t count
 	unsigned long bytes;
 	
 	if (!data)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	kfsd_enter();
 	r = CALL(cfs, read, fdesc, data, offset, data_size);
 	kfsd_leave(1);
 	
 	/* CFS gives us an "error" when we hit EOF */
-	if (r == -E_EOF)
+	if (r == -1)
 		r = 0;
 	else if (r < 0)
 		goto out;
@@ -846,7 +843,7 @@ static ssize_t serve_read(struct file * filp, char __user * buffer, size_t count
 	{
 		if (r == bytes)
 		{
-			r = -E_FAULT;
+			r = -EFAULT;
 			goto out;
 		}
 		r -= bytes;
@@ -872,7 +869,7 @@ static int serve_link(struct dentry * src_dentry, struct inode * parent, struct 
 		struct inode * inode = new_inode(parent->i_sb);
 		if (!inode)
 		{
-			r = -E_NO_MEM;
+			r = -ENOMEM;
 			goto out;
 		}
 		inode->i_ino = src_dentry->d_inode->i_ino;
@@ -921,11 +918,11 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t 
 	// To work with knoppix's 2.6.12 we do not currently support atomic create+open.
 	r = CALL(cfs, close, fdesc);
 	if (r < 0)
-		kdprintf(STDERR_FILENO, "%s(%s): unable to close created fdesc\n", __FUNCTION__, dentry->d_name.name);
+		fprintf(stderr, "%s(%s): unable to close created fdesc\n", __FUNCTION__, dentry->d_name.name);
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);	
 	d_instantiate(dentry, inode);
@@ -955,7 +952,7 @@ static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev
 	int r;
 
 	if (!(mode & S_IFREG))
-		return -E_PERM;
+		return -EPERM;
 
 	kfsd_enter();
 	r = create_withlock(dir, dentry, mode, &kernelmd);
@@ -975,7 +972,7 @@ static int serve_symlink(struct inode * dir, struct dentry * dentry, const char 
 	if (!feature_supported(dentry2cfs(dentry), dir->i_ino, KFS_feature_symlink.id))
 	{
 		kfsd_leave(1);
-		return -E_NO_SYS;
+		return -ENOSYS;
 	}
 
 	r = create_withlock(dir, dentry, mode, &kernelmd);
@@ -1007,7 +1004,7 @@ static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	if (!inode)
 	{
 		kfsd_leave(1);
-		return -E_NO_MEM;
+		return -ENOMEM;
 	}
 	inode->i_ino = cfs_ino;
 	read_inode_withlock(inode);
@@ -1041,7 +1038,7 @@ static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, stru
 	if (dentry2cfs(old_dentry) != dentry2cfs(new_dentry))
 	{
 		kfsd_leave(1);
-		return -E_PERM;
+		return -EPERM;
 	}
 	r = CALL(dentry2cfs(old_dentry), rename, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
 	kfsd_leave(1);
@@ -1072,7 +1069,7 @@ static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t fill
 	}
 	kfsd_leave(1);
 
-	if (r == -E_UNSPECIFIED)
+	if (r == -1)
 		return 1;
 	return 0;
 }
@@ -1098,12 +1095,12 @@ static int read_link(struct dentry * dentry, char * buffer, int buflen)
 	cfs_ino = dentry->d_inode->i_ino;
 
 	if (!feature_supported(cfs, cfs_ino, KFS_feature_symlink.id))
-		return -E_NO_SYS;
+		return -ENOSYS;
 
 	link_len = CALL(cfs, get_metadata, cfs_ino, KFS_feature_symlink.id, buflen - 1, buffer);
 	if (link_len < 0)
 	{
-		if (link_len == -E_NO_MEM)
+		if (link_len == -ENOMEM)
 			return -ENAMETOOLONG;
 		return link_len;
 	}
@@ -1183,7 +1180,7 @@ serve_follow_link(struct dentry * dentry, struct nameidata * nd)
 	if (!nd_link_name)
 	{
 		kfsd_leave(1);
-		return FOLLOW_LINK_RET_VAL(-E_NO_MEM);
+		return FOLLOW_LINK_RET_VAL(-ENOMEM);
 	}
 	memcpy(nd_link_name, link_name, link_len);
 	nd_set_link(nd, nd_link_name);
@@ -1237,7 +1234,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 
 	do {
 		r = CALL(cfs, read, fdesc, buffer, offset, count);
-		if (r == -E_EOF)
+		if (r == -1)
 			r = 0;
 		else if (r < 0)
 			goto out;
@@ -1338,7 +1335,7 @@ static int serve_writepage(struct page * page, struct writeback_control * wbc)
 		r = CALL(cfs, open, inode->i_ino, 0, &fdesc);
 		if (r < 0)
 		{
-			kdprintf(STDERR_FILENO, "%s(ino = %u): open() = %d\n", __FUNCTION__, inode->i_ino, r);
+			fprintf(stderr, "%s(ino = %lu): open() = %d\n", __FUNCTION__, inode->i_ino, r);
 			unlock_page(page);
 			return r;
 		}
@@ -1352,7 +1349,7 @@ static int serve_writepage(struct page * page, struct writeback_control * wbc)
 
 	if (!kfsd_fdesc)
 		if ((r = CALL(cfs, close, fdesc)) < 0)
-			kdprintf(STDERR_FILENO, "%s(ino = %u): close() = %d\n", __FUNCTION__, inode->i_ino, r);
+			fprintf(stderr, "%s(ino = %lu): close() = %d\n", __FUNCTION__, inode->i_ino, r);
 
 	return r;
 }

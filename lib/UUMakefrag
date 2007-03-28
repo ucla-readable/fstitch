@@ -1,8 +1,6 @@
 OBJDIRS += lib
 
 LIB_SRCFILES := \
-			lib/kdprintf.c \
-			lib/qsort.c \
 			lib/vector.c \
 			lib/hash_map.c \
 			lib/hash_set.c \

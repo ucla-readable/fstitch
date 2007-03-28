@@ -1,7 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 #include <lib/hash_set.h> // for vector_create_hashset()
 #include <lib/vector.h>
 
@@ -184,7 +181,7 @@ int vector_reserve(vector_t * v, size_t n)
 
 	elts = vector_create_elts(n);
 	if (!elts)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	for (i=0; i < n_elts; i++)
 		elts[i] = v->elts[i];

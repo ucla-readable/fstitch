@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -141,11 +136,11 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	loop_number = block->number;
 	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * info->blocksize);
 	if(lfs_number == -1)
-		return -E_INVAL;
+		return -EINVAL;
 
 	wblock = bdesc_alloc_clone(block, lfs_number);
 	if(!wblock)
-		return -E_UNSPECIFIED;
+		return -1;
 	bdesc_autorelease(wblock);
 
 	r = chdesc_push_down(bd, block, info->lfs_bd, wblock);

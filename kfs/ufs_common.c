@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/hash_map.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <kfs/debug.h>
 #include <kfs/ufs_common.h>
@@ -22,7 +17,7 @@ int ufs_read_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode * ino
 		printf("Warning, trying to read inode %d\n", num);
 
 	if (!inode || num >= super->fs_ipg * super->fs_ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	cg = num / super->fs_ipg; // Cylinder group #
 	cg_off = num % super->fs_ipg; // nth inode in cg
@@ -32,7 +27,7 @@ int ufs_read_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode * ino
 
 	inode_table = CALL(info->ubd, read_block, fragno, 1);
 	if (!inode_table)
-		return -E_NO_ENT;
+		return -ENOENT;
 	wanted = (struct UFS_dinode *) (inode_table->ddesc->data);
 	wanted += frag_off;
 	memcpy(inode, wanted, sizeof(struct UFS_dinode));
@@ -51,13 +46,13 @@ int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inod
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (num < UFS_ROOT_INODE)
 		printf("Warning, trying to write inode %d\n", num);
 
 	if (num >= super->fs_ipg * super->fs_ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	cg = num / super->fs_ipg; // Cylinder group #
 	cg_off = num % super->fs_ipg; // nth inode in cg
@@ -67,7 +62,7 @@ int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inod
 
 	inode_table = CALL(info->ubd, read_block, fragno, 1);
 	if (!inode_table)
-		return -E_NO_ENT;
+		return -ENOENT;
 	offset = sizeof(struct UFS_dinode) * frag_off;
 	r = chdesc_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode_table->ddesc->data[offset], &inode, head);
 	if (r < 0)
@@ -151,11 +146,11 @@ int ufs_read_inode_bitmap(struct ufs_info * info, uint32_t num)
 
 	cg = CALL(info->parts.p_cg, read, num / super->fs_ipg);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % super->fs_ipg;
 	if (offset >= cg->cg_niblk)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_iusedoff + offset / 8;
 	blockno = CALL(info->parts.p_cg, get_cylstart, num / super->fs_ipg)
@@ -163,7 +158,7 @@ int ufs_read_inode_bitmap(struct ufs_info * info, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -182,11 +177,11 @@ int ufs_read_fragment_bitmap(struct ufs_info * info, uint32_t num)
 
 	cg = CALL(info->parts.p_cg, read, num / super->fs_fpg);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % super->fs_fpg;
 	if (offset >= cg->cg_ndblk)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_freeoff + offset / 8;
 	blockno = CALL(info->parts.p_cg, get_cylstart, num / super->fs_fpg)
@@ -194,7 +189,7 @@ int ufs_read_fragment_bitmap(struct ufs_info * info, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -214,11 +209,11 @@ int ufs_read_block_bitmap(struct ufs_info * info, uint32_t num)
 	blocknum = num * super->fs_frag;
 	cg = CALL(info->parts.p_cg, read, blocknum / super->fs_fpg);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % (super->fs_fpg / super->fs_frag);
 	if (offset >= cg->cg_nclusterblks)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_clusteroff + offset / 8;
 	blockno = CALL(info->parts.p_cg, get_cylstart, blocknum / super->fs_fpg)
@@ -226,7 +221,7 @@ int ufs_read_block_bitmap(struct ufs_info * info, uint32_t num)
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -244,15 +239,15 @@ int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || value > 128)
-		return -E_INVAL;
+		return -EINVAL;
 
 	cg = CALL(info->parts.p_cg, read, num / super->fs_fpg);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % super->fs_fpg;
 	if (offset >= cg->cg_ndblk)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_btotoff + offset / 256;
 	blockno = CALL(info->parts.p_cg, get_cylstart, num / super->fs_fpg)
@@ -260,7 +255,7 @@ int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
 	if (r >= 0)
@@ -283,15 +278,15 @@ int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head || value > 128)
-		return -E_INVAL;
+		return -EINVAL;
 
 	cg = CALL(info->parts.p_cg, read, num / super->fs_fpg);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % super->fs_fpg;
 	if (offset >= cg->cg_ndblk)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_boff + offset / 512;
 	blockno = CALL(info->parts.p_cg, get_cylstart, num / super->fs_fpg)
@@ -299,7 +294,7 @@ int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t
 
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
 	if (r >= 0)
@@ -324,7 +319,7 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (value == UFS_USED) {
 		value = 1;
@@ -338,18 +333,18 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	cyl = num / super->fs_ipg;
 	cg = CALL(info->parts.p_cg, read, cyl);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % super->fs_ipg;
 	if (offset >= cg->cg_niblk)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_iusedoff + offset / 8;
 	blockno = CALL(info->parts.p_cg, get_cylstart, cyl)
 		+ super->fs_cblkno + offset / super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -414,11 +409,11 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 	};
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	cg = CALL(info->parts.p_cg, read, cyl);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	if (value == UFS_USED)
 		value = 0;
@@ -427,14 +422,14 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 
 	offset = num % super->fs_fpg;
 	if (offset >= cg->cg_ndblk)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_freeoff + offset / 8;
 	blockno = CALL(info->parts.p_cg, get_cylstart, cyl)
 		+ super->fs_cblkno + offset / super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	ptr = ((uint32_t *) block->ddesc->data) + (offset % super->fs_fsize) / 4;
 
@@ -451,7 +446,7 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 	blockno = CALL(info->parts.p_cg, get_cylstart, cyl) + super->fs_cblkno;
 	cgblock = CALL(info->ubd, read_block, blockno, 1);
 	if (!cgblock)
-		return -E_NO_ENT;
+		return -ENOENT;
 		*/
 
 	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
@@ -533,7 +528,7 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (value == UFS_USED) {
 		value = 0;
@@ -548,18 +543,18 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	cyl = blocknum / super->fs_fpg;
 	cg = CALL(info->parts.p_cg, read, cyl);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	offset = num % (super->fs_fpg / super->fs_frag);
 	if (offset >= cg->cg_nclusterblks)
-		return -E_INVAL;
+		return -EINVAL;
 
 	offset = cg->cg_clusteroff + offset / 8;
 	blockno = CALL(info->parts.p_cg, get_cylstart, cyl)
 		+ super->fs_cblkno + offset / super->fs_fsize;
 	block = CALL(info->ubd, read_block, blockno, 1);
 	if (!block)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	ptr = ((uint32_t *) block->ddesc->data)
 		+ (offset % super->fs_fsize) / 4;
@@ -617,11 +612,11 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 	int r;
 
 	if (!head || cyl < 0 || cyl >= super->fs_ncg)
-		return -E_INVAL;
+		return -EINVAL;
 
 	cg = CALL(info->parts.p_cg, read, cyl);
 	if (!cg)
-		return -E_UNSPECIFIED;
+		return -1;
 
 	// Update cylinder group
 	oldhead = *head;
@@ -706,7 +701,7 @@ uint8_t kfs_to_ufs_type(uint8_t type)
 			return UFS_DT_LNK;
 			// case TYPE_DEVICE: ambiguous
 		default:
-			return -E_INVAL;
+			return -EINVAL;
 	}
 	
 }
@@ -728,7 +723,7 @@ uint8_t ufs_to_kfs_type(uint8_t type)
 			   return TYPE_DEVICE;
 			   */
 		default:
-			kdprintf(STDERR_FILENO, "%s(): file type %u is currently unsupported\n", __FUNCTION__, type);
+			fprintf(stderr, "%s(): file type %u is currently unsupported\n", __FUNCTION__, type);
 			return TYPE_INVAL;
 	}
 }

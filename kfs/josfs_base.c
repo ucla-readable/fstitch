@@ -1,11 +1,6 @@
-#include <lib/error.h>
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/hash_set.h>
 #include <lib/jiffies.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
@@ -249,7 +244,7 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 				}
 				else {
 					Dprintf("JOSFSDEBUG: dir_lookup done: NO MEM2\n");
-					return -E_NO_MEM;
+					return -ENOMEM;
 				}
 			}
 		}
@@ -257,14 +252,14 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 
 	*file = NULL;
 	Dprintf("JOSFSDEBUG: dir_lookup done: NOT FOUND\n");
-	return -E_NO_ENT;
+	return -ENOENT;
 }
 
 static int josfs_get_config(void * object, int level, char * string, size_t length)
 {
 	LFS_t * lfs = (LFS_t *) object;
 	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (length >= 1)
 		string[0] = 0;
@@ -275,7 +270,7 @@ static int josfs_get_status(void * object, int level, char * string, size_t leng
 {
 	LFS_t * lfs = (LFS_t *) object;
 	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	if (length >= 1)
 		string[0] = 0;
@@ -443,7 +438,7 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 
 	fd = (struct josfs_fdesc *)josfs_lookup_inode(object, parent);
 	if (!fd)
-		return -E_INVAL;
+		return -EINVAL;
 	parent_file = fd->file;
 
 	r = dir_lookup(object, parent_file, name, &file, &dirb, &index);
@@ -531,7 +526,7 @@ static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entr
 	uint16_t reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
 
 	if (size < reclen)
-		return -E_INVAL;
+		return -EINVAL;
 
 	// If the name length is 0 (or less?) then we assume it's an empty slot
 	if (namelen < 1) {
@@ -574,18 +569,18 @@ static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** na
 
 	// Make sure it's a directory and we can read from it
 	if (file->f_type != JOSFS_TYPE_DIR)
-		return -E_NOT_DIR;
+		return -ENOTDIR;
 
 	blockno = *basep / JOSFS_BLKFILES;
 
 	if (blockno >= get_file_numblocks(info, file))
-		return -E_UNSPECIFIED;
+		return -1;
 
 	blockno = get_file_block(object, file, blockno * JOSFS_BLKSIZE);
 	if (blockno != INVALID_BLOCK)
 		dirblock = josfs_lookup_block(object, blockno);
 	if (!dirblock)
-		return -E_NO_ENT;
+		return -ENOENT;
 	dirfile = (JOSFS_File_t *) dirblock->ddesc->data + (*basep % JOSFS_BLKFILES);
 
 	(*basep)++;
@@ -613,7 +608,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 
 	// Make sure it's a directory and we can read from it
 	if (f->file->f_type != JOSFS_TYPE_DIR)
-		return -E_NOT_DIR;
+		return -ENOTDIR;
 
 	if (*basep == 0)
 	{
@@ -656,13 +651,13 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 		blockno = (*basep - 2) / JOSFS_BLKFILES;
 
 		if (blockno >= get_file_numblocks(info, f->file))
-			return -E_UNSPECIFIED;
+			return -1;
 
 		blockno = get_file_block(object, f->file, blockno * JOSFS_BLKSIZE);
 		if (blockno != INVALID_BLOCK)
 			dirblock = josfs_lookup_block(object, blockno);
 		if (!dirblock)
-			return -E_NO_ENT;
+			return -ENOENT;
 		dirfile = &((JOSFS_File_t *) dirblock->ddesc->data)[(*basep - 2) % JOSFS_BLKFILES];
 
 		r = fill_dirent(dirfile, f->ino, entry, size, basep);
@@ -680,14 +675,14 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	int r, offset;
 
 	if (!head || nblocks < 0)
-		return -E_INVAL;
+		return -EINVAL;
 	if (nblocks >= JOSFS_NINDIRECT)
-		return -E_NO_SPC;
+		return -ENOSPC;
 
 	if (nblocks > JOSFS_NDIRECT) {
 		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
 		if (!indirect)
-			return -E_NO_SPC;
+			return -ENOSPC;
 
 		offset = nblocks * sizeof(uint32_t);
 		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
@@ -700,7 +695,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		uint32_t inumber = josfs_allocate_block(object, NULL, 0, head);
 		bdesc_t * indirect;
 		if (inumber == INVALID_BLOCK)
-			return -E_NO_SPC;
+			return -ENOSPC;
 		indirect = josfs_lookup_block(object, inumber);
 
 		// Initialize the new indirect block
@@ -711,7 +706,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		// Initialize the structure, then point to it
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_NO_SPC;
+			return -ENOSPC;
 
 		// this head is from josfs_allocate_block() above
 		offset = nblocks * sizeof(uint32_t);
@@ -737,7 +732,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 	else {
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_NO_SPC;
+			return -ENOSPC;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks];
@@ -902,7 +897,7 @@ allocate_name_exit:
 
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 {
-	return -E_NO_ENT;
+	return -ENOENT;
 }
 
 static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
@@ -923,7 +918,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	r = josfs_lookup_name(object, oldparent, oldname, &inode);
 	if (r)
@@ -931,13 +926,13 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 
 	oldfdesc = josfs_lookup_inode(object, inode);
 	if (!oldfdesc)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	old = (struct josfs_fdesc *) oldfdesc;
 	dirblock = CALL(info->ubd, read_block, old->dirb, 1);
 	if (!dirblock) {
 		josfs_free_fdesc(object, oldfdesc);
-		return -E_INVAL;
+		return -EINVAL;
 	}
 
 	oldfile = (JOSFS_File_t *) (((uint8_t *) dirblock->ddesc->data) + old->index);
@@ -958,7 +953,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 
 	newfdesc = josfs_allocate_name(object, newparent, newname, filetype, NULL, &emptymd, &not_used, head);
 	if (!newfdesc)
-		return -E_EXIST;
+		return -EEXIST;
 
 	new = (struct josfs_fdesc *) newfdesc;
 	strcpy(temp_file.f_name, new->file->f_name);
@@ -970,7 +965,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 	dirblock = CALL(info->ubd, read_block, new->dirb, 1);
 	if (!dirblock) {
 		josfs_free_fdesc(object, newfdesc);
-		return -E_INVAL;
+		return -EINVAL;
 	}
 
 	/* WARNING: JOSFS has no inodes, so we write a copy of the combined
@@ -1093,7 +1088,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 	inode_t inode;
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	r = josfs_lookup_name(object, parent, name, &inode);
 	if (r)
@@ -1101,13 +1096,13 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 
 	file = josfs_lookup_inode(object, inode);
 	if (!file)
-		return -E_INVAL;
+		return -EINVAL;
 
 	f = (struct josfs_fdesc *) file;
 
 	dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 	if (!dirblock) {
-		r = -E_NO_SPC;
+		r = -ENOSPC;
 		goto remove_name_exit;
 	}
 
@@ -1133,7 +1128,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	/* XXX: with blockman, I don't think this can happen anymore... */
 	if (info->bitmap_cache && info->bitmap_cache->number == block->number)
@@ -1177,20 +1172,20 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 	if (id == KFS_feature_size.id) {
 		if (!f)
-			return -E_INVAL;
+			return -EINVAL;
 
 		if (size < sizeof(int32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(int32_t);
 
 		*((int32_t *) data) = f->file->f_size;
 	}
 	else if (id == KFS_feature_filetype.id) {
 		if (!f)
-			return -E_INVAL;
+			return -EINVAL;
 
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		if (f->file->f_type == JOSFS_TYPE_FILE)
@@ -1202,38 +1197,38 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	}
 	else if (id == KFS_feature_freespace.id) {
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = count_free_space(object);
 	}
 	else if (id == KFS_feature_file_lfs.id) {
 		if (size < sizeof(object))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(object);
 
 		*((typeof(object) *) data) = object;
 	}
 	else if (id == KFS_feature_blocksize.id) {
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = josfs_get_blocksize(object);
 	}
 	else if (id == KFS_feature_devicesize.id) {
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = super->s_nblocks;
 	}
 	else if (id == KFS_feature_mtime.id || id == KFS_feature_atime.id) {
 		if (!f)
-			return -E_INVAL;
+			return -EINVAL;
 
 		if (size < sizeof(uint32_t))
-			return -E_NO_MEM;
+			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		if (id == KFS_feature_mtime.id)
@@ -1242,7 +1237,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			*((uint32_t *) data) = f->file->f_atime;
 	}
 	else
-		return -E_INVAL;
+		return -EINVAL;
 
 	return size;
 }
@@ -1274,15 +1269,15 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 	uint16_t offset;
 
 	if (!head)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (id == KFS_feature_size.id) {
 		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) > JOSFS_MAXFILESIZE)
-			return -E_INVAL;
+			return -EINVAL;
 
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_INVAL;
+			return -EINVAL;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_size;
@@ -1300,7 +1295,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 	else if (id == KFS_feature_filetype.id) {
 		uint32_t fs_type;
 		if (sizeof(uint32_t) != size)
-			return -E_INVAL;
+			return -EINVAL;
 		switch(*((uint32_t *) data))
 		{
 			case TYPE_FILE:
@@ -1310,12 +1305,12 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 				fs_type = JOSFS_TYPE_DIR;
 				break;
 			default:
-				return -E_INVAL;
+				return -EINVAL;
 		}
 
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_INVAL;
+			return -EINVAL;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_type;
@@ -1333,11 +1328,11 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 	}
 	else if (id == KFS_feature_mtime.id || id == KFS_feature_atime.id) {
 		if (sizeof(uint32_t) != size)
-			return -E_INVAL;
+			return -EINVAL;
 
 		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
 		if (!dirblock)
-			return -E_INVAL;
+			return -EINVAL;
 
 		offset = f->index;
 		if (id == KFS_feature_mtime.id)
@@ -1359,7 +1354,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		return 0;
 	}
 
-	return -E_INVAL;
+	return -EINVAL;
 }
 
 static int josfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
@@ -1367,7 +1362,7 @@ static int josfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, si
 	int r;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
 	if (!f)
-		return -E_INVAL;
+		return -EINVAL;
 	r = josfs_set_metadata(object, f, id, size, data, head);
 	josfs_free_fdesc(object, (fdesc_t *) f);
 	return r;

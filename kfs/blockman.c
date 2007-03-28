@@ -1,6 +1,4 @@
-#include <lib/error.h>
-#include <lib/stdlib.h>
-#include <lib/kdprintf.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
 
 #include <kfs/bd.h>
@@ -48,7 +46,7 @@ void blockman_destroy(blockman_t ** blockman)
 	{
 #if !DISABLE_ORPHAN_WARNING
 		if(bdesc_autorelease_poolstack_scan(ddesc) < ddesc->ref_count)
-			kdprintf(STDERR_FILENO, "%s(): (%s:%d): orphaning data descriptor 0x%08x (manager 0x%08x, #%d, count %d)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman, ddesc->managed_number, ddesc->ref_count - bdesc_autorelease_poolstack_scan(ddesc));
+			fprintf(stderr, "%s(): (%s:%d): orphaning data descriptor %p (manager %p, #%d, count %d)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman, ddesc->managed_number, ddesc->ref_count - bdesc_autorelease_poolstack_scan(ddesc));
 #endif
 		ddesc->manager = NULL;
 	}
@@ -63,7 +61,7 @@ int blockman_add(blockman_t * blockman, uint32_t number, datadesc_t * ddesc)
 	Dprintf("<blockman 0x%08x add %u: ddesc 0x%08x>\n", blockman, number, ddesc);
 	
 	if(ddesc->manager)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	r = hash_map_insert(blockman->map, (void *) number, ddesc);
 	if(r < 0)

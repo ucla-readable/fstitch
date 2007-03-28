@@ -1,6 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdlib.h>
+#include <lib/platform.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
 
@@ -179,7 +177,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	{
 		head = chain_elt_create();
 		if (!head)
-			return -E_NO_MEM;
+			return -ENOMEM;
 	}
 	else
 	{
@@ -196,7 +194,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 		new_head = chain_elt_create();
 		if (!new_head)
-			return -E_NO_MEM;
+			return -ENOMEM;
 
 		new_head->next = head;
 		head->prev = new_head;
@@ -307,18 +305,18 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	const size_t newk_elt_num = hash_ptr(newk, vector_size(hm->tbl));
 	head = vector_elt(hm->tbl, newk_elt_num);
 	if (head && chain_search_key(head, newk))
-		return -E_EXIST;
+		return -EEXIST;
 
 	// Find oldk
 
 	const size_t oldk_elt_num = hash_ptr(oldk, vector_size(hm->tbl));
 	head = vector_elt(hm->tbl, oldk_elt_num);
 	if (!head)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	head = chain_search_key(head, oldk);
 	if (!head)
-		return -E_NO_ENT;
+		return -ENOENT;
 
 	// The hashmap has oldk, move elt to its new home
 
@@ -423,7 +421,7 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	// Create new hash table
 	new_hm = hash_map_create_size(n, hm->auto_resize);
 	if (!new_hm)
-		return -E_NO_MEM;
+		return -ENOMEM;
 
 	// Rehash elements
 	for (i=0; i < vector_size(hm->tbl); i++)

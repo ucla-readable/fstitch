@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 #include <lib/stdarg.h>
 
 #include <kfs/debug.h>
@@ -808,7 +803,7 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	{
 		assert(after->type == NOOP && !after->afters); /* quickly catch bugs for now */
 		if(after->type != NOOP || after->afters)
-			return -E_INVAL;
+			return -EINVAL;
 	}
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
@@ -834,7 +829,7 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 	
 	dep = chdepdesc_alloc();
 	if(!dep)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	propagate_depend_add(after, before);
 	
@@ -939,7 +934,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
 		printf("Attempt to overlap a new chdesc (%p) with a rolled-back chdesc (%p)! (debug = %d)\n", recent, original, KFS_DEBUG_COUNT());
-		return -E_BUSY;
+		return -EBUSY;
 	}
 	
 	r = chdesc_add_depend(recent, original);
@@ -1217,7 +1212,7 @@ int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, ch
 	
 	chdesc = chdesc_alloc();
 	if(!chdesc)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	account_nchdescs(NOOP, 1);
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, owner);
 #if COUNT_CHDESCS
@@ -1294,7 +1289,7 @@ int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...)
 	{
 		befores = smalloc(nbefores * sizeof(befores[0]));
 		if(!befores)
-			return -E_NO_MEM;
+			return -ENOMEM;
 	}
 	
 	va_start(ap, tail);
@@ -1901,7 +1896,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 			{
 				if((*new)->flags & CHDESC_OVERLAP)
 					chdesc_unlink_overlap(overlap); /* XXX? */
-				return -E_NO_MEM;
+				return -ENOMEM;
 			}
 			account_update(&act_data, merge_length);
 		}
@@ -1962,7 +1957,7 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 	
 	if(count == 1)
 		return chdesc_create_byte(block, owner, offset, length, data, head);
-	return -E_INVAL;
+	return -EINVAL;
 }
 
 /* common code to create a byte chdesc */
@@ -1975,7 +1970,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	assert(block && block->ddesc && owner && head);
 	
 	if(offset + length > block->ddesc->length)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	r = chdesc_create_merge(block, owner, *head, head);
 	if(r < 0)
@@ -1991,7 +1986,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	chdesc = chdesc_alloc();
 	if(!chdesc)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	account_nchdescs(BYTE, 1);	
 	
 	chdesc->owner = owner;		
@@ -2096,7 +2091,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			if(!(chdesc->byte.xdata = malloc(length)))
 			{
 				chdesc_destroy(&chdesc);
-				return -E_NO_MEM;
+				return -ENOMEM;
 			}
 			account_update(&act_data, length);
 		}
@@ -2280,7 +2275,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	
 	chdesc = chdesc_alloc();
 	if(!chdesc)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	account_nchdescs(BIT, 1);
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
 #if COUNT_CHDESCS
@@ -2323,7 +2318,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	/* add chdesc to block's befores */
 	if(!bit_changes && !(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
 	{
-		r = -E_NO_MEM;
+		r = -ENOMEM;
 		goto error;
 	}
 	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
@@ -2369,9 +2364,9 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 {
 	/* sanity checks */
 	if(chdesc->type != BYTE)
-		return -E_INVAL;
+		return -EINVAL;
 	if(offset + length > chdesc->byte.offset + chdesc->byte.length)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	/* scan for overlapping chdescs - they will all have us as a before, or at
 	 * least, if there are any, at least one will have us as a direct before */
@@ -2391,7 +2386,7 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 			if(!chdesc_overlap_check(dep->after.desc, chdesc))
 				continue;
 			/* overlap detected! */
-			return -E_PERM;
+			return -EPERM;
 		}
 	}
 	
@@ -2502,7 +2497,7 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 		if(before->flags & CHDESC_WRITTEN)
 			return 0;
 		printf("%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
-		return -E_INVAL;
+		return -EINVAL;
 	}
 	if(before->flags & CHDESC_WRITTEN)
 		return 0;
@@ -2515,7 +2510,7 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 	{
 		printf("%s(): (%s:%d): Avoided recursive dependency! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
 		assert(0);
-		return -E_INVAL;
+		return -EINVAL;
 	}
 	/* chdesc_has_before() marks the DAG rooted at "before" so we must unmark it */
 	chdesc_unmark_graph(before);
@@ -2600,7 +2595,7 @@ static void memxchg(void * p, void * q, size_t n)
 int chdesc_apply(chdesc_t * chdesc)
 {
 	if(!(chdesc->flags & CHDESC_ROLLBACK))
-		return -E_INVAL;
+		return -EINVAL;
 	switch(chdesc->type)
 	{
 		case BIT:
@@ -2608,7 +2603,7 @@ int chdesc_apply(chdesc_t * chdesc)
 			break;
 		case BYTE:
 			if(!chdesc->byte.xdata)
-				return -E_INVAL;
+				return -EINVAL;
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
@@ -2624,7 +2619,7 @@ int chdesc_apply(chdesc_t * chdesc)
 			break;
 		default:
 			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
-			return -E_INVAL;
+			return -EINVAL;
 	}
 	chdesc->flags &= ~CHDESC_ROLLBACK;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
@@ -2634,7 +2629,7 @@ int chdesc_apply(chdesc_t * chdesc)
 int chdesc_rollback(chdesc_t * chdesc)
 {
 	if(chdesc->flags & CHDESC_ROLLBACK)
-		return -E_INVAL;
+		return -EINVAL;
 	switch(chdesc->type)
 	{
 		case BIT:
@@ -2642,7 +2637,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 			break;
 		case BYTE:
 			if(!chdesc->byte.xdata)
-				return -E_INVAL;
+				return -EINVAL;
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
@@ -2658,7 +2653,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 			break;
 		default:
 			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
-			return -E_INVAL;
+			return -EINVAL;
 	}
 	chdesc->flags |= CHDESC_ROLLBACK;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ROLLBACK, chdesc);
@@ -2764,7 +2759,7 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_c
 			if(ref->desc == location)
 			{
 				if(ref->callback)
-					return -E_BUSY;
+					return -EBUSY;
 				ref->callback = callback;
 				ref->callback_data = callback_data;
 				return 0;
@@ -2775,7 +2770,7 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_c
 	{
 		chrefdesc_t * ref = malloc(sizeof(*ref));
 		if(!ref)
-			return -E_NO_MEM;
+			return -ENOMEM;
 		account_update(&act_nwrefs, 1);
 		
 		ref->desc = location;
@@ -2809,7 +2804,7 @@ int chdesc_weak_forget(chdesc_t ** location, bool callback)
 		if(!scan)
 		{
 			printf("%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
-			return -E_BUSY;
+			return -EBUSY;
 		}
 		*prev = scan->next;
 		if(callback && scan->callback)

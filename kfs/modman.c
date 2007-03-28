@@ -1,9 +1,6 @@
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/stdio.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
-#include <lib/error.h>
 
 #ifdef __KERNEL__
 #include <asm/page.h> // for PAGE_OFFSET
@@ -36,14 +33,14 @@ CFS_t * modman_devfs = NULL;
 static int modman_add(hash_map_t * map, void * module, const char * name)
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
-	int r = -E_NO_MEM;
+	int r = -ENOMEM;
 	
 	if(mod)
-		return -E_BUSY;
+		return -EBUSY;
 	
 	mod = malloc(sizeof(*mod));
 	if(!mod)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	
 	mod->module = module;
 	mod->usage = 0;
@@ -111,7 +108,7 @@ static int modman_inc(hash_map_t * map, void * module, void * user, const char *
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
-		return -E_NO_ENT;
+		return -ENOENT;
 	if(user)
 	{
 		char * copy = NULL;
@@ -120,7 +117,7 @@ static int modman_inc(hash_map_t * map, void * module, void * user, const char *
 		{
 			copy = strdup(name);
 			if(!copy)
-				return -E_NO_MEM;
+				return -ENOMEM;
 		}
 		r = vector_push_back(mod->users, user);
 		if(r < 0)
@@ -135,7 +132,7 @@ static int modman_inc(hash_map_t * map, void * module, void * user, const char *
 			vector_pop_back(mod->users);
 			if(copy)
 				free(copy);
-			return -E_NO_MEM;
+			return -ENOMEM;
 		}
 	}
 	Dprintf("%s: increasing usage of %s to %d by 0x%08x\n", __FUNCTION__, mod->name, mod->usage + 1, user);
@@ -146,9 +143,9 @@ static int modman_dec(hash_map_t * map, void * module, void * user)
 {
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	if(!mod)
-		return -E_NO_ENT;
+		return -ENOENT;
 	if(!mod->usage)
-		return -E_INVAL;
+		return -EINVAL;
 	if(user)
 	{
 		/* remove the last instance of this user from the vectors (more efficient than the first) */
@@ -173,9 +170,9 @@ static int modman_rem(hash_map_t * map, void * module)
 	modman_entry_module_t * mod = (modman_entry_module_t *) hash_map_find_val(map, module);
 	
 	if(!mod)
-		return -E_NO_ENT;
+		return -ENOENT;
 	if(mod->usage)
-		return -E_BUSY;
+		return -EBUSY;
 	
 	/* this is a cheezy hack to remove BD modules from modman_devfs
 	 * here in modman_rem(), rather than the macro-generated
@@ -221,7 +218,7 @@ static void modman_shutdown(void * ignore)
 int modman_init(void)
 {
 	if(bd_map || cfs_map || lfs_map)
-		return -E_BUSY;
+		return -EBUSY;
 	
 	bd_map = hash_map_create();
 	cfs_map = hash_map_create();
@@ -244,7 +241,7 @@ int modman_init(void)
 		hash_map_destroy(cfs_map);
 	if(lfs_map)
 		hash_map_destroy(lfs_map);
-	return -E_NO_MEM;
+	return -ENOMEM;
 }
 
 /* Generate all the modman_op_type() functions which are exposed to the rest of kfsd with some handy macros... */

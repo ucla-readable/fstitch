@@ -1,3 +1,5 @@
+#include <lib/platform.h>
+
 #include <kfs/kernel_opgroup_ops.h>
 
 #include <linux/version.h>
@@ -9,9 +11,6 @@
 #include <linux/blkdev.h>
 #include <linux/spinlock.h>
 
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
 #include <kfs/kfsd.h>
 #include <kfs/opgroup.h>
 #include <kfs/kernel_serve.h>
@@ -29,7 +28,7 @@ static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsign
 	int r;
 
 	if (copy_from_user((void *) &cmd_args, (void __user *) arg, sizeof(cmd_args)))
-		return -E_FAULT;
+		return -EFAULT;
 
 	kfsd_enter();
 	if (cmd_args.opgroup_a >= 0)
@@ -40,9 +39,9 @@ static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsign
 	{
 		long len = strnlen_user(cmd_args.str, STR_LEN_MAX);
 		if (len < 1 || STR_LEN_MAX < len)
-			return -E_FAULT;
+			return -EFAULT;
 		if (copy_from_user(str, (void __user *) cmd_args.str, len))
-			return -E_FAULT;
+			return -EFAULT;
 	}
 
 	switch (cmd)
@@ -85,7 +84,7 @@ static void kernel_opgroup_process_request_queue(request_queue_t * q)
 {
 	struct request *req;
 	while ((req = elv_next_request(q)) != NULL)
-		kdprintf(STDERR_FILENO, "%s: requests are not allowed\n", __FUNCTION__);
+		fprintf(stderr, "%s: requests are not allowed\n", __FUNCTION__);
 }
 
 
@@ -118,22 +117,22 @@ int kernel_opgroup_ops_init(void)
 	r = register_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
 	if (r < 0)
 	{
-		kdprintf(STDERR_FILENO, "%s: unable to get major number\n", __FUNCTION__);
-		return -E_BUSY;
+		fprintf(stderr, "%s: unable to get major number\n", __FUNCTION__);
+		return -EBUSY;
 	}
 
 	spin_lock_init(&state.queue_lock);
 	if (!(blk_init_queue(kernel_opgroup_process_request_queue, &state.queue_lock)))
 	{
-		kdprintf(STDERR_FILENO, "%s: blk_init_queue() failed\n", __FUNCTION__);
+		fprintf(stderr, "%s: blk_init_queue() failed\n", __FUNCTION__);
 		unregister_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 	if (!(state.gd = alloc_disk(1)))
 	{
-		kdprintf(STDERR_FILENO, "%s: alloc_disk() failed\n", __FUNCTION__);
+		fprintf(stderr, "%s: alloc_disk() failed\n", __FUNCTION__);
 		unregister_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 	state.gd->major = OPGROUP_MAJOR;
 	state.gd->first_minor = 0;

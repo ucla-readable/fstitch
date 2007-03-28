@@ -1,6 +1,5 @@
-#include <lib/stdlib.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
-#include <lib/error.h>
 
 #include <kfs/chdesc.h>
 #include <kfs/block_alloc.h>
@@ -27,7 +26,7 @@ int block_alloc_set_freed(block_alloc_head_t * alloc, uint32_t block, chdesc_t *
 	int r;
 	alloc_record_t * record = malloc(sizeof(*record));
 	if(!record)
-		return -E_NO_MEM;
+		return -ENOMEM;
 	record->block = block;
 	r = chdesc_weak_retain(clear, &record->clear, block_alloc_satisfy_callback, alloc);
 	if(r < 0)
@@ -79,7 +78,7 @@ int block_alloc_notify_alloc(block_alloc_head_t * alloc, uint32_t block)
 int block_alloc_head_init(block_alloc_head_t * alloc)
 {
 	alloc->map = hash_map_create();
-	return alloc->map ? 0 : -E_NO_MEM;
+	return alloc->map ? 0 : -ENOMEM;
 }
 
 void block_alloc_head_destroy(block_alloc_head_t * alloc)

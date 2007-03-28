@@ -1,10 +1,5 @@
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
-#include <lib/error.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -210,7 +205,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > CALL(info->bd, get_numblocks))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	slot = hash_map_find_val(info->block_map, (void *) block->number);
 	if(slot)

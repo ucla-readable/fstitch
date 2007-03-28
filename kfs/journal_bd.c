@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/hash_map.h>
 
@@ -387,11 +382,11 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 static int journal_bd_start_transaction(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	int r = -E_NO_MEM;
+	int r = -ENOMEM;
 	
 	/* do we have a journal yet? */
 	if(!info->journal)
-		return -E_INVAL;
+		return -EINVAL;
 	if(info->keep_w)
 		return 0;
 
@@ -460,13 +455,13 @@ static int journal_bd_stop_transaction(BD_t * object)
 	int r;
 	
 	if(nholds)
-		return -E_BUSY;
+		return -EBUSY;
 	
 	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
 	if(!block)
 	{
 		printf("Can't get the commit record block!\n");
-		return -E_UNSPECIFIED;
+		return -1;
 	}
 	
 	Dprintf("%s(): ending transaction (sequence %u, debug = %d)\n", __FUNCTION__, info->trans_seq, KFS_DEBUG_COUNT());
@@ -575,7 +570,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > info->length)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	if(info->recursion)
 	{
@@ -727,7 +722,7 @@ static void journal_bd_callback(void * arg)
 	{
 		int r;
 		r = journal_bd_stop_transaction(object);
-		if(r < 0 && r != -E_BUSY)
+		if(r < 0 && r != -EBUSY)
 			kpanic("Holy Mackerel!");
 	}
 }
@@ -775,7 +770,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
 	chdesc_t * head = NULL;
-	int r = -E_NO_MEM;
+	int r = -ENOMEM;
 	
 	const uint32_t bnpb = numbers_per_block(info->blocksize);
 	const uint32_t transaction_number = transaction_start / info->trans_total_blocks;
@@ -785,7 +780,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	bdesc_t * commit_block = CALL(info->journal, read_block, transaction_start, 1);
 	
 	if(!commit_block)
-		return -E_UNSPECIFIED;
+		return -1;
 	
 	cr = (struct commit_record *) commit_block->ddesc->data;
 	if(cr->magic != JOURNAL_MAGIC || cr->type != expected_type)
@@ -845,7 +840,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		uint32_t * numbers;
 		bdesc_t * number_block = CALL(info->journal, read_block, bnb, 1);
 		if(!number_block)
-			return -E_UNSPECIFIED;
+			return -1;
 		bdesc_retain(number_block);
 		
 		numbers = (uint32_t *) number_block->ddesc->data;
@@ -853,7 +848,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		{
 			bdesc_t * output;
 			bdesc_t * data_block = CALL(info->journal, read_block, db++, 1);
-			r = -E_UNSPECIFIED;
+			r = -1;
 			if(!data_block)
 				goto data_error;
 			bdesc_retain(data_block);
@@ -944,7 +939,7 @@ static int replay_journal(BD_t * bd)
 		bdesc_t * commit_block = CALL(info->journal, read_block, transaction * info->trans_total_blocks, 1);
 		
 		if(!commit_block)
-			return -E_UNSPECIFIED;
+			return -1;
 		
 		Dprintf("%s(): slot %d commit record on journal block %u\n", __FUNCTION__, transaction, commit_block->number);
 		cr = (struct commit_record *) commit_block->ddesc->data;
@@ -1114,7 +1109,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	uint16_t level;
 	
 	if(OBJMAGIC(bd) != JOURNAL_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	/* allow disabling the journal */
 	if(!journal)
@@ -1147,26 +1142,26 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	
 	/* make sure there is no current journal */
 	if(info->journal)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	/* make sure the journal device has the same blocksize as the disk */
 	if(info->blocksize != CALL(journal, get_blocksize))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	/* make sure the atomic size of the journal device is big enough */
 	if(sizeof(struct commit_record) > CALL(journal, get_atomicsize))
-		return -E_INVAL;
+		return -EINVAL;
 	
 	level = journal->level;
 	if(!level || level > bd->level)
-		return -E_INVAL;
+		return -EINVAL;
 	/* The graph index of the journal must be allowed to be larger than the
 	 * BD: it will be in the common case of an internal journal, for
 	 * instance. But we're more like an LFS module in our use of the
 	 * journal; we create the chdescs, not just forward them. So it's OK. */
 	
 	if(modman_inc_bd(journal, bd, "journal") < 0)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	info->journal = journal;
 	
@@ -1177,7 +1172,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 		info->cr_count = 0;
 		info->journal = NULL;
 		modman_dec_bd(journal, bd);
-		return -E_NO_SPC;
+		return -ENOSPC;
 	}
 	
 	info->cr_retain = scalloc(info->cr_count, sizeof(*info->cr_retain));

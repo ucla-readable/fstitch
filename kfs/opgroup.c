@@ -1,7 +1,5 @@
-#include <lib/error.h>
-#include <lib/assert.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
-#include <lib/kdprintf.h>
 
 #include <kfs/debug.h>
 #include <kfs/sync.h>
@@ -280,16 +278,16 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 {
 	int r = 0;
 	if(!after || !before)
-		return -E_INVAL;
+		return -EINVAL;
 	/* from before's perspective, we are adding an after
 	 *   => before must not be engaged [anywhere] if it is not atomic */
 	if(!(before->flags & OPGROUP_FLAG_ATOMIC) && before->engaged_count)
-		return -E_BUSY;
+		return -EBUSY;
 	/* from after's perspective, we are adding a before
 	 *   => after must not be released (standard case) or have an after (noop case) */
 	assert(!after->tail_keep == after->is_released);
 	if(after->is_released || after->has_afters)
-		return -E_INVAL;
+		return -EINVAL;
 	/* we only create head => tail directly if we need to: when we are adding
 	 * an after to an opgroup and it still has both its head and tail */
 	if(before->head && before->tail)
@@ -318,7 +316,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 			chdesc_satisfy(&before->head_keep);
 	}
 	else
-		kdprintf(STDERR_FILENO, "%s: chdesc_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
+		fprintf(stderr, "%s: chdesc_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
 	return r;
 }
 
@@ -429,21 +427,21 @@ int opgroup_engage(opgroup_t * opgroup)
 	opgroup_state_t * state;
 	
 	if(!current_scope)
-		return -E_NO_DEV;
+		return -ENODEV;
 	if(!opgroup)
-		return -E_INVAL;
+		return -EINVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
 	if(!state)
-		return -E_NO_ENT;
+		return -ENOENT;
 	assert(state->opgroup == opgroup);
 	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && (!opgroup->is_released || !opgroup->is_released))
-		return -E_INVAL;
+		return -EINVAL;
 	/* can't engage it if it is not atomic and it has afters */
 	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_afters)
-		return -E_INVAL;
+		return -EINVAL;
 	/* can't engage it if it is atomic and has been released */
 	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->is_released)
-		return -E_INVAL;
+		return -EINVAL;
 	if(state->engaged)
 		return 0;
 	
@@ -476,12 +474,12 @@ int opgroup_disengage(opgroup_t * opgroup)
 	opgroup_state_t * state;
 	
 	if(!current_scope)
-		return -E_NO_DEV;
+		return -ENODEV;
 	if(!opgroup)
-		return -E_INVAL;
+		return -EINVAL;
 	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
 	if(!state)
-		return -E_NO_ENT;
+		return -ENOENT;
 	assert(state->opgroup == opgroup);
 	if(!state->engaged)
 		return 0;
@@ -502,10 +500,10 @@ int opgroup_disengage(opgroup_t * opgroup)
 int opgroup_release(opgroup_t * opgroup)
 {
 	if(!opgroup)
-		return -E_INVAL;
+		return -EINVAL;
 	/* can't release atomic opgroup if it is engaged */
 	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->engaged_count)
-		return -E_INVAL;
+		return -EINVAL;
 	if(opgroup->tail_keep)
 	{
 		chdesc_satisfy(&opgroup->tail_keep);
@@ -520,19 +518,19 @@ int opgroup_abandon(opgroup_t ** opgroup)
 {
 	opgroup_state_t * state;
 	if(!current_scope)
-		return -E_NO_DEV;
+		return -ENODEV;
 	if(!opgroup || !*opgroup)
-		return -E_INVAL;
+		return -EINVAL;
 	state = hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
 	if(!state)
-		return -E_NO_ENT;
+		return -ENOENT;
 	assert(state->opgroup == *opgroup);
 	/* can't abandon a non-released atomic opgroup */
 	if(((*opgroup)->flags & OPGROUP_FLAG_ATOMIC) && !(*opgroup)->is_released)
-		return -E_INVAL;
+		return -EINVAL;
 	/* can't abandon an engaged opgroup */
 	if(state->engaged)
-		return -E_BUSY;
+		return -EBUSY;
 	if(!--state->opgroup->references)
 	{
 		if((*opgroup)->flags & OPGROUP_FLAG_ATOMIC)
@@ -574,7 +572,7 @@ opgroup_t * opgroup_lookup(opgroup_id_t id)
 opgroup_id_t opgroup_id(const opgroup_t * opgroup)
 {
 	if(!opgroup)
-		return -E_INVAL;
+		return -EINVAL;
 	return opgroup->id;
 }
 
@@ -606,7 +604,7 @@ int opgroup_finish_head(chdesc_t * head)
 int opgroup_label(opgroup_t * opgroup, const char * label)
 {
 	if(!opgroup)
-		return -E_INVAL;
+		return -EINVAL;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, opgroup->head, "og head: %s", label);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, opgroup->tail, "og tail: %s", label);
 	return 0;

@@ -1,7 +1,4 @@
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 #include <lib/partition.h>
 #include <lib/vector.h>
 

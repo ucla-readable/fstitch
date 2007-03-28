@@ -1,12 +1,7 @@
-#include <lib/error.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/strings.h>
 #include <lib/vector.h>
 #include <lib/dirent.h>
-#include <linux/ctype.h>
-#include <linux/fcntl.h>
+
+#include <lib/platform.h>
 
 #include <kfs/modman.h>
 #include <kfs/cfs.h>
@@ -42,7 +37,7 @@ static int icase_ignore (CFS_t * object, inode_t parent, const char * name, char
 
 	r = CALL(object, open, parent, O_RDONLY, &f);
 	if (f == NULL)
-		return -E_INVAL;
+		return -EINVAL;
 	
 	r = CALL(object, get_root, &(f->common->parent));
 	if(r < 0) {
@@ -55,7 +50,7 @@ static int icase_ignore (CFS_t * object, inode_t parent, const char * name, char
 	do {
 		r = CALL(object, get_dirent, f, &dir, sizeof(struct dirent), &bp);
 		if (r < 0) {
-			r = -E_NO_ENT;
+			r = -ENOENT;
 			break;
 		}
 	} while (strcasecmp(name, dir.d_name) != 0);
@@ -65,7 +60,7 @@ static int icase_ignore (CFS_t * object, inode_t parent, const char * name, char
 	
 	if (r >= 0)
 		if ((*string = strdup(dir.d_name)) == NULL)
-			r = -E_NO_MEM;
+			r = -ENOMEM;
 	return r;
 }	
 
@@ -76,7 +71,7 @@ static int icase_get_config(void * object, int level, char * string, size_t leng
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != ICASE_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 
 	if (length >= 1)
 		string[0] = 0;
@@ -87,7 +82,7 @@ static int icase_get_status(void * object, int level, char * string, size_t leng
 {
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != ICASE_MAGIC)
-		return -E_INVAL;
+		return -EINVAL;
 	snprintf(string, length, "case insensitivity is on!");
 	return 0;
 }
@@ -106,7 +101,7 @@ static int icase_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 	int r;
 
 	r =  CALL(state->frontend_cfs, lookup, parent, name, ino);
-	if(r == -E_NO_ENT)
+	if(r == -ENOENT)
 	{
 		char * actual_name = NULL;
 		r = icase_ignore(cfs, parent, name, &(actual_name));
@@ -174,7 +169,7 @@ static int icase_unlink(CFS_t * cfs, inode_t parent, const char * name)
 
 	r = CALL(state->frontend_cfs, unlink, parent, name);
 	
-	if(r == -E_NO_ENT)
+	if(r == -ENOENT)
 	{
 		char * actual_name = NULL;
 		r = icase_ignore(cfs, parent, name, &(actual_name));
@@ -215,17 +210,17 @@ static int icase_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, in
 
 	r = CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
 
-	if (r == -E_NO_ENT) {
+	if (r == -ENOENT) {
 		char * actual_newname = NULL;
 		char * actual_oldname = NULL;
 
 		r = icase_ignore(cfs, oldparent, oldname, &(actual_oldname));
 		q = icase_ignore(cfs, newparent, newname, &(actual_newname));	
 		
-		if ((r < 0) || (q < 0 && q != -E_NO_ENT))
+		if ((r < 0) || (q < 0 && q != -ENOENT))
 			return (r < 0) ? r : q;
 
-		if((r >= 0 && q >= 0) || q == -E_NO_ENT )
+		if((r >= 0 && q >= 0) || q == -ENOENT )
 			actual_newname = (char *)newname;
 
 		r = CALL(state->frontend_cfs, rename, oldparent, actual_oldname, newparent, actual_newname);
@@ -253,7 +248,7 @@ static int icase_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 
 	r = CALL(state->frontend_cfs, rmdir, parent, name);
 	
-	if(r == -E_NO_ENT)
+	if(r == -ENOENT)
 	{
 		char * actual_name = NULL;
 		r = icase_ignore(cfs, parent, name, &(actual_name));

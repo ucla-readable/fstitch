@@ -1,9 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
-#include <lib/types.h>
+#include <lib/platform.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -110,11 +105,11 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	if(block->ddesc->length != info->blocksize) {
 		kpanic("wrote block with bad length\n");
-		return -E_INVAL;
+		return -EINVAL;
 	}
 	if (block->number >= info->blockcount) {
 		kpanic("wrote bad block number\n");
-		return -E_INVAL;
+		return -EINVAL;
 	}
 
 	r = revision_tail_prepare(block, object);

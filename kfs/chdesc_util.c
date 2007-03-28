@@ -1,8 +1,4 @@
-#include <lib/error.h>
-#include <lib/assert.h>
-#include <lib/stdio.h>
-#include <lib/stdlib.h>
-#include <lib/string.h>
+#include <lib/platform.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -32,7 +28,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 {
 	chdesc_dlist_t * dlist = current_block->ddesc->index_changes;
 	if(target_block->ddesc != current_block->ddesc)
-		return -E_INVAL;
+		return -EINVAL;
 	if(dlist[current_bd->graph_index].head)
 	{
 		chdesc_t * chdesc;
@@ -113,7 +109,7 @@ int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 	uint8_t * new = (uint8_t *) newdata;
 
 	if(!old || !new || !head || length < 1)
-		return -E_INVAL;
+		return -EINVAL;
 
 	for(start = 0; start < length && old[start] == new[start]; start++);
 	if(start >= length)
