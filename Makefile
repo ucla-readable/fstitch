@@ -68,7 +68,7 @@ thetags::
 		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) $(CTAGSFLAGS) -L - -e
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(OBJDIR)/fs/ufs.img $(OBJDIR)/fs/ext2.img $(BIN)
+TAGDEPS := $(BASE_OBJDIR)/fs/ufs.img $(BASE_OBJDIR)/fs/ext2.img $(BIN)
 tags: $(TAGDEPS)
 	@echo + ctags [vi]
 	$(V)find . -type f \
@@ -82,7 +82,7 @@ TAGS: $(TAGDEPS)
 
 # For deleting the build
 fsclean:
-	rm -f $(OBJDIR)/fs/ufs.img  $(OBJDIR)/fs/ext2.img 
+	rm -f $(BASE_OBJDIR)/fs/ufs.img $(BASE_OBJDIR)/fs/ext2.img 
 
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean

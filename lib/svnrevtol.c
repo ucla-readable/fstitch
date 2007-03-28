@@ -1,6 +1,4 @@
-#include <lib/strtol.h>
-#include <lib/stdlib.h> // for NULL
-
+#include <lib/platform.h>
 #include <lib/svnrevtol.h>
 
 // Returns the revision number specified in the given subversion rev string.

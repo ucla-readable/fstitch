@@ -7,6 +7,8 @@
 #define calloc(nmemb, size) kcalloc(nmemb, size, GFP_KERNEL)
 #define free(x) kfree(x)
 
+long strtol(const char * str, char ** end, int base);
+
 // Sort in ascending order. compar should return a value less than,
 // equal to, or greater than zero if 'a' is less than, equal to, or
 // greater than 'b', respectively.
