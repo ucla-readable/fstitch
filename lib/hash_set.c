@@ -1,5 +1,4 @@
-#include <lib/assert.h>
-#include <lib/stdlib.h>
+#include <lib/platform.h>
 #include <lib/hash_map.h>
 #include <lib/hash_set.h>
 

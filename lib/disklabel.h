@@ -1,8 +1,6 @@
 #ifndef _DISKLABEL_H_
 #define _DISKLABEL_H_
 
-#include <lib/types.h>
-
 #define BSDLABEL_DISKMAGIC      ((uint32_t)0x82564557)
 #define BSDLABEL_MAXLABELS      8
 #define BSDLABEL_LABELSECTOR    1

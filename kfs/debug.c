@@ -1,7 +1,6 @@
+#include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/sleep.h>
-#include <lib/platform.h>
-#include <lib/stdarg.h>
 #include <lib/svnrevtol.h>
 
 #include <lib/platform.h>

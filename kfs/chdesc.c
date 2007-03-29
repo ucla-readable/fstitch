@@ -1,5 +1,4 @@
 #include <lib/platform.h>
-#include <lib/stdarg.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -318,7 +317,7 @@ static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
 	assert(chdesc->type == BYTE);
 	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.xdata)
 	{
-		kfree(chdesc->byte.xdata);
+		free(chdesc->byte.xdata);
 		account_update(&act_data, -chdesc->byte.length);
 	}
 }

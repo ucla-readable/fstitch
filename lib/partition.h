@@ -1,8 +1,6 @@
 #ifndef _PARTITION_H_
 #define _PARTITION_H_ 1
 
-#include <lib/types.h>
-
 #define PTABLE_OFFSET           446
 #define PTABLE_KUDOS_TYPE       0xF8
 #define PTABLE_DOS_EXT_TYPE     0x05

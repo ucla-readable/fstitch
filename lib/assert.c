@@ -4,7 +4,7 @@
 #include <asm/bug.h>
 
 #include <kfs/kernel_serve.h>
-#include <lib/assert.h>
+#include <lib/kernel-assert.h>
 
 #define REBOOT 1
 

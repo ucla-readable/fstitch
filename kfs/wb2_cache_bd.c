@@ -252,7 +252,7 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 	r = revision_slice_create(block, object, info->bd, &slice);
 	if(r < 0)
 	{
-		printk(KERN_ERR "%s() returned %i; can't flush!\n", __FUNCTION__, r);
+		printf("%s() returned %i; can't flush!\n", __FUNCTION__, r);
 		return FLUSH_NONE;
 	}
 	
@@ -650,7 +650,7 @@ static void wb2_cache_bd_callback(void * arg)
 	shrink_dblocks(object, PREEN);
 #if DEBUG_TIMING
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	printk(KERN_ERR "%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
+	printf("%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
 #endif
 }
 

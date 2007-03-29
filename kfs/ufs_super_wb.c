@@ -199,7 +199,7 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 		len = strlen(fsmnt);
 		if (len >= UFS_MAXMNTLEN)
 			return -EINVAL;
-		strcpy(linfo->super.fs_fsmnt, fsmnt);
+		strcpy((char *) linfo->super.fs_fsmnt, fsmnt);
 		linfo->dirty[WB_FSMNT] = 1;
 		return 0;
 	}
@@ -211,7 +211,7 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 
 	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_fsmnt,
-			strlen(linfo->super.fs_fsmnt) + 1, &linfo->super.fs_fsmnt, head);
+			strlen((char *) linfo->super.fs_fsmnt) + 1, &linfo->super.fs_fsmnt, head);
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock FSmount");

@@ -18,7 +18,6 @@
 static FILE * block_log = NULL;
 static size_t block_log_users = 0;
 
-
 struct unix_file_info {
 	char *fname;
 	int fd;
@@ -27,8 +26,7 @@ struct unix_file_info {
 	blockman_t * blockman;
 };
 
-static int
-unix_file_bd_get_config(void * object, int level, char * string, size_t length)
+static int unix_file_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(bd);
@@ -47,8 +45,7 @@ unix_file_bd_get_config(void * object, int level, char * string, size_t length)
 	return 0;
 }
 
-static int
-unix_file_bd_get_status(void * object, int level, char * string, size_t length)
+static int unix_file_bd_get_status(void * object, int level, char * string, size_t length)
 {
 	/* no status to report */
 	if(length > 0)
@@ -56,26 +53,22 @@ unix_file_bd_get_status(void * object, int level, char * string, size_t length)
 	return 0;
 }
 
-static uint32_t
-unix_file_bd_get_numblocks(BD_t * object)
+static uint32_t unix_file_bd_get_numblocks(BD_t * object)
 {
 	return ((struct unix_file_info*) OBJLOCAL(object))->blockcount;
 }
 
-static uint16_t
-unix_file_bd_get_blocksize(BD_t * object)
+static uint16_t unix_file_bd_get_blocksize(BD_t * object)
 {
 	return ((struct unix_file_info*) OBJLOCAL(object))->blocksize;
 }
 
-static uint16_t
-unix_file_bd_get_atomicsize(BD_t * object)
+static uint16_t unix_file_bd_get_atomicsize(BD_t * object)
 {
 	return unix_file_bd_get_blocksize(object);
 }
 
-static bdesc_t *
-unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -129,8 +122,7 @@ unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 	return bdesc;
 }
 
-static bdesc_t *
-unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	bdesc_t * bdesc;
@@ -159,8 +151,7 @@ unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count
 	return bdesc;
 }
 
-static int
-unix_file_bd_write_block(BD_t * object, bdesc_t * block)
+static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
 	int r;
@@ -169,14 +160,14 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	if(block->number + block->count > info->blockcount)
 	{
-		panic("wrote bad block number\n");
-		return -E_INVAL;
+		kpanic("wrote bad block number\n");
+		return -EINVAL;
 	}
 
 	r = revision_tail_prepare(block, object);
 	if(r < 0)
 	{
-		panic("revision_tail_prepare gave: %i\n", r);
+		kpanic("revision_tail_prepare gave: %i\n", r);
 		return r;
 	}
 	revision_back = r;
@@ -199,7 +190,7 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	r = revision_tail_acknowledge(block, object);
 	if(r < 0)
 	{
-		panic("revision_tail_acknowledge gave error: %i\n", r);
+		kpanic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
 	revision_forward = r;
@@ -215,9 +206,8 @@ unix_file_bd_write_block(BD_t * object, bdesc_t * block)
  * drive (i.e. the "permanent storage device"), the drive itself may
  * not physically write the data to the platters for quite some time
  * and it may be written in an out-of-order sequence." */
-// NOTE: MacOSX has the fcntl() command F_FULLFSYNC to flush a drive's buffer
-static int
-unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+// NOTE: Mac OS X has the fcntl() command F_FULLFSYNC to flush a drive's buffer
+static int unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 #if !RECKLESS_WRITE_SPEED
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
@@ -232,8 +222,17 @@ unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static int
-unix_file_bd_destroy(BD_t * bd)
+static chdesc_t * unix_file_bd_get_write_head(BD_t * object)
+{
+	return NULL;
+}
+
+static int32_t unix_file_bd_get_block_space(BD_t * object)
+{
+	return 0;
+}
+
+static int unix_file_bd_destroy(BD_t * bd)
 {
 	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(bd);
 	int r;
@@ -257,7 +256,7 @@ unix_file_bd_destroy(BD_t * bd)
 			if(r == EOF)
 			{
 				perror("fclose(block_log)");
-				panic("unable to close block log\n");
+				kpanic("unable to close block log\n");
 			}
 			block_log = NULL;
 		}
@@ -266,8 +265,7 @@ unix_file_bd_destroy(BD_t * bd)
 	return 0;
 }
 
-BD_t *
-unix_file_bd(const char *fname, uint16_t blocksize)
+BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 {
 	struct unix_file_info * info;
 	BD_t * bd = malloc(sizeof(*bd));
@@ -282,11 +280,11 @@ unix_file_bd(const char *fname, uint16_t blocksize)
 	if(r == -1)
 	{
 		perror("stat");
-		panic("unable to stat %s\n", fname);
+		kpanic("unable to stat %s\n", fname);
 	}
 	blocks = sb.st_size / blocksize;
 	if(sb.st_size != (blocks * blocksize))
-		panic("file %s's size is not block-aligned\n", fname);
+		kpanic("file %s's size is not block-aligned\n", fname);
 	if(blocks < 1)
 		return NULL;
 

@@ -1,7 +1,6 @@
 #ifndef KUDOS_INC_VECTOR_H
 #define KUDOS_INC_VECTOR_H
 
-#include <lib/types.h>
 #include <lib/hash_set.h> // for vector_create_hashset()
 
 struct vector {

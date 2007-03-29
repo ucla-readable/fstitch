@@ -1,7 +1,6 @@
+#include <lib/platform.h>
 #include <lib/vector.h>
 #include <lib/dirent.h>
-
-#include <lib/platform.h>
 
 #include <kfs/modman.h>
 #include <kfs/cfs.h>

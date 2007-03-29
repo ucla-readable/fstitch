@@ -1,10 +1,7 @@
 #ifndef __KUDOS_KFS_UFS_DIRENT_H
 #define __KUDOS_KFS_UFS_DIRENT_H
 
-#include <lib/types.h>
-
 #include <kfs/oo.h>
-
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>

@@ -137,7 +137,10 @@ void sched_run_cleanup(void)
 {
 	int r;
 
+#ifdef __KERNEL__
+	// In-flight blocks are only supported in the kernel
 	revision_tail_process_landing_requests();
+#endif
 
 	// Run bdesc autoreleasing
 	bdesc_autorelease_pool_pop();
