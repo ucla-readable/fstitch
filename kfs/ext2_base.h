@@ -40,21 +40,14 @@
 #define EXT2_NAME_LEN 255
 
 
-#ifndef __KERNEL__
-
-#define S_IFMT   0xF000
-#define S_IFSOCK 0xC000
-#define S_IFLNK  0xA000
-#define S_IFREG  0x8000
-#define S_IFBLK  0x6000
-#define S_IFDIR  0x4000
-#define S_IFCHR  0x2000
-#define S_IFIFO  0x1000
-#define S_ISUID  0x0800
-#define S_ISGID  0x0400
-#define S_ISVTX  0x0200
-
-#endif
+#define EXT2_S_IFMT   0xF000
+#define EXT2_S_IFSOCK 0xC000
+#define EXT2_S_IFLNK  0xA000
+#define EXT2_S_IFREG  0x8000
+#define EXT2_S_IFBLK  0x6000
+#define EXT2_S_IFDIR  0x4000
+#define EXT2_S_IFCHR  0x2000
+#define EXT2_S_IFIFO  0x1000
 
 #define EXT2_S_ISUID	0x0800	//SUID
 #define EXT2_S_ISGID	0x0400	//SGID

@@ -1192,15 +1192,15 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	switch (type)
 	{
 		case TYPE_FILE:
-			mode = S_IFREG;
+			mode = EXT2_S_IFREG;
 			file_type = TYPE_FILE;
 			break;
 		case TYPE_DIR:
-			mode = S_IFDIR;
+			mode = EXT2_S_IFDIR;
 			file_type = TYPE_DIR;
 			break;
 		case TYPE_SYMLINK:      
-			mode = S_IFLNK;
+			mode = EXT2_S_IFLNK;
 			file_type = TYPE_SYMLINK;
 		        break;
 		default:
@@ -2014,7 +2014,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 			return -ENOMEM;
 		size = sizeof(uint16_t);
 
-		*((uint16_t *) data) = f->f_inode.i_mode & ~S_IFMT;
+		*((uint16_t *) data) = f->f_inode.i_mode & ~EXT2_S_IFMT;
 	}
 	else if (id == KFS_feature_mtime.id) {
 		if (!f)
@@ -2128,16 +2128,16 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		switch(*((uint32_t *) data))
 		{
 			case TYPE_FILE:
-				fs_type = S_IFREG;
+				fs_type = EXT2_S_IFREG;
 				break;
 			case TYPE_DIR:
-				fs_type = S_IFDIR;
+				fs_type = EXT2_S_IFDIR;
 				break;
 			default:
 				return -EINVAL;
 		}
 
-		f->f_inode.i_mode = (f->f_inode.i_mode & ~S_IFMT) | (fs_type);
+		f->f_inode.i_mode = (f->f_inode.i_mode & ~EXT2_S_IFMT) | (fs_type);
 		f->f_type = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 	}
@@ -2156,8 +2156,8 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 	else if (id == KFS_feature_unix_permissions.id) {
 		if (sizeof(uint16_t) != size)
 			return -EINVAL;
-		f->f_inode.i_mode = (f->f_inode.i_mode & S_IFMT)
-			| (*((uint16_t *) data) & ~S_IFMT);
+		f->f_inode.i_mode = (f->f_inode.i_mode & EXT2_S_IFMT)
+			| (*((uint16_t *) data) & ~EXT2_S_IFMT);
 		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
 	}
 	else if (id == KFS_feature_mtime.id ) {
@@ -2264,12 +2264,12 @@ static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
 //TODO Make this pretty and better
 static uint8_t ext2_to_kfs_type(uint16_t type)
 {
-	switch(type & S_IFMT) {
-		case(S_IFDIR):
+	switch(type & EXT2_S_IFMT) {
+		case(EXT2_S_IFDIR):
 			return TYPE_DIR;
-		case(S_IFREG):
+		case(EXT2_S_IFREG):
 			return TYPE_FILE;
-		case(S_IFLNK):
+		case(EXT2_S_IFLNK):
 			return TYPE_SYMLINK;	
 		default:
 			return TYPE_INVAL;
