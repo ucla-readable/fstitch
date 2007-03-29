@@ -23,9 +23,10 @@ if [ "$KMACHINE" != "pb" ] && [ "$KMACHINE" != "mm" ]; then arg_error "$0"; fi
 
 rsync --rsh=ssh -vaSz \
 	--exclude=/TAGS --exclude=/tags \
+	--exclude=/time.log \
 	--exclude=/obj/ --exclude=/emukern/ \
 	--exclude=/kfs/kkfsd.ko --exclude=/kfs/kkfsd.o \
 	--exclude=/kfs/kkfsd.mod.c --exclude=/kfs/kkfsd.mod.o \
-	--exclude=/kfs/.kkfsd.*.cmd \
+	--exclude=/Module.symvers --exclude=/kfs/.kkfsd.*.cmd \
 	--exclude=/.tmp_versions/ \
-	. kudos-${KMACHINE}:$TARGET/
+	. kudos-${KMACHINE}.cs.ucla.edu:$TARGET/
