@@ -93,7 +93,7 @@ static uint16_t wb_cache_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
-static uint32_t push_block(struct cache_info * info, bdesc_t * block)
+static uint32_t wb_push_block(struct cache_info * info, bdesc_t * block)
 {
 	uint32_t index = info->blocks[0].free_index;
 	
@@ -119,7 +119,7 @@ static uint32_t push_block(struct cache_info * info, bdesc_t * block)
 	return index;
 }
 
-static void pop_block(struct cache_info * info, uint32_t number, uint32_t index)
+static void wb_pop_block(struct cache_info * info, uint32_t number, uint32_t index)
 {
 	assert(info->blocks[index].block);
 	assert(info->blocks[index].block->number == number);
@@ -138,7 +138,7 @@ static void pop_block(struct cache_info * info, uint32_t number, uint32_t index)
 	hash_map_erase(info->block_map, (void *) number);
 }
 
-static void touch_block(struct cache_info * info, uint32_t index)
+static void wb_touch_block(struct cache_info * info, uint32_t index)
 {
 	assert(info->blocks[index].block);
 	
@@ -157,7 +157,7 @@ static void touch_block(struct cache_info * info, uint32_t index)
 	}
 }
 
-static int flush_block(BD_t * object, struct cache_slot * slot)
+static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t slice;
@@ -208,25 +208,28 @@ static int flush_block(BD_t * object, struct cache_slot * slot)
 }
 
 /* evict_block should evict exactly one block if it is successful */
-static int evict_block(BD_t * object, bool only_dirty)
+static int wb_evict_block(BD_t * object, bool only_dirty)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	
+#ifdef __KERNEL__
 	revision_tail_process_landing_requests();
+#endif
 	for(;;)
 	{
 		int r = FLUSH_EMPTY;
 		struct cache_slot * slot;
 		for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
 		{
-			int code = flush_block(object, slot);
+			int code = wb_flush_block(object, slot);
 			if(code == FLUSH_DONE || (!only_dirty && code == FLUSH_EMPTY))
 			{
-				pop_block(info, slot->block->number, (uint32_t) (slot - &info->blocks[0]));
+				wb_pop_block(info, slot->block->number, (uint32_t) (slot - &info->blocks[0]));
 				return 0;
 			}
 			r |= code;
 		}
+#ifdef __KERNEL__
 		/* For both FLUSH_NONE and FLUSH_SOME we must wait to make
 		 * progress if there are any flights in progress. For FLUSH_NONE
 		 * this is obvious; for FLUSH_SOME you must consider that the
@@ -241,7 +244,9 @@ static int evict_block(BD_t * object, bool only_dirty)
 			revision_tail_process_landing_requests();
 			TIMING_STOP(wait, wait);
 		}
-		else if(r == FLUSH_NONE)
+		else
+#endif
+		if(r == FLUSH_NONE)
 			return -EBUSY;
 	}
 }
@@ -262,14 +267,14 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 		/* in the cache, use it */
 		block = info->blocks[index].block;
 		assert(block->count == count);
-		touch_block(info, index);
+		wb_touch_block(info, index);
 		if(!block->ddesc->synthetic)
 			return block;
 	}
 	else
 	{
 		if(hash_map_size(info->block_map) == info->size)
-			if(evict_block(object, 0) < 0)
+			if(wb_evict_block(object, 0) < 0)
 				/* no room in cache, and can't evict anything... */
 				return NULL;
 		assert(hash_map_size(info->block_map) < info->size);
@@ -282,7 +287,7 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
-	else if(push_block(info, block) == INVALID_BLOCK)
+	else if(wb_push_block(info, block) == INVALID_BLOCK)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
@@ -304,12 +309,12 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	{
 		/* in the cache, use it */
 		assert(info->blocks[index].block->count == count);
-		touch_block(info, index);
+		wb_touch_block(info, index);
 		return info->blocks[index].block;
 	}
 	
 	if(hash_map_size(info->block_map) == info->size)
-		if(evict_block(object, 0) < 0)
+		if(wb_evict_block(object, 0) < 0)
 			/* no room in cache, and can't evict anything... */
 			return NULL;
 	assert(hash_map_size(info->block_map) < info->size);
@@ -319,7 +324,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(!block)
 		return NULL;
 	
-	index = push_block(info, block);
+	index = wb_push_block(info, block);
 	if(index == INVALID_BLOCK)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
@@ -342,19 +347,19 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		/* already have this block */
 		assert(info->blocks[index].block->ddesc == block->ddesc);
 		assert(info->blocks[index].block->count == block->count);
-		touch_block(info, index);
+		wb_touch_block(info, index);
 		
 		return 0;
 	}
 	else
 	{
 		if(hash_map_size(info->block_map) == info->size)
-			if(evict_block(object, 0) < 0)
+			if(wb_evict_block(object, 0) < 0)
 				/* no room in cache, and can't evict anything... */
 				return -EBUSY;
 		assert(hash_map_size(info->block_map) < info->size);
 		
-		index = push_block(info, block);
+		index = wb_push_block(info, block);
 		if(index == INVALID_BLOCK)
 			return -ENOMEM;
 		
@@ -371,7 +376,7 @@ static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 	/* evict_block will evict exactly one block if it is successful */
 	for(dirty = start_dirty; dirty; dirty--)
-		if(evict_block(object, 1) < 0)
+		if(wb_evict_block(object, 1) < 0)
 		{
 			assert(dirty == wb_cache_dirty_count(object));
 			return (start_dirty == dirty) ? FLUSH_NONE : FLUSH_SOME;
@@ -404,8 +409,10 @@ static void wb_cache_bd_callback(void * arg)
 	/* FIXME: try to come up with a good flush ordering, instead of waiting for the next callback? */
 	for(slot = info->blocks[0].lru; slot != &info->blocks[0]; slot = slot->prev)
 	{
+#ifdef __KERNEL__
 		revision_tail_process_landing_requests();
-		flush_block(object, slot);
+#endif
+		wb_flush_block(object, slot);
 	}
 }
 

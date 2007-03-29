@@ -111,7 +111,7 @@ static uint16_t wb2_cache_bd_get_atomicsize(BD_t * object)
 }
 
 /* we are guaranteed that the block is not already in the list */
-static struct lru_slot * push_block(struct cache_info * info, bdesc_t * block)
+static struct lru_slot * wb2_push_block(struct cache_info * info, bdesc_t * block)
 {
 	struct lru_slot * slot = malloc(sizeof(*slot));
 	if(!slot)
@@ -148,7 +148,7 @@ static struct lru_slot * push_block(struct cache_info * info, bdesc_t * block)
 }
 
 /* we are guaranteed that the block is not already in the list */
-static void push_slot_dirty(struct cache_info * info, struct lru_slot * slot)
+static void wb2_push_slot_dirty(struct cache_info * info, struct lru_slot * slot)
 {
 	slot->dirty.prev = NULL;
 	slot->dirty.next = info->dirty.first;
@@ -161,9 +161,9 @@ static void push_slot_dirty(struct cache_info * info, struct lru_slot * slot)
 	info->dblocks++;
 }
 
-#define dirty_slot(info, slot) ((info)->dirty.first == (slot) || (slot)->dirty.prev)
+#define wb2_dirty_slot(info, slot) ((info)->dirty.first == (slot) || (slot)->dirty.prev)
 
-static void pop_slot(struct cache_info * info, struct lru_slot * slot)
+static void wb2_pop_slot(struct cache_info * info, struct lru_slot * slot)
 {
 	uint32_t number = slot->block->number;
 	assert(hash_map_find_val(info->block_map, (void *) number) == slot);
@@ -178,7 +178,7 @@ static void pop_slot(struct cache_info * info, struct lru_slot * slot)
 		slot->all.next->all.prev = slot->all.prev;
 	else
 		info->all.last = slot->all.prev;
-	if(dirty_slot(info, slot))
+	if(wb2_dirty_slot(info, slot))
 	{
 		if(slot->dirty.prev)
 			slot->dirty.prev->dirty.next = slot->dirty.next;
@@ -193,9 +193,9 @@ static void pop_slot(struct cache_info * info, struct lru_slot * slot)
 	hash_map_erase(info->block_map, (void *) number);
 }
 
-static void pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
+static void wb2_pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
 {
-	assert(dirty_slot(info, slot));
+	assert(wb2_dirty_slot(info, slot));
 	if(slot->dirty.prev)
 		slot->dirty.prev->dirty.next = slot->dirty.next;
 	else
@@ -209,7 +209,7 @@ static void pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
 	info->dblocks--;
 }
 
-static void touch_block_read(struct cache_info * info, struct lru_slot * slot)
+static void wb2_touch_block_read(struct cache_info * info, struct lru_slot * slot)
 {
 	/* already the first? */
 	if(info->all.first == slot)
@@ -232,7 +232,7 @@ static void touch_block_read(struct cache_info * info, struct lru_slot * slot)
 		info->all.last = slot;
 }
 
-static int flush_block(BD_t * object, bdesc_t * block, int * delay)
+static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t slice;
@@ -285,7 +285,7 @@ static int flush_block(BD_t * object, bdesc_t * block, int * delay)
 }
 
 #if DIRTY_QUEUE_REORDERING
-static bdesc_t * find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * start_block)
+static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * start_block)
 {
 	chdepdesc_t * dep = chdesc->befores;
 	for(; dep; dep = dep->before.next)
@@ -295,7 +295,7 @@ static bdesc_t * find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * s
 			continue;
 		if(!before->block)
 		{
-			bdesc_t * block = find_block_before(object, before, start_block);
+			bdesc_t * block = wb2_find_block_before(object, before, start_block);
 			if(block)
 				return block;
 		}
@@ -306,9 +306,9 @@ static bdesc_t * find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * s
 }
 
 /* move "slot" to before "before" */
-static void bounce_block_write(struct cache_info * info, struct lru_slot * slot, struct lru_slot * before)
+static void wb2_bounce_block_write(struct cache_info * info, struct lru_slot * slot, struct lru_slot * before)
 {
-	pop_slot_dirty(info, slot);
+	wb2_pop_slot_dirty(info, slot);
 	slot->dirty.next = before;
 	slot->dirty.prev = before->dirty.prev;
 	before->dirty.prev = slot;
@@ -329,7 +329,7 @@ enum dshrink_strategy {
 };
 /* reduce the number of dirty blocks in the cache, if possible, by writing
  * blocks out (using the specified strategy) */
-static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
+static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	struct lru_slot * slot = info->dirty.last;
@@ -349,7 +349,9 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		return;
 #endif
 	
+#ifdef __KERNEL__
 	revision_tail_process_landing_requests();
+#endif
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
 	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && slot != STOP)
@@ -364,7 +366,7 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		}
 		slot->pass = pass;
 #endif
-		status = flush_block(object, slot->block, &delay);
+		status = wb2_flush_block(object, slot->block, &delay);
 		/* still dirty? */
 		if(status < 0)
 		{
@@ -375,7 +377,7 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			{
 				chdesc_t * scan = slot->block->ddesc->index_changes[object->graph_index].head;
 				for(; !block && scan; scan = scan->ddesc_index_next)
-					block = find_block_before(object, scan, slot->block);
+					block = wb2_find_block_before(object, scan, slot->block);
 			}
 			if(block)
 			{
@@ -404,7 +406,7 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 						before_slot->block_after_number = slot->block->number;
 						before_slot->block_after_pass = pass;
 					}
-					bounce_block_write(info, slot, before_slot);
+					wb2_bounce_block_write(info, slot, before_slot);
 					if(info->dirty.first == slot && !stop && prev)
 						stop = slot;
 					slot = prev;
@@ -427,20 +429,20 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		{
 			uint32_t number = slot->block->number;
 			struct lru_slot * prev = slot->dirty.prev;
-			pop_slot_dirty(info, slot);
+			wb2_pop_slot_dirty(info, slot);
 			/* now try and find sequential blocks to write */
 			while((slot = hash_map_find_val(info->block_map, (void *) ++number)))
 			{
-				if(!dirty_slot(info, slot))
+				if(!wb2_dirty_slot(info, slot))
 					break;
 				/* if we were about to examine this block, don't */
 				if(slot == prev)
 					prev = prev->dirty.prev;
 				/* assume it will be merged, so don't ask for delay */
-				status = flush_block(object, slot->block, NULL);
+				status = wb2_flush_block(object, slot->block, NULL);
 				/* clean slot now? */
 				if(status >= 0)
-					pop_slot_dirty(info, slot);
+					wb2_pop_slot_dirty(info, slot);
 				/* if we didn't actually write it, stop looking */
 				if(status == FLUSH_EMPTY || status == FLUSH_NONE)
 					break;
@@ -461,7 +463,7 @@ static void shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 
 /* reduce the number of blocks in the cache to below the soft limit, if
  * possible, by evicting clean blocks in LRU order */
-static void shrink_blocks(struct cache_info * info)
+static void wb2_shrink_blocks(struct cache_info * info)
 {
 	struct lru_slot * slot = info->all.last;
 	/* while there are more blocks than the soft limit, and there are clean blocks */
@@ -469,12 +471,12 @@ static void shrink_blocks(struct cache_info * info)
 	{
 		assert(slot);
 		/* skip dirty blocks */
-		if(dirty_slot(info, slot))
+		if(wb2_dirty_slot(info, slot))
 			slot = slot->all.prev;
 		else
 		{
 			struct lru_slot * prev = slot->all.prev;
-			pop_slot(info, slot);
+			wb2_pop_slot(info, slot);
 			info->blocks--;
 			slot = prev;
 		}
@@ -497,16 +499,16 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 		/* in the cache, use it */
 		block = slot->block;
 		assert(block->count == count);
-		touch_block_read(info, slot);
+		wb2_touch_block_read(info, slot);
 		if(!block->ddesc->synthetic)
 			return block;
 	}
 	else
 	{
 		if(info->dblocks > info->soft_dblocks)
-			shrink_dblocks(object, CLIP);
+			wb2_shrink_dblocks(object, CLIP);
 		if(info->blocks >= info->soft_blocks)
-			shrink_blocks(info);
+			wb2_shrink_blocks(info);
 	}
 	
 	/* not in the cache, need to read it */
@@ -516,7 +518,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
-	else if(!push_block(info, block))
+	else if(!wb2_push_block(info, block))
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
@@ -538,21 +540,21 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	{
 		/* in the cache, use it */
 		assert(slot->block->count == count);
-		touch_block_read(info, slot);
+		wb2_touch_block_read(info, slot);
 		return slot->block;
 	}
 	
 	if(info->dblocks > info->soft_dblocks)
-		shrink_dblocks(object, CLIP);
+		wb2_shrink_dblocks(object, CLIP);
 	if(info->blocks >= info->soft_blocks)
-		shrink_blocks(info);
+		wb2_shrink_blocks(info);
 	
 	/* not in the cache, need to read it */
 	block = CALL(info->bd, synthetic_read_block, number, count);
 	if(!block)
 		return NULL;
 	
-	if(!push_block(info, block))
+	if(!wb2_push_block(info, block))
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
@@ -574,29 +576,31 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		/* already have this block */
 		assert(slot->block->ddesc == block->ddesc);
 		assert(slot->block->count == block->count);
-		touch_block_read(info, slot);
+		wb2_touch_block_read(info, slot);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
-		if(!dirty_slot(info, slot))
-			push_slot_dirty(info, slot);
+		if(!wb2_dirty_slot(info, slot))
+			wb2_push_slot_dirty(info, slot);
 	}
 	else
 	{
 		if(info->dblocks > info->soft_dblocks)
-			shrink_dblocks(object, CLIP);
+			wb2_shrink_dblocks(object, CLIP);
+#ifdef __KERNEL__
 		else
 			/* shrink_dblocks() calls revision_tail_process_landing_requests(),
 			 * so only call it if we aren't calling shrink_dblocks() above */
 			revision_tail_process_landing_requests();
+#endif
 		if(info->blocks >= info->soft_blocks)
-			shrink_blocks(info);
+			wb2_shrink_blocks(info);
 		
-		slot = push_block(info, block);
+		slot = wb2_push_block(info, block);
 		if(!slot)
 			return -ENOMEM;
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
-		push_slot_dirty(info, slot);
+		wb2_push_slot_dirty(info, slot);
 	}
 	
 	return 0;
@@ -613,11 +617,12 @@ static int wb2_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	for(;;)
 	{
 		uint32_t old_dirty = info->dblocks;
-		shrink_dblocks(object, FLUSH);
+		wb2_shrink_dblocks(object, FLUSH);
 		if(!info->dblocks)
 			return FLUSH_DONE;
 		if(info->dblocks == old_dirty)
 		{
+#ifdef __KERNEL__
 			if(revision_tail_flights_exist())
 			{
 				KERNEL_INTERVAL(wait);
@@ -627,6 +632,7 @@ static int wb2_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 				TIMING_STOP(wait, wait);
 			}
 			else
+#endif
 				return (old_dirty == start_dirty) ? FLUSH_NONE : FLUSH_SOME;
 		}
 	}
@@ -647,7 +653,7 @@ static int32_t wb2_cache_bd_get_block_space(BD_t * object)
 static void wb2_cache_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
-	shrink_dblocks(object, PREEN);
+	wb2_shrink_dblocks(object, PREEN);
 #if DEBUG_TIMING
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	printf("%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
@@ -676,7 +682,7 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 	
 	/* the blocks are all clean, because we checked above - just release them */
 	while(info->all.first)
-		pop_slot(info, info->all.first);
+		wb2_pop_slot(info, info->all.first);
 	
 	hash_map_destroy(info->block_map);
 	free(info);

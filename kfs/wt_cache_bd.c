@@ -70,14 +70,14 @@ static uint16_t wt_cache_bd_get_atomicsize(BD_t * object)
 }
 
 /* remove 'slot' from its list position */
-static void list_remove(struct cache_slot * slot)
+static void wt_list_remove(struct cache_slot * slot)
 {
 	slot->less_recent->more_recent = slot->more_recent;
 	slot->more_recent->less_recent = slot->less_recent;
 }
 
 /* insert 'slot' into the list position following 'less_recent' */
-static void list_insert(struct cache_slot * slot, struct cache_slot * less_recent)
+static void wt_list_insert(struct cache_slot * slot, struct cache_slot * less_recent)
 {
 	slot->more_recent = less_recent->more_recent;
 	slot->more_recent->less_recent = slot;
@@ -85,16 +85,16 @@ static void list_insert(struct cache_slot * slot, struct cache_slot * less_recen
 	slot->less_recent = less_recent;
 }
 
-static void touch_block(struct cache_info * info, struct cache_slot * slot)
+static void wt_touch_block(struct cache_info * info, struct cache_slot * slot)
 {
 	if(info->blocks[0].mru != slot)
 	{
-		list_remove(slot);
-		list_insert(slot, info->blocks[0].mru);
+		wt_list_remove(slot);
+		wt_list_insert(slot, info->blocks[0].mru);
 	}
 }
 
-static int push_block(struct cache_info * info, bdesc_t * block)
+static int wt_push_block(struct cache_info * info, bdesc_t * block)
 {
 	struct cache_slot * slot = info->blocks[0].lru;
 	int r;
@@ -108,11 +108,11 @@ static int push_block(struct cache_info * info, bdesc_t * block)
 	slot->block = block;
 	
 	bdesc_retain(block);
-	touch_block(info, slot);
+	wt_touch_block(info, slot);
 	return 0;
 }
 
-static void pop_block(struct cache_info * info, struct cache_slot * slot)
+static void wt_pop_block(struct cache_info * info, struct cache_slot * slot)
 {
 	struct cache_slot * erased_slot;
 	
@@ -123,8 +123,8 @@ static void pop_block(struct cache_info * info, struct cache_slot * slot)
 	assert(slot == erased_slot);
 	bdesc_release(&slot->block);
 	
-	list_remove(slot);
-	list_insert(slot, &info->blocks[0]);
+	wt_list_remove(slot);
+	wt_list_insert(slot, &info->blocks[0]);
 }
 
 static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
@@ -137,7 +137,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	if(slot)
 	{
 		assert(slot->block->count == count);
-		touch_block(info, slot);
+		wt_touch_block(info, slot);
 		if(!slot->block->ddesc->synthetic)
 			return slot->block;
 	}
@@ -148,7 +148,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 			return NULL;
 		
 		if(info->blocks[0].lru->block)
-			pop_block(info, info->blocks[0].lru);
+			wt_pop_block(info, info->blocks[0].lru);
 	}
 	
 	block = CALL(info->bd, read_block, number, count);
@@ -157,7 +157,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
-	else if(push_block(info, block) < 0)
+	else if(wt_push_block(info, block) < 0)
 		return NULL;
 	
 	return block;
@@ -178,18 +178,18 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(slot)
 	{
 		assert(slot->block->count == count);
-		touch_block(info, slot);
+		wt_touch_block(info, slot);
 		return slot->block;
 	}
 	
 	if(info->blocks[0].lru->block)
-		pop_block(info, info->blocks[0].lru);
+		wt_pop_block(info, info->blocks[0].lru);
 	
 	block = CALL(info->bd, synthetic_read_block, number, count);
 	if(!block)
 		return NULL;
 	
-	r = push_block(info, block);
+	r = wt_push_block(info, block);
 	if(r < 0)
 		/* kind of a waste of a read... but we have to do it */
 		return NULL;
@@ -212,14 +212,14 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	{
 		assert(slot->block->ddesc == block->ddesc);
 		assert(slot->block->count == block->count);
-		touch_block(info, slot);
+		wt_touch_block(info, slot);
 	}
 	else
 	{
 		if(info->blocks[0].lru->block)
-			pop_block(info, info->blocks[0].lru);
+			wt_pop_block(info, info->blocks[0].lru);
 
-		r = push_block(info, block);
+		r = wt_push_block(info, block);
 		if(r < 0)
 			return r;
 	}
@@ -259,7 +259,7 @@ static int wt_cache_bd_destroy(BD_t * bd)
 	modman_dec_bd(info->bd, bd);
 	
 	while(info->blocks[0].mru->block)
-		pop_block(info, info->blocks[0].mru);
+		wt_pop_block(info, info->blocks[0].mru);
 	
 	sfree(info->blocks, (info->size + 1) * sizeof(info->blocks[0]));
 	
