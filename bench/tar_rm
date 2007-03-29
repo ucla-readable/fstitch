@@ -1,0 +1,13 @@
+#!/bin/bash
+# Run tar test and them rm test, so that rm can remove something
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+
+if [ $# -ne 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1;
+fi
+
+try $BENCHDIR/tar
+try $BENCHDIR/rm

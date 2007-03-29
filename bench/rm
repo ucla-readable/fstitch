@@ -1,0 +1,28 @@
+#!/bin/bash
+
+function run () {
+	try $BENCHDIR/init $FS start --no-format
+	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
+	time (echo + rm; time rm -rf $MNT/$TAROUT;
+	      echo + sync; time fsync $KUDOSDIR $MNT;
+	      echo + total)
+	try $BENCHDIR/init $FS stop
+}
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+OUTDIR="$KUDOSDIR/test"
+FS=`cat "$OUTDIR/fs"`
+T=rm
+[ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
+N=`get_test_num $OUTDIR/$T`
+TAROUT=linux-2.6.15
+
+if [ $# -ne 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1;
+fi
+
+prepare $T $N $KUDOSDIR $OUTDIR
+run 2>&1 | tee $OUTDIR/$T.run.$N

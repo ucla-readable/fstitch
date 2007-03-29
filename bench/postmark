@@ -1,0 +1,43 @@
+#!/bin/bash
+
+function run_postmark () {
+	echo + postmark
+	# TODO: 200,000 kB is way too small, but we crash with larger (eg 2 MB)
+	time $BENCHDIR/postmark-1_5 <<- EOF
+		set location $MNT
+		set number 500
+		set size 500 200000
+		set write 4096
+		set read 4096
+		run
+	EOF
+	echo + sync
+	time fsync $KUDOSDIR $MNT
+	echo + total
+}
+
+function run () {
+	try gcc -O2 $BENCHDIR/postmark-1_5.c -o $BENCHDIR/postmark-1_5
+	try sync
+
+	try $BENCHDIR/init $FS start
+	time run_postmark
+	try $BENCHDIR/init $FS stop
+}
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+OUTDIR="$KUDOSDIR/test"
+FS=`cat "$OUTDIR/fs"`
+T=postmark
+[ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
+N=`get_test_num $OUTDIR/$T`
+
+if [ $# -ne 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1;
+fi
+
+prepare $T $N $KUDOSDIR $OUTDIR
+run 2>&1 | tee $OUTDIR/$T.run.$N

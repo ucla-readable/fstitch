@@ -1,0 +1,67 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+
+function usage () {
+	echo "About: start and stop a file system" 
+	echo "Usage: `basename "$0"` <ext2|linux-ext<23>> <start|stop> [--no-format]"
+
+}
+
+if [ $# -lt 2 ] || [ 3 -lt $# ]; then
+	usage 1>&2
+	exit 1
+fi
+
+FS="$1"
+ACTION="$2"
+FORMAT=1
+
+if [ $# -eq 3 ]; then
+	if [ "$3" != "--no-format" ]; then
+		usage 1>&2
+		exit 1
+	fi
+	FORMAT=0
+fi
+
+DEV=
+PART=
+HOST=
+if [ "$FS" == "ext2" ] || [ "$FS" == "linux-ext3" ] || [ "$FS" == "linux-ext2" ]; then
+	DEV=${DEV:-/dev/sdb}
+	PART=${DEV}${PART:-1}
+else
+	echo "Unknown FS \"$FS\"" 1>&2
+	exit 1
+fi
+if [ "$FS" == "ext2" ]; then
+	HOST=kudos
+else
+	HOST=linux
+	FS=`echo $FS | sed 's/linux-//'`
+fi
+
+if [ "$ACTION" == "start" ]; then
+	sync
+	[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
+	if [ "$HOST" == "kudos" ]; then
+		if [ "$NWBBLOCKS" == "" ]; then
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV
+		else
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS"
+		fi
+		try sudo mount -t kfs $KMNT $MNT
+	else
+		try sudo mount -t $FS $PART $MNT
+	fi
+	try sudo chmod 777 $MNT
+elif [ "$ACTION" == "stop" ]; then
+	try sudo umount $MNT
+	if [ "$HOST" == "kudos" ]; then try sudo rmmod kkfsd; fi
+else
+	echo "Unknown action \"$1\"" 1>&2
+	exit 1
+fi

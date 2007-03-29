@@ -1,0 +1,23 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+OUTDIR="$KUDOSDIR/test"
+
+if [ $# -lt 2 ]; then
+	echo "About: run a test multiple times and name output files accordingly" 1>&2
+	echo "Usage: `basename "$0"` <NRUNS> <PROGRAM> [ARGS...]" 1>&2
+	exit 1
+fi
+
+COUNT=$1
+shift
+TEST=`basename $1`
+
+I=0
+while [ $I -lt $COUNT ]; do
+  echo "** Start run $I of $COUNT"
+  try $@
+  I=$((I + 1))
+done 2>&1 | tee $OUTDIR/$TEST-all

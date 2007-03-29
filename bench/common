@@ -1,0 +1,69 @@
+# -*- mode: shell-script -*-
+
+# get the next test number
+function get_test_num () {
+	BASE=$1
+	MAX=1000
+	I=0
+	while [ $I -lt $MAX ]; do
+		[ `ls ${BASE}*.$I 2>/dev/null | wc -l` -eq 0 ] && break
+		I=$((I + 1))
+	done
+	if [ $I -eq $MAX ]; then
+		echo "All $MAX tests used?" 1>&2
+		exit 1
+	fi
+	echo $I
+}
+
+# try to run args, or exit
+function try () {
+	echo "+ $@"
+	$@
+	R=$?
+	if [ $R -ne 0 ]; then echo "FAILED ($R): $@"; exit 1; fi
+}
+
+# wait (a bit) for kkfsd to exit
+function waitkkfsd () {
+	MAX=10
+	I=0
+	while [ $I -lt $MAX ]; do
+		ps -C kkfsd | grep -vq kkfsd && break
+		sleep 0.5
+		I=$((I + 1))
+	done
+	[ $I -eq $MAX ] && echo "kkfsd has not exited" 1>&2
+	sleep 1 # try to wait for syslogd to log kkfsd exit output
+}
+
+# fsync after a test (both kudos and linux)
+function fsync () {
+	KUDOSDIR=$1
+	MNT=$2
+	$KUDOSDIR/obj/util/fsync $MNT
+	sync
+}
+
+# prepare to run a test
+function prepare () {
+	T="$1"
+	N="$2"
+	KUDOSDIR="$3"
+	OUTDIR="$4"
+
+	echo "* Start test $T ($N)"
+
+	pushd $KUDOSDIR
+	try make
+	popd
+
+	sudo tail -f -n 1 /var/log/syslog 2>&1 >$OUTDIR/$T.sys.$N </dev/null &
+	SYSTAIL=$!
+	trap "echo + kill tail syslog; waitkkfsd; sudo kill $SYSTAIL" EXIT
+
+	try sync
+}
+
+KMNT=kfs:/
+MNT=/mnt/test
