@@ -38,26 +38,21 @@
 /* Set to enable chdesc accounting */
 #define CHDESC_ACCOUNT 0
 
-#if CHDESC_ACCOUNT && !defined(__KERNEL__)
-#error chdesc accounting only works in the kernel
-#endif
-
 
 #if CHDESC_ACCOUNT
-static inline u64 u64_diff(u64 start, u64 end)
+static inline uint64_t u64_diff(uint64_t start, uint64_t end)
 {
 	if(start <= end)
 		return end - start;
 	return ULLONG_MAX - end + start;
 }
 
-# include <asm/tsc.h>
 typedef struct account {
 	const char * name;
 	size_t size;
-	u64 space_time; /* total 'space * time' */
-	u64 space_total;
-	u32 space_max, space_last;
+	uint64_t space_time; /* total 'space * time' */
+	uint64_t space_total;
+	uint32_t space_max, space_last;
 	cycles_t time_first, time_last;
 } account_t;
 
@@ -74,8 +69,8 @@ static inline void account_init(const char * name, size_t size, account_t * act)
 static inline void account_update(account_t * act, int32_t space_change)
 {
 	cycles_t time_current = get_cycles();
-	u64 diff = u64_diff(act->time_last, time_current);
-	u64 spacetime_prev = act->space_time;
+	uint64_t diff = u64_diff(act->time_last, time_current);
+	uint64_t spacetime_prev = act->space_time;
 	
 	if(!act->time_first)
 		act->time_first = act->time_last = get_cycles();
@@ -129,10 +124,10 @@ static inline void account_nchdescs_convert(int type_old, int type_new)
 		assert(0);
 }
 
-static u64 do_div64(u64 n, u64 base)
+static uint64_t do_div64(uint64_t n, uint64_t base)
 {
-	u64 count = 0;
-	u64 prev;
+	uint64_t count = 0;
+	uint64_t prev;
 	if(!n)
 		return 0;
 	if(!base)
@@ -147,8 +142,8 @@ static u64 do_div64(u64 n, u64 base)
 
 static void account_print(const account_t * act)
 {
-	u64 mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
-	printf("account: %s: mean=%llu max=%u total=%llu sizeof=%lu\n", act->name, mean, act->space_max, act->space_total, act->size);
+	uint64_t mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
+	printf("account: %s: mean=%llu max=%u total=%llu sizeof=%u\n", act->name, mean, act->space_max, act->space_total, act->size);
 }
 
 static void account_print_all(void * ignore)
