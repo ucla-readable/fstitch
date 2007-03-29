@@ -17,9 +17,6 @@
 #define assert(cond) do { } while(0)
 #endif
 
-// static_assert(x) will generate a compile-time error if 'x' is false.
-#define static_assert(x) switch (x) case 0: case (x):
-
 #define kpanic(info...) \
 	do { \
 		printk(KERN_EMERG \

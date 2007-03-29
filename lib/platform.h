@@ -108,4 +108,7 @@ typedef unsigned char bool;
 #define ROUND32(a, n)		ROUNDUP32((a), (n))
 #define ROUNDDOWN32(a, n)	(((uint32_t) (a)) & ~((n) - 1))
 
+// static_assert(x) will generate a compile-time error if 'x' is false.
+#define static_assert(x) switch (x) case 0: case (x):
+
 #endif /* __KUDOS_KFS_PLATFORM_H */

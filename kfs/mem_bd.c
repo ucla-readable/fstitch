@@ -8,7 +8,12 @@
 #include <kfs/revision.h>
 #include <kfs/josfs_base.h>
 
+#ifdef __KERNEL__
 #include <linux/vmalloc.h>
+#else
+#define vmalloc(x) malloc(x)
+#define vfree(x) free(x)
+#endif
 
 struct mem_info {
 	uint8_t *blocks;

@@ -13,6 +13,8 @@ int jsleep(int32_t jiffies)
 
 #elif defined(UNIXUSER)
 
+#include <unistd.h>
+
 int jsleep(int32_t jiffies)
 {
 	// TODO: use nanosleep to avoid unix signal interactions

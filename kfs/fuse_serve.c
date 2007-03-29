@@ -1228,7 +1228,6 @@ static int set_signal_handler(int sig, void (*handler)(int))
 static int set_signal_handlers(void)
 {
 	if ((set_signal_handler(SIGHUP, signal_handler) == -1)
-	     || (set_signal_handler(SIGINT, signal_handler) == -1)
 	     || (set_signal_handler(SIGTERM, signal_handler) == -1)
 	     || (set_signal_handler(SIGPIPE, SIG_IGN) == -1))
 		return -1;
@@ -1354,6 +1353,31 @@ static struct timeval fuse_serve_timeout(void)
 	return tv;
 }
 
+struct callback_list {
+	unlock_callback_t callback;
+	void * data;
+	int count;
+	struct callback_list * next;
+};
+static struct callback_list * callbacks;
+
+int kfsd_unlock_callback(unlock_callback_t callback, void * data)
+{
+	if(callbacks && callbacks->callback == callback && callbacks->data == data)
+		callbacks->count++;
+	else
+	{
+		struct callback_list * list = malloc(sizeof(*list));
+		if(!list)
+			return -ENOMEM;
+		list->callback = callback;
+		list->data = data;
+		list->count = 1;
+		list->next = callbacks;
+		callbacks = list;
+	}
+	return 0;
+}
 
 // Adapted from FUSE's lib/fuse_loop.c to support sched callbacks and multiple mounts
 int fuse_serve_loop(void)
@@ -1476,6 +1500,14 @@ int fuse_serve_loop(void)
 				break;
 			}
 			tv = time_subtract(tv, time_elapsed(it_start, it_end));
+		}
+
+		while(callbacks)
+		{
+			struct callback_list * first = callbacks;
+			callbacks = first->next;
+			first->callback(first->data, first->count);
+			free(first);
 		}
 	}
 

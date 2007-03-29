@@ -10,8 +10,13 @@
 #include <kfs/sched.h>
 #include <kfs/debug.h>
 #include <kfs/revision.h>
-#include <kfs/kernel_serve.h>
 #include <kfs/journal_bd.h>
+
+#ifdef __KERNEL__
+#include <kfs/kernel_serve.h>
+#elif defined(UNIXUSER)
+#include <kfs/fuse_serve.h>
+#endif
 
 #define ONLY_METADATA 1
 
