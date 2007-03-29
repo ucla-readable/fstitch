@@ -54,15 +54,17 @@ static inline u64 u64_diff(u64 start, u64 end)
 # include <asm/tsc.h>
 typedef struct account {
 	const char * name;
+	size_t size;
 	u64 space_time; /* total 'space * time' */
 	u64 space_total;
 	u32 space_max, space_last;
 	cycles_t time_first, time_last;
 } account_t;
 
-static inline void account_init(const char * name, account_t * act)
+static inline void account_init(const char * name, size_t size, account_t * act)
 {
 	act->name = name;
+	act->size = size;
 	act->space_time = 0;
 	act->space_total = 0;
 	act->space_max = act->space_last = 0;
@@ -146,7 +148,7 @@ static u64 do_div64(u64 n, u64 base)
 static void account_print(const account_t * act)
 {
 	u64 mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
-	printf("account: %s: mean=%llu max=%u total=%llu\n", act->name, mean, act->space_max, act->space_total);
+	printf("account: %s: mean=%llu max=%u total=%llu sizeof=%lu\n", act->name, mean, act->space_max, act->space_total, act->size);
 }
 
 static void account_print_all(void * ignore)
@@ -162,16 +164,16 @@ static void account_print_all(void * ignore)
 
 static int account_init_all(void)
 {
-	account_init("nchdescs (byte)", &act_nchdescs[BYTE]);
-	account_init("nchdescs (bit)", &act_nchdescs[BIT]);
-	account_init("nchdescs (noop)", &act_nchdescs[NOOP]);
-	account_init("nchdescs (bit->byte)", &act_nchdescs[NC_CONVERT_BIT_BYTE]);
-	account_init("nchdescs (->noop)", &act_nchdescs[NC_CONVERT_NOOP]);
-	account_init("nchdescs (total)", &act_nchdescs[NC_TOTAL]);
+	account_init("nchdescs (byte)", sizeof(chdesc_t), &act_nchdescs[BYTE]);
+	account_init("nchdescs (bit)", sizeof(chdesc_t), &act_nchdescs[BIT]);
+	account_init("nchdescs (noop)", sizeof(chdesc_t), &act_nchdescs[NOOP]);
+	account_init("nchdescs (bit->byte)", 0, &act_nchdescs[NC_CONVERT_BIT_BYTE]);
+	account_init("nchdescs (->noop)", 0, &act_nchdescs[NC_CONVERT_NOOP]);
+	account_init("nchdescs (total)", sizeof(chdesc_t), &act_nchdescs[NC_TOTAL]);
 	//account_init("nnrb", &act_nnrb);
-	account_init("data", &act_data);
-	account_init("ndeps", &act_ndeps);
-	account_init("nwrefs", &act_nwrefs);
+	account_init("data", 1, &act_data);
+	account_init("ndeps", sizeof(chdepdesc_t), &act_ndeps);
+	account_init("nwrefs", sizeof(chrefdesc_t), &act_nwrefs);
 	return kfsd_register_shutdown_module(account_print_all, NULL, SHUTDOWN_POSTMODULES);
 }
 #else
