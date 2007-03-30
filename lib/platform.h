@@ -46,8 +46,6 @@ static __inline int strcasecmp(const char * s1, const char * s2)
 typedef unsigned char bool;
 #endif
 
-#include <asm/tsc.h>
-
 #elif defined(UNIXUSER)
 
 #include <ctype.h>
@@ -87,18 +85,6 @@ typedef unsigned char bool;
 #endif
 
 #define container_of(ptr, type, member) ({typeof(((type *) 0)->member) * __mptr = (ptr); (type *) (unsigned long) ((char *) __mptr - offsetof(type,member));})
-
-typedef unsigned long long cycles_t;
-static inline cycles_t get_cycles(void)
-{
-	cycles_t ret;
-#if __i386__
-	__asm__ __volatile__("rdtsc" : "=A" (ret));
-#else
-# warning get_cycles() will return 0 for this arch
-#endif
-	return ret;
-}
 
 #endif /* __KERNEL__, UNIXUSER */
 

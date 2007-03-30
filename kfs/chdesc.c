@@ -40,6 +40,23 @@
 
 
 #if CHDESC_ACCOUNT
+#ifdef __KERNEL__
+#include <asm/tsc.h>
+#else
+typedef unsigned long long cycles_t;
+static inline cycles_t get_cycles(void)
+{
+	cycles_t ret;
+#ifdef __i386__
+	__asm__ __volatile__("rdtsc" : "=A" (ret));
+#else
+# warning get_cycles() will return 0 on this architecture
+	ret = 0;
+#endif
+	return ret;
+}
+#endif
+
 static inline uint64_t u64_diff(uint64_t start, uint64_t end)
 {
 	if(start <= end)
