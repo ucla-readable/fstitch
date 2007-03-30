@@ -9,8 +9,9 @@ MNT="$1"
 shift
 
 KFSD=./obj/unix-user/kfs/kfsd
+# -s because kkfsd is not multithread safe
 # '-o allow_root' so that the (suid) fusermount can mount nested mountpoints
-KFSD_OPTS="-o allow_root"
+KFSD_OPTS="-s -o allow_root"
 
 # Run kfsd. If it exits non-zero (and so probably crashed) explicitly unmount.
 # Lazy unmount in case fusermount is called before kfsd's mount is removed.
