@@ -326,7 +326,7 @@ int main(int argc, char * argv[])
 		{
 			printf("nwbblocks=<The number of write-back blocks to use>\n");
 			printf("unix_file=<The device to attach unix_file_bd to>\n");
-			printf("[fuse standard options]\n");
+			printf("use -h for help on fuse options\n");
 			return 0;
 		}
 		else if(!strncmp(argv[i], "nwbblocks=", 10))
