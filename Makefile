@@ -43,6 +43,7 @@ all: tags TAGS
 
 kfs/kkfsd.ko: always
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
+	@[ -f .user ] && $(MAKE) -f Makefile.user || true
 
 install: kfs/kkfsd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
