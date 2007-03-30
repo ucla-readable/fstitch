@@ -67,6 +67,8 @@ static int check_super(LFS_t * object)
 	
 	return 0;
 }
+
+#ifdef __i386__
 //Stolen from Linux kernel include/asm-i386/bitops.h 2.6.20
 static inline int find_zero_bit( const unsigned long *addr, unsigned size )
 {
@@ -91,6 +93,12 @@ static inline int find_zero_bit( const unsigned long *addr, unsigned size )
 			:"1" ((size + 31) >> 5), "2" (addr), "b" (addr) : "memory");
 	return res;
 }
+#else
+static inline int find_zero_bit( const unsigned long *addr, unsigned size )
+{
+#error implement find_zero_bit in C
+}
+#endif
 
 static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {

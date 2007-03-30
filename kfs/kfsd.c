@@ -312,6 +312,16 @@ static void kfsd_main(int nwbblocks)
 }
 
 char * unix_file = NULL;
+int kfsd_argc = 0;
+char ** kfsd_argv = NULL;
+
+static void remove_arg(int * argc, char ** argv, int idx)
+{
+	int i;
+	--*argc;
+	for(i = idx; i < *argc; i++)
+		argv[i] = argv[i + 1];
+}
 
 int main(int argc, char * argv[])
 {
@@ -322,18 +332,22 @@ int main(int argc, char * argv[])
 		{
 			printf("nwbblocks=<The number of write-back blocks to use>\n");
 			printf("unix_file=<The device to attach unix_file_bd to>\n");
+			printf("[fuse standard options]\n");
 			return 0;
 		}
 		else if(!strncmp(argv[i], "nwbblocks=", 10))
-			nwbblocks = atoi(&argv[i][10]);
-		else if(!strncmp(argv[i], "unix_file=", 10))
-			unix_file = &argv[i][10];
-		else
 		{
-			printf("Unknown parameter %s\n", argv[i]);
-			return 1;
+			nwbblocks = atoi(&argv[i][10]);
+			remove_arg(&argc, argv, i--);
+		}
+		else if(!strncmp(argv[i], "unix_file=", 10))
+		{
+			unix_file = &argv[i][10];
+			remove_arg(&argc, argv, i--);
 		}
 	}
+	kfsd_argc = argc;
+	kfsd_argv = argv;
 	signal(SIGINT, (void (*)(int)) kfsd_request_shutdown);
 	
 	printf("ukfsd started (PID = %d)\n", getpid());

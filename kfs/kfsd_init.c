@@ -133,8 +133,9 @@ int kfsd_init(int nwbblocks)
 		return r;
 	}
 #elif defined(UNIXUSER)
-	/* FIXME: get the command line arguments */
-	if ((r = fuse_serve_init(0, NULL)) < 0)
+	extern int kfsd_argc;
+	extern char ** kfsd_argv;
+	if ((r = fuse_serve_init(kfsd_argc, kfsd_argv)) < 0)
 	{
 		fprintf(stderr, "fuse_serve_init: %d\n", r);
 		return r;
