@@ -93,7 +93,7 @@ int fuse_serve_mount_set_root(CFS_t * root_cfs)
 		return r;
 
 	root->cfs = root_cfs;
-	printf("Mounted \"\" from %s\n", modman_name_cfs(root_cfs));
+	printf("Mounted \"/\" from %s\n", modman_name_cfs(root_cfs));
 	return 0;
 }
 

@@ -285,7 +285,6 @@ MODULE_LICENSE("GPL");
 
 #include <kfs/fuse_serve.h>
 #include <unistd.h>
-#include <signal.h>
 
 static void kfsd_main(int nwbblocks)
 {
@@ -301,12 +300,7 @@ static void kfsd_main(int nwbblocks)
 	else
 	{
 		kfsd_running = 1;
-		while(kfsd_running)
-		{
-			sched_run_callbacks();
-			/* do actual work */
-			usleep(100);
-		}
+		fuse_serve_loop();
 	}
 	kfsd_shutdown();
 }
@@ -348,7 +342,6 @@ int main(int argc, char * argv[])
 	}
 	kfsd_argc = argc;
 	kfsd_argv = argv;
-	signal(SIGINT, (void (*)(int)) kfsd_request_shutdown);
 	
 	printf("ukfsd started (PID = %d)\n", getpid());
 	Dprintf("Running kfsd_main()\n");

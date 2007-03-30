@@ -1198,6 +1198,7 @@ static void signal_handler(int sig)
 		fprintf(stderr, "%s(%d): write() failed\n", __FUNCTION__, sig);
 		perror("write");
 	}
+	kfsd_request_shutdown();
 	printf("Shutdown started.\n");
 	fflush(stdout);
 }
@@ -1228,6 +1229,7 @@ static int set_signal_handler(int sig, void (*handler)(int))
 static int set_signal_handlers(void)
 {
 	if ((set_signal_handler(SIGHUP, signal_handler) == -1)
+	     || (set_signal_handler(SIGINT, signal_handler) == -1)
 	     || (set_signal_handler(SIGTERM, signal_handler) == -1)
 	     || (set_signal_handler(SIGPIPE, SIG_IGN) == -1))
 		return -1;

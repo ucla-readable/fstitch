@@ -323,6 +323,7 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 
 	BD_INIT(bd, unix_file_bd, info);
 	bd->level = 0;
+	bd->graph_index = 0;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
