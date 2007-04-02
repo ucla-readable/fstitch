@@ -69,6 +69,7 @@ typedef struct opgroup_scope opgroup_scope_t;
 
 opgroup_scope_t * opgroup_scope_create(void);
 opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope);
+size_t opgroup_scope_size(opgroup_scope_t * scope);
 void opgroup_scope_destroy(opgroup_scope_t * scope);
 
 void opgroup_scope_set_current(opgroup_scope_t * scope);

@@ -151,6 +151,11 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	return NULL;
 }
 
+size_t opgroup_scope_size(opgroup_scope_t * scope)
+{
+	return hash_map_size(scope->id_map);
+}
+
 void opgroup_scope_destroy(opgroup_scope_t * scope)
 {
 	hash_map_it_t it;
