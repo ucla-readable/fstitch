@@ -1051,7 +1051,8 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 
 		//check if we can insert the dirent:
 		else if ((entry->rec_len - (8 + entry->name_len)) > new_dirent->rec_len) {
-			EXT2_Dir_entry_t copy = *entry;
+			EXT2_Dir_entry_t copy;
+			memcpy(&copy, entry, MIN(entry->rec_len, sizeof(copy)));
 			new_prev_len =  8 + ((copy.name_len - 1) / 4 + 1) * 4;
 			new_dirent->rec_len = copy.rec_len - new_prev_len;
 			copy.rec_len = new_prev_len;
@@ -1611,7 +1612,8 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	}
 
 	if (new) {
-		EXT2_Dir_entry_t copy = *new_dirent;
+		EXT2_Dir_entry_t copy;
+		memcpy(&copy, new_dirent, MIN(new_dirent->rec_len, sizeof(copy)));
 
 		// Overwriting a directory makes little sense
 		if (new->f_type == TYPE_DIR) {
