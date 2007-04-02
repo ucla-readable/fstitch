@@ -191,6 +191,7 @@ static void wb2_pop_slot(struct cache_info * info, struct lru_slot * slot)
 	}
 	
 	hash_map_erase(info->block_map, (void *) number);
+	free(slot);
 }
 
 static void wb2_pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
