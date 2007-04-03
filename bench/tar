@@ -2,17 +2,18 @@
 
 function run () {
 	try cat $TARFILE >/dev/null
-	try $BENCHDIR/init $FS start
+	try $BENCHDIR/init -f $FS -h $HOST -a start
 	time (echo + tar; time tar -C $MNT/ -xf $TARFILE;
 	      echo + sync; time fsync $KUDOSDIR $MNT;
 	      echo + total)
-	try $BENCHDIR/init $FS stop
+	try $BENCHDIR/init -f $FS -h $HOST -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
+HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
 T=tar
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
@@ -24,5 +25,5 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR
+prepare $T $N $KUDOSDIR $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N

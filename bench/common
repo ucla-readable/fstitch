@@ -51,18 +51,38 @@ function prepare () {
 	N="$2"
 	KUDOSDIR="$3"
 	OUTDIR="$4"
+	HOST="$5"
 
 	echo "* Start test $T ($N)"
 
-	pushd $KUDOSDIR
-	try make
-	popd
+	case "$HOST" in
+		kudos)
+			pushd $KUDOSDIR; try make; popd;;
+		uu)
+			pushd $KUDOSDIR; try make -f Makefile.user; popd;;
+		linux)
+			;;
+		*)
+			echo "Unsupported host \"$HOST\"" 1>&2; exit 1;;
+	esac
 
-	sudo tail -f -n 1 /var/log/syslog 2>&1 >$OUTDIR/$T.sys.$N </dev/null &
-	SYSTAIL=$!
-	trap "echo + kill tail syslog; waitkkfsd; sudo kill $SYSTAIL" EXIT
+	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]; then
+		sudo tail -f -n 1 /var/log/syslog 2>&1 >$OUTDIR/$T.sys.$N </dev/null &
+		SYSTAIL=$!
+		trap "echo + kill tail syslog; waitkkfsd; sudo kill $SYSTAIL" EXIT
+	fi
 
 	try sync
+}
+
+# Return whether "HOST-FS" pair is supported
+function supported_host_fs () {
+	case "$1" in
+		kudos-ext2) true;;
+		uu-ext2) true;;
+		linux-ext2|linux-ext3) true;;
+		*) false;
+	esac
 }
 
 KMNT=kfs:/

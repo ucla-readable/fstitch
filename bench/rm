@@ -1,18 +1,19 @@
 #!/bin/bash
 
 function run () {
-	try $BENCHDIR/init $FS start --no-format
+	try $BENCHDIR/init -f $FS -h $HOST -a start -k
 	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
 	time (echo + rm; time rm -rf $MNT/$TAROUT;
 	      echo + sync; time fsync $KUDOSDIR $MNT;
 	      echo + total)
-	try $BENCHDIR/init $FS stop
+	try $BENCHDIR/init -f $FS -h $HOST -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
+HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
 T=rm
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
@@ -24,5 +25,5 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR
+prepare $T $N $KUDOSDIR $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N

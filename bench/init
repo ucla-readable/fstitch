@@ -6,61 +6,81 @@ KUDOSDIR="$BENCHDIR/.."
 
 function usage () {
 	echo "About: start and stop a file system" 
-	echo "Usage: `basename "$0"` <ext2|linux-ext<23>> <start|stop> [--no-format]"
-
+	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-f FS] [-k]"
+	echo "       where HOST-FS may be kudos-ext2, linux-ext2, or linux-ext3"
+	echo "           default is kudos-ext2"
+	echo "       -k keeps the existing file system"
+	echo "           default is to format at start"
 }
 
-if [ $# -lt 2 ] || [ 3 -lt $# ]; then
+FS=ext2
+HOST=kudos
+FORMAT=1
+ACTION=
+
+while getopts "a:f:h:k" flag; do
+	case "$flag" in
+		a) ACTION="$OPTARG";;
+		f) FS="$OPTARG";;
+		h) HOST="$OPTARG";;
+		k) FORMAT=0;;
+		\?) usage 1>&2; exit 1;;
+		*) usage 1>&2; exit 1;;
+	esac
+done
+
+if [ "$ACTION" != "start" ] && [ "$ACTION" != "stop" ]; then
+	echo "Illegal action" 1>&2
 	usage 1>&2
 	exit 1
 fi
 
-FS="$1"
-ACTION="$2"
-FORMAT=1
-
-if [ $# -eq 3 ]; then
-	if [ "$3" != "--no-format" ]; then
-		usage 1>&2
-		exit 1
-	fi
-	FORMAT=0
+if ! supported_host_fs "${HOST}-${FS}"; then
+	echo "Unsupported host-filesystem pair \"${HOST}-${FS}\"" 1>&2
+	exit 1
 fi
 
 DEV=
 PART=
-HOST=
-if [ "$FS" == "ext2" ] || [ "$FS" == "linux-ext3" ] || [ "$FS" == "linux-ext2" ]; then
+if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]; then
 	DEV=${DEV:-/dev/sdb}
 	PART=${DEV}${PART:-1}
-else
-	echo "Unknown FS \"$FS\"" 1>&2
-	exit 1
-fi
-if [ "$FS" == "ext2" ]; then
-	HOST=kudos
-else
-	HOST=linux
-	FS=`echo $FS | sed 's/linux-//'`
+elif [ "$HOST" == "uu" ]; then
+	DEV=${DEV:-$KUDOSDIR/obj/fs/ext2.img}
+	PART=${DEV}${PART:-}
 fi
 
 if [ "$ACTION" == "start" ]; then
 	sync
-	[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
 	if [ "$HOST" == "kudos" ]; then
+		[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
 		if [ "$NWBBLOCKS" == "" ]; then
 			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV
 		else
 			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS"
 		fi
 		try sudo mount -t kfs $KMNT $MNT
+		try sudo chmod 777 $MNT
+	elif [ "$HOST" == "uu" ]; then
+		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
+		if [ "$NWBBLOCKS" == "" ]; then
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV $MNT &
+		else
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" $MNT &
+		fi
 	else
+		[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
 		try sudo mount -t $FS $PART $MNT
+		try sudo chmod 777 $MNT
 	fi
-	try sudo chmod 777 $MNT
+	sleep 1 # give kfsd time to init
 elif [ "$ACTION" == "stop" ]; then
-	try sudo umount $MNT
-	if [ "$HOST" == "kudos" ]; then try sudo rmmod kkfsd; fi
+	if [ "$HOST" == "uu" ]; then
+		killall kfsd # TODO: kill just the started kfsd
+	else
+		try sudo umount $MNT
+		if [ "$HOST" == "kudos" ]; then try sudo rmmod kkfsd; fi
+	fi
 else
 	echo "Unknown action \"$1\"" 1>&2
 	exit 1
