@@ -1,0 +1,87 @@
+#!/usr/bin/env perl
+
+use File::Basename;
+use Getopt::Std;
+
+sub usage() {
+	$basename = basename($0);
+	print STDERR "Usage: $basename [-h] <-d TEST_DIR> <-t TEST_NAME>\n";
+	exit(1);
+}
+
+my %opt;
+
+getopts("hd:t:", \%opt) or usage();
+usage() if $opt{h} || !defined $opt{d} || !defined $opt{t};
+
+if (!-d "$opt{d}") {
+	print STDERR "Test output directory does not exist ($opt{d})\n";
+	exit(1);
+}
+
+my $testdir = $opt{d};
+my $testname = $opt{t};
+
+if (!-f "$testdir/$testname.run.0") {
+	print STDERR "No $testname runs\n";
+	exit(1);
+}
+
+# track times for total
+my %real = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %sys = %real;
+my %user = %real;
+my %io = %real;
+
+my %totals = ("real" => \%real, "sys" => \%sys, "user" => \%user, "io" => \%io);
+my @totalsa = (\%real, \%sys, \%user, \%io);
+
+foreach $run (<$testdir/$testname.run.*>) {
+	#print STDERR "run: $run\n";
+	open(R, "<$run") || die;
+	my $total_io = 0;
+	my $state = 0;
+	while(<R>) {
+		my $line = $_;
+		if ($state == 0) {
+			if ($line =~ m/^\+ $testname$/) {
+				$state = 1;
+			} elsif ($line =~ m/^\+ sync$/) {
+				$state = 2;
+			} elsif ($line =~ m/^\+ total$/) {
+				$state = 3;
+			}
+		} else {
+			if ($line =~ m/^(real|user|sys)\s+(\d+)m(\d+\.\d+)s$/) {
+				if ($state == 3) {
+					my $time = $2 * 60 + $3;
+					my $total = $totals{$1};
+					if ($1 eq "real") {
+						$total_io += $time;
+					} else {
+						$total_io -= $time;
+					}
+					$total->{"sum"} += $time;
+					$total->{"count"}++;
+					$total->{"min"} = $time if ($time < $total->{"min"} || $total->{"min"} == -1);
+					$total->{"max"} = $time if ($time > $total->{"max"});
+				}
+				$state = 0 if $1 eq "sys";
+			} elsif (! $line =~ m/\w+/) {
+				print STDERR "Ignoring unexpected line \"$line\"\n";
+			}
+		}
+	}
+	$io{"sum"} += $total_io;
+	$io{"count"}++;
+	$io{"min"} = $total_io if ($total_io < $io{"min"} || $io{"min"} == -1);
+	$io{"max"} = $total_io if ($total_io > $io{"max"});
+	close(R);
+}
+
+foreach $total (@totalsa) {
+	my $avg = 0;
+	$avg = $total->{"sum"} / $total->{"count"} if ($total->{"count"} != 0);
+	printf "%.3f %.3f %.3f  ", $avg, $total->{"min"}, $total->{"max"};
+}
+print "\n";

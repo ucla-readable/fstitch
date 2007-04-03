@@ -1,0 +1,40 @@
+#!/usr/bin/env perl
+
+use File::Basename;
+use Getopt::Std;
+
+sub usage() {
+	$basename = basename($0);
+	print STDERR "Usage: $basename [-h] <-d TEST_DIR> <-t TEST_NAME>\n";
+	exit(1);
+}
+
+my %opt;
+
+getopts("hd:t:", \%opt) or usage();
+usage() if $opt{h} || !defined $opt{d} || !defined $opt{t};
+
+if (!-d "$opt{d}") {
+	print STDERR "Test output directory does not exist ($opt{d})\n";
+	exit(1);
+}
+
+my $testdir = $opt{d};
+my $testname = $opt{t};
+
+if (!-f "$testdir/$testname-mem.sys.0") {
+	print STDERR "No $testname-mem runs\n";
+	exit(1);
+}
+open(R, "<$testdir/$testname-mem.sys.0") || die;
+%careabouts = ("nchdescs (bit)" => 1, "nchdescs (byte)" => 1, "nchdescs (noop)" => 1, "nchdescs (total)" => 1, "ndeps" => 1, "nwrefs" => 1, "data" => 1);
+while(<R>) {
+	my $line = $_;
+	if (! $line =~ m/account: /) {
+		next;
+	}
+	$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) sizeof=(\d+)/;
+	print "$2 $3 $4 $5  " if (exists($careabouts{$1}));
+}
+print "\n";
+close(R);

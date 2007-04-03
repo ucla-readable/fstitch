@@ -1,0 +1,77 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+
+function usage () {
+	echo "About: Generate space plot for a given test"
+	echo "Usage: `basename "$0"` <-t TESTNAME> <-o OUTDIR> [-k time|rev]"
+}
+
+KEY=time
+while getopts "t:o:k:" flag; do
+	case "$flag" in
+		t) TESTNAME="$OPTARG";;
+		o) OUTDIR="$OPTARG";;
+		k) KEY="$OPTARG";;
+		/?) usage 1>&2; exit 1;;
+		*) usage 1>&2; exit 1;;
+	esac
+done
+
+if [ -z "$TESTNAME" ] || [ -z "$OUTDIR" ]; then
+	usage 1>&2
+	exit 1
+fi
+
+if [ "$KEY" != "rev" ] && [ "$KEY" != "time" ]; then
+	echo "Illegal key \"$KEY\"" 1>&2
+	usage 1>&2
+	exit 1
+fi
+
+if [ ! -d "$OUTDIR" ]; then
+	echo "OUTDIR $OUTDIR does not exist" 1>&2
+	exit 1
+fi
+
+DATA=`mktemp plot_space.XXXXXX` || exit 1
+trap "rm -f $DATA" EXIT
+
+for test in `ls $KUDOSDIR/tests/`; do
+	[ "`cat $KUDOSDIR/tests/$test/host`" == "kudos" ] || continue
+	LINE="`$BENCHDIR/ex_space -d $KUDOSDIR/tests/$test -t $TESTNAME`"
+	[ -n "$LINE" ] || continue
+	if [ "$KEY" == "time" ] ; then
+		echo -n "$test"
+	elif [ "$KEY" == "rev" ]; then
+		echo -n "`cat $KUDOSDIR/tests/$test/svnversion |sed 's/:\d+//;s/M$//'`"
+	fi
+	echo "  $LINE"
+done > $DATA
+
+if [ "$KEY" == "time" ]; then
+	XAXIS="set xlabel \"Test (time)\"; set xdata time; set timefmt \"%Y-%m-%dT%H:%M:%S\""
+elif [ "$KEY" == "rev" ]; then
+	XAXIS="set xlabel \"Test (rev)\""
+fi
+
+gnuplot << EOF
+set terminal png
+set key above
+set grid
+$XAXIS
+
+set title "$TESTNAME space"
+set output "$OUTDIR/space_${TESTNAME}.png"
+set ylabel "Total space allocated (kBs)"
+plot [:] [0:] \
+	"$DATA" using 1:(\$4*\$5/1024) with linespoints title "bit chdescs", \
+	"$DATA" using 1:(\$8*\$9/1024) with linespoints title "byte chdescs", \
+	"$DATA" using 1:(\$12*\$13/1024) with linespoints title "noop chdescs", \
+	"$DATA" using 1:(\$16*\$17/1024) with linespoints title "all chdescs", \
+	"$DATA" using 1:(\$20*\$21/1024) with linespoints title "deps", \
+	"$DATA" using 1:(\$24*\$25/1024) with linespoints title "wrefs", \
+	"$DATA" using 1:(\$28*\$29/1024) with linespoints title "rollback data"
+EOF
