@@ -59,7 +59,8 @@ fi
 
 gnuplot << EOF
 set terminal png
-set key above
+#set key above # above is only in gnuplot > 4.0, but it will look better
+set key outside
 set grid
 $XAXIS
 
