@@ -1,0 +1,30 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+
+PLOT_CMDS="plot_time plot_space"
+TESTS="tar rm postmark"
+
+function usage () {
+	echo "About: generate all plots"
+	echo "Usage: `basename "$0"` <-o OUTDIR> [-k KEY]"
+}
+
+KEY=
+while getopts "o:k:" flag; do
+	case "$flag" in
+		o) OUTDIR="$OPTARG";;
+		k) KEY="$OPTARG";;
+		/?) usage 1>&2; exit 1;;
+		*) usage 1>&2; exit 1;;
+	esac
+done
+[ -n "$KEY" ] && KEY="-k $KEY"
+
+for PLOT in $PLOT_CMDS; do
+	for TESTNAME in $TESTS; do
+		try $BENCHDIR/$PLOT -t $TESTNAME -o $OUTDIR $KEY
+	done
+done
