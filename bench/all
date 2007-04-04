@@ -17,13 +17,15 @@ BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
+HOST="`cat $KUDOSDIR/test/host`"
+FS="`cat $KUDOSDIR/test/fs`"
 
 if [ $# -gt 1 ]; then
 	echo "About: run all tests"
 	echo "Usage: `basename "$0"` [NRUNS]" 1>&2
 	exit 1;
 fi
-NRUNS=1
+NRUNS=3
 [ $# -eq 1 ] && NRUNS="$1"
 
 $BENCHDIR/multi $NRUNS $BENCHDIR/tar_rm
