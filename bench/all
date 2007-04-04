@@ -27,11 +27,15 @@ NRUNS=1
 [ $# -eq 1 ] && NRUNS="$1"
 
 $BENCHDIR/multi $NRUNS $BENCHDIR/tar_rm
-if grep -v linux- $OUTDIR/fs; then
-	accounting_on; TESTNAME=mem $BENCHDIR/tar_rm; accounting_restore
+if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
+	if grep -v linux- $OUTDIR/fs; then
+		accounting_on; TESTNAME=mem $BENCHDIR/tar_rm; accounting_restore
+	fi
 fi
 
 $BENCHDIR/multi $NRUNS $BENCHDIR/postmark
-if grep -v linux- $OUTDIR/fs; then
-	accounting_on; TESTNAME=mem $BENCHDIR/postmark; accounting_restore
+if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
+	if grep -v linux- $OUTDIR/fs; then
+		accounting_on; TESTNAME=mem $BENCHDIR/postmark; accounting_restore
+	fi
 fi
