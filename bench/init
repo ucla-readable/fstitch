@@ -4,6 +4,8 @@ BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 
+VMLINUX=/lib/modules/`uname -r`/source/vmlinux
+
 function usage () {
 	echo "About: start and stop a file system" 
 	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-f FS] [-k]"
@@ -50,6 +52,10 @@ elif [ "$HOST" == "uu" ]; then
 	PART=${DEV}${PART:-}
 fi
 
+# Try to load oprofile, then detect whether it worked
+zgrep -q OPROFILE /proc/config.gz && sudo modprobe oprofile
+PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
+
 if [ "$ACTION" == "start" ]; then
 	sync
 	if [ "$HOST" == "kudos" ]; then
@@ -74,10 +80,25 @@ if [ "$ACTION" == "start" ]; then
 		try sudo chmod 777 $MNT
 	fi
 	sleep 1 # give kfsd time to init
+
+	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux"]); then
+		if [ ! $VMLINUX ]; then
+			echo "vmlinux \"$VMLINUX\" does not exist, cannot profile" 1>&2
+			exit 1
+		fi
+		try sudo opcontrol --init
+		try sudo opcontrol --setup --separate=kernel --vmlinux=$VMLINUX
+		try sudo opcontrol --start
+		try sudo opcontrol --reset
+	fi
 elif [ "$ACTION" == "stop" ]; then
 	if [ "$HOST" == "uu" ]; then
 		killall kfsd # TODO: kill just the started kfsd
 	else
+		if [ $PROFILE -eq 1 ]; then
+			try sudo opcontrol --stop
+			try sudo opcontrol --dump
+		fi
 		try sudo umount $MNT
 		if [ "$HOST" == "kudos" ]; then try sudo rmmod kkfsd; fi
 	fi

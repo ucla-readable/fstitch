@@ -27,3 +27,4 @@ fi
 
 prepare $T $N $KUDOSDIR $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
+finish $T $N $KUDOSDIR $OUTDIR $HOST

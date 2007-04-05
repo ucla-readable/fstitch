@@ -75,6 +75,20 @@ function prepare () {
 	try sync
 }
 
+# post-test actions
+function finish () {
+	T=$1
+	N=$2
+	KUDOSDIR=$3
+	OUTDIR=$4
+	HOST=$5
+	PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
+	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]); then
+		grep -q idle=poll /proc/cmdline && TP=.2 || TP=1
+		try sudo opreport -l -g -p $KUDOSDIR/kfs/ -t $TP | tee -a $OUTDIR/$T.oprof.$N
+	fi
+}
+
 # Return whether "HOST-FS" pair is supported
 function supported_host_fs () {
 	case "$1" in
