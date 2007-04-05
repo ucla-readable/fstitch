@@ -6,7 +6,6 @@
 #include <kfs/lfs.h>
 #include <kfs/modman.h>
 #include <kfs/debug.h>
-#include <kfs/ext2_super_wb.h>
 #include <kfs/ext2_base.h>
 #include <kfs/feature.h>
 
@@ -26,6 +25,7 @@ static uint32_t ext2_get_file_block(LFS_t * object, fdesc_t * file, uint32_t off
 static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head);
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
 
+static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs);
 static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode);
 static uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head);
@@ -62,8 +62,6 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 	
-	EXT2_BLOCK_SIZE = (1024 << info->super->s_log_block_size);
-	EXT2_DESC_PER_BLOCK = EXT2_BLOCK_SIZE / sizeof(EXT2_group_desc_t);
 	
 	return 0;
 }
@@ -245,12 +243,8 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 	if (r < 0)
 		return r;
 
-	r = CALL(info->super_wb, blocks, value ? -1 : 1);
-	if (r < 0)
-		return r;
+	return ext2_super_report(object, block_group, (value ? -1 : 1), 0, 0);
 
-	r = CALL(info->super_wb, write_gdesc, block_group, value ? -1 : 1, 0, 0);
-	return r;
 }
 
 static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chdesc_t ** head)
@@ -305,13 +299,7 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 	r = CALL(info->ubd, write_block, info->inode_cache);
 	if (r < 0)
 		return r;
-		
-	r = CALL(info->super_wb, inodes, value ? -1 : 1);
-	if (r < 0)
-		return r;
-
-	r = CALL(info->super_wb, write_gdesc, block_group, 0, value ? -1 : 1, 0);
-	return r;
+	return ext2_super_report(object, block_group, 0, (value ? -1 : 1), 0);
 }
 
 static uint32_t count_free_space(LFS_t * object)
@@ -1371,7 +1359,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		lfs_add_fork_head(prev_head);
 
 		uint32_t group = (newf->f_ino - 1) / info->super->s_inodes_per_group;
-		r = CALL(info->super_wb, write_gdesc, group, 0, 0, 1);
+		r = ext2_super_report(object, group, 0, 0, 1);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1866,7 +1854,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 					goto remove_name_exit;
 				lfs_add_fork_head(prev_head);
 			}
-			r = CALL(info->super_wb, write_gdesc, group, 0, 0, -1);
+			r = ext2_super_report(object, group, 0, 0, -1);
 			if(r < 0)
 				goto remove_name_exit;				
 		}
@@ -2222,20 +2210,23 @@ static int ext2_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, 
 static int ext2_destroy(LFS_t * lfs)
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
-	chdesc_t * head = NULL; /* CALL(lfs, get_write_head); */
-	CALL(info->super_wb, sync, &head);
-	int r = modman_rem_lfs(lfs);
+	int i,r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	DESTROY(info->super_wb);
-	modman_dec_bd(info->ubd, lfs);
-	
+	modman_dec_bd(info->ubd, lfs);	
 	hash_map_destroy(info->filemap);
 	if(info->bitmap_cache != NULL)
 		bdesc_release(&info->bitmap_cache);
 	if(info->inode_cache != NULL)
 		bdesc_release(&info->inode_cache);
-
+	if(info->super_cache != NULL)
+		bdesc_release(&info->super_cache);
+	for(i = 0; i < info->ngroupblocks; i++)
+		bdesc_release(&(info->gdescs[i]));
+	
+	free(info->gdescs);
+	free(info->super);
+	free(info->groups);
 	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
@@ -2315,11 +2306,122 @@ int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, c
 	return CALL(info->ubd, write_block, bdesc);
 }
 
-static void ext2_destroy_super(LFS_t * lfs)
+static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs)
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
-	if (info->super_wb)
-		DESTROY(info->super_wb);
+	int r = 0;
+	chdesc_t * head = CALL(lfs, get_write_head); 
+	
+	//Deal with the super block
+	info->super->s_free_blocks_count += blocks;
+	info->super->s_free_inodes_count += inodes;
+
+	r = chdesc_create_diff(info->super_cache, info->ubd, 1024, 12 * sizeof(uint32_t), 
+				info->super_cache->ddesc->data + 1024, info->super, &head);
+	if (r < 0)
+		return r;
+	lfs_add_fork_head(head);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
+	r = CALL(info->ubd, write_block, info->super_cache);
+	if (r < 0)
+		return r;
+	
+	//Deal with the group descriptors
+	info->groups[group].bg_free_blocks_count += blocks;
+	info->groups[group].bg_free_inodes_count += inodes;
+	info->groups[group].bg_used_dirs_count += dirs;
+	
+	head = CALL(lfs, get_write_head); 
+	
+	int group_bdesc = group / EXT2_DESC_PER_BLOCK;
+	int nbytes = 0;
+	if ( (sizeof(EXT2_group_desc_t) * info->ngroups) < (EXT2_BLOCK_SIZE*(group_bdesc+1)) )
+		nbytes = (sizeof(EXT2_group_desc_t) * info->ngroups) % EXT2_BLOCK_SIZE;
+	else
+		nbytes = EXT2_BLOCK_SIZE;
+
+	r = chdesc_create_diff(info->gdescs[group_bdesc], info->ubd, 
+			(group_bdesc*EXT2_BLOCK_SIZE), nbytes, 
+			info->gdescs[group_bdesc]->ddesc->data, 
+			info->groups + (group_bdesc*EXT2_DESC_PER_BLOCK), &head);
+	if (r < 0)
+		return r;
+	lfs_add_fork_head(head);
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write group desc");
+	r = CALL(info->ubd, write_block, info->gdescs[group_bdesc]);
+	return r;
+	
+}
+
+static int ext2_load_super(LFS_t * lfs)
+{
+	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
+	
+	//initialize the pointers
+	info->bitmap_cache = NULL;
+	info->inode_cache = NULL;
+	info->groups = NULL;
+	info->gnum = INVALID_BLOCK;	
+	info->inode_gdesc = INVALID_BLOCK;	
+	
+	info->super_cache = CALL(info->ubd, read_block, 0, 1);
+	if (info->super_cache == NULL)
+	{
+		printf("Unable to read superblock!\n");
+		return 0;
+	}
+	bdesc_retain(info->super_cache);
+	info->super = malloc(sizeof(struct EXT2_Super));
+	memcpy(info->super, info->super_cache->ddesc->data + 1024, sizeof(struct EXT2_Super));
+	
+	//now load the gdescs
+	uint32_t block, i;
+	uint32_t ngroupblocks;
+	EXT2_BLOCK_SIZE = (1024 << info->super->s_log_block_size);
+	EXT2_DESC_PER_BLOCK = EXT2_BLOCK_SIZE / sizeof(EXT2_group_desc_t);
+	int ngroups = (info->super->s_blocks_count / info->super->s_blocks_per_group);
+	if (info->super->s_blocks_count % info->super->s_blocks_per_group != 0)
+		ngroups++;
+	info->ngroups = ngroups;
+	info->groups = calloc(ngroups, sizeof(EXT2_group_desc_t));
+	if (!info->groups)
+		goto wb_fail1;
+	block = 1; //Block 1 is where the gdescs are stored
+	
+	ngroupblocks = ngroups / EXT2_DESC_PER_BLOCK;
+	if (ngroups % EXT2_DESC_PER_BLOCK != 0)
+		ngroupblocks++;
+	
+	info->gdescs = malloc(ngroupblocks*sizeof(bdesc_t*));
+	int nbytes = 0;
+	for(i = 0; i < ngroupblocks; i++) {
+		info->gdescs[i] = CALL(info->ubd, read_block, (block + i), 1);
+		if(!info->gdescs[i])
+			goto wb_fail2;
+		
+		if ( (sizeof(EXT2_group_desc_t) * ngroups) < (EXT2_BLOCK_SIZE*(i+1)) )
+			nbytes = (sizeof(EXT2_group_desc_t) * ngroups) % EXT2_BLOCK_SIZE;
+		else
+			nbytes = EXT2_BLOCK_SIZE;
+		
+		if (memcpy(info->groups + (i*EXT2_DESC_PER_BLOCK), 
+				info->gdescs[i]->ddesc->data, nbytes) == NULL)
+			goto wb_fail2;
+		bdesc_retain(info->gdescs[i]);
+	}
+	info->ngroupblocks = ngroupblocks;	
+	return 1;	
+
+wb_fail2:
+	for(i = 0; i < ngroupblocks; i++)
+		bdesc_release(&(info->gdescs[i]));
+	free(info->gdescs);
+	free(info->super);
+	free(info->groups);
+ wb_fail1:
+	bdesc_release(&info->super_cache);
+	return 0;
+	
 }
 
 LFS_t * ext2(BD_t * block_device)
@@ -2352,31 +2454,17 @@ LFS_t * ext2(BD_t * block_device)
 		return NULL;
 	}
 
-	info->super_wb = ext2_super_wb(lfs, info);
-	if (!info->super_wb) {
-		ext2_destroy_super(lfs);
+	if (ext2_load_super(lfs) == 0) {
+		free(info);
+		free(lfs);
 		return NULL;
 	}
-	info->super = CALL(info->super_wb, read);
-	info->ngroups = info->super->s_blocks_count / info->super->s_blocks_per_group;
-	info->bitmap_cache = NULL;
-	info->inode_cache = NULL;
-	info->groups = NULL;
-	info->gnum = INVALID_BLOCK;	
-	info->inode_gdesc = INVALID_BLOCK;	
 
 	if (check_super(lfs)) {
 		free(info);
 		free(lfs);
 		return NULL;
 	}
-	
-	info->groups = CALL(info->super_wb, read_gdescs);
-	/*	if(ext2_load_groups(info) < 0) {
-		free(info);
-		free(lfs);
-		return NULL;
-		}*/
 	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{

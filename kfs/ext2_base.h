@@ -3,7 +3,6 @@
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
-#include <kfs/ext2_super.h>
 
 /* This file is derived from kfs/josfs_base.h */
 
@@ -265,13 +264,15 @@ struct ext2_info
 	BD_t * ubd;
         EXT2_Super_t * super;
 	EXT2_group_desc_t * groups;
-	uint32_t ngroups;
 	hash_map_t * filemap;
+	bdesc_t** gdescs;
+	bdesc_t * super_cache;
 	bdesc_t * bitmap_cache;
 	bdesc_t * inode_cache;
+	uint32_t ngroups;
 	uint32_t gnum;
+	uint32_t ngroupblocks;
 	uint32_t inode_gdesc;
-	struct EXT2mod_super * super_wb;
 };
 typedef struct ext2_info ext2_info_t;
 

@@ -63,7 +63,6 @@ KKFSD_KFS_OBJS := \
               loop_bd.o \
               josfs_base.o \
               ext2_base.o \
-              ext2_super_wb.o \
               ufs_base.o \
               ufs_common.o \
               ufs_alloc_lastpos.o \
