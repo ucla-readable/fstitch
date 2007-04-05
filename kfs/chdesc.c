@@ -1937,7 +1937,10 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 		chdesc_link_overlap(overlap, overlap->block->ddesc);
 	}
 	
-	memcpy(&ddesc->data[(*new)->byte.offset], data, (*new)->byte.length);
+	if(data)
+		memcpy(&ddesc->data[(*new)->byte.offset], data, (*new)->byte.length);
+	else
+		memset(&ddesc->data[(*new)->byte.offset], 0, (*new)->byte.length);
 	
 	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
