@@ -80,8 +80,10 @@ public class Debugger extends OpcodeFactory
 			throw new UnsupportedStreamRevisionException(2693, 2584, 2702);
 		if(debugRev == 2703 && debugOpcodeRev == 2703)
 			throw new UnsupportedStreamRevisionException(2703, 2703, -1);
-		if((debugRev == 2704 && debugOpcodeRev == 2703) || (debugRev == 2747 && debugOpcodeRev == 2747))
-			throw new UnsupportedStreamRevisionException(debugRev, debugOpcodeRev, 2756);
+		if(debugRev == 2704 && debugOpcodeRev == 2703)
+			throw new UnsupportedStreamRevisionException(2704, 2703, 2756);
+		if(debugRev == 2747 && debugOpcodeRev == 2747)
+			throw new UnsupportedStreamRevisionException(2747, 2747, 2756);
 		if(debugRev == 2757 && debugOpcodeRev == 2757)
 			throw new UnsupportedStreamRevisionException(2757, 2757, -1);
 		if(debugRev == 2760 && debugOpcodeRev == 2760)
@@ -104,13 +106,8 @@ public class Debugger extends OpcodeFactory
 		/* supported revisions */
 		if(debugRev == 2971 && debugOpcodeRev == 2934)
 			return; /* NOTE: flag change in r2972 */
-		if(debugRev == 3017 && debugOpcodeRev == 2934)
-			return;
-		if(debugRev == 3103 && debugOpcodeRev == 2934)
-			return;
-		if(debugRev == 3123 && debugOpcodeRev == 2934)
-			return;
-		if(debugRev == 3330 && debugOpcodeRev == 2934)
+		if((debugRev == 3017 || debugRev == 3103 || debugRev == 3123 ||
+		    debugRev == 3330 || debugRev == 3371) && debugOpcodeRev == 2934)
 			return;
 		
 		/* 0 means "use a newer revision" */

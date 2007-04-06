@@ -12,6 +12,13 @@
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 #endif
+#define vuint8_t uint8_t
+#define vuint16_t uint16_t
+#elif defined(UNIXUSER)
+#include <stdio.h>
+#include <arpa/inet.h>
+#define vuint8_t uint32_t
+#define vuint16_t uint32_t
 #endif
 
 #include <kfs/chdesc.h>
@@ -21,7 +28,7 @@
 
 #if KFS_DEBUG
 
-/* For a lean and mean debug output stream, set all of these to 1. */
+/* For a lean and mean debug output stream, set both of these to 1. */
 #define KFS_OMIT_FILE_FUNC 0
 #define KFS_OMIT_BTRACE 0
 
@@ -31,10 +38,12 @@
 #define KFS_OMIT_BTRACE 1
 #endif
 
+#ifdef __KERNEL__
 #if !KFS_OMIT_BTRACE && !defined(CONFIG_FRAME_POINTER)
-#warning Frame pointers are required for backtraces; disabling
+#warning Frame pointers are required for backtraces in the kernel; disabling
 #undef KFS_OMIT_BTRACE
 #define KFS_OMIT_BTRACE 1
+#endif
 #endif
 
 /* structure definitions */
@@ -381,7 +390,8 @@ static int debug_count = 0;
 static int kfs_debug_io_init(void);
 static int kfs_debug_io_write(void * data, uint32_t size);
 static void kfs_debug_io_command(void * arg);
-/* NOTE: also the non-static void kfs_debug_dbwait(const char *, bdesc_t *) */
+
+#ifdef __KERNEL__
 
 static struct proc_dir_entry * proc_entry;
 static uint8_t * proc_buffer;
@@ -432,11 +442,6 @@ static int kfs_debug_io_write(void * data, uint32_t len)
 static void kfs_debug_io_command(void * arg)
 {
 	// kkfsd does not currently support command reading
-}
-
-void kfs_debug_dbwait(const char * function, bdesc_t * block)
-{
-	fprintf(stderr, "%s() not supported for kernel, not waiting\n", __FUNCTION__);
 }
 
 static void kfs_debug_shutdown(void * ignore)
@@ -496,8 +501,49 @@ static int kfs_debug_io_init(void)
 	return 0;
 }
 
+#elif defined(UNIXUSER)
 
-/* This function is used like a binary version of kdprintf(). It takes a file
+static FILE * file_output;
+
+static int kfs_debug_io_write(void * data, uint32_t len)
+{
+	return fwrite(data, len, 1, file_output);
+}
+
+static void kfs_debug_io_command(void * arg)
+{
+	// uukfsd does not currently support command reading
+}
+
+static void kfs_debug_shutdown(void * ignore)
+{
+	fclose(file_output);
+	file_output = NULL;
+}
+
+static int kfs_debug_io_init(void)
+{
+	int r;
+	file_output = fopen(DEBUG_FILENAME, "w");
+	if(!file_output)
+	{
+		fprintf(stderr, "%s: unable to open debug trace file %s\n", __FUNCTION__, DEBUG_FILENAME);
+		return -1;
+	}
+	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	if(r < 0)
+	{
+		fprintf(stderr, "%s: unable to register shutdown callback\n", __FUNCTION__);
+		kfs_debug_shutdown(NULL);
+		return r;
+	}
+	return 0;
+}
+
+#endif
+
+
+/* This function is used like a binary version of printf(). It takes a file
  * descriptor, and then a series of pairs of (size, pointer) of data to write to
  * it. The list is terminated by a 0 size. Also accepted are the special sizes
  * -1, -2, and -4, which indicate that the data is to be extracted from the
@@ -528,12 +574,12 @@ static int kfs_debug_write(int size, ...)
 			size = -size;
 			if(size == 1)
 			{
-				uint8_t data = va_arg(ap, uint8_t);
+				uint8_t data = va_arg(ap, vuint8_t);
 				result = kfs_debug_io_write(&data, 1);
 			}
 			else if(size == 2)
 			{
-				uint16_t data = htons(va_arg(ap, uint16_t));
+				uint16_t data = htons(va_arg(ap, vuint16_t));
 				result = kfs_debug_io_write(&data, 2);
 			}
 			else if(size == 4)
@@ -705,12 +751,12 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			}
 			else if(size == 2)
 			{
-				uint16_t param = va_arg(ap, uint16_t);
+				uint16_t param = va_arg(ap, vuint16_t);
 				kfs_debug_write(LIT_8, 2, LIT_16, param, END);
 			}
 			else if(size == 1)
 			{
-				uint8_t param = va_arg(ap, uint8_t);
+				uint8_t param = va_arg(ap, vuint8_t);
 				kfs_debug_write(LIT_8, 1, LIT_8, param, END);
 			}
 			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == STRING)
