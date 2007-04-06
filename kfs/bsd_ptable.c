@@ -127,7 +127,7 @@ void * bsd_ptable_init(BD_t * bd)
 		info->parts[i].length = label->d_partitions[i].p_size;
 		info->parts[i].type = label->d_partitions[i].p_fstype;
 		printf("BSD Partition %d has %d blocks, type: %s\n", i,
-				info->parts[i].length, fstypenames[info->parts[i].type]);
+		       info->parts[i].length, fstypenames[info->parts[i].type]);
 	}
 
 	// Check for overlap
@@ -142,13 +142,13 @@ void * bsd_ptable_init(BD_t * bd)
 				continue;
 
 			if ((info->parts[j].start > info->parts[i].start &&
-						info->parts[j].start < info->parts[i].length) ||
-					(info->parts[j].length > info->parts[i].start &&
-					 info->parts[j].length < info->parts[i].length) ||
-					(info->parts[i].start > info->parts[j].start &&
-					 info->parts[i].start < info->parts[j].length) ||
-					(info->parts[i].length > info->parts[j].start &&
-					 info->parts[i].length < info->parts[j].length))
+			     info->parts[j].start < info->parts[i].length) ||
+			    (info->parts[j].length > info->parts[i].start &&
+			     info->parts[j].length < info->parts[i].length) ||
+			    (info->parts[i].start > info->parts[j].start &&
+			     info->parts[i].start < info->parts[j].length) ||
+			    (info->parts[i].length > info->parts[j].start &&
+			     info->parts[i].length < info->parts[j].length))
 			{
 				printf("Overlapping partitions detected!\n");
 				goto bsd_init_error;
@@ -192,8 +192,7 @@ BD_t * bsd_ptable_bd(void * _info, int index)
 	if (info->parts[index].length == 0)
 		return NULL;
 
-	return partition_bd(info->bd, info->parts[index].start,
-			info->parts[index].length);
+	return partition_bd(info->bd, info->parts[index].start, info->parts[index].length);
 }
 
 void bsd_ptable_free(void * _info)
@@ -201,4 +200,3 @@ void bsd_ptable_free(void * _info)
 	struct disklabel_info * info = (struct disklabel_info *) _info;
 	free(info);
 }
-
