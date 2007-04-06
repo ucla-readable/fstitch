@@ -128,6 +128,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 			if (!bitmap)
 				return -ENOENT;
 			bdesc_retain(bitmap);
+			bitmap->ddesc->flags |= BDESC_FLAG_BITMAP;
 			info->bitmap_cache = bitmap;
 		}
 		
@@ -175,6 +176,7 @@ static int read_block_bitmap(LFS_t * object, uint32_t blockno)
 		if (!bitmap)
 			return -ENOENT;
 		bdesc_retain(bitmap);
+		bitmap->ddesc->flags |= BDESC_FLAG_BITMAP;
 		info->bitmap_cache = bitmap;
 	}
 
@@ -219,6 +221,7 @@ static int write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chde
 			return -ENOENT;
 		}
 		bdesc_retain(bitmap);
+		bitmap->ddesc->flags |= BDESC_FLAG_BITMAP;
 		info->bitmap_cache = bitmap;
 	}
 
@@ -275,6 +278,7 @@ static int write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chde
 		if (!bitmap)
 			return -ENOENT;
 		bdesc_retain(bitmap);
+		bitmap->ddesc->flags |= BDESC_FLAG_BITMAP;
 		info->inode_cache = bitmap;
 	}
 
@@ -1121,6 +1125,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 			if (!bitmap)
 				return -ENOSPC;
 			bdesc_retain(bitmap);
+			bitmap->ddesc->flags |= BDESC_FLAG_BITMAP;
 			info->inode_cache = bitmap;
 		}
 		

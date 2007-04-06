@@ -19,6 +19,9 @@ struct chdesc_dlist {
 };
 typedef struct chdesc_dlist chdesc_dlist_t;
 
+/* These flags are purely for debugging, and are set only when helpful. */
+#define BDESC_FLAG_BITMAP 0x0001
+
 struct datadesc {
 	uint8_t * data;
 	uint32_t ref_count:30, in_flight:1, synthetic:1;
@@ -48,7 +51,7 @@ struct datadesc {
 	hash_map_t * bit_changes;
 	blockman_t * manager;
 	uint32_t managed_number;
-	uint16_t length;
+	uint16_t length, flags;
 };
 
 struct bdesc {

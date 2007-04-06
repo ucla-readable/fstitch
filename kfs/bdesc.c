@@ -85,6 +85,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	/* it has no manager, but give it a managed number anyway */
 	bdesc->ddesc->managed_number = number;
 	bdesc->ddesc->length = length;
+	bdesc->ddesc->flags = 0;
 	return bdesc;
 }
 
