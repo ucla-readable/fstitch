@@ -1517,9 +1517,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 {
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
 	int r;
-	uint32_t target;
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-
 	EXT2_File_t * f = (EXT2_File_t *)file;
 
 	if (!f || f->f_inode.i_blocks == 0 || f->f_type == TYPE_SYMLINK)
@@ -1528,13 +1526,13 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	if (f->f_inode.i_size == 0)
 	       return INVALID_BLOCK;
 
-	//ext2_erase_block_ptr will either return INLID_BLOCK, or the block that was truncated...
-	target = ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
 	f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
 	r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
 	if (r < 0)
 		return INVALID_BLOCK;
-	return target;
+
+	//ext2_erase_block_ptr will either return INLID_BLOCK, or the block that was truncated...
+	return ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
 }
 
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
