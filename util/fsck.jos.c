@@ -17,6 +17,8 @@
 #include <lib/partition.h>
 #include <kfs/josfs_base.h>
 
+static int fix = 0;
+
 static int diskfd;
 static off_t diskoff;
 static int nblocks;
@@ -26,12 +28,13 @@ typedef enum {
 	BLOCK_SUPER,
 	BLOCK_DIR,
 	BLOCK_BITS,
-	BLOCK_INDIR
+	BLOCK_INDIR,
+	BLOCK_DATA
 } Type;
 
 typedef struct {
 	Type type;
-	uint32_t busy;
+	uint32_t dirty:1, busy:31;
 	uint32_t used;
 	uint32_t bno;
 	uint8_t buf[JOSFS_BLKSIZE];
@@ -115,6 +118,8 @@ static void swizzle_block(Block * b)
 			for(i = 0; i < JOSFS_BLKSIZE / 4; i++)
 				swizzle(&u[i]);
 			break;
+		case BLOCK_DATA:
+			break;
 	}
 }
 
@@ -159,7 +164,18 @@ static Block * get_block(uint32_t bno, Type type)
 	
 	b = &cache[least];
 	
-	/* if b->used, evict block b... nothing to do though */
+	if(b->used && b->dirty)
+	{
+		/* evict block b */
+		swizzle_block(b);
+		if(lseek(diskfd, diskoff + b->bno * JOSFS_BLKSIZE, SEEK_SET) < 0 || write(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE)
+		{
+			fprintf(stderr, "write block %d: ", b->bno);
+			perror("");
+			return NULL;
+		}
+		b->dirty = 0;
+	}
 	
 	if(lseek(diskfd, diskoff + bno * JOSFS_BLKSIZE, SEEK_SET) < 0 || readn(diskfd, b->buf, JOSFS_BLKSIZE) != JOSFS_BLKSIZE)
 	{
@@ -175,6 +191,11 @@ out:
 	b->busy++;
 	/* update last used time */
 	b->used = ++t;
+	if(!t)
+	{
+		fprintf(stderr, "panic: too many block reads\n");
+		return NULL;
+	}
 	return b;
 }
 
@@ -192,6 +213,17 @@ static int block_marked_free(uint32_t bno)
 		return -1;
 	put_block(b);
 	return (((uint32_t *) b->buf)[offset / 32] >> (offset % 32)) & 1;
+}
+
+static void mark_block_free(uint32_t bno)
+{
+	uint32_t bitblk = bno / JOSFS_BLKBITSIZE;
+	uint32_t offset = bno % JOSFS_BLKBITSIZE;
+	Block * b = get_block(2 + bitblk, BLOCK_BITS);
+	assert(b);
+	b->dirty = 1;
+	put_block(b);
+	((uint32_t *) b->buf)[offset / 32] |= 1 << (offset % 32);
 }
 
 /* check for a partition table and use the first JOSFS partition if there is one */
@@ -227,7 +259,7 @@ static int open_disk(const char * name)
 	Block * b;
 	struct JOSFS_Super * super;
 	
-	if((diskfd = open(name, O_RDONLY)) < 0)
+	if((diskfd = open(name, fix ? O_RDWR : O_RDONLY)) < 0)
 	{
 		fprintf(stderr, "open: ");
 		perror(name);
@@ -355,8 +387,11 @@ static int scan_free(void)
 		{
 			if(!block_marked_free(i))
 			{
-				fprintf(stderr, "Block %u is not referenced, but marked unavailable\n", i);
-				return -1;
+				fprintf(stderr, "Block %u is not referenced, but marked unavailable%s\n", i, fix ? " (fixed)" : "");
+				if(!fix)
+					return -1;
+				else
+					mark_block_free(i);
 			}
 		}
 	return 0;
@@ -517,13 +552,40 @@ static int scan_tree(void)
 	return 0;
 }
 
+/* do enough reads to force any dirty blocks out of the cache */
+static void flush_cache(void)
+{
+	int i, j, k;
+	for(i = 1, j = 0; j < CACHE_BLOCKS; i++)
+	{
+		/* make sure it's not already in the cache */
+		for(k = 0; k < CACHE_BLOCKS; k++)
+			if(cache[k].bno == i)
+				break;
+		if(k < CACHE_BLOCKS)
+			continue;
+		/* then read it */
+		put_block(get_block(i, BLOCK_DATA));
+		j++;
+	}
+}
+
 int main(int argc, char * argv[])
 {
 	assert(JOSFS_BLKSIZE % sizeof(struct JOSFS_File) == 0);
 	
+	if(argc > 1 && !strcmp(argv[1], "-fix"))
+	{
+		int i;
+		argc--;
+		for(i = 1; i < argc; i++)
+			argv[i] = argv[i + 1];
+		fix = 1;
+	}
+	
 	if(argc != 2)
 	{
-		fprintf(stderr, "Usage: %s <device>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-fix] <device>\n", argv[0]);
 		return 1;
 	}
 	
@@ -536,6 +598,7 @@ int main(int argc, char * argv[])
 	if(scan_free() < 0)
 		return 1;
 	
+	flush_cache();
 	printf("File system is OK!\n");
 	return 0;
 }
