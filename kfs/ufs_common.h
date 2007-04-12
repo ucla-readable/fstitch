@@ -38,6 +38,7 @@ int ufs_read_block_bitmap(struct ufs_info * info, uint32_t num);
 int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_t ** head);
 int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t ** head);
 int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
+extern char * frsum_warning;
 int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
 int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head);
 int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head);

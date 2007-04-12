@@ -27,6 +27,7 @@ extern const feature_t KFS_feature_devicesize;
 extern const feature_t KFS_feature_mtime;
 extern const feature_t KFS_feature_atime;
 extern const feature_t KFS_feature_symlink;
+extern const feature_t KFS_feature_delete;
 
 // Get metadata associated with the opaque variable 'arg'.
 // Returns:

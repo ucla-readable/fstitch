@@ -376,7 +376,7 @@ write_inode_bitmap_end:
 	return r;
 }
 
-#warning frsum code needs to be correctly reimplemented
+char * frsum_warning = "Warning: frsum code needs to be correctly reimplemented\n";
 int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
 {
 	const struct UFS_cg * cg;

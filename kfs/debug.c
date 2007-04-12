@@ -507,7 +507,7 @@ static FILE * file_output;
 
 static int kfs_debug_io_write(void * data, uint32_t len)
 {
-	return fwrite(data, len, 1, file_output);
+	return fwrite(data, 1, len, file_output);
 }
 
 static void kfs_debug_io_command(void * arg)
@@ -618,7 +618,10 @@ int kfs_debug_init(void)
 	int m, o, r;
 	int32_t debug_rev, debug_opcode_rev;
 	
-	printf("Initializing KFS debugging interface...\n");
+	debug_rev = svnrevtol("$Rev$");
+	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
+	
+	printf("Initializing KFS debugging interface... (%d,%d)\n", debug_rev, debug_opcode_rev);
 	
 	r = sched_register(kfs_debug_io_command, NULL, HZ / 10);
 	if(r < 0)
@@ -627,9 +630,6 @@ int kfs_debug_init(void)
 	r = kfs_debug_io_init();
 	if(r < 0)
 		return r;
-	
-	debug_rev = svnrevtol("$Rev$");
-	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
 	
 	kfs_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
 	

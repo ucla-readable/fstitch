@@ -14,3 +14,4 @@ const feature_t KFS_feature_devicesize = {id: 0x0000000A, optional: 0, warn: 0, 
 const feature_t KFS_feature_mtime = {id: 0x0000000B, optional: 0, warn: 0, description: "File modification time"};
 const feature_t KFS_feature_atime = {id: 0x0000000C, optional: 0, warn: 0, description: "File access time"};
 const feature_t KFS_feature_symlink = {id: 0x0000000D, optional: 0, warn: 0, description: "Symbolic Link Name"};
+const feature_t KFS_feature_delete = {id: 0x0000000E, optional: 0, warn: 0, description: "Delete full file in LFS"};

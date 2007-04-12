@@ -107,7 +107,7 @@ public class Debugger extends OpcodeFactory
 		if(debugRev == 2971 && debugOpcodeRev == 2934)
 			return; /* NOTE: flag change in r2972 */
 		if((debugRev == 3017 || debugRev == 3103 || debugRev == 3123 ||
-		    debugRev == 3330 || debugRev == 3371) && debugOpcodeRev == 2934)
+		    debugRev == 3330 || debugRev == 3371 || debugRev == 3379) && debugOpcodeRev == 2934)
 			return;
 		
 		/* 0 means "use a newer revision" */

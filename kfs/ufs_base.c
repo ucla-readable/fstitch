@@ -1799,6 +1799,8 @@ LFS_t * ufs(BD_t * block_device)
 	if (!block_device)
 		return NULL;
 
+	printf(frsum_warning);
+
 	lfs = malloc(sizeof(*lfs));
 	if (!lfs)
 		return NULL;

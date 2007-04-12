@@ -568,12 +568,11 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	const bool link_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_nlinks.id);
-	int i, r;
-	uint32_t nblocks;
-	uint32_t nlinks;
-	chdesc_t * save_head;
+	const bool delete_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_delete.id);
+	int r;
 
 	if (link_supported) {
+		uint32_t nlinks;
 		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
@@ -587,23 +586,27 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 		}
 	}
 
-	nblocks = CALL(state->lfs, get_file_numblocks, f);
-	for (i = 0 ; i < nblocks; i++) {
-		uint32_t number = CALL(state->lfs, truncate_file_block, f, prev_head);
-		if (number == INVALID_BLOCK) {
-			CALL(state->lfs, free_fdesc, f);
-			return -EINVAL;
+	if (!delete_supported) {
+		int i;
+		chdesc_t * save_head;
+		uint32_t nblocks = CALL(state->lfs, get_file_numblocks, f);
+		for (i = 0 ; i < nblocks; i++) {
+			uint32_t number = CALL(state->lfs, truncate_file_block, f, prev_head);
+			if (number == INVALID_BLOCK) {
+				CALL(state->lfs, free_fdesc, f);
+				return -EINVAL;
+			}
+
+			save_head = *prev_head;
+
+			r = CALL(state->lfs, free_block, f, number, prev_head);
+			if (r < 0) {
+				CALL(state->lfs, free_fdesc, f);
+				return r;
+			}
+
+			*prev_head = save_head;
 		}
-
-		save_head = *prev_head;
-
-		r = CALL(state->lfs, free_block, f, number, prev_head);
-		if (r < 0) {
-			CALL(state->lfs, free_fdesc, f);
-			return r;
-		}
-
-		*prev_head = save_head;
 	}
 
 	CALL(state->lfs, free_fdesc, f);

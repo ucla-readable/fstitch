@@ -970,7 +970,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 			chdesc_remove_depend(bit_changes, original);
 		}
 		else
-			printf("Complete overlap of unhandled chdesc type!\n");
+			kpanic("Complete overlap of unhandled chdesc type!");
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, recent, CHDESC_OVERLAP);
 		recent->flags |= CHDESC_OVERLAP;
 	}
@@ -1593,9 +1593,6 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 	for(; pprev != &block->ddesc->all_changes; pprev = chdesc->ddesc_pprev)
 	{
 		chdesc = pprev2chdesc(pprev);
-		/* PERFORMANCE NOTE: If merge code did not move merge_target to the
-		 * start of the ddesc.all_changes list then the last
-		 * non-noop non-inflight would have no befores (by definition). */
 		if(chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT) && !chdesc_has_block_befores(chdesc, block))
 		{
 			assert(chdesc->type == BYTE || chdesc->type == BIT);
@@ -2877,7 +2874,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		account_nchdescs_undo((*chdesc)->type);
 	}
 	
-	/* remove befores first, so chdesc_satisfy() won't just turn it to a NOOP */
+	/* remove befores first, so chdesc_satisfy() won't complain */
 	while((*chdesc)->befores)
 		chdesc_dep_remove((*chdesc)->befores);
 	if((*chdesc)->afters)

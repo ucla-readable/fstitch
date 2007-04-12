@@ -1082,10 +1082,10 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 	fdesc_t * file;
 	bdesc_t * dirblock = NULL;
 	struct josfs_fdesc * f;
-	int r;
 	uint16_t offset;
 	uint8_t data = 0;
 	inode_t inode;
+	int r;
 
 	if (!head)
 		return -EINVAL;
@@ -1113,9 +1113,40 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "clear name[0]");
 
 	r = CALL(info->ubd, write_block, dirblock);
-
 	if (r >= 0)
 		f->file->f_name[0] = '\0';
+
+	/* free all the file's blocks */
+	if(f->file->f_direct[0])
+	{
+		int i;
+		chdesc_t * fork;
+		
+		if(f->file->f_indirect)
+		{
+			bdesc_t * indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
+			uint32_t * blocks = (uint32_t *) indirect->ddesc->data;
+			
+			for(i = JOSFS_NDIRECT; i < JOSFS_NINDIRECT; i++)
+				if(blocks[i])
+				{
+					fork = *head;
+					r = josfs_free_block(object, file, blocks[i], &fork);
+					r = lfs_add_fork_head(fork);
+				}
+			r = josfs_free_block(object, file, f->file->f_indirect, &fork);
+			r = lfs_add_fork_head(fork);
+			f->file->f_indirect = 0;
+		}
+		for(i = 0; i < JOSFS_NDIRECT; i++)
+			if(f->file->f_direct[i])
+			{
+				fork = *head;
+				r = josfs_free_block(object, file, f->file->f_direct[i], &fork);
+				r = lfs_add_fork_head(fork);
+				f->file->f_direct[i] = 0;
+			}
+	}
 
 remove_name_exit:
 	josfs_free_fdesc(object, file);
@@ -1151,7 +1182,7 @@ static int32_t josfs_get_block_space(LFS_t * object)
 	return CALL(info->ubd, get_block_space);
 }
 
-static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime};
+static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_delete};
 
 static size_t josfs_get_num_features(LFS_t * object, inode_t ino)
 {
@@ -1397,12 +1428,6 @@ LFS_t * josfs(BD_t * block_device)
 	struct josfs_info * info;
 	LFS_t * lfs = malloc(sizeof(*lfs));
 
-	if (PAGE_SIZE != 4096) {
-		free(lfs);
-		Dprintf("JOSFSDEBUG: PAGE_SIZE != 4096\n");
-		return NULL;
-	}
-	
 	if (!lfs)
 		return NULL;
 
