@@ -2249,6 +2249,12 @@ static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
 		return -EINVAL;
 	bitoffset &= (EXT2_BLOCK_SIZE - 1);
 	memcpy(inode, (bdesc->ddesc->data + bitoffset ), sizeof(EXT2_inode_t));
+	//Check to make sure the file is not sparse
+	if( ((inode->i_size + EXT2_BLOCK_SIZE - 1) / EXT2_BLOCK_SIZE) != inode->i_blocks) {
+		printf("ext2_base: ERROR Detected a sparse file!\n");
+		return -EINVAL;
+	}
+
 	if(!inode)
 		return -ENOENT;
 	else
