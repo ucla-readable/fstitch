@@ -1099,7 +1099,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 	bdesc_t * bitmap;
 	inode_t curr = 0;
 
-	if (*ino >= info->super->s_inodes_count) 
+	if (*ino > info->super->s_inodes_count)
 	{
 		printf("%s requested status of inode %u too large!\n",__FUNCTION__, *ino);
 		return -ENOSPC;
