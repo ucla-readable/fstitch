@@ -18,7 +18,7 @@
 #endif
 
 static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number);
-static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
+static int _ext2_free_block(LFS_t * object, uint32_t block, chdesc_t ** head);
 static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offset);
 static uint32_t ext2_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
@@ -901,7 +901,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 				return -ENOSPC;
 			dindirect = ext2_synthetic_lookup_block(object, blockno);
 			if(dindirect == NULL) {
-				(void)ext2_free_block(object, file, blockno, &prev_head);
+				(void)_ext2_free_block(object, blockno, &prev_head);
 				return -ENOSPC;
 			}
 			if((r = chdesc_create_init(dindirect, info->ubd, &prev_head)))
@@ -912,7 +912,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			//first indirect block
 			blockno = ext2_allocate_block(object, file, 0, head);
 			if(blockno == INVALID_BLOCK) {
-				(void)ext2_free_block(object, file, dindirect->number, head);
+				(void)_ext2_free_block(object, dindirect->number, head);
 				return -ENOSPC;
 			}
 			indirect = ext2_synthetic_lookup_block(object, blockno);
@@ -1381,9 +1381,9 @@ static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 	return -ENOENT;
 }
 
-static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_t offset, chdesc_t ** head)
+static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdesc_t ** head)
 {
-	Dprintf("EXT2DEBUG: %s %p %d\n", __FUNCTION__, file, offset);
+	Dprintf("EXT2DEBUG: %s %p %d\n", __FUNCTION__, file, file->f_inode.i_size);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	uint32_t blocknum, pointers_per_block;
 	bdesc_t * block_desc, * double_block_desc;
@@ -1395,28 +1395,27 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 
 	//non block aligned offsets suck (aka aren't supported)
 
-
-	if (offset <= EXT2_BLOCK_SIZE)
+	if (inode->i_size <= EXT2_BLOCK_SIZE)
 		blocknum = 0;
-	else if ( (offset % EXT2_BLOCK_SIZE) == 0)
-		blocknum = (offset / EXT2_BLOCK_SIZE) - 1;
+	else if ( (inode->i_size % EXT2_BLOCK_SIZE) == 0)
+		blocknum = (inode->i_size / EXT2_BLOCK_SIZE) - 1;
 	else
-		blocknum = offset / EXT2_BLOCK_SIZE;
+		blocknum = inode->i_size / EXT2_BLOCK_SIZE;
 
 	if (blocknum < EXT2_NDIRECT)
 	{
-		target = file->f_inode.i_block[blocknum];
-		file->f_inode.i_block[blocknum] = 0;
-		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-			file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
+		target = inode->i_block[blocknum];
+		inode->i_block[blocknum] = 0;
+		if (inode->i_size > EXT2_BLOCK_SIZE)
+			inode->i_size = inode->i_size - EXT2_BLOCK_SIZE;
 		else
-			file->f_inode.i_size = 0;
+			inode->i_size = 0;
 
 	}
 	else if (blocknum < EXT2_NDIRECT + pointers_per_block)
 	{
 		blocknum -= EXT2_NDIRECT;
-		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_NINDIRECT], 1));
+		block_desc = (CALL(info->ubd, read_block, inode->i_block[EXT2_NINDIRECT], 1));
 		if (!block_desc)
 			return INVALID_BLOCK;      
 		block_nums = (uint32_t *)block_desc->ddesc->data;
@@ -1424,21 +1423,21 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 
 		if (blocknum == 0)
 		{
-			indir_ptr = file->f_inode.i_block[EXT2_NDIRECT];
-			if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-				file->f_inode.i_size = file->f_inode.i_size - EXT2_BLOCK_SIZE;
+			indir_ptr = inode->i_block[EXT2_NDIRECT];
+			if (inode->i_size > EXT2_BLOCK_SIZE)
+				inode->i_size = inode->i_size - EXT2_BLOCK_SIZE;
 			else
-				file->f_inode.i_size = 0;
-			r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
+				inode->i_size = 0;
+			r = _ext2_free_block(object, indir_ptr, head);
 			if (r < 0)
 				return INVALID_BLOCK;
-			file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-			file->f_inode.i_block[EXT2_NDIRECT] = 0;
+			inode->i_blocks -= EXT2_BLOCK_SIZE / 512;
+			inode->i_block[EXT2_NDIRECT] = 0;
 		} else {
-			if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-				file->f_inode.i_size -= EXT2_BLOCK_SIZE;
+			if (inode->i_size > EXT2_BLOCK_SIZE)
+				inode->i_size -= EXT2_BLOCK_SIZE;
 			else
-				file->f_inode.i_size = 0;
+				inode->i_size = 0;
 			//r = chdesc_create_byte(block_desc, info->ubd, blocknum * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
 			//if (r < 0)
 			//    return INVALID_BLOCK;
@@ -1450,7 +1449,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 	else if (blocknum < EXT2_NDIRECT + pointers_per_block + pointers_per_block * pointers_per_block)
 	{
 		blocknum -= (EXT2_NDIRECT + pointers_per_block);
-		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_DINDIRECT], 1));
+		block_desc = (CALL(info->ubd, read_block, inode->i_block[EXT2_DINDIRECT], 1));
 		if (!block_desc)
 			return INVALID_BLOCK;
 		block_nums = (uint32_t *)block_desc->ddesc->data;
@@ -1462,20 +1461,20 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 		double_indir_ptr = (blocknum % pointers_per_block);
 		target = double_block_nums[double_indir_ptr];
 
-		if (file->f_inode.i_size > EXT2_BLOCK_SIZE)
-			file->f_inode.i_size -= EXT2_BLOCK_SIZE;
+		if (inode->i_size > EXT2_BLOCK_SIZE)
+			inode->i_size -= EXT2_BLOCK_SIZE;
 		else
-			file->f_inode.i_size = 0;
+			inode->i_size = 0;
 
 		if (blocknum % pointers_per_block == 0)
 		{
 			if (blocknum == 0)
 			{
-				r = ext2_free_block(object, (fdesc_t *) file, file->f_inode.i_block[EXT2_DINDIRECT], head);
+				r = _ext2_free_block(object, inode->i_block[EXT2_DINDIRECT], head);
 				if (r < 0)
 					return INVALID_BLOCK;
-				file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-				file->f_inode.i_block[EXT2_DINDIRECT] = 0;
+				inode->i_blocks -= EXT2_BLOCK_SIZE / 512;
+				inode->i_block[EXT2_DINDIRECT] = 0;
 			}
 			else
 			{
@@ -1486,10 +1485,10 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 				//if (r < 0)
 				//	return INVALID_BLOCK;
 			}
-			r = ext2_free_block(object, (fdesc_t *) file, indir_ptr, head);
+			r = _ext2_free_block(object, indir_ptr, head);
 			if (r < 0)
 				return INVALID_BLOCK;
-			file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
+			inode->i_blocks -= EXT2_BLOCK_SIZE / 512;
 		}
 		else
 		{
@@ -1506,10 +1505,6 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_File_t * file, uint32_
 		Dprintf("Triply indirect blocks are not implemented.\n");
 		assert(0);
 	}
-	//file->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-	//r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
-	//if (r < 0)
-	//	return INVALID_BLOCK;
 	return target;
 }
 
@@ -1531,8 +1526,8 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	if (r < 0)
 		return INVALID_BLOCK;
 
-	//ext2_erase_block_ptr will either return INLID_BLOCK, or the block that was truncated...
-	return ext2_erase_block_ptr(object, f, f->f_inode.i_size, head);
+	//ext2_erase_block_ptr will either return INVALID_BLOCK, or the block that was truncated...
+	return ext2_erase_block_ptr(object, &f->f_inode, head);
 }
 
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
@@ -1665,7 +1660,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 					r = -1;
 					goto ext2_rename_exit4;
 				}
-				r = ext2_free_block(object, (fdesc_t *) new, block, &prev_head);
+				r = _ext2_free_block(object, block, &prev_head);
 				if (r < 0)
 					goto ext2_rename_exit4;
 			}
@@ -1695,7 +1690,7 @@ ext2_rename_exit:
 	return r;
 }
 
-static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
+static int _ext2_free_block(LFS_t * object, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_free_block\n");
 	int r;
@@ -1711,6 +1706,11 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 	}
 	
 	return r;
+}
+
+static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
+{
+	return _ext2_free_block(object, block, head);
 }
 
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head)
@@ -1791,7 +1791,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	      goto remove_name_exit;
 	}	
 	
-	//put in sanity checks here!
+	/* put in sanity checks here! */
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep;
 	uint8_t minlinks = 1;
 	
@@ -1817,7 +1817,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	      goto remove_name_exit;
 	assert (file->f_inode.i_links_count >= minlinks);
 
-	//Remove link to parent directory
+	/* remove link to parent directory */
 	if (file->f_type == TYPE_DIR) {
 	      pfile->f_inode.i_links_count--;
 	      prev_head = *head;
@@ -1828,38 +1828,43 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	}
 	
 	if (file->f_inode.i_links_count == minlinks) {
-		// Truncate the directory
-		if (file->f_type == TYPE_DIR) {
-			uint32_t number, nblocks, j, group;
-			group = (file->f_ino - 1) / info->super->s_inodes_per_group;
-			nblocks = ext2_get_file_numblocks(object, (fdesc_t *) file);
-			
-			for (j = 0; j < nblocks; j++) {
-				prev_head = *head;
-				number = ext2_erase_block_ptr(object, file, file->f_inode.i_size, &prev_head);
-				if (number == INVALID_BLOCK) {
-					r = -EINVAL;
-					goto remove_name_exit;
-				}
-
-				r = ext2_free_block(object, (fdesc_t *) file, number, &prev_head);
-				if (r < 0)
-					goto remove_name_exit;
-				lfs_add_fork_head(prev_head);
-			}
-			r = ext2_super_report(object, group, 0, 0, -1);
-			if(r < 0)
-				goto remove_name_exit;				
-		}
+		/* need to free the inode */
+		uint32_t number, nblocks, j, group;
+		EXT2_inode_t inode = file->f_inode;
+		group = (file->f_ino - 1) / info->super->s_inodes_per_group;
+		nblocks = ext2_get_file_numblocks(object, (fdesc_t *) file);
 		
 		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
 		r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
 		if (r < 0)
 			goto remove_name_exit;
 
-		r = write_inode_bitmap(object, file->f_ino, 0, head);
+		prev_head = *head;
+		r = write_inode_bitmap(object, file->f_ino, 0, &prev_head);
 		if (r < 0)
 			goto remove_name_exit;
+		lfs_add_fork_head(prev_head);
+		
+		for (j = 0; j < nblocks; j++) {
+			prev_head = *head;
+			number = ext2_erase_block_ptr(object, &inode, &prev_head);
+			if (number == INVALID_BLOCK) {
+				r = -EINVAL;
+				goto remove_name_exit;
+			}
+			lfs_add_fork_head(prev_head);
+
+			prev_head = *head;
+			r = _ext2_free_block(object, number, &prev_head);
+			if (r < 0)
+				goto remove_name_exit;
+			lfs_add_fork_head(prev_head);
+		}
+		if(file->f_type == TYPE_DIR) {
+			r = ext2_super_report(object, group, 0, 0, -1);
+			if(r < 0)
+				goto remove_name_exit;				
+		}
 	} else {
 	      file->f_inode.i_links_count--;
 	      r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
@@ -1901,7 +1906,7 @@ static int32_t ext2_get_block_space(LFS_t * object)
 	return CALL(info->ubd, get_block_space);
 }
 
-static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks, &KFS_feature_symlink};
+static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks, &KFS_feature_symlink, &KFS_feature_delete};
 
 static size_t ext2_get_num_features(LFS_t * object, inode_t ino)
 {
