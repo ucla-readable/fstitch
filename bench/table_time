@@ -31,7 +31,7 @@ fi
 function most_recent_test () {
 	HOST="$1"
 	FS="$2"
-	for test in `ls -t $KUDOSDIR/tests/ | tac`; do
+	for test in `ls -t $KUDOSDIR/tests/`; do
 		DIR="$KUDOSDIR/tests/$test"
 		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $DIR/fs`" == "$FS" ]; then
 			echo "$test"
