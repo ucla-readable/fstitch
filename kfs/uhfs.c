@@ -366,20 +366,6 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	return size_read ? size_read : (size ? -1 : 0);
 }
 
-static void uhfs_mark_data(chdesc_t * head, chdesc_t * tail)
-{
-	chdepdesc_t * dep;
-	if(head == tail || (head->flags & CHDESC_DATA))
-		return;
-	if(head->type != NOOP)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
-		head->flags |= CHDESC_DATA;
-	}
-	for(dep = head->befores; dep; dep = dep->before.next)
-		uhfs_mark_data(dep->before.desc, tail);
-}
-
 static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
@@ -468,7 +454,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "init data block");
 			/* note that we do not write it - we will write it later */
 
-			uhfs_mark_data(prev_head, tail);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, prev_head, CHDESC_DATA);
+			prev_head->flags |= CHDESC_DATA;
 
 			r = opgroup_finish_head(prev_head);
 			/* can we do better than this? */
@@ -521,7 +508,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			goto uhfs_write_written_exit;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "write file data");
 
-		uhfs_mark_data(prev_head, tail);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, prev_head, CHDESC_DATA);
+		prev_head->flags |= CHDESC_DATA;
 
 		r = opgroup_finish_head(prev_head);
 		/* can we do better than this? */
