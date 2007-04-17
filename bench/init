@@ -81,7 +81,7 @@ if [ "$ACTION" == "start" ]; then
 	fi
 	sleep 1 # give kfsd time to init
 
-	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux"]); then
+	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]); then
 		if [ ! $VMLINUX ]; then
 			echo "vmlinux \"$VMLINUX\" does not exist, cannot profile" 1>&2
 			exit 1
