@@ -31,13 +31,18 @@ fi
 function most_recent_test () {
 	HOST="$1"
 	FS="$2"
+	REV=0
+	MR=
 	for test in `ls -t $KUDOSDIR/tests/`; do
 		DIR="$KUDOSDIR/tests/$test"
+		REVN=`cat $DIR/svnversion | sed -r 's/:[0-9]+//;s/M$//'`
+		[ $REVN -le $REV ] && continue
 		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $DIR/fs`" == "$FS" ]; then
-			echo "$test"
-			break
+			MR="$test"
+			REV=$REVN
 		fi
 	done
+	echo "$MR"
 }
 
 ARRAYNAME="time_${TESTNAME}_data"

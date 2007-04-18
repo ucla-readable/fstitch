@@ -46,10 +46,10 @@ for test in `ls $KUDOSDIR/tests/`; do
 	if [ "$KEY" == "time" ] ; then
 		echo -n "$test"
 	elif [ "$KEY" == "rev" ]; then
-		echo -n "`cat $KUDOSDIR/tests/$test/svnversion |sed 's/:\d+//;s/M$//'`"
+		echo -n "`cat $KUDOSDIR/tests/$test/svnversion | sed -r 's/:[0-9]+//;s/M$//'`"
 	fi
 	echo "  $LINE"
-done > $DATA
+done | sort > $DATA
 
 if [ "$KEY" == "time" ]; then
 	XAXIS="set xlabel \"Test (time)\"; set xdata time; set timefmt \"%Y-%m-%dT%H:%M:%S\""
