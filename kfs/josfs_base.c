@@ -696,7 +696,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		bdesc_t * indirect;
 		if (inumber == INVALID_BLOCK)
 			return -ENOSPC;
-		indirect = josfs_lookup_block(object, inumber);
+		indirect = josfs_synthetic_lookup_block(object, inumber);
 
 		// Initialize the new indirect block
 		if ((r = chdesc_create_init(indirect, info->ubd, head)) < 0)
@@ -838,7 +838,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	// No empty slots, gotta allocate a new block
 	number = josfs_allocate_block(object, NULL, 0, head);
 	if (number != INVALID_BLOCK)
-		blk = josfs_lookup_block(object, number);
+		blk = josfs_synthetic_lookup_block(object, number);
 	else
 		blk = NULL;
 	if (!blk)
