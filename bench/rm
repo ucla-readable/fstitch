@@ -3,6 +3,7 @@
 function run () {
 	try $BENCHDIR/init -f $FS -h $HOST -a start -k
 	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
+	start_kdb_log $T $N $OUTDIR $HOST
 	time (echo + rm; time rm -rf $MNT/$TAROUT;
 	      echo + sync; time fsync $KUDOSDIR $MNT;
 	      echo + total)
