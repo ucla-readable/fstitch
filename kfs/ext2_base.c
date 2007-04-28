@@ -1168,7 +1168,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	uint16_t mode, x16;
 	uint32_t x32;
 	ext2_fdesc_t * ln = (ext2_fdesc_t *) link;
-	chdesc_t * prev_head;
+	chdesc_t * inode_head, * dot_head, * dotdot_head;
 	uint32_t ino;
 	EXT2_Dir_entry_t new_dirent;
 	int r, createdot = 0;
@@ -1211,15 +1211,11 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 	if (ln && file_type != ln->f_type)
 		return NULL;
 
+	//this might be redundent:
 	dir = (ext2_fdesc_t *) ext2_lookup_inode(object, parent);
 	if (!dir)
 		return NULL;
 	
-	//FIXME this is redundent
-	/*	r = ext2_lookup_name(object, parent, name, NULL);
-	if (r >= 0) // File exists already
-	goto allocate_name_exit; */
-
 	if (!ln) {
 		ino = ext2_find_free_inode(object, parent); 
 		if (ino == EXT2_BAD_INO)
@@ -1274,6 +1270,8 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		if (r != 0)
 			goto allocate_name_exit2;
 
+		inode_head = *head;
+
 		if (type == TYPE_SYMLINK) {
 			link_buf = malloc(EXT2_BLOCK_SIZE);
 			if (!link_buf) {
@@ -1284,20 +1282,20 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 			if (r < 0)
 				goto allocate_name_exit2;
 			else {
-				r = ext2_set_metadata(object, newf, KFS_feature_symlink.id, r, link_buf, head);
+				r = ext2_set_metadata(object, newf, KFS_feature_symlink.id, r, link_buf, &inode_head);
 				if (r < 0)
 					goto allocate_name_exit2;
 			}
 			
 		}
 
-		r = ext2_write_inode(info, newf->f_ino, newf->f_inode, head);
+		r = ext2_write_inode(info, newf->f_ino, newf->f_inode, &inode_head);
 		if (r < 0)
 			goto allocate_name_exit2;
 
 		*newino = ino;
-
 	} else {
+		inode_head = *head;
 		newf = (ext2_fdesc_t *) ext2_lookup_inode(object, ln->f_ino);
 		
 		assert(ln == newf);
@@ -1307,7 +1305,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 
 		// Increase link count
 		ln->f_inode.i_links_count++;
-		r = ext2_write_inode(info, ln->f_ino, ln->f_inode, head);
+		r = ext2_write_inode(info, ln->f_ino, ln->f_inode, &inode_head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1332,36 +1330,43 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 			new_dirent.file_type = EXT2_TYPE_FILE;
 	}
 	strncpy(new_dirent.name, name, EXT2_NAME_LEN);
-	prev_head = *head;
-	r = ext2_insert_dirent(object, dir, &new_dirent, head);
-	if (r < 0) {
-		printf("Inserting a dirent in allocate_name failed for \"%s\"!\n", name);
-		goto allocate_name_exit2;
-	}
 
 	// Create . and ..
-	// FIXME: this should probably be before the dirent is inserted, in the !ln case above
 	if (type == TYPE_DIR && !createdot) {
 		inode_t ino;
 		fdesc_t * cfdesc;
 		metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
+		dot_head = *head;
+		dotdot_head = *head;
 
 		//TODO could save time by not reopening the parent!
 		//in fact, just insert into the parent dirently!1
-		cfdesc = ext2_allocate_name(object, newf->f_ino, ".", TYPE_DIR, (fdesc_t *) newf, &emptymd, &ino, &prev_head);
+		cfdesc = ext2_allocate_name(object, newf->f_ino, ".", TYPE_DIR, (fdesc_t *) newf, &emptymd, &ino, &dot_head);
 		if (!cfdesc)
 			goto allocate_name_exit2;
 		ext2_free_fdesc(object, (fdesc_t *)cfdesc);
-		cfdesc = ext2_allocate_name(object, newf->f_ino, "..", TYPE_DIR, (fdesc_t *) dir, &emptymd, &ino, &prev_head);
+		cfdesc = ext2_allocate_name(object, newf->f_ino, "..", TYPE_DIR, (fdesc_t *) dir, &emptymd, &ino, &dotdot_head);
 		if (!cfdesc)
 			goto allocate_name_exit2;
 		ext2_free_fdesc(object, (fdesc_t *)cfdesc);
-		lfs_add_fork_head(prev_head);
+		lfs_add_fork_head(*head);
 
 		uint32_t group = (newf->f_ino - 1) / info->super->s_inodes_per_group;
 		r = ext2_super_report(object, group, 0, 0, 1);
 		if (r < 0)
 			goto allocate_name_exit2;
+		r = chdesc_create_noop_list(info->ubd, head, inode_head, dot_head, dotdot_head);
+		if (r < 0)
+			goto allocate_name_exit2;
+	}
+	else {
+	   head = &inode_head;
+	}
+
+	r = ext2_insert_dirent(object, dir, &new_dirent, head);
+	if (r < 0) {
+		printf("Inserting a dirent in allocate_name failed for \"%s\"!\n", name);
+		goto allocate_name_exit2;
 	}
 
 	ext2_free_fdesc(object, (fdesc_t *)dir);
