@@ -199,8 +199,10 @@ static off_t get_opcode_offset(int index)
 	return scan ? scan->offsets[index] : -1;
 }
 
+#ifdef __linux__
 #define fgetc fgetc_unlocked
 #define feof feof_unlocked
+#endif
 
 static FILE * input = NULL;
 
@@ -667,8 +669,24 @@ int main(int argc, char * argv[])
 	struct stat file;
 	off_t offset;
 	
-	stat(argv[1], &file);
+	if(argc < 2)
+	{
+		printf("Usage: %s <trace>\n", argv[0]);
+		return 0;
+	}
+	
+	r = stat(argv[1], &file);
+	if(r < 0)
+	{
+		perror(argv[1]);
+		return 1;
+	}
 	input = fopen(argv[1], "r");
+	if(!input)
+	{
+		perror(argv[1]);
+		return 1;
+	}
 	
 	printf("Reading debug signature... ");
 	fflush(stdout);
