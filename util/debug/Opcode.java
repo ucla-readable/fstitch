@@ -5,7 +5,7 @@ public abstract class Opcode implements Constants
 	protected String file = null;
 	protected int line = 0;
 	protected String function = null;
-	protected Vector backtrace = null;
+	protected UniqueStack stack = null;
 	
 	public void setFile(String file)
 	{
@@ -28,11 +28,11 @@ public abstract class Opcode implements Constants
 		this.function = function;
 	}
 	
-	public void addStackFrame(int address)
+	public void setStack(UniqueStack stack)
 	{
-		if(backtrace == null)
-			backtrace = new Vector();
-		backtrace.add(new Integer(address));
+		if(this.stack != null)
+			throw new RuntimeException("Stack trace already set!");
+		this.stack = stack;
 	}
 	
 	public String getFile()
@@ -50,18 +50,9 @@ public abstract class Opcode implements Constants
 		return function;
 	}
 	
-	public int getFrameCount()
+	public UniqueStack getStack()
 	{
-		if(backtrace == null)
-			return 0;
-		return backtrace.size();
-	}
-	
-	public int getStackFrame(int frame)
-	{
-		if(backtrace == null)
-			return 0;
-		return ((Integer) backtrace.get(frame)).intValue();
+		return stack;
 	}
 	
 	public abstract void applyTo(SystemState state);

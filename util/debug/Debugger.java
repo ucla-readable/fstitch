@@ -146,11 +146,13 @@ public class Debugger extends OpcodeFactory
 		
 		/* get the opcode footer (the stack trace) */
 		int address = input.readInt();
+		UniqueStack.StackTemplate stack = new UniqueStack.StackTemplate();
 		while(address != 0)
 		{
-			opcode.addStackFrame(address);
+			stack.addStackFrame(address);
 			address = input.readInt();
 		}
+		opcode.setStack(stack.getUniqueStack());
 		
 		return opcode;
 	}

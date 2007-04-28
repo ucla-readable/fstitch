@@ -22,7 +22,8 @@ public class ListCommand implements Command
 	
 	private void listOpcode(int number, Opcode opcode, boolean showTrace)
 	{
-		int frames = opcode.getFrameCount();
+		UniqueStack stack = opcode.getStack();
+		int frames = stack.getFrameCount();
 		if(opcode.hasEffect())
 			System.out.println("#" + number + " " + opcode);
 		else if(opcode instanceof InfoMark)
@@ -33,7 +34,7 @@ public class ListCommand implements Command
 		if(frames != 0 && showTrace)
 		{
 			for(int i = 0; i < frames; i++)
-				System.out.print("  [" + i + "]: " + SystemState.hex(opcode.getStackFrame(i)));
+				System.out.print("  [" + i + "]: " + SystemState.hex(stack.getStackFrame(i)));
 			System.out.println();
 		}
 	}
