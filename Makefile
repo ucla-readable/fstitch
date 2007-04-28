@@ -42,6 +42,8 @@ all: tags TAGS
 .PRECIOUS: %.o
 
 kfs/kkfsd.ko: always
+	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" == "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
+	@echo "$(KERNELRELEASE)" > .kernel_version
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
 	@[ -f .user ] && $(MAKE) -f Makefile.user || true
 
@@ -87,7 +89,7 @@ fsclean:
 
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
-	rm -rf $(BASE_OBJDIR) tags TAGS Module.symvers
+	rm -rf $(BASE_OBJDIR) tags TAGS Module.symvers .kernel_version
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,
