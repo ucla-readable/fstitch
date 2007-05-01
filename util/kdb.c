@@ -205,6 +205,7 @@ static off_t get_opcode_offset(int index)
 #endif
 
 static FILE * input = NULL;
+static const char * input_name = NULL;
 
 static int read_lit_8(uint8_t * data)
 {
@@ -216,29 +217,35 @@ static int read_lit_8(uint8_t * data)
 
 static int read_lit_16(uint16_t * data)
 {
-	int i;
-	*data = 0;
-	for(i = 0; i < 2; i++)
-	{
-		*data <<= 8;
-		*data |= fgetc(input);
-		if(feof(input))
-			return -1;
-	}
+	*data = fgetc(input);
+	if(feof(input))
+		return -1;
+	*data <<= 8;
+	*data |= fgetc(input);
+	if(feof(input))
+		return -1;
 	return 0;
 }
 
+/* This function is called an order of magnitude more frequently than any other
+ * function. It is important that it be very fast. So, unroll the obvious loop. */
 static int read_lit_32(uint32_t * data)
 {
-	int i;
-	*data = 0;
-	for(i = 0; i < 4; i++)
-	{
-		*data <<= 8;
-		*data |= fgetc(input);
-		if(feof(input))
-			return -1;
-	}
+	*data = fgetc(input);
+	if(feof(input))
+		return -1;
+	*data <<= 8;
+	*data |= fgetc(input);
+	if(feof(input))
+		return -1;
+	*data <<= 8;
+	*data |= fgetc(input);
+	if(feof(input))
+		return -1;
+	*data <<= 8;
+	*data |= fgetc(input);
+	if(feof(input))
+		return -1;
 	return 0;
 }
 
@@ -530,12 +537,166 @@ struct chdesc {
 
 /* Begin commands */
 
-static int command_jump(int argc, char * argv[])
+static int command_jump(int argc, const char * argv[])
 {
+	int target, progress = 0, distance, percent = -1;
+	if(argc < 2)
+	{
+		printf("Need an opcode to jump to.");
+		return -1;
+	}
+	target = atoi(argv[1]);
+	printf("[Jump: %d to %d]\n", applied, target);
+	printf("Replaying log...     ");
+	fflush(stdout);
+	if(target < applied)
+	{
+		/* reset system state */
+		applied = 0;
+	}
+	distance = target - applied;
+	while(applied < target)
+	{
+		int m, o, p, r;
+		struct debug_opcode opcode;
+		p = progress * 100 / distance;
+		if(p > percent)
+		{
+			percent = p;
+			printf("\e[4D%2d%% ", percent);
+			fflush(stdout);
+		}
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("error %d reading opcode %d\n", -r, applied + 1);
+			return r;
+		}
+		m = opcode.module_idx;
+		o = opcode.opcode_idx;
+		switch(modules[m].opcodes[o]->opcode)
+		{
+			case KDB_INFO_MARK:
+				/* nothing */
+				break;
+			case KDB_INFO_BD_NAME:
+				/* ... */
+				break;
+			case KDB_INFO_BDESC_NUMBER:
+				/* ... */
+				break;
+			case KDB_INFO_CHDESC_LABEL:
+				/* ... */
+				break;
+			
+			case KDB_BDESC_ALLOC:
+			case KDB_BDESC_ALLOC_WRAP:
+			case KDB_BDESC_RETAIN:
+			case KDB_BDESC_RELEASE:
+			case KDB_BDESC_DESTROY:
+			case KDB_BDESC_FREE_DDESC:
+			case KDB_BDESC_AUTORELEASE:
+			case KDB_BDESC_AR_RESET:
+			case KDB_BDESC_AR_POOL_PUSH:
+			case KDB_BDESC_AR_POOL_POP:
+				/* unsupported */
+				break;
+			
+			case KDB_CHDESC_CREATE_NOOP:
+				/* ... */
+				break;
+			case KDB_CHDESC_CREATE_BIT:
+				/* ... */
+				break;
+			case KDB_CHDESC_CREATE_BYTE:
+				/* ... */
+				break;
+			case KDB_CHDESC_CONVERT_NOOP:
+				/* ... */
+				break;
+			case KDB_CHDESC_CONVERT_BIT:
+				/* ... */
+				break;
+			case KDB_CHDESC_CONVERT_BYTE:
+				/* ... */
+				break;
+			case KDB_CHDESC_REWRITE_BYTE:
+				/* ... */
+				break;
+			case KDB_CHDESC_APPLY:
+				/* ... */
+				break;
+			case KDB_CHDESC_ROLLBACK:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_FLAGS:
+				/* ... */
+				break;
+			case KDB_CHDESC_CLEAR_FLAGS:
+				/* ... */
+				break;
+			case KDB_CHDESC_DESTROY:
+				/* ... */
+				break;
+			case KDB_CHDESC_ADD_BEFORE:
+				/* ... */
+				break;
+			case KDB_CHDESC_ADD_AFTER:
+				/* ... */
+				break;
+			case KDB_CHDESC_REM_BEFORE:
+				/* ... */
+				break;
+			case KDB_CHDESC_REM_AFTER:
+				/* ... */
+				break;
+			case KDB_CHDESC_WEAK_RETAIN:
+				/* ... */
+				break;
+			case KDB_CHDESC_WEAK_FORGET:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_OFFSET:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_XOR:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_LENGTH:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_BLOCK:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_OWNER:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_FREE_PREV:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_FREE_NEXT:
+				/* ... */
+				break;
+			case KDB_CHDESC_SET_FREE_HEAD:
+				/* ... */
+				break;
+			
+			case KDB_CHDESC_SATISFY:
+			case KDB_CHDESC_WEAK_COLLECT:
+			case KDB_CHDESC_OVERLAP_ATTACH:
+			case KDB_CHDESC_OVERLAP_MULTIATTACH:
+				/* nothing */
+				break;
+		}
+		put_opcode(&opcode);
+		applied++;
+		progress++;
+	}
+	printf("\e[4D%d opcodes OK!\n", applied);
 	return 0;
 }
 
-static int command_list(int argc, char * argv[])
+static int command_list(int argc, const char * argv[])
 {
 	int i, show_trace = 0;
 	int min = 0, max = opcodes - 1;
@@ -552,6 +713,7 @@ static int command_list(int argc, char * argv[])
 	}
 	else if(argc > 2)
 	{
+		/* show an opcode range */
 		min = atoi(argv[1]) - 1;
 		max = atoi(argv[2]) - 1;
 		if(min < 0 || min > max)
@@ -564,12 +726,12 @@ static int command_list(int argc, char * argv[])
 	}
 	for(i = min; i <= max; i++)
 	{
+		int m, o, p, r;
 		struct debug_opcode opcode;
-		int r = get_opcode(i, &opcode);
-		int m, o, p;
+		r = get_opcode(i, &opcode);
 		if(r < 0)
 		{
-			printf("Error reading opcode %d\n", i + 1);
+			printf("Error %d reading opcode %d\n", -r, i + 1);
 			return r;
 		}
 		m = opcode.module_idx;
@@ -621,32 +783,51 @@ static int command_list(int argc, char * argv[])
 	return 0;
 }
 
-static int command_reset(int argc, char * argv[])
+static int command_reset(int argc, const char * argv[])
 {
+	const char * array[] = {"jump", "0"};
+	return command_jump(2, array);
+}
+
+static int command_run(int argc, const char * argv[])
+{
+	int r;
+	char number[12];
+	const char * array[] = {"jump", number};
+	sprintf(number, "%u", opcodes);
+	r = command_jump(2, array);
+	if(r >= 0)
+		printf("[Info: %d unique strings, %d unique stacks]\n", unique_strings, unique_stacks);
+	return r;
+}
+
+static int command_status(int argc, const char * argv[])
+{
+	if(argc < 2)
+		printf("Debugging %s, read %d opcodes, applied %d\n", input_name, opcodes, applied);
 	return 0;
 }
 
-static int command_run(int argc, char * argv[])
+static int command_step(int argc, const char * argv[])
 {
-	return 0;
-}
-
-static int command_step(int argc, char * argv[])
-{
-	return 0;
+	char number[12];
+	const char * array[] = {"jump", number};
+	int delta = (argc > 1) ? atoi(argv[1]) : 1;
+	sprintf(number, "%u", applied + delta);
+	return command_jump(2, array);
 }
 
 /* End commands */
 
 /* Begin command line processing */
 
-static int command_help(int argc, char * argv[]);
-static int command_quit(int argc, char * argv[]);
+static int command_help(int argc, const char * argv[]);
+static int command_quit(int argc, const char * argv[]);
 
 struct {
 	const char * command;
 	const char * help;
-	int (*execute)(int argc, char * argv[]);
+	int (*execute)(int argc, const char * argv[]);
 } commands[] = {
 	//{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui},
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump},
@@ -657,7 +838,7 @@ struct {
 	//{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render},
 	{"reset", "Reset system state to 0 opcodes.", command_reset},
 	{"run", "Apply all opcodes to system state.", command_run},
-	//{"status", "Displays system state status.", command_status},
+	{"status", "Displays system state status.", command_status},
 	{"step", "Step system state by a specified number of opcodes, or 1 by default.", command_step},
 	//{"view", "View system state graphically, optionally in a new window.", command_view},
 	{"help", "Displays help.", command_help},
@@ -665,7 +846,7 @@ struct {
 };
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
 
-static int command_help(int argc, char * argv[])
+static int command_help(int argc, const char * argv[])
 {
 	int i;
 	if(argc < 2)
@@ -685,7 +866,7 @@ static int command_help(int argc, char * argv[])
 	return 0;
 }
 
-static int command_quit(int argc, char * argv[])
+static int command_quit(int argc, const char * argv[])
 {
 	return -EINTR;
 }
@@ -712,7 +893,7 @@ static char * command_complete(const char * text, int state)
 static int command_line_execute(char * line)
 {
 	int i, argc = 0;
-	char * argv[64];
+	const char * argv[64];
 	do {
 		while(*line == ' ')
 			line++;
@@ -756,10 +937,11 @@ int main(int argc, char * argv[])
 		perror(argv[1]);
 		return 1;
 	}
-	input = fopen(argv[1], "r");
+	input_name = argv[1];
+	input = fopen(input_name, "r");
 	if(!input)
 	{
-		perror(argv[1]);
+		perror(input_name);
 		return 1;
 	}
 	
@@ -768,7 +950,7 @@ int main(int argc, char * argv[])
 	r = read_debug_signature();
 	if(r < 0)
 	{
-		printf("error %d!\n", r);
+		printf("error %d!\n", -r);
 		fclose(input);
 		return 1;
 	}
