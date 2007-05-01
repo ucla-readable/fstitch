@@ -361,31 +361,25 @@ static int scan_opcode(void)
 	for(p = 0; r >= 0 && modules[m].opcodes[o]->params[p]->name; p++)
 	{
 		uint8_t size;
+		union {
+			uint32_t b4;
+			uint16_t b2;
+			uint8_t b1;
+			const char * v;
+		} data;
 		r = read_lit_8(&size);
 		if(r < 0)
 			return r;
 		if(size != type_sizes[modules[m].opcodes[o]->params[p]->type])
 			return -42;
 		if(size == 4)
-		{
-			uint32_t data;
-			r = read_lit_32(&data);
-		}
+			r = read_lit_32(&data.b4);
 		else if(size == 2)
-		{
-			uint16_t data;
-			r = read_lit_16(&data);
-		}
+			r = read_lit_16(&data.b2);
 		else if(size == 1)
-		{
-			uint8_t data;
-			r = read_lit_8(&data);
-		}
+			r = read_lit_8(&data.b1);
 		else if(size == (uint8_t) -1)
-		{
-			const char * data;
-			r = read_lit_str(&data, 0);
-		}
+			r = read_lit_str(&data.v, 0);
 		if(r < 0)
 			return r;
 	}
@@ -543,6 +537,87 @@ static int command_jump(int argc, char * argv[])
 
 static int command_list(int argc, char * argv[])
 {
+	int i, show_trace = 0;
+	int min = 0, max = opcodes - 1;
+	if(argc == 2)
+	{
+		/* show a single opcode */
+		min = max = atoi(argv[1]) - 1;
+		if(max >= opcodes)
+		{
+			printf("No such opcode.\n");
+			return -1;
+		}
+		show_trace = 1;
+	}
+	else if(argc > 2)
+	{
+		min = atoi(argv[1]) - 1;
+		max = atoi(argv[2]) - 1;
+		if(min < 0 || min > max)
+		{
+			printf("Invalid range.\n");
+			return -1;
+		}
+		if(max >= opcodes)
+			max = opcodes - 1;
+	}
+	for(i = min; i <= max; i++)
+	{
+		struct debug_opcode opcode;
+		int r = get_opcode(i, &opcode);
+		int m, o, p;
+		if(r < 0)
+		{
+			printf("Error reading opcode %d\n", i + 1);
+			return r;
+		}
+		m = opcode.module_idx;
+		o = opcode.opcode_idx;
+		printf("#%d %s", i + 1, modules[m].opcodes[o]->name);
+		for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
+		{
+			printf("%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
+			if(opcode.params[p].size == 4)
+			{
+				const char * format = "0x%08x";
+				if(modules[m].opcodes[o]->params[p]->type == UINT32)
+					format = "%u";
+				else if(modules[m].opcodes[o]->params[p]->type == INT32)
+					format = "%d";
+				printf(format, opcode.params[p].data_4);
+			}
+			else if(opcode.params[p].size == 2)
+			{
+				if(modules[m].opcodes[o]->params[p]->type == UINT16)
+					printf("%d", opcode.params[p].data_2);
+				else if(modules[m].opcodes[o]->params[p]->type == INT16)
+					printf("%d", (int) (int16_t) opcode.params[p].data_2);
+				else
+					printf("0x%04x", opcode.params[p].data_2);
+			}
+			else if(opcode.params[p].size == 1)
+			{
+				if(modules[m].opcodes[o]->params[p]->type == BOOL)
+					printf(opcode.params[p].data_1 ? "true" : "false");
+				else
+					printf("%d", opcode.params[p].data_1);
+			}
+			else if(opcode.params[p].size == (uint8_t) -1)
+			{
+				printf("%s", opcode.params[p].data_v);
+			}
+		}
+		printf("\n");
+		printf("    from %s() at %s:%d\n", opcode.function, opcode.file, opcode.line);
+		if(show_trace)
+		{
+			for(p = 0; opcode.stack[p]; p++)
+				printf("  [%d]: 0x%08x", p, opcode.stack[p]);
+			printf("\n");
+		}
+		put_opcode(&opcode);
+	}
 	return 0;
 }
 
@@ -793,6 +868,8 @@ int main(int argc, char * argv[])
 			free(line);
 			if(r == -ENFILE)
 				printf("Too many tokens on command line!\n");
+			else if(r == -ENOENT)
+				printf("No such command.\n");
 		} while(r != -EINTR);
 	}
 	
