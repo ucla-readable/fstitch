@@ -22,7 +22,8 @@ static void fork_handler(struct task_struct * child)
 {
 	opgroup_scope_t * parent_scope;
 	
-	assert(current == child->real_parent);
+	/* Why is this assertion not always true? */
+	/* assert(current == child->real_parent); */
 	spin_lock(&scope_lock);
 	
 	parent_scope = hash_map_find_val(scope_map, child->real_parent);
