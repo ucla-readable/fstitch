@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <assert.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -155,7 +156,7 @@ static int add_opcode_offset(off_t offset)
 	{
 		struct opcode_offsets * extra = malloc(sizeof(*extra));
 		if(!extra)
-			return -1;
+			return -ENOMEM;
 		if(!last_offsets)
 			extra->size = 64;
 		else if(last_offsets->size < 32768)
@@ -167,7 +168,7 @@ static int add_opcode_offset(off_t offset)
 		if(!extra->offsets)
 		{
 			free(extra);
-			return -1;
+			return -ENOMEM;
 		}
 		extra->next = NULL;
 		if(last_offsets)
@@ -196,7 +197,7 @@ static off_t get_opcode_offset(int index)
 		index -= scan->size;
 		scan_index += scan->size;
 	}
-	return scan ? scan->offsets[index] : -1;
+	return scan ? scan->offsets[index] : -EINVAL;
 }
 
 #ifdef __linux__
@@ -278,7 +279,7 @@ static int read_debug_signature(void)
 	if(r < 0)
 		return r;
 	if(debug_rev != 3379 || debug_opcode_rev != 2934)
-		return -42;
+		return -EPROTO;
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
@@ -291,17 +292,17 @@ static int read_debug_signature(void)
 			if(r < 0)
 				return r;
 			if(module != modules[m].module)
-				return -42;
+				return -EPROTO;
 			r = read_lit_16(&opcode);
 			if(r < 0)
 				return r;
 			if(opcode != modules[m].opcodes[o]->opcode)
-				return -42;
+				return -EPROTO;
 			r = read_lit_str(&o_name, 0);
 			if(r < 0)
 				return r;
 			if(strcmp(o_name, modules[m].opcodes[o]->name))
-				return -42;
+				return -EPROTO;
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size;
@@ -310,27 +311,41 @@ static int read_debug_signature(void)
 				if(r < 0)
 					return r;
 				if(size != type_sizes[modules[m].opcodes[o]->params[p]->type])
-					return -42;
+					return -EPROTO;
 				r = read_lit_str(&p_name, 0);
 				if(r < 0)
 					return r;
 				if(strcmp(p_name, modules[m].opcodes[o]->params[p]->name))
-					return -42;
+					return -EPROTO;
 			}
 			r = read_lit_8(&zero);
 			if(r < 0)
 				return r;
 			if(zero)
-				return -42;
+				return -EPROTO;
 		}
 	r = read_lit_16(&zero);
 	if(r < 0)
 		return r;
 	if(zero)
-		return -42;
+		return -EPROTO;
 	
 	return 0;
 }
+
+struct debug_param {
+	union {
+		uint8_t size;
+		/* name is only used as input to param_lookup */
+		const char * name;
+	};
+	union {
+		uint32_t data_4;
+		uint16_t data_2;
+		uint8_t data_1;
+		const char * data_v;
+	};
+};
 
 static int scan_opcode(void)
 {
@@ -364,29 +379,23 @@ static int scan_opcode(void)
 			break;
 		}
 	if(!modules[m].opcodes || !modules[m].opcodes[o]->params)
-		return -42;
+		return -EPROTO;
 	for(p = 0; r >= 0 && modules[m].opcodes[o]->params[p]->name; p++)
 	{
-		uint8_t size;
-		union {
-			uint32_t b4;
-			uint16_t b2;
-			uint8_t b1;
-			const char * v;
-		} data;
-		r = read_lit_8(&size);
+		struct debug_param param;
+		r = read_lit_8(&param.size);
 		if(r < 0)
 			return r;
-		if(size != type_sizes[modules[m].opcodes[o]->params[p]->type])
-			return -42;
-		if(size == 4)
-			r = read_lit_32(&data.b4);
-		else if(size == 2)
-			r = read_lit_16(&data.b2);
-		else if(size == 1)
-			r = read_lit_8(&data.b1);
-		else if(size == (uint8_t) -1)
-			r = read_lit_str(&data.v, 0);
+		if(param.size != type_sizes[modules[m].opcodes[o]->params[p]->type])
+			return -EPROTO;
+		if(param.size == 4)
+			r = read_lit_32(&param.data_4);
+		else if(param.size == 2)
+			r = read_lit_16(&param.data_2);
+		else if(param.size == 1)
+			r = read_lit_8(&param.data_1);
+		else if(param.size == (uint8_t) -1)
+			r = read_lit_str(&param.data_v, 0);
 		if(r < 0)
 			return r;
 	}
@@ -394,7 +403,7 @@ static int scan_opcode(void)
 	if(r < 0)
 		return r;
 	if(zero)
-		return -42;
+		return -EPROTO;
 	do {
 		r = read_lit_32(&stack);
 		if(r < 0)
@@ -402,16 +411,6 @@ static int scan_opcode(void)
 	} while(stack);
 	return 0;
 }
-
-struct debug_param {
-	uint8_t size;
-	union {
-		uint32_t data_4;
-		uint16_t data_2;
-		uint8_t data_1;
-		const char * data_v;
-	};
-};
 
 struct debug_opcode {
 	const char * file;
@@ -451,13 +450,13 @@ static int read_opcode(struct debug_opcode * debug_opcode)
 			break;
 		}
 	if(!modules[m].opcodes || !modules[m].opcodes[o]->params)
-		return -42;
+		return -EPROTO;
 	debug_opcode->module_idx = m;
 	debug_opcode->opcode_idx = o;
 	for(p = 0; modules[m].opcodes[o]->params[p]->name; p++);
 	debug_opcode->params = malloc(p * sizeof(*debug_opcode->params));
 	if(!debug_opcode->params)
-		return -69;
+		return -ENOMEM;
 	i = 0;
 	for(p = 0; r >= 0 && modules[m].opcodes[o]->params[p]->name; p++)
 	{
@@ -467,7 +466,7 @@ static int read_opcode(struct debug_opcode * debug_opcode)
 			goto error_params;
 		if(param->size != type_sizes[modules[m].opcodes[o]->params[p]->type])
 		{
-			r = -42;
+			r = -EPROTO;
 			goto error_params;
 		}
 		if(param->size == 4)
@@ -486,14 +485,14 @@ static int read_opcode(struct debug_opcode * debug_opcode)
 		goto error_params;
 	if(zero)
 	{
-		r = -42;
+		r = -EPROTO;
 		goto error_params;
 	}
 	i = 0;
 	do {
 		if(i == 128)
 		{
-			r = -69;
+			r = -E2BIG;
 			goto error_params;
 		}
 		r = read_lit_32(&stack[i]);
@@ -526,16 +525,332 @@ static void put_opcode(struct debug_opcode * debug_opcode)
 
 /* Begin state management */
 
-static int applied = 0;
+struct bd {
+	uint32_t address;
+	const char * name;
+	struct bd * next;
+};
+
+struct block {
+	uint32_t address;
+	uint32_t number;
+	struct block * next;
+};
+
+struct arrow {
+	uint32_t chdesc;
+	struct arrow * next;
+};
+
+struct label {
+	const char * label;
+	struct label * next;
+};
 
 struct chdesc {
 	uint32_t address;
+	int opcode;
+	uint32_t owner, block;
 	enum {BIT, BYTE, NOOP} type;
+	union {
+		struct {
+			uint16_t offset;
+			uint32_t xor;
+		} bit;
+		struct {
+			uint16_t offset, length;
+		} byte;
+	};
+	uint16_t flags;
+	struct arrow * befores;
+	struct arrow * afters;
+	struct label * labels;
+	struct chdesc * next;
 };
+
+static struct bd * bds = NULL;
+static struct block * blocks = NULL;
+static struct chdesc * chdescs = NULL;
+static int chdesc_count = 0;
+static int arrow_count = 0;
+
+static int applied = 0;
+
+static void free_arrows(struct arrow ** point)
+{
+	while(*point)
+	{
+		struct arrow * old = *point;
+		*point = old->next;
+		free(old);
+		arrow_count--;
+	}
+}
+
+static void free_labels(struct label ** point)
+{
+	while(*point)
+	{
+		struct label * old = *point;
+		*point = old->next;
+		free(old);
+	}
+}
+
+static void reset_state(void)
+{
+	while(bds)
+	{
+		struct bd * old = bds;
+		bds = old->next;
+		free(old);
+	}
+	while(blocks)
+	{
+		struct block * old = blocks;
+		blocks = old->next;
+		free(old);
+	}
+	while(chdescs)
+	{
+		struct chdesc * old = chdescs;
+		chdescs = old->next;
+		free_arrows(&old->befores);
+		free_arrows(&old->afters);
+		free_labels(&old->labels);
+		free(old);
+	}
+	chdesc_count = 0;
+	arrow_count = 0;
+	applied = 0;
+}
+
+static struct bd * lookup_bd(uint32_t address)
+{
+	struct bd * scan;
+	for(scan = bds; scan; scan = scan->next)
+		if(scan->address == address)
+			break;
+	return scan;
+}
+
+static struct block * lookup_block(uint32_t address)
+{
+	struct block * scan;
+	for(scan = blocks; scan; scan = scan->next)
+		if(scan->address == address)
+			break;
+	return scan;
+}
+
+static struct chdesc * lookup_chdesc(uint32_t address)
+{
+	struct chdesc * scan;
+	for(scan = chdescs; scan; scan = scan->next)
+		if(scan->address == address)
+			break;
+	return scan;
+}
+
+static int add_bd_name(uint32_t address, const char * name)
+{
+	struct bd * bd = lookup_bd(address);
+	if(bd)
+	{
+		bd->name = name;
+		return 0;
+	}
+	bd = malloc(sizeof(*bd));
+	if(!bd)
+		return -ENOMEM;
+	bd->address = address;
+	bd->name = name;
+	bd->next = bds;
+	bds = bd;
+	return 0;
+}
+
+static int add_block_number(uint32_t address, uint32_t number)
+{
+	struct block * block = lookup_block(address);
+	if(block)
+	{
+		block->number = number;
+		return 0;
+	}
+	block = malloc(sizeof(*block));
+	if(!block)
+		return -ENOMEM;
+	block->address = address;
+	block->number = number;
+	block->next = blocks;
+	blocks = block;
+	return 0;
+}
+
+static struct chdesc * _chdesc_create(uint32_t address, uint32_t owner)
+{
+	struct chdesc * chdesc = malloc(sizeof(*chdesc));
+	if(!chdesc)
+		return NULL;
+	chdesc->address = address;
+	chdesc->opcode = applied + 1;
+	chdesc->owner = owner;
+	chdesc->flags = 0;
+	chdesc->befores = NULL;
+	chdesc->afters = NULL;
+	chdesc->next = chdescs;
+	chdescs = chdesc;
+	chdesc_count++;
+	return chdesc;
+}
+
+static struct chdesc * chdesc_create_bit(uint32_t address, uint32_t owner, uint32_t block, uint16_t offset, uint32_t xor)
+{
+	struct chdesc * chdesc = _chdesc_create(address, owner);
+	if(!chdesc)
+		return NULL;
+	chdesc->block = block;
+	chdesc->type = BIT;
+	chdesc->bit.offset = offset;
+	chdesc->bit.xor = xor;
+	return chdesc;
+}
+
+static struct chdesc * chdesc_create_byte(uint32_t address, uint32_t owner, uint32_t block, uint16_t offset, uint16_t length)
+{
+	struct chdesc * chdesc = _chdesc_create(address, owner);
+	if(!chdesc)
+		return NULL;
+	chdesc->block = block;
+	chdesc->type = BYTE;
+	chdesc->byte.offset = offset;
+	chdesc->byte.length = length;
+	return chdesc;
+}
+
+static struct chdesc * chdesc_create_noop(uint32_t address, uint32_t owner)
+{
+	struct chdesc * chdesc = _chdesc_create(address, owner);
+	if(!chdesc)
+		return NULL;
+	chdesc->block = 0;
+	chdesc->type = NOOP;
+	return chdesc;
+}
+
+static int chdesc_add_label(struct chdesc * chdesc, const char * label)
+{
+	struct label * scan;
+	for(scan = chdesc->labels; scan; scan = scan->next)
+		if(!strcmp(scan->label, label))
+			return 0;
+	scan = malloc(sizeof(*scan));
+	if(!scan)
+		return -ENOMEM;
+	scan->label = label;
+	scan->next = chdesc->labels;
+	chdesc->labels = scan;
+	return 0;
+}
+
+static int chdesc_add_before(struct chdesc * after, uint32_t before)
+{
+	struct arrow * arrow = malloc(sizeof(*arrow));
+	if(!arrow)
+		return -ENOMEM;
+	arrow->chdesc = before;
+	arrow->next = after->befores;
+	after->befores = arrow;
+	arrow_count++;
+	return 0;
+}
+
+static int chdesc_add_after(uint32_t after, struct chdesc * before)
+{
+	struct arrow * arrow = malloc(sizeof(*arrow));
+	if(!arrow)
+		return -ENOMEM;
+	arrow->chdesc = after;
+	arrow->next = before->afters;
+	before->afters = arrow;
+	arrow_count++;
+	return 0;
+}
+
+static int chdesc_rem_before(struct chdesc * after, uint32_t before)
+{
+	struct arrow ** point;
+	for(point = &after->befores; *point; point = &(*point)->next)
+		if((*point)->chdesc == before)
+		{
+			struct arrow * old = *point;
+			*point = old->next;
+			free(old);
+			arrow_count--;
+			return 0;
+		}
+	return -ENOENT;
+}
+
+static int chdesc_rem_after(uint32_t after, struct chdesc * before)
+{
+	struct arrow ** point;
+	for(point = &before->afters; *point; point = &(*point)->next)
+		if((*point)->chdesc == after)
+		{
+			struct arrow * old = *point;
+			*point = old->next;
+			free(old);
+			arrow_count--;
+			return 0;
+		}
+	return -ENOENT;
+}
+
+static int chdesc_destroy(uint32_t address)
+{
+	struct chdesc ** point = &chdescs;
+	for(point = &chdescs; *point; point = &(*point)->next)
+		if((*point)->address == address)
+		{
+			struct chdesc * old = *point;
+			*point = old->next;
+			free_arrows(&old->befores);
+			free_arrows(&old->afters);
+			free_labels(&old->labels);
+			chdesc_count--;
+			return 0;
+		}
+	return -ENOENT;
+}
 
 /* End state management */
 
 /* Begin commands */
+
+static int param_lookup(struct debug_opcode * opcode, struct debug_param * table)
+{
+	int m = opcode->module_idx;
+	int o = opcode->opcode_idx;
+	int i, j = 0;
+	for(i = 0; table[i].name; i++)
+	{
+		for(; modules[m].opcodes[o]->params[j]->name; j++)
+			if(!strcmp(modules[m].opcodes[o]->params[j]->name, table[i].name))
+				break;
+		if(!modules[m].opcodes[o]->params[j]->name)
+		{
+			for(j = 0; modules[m].opcodes[o]->params[j]->name; j++)
+				if(!strcmp(modules[m].opcodes[o]->params[j]->name, table[i].name))
+					break;
+			if(!modules[m].opcodes[o]->params[j]->name)
+				return -ENOENT;
+		}
+		table[i] = opcode->params[j++];
+	}
+	return 0;
+}
 
 static int command_jump(int argc, const char * argv[])
 {
@@ -550,10 +865,7 @@ static int command_jump(int argc, const char * argv[])
 	printf("Replaying log...     ");
 	fflush(stdout);
 	if(target < applied)
-	{
-		/* reset system state */
-		applied = 0;
-	}
+		reset_state();
 	distance = target - applied;
 	while(applied < target)
 	{
@@ -569,7 +881,7 @@ static int command_jump(int argc, const char * argv[])
 		r = get_opcode(applied, &opcode);
 		if(r < 0)
 		{
-			printf("error %d reading opcode %d\n", -r, applied + 1);
+			printf("error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
 			return r;
 		}
 		m = opcode.module_idx;
@@ -580,14 +892,60 @@ static int command_jump(int argc, const char * argv[])
 				/* nothing */
 				break;
 			case KDB_INFO_BD_NAME:
-				/* ... */
+			{
+				struct debug_param params[] = {
+					{{name: "bd"}},
+					{{name: "name"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
+				r = add_bd_name(params[0].data_4, params[1].data_v);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_INFO_BDESC_NUMBER:
-				/* ... */
+			{
+				struct debug_param params[] = {
+					{{name: "block"}},
+					{{name: "number"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				r = add_block_number(params[0].data_4, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_INFO_CHDESC_LABEL:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{name: "chdesc"}},
+					{{name: "label"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_add_label(chdesc, params[1].data_v);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			
 			case KDB_BDESC_ALLOC:
 			case KDB_BDESC_ALLOC_WRAP:
@@ -603,14 +961,69 @@ static int command_jump(int argc, const char * argv[])
 				break;
 			
 			case KDB_CHDESC_CREATE_NOOP:
-				/* ... */
+			{
+				struct debug_param params[] = {
+					{{name: "chdesc"}},
+					{{name: "owner"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				if(!chdesc_create_noop(params[0].data_4, params[1].data_4))
+				{
+					r = -ENOMEM;
+					goto fail;
+				}
 				break;
+			}
 			case KDB_CHDESC_CREATE_BIT:
-				/* ... */
+			{
+				struct debug_param params[] = {
+					{{name: "chdesc"}},
+					{{name: "block"}},
+					{{name: "owner"}},
+					{{name: "offset"}},
+					{{name: "xor"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4 &&
+				       params[2].size == 4 && params[3].size == 2 &&
+				       params[4].size == 4);
+				if(!chdesc_create_bit(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_4))
+				{
+					r = -ENOMEM;
+					goto fail;
+				}
 				break;
+			}
 			case KDB_CHDESC_CREATE_BYTE:
-				/* ... */
+			{
+				struct debug_param params[] = {
+					{{name: "chdesc"}},
+					{{name: "block"}},
+					{{name: "owner"}},
+					{{name: "offset"}},
+					{{name: "length"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4 &&
+				       params[2].size == 4 && params[3].size == 2 &&
+				       params[4].size == 2);
+				if(!chdesc_create_byte(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_2))
+				{
+					r = -ENOMEM;
+					goto fail;
+				}
 				break;
+			}
 			case KDB_CHDESC_CONVERT_NOOP:
 				/* ... */
 				break;
@@ -636,8 +1049,20 @@ static int command_jump(int argc, const char * argv[])
 				/* ... */
 				break;
 			case KDB_CHDESC_DESTROY:
-				/* ... */
+			{
+				struct debug_param params[] = {
+					{{name: "chdesc"}},
+					{{name: NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				r = chdesc_destroy(params[0].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_ADD_BEFORE:
 				/* ... */
 				break;
@@ -687,6 +1112,11 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_CHDESC_OVERLAP_MULTIATTACH:
 				/* nothing */
 				break;
+			
+		fail:
+			printf("error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			put_opcode(&opcode);
+			return r;
 		}
 		put_opcode(&opcode);
 		applied++;
@@ -704,7 +1134,7 @@ static int command_list(int argc, const char * argv[])
 	{
 		/* show a single opcode */
 		min = max = atoi(argv[1]) - 1;
-		if(max >= opcodes)
+		if(min < 0 || max >= opcodes)
 		{
 			printf("No such opcode.\n");
 			return -1;
@@ -731,7 +1161,7 @@ static int command_list(int argc, const char * argv[])
 		r = get_opcode(i, &opcode);
 		if(r < 0)
 		{
-			printf("Error %d reading opcode %d\n", -r, i + 1);
+			printf("Error %d reading opcode %d (%s)\n", -r, i + 1, strerror(-r));
 			return r;
 		}
 		m = opcode.module_idx;
@@ -804,7 +1234,10 @@ static int command_run(int argc, const char * argv[])
 static int command_status(int argc, const char * argv[])
 {
 	if(argc < 2)
+	{
 		printf("Debugging %s, read %d opcodes, applied %d\n", input_name, opcodes, applied);
+		printf("[Info: %d chdescs, %d dependencies (%d raw)]\n", chdesc_count, (arrow_count + 1) / 2, arrow_count);
+	}
 	return 0;
 }
 
@@ -908,7 +1341,7 @@ static int command_line_execute(char * line)
 			break;
 	} while(argc < 64);
 	if(*line)
-		return -ENFILE;
+		return -E2BIG;
 	if(!argc)
 		return 0;
 	for(i = 0; i < COMMAND_COUNT; i++)
@@ -950,7 +1383,7 @@ int main(int argc, char * argv[])
 	r = read_debug_signature();
 	if(r < 0)
 	{
-		printf("error %d!\n", -r);
+		printf("error %d (%s)\n", -r, strerror(-r));
 		fclose(input);
 		return 1;
 	}
@@ -977,7 +1410,7 @@ int main(int argc, char * argv[])
 	}
 	printf("\e[4D%d opcodes OK!\n", opcodes);
 	if(r < 0)
-		fprintf(stderr, "Error %d at file offset %lld+%lld\n", -r, offset, ftello(input) - offset);
+		fprintf(stderr, "Error %d at file offset %lld+%lld (%s)\n", -r, offset, ftello(input) - offset, strerror(-r));
 	
 	if(opcodes)
 	{
@@ -1048,7 +1481,7 @@ int main(int argc, char * argv[])
 				add_history(line);
 			r = command_line_execute(line);
 			free(line);
-			if(r == -ENFILE)
+			if(r == -E2BIG)
 				printf("Too many tokens on command line!\n");
 			else if(r == -ENOENT)
 				printf("No such command.\n");
