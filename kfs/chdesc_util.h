@@ -17,5 +17,6 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 
 /* create change descriptors based on the diff of two data regions */
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head);
+int chdesc_create_diff_array(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
 
 #endif /* __KUDOS_KFS_CHDESC_UTIL_H */

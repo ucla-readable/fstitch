@@ -1396,7 +1396,7 @@ static void chdesc_nrb_merge_stats_log(unsigned idx)
 /* Determine whether a new chdesc on 'block' and with the before 'before'
  * can be merged into an existing chdesc.
  * Return such a chdesc if so, else return NULL. */
-static chdesc_t * select_chdesc_merger(const bdesc_t * block, const chdesc_t * before)
+static chdesc_t * select_chdesc_merger(const bdesc_t * block)
 {
 	if(new_chdescs_require_data(block))
 	{
@@ -1772,18 +1772,20 @@ static void merge_rbs(bdesc_t * block)
 /* Attempt to merge into an existing chdesc instead of create a new chdesc.
  * Returns 1 on successful merge (*merged points merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t * before, chdesc_t ** merged)
+static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 #if CHDESC_NRB
 	chdesc_t * merger;
+	size_t i;
 # if CHDESC_MERGE_RBS_NRB
 	if(!new_chdescs_require_data(block) && !block->ddesc->nrb)
 		merge_rbs(block);
 # endif
-	if(!(merger = select_chdesc_merger(block, before)))
+	if(!(merger = select_chdesc_merger(block)))
 		return 0;
-	if(before && !(before->flags & CHDESC_WRITTEN))
-		move_befores_for_merge(before, merger, 0);
+	for(i = 0; i < nbefores; i++)
+		if(befores[i])
+			move_befores_for_merge(befores[i], merger, 0);
 	
 	chdesc_unlink_index_changes(merger);
 	/* move merger to correct owner */
@@ -1791,7 +1793,7 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t * before,
 	
 	chdesc_link_index_changes(merger);
 	
-	*merged = merger;
+	*tail = merger;
 	return 1;
 #else
 	return 0;
@@ -1801,19 +1803,20 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t * before,
 #if CHDESC_BYTE_MERGE_OVERLAP
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
- * Returns 1 on successful merge (*head points to merged chdesc),
+ * Returns 1 on successful merge (*tail points to merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, const void *data)
+static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, chdesc_t ** new, size_t nbefores, chdesc_t * befores[])
 {
 	chdepdesc_t * dep;
 	chdesc_t * overlap = NULL;
 	uint16_t overlap_end, new_end, merge_offset, merge_length, merge_end;
 	datadesc_t * ddesc = (*new)->block->ddesc;
+	size_t i;
 	int r;
 	
 	/* determine whether we can merge new into an overlap */
-	/* NOTE: if *head has a before and there are many overlaps, it may be
-	 * be wise to check *head for befores before looking at overlaps */
+	/* NOTE: if a befores[i] has a before and there are many overlaps, it may
+	 * be wise to check befores[i] for befores before looking at overlaps */
 	for(dep = (*new)->befores; dep; dep = dep->before.next)
 	{
 		chdesc_t * before = dep->before.desc;
@@ -1822,7 +1825,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 		if(before->block && (*new)->block->ddesc == before->block->ddesc
 		   && chdesc_overlap_check(*new, before))
 		{
-			/* note: *new may overlap *head */
+			/* note: *new may overlap a before[i] */
 			if(before->type != BYTE)
 				return 0;
 			if(overlap && overlap != before)
@@ -1844,7 +1847,13 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 		}
 		else
 		{
-			assert(*head == before);
+#ifndef NDEBUG
+			// assert(exists i: befores[i] == before):
+			for(i = 0; i < nbefores; i++)
+				if(befores[i] == before)
+					break;
+			assert(i < nbefores || !nbefores);
+#endif
 			if(before->flags & CHDESC_FUTURE_BEFORES)
 				return 0;
 			if(before->befores)
@@ -1874,14 +1883,17 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 	merge_end = merge_offset + merge_length;
 	
 	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->byte.offset, overlap->byte.length, overlap, merge_offset, merge_length, (*new)->block->number);
-	
-	if(*head && overlap != *head)
+
+	for(i = 0; i < nbefores; i++)
 	{
-		uint16_t flags = overlap->flags;
-		overlap->flags |= CHDESC_SAFE_AFTER;
-		if((r = chdesc_add_depend(overlap, *head)) < 0)
-			return r;
-		overlap->flags = flags;
+		if(befores[i] && overlap != befores[i])
+		{
+			uint16_t flags = overlap->flags;
+			overlap->flags |= CHDESC_SAFE_AFTER;
+			if((r = chdesc_add_depend(overlap, befores[i])) < 0)
+				return r;
+			overlap->flags = flags;
+		}
 	}
 	
 	/* Restore ddesc->overlaps if new fully overlapped some chdesc(s).
@@ -1946,7 +1958,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** new, chdesc_t ** head, c
 	chdesc_link_index_changes(overlap);
 	
 	chdesc_destroy(new);
-	*head = overlap;
+	*tail = overlap;
 	return 1;
 }
 #endif
@@ -1978,18 +1990,19 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 }
 
 /* common code to create a byte chdesc */
-static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t ** head)
+static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 	bool data_required = new_chdescs_require_data(block);
 	chdesc_t * chdesc;
+	size_t i;
 	int r;
 	
-	assert(block && block->ddesc && owner && head);
+	assert(block && block->ddesc && owner && tail);
 	
 	if(offset + length > block->ddesc->length)
 		return -EINVAL;
 	
-	r = chdesc_create_merge(block, owner, *head, head);
+	r = chdesc_create_merge(block, owner, tail, nbefores, befores);
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -2065,14 +2078,17 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc_link_ready_changes(chdesc);
 	chdesc_link_index_changes(chdesc);
 	
-	/* this is a new chdesc, so we don't need to check for loops.
-	 * but we should check to make sure head has not already been written. */
-	if(*head && !((*head)->flags & CHDESC_WRITTEN))
-		if((r = chdesc_add_depend_fast(chdesc, *head)) < 0)
-		{
-			chdesc_destroy(&chdesc);
-			return r;
-		}
+	/* this is a new chdesc, so we don't need to check for loops. but
+	 * we should check to make sure before[i] has not already been written. */
+	for(i = 0; i < nbefores; i++)
+	{
+		if(befores[i] && !((befores[i])->flags & CHDESC_WRITTEN))
+			if((r = chdesc_add_depend_fast(chdesc, befores[i])) < 0)
+			{
+				chdesc_destroy(&chdesc);
+				return r;
+			}
+	}
 
 	chdesc_link_overlap(chdesc, block->ddesc);
 	
@@ -2087,7 +2103,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	/* after the above work towards chdesc to avoid multiple overlap scans */
 	if(data_required)
 	{
-		if((r = chdesc_create_byte_merge_overlap(&chdesc, head, data)) < 0)
+		if((r = chdesc_create_byte_merge_overlap(data, tail, &chdesc, nbefores, befores)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
@@ -2143,7 +2159,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	}
 	
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
-	*head = chdesc;
+	*tail = chdesc;
 	block->ddesc->synthetic = 0;
 	
 	return 0;
@@ -2151,19 +2167,29 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
+	chdesc_t * befores[] = { *head };
 	if(&block->ddesc->data[offset] == data)
 		kpanic("Cannot create a change descriptor in place!");
-	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, head);
+	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, head, 1, befores);
+}
+
+int chdesc_create_byte_array(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
+{
+	if(&block->ddesc->data[offset] == data)
+		kpanic("Cannot create a change descriptor in place!");
+	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, tail, nbefores, befores);
 }
 
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
-	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, NULL, head);
+	chdesc_t * befores[] = { *head };
+	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, NULL, head, 1, befores);
 }
 
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head);
+	chdesc_t * befores[] = { *head };
+	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head, 1, befores);
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
@@ -2251,9 +2277,10 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	bool data_required = new_chdescs_require_data(block);
 	chdesc_t * chdesc;
 	chdesc_t * bit_changes = NULL;
+	chdesc_t * befores[] = { *head };
 	int r;
 
-	r = chdesc_create_merge(block, owner, *head, head);
+	r = chdesc_create_merge(block, owner, head, 1, befores);
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -2265,10 +2292,11 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if(!data_required)
 	{
 		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+		chdesc_t * befores[] = { *head };
 #if CHDESC_NRB_MERGE_STATS
 		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
 #endif
-		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
+		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head, 1, befores);
 	}
 	
 #if CHDESC_BIT_MERGE_OVERLAP	
@@ -2285,7 +2313,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	else if(block->ddesc->all_changes == block->ddesc->nrb && !block->ddesc->nrb->ddesc_next && bit_merge_overlap_ok_head(*head, block->ddesc->nrb))
 	{
 		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
-		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
+		chdesc_t * befores[] = { *head };
+		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head, 1, befores);
 	}
 # endif
 #endif
