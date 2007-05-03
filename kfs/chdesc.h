@@ -1,6 +1,19 @@
 #ifndef __KUDOS_KFS_CHDESC_H
 #define __KUDOS_KFS_CHDESC_H
 
+#define CHDESC_MARKED          0x01 /* marker for graph traversal */
+#define CHDESC_ROLLBACK        0x02 /* chdesc is rolled back */
+#define CHDESC_WRITTEN         0x04 /* chdesc has been written to disk */
+#define CHDESC_FREEING         0x08 /* chdesc is being freed */
+#define CHDESC_DATA            0x10 /* user data change (not metadata) */
+#define CHDESC_BIT_NOOP        0x20 /* bit_changes NOOP chdesc */
+#define CHDESC_OVERLAP         0x40 /* overlaps another chdesc completely */
+#define CHDESC_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
+#define CHDESC_FUTURE_BEFORES 0x100 /* may gain befores that would break overlap merging */
+#define CHDESC_INFLIGHT       0x200 /* chdesc is being written to disk */
+
+#ifndef CONSTANTS_ONLY
+
 #include <lib/hash_map.h>
 
 #define CHDESC_BYTE_SUM 0
@@ -31,17 +44,6 @@ typedef struct chrefdesc chrefdesc_t;
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
-
-#define CHDESC_MARKED          0x01 /* marker for graph traversal */
-#define CHDESC_ROLLBACK        0x02 /* chdesc is rolled back */
-#define CHDESC_WRITTEN         0x04 /* chdesc has been written to disk */
-#define CHDESC_FREEING         0x08 /* chdesc is being freed */
-#define CHDESC_DATA            0x10 /* user data change (not metadata) */
-#define CHDESC_BIT_NOOP        0x20 /* bit_changes NOOP chdesc */
-#define CHDESC_OVERLAP         0x40 /* overlaps another chdesc completely */
-#define CHDESC_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
-#define CHDESC_FUTURE_BEFORES 0x100 /* may gain befores that would break overlap merging */
-#define CHDESC_INFLIGHT       0x200 /* chdesc is being written to disk */
 
 struct chdesc {
 	BD_t * owner;
@@ -244,5 +246,7 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc);
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>
+
+#endif /* CONSTANTS_ONLY */
 
 #endif /* __KUDOS_KFS_CHDESC_H */

@@ -17,6 +17,9 @@
 #define WANT_DEBUG_STRUCTURES 1
 #include "kfs/debug_opcode.h"
 
+#define CONSTANTS_ONLY 1
+#include "kfs/chdesc.h"
+
 /* Set HASH_PRIME to do an extra pass over the input file to prime the string
  * and stack hash tables, and to report on the result. */
 #define HASH_PRIME 0
@@ -766,7 +769,7 @@ static int chdesc_add_before(struct chdesc * after, uint32_t before)
 	return 0;
 }
 
-static int chdesc_add_after(uint32_t after, struct chdesc * before)
+static int chdesc_add_after(struct chdesc * before, uint32_t after)
 {
 	struct arrow * arrow = malloc(sizeof(*arrow));
 	if(!arrow)
@@ -793,7 +796,7 @@ static int chdesc_rem_before(struct chdesc * after, uint32_t before)
 	return -ENOENT;
 }
 
-static int chdesc_rem_after(uint32_t after, struct chdesc * before)
+static int chdesc_rem_after(struct chdesc * before, uint32_t after)
 {
 	struct arrow ** point;
 	for(point = &before->afters; *point; point = &(*point)->next)
@@ -861,6 +864,11 @@ static int command_jump(int argc, const char * argv[])
 		return -1;
 	}
 	target = atoi(argv[1]);
+	if(target < 0 || target > opcodes)
+	{
+		printf("No such opcode.\n");
+		return -1;
+	}
 	printf("[Jump: %d to %d]\n", applied, target);
 	printf("Replaying log...     ");
 	fflush(stdout);
@@ -1025,29 +1033,160 @@ static int command_jump(int argc, const char * argv[])
 				break;
 			}
 			case KDB_CHDESC_CONVERT_NOOP:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->type = NOOP;
 				break;
+			}
 			case KDB_CHDESC_CONVERT_BIT:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "offset"}},
+					{{.name = "xor"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 2 &&
+				       params[2].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->type = BIT;
+				chdesc->bit.offset = params[1].data_2;
+				chdesc->bit.xor = params[2].data_4;
 				break;
+			}
 			case KDB_CHDESC_CONVERT_BYTE:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "offset"}},
+					{{.name = "length"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 2 &&
+				       params[2].size == 2);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->type = BYTE;
+				chdesc->byte.offset = params[1].data_2;
+				chdesc->byte.length = params[2].data_2;
 				break;
+			}
 			case KDB_CHDESC_REWRITE_BYTE:
-				/* ... */
+				/* nothing */
 				break;
 			case KDB_CHDESC_APPLY:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->flags &= ~CHDESC_ROLLBACK;
 				break;
+			}
 			case KDB_CHDESC_ROLLBACK:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->flags |= CHDESC_ROLLBACK;
 				break;
+			}
 			case KDB_CHDESC_SET_FLAGS:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "flags"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->flags |= params[1].data_4;
 				break;
+			}
 			case KDB_CHDESC_CLEAR_FLAGS:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "flags"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->flags &= ~params[1].data_4;
 				break;
+			}
 			case KDB_CHDESC_DESTROY:
 			{
 				struct debug_param params[] = {
@@ -1064,17 +1203,97 @@ static int command_jump(int argc, const char * argv[])
 				break;
 			}
 			case KDB_CHDESC_ADD_BEFORE:
-				/* ... */
+			{
+				struct chdesc * after;
+				struct debug_param params[] = {
+					{{.name = "source"}},
+					{{.name = "target"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				after = lookup_chdesc(params[0].data_4);
+				if(!after)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_add_before(after, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_ADD_AFTER:
-				/* ... */
+			{
+				struct chdesc * before;
+				struct debug_param params[] = {
+					{{.name = "source"}},
+					{{.name = "target"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				before = lookup_chdesc(params[0].data_4);
+				if(!before)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_add_after(before, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_REM_BEFORE:
-				/* ... */
+			{
+				struct chdesc * after;
+				struct debug_param params[] = {
+					{{.name = "source"}},
+					{{.name = "target"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				after = lookup_chdesc(params[0].data_4);
+				if(!after)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_rem_before(after, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_REM_AFTER:
-				/* ... */
+			{
+				struct chdesc * before;
+				struct debug_param params[] = {
+					{{.name = "source"}},
+					{{.name = "target"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				before = lookup_chdesc(params[0].data_4);
+				if(!before)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_rem_after(before, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_WEAK_RETAIN:
 				/* ... */
 				break;
@@ -1215,8 +1434,8 @@ static int command_list(int argc, const char * argv[])
 
 static int command_reset(int argc, const char * argv[])
 {
-	const char * array[] = {"jump", "0"};
-	return command_jump(2, array);
+	reset_state();
+	return 0;
 }
 
 static int command_run(int argc, const char * argv[])
@@ -1235,8 +1454,9 @@ static int command_status(int argc, const char * argv[])
 {
 	if(argc < 2)
 	{
+		int dependencies = (arrow_count + 1) / 2;
 		printf("Debugging %s, read %d opcodes, applied %d\n", input_name, opcodes, applied);
-		printf("[Info: %d chdescs, %d dependencies (%d raw)]\n", chdesc_count, (arrow_count + 1) / 2, arrow_count);
+		printf("[Info: %d chdescs, %d dependenc%s (%d raw)]\n", chdesc_count, dependencies, (dependencies == 1) ? "y" : "ies", arrow_count);
 	}
 	return 0;
 }
