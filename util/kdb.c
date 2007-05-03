@@ -894,9 +894,9 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_INFO_BD_NAME:
 			{
 				struct debug_param params[] = {
-					{{name: "bd"}},
-					{{name: "name"}},
-					{{name: NULL}}
+					{{.name = "bd"}},
+					{{.name = "name"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
@@ -910,9 +910,9 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_INFO_BDESC_NUMBER:
 			{
 				struct debug_param params[] = {
-					{{name: "block"}},
-					{{name: "number"}},
-					{{name: NULL}}
+					{{.name = "block"}},
+					{{.name = "number"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
@@ -927,9 +927,9 @@ static int command_jump(int argc, const char * argv[])
 			{
 				struct chdesc * chdesc;
 				struct debug_param params[] = {
-					{{name: "chdesc"}},
-					{{name: "label"}},
-					{{name: NULL}}
+					{{.name = "chdesc"}},
+					{{.name = "label"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
@@ -963,9 +963,9 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_CHDESC_CREATE_NOOP:
 			{
 				struct debug_param params[] = {
-					{{name: "chdesc"}},
-					{{name: "owner"}},
-					{{name: NULL}}
+					{{.name = "chdesc"}},
+					{{.name = "owner"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
@@ -981,12 +981,12 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_CHDESC_CREATE_BIT:
 			{
 				struct debug_param params[] = {
-					{{name: "chdesc"}},
-					{{name: "block"}},
-					{{name: "owner"}},
-					{{name: "offset"}},
-					{{name: "xor"}},
-					{{name: NULL}}
+					{{.name = "chdesc"}},
+					{{.name = "block"}},
+					{{.name = "owner"}},
+					{{.name = "offset"}},
+					{{.name = "xor"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
@@ -1004,12 +1004,12 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_CHDESC_CREATE_BYTE:
 			{
 				struct debug_param params[] = {
-					{{name: "chdesc"}},
-					{{name: "block"}},
-					{{name: "owner"}},
-					{{name: "offset"}},
-					{{name: "length"}},
-					{{name: NULL}}
+					{{.name = "chdesc"}},
+					{{.name = "block"}},
+					{{.name = "owner"}},
+					{{.name = "offset"}},
+					{{.name = "length"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
@@ -1051,8 +1051,8 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_CHDESC_DESTROY:
 			{
 				struct debug_param params[] = {
-					{{name: "chdesc"}},
-					{{name: NULL}}
+					{{.name = "chdesc"}},
+					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)

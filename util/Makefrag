@@ -42,4 +42,4 @@ $(UTILDIR)/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/
 $(UTILDIR)/kdb: util/kdb.c kfs/debug_opcode.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) -lreadline -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) -std=gnu99 -lreadline -I. -o $@ $<
