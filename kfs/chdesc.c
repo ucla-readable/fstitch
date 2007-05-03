@@ -1854,25 +1854,53 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 					break;
 			assert(i < nbefores || !nbefores);
 #endif
-			if(before->flags & CHDESC_FUTURE_BEFORES)
-				return 0;
-			if(before->befores)
-			{
-				chdesc_t * before2 = before->befores->before.desc;
-				if(before->befores->before.next)
-					return 0; /* could iterate, but it has not helped */
-				if(before2->befores)
-					return 0; /* could recurse, but it has not helped */
-				if(before2->block && before2->block->ddesc == ddesc)
-					return 0;
-				if(before2->flags & CHDESC_FUTURE_BEFORES)
-					return 0;
-			}
 		}
 	}
 	if(!overlap)
 		return 0;
 	
+	/* Check that *new's explicit befores will not induce chdesc cycles */
+	for(i = 0; i < nbefores; i++)
+	{
+		chdesc_t * before = befores[i];
+		
+		if(!before)
+			continue;
+		if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+			continue;
+		if(before->block && (*new)->block->ddesc == before->block->ddesc
+		   && chdesc_overlap_check(*new, before))
+			continue;
+		
+		if(before->flags & CHDESC_FUTURE_BEFORES)
+			return 0;
+		if(before->befores)
+		{
+			/* Check that before's befores will not induce chdesc cycles */
+			chdesc_t * before2 = before->befores->before.desc;
+			if(before2->flags & CHDESC_FUTURE_BEFORES)
+				return 0;
+			/* there cannot be a cycle if overlap already depends on before,
+			 * so do a (quick, width-2) check for this case: */
+			if(!(((before->afters->after.desc == overlap
+			       || before->afters->after.desc == *new)
+			      && (!before->afters->after.next
+			          || (!before->afters->after.next->after.next
+			              && (before->afters->after.desc == *new
+			                  || before->afters->after.desc == overlap))))))
+			{
+				/* we did not detect that overlap depends on before, so we
+				 * must check before's befores for chdesc cycles: */
+				if(before2->block && before2->block->ddesc == ddesc)
+					return 0;
+				if(before->befores->before.next)
+					return 0; /* could iterate, but it has not helped */
+				if(before2->befores)
+					return 0; /* could recurse, but it has not helped */
+			}
+		}
+	}
+
 	/* could support this, but it is not necessary to do so */
 	assert(!(overlap->flags & CHDESC_ROLLBACK));
 	
