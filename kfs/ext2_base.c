@@ -33,6 +33,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
 int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head);
+int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent);
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data);
 
@@ -875,13 +876,14 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 	bdesc_t * indirect = NULL, * dindirect = NULL;
 	uint32_t blockno, nindirect;
 	int r, offset, allocated;
+	chdesc_t * inode_befores[] = {NULL, NULL};
 	
 	if (f->f_type == TYPE_SYMLINK)
 		return -EINVAL;
 
 	if (!head || !f || block == INVALID_BLOCK)
 		return -EINVAL;
-	
+
 	nindirect = EXT2_BLOCK_SIZE / sizeof(uint32_t);
 	allocated = 0;
 
@@ -931,12 +933,15 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 		}
 		r = add_indirect(object, f, block, head);
 		if (r < 0)
-			return r;		
+			return r;
 	}
 	else if (nblocks > EXT2_NDIRECT) {
+		size_t ib_index;
 		if(nblocks == (EXT2_NDIRECT+1)) {
 			//allocate the indirect block pointer
-			blockno = ext2_allocate_block(object, file, 0, head);
+			ib_index = 1;
+			inode_befores[1] = CALL(info->ubd, get_write_head);
+			blockno = ext2_allocate_block(object, file, 0, &inode_befores[1]);
 			if(blockno == INVALID_BLOCK)
 				return -ENOSPC;
 			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
@@ -944,29 +949,31 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			indirect = ext2_synthetic_lookup_block(object, blockno);
 			if(indirect == NULL)
 				return -ENOSPC;
-			if ((r = chdesc_create_init(indirect, info->ubd, head)))
+			if ((r = chdesc_create_init(indirect, info->ubd, &inode_befores[1])))
 				return r;
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init indirect block");
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, inode_befores[1], "init indirect block");
 		} else {
+			ib_index = 0;
 			blockno = f->f_inode.i_block[EXT2_NDIRECT];
 			indirect = ext2_lookup_block(object, f->f_inode.i_block[EXT2_NDIRECT]);
 			if(indirect == NULL)
 				return -ENOSPC;
 		}
+		inode_befores[0] = *head;
 		offset = (nblocks - EXT2_NDIRECT - 1) * sizeof(uint32_t);
 		//This is to account for the fact that indirect block now affects the block count
 		if(nblocks > (EXT2_NDIRECT + 2))
 			offset -= sizeof(uint32_t);
-		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
+		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, &inode_befores[ib_index])) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add block");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, inode_befores[ib_index], "add block");
 
 		r = CALL(info->ubd, write_block, indirect);
 		if (r < 0)
 			return r;
 	}
 	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
-	return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+	return ext2_write_inode_array(info, f->f_ino, f->f_inode, head, sizeof(inode_befores) / sizeof(*inode_befores), inode_befores);
 }
 
 static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * dirent, 
@@ -2281,12 +2288,12 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 	}
 }
 
-int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head)
+int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 	uint32_t block_group, bitoffset, block;
 	int r;
 	bdesc_t * bdesc;
-	if (!head)
+	if (!tail)
 		return -EINVAL;
 	
 	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
@@ -2302,12 +2309,18 @@ int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, c
 	if(!bdesc)
 		return -ENOENT;
 	bitoffset &= (EXT2_BLOCK_SIZE - 1);
-	r = chdesc_create_diff(bdesc, info->ubd, bitoffset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[bitoffset], &inode, head);
+	r = chdesc_create_diff_array(bdesc, info->ubd, bitoffset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[bitoffset], &inode, tail, nbefores, befores);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write inode");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write inode");
 
 	return CALL(info->ubd, write_block, bdesc);
+}
+
+int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head)
+{
+	chdesc_t * befores[] = { *head };
+	return ext2_write_inode_array(info, ino, inode, head, 1, befores);
 }
 
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs)
