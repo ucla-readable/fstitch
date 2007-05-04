@@ -1884,7 +1884,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 			 * so do a (quick, width-2) check for this case: */
 			if(!(before->afters->after.desc == overlap
 			     || (before->afters->after.next
-			         && before->afters->after.next->after.desc == overlap))
+			         && before->afters->after.next->after.desc == overlap)))
 			{
 				/* we did not detect that overlap depends on before, so we
 				 * must check before's befores for chdesc cycles: */
