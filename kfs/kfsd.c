@@ -4,6 +4,7 @@
 #include <kfs/sched.h>
 #include <kfs/bdesc.h>
 #include <kfs/chdesc.h>
+#include <kfs/debug.h>
 #include <kfs/kfsd.h>
 #include <kfs/kfsd_init.h>
 #include <kfs/destroy.h>
@@ -70,7 +71,11 @@ static int kfsd_running = 0;
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
 static void kfsd_shutdown(void)
 {
-	printf("Syncing and shutting down.\n");
+	printf("Syncing and shutting down");
+#if KFS_DEBUG
+	printf(" (debug = %d)", KFS_DEBUG_COUNT());
+#endif
+	printf(".\n");
 	if(kfsd_running > 0)
 		kfsd_running = 0;
 	
