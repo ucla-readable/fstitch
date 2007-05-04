@@ -2288,6 +2288,8 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	chdesc_t * overlap_bit = NULL;
 	chdesc_t * overlap_word = NULL;
 	chdesc_t * overlap;
+	uint16_t flags;
+	int r;
 	
 	for(dep = bit_changes->befores; dep; dep = dep->before.next)
 	{
@@ -2330,6 +2332,15 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 
 		if (list == 0 && (list = chdesc_overlap_list(overlap)))
 			goto retry;
+	}
+	
+	if(overlap != *head)
+	{
+		flags = overlap->flags;
+		overlap->flags |= CHDESC_SAFE_AFTER;
+		if((r = chdesc_add_depend_fast(overlap, *head)) < 0)
+			return r;
+		overlap->flags = flags;
 	}
 	
 	overlap->bit.or |= xor;
