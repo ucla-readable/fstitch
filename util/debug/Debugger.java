@@ -39,6 +39,7 @@ public class Debugger extends OpcodeFactory
 		addModule(new BdescModule(input));
 		addModule(new ChdescAlterModule(input));
 		addModule(new ChdescInfoModule(input));
+		addModule(new CacheModule(input));
 		
 		short module = input.readShort();
 		if(module != 0)
@@ -102,14 +103,16 @@ public class Debugger extends OpcodeFactory
 			throw new UnsupportedStreamRevisionException(2857, debugOpcodeRev, 2933);
 		if((debugRev == 2934 || debugRev == 2953) && debugOpcodeRev == 2934)
 			throw new UnsupportedStreamRevisionException(debugRev, 2934, 2970);
-		
-		/* supported revisions */
 		if(debugRev == 2971 && debugOpcodeRev == 2934)
-			return; /* NOTE: flag change in r2972 */
+			throw new UnsupportedStreamRevisionException(2971, 2934, 3406); /* NOTE: flag change in r2972 */
 		if((debugRev == 3017 || debugRev == 3103 || debugRev == 3123 ||
 		    debugRev == 3330 || debugRev == 3371 || debugRev == 3379) && debugOpcodeRev == 2934)
-			return;
+			throw new UnsupportedStreamRevisionException(debugRev, 2934, 3406);
 		if(debugRev == 3390 && (debugOpcodeRev == 3390 || debugOpcodeRev == 3396))
+			throw new UnsupportedStreamRevisionException(3390, debugOpcodeRev, 3406);
+		
+		/* supported revisions */
+		if(debugRev == 3390 && debugOpcodeRev == 3407)
 			return;
 		
 		/* 0 means "use a newer revision" */

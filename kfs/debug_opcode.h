@@ -8,7 +8,8 @@ enum kdb_debug_module {
 	KDB_MODULE_INFO =                  1,
 	KDB_MODULE_BDESC =               100,
 	KDB_MODULE_CHDESC_ALTER =        200,
-	KDB_MODULE_CHDESC_INFO =         300
+	KDB_MODULE_CHDESC_INFO =         300,
+	KDB_MODULE_CACHE =               400
 };
 
 /* opcodes */
@@ -63,7 +64,13 @@ enum kdb_debug_opcode {
 	KDB_CHDESC_SATISFY =             301,
 	KDB_CHDESC_WEAK_COLLECT =        302,
 	KDB_CHDESC_OVERLAP_ATTACH =      303,
-	KDB_CHDESC_OVERLAP_MULTIATTACH = 304
+	KDB_CHDESC_OVERLAP_MULTIATTACH = 304,
+	
+	/* cache (4xx) */
+	KDB_CACHE_NOTIFY =               401,
+	KDB_CACHE_FINDBLOCK =            402,
+	KDB_CACHE_LOOKBLOCK =            403,
+	KDB_CACHE_WRITEBLOCK =           404
 };
 
 #ifdef WANT_DEBUG_STRUCTURES
@@ -281,6 +288,15 @@ static const struct param * params_chdesc_overlap_multiattach[] = {
 	&param_block,
 	&last_param
 };
+static const struct param * params_cache_only[] = {
+	&param_bd,
+	&last_param
+};
+static const struct param * params_cache_block[] = {
+	&param_bd,
+	&param_block,
+	&last_param
+};
 
 #define OPCODE(number, params) {number, #number, params}
 
@@ -330,6 +346,10 @@ static const struct opcode
 	opcode_chdesc_weak_collect =        OPCODE(KDB_CHDESC_WEAK_COLLECT,        params_chdesc_only),
 	opcode_chdesc_overlap_attach =      OPCODE(KDB_CHDESC_OVERLAP_ATTACH,      params_chdesc_overlap_attach),
 	opcode_chdesc_overlap_multiattach = OPCODE(KDB_CHDESC_OVERLAP_MULTIATTACH, params_chdesc_overlap_multiattach),
+	opcode_cache_notify =               OPCODE(KDB_CACHE_NOTIFY,               params_cache_only),
+	opcode_cache_findblock =            OPCODE(KDB_CACHE_FINDBLOCK,            params_cache_only),
+	opcode_cache_lookblock =            OPCODE(KDB_CACHE_LOOKBLOCK,            params_cache_block),
+	opcode_cache_writeblock =           OPCODE(KDB_CACHE_WRITEBLOCK,           params_cache_block),
 	last_opcode = {0, NULL, NULL};
 
 /* opcode combinations */
@@ -389,6 +409,13 @@ static const struct opcode * opcodes_chdesc_info[] = {
 	&opcode_chdesc_overlap_multiattach,
 	&last_opcode
 };
+static const struct opcode * opcodes_cache[] = {
+	&opcode_cache_notify,
+	&opcode_cache_findblock,
+	&opcode_cache_lookblock,
+	&opcode_cache_writeblock,
+	&last_opcode
+};
 
 /* modules */
 static const struct module modules[] = {
@@ -396,6 +423,7 @@ static const struct module modules[] = {
 	{KDB_MODULE_BDESC, opcodes_bdesc},
 	{KDB_MODULE_CHDESC_ALTER, opcodes_chdesc_alter},
 	{KDB_MODULE_CHDESC_INFO, opcodes_chdesc_info},
+	{KDB_MODULE_CACHE, opcodes_cache},
 	{0, NULL}
 };
 

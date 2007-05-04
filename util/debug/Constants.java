@@ -5,6 +5,7 @@ public interface Constants
 	public static final short KDB_MODULE_BDESC = 100;
 	public static final short KDB_MODULE_CHDESC_ALTER = 200;
 	public static final short KDB_MODULE_CHDESC_INFO = 300;
+	public static final short KDB_MODULE_CACHE = 400;
 	
 	public static final short KDB_INFO_MARK = 0;
 	public static final short KDB_INFO_BD_NAME = 1;
@@ -53,4 +54,9 @@ public interface Constants
 	public static final short KDB_CHDESC_WEAK_COLLECT = 302;
 	public static final short KDB_CHDESC_OVERLAP_ATTACH = 303;
 	public static final short KDB_CHDESC_OVERLAP_MULTIATTACH = 304;
+	
+	public static final short KDB_CACHE_NOTIFY = 401;
+	public static final short KDB_CACHE_FINDBLOCK = 402;
+	public static final short KDB_CACHE_LOOKBLOCK = 403;
+	public static final short KDB_CACHE_WRITEBLOCK = 404;
 }

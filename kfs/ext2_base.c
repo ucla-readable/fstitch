@@ -2337,11 +2337,15 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 	                       info->super_cache->ddesc->data + 1024, info->super, &head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
-	lfs_add_fork_head(head);
-	r = CALL(info->ubd, write_block, info->super_cache);
-	if (r < 0)
-		return r;
+	//chdesc_create_diff() returns 0 for "no change"
+	if (head && r > 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
+		lfs_add_fork_head(head);
+		r = CALL(info->ubd, write_block, info->super_cache);
+		if (r < 0)
+			return r;
+	}
 	
 	//Deal with the group descriptors
 	info->groups[group].bg_free_blocks_count += blocks;

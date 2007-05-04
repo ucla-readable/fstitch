@@ -2812,7 +2812,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 			/* it should already be NULL from the weak reference */
 			assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
 			hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_BIT_NOOP);
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, *chdesc, CHDESC_BIT_NOOP);
 			(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
 		}
 	}

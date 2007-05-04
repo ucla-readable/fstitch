@@ -281,7 +281,7 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if(debug_rev != 3379 || debug_opcode_rev != 2934)
+	if(debug_rev != 3390 || debug_opcode_rev != 3407)
 		return -EPROTO;
 	
 	for(m = 0; modules[m].opcodes; m++)
@@ -1330,6 +1330,13 @@ static int command_jump(int argc, const char * argv[])
 			case KDB_CHDESC_OVERLAP_ATTACH:
 			case KDB_CHDESC_OVERLAP_MULTIATTACH:
 				/* nothing */
+				break;
+			
+			case KDB_CACHE_NOTIFY:
+			case KDB_CACHE_FINDBLOCK:
+			case KDB_CACHE_LOOKBLOCK:
+			case KDB_CACHE_WRITEBLOCK:
+				/* ... */
 				break;
 			
 		fail:
