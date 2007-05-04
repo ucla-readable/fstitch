@@ -88,10 +88,14 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 			head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CStotal");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
-	if (r < 0)
-		return r;
+	/* chdesc_create_diff() returns 0 for "no change" */
+	if (*head && r > 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CStotal");
+		r = CALL(linfo->global_info->ubd, write_block, linfo->super_block);
+		if (r < 0)
+			return r;
+	}
 	linfo->dirty[WB_CSTOTAL] = 0;
 	/* Successfully wrote to disk, updating oldsum to reflect what should
 	 * be on disk. */

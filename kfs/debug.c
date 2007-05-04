@@ -294,7 +294,7 @@ int kfs_debug_init(void)
 	debug_rev = svnrevtol("$Rev$");
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
 	
-	printf("Initializing KFS debugging interface... (%d,%d)\n", debug_rev, debug_opcode_rev);
+	printf("Initializing KFS debugging interface... (%d, %d)\n", debug_rev, debug_opcode_rev);
 	
 	r = sched_register(kfs_debug_io_command, NULL, HZ / 10);
 	if(r < 0)

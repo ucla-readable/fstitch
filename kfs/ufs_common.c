@@ -67,12 +67,14 @@ int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inod
 	r = chdesc_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &inode_table->ddesc->data[offset], &inode, head);
 	if (r < 0)
 		return r;
-#if KFS_DEBUG
-	if(r > 0)
+	/* chdesc_create_diff() returns 0 for "no change" */
+	if (*head && r > 0)
+	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "update inode");
-#endif
+		r = CALL(info->ubd, write_block, inode_table);
+	}
 
-	return CALL(info->ubd, write_block, inode_table);
+	return r;
 }
 
 uint32_t ufs_read_btot(struct ufs_info * info, uint32_t num)

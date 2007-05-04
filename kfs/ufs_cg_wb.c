@@ -118,10 +118,14 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 			&linfo->cg[num].cgdata.cg_cs, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg checksum");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
-	if (r < 0)
-		return r;
+	/* chdesc_create_diff() returns 0 for "no change" */
+	if (*head && r > 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg checksum");
+		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+		if (r < 0)
+			return r;
+	}
 	linfo->cg[num].dirty[WB_CS] = 0;
 	/* Successfully wrote to disk, updating oldcgsum to reflect what should
 	 * be on disk. */
@@ -258,10 +262,14 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 			&linfo->cg[num].oldfrsum, &linfo->cg[num].cgdata.cg_frsum, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frsum");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
-	if (r < 0)
-		return r;
+	/* chdesc_create_diff() returns 0 for "no change" */
+	if(*head && r > 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frsum");
+		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+		if (r < 0)
+			return r;
+	}
 	linfo->cg[num].dirty[WB_FRSUM] = 0;
 	/* Successfully wrote to disk, updating oldfrsum to reflect what should
 	 * be on disk. */

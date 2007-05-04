@@ -281,7 +281,7 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if(debug_rev != 3390 || debug_opcode_rev != 3407)
+	if((debug_rev != 3390 && debug_rev != 3408) || debug_opcode_rev != 3407)
 		return -EPROTO;
 	
 	for(m = 0; modules[m].opcodes; m++)
@@ -572,8 +572,8 @@ struct chdesc {
 };
 
 static struct bd * bds = NULL;
-static struct block * blocks = NULL;
-static struct chdesc * chdescs = NULL;
+static struct block * blocks[HASH_TABLE_SIZE];
+static struct chdesc * chdescs[HASH_TABLE_SIZE];
 static int chdesc_count = 0;
 static int arrow_count = 0;
 
@@ -602,27 +602,30 @@ static void free_labels(struct label ** point)
 
 static void reset_state(void)
 {
+	int i;
 	while(bds)
 	{
 		struct bd * old = bds;
 		bds = old->next;
 		free(old);
 	}
-	while(blocks)
-	{
-		struct block * old = blocks;
-		blocks = old->next;
-		free(old);
-	}
-	while(chdescs)
-	{
-		struct chdesc * old = chdescs;
-		chdescs = old->next;
-		free_arrows(&old->befores);
-		free_arrows(&old->afters);
-		free_labels(&old->labels);
-		free(old);
-	}
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+		while(blocks[i])
+		{
+			struct block * old = blocks[i];
+			blocks[i] = old->next;
+			free(old);
+		}
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+		while(chdescs[i])
+		{
+			struct chdesc * old = chdescs[i];
+			chdescs[i] = old->next;
+			free_arrows(&old->befores);
+			free_arrows(&old->afters);
+			free_labels(&old->labels);
+			free(old);
+		}
 	chdesc_count = 0;
 	arrow_count = 0;
 	applied = 0;
@@ -640,7 +643,8 @@ static struct bd * lookup_bd(uint32_t address)
 static struct block * lookup_block(uint32_t address)
 {
 	struct block * scan;
-	for(scan = blocks; scan; scan = scan->next)
+	int index = address % HASH_TABLE_SIZE;
+	for(scan = blocks[index]; scan; scan = scan->next)
 		if(scan->address == address)
 			break;
 	return scan;
@@ -649,7 +653,8 @@ static struct block * lookup_block(uint32_t address)
 static struct chdesc * lookup_chdesc(uint32_t address)
 {
 	struct chdesc * scan;
-	for(scan = chdescs; scan; scan = scan->next)
+	int index = address % HASH_TABLE_SIZE;
+	for(scan = chdescs[index]; scan; scan = scan->next)
 		if(scan->address == address)
 			break;
 	return scan;
@@ -675,6 +680,7 @@ static int add_bd_name(uint32_t address, const char * name)
 
 static int add_block_number(uint32_t address, uint32_t number)
 {
+	int index = address % HASH_TABLE_SIZE;
 	struct block * block = lookup_block(address);
 	if(block)
 	{
@@ -686,13 +692,14 @@ static int add_block_number(uint32_t address, uint32_t number)
 		return -ENOMEM;
 	block->address = address;
 	block->number = number;
-	block->next = blocks;
-	blocks = block;
+	block->next = blocks[index];
+	blocks[index] = block;
 	return 0;
 }
 
 static struct chdesc * _chdesc_create(uint32_t address, uint32_t owner)
 {
+	int index = address % HASH_TABLE_SIZE;
 	struct chdesc * chdesc = malloc(sizeof(*chdesc));
 	if(!chdesc)
 		return NULL;
@@ -702,8 +709,9 @@ static struct chdesc * _chdesc_create(uint32_t address, uint32_t owner)
 	chdesc->flags = 0;
 	chdesc->befores = NULL;
 	chdesc->afters = NULL;
-	chdesc->next = chdescs;
-	chdescs = chdesc;
+	chdesc->labels = NULL;
+	chdesc->next = chdescs[index];
+	chdescs[index] = chdesc;
 	chdesc_count++;
 	return chdesc;
 }
@@ -813,8 +821,9 @@ static int chdesc_rem_after(struct chdesc * before, uint32_t after)
 
 static int chdesc_destroy(uint32_t address)
 {
-	struct chdesc ** point = &chdescs;
-	for(point = &chdescs; *point; point = &(*point)->next)
+	int index = address % HASH_TABLE_SIZE;
+	struct chdesc ** point;
+	for(point = &chdescs[index]; *point; point = &(*point)->next)
 		if((*point)->address == address)
 		{
 			struct chdesc * old = *point;
@@ -855,6 +864,8 @@ static int param_lookup(struct debug_opcode * opcode, struct debug_param * table
 	return 0;
 }
 
+static int tty = 0;
+
 static int command_jump(int argc, const char * argv[])
 {
 	int target, progress = 0, distance, percent = -1;
@@ -869,27 +880,29 @@ static int command_jump(int argc, const char * argv[])
 		printf("No such opcode.\n");
 		return -1;
 	}
-	printf("[Jump: %d to %d]\n", applied, target);
-	printf("Replaying log...     ");
+	printf("Replaying log... %s", tty ? "    " : "");
 	fflush(stdout);
 	if(target < applied)
 		reset_state();
 	distance = target - applied;
 	while(applied < target)
 	{
-		int m, o, p, r;
+		int m, o, r;
 		struct debug_opcode opcode;
-		p = progress * 100 / distance;
-		if(p > percent)
+		if(tty)
 		{
-			percent = p;
-			printf("\e[4D%2d%% ", percent);
-			fflush(stdout);
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
 		}
 		r = get_opcode(applied, &opcode);
 		if(r < 0)
 		{
-			printf("error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%serror %d reading opcode %d (%s)\n", tty ? "" : " ", -r, applied + 1, strerror(-r));
 			return r;
 		}
 		m = opcode.module_idx;
@@ -1301,28 +1314,138 @@ static int command_jump(int argc, const char * argv[])
 				/* ... */
 				break;
 			case KDB_CHDESC_SET_OFFSET:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "offset"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 2);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				if(chdesc->type == BIT)
+					chdesc->bit.offset = params[1].data_2;
+				else if(chdesc->type == BYTE)
+					chdesc->byte.offset = params[1].data_2;
+				else
+				{
+					r = -ENOMSG;
+					goto fail;
+				}
 				break;
+			}
 			case KDB_CHDESC_SET_XOR:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "xor"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				if(chdesc->type != BIT)
+				{
+					r = -ENOMSG;
+					goto fail;
+				}
+				chdesc->bit.xor = params[1].data_4;
 				break;
+			}
 			case KDB_CHDESC_SET_LENGTH:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "length"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 2);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				if(chdesc->type != BYTE)
+				{
+					r = -ENOMSG;
+					goto fail;
+				}
+				chdesc->byte.length = params[1].data_2;
 				break;
+			}
 			case KDB_CHDESC_SET_BLOCK:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "block"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				if(chdesc->type != BIT && chdesc->type != BYTE)
+				{
+					r = -ENOMSG;
+					goto fail;
+				}
+				chdesc->block = params[1].data_4;
 				break;
+			}
 			case KDB_CHDESC_SET_OWNER:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "owner"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->owner = params[1].data_4;
 				break;
+			}
+			
 			case KDB_CHDESC_SET_FREE_PREV:
-				/* ... */
-				break;
 			case KDB_CHDESC_SET_FREE_NEXT:
-				/* ... */
-				break;
 			case KDB_CHDESC_SET_FREE_HEAD:
-				/* ... */
+				/* currently not supported */
 				break;
 			
 			case KDB_CHDESC_SATISFY:
@@ -1340,7 +1463,7 @@ static int command_jump(int argc, const char * argv[])
 				break;
 			
 		fail:
-			printf("error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%serror %d applying opcode %d (%s)\n", tty ? "" : " ", -r, applied + 1, strerror(-r));
 			put_opcode(&opcode);
 			return r;
 		}
@@ -1348,7 +1471,7 @@ static int command_jump(int argc, const char * argv[])
 		applied++;
 		progress++;
 	}
-	printf("\e[4D%d opcodes OK!\n", applied);
+	printf("%s%d opcode%s OK!\n", tty ? "\e[4D" : "", applied, (applied == 1) ? "" : "s");
 	return 0;
 }
 
@@ -1461,9 +1584,9 @@ static int command_status(int argc, const char * argv[])
 {
 	if(argc < 2)
 	{
-		int dependencies = (arrow_count + 1) / 2;
-		printf("Debugging %s, read %d opcodes, applied %d\n", input_name, opcodes, applied);
-		printf("[Info: %d chdescs, %d dependenc%s (%d raw)]\n", chdesc_count, dependencies, (dependencies == 1) ? "y" : "ies", arrow_count);
+		int arrows = (arrow_count + 1) / 2;
+		printf("Debugging %s, read %d opcode%s, applied %d\n", input_name, opcodes, (opcodes == 1) ? "" : "s", applied);
+		printf("[Info: %d chdesc%s, %d dependenc%s (%d raw)]\n", chdesc_count, (chdesc_count == 1) ? "" : "s", arrows, (arrows == 1) ? "y" : "ies", arrow_count);
 	}
 	return 0;
 }
@@ -1585,6 +1708,8 @@ int main(int argc, char * argv[])
 	struct stat file;
 	off_t offset;
 	
+	tty = isatty(1);
+	
 	if(argc < 2)
 	{
 		printf("Usage: %s <trace>\n", argv[0]);
@@ -1617,7 +1742,7 @@ int main(int argc, char * argv[])
 	else
 		printf("OK!\n");
 	
-	printf("Scanning debugging output...     ");
+	printf("Scanning debugging output... %s", tty ? "    " : "");
 	fflush(stdout);
 	
 	while((offset = ftello(input)) != file.st_size)
@@ -1625,8 +1750,14 @@ int main(int argc, char * argv[])
 		r = offset * 100 / file.st_size;
 		if(r > percent)
 		{
-			percent = r;
-			printf("\e[4D%2d%% ", percent);
+			if(tty)
+			{
+				percent = r;
+				printf("\e[4D%2d%% ", percent);
+			}
+			else
+				while(++percent <= r)
+					printf("*");
 			fflush(stdout);
 		}
 		
@@ -1635,7 +1766,7 @@ int main(int argc, char * argv[])
 			break;
 		add_opcode_offset(offset);
 	}
-	printf("\e[4D%d opcodes OK!\n", opcodes);
+	printf("%s%d opcode%s OK!\n", tty ? "\e[4D" : " ", opcodes, (opcodes == 1) ? "" : "s");
 	if(r < 0)
 		fprintf(stderr, "Error %d at file offset %lld+%lld (%s)\n", -r, offset, ftello(input) - offset, strerror(-r));
 	
@@ -1644,10 +1775,10 @@ int main(int argc, char * argv[])
 #if HASH_PRIME || RANDOM_TEST
 		int opcode;
 #endif
-		printf("Average opcode length: %d bytes\n", (int) ((offset + opcodes / 2) / opcodes));
+		printf("[Info: average opcode length is %d bytes]\n", (int) ((offset + opcodes / 2) / opcodes));
 		
 #if HASH_PRIME
-		printf("Reading debugging output...     ");
+		printf("Reading debugging output... %s", tty ? "    " : "");
 		fflush(stdout);
 		
 		percent = -1;
@@ -1657,8 +1788,14 @@ int main(int argc, char * argv[])
 			r = opcode * 100 / opcodes;
 			if(r > percent)
 			{
-				percent = r;
-				printf("\e[4D%2d%% ", percent);
+				if(tty)
+				{
+					percent = r;
+					printf("\e[4D%2d%% ", percent);
+				}
+				else
+					while(++percent <= r)
+						printf("*");
 				fflush(stdout);
 			}
 			
@@ -1667,11 +1804,11 @@ int main(int argc, char * argv[])
 				break;
 			put_opcode(&debug_opcode);
 		}
-		printf("\e[4D%d unique strings, %d unique stacks\n", unique_strings, unique_stacks);
+		printf("%s%d unique strings, %d unique stacks\n", tty ? "\e[4D" : " ", unique_strings, unique_stacks);
 #endif
 		
 #if RANDOM_TEST
-		printf("Reading random opcodes...     ");
+		printf("Reading random opcodes... %s", tty ? "    " : "");
 		fflush(stdout);
 		
 		percent = -1;
@@ -1681,8 +1818,14 @@ int main(int argc, char * argv[])
 			r = opcode * 100 / opcodes;
 			if(r > percent)
 			{
-				percent = r;
-				printf("\e[4D%2d%% ", percent);
+				if(tty)
+				{
+					percent = r;
+					printf("\e[4D%2d%% ", percent);
+				}
+				else
+					while(++percent <= r)
+						printf("*");
 				fflush(stdout);
 			}
 			
@@ -1691,7 +1834,7 @@ int main(int argc, char * argv[])
 				break;
 			put_opcode(&debug_opcode);
 		}
-		printf("\e[4DOK!\n");
+		printf("%sOK!\n", tty ? "\e[4D" : " ");
 #endif
 		
 		rl_completion_entry_function = command_complete;

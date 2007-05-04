@@ -2312,9 +2312,15 @@ int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t in
 	r = chdesc_create_diff_array(bdesc, info->ubd, bitoffset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[bitoffset], &inode, tail, nbefores, befores);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write inode");
+	//chdesc_create_diff() returns 0 for "no change"
+	if (*tail && r > 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write inode");
+		lfs_add_fork_head(*tail);
+		r = CALL(info->ubd, write_block, bdesc);
+	}
 
-	return CALL(info->ubd, write_block, bdesc);
+	return r;
 }
 
 int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head)
@@ -2367,11 +2373,15 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 	                       info->groups + group_bdesc * EXT2_DESC_PER_BLOCK, &head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write group desc");
-	lfs_add_fork_head(head);
-	r = CALL(info->ubd, write_block, info->gdescs[group_bdesc]);
-	return r;
+	//chdesc_create_diff() returns 0 for "no change"
+	if (head && r > 0)
+	{
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write group desc");
+		lfs_add_fork_head(head);
+		r = CALL(info->ubd, write_block, info->gdescs[group_bdesc]);
+	}
 	
+	return r;
 }
 
 static int ext2_load_super(LFS_t * lfs)
