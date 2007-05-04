@@ -540,6 +540,11 @@ struct block {
 	struct block * next;
 };
 
+struct weak {
+	uint32_t location;
+	struct weak * next;
+};
+
 struct arrow {
 	uint32_t chdesc;
 	struct arrow * next;
@@ -565,15 +570,18 @@ struct chdesc {
 		} byte;
 	};
 	uint16_t flags;
+	struct weak * weak_refs;
 	struct arrow * befores;
 	struct arrow * afters;
 	struct label * labels;
+	uint32_t free_prev, free_next;
 	struct chdesc * next;
 };
 
 static struct bd * bds = NULL;
 static struct block * blocks[HASH_TABLE_SIZE];
 static struct chdesc * chdescs[HASH_TABLE_SIZE];
+static uint32_t chdesc_free_head = 0;
 static int chdesc_count = 0;
 static int arrow_count = 0;
 
@@ -707,9 +715,12 @@ static struct chdesc * _chdesc_create(uint32_t address, uint32_t owner)
 	chdesc->opcode = applied + 1;
 	chdesc->owner = owner;
 	chdesc->flags = 0;
+	chdesc->weak_refs = NULL;
 	chdesc->befores = NULL;
 	chdesc->afters = NULL;
 	chdesc->labels = NULL;
+	chdesc->free_prev = 0;
+	chdesc->free_next = 0;
 	chdesc->next = chdescs[index];
 	chdescs[index] = chdesc;
 	chdesc_count++;
@@ -748,6 +759,31 @@ static struct chdesc * chdesc_create_noop(uint32_t address, uint32_t owner)
 	chdesc->block = 0;
 	chdesc->type = NOOP;
 	return chdesc;
+}
+
+static int chdesc_add_weak(struct chdesc * chdesc, uint32_t location)
+{
+	struct weak * weak = malloc(sizeof(*weak));
+	if(!weak)
+		return -ENOMEM;
+	weak->location = location;
+	weak->next = chdesc->weak_refs;
+	chdesc->weak_refs = weak;
+	return 0;
+}
+
+static int chdesc_rem_weak(struct chdesc * chdesc, uint32_t location)
+{
+	struct weak ** point;
+	for(point = &chdesc->weak_refs; *point; point = &(*point)->next)
+		if((*point)->location == location)
+		{
+			struct weak * old = *point;
+			*point = old->next;
+			free(old);
+			return 0;
+		}
+	return -ENOENT;
 }
 
 static int chdesc_add_label(struct chdesc * chdesc, const char * label)
@@ -1308,11 +1344,51 @@ static int command_jump(int argc, const char * argv[])
 				break;
 			}
 			case KDB_CHDESC_WEAK_RETAIN:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "location"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_add_weak(chdesc, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_WEAK_FORGET:
-				/* ... */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "location"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4 && params[1].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				r = chdesc_rem_weak(chdesc, params[1].data_4);
+				if(r < 0)
+					goto fail;
 				break;
+			}
 			case KDB_CHDESC_SET_OFFSET:
 			{
 				struct chdesc * chdesc;
@@ -1441,12 +1517,61 @@ static int command_jump(int argc, const char * argv[])
 				chdesc->owner = params[1].data_4;
 				break;
 			}
-			
 			case KDB_CHDESC_SET_FREE_PREV:
-			case KDB_CHDESC_SET_FREE_NEXT:
-			case KDB_CHDESC_SET_FREE_HEAD:
-				/* currently not supported */
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "free_prev"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->free_prev = params[1].data_4;
 				break;
+			}
+			case KDB_CHDESC_SET_FREE_NEXT:
+			{
+				struct chdesc * chdesc;
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = "free_next"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				chdesc = lookup_chdesc(params[0].data_4);
+				if(!chdesc)
+				{
+					r = -EFAULT;
+					goto fail;
+				}
+				chdesc->free_next = params[1].data_4;
+				break;
+			}
+			case KDB_CHDESC_SET_FREE_HEAD:
+			{
+				struct debug_param params[] = {
+					{{.name = "chdesc"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					goto fail;
+				assert(params[0].size == 4);
+				chdesc_free_head = params[0].data_4;
+				break;
+			}
 			
 			case KDB_CHDESC_SATISFY:
 			case KDB_CHDESC_WEAK_COLLECT:
