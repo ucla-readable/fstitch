@@ -875,8 +875,6 @@ static int chdesc_destroy(uint32_t address)
 
 /* End state management */
 
-/* Begin commands */
-
 static int param_lookup(struct debug_opcode * opcode, struct debug_param * table)
 {
 	int m = opcode->module_idx;
@@ -943,11 +941,535 @@ static int param_chdesc_set_field(struct debug_opcode * opcode, const char * nam
 	return 0;
 }
 
+/* This function contains almost all of the opcode-specific code. Everything
+ * else is driven by tables defined in debug_opcode.h or in this function. */
+static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippable)
+{
+	int m, o, r = 0;
+	m = opcode->module_idx;
+	o = opcode->opcode_idx;
+	if(effect)
+		*effect = 1;
+	if(skippable)
+		*skippable = 0;
+	switch(modules[m].opcodes[o]->opcode)
+	{
+		case KDB_INFO_MARK:
+			/* nothing */
+			if(effect)
+				*effect = 0;
+			break;
+		case KDB_INFO_BD_NAME:
+		{
+			struct debug_param params[] = {
+				{{.name = "bd"}},
+				{{.name = "name"}},
+				{{.name = NULL}}
+			};
+			if(skippable)
+				*skippable = 1;
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
+			r = add_bd_name(params[0].data_4, params[1].data_v);
+			break;
+		}
+		case KDB_INFO_BDESC_NUMBER:
+		{
+			struct debug_param params[] = {
+				{{.name = "block"}},
+				{{.name = "number"}},
+				{{.name = NULL}}
+			};
+			if(skippable)
+				*skippable = 1;
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4);
+			r = add_block_number(params[0].data_4, params[1].data_4);
+			break;
+		}
+		case KDB_INFO_CHDESC_LABEL:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "label"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			r = chdesc_add_label(chdesc, params[1].data_v);
+			break;
+		}
+		
+		case KDB_BDESC_ALLOC:
+		case KDB_BDESC_ALLOC_WRAP:
+		case KDB_BDESC_RETAIN:
+		case KDB_BDESC_RELEASE:
+		case KDB_BDESC_DESTROY:
+		case KDB_BDESC_FREE_DDESC:
+		case KDB_BDESC_AUTORELEASE:
+		case KDB_BDESC_AR_RESET:
+		case KDB_BDESC_AR_POOL_PUSH:
+		case KDB_BDESC_AR_POOL_POP:
+			/* unsupported */
+			break;
+		
+		case KDB_CHDESC_CREATE_NOOP:
+		{
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "owner"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4);
+			if(!chdesc_create_noop(params[0].data_4, params[1].data_4))
+				r = -ENOMEM;
+			break;
+		}
+		case KDB_CHDESC_CREATE_BIT:
+		{
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "block"}},
+				{{.name = "owner"}},
+				{{.name = "offset"}},
+				{{.name = "xor"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4 &&
+					params[2].size == 4 && params[3].size == 2 &&
+					params[4].size == 4);
+			if(!chdesc_create_bit(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_4))
+				r = -ENOMEM;
+			break;
+		}
+		case KDB_CHDESC_CREATE_BYTE:
+		{
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "block"}},
+				{{.name = "owner"}},
+				{{.name = "offset"}},
+				{{.name = "length"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4 &&
+					params[2].size == 4 && params[3].size == 2 &&
+					params[4].size == 2);
+			if(!chdesc_create_byte(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_2))
+				r = -ENOMEM;
+			break;
+		}
+		case KDB_CHDESC_CONVERT_NOOP:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->type = NOOP;
+			break;
+		}
+		case KDB_CHDESC_CONVERT_BIT:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "offset"}},
+				{{.name = "xor"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 2 &&
+					params[2].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->type = BIT;
+			chdesc->bit.offset = params[1].data_2;
+			chdesc->bit.xor = params[2].data_4;
+			break;
+		}
+		case KDB_CHDESC_CONVERT_BYTE:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "offset"}},
+				{{.name = "length"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 2 &&
+					params[2].size == 2);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->type = BYTE;
+			chdesc->byte.offset = params[1].data_2;
+			chdesc->byte.length = params[2].data_2;
+			break;
+		}
+		case KDB_CHDESC_REWRITE_BYTE:
+			/* nothing */
+			break;
+		case KDB_CHDESC_APPLY:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->flags &= ~CHDESC_ROLLBACK;
+			break;
+		}
+		case KDB_CHDESC_ROLLBACK:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->flags |= CHDESC_ROLLBACK;
+			break;
+		}
+		case KDB_CHDESC_SET_FLAGS:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "flags"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->flags |= params[1].data_4;
+			break;
+		}
+		case KDB_CHDESC_CLEAR_FLAGS:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "flags"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			chdesc->flags &= ~params[1].data_4;
+			break;
+		}
+		case KDB_CHDESC_DESTROY:
+		{
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4);
+			r = chdesc_destroy(params[0].data_4);
+			break;
+		}
+		case KDB_CHDESC_ADD_BEFORE:
+			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_add_before);
+			break;
+		case KDB_CHDESC_ADD_AFTER:
+			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_add_after);
+			break;
+		case KDB_CHDESC_REM_BEFORE:
+			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_rem_before);
+			break;
+		case KDB_CHDESC_REM_AFTER:
+			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_rem_after);
+			break;
+		case KDB_CHDESC_WEAK_RETAIN:
+			r = param_chdesc_int_apply(opcode, "chdesc", "location", chdesc_add_weak);
+			break;
+		case KDB_CHDESC_WEAK_FORGET:
+			r = param_chdesc_int_apply(opcode, "chdesc", "location", chdesc_rem_weak);
+			break;
+		case KDB_CHDESC_SET_OFFSET:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "offset"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 2);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			if(chdesc->type == BIT)
+				chdesc->bit.offset = params[1].data_2;
+			else if(chdesc->type == BYTE)
+				chdesc->byte.offset = params[1].data_2;
+			else
+				r = -ENOMSG;
+			break;
+		}
+		case KDB_CHDESC_SET_XOR:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "xor"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			if(chdesc->type != BIT)
+			{
+				r = -ENOMSG;
+				break;
+			}
+			chdesc->bit.xor = params[1].data_4;
+			break;
+		}
+		case KDB_CHDESC_SET_LENGTH:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "length"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 2);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			if(chdesc->type != BYTE)
+			{
+				r = -ENOMSG;
+				break;
+			}
+			chdesc->byte.length = params[1].data_2;
+			break;
+		}
+		case KDB_CHDESC_SET_BLOCK:
+		{
+			struct chdesc * chdesc;
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = "block"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4 && params[1].size == 4);
+			chdesc = lookup_chdesc(params[0].data_4);
+			if(!chdesc)
+			{
+				r = -EFAULT;
+				break;
+			}
+			if(chdesc->type != BIT && chdesc->type != BYTE)
+			{
+				r = -ENOMSG;
+				break;
+			}
+			chdesc->block = params[1].data_4;
+			break;
+		}
+		case KDB_CHDESC_SET_OWNER:
+			r = param_chdesc_set_field(opcode, "chdesc", "owner", offsetof(struct chdesc, owner));
+			break;
+		case KDB_CHDESC_SET_FREE_PREV:
+			r = param_chdesc_set_field(opcode, "chdesc", "free_prev", offsetof(struct chdesc, free_prev));
+			break;
+		case KDB_CHDESC_SET_FREE_NEXT:
+			r = param_chdesc_set_field(opcode, "chdesc", "free_next", offsetof(struct chdesc, free_next));
+			break;
+		case KDB_CHDESC_SET_FREE_HEAD:
+		{
+			struct debug_param params[] = {
+				{{.name = "chdesc"}},
+				{{.name = NULL}}
+			};
+			r = param_lookup(opcode, params);
+			if(r < 0)
+				break;
+			assert(params[0].size == 4);
+			chdesc_free_head = params[0].data_4;
+			break;
+		}
+		
+		case KDB_CHDESC_SATISFY:
+		case KDB_CHDESC_WEAK_COLLECT:
+		case KDB_CHDESC_OVERLAP_ATTACH:
+		case KDB_CHDESC_OVERLAP_MULTIATTACH:
+			/* nothing */
+			if(effect)
+				*effect = 0;
+			break;
+		
+		case KDB_CACHE_NOTIFY:
+		case KDB_CACHE_FINDBLOCK:
+		case KDB_CACHE_LOOKBLOCK:
+		case KDB_CACHE_WRITEBLOCK:
+			/* ... */
+			if(effect)
+				*effect = 0;
+			break;
+	}
+	return r;
+}
+
+static void print_opcode(int number, struct debug_opcode * opcode, int show_trace)
+{
+	int m, o, p;
+	m = opcode->module_idx;
+	o = opcode->opcode_idx;
+	printf("#%d %s", number, modules[m].opcodes[o]->name);
+	for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
+	{
+		printf("%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
+		if(opcode->params[p].size == 4)
+		{
+			const char * format = "0x%08x";
+			if(modules[m].opcodes[o]->params[p]->type == UINT32)
+				format = "%u";
+			else if(modules[m].opcodes[o]->params[p]->type == INT32)
+				format = "%d";
+			printf(format, opcode->params[p].data_4);
+		}
+		else if(opcode->params[p].size == 2)
+		{
+			if(modules[m].opcodes[o]->params[p]->type == UINT16)
+				printf("%d", opcode->params[p].data_2);
+			else if(modules[m].opcodes[o]->params[p]->type == INT16)
+				printf("%d", (int) (int16_t) opcode->params[p].data_2);
+			else
+				printf("0x%04x", opcode->params[p].data_2);
+		}
+		else if(opcode->params[p].size == 1)
+		{
+			if(modules[m].opcodes[o]->params[p]->type == BOOL)
+				printf(opcode->params[p].data_1 ? "true" : "false");
+			else
+				printf("%d", opcode->params[p].data_1);
+		}
+		else if(opcode->params[p].size == (uint8_t) -1)
+			printf("%s", opcode->params[p].data_v);
+	}
+	printf("\n");
+	printf("    from %s() at %s:%d\n", opcode->function, opcode->file, opcode->line);
+	if(show_trace)
+	{
+		for(p = 0; opcode->stack[p]; p++)
+			printf("  [%d]: 0x%08x", p, opcode->stack[p]);
+		printf("\n");
+	}
+}
+
+/* Begin commands */
+
 static int tty = 0;
 
 static int command_jump(int argc, const char * argv[])
 {
-	int target, progress = 0, distance, percent = -1;
+	int target, effect = 0;
+	int progress = 0, distance, percent = -1;
 	if(argc < 2)
 	{
 		printf("Need an opcode to jump to.");
@@ -966,7 +1488,7 @@ static int command_jump(int argc, const char * argv[])
 	distance = target - applied;
 	while(applied < target)
 	{
-		int m, o, r;
+		int r, opcode_effect;
 		struct debug_opcode opcode;
 		if(tty)
 		{
@@ -981,509 +1503,22 @@ static int command_jump(int argc, const char * argv[])
 		r = get_opcode(applied, &opcode);
 		if(r < 0)
 		{
-			printf("%serror %d reading opcode %d (%s)\n", tty ? "" : " ", -r, applied + 1, strerror(-r));
+			printf("error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
 			return r;
 		}
-		m = opcode.module_idx;
-		o = opcode.opcode_idx;
-		switch(modules[m].opcodes[o]->opcode)
-		{
-			case KDB_INFO_MARK:
-				/* nothing */
-				break;
-			case KDB_INFO_BD_NAME:
-			{
-				struct debug_param params[] = {
-					{{.name = "bd"}},
-					{{.name = "name"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
-				r = add_bd_name(params[0].data_4, params[1].data_v);
-				if(r < 0)
-					goto fail;
-				break;
-			}
-			case KDB_INFO_BDESC_NUMBER:
-			{
-				struct debug_param params[] = {
-					{{.name = "block"}},
-					{{.name = "number"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4);
-				r = add_block_number(params[0].data_4, params[1].data_4);
-				if(r < 0)
-					goto fail;
-				break;
-			}
-			case KDB_INFO_CHDESC_LABEL:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "label"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				r = chdesc_add_label(chdesc, params[1].data_v);
-				if(r < 0)
-					goto fail;
-				break;
-			}
-			
-			case KDB_BDESC_ALLOC:
-			case KDB_BDESC_ALLOC_WRAP:
-			case KDB_BDESC_RETAIN:
-			case KDB_BDESC_RELEASE:
-			case KDB_BDESC_DESTROY:
-			case KDB_BDESC_FREE_DDESC:
-			case KDB_BDESC_AUTORELEASE:
-			case KDB_BDESC_AR_RESET:
-			case KDB_BDESC_AR_POOL_PUSH:
-			case KDB_BDESC_AR_POOL_POP:
-				/* unsupported */
-				break;
-			
-			case KDB_CHDESC_CREATE_NOOP:
-			{
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "owner"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4);
-				if(!chdesc_create_noop(params[0].data_4, params[1].data_4))
-				{
-					r = -ENOMEM;
-					goto fail;
-				}
-				break;
-			}
-			case KDB_CHDESC_CREATE_BIT:
-			{
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "block"}},
-					{{.name = "owner"}},
-					{{.name = "offset"}},
-					{{.name = "xor"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4 &&
-				       params[2].size == 4 && params[3].size == 2 &&
-				       params[4].size == 4);
-				if(!chdesc_create_bit(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_4))
-				{
-					r = -ENOMEM;
-					goto fail;
-				}
-				break;
-			}
-			case KDB_CHDESC_CREATE_BYTE:
-			{
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "block"}},
-					{{.name = "owner"}},
-					{{.name = "offset"}},
-					{{.name = "length"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4 &&
-				       params[2].size == 4 && params[3].size == 2 &&
-				       params[4].size == 2);
-				if(!chdesc_create_byte(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_2))
-				{
-					r = -ENOMEM;
-					goto fail;
-				}
-				break;
-			}
-			case KDB_CHDESC_CONVERT_NOOP:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->type = NOOP;
-				break;
-			}
-			case KDB_CHDESC_CONVERT_BIT:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "offset"}},
-					{{.name = "xor"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 2 &&
-				       params[2].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->type = BIT;
-				chdesc->bit.offset = params[1].data_2;
-				chdesc->bit.xor = params[2].data_4;
-				break;
-			}
-			case KDB_CHDESC_CONVERT_BYTE:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "offset"}},
-					{{.name = "length"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 2 &&
-				       params[2].size == 2);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->type = BYTE;
-				chdesc->byte.offset = params[1].data_2;
-				chdesc->byte.length = params[2].data_2;
-				break;
-			}
-			case KDB_CHDESC_REWRITE_BYTE:
-				/* nothing */
-				break;
-			case KDB_CHDESC_APPLY:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->flags &= ~CHDESC_ROLLBACK;
-				break;
-			}
-			case KDB_CHDESC_ROLLBACK:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->flags |= CHDESC_ROLLBACK;
-				break;
-			}
-			case KDB_CHDESC_SET_FLAGS:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "flags"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->flags |= params[1].data_4;
-				break;
-			}
-			case KDB_CHDESC_CLEAR_FLAGS:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "flags"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				chdesc->flags &= ~params[1].data_4;
-				break;
-			}
-			case KDB_CHDESC_DESTROY:
-			{
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4);
-				r = chdesc_destroy(params[0].data_4);
-				if(r < 0)
-					goto fail;
-				break;
-			}
-			case KDB_CHDESC_ADD_BEFORE:
-				r = param_chdesc_int_apply(&opcode, "source", "target", chdesc_add_before);
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_ADD_AFTER:
-				r = param_chdesc_int_apply(&opcode, "source", "target", chdesc_add_after);
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_REM_BEFORE:
-				r = param_chdesc_int_apply(&opcode, "source", "target", chdesc_rem_before);
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_REM_AFTER:
-				r = param_chdesc_int_apply(&opcode, "source", "target", chdesc_rem_after);
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_WEAK_RETAIN:
-				r = param_chdesc_int_apply(&opcode, "chdesc", "location", chdesc_add_weak);
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_WEAK_FORGET:
-				r = param_chdesc_int_apply(&opcode, "chdesc", "location", chdesc_rem_weak);
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_SET_OFFSET:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "offset"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 2);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				if(chdesc->type == BIT)
-					chdesc->bit.offset = params[1].data_2;
-				else if(chdesc->type == BYTE)
-					chdesc->byte.offset = params[1].data_2;
-				else
-				{
-					r = -ENOMSG;
-					goto fail;
-				}
-				break;
-			}
-			case KDB_CHDESC_SET_XOR:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "xor"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				if(chdesc->type != BIT)
-				{
-					r = -ENOMSG;
-					goto fail;
-				}
-				chdesc->bit.xor = params[1].data_4;
-				break;
-			}
-			case KDB_CHDESC_SET_LENGTH:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "length"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 2);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				if(chdesc->type != BYTE)
-				{
-					r = -ENOMSG;
-					goto fail;
-				}
-				chdesc->byte.length = params[1].data_2;
-				break;
-			}
-			case KDB_CHDESC_SET_BLOCK:
-			{
-				struct chdesc * chdesc;
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = "block"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4 && params[1].size == 4);
-				chdesc = lookup_chdesc(params[0].data_4);
-				if(!chdesc)
-				{
-					r = -EFAULT;
-					goto fail;
-				}
-				if(chdesc->type != BIT && chdesc->type != BYTE)
-				{
-					r = -ENOMSG;
-					goto fail;
-				}
-				chdesc->block = params[1].data_4;
-				break;
-			}
-			case KDB_CHDESC_SET_OWNER:
-				r = param_chdesc_set_field(&opcode, "chdesc", "owner", offsetof(struct chdesc, owner));
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_SET_FREE_PREV:
-				r = param_chdesc_set_field(&opcode, "chdesc", "free_prev", offsetof(struct chdesc, free_prev));
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_SET_FREE_NEXT:
-				r = param_chdesc_set_field(&opcode, "chdesc", "free_next", offsetof(struct chdesc, free_next));
-				if(r < 0)
-					goto fail;
-				break;
-			case KDB_CHDESC_SET_FREE_HEAD:
-			{
-				struct debug_param params[] = {
-					{{.name = "chdesc"}},
-					{{.name = NULL}}
-				};
-				r = param_lookup(&opcode, params);
-				if(r < 0)
-					goto fail;
-				assert(params[0].size == 4);
-				chdesc_free_head = params[0].data_4;
-				break;
-			}
-			
-			case KDB_CHDESC_SATISFY:
-			case KDB_CHDESC_WEAK_COLLECT:
-			case KDB_CHDESC_OVERLAP_ATTACH:
-			case KDB_CHDESC_OVERLAP_MULTIATTACH:
-				/* nothing */
-				break;
-			
-			case KDB_CACHE_NOTIFY:
-			case KDB_CACHE_FINDBLOCK:
-			case KDB_CACHE_LOOKBLOCK:
-			case KDB_CACHE_WRITEBLOCK:
-				/* ... */
-				break;
-			
-		fail:
-			printf("%serror %d applying opcode %d (%s)\n", tty ? "" : " ", -r, applied + 1, strerror(-r));
-			put_opcode(&opcode);
-			return r;
-		}
+		r = apply_opcode(&opcode, &opcode_effect, NULL);
 		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		if(opcode_effect)
+			effect = 1;
 		applied++;
 		progress++;
 	}
-	printf("%s%d opcode%s OK!\n", tty ? "\e[4D" : "", applied, (applied == 1) ? "" : "s");
+	printf("%s%d opcode%s OK%s\n", tty ? "\e[4D" : "", applied, (applied == 1) ? "" : "s", effect ? "!" : ", no change.");
 	return 0;
 }
 
@@ -1517,58 +1552,14 @@ static int command_list(int argc, const char * argv[])
 	}
 	for(i = min; i <= max; i++)
 	{
-		int m, o, p, r;
 		struct debug_opcode opcode;
-		r = get_opcode(i, &opcode);
+		int r = get_opcode(i, &opcode);
 		if(r < 0)
 		{
 			printf("Error %d reading opcode %d (%s)\n", -r, i + 1, strerror(-r));
 			return r;
 		}
-		m = opcode.module_idx;
-		o = opcode.opcode_idx;
-		printf("#%d %s", i + 1, modules[m].opcodes[o]->name);
-		for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
-		{
-			printf("%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
-			if(opcode.params[p].size == 4)
-			{
-				const char * format = "0x%08x";
-				if(modules[m].opcodes[o]->params[p]->type == UINT32)
-					format = "%u";
-				else if(modules[m].opcodes[o]->params[p]->type == INT32)
-					format = "%d";
-				printf(format, opcode.params[p].data_4);
-			}
-			else if(opcode.params[p].size == 2)
-			{
-				if(modules[m].opcodes[o]->params[p]->type == UINT16)
-					printf("%d", opcode.params[p].data_2);
-				else if(modules[m].opcodes[o]->params[p]->type == INT16)
-					printf("%d", (int) (int16_t) opcode.params[p].data_2);
-				else
-					printf("0x%04x", opcode.params[p].data_2);
-			}
-			else if(opcode.params[p].size == 1)
-			{
-				if(modules[m].opcodes[o]->params[p]->type == BOOL)
-					printf(opcode.params[p].data_1 ? "true" : "false");
-				else
-					printf("%d", opcode.params[p].data_1);
-			}
-			else if(opcode.params[p].size == (uint8_t) -1)
-			{
-				printf("%s", opcode.params[p].data_v);
-			}
-		}
-		printf("\n");
-		printf("    from %s() at %s:%d\n", opcode.function, opcode.file, opcode.line);
-		if(show_trace)
-		{
-			for(p = 0; opcode.stack[p]; p++)
-				printf("  [%d]: 0x%08x", p, opcode.stack[p]);
-			printf("\n");
-		}
+		print_opcode(i + 1, &opcode, show_trace);
 		put_opcode(&opcode);
 	}
 	return 0;
@@ -1605,11 +1596,40 @@ static int command_status(int argc, const char * argv[])
 
 static int command_step(int argc, const char * argv[])
 {
-	char number[12];
-	const char * array[] = {"jump", number};
 	int delta = (argc > 1) ? atoi(argv[1]) : 1;
-	sprintf(number, "%u", applied + delta);
-	return command_jump(2, array);
+	int target = applied + delta, skippable = 1;
+	int effect = 0;
+	if(target < 0 || target > opcodes)
+	{
+		printf("No such opcode.\n");
+		return -1;
+	}
+	printf("Replaying log... ");
+	fflush(stdout);
+	if(target < applied)
+		reset_state();
+	while(applied < target || (delta == 1 && skippable))
+	{
+		struct debug_opcode opcode;
+		int opcode_effect, r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		r = apply_opcode(&opcode, &opcode_effect, &skippable);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		if(opcode_effect)
+			effect = 1;
+		applied++;
+	}
+	printf("%d opcode%s OK%s\n", applied, (applied == 1) ? "" : "s", effect ? "!" : ", no change.");
+	return 0;
 }
 
 /* End commands */
