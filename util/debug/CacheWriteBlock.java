@@ -25,7 +25,7 @@ public class CacheWriteBlock extends Opcode
 	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CACHE_WRITEBLOCK, "KDB_CACHE_WRITEBLOCK", CacheWriteBlock.class);
-		factory.addParameter("bd", 4);
+		factory.addParameter("cache", 4);
 		factory.addParameter("block", 4);
 		return factory;
 	}

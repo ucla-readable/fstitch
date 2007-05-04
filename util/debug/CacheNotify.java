@@ -24,7 +24,7 @@ public class CacheNotify extends Opcode
 	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CACHE_NOTIFY, "KDB_CACHE_NOTIFY", CacheNotify.class);
-		factory.addParameter("bd", 4);
+		factory.addParameter("cache", 4);
 		return factory;
 	}
 }

@@ -114,6 +114,7 @@ static const struct param
 	param_bd =          {"bd",          UHEX32},
 	param_block =       {"block",       UHEX32},
 	param_blocks =      {"blocks",      UHEX32},
+	param_cache =       {"cache",       UHEX32},
 	param_chdesc =      {"chdesc",      UHEX32},
 	param_chdescs =     {"chdescs",     UHEX32},
 	param_count =       {"count",       UINT32},
@@ -289,11 +290,11 @@ static const struct param * params_chdesc_overlap_multiattach[] = {
 	&last_param
 };
 static const struct param * params_cache_only[] = {
-	&param_bd,
+	&param_cache,
 	&last_param
 };
 static const struct param * params_cache_block[] = {
-	&param_bd,
+	&param_cache,
 	&param_block,
 	&last_param
 };

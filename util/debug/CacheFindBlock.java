@@ -24,7 +24,7 @@ public class CacheFindBlock extends Opcode
 	public static ModuleOpcodeFactory getFactory(CountingDataInput input)
 	{
 		ModuleOpcodeFactory factory = new ModuleOpcodeFactory(input, KDB_CACHE_FINDBLOCK, "KDB_CACHE_FINDBLOCK", CacheFindBlock.class);
-		factory.addParameter("bd", 4);
+		factory.addParameter("cache", 4);
 		return factory;
 	}
 }
