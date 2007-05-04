@@ -2218,11 +2218,28 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
+/* Return whether it is safe, chdesc dependency wise, to merge
+ * a new bit chdesc with the before 'head' into 'overlap'. */
 static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * overlap)
 {
 	if(head && head != overlap && !(head->flags & CHDESC_INFLIGHT))
-		if(head->befores || head->flags & CHDESC_FUTURE_BEFORES)
+	{
+		if(head->flags & CHDESC_FUTURE_BEFORES)
 			return 0;
+		/* Check whether creating overlap->head may induce a cycle.
+		 * If overlap->head already exists, the answer is of course no
+		 * so take a quick look at overlap: */
+		if(!(overlap->befores
+		     && (overlap->befores->before.desc == head
+		         || (overlap->befores->before.next
+		             && overlap->befores->before.next->before.desc == head))))
+		{
+			/* We did not detect that overlap->head already exists,
+			 * so see if head->overlap may exist: */
+			if(head->befores)
+				return 0;
+		}
+	}
 	return 1;
 }
 #endif
@@ -2253,7 +2270,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	
 	if(!bit_merge_overlap_ok_head(*head, overlap))
 		return 0;
-
+	
 	{
 		int list = 0;
 		chdesc_t *before;
