@@ -2239,7 +2239,7 @@ static bool common_indirect_before(const chdesc_t * a, const chdesc_t * b)
 				size_t l = 0;
 				for(; b_b_b && l < max; b_b_b = b_b_b->before.next, l++)
 				{
-					if(a_b_b->befores.desc == b_b_b->before.desc)
+					if(a_b_b->before.desc == b_b_b->before.desc)
 						return 1;
 				}
 			}
