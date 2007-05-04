@@ -114,7 +114,7 @@ public class Debugger extends OpcodeFactory
 			throw new UnsupportedStreamRevisionException(debugRev, 3407, 3412);
 		
 		/* supported revisions */
-		if(debugRev == 3408 && debugOpcodeRev == 3413)
+		if(debugRev == 3408 && debugOpcodeRev == 3414)
 			return;
 		
 		/* 0 means "use a newer revision" */
