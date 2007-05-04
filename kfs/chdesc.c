@@ -2218,6 +2218,36 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
+/* Return whether a and b have a common indirect before; that is, whether
+ * there exist some x,y,z: a->x->z and b->y->z. */
+static bool common_indirect_before(const chdesc_t * a, const chdesc_t * b)
+{
+	size_t max = 2;
+	chdepdesc_t * a_b = a->befores;
+	size_t i = 0;
+	for(; a_b && i < max; a_b = a_b->before.next, i++)
+	{
+		chdepdesc_t * a_b_b = a_b->before.desc->befores;
+		size_t j = 0;
+		for(; a_b_b && j < max; a_b_b = a_b_b->before.next, j++)
+		{
+			chdepdesc_t * b_b = b->befores;
+			size_t k = 0;
+			for(; b_b && k < max; b_b = b_b->before.next, k++)
+			{
+				chdepdesc_t * b_b_b = b_b->before.desc->befores;
+				size_t l = 0;
+				for(; b_b_b && l < max; b_b_b = b_b_b->before.next, l++)
+				{
+					if(a_b_b->befores.desc == b_b_b->before.desc)
+						return 1;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
 /* Return whether it is safe, chdesc dependency wise, to merge
  * a new bit chdesc with the before 'head' into 'overlap'. */
 static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * overlap)
@@ -2237,7 +2267,14 @@ static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * ov
 			/* We did not detect that overlap->head already exists,
 			 * so see if head->overlap may exist: */
 			if(head->befores)
-				return 0;
+			{
+				/* Try to find some x: overlap->x->head: */
+				if(!common_indirect_before(head, overlap))
+				{
+					/* Cannot determine that head->overlap does not exist */
+					return 0;
+				}
+			}
 		}
 	}
 	return 1;
