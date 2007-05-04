@@ -2297,7 +2297,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 			goto retry;
 	}
 	
-	if(overlap != *head)
+	if(*head && overlap != *head)
 	{
 		flags = overlap->flags;
 		overlap->flags |= CHDESC_SAFE_AFTER;
