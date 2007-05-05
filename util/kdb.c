@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <errno.h>
+#include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -875,6 +876,8 @@ static int chdesc_destroy(uint32_t address)
 
 /* End state management */
 
+static int render_free = 0;
+
 static int param_lookup(struct debug_opcode * opcode, struct debug_param * table)
 {
 	int m = opcode->module_idx;
@@ -1462,6 +1465,221 @@ static void print_opcode(int number, struct debug_opcode * opcode, int show_trac
 	}
 }
 
+static int snprint_opcode(char * string, size_t length, struct debug_opcode * opcode)
+{
+	int m, o, p, r;
+	m = opcode->module_idx;
+	o = opcode->opcode_idx;
+	r = snprintf(string, length, "%s", modules[m].opcodes[o]->name);
+	if(r >= length)
+		return -1;
+	length -= r;
+	string += r;
+	for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
+	{
+		r = snprintf(string, length, "%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
+		if(r >= length)
+			return -1;
+		length -= r;
+		string += r;
+		if(opcode->params[p].size == 4)
+		{
+			const char * format = "0x%08x";
+			if(modules[m].opcodes[o]->params[p]->type == UINT32)
+				format = "%u";
+			else if(modules[m].opcodes[o]->params[p]->type == INT32)
+				format = "%d";
+			r = snprintf(string, length, format, opcode->params[p].data_4);
+		}
+		else if(opcode->params[p].size == 2)
+		{
+			if(modules[m].opcodes[o]->params[p]->type == UINT16)
+				r = snprintf(string, length, "%d", opcode->params[p].data_2);
+			else if(modules[m].opcodes[o]->params[p]->type == INT16)
+				r = snprintf(string, length, "%d", (int) (int16_t) opcode->params[p].data_2);
+			else
+				r = snprintf(string, length, "0x%04x", opcode->params[p].data_2);
+		}
+		else if(opcode->params[p].size == 1)
+		{
+			if(modules[m].opcodes[o]->params[p]->type == BOOL)
+				r = snprintf(string, length, opcode->params[p].data_1 ? "true" : "false");
+			else
+				r = snprintf(string, length, "%d", opcode->params[p].data_1);
+		}
+		else if(opcode->params[p].size == (uint8_t) -1)
+			r = snprintf(string, length, "%s", opcode->params[p].data_v);
+		else
+			continue;
+		if(r >= length)
+			return -1;
+		length -= r;
+		string += r;
+	}
+	return 0;
+}
+
+static void render_block_owner(FILE * output, struct chdesc * chdesc)
+{
+	if(chdesc->block)
+	{
+		struct block * block = lookup_block(chdesc->block);
+		if(block)
+			fprintf(output, "\\n#%d (0x%08x)", block->number, block->address);
+		else
+			fprintf(output, "\\non 0x%08x", chdesc->block);
+	}
+	if(chdesc->owner)
+	{
+		struct bd * bd = lookup_bd(chdesc->owner);
+		if(bd)
+			fprintf(output, "\\n%s", bd->name);
+		else
+			fprintf(output, "\\nat 0x%08x", chdesc->owner);
+	}
+}
+
+static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free)
+{
+	struct label * label;
+	struct arrow * arrow;
+	struct weak * weak;
+	
+	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, chdesc, chdesc->address);
+	for(label = chdesc->labels; label; label = label->next)
+		fprintf(output, "\\n\\\"%s\\\"", label->label);
+	switch(chdesc->type)
+	{
+		case NOOP:
+			render_block_owner(output, chdesc);
+			fprintf(output, "\",style=\"");
+			break;
+		case BIT:
+			fprintf(output, "\\n[%d:0x%08x]", chdesc->bit.offset, chdesc->bit.xor);
+			render_block_owner(output, chdesc);
+			fprintf(output, "\",fillcolor=springgreen1,style=\"filled");
+			break;
+		case BYTE:
+			fprintf(output, "\\n[%d:%d]", chdesc->byte.offset, chdesc->byte.length);
+			render_block_owner(output, chdesc);
+			fprintf(output, "\",fillcolor=slateblue1,style=\"filled");
+			break;
+	}
+	if(chdesc->flags & CHDESC_ROLLBACK)
+		fprintf(output, ",dashed,bold");
+	if(chdesc->flags & CHDESC_MARKED)
+		fprintf(output, ",bold\",color=red");
+	else
+		fprintf(output, "\"");
+	if(chdesc->flags & CHDESC_FREEING)
+		fprintf(output, ",fontcolor=red");
+	else if(chdesc->flags & CHDESC_WRITTEN)
+		fprintf(output, ",fontcolor=blue");
+	fprintf(output, "]\n");
+	
+	for(arrow = chdesc->befores; arrow; arrow = arrow->next)
+	{
+		struct chdesc * before = lookup_chdesc(arrow->chdesc);
+		if(before)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", chdesc->address, chdesc, before->address, before);
+	}
+	for(arrow = chdesc->afters; arrow; arrow = arrow->next)
+	{
+		struct chdesc * after = lookup_chdesc(arrow->chdesc);
+		if(after)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, after, chdesc->address, chdesc);
+	}
+	for(weak = chdesc->weak_refs; weak; weak = weak->next)
+	{
+		fprintf(output, "\"0x%08x\" [shape=box,fillcolor=yellow,style=filled]\n", weak->location);
+		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, chdesc->address, chdesc);
+	}
+	if(chdesc->free_prev)
+	{
+		struct chdesc * prev = lookup_chdesc(chdesc->free_prev);
+		if(prev)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, prev, chdesc->address, chdesc);
+	}
+	if(chdesc->free_next && render_free)
+	{
+		struct chdesc * next = lookup_chdesc(chdesc->free_next);
+		if(next)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", chdesc->address, chdesc, next->address, next);
+	}
+}
+
+static void render(FILE * output, const char * title, int landscape)
+{
+	int i, free = 0;
+	
+	/* header */
+	fprintf(output, "digraph chdescs\n{\nnodesep=0.25;\nranksep=0.25;\n");
+	if(landscape)
+		fprintf(output, "rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
+	else
+		fprintf(output, "rankdir=LR;\norientation=P;\nsize=\"16,16\";\n");
+	fprintf(output, "subgraph clusterAll {\nlabel=\"%s\";\ncolor=white;\n", title);
+	fprintf(output, "node [shape=ellipse,color=black];\n");
+	
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		struct chdesc * chdesc;
+		for(chdesc = chdescs[i]; chdesc; chdesc = chdesc->next)
+		{
+			int is_free = chdesc->address == chdesc_free_head || chdesc->free_prev;
+			if(is_free)
+				free++;
+			if(render_free)
+				render_chdesc(output, chdesc, 1);
+			else if(chdesc->address == chdesc_free_head || !chdesc->free_prev)
+				render_chdesc(output, chdesc, 0);
+		}
+	}
+	
+	if(chdesc_free_head)
+	{
+		fprintf(output, "subgraph cluster_free {\ncolor=red;\nstyle=dashed;\n");
+		if(render_free)
+		{
+			struct chdesc * chdesc = lookup_chdesc(chdesc_free_head);
+			fprintf(output, "label=\"Free List\";\n");
+			while(chdesc)
+			{
+				fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+				chdesc = lookup_chdesc(chdesc->free_next);
+			}
+			if(free > 3)
+			{
+				double ratio = sqrt(free / 1.6) / free;
+				int cluster = 0;
+				free = 0;
+				fprintf(output, "subgraph cluster_align {\nstyle=invis;\n");
+				chdesc = lookup_chdesc(chdesc_free_head);
+				while(chdesc)
+				{
+					free++;
+					if(cluster < ratio * free)
+					{
+						cluster++;
+						fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+					}
+					chdesc = lookup_chdesc(chdesc->free_next);
+				}
+				fprintf(output, "}\n");
+			}
+		}
+		else
+		{
+			fprintf(output, "label=\"Free Head (+%d)\";\n", free - 1);
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc_free_head, lookup_chdesc(chdesc_free_head));
+		}
+		fprintf(output, "}\n");
+	}
+	
+	/* footer */
+	fprintf(output, "}\n}\n");
+}
+
 /* Begin commands */
 
 static int tty = 0;
@@ -1565,6 +1783,180 @@ static int command_list(int argc, const char * argv[])
 	return 0;
 }
 
+static int command_find(int argc, const char * argv[])
+{
+	int start = 0, stop = opcodes;
+	int save_applied = applied, count;
+	int r, extreme = -1, direction;
+	struct debug_opcode opcode;
+	const char * range = "";
+	if(argc < 2 || (!strcmp(argv[1], "max") && !strcmp(argv[1], "min")))
+	{
+		printf("Need \"max\" or \"min\" to find.\n");
+		return -1;
+	}
+	if(argc == 4)
+	{
+		/* search an opcode range */
+		start = atoi(argv[2]);
+		stop = atoi(argv[3]);
+		if(start < 0 || start > stop)
+		{
+			printf("Invalid range.\n");
+			return -1;
+		}
+		if(stop > opcodes)
+			stop = opcodes;
+		range = "in range ";
+	}
+	else if(argc != 2)
+	{
+		printf("Need a valid opcode range.\n");
+		return -1;
+	}
+	direction = strcmp(argv[1], "max") ? -1 : 1;
+	
+	if(start < applied)
+		reset_state();
+	while(applied < start)
+	{
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("Error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("Error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		applied++;
+	}
+	
+	/* find the extreme */
+	extreme = chdesc_count;
+	count = applied;
+	while(applied < stop)
+	{
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("Error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("Error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		applied++;
+		if(chdesc_count * direction > extreme * direction)
+		{
+			extreme = chdesc_count;
+			count = applied;
+		}
+	}
+	
+	/* restore initial state */
+	if(save_applied < applied)
+		reset_state();
+	while(applied < save_applied)
+	{
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("Error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("Error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			return r;
+		}
+		applied++;
+	}
+	
+	printf("The %simum change descriptor count of %d %sfirst occurs at opcode #%d\n", argv[1], extreme, range, count);
+	return 0;
+}
+
+static int command_option(int argc, const char * argv[])
+{
+	if(argc < 2)
+	{
+		printf("Need an option to get or set.\n");
+		return -1;
+	}
+	if(!strcmp(argv[1], "freelist"))
+	{
+		const char * now = "";
+		if(argc > 2)
+		{
+			if(!strcmp(argv[2], "on"))
+				render_free = 1;
+			else if(!strcmp(argv[2], "off"))
+				render_free = 0;
+			else
+			{
+				printf("Invalid setting: %s\n", argv[2]);
+				return -1;
+			}
+			now = "now ";
+		}
+		printf("Free list rendering is %so%s\n", now, render_free ? "n" : "ff");
+	}
+	else if(!strcmp(argv[1], "grouping"))
+	{
+		printf("Grouping is not yet supported.\n");
+		return -1;
+	}
+	else
+	{
+		printf("Invalid option: %s\n", argv[1]);
+		return -1;
+	}
+	return 0;
+}
+
+static int command_render(int argc, const char * argv[])
+{
+	FILE * output = stdout;
+	char title[256] = {0};
+	if(argc > 1)
+	{
+		output = fopen(argv[1], "w");
+		if(!output)
+		{
+			perror(argv[1]);
+			return -errno;
+		}
+	}
+	if(applied > 0)
+	{
+		struct debug_opcode opcode;
+		int r = get_opcode(applied - 1, &opcode);
+		if(r < 0)
+		{
+			printf("Error %d reading opcode %d (%s)\n", -r, applied, strerror(-r));
+			return r;
+		}
+		r = snprint_opcode(title, sizeof(title), &opcode);
+		put_opcode(&opcode);
+		assert(r >= 0);
+	}
+	render(output, title, 1);
+	if(argc > 1)
+		fclose(output);
+	return 0;
+}
+
 static int command_reset(int argc, const char * argv[])
 {
 	reset_state();
@@ -1647,10 +2039,10 @@ struct {
 	//{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui},
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump},
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list},
-	//{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find},
-	//{"option", "Get or set rendering options: freelist, grouping.", command_option},
+	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find},
+	{"option", "Get or set rendering options: freelist, grouping.", command_option},
 	//{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps},
-	//{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render},
+	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render},
 	{"reset", "Reset system state to 0 opcodes.", command_reset},
 	{"run", "Apply all opcodes to system state.", command_run},
 	{"status", "Displays system state status.", command_status},
@@ -1799,7 +2191,9 @@ int main(int argc, char * argv[])
 		add_opcode_offset(offset);
 	}
 	printf("%s%d opcode%s OK!\n", tty ? "\e[4D" : " ", opcodes, (opcodes == 1) ? "" : "s");
-	if(r < 0)
+	if(r == -1)
+		fprintf(stderr, "Unexpected end of file at offset %lld+%lld\n", offset, ftello(input) - offset);
+	else if(r < 0)
 		fprintf(stderr, "Error %d at file offset %lld+%lld (%s)\n", -r, offset, ftello(input) - offset, strerror(-r));
 	
 	if(opcodes)
@@ -1836,7 +2230,7 @@ int main(int argc, char * argv[])
 				break;
 			put_opcode(&debug_opcode);
 		}
-		printf("%s%d unique strings, %d unique stacks\n", tty ? "\e[4D" : " ", unique_strings, unique_stacks);
+		printf("%s%d unique strings, %d unique stacks OK!\n", tty ? "\e[4D" : " ", unique_strings, unique_stacks);
 #endif
 		
 #if RANDOM_TEST
@@ -1861,7 +2255,7 @@ int main(int argc, char * argv[])
 				fflush(stdout);
 			}
 			
-			r = get_opcode((rand() * RAND_MAX + rand()) % opcodes, &debug_opcode);
+			r = get_opcode((unsigned int) (rand() * RAND_MAX + rand()) % opcodes, &debug_opcode);
 			if(r < 0)
 				break;
 			put_opcode(&debug_opcode);
