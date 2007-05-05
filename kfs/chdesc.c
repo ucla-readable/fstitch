@@ -2218,6 +2218,74 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
+/* Quickly check whether creating head->merge may induce a cycle:
+ * determine (heuristically) whether there exist chdescs x,y such that
+ * merge->x->y and head->y and (conservatively) check that head~>merge
+ * does not exist. */
+static bool merge_head_dep_safe(const chdesc_t * head, const chdesc_t * merge)
+{
+#define MAX_WIDTH 2
+	chdesc_t * common[MAX_WIDTH + 1] = {NULL, NULL, NULL};
+	size_t common_index = 0;
+	chdepdesc_t * head_b = head->befores;
+	size_t i = 0;
+
+	/* Find some common befores */
+	for(; head_b && i < MAX_WIDTH; head_b = head_b->before.next)
+	{
+		chdepdesc_t * merge_b = merge->befores;
+		size_t j = 0;
+		for(; merge_b && j < MAX_WIDTH; merge_b = merge_b->before.next)
+		{
+			chdepdesc_t * merge_b_b = merge_b->before.desc->befores;
+			size_t k = 0;
+			for(; merge_b_b && k < MAX_WIDTH; merge_b_b = merge_b_b->before.next)
+			{
+				if(head_b->before.desc == merge_b_b->before.desc)
+				{
+					common[common_index++] = head_b->before.desc;
+					if(common_index > MAX_WIDTH)
+					{
+						printf("%s(): More common chdescs found than can handle\n", __FUNCTION__);
+						i = MAX_WIDTH; /* end search since 'common' is full */
+					}
+					goto next_head_b;
+				}
+			}
+		}
+	  next_head_b:
+		(void) 0; /* placate compiler re end of compound statement labels */
+	}
+	if(!common_index)
+		return 0;
+	
+	/* Check for head~>merge paths */
+	for(head_b = head->befores; head_b; head_b = head_b->before.next)
+	{
+		chdesc_t * before = head_b->before.desc;
+		for(i = 0; i < MAX_WIDTH; i++)
+			if(before == common[i])
+				break;
+		if(i < MAX_WIDTH)
+			continue;
+		if(before->flags & CHDESC_FUTURE_BEFORES)
+			return 0;
+		if(before == merge)
+			return 0;
+		if(before->befores)
+		{
+			if(before->befores->before.next)
+				return 0;
+			for(i = 0; i < MAX_WIDTH; i++)
+				if(before->befores->before.desc == common[i])
+					break;
+			if(i == MAX_WIDTH)
+				return 0;
+		}
+	}
+	return 1;
+}
+
 /* Return whether it is safe, chdesc dependency wise, to merge
  * a new bit chdesc with the before 'head' into 'overlap'. */
 static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * overlap)
@@ -2227,16 +2295,15 @@ static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * ov
 		if(head->flags & CHDESC_FUTURE_BEFORES)
 			return 0;
 		/* Check whether creating overlap->head may induce a cycle.
-		 * If overlap->head already exists, the answer is of course no
-		 * so take a quick look at overlap: */
+		 * If overlap->head already exists the answer is of course no: */
 		if(!(overlap->befores
 		     && (overlap->befores->before.desc == head
 		         || (overlap->befores->before.next
 		             && overlap->befores->before.next->before.desc == head))))
 		{
 			/* We did not detect that overlap->head already exists,
-			 * so see if head->overlap may exist: */
-			if(head->befores)
+			 * so see if head->overlap cannot exist: */
+			if(head->befores && !merge_head_dep_safe(head, overlap))
 				return 0;
 		}
 	}
