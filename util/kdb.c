@@ -579,6 +579,8 @@ struct chdesc {
 	struct chdesc * next;
 };
 
+static const char * type_names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [NOOP] = "NOOP"};
+
 static struct bd * bds = NULL;
 static struct block * blocks[HASH_TABLE_SIZE];
 static struct chdesc * chdescs[HASH_TABLE_SIZE];
@@ -1418,6 +1420,23 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 	return r;
 }
 
+static void print_chdesc_brief(uint32_t address)
+{
+	struct chdesc * chdesc = lookup_chdesc(address);
+	if(chdesc)
+	{
+		struct arrow * count;
+		int afters = 0, befores = 0;
+		for(count = chdesc->afters; count; count = count->next)
+			afters++;
+		for(count = chdesc->befores; count; count = count->next)
+			befores++;
+		printf(" 0x%08x, %s, nafters %d, nbefores %d\n", chdesc->address, type_names[chdesc->type], afters, befores);
+	}
+	else
+		printf(" 0x%08x\n", address);
+}
+
 static void print_opcode(int number, struct debug_opcode * opcode, int show_trace)
 {
 	int m, o, p;
@@ -1790,7 +1809,7 @@ static int command_find(int argc, const char * argv[])
 	int r, extreme = -1, direction;
 	struct debug_opcode opcode;
 	const char * range = "";
-	if(argc < 2 || (!strcmp(argv[1], "max") && !strcmp(argv[1], "min")))
+	if(argc < 2 || (strcmp(argv[1], "max") && strcmp(argv[1], "min")))
 	{
 		printf("Need \"max\" or \"min\" to find.\n");
 		return -1;
@@ -1983,6 +2002,62 @@ static int command_status(int argc, const char * argv[])
 		printf("Debugging %s, read %d opcode%s, applied %d\n", input_name, opcodes, (opcodes == 1) ? "" : "s", applied);
 		printf("[Info: %d chdesc%s, %d dependenc%s (%d raw)]\n", chdesc_count, (chdesc_count == 1) ? "" : "s", arrows, (arrows == 1) ? "y" : "ies", arrow_count);
 	}
+	else
+	{
+		int i = 1;
+		int verbose = 0;
+		if(!strcmp(argv[1], "-v"))
+		{
+			verbose = 1;
+			i++;
+		}
+		else if(!strcmp(argv[1], "-vv") || !strcmp(argv[1], "-V"))
+		{
+			verbose = 2;
+			i++;
+		}
+		for(; i < argc; i++)
+		{
+			uint32_t address = strtoul(argv[i], NULL, 16);
+			struct chdesc * chdesc = lookup_chdesc(address);
+			if(!chdesc)
+			{
+				printf("No such chdesc: 0x%08x\n", address);
+				continue;
+			}
+			printf("Chdesc 0x%08x was created by opcode %d\n", chdesc->address, chdesc->opcode);
+			if(verbose)
+			{
+				struct label * label;
+				for(label = chdesc->labels; label; label = label->next)
+					printf("Label = \"%s\"\n", label->label);
+				printf("block address = 0x%08x", chdesc->block);
+				if(chdesc->block)
+				{
+					struct block * block = lookup_block(chdesc->block);
+					if(block)
+						printf(", number = %u", block->number);
+				}
+				if(chdesc->owner)
+				{
+					struct bd * bd = lookup_bd(chdesc->owner);
+					if(bd)
+						printf(", name = %s", bd->name);
+				}
+				printf("\nFlags: 0x%08x\n", chdesc->flags);
+				if(verbose > 1)
+				{
+					struct arrow * arrow;
+					printf("Afters:\n");
+					for(arrow = chdesc->afters; arrow; arrow = arrow->next)
+						print_chdesc_brief(arrow->chdesc);
+					printf("Befores:\n");
+					for(arrow = chdesc->befores; arrow; arrow = arrow->next)
+						print_chdesc_brief(arrow->chdesc);
+				}
+			}
+		}
+	}
 	return 0;
 }
 
@@ -2080,16 +2155,44 @@ static int command_quit(int argc, const char * argv[])
 
 static char * command_complete(const char * text, int state)
 {
-	static int index, length;
+	static int index, length, chdesc;
+	static struct chdesc * last;
 	if(!state)
 	{
 		int i;
-		/* don't complete commands except at the beginning of the line */
+		/* don't complete commands except at the beginning of the line, or 0x... */
+		chdesc = 0;
 		for(i = rl_point - 1; i >= 0; i--)
 			if(rl_line_buffer[i] == ' ')
+			{
+				if(i < rl_point - 2 && rl_line_buffer[i + 1] == '0' && rl_line_buffer[i + 2] == 'x')
+				{
+					chdesc = 1;
+					last = NULL;
+					break;
+				}
 				return NULL;
+			}
 		index = 0;
 		length = strlen(text);
+	}
+	if(chdesc)
+	{
+		char name[11];
+		do {
+			while(!last && index < HASH_TABLE_SIZE)
+				last = chdescs[index++];
+			for(; last; last = last->next)
+			{
+				sprintf(name, "0x%08x", last->address);
+				if(!strncmp(name, text, length))
+				{
+					last = last->next;
+					return strdup(name);
+				}
+			}
+		} while(index < HASH_TABLE_SIZE);
+		return NULL;
 	}
 	for(; index < COMMAND_COUNT; index++)
 		if(!strncmp(commands[index].command, text, length))
