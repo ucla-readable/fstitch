@@ -10,10 +10,13 @@
 #include <errno.h>
 #include <math.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 
 #include <readline/readline.h>
 #include <readline/history.h>
+
+#include <gtk/gtk.h>
 
 #define WANT_DEBUG_STRUCTURES 1
 #include "kfs/debug_opcode.h"
@@ -924,7 +927,7 @@ static int param_chdesc_int_apply(struct debug_opcode * opcode, const char * nam
 #ifndef ptrdiff_t
 #define ptrdiff_t uintptr_t
 #endif
-#define offsetof(struct, field) ((ptrdiff_t) &((struct *) NULL)->field)
+#define field_offset(struct, field) ((ptrdiff_t) &((struct *) NULL)->field)
 
 static int param_chdesc_set_field(struct debug_opcode * opcode, const char * name1, const char * name2, ptrdiff_t field)
 {
@@ -1377,13 +1380,13 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			break;
 		}
 		case KDB_CHDESC_SET_OWNER:
-			r = param_chdesc_set_field(opcode, "chdesc", "owner", offsetof(struct chdesc, owner));
+			r = param_chdesc_set_field(opcode, "chdesc", "owner", field_offset(struct chdesc, owner));
 			break;
 		case KDB_CHDESC_SET_FREE_PREV:
-			r = param_chdesc_set_field(opcode, "chdesc", "free_prev", offsetof(struct chdesc, free_prev));
+			r = param_chdesc_set_field(opcode, "chdesc", "free_prev", field_offset(struct chdesc, free_prev));
 			break;
 		case KDB_CHDESC_SET_FREE_NEXT:
-			r = param_chdesc_set_field(opcode, "chdesc", "free_next", offsetof(struct chdesc, free_next));
+			r = param_chdesc_set_field(opcode, "chdesc", "free_next", field_offset(struct chdesc, free_next));
 			break;
 		case KDB_CHDESC_SET_FREE_HEAD:
 		{
@@ -1702,6 +1705,54 @@ static void render(FILE * output, const char * title, int landscape)
 /* Begin commands */
 
 static int tty = 0;
+
+static int command_line_execute(char * line);
+static void gtk_gui(void);
+static int command_gui(int argc, const char * argv[])
+{
+	int child, gui[2];
+	child = pipe(gui);
+	if(child < 0)
+	{
+		perror("pipe()");
+		return child;
+	}
+	child = fork();
+	if(child < 0)
+	{
+		close(gui[0]);
+		close(gui[1]);
+		perror("fork()");
+		return child;
+	}
+	else if(!child)
+	{
+		/* free some memory */
+		reset_state();
+		close(gui[0]);
+		dup2(gui[1], 1);
+		close(gui[1]);
+		gtk_gui();
+		exit(0);
+		/* just to be sure */
+		assert(0);
+	}
+	else
+	{
+		char line[64];
+		FILE * input = fdopen(gui[0], "r");
+		close(gui[1]);
+		fgets(line, sizeof(line), input);
+		while(!feof(input))
+		{
+			command_line_execute(line);
+			fgets(line, sizeof(line), input);
+		}
+		fclose(input);
+		wait(NULL);
+	}
+	return 0;
+}
 
 static int command_jump(int argc, const char * argv[])
 {
@@ -2111,7 +2162,7 @@ struct {
 	const char * help;
 	int (*execute)(int argc, const char * argv[]);
 } commands[] = {
-	//{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui},
+	{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui},
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump},
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list},
 	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find},
@@ -2205,12 +2256,12 @@ static int command_line_execute(char * line)
 	int i, argc = 0;
 	const char * argv[64];
 	do {
-		while(*line == ' ')
+		while(*line == ' ' || *line == '\n')
 			line++;
 		if(!*line)
 			break;
 		argv[argc++] = line;
-		while(*line && *line != ' ')
+		while(*line && *line != ' ' && *line != '\n')
 			line++;
 		if(*line)
 			*(line++) = 0;
@@ -2228,6 +2279,9 @@ static int command_line_execute(char * line)
 }
 
 /* End command line processing */
+
+static int gtk_argc;
+static char ** gtk_argv;
 
 int main(int argc, char * argv[])
 {
@@ -2256,6 +2310,11 @@ int main(int argc, char * argv[])
 		perror(input_name);
 		return 1;
 	}
+	
+	/* set up argc, argv for GTK */
+	gtk_argc = argc - 1;
+	gtk_argv = &argv[1];
+	argv[1] = argv[0];
 	
 	printf("Reading debug signature... ");
 	fflush(stdout);
@@ -2389,4 +2448,60 @@ int main(int argc, char * argv[])
 	
 	fclose(input);
 	return 0;
+}
+
+static gboolean close_gui(GtkWidget * widget, GdkEvent * event, gpointer data)
+{
+	gtk_main_quit();
+	return FALSE;
+}
+
+static void click_button(GtkWidget * widget, gpointer data)
+{
+	printf("%s", (const char *) data);
+}
+
+static void gtk_gui(void)
+{
+	GtkWidget * window;
+	GtkWidget * table;
+	GtkWidget * button;
+	
+	gtk_init(&gtk_argc, &gtk_argv);
+	
+	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_title(GTK_WINDOW(window), "Debugger GUI");
+	g_signal_connect(G_OBJECT(window), "delete_event", G_CALLBACK(close_gui), NULL);
+	
+	table = gtk_table_new(1, 5, TRUE);
+	gtk_container_add(GTK_CONTAINER(window), table);
+	
+	button = gtk_button_new_with_label("Start");
+	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "reset\nview\n");
+	gtk_table_attach_defaults(GTK_TABLE(table), button, 0, 1, 0, 1);
+	gtk_widget_show(button);
+	
+	button = gtk_button_new_with_label("<<");
+	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "step -1\nview\n");
+	gtk_table_attach_defaults(GTK_TABLE(table), button, 1, 2, 0, 1);
+	gtk_widget_show(button);
+	
+	button = gtk_button_new_with_label("New");
+	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "view new\n");
+	gtk_table_attach_defaults(GTK_TABLE(table), button, 2, 3, 0, 1);
+	gtk_widget_show(button);
+	
+	button = gtk_button_new_with_label(">>");
+	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "step\nview\n");
+	gtk_table_attach_defaults(GTK_TABLE(table), button, 3, 4, 0, 1);
+	gtk_widget_show(button);
+	
+	button = gtk_button_new_with_label("End");
+	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "run\nview\n");
+	gtk_table_attach_defaults(GTK_TABLE(table), button, 4, 5, 0, 1);
+	gtk_widget_show(button);
+	
+	gtk_widget_show(table);
+	gtk_widget_show(window);
+	gtk_main();
 }

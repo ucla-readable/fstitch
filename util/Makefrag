@@ -39,7 +39,9 @@ $(UTILDIR)/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/
 	@mkdir -p $(@D)
 	$(V)$(ANT) -f util/debug/build.xml
 
+GTKFLAGS:=$(shell pkg-config gtk+-2.0 --cflags --libs)
+
 $(UTILDIR)/kdb: util/kdb.c kfs/debug_opcode.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) -std=gnu99 -lreadline -lm -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) $(GTKFLAGS) -std=gnu99 -lreadline -lm -I. -o $@ $<
