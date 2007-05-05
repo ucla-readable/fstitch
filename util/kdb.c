@@ -32,7 +32,7 @@
  * input file to test the speed of non-sequential access. */
 #define RANDOM_TEST 0
 
-/* Begin unique immutable strings */
+/* Begin unique immutable strings {{{ */
 
 #define HASH_TABLE_SIZE 65521
 
@@ -78,9 +78,9 @@ static const char * strdup_unique(char * string)
 	return scan->string;
 }
 
-/* End unique immutable strings */
+/* End unique immutable strings }}} */
 
-/* Begin unique immutable stacks */
+/* Begin unique immutable stacks {{{ */
 
 static uint32_t stksum(const uint32_t * stack)
 {
@@ -143,9 +143,9 @@ static const uint32_t * stkdup_unique(uint32_t * stack)
 	return scan->stack;
 }
 
-/* End unique immutable stacks */
+/* End unique immutable stacks }}} */
 
-/* Begin opcode reading */
+/* Begin opcode reading {{{ */
 
 struct opcode_offsets {
 	int size, full;
@@ -528,9 +528,9 @@ static void put_opcode(struct debug_opcode * debug_opcode)
 	free(debug_opcode->params);
 }
 
-/* End opcode reading */
+/* End opcode reading }}} */
 
-/* Begin state management */
+/* Begin state management {{{ */
 
 struct bd {
 	uint32_t address;
@@ -579,7 +579,10 @@ struct chdesc {
 	struct arrow * afters;
 	struct label * labels;
 	uint32_t free_prev, free_next;
+	/* hash table */
 	struct chdesc * next;
+	/* groups */
+	struct chdesc * group_next[2];
 };
 
 static const char * type_names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [NOOP] = "NOOP"};
@@ -879,9 +882,378 @@ static int chdesc_destroy(uint32_t address)
 	return -ENOENT;
 }
 
-/* End state management */
+/* End state management }}} */
+
+/* Begin rendering and grouping {{{ */
 
 static int render_free = 0;
+static int render_block = 1;
+static int render_owner = 1;
+static enum {
+	OFF,
+	BLOCK,
+	OWNER,
+	BLOCK_OWNER,
+	OWNER_BLOCK
+} current_grouping = OFF;
+static const char * grouping_names[] = {
+	[OFF] = "off",
+	[BLOCK] = "block[red]",
+	[OWNER] = "owner[red]",
+	[BLOCK_OWNER] = "block[gold]-owner[red]",
+	[OWNER_BLOCK] = "owner[gold]-block[red]"
+};
+
+struct group_hash;
+struct group {
+	uint32_t key;
+	struct chdesc * chdescs;
+	struct group_hash * sub;
+	struct group * next;
+};
+
+struct group_hash {
+	struct group * hash_table[HASH_TABLE_SIZE];
+};
+
+static struct group_hash * groups = NULL;
+
+static struct group * chdesc_group_key(struct group_hash * hash, uint32_t key, int level, struct chdesc * chdesc)
+{
+	int index = key % HASH_TABLE_SIZE;
+	struct group * group;
+	for(group = hash->hash_table[index]; group; group = group->next)
+		if(group->key == key)
+			break;
+	if(!group)
+	{
+		group = malloc(sizeof(*group));
+		group->key = key;
+		group->chdescs = NULL;
+		group->sub = NULL;
+		group->next = hash->hash_table[index];
+		hash->hash_table[index] = group;
+	}
+	chdesc->group_next[level] = group->chdescs;
+	group->chdescs = chdesc;
+	return group;
+}
+
+static int chdesc_group(struct chdesc * chdesc)
+{
+	uint32_t key = 0;
+	struct group * group;
+	if(current_grouping == OFF)
+		return 0;
+	if(!groups)
+	{
+		groups = calloc(1, sizeof(*groups));
+		if(!groups)
+			return -ENOMEM;
+	}
+	if(current_grouping == BLOCK || current_grouping == BLOCK_OWNER)
+		key = chdesc->block;
+	else if(current_grouping == OWNER || current_grouping == OWNER_BLOCK)
+		key = chdesc->owner;
+	group = chdesc_group_key(groups, key, 0, chdesc);
+	if(!group)
+		return -ENOMEM;
+	if(current_grouping == BLOCK_OWNER || current_grouping == OWNER_BLOCK)
+	{
+		key = 0;
+		if(!group->sub)
+		{
+			group->sub = calloc(1, sizeof(*group->sub));
+			if(!group->sub)
+				return -ENOMEM;
+		}
+		if(current_grouping == BLOCK_OWNER)
+			key = chdesc->owner;
+		else if(current_grouping == OWNER_BLOCK)
+			key = chdesc->block;
+		group = chdesc_group_key(group->sub, key, 1, chdesc);
+		if(!group)
+			return -ENOMEM;
+	}
+	return 0;
+}
+
+static void kill_group(struct group_hash * hash)
+{
+	int i;
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+		while(hash->hash_table[i])
+		{
+			struct group * old = hash->hash_table[i];
+			hash->hash_table[i] = old->next;
+			if(old->sub)
+				kill_group(old->sub);
+			free(old);
+		}
+}
+
+static void reset_groups(void)
+{
+	kill_group(groups);
+	groups = NULL;
+}
+
+static int render_group(FILE * output, struct group * group, int level)
+{
+	const char * color = "red";
+	if(group->key)
+	{
+		fprintf(output, "subgraph cluster%dL0x%08x {\n", level, group->key);
+		if((level == 0 && (current_grouping == BLOCK || current_grouping == BLOCK_OWNER)) || (level == 1 && current_grouping == OWNER_BLOCK))
+		{
+			/* render a block group */
+			struct block * block = lookup_block(group->key);
+			if(block)
+				fprintf(output, "label=\"#%d (0x%08x)\";\n", block->number, block->address);
+			else
+				fprintf(output, "label=\"0x%08x\";\n", group->key);
+		}
+		else if((level == 0 && (current_grouping == OWNER || current_grouping == OWNER_BLOCK)) || (level == 1 && current_grouping == BLOCK_OWNER))
+		{
+			/* render an owner group */
+			struct bd * bd = lookup_bd(group->key);
+			if(bd)
+				fprintf(output, "label=\"%s\";\n", bd->name);
+			else
+				fprintf(output, "label=\"0x%08x\";\n", group->key);
+		}
+		else
+			return -1;
+		if(level == 0 && (current_grouping == BLOCK_OWNER || current_grouping == OWNER_BLOCK))
+			color = "gold";
+		fprintf(output, "color=%s;\nlabeljust=r;\n", color);
+	}
+	if(level == 1 || current_grouping == BLOCK || current_grouping == OWNER)
+	{
+		/* actually list the chdescs */
+		struct chdesc * chdesc;
+		for(chdesc = group->chdescs; chdesc; chdesc = chdesc->group_next[level])
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+	}
+	return !!group->key;
+}
+
+static void render_groups(FILE * output)
+{
+	int i;
+	if(current_grouping == OFF)
+		return;
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		struct group * group = groups->hash_table[i];
+		for(; group; group = group->next)
+		{
+			int r = render_group(output, group, 0);
+			assert(r >= 0);
+			if(current_grouping == BLOCK_OWNER || current_grouping == OWNER_BLOCK)
+			{
+				int j;
+				assert(group->sub);
+				for(j = 0; j < HASH_TABLE_SIZE; j++)
+				{
+					struct group * sub = group->sub->hash_table[j];
+					for(; sub; sub = sub->next)
+					{
+						int s = render_group(output, sub, 1);
+						assert(s >= 0);
+						if(s)
+							fprintf(output, "}\n");
+					}
+				}
+			}
+			if(r)
+				fprintf(output, "}\n");
+		}
+	}
+}
+
+static void render_block_owner(FILE * output, struct chdesc * chdesc)
+{
+	if(chdesc->block && render_block)
+	{
+		struct block * block = lookup_block(chdesc->block);
+		if(block)
+			fprintf(output, "\\n#%d (0x%08x)", block->number, block->address);
+		else
+			fprintf(output, "\\non 0x%08x", chdesc->block);
+	}
+	if(chdesc->owner && render_owner)
+	{
+		struct bd * bd = lookup_bd(chdesc->owner);
+		if(bd)
+			fprintf(output, "\\n%s", bd->name);
+		else
+			fprintf(output, "\\nat 0x%08x", chdesc->owner);
+	}
+}
+
+static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free)
+{
+	struct label * label;
+	struct arrow * arrow;
+	struct weak * weak;
+	
+	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, chdesc, chdesc->address);
+	for(label = chdesc->labels; label; label = label->next)
+		fprintf(output, "\\n\\\"%s\\\"", label->label);
+	switch(chdesc->type)
+	{
+		case NOOP:
+			render_block_owner(output, chdesc);
+			fprintf(output, "\",style=\"");
+			break;
+		case BIT:
+			fprintf(output, "\\n[%d:0x%08x]", chdesc->bit.offset, chdesc->bit.xor);
+			render_block_owner(output, chdesc);
+			fprintf(output, "\",fillcolor=springgreen1,style=\"filled");
+			break;
+		case BYTE:
+			fprintf(output, "\\n[%d:%d]", chdesc->byte.offset, chdesc->byte.length);
+			render_block_owner(output, chdesc);
+			fprintf(output, "\",fillcolor=slateblue1,style=\"filled");
+			break;
+	}
+	if(chdesc->flags & CHDESC_ROLLBACK)
+		fprintf(output, ",dashed,bold");
+	if(chdesc->flags & CHDESC_MARKED)
+		fprintf(output, ",bold\",color=red");
+	else
+		fprintf(output, "\"");
+	if(chdesc->flags & CHDESC_FREEING)
+		fprintf(output, ",fontcolor=red");
+	else if(chdesc->flags & CHDESC_WRITTEN)
+		fprintf(output, ",fontcolor=blue");
+	fprintf(output, "]\n");
+	
+	for(arrow = chdesc->befores; arrow; arrow = arrow->next)
+	{
+		struct chdesc * before = lookup_chdesc(arrow->chdesc);
+		if(before)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", chdesc->address, chdesc, before->address, before);
+	}
+	for(arrow = chdesc->afters; arrow; arrow = arrow->next)
+	{
+		struct chdesc * after = lookup_chdesc(arrow->chdesc);
+		if(after)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, after, chdesc->address, chdesc);
+	}
+	for(weak = chdesc->weak_refs; weak; weak = weak->next)
+	{
+		fprintf(output, "\"0x%08x\" [shape=box,fillcolor=yellow,style=filled]\n", weak->location);
+		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, chdesc->address, chdesc);
+	}
+	if(chdesc->free_prev)
+	{
+		struct chdesc * prev = lookup_chdesc(chdesc->free_prev);
+		if(prev)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, prev, chdesc->address, chdesc);
+	}
+	if(chdesc->free_next && render_free)
+	{
+		struct chdesc * next = lookup_chdesc(chdesc->free_next);
+		if(next)
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", chdesc->address, chdesc, next->address, next);
+	}
+}
+
+static void render(FILE * output, const char * title, int landscape)
+{
+	int i, free = 0;
+	
+	/* header */
+	fprintf(output, "digraph chdescs\n{\nnodesep=0.25;\nranksep=0.25;\n");
+	if(landscape)
+		fprintf(output, "rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
+	else
+		fprintf(output, "rankdir=LR;\norientation=P;\nsize=\"16,16\";\n");
+	fprintf(output, "subgraph clusterAll {\nlabel=\"%s\";\ncolor=white;\n", title);
+	fprintf(output, "node [shape=ellipse,color=black];\n");
+	
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		struct chdesc * chdesc;
+		for(chdesc = chdescs[i]; chdesc; chdesc = chdesc->next)
+		{
+			int is_free = chdesc->address == chdesc_free_head || chdesc->free_prev;
+			if(is_free)
+				free++;
+			if(render_free)
+			{
+				if(!(chdesc->flags & CHDESC_WRITTEN))
+				{
+					int r = chdesc_group(chdesc);
+					assert(r >= 0);
+				}
+				render_chdesc(output, chdesc, 1);
+			}
+			else if(chdesc->address == chdesc_free_head || !chdesc->free_prev)
+			{
+				if(!(chdesc->flags & CHDESC_WRITTEN))
+				{
+					int r = chdesc_group(chdesc);
+					assert(r >= 0);
+				}
+				render_chdesc(output, chdesc, 0);
+			}
+		}
+	}
+	
+	if(chdesc_free_head)
+	{
+		fprintf(output, "subgraph cluster_free {\ncolor=red;\nstyle=dashed;\n");
+		if(render_free)
+		{
+			struct chdesc * chdesc = lookup_chdesc(chdesc_free_head);
+			fprintf(output, "label=\"Free List\";\n");
+			while(chdesc)
+			{
+				fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+				chdesc = lookup_chdesc(chdesc->free_next);
+			}
+			if(free > 3)
+			{
+				double ratio = sqrt(free / 1.6) / free;
+				int cluster = 0;
+				free = 0;
+				fprintf(output, "subgraph cluster_align {\nstyle=invis;\n");
+				chdesc = lookup_chdesc(chdesc_free_head);
+				while(chdesc)
+				{
+					free++;
+					if(cluster < ratio * free)
+					{
+						cluster++;
+						fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+					}
+					chdesc = lookup_chdesc(chdesc->free_next);
+				}
+				fprintf(output, "}\n");
+			}
+		}
+		else
+		{
+			fprintf(output, "label=\"Free Head (+%d)\";\n", free - 1);
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc_free_head, lookup_chdesc(chdesc_free_head));
+		}
+		fprintf(output, "}\n");
+	}
+	
+	/* grouping */
+	render_groups(output);
+	reset_groups();
+	
+	/* footer */
+	fprintf(output, "}\n}\n");
+}
+
+/* End rendering and grouping }}} */
+
+/* Begin opcode logic {{{ */
 
 static int param_lookup(struct debug_opcode * opcode, struct debug_param * table)
 {
@@ -1423,23 +1795,6 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 	return r;
 }
 
-static void print_chdesc_brief(uint32_t address)
-{
-	struct chdesc * chdesc = lookup_chdesc(address);
-	if(chdesc)
-	{
-		struct arrow * count;
-		int afters = 0, befores = 0;
-		for(count = chdesc->afters; count; count = count->next)
-			afters++;
-		for(count = chdesc->befores; count; count = count->next)
-			befores++;
-		printf(" 0x%08x, %s, nafters %d, nbefores %d\n", chdesc->address, type_names[chdesc->type], afters, befores);
-	}
-	else
-		printf(" 0x%08x\n", address);
-}
-
 static void print_opcode(int number, struct debug_opcode * opcode, int show_trace)
 {
 	int m, o, p;
@@ -1541,173 +1896,14 @@ static int snprint_opcode(char * string, size_t length, struct debug_opcode * op
 	return 0;
 }
 
-static void render_block_owner(FILE * output, struct chdesc * chdesc)
-{
-	if(chdesc->block)
-	{
-		struct block * block = lookup_block(chdesc->block);
-		if(block)
-			fprintf(output, "\\n#%d (0x%08x)", block->number, block->address);
-		else
-			fprintf(output, "\\non 0x%08x", chdesc->block);
-	}
-	if(chdesc->owner)
-	{
-		struct bd * bd = lookup_bd(chdesc->owner);
-		if(bd)
-			fprintf(output, "\\n%s", bd->name);
-		else
-			fprintf(output, "\\nat 0x%08x", chdesc->owner);
-	}
-}
+/* End opcode logic }}} */
 
-static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free)
-{
-	struct label * label;
-	struct arrow * arrow;
-	struct weak * weak;
-	
-	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, chdesc, chdesc->address);
-	for(label = chdesc->labels; label; label = label->next)
-		fprintf(output, "\\n\\\"%s\\\"", label->label);
-	switch(chdesc->type)
-	{
-		case NOOP:
-			render_block_owner(output, chdesc);
-			fprintf(output, "\",style=\"");
-			break;
-		case BIT:
-			fprintf(output, "\\n[%d:0x%08x]", chdesc->bit.offset, chdesc->bit.xor);
-			render_block_owner(output, chdesc);
-			fprintf(output, "\",fillcolor=springgreen1,style=\"filled");
-			break;
-		case BYTE:
-			fprintf(output, "\\n[%d:%d]", chdesc->byte.offset, chdesc->byte.length);
-			render_block_owner(output, chdesc);
-			fprintf(output, "\",fillcolor=slateblue1,style=\"filled");
-			break;
-	}
-	if(chdesc->flags & CHDESC_ROLLBACK)
-		fprintf(output, ",dashed,bold");
-	if(chdesc->flags & CHDESC_MARKED)
-		fprintf(output, ",bold\",color=red");
-	else
-		fprintf(output, "\"");
-	if(chdesc->flags & CHDESC_FREEING)
-		fprintf(output, ",fontcolor=red");
-	else if(chdesc->flags & CHDESC_WRITTEN)
-		fprintf(output, ",fontcolor=blue");
-	fprintf(output, "]\n");
-	
-	for(arrow = chdesc->befores; arrow; arrow = arrow->next)
-	{
-		struct chdesc * before = lookup_chdesc(arrow->chdesc);
-		if(before)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", chdesc->address, chdesc, before->address, before);
-	}
-	for(arrow = chdesc->afters; arrow; arrow = arrow->next)
-	{
-		struct chdesc * after = lookup_chdesc(arrow->chdesc);
-		if(after)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, after, chdesc->address, chdesc);
-	}
-	for(weak = chdesc->weak_refs; weak; weak = weak->next)
-	{
-		fprintf(output, "\"0x%08x\" [shape=box,fillcolor=yellow,style=filled]\n", weak->location);
-		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, chdesc->address, chdesc);
-	}
-	if(chdesc->free_prev)
-	{
-		struct chdesc * prev = lookup_chdesc(chdesc->free_prev);
-		if(prev)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, prev, chdesc->address, chdesc);
-	}
-	if(chdesc->free_next && render_free)
-	{
-		struct chdesc * next = lookup_chdesc(chdesc->free_next);
-		if(next)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", chdesc->address, chdesc, next->address, next);
-	}
-}
-
-static void render(FILE * output, const char * title, int landscape)
-{
-	int i, free = 0;
-	
-	/* header */
-	fprintf(output, "digraph chdescs\n{\nnodesep=0.25;\nranksep=0.25;\n");
-	if(landscape)
-		fprintf(output, "rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
-	else
-		fprintf(output, "rankdir=LR;\norientation=P;\nsize=\"16,16\";\n");
-	fprintf(output, "subgraph clusterAll {\nlabel=\"%s\";\ncolor=white;\n", title);
-	fprintf(output, "node [shape=ellipse,color=black];\n");
-	
-	for(i = 0; i < HASH_TABLE_SIZE; i++)
-	{
-		struct chdesc * chdesc;
-		for(chdesc = chdescs[i]; chdesc; chdesc = chdesc->next)
-		{
-			int is_free = chdesc->address == chdesc_free_head || chdesc->free_prev;
-			if(is_free)
-				free++;
-			if(render_free)
-				render_chdesc(output, chdesc, 1);
-			else if(chdesc->address == chdesc_free_head || !chdesc->free_prev)
-				render_chdesc(output, chdesc, 0);
-		}
-	}
-	
-	if(chdesc_free_head)
-	{
-		fprintf(output, "subgraph cluster_free {\ncolor=red;\nstyle=dashed;\n");
-		if(render_free)
-		{
-			struct chdesc * chdesc = lookup_chdesc(chdesc_free_head);
-			fprintf(output, "label=\"Free List\";\n");
-			while(chdesc)
-			{
-				fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
-				chdesc = lookup_chdesc(chdesc->free_next);
-			}
-			if(free > 3)
-			{
-				double ratio = sqrt(free / 1.6) / free;
-				int cluster = 0;
-				free = 0;
-				fprintf(output, "subgraph cluster_align {\nstyle=invis;\n");
-				chdesc = lookup_chdesc(chdesc_free_head);
-				while(chdesc)
-				{
-					free++;
-					if(cluster < ratio * free)
-					{
-						cluster++;
-						fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
-					}
-					chdesc = lookup_chdesc(chdesc->free_next);
-				}
-				fprintf(output, "}\n");
-			}
-		}
-		else
-		{
-			fprintf(output, "label=\"Free Head (+%d)\";\n", free - 1);
-			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc_free_head, lookup_chdesc(chdesc_free_head));
-		}
-		fprintf(output, "}\n");
-	}
-	
-	/* footer */
-	fprintf(output, "}\n}\n");
-}
-
-/* Begin commands */
+/* Begin commands {{{ */
 
 static int tty = 0;
 
+static void gtk_gui(const char * ps_file);
 static int command_line_execute(char * line);
-static void gtk_gui(void);
 static int command_gui(int argc, const char * argv[])
 {
 	int child, gui[2];
@@ -1732,7 +1928,7 @@ static int command_gui(int argc, const char * argv[])
 		close(gui[0]);
 		dup2(gui[1], 1);
 		close(gui[1]);
-		gtk_gui();
+		gtk_gui((argc > 1) ? argv[1] : NULL);
 		exit(0);
 		/* just to be sure */
 		assert(0);
@@ -1745,6 +1941,12 @@ static int command_gui(int argc, const char * argv[])
 		fgets(line, sizeof(line), input);
 		while(!feof(input))
 		{
+			/* substitute the ps command for the view command if asked */
+			if(argc > 1 && (!strcmp(line, "view\n") || !strcmp(line, "view new\n")))
+			{
+				snprintf(line, sizeof(line), "ps %s", argv[1]);
+				line[sizeof(line) - 1] = 0;
+			}
 			command_line_execute(line);
 			fgets(line, sizeof(line), input);
 		}
@@ -1853,6 +2055,7 @@ static int command_list(int argc, const char * argv[])
 	return 0;
 }
 
+/* TODO: add progress meter here */
 static int command_find(int argc, const char * argv[])
 {
 	int start = 0, stop = opcodes;
@@ -1984,14 +2187,71 @@ static int command_option(int argc, const char * argv[])
 	}
 	else if(!strcmp(argv[1], "grouping"))
 	{
-		printf("Grouping is not yet supported.\n");
-		return -1;
+		const char * now = "";
+		if(argc > 2)
+		{
+			if(!strcmp(argv[2], "off") || !strcmp(argv[2], "none"))
+				current_grouping = OFF;
+			else if(!strcmp(argv[2], "block"))
+				current_grouping = BLOCK;
+			else if(!strcmp(argv[2], "owner"))
+				current_grouping = OWNER;
+			else if(!strcmp(argv[2], "block-owner"))
+				current_grouping = BLOCK_OWNER;
+			else if(!strcmp(argv[2], "owner-block"))
+				current_grouping = OWNER_BLOCK;
+			else
+			{
+				printf("Invalid setting: %s\n", argv[2]);
+				return -1;
+			}
+			now = "now ";
+			render_block = current_grouping == OFF || current_grouping == OWNER;
+			render_owner = current_grouping == OFF || current_grouping == BLOCK;
+		}
+		else
+			printf("Available groupings: off, block, owner, block-owner, owner-block.\n");
+		printf("Change descriptor grouping is %s%s\n", now, grouping_names[current_grouping]);
 	}
 	else
 	{
 		printf("Invalid option: %s\n", argv[1]);
 		return -1;
 	}
+	return 0;
+}
+
+static int command_ps(int argc, const char * argv[])
+{
+	FILE * output;
+	char title[256];
+	if(argc > 1)
+		snprintf(title, sizeof(title), "dot -Tps -o %s", argv[1]);
+	else
+		snprintf(title, sizeof(title), "dot -Tps");
+	output = popen(title, "w");
+	if(!output)
+	{
+		perror("dot");
+		return -errno;
+	}
+	if(applied > 0)
+	{
+		struct debug_opcode opcode;
+		int r = get_opcode(applied - 1, &opcode);
+		if(r < 0)
+		{
+			printf("Error %d reading opcode %d (%s)\n", -r, applied, strerror(-r));
+			return r;
+		}
+		r = snprint_opcode(title, sizeof(title), &opcode);
+		put_opcode(&opcode);
+		assert(r >= 0);
+	}
+	else
+		title[0] = 0;
+	render(output, title, 1);
+	pclose(output);
 	return 0;
 }
 
@@ -2043,6 +2303,23 @@ static int command_run(int argc, const char * argv[])
 	if(r >= 0)
 		printf("[Info: %d unique strings, %d unique stacks]\n", unique_strings, unique_stacks);
 	return r;
+}
+
+static void print_chdesc_brief(uint32_t address)
+{
+	struct chdesc * chdesc = lookup_chdesc(address);
+	if(chdesc)
+	{
+		struct arrow * count;
+		int afters = 0, befores = 0;
+		for(count = chdesc->afters; count; count = count->next)
+			afters++;
+		for(count = chdesc->befores; count; count = count->next)
+			befores++;
+		printf(" 0x%08x, %s, nafters %d, nbefores %d\n", chdesc->address, type_names[chdesc->type], afters, befores);
+	}
+	else
+		printf(" 0x%08x\n", address);
 }
 
 static int command_status(int argc, const char * argv[])
@@ -2150,9 +2427,15 @@ static int command_step(int argc, const char * argv[])
 	return 0;
 }
 
-/* End commands */
+static int command_view(int argc, const char * argv[])
+{
+	printf("Not yet implemented.\n");
+	return 0;
+}
 
-/* Begin command line processing */
+/* End commands }}} */
+
+/* Begin command line processing {{{ */
 
 static int command_help(int argc, const char * argv[]);
 static int command_quit(int argc, const char * argv[]);
@@ -2167,13 +2450,13 @@ struct {
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list},
 	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find},
 	{"option", "Get or set rendering options: freelist, grouping.", command_option},
-	//{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps},
+	{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps},
 	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render},
 	{"reset", "Reset system state to 0 opcodes.", command_reset},
 	{"run", "Apply all opcodes to system state.", command_run},
 	{"status", "Displays system state status.", command_status},
 	{"step", "Step system state by a specified number of opcodes, or 1 by default.", command_step},
-	//{"view", "View system state graphically, optionally in a new window.", command_view},
+	{"view", "View system state graphically, optionally in a new window.", command_view},
 	{"help", "Displays help.", command_help},
 	{"quit", "Quits the program.", command_quit}
 };
@@ -2278,7 +2561,9 @@ static int command_line_execute(char * line)
 	return -ENOENT;
 }
 
-/* End command line processing */
+/* End command line processing }}} */
+
+/* Begin main {{{ */
 
 static int gtk_argc;
 static char ** gtk_argv;
@@ -2450,6 +2735,10 @@ int main(int argc, char * argv[])
 	return 0;
 }
 
+/* End main }}} */
+
+/* Begin GTK interface {{{ */
+
 static gboolean close_gui(GtkWidget * widget, GdkEvent * event, gpointer data)
 {
 	gtk_main_quit();
@@ -2461,16 +2750,23 @@ static void click_button(GtkWidget * widget, gpointer data)
 	printf("%s", (const char *) data);
 }
 
-static void gtk_gui(void)
+static void gtk_gui(const char * ps_file)
 {
+	char title[64];
+	
 	GtkWidget * window;
 	GtkWidget * table;
 	GtkWidget * button;
 	
 	gtk_init(&gtk_argc, &gtk_argv);
 	
+	if(ps_file)
+		snprintf(title, sizeof(title), "Debugger GUI: %s", ps_file);
+	else
+		snprintf(title, sizeof(title), "Debugger GUI");
+	title[sizeof(title) - 1] = 0;
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_title(GTK_WINDOW(window), "Debugger GUI");
+	gtk_window_set_title(GTK_WINDOW(window), title);
 	g_signal_connect(G_OBJECT(window), "delete_event", G_CALLBACK(close_gui), NULL);
 	
 	table = gtk_table_new(1, 5, TRUE);
@@ -2505,3 +2801,5 @@ static void gtk_gui(void)
 	gtk_widget_show(window);
 	gtk_main();
 }
+
+/* End GTK interface }}} */
