@@ -994,8 +994,11 @@ static void kill_group(struct group_hash * hash)
 
 static void reset_groups(void)
 {
-	kill_group(groups);
-	groups = NULL;
+	if(groups)
+	{
+		kill_group(groups);
+		groups = NULL;
+	}
 }
 
 static int render_group(FILE * output, struct group * group, int level)
