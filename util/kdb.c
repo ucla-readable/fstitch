@@ -2058,7 +2058,6 @@ static int command_list(int argc, const char * argv[])
 	return 0;
 }
 
-/* TODO: add progress meter here */
 static int command_find(int argc, const char * argv[])
 {
 	int start = 0, stop = opcodes;
@@ -2066,6 +2065,7 @@ static int command_find(int argc, const char * argv[])
 	int r, extreme = -1, direction;
 	struct debug_opcode opcode;
 	const char * range = "";
+	int progress = 0, distance = 0, percent = -1;
 	if(argc < 2 || (strcmp(argv[1], "max") && strcmp(argv[1], "min")))
 	{
 		printf("Need \"max\" or \"min\" to find.\n");
@@ -2092,24 +2092,48 @@ static int command_find(int argc, const char * argv[])
 	}
 	direction = strcmp(argv[1], "max") ? -1 : 1;
 	
+	if(tty)
+	{
+		/* calculate total distance */
+		distance = stop;
+		if(start >= applied)
+			distance -= applied;
+		distance += applied;
+		if(applied >= stop)
+			distance -= stop;
+		printf("Finding %simum...     ", argv[1]);
+		fflush(stdout);
+	}
+	
 	if(start < applied)
 		reset_state();
 	while(applied < start)
 	{
+		if(tty)
+		{
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
+		}
 		r = get_opcode(applied, &opcode);
 		if(r < 0)
 		{
-			printf("Error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 			return r;
 		}
 		r = apply_opcode(&opcode, NULL, NULL);
 		put_opcode(&opcode);
 		if(r < 0)
 		{
-			printf("Error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 			return r;
 		}
 		applied++;
+		progress++;
 	}
 	
 	/* find the extreme */
@@ -2117,20 +2141,31 @@ static int command_find(int argc, const char * argv[])
 	count = applied;
 	while(applied < stop)
 	{
+		if(tty)
+		{
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
+		}
 		r = get_opcode(applied, &opcode);
 		if(r < 0)
 		{
-			printf("Error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 			return r;
 		}
 		r = apply_opcode(&opcode, NULL, NULL);
 		put_opcode(&opcode);
 		if(r < 0)
 		{
-			printf("Error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 			return r;
 		}
 		applied++;
+		progress++;
 		if(chdesc_count * direction > extreme * direction)
 		{
 			extreme = chdesc_count;
@@ -2143,21 +2178,34 @@ static int command_find(int argc, const char * argv[])
 		reset_state();
 	while(applied < save_applied)
 	{
+		if(tty)
+		{
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
+		}
 		r = get_opcode(applied, &opcode);
 		if(r < 0)
 		{
-			printf("Error %d reading opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 			return r;
 		}
 		r = apply_opcode(&opcode, NULL, NULL);
 		put_opcode(&opcode);
 		if(r < 0)
 		{
-			printf("Error %d applying opcode %d (%s)\n", -r, applied + 1, strerror(-r));
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 			return r;
 		}
 		applied++;
+		progress++;
 	}
+	if(tty)
+		printf("\e[4D100%%\n");
 	
 	printf("The %simum change descriptor count of %d %sfirst occurs at opcode #%d\n", argv[1], extreme, range, count);
 	return 0;
