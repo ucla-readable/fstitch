@@ -207,30 +207,46 @@ static off_t get_opcode_offset(int index)
 	return scan ? scan->offsets[index] : -EINVAL;
 }
 
-#ifdef __linux__
-#define fgetc fgetc_unlocked
-#define feof feof_unlocked
-#endif
-
 static FILE * input = NULL;
 static const char * input_name = NULL;
 
+static uint8_t input_buffer[32768];
+static int input_buffer_size = 0;
+static int input_buffer_pos = 0;
+static int input_eof = 0;
+
+static uint8_t input_uint8(void) __attribute__((always_inline));
+static uint8_t input_uint8(void)
+{
+	if(input_buffer_pos >= input_buffer_size)
+	{
+		input_buffer_size = fread(input_buffer, 1, sizeof(input_buffer), input);
+		if(input_buffer_size <= 0)
+		{
+			input_eof = 1;
+			return -1;
+		}
+		input_buffer_pos = 0;
+	}
+	return input_buffer[input_buffer_pos++];
+}
+
 static int read_lit_8(uint8_t * data)
 {
-	*data = fgetc(input);
-	if(feof(input))
+	*data = input_uint8();
+	if(input_eof)
 		return -1;
 	return 0;
 }
 
 static int read_lit_16(uint16_t * data)
 {
-	*data = fgetc(input);
-	if(feof(input))
+	*data = input_uint8();
+	if(input_eof)
 		return -1;
 	*data <<= 8;
-	*data |= fgetc(input);
-	if(feof(input))
+	*data |= input_uint8();
+	if(input_eof)
 		return -1;
 	return 0;
 }
@@ -239,20 +255,20 @@ static int read_lit_16(uint16_t * data)
  * function. It is important that it be very fast. So, unroll the obvious loop. */
 static int read_lit_32(uint32_t * data)
 {
-	*data = fgetc(input);
-	if(feof(input))
+	*data = input_uint8();
+	if(input_eof)
 		return -1;
 	*data <<= 8;
-	*data |= fgetc(input);
-	if(feof(input))
+	*data |= input_uint8();
+	if(input_eof)
 		return -1;
 	*data <<= 8;
-	*data |= fgetc(input);
-	if(feof(input))
+	*data |= input_uint8();
+	if(input_eof)
 		return -1;
 	*data <<= 8;
-	*data |= fgetc(input);
-	if(feof(input))
+	*data |= input_uint8();
+	if(input_eof)
 		return -1;
 	return 0;
 }
@@ -263,8 +279,8 @@ static int read_lit_str(const char ** data, int allocate)
 	static char buffer[128];
 	for(i = 0; i < sizeof(buffer); i++)
 	{
-		buffer[i] = fgetc(input);
-		if(feof(input))
+		buffer[i] = input_uint8();
+		if(input_eof)
 			return -1;
 		if(!buffer[i])
 			break;
