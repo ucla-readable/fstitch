@@ -207,7 +207,7 @@ static off_t get_opcode_offset(int index)
 	return scan ? scan->offsets[index] : -EINVAL;
 }
 
-static FILE * input = NULL;
+static FILE * input_file = NULL;
 static const char * input_name = NULL;
 
 static uint8_t input_buffer[32768];
@@ -215,12 +215,21 @@ static int input_buffer_size = 0;
 static int input_buffer_pos = 0;
 static int input_eof = 0;
 
+static int input_init(const char * name)
+{
+	input_file = fopen(name, "r");
+	if(!input_file)
+		return -errno;
+	input_name = name;
+	return 0;
+}
+
 static uint8_t input_uint8(void) __attribute__((always_inline));
 static uint8_t input_uint8(void)
 {
 	if(input_buffer_pos >= input_buffer_size)
 	{
-		input_buffer_size = fread(input_buffer, 1, sizeof(input_buffer), input);
+		input_buffer_size = fread(input_buffer, 1, sizeof(input_buffer), input_file);
 		if(input_buffer_size <= 0)
 		{
 			input_eof = 1;
@@ -229,6 +238,27 @@ static uint8_t input_uint8(void)
 		input_buffer_pos = 0;
 	}
 	return input_buffer[input_buffer_pos++];
+}
+
+static off_t input_offset(void)
+{
+	if(input_eof)
+		return ftello(input_file);
+	return ftello(input_file) - input_buffer_size + input_buffer_pos;
+}
+
+static void input_seek(off_t offset)
+{
+	input_buffer_size = 0;
+	input_buffer_pos = 0;
+	fseeko(input_file, offset, SEEK_SET);
+}
+
+static void input_finish(void)
+{
+	fclose(input_file);
+	input_file = NULL;
+	input_name = NULL;
 }
 
 static int read_lit_8(uint8_t * data)
@@ -534,7 +564,7 @@ static int get_opcode(int index, struct debug_opcode * debug_opcode)
 {
 	static int last_index = -1;
 	if(last_index == -1 || index != last_index + 1)
-		fseeko(input, get_opcode_offset(index), SEEK_SET);
+		input_seek(get_opcode_offset(index));
 	last_index = index;
 	return read_opcode(debug_opcode);
 }
@@ -2655,11 +2685,9 @@ int main(int argc, char * argv[])
 		perror(argv[1]);
 		return 1;
 	}
-	input_name = argv[1];
-	input = fopen(input_name, "r");
-	if(!input)
+	if(input_init(argv[1]) < 0)
 	{
-		perror(input_name);
+		perror(argv[1]);
 		return 1;
 	}
 	
@@ -2674,7 +2702,7 @@ int main(int argc, char * argv[])
 	if(r < 0)
 	{
 		printf("error %d (%s)\n", -r, strerror(-r));
-		fclose(input);
+		input_finish();
 		return 1;
 	}
 	else
@@ -2683,7 +2711,7 @@ int main(int argc, char * argv[])
 	printf("Scanning debugging output... %s", tty ? "    " : "");
 	fflush(stdout);
 	
-	while((offset = ftello(input)) != file.st_size)
+	while((offset = input_offset()) != file.st_size)
 	{
 		r = offset * 100 / file.st_size;
 		if(r > percent)
@@ -2706,9 +2734,9 @@ int main(int argc, char * argv[])
 	}
 	printf("%s%d opcode%s OK!\n", tty ? "\e[4D" : " ", opcodes, (opcodes == 1) ? "" : "s");
 	if(r == -1)
-		fprintf(stderr, "Unexpected end of file at offset %lld+%lld\n", offset, ftello(input) - offset);
+		fprintf(stderr, "Unexpected end of file at offset %lld+%lld\n", offset, input_offset() - offset);
 	else if(r < 0)
-		fprintf(stderr, "Error %d at file offset %lld+%lld (%s)\n", -r, offset, ftello(input) - offset, strerror(-r));
+		fprintf(stderr, "Error %d at file offset %lld+%lld (%s)\n", -r, offset, input_offset() - offset, strerror(-r));
 	
 	if(opcodes)
 	{
@@ -2798,7 +2826,7 @@ int main(int argc, char * argv[])
 		} while(r != -EINTR);
 	}
 	
-	fclose(input);
+	input_finish();
 	return 0;
 }
 
