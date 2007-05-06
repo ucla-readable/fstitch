@@ -2808,6 +2808,7 @@ static void gtk_gui(const char * ps_file)
 	GtkWidget * window;
 	GtkWidget * table;
 	GtkWidget * button;
+	GtkWidget * arrow;
 	
 	gtk_init(&gtk_argc, &gtk_argv);
 	
@@ -2823,27 +2824,33 @@ static void gtk_gui(const char * ps_file)
 	table = gtk_table_new(1, 5, TRUE);
 	gtk_container_add(GTK_CONTAINER(window), table);
 	
-	button = gtk_button_new_with_label("Start");
+	button = gtk_button_new_with_label("   Start   ");
 	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "reset\nview\n");
 	gtk_table_attach_defaults(GTK_TABLE(table), button, 0, 1, 0, 1);
 	gtk_widget_show(button);
 	
-	button = gtk_button_new_with_label("<<");
+	button = gtk_button_new();
+	arrow = gtk_arrow_new(GTK_ARROW_LEFT, GTK_SHADOW_OUT);
+	gtk_container_add(GTK_CONTAINER(button), arrow);
 	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "step -1\nview\n");
 	gtk_table_attach_defaults(GTK_TABLE(table), button, 1, 2, 0, 1);
+	gtk_widget_show(arrow);
 	gtk_widget_show(button);
 	
-	button = gtk_button_new_with_label("New");
+	button = gtk_button_new_with_label("   New   ");
 	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "view new\n");
 	gtk_table_attach_defaults(GTK_TABLE(table), button, 2, 3, 0, 1);
 	gtk_widget_show(button);
 	
-	button = gtk_button_new_with_label(">>");
+	button = gtk_button_new();
+	arrow = gtk_arrow_new(GTK_ARROW_RIGHT, GTK_SHADOW_OUT);
+	gtk_container_add(GTK_CONTAINER(button), arrow);
 	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "step\nview\n");
 	gtk_table_attach_defaults(GTK_TABLE(table), button, 3, 4, 0, 1);
+	gtk_widget_show(arrow);
 	gtk_widget_show(button);
 	
-	button = gtk_button_new_with_label("End");
+	button = gtk_button_new_with_label("   End   ");
 	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(click_button), "run\nview\n");
 	gtk_table_attach_defaults(GTK_TABLE(table), button, 4, 5, 0, 1);
 	gtk_widget_show(button);
