@@ -1083,7 +1083,7 @@ static int render_group(FILE * output, struct group * group, int level)
 		/* actually list the chdescs */
 		struct chdesc * chdesc;
 		for(chdesc = group->chdescs; chdesc; chdesc = chdesc->group_next[level])
-			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, (void *) chdesc);
 	}
 	return !!group->key;
 }
@@ -1148,7 +1148,7 @@ static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free
 	struct arrow * arrow;
 	struct weak * weak;
 	
-	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, chdesc, chdesc->address);
+	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, (void *) chdesc, chdesc->address);
 	for(label = chdesc->labels; label; label = label->next)
 		fprintf(output, "\\n\\\"%s\\\"", label->label);
 	switch(chdesc->type)
@@ -1184,30 +1184,30 @@ static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free
 	{
 		struct chdesc * before = lookup_chdesc(arrow->chdesc);
 		if(before)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", chdesc->address, chdesc, before->address, before);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", chdesc->address, (void *) chdesc, before->address, (void *) before);
 	}
 	for(arrow = chdesc->afters; arrow; arrow = arrow->next)
 	{
 		struct chdesc * after = lookup_chdesc(arrow->chdesc);
 		if(after)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, after, chdesc->address, chdesc);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, (void *) after, chdesc->address, (void *) chdesc);
 	}
 	for(weak = chdesc->weak_refs; weak; weak = weak->next)
 	{
 		fprintf(output, "\"0x%08x\" [shape=box,fillcolor=yellow,style=filled]\n", weak->location);
-		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, chdesc->address, chdesc);
+		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, chdesc->address, (void *) chdesc);
 	}
 	if(chdesc->free_prev)
 	{
 		struct chdesc * prev = lookup_chdesc(chdesc->free_prev);
 		if(prev)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, prev, chdesc->address, chdesc);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, (void *) prev, chdesc->address, (void *) chdesc);
 	}
 	if(chdesc->free_next && render_free)
 	{
 		struct chdesc * next = lookup_chdesc(chdesc->free_next);
 		if(next)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", chdesc->address, chdesc, next->address, next);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", chdesc->address, (void *) chdesc, next->address, (void *) next);
 	}
 }
 
@@ -1262,7 +1262,7 @@ static void render(FILE * output, const char * title, int landscape)
 			fprintf(output, "label=\"Free List\";\n");
 			while(chdesc)
 			{
-				fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+				fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, (void *) chdesc);
 				chdesc = lookup_chdesc(chdesc->free_next);
 			}
 			if(free > 3)
@@ -1278,7 +1278,7 @@ static void render(FILE * output, const char * title, int landscape)
 					if(cluster < ratio * free)
 					{
 						cluster++;
-						fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, chdesc);
+						fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, (void *) chdesc);
 					}
 					chdesc = lookup_chdesc(chdesc->free_next);
 				}
@@ -1288,7 +1288,7 @@ static void render(FILE * output, const char * title, int landscape)
 		else
 		{
 			fprintf(output, "label=\"Free Head (+%d)\";\n", free - 1);
-			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc_free_head, lookup_chdesc(chdesc_free_head));
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc_free_head, (void *) lookup_chdesc(chdesc_free_head));
 		}
 		fprintf(output, "}\n");
 	}
@@ -1367,7 +1367,7 @@ static int param_chdesc_set_field(struct debug_opcode * opcode, const char * nam
 	if(!chdesc)
 		return -EFAULT;
 	/* looks ugly but it's the only way */
-	*(uint32_t *) (((void *) chdesc) + field) = params[1].data_4;
+	*(uint32_t *) (((uintptr_t) chdesc) + field) = params[1].data_4;
 	return 0;
 }
 
@@ -1971,7 +1971,7 @@ static int command_gui(int argc, const char * argv[])
 		perror("fork()");
 		return child;
 	}
-	else if(!child)
+	if(!child)
 	{
 		/* free some memory */
 		reset_state();
@@ -2340,6 +2340,7 @@ static int command_ps(int argc, const char * argv[])
 		if(r < 0)
 		{
 			printf("Error %d reading opcode %d (%s)\n", -r, applied, strerror(-r));
+			pclose(output);
 			return r;
 		}
 		r = snprint_opcode(title, sizeof(title), &opcode);
@@ -2864,6 +2865,7 @@ static void gtk_gui(const char * ps_file)
 	title[sizeof(title) - 1] = 0;
 	window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(window), title);
+	gtk_window_set_keep_above(GTK_WINDOW(window), TRUE);
 	g_signal_connect(G_OBJECT(window), "delete_event", G_CALLBACK(close_gui), NULL);
 	
 	table = gtk_table_new(1, 5, TRUE);
