@@ -251,6 +251,7 @@ static void input_seek(off_t offset)
 {
 	input_buffer_size = 0;
 	input_buffer_pos = 0;
+	input_eof = 0;
 	fseeko(input_file, offset, SEEK_SET);
 }
 
