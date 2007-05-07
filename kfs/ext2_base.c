@@ -1361,7 +1361,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 		r = ext2_super_report(object, group, 0, 0, 1);
 		if (r < 0)
 			goto allocate_name_exit2;
-		r = chdesc_create_noop_list(info->ubd, head, inode_head, dot_head, dotdot_head);
+		r = chdesc_create_noop_list(info->ubd, head, inode_head, dot_head, dotdot_head, NULL);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
