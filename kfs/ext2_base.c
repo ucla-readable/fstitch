@@ -876,7 +876,7 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 	bdesc_t * indirect = NULL, * dindirect = NULL;
 	uint32_t blockno, nindirect;
 	int r, offset, allocated;
-	chdesc_t * inode_befores[] = {NULL, NULL};
+	chdesc_t * inode_befores[] = {*head, NULL};
 	
 	if (f->f_type == TYPE_SYMLINK)
 		return -EINVAL;
@@ -959,7 +959,6 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 			if(indirect == NULL)
 				return -ENOSPC;
 		}
-		inode_befores[0] = *head;
 		offset = (nblocks - EXT2_NDIRECT - 1) * sizeof(uint32_t);
 		//This is to account for the fact that indirect block now affects the block count
 		if(nblocks > (EXT2_NDIRECT + 2))
