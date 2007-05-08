@@ -8,6 +8,7 @@
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
 #include <kfs/sched.h>
+#include <kfs/debug.h>
 #include <kfs/revision.h>
 #include <kfs/wb2_cache_bd.h>
 
@@ -238,6 +239,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t slice;
 	int r;
+	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block->number);
 	
 	if(delay)
 		*delay = 0;
@@ -277,6 +279,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
+			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block->number);
 		}
 	}
 	
@@ -349,6 +352,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	if(kfsd_is_running())
 		return;
 #endif
+	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 #ifdef __KERNEL__
 	revision_tail_process_landing_requests();
@@ -765,5 +769,6 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		return NULL;
 	}
 	
+	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
 	return bd;
 }
