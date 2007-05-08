@@ -1795,7 +1795,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -EFAULT;
 				break;
 			}
-			if(chdesc->type != BIT && chdesc->type != BYTE)
+			if(chdesc->type != BIT && chdesc->type != BYTE && params[1].data_4)
 			{
 				r = -ENOMSG;
 				break;
