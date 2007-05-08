@@ -1,5 +1,5 @@
 OBJDIRS += util
-BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/kdb.jar $(UTILDIR)/kdb
+BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/kdb
 ifeq ($(OBJDIR),$(BASE_OBJDIR)/kernel)
 BIN += $(UTILDIR)/testopgroup
 endif
@@ -34,14 +34,9 @@ $(UTILDIR)/testopgroup: util/testopgroup.c $(OBJDIR)/lib/libopgroup.so
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $< -L$(OBJDIR)/lib -lopgroup
 
-$(UTILDIR)/kdb.jar: $(wildcard util/debug/*.java) $(wildcard util/debug/command/*.java)
-	@echo + ant[UTIL/DEBUG]
-	@mkdir -p $(@D)
-	$(V)$(ANT) -f util/debug/build.xml
-
 GTKFLAGS:=$(shell pkg-config gtk+-2.0 --cflags --libs)
 
 $(UTILDIR)/kdb: util/kdb.c kfs/debug_opcode.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) $(GTKFLAGS) -std=gnu99 -lreadline -lm -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) $(GTKFLAGS) -lreadline -lm -I. -o $@ $<

@@ -6,15 +6,11 @@ UTILDIR := $(BASE_OBJDIR)/util
 
 V = @
 
-UTILS := \
-	$(UTILDIR)/fsformat \
-	$(UTILDIR)/fsck.jos \
-	$(UTILDIR)/kdb.jar
+BIN :=
 
 # Commands
 CC	:= gcc $(CC_VER) -pipe
 AR	:= ar
-ANT	:= ant
 TAR	:= tar
 PERL	:= perl
 CTAGS	:= ctags
@@ -42,8 +38,6 @@ all: tags TAGS
 # make it so that no intermediate .o files are never deleted
 .PRECIOUS: %.o \
 	$(OBJDIR)/lib/%.o $(OBJDIR)/kfs/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
-
-BIN :=
 
 $(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[LIB] $<

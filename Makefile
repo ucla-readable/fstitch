@@ -18,13 +18,12 @@ endif
 
 # Commands
 CC	:= gcc $(CC_VER) -pipe
-ANT	:= ant
 TAR	:= tar
 PERL	:= perl
 CTAGS	:= ctags
 
 # Command flags
-CFLAGS	:= -Wall -pedantic
+CFLAGS	:= -Wall -std=gnu99
 CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile\)\(Makefile.user\).mk
 
 # Lists that the */Makefrag makefile fragments will add to
