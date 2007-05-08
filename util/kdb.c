@@ -2070,8 +2070,20 @@ static int command_jump(int argc, const char * argv[])
 
 static int command_list(int argc, const char * argv[])
 {
-	int i, show_trace = 0;
+	int i, show_trace = 0, matches = 0;
 	int min = 0, max = opcodes - 1;
+	const char * prefix = NULL;
+	int prefix_length = -1;
+	if(argc > 1)
+		/* filter by opcode type prefix */
+		if(argv[1][0] == 'K')
+		{
+			prefix = argv[1];
+			prefix_length = strlen(prefix);
+			argv[1] = argv[0];
+			argv = &argv[1];
+			argc--;
+		}
 	if(argc == 2)
 	{
 		/* show a single opcode */
@@ -2105,9 +2117,15 @@ static int command_list(int argc, const char * argv[])
 			printf("Error %d reading opcode %d (%s)\n", -r, i + 1, strerror(-r));
 			return r;
 		}
-		print_opcode(i + 1, &opcode, show_trace);
+		if(!prefix || !strncmp(prefix, modules[opcode.module_idx].opcodes[opcode.opcode_idx]->name, prefix_length))
+		{
+			print_opcode(i + 1, &opcode, show_trace);
+			matches++;
+		}
 		put_opcode(&opcode);
 	}
+	if(prefix)
+		printf("Matched %d opcodes.\n", matches);
 	return 0;
 }
 
@@ -2711,20 +2729,40 @@ static int command_quit(int argc, const char * argv[])
 
 static char * command_complete(const char * text, int state)
 {
-	static int index, length, chdesc;
-	static struct chdesc * last;
+	static int index, length;
+	static enum {
+		COMMAND,
+		CHDESC,
+		KDB
+	} type = COMMAND;
+	static union {
+		struct {
+			struct chdesc * last;
+		} chdesc;
+		struct {
+			int module, opcode;
+		} kdb;
+	} local;
 	if(!state)
 	{
 		int i;
-		/* don't complete commands except at the beginning of the line, or 0x... */
-		chdesc = 0;
+		/* complete only commands at the beginning of the line,
+		 * and complete only 0x... and K... elsewhere */
+		type = COMMAND;
 		for(i = rl_point - 1; i >= 0; i--)
 			if(rl_line_buffer[i] == ' ')
 			{
 				if(i < rl_point - 2 && rl_line_buffer[i + 1] == '0' && rl_line_buffer[i + 2] == 'x')
 				{
-					chdesc = 1;
-					last = NULL;
+					type = CHDESC;
+					local.chdesc.last = NULL;
+					break;
+				}
+				if(i < rl_point - 1 && rl_line_buffer[i + 1] == 'K')
+				{
+					type = KDB;
+					local.kdb.module = 0;
+					local.kdb.opcode = 0;
 					break;
 				}
 				return NULL;
@@ -2732,27 +2770,45 @@ static char * command_complete(const char * text, int state)
 		index = 0;
 		length = strlen(text);
 	}
-	if(chdesc)
+	switch(type)
 	{
-		char name[11];
-		do {
-			while(!last && index < HASH_TABLE_SIZE)
-				last = chdescs[index++];
-			for(; last; last = last->next)
-			{
-				sprintf(name, "0x%08x", last->address);
-				if(!strncmp(name, text, length))
+		case COMMAND:
+			for(; index < COMMAND_COUNT; index++)
+				if(!strncmp(commands[index].command, text, length))
+					return strdup(commands[index++].command);
+			break;
+		case CHDESC:
+		{
+			char name[11];
+			do {
+				while(!local.chdesc.last && index < HASH_TABLE_SIZE)
+					local.chdesc.last = chdescs[index++];
+				for(; local.chdesc.last; local.chdesc.last = local.chdesc.last->next)
 				{
-					last = last->next;
-					return strdup(name);
+					sprintf(name, "0x%08x", local.chdesc.last->address);
+					if(!strncmp(name, text, length))
+					{
+						local.chdesc.last = local.chdesc.last->next;
+						return strdup(name);
+					}
 				}
+			} while(index < HASH_TABLE_SIZE);
+			break;
+		}
+		case KDB:
+			while(modules[local.kdb.module].opcodes)
+			{
+				while(modules[local.kdb.module].opcodes[local.kdb.opcode]->name)
+				{
+					const char * name = modules[local.kdb.module].opcodes[local.kdb.opcode++]->name;
+					if(!strncmp(name, text, length))
+						return strdup(name);
+				}
+				local.kdb.opcode = 0;
+				local.kdb.module++;
 			}
-		} while(index < HASH_TABLE_SIZE);
-		return NULL;
+			break;
 	}
-	for(; index < COMMAND_COUNT; index++)
-		if(!strncmp(commands[index].command, text, length))
-			return strdup(commands[index++].command);
 	return NULL;
 }
 
