@@ -80,6 +80,8 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 	off_t size;
 	while(proc_buffer_rpos == proc_buffer_wpos)
 	{
+		if(!kfsd_is_running())
+			return 0;
 		// buffer is empty, wait for writes
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 50);
@@ -119,11 +121,13 @@ static void kfs_debug_io_command(void * arg)
 
 static void kfs_debug_shutdown(void * ignore)
 {
+	int tries = 0;
 	if(atomic_read(&proc_entry->count) > 0)
 	{
-		printf("Please kill /proc/" DEBUG_PROC_FILENAME " reader.\n");
 		while (atomic_read(&proc_entry->count) > 0)
 			jsleep(HZ / 4);
+		if(++tries == 2)
+			printf("Please kill /proc/" DEBUG_PROC_FILENAME " reader.\n");
 	}
 	remove_proc_entry(DEBUG_PROC_FILENAME, &proc_root);	
 	vfree(proc_buffer);
