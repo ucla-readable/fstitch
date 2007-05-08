@@ -9,6 +9,8 @@
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -1978,6 +1980,10 @@ static int command_gui(int argc, const char * argv[])
 		close(gui[0]);
 		dup2(gui[1], 1);
 		close(gui[1]);
+		child = open("/dev/null", O_RDWR);
+		dup2(child, 0);
+		dup2(child, 2);
+		close(child);
 		gtk_gui((argc > 1) ? argv[1] : NULL);
 		exit(0);
 		/* just to be sure */
@@ -2001,7 +2007,7 @@ static int command_gui(int argc, const char * argv[])
 			fgets(line, sizeof(line), input);
 		}
 		fclose(input);
-		wait(NULL);
+		/* child will be collected by collect_children() */
 	}
 	return 0;
 }
@@ -2526,9 +2532,117 @@ static int command_step(int argc, const char * argv[])
 	return 0;
 }
 
+static int view_child = 0;
+static FILE * view_file = NULL;
+
+static void gtk_view(void);
 static int command_view(int argc, const char * argv[])
 {
-	printf("Not yet implemented.\n");
+	char tempfile[] = "/tmp/kdb-XXXXXX";
+	FILE * output;
+	char title[256];
+	int r, fresh = 0;
+	
+	/* make a temporary image file name */
+	r = mkstemp(tempfile);
+	if(r < 0)
+	{
+		/* r will not be the error */
+		printf("Error %d creating image file (%s)\n", errno, strerror(errno));
+		return -errno;
+	}
+	close(r);
+	
+	/* this section is very similar to the ps command */
+	snprintf(title, sizeof(title), "dot -Tpng -o %s", tempfile);
+	output = popen(title, "w");
+	if(!output)
+	{
+		perror("dot");
+		unlink(tempfile);
+		return -errno;
+	}
+	if(applied > 0)
+	{
+		struct debug_opcode opcode;
+		r = get_opcode(applied - 1, &opcode);
+		if(r < 0)
+		{
+			printf("Error %d reading opcode %d (%s)\n", -r, applied, strerror(-r));
+			pclose(output);
+			unlink(tempfile);
+			return r;
+		}
+		r = snprint_opcode(title, sizeof(title), &opcode);
+		put_opcode(&opcode);
+		assert(r >= 0);
+	}
+	else
+		title[0] = 0;
+	render(output, title, 0);
+	pclose(output);
+	
+	/* abandon the old window if requested */
+	if(view_child && argc > 1 && !strcmp(argv[1], "new"))
+	{
+		fclose(view_file);
+		/* rename the old window */
+		kill(view_child, SIGUSR2);
+		view_child = 0;
+		view_file = NULL;
+	}
+	/* start a new child if necessary */
+	if(!view_child)
+	{
+		int child, gui[2];
+		r = pipe(gui);
+		if(r < 0)
+		{
+			perror("pipe()");
+			unlink(tempfile);
+			return r;
+		}
+		child = fork();
+		if(child < 0)
+		{
+			perror("fork()");
+			close(gui[0]);
+			close(gui[1]);
+			unlink(tempfile);
+			return child;
+		}
+		if(!child)
+		{
+			/* free some memory */
+			reset_state();
+			close(gui[1]);
+			dup2(gui[0], 0);
+			close(gui[0]);
+			child = open("/dev/null", O_WRONLY);
+			dup2(child, 1);
+			dup2(child, 2);
+			close(child);
+			gtk_view();
+			exit(0);
+			/* just to be sure */
+			assert(0);
+		}
+		else
+		{
+			view_child = child;
+			view_file = fdopen(gui[1], "w");
+			close(gui[0]);
+			fresh = 1;
+		}
+	}
+	
+	/* send the file name and window title */
+	fprintf(view_file, "%s\n* Debugging %s, read %d opcodes, applied %d\n", tempfile, input_name, opcodes, applied);
+	fflush(view_file);
+	/* kick the child */
+	if(!fresh)
+		kill(view_child, SIGUSR1);
+	
 	return 0;
 }
 
@@ -2543,21 +2657,22 @@ struct {
 	const char * command;
 	const char * help;
 	int (*execute)(int argc, const char * argv[]);
+	const int child_atomic;
 } commands[] = {
-	{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui},
-	{"jump", "Jump system state to a specified number of opcodes.", command_jump},
-	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list},
-	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find},
-	{"option", "Get or set rendering options: freelist, grouping.", command_option},
-	{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps},
-	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render},
-	{"reset", "Reset system state to 0 opcodes.", command_reset},
-	{"run", "Apply all opcodes to system state.", command_run},
-	{"status", "Displays system state status.", command_status},
-	{"step", "Step system state by a specified number of opcodes, or 1 by default.", command_step},
-	{"view", "View system state graphically, optionally in a new window.", command_view},
-	{"help", "Displays help.", command_help},
-	{"quit", "Quits the program.", command_quit}
+	{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui, 0},
+	{"jump", "Jump system state to a specified number of opcodes.", command_jump, 0},
+	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list, 0},
+	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find, 0},
+	{"option", "Get or set rendering options: freelist, grouping.", command_option, 0},
+	{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps, 1},
+	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render, 0},
+	{"reset", "Reset system state to 0 opcodes.", command_reset, 0},
+	{"run", "Apply all opcodes to system state.", command_run, 0},
+	{"status", "Displays system state status.", command_status, 0},
+	{"step", "Step system state by a specified number of opcodes, or 1 by default.", command_step, 0},
+	{"view", "View system state graphically, optionally in a new window.", command_view, 1},
+	{"help", "Displays help.", command_help, 0},
+	{"quit", "Quits the program.", command_quit, 1}
 };
 #define COMMAND_COUNT (sizeof(commands) / sizeof(commands[0]))
 
@@ -2583,6 +2698,14 @@ static int command_help(int argc, const char * argv[])
 
 static int command_quit(int argc, const char * argv[])
 {
+	if(view_child)
+	{
+		fclose(view_file);
+		/* rename the old window */
+		kill(view_child, SIGUSR2);
+		view_child = 0;
+		view_file = NULL;
+	}
 	return -EINTR;
 }
 
@@ -2656,7 +2779,20 @@ static int command_line_execute(char * line)
 		return 0;
 	for(i = 0; i < COMMAND_COUNT; i++)
 		if(!strcmp(commands[i].command, argv[0]))
-			return commands[i].execute(argc, argv);
+		{
+			int r;
+			sigset_t set, old;
+			if(commands[i].child_atomic)
+			{
+				sigemptyset(&set);
+				sigaddset(&set, SIGCHLD);
+				sigprocmask(SIG_BLOCK, &set, &old);
+			}
+			r = commands[i].execute(argc, argv);
+			if(commands[i].child_atomic)
+				sigprocmask(SIG_SETMASK, &old, NULL);
+			return r;
+		}
 	return -ENOENT;
 }
 
@@ -2667,6 +2803,22 @@ static int command_line_execute(char * line)
 static int gtk_argc;
 static char ** gtk_argv;
 
+static void collect_children(int number)
+{
+	int child = waitpid(-1, NULL, WNOHANG);
+	while(child > 0)
+	{
+		/* no more view child */
+		if(child == view_child)
+		{
+			fclose(view_file);
+			view_child = 0;
+			view_file = NULL;
+		}
+		child = waitpid(-1, NULL, WNOHANG);
+	}
+}
+
 int main(int argc, char * argv[])
 {
 	int r, percent = -1;
@@ -2674,6 +2826,8 @@ int main(int argc, char * argv[])
 	off_t offset;
 	
 	tty = isatty(1);
+	signal(SIGCHLD, collect_children);
+	signal(SIGPIPE, SIG_IGN);
 	
 	if(argc < 2)
 	{
@@ -2814,7 +2968,8 @@ int main(int argc, char * argv[])
 			if(!line)
 			{
 				printf("\n");
-				break;
+				line = strdup("quit");
+				assert(line);
 			}
 			for(i = 0; line[i] == ' '; i++);
 			if(line[i])
@@ -2835,6 +2990,8 @@ int main(int argc, char * argv[])
 /* End main }}} */
 
 /* Begin GTK interface {{{ */
+
+/* This part is for the GUI */
 
 static gboolean close_gui(GtkWidget * widget, GdkEvent * event, gpointer data)
 {
@@ -2904,6 +3061,93 @@ static void gtk_gui(const char * ps_file)
 	
 	gtk_widget_show(table);
 	gtk_widget_show(window);
+	gtk_main();
+}
+
+/* This part is for the view command */
+
+static GtkWidget * view_window = NULL;
+static GtkWidget * view_scroll = NULL;
+static gint view_width = 0, view_height;
+static char view_title[256];
+
+static void view_signal(int number)
+{
+	if(number == SIGUSR1)
+	{
+		GtkWidget * image;
+		GdkPixbuf * pixbuf;
+		GtkWidget * old;
+		gint old_width, old_height;
+		int i;
+		
+		fgets(view_title, sizeof(view_title), stdin);
+		if(feof(stdin))
+			return;
+		for(i = 0; view_title[i]; i++)
+			if(view_title[i] == '\n')
+			{
+				view_title[i] = 0;
+				break;
+			}
+		image = gtk_image_new_from_file(view_title);
+		pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(image));
+		unlink(view_title);
+		gtk_window_get_size(GTK_WINDOW(view_window), &old_width, &old_height);
+		if(!view_width || (view_width == old_width && view_height == old_height))
+		{
+			int spacing = 0;
+			gtk_widget_style_get(view_scroll, "scrollbar-spacing", &spacing, NULL);
+			view_width = gdk_pixbuf_get_width(pixbuf) + ++spacing;
+			view_height = gdk_pixbuf_get_height(pixbuf) + spacing;
+			gtk_window_resize(GTK_WINDOW(view_window), view_width, view_height);
+		}
+		old = gtk_bin_get_child(GTK_BIN(view_scroll));
+		if(old)
+			gtk_container_remove(GTK_CONTAINER(view_scroll), old);
+		gtk_scrolled_window_add_with_viewport(GTK_SCROLLED_WINDOW(view_scroll), image);
+		gtk_widget_show(image);
+		fgets(view_title, sizeof(view_title), stdin);
+		if(feof(stdin))
+			snprintf(view_title, sizeof(view_title), "* Debugging %s, read %d opcode%s", input_name, opcodes, (opcodes == 1) ? "" : "s");
+		else
+			for(i = 0; view_title[i]; i++)
+				if(view_title[i] == '\n')
+				{
+					view_title[i] = 0;
+					break;
+				}
+		gtk_window_set_title(GTK_WINDOW(view_window), view_title);
+	}
+	else if(number == SIGUSR2)
+		gtk_window_set_title(GTK_WINDOW(view_window), &view_title[2]);
+	else
+	{
+		/* let a second SIGTERM kill us */
+		signal(SIGTERM, SIG_DFL);
+		gtk_main_quit();
+	}
+}
+
+static void gtk_view(void)
+{
+	gtk_init(&gtk_argc, &gtk_argv);
+	
+	view_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	g_signal_connect(G_OBJECT(view_window), "delete_event", G_CALLBACK(close_gui), NULL);
+	
+	view_scroll = gtk_scrolled_window_new(NULL, NULL);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(view_scroll), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+	gtk_container_add(GTK_CONTAINER(view_window), view_scroll);
+	
+	signal(SIGUSR1, view_signal);
+	signal(SIGUSR2, view_signal);
+	signal(SIGTERM, view_signal);
+	
+	view_signal(SIGUSR1);
+	
+	gtk_widget_show(view_scroll);
+	gtk_widget_show(view_window);
 	gtk_main();
 }
 
