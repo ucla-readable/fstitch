@@ -1657,9 +1657,9 @@ static void merge_rbs(bdesc_t * block)
 	}
 	else
 		assert(0);
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, chdesc, 0);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, merger, 0);
 	merger->byte.offset = 0;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, chdesc, block->ddesc->length);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, merger, block->ddesc->length);
 	merger->byte.length = block->ddesc->length;
 	merger->byte.xdata = NULL;
 # if CHDESC_BYTE_SUM
