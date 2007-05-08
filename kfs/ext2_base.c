@@ -32,8 +32,8 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
 static int read_block_bitmap(LFS_t * object, uint32_t blockno);
-int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head);
-int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
+int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** head);
+int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent);
 static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data);
 
@@ -1017,7 +1017,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 			return r;
 	}
 	f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
-	return ext2_write_inode_array(info, f->f_ino, f->f_inode, tail, ninode_befores, inode_befores);
+	return ext2_write_inode_array(info, f->f_ino, &f->f_inode, tail, ninode_befores, inode_befores);
 }
 
 static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
@@ -1355,7 +1355,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 			
 		}
 
-		r = ext2_write_inode(info, newf->f_ino, newf->f_inode, &inode_head);
+		r = ext2_write_inode(info, newf->f_ino, &newf->f_inode, &inode_head);
 		if (r < 0)
 			goto allocate_name_exit2;
 
@@ -1371,7 +1371,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent, const char *
 
 		// Increase link count
 		ln->f_inode.i_links_count++;
-		r = ext2_write_inode(info, ln->f_ino, ln->f_inode, &inode_head);
+		r = ext2_write_inode(info, ln->f_ino, &ln->f_inode, &inode_head);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -1593,7 +1593,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	       return INVALID_BLOCK;
 
 	f->f_inode.i_blocks -= EXT2_BLOCK_SIZE / 512;
-	r = ext2_write_inode(info, f->f_ino, f->f_inode, head);
+	r = ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	if (r < 0)
 		return INVALID_BLOCK;
 
@@ -1683,7 +1683,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		prev_head = *head;
 
 		old->f_inode.i_links_count++;
-		r = ext2_write_inode(info, old->f_ino, old->f_inode, head);
+		r = ext2_write_inode(info, old->f_ino, &old->f_inode, head);
 		if (r < 0)
 			goto ext2_rename_exit4;
 	}
@@ -1713,13 +1713,13 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		goto ext2_rename_exit4;
 
 	old->f_inode.i_links_count--;
-	r = ext2_write_inode(info, old->f_ino, old->f_inode, head);
+	r = ext2_write_inode(info, old->f_ino, &old->f_inode, head);
 	if (r < 0)
 		goto ext2_rename_exit4;
 
 	if (existing) {
 		new->f_inode.i_links_count--;
-		r = ext2_write_inode(info, new->f_ino, new->f_inode, &prev_head);
+		r = ext2_write_inode(info, new->f_ino, &new->f_inode, &prev_head);
 		if (r < 0)
 			goto ext2_rename_exit4;
 
@@ -1737,7 +1737,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 			}
 
 			memset(&new->f_inode, 0, sizeof(EXT2_inode_t));
-			r = ext2_write_inode(info, new->f_ino, new->f_inode, &prev_head);
+			r = ext2_write_inode(info, new->f_ino, &new->f_inode, &prev_head);
 			if (r < 0)
 				goto ext2_rename_exit4;
 
@@ -1892,7 +1892,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	if (file->f_type == TYPE_DIR) {
 	      pfile->f_inode.i_links_count--;
 	      prev_head = *head;
-	      r = ext2_write_inode(info, pfile->f_ino, pfile->f_inode, &prev_head);
+	      r = ext2_write_inode(info, pfile->f_ino, &pfile->f_inode, &prev_head);
 	      if (r < 0)
 		     goto remove_name_exit;
 	      lfs_add_fork_head(prev_head);
@@ -1906,7 +1906,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		nblocks = ext2_get_file_numblocks(object, (fdesc_t *) file);
 		
 		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
-		r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+		r = ext2_write_inode(info, file->f_ino, &file->f_inode, head);
 		if (r < 0)
 			goto remove_name_exit;
 
@@ -1938,7 +1938,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		}
 	} else {
 	      file->f_inode.i_links_count--;
-	      r = ext2_write_inode(info, file->f_ino, file->f_inode, head);
+	      r = ext2_write_inode(info, file->f_ino, &file->f_inode, head);
 	      if (r < 0)
 		     goto remove_name_exit;
 	}
@@ -2189,7 +2189,7 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		if (sizeof(uint32_t) != size || *((uint32_t *) data) < 0 || *((uint32_t *) data) >= EXT2_MAX_FILE_SIZE)
 			return -EINVAL;
 		f->f_inode.i_size = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_filetype.id) {
 		uint32_t fs_type;
@@ -2209,38 +2209,38 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 
 		f->f_inode.i_mode = (f->f_inode.i_mode & ~EXT2_S_IFMT) | (fs_type);
 		f->f_type = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_uid.id) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_uid = *(uint32_t *) data;
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_gid.id) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_gid = *(uint32_t *) data;
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_unix_permissions.id) {
 		if (sizeof(uint16_t) != size)
 			return -EINVAL;
 		f->f_inode.i_mode = (f->f_inode.i_mode & EXT2_S_IFMT)
 			| (*((uint16_t *) data) & ~EXT2_S_IFMT);
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_mtime.id ) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_mtime = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_atime.id) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_atime = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else if (id == KFS_feature_symlink.id) {
 		int r;
@@ -2256,7 +2256,7 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 				return r;
 		}
 		f->f_inode.i_size = size;  //size must include zerobyte!
-		return ext2_write_inode(info, f->f_ino, f->f_inode, head);
+		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
 	else
 		return -EINVAL;
@@ -2350,7 +2350,7 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 	}
 }
 
-int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
+int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
 	uint32_t block_group, bitoffset, block;
 	int r;
@@ -2371,7 +2371,7 @@ int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t in
 	if(!bdesc)
 		return -ENOENT;
 	bitoffset &= (EXT2_BLOCK_SIZE - 1);
-	r = chdesc_create_diff_array(bdesc, info->ubd, bitoffset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[bitoffset], &inode, tail, nbefores, befores);
+	r = chdesc_create_diff_array(bdesc, info->ubd, bitoffset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[bitoffset], inode, tail, nbefores, befores);
 	if (r < 0)
 		return r;
 	//chdesc_create_diff() returns 0 for "no change"
@@ -2385,7 +2385,7 @@ int ext2_write_inode_array(struct ext2_info * info, inode_t ino, EXT2_inode_t in
 	return r;
 }
 
-int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t inode, chdesc_t ** head)
+int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** head)
 {
 	chdesc_t * befores[] = { *head };
 	return ext2_write_inode_array(info, ino, inode, head, 1, befores);
