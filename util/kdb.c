@@ -2439,7 +2439,27 @@ static void print_chdesc_brief(uint32_t address)
 			afters++;
 		for(count = chdesc->befores; count; count = count->next)
 			befores++;
-		printf(" 0x%08x, %s, nafters %d, nbefores %d\n", chdesc->address, type_names[chdesc->type], afters, befores);
+		printf(" 0x%08x, %s, ", chdesc->address, type_names[chdesc->type]);
+		if(chdesc->block)
+		{
+			struct block * block = lookup_block(chdesc->block);
+			if(block)
+				printf("block #%d, ", block->number);
+			else
+				printf("block 0x%08x, ", chdesc->block);
+		}
+		switch(chdesc->type)
+		{
+			case BIT:
+				printf("offset %d, xor 0x%08x, ", chdesc->bit.offset, chdesc->bit.xor);
+				break;
+			case BYTE:
+				printf("offset %d, length %d, ", chdesc->byte.offset, chdesc->byte.length);
+				break;
+			case NOOP:
+				break;
+		}
+		printf("nafters %d, nbefores %d\n", afters, befores);
 	}
 	else
 		printf(" 0x%08x\n", address);
