@@ -2503,8 +2503,11 @@ static int command_status(int argc, const char * argv[])
 		}
 		for(; i < argc; i++)
 		{
-			uint32_t address = strtoul(argv[i], NULL, 16);
+			char * end;
+			uint32_t address = strtoul(argv[i], &end, 16);
 			struct chdesc * chdesc = lookup_chdesc(address);
+			if(*end)
+				printf("[Info: interpreted %s as 0x%08x.]\n", argv[i], address);
 			if(!chdesc)
 			{
 				printf("No such chdesc: 0x%08x\n", address);
@@ -2859,6 +2862,16 @@ static char * command_complete(const char * text, int state)
 					{
 						local.chdesc.last = local.chdesc.last->next;
 						return strdup(name);
+					}
+					if(local.chdesc.last->address < 0x10000000)
+					{
+						sprintf(name, "0x%x", local.chdesc.last->address);
+						if(!strncmp(name, text, length))
+						{
+							sprintf(name, "0x%08x", local.chdesc.last->address);
+							local.chdesc.last = local.chdesc.last->next;
+							return strdup(name);
+						}
 					}
 				}
 			} while(index < HASH_TABLE_SIZE);
