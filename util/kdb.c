@@ -317,6 +317,9 @@ static int read_lit_str(const char ** data, int allocate)
 			return -1;
 		if(!buffer[i])
 			break;
+		/* convert double quotes to single quotes */
+		if(buffer[i] == '"')
+			buffer[i] = '\'';
 	}
 	*data = allocate ? strdup_unique(buffer) : buffer;
 	return 0;
