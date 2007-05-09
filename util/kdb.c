@@ -941,13 +941,24 @@ static int chdesc_destroy(uint32_t address)
 static int render_free = 0;
 static int render_block = 1;
 static int render_owner = 1;
-static enum {
+static enum grouping_type {
 	OFF,
 	BLOCK,
 	OWNER,
 	BLOCK_OWNER,
 	OWNER_BLOCK
 } current_grouping = OFF;
+static struct {
+	const char * name;
+	enum grouping_type type;
+} groupings[] = {
+	{"off", OFF},
+	{"block", BLOCK},
+	{"owner", OWNER},
+	{"block-owner", BLOCK_OWNER},
+	{"owner-block", OWNER_BLOCK}
+};
+#define GROUPINGS (sizeof(groupings) / sizeof(groupings[0]))
 static const char * grouping_names[] = {
 	[OFF] = "off",
 	[BLOCK] = "block[red]",
@@ -2285,6 +2296,8 @@ static int command_find(int argc, const char * argv[])
 	return 0;
 }
 
+static const char * options[] = {"freelist", "grouping"};
+#define OPTIONS (sizeof(options) / sizeof(options[0]))
 static int command_option(int argc, const char * argv[])
 {
 	if(argc < 2)
@@ -2312,20 +2325,20 @@ static int command_option(int argc, const char * argv[])
 	}
 	else if(!strcmp(argv[1], "grouping"))
 	{
+		int i;
 		const char * now = "";
 		if(argc > 2)
 		{
-			if(!strcmp(argv[2], "off") || !strcmp(argv[2], "none"))
+			for(i = 0; i < GROUPINGS; i++)
+				if(!strcmp(argv[2], groupings[i].name))
+				{
+					current_grouping = groupings[i].type;
+					break;
+				}
+			/* "none" is an unlisted synonym for "off" */
+			if(!strcmp(argv[2], "none"))
 				current_grouping = OFF;
-			else if(!strcmp(argv[2], "block"))
-				current_grouping = BLOCK;
-			else if(!strcmp(argv[2], "owner"))
-				current_grouping = OWNER;
-			else if(!strcmp(argv[2], "block-owner"))
-				current_grouping = BLOCK_OWNER;
-			else if(!strcmp(argv[2], "owner-block"))
-				current_grouping = OWNER_BLOCK;
-			else
+			else if(i == GROUPINGS)
 			{
 				printf("Invalid setting: %s\n", argv[2]);
 				return -1;
@@ -2334,8 +2347,6 @@ static int command_option(int argc, const char * argv[])
 			render_block = current_grouping == OFF || current_grouping == OWNER;
 			render_owner = current_grouping == OFF || current_grouping == BLOCK;
 		}
-		else
-			printf("Available groupings: off, block, owner, block-owner, owner-block.\n");
 		printf("Change descriptor grouping is %s%s\n", now, grouping_names[current_grouping]);
 	}
 	else
@@ -2756,7 +2767,10 @@ static char * command_complete(const char * text, int state)
 	static enum {
 		COMMAND,
 		CHDESC,
-		KDB
+		KDB,
+		MAXMIN,
+		OPTION,
+		GROUPING
 	} type = COMMAND;
 	static union {
 		struct {
@@ -2768,28 +2782,60 @@ static char * command_complete(const char * text, int state)
 	} local;
 	if(!state)
 	{
-		int i;
-		/* complete only commands at the beginning of the line,
-		 * and complete only 0x... and K... elsewhere */
-		type = COMMAND;
-		for(i = rl_point - 1; i >= 0; i--)
-			if(rl_line_buffer[i] == ' ')
+		int i, spaces[2] = {-1, -1};
+		char * argv[2] = {NULL, NULL};
+		/* find the first non-whitespace character */
+		for(i = 0; i < rl_point && rl_line_buffer[i] == ' '; i++);
+		if(i < rl_point)
+		{
+			argv[0] = &rl_line_buffer[i];
+			/* find the first whitespace character after that */
+			for(; i < rl_point && rl_line_buffer[i] != ' '; i++);
+			if(i < rl_point)
 			{
-				if(i < rl_point - 2 && rl_line_buffer[i + 1] == '0' && rl_line_buffer[i + 2] == 'x')
+				spaces[0] = i;
+				/* and find another non-whitespace character */
+				for(; i < rl_point && rl_line_buffer[i] == ' '; i++);
+				if(i < rl_point)
 				{
-					type = CHDESC;
-					local.chdesc.last = NULL;
-					break;
+					argv[1] = &rl_line_buffer[i];
+					/* and find another whitespace character */
+					for(; i < rl_point && rl_line_buffer[i] != ' '; i++);
+					if(i < rl_point)
+						spaces[1] = i;
 				}
-				if(i < rl_point - 1 && rl_line_buffer[i + 1] == 'K')
-				{
-					type = KDB;
-					local.kdb.module = 0;
-					local.kdb.opcode = 0;
-					break;
-				}
-				return NULL;
 			}
+		}
+		/* complete only commands at the beginning of the line */
+		if(spaces[0] == -1)
+			type = COMMAND;
+		else
+		{
+			if(!strncmp(argv[0], "status ", 7))
+			{
+				type = CHDESC;
+				local.chdesc.last = NULL;
+			}
+			else if(!strncmp(argv[0], "list ", 5))
+			{
+				type = KDB;
+				local.kdb.module = 0;
+				local.kdb.opcode = 0;
+			}
+			else if(!strncmp(argv[0], "find ", 5))
+				type = MAXMIN;
+			else if(!strncmp(argv[0], "option ", 7))
+			{
+				if(spaces[1] == -1)
+					type = OPTION;
+				else if(!strncmp(argv[1], "grouping ", 9))
+					type = GROUPING;
+				else
+					return NULL;
+			}
+			else
+				return NULL;
+		}
 		index = 0;
 		length = strlen(text);
 	}
@@ -2829,6 +2875,37 @@ static char * command_complete(const char * text, int state)
 				}
 				local.kdb.opcode = 0;
 				local.kdb.module++;
+			}
+			break;
+		case MAXMIN:
+			switch(index++)
+			{
+				case 0:
+					if(!strncmp("max", text, length))
+						return strdup("max");
+					index++;
+				case 1:
+					if(!strncmp("min", text, length))
+						return strdup("min");
+					index++;
+				default:
+					break;
+			}
+			break;
+		case OPTION:
+			while(index < OPTIONS)
+			{
+				if(!strncmp(options[index], text, length))
+					return strdup(options[index++]);
+				index++;
+			}
+			break;
+		case GROUPING:
+			while(index < GROUPINGS)
+			{
+				if(!strncmp(groupings[index].name, text, length))
+					return strdup(groupings[index++].name);
+				index++;
 			}
 			break;
 	}
