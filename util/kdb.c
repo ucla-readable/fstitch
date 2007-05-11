@@ -928,6 +928,7 @@ static int chdesc_destroy(uint32_t address)
 			free_arrows(&old->befores);
 			free_arrows(&old->afters);
 			free_labels(&old->labels);
+			free(old);
 			chdesc_count--;
 			return 0;
 		}
