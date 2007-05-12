@@ -41,6 +41,8 @@
 static uint32_t strsum(const char * string)
 {
 	uint32_t sum = 0x5AFEDA7A;
+	if(!string)
+		return 0;
 	while(*string)
 	{
 		/* ROL 3 */
@@ -63,6 +65,18 @@ static const char * strdup_unique(char * string)
 	uint32_t sum = strsum(string);
 	uint32_t index = sum % HASH_TABLE_SIZE;
 	struct hash_entry * scan;
+	if(!string)
+	{
+		for(index = 0; index < HASH_TABLE_SIZE; index++)
+			while(hash_table[index])
+			{
+				struct hash_entry * old = hash_table[index];
+				hash_table[index] = old->next;
+				free((void *) old->string);
+				free(old);
+			}
+		return NULL;
+	}
 	for(scan = hash_table[index]; scan; scan = scan->next)
 		if(scan->sum == sum && !strcmp(scan->string, string))
 			break;
@@ -87,6 +101,8 @@ static const char * strdup_unique(char * string)
 static uint32_t stksum(const uint32_t * stack)
 {
 	uint32_t sum = 0x5AFEDA7A;
+	if(!stack)
+		return 0;
 	while(*stack)
 	{
 		/* ROL 3 */
@@ -128,6 +144,18 @@ static const uint32_t * stkdup_unique(uint32_t * stack)
 	uint32_t sum = stksum(stack);
 	uint32_t index = sum % HASH_TABLE_SIZE;
 	struct hash_entry * scan;
+	if(!stack)
+	{
+		for(index = 0; index < HASH_TABLE_SIZE; index++)
+			while(hash_table[index])
+			{
+				struct hash_entry * old = hash_table[index];
+				hash_table[index] = old->next;
+				free((void *) old->stack);
+				free(old);
+			}
+		return NULL;
+	}
 	for(scan = hash_table[index]; scan; scan = scan->next)
 		if(scan->sum == sum && !stkcmp(scan->stack, stack))
 			break;
@@ -625,7 +653,7 @@ struct chdesc {
 			uint16_t offset, length;
 		} byte;
 	};
-	uint16_t flags;
+	uint16_t flags, local_flags;
 	struct weak * weak_refs;
 	struct arrow * befores;
 	struct arrow * afters;
@@ -776,6 +804,7 @@ static struct chdesc * _chdesc_create(uint32_t address, uint32_t owner)
 	chdesc->opcode = applied + 1;
 	chdesc->owner = owner;
 	chdesc->flags = 0;
+	chdesc->local_flags = 0;
 	chdesc->weak_refs = NULL;
 	chdesc->befores = NULL;
 	chdesc->afters = NULL;
@@ -1965,9 +1994,377 @@ static int snprint_opcode(char * string, size_t length, struct debug_opcode * op
 
 /* End opcode logic }}} */
 
+/* Begin cache analysis {{{ */
+
+struct cache_block {
+	uint32_t address;
+	int inflight;
+	struct block * block;
+	struct chdesc * chdescs;
+	int chdesc_count;
+	struct chdesc * ready;
+	int ready_count;
+	struct cache_block * next;
+} * cache_blocks[HASH_TABLE_SIZE];
+
+static struct cache_block * cache_block_lookup(uint32_t address)
+{
+	struct cache_block * scan;
+	int index = address % HASH_TABLE_SIZE;
+	for(scan = cache_blocks[index]; scan; scan = scan->next)
+		if(scan->address == address)
+			return scan;
+	scan = malloc(sizeof(*scan));
+	if(!scan)
+		return NULL;
+	scan->address = address;
+	scan->inflight = 0;
+	scan->block = lookup_block(address);
+	scan->chdescs = NULL;
+	scan->chdesc_count = 0;
+	scan->ready = NULL;
+	scan->ready_count = 0;
+	scan->next = cache_blocks[index];
+	cache_blocks[index] = scan;
+	return scan;
+}
+
+static void cache_block_clean(void)
+{
+	int i;
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+		while(cache_blocks[i])
+		{
+			struct cache_block * old = cache_blocks[i];
+			cache_blocks[i] = old->next;
+			free(old);
+		}
+}
+
+#define LOCAL_READY 0x01
+
+static int chdesc_is_ready(struct chdesc * chdesc, uint32_t block)
+{
+	struct arrow * scan;
+	for(scan = chdesc->befores; scan; scan = scan->next)
+	{
+		struct chdesc * before = lookup_chdesc(scan->chdesc);
+		assert(before);
+		if(before->type == NOOP)
+		{
+			/* recursive */
+			if(!chdesc_is_ready(before, block))
+				return 0;
+		}
+		else if(before->block != block)
+			return 0;
+		else if(!(before->local_flags & LOCAL_READY))
+			return 0;
+	}
+	return 1;
+}
+
+struct cache_choices {
+	int dirty, inflight, dirty_inflight;
+	int full_ready, half_ready, not_ready;
+};
+
+/* Look at all change descriptors, and determine which blocks on the given cache
+ * can be completely written, partially written, or not written. Note that
+ * blocks containing in-flight change descriptors may not be written at all. */
+static void cache_choice_snapshot(uint32_t cache, struct cache_choices * info)
+{
+	int i;
+	struct chdesc * chdesc;
+	memset(info, 0, sizeof(*info));
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+		for(chdesc = chdescs[i]; chdesc; chdesc = chdesc->next)
+		{
+			struct cache_block * block;
+			/* the local flags will be used to track readiness */
+			chdesc->local_flags &= ~LOCAL_READY;
+			if(chdesc->flags & CHDESC_INFLIGHT)
+			{
+				assert(chdesc->block);
+				block = cache_block_lookup(chdesc->block);
+				assert(block);
+				if(!block->inflight)
+				{
+					info->inflight++;
+					if(block->chdescs)
+						info->dirty_inflight++;
+				}
+				block->inflight++;
+			}
+			else if(chdesc->owner == cache && chdesc->block)
+			{
+				block = cache_block_lookup(chdesc->block);
+				assert(block);
+				if(!block->chdescs)
+				{
+					info->dirty++;
+					if(block->inflight)
+						info->dirty_inflight++;
+				}
+				/* use the group_next fields in the chdescs to keep
+				 * track of which chdescs are on the block or ready */
+				chdesc->group_next[0] = block->chdescs;
+				block->chdescs = chdesc;
+				block->chdesc_count++;
+			}
+		}
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		struct cache_block * scan = cache_blocks[i];
+		for(; scan; scan = scan->next)
+		{
+			int change;
+			/* nothing is ready on an inflight block */
+			if(scan->inflight)
+				continue;
+			do {
+				change = 0;
+				for(chdesc = scan->chdescs; chdesc; chdesc = chdesc->group_next[0])
+				{
+					/* already found to be ready */
+					if(chdesc->local_flags & LOCAL_READY)
+						continue;
+					if(chdesc_is_ready(chdesc, chdesc->block))
+					{
+						chdesc->local_flags |= LOCAL_READY;
+						scan->ready_count++;
+						change = 1;
+					}
+				}
+			} while(change);
+			if(scan->chdesc_count == scan->ready_count)
+				info->full_ready++;
+			else if(scan->ready_count)
+				info->half_ready++;
+			else
+				info->not_ready++;
+		}
+	}
+	/* more? */
+}
+
+/* End cache analysis }}} */
+
 /* Begin commands {{{ */
 
 static int tty = 0;
+
+static int restore_initial_state(int save_applied, int * progress, int * distance, int * percent)
+{
+	int r;
+	struct debug_opcode opcode;
+	if(save_applied < opcodes)
+		reset_state();
+	while(applied < save_applied)
+	{
+		if(tty)
+		{
+			int p = *progress * 100 / *distance;
+			if(p > *percent)
+			{
+				*percent = p;
+				printf("\e[4D%2d%% ", *percent);
+				fflush(stdout);
+			}
+		}
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			return r;
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			return r;
+		}
+		applied++;
+		(*progress)++;
+	}
+	return 0;
+}
+
+static int command_cache(int argc, const char * argv[])
+{
+	int progress = 0, distance = 0, percent = -1;
+	int r = 0, save_applied = applied;
+	struct debug_opcode opcode;
+	int caches = 0, finds = 0, looks = 0, writes = 0;
+	int alt_finds = 0, alt_looks = 0, alt_writes = 0;
+	uint32_t cache = 0;
+	struct bd * cache_bd = NULL;
+	const char * prefix = "";
+	const char * status = "";
+	
+	if(tty)
+	{
+		/* calculate total distance */
+		distance = opcodes;
+		if(applied < opcodes)
+			distance += applied;
+		prefix = "\r\e[K";
+		status = "Analyzing cache behavior...     ";
+		printf(status);
+		fflush(stdout);
+	}
+	
+	/* analyze cache behavior */
+	if(applied)
+		reset_state();
+	while(applied < opcodes)
+	{
+		if(tty)
+		{
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
+		}
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			return r;
+		}
+		if(modules[opcode.module_idx].module == KDB_MODULE_CACHE)
+		{
+			if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_NOTIFY)
+			{
+				struct bd * bd;
+				struct debug_param params[] = {
+					{{.name = "cache"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					break;
+				assert(params[0].size == 4);
+				bd = lookup_bd(params[0].data_4);
+				if(bd)
+					printf("%sCache detected: %s (0x%08x)", prefix, bd->name, bd->address);
+				else
+					printf("%sCache detected: 0x%08x", prefix, params[0].data_4);
+				if(!caches++)
+				{
+					printf(" (processing data for this cache)");
+					cache = params[0].data_4;
+					cache_bd = bd;
+				}
+				printf("\n");
+				if(tty)
+				{
+					printf("%s\e[4D%2d%% ", status, percent);
+					fflush(stdout);
+				}
+			}
+			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_FINDBLOCK)
+			{
+				struct debug_param params[] = {
+					{{.name = "cache"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					break;
+				assert(params[0].size == 4);
+				if(params[0].data_4 == cache)
+				{
+					struct cache_choices info;
+					/* clean the old cached block info */
+					cache_block_clean();
+					cache_choice_snapshot(cache, &info);
+					printf("%s#%8d: FINDBLOCK; dirty: %5d, inflight: %5d,    both: %5d\n", prefix, applied + 1, info.dirty, info.inflight, info.dirty_inflight);
+					printf("                      ready: %5d,     half: %5d, blocked: %5d\n", info.full_ready, info.half_ready, info.not_ready);
+					if(tty)
+					{
+						printf("%s\e[4D%2d%% ", status, percent);
+						fflush(stdout);
+					}
+					finds++;
+				}
+				else
+					alt_finds++;
+			}
+			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_LOOKBLOCK)
+			{
+				struct debug_param params[] = {
+					{{.name = "cache"}},
+					{{.name = "block"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					break;
+				assert(params[0].size == 4 && params[1].size == 4);
+				if(params[0].data_4 == cache)
+					looks++;
+				else
+					alt_looks++;
+			}
+			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_WRITEBLOCK)
+			{
+				struct debug_param params[] = {
+					{{.name = "cache"}},
+					{{.name = "block"}},
+					{{.name = NULL}}
+				};
+				r = param_lookup(&opcode, params);
+				if(r < 0)
+					break;
+				assert(params[0].size == 4 && params[1].size == 4);
+				if(params[0].data_4 == cache)
+					writes++;
+				else
+					alt_writes++;
+			}
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			return r;
+		}
+		applied++;
+		progress++;
+	}
+	cache_block_clean();
+	if(r < 0)
+	{
+		printf("%crror %d analyzing opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+		return r;
+	}
+	
+	r = restore_initial_state(save_applied, &progress, &distance, &percent);
+	if(r < 0)
+		return r;
+	if(tty)
+		printf("\e[4D100%%\n");
+	
+	printf("Caches: %d, Finds: %d", caches, finds);
+	if(alt_finds)
+		printf("(+%d)", alt_finds);
+	printf(", Looks: %d", looks);
+	if(alt_looks)
+		printf("(+%d)", alt_looks);
+	printf(", Writes: %d", writes);
+	if(alt_writes)
+		printf("(+%d)", alt_writes);
+	printf("\n");
+	if(writes)
+		printf("Average looks/write: %lg\n", (double) looks / (double) writes);
+	return 0;
+}
 
 static void gtk_gui(const char * ps_file);
 static int command_line_execute(char * line);
@@ -2259,37 +2656,9 @@ static int command_find(int argc, const char * argv[])
 		}
 	}
 	
-	/* restore initial state */
-	if(save_applied < applied)
-		reset_state();
-	while(applied < save_applied)
-	{
-		if(tty)
-		{
-			int p = progress * 100 / distance;
-			if(p > percent)
-			{
-				percent = p;
-				printf("\e[4D%2d%% ", percent);
-				fflush(stdout);
-			}
-		}
-		r = get_opcode(applied, &opcode);
-		if(r < 0)
-		{
-			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
-			return r;
-		}
-		r = apply_opcode(&opcode, NULL, NULL);
-		put_opcode(&opcode);
-		if(r < 0)
-		{
-			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
-			return r;
-		}
-		applied++;
-		progress++;
-	}
+	r = restore_initial_state(save_applied, &progress, &distance, &percent);
+	if(r < 0)
+		return r;
 	if(tty)
 		printf("\e[4D100%%\n");
 	
@@ -2715,6 +3084,7 @@ struct {
 	int (*execute)(int argc, const char * argv[]);
 	const int child_atomic;
 } commands[] = {
+	{"cache", "Analyze cache options and decisions.", command_cache, 0},
 	{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui, 0},
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump, 0},
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list, 0},
@@ -3154,6 +3524,20 @@ int main(int argc, char * argv[])
 	}
 	
 	input_finish();
+	
+	/* free everything */
+	cache_block_clean();
+	reset_state();
+	while(offsets)
+	{
+		struct opcode_offsets * old = offsets;
+		offsets = old->next;
+		free(old->offsets);
+		free(old);
+	}
+	strdup_unique(NULL);
+	stkdup_unique(NULL);
+	
 	return 0;
 }
 
