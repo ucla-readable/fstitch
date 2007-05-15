@@ -68,7 +68,8 @@ typedef struct account {
 	const char * name;
 	size_t size;
 	uint64_t space_time; /* total 'space * time' */
-	uint64_t space_total;
+	uint64_t space_total; /* total allocated */
+	uint64_t space_total_realloc; /* total allocated, minus realloc effect */
 	uint32_t space_max, space_last;
 	cycles_t time_first, time_last;
 } account_t;
@@ -79,27 +80,36 @@ static inline void account_init(const char * name, size_t size, account_t * act)
 	act->size = size;
 	act->space_time = 0;
 	act->space_total = 0;
+	act->space_total_realloc = 0;
 	act->space_max = act->space_last = 0;
 	act->time_first = act->time_last = 0;
 }
 
-static inline void account_update(account_t * act, int32_t space_change)
+static inline void account_update_realloc(account_t * act, int32_t prev_space_change, int32_t space_change)
 {
 	cycles_t time_current = get_cycles();
-	uint64_t diff = u64_diff(act->time_last, time_current);
+	uint64_t time_diff = u64_diff(act->time_last, time_current);
 	uint64_t spacetime_prev = act->space_time;
 	
 	if(!act->time_first)
 		act->time_first = act->time_last = get_cycles();
 	
-	act->space_time += act->space_last * diff;
+	act->space_time += act->space_last * time_diff;
 	assert(act->space_time >= spacetime_prev);
 	act->space_last += space_change;
 	act->time_last = time_current;
 	if(act->space_last > act->space_max)
 		act->space_max = act->space_last;
 	if(space_change > 0)
+	{
 		act->space_total += space_change; /* FIXME: sort of */
+		act->space_total_realloc += space_change - prev_space_change; /* FIXME: sort of (?) */
+	}	
+}
+
+static inline void account_update(account_t * act, int32_t space_change)
+{
+	return account_update_realloc(act, 0, space_change);
 }
 
 static account_t act_nchdescs[6], act_ndeps, act_nwrefs;
@@ -123,10 +133,13 @@ static inline void account_nchdescs(int type, int add)
 
 static inline void account_nchdescs_undo(int type)
 {
+	/* count undone in 'total space'? (do not decrement space_total) */
 	account_update(&act_nchdescs[type], -1);
 	act_nchdescs[type].space_total--;
+	act_nchdescs[type].space_total_realloc--;
 	account_update(&act_nchdescs[NC_TOTAL], -1);
 	act_nchdescs[NC_TOTAL].space_total--;
+	act_nchdescs[NC_TOTAL].space_total_realloc--;
 }
 
 static inline void account_nchdescs_convert(int type_old, int type_new)
@@ -160,7 +173,7 @@ static uint64_t do_div64(uint64_t n, uint64_t base)
 static void account_print(const account_t * act)
 {
 	uint64_t mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
-	printf("account: %s: mean=%llu max=%u total=%llu sizeof=%u\n", act->name, mean, act->space_max, act->space_total, act->size);
+	printf("account: %s: mean=%llu max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->name, mean, act->space_max, act->space_total_realloc, act->space_total, act->size);
 }
 
 static void account_print_all(void * ignore)
@@ -168,10 +181,6 @@ static void account_print_all(void * ignore)
 	int i;
 	for(i = 0; i < sizeof(act_all) / sizeof(*act_all); i++)
 		account_print(act_all[i]);
-	printf("account totals headers: bit byte noop bit->byte ->noop total ndeps nwrefs data\n");
-	printf("account totals data: %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
-	        act_nchdescs[BIT].space_total, act_nchdescs[BYTE].space_total, act_nchdescs[NOOP].space_total, act_nchdescs[NC_CONVERT_BIT_BYTE].space_total, act_nchdescs[NC_CONVERT_NOOP].space_total, act_nchdescs[NC_TOTAL].space_total,
-	        act_ndeps.space_total, act_nwrefs.space_total, act_data.space_total);
 }
 
 static int account_init_all(void)
@@ -190,6 +199,7 @@ static int account_init_all(void)
 }
 #else
 # define account_init(x) do {} while(0)
+# define account_update_realloc(act, sc, ad) do {} while(0)
 # define account_update(act, sc) do {} while(0)
 # define account_nchdescs(type, add) do {} while (0)
 # define account_nchdescs_undo(type) do {} while (0)
@@ -1949,7 +1959,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 					chdesc_unlink_overlap(overlap); /* XXX? */
 				return -ENOMEM;
 			}
-			account_update(&act_data, merge_length);
+			account_update_realloc(&act_data, overlap->byte.length, merge_length);
 		}
 		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.xdata, overlap->byte.length);
 		if(merge_offset < overlap->byte.offset)

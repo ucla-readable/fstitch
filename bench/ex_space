@@ -33,8 +33,8 @@ while(<R>) {
 	if (! $line =~ m/account: /) {
 		next;
 	}
-	$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) sizeof=(\d+)/;
-	print "$2 $3 $4 $5  " if (exists($careabouts{$1}));
+	$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) total_realloc=(\d+) sizeof=(\d+)/;
+	print "$2 $3 $4 $5 $6  " if (exists($careabouts{$1}));
 }
 print "\n";
 close(R);
