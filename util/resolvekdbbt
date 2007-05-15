@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # read kdb backtrace and corresponding symbols
 
 BIN=obj/unix-user/kfs/kfsd
@@ -19,7 +19,7 @@ then
 fi
 
 function resolve () {
-	sed -r 's/\[[0-9]*\]: /\n/g' | tail +2 | xargs addr2line -f -e "$BIN"
+	sed -r 's/\[[0-9]*\]: /\n/g' | tail -n +2 | xargs addr2line -f -e "$BIN"
 }
 
 if [ $# -ge 1 ]
