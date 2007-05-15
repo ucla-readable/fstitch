@@ -1265,7 +1265,8 @@ static void render(FILE * output, const char * title, int landscape)
 	int i, free = 0;
 	
 	/* header */
-	fprintf(output, "digraph chdescs\n{\nnodesep=0.25;\nranksep=0.25;\n");
+	fprintf(output, "digraph \"debug: %d/%d opcode%s, %s\"\n", applied, opcodes, (opcodes == 1) ? "" : "s", input_name);
+	fprintf(output, "{\nnodesep=0.25;\nranksep=0.25;\n");
 	if(landscape)
 		fprintf(output, "rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
 	else
