@@ -239,7 +239,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	revision_slice_t slice;
 	int r;
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block->number);
+	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
 	
 	if(delay)
 		*delay = 0;
@@ -279,7 +279,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block->number);
+			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block);
 		}
 	}
 	

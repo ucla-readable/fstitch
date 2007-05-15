@@ -1,4 +1,4 @@
-/* make sure we get the structures from debug_opcode.h */
+/* Make sure we get the structures from debug_opcode.h */
 #define WANT_DEBUG_STRUCTURES 1
 
 #include <lib/platform.h>
@@ -59,7 +59,7 @@ static int debug_count = 0;
 #define LIT_STR (-3)
 #define END 0
 
-/* io system prototypes */
+/* I/O system prototypes */
 static int kfs_debug_io_init(void);
 static int kfs_debug_io_write(void * data, uint32_t size);
 static void kfs_debug_io_command(void * arg);
@@ -82,7 +82,7 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 	{
 		if(!kfsd_is_running())
 			return 0;
-		// buffer is empty, wait for writes
+		/* buffer is empty, wait for writes */
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 50);
 		if(signal_pending(current))
@@ -105,7 +105,7 @@ static int kfs_debug_io_write(void * data, uint32_t len)
 	{
 		while(proc_buffer_wpos >= proc_buffer_rpos + DEBUG_PROC_SIZE)
 		{
-			// buffer is full, wait for reads
+			/* buffer is full, wait for reads */
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ / 50);
 		}
@@ -116,7 +116,7 @@ static int kfs_debug_io_write(void * data, uint32_t len)
 
 static void kfs_debug_io_command(void * arg)
 {
-	// kkfsd does not currently support command reading
+	/* kkfsd does not currently support command reading */
 }
 
 static void kfs_debug_shutdown(void * ignore)
@@ -189,7 +189,7 @@ static int kfs_debug_io_write(void * data, uint32_t len)
 
 static void kfs_debug_io_command(void * arg)
 {
-	// uukfsd does not currently support command reading
+	/* uukfsd does not currently support command reading */
 }
 
 static void kfs_debug_shutdown(void * ignore)
@@ -318,7 +318,6 @@ int kfs_debug_init(void)
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
-				/* TODO: maybe write the logical data type here as well */
 				kfs_debug_write(LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
 				if(modules[m].opcodes[o]->params[p]->type == FORMAT)
 					if(modules[m].opcodes[o]->params[p + 1]->name)

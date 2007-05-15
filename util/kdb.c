@@ -353,11 +353,12 @@ static int read_lit_str(const char ** data, int allocate)
 	return 0;
 }
 
+static uint32_t debug_rev, debug_opcode_rev;
+
 static int read_debug_signature(void)
 {
 	int m, o, r;
 	uint16_t zero;
-	uint32_t debug_rev, debug_opcode_rev;
 	
 	r = read_lit_32(&debug_rev);
 	if(r < 0)
@@ -365,8 +366,10 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if((debug_rev != 3408 && debug_rev != 3439) || debug_opcode_rev != 3414)
+	if((debug_rev != 3408 && debug_rev != 3439 && debug_rev != 3456) || debug_opcode_rev != 3414)
 		return -EPROTO;
+	if(debug_rev != 3456)
+		printf("[detected old file; cache command may not work] ");
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
@@ -1996,9 +1999,17 @@ static int snprint_opcode(char * string, size_t length, struct debug_opcode * op
 
 /* Begin cache analysis {{{ */
 
-struct cache_block {
+#define CACHE_CHDESC_READY    0x01
+
+#define CACHE_BLOCK_DIRTY     0x01
+#define CACHE_BLOCK_INFLIGHT  0x02
+#define CACHE_BLOCK_READY     0x04
+#define CACHE_BLOCK_HALFREADY 0x08
+#define CACHE_BLOCK_NOTREADY  0x10
+
+static struct cache_block {
 	uint32_t address;
-	int inflight;
+	uint32_t local_flags;
 	struct block * block;
 	struct chdesc * chdescs;
 	int chdesc_count;
@@ -2006,6 +2017,16 @@ struct cache_block {
 	int ready_count;
 	struct cache_block * next;
 } * cache_blocks[HASH_TABLE_SIZE];
+
+struct cache_situation {
+	int dirty, inflight, dirty_inflight;
+	int full_ready, half_ready, not_ready;
+};
+
+struct cache_choice {
+	int look_ready, look_half, look_not;
+	int write_ready, write_half;
+};
 
 static struct cache_block * cache_block_lookup(uint32_t address)
 {
@@ -2018,7 +2039,7 @@ static struct cache_block * cache_block_lookup(uint32_t address)
 	if(!scan)
 		return NULL;
 	scan->address = address;
-	scan->inflight = 0;
+	scan->local_flags = 0;
 	scan->block = lookup_block(address);
 	scan->chdescs = NULL;
 	scan->chdesc_count = 0;
@@ -2041,8 +2062,6 @@ static void cache_block_clean(void)
 		}
 }
 
-#define LOCAL_READY 0x01
-
 static int chdesc_is_ready(struct chdesc * chdesc, uint32_t block)
 {
 	struct arrow * scan;
@@ -2058,21 +2077,16 @@ static int chdesc_is_ready(struct chdesc * chdesc, uint32_t block)
 		}
 		else if(before->block != block)
 			return 0;
-		else if(!(before->local_flags & LOCAL_READY))
+		else if(!(before->local_flags & CACHE_CHDESC_READY))
 			return 0;
 	}
 	return 1;
 }
 
-struct cache_choices {
-	int dirty, inflight, dirty_inflight;
-	int full_ready, half_ready, not_ready;
-};
-
 /* Look at all change descriptors, and determine which blocks on the given cache
  * can be completely written, partially written, or not written. Note that
  * blocks containing in-flight change descriptors may not be written at all. */
-static void cache_choice_snapshot(uint32_t cache, struct cache_choices * info)
+static void cache_situation_snapshot(uint32_t cache, struct cache_situation * info)
 {
 	int i;
 	struct chdesc * chdesc;
@@ -2082,29 +2096,30 @@ static void cache_choice_snapshot(uint32_t cache, struct cache_choices * info)
 		{
 			struct cache_block * block;
 			/* the local flags will be used to track readiness */
-			chdesc->local_flags &= ~LOCAL_READY;
+			chdesc->local_flags &= ~CACHE_CHDESC_READY;
 			if(chdesc->flags & CHDESC_INFLIGHT)
 			{
 				assert(chdesc->block);
 				block = cache_block_lookup(chdesc->block);
 				assert(block);
-				if(!block->inflight)
+				if(!(block->local_flags & CACHE_BLOCK_INFLIGHT))
 				{
 					info->inflight++;
 					if(block->chdescs)
 						info->dirty_inflight++;
+					block->local_flags |= CACHE_BLOCK_INFLIGHT;
 				}
-				block->inflight++;
 			}
 			else if(chdesc->owner == cache && chdesc->block)
 			{
 				block = cache_block_lookup(chdesc->block);
 				assert(block);
-				if(!block->chdescs)
+				if(!(block->local_flags & CACHE_BLOCK_DIRTY))
 				{
 					info->dirty++;
-					if(block->inflight)
+					if(block->local_flags & CACHE_BLOCK_INFLIGHT)
 						info->dirty_inflight++;
+					block->local_flags |= CACHE_BLOCK_DIRTY;
 				}
 				/* use the group_next fields in the chdescs to keep
 				 * track of which chdescs are on the block or ready */
@@ -2120,29 +2135,38 @@ static void cache_choice_snapshot(uint32_t cache, struct cache_choices * info)
 		{
 			int change;
 			/* nothing is ready on an inflight block */
-			if(scan->inflight)
+			if(scan->local_flags & CACHE_BLOCK_INFLIGHT)
 				continue;
 			do {
 				change = 0;
 				for(chdesc = scan->chdescs; chdesc; chdesc = chdesc->group_next[0])
 				{
 					/* already found to be ready */
-					if(chdesc->local_flags & LOCAL_READY)
+					if(chdesc->local_flags & CACHE_CHDESC_READY)
 						continue;
 					if(chdesc_is_ready(chdesc, chdesc->block))
 					{
-						chdesc->local_flags |= LOCAL_READY;
+						chdesc->local_flags |= CACHE_CHDESC_READY;
 						scan->ready_count++;
 						change = 1;
 					}
 				}
 			} while(change);
 			if(scan->chdesc_count == scan->ready_count)
+			{
 				info->full_ready++;
+				scan->local_flags |= CACHE_BLOCK_READY;
+			}
 			else if(scan->ready_count)
+			{
 				info->half_ready++;
+				scan->local_flags |= CACHE_BLOCK_HALFREADY;
+			}
 			else
+			{
 				info->not_ready++;
+				scan->local_flags |= CACHE_BLOCK_NOTREADY;
+			}
 		}
 	}
 	/* more? */
@@ -2202,6 +2226,7 @@ static int command_cache(int argc, const char * argv[])
 	struct bd * cache_bd = NULL;
 	const char * prefix = "";
 	const char * status = "";
+	struct cache_choice choices;
 	
 	if(tty)
 	{
@@ -2214,6 +2239,10 @@ static int command_cache(int argc, const char * argv[])
 		printf(status);
 		fflush(stdout);
 	}
+	
+	/* make sure we start with a clean slate */
+	cache_block_clean();
+	memset(&choices, 0, sizeof(choices));
 	
 	/* analyze cache behavior */
 	if(applied)
@@ -2279,10 +2308,11 @@ static int command_cache(int argc, const char * argv[])
 				assert(params[0].size == 4);
 				if(params[0].data_4 == cache)
 				{
-					struct cache_choices info;
+					struct cache_situation info;
 					/* clean the old cached block info */
 					cache_block_clean();
-					cache_choice_snapshot(cache, &info);
+					memset(&choices, 0, sizeof(choices));
+					cache_situation_snapshot(cache, &info);
 					printf("%s#%8d: FINDBLOCK; dirty: %5d, inflight: %5d,    both: %5d\n", prefix, applied + 1, info.dirty, info.inflight, info.dirty_inflight);
 					printf("                      ready: %5d,     half: %5d, blocked: %5d\n", info.full_ready, info.half_ready, info.not_ready);
 					if(tty)
@@ -2307,7 +2337,22 @@ static int command_cache(int argc, const char * argv[])
 					break;
 				assert(params[0].size == 4 && params[1].size == 4);
 				if(params[0].data_4 == cache)
+				{
+					struct cache_block * block = cache_block_lookup(params[1].data_4);
+					assert(block);
+					if(block->local_flags & CACHE_BLOCK_READY)
+						choices.look_ready++;
+					else if(block->local_flags & CACHE_BLOCK_HALFREADY)
+						choices.look_half++;
+					else if(block->local_flags & CACHE_BLOCK_NOTREADY)
+						choices.look_not++;
+					else
+					{
+						r = -EFAULT;
+						break;
+					}
 					looks++;
+				}
 				else
 					alt_looks++;
 			}
@@ -2323,7 +2368,20 @@ static int command_cache(int argc, const char * argv[])
 					break;
 				assert(params[0].size == 4 && params[1].size == 4);
 				if(params[0].data_4 == cache)
+				{
+					struct cache_block * block = cache_block_lookup(params[1].data_4);
+					assert(block);
+					if(block->local_flags & CACHE_BLOCK_READY)
+						choices.write_ready++;
+					else if(block->local_flags & CACHE_BLOCK_HALFREADY)
+						choices.write_half++;
+					else
+					{
+						r = -EFAULT;
+						break;
+					}
 					writes++;
+				}
 				else
 					alt_writes++;
 			}
