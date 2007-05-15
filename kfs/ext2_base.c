@@ -1026,6 +1026,61 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 	return ext2_append_file_block_array(object, file, block, head, 1, befores);
 }
 
+static uint16_t dirent_rec_len(uint16_t name_len)
+{
+	return 8 + ((name_len - 1) / 4 + 1) * 4;
+}
+
+static int ext2_write_dirent_extend(LFS_t * object, EXT2_File_t * parent,
+                                    EXT2_Dir_entry_t * dirent_exists,
+                                    EXT2_Dir_entry_t * dirent_new,
+                                    uint32_t basep, chdesc_t ** head)
+{
+	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
+	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	uint32_t blockno;
+	bdesc_t * dirblock;
+	int r;
+	//check: off end of file?
+	if (!parent || !dirent_exists || !dirent_new || !head)
+		return -EINVAL;
+
+	if (basep + dirent_exists->rec_len + dirent_new->rec_len > parent->f_inode.i_size)
+		return -EINVAL;
+
+	uint32_t exists_rec_len_actual = dirent_rec_len(dirent_exists->name_len);
+	uint32_t new_rec_len_actual = dirent_rec_len(dirent_new->name_len);
+
+	// dirents are in a single block:
+	if (basep % EXT2_BLOCK_SIZE + exists_rec_len_actual + new_rec_len_actual <= EXT2_BLOCK_SIZE) {
+		EXT2_Dir_entry_t entries[2];
+
+		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
+		blockno = get_file_block(object, parent, basep);
+		if (blockno == INVALID_BLOCK)
+			return -1;
+
+		basep %= EXT2_BLOCK_SIZE;
+
+		dirblock = CALL(info->ubd, read_block, blockno, 1);
+		if (!dirblock)
+			return -1;
+
+		memcpy(entries, dirent_exists, exists_rec_len_actual);
+		memcpy((void *) entries + exists_rec_len_actual, dirent_new, new_rec_len_actual);
+	     
+		if ((r = chdesc_create_byte(dirblock, info->ubd, basep, exists_rec_len_actual + new_rec_len_actual, (void *) entries, head)) < 0)
+			return r;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent '%s'", dirent_new->name);
+
+		r = CALL(info->ubd, write_block, dirblock);
+		if (r < 0)
+			return r;
+	} else
+		kpanic("overlapping dirent");
+	return 0;
+}
+
 static int ext2_write_dirent_array(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * dirent, 
                                    uint32_t basep, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
 {
@@ -1042,7 +1097,7 @@ static int ext2_write_dirent_array(LFS_t * object, EXT2_File_t * parent, EXT2_Di
 		return -EINVAL;
 
 	//dirent is in a single block:
-	uint32_t actual_rec_len = 8 + ((dirent->name_len - 1) / 4 + 1) * 4;
+	uint32_t actual_rec_len = dirent_rec_len(dirent->name_len);
 	if (basep % EXT2_BLOCK_SIZE + actual_rec_len <= EXT2_BLOCK_SIZE) {
 		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
 		blockno = get_file_block(object, parent, basep);
@@ -1057,7 +1112,7 @@ static int ext2_write_dirent_array(LFS_t * object, EXT2_File_t * parent, EXT2_Di
 	     
 		if ((r = chdesc_create_byte_array(dirblock, info->ubd, basep, actual_rec_len, (void *) dirent, tail, nbefores, befores )) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent '%s'", dirent->name);
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
@@ -1075,19 +1130,19 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 }
 
 static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * new_dirent, chdesc_t ** head)
-{ 
+{
 	Dprintf("EXT2DEBUG: ext2_insert_dirent %s\n", new_dirent->name);
 	const EXT2_Dir_entry_t * entry;
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	uint32_t new_prev_len, basep = 0, prev_basep = 0, new_block;
+	uint32_t basep = 0, prev_basep = 0, new_block;
 	int r = 0, newdir = 0;
 	bdesc_t * block;
-	chdesc_t * ref_befores[2]; // befores for any block reference
+	chdesc_t * ref_befores[] = {*head, NULL}; // befores for any block reference
 	size_t nref_befores = sizeof(ref_befores) / sizeof(ref_befores[0]);
 	chdesc_t * append_chdesc;
 	
 	if (parent->f_inode.i_size == 0)
-		newdir = 1;	
+		newdir = 1;
 	
 	while (r >= 0 && !newdir) {
 		r = ext2_get_disk_dirent(object, parent, &basep, &entry);
@@ -1104,17 +1159,13 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 
 		//check if we can insert the dirent:
 		else if ((entry->rec_len - (8 + entry->name_len)) > new_dirent->rec_len) {
-			EXT2_Dir_entry_t copy;
-			memcpy(&copy, entry, MIN(entry->rec_len, sizeof(copy)));
-			new_prev_len =  8 + ((copy.name_len - 1) / 4 + 1) * 4;
-			new_dirent->rec_len = copy.rec_len - new_prev_len;
-			copy.rec_len = new_prev_len;
-
-			r = ext2_write_dirent(object, parent, &copy, prev_basep, head);
-			if (r < 0)
-				return r;
-
-			return ext2_write_dirent(object, parent, new_dirent, prev_basep + copy.rec_len, head);
+			EXT2_Dir_entry_t entry_updated;
+			uint16_t entry_updated_len;
+			memcpy(&entry_updated, entry, MIN(entry->rec_len, sizeof(entry_updated)));
+			entry_updated_len = dirent_rec_len(entry_updated.name_len);
+			new_dirent->rec_len = entry_updated.rec_len - entry_updated_len;
+			entry_updated.rec_len = entry_updated_len;
+			return ext2_write_dirent_extend(object, parent, &entry_updated, new_dirent, prev_basep, head);
 		}
 		//detect the end of file, and break
 		if (prev_basep + entry->rec_len == parent->f_inode.i_size)
@@ -1123,7 +1174,6 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	}
 
 	//test the aligned case! test by having a 16 whatever file
-	ref_befores[0] = *head;
 	new_block = ext2_allocate_block(object, (fdesc_t *) parent, 1, &ref_befores[1]);
 	if (new_block == INVALID_BLOCK)
 		return -ENOSPC;
@@ -1144,19 +1194,9 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 		return r;
 	lfs_add_fork_head(append_chdesc);
 	
-	if (newdir)
-	{	//fix the size of the dirent:
-		new_dirent->rec_len = parent->f_inode.i_size;	
-		r = ext2_write_dirent_array(object, parent, new_dirent, 0, head, nref_befores, ref_befores);
-		if (r < 0)
-			return r;
-	} else {
-		new_dirent->rec_len = EXT2_BLOCK_SIZE;
-		r = ext2_write_dirent_array(object, parent, new_dirent, prev_basep + entry->rec_len, head, nref_befores, ref_befores);
-		if (r < 0)
-			return r;
-	}
-	return 0;
+	new_dirent->rec_len = EXT2_BLOCK_SIZE;
+	basep = newdir ? 0 : prev_basep + entry->rec_len;
+	return ext2_write_dirent_array(object, parent, new_dirent, basep, head, nref_befores, ref_befores);
 }
 
 static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
