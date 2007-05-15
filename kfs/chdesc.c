@@ -173,7 +173,7 @@ static uint64_t do_div64(uint64_t n, uint64_t base)
 static void account_print(const account_t * act)
 {
 	uint64_t mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
-	printf("account: %s: mean=%llu max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->name, mean, act->space_max, act->space_total_realloc, act->space_total, act->size);
+	printf("account: %s: mean=%llu max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->name, mean, act->space_max, act->space_total, act->space_total_realloc, act->size);
 }
 
 static void account_print_all(void * ignore)

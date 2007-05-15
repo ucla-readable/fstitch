@@ -53,7 +53,11 @@ while(<R>) {
 		print "$2 $3 $4 $4 $5  " if (exists($careabouts{$1}));
 	} else {
 		$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) total_realloc=(\d+) sizeof=(\d+)/;
-		print "$2 $3 $4 $5 $6  " if (exists($careabouts{$1}));
+		if ($rev == 3451 || $rev == 3452) {
+			print "$2 $3 $5 $4 $6  " if (exists($careabouts{$1}));
+		} else {
+			print "$2 $3 $4 $5 $6  " if (exists($careabouts{$1}));
+		}
 	}
 }
 print "\n";
