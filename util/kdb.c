@@ -2725,6 +2725,54 @@ static int command_find(int argc, const char * argv[])
 	return 0;
 }
 
+static const char * lookups[] = {"bd", "block"};
+#define LOOKUPS (sizeof(lookups) / sizeof(options[0]))
+static int command_lookup(int argc, const char * argv[])
+{
+	int i, bd = 0;
+	if(argc < 2)
+	{
+		printf("Need an object type and address to look up.\n");
+		return -1;
+	}
+	if(!strcmp(argv[1], "bd"))
+		bd = 1;
+	else if(strcmp(argv[1], "block"))
+	{
+		printf("Invalid object type: %s\n", argv[1]);
+		return -1;
+	}
+	if(argc < 3)
+	{
+		printf("Need a block%s address to look up.\n", bd ? " device" : "");
+		return -1;
+	}
+	for(i = 2; i < argc; i++)
+	{
+		char * end;
+		uint32_t address = strtoul(argv[i], &end, 16);
+		if(*end)
+			printf("[Info: interpreted %s as 0x%08x.]\n", argv[i], address);
+		if(bd)
+		{
+			struct bd * bd = lookup_bd(address);
+			if(bd)
+				printf("Block device 0x%08x: %s\n", bd->address, bd->name);
+			else
+				printf("No such block device: 0x%08x\n", address);
+		}
+		else
+		{
+			struct block * block = lookup_block(address);
+			if(block)
+				printf("Block 0x%08x: #%u\n", block->address, block->number);
+			else
+				printf("No such block: 0x%08x\n", address);
+		}
+	}
+	return 0;
+}
+
 static const char * options[] = {"freelist", "grouping"};
 #define OPTIONS (sizeof(options) / sizeof(options[0]))
 static int command_option(int argc, const char * argv[])
@@ -3148,6 +3196,7 @@ struct {
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump, 0},
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list, 0},
 	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find, 0},
+	{"lookup", "Lookup block numbers or block devices by address.", command_lookup, 0},
 	{"option", "Get or set rendering options: freelist, grouping.", command_option, 0},
 	{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps, 1},
 	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render, 0},
@@ -3200,8 +3249,11 @@ static char * command_complete(const char * text, int state)
 	static enum {
 		COMMAND,
 		CHDESC,
+		BLOCK,
+		BD,
 		KDB,
 		MAXMIN,
+		LOOKUP,
 		OPTION,
 		GROUPING
 	} type = COMMAND;
@@ -3209,6 +3261,12 @@ static char * command_complete(const char * text, int state)
 		struct {
 			struct chdesc * last;
 		} chdesc;
+		struct {
+			struct block * last;
+		} block;
+		struct {
+			struct bd * next;
+		} bd;
 		struct {
 			int module, opcode;
 		} kdb;
@@ -3257,6 +3315,23 @@ static char * command_complete(const char * text, int state)
 			}
 			else if(!strncmp(argv[0], "find ", 5))
 				type = MAXMIN;
+			else if(!strncmp(argv[0], "lookup ", 7))
+			{
+				if(spaces[1] == -1)
+					type = LOOKUP;
+				else if(!strncmp(argv[1], "bd ", 3))
+				{
+					type = BD;
+					local.bd.next = bds;
+				}
+				else if(!strncmp(argv[1], "block ", 6))
+				{
+					type = BLOCK;
+					local.block.last = NULL;
+				}
+				else
+					return NULL;
+			}
 			else if(!strncmp(argv[0], "option ", 7))
 			{
 				if(spaces[1] == -1)
@@ -3307,6 +3382,58 @@ static char * command_complete(const char * text, int state)
 			} while(index < HASH_TABLE_SIZE);
 			break;
 		}
+		case BLOCK:
+		{
+			char name[11];
+			do {
+				while(!local.block.last && index < HASH_TABLE_SIZE)
+					local.block.last = blocks[index++];
+				for(; local.block.last; local.block.last = local.block.last->next)
+				{
+					sprintf(name, "0x%08x", local.block.last->address);
+					if(!strncmp(name, text, length))
+					{
+						local.block.last = local.block.last->next;
+						return strdup(name);
+					}
+					if(local.block.last->address < 0x10000000)
+					{
+						sprintf(name, "0x%x", local.block.last->address);
+						if(!strncmp(name, text, length))
+						{
+							sprintf(name, "0x%08x", local.block.last->address);
+							local.block.last = local.block.last->next;
+							return strdup(name);
+						}
+					}
+				}
+			} while(index < HASH_TABLE_SIZE);
+			break;
+		}
+		case BD:
+		{
+			char name[11];
+			for(; local.bd.next; local.bd.next = local.bd.next->next)
+			{
+				sprintf(name, "0x%08x", local.bd.next->address);
+				if(!strncmp(name, text, length))
+				{
+					local.bd.next = local.bd.next->next;
+					return strdup(name);
+				}
+				if(local.bd.next->address < 0x10000000)
+				{
+					sprintf(name, "0x%x", local.bd.next->address);
+					if(!strncmp(name, text, length))
+					{
+						sprintf(name, "0x%08x", local.bd.next->address);
+						local.bd.next = local.bd.next->next;
+						return strdup(name);
+					}
+				}
+			}
+			break;
+		}
 		case KDB:
 			while(modules[local.kdb.module].opcodes)
 			{
@@ -3333,6 +3460,14 @@ static char * command_complete(const char * text, int state)
 					index++;
 				default:
 					break;
+			}
+			break;
+		case LOOKUP:
+			while(index < LOOKUPS)
+			{
+				if(!strncmp(lookups[index], text, length))
+					return strdup(lookups[index++]);
+				index++;
 			}
 			break;
 		case OPTION:
