@@ -352,11 +352,11 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	if(kfsd_is_running())
 		return;
 #endif
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 #ifdef __KERNEL__
 	revision_tail_process_landing_requests();
 #endif
+	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
 	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && slot != STOP)
