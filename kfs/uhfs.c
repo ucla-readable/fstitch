@@ -180,7 +180,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 			return r;
 		assert(r == sizeof(size));
 
-		if (target_size < size)
+		if (target_size <= size)
 		{
 			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head);
 			if (r < 0)
