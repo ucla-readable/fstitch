@@ -2025,6 +2025,7 @@ struct cache_situation {
 };
 
 struct cache_choice {
+	int choices;
 	int look_ready, look_half, look_not;
 	int write_ready, write_half;
 };
@@ -2310,11 +2311,17 @@ static int command_cache(int argc, const char * argv[])
 				if(params[0].data_4 == cache)
 				{
 					struct cache_situation info;
+					printf("%s", prefix);
+					if(choices.choices)
+					{
+						printf("       LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
+						printf("       WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
+					}
 					/* clean the old cached block info */
 					cache_block_clean();
 					memset(&choices, 0, sizeof(choices));
 					cache_situation_snapshot(cache, &info);
-					printf("%s#%8d: FINDBLOCK; dirty: %5d, inflight: %5d,    both: %5d\n", prefix, applied + 1, info.dirty, info.inflight, info.dirty_inflight);
+					printf("#%8d: FINDBLOCK; dirty: %5d, inflight: %5d,    both: %5d\n", applied + 1, info.dirty, info.inflight, info.dirty_inflight);
 					printf("                      ready: %5d,     half: %5d, blocked: %5d\n", info.full_ready, info.half_ready, info.not_ready);
 					if(tty)
 					{
@@ -2349,9 +2356,10 @@ static int command_cache(int argc, const char * argv[])
 						choices.look_not++;
 					else
 					{
-						r = -EFAULT;
+						r = -EINVAL;
 						break;
 					}
+					choices.choices++;
 					looks++;
 				}
 				else
@@ -2378,9 +2386,10 @@ static int command_cache(int argc, const char * argv[])
 						choices.write_half++;
 					else
 					{
-						r = -EFAULT;
+						r = -EINVAL;
 						break;
 					}
+					choices.choices++;
 					writes++;
 				}
 				else
@@ -2402,6 +2411,11 @@ static int command_cache(int argc, const char * argv[])
 	{
 		printf("%crror %d analyzing opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
 		return r;
+	}
+	if(choices.choices)
+	{
+		printf("LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
+		printf("WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
 	}
 	
 	r = restore_initial_state(save_applied, &progress, &distance, &percent);
