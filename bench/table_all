@@ -21,4 +21,5 @@ done
 
 for TESTNAME in $TESTS; do
 	try $BENCHDIR/table_time -t $TESTNAME -o $OUTDIR
+	try $BENCHDIR/table_space -t $TESTNAME -o $OUTDIR
 done
