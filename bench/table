@@ -5,19 +5,25 @@ BENCHDIR="`dirname "$0"`"
 KUDOSDIR="$BENCHDIR/.."
 
 function usage () {
-	echo "About: Generate time table for a given test"
-	echo "Usage: `basename "$0"` <-t TESTNAME> <-o OUTDIR>"
+	echo "About: Generate javascript table data for a given test and measurement"
+	echo "Usage: `basename "$0"` <-m MEASUREMENT> <-t TESTNAME> <-o OUTDIR>"
+	echo "       where MEASUREMENT is one of time, space, or io"
 }
 
-KEY=time
-while getopts "t:o:" flag; do
+while getopts "m:t:o:" flag; do
 	case "$flag" in
+		m) MEASUREMENT="$OPTARG";;
 		t) TESTNAME="$OPTARG";;
 		o) OUTDIR="$OPTARG";;
 		/?) usage 1>&2; exit 1;;
 		*) usage 1>&2; exit 1;;
 	esac
 done
+
+if [ -z "$MEASUREMENT" ]; then
+	usage 1>&2
+	exit 1
+fi
 
 if [ -z "$OUTDIR" ]; then
 	usage 1>&2
@@ -45,12 +51,12 @@ function most_recent_test () {
 	echo "$MR"
 }
 
-ARRAYNAME="space_${TESTNAME}_data"
-JSFILE="$OUTDIR/space_${TESTNAME}.js"
+ARRAYNAME="${MEASUREMENT}_${TESTNAME}_data"
+JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
-for sys in "kudos ext2"; do
+for sys in "kudos ext2" "linux ext2" "linux ext3" "freebsd ufs"; do
 	HOST=`echo "$sys" | awk '{print $1}'`
 	FS=`echo "$sys" | awk '{print $2}'`
 	RECENT="`most_recent_test $HOST $FS`"
@@ -58,7 +64,7 @@ for sys in "kudos ext2"; do
 	[ -z "$RECENT" ] && echo "No data for $HOST $FS" && continue
 
 	echo "Most recent for $HOST $FS is $RECENT"
-	DATA="`$BENCHDIR/ex_space -d $KUDOSDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
+	DATA="`$BENCHDIR/ex_${MEASUREMENT} -d $KUDOSDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
 	echo "${ARRAYNAME}[$I] = new Array(\"$HOST\", \"$FS\", ${DATA});" >> $JSFILE
 	I=$((I+1))
 done
