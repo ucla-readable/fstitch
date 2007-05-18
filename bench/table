@@ -65,6 +65,7 @@ for sys in "kudos ext2" "linux ext2" "linux ext3" "freebsd ufs"; do
 
 	echo "Most recent for $HOST $FS is $RECENT"
 	DATA="`$BENCHDIR/ex_${MEASUREMENT} -d $KUDOSDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
+	[ -z "$DATA" ] && echo "No data for $HOST $FS" && continue
 	echo "${ARRAYNAME}[$I] = new Array(\"$HOST\", \"$FS\", ${DATA});" >> $JSFILE
 	I=$((I+1))
 done
