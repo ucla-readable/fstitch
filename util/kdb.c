@@ -1932,8 +1932,10 @@ static void print_opcode(int number, struct debug_opcode * opcode, int show_trac
 		else if(opcode->params[p].size == (uint8_t) -1)
 			printf("%s", opcode->params[p].data_v);
 	}
-	printf("\n");
-	printf("    from %s() at %s:%d\n", opcode->function, opcode->file, opcode->line);
+	if(opcode->function[0] || opcode->file[0])
+		printf("\n    from %s() at %s:%d\n", opcode->function, opcode->file, opcode->line);
+	else
+		printf(" (line %d)\n", opcode->line);
 	if(show_trace)
 	{
 		for(p = 0; opcode->stack[p]; p++)
@@ -2016,6 +2018,9 @@ static struct cache_block {
 	int chdesc_count;
 	struct chdesc * ready;
 	int ready_count;
+	int dep_count;
+	int dblock_count;
+	uint32_t dblock_last;
 	struct cache_block * next;
 } * cache_blocks[HASH_TABLE_SIZE];
 
@@ -2028,6 +2033,8 @@ struct cache_choice {
 	int choices;
 	int look_ready, look_half, look_not;
 	int write_ready, write_half;
+	int write_rdeps, write_rdblocks;
+	int write_hdeps, write_hdblocks;
 };
 
 static struct cache_block * cache_block_lookup(uint32_t address)
@@ -2047,6 +2054,9 @@ static struct cache_block * cache_block_lookup(uint32_t address)
 	scan->chdesc_count = 0;
 	scan->ready = NULL;
 	scan->ready_count = 0;
+	scan->dep_count = 0;
+	scan->dblock_count = 0;
+	scan->dblock_last = 0;
 	scan->next = cache_blocks[index];
 	cache_blocks[index] = scan;
 	return scan;
@@ -2083,6 +2093,30 @@ static int chdesc_is_ready(struct chdesc * chdesc, uint32_t block)
 			return 0;
 	}
 	return 1;
+}
+
+static void dblock_update(struct chdesc * depender, struct chdesc * chdesc)
+{
+	if(depender == chdesc || chdesc->type == NOOP)
+	{
+		struct arrow * scan;
+		for(scan = chdesc->befores; scan; scan = scan->next)
+		{
+			struct chdesc * before = lookup_chdesc(scan->chdesc);
+			assert(before);
+			dblock_update(depender, before);
+		}
+	}
+	else if(chdesc->block != depender->block)
+	{
+		struct cache_block * block = cache_block_lookup(chdesc->block);
+		block->dep_count++;
+		if(block->dblock_last != depender->block)
+		{
+			block->dblock_count++;
+			block->dblock_last = depender->block;
+		}
+	}
 }
 
 /* Look at all change descriptors, and determine which blocks on the given cache
@@ -2171,7 +2205,13 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 			}
 		}
 	}
-	/* more? */
+	for(i = 0; i < HASH_TABLE_SIZE; i++)
+	{
+		struct cache_block * scan = cache_blocks[i];
+		for(; scan; scan = scan->next)
+			for(chdesc = scan->chdescs; chdesc; chdesc = chdesc->group_next[0])
+				dblock_update(chdesc, chdesc);
+	}
 }
 
 /* End cache analysis }}} */
@@ -2224,6 +2264,7 @@ static int command_cache(int argc, const char * argv[])
 	struct debug_opcode opcode;
 	int caches = 0, finds = 0, looks = 0, writes = 0;
 	int alt_finds = 0, alt_looks = 0, alt_writes = 0;
+	int ready = 0, half = 0;
 	uint32_t cache = 0;
 	struct bd * cache_bd = NULL;
 	const char * prefix = "";
@@ -2316,6 +2357,9 @@ static int command_cache(int argc, const char * argv[])
 					{
 						printf("       LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
 						printf("       WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
+						printf("             deps on: ready: %5d (%5d), half: %5d (%5d)\n", choices.write_rdblocks, choices.write_rdeps, choices.write_hdblocks, choices.write_hdeps);
+						ready += choices.write_ready;
+						half += choices.write_half;
 					}
 					/* clean the old cached block info */
 					cache_block_clean();
@@ -2381,9 +2425,17 @@ static int command_cache(int argc, const char * argv[])
 					struct cache_block * block = cache_block_lookup(params[1].data_4);
 					assert(block);
 					if(block->local_flags & CACHE_BLOCK_READY)
+					{
 						choices.write_ready++;
+						choices.write_rdeps += block->dep_count;
+						choices.write_rdblocks += block->dblock_count;
+					}
 					else if(block->local_flags & CACHE_BLOCK_HALFREADY)
+					{
 						choices.write_half++;
+						choices.write_hdeps += block->dep_count;
+						choices.write_hdblocks += block->dblock_count;
+					}
 					else
 					{
 						r = -EINVAL;
@@ -2414,8 +2466,11 @@ static int command_cache(int argc, const char * argv[])
 	}
 	if(choices.choices)
 	{
-		printf("LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
-		printf("WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
+		printf("       LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
+		printf("       WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
+		printf("             deps on: ready: %5d (%5d), half: %5d (%5d)\n", choices.write_rdblocks, choices.write_rdeps, choices.write_hdblocks, choices.write_hdeps);
+		ready += choices.write_ready;
+		half += choices.write_half;
 	}
 	
 	r = restore_initial_state(save_applied, &progress, &distance, &percent);
@@ -2435,7 +2490,11 @@ static int command_cache(int argc, const char * argv[])
 		printf("(+%d)", alt_writes);
 	printf("\n");
 	if(writes)
+	{
 		printf("Average looks/write: %lg\n", (double) looks / (double) writes);
+		printf("Ready blocks written: %d\n", ready);
+		printf("Half blocks written: %d\n", half);
+	}
 	return 0;
 }
 
