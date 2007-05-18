@@ -30,4 +30,5 @@ rsync --rsh=ssh -vaSz \
 	--exclude=/kfs/kkfsd.mod.c --exclude=/kfs/kkfsd.mod.o \
 	--exclude=/Module.symvers --exclude=/kfs/.kkfsd.*.cmd \
 	--exclude=/.tmp_versions/ --exclude=/.kernel_version \
+	--exclude=.*.swp --exclude=.*.swo --exclude=.*.swn \
 	. kudos-${KMACHINE}.cs.ucla.edu:$TARGET/
