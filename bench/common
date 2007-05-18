@@ -76,12 +76,13 @@ function prepare () {
 	try sync
 }
 
-# start kdb logging
-function start_kdb_log () {
+# start kdb and block logging
+function prepare_postinit () {
 	T=$1
 	N=$2
 	OUTDIR=$3
 	HOST=$4
+
 	if [ "$HOST" == "kudos" ] && [ -f /proc/kkfsd_debug ]; then
 		echo "+ sudo log /proc/kkfsd_debug"
 		sudo cat /proc/kkfsd_debug &>$OUTDIR/$T.kdb.$N </dev/null &
@@ -93,6 +94,23 @@ function start_kdb_log () {
 				sudo kill $KDBCAT
 				break
 			done &>/dev/null &
+	fi
+
+	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz; then
+		if ! mount | grep -q /debug; then
+			sudo mount /debug
+		fi
+		if mount | grep -q /debug; then
+			DEV=${DEV:-/dev/sdb}
+			echo "+ blktrace"
+			sudo blktrace -r /debug -d $DEV -o $OUTDIR/$T.blk.$N &>/dev/null </dev/null &
+			BLKTRACE=$!
+			sleep 1 # if blktrace will fail, it will probably fail within 1s
+			if ! ps $BLKTRACE >/dev/null; then
+				echo "blktrace failed" 1>&2
+				exit 1
+			fi
+		fi
 	fi
 }
 
@@ -107,6 +125,10 @@ function finish () {
 	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]); then
 		grep -q idle=poll /proc/cmdline && TP=.2 || TP=1
 		try sudo opreport -l -g -p $KUDOSDIR/kfs/ -t $TP | tee -a $OUTDIR/$T.oprof.$N
+	fi
+	if ps -C blktrace >/dev/null; then
+		echo "+ kill blktrace"
+		sudo killall blktrace
 	fi
 }
 

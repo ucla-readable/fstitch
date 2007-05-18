@@ -3,7 +3,7 @@
 function run () {
 	try cat $TARFILE >/dev/null
 	try $BENCHDIR/init -f $FS -h $HOST -a start
-	start_kdb_log $T $N $OUTDIR $HOST
+	prepare_postinit  $T $N $OUTDIR $HOST
 	time (echo + tar; time tar -C $MNT/ -xf $TARFILE;
 	      echo + sync; time fsync $KUDOSDIR $MNT;
 	      echo + total)

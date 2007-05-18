@@ -21,7 +21,7 @@ function run () {
 	try sync
 
 	try $BENCHDIR/init -f $FS -h $HOST -a start
-	start_kdb_log $T $N $OUTDIR $HOST
+	prepare_postinit $T $N $OUTDIR $HOST
 	time run_postmark
 	try $BENCHDIR/init -f $FS -h $HOST -a stop
 }
