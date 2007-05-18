@@ -53,7 +53,7 @@ static __inline void * scalloc(size_t nmemb, size_t size)
 	return p;
 }
 
-/* TODO: should/can we optimize? */
+/* TODO: should/can we optimize? One way: 2.6.22 has krealloc(). */
 static __inline void * srealloc(void * p, size_t p_size, size_t new_size)
 {
 	void * q = smalloc(new_size);
