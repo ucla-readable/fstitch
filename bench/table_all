@@ -31,4 +31,5 @@ fi
 for TESTNAME in $TESTS; do
 	try $BENCHDIR/table -m time -t $TESTNAME -o $OUTDIR
 	try $BENCHDIR/table -m space -t $TESTNAME -o $OUTDIR
+	try $BENCHDIR/table -m io -t $TESTNAME -o $OUTDIR
 done

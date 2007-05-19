@@ -1,0 +1,79 @@
+#!/usr/bin/env perl
+
+use File::Basename;
+use Getopt::Std;
+
+sub usage() {
+	$basename = basename($0);
+	print STDERR "Usage: $basename [-h] <-d TEST_DIR> <-t TEST_NAME>\n";
+	exit(1);
+}
+
+my %opt;
+
+getopts("hd:t:", \%opt) or usage();
+usage() if $opt{h} || !defined $opt{d} || !defined $opt{t};
+
+if (!-d "$opt{d}") {
+	print STDERR "Test output directory does not exist ($opt{d})\n";
+	exit(1);
+}
+
+my $testdir = $opt{d};
+my $testname = $opt{t};
+
+if (!-f "$testdir/$testname.run.0") {
+	print STDERR "No $testname runs\n";
+	exit(1);
+}
+
+my %writes_dispatched = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %writes_size = %writes_dispatched;
+my %reads_dispatched = %writes_dispatched;
+my %reads_size = %writes_dispatched;
+
+sub addtest {
+	my $table = shift;
+	my $val = shift;
+	$table->{"sum"} += $val;
+	$table->{"count"}++;
+	$table->{"min"} = $val if ($val < $table->{"min"} || $table->{"min"} == -1);
+	$table->{"max"} = $val if ($val > $table->{"max"});
+}
+
+sub printstats {
+	my $table = shift;
+	my $avg = 0;
+	$avg = $table->{"sum"} / $table->{"count"} if ($table->{"count"} != 0);
+	printf "%.3f %.3f %.3f  ", $avg, $table->{"min"}, $table->{"max"};
+}
+
+foreach $blk (<$testdir/$testname.blk.*>) {
+	# remove blktrace suffix for blkparse
+	$blk =~ m/(.*\.blk\.\d+)\./;
+	$blk = $1;
+
+	#print "+ blkparse -i $blk\n";
+	my $writes_dispatched = -1;
+	my $writes_size = -1;
+	my $reads_dispatched = -1;
+	my $reads_size = -1;
+	open(R, "blkparse -i $blk |") || die;
+	while(<R>) {
+		if (m/Write Dispatches:\s+(\d+),\s+(\d+)KiB/) {
+			addtest(\%writes_dispatched, $1);
+			addtest(\%writes_size, $2);
+		}
+		if (m/Read Dispatches:\s+(\d+),\s+(\d+)KiB/) {
+			addtest(\%reads_dispatched, $1);
+			addtest(\%reads_size, $2);
+		}
+	}
+	close(R);
+}
+
+printstats(\%writes_dispatched);
+printstats(\%writes_size);
+printstats(\%reads_dispatched);
+printstats(\%reads_size);
+print "\n";
