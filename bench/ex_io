@@ -35,6 +35,7 @@ my %reads_size = %writes_dispatched;
 sub addtest {
 	my $table = shift;
 	my $val = shift;
+	$val =~ tr/,//d; # some locales insert commas. human readability? crazy.
 	$table->{"sum"} += $val;
 	$table->{"count"}++;
 	$table->{"min"} = $val if ($val < $table->{"min"} || $table->{"min"} == -1);
@@ -60,13 +61,13 @@ foreach $blk (<$testdir/$testname.blk.*>) {
 	my $reads_size = -1;
 	open(R, "blkparse -i $blk |") || die;
 	while(<R>) {
-		if (m/Write Dispatches:\s+(\d+),\s+(\d+)KiB/) {
+		if (m/Write Dispatches:\s+(\d+(,\d+){0,1}),\s+(\d+(,\d+){0,1})KiB/) {
 			addtest(\%writes_dispatched, $1);
-			addtest(\%writes_size, $2);
+			addtest(\%writes_size, $3);
 		}
-		if (m/Read Dispatches:\s+(\d+),\s+(\d+)KiB/) {
+		if (m/Read Dispatches:\s+(\d+(,\d+){0,1}),\s+(\d+(,\d+){0,1})KiB/) {
 			addtest(\%reads_dispatched, $1);
-			addtest(\%reads_size, $2);
+			addtest(\%reads_size, $3);
 		}
 	}
 	close(R);
