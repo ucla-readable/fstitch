@@ -103,6 +103,7 @@ function prepare_postinit () {
 		if mount | grep -q /debug; then
 			DEV=${DEV:-/dev/sdb}
 			echo "+ blktrace"
+			# FIXME: create blktrace file as current user, not root
 			sudo blktrace -r /debug -d $DEV -o $OUTDIR/$T.blk.$N &>/dev/null </dev/null &
 			BLKTRACE=$!
 			sleep 1 # if blktrace will fail, it will probably fail within 1s
