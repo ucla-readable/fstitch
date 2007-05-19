@@ -2355,9 +2355,9 @@ static int command_cache(int argc, const char * argv[])
 					printf("%s", prefix);
 					if(choices.choices)
 					{
-						printf("       LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
-						printf("       WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
-						printf("             deps on: ready: %5d (%5d), half: %5d (%5d)\n", choices.write_rdblocks, choices.write_rdeps, choices.write_hdblocks, choices.write_hdeps);
+						printf("       LOOK  summary: ready: %5d,     half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
+						printf("       WRITE summary: ready: %5d,     half: %5d\n", choices.write_ready, choices.write_half);
+						printf("             deps on: ready: %5d,     half: %5d (%6d, %6d)\n", choices.write_rdblocks, choices.write_hdblocks, choices.write_rdeps, choices.write_hdeps);
 						ready += choices.write_ready;
 						half += choices.write_half;
 					}
@@ -2466,9 +2466,9 @@ static int command_cache(int argc, const char * argv[])
 	}
 	if(choices.choices)
 	{
-		printf("       LOOK  summary: ready: %5d, half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
-		printf("       WRITE summary: ready: %5d, half: %5d\n", choices.write_ready, choices.write_half);
-		printf("             deps on: ready: %5d (%5d), half: %5d (%5d)\n", choices.write_rdblocks, choices.write_rdeps, choices.write_hdblocks, choices.write_hdeps);
+		printf("       LOOK  summary: ready: %5d,     half: %5d, blocked: %5d\n", choices.look_ready, choices.look_half, choices.look_not);
+		printf("       WRITE summary: ready: %5d,     half: %5d\n", choices.write_ready, choices.write_half);
+		printf("             deps on: ready: %5d,     half: %5d (%6d, %6d)\n", choices.write_rdblocks, choices.write_hdblocks, choices.write_rdeps, choices.write_hdeps);
 		ready += choices.write_ready;
 		half += choices.write_half;
 	}
