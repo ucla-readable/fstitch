@@ -49,6 +49,7 @@ struct cache_info {
 	BD_t * bd;
 	uint32_t soft_blocks, blocks;
 	uint32_t soft_dblocks, dblocks;
+	uint32_t soft_dblocks_low, soft_dblocks_high;
 	struct {
 		struct lru_slot * first;
 		struct lru_slot * last;
@@ -65,7 +66,7 @@ static int wb2_cache_bd_get_config(void * object, int level, char * string, size
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, soft dirty: %d, soft blocks: %d", info->blocksize, info->soft_dblocks, info->soft_blocks);
+			snprintf(string, length, "blocksize: %d, soft dirty: %d/%d, soft blocks: %d", info->blocksize, info->soft_dblocks_low, info->soft_dblocks_high, info->soft_blocks);
 			break;
 		case CONFIG_BRIEF:
 			snprintf(string, length, "%d x %d", info->blocksize, info->soft_blocks);
@@ -84,7 +85,7 @@ static int wb2_cache_bd_get_status(void * object, int level, char * string, size
 	switch(level)
 	{
 		case STATUS_VERBOSE:
-			snprintf(string, length, "dirty: %d, blocks: %d", info->dblocks, info->blocks);
+			snprintf(string, length, "dirty: %d, blocks: %d, soft dirty: %d", info->dblocks, info->blocks, info->soft_dblocks);
 			break;
 		case STATUS_BRIEF:
 			snprintf(string, length, "%d", info->blocks);
@@ -159,7 +160,9 @@ static void wb2_push_slot_dirty(struct cache_info * info, struct lru_slot * slot
 		slot->dirty.next->dirty.prev = slot;
 	else
 		info->dirty.last = slot;
-	info->dblocks++;
+	/* if we go above the high mark, set the current mark low */
+	if(++info->dblocks > info->soft_dblocks_high)
+		info->soft_dblocks = info->soft_dblocks_low;
 }
 
 #define wb2_dirty_slot(info, slot) ((info)->dirty.first == (slot) || (slot)->dirty.prev)
@@ -208,7 +211,9 @@ static void wb2_pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
 		info->dirty.last = slot->dirty.prev;
 	slot->dirty.prev = NULL;
 	slot->dirty.next = NULL;
-	info->dblocks--;
+	/* if we make it below the low mark, set the current mark high */
+	if(--info->dblocks <= info->soft_dblocks_low)
+		info->soft_dblocks = info->soft_dblocks_high;
 }
 
 static void wb2_touch_block_read(struct cache_info * info, struct lru_slot * slot)
@@ -322,7 +327,9 @@ static void wb2_bounce_block_write(struct cache_info * info, struct lru_slot * s
 		info->dirty.first = slot;
 	/* there is no way we could be putting this block at the end
 	 * of the queue, since it's going before some other block */
-	info->dblocks++;
+	/* if we go above the high mark, set the current mark low */
+	if(++info->dblocks > info->soft_dblocks_high)
+		info->soft_dblocks = info->soft_dblocks_low;
 }
 #endif
 
@@ -733,7 +740,9 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	info->bd = disk;
 	info->soft_blocks = soft_blocks;
 	info->blocks = 0;
-	info->soft_dblocks = soft_dblocks;
+	info->soft_dblocks_low = soft_dblocks * 9 / 10;
+	info->soft_dblocks_high = soft_dblocks * 11 / 10;
+	info->soft_dblocks = info->soft_dblocks_high;
 	info->dblocks = 0;
 	info->all.first = NULL;
 	info->all.last = NULL;
