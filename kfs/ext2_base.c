@@ -67,38 +67,6 @@ static int check_super(LFS_t * object)
 	return 0;
 }
 
-#ifdef __i386__
-//Stolen from Linux kernel include/asm-i386/bitops.h 2.6.20
-static inline int find_zero_bit( const unsigned long *addr, unsigned size )
-{
-	int d0, d1, d2;
-	int res;
-
-	if (!size)
-		return 0;
-	// This looks at memory. Mark it volatile to tell gcc not to move it around
-	__asm__ __volatile__(
-			"movl $-1,%%eax\n\t"
-			"xorl %%edx,%%edx\n\t"
-			"repe; scasl\n\t"
-			"je 1f\n\t"
-			"xorl -4(%%edi),%%eax\n\t"
-			"subl $4,%%edi\n\t"
-			"bsfl %%eax,%%edx\n"
-			"1:\tsubl %%ebx,%%edi\n\t"
-			"shll $3,%%edi\n\t"
-			"addl %%edi,%%edx"
-			:"=d" (res), "=&c" (d0), "=&D" (d1), "=&a" (d2)
-			:"1" ((size + 31) >> 5), "2" (addr), "b" (addr) : "memory");
-	return res;
-}
-#else
-static inline int find_zero_bit( const unsigned long *addr, unsigned size )
-{
-#error implement find_zero_bit in C
-}
-#endif
-
 static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
 	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
@@ -135,7 +103,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		
 		const unsigned long * foo = (const unsigned long *)info->bitmap_cache->ddesc->data;
 		int bar = 0;
-		bar = find_zero_bit(foo, info->super->s_blocks_per_group );
+		bar = find_first_zero_bit(foo, info->super->s_blocks_per_group );
 		if (bar < (info->super->s_blocks_per_group)) {
 			curr += bar; 
 			*blockno = curr;
@@ -1233,7 +1201,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 		const unsigned long * foo = (const unsigned long *)info->inode_cache->ddesc->data;
 		//assert((curr % info->super->s_inodes_per_group) == 0);
 		int bar = 0;
-		bar = find_zero_bit(foo, info->super->s_inodes_per_group/*, (curr % info->super->s_inodes_per_group)*/ );
+		bar = find_first_zero_bit(foo, info->super->s_inodes_per_group/*, (curr % info->super->s_inodes_per_group)*/ );
 		if (bar < (info->super->s_inodes_per_group)) {
 			curr += bar + 1; 
 			*ino = curr;

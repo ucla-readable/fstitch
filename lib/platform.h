@@ -86,6 +86,31 @@ typedef unsigned char bool;
 
 #define container_of(ptr, type, member) ({typeof(((type *) 0)->member) * __mptr = (ptr); (type *) (unsigned long) ((char *) __mptr - offsetof(type,member));})
 
+#ifdef __i386__
+static __inline int find_first_zero_bit(const unsigned long * addr, unsigned size)
+{
+	int res, d0, d1, d2;
+	if(!size)
+		return 0;
+	__asm__ __volatile__(
+			"movl $-1,%%eax\n\t"
+			"xorl %%edx,%%edx\n\t"
+			"repe; scasl\n\t"
+			"je 1f\n\t"
+			"xorl -4(%%edi),%%eax\n\t"
+			"subl $4,%%edi\n\t"
+			"bsfl %%eax,%%edx\n"
+			"1:\tsubl %%ebx,%%edi\n\t"
+			"shll $3,%%edi\n\t"
+			"addl %%edi,%%edx"
+			:"=d" (res), "=&c" (d0), "=&D" (d1), "=&a" (d2)
+			:"1" ((size + 31) >> 5), "2" (addr), "b" (addr) : "memory");
+	return res;
+}
+#else
+#error Implement find_first_zero_bit in C
+#endif
+
 #endif /* __KERNEL__, UNIXUSER */
 
 /* Efficient min and max operations */ 
