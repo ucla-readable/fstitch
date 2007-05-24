@@ -44,10 +44,26 @@ sub addtest {
 }
 
 sub printstats {
+	my $stream = shift;
 	my $table = shift;
 	my $avg = 0;
 	$avg = $table->{"sum"} / $table->{"count"} if ($table->{"count"} != 0);
-	printf "%.3f %.3f %.3f  ", $avg, $table->{"min"}, $table->{"max"};
+	printf $stream "%.3f %.3f %.3f  ", $avg, $table->{"min"}, $table->{"max"};
+}
+
+my $cachefile = "$testdir/.$testname.blk.ex_cache";
+
+sub printcache {
+	open(C, "<$cachefile") || die;
+	while(<C>) {
+		print "$_";
+	}
+	close(C);
+}
+
+if (-r $cachefile) {
+	printcache();
+	exit(0);
 }
 
 foreach $blk (<$testdir/$testname.blk.*>) {
@@ -77,8 +93,12 @@ foreach $blk (<$testdir/$testname.blk.*>) {
 
 exit if !$havedata;
 
-printstats(\%writes_dispatched);
-printstats(\%writes_size);
-printstats(\%reads_dispatched);
-printstats(\%reads_size);
-print "\n";
+open(C, ">$cachefile") || die;
+printstats(\*C, \%writes_dispatched);
+printstats(\*C, \%writes_size);
+printstats(\*C, \%reads_dispatched);
+printstats(\*C, \%reads_size);
+print C "\n";
+close(C);
+
+printcache();
