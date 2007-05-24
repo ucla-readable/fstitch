@@ -1,0 +1,77 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+
+function usage () {
+	echo "About: Generate io plot for a given test"
+	echo "Usage: `basename "$0"` <-t TESTNAME> <-o OUTDIR> [-k time|rev]"
+}
+
+KEY=time
+while getopts "t:o:k:" flag; do
+	case "$flag" in
+		t) TESTNAME="$OPTARG";;
+		o) OUTDIR="$OPTARG";;
+		k) KEY="$OPTARG";;
+		/?) usage 1>&2; exit 1;;
+		*) usage 1>&2; exit 1;;
+	esac
+done
+
+if [ -z "$TESTNAME" ] || [ -z "$OUTDIR" ]; then
+	usage 1>&2
+	exit 1
+fi
+
+if [ "$KEY" != "rev" ] && [ "$KEY" != "time" ]; then
+	echo "Illegal key \"$KEY\"" 1>&2
+	usage 1>&2
+	exit 1
+fi
+
+if [ ! -d "$OUTDIR" ]; then
+	echo "OUTDIR $OUTDIR does not exist" 1>&2
+	exit 1
+fi
+
+DATA=`mktemp plot_io.XXXXXX` || exit 1
+trap "rm -f $DATA" EXIT
+
+for test in `ls $KUDOSDIR/tests/`; do
+	[ "`cat $KUDOSDIR/tests/$test/host`" == "kudos" ] || continue
+	LINE="`$BENCHDIR/ex_io -d $KUDOSDIR/tests/$test -t $TESTNAME`"
+	[ -n "$LINE" ] || continue
+	if [ "$KEY" == "time" ] ; then
+		echo -n "$test"
+	elif [ "$KEY" == "rev" ]; then
+		echo -n "`cat $KUDOSDIR/tests/$test/svnversion | sed -r 's/:[0-9]+//;s/M$//'`"
+	fi
+	echo "  $LINE"
+done | sort > $DATA
+
+if [ "$KEY" == "time" ]; then
+	XAXIS="set xlabel \"Test (time)\"; set xdata time; set timefmt \"%Y-%m-%dT%H:%M:%S\""
+elif [ "$KEY" == "rev" ]; then
+	XAXIS="set xlabel \"Test (rev)\""
+fi
+
+gnuplot << EOF
+set terminal png
+#set key above # above is only in gnuplot > 4.0, but it will look better
+set key outside
+set grid
+$XAXIS
+
+set title "$TESTNAME I/O"
+set ylabel "# requests"
+set y2tics border
+set y2label "kBs"
+set output "$OUTDIR/io_${TESTNAME}.png"
+plot [:] [0:] \
+	"$DATA" using 1:2:3:4 with yerrorlines title "write requests", \
+	"$DATA" using 1:5:6:7 with yerrorlines axes x1y2 title "write kBs", \
+	"$DATA" using 1:8:9:10 with yerrorlines title "read requests", \
+	"$DATA" using 1:11:12:13 with yerrorlines axes x1y2 title "read kBs"
+EOF

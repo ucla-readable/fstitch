@@ -4,7 +4,7 @@ BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 
-PLOT_CMDS="plot_time plot_space"
+PLOT_CMDS="plot_time plot_space plot_io"
 TESTS="tar rm postmark"
 
 function usage () {

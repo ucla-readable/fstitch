@@ -27,6 +27,7 @@ if (!-f "$testdir/$testname.run.0") {
 	exit(1);
 }
 
+my $havedata = 0;
 my %writes_dispatched = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
 my %writes_size = %writes_dispatched;
 my %reads_dispatched = %writes_dispatched;
@@ -62,6 +63,7 @@ foreach $blk (<$testdir/$testname.blk.*>) {
 	open(R, "blkparse -i $blk |") || die;
 	while(<R>) {
 		if (m/Write Dispatches:\s+(\d+(,\d+){0,1}),\s+(\d+(,\d+){0,1})KiB/) {
+			$havedata = 1;
 			addtest(\%writes_dispatched, $1);
 			addtest(\%writes_size, $3);
 		}
@@ -72,6 +74,8 @@ foreach $blk (<$testdir/$testname.blk.*>) {
 	}
 	close(R);
 }
+
+exit if !$havedata;
 
 printstats(\%writes_dispatched);
 printstats(\%writes_size);
