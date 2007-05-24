@@ -54,7 +54,7 @@ sub printstats {
 my $cachefile = "$testdir/.$testname.blk.ex_cache";
 
 sub printcache {
-	open(C, "<$cachefile") || die;
+	open(C, "<$cachefile") || die "cannot open <$cachefile: $!";
 	while(<C>) {
 		print "$_";
 	}
@@ -93,7 +93,7 @@ foreach $blk (<$testdir/$testname.blk.*>) {
 
 exit if !$havedata;
 
-open(C, ">$cachefile") || die;
+open(C, ">$cachefile") || die "cannot open >$cachefile: $!";
 printstats(\*C, \%writes_dispatched);
 printstats(\*C, \%writes_size);
 printstats(\*C, \%reads_dispatched);
