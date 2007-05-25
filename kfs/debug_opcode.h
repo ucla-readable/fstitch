@@ -122,6 +122,7 @@ static const struct param
 	param_ddesc =       {"ddesc",       UHEX32},
 	param_depth =       {"depth",       UINT32},
 	param_flags =       {"flags",       UHEX32},
+	param_flags16 =     {"flags16",     UHEX16},
 	param_free_next =   {"free_next",   UHEX32},
 	param_free_prev =   {"free_prev",   UHEX32},
 	param_head =        {"head",        UHEX32},
@@ -298,6 +299,12 @@ static const struct param * params_cache_block[] = {
 	&param_block,
 	&last_param
 };
+static const struct param * params_cache_block_flags[] = {
+	&param_cache,
+	&param_block,
+	&param_flags16,
+	&last_param
+};
 
 #define OPCODE(number, params) {number, #number, params}
 
@@ -350,7 +357,7 @@ static const struct opcode
 	opcode_cache_notify =               OPCODE(KDB_CACHE_NOTIFY,               params_cache_only),
 	opcode_cache_findblock =            OPCODE(KDB_CACHE_FINDBLOCK,            params_cache_only),
 	opcode_cache_lookblock =            OPCODE(KDB_CACHE_LOOKBLOCK,            params_cache_block),
-	opcode_cache_writeblock =           OPCODE(KDB_CACHE_WRITEBLOCK,           params_cache_block),
+	opcode_cache_writeblock =           OPCODE(KDB_CACHE_WRITEBLOCK,           params_cache_block_flags),
 	last_opcode = {0, NULL, NULL};
 
 /* opcode combinations */

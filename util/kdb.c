@@ -25,6 +25,7 @@
 
 #define CONSTANTS_ONLY 1
 #include "kfs/chdesc.h"
+#include "kfs/bdesc.h"
 
 /* Set HASH_PRIME to do an extra pass over the input file to prime the string
  * and stack hash tables, and to report on the result. */
@@ -366,10 +367,8 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if((debug_rev != 3408 && debug_rev != 3439 && debug_rev != 3456) || debug_opcode_rev != 3414)
+	if(debug_rev != 3456 || debug_opcode_rev != 3482)
 		return -EPROTO;
-	if(debug_rev != 3456)
-		printf("[detected old file; cache command may not work] ");
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
@@ -2270,6 +2269,14 @@ static int command_cache(int argc, const char * argv[])
 	const char * prefix = "";
 	const char * status = "";
 	struct cache_choice choices;
+	FILE * write_log = NULL;
+	
+	if(argc > 1)
+	{
+		write_log = fopen(argv[1], "w");
+		if(!write_log)
+			perror(argv[1]);
+	}
 	
 	if(tty)
 	{
@@ -2306,6 +2313,8 @@ static int command_cache(int argc, const char * argv[])
 		if(r < 0)
 		{
 			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			if(write_log)
+				fclose(write_log);
 			return r;
 		}
 		if(modules[opcode.module_idx].module == KDB_MODULE_CACHE)
@@ -2414,12 +2423,13 @@ static int command_cache(int argc, const char * argv[])
 				struct debug_param params[] = {
 					{{.name = "cache"}},
 					{{.name = "block"}},
+					{{.name = "flags16"}},
 					{{.name = NULL}}
 				};
 				r = param_lookup(&opcode, params);
 				if(r < 0)
 					break;
-				assert(params[0].size == 4 && params[1].size == 4);
+				assert(params[0].size == 4 && params[1].size == 4 && params[2].size == 2);
 				if(params[0].data_4 == cache)
 				{
 					struct cache_block * block = cache_block_lookup(params[1].data_4);
@@ -2443,6 +2453,17 @@ static int command_cache(int argc, const char * argv[])
 					}
 					choices.choices++;
 					writes++;
+					if(write_log)
+					{
+						const char * note = "";
+						if(params[2].data_2 & BDESC_FLAG_BITMAP)
+							note = " # Bitmap block";
+						if(params[2].data_2 & BDESC_FLAG_DIRENT)
+							note = " # Directory block";
+						if(params[2].data_2 & BDESC_FLAG_INDIR)
+							note = " # Indirect block";
+						fprintf(write_log, "%u%s\n", block->block->number, note);
+					}
 				}
 				else
 					alt_writes++;
@@ -2453,11 +2474,15 @@ static int command_cache(int argc, const char * argv[])
 		if(r < 0)
 		{
 			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			if(write_log)
+				fclose(write_log);
 			return r;
 		}
 		applied++;
 		progress++;
 	}
+	if(write_log)
+		fclose(write_log);
 	cache_block_clean();
 	if(r < 0)
 	{

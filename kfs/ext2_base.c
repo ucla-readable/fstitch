@@ -835,6 +835,7 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 		if ((r = chdesc_create_byte_array(indirect, info->ubd, offset, sizeof(uint32_t), &block, tail, nbefores, befores)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "add block");
+		indirect->ddesc->flags |= BDESC_FLAG_INDIR;
 
 		return CALL(info->ubd, write_block, indirect);
 	}
@@ -897,6 +898,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 			if((r = chdesc_create_init(dindirect, info->ubd, &indir_before)))
 				return r;
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, indir_before, "init double indirect block");
+			dindirect->ddesc->flags |= BDESC_FLAG_INDIR;
 
 			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
@@ -913,6 +915,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 			if((r = chdesc_create_init(indirect, info->ubd, &dindir_before)))
 				return r;
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, dindir_before, "init indirect block");
+			indirect->ddesc->flags |= BDESC_FLAG_INDIR;
 
 			// attach indir to dindir
 			// (no need to dep on indir_before since the dindirect user will depend on dindir_before and indir_before)
@@ -979,6 +982,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 			ninode_befores = nlocal_inode_befores;
 		}
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, inode_befores[0], "add block");
+		indirect->ddesc->flags |= BDESC_FLAG_INDIR;
 
 		r = CALL(info->ubd, write_block, indirect);
 		if (r < 0)
@@ -1040,6 +1044,7 @@ static int ext2_write_dirent_extend(LFS_t * object, EXT2_File_t * parent,
 		if ((r = chdesc_create_byte(dirblock, info->ubd, basep, exists_rec_len_actual + new_rec_len_actual, (void *) entries, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent '%s'", dirent_new->name);
+		dirblock->ddesc->flags |= BDESC_FLAG_DIRENT;
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
@@ -1081,6 +1086,7 @@ static int ext2_write_dirent_array(LFS_t * object, EXT2_File_t * parent, EXT2_Di
 		if ((r = chdesc_create_byte_array(dirblock, info->ubd, basep, actual_rec_len, (void *) dirent, tail, nbefores, befores )) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent '%s'", dirent->name);
+		dirblock->ddesc->flags |= BDESC_FLAG_DIRENT;
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
@@ -1153,6 +1159,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, ref_befores[1], "init new dirent block");
+	block->ddesc->flags |= BDESC_FLAG_DIRENT;
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
 		return r;

@@ -1,6 +1,13 @@
 #ifndef __KUDOS_KFS_BDESC_H
 #define __KUDOS_KFS_BDESC_H
 
+/* These flags are purely for debugging, and are set only when helpful. */
+#define BDESC_FLAG_BITMAP 0x0001
+#define BDESC_FLAG_DIRENT 0x0002
+#define BDESC_FLAG_INDIR  0x0004
+
+#ifndef CONSTANTS_ONLY
+
 #include <lib/hash_map.h>
 
 struct bdesc;
@@ -18,9 +25,6 @@ struct chdesc_dlist {
 	chdesc_t ** tail;
 };
 typedef struct chdesc_dlist chdesc_dlist_t;
-
-/* These flags are purely for debugging, and are set only when helpful. */
-#define BDESC_FLAG_BITMAP 0x0001
 
 struct datadesc {
 	uint8_t * data;
@@ -93,5 +97,7 @@ unsigned int bdesc_autorelease_pool_depth(void);
 
 /* scan the autorelease pool stack and return the total ar_count of a ddesc */
 int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc);
+
+#endif /* CONSTANTS_ONLY */
 
 #endif /* __KUDOS_KFS_BDESC_H */

@@ -284,7 +284,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block);
+			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->ddesc->flags);
 		}
 	}
 	
