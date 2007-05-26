@@ -66,12 +66,34 @@ $XAXIS
 
 set title "$TESTNAME I/O"
 set ylabel "# requests"
+set yrange [0:]
 set y2tics border
 set y2label "kBs"
+set y2range [0:]
 set output "$OUTDIR/io_${TESTNAME}.png"
-plot [:] [0:] \
+plot \
 	"$DATA" using 1:2:3:4 with yerrorlines title "write requests", \
 	"$DATA" using 1:5:6:7 with yerrorlines axes x1y2 title "write kBs", \
-	"$DATA" using 1:8:9:10 with yerrorlines title "read requests", \
-	"$DATA" using 1:11:12:13 with yerrorlines axes x1y2 title "read kBs"
+	"$DATA" using 1:14:15:16 with yerrorlines title "read requests", \
+	"$DATA" using 1:17:18:19 with yerrorlines axes x1y2 title "read kBs"
+EOF
+
+
+gnuplot << EOF
+set terminal png
+#set key above # above is only in gnuplot > 4.0, but it will look better
+set key outside
+set grid
+$XAXIS
+
+set title "$TESTNAME I/O for sectors written more than once"
+set ylabel "# sectors"
+set yrange [0:]
+set y2tics border
+set y2label "# writes"
+set y2range [0:]
+set output "$OUTDIR/io_multi_${TESTNAME}.png"
+plot \
+	"$DATA" using 1:8:9:10 with yerrorlines title "# sectors", \
+	"$DATA" using 1:11:12:13 with yerrorlines axes x1y2 title "# writes"
 EOF
