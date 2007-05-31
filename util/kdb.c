@@ -1883,6 +1883,8 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			break;
 		
 		case KDB_CACHE_NOTIFY:
+			if(skippable)
+				*skippable = 1;
 		case KDB_CACHE_FINDBLOCK:
 		case KDB_CACHE_LOOKBLOCK:
 		case KDB_CACHE_WRITEBLOCK:
