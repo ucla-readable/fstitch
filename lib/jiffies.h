@@ -15,8 +15,8 @@ static __inline int jiffy_time(void)
 #elif defined(UNIXUSER)
 
 /* Jiffies are used mostly for timers, so we'll save
- * CPU by making the granularity 1/10 of a second. */
-#define HZ 10
+ * CPU by making the granularity 1/50 of a second. */
+#define HZ 50
 
 #include <sys/time.h>
 #include <time.h>

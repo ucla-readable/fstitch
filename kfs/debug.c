@@ -293,6 +293,7 @@ static int kfs_debug_write(int size, ...)
 int kfs_debug_init(void)
 {
 	int m, o, r;
+	int timestamp = jiffy_time();
 	uint32_t debug_rev, debug_opcode_rev;
 	
 	debug_rev = svnrevtol("$Rev$");
@@ -308,7 +309,7 @@ int kfs_debug_init(void)
 	if(r < 0)
 		return r;
 	
-	kfs_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, END);
+	kfs_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, LIT_32, timestamp, END);
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
@@ -377,6 +378,7 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
 	int m, o = 0, r = 0;
+	int timestamp = jiffy_time();
 	va_list ap;
 	va_start(ap, function);
 	
@@ -396,9 +398,9 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 	
 	debug_count++;
 #if KFS_OMIT_FILE_FUNC
-	kfs_debug_write(LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(LIT_32, timestamp, LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
 #else
-	kfs_debug_write(LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
+	kfs_debug_write(LIT_32, timestamp, LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
 #endif
 	
 	if(!modules[m].opcodes)

@@ -355,6 +355,7 @@ static int read_lit_str(const char ** data, int allocate)
 }
 
 static uint32_t debug_rev, debug_opcode_rev;
+static uint32_t initial_timestamp;
 
 static int read_debug_signature(void)
 {
@@ -367,8 +368,12 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if(debug_rev != 3456 || debug_opcode_rev != 3482)
+	if(debug_rev != 3486 || debug_opcode_rev != 3482)
 		return -EPROTO;
+	
+	r = read_lit_32(&initial_timestamp);
+	if(r < 0)
+		return r;
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
@@ -502,6 +507,7 @@ static int scan_opcode(void)
 }
 
 struct debug_opcode {
+	uint32_t timestamp;
 	const char * file;
 	uint32_t line;
 	const char * function;
@@ -515,6 +521,10 @@ static int read_opcode(struct debug_opcode * debug_opcode)
 	int i, m, o = 0, p, r;
 	uint16_t module, opcode, zero;
 	uint32_t stack[128];
+	r = read_lit_32(&debug_opcode->timestamp);
+	if(r < 0)
+		return r;
+	debug_opcode->timestamp -= initial_timestamp;
 	r = read_lit_str(&debug_opcode->file, 1);
 	if(r < 0)
 		return r;
@@ -1901,7 +1911,7 @@ static void print_opcode(int number, struct debug_opcode * opcode, int show_trac
 	int m, o, p;
 	m = opcode->module_idx;
 	o = opcode->opcode_idx;
-	printf("#%d %s", number, modules[m].opcodes[o]->name);
+	printf("#%d @%u %s", number, opcode->timestamp, modules[m].opcodes[o]->name);
 	for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 	{
 		printf("%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
@@ -1937,7 +1947,7 @@ static void print_opcode(int number, struct debug_opcode * opcode, int show_trac
 		printf("\n    from %s() at %s:%d\n", opcode->function, opcode->file, opcode->line);
 	else
 		printf(" (line %d)\n", opcode->line);
-	if(show_trace)
+	if(show_trace && opcode->stack[0])
 	{
 		for(p = 0; opcode->stack[p]; p++)
 			printf("  [%d]: 0x%08x", p, opcode->stack[p]);
@@ -2464,7 +2474,7 @@ static int command_cache(int argc, const char * argv[])
 							note = " # Directory block";
 						if(params[2].data_2 & BDESC_FLAG_INDIR)
 							note = " # Indirect block";
-						fprintf(write_log, "%u%s\n", block->block->number, note);
+						fprintf(write_log, "%u %u%s\n", opcode.timestamp, block->block->number, note);
 					}
 				}
 				else
