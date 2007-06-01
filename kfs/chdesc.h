@@ -61,7 +61,7 @@ struct chdesc {
 			/* offset is in bytes */
 			uint16_t offset, length;
 			/* NULL data implies chdesc need not (and cannot) be rolled back */
-			uint8_t * xdata;
+			uint8_t * data;
 			uint8_t ldata[CHDESC_LOCALDATA];
 			//uint16_t satisfy_freed;
 #if CHDESC_BYTE_SUM
@@ -156,7 +156,7 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc) __attribute__((always_inline));
 static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
 {
-	return chdesc->type != BYTE || chdesc->byte.xdata;
+	return chdesc->type != BYTE || chdesc->byte.data;
 }
 
 /* return the maximum before BD level */

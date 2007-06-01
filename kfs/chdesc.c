@@ -339,9 +339,9 @@ static __inline void chdesc_free_byte_data(chdesc_t *chdesc) __attribute((always
 static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
 {
 	assert(chdesc->type == BYTE);
-	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.xdata)
+	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.data)
 	{
-		free(chdesc->byte.xdata);
+		free(chdesc->byte.data);
 		account_update(&act_data, -chdesc->byte.length);
 	}
 }
@@ -1671,7 +1671,7 @@ static void merge_rbs(bdesc_t * block)
 	merger->byte.offset = 0;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, merger, block->ddesc->length);
 	merger->byte.length = block->ddesc->length;
-	merger->byte.xdata = NULL;
+	merger->byte.data = NULL;
 # if CHDESC_BYTE_SUM
 	merger->byte.old_sum = 0;
 	merger->byte.new_sum = 0;
@@ -1961,13 +1961,13 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 			}
 			account_update_realloc(&act_data, overlap->byte.length, merge_length);
 		}
-		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.xdata, overlap->byte.length);
+		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.data, overlap->byte.length);
 		if(merge_offset < overlap->byte.offset)
 			memcpy(merge_data, &ddesc->data[merge_offset], overlap->byte.offset - merge_offset);
 		if(overlap_end < merge_end)
 			memcpy(merge_data + overlap_end - merge_offset, &ddesc->data[overlap_end], merge_end - overlap_end);
 		chdesc_free_byte_data(overlap);
-		overlap->byte.xdata = merge_data;
+		overlap->byte.data = merge_data;
 
 		chdesc_unlink_overlap(overlap);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, overlap, merge_offset);
@@ -1975,7 +1975,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, overlap, merge_length);
 		overlap->byte.length = merge_length;
 # if CHDESC_BYTE_SUM
-		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.xdata, merge_length);
+		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
 		overlap->byte.new_sum = chdesc_byte_sum(&ddesc->data[merge_offset], merge_length);
 # endif
 		chdesc_link_overlap(overlap, overlap->block->ddesc);
@@ -2063,7 +2063,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	{
 		chdesc->byte.offset = offset;
 		chdesc->byte.length = length;
-		chdesc->byte.xdata = NULL; /* XXX Is this OK? */
+		chdesc->byte.data = NULL; /* XXX Is this OK? */
 	}
 	else
 	{
@@ -2072,7 +2072,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		 * Leave 'offset' and 'length' as is to copy source data. */
 		chdesc->byte.offset = 0;
 		chdesc->byte.length = block->ddesc->length;
-		chdesc->byte.xdata = NULL;
+		chdesc->byte.data = NULL;
 #if CHDESC_BYTE_SUM
 		chdesc->byte.old_sum = 0;
 		chdesc->byte.new_sum = 0;
@@ -2153,10 +2153,10 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		void * block_data = &chdesc->block->ddesc->data[offset];
 
 		if(length <= CHDESC_LOCALDATA)
-			chdesc->byte.xdata = &chdesc->byte.ldata[0];
+			chdesc->byte.data = &chdesc->byte.ldata[0];
 		else
 		{
-			if(!(chdesc->byte.xdata = malloc(length)))
+			if(!(chdesc->byte.data = malloc(length)))
 			{
 				chdesc_destroy(&chdesc);
 				return -ENOMEM;
@@ -2164,14 +2164,14 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			account_update(&act_data, length);
 		}
 
-		memcpy(chdesc->byte.xdata, block_data, length);
+		memcpy(chdesc->byte.data, block_data, length);
 		if(data)
 			memcpy(block_data, data, length);
 		else
 			memset(block_data, 0, length);
 #if CHDESC_BYTE_SUM
 		chdesc->byte.new_sum = chdesc_byte_sum(block_data, length);
-		chdesc->byte.old_sum = chdesc_byte_sum(chdesc->byte.xdata, length);
+		chdesc->byte.old_sum = chdesc_byte_sum(chdesc->byte.data, length);
 #endif
 	}
 	else
@@ -2571,9 +2571,9 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 	/* no overlaps */
 	if(chdesc->flags & CHDESC_ROLLBACK)
 	{
-		memcpy(&chdesc->byte.xdata[offset], data, length);
+		memcpy(&chdesc->byte.data[offset], data, length);
 #if CHDESC_BYTE_SUM
-		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length);
+		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length);
 #endif
 	}
 	else
@@ -2778,15 +2778,15 @@ int chdesc_apply(chdesc_t * chdesc)
 			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
 			break;
 		case BYTE:
-			if(!chdesc->byte.xdata)
+			if(!chdesc->byte.data)
 				return -EINVAL;
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.new_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
-			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.xdata, chdesc->byte.length);
+			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.old_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
@@ -2812,15 +2812,15 @@ int chdesc_rollback(chdesc_t * chdesc)
 			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
 			break;
 		case BYTE:
-			if(!chdesc->byte.xdata)
+			if(!chdesc->byte.data)
 				return -EINVAL;
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.old_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
-			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.xdata, chdesc->byte.length);
+			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.xdata, chdesc->byte.length) != chdesc->byte.new_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
@@ -2886,10 +2886,10 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 		/* we don't need the data in byte change descriptors anymore */
 		if((*chdesc)->type == BYTE)
 		{
-			if((*chdesc)->byte.xdata)
+			if((*chdesc)->byte.data)
 			{
 				chdesc_free_byte_data(*chdesc);
-				(*chdesc)->byte.xdata = NULL;
+				(*chdesc)->byte.data = NULL;
 				/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
 			}
 		}
@@ -3061,7 +3061,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 				if(chdesc_is_rollbackable(*chdesc))
 				{
 					chdesc_free_byte_data(*chdesc);
-					(*chdesc)->byte.xdata = NULL;
+					(*chdesc)->byte.data = NULL;
 				}
 				//else
 				//	account_update(&act_nnrb, -1);
