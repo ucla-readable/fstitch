@@ -444,11 +444,15 @@ struct debug_param {
 static int scan_opcode(void)
 {
 	int m, o = 0, p, r;
+	uint32_t timestamp;
 	const char * file;
 	uint32_t line;
 	const char * function;
 	uint16_t module, opcode, zero;
 	uint32_t stack;
+	r = read_lit_32(&timestamp);
+	if(r < 0)
+		return r;
 	r = read_lit_str(&file, 0);
 	if(r < 0)
 		return r;
