@@ -1013,6 +1013,14 @@ static const char * grouping_names[] = {
 	[OWNER_BLOCK] = "owner[gold]-block[red]"
 };
 
+struct mark {
+	uint32_t address;
+	int opcode;
+	struct mark * next;
+};
+
+static struct mark * marks = NULL;
+
 struct group_hash;
 struct group {
 	uint32_t key;
@@ -1026,6 +1034,60 @@ struct group_hash {
 };
 
 static struct group_hash * groups = NULL;
+
+static struct mark * mark_find(uint32_t address, int opcode)
+{
+	struct mark * mark;
+	for(mark = marks; mark; mark = mark->next)
+		if(mark->address == address && mark->opcode == opcode)
+			break;
+	return mark;
+}
+
+static int mark_add(uint32_t address, int opcode)
+{
+	struct mark * mark = mark_find(address, opcode);
+	if(mark)
+		return -EEXIST;
+	mark = malloc(sizeof(*mark));
+	if(!mark)
+		return -ENOMEM;
+	mark->address = address;
+	mark->opcode = opcode;
+	mark->next = marks;
+	marks = mark;
+	return 0;
+}
+
+static int mark_remove(uint32_t address, int opcode)
+{
+	struct mark ** prev = &marks;
+	struct mark * scan = marks;
+	for(; scan; prev = &scan->next, scan = scan->next)
+		if(scan->address == address && scan->opcode == opcode)
+			break;
+	if(!scan)
+		return -ENOENT;
+	*prev = scan->next;
+	free(scan);
+	return 0;
+}
+
+static int mark_remove_index(int index)
+{
+	struct mark ** prev = &marks;
+	struct mark * scan = marks;
+	if(index < 0)
+		return -EINVAL;
+	for(; scan; prev = &scan->next, scan = scan->next)
+		if(--index < 0)
+			break;
+	if(!scan)
+		return -ENOENT;
+	*prev = scan->next;
+	free(scan);
+	return 0;
+}
 
 static struct group * chdesc_group_key(struct group_hash * hash, uint32_t key, int level, struct chdesc * chdesc)
 {
@@ -1209,25 +1271,30 @@ static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free
 	struct label * label;
 	struct arrow * arrow;
 	struct weak * weak;
+	struct mark * mark;
 	
 	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, (void *) chdesc, chdesc->address);
 	for(label = chdesc->labels; label; label = label->next)
 		fprintf(output, "\\n\\\"%s\\\"", label->label);
+	mark = mark_find(chdesc->address, chdesc->opcode);
 	switch(chdesc->type)
 	{
 		case NOOP:
 			render_block_owner(output, chdesc);
-			fprintf(output, "\",style=\"");
+			if(mark)
+				fprintf(output, "\",fillcolor=orange,style=\"filled");
+			else
+				fprintf(output, "\",style=\"");
 			break;
 		case BIT:
 			fprintf(output, "\\n[%d:0x%08x]", chdesc->bit.offset, chdesc->bit.xor);
 			render_block_owner(output, chdesc);
-			fprintf(output, "\",fillcolor=springgreen1,style=\"filled");
+			fprintf(output, "\",fillcolor=%s,style=\"filled", mark ? "orange" : "springgreen1");
 			break;
 		case BYTE:
 			fprintf(output, "\\n[%d:%d]", chdesc->byte.offset, chdesc->byte.length);
 			render_block_owner(output, chdesc);
-			fprintf(output, "\",fillcolor=slateblue1,style=\"filled");
+			fprintf(output, "\",fillcolor=%s,style=\"filled", mark ? "orange" : "slateblue1");
 			break;
 	}
 	if(chdesc->flags & CHDESC_ROLLBACK)
@@ -2887,6 +2954,81 @@ static int command_lookup(int argc, const char * argv[])
 	return 0;
 }
 
+
+static int command_mark(int argc, const char * argv[])
+{
+	int i, mark = 0;
+	if(argc < 1 || strcmp(argv[0], "unmark"))
+		mark = 1;
+	if(argc < 2)
+	{
+		struct mark * scan;
+		i = 0;
+		printf("Marked change descriptors:\n");
+		for(scan = marks; scan; scan = scan->next)
+			printf("  #%d: 0x%08x from opcode #%d\n", ++i, scan->address, scan->opcode);
+		return 0;
+	}
+	for(i = 1; i < argc; i++)
+	{
+		char * end;
+		uint32_t address = strtoul(argv[i], &end, 16);
+		if(mark)
+		{
+			int r;
+			struct chdesc * chdesc = lookup_chdesc(address);
+			if(*end)
+				printf("[Info: interpreted %s as 0x%08x.]\n", argv[i], address);
+			if(!chdesc)
+			{
+				printf("No such change descriptor: 0x%08x\n", address);
+				continue;
+			}
+			r = mark_add(chdesc->address, chdesc->opcode);
+			if(r == -EEXIST)
+			{
+				printf("[Info: ignoring duplicate mark 0x%08x:%d.]\n", chdesc->address, chdesc->opcode);
+				continue;
+			}
+			else if(r < 0)
+				return r;
+			printf("Created mark 0x%08x:%d\n", chdesc->address, chdesc->opcode);
+		}
+		else
+		{
+			int r;
+			if(argv[i][0] == '#')
+			{
+				int index = atoi(&argv[i][1]) - 1;
+				r = mark_remove_index(index);
+			}
+			else if(*end != ':')
+			{
+				printf("[Info: ignoring invalid mark ID %s.]\n", argv[i]);
+				continue;
+			}
+			else
+			{
+				int opcode = atoi(&end[1]);
+				r = mark_remove(address, opcode);
+			}
+			if(r == -EINVAL)
+			{
+				printf("Invalid mark: %s\n", argv[i]);
+				continue;
+			}
+			else if(r == -ENOENT)
+			{
+				printf("No such mark: %s\n", argv[i]);
+				continue;
+			}
+			else if(r < 0)
+				return r;
+		}
+	}
+	return 0;
+}
+
 static const char * options[] = {"freelist", "grouping"};
 #define OPTIONS (sizeof(options) / sizeof(options[0]))
 static int command_option(int argc, const char * argv[])
@@ -3311,6 +3453,7 @@ struct {
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list, 0},
 	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find, 0},
 	{"lookup", "Lookup block numbers or block devices by address.", command_lookup, 0},
+	{"mark", "Mark a change descriptor to be highlighted in output.", command_mark, 0},
 	{"option", "Get or set rendering options: freelist, grouping.", command_option, 0},
 	{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps, 1},
 	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render, 0},
@@ -3318,6 +3461,7 @@ struct {
 	{"run", "Apply all opcodes to system state.", command_run, 0},
 	{"status", "Displays system state status.", command_status, 0},
 	{"step", "Step system state by a specified number of opcodes, or 1 by default.", command_step, 0},
+	{"unmark", "Unmark a change descriptor from being highlighted.", command_mark, 0},
 	{"view", "View system state graphically, optionally in a new window.", command_view, 1},
 	{"help", "Displays help.", command_help, 0},
 	{"quit", "Quits the program.", command_quit, 1}
@@ -3366,6 +3510,7 @@ static char * command_complete(const char * text, int state)
 		BLOCK,
 		BD,
 		KDB,
+		MARK,
 		MAXMIN,
 		LOOKUP,
 		OPTION,
@@ -3384,6 +3529,9 @@ static char * command_complete(const char * text, int state)
 		struct {
 			int module, opcode;
 		} kdb;
+		struct {
+			struct mark * next;
+		} mark;
 	} local;
 	if(!state)
 	{
@@ -3416,7 +3564,7 @@ static char * command_complete(const char * text, int state)
 			type = COMMAND;
 		else
 		{
-			if(!strncmp(argv[0], "status ", 7))
+			if(!strncmp(argv[0], "status ", 7) || !strncmp(argv[0], "mark ", 5))
 			{
 				type = CHDESC;
 				local.chdesc.last = NULL;
@@ -3426,6 +3574,11 @@ static char * command_complete(const char * text, int state)
 				type = KDB;
 				local.kdb.module = 0;
 				local.kdb.opcode = 0;
+			}
+			else if(!strncmp(argv[0], "unmark ", 7))
+			{
+				type = MARK;
+				local.mark.next = marks;
 			}
 			else if(!strncmp(argv[0], "find ", 5))
 				type = MAXMIN;
@@ -3561,6 +3714,20 @@ static char * command_complete(const char * text, int state)
 				local.kdb.module++;
 			}
 			break;
+		case MARK:
+		{
+			char name[24];
+			for(; local.mark.next; local.mark.next = local.mark.next->next)
+			{
+				sprintf(name, "0x%08x:%d", local.mark.next->address, local.mark.next->opcode);
+				if(!strncmp(name, text, length))
+				{
+					local.mark.next = local.mark.next->next;
+					return strdup(name);
+				}
+			}
+			break;
+		}
 		case MAXMIN:
 			switch(index++)
 			{
