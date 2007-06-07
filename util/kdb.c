@@ -2611,6 +2611,11 @@ static int command_line_execute(char * line);
 static int command_gui(int argc, const char * argv[])
 {
 	int child, gui[2];
+	if(!getenv("DISPLAY"))
+	{
+		printf("No DISPLAY environment variable.\n");
+		return -1;
+	}
 	child = pipe(gui);
 	if(child < 0)
 	{
@@ -3330,6 +3335,12 @@ static int command_view(int argc, const char * argv[])
 	FILE * output;
 	char title[256];
 	int r, fresh = 0;
+	
+	if(!getenv("DISPLAY"))
+	{
+		printf("No DISPLAY environment variable.\n");
+		return -1;
+	}
 	
 	/* make a temporary image file name */
 	r = mkstemp(tempfile);
