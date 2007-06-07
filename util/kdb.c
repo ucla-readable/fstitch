@@ -3171,7 +3171,7 @@ static int command_run(int argc, const char * argv[])
 	sprintf(number, "%u", opcodes);
 	r = command_jump(2, array);
 	if(r >= 0)
-		printf("[Info: %d unique strings, %d unique stacks]\n", unique_strings, unique_stacks);
+		printf("[Info: %d unique string%s, %d unique stack%s]\n", unique_strings, (unique_strings == 1) ? "" : "s", unique_stacks, (unique_stacks == 1) ? "" : "s");
 	return r;
 }
 
@@ -3943,7 +3943,7 @@ int main(int argc, char * argv[])
 				break;
 			put_opcode(&debug_opcode);
 		}
-		printf("%s%d unique strings, %d unique stacks OK!\n", tty ? "\e[4D" : " ", unique_strings, unique_stacks);
+		printf("%s%d unique string%s, %d unique stack%s OK!\n", tty ? "\e[4D" : " ", unique_strings, (unique_strings == 1) ? "" : "s", unique_stacks, (unique_stacks == 1) ? "" : "s");
 #endif
 		
 #if RANDOM_TEST
