@@ -2974,6 +2974,12 @@ static int command_mark(int argc, const char * argv[])
 			printf("  #%d: 0x%08x from opcode #%d\n", ++i, scan->address, scan->opcode);
 		return 0;
 	}
+	if(!mark && argc > 1 && !strcmp(argv[1], "all"))
+	{
+		while(marks)
+			mark_remove_index(0);
+		return 0;
+	}
 	for(i = 1; i < argc; i++)
 	{
 		char * end;

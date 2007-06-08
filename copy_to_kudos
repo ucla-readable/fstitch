@@ -17,9 +17,8 @@ function arg_error() {
 
 if [ $# -ne 1 ]; then arg_error "$0"; fi
 
-KMACHINE=$1
-
-if [ "$KMACHINE" != "pb" ] && [ "$KMACHINE" != "mm" ]; then arg_error "$0"; fi
+KMACHINE=kudos-$1.cs.ucla.edu
+host $KMACHINE > /dev/null || arg_error "$0"
 
 rsync --rsh=ssh -vaSz \
 	--exclude=/TAGS --exclude=/tags \
@@ -31,4 +30,4 @@ rsync --rsh=ssh -vaSz \
 	--exclude=/Module.symvers --exclude=/kfs/.kkfsd.*.cmd \
 	--exclude=/.tmp_versions/ --exclude=/.kernel_version \
 	--exclude=.*.swp --exclude=.*.swo --exclude=.*.swn \
-	. kudos-${KMACHINE}.cs.ucla.edu:$TARGET/
+	. $KMACHINE:$TARGET/

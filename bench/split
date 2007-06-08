@@ -19,8 +19,8 @@ FS=`cat "$OUTDIR/fs"`
 T=split
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`
-FILESZ=98304
-NFILE=512
+FILESZ=131072
+NFILE=676
 
 if [ $# -ne 0 ]; then
 	echo "Usage: `basename "$0"`" 1>&2
