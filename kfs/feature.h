@@ -32,8 +32,8 @@ extern const feature_t KFS_feature_delete;
 // Get metadata associated with the opaque variable 'arg'.
 // Returns:
 // * >=0: fills 'data', return value is number of bytes filled
-// * -E_NO_MEM: 'id' is supported, but 'size' is too small
-// * -E_NOT_FOUND: 'id' is not supported
+// * -ENOMEM: 'id' is supported, but 'size' is too small
+// * -ENOENT: 'id' is not supported
 // * <0: implementation specific error
 //
 // Pros/cons for providing this interface in CFS/LFS as a function

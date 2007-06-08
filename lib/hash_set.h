@@ -18,7 +18,7 @@ size_t hash_set_size(const hash_set_t * hs);
 // Return whether hash_set is empty.
 bool   hash_set_empty(const hash_set_t * hs);
 // Insert the given element.
-// Returns 0 or 1 on success, or -E_NO_MEM.
+// Returns 0 or 1 on success, or -ENOMEM.
 int    hash_set_insert(hash_set_t * hs, void * elt);
 // Remove the given element, does not destory elt.
 // Returns k's value on success, NULL if k is not in the hash_set.
@@ -31,7 +31,7 @@ bool   hash_set_exists(const hash_set_t * hs, const void * elt);
 // Return the number of buckets currently allocated.
 size_t hash_set_bucket_count(const hash_set_t * hs);
 // Resize the number of buckets to n.
-// Returns 0 on success, 1 on no resize needed, or -E_NO_MEM.
+// Returns 0 on success, 1 on no resize needed, or -ENOMEM.
 int    hash_set_resize(hash_set_t * hs, size_t n);
 
 

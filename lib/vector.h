@@ -26,10 +26,10 @@ size_t vector_size(const vector_t * v) __attribute__((always_inline));
 static __inline
 bool   vector_empty(const vector_t * v) __attribute__((always_inline));
 // Push elt onto the back of the vector, growing if necessary.
-// Returns 0 on success, or -E_NO_MEM.
+// Returns 0 on success, or -ENOMEM.
 int    vector_push_back(vector_t * v, void * elt);
 // Push vector onto the back, growing if necessary.
-// Returns 0 on success, or -E_NO_MEM.
+// Returns 0 on success, or -ENOMEM.
 int    vector_push_back_vector(vector_t * v, const vector_t * v2);
 // Remove the last elt in the vector, does not destroy elt.
 static __inline
@@ -62,7 +62,7 @@ bool   vector_contains(vector_t * v, void * elt);
 // Return the current capacity of the vector.
 size_t vector_capacity(const vector_t * v);
 // Ensure room for n elts is reserved in the vector.
-// Returns 0 on success, or -E_NO_MEM.
+// Returns 0 on success, or -ENOMEM.
 int    vector_reserve(vector_t * v, size_t n);
 
 

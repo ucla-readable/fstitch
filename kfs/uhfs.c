@@ -250,7 +250,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 		if (check_type_supported(state->lfs, ino, inner, &filetype))
 		{
 			if (filetype == TYPE_DIR)
-				return -1; // -E_EISDIR
+				return -1; // -EISDIR
 			else if (filetype == TYPE_INVAL)
 				return -1; // This seems bad too
 		}
@@ -324,7 +324,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	if (check_type_supported(state->lfs, uf->inode, uf->inner, &filetype))
 	{
 		if (filetype == TYPE_DIR)
-			return -1; // -E_EISDIR
+			return -1; // -EISDIR
 		else if (filetype == TYPE_INVAL)
 			return -1; // This seems bad too
 	}

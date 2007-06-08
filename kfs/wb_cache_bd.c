@@ -16,7 +16,7 @@
 /* This file implements the first whack at our new WB cache. It's an LRU cache,
  * and it allows you to give it chdescs with unsatisfied dependencies. However,
  * it will fill up and deadlock if you give it too many. If this ever causes a
- * problem, an appropriate error message is displayed on the console and -E_BUSY
+ * problem, an appropriate error message is displayed on the console and -EBUSY
  * is returned. */
 
 #define DEBUG_TIMING 0
