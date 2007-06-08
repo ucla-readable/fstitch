@@ -3,7 +3,7 @@
 function run () {
 	try $BENCHDIR/init -f $FS -h $HOST -a start
 	prepare_postinit  $T $N $OUTDIR $HOST
-	time (echo + split; dd if=/dev/zero bs=$FILESZ count=$NFILE |
+	time (echo + split; dd if=/dev/zero bs=$FILESZ count=$NFILE | \
 	                    time split -b $FILESZ - $MNT/file_;
 	      echo + sync; time fsync $KUDOSDIR $MNT;
 	      echo + total)
@@ -19,8 +19,8 @@ FS=`cat "$OUTDIR/fs"`
 T=split
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`
-FILESZ=16384
-NFILE=100
+FILESZ=98304
+NFILE=512
 
 if [ $# -ne 0 ]; then
 	echo "Usage: `basename "$0"`" 1>&2
