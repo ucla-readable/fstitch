@@ -58,6 +58,7 @@ KKFSD_KFS_OBJS := \
               wt_cache_bd.o \
               wb_cache_bd.o \
               wb2_cache_bd.o \
+              wbr_cache_bd.o \
               journal_bd.o \
               unlink_bd.o \
               loop_bd.o \

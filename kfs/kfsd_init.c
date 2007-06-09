@@ -12,6 +12,7 @@
 #include <kfs/wt_cache_bd.h>
 #include <kfs/wb_cache_bd.h>
 #include <kfs/wb2_cache_bd.h>
+#include <kfs/wbr_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
 #include <kfs/mem_bd.h>
 #include <kfs/loop_bd.h>
@@ -67,6 +68,12 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define wb2_cache_bd(bd, dblocks, blocks) wt_cache_bd(bd, dblocks)
 #elif USE_WB_CACHE != 2
 #define wb2_cache_bd(bd, dblocks, blocks) wb_cache_bd(bd, dblocks)
+#endif
+
+#define USE_WBR_CACHE 0
+#if USE_WBR_CACHE
+#undef wb2_cache_bd
+#define wb2_cache_bd wbr_cache_bd
 #endif
 
 #if USE_WB_CACHE != 2 && USE_JOURNAL
