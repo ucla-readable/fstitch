@@ -17,6 +17,12 @@
 #define Dprintf(x...)
 #endif
 
+/* values for the "purpose" parameter */
+#define PURPOSE_FILEDATA 0
+#define PURPOSE_DIRDATA 1
+#define PURPOSE_INDIRECT 2
+#define PURPOSE_DINDIRECT 3
+
 static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number);
 static int _ext2_free_block(LFS_t * object, uint32_t block, chdesc_t ** head);
 static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
@@ -320,7 +326,6 @@ static BD_t * ext2_get_blockdev(LFS_t * object)
 	return ((struct ext2_info *) OBJLOCAL(object))->ubd;
 }
 
-// purpose parameter is ignored
 // FIXME currently the superblock and group descriptor structures are not adjusted
 static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** tail)
 {
@@ -347,8 +352,8 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 		return INVALID_BLOCK;
 	lastblock = blockno;
 	//FIXME this could affect performance
-	//Look in the 32 block(disk blocks not street blocks) vicinity of the lastblock
-	//there is no check to make sure that these blocks are all in the same block group
+	//Look in the 32 block vicinity of the lastblock
+	//There is no check to make sure that these blocks are all in the same block group
 	while(blockno - lastblock < 32) {
 		blockno++;
 		if(read_block_bitmap(object, blockno) == EXT2_FREE)
@@ -358,6 +363,10 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 inode_search:	
 	//Look for free blocks in same block group as the inode
 	block_group = (f->f_ino - 1) / info->super->s_inodes_per_group;
+	if(purpose == PURPOSE_DIRDATA)
+		block_group = (block_group + 2) % info->ngroups;
+	else if(purpose)
+		block_group = (block_group + 1) % info->ngroups;
 	blockno = block_group * info->super->s_blocks_per_group;
 	//FIXME this should be slightly smarter
 	while(blockno < info->super->s_blocks_count) {
@@ -796,7 +805,7 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 		uint32_t blockno;
 		chdesc_t * prev_head = NULL;
 		//allocate an indirect pointer
-		blockno = ext2_allocate_block(object, (fdesc_t *)f, 0, head);
+		blockno = ext2_allocate_block(object, (fdesc_t *)f, PURPOSE_INDIRECT, head);
 		if(blockno == INVALID_BLOCK)
 			return -ENOSPC;
 		indirect = ext2_synthetic_lookup_block(object, blockno);
@@ -886,7 +895,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 			chdesc_t * indir_before, * dindir_before;
 
 			// allocate and init doubly indirect block
-			blockno = ext2_allocate_block(object, file, 0, &indir_before);
+			blockno = ext2_allocate_block(object, file, PURPOSE_DINDIRECT, &indir_before);
 			if(blockno == INVALID_BLOCK)
 				return -ENOSPC;
 			dindirect = ext2_synthetic_lookup_block(object, blockno);
@@ -904,7 +913,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
 
 			// allocate and init first indirect block
-			blockno = ext2_allocate_block(object, file, 0, &dindir_before);
+			blockno = ext2_allocate_block(object, file, PURPOSE_INDIRECT, &dindir_before);
 			if(blockno == INVALID_BLOCK) {
 				(void)_ext2_free_block(object, dindirect->number, &dindir_before);
 				(void)chdesc_create_noop_list(NULL, tail, indir_before, dindir_before, NULL);
@@ -945,7 +954,7 @@ static int ext2_append_file_block_array(LFS_t * object, fdesc_t * file, uint32_t
 	else if (nblocks > EXT2_NDIRECT) {
 		if(nblocks == (EXT2_NDIRECT+1)) {
 			//allocate the indirect block pointer
-			blockno = ext2_allocate_block(object, file, 0, &inode_befores[0]);
+			blockno = ext2_allocate_block(object, file, PURPOSE_INDIRECT, &inode_befores[0]);
 			if(blockno == INVALID_BLOCK)
 				return -ENOSPC;
 			f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
@@ -1148,7 +1157,7 @@ static int ext2_insert_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_ent
 	}
 
 	//test the aligned case! test by having a 16 whatever file
-	new_block = ext2_allocate_block(object, (fdesc_t *) parent, 1, &ref_befores[1]);
+	new_block = ext2_allocate_block(object, (fdesc_t *) parent, PURPOSE_DIRDATA, &ref_befores[1]);
 	if (new_block == INVALID_BLOCK)
 		return -ENOSPC;
 	/* FIXME: these errors should all free the block we allocated! */
@@ -2174,7 +2183,7 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 	if (name_len > EXT2_BLOCK_SIZE)
 		return -ENAMETOOLONG;
 
-	new_block_no = ext2_allocate_block(object, (fdesc_t *) f, 1, &init_befores[1]);
+	new_block_no = ext2_allocate_block(object, (fdesc_t *) f, PURPOSE_FILEDATA, &init_befores[1]);
 	if (new_block_no == INVALID_BLOCK)
 		 return -EINVAL;
 
