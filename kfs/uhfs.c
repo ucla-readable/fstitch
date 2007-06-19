@@ -417,12 +417,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
-			const int type = TYPE_FILE; /* TODO: can this be other types? */
-
 			save_head = prev_head;
 			prev_head = orig_head; /* no need to link with previous chains here */
 
-			number = CALL(state->lfs, allocate_block, uf->inner, type, &prev_head);
+			number = CALL(state->lfs, allocate_block, uf->inner, 0, &prev_head);
 			if (number == INVALID_BLOCK)
 				goto uhfs_write_written_exit;
 

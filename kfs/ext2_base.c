@@ -339,7 +339,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	if (!tail || !f)
 		return INVALID_BLOCK;
 	
-	if(f->f_inode.i_size == 0)
+	if(f->f_inode.i_size == 0 || purpose)
 		goto inode_search;
 
 	//Get the block number of the last block of the inode
