@@ -137,15 +137,35 @@ struct chrefdesc {
 	chrefdesc_t * next;
 };
 
+/* chdesc pass sets allow easy prepending of new chdescs to argument lists */
+struct chdesc_pass_set {
+	struct chdesc_pass_set * next;
+	ssize_t size;
+	/* must be last */
+	union {
+		chdesc_t * array[0];
+		/* when size is negative, use list rather than array */
+		chdesc_t ** list;
+	};
+};
+typedef struct chdesc_pass_set chdesc_pass_set_t;
+
+#define CHDESC_PASS_SET_TYPE(n) struct { chdesc_pass_set_t * next; ssize_t size; chdesc_t * array[n]; }
+#define DEFINE_CHDESC_PASS_SET(name, n, base) CHDESC_PASS_SET_TYPE(n) name = {.next = base, .size = n}
+#define PASS_CHDESC_SET(set) ((chdesc_pass_set_t *) &(set))
+
 int chdesc_init(void);
 
 /* create new chdescs */
+/* create a noop using a pass set */
+int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * befores);
 /* create a noop using befores array */
 int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
 /* create a noop using the NULL-terminated befores var_arg */
 int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...);
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head);
 int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
+int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores);
 int chdesc_create_byte_array(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head);
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
