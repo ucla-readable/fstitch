@@ -799,40 +799,41 @@ static int add_indirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc
 	else
 		nblocks -= ((nblocks / nindirect));
 	if(nblocks != 0 && (nblocks % (nindirect)) == 0) {
-		// TODO: is this if body reachable? if not, inline this function into its only caller?
-		kpanic("It turns out the if body of %s() is reachable. Update its head use and remove this panic.", __FUNCTION__);
-#if 0
+		chdesc_pass_set_t befores_set = {.next = NULL, .size = -nbefores};
+		DEFINE_CHDESC_PASS_SET(indir_befores, 1, &befores_set);
 		uint32_t blockno;
-		chdesc_t * prev_head = NULL;
+		chdesc_t * fork_tail;
+		befores_set.list = befores;
+
 		//allocate an indirect pointer
-		blockno = ext2_allocate_block(object, (fdesc_t *)f, PURPOSE_INDIRECT, head);
+		blockno = ext2_allocate_block(object, (fdesc_t *)f, PURPOSE_INDIRECT, tail);
 		if(blockno == INVALID_BLOCK)
 			return -ENOSPC;
 		indirect = ext2_synthetic_lookup_block(object, blockno);
 		if(indirect == NULL)
 			return -ENOSPC;
-		if((r = chdesc_create_init(indirect, info->ubd, head)) < 0)
+		if((r = chdesc_create_init(indirect, info->ubd, tail)) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init indirect block");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "init indirect block");
+
 		dindir = (uint32_t *)indirect->ddesc->data;
 		f->f_inode.i_blocks += EXT2_BLOCK_SIZE / 512;
 		offset = (nblocks / (nindirect)) * sizeof(uint32_t);
-		prev_head = *head;
-		if ((r = chdesc_create_byte(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, &prev_head)) < 0)
+		indir_befores.array[0] = *tail;
+		if ((r = chdesc_create_byte_set(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, &fork_tail, PASS_CHDESC_SET(indir_befores))) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "add indirect block");
-		r = lfs_add_fork_head(prev_head);
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *fork_tail, "add indirect block");
+		r = lfs_add_fork_head(fork_tail);
 		assert(r >= 0);
+
 		//add the block to the indirect pointer
-		if ((r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, head)) < 0)
+		if ((r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, tail)) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add block");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "add block");
 
 		if ((r = CALL(info->ubd, write_block, indirect)) < 0)
 			return r;
-
 		return CALL(info->ubd, write_block, dindirect);
-#endif
 	} else {
 		dindir = (uint32_t *)dindirect->ddesc->data;
 		offset = (nblocks / (nindirect));
