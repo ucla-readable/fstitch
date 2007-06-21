@@ -2311,15 +2311,6 @@ int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint1
 	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, tail, befores);
 }
 
-int chdesc_create_byte_array(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
-{
-	chdesc_pass_set_t set = {.next = NULL, .size = -nbefores};
-	set.list = befores;
-	if(&block->ddesc->data[offset] == data)
-		kpanic("Cannot create a change descriptor in place!");
-	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, tail, &set);
-}
-
 int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);

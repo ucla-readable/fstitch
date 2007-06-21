@@ -102,7 +102,7 @@ int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t **
 }
 
 /* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
-int chdesc_create_diff_array(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
+int chdesc_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	int r, start, end;
 	uint8_t * old = (uint8_t *) olddata;
@@ -117,7 +117,7 @@ int chdesc_create_diff_array(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	for(end = length - 1; end >= start && old[end] == new[end]; end--);
 	assert(start <= end);
 	
-	r = chdesc_create_byte_array(block, owner, offset + start, end - start + 1, &new[start], tail, nbefores, befores);
+	r = chdesc_create_byte_set(block, owner, offset + start, end - start + 1, &new[start], tail, befores);
 	if(r < 0)
 		return r;
 	return 1;
@@ -125,6 +125,7 @@ int chdesc_create_diff_array(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 
 int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head)
 {
-	chdesc_t * befores[] = { *head };
-	return chdesc_create_diff_array(block, owner, offset, length, olddata, newdata, head, 1, befores);
+	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	set.array[0] = *head;
+	return chdesc_create_diff_set(block, owner, offset, length, olddata, newdata, head, PASS_CHDESC_SET(set));
 }
