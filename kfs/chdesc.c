@@ -1846,6 +1846,45 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 }
 
 #if CHDESC_BYTE_MERGE_OVERLAP
+/* Conservatively return true iff 'after' depends on 'before' */
+static bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
+{
+	/* Quick (bidirectional width-2) check for after->before */
+	if(!after->befores || !before->afters)
+		return 0;
+	if(before->afters->after.desc == after)
+		return 1;
+	if(before->afters->after.next && before->afters->after.next->after.desc == after)
+		return 1;
+	if(after->befores->before.desc == before)
+		return 1;
+	if(after->befores->before.next && after->befores->before.next->before.desc == before)
+		return 1;
+	return 0; /* No after->before found */
+}
+
+/* Conservatively return true iff left's befores are a subset of right's befores */
+static bool quick_befores_subset(const chdesc_t * left, const chdesc_t * right)
+{
+	const size_t max_nleft_befores = 2;
+	const chdepdesc_t * left_dep = left->befores;
+	size_t i;
+
+	if(!left->befores)
+		return 1;
+	if(!right->befores)
+		return 0;
+
+	for(left_dep = left->befores, i = 0; left_dep; left_dep = left_dep->before.next, i++)
+	{
+		if (i >= max_nleft_befores)
+			return 0;
+		if(!quick_depends_on(right, left_dep->before.desc))
+			return 0;
+	}
+	return 1;
+}
+
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
  * Returns 1 on successful merge (*tail points to merged chdesc),
@@ -1956,14 +1995,12 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 				chdesc_t * before2 = before->befores->before.desc;
 				if(before2->flags & CHDESC_FUTURE_BEFORES)
 					return 0;
-				/* there cannot be a cycle if overlap already depends on before,
-				 * so do a (quick, width-2) check for this case: */
-				if(!(before->afters->after.desc == overlap
-				     || (before->afters->after.next
-				         && before->afters->after.next->after.desc == overlap)))
+				/* there cannot be a cycle if overlap already depends on before
+				 * or depends on all of before's befores */
+				if(!quick_depends_on(overlap, before) && !quick_befores_subset(before, overlap))
 				{
-					/* we did not detect that overlap depends on before, so we
-					 * must check before's befores for chdesc cycles: */
+					/* we did not detect that overlap depends on before or its befores,
+					 * so we must check before's befores for chdesc cycles: */
 					if(before2->block && before2->block->ddesc == ddesc)
 						return 0;
 					if(before->befores->before.next)
