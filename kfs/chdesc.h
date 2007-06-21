@@ -22,8 +22,7 @@
  * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
 #define CHDESC_NRB 1
-/* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection,
- * but does not yet work with chdesc_noop_reassign() */
+/* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection */
 /* values: 0 (disable), 1 (enable) */
 #define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
 /* Set to ensure that, for a block with a NRB, all RBs on the block depend
