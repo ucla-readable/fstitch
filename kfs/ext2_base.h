@@ -269,10 +269,10 @@ struct ext2_info
 	bdesc_t * super_cache;
 	bdesc_t * bitmap_cache;
 	bdesc_t * inode_cache;
-	uint32_t ngroups;
-	uint32_t gnum;
+	uint32_t ngroups, gnum;
 	uint32_t ngroupblocks;
 	uint32_t inode_gdesc;
+	uint16_t block_size, block_descs;
 };
 typedef struct ext2_info ext2_info_t;
 
