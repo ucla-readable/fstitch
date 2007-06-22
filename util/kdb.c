@@ -652,6 +652,7 @@ struct arrow {
 
 struct label {
 	const char * label;
+	int count;
 	struct label * next;
 };
 
@@ -897,11 +898,15 @@ static int chdesc_add_label(struct chdesc * chdesc, const char * label)
 	struct label * scan;
 	for(scan = chdesc->labels; scan; scan = scan->next)
 		if(!strcmp(scan->label, label))
+		{
+			scan->count++;
 			return 0;
+		}
 	scan = malloc(sizeof(*scan));
 	if(!scan)
 		return -ENOMEM;
 	scan->label = label;
+	scan->count = 1;
 	scan->next = chdesc->labels;
 	chdesc->labels = scan;
 	return 0;
@@ -1275,7 +1280,10 @@ static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free
 	
 	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, (void *) chdesc, chdesc->address);
 	for(label = chdesc->labels; label; label = label->next)
-		fprintf(output, "\\n\\\"%s\\\"", label->label);
+		if(label->count > 1)
+			fprintf(output, "\\n\\\"%s\\\" (x%d)", label->label, label->count);
+		else
+			fprintf(output, "\\n\\\"%s\\\"", label->label);
 	mark = mark_find(chdesc->address, chdesc->opcode);
 	switch(chdesc->type)
 	{
