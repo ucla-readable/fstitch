@@ -1630,6 +1630,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	return ext2_erase_block_ptr(object, &f->f_inode, head);
 }
 
+// FIXME: directory rename is incorrect (eg parent linkcounts are not updated)
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_rename\n");
