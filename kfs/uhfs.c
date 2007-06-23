@@ -715,6 +715,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 		return r;
 	if (r >= 0)
 	{
+		// FIXME: does not atomically replace newparent/newname
 		r = unlink_name(cfs, newparent, newname, &prev_head);
 		if (r < 0)
 			return r;
