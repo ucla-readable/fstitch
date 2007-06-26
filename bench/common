@@ -96,15 +96,14 @@ function prepare_postinit () {
 			done &>/dev/null &
 	fi
 
-	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz; then
+	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
 		if ! mount | grep -q /debug; then
 			sudo mount /debug
 		fi
 		if mount | grep -q /debug; then
 			DEV=${DEV:-/dev/sdb}
 			echo "+ blktrace"
-			# FIXME: create blktrace file as current user, not root
-			sudo blktrace -r /debug -d $DEV -o $OUTDIR/$T.blk.$N &>/dev/null </dev/null &
+			sudo blktrace -r /debug -d $DEV -o - >$OUTDIR/$T.blk.$N.blktrace.0 2>/dev/null </dev/null &
 			BLKTRACE=$!
 			sleep 1 # if blktrace will fail, it will probably fail within 1s
 			if ! ps $BLKTRACE >/dev/null; then
