@@ -2919,11 +2919,42 @@ static int command_find(int argc, const char * argv[])
 	return 0;
 }
 
+static void print_chdesc_brief(struct chdesc * chdesc)
+{
+	struct arrow * count;
+	int afters = 0, befores = 0;
+	for(count = chdesc->afters; count; count = count->next)
+		afters++;
+	for(count = chdesc->befores; count; count = count->next)
+		befores++;
+	printf(" 0x%08x, %s, ", chdesc->address, type_names[chdesc->type]);
+	if(chdesc->block)
+	{
+		struct block * block = lookup_block(chdesc->block);
+		if(block)
+			printf("block #%d, ", block->number);
+		else
+			printf("block 0x%08x, ", chdesc->block);
+	}
+	switch(chdesc->type)
+	{
+		case BIT:
+			printf("offset %d, xor 0x%08x, ", chdesc->bit.offset, chdesc->bit.xor);
+			break;
+		case BYTE:
+			printf("offset %d, length %d, ", chdesc->byte.offset, chdesc->byte.length);
+			break;
+		case NOOP:
+			break;
+	}
+	printf("nafters %d, nbefores %d\n", afters, befores);
+}
+
 static const char * lookups[] = {"bd", "block"};
 #define LOOKUPS (sizeof(lookups) / sizeof(options[0]))
 static int command_lookup(int argc, const char * argv[])
 {
-	int i, bd = 0;
+	int i, bd = 0, verbose = 0;
 	if(argc < 2)
 	{
 		printf("Need an object type and address to look up.\n");
@@ -2936,12 +2967,14 @@ static int command_lookup(int argc, const char * argv[])
 		printf("Invalid object type: %s\n", argv[1]);
 		return -1;
 	}
-	if(argc < 3)
+	else if(argc > 2 && !strcmp(argv[2], "-v"))
+		verbose = 1;
+	if(argc < 3 + verbose)
 	{
 		printf("Need a block%s address to look up.\n", bd ? " device" : "");
 		return -1;
 	}
-	for(i = 2; i < argc; i++)
+	for(i = 2 + verbose; i < argc; i++)
 	{
 		char * end;
 		uint32_t address = strtoul(argv[i], &end, 16);
@@ -2959,14 +2992,33 @@ static int command_lookup(int argc, const char * argv[])
 		{
 			struct block * block = lookup_block(address);
 			if(block)
+			{
 				printf("Block 0x%08x: #%u\n", block->address, block->number);
+				if(verbose)
+				{
+					int index;
+					struct chdesc * scan;
+					printf("Change descriptors:\n");
+					for(index = 0; index < HASH_TABLE_SIZE; index++)
+						for(scan = chdescs[index]; scan; scan = scan->next)
+						{
+							struct block * compare = lookup_block(scan->block);
+							if(scan->block == block->address)
+								print_chdesc_brief(scan);
+							else if(compare && compare->number == block->number)
+							{
+								printf("(#) ");
+								print_chdesc_brief(scan);
+							}
+						}
+				}
+			}
 			else
 				printf("No such block: 0x%08x\n", address);
 		}
 	}
 	return 0;
 }
-
 
 static int command_mark(int argc, const char * argv[])
 {
@@ -3194,43 +3246,6 @@ static int command_run(int argc, const char * argv[])
 	return r;
 }
 
-static void print_chdesc_brief(uint32_t address)
-{
-	struct chdesc * chdesc = lookup_chdesc(address);
-	if(chdesc)
-	{
-		struct arrow * count;
-		int afters = 0, befores = 0;
-		for(count = chdesc->afters; count; count = count->next)
-			afters++;
-		for(count = chdesc->befores; count; count = count->next)
-			befores++;
-		printf(" 0x%08x, %s, ", chdesc->address, type_names[chdesc->type]);
-		if(chdesc->block)
-		{
-			struct block * block = lookup_block(chdesc->block);
-			if(block)
-				printf("block #%d, ", block->number);
-			else
-				printf("block 0x%08x, ", chdesc->block);
-		}
-		switch(chdesc->type)
-		{
-			case BIT:
-				printf("offset %d, xor 0x%08x, ", chdesc->bit.offset, chdesc->bit.xor);
-				break;
-			case BYTE:
-				printf("offset %d, length %d, ", chdesc->byte.offset, chdesc->byte.length);
-				break;
-			case NOOP:
-				break;
-		}
-		printf("nafters %d, nbefores %d\n", afters, befores);
-	}
-	else
-		printf(" 0x%08x\n", address);
-}
-
 static int command_status(int argc, const char * argv[])
 {
 	if(argc < 2)
@@ -3265,7 +3280,7 @@ static int command_status(int argc, const char * argv[])
 				printf("No such chdesc: 0x%08x\n", address);
 				continue;
 			}
-			printf("Chdesc 0x%08x was created by opcode %d\n", chdesc->address, chdesc->opcode);
+			printf("Chdesc 0x%08x (%s) was created by opcode %d\n", chdesc->address, type_names[chdesc->type], chdesc->opcode);
 			if(verbose)
 			{
 				struct label * label;
@@ -3290,10 +3305,22 @@ static int command_status(int argc, const char * argv[])
 					struct arrow * arrow;
 					printf("Afters:\n");
 					for(arrow = chdesc->afters; arrow; arrow = arrow->next)
-						print_chdesc_brief(arrow->chdesc);
+					{
+						struct chdesc * after = lookup_chdesc(arrow->chdesc);
+						if(after)
+							print_chdesc_brief(after);
+						else
+							printf(" 0x%08x\n", arrow->chdesc);
+					}
 					printf("Befores:\n");
 					for(arrow = chdesc->befores; arrow; arrow = arrow->next)
-						print_chdesc_brief(arrow->chdesc);
+					{
+						struct chdesc * before = lookup_chdesc(arrow->chdesc);
+						if(before)
+							print_chdesc_brief(before);
+						else
+							printf(" 0x%08x\n", arrow->chdesc);
+					}
 				}
 			}
 		}
