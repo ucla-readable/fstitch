@@ -315,10 +315,13 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	uint32_t blockno, offset, * ptr;
 	int r, cyl, inode_offset;
 	bdesc_t * block;
-	chdesc_t * oldheads_array[2];
-	chdesc_t ** oldheads = oldheads_array;
+	DEFINE_CHDESC_PASS_SET(oldheads_set, 2, NULL);
+	chdesc_t ** oldheads = oldheads_set.array;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	oldheads_set.array[0] = NULL;
+	oldheads_set.array[1] = NULL;
 
 	if (!head)
 		return -EINVAL;
@@ -370,7 +373,7 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 		goto write_inode_bitmap_end;
 	*(oldheads++) = *head;
 
-	r = chdesc_create_noop_array(NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
+	r = chdesc_create_noop_set(NULL, head, PASS_CHDESC_SET(oldheads_set));
 	if (r < 0)
 		goto write_inode_bitmap_end;
 
@@ -524,10 +527,13 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	int r, cyl, block_offset;
 	bdesc_t * block;
 	chdesc_t * save_head;
-	chdesc_t * oldheads_array[2];
-	chdesc_t ** oldheads = oldheads_array;
+	DEFINE_CHDESC_PASS_SET(oldheads_set, 2, NULL);
+	chdesc_t ** oldheads = oldheads_set.array;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
+
+	oldheads_set.array[0] = NULL;
+	oldheads_set.array[1] = NULL;
 
 	if (!head)
 		return -EINVAL;
@@ -598,7 +604,7 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 		return r;
 	*(oldheads++) = *head;
 
-	return chdesc_create_noop_array(NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
+	return chdesc_create_noop_set(NULL, head, PASS_CHDESC_SET(oldheads_set));
 }
 
 // [ndir, ..., nffree] parameters are deltas
@@ -608,10 +614,14 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 	struct UFS_csum * csum;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
-	chdesc_t * oldheads_array[3] = {NULL, NULL, NULL};
-	chdesc_t ** oldheads = oldheads_array;
+	DEFINE_CHDESC_PASS_SET(oldheads_set, 3, NULL);
+	chdesc_t ** oldheads = oldheads_set.array;
 	chdesc_t * oldhead;
 	int r;
+
+	oldheads_set.array[0] = NULL;
+	oldheads_set.array[1] = NULL;
+	oldheads_set.array[2] = NULL;
 
 	if (!head || cyl < 0 || cyl >= super->fs_ncg)
 		return -EINVAL;
@@ -665,12 +675,12 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 	if (*head != oldhead)
 		*(oldheads++) = *head;
 
-	if (oldheads == oldheads_array)
+	if (oldheads == oldheads_set.array)
 	{
 		assert(*head == oldhead);
 		return 0;
 	}
-	return chdesc_create_noop_array(NULL, head, sizeof(oldheads_array)/sizeof(oldheads_array[0]), oldheads_array);
+	return chdesc_create_noop_set(NULL, head, PASS_CHDESC_SET(oldheads_set));
 }
 
 int ufs_check_name(const char * p)
