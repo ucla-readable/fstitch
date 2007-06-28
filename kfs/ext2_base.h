@@ -11,8 +11,8 @@
  * Constants relative to the data blocks
  */
 #define EXT2_NDIRECT			12
-#define EXT2_NINDIRECT			EXT2_NDIRECT
-#define EXT2_DINDIRECT			(EXT2_NINDIRECT + 1)
+#define EXT2_INDIRECT			EXT2_NDIRECT
+#define EXT2_DINDIRECT			(EXT2_INDIRECT + 1)
 #define EXT2_TINDIRECT			(EXT2_DINDIRECT + 1)
 #define EXT2_N_BLOCKS			(EXT2_TINDIRECT + 1)
 

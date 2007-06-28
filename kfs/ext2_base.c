@@ -608,12 +608,8 @@ static uint32_t ext2_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	
 	if(f->f_type == TYPE_SYMLINK)
 		return 0;
-
-	//i_blocks holds number of 512 byte blocks not info->block_size blocks
-	//return f->f_inode.i_blocks / (info->block_size / 512);
-	if (f->f_inode.i_size == 0)
-		return 0;
-	return ((f->f_inode.i_size + info->block_size - 1) / info->block_size);
+	
+	return (f->f_inode.i_size + info->block_size - 1) / info->block_size;
 }
 
 static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offset)
@@ -662,7 +658,7 @@ static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offs
 	else if (blocknum >= EXT2_NDIRECT)
 	{
 		blocknum -= EXT2_NDIRECT;
-		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_NINDIRECT], 1));
+		block_desc = (CALL(info->ubd, read_block, file->f_inode.i_block[EXT2_INDIRECT], 1));
 		if (!block_desc)
 		{
 			Dprintf("failed indirect block lookup in %s\n", __FUNCTION__);
@@ -768,206 +764,91 @@ static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry
 	return fill_dirent(info, dirent, dirent->inode, entry, size, basep);
 }
 
-/* append a block number to an inode which has a doubly indirect block, allocating a new indirect block if necessary */
-static int add_block_with_dindirect(LFS_t * object, ext2_fdesc_t * f, uint32_t block, chdesc_t ** tail, chdesc_pass_set_t * befores) {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	const uint16_t n_per_block = info->block_size / sizeof(uint32_t);
-	bdesc_t * dindirect = NULL, * indirect = NULL;
-	uint32_t offset, nblocks;
-	int r;
-	
-	/* calculate current number of blocks */
-	nblocks = f->f_inode.i_blocks / (info->block_size / 512);
-	
-	/* discount all the blocks associated with the data before the doubly
-	 * indirect block, and the doubly indirect block itself */
-	nblocks -= EXT2_NDIRECT + n_per_block + 2;
-	
-	/* discount any indirect blocks pointed to by the doubly indirect block */
-	nblocks -= (nblocks + n_per_block) / (n_per_block + 1);
-	
-	/* calculate the offset into the double indirect array */
-	offset = nblocks / n_per_block;
-	
-	dindirect = ext2_lookup_block(object, f->f_inode.i_block[EXT2_DINDIRECT]);
-	if(!dindirect)
-		return -ENOSPC;
-	/* the first indirect block on the doubly indirect block is allocated
-	 * together with the doubly indirect block itself... */
-	if(nblocks && !(nblocks % n_per_block)) {
-		DEFINE_CHDESC_PASS_SET(indir_befores, 1, befores);
-		chdesc_t * fork_tail;
-		uint32_t blockno;
-		
-		/* allocate an indirect block */
-		blockno = ext2_allocate_block(object, (fdesc_t *)f, PURPOSE_INDIRECT, tail);
-		if(blockno == INVALID_BLOCK)
-			return -ENOSPC;
-		indirect = ext2_synthetic_lookup_block(object, blockno);
-		if(indirect == NULL)
-			return -ENOSPC;
-		if((r = chdesc_create_init(indirect, info->ubd, tail)) < 0)
-			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "init indirect block");
-		
-		f->f_inode.i_blocks += info->block_size / 512;
-		/* convert offset to bytes */
-		offset *= sizeof(uint32_t);
-		indir_befores.array[0] = *tail;
-		if((r = chdesc_create_byte_set(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, &fork_tail, PASS_CHDESC_SET(indir_befores))) < 0)
-			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, fork_tail, "add indirect block");
-		r = lfs_add_fork_head(fork_tail);
-		assert(r >= 0);
-		
-		/* add the block to the indirect block */
-		if((r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, tail)) < 0)
-			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "add block");
-		
-		if((r = CALL(info->ubd, write_block, indirect)) < 0)
-			return r;
-		return CALL(info->ubd, write_block, dindirect);
-	}
-	
-	indirect = ext2_lookup_block(object, ((uint32_t *) dindirect->ddesc->data)[offset]);
-	if(!indirect)
-		return -ENOSPC;
-	offset = (nblocks % n_per_block) * sizeof(uint32_t);
-	if((r = chdesc_create_byte_set(indirect, info->ubd, offset, sizeof(uint32_t), &block, tail, befores)) < 0)
-		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "add block");
-	indirect->ddesc->flags |= BDESC_FLAG_INDIR;
-	
-	return CALL(info->ubd, write_block, indirect);
-}
-
+/* FIXME: this function does not deallocate blocks on failures */
 static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	Dprintf("EXT2DEBUG: %s %d\n", __FUNCTION__, block);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	const uint32_t n_per_block = info->block_size / sizeof(uint32_t);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	uint32_t nblocks = (f->f_inode.i_blocks / (info->block_size / 512)) + 1; //plus 1 to account for newly allocated block
-	bdesc_t * indirect = NULL, * dindirect = NULL;
-	uint32_t blockno, nindirect;
-	int r, offset;
-	DEFINE_CHDESC_PASS_SET(set, 1, befores);
-	set.array[0] = NULL;
+	uint32_t nblocks;
 	
-	if (f->f_type == TYPE_SYMLINK)
+	DEFINE_CHDESC_PASS_SET(set, 2, NULL);
+	chdesc_pass_set_t * inode_dep = PASS_CHDESC_SET(set);
+	set.array[0] = CALL(object, get_write_head);
+	set.array[1] = NULL;
+	/* we only need size 2 in some cases */
+	set.size = 1;
+	
+	if(!tail || !f || block == INVALID_BLOCK)
 		return -EINVAL;
-
-	if (!tail || !f || block == INVALID_BLOCK)
+	
+	if(f->f_type == TYPE_SYMLINK)
 		return -EINVAL;
-
-	nindirect = info->block_size / sizeof(uint32_t);
-
-	//FIXME as long as we only support doubly indirect blocks this
-	//is the maximum number of blocks
-	if (nblocks >= (EXT2_NDIRECT + ((nindirect + 1) * (nindirect + 1)) + 1))
-		return -EINVAL;
-
-	if (nblocks <= EXT2_NDIRECT)
-		f->f_inode.i_block[nblocks ? nblocks - 1 : 0] = block;
-	else if (nblocks > (EXT2_NDIRECT + nindirect + 1) ) {
-		chdesc_pass_set_t * indir_attach_befores;
-		DEFINE_CHDESC_PASS_SET(new_attach, 2, NULL);
-		if(nblocks == EXT2_NDIRECT + nindirect + 2) {
-			chdesc_t * indir_before, * dindir_before;
-
-			// allocate and init doubly indirect block
-			blockno = ext2_allocate_block(object, file, PURPOSE_DINDIRECT, &indir_before);
-			if(blockno == INVALID_BLOCK)
-				return -ENOSPC;
-			dindirect = ext2_synthetic_lookup_block(object, blockno);
-			if(dindirect == NULL) {
-				(void)_ext2_free_block(object, blockno, &indir_before);
-				*tail = indir_before;
-				return -ENOSPC;
-			}
-			if((r = chdesc_create_init(dindirect, info->ubd, &indir_before)))
-				return r;
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, indir_before, "init double indirect block");
-			dindirect->ddesc->flags |= BDESC_FLAG_INDIR;
-
-			f->f_inode.i_blocks += info->block_size / 512;
-			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
-
-			// allocate and init first indirect block
-			blockno = ext2_allocate_block(object, file, PURPOSE_INDIRECT, &dindir_before);
-			if(blockno == INVALID_BLOCK) {
-				(void)_ext2_free_block(object, dindirect->number, &dindir_before);
-				(void)chdesc_create_noop_list(NULL, tail, indir_before, dindir_before, NULL);
-				return -ENOSPC;
-			}
-			indirect = ext2_synthetic_lookup_block(object, blockno);
-			assert(indirect);
-			if((r = chdesc_create_init(indirect, info->ubd, &dindir_before)))
-				return r;
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, dindir_before, "init indirect block");
-			indirect->ddesc->flags |= BDESC_FLAG_INDIR;
-
-			// attach indir to dindir
-			// (no need to dep on indir_before since the dindirect user will depend on dindir_before and indir_before)
-			if ((r = chdesc_create_byte(dindirect, info->ubd, 0, sizeof(uint32_t), &blockno, &dindir_before)) < 0)
-				return r;
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, dindir_before, "add indirect block");
-			if ((r = CALL(info->ubd, write_block, dindirect)) < 0)
-				return r;
-			if ((r = CALL(info->ubd, write_block, indirect)) < 0)
-				return r;
-			f->f_inode.i_blocks += info->block_size / 512;
-
-			new_attach.array[0] = indir_before;
-			new_attach.array[1] = dindir_before;
-			indir_attach_befores = PASS_CHDESC_SET(new_attach);
-		} else {
-			indir_attach_befores = befores;
-			// the below ext2_write_inode_set() need not directly depend on 'befores':
-			set.next = NULL;
+	
+	/* calculate current number of blocks */
+	nblocks = f->f_inode.i_blocks / (info->block_size / 512);
+	if(nblocks > EXT2_NDIRECT)
+		/* subtract the indirect block */
+		if(--nblocks > EXT2_NDIRECT + n_per_block)
+		{
+			/* subtract the doubly indirect block */
+			nblocks--;
+			/* subtract all the additional indirect blocks */
+			nblocks -= (nblocks - EXT2_NDIRECT) / (n_per_block + 1);
+			/* FIXME: as long as we only support doubly indirect blocks,
+			 * this is the maximum number of blocks we can use */
+			if(nblocks > EXT2_NDIRECT + 1 + (n_per_block + 1) * (n_per_block + 1))
+				return -EINVAL;
 		}
-		r = add_block_with_dindirect(object, f, block, &set.array[0], indir_attach_befores);
-		if (r < 0)
-			return r;
+	
+	if(nblocks < EXT2_NDIRECT)
+	{
+		f->f_inode.i_block[nblocks] = block;
+		inode_dep = befores;
 	}
-	else if (nblocks > EXT2_NDIRECT) {
-		if(nblocks == (EXT2_NDIRECT+1)) {
-			//allocate the indirect block pointer
-			blockno = ext2_allocate_block(object, file, PURPOSE_INDIRECT, &set.array[0]);
+	else if(nblocks < EXT2_NDIRECT + n_per_block)
+	{
+		int r;
+		bdesc_t * indirect;
+		
+		nblocks -= EXT2_NDIRECT;
+		
+		if(!nblocks)
+		{
+			/* allocate the indirect block */
+			uint32_t blockno = ext2_allocate_block(object, file, PURPOSE_INDIRECT, &set.array[0]);
 			if(blockno == INVALID_BLOCK)
 				return -ENOSPC;
-			f->f_inode.i_blocks += info->block_size / 512;
-			f->f_inode.i_block[EXT2_NDIRECT] = blockno;
 			indirect = ext2_synthetic_lookup_block(object, blockno);
-			if(indirect == NULL)
+			if(!indirect)
 				return -ENOSPC;
-			if ((r = chdesc_create_init(indirect, info->ubd, &set.array[0])))
+			r = chdesc_create_init(indirect, info->ubd, &set.array[0]);
+			if(r < 0)
 				return r;
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[0], "init indirect block");
-		} else {
-			blockno = f->f_inode.i_block[EXT2_NDIRECT];
-			indirect = ext2_lookup_block(object, f->f_inode.i_block[EXT2_NDIRECT]);
-			if(indirect == NULL)
-				return -ENOSPC;
+			
+			/* there are no references to the indirect block yet, so we can update it without depending on befores */
+			r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, &set.array[0]);
+			if(r < 0)
+				return r;
+			/* however, updating the inode itself must then depend on befores */
+			set.next = befores;
+			
+			/* these changes will be written later, depending on inode_dep (set) */
+			f->f_inode.i_blocks += info->block_size / 512;
+			f->f_inode.i_block[EXT2_INDIRECT] = blockno;
 		}
-
-		offset = (nblocks - EXT2_NDIRECT - 1) * sizeof(uint32_t);
-		//This is to account for the fact that indirect block now affects the block count
-		if(nblocks > (EXT2_NDIRECT + 2))
-			offset -= sizeof(uint32_t);
-
-		if(nblocks == (EXT2_NDIRECT+1)) {
-			// no references to indirect yet, so we can update it without depending on 'befores'
-			if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, &set.array[0])) < 0)
+		else
+		{
+			int offset = nblocks * sizeof(uint32_t);
+			indirect = ext2_lookup_block(object, f->f_inode.i_block[EXT2_INDIRECT]);
+			if(!indirect)
+				return -ENOSPC;
+			/* the indirect block is already referenced, so updating it has to depend on befores */
+			r = chdesc_create_byte_set(indirect, info->ubd, offset, sizeof(uint32_t), &block, &set.array[0], befores);
+			if(r < 0)
 				return r;
-		} else {
-			chdesc_t * head = NULL;
-			if ((r = chdesc_create_byte_set(indirect, info->ubd, offset, sizeof(uint32_t), &block, &head, PASS_CHDESC_SET(set))) < 0)
-				return r;
-			set.array[0] = head;
-			// indirect is referenced, so the above has to depend on 'befores'.
-			// thus the below ext2_write_inode_set() need not explicitly depend on 'befores':
-			set.next = NULL;
 		}
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[0], "add block");
 		indirect->ddesc->flags |= BDESC_FLAG_INDIR;
@@ -976,8 +857,118 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 		if (r < 0)
 			return r;
 	}
+	else
+	{
+		int r, offset;
+		bdesc_t * indirect = NULL;
+		chdesc_t * indir_init = set.array[0]; /* write_head */
+		bdesc_t * dindirect = NULL;
+		chdesc_t * dindir_init = set.array[0]; /* write_head */
+		
+		nblocks -= EXT2_NDIRECT + n_per_block;
+		
+		if(!nblocks)
+		{
+			/* allocate and init doubly indirect block */
+			uint32_t blockno = ext2_allocate_block(object, file, PURPOSE_DINDIRECT, &dindir_init);
+			if(blockno == INVALID_BLOCK)
+				return -ENOSPC;
+			dindirect = ext2_synthetic_lookup_block(object, blockno);
+			if(!dindirect)
+				return -ENOSPC;
+			r = chdesc_create_init(dindirect, info->ubd, &dindir_init);
+			if(r < 0)
+				return r;
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, dindir_init, "init double indirect block");
+			
+			/* these changes will be written later, depending on inode_dep (set) */
+			f->f_inode.i_blocks += info->block_size / 512;
+			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
+		}
+		else
+		{
+			dindirect = ext2_lookup_block(object, f->f_inode.i_block[EXT2_DINDIRECT]);
+			if(!dindirect)
+				return -ENOSPC;
+		}
+		dindirect->ddesc->flags |= BDESC_FLAG_INDIR;
+		
+		if(!(nblocks % n_per_block))
+		{
+			/* allocate and init indirect block */
+			uint32_t blockno = ext2_allocate_block(object, file, PURPOSE_INDIRECT, &indir_init);
+			if(blockno == INVALID_BLOCK)
+				return -ENOSPC;
+			indirect = ext2_synthetic_lookup_block(object, blockno);
+			if(!indirect)
+				return -ENOSPC;
+			r = chdesc_create_init(indirect, info->ubd, &indir_init);
+			if(r < 0)
+				return r;
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, indir_init, "init indirect block");
+			
+			set.next = befores;
+			if(!nblocks)
+			{
+				/* in the case where we are also allocating the doubly indirect
+				 * block, the inode can depend directly on everything and no
+				 * dependencies are necessary between the other changes involved */
+				set.array[1] = dindir_init;
+				r = chdesc_create_byte(dindirect, info->ubd, 0, sizeof(uint32_t), &blockno, &set.array[1]);
+			}
+			else
+			{
+				offset = (nblocks / n_per_block) * sizeof(uint32_t);
+				set.array[0] = indir_init;
+				r = chdesc_create_byte_set(dindirect, info->ubd, offset, sizeof(uint32_t), &blockno, &set.array[1], PASS_CHDESC_SET(set));
+				set.next = NULL;
+			}
+			if(r < 0)
+				return r;
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[1], "add indirect block");
+			
+			/* the cases involving allocating an indirect block require a larger set */
+			set.size = 2;
+			
+			/* this change will be written later, depending on inode_dep (set) */
+			f->f_inode.i_blocks += info->block_size / 512;
+			
+			set.array[0] = indir_init;
+			r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, &set.array[0]);
+			if(r < 0)
+				return r;
+		}
+		else
+		{
+			offset = nblocks / n_per_block;
+			indirect = ext2_lookup_block(object, ((uint32_t *) dindirect->ddesc->data)[offset]);
+			if(!indirect)
+				return -ENOSPC;
+			offset = (nblocks % n_per_block) * sizeof(uint32_t);
+			r = chdesc_create_byte_set(indirect, info->ubd, offset, sizeof(uint32_t), &block, &set.array[0], befores);
+			if(r < 0)
+				return r;
+		}
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[0], "add block");
+		indirect->ddesc->flags |= BDESC_FLAG_INDIR;
+		
+		r = CALL(info->ubd, write_block, indirect);
+		if(r < 0)
+			return r;
+		
+		if(!(nblocks % n_per_block))
+		{
+			/* we write this one second since it probably
+			 * should be written second (to the disk) */
+			r = CALL(info->ubd, write_block, dindirect);
+			if(r < 0)
+				return r;
+		}
+	}
+	
+	/* increment i_blocks for the block itself */
 	f->f_inode.i_blocks += info->block_size / 512;
-	return ext2_write_inode_set(info, f->f_ino, &f->f_inode, tail, PASS_CHDESC_SET(set));
+	return ext2_write_inode_set(info, f->f_ino, &f->f_inode, tail, inode_dep);
 }
 
 static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
@@ -1504,7 +1495,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 	else if (blocknum < EXT2_NDIRECT + pointers_per_block)
 	{
 		blocknum -= EXT2_NDIRECT;
-		block_desc = (CALL(info->ubd, read_block, inode->i_block[EXT2_NINDIRECT], 1));
+		block_desc = (CALL(info->ubd, read_block, inode->i_block[EXT2_INDIRECT], 1));
 		if (!block_desc)
 			return INVALID_BLOCK;
 		block_nums = (uint32_t *)block_desc->ddesc->data;
@@ -1512,7 +1503,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 
 		if (blocknum == 0)
 		{
-			indir_ptr = inode->i_block[EXT2_NDIRECT];
+			indir_ptr = inode->i_block[EXT2_INDIRECT];
 			if (inode->i_size > info->block_size)
 				inode->i_size = inode->i_size - info->block_size;
 			else
@@ -1521,7 +1512,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 			if (r < 0)
 				return INVALID_BLOCK;
 			inode->i_blocks -= info->block_size / 512;
-			inode->i_block[EXT2_NDIRECT] = 0;
+			inode->i_block[EXT2_INDIRECT] = 0;
 		} else {
 			if (inode->i_size > info->block_size)
 				inode->i_size -= info->block_size;
