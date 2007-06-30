@@ -151,7 +151,7 @@ typedef struct chdesc_pass_set chdesc_pass_set_t;
 
 #define CHDESC_PASS_SET_TYPE(n) struct { chdesc_pass_set_t * next; ssize_t size; chdesc_t * array[n]; }
 #define DEFINE_CHDESC_PASS_SET(name, n, base) CHDESC_PASS_SET_TYPE(n) name = {.next = base, .size = n}
-#define PASS_CHDESC_SET(set) ((chdesc_pass_set_t *) &(set))
+#define PASS_CHDESC_SET(set) ((chdesc_pass_set_t *) (void *) &(set))
 
 int chdesc_init(void);
 
