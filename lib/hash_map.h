@@ -1,6 +1,11 @@
 #ifndef KUDOS_INC_HASH_MAP_H
 #define KUDOS_INC_HASH_MAP_H
 
+/* Set to check for illegal hash map modifications during iteration.
+ * If hash map iteration code tries to deref bad pointers, try this. */
+/* values: 0 (normal), 1 (debug) */
+#define HASH_MAP_IT_MOD_DEBUG (!NDEBUG)
+
 struct hash_map_elt {
 	void * key;
 	void * val;
@@ -60,6 +65,9 @@ struct hash_map_it {
 	hash_map_t * hm;
 	size_t bucket;
 	chain_elt_t * elt;
+#if HASH_MAP_IT_MOD_DEBUG
+	size_t version;
+#endif
 };
 typedef struct hash_map_it hash_map_it_t;
 
@@ -67,12 +75,12 @@ void hash_map_it_init(hash_map_it_t * it, hash_map_t * hm);
 // Iterate through the hash map values using hm_it.
 // - Returns NULL when the end of the hash map is reached.
 // - Behavior is undefined if you begin iterating, modify hm, and then continue
-//   iterating using the old hm_it.
+//   iterating using the old hm_it. (Define HASH_MAP_IT_MOD_DEBUG to detect.)
 void * hash_map_val_next(hash_map_it_t * it);
 // Iterate through the hash map values using hm_it.
 // - key is NULL when the end of the hash map is reached.
 // - Behavior is undefined if you begin iterating, modify hm, and then continue
-//   iterating using the old hm_it.
+//   iterating using the old hm_it. (Define HASH_MAP_IT_MOD_DEBUG to detect.)
 hash_map_elt_t hash_map_elt_next(hash_map_it_t * it);
 
 #endif /* !KUDOS_INC_HASH_MAP_H */

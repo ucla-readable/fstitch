@@ -37,6 +37,9 @@ struct hash_map {
 	size_t size;
 	bool auto_resize;
 	vector_t * tbl;
+#if HASH_MAP_IT_MOD_DEBUG
+	size_t version;
+#endif
 };
 
 
@@ -110,6 +113,9 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 		free(hm);
 		return NULL;
 	}
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version = 0;
+#endif
 
 	return hm;
 }
@@ -186,6 +192,9 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 		if ((existing_elt = chain_search_key(head, k)))
 		{
 			existing_elt->elt.val = v;
+#if HASH_MAP_IT_MOD_DEBUG
+			hm->version++;
+#endif
 			return 1;
 		}
 
@@ -204,6 +213,9 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	hm->size++;
 	head->elt.key = k;
 	head->elt.val = v;
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version++;
+#endif
 
 	if (hm->auto_resize && next_size(hash_map_size(hm)) > hash_map_bucket_count(hm))
 	{
@@ -232,6 +244,9 @@ static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 
 	vector_elt_set(hm->tbl, elt_num, elt);
 	hm->size++;
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version++;
+#endif
 }
 
 // Erase the key-value pair for k from hm, return the element.
@@ -260,6 +275,9 @@ static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 	k_chain->prev = NULL;
 
 	hm->size--;
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version++;
+#endif
 
 	return k_chain;
 }
@@ -338,6 +356,9 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 		head->prev = elt;
 	}
 	vector_elt_set(hm->tbl, newk_elt_num, elt);
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version++;
+#endif
 
 	return 0;
 }
@@ -361,6 +382,9 @@ void hash_map_clear(hash_map_t * hm)
 	}
 
 	hm->size = 0;
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version++;
+#endif
 }
 
 void * hash_map_find_val(const hash_map_t * hm, const void * k)
@@ -442,6 +466,9 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	hm->size = new_hm->size;
 	hm->tbl  = new_hm->tbl;
 	free(new_hm);
+#if HASH_MAP_IT_MOD_DEBUG
+	hm->version++;
+#endif
 
 	return 0;
 }
@@ -456,6 +483,9 @@ void hash_map_it_init(hash_map_it_t * it, hash_map_t * hm)
 	it->hm = hm;
 	it->bucket = 0;
 	it->elt = NULL;
+#if HASH_MAP_IT_MOD_DEBUG
+	it->version = hm->version;
+#endif
 }
 
 hash_map_elt_t hash_map_elt_next(hash_map_it_t * it)
@@ -463,6 +493,10 @@ hash_map_elt_t hash_map_elt_next(hash_map_it_t * it)
 	hash_map_elt_t no_elt = { .key = NULL, .val = NULL };
 	chain_elt_t * head;
 	size_t i;
+
+#if HASH_MAP_IT_MOD_DEBUG
+	assert(it->version == it->hm->version);
+#endif
 
 	if (!it->bucket && !it->elt)
 	{
