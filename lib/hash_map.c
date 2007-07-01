@@ -171,7 +171,6 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	Dprintf("%s(%p, %p, %p)\n", __FUNCTION__, hm, k, v);
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
-	size_t ns;
 
 	if (!head)
 	{
@@ -206,7 +205,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	head->elt.key = k;
 	head->elt.val = v;
 
-	if (hm->auto_resize && (ns = next_size(hash_map_size(hm)) > hash_map_bucket_count(hm)))
+	if (hm->auto_resize && next_size(hash_map_size(hm)) > hash_map_bucket_count(hm))
 	{
 		// (safe to ignore failure)
 		(void) hash_map_resize(hm, hash_map_size(hm));
