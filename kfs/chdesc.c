@@ -1048,7 +1048,7 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 		while((bit_changes = hash_map_val_next(&it)))
 			if(chdesc_overlap_check(chdesc, bit_changes->befores->before.desc))
 				if((r = _chdesc_overlap_multiattach(chdesc, bit_changes)) < 0)
-					return 0;
+					return r;
 	}
 
 	// get range of buckets touched by this chdesc
