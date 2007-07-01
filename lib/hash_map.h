@@ -4,7 +4,11 @@
 /* Set to check for illegal hash map modifications during iteration.
  * If hash map iteration code tries to deref bad pointers, try this. */
 /* values: 0 (normal), 1 (debug) */
-#define HASH_MAP_IT_MOD_DEBUG (!NDEBUG)
+#ifndef NDEBUG
+# define HASH_MAP_IT_MOD_DEBUG 1
+#else
+# define HASH_MAP_IT_MOD_DEBUG 0
+#endif
 
 struct hash_map_elt {
 	void * key;
