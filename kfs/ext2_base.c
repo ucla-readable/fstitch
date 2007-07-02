@@ -1601,6 +1601,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	if (f->f_inode.i_size == 0)
 		return INVALID_BLOCK;
 
+	// FIXME: need to do [d]indirect block count decrement, and write it, here!
 	f->f_inode.i_blocks -= info->block_size / 512;
 	r = ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	if (r < 0)
