@@ -2323,7 +2323,7 @@ static int ext2_destroy(LFS_t * lfs)
 
 static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
 {
-	uint32_t block_group, bitoffset, block;
+	uint32_t block_group, offset, block;
 	bdesc_t * bdesc;
 
 	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
@@ -2332,13 +2332,13 @@ static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
 	
 	//Get the group the inode belongs in
 	block_group = (ino - 1) / info->super->s_inodes_per_group;
-	bitoffset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
-	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
+	offset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
+	block = info->groups[block_group].bg_inode_table + (offset >> (10 + info->super->s_log_block_size));
 	bdesc = CALL(info->ubd, read_block, block, 1);
 	if(!bdesc)
 		return -EINVAL;
-	bitoffset &= info->block_size - 1;
-	memcpy(inode, (bdesc->ddesc->data + bitoffset ), sizeof(EXT2_inode_t));
+	offset &= info->block_size - 1;
+	memcpy(inode, (bdesc->ddesc->data + offset ), sizeof(EXT2_inode_t));
 
 	if(!inode)
 		return -ENOENT;
@@ -2363,7 +2363,7 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 
 int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
-	uint32_t block_group, bitoffset, block;
+	uint32_t block_group, offset, block;
 	int r;
 	bdesc_t * bdesc;
 	if (!tail)
@@ -2376,13 +2376,13 @@ int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * in
 	//Get the group the inode belongs in
 	block_group = (ino - 1) / info->super->s_inodes_per_group;
 	
-	bitoffset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
-	block = info->groups[block_group].bg_inode_table + (bitoffset >> (10 + info->super->s_log_block_size));
+	offset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
+	block = info->groups[block_group].bg_inode_table + (offset >> (10 + info->super->s_log_block_size));
 	bdesc = CALL(info->ubd, read_block, block, 1);
 	if(!bdesc)
 		return -ENOENT;
-	bitoffset &= info->block_size - 1;
-	r = chdesc_create_diff_set(bdesc, info->ubd, bitoffset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[bitoffset], inode, tail, befores);
+	offset &= info->block_size - 1;
+	r = chdesc_create_diff_set(bdesc, info->ubd, offset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[offset], inode, tail, befores);
 	if (r < 0)
 		return r;
 	//chdesc_create_diff() returns 0 for "no change"
