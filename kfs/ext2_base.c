@@ -23,10 +23,39 @@
 #define PURPOSE_INDIRECT 2
 #define PURPOSE_DINDIRECT 3
 
+struct ext2_info {
+	BD_t * ubd;
+        EXT2_Super_t * super;
+	EXT2_group_desc_t * groups;
+	hash_map_t * filemap;
+	bdesc_t** gdescs;
+	bdesc_t * super_cache;
+	bdesc_t * bitmap_cache;
+	bdesc_t * inode_cache;
+	uint32_t ngroups, gnum;
+	uint32_t ngroupblocks;
+	uint32_t inode_gdesc;
+	uint16_t block_size, block_descs;
+};
+typedef struct ext2_info ext2_info_t;
+
+struct ext2_fdesc {
+	/* extend struct fdesc */
+	struct fdesc_common * common;
+	struct fdesc_common base;
+	
+	EXT2_inode_t f_inode;
+	uint8_t f_type;
+	inode_t	f_ino;
+	uint32_t f_nopen;
+	uint32_t f_lastblock;
+};
+typedef struct ext2_fdesc ext2_fdesc_t;
+
 static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number);
 static int _ext2_free_block(LFS_t * object, uint32_t block, chdesc_t ** head);
 static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
-static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offset);
+static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t offset);
 static uint32_t ext2_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head);
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
@@ -342,7 +371,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	if (f->f_lastblock != 0)
 		blockno = f->f_lastblock;
 	else
-		blockno = get_file_block(object, (EXT2_File_t *) f, (f->f_inode.i_size) - 1);	
+		blockno = get_file_block(object, (ext2_fdesc_t *) f, (f->f_inode.i_size) - 1);	
 	if(blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
 	lastblock = blockno;
@@ -612,7 +641,7 @@ static uint32_t ext2_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	return (f->f_inode.i_size + info->block_size - 1) / info->block_size;
 }
 
-static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offset)
+static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t offset)
 {
 	Dprintf("EXT2DEBUG: %s %p %d\n", __FUNCTION__, file, offset);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
@@ -675,7 +704,7 @@ static uint32_t get_file_block(LFS_t * object, EXT2_File_t * file, uint32_t offs
 static uint32_t ext2_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	Dprintf("EXT2DEBUG: ext2_get_file_block %p, %u\n", file, offset);
-	return get_file_block(object, (EXT2_File_t *)file, offset);
+	return get_file_block(object, (ext2_fdesc_t *) file, offset);
 }
 
 static int fill_dirent(ext2_info_t * info, const EXT2_Dir_entry_t * dirfile, inode_t ino, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -983,7 +1012,7 @@ static uint16_t dirent_rec_len(uint16_t name_len)
 	return 8 + ((name_len - 1) / 4 + 1) * 4;
 }
 
-static int ext2_write_dirent_extend_set(LFS_t * object, EXT2_File_t * parent,
+static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
                                         EXT2_Dir_entry_t * dirent_exists,
                                         EXT2_Dir_entry_t * dirent_new, uint32_t basep,
                                         chdesc_t ** tail, chdesc_pass_set_t * befores)
@@ -1034,7 +1063,7 @@ static int ext2_write_dirent_extend_set(LFS_t * object, EXT2_File_t * parent,
 	return 0;
 }
 
-static int ext2_write_dirent_set(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * dirent,
+static int ext2_write_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir_entry_t * dirent,
                                  uint32_t basep, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
@@ -1076,7 +1105,7 @@ static int ext2_write_dirent_set(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_
 	return 0;
 }
 
-static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * dirent,
+static int ext2_write_dirent(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir_entry_t * dirent,
 				 uint32_t basep, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
@@ -1084,7 +1113,7 @@ static int ext2_write_dirent(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entr
 	return ext2_write_dirent_set(object, parent, dirent, basep, head, PASS_CHDESC_SET(set));
 }
 
-static int ext2_insert_dirent_set(LFS_t * object, EXT2_File_t * parent, EXT2_Dir_entry_t * new_dirent, chdesc_t ** tail, chdesc_pass_set_t * befores)
+static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir_entry_t * new_dirent, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	Dprintf("EXT2DEBUG: ext2_insert_dirent %s\n", new_dirent->name);
 	const EXT2_Dir_entry_t * entry;
@@ -1226,7 +1255,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 {
 	Dprintf("EXT2DEBUG: ext2_allocate_name %s\n", name);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	EXT2_File_t * parent_file = NULL, * new_file = NULL;
+	ext2_fdesc_t * parent_file = NULL, * new_file = NULL;
 	uint16_t mode;
 	int r;
 	ext2_fdesc_t * ln = (ext2_fdesc_t *) link;
@@ -1593,7 +1622,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
 	int r;
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	EXT2_File_t * f = (EXT2_File_t *)file;
+	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 
 	if (!f || f->f_inode.i_blocks == 0 || f->f_type == TYPE_SYMLINK)
 		return INVALID_BLOCK;

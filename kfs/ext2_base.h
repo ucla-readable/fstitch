@@ -4,9 +4,6 @@
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
 
-/* This file is derived from kfs/josfs_base.h */
-
-
 /*
  * Constants relative to the data blocks
  */
@@ -229,21 +226,6 @@ struct EXT2_inode {
 };
 typedef struct EXT2_inode EXT2_inode_t;
 
-// File Type
-
-struct EXT2_File {
-	struct fdesc_common * common;
-	struct fdesc_common base;
-	
-	EXT2_inode_t f_inode;		 //inode
-	uint8_t f_type;		 //file type
-	inode_t	f_ino;		 //inode number
-	uint32_t f_nopen;
-	uint32_t f_lastblock;
-};
-typedef struct EXT2_File EXT2_File_t;
-typedef struct EXT2_File ext2_fdesc_t;
-
 /*
  * The new version of the directory entry.  Since EXT2 structures are
  * stored in intel byte order, and the name_len field could never be
@@ -258,23 +240,6 @@ struct EXT2_Dir_entry {
         char     name[EXT2_NAME_LEN];    /* File name */
 };
 typedef struct EXT2_Dir_entry EXT2_Dir_entry_t;
-
-struct ext2_info
-{
-	BD_t * ubd;
-        EXT2_Super_t * super;
-	EXT2_group_desc_t * groups;
-	hash_map_t * filemap;
-	bdesc_t** gdescs;
-	bdesc_t * super_cache;
-	bdesc_t * bitmap_cache;
-	bdesc_t * inode_cache;
-	uint32_t ngroups, gnum;
-	uint32_t ngroupblocks;
-	uint32_t inode_gdesc;
-	uint16_t block_size, block_descs;
-};
-typedef struct ext2_info ext2_info_t;
 
 LFS_t * ext2(BD_t * block_device);
 
