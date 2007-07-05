@@ -889,7 +889,7 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 
 /* CRUCIAL NOTE: does *not* check whether the chdescs are on the same ddesc */
 /* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
-int chdesc_overlap_check(chdesc_t * a, chdesc_t * b)
+int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
 {
 	uint16_t a_start, a_len;
 	uint16_t b_start, b_len;

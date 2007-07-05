@@ -206,7 +206,7 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
 
 /* check whether two change descriptors overlap, even on different blocks */
-int chdesc_overlap_check(chdesc_t * a, chdesc_t * b);
+int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b);
 
 /* rewrite a byte change descriptor, if it is safe to do so */
 int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data);
