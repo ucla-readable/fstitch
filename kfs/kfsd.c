@@ -227,8 +227,12 @@ module_param(nwbblocks, int, 0);
 MODULE_PARM_DESC(nwbblocks, "The number of write-back blocks to use");
 
 char * linux_device = NULL;
+module_param_named(device, linux_device, charp, 0);
+MODULE_PARM_DESC(device, "The device to attach linux_bd to");
+
+/* provide reverse compatible linux_device parameter */
 module_param(linux_device, charp, 0);
-MODULE_PARM_DESC(linux_device, "The device to attach linux_bd to");
+MODULE_PARM_DESC(linux_device, "Alias for device");
 
 static int kfsd_is_shutdown = 0;
 
