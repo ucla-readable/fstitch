@@ -630,7 +630,8 @@ static uint32_t count_bdesc_external_afters(const bdesc_t * block)
 	const chdesc_t * c;
 	uint32_t n = 0;
 	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
-		n += count_chdesc_external_afters(c, block);
+		if(!(c->flags & CHDESC_INFLIGHT))
+			n += count_chdesc_external_afters(c, block);
 	return n;
 }
 
@@ -674,7 +675,7 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 	}
 }
 
-/* propagate a depend add through a noop before,
+/* propagate a depend add/remove through a noop before,
  * to increment extern_after_count for before's block */
 static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_before, const chdesc_t * after, bool add)
 {
@@ -690,7 +691,7 @@ static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_befor
 			/* XXX: stack usage */
 			propagate_extern_after_change_thru_noop_before(before, after, add);
 		}
-		else if(chdesc_is_external(after, before->block))
+		else if(chdesc_is_external(after, before->block) && !(before->flags & CHDESC_INFLIGHT))
 		{
 			if(add)
 			{
@@ -702,6 +703,42 @@ static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_befor
 				assert(before->block->ddesc->extern_after_count);
 				before->block->ddesc->extern_after_count--;
 			}
+		}
+	}
+}
+
+/* propagate extern_after_count changes for a depend add/remove */
+static void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, bool add)
+{
+	if(!after->block)
+	{
+		if(before->block)
+			propagate_extern_after_change_thru_noop_after(after, before->block, add);
+		else
+		{
+			/* Note: if we allow adding/removing a dependency from data->NOOP
+			 * to NOOP->data, propagate_extern_after_change_thru_noop_after()
+			 * should also propagate thru before noops to before blocks.
+			 * It seems likely that the propagate_extern_after_*() functions
+			 * should be merged into a single interface function that handles
+			 * all data/noop -before and -after combinations
+			 * TODO: Can move_befores_for_merge() remove such dependencies? */
+			assert(!after->afters || !before->befores);
+		}
+	}
+	else if(!before->block)
+		propagate_extern_after_change_thru_noop_before(before, after, add);
+	else if(chdesc_is_external(after, before->block))
+	{
+		if(add)
+		{
+			before->block->ddesc->extern_after_count++;
+			assert(before->block->ddesc->extern_after_count);
+		}
+		else
+		{
+			assert(before->block->ddesc->extern_after_count);
+			before->block->ddesc->extern_after_count--;
 		}
 	}
 }
@@ -723,28 +760,10 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 	if(!after->owner && (before_level > after_prev_level || after_prev_level == BDLEVEL_NONE))
 			propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
-	if(!after->block)
-	{
-		if(before->block)
-			propagate_extern_after_change_thru_noop_after(after, before->block, 1);
-		else
-		{
-			/* Note: if we allow adding a dependency from data->NOOP
-			 * to NOOP->data, propagate_extern_after_change_thru_noop_after()
-			 * should also propagate thru before noops to before blocks.
-			 * It seems likely that the propagate_extern_after_*() functions
-			 * should be merged into a single interface function that handles
-			 * all data/noop -before and -after combinations */
-			assert(!after->afters || !before->befores);
-		}
-	}
-	else if(!before->block)
-		propagate_extern_after_change_thru_noop_before(before, after, 1);
-	else if(chdesc_is_external(after, before->block))
-	{
-		before->block->ddesc->extern_after_count++;
-		assert(before->block->ddesc->extern_after_count);
-	}
+	/* an inflight chdesc does not contribute to its block's
+	 * extern_after_count */
+	if(!(before->flags & CHDESC_INFLIGHT))
+		propagate_extern_after_change(after, before, 1);
 #endif
 }
 
@@ -764,27 +783,9 @@ static void propagate_depend_remove(chdesc_t * after, chdesc_t * before)
 	if(!after->owner && (before_level == after_prev_level && !after->nbefores[before_level]))
 		propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
-	if(!after->block)
-	{
-		if(before->block)
-			propagate_extern_after_change_thru_noop_after(after, before->block, 0);
-		else
-		{
-			/* Note: if we remove a dependency from data->NOOP to NOOP->data,
-			 * propagate_extern_after_change_thru_noop_after() should
-			 * also propagate thru noops to before blocks, as in
-			 * propagate_depend_add().
-			 * TODO: Can move_befores_for_merge() remove such dependencies? */
-			assert(!after->afters || !before->befores);
-		}
-	}
-	else if(!before->block)
-		propagate_extern_after_change_thru_noop_before(before, after, 0);
-	else if(chdesc_is_external(after, before->block))
-	{
-		assert(before->block->ddesc->extern_after_count);
-		before->block->ddesc->extern_after_count--;
-	}
+	/* extern_after_count is pre-decremented when a chdesc goes inflight */
+	if(!(before->flags & CHDESC_INFLIGHT))
+		propagate_extern_after_change(after, before, 0);
 #endif
 }
 
@@ -832,6 +833,11 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 		if(after->type != NOOP || after->afters)
 			return -EINVAL;
 	}
+
+	/* the block cannot be written until 'before' is on disk, so an explicit
+	 * dependency from a same-block chdesc is unnecessary */
+	if(after->block && before->block && after->block->ddesc == before->block->ddesc && (before->flags & CHDESC_INFLIGHT))
+		return 0;
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
@@ -1669,6 +1675,8 @@ static void empty_bit_changes(bdesc_t * block)
 }
 
 /* Merge all RBs on 'block' into a single NRB */
+/* TODO: if this function ends up being heavily used during runtime,
+ * it's two dependency move algorithms can be much simpler. */
 static void merge_rbs(bdesc_t * block)
 {
 # if CHDESC_MERGE_RBS_NRB_STATS
@@ -1741,6 +1749,8 @@ static void merge_rbs(bdesc_t * block)
 		{
 			chdesc_t * before = dep->before.desc;
 			next = dep->before.next;
+			if(before->flags & CHDESC_INFLIGHT)
+				continue;
 			if(!before->block)
 				propagate_extern_after_change_thru_noop_before(before, chdesc, 0);
 			else if(chdesc_is_external(chdesc, before->block))
@@ -1750,7 +1760,6 @@ static void merge_rbs(bdesc_t * block)
 			}
 			else
 			{
-				assert(!(before->flags & CHDESC_INFLIGHT));
 				/* intra-block noop dependencies, other than noop->merger, are
 				 * unnecessary & can lead to noop path blowup. Remove them. */
 				chdesc_dep_remove(dep);
@@ -2550,6 +2559,28 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 }
 #endif
 
+#if CHDESC_BIT_MERGE_OVERLAP
+/* Returns whether chdesc has in-ram befores */
+static bool has_inram_befores(const chdesc_t * chdesc)
+{
+	chdepdesc_t * dep;
+	for(dep = chdesc->befores; dep; dep = dep->before.next)
+		if(!(dep->before.desc->flags & CHDESC_INFLIGHT))
+			return 1;
+	return 0;
+}
+
+/* Returns whether chdesc is the only chdesc on its ddesc and in ram */
+static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
+{
+	chdesc_t * c;
+	for(c = chdesc->block->ddesc->all_changes; c; c = c->ddesc_next)
+		if(c != chdesc && !(c->flags & CHDESC_INFLIGHT))
+			return 0;
+	return 1;
+}
+#endif
+
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
 {
 	//uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
@@ -2581,9 +2612,9 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
 	}
 	
-#if CHDESC_BIT_MERGE_OVERLAP	
+#if CHDESC_BIT_MERGE_OVERLAP
 	bit_changes = chdesc_bit_changes(block, offset);
-	if(bit_changes)
+	if(bit_changes && has_inram_befores(bit_changes))
 	{
 		r = chdesc_create_bit_merge_overlap(owner, xor, bit_changes, head);
 		if(r < 0)
@@ -2592,7 +2623,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 			return 0;
 	}
 # if CHDESC_NRB
-	else if(block->ddesc->all_changes == block->ddesc->nrb && !block->ddesc->nrb->ddesc_next && bit_merge_overlap_ok_head(*head, block->ddesc->nrb))
+	else if(block->ddesc->nrb && is_sole_inram_chdesc(block->ddesc->nrb) && bit_merge_overlap_ok_head(*head, block->ddesc->nrb))
 	{
 		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
 		DEFINE_CHDESC_PASS_SET(set, 1, NULL);
@@ -2987,6 +3018,36 @@ int chdesc_rollback(chdesc_t * chdesc)
 	chdesc->flags |= CHDESC_ROLLBACK;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ROLLBACK, chdesc);
 	return 0;
+}
+
+void chdesc_set_inflight(chdesc_t * chdesc)
+{
+	uint16_t owner_level = chdesc_level(chdesc);
+	chdepdesc_t * dep;
+	
+	assert(!(chdesc->flags & CHDESC_INFLIGHT));
+	assert(chdesc->type != NOOP);
+	
+#if BDESC_EXTERN_AFTER_COUNT
+	/* Pre-decrement extern_after_count to give a more useful view for
+	 * optimizations (eg allow a new NRB on chdesc's block).
+	 * propagate_depend_remove() takes this pre-decrement into account. */
+	for(dep = chdesc->afters; dep; dep = dep->after.next)
+		propagate_extern_after_change(dep->after.desc, chdesc, 0);
+#endif
+	
+#if CHDESC_NRB
+	/* New chdescs cannot be merged into an inflight chdesc so allow
+	 * for a new NRB */
+	if(chdesc == chdesc->block->ddesc->nrb)
+		(void) chdesc_weak_release(&chdesc->block->ddesc->nrb, 0);
+#endif
+	
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_INFLIGHT);
+	chdesc->flags |= CHDESC_INFLIGHT;
+	
+	/* in-flight chdescs +1 their level to prevent afters from following */
+	chdesc_propagate_level_change(chdesc, owner_level, chdesc_level(chdesc));
 }
 
 static void chdesc_weak_collect(chdesc_t * chdesc)

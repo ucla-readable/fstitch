@@ -348,21 +348,7 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(scan->owner == bd)
-		{
-			uint16_t level = chdesc_level(scan);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, scan, CHDESC_INFLIGHT);
-			scan->flags |= CHDESC_INFLIGHT;
-			/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
-			chdesc_propagate_level_change(scan, level, chdesc_level(scan));
-#if CHDESC_NRB
-			/* if this chdesc was the NRB for the block, we allow a
-			 * new NRB at this point because merging into this
-			 * chdesc is not allowed while it is in flight (and
-			 * merges are attempted to the block's NRB chdesc) */
-			if(scan == block->ddesc->nrb)
-				chdesc_weak_release(&block->ddesc->nrb, 0);
-#endif
-		}
+			chdesc_set_inflight(scan);
 		else if(!chdesc_is_rollbackable(scan))
 			fprintf(stderr, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
 	

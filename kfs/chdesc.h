@@ -223,6 +223,9 @@ void chdesc_dep_remove(chdepdesc_t * dep);
 int chdesc_apply(chdesc_t * chdesc);
 int chdesc_rollback(chdesc_t * chdesc);
 
+/* mark chdesc as inflight */
+void chdesc_set_inflight(chdesc_t * chdesc);
+
 /* satisfy a change descriptor, i.e. remove it from all others that depend on it and add it to the list of written chdescs */
 int chdesc_satisfy(chdesc_t ** chdesc);
 
