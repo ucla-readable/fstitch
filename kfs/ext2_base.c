@@ -11,6 +11,8 @@
 
 #define EXT2_BASE_DEBUG 0
 
+#define ROUND_ROBIN_ALLOC 0
+
 #if EXT2_BASE_DEBUG
 #define Dprintf(x...) printf(x)
 #else
@@ -36,6 +38,11 @@ struct ext2_info {
 	uint32_t ngroupblocks;
 	uint32_t inode_gdesc;
 	uint16_t block_size, block_descs;
+#if ROUND_ROBIN_ALLOC
+	/* the last block number allocated for each of file
+	 * data, directory data, and [d]indirect pointers */
+	uint32_t last_fblock, last_dblock, last_iblock;
+#endif
 };
 typedef struct ext2_info ext2_info_t;
 
@@ -48,7 +55,9 @@ struct ext2_fdesc {
 	uint8_t f_type;
 	inode_t	f_ino;
 	uint32_t f_nopen;
+#if !ROUND_ROBIN_ALLOC
 	uint32_t f_lastblock;
+#endif
 };
 typedef struct ext2_fdesc ext2_fdesc_t;
 
@@ -145,6 +154,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 	return -ENOSPC;
 }
 
+#if !ROUND_ROBIN_ALLOC
 static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
@@ -181,6 +191,7 @@ static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 		return EXT2_USED;
 	return EXT2_FREE;
 }
+#endif
 
 static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
 {
@@ -341,13 +352,16 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	uint32_t lastblock = 0;
-	uint32_t blockno, block_group;
+	uint32_t blockno, lastblock = 0;
+#if !ROUND_ROBIN_ALLOC
+	uint32_t block_group;
+#endif
 	int r;
 	
 	if(!tail || !f)
 		return INVALID_BLOCK;
 	
+#if !ROUND_ROBIN_ALLOC
 	if(f->f_inode.i_size == 0 || purpose)
 		goto inode_search;
 	
@@ -356,7 +370,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	if(f->f_lastblock != 0)
 		blockno = f->f_lastblock;
 	else
-		blockno = get_file_block(object, (ext2_fdesc_t *) f, (f->f_inode.i_size) - 1);	
+		blockno = get_file_block(object, (ext2_fdesc_t *) f, f->f_inode.i_size - 1);	
 	if(blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
 	lastblock = blockno;
@@ -378,6 +392,14 @@ inode_search:
 	else if(purpose)
 		block_group = (block_group + 1) % info->ngroups;
 	blockno = block_group * info->super->s_blocks_per_group;
+#else
+	if(purpose == PURPOSE_FILEDATA)
+		blockno = info->last_fblock;
+	else if(purpose == PURPOSE_DIRDATA)
+		blockno = info->last_dblock;
+	else
+		blockno = info->last_iblock;
+#endif
 	//FIXME this should be slightly smarter
 	while(blockno < info->super->s_blocks_count)
 	{
@@ -398,8 +420,18 @@ claim_block:
 		ext2_write_block_bitmap(object, blockno, 0, tail);
 		return INVALID_BLOCK;
 	}
+#if !ROUND_ROBIN_ALLOC
 	if(purpose == PURPOSE_FILEDATA || purpose == PURPOSE_DIRDATA)
 		f->f_lastblock = blockno;
+#else
+	lastblock = (blockno + 1) % info->super->s_blocks_count;
+	if(purpose == PURPOSE_FILEDATA)
+		info->last_fblock = lastblock;
+	else if(purpose == PURPOSE_DIRDATA)
+		info->last_fblock = lastblock;
+	else
+		info->last_iblock = lastblock;
+#endif
 	return blockno;
 }
 
@@ -441,7 +473,9 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	fd->base.parent = INODE_NONE;
 	fd->f_ino = ino;
 	fd->f_nopen = 1;
+#if !ROUND_ROBIN_ALLOC
 	fd->f_lastblock = 0;
+#endif
 	
 	r = ext2_get_inode(info, ino, &fd->f_inode);
 	if(r < 0)
@@ -1298,7 +1332,9 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 		new_file->common = &new_file->base;
 		new_file->base.parent = INODE_NONE;
 		new_file->f_nopen = 1;
+#if !ROUND_ROBIN_ALLOC
 		new_file->f_lastblock = 0;
+#endif
 		new_file->f_ino = ino;
 		new_file->f_type = type;
 
@@ -2485,6 +2521,11 @@ static int ext2_load_super(LFS_t * lfs)
 	info->groups = NULL;
 	info->gnum = INVALID_BLOCK;	
 	info->inode_gdesc = INVALID_BLOCK;	
+#if ROUND_ROBIN_ALLOC
+	info->last_fblock = 0;
+	info->last_iblock = 0;
+	info->last_dblock = 0;
+#endif
 	
 	info->super_cache = CALL(info->ubd, read_block, 0, 1);
 	if (info->super_cache == NULL)
@@ -2495,6 +2536,14 @@ static int ext2_load_super(LFS_t * lfs)
 	bdesc_retain(info->super_cache);
 	info->super = malloc(sizeof(struct EXT2_Super));
 	memcpy(info->super, info->super_cache->ddesc->data + 1024, sizeof(struct EXT2_Super));
+
+#if ROUND_ROBIN_ALLOC
+	/* start file data at the beginning, indirect blocks halfway through,
+	 * and directory data one quarter from the end of the file system */
+	info->last_fblock = 0;
+	info->last_iblock = info->super->s_blocks_count / 2;
+	info->last_dblock = 3 * (info->super->s_blocks_count / 4);
+#endif
 	
 	//now load the gdescs
 	uint32_t block, i;
