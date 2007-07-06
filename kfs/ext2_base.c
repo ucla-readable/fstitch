@@ -62,6 +62,7 @@ struct ext2_fdesc {
 typedef struct ext2_fdesc ext2_fdesc_t;
 
 /* some prototypes */
+static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno);
 static int _ext2_free_block(LFS_t * object, uint32_t block, chdesc_t ** head);
 static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t offset);
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
@@ -101,12 +102,19 @@ static int check_super(LFS_t * object)
 	return 0;
 }
 
-/* FIXME: start at *blockno, not *blockno - *blockno % sizeof(block_group) */
+/* When round robin allocation is enabled, *blockno is used as the minimum block
+ * number to allocate (unless we wrap around the end of the file system).
+ * Otherwise, it is used only to determine which block group to look at first.
+ * This is merely an optimization: unless round robin allocation is enabled, we
+ * will never pass anything but the first block of a block group anyway. */
 static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
 	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	uint32_t start_group, block_group;
+#if ROUND_ROBIN_ALLOC
+	uint32_t minimum, offset, offset_bits;
+#endif
 	
 	if(*blockno < info->super->s_first_data_block)
 	{
@@ -121,6 +129,11 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 	
 	start_group = *blockno / info->super->s_blocks_per_group;
 	block_group = start_group;
+#if ROUND_ROBIN_ALLOC
+	minimum = *blockno % info->super->s_blocks_per_group;
+	offset = minimum / (sizeof(unsigned long) * 8);
+	offset_bits = offset * sizeof(unsigned long) * 8;
+#endif
 	do {
 		bdesc_t * bitmap;
 		const unsigned long * array;
@@ -141,7 +154,38 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		}
 		
 		array = (const unsigned long *) info->bitmap_cache->ddesc->data;
+#if ROUND_ROBIN_ALLOC
+		/* adjust array for offset */
+		array = &array[offset];
+	retry:
+		index = find_first_zero_bit(array, info->super->s_blocks_per_group - offset_bits);
+		/* adjust result for offset */
+		index += offset_bits;
+		
+		if(index < minimum)
+		{
+			/* one of the earlier bits in the same 32-bit
+			 * word as the first allowed bit is zero... but
+			 * we must choose a later bit than that */
+			uint32_t block, limit = (*blockno + sizeof(unsigned long) * 8);
+			limit &= ~(sizeof(unsigned long) * 8 - 1);
+			for(block = *blockno; block < limit; block++)
+				if(ext2_read_block_bitmap(object, block) == EXT2_FREE)
+				{
+					*blockno = block;
+					return EXT2_FREE;
+				}
+			/* found nothing, go to next 32-bit word and retry */
+			array = &array[1];
+			offset++;
+			offset_bits += sizeof(unsigned long) * 8;
+			minimum = offset_bits;
+			goto retry;
+		}
+#else
 		index = find_first_zero_bit(array, info->super->s_blocks_per_group);
+#endif
+		
 		if(index < info->super->s_blocks_per_group)
 		{
 			*blockno = block_group * info->super->s_blocks_per_group + index;
@@ -154,7 +198,6 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 	return -ENOSPC;
 }
 
-#if !ROUND_ROBIN_ALLOC
 static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
@@ -191,7 +234,6 @@ static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 		return EXT2_USED;
 	return EXT2_FREE;
 }
-#endif
 
 static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
 {
