@@ -70,7 +70,7 @@ thetags::
 		| grep -v ./obj/ | grep -v ~$ | grep -v ./TAGS | grep -v ./tags \
 		| $(CTAGS) $(CTAGSFLAGS) -L - -e
 # TODO: can we give these targets more correct dependencies
-TAGDEPS := $(BASE_OBJDIR)/fs/ufs.img $(BASE_OBJDIR)/fs/ext2.img $(BIN)
+TAGDEPS := $(BIN)
 tags: $(TAGDEPS)
 	@echo + ctags [vi]
 	$(V)find . -type f \

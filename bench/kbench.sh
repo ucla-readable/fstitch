@@ -93,7 +93,7 @@ function max() {
 }
 
 function usage() {
-	echo "Usage: `basename \"$0\"` <MAKE_USER> <ufs|ext2> [NRUNS=1]"
+	echo "Usage: `basename \"$0\"` <MAKE_USER> <ufs|ext2|ext2-small> [NRUNS=1]"
 	echo "       where MAKE_USER is the name of the user for running make"
 }
 
@@ -116,6 +116,8 @@ FSIMG=
 if [ "$2" == "ufs" ]; then
 	FSIMG=obj/fs/ufs.img
 elif [ "$2" == "ext2" ]; then
+	FSIMG=obj/fs/ext2-10G.img
+elif [ "$2" == "ext2-small" ]; then
 	FSIMG=obj/fs/ext2.img
 elif [ "$2" != "${2#=}" ]; then
 	FSIMG="${2#=}"
@@ -123,6 +125,8 @@ else
 	usage 2>&1
 	exit 1
 fi
+
+[ -f "$FSIMG" ] || make "$FSIMG" || exit 1
 
 if [ $# -ge 3 ]
 then
