@@ -398,7 +398,8 @@ claim_block:
 		ext2_write_block_bitmap(object, blockno, 0, tail);
 		return INVALID_BLOCK;
 	}
-	f->f_lastblock = blockno;
+	if(purpose == PURPOSE_FILEDATA || purpose == PURPOSE_DIRDATA)
+		f->f_lastblock = blockno;
 	return blockno;
 }
 
