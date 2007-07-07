@@ -833,7 +833,11 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 		if(after->type != NOOP || after->afters)
 			return -EINVAL;
 	}
-
+	
+	/* no need to actually create a dependency on a written chdesc */
+	if(before->flags & CHDESC_WRITTEN)
+		return 0;
+	
 	/* the block cannot be written until 'before' is on disk, so an explicit
 	 * dependency from a same-block chdesc is unnecessary */
 	if(after->block && before->block && after->block->ddesc == before->block->ddesc && (before->flags & CHDESC_INFLIGHT))
