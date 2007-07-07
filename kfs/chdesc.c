@@ -823,7 +823,7 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 }
 
 /* add a dependency between change descriptors without checking for cycles */
-static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
+static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 {
 	chdepdesc_t * dep;
 	
@@ -832,6 +832,20 @@ static int chdesc_add_depend_fast(chdesc_t * after, chdesc_t * before)
 		assert(after->type == NOOP && !after->afters); /* quickly catch bugs for now */
 		if(after->type != NOOP || after->afters)
 			return -EINVAL;
+	}
+	
+	/* in-flight and on-disk chdescs cannot (generally) safely gain befores */
+	if(after->flags & CHDESC_INFLIGHT)
+	{
+		printf("%s(): (%s:%d): Adding before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
+		return -EINVAL;
+	}
+	if(after->flags & CHDESC_WRITTEN)
+	{
+		if(before->flags & CHDESC_WRITTEN)
+			return 0;
+		printf("%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
+		return -EINVAL;
 	}
 	
 	/* no need to actually create a dependency on a written chdesc */
@@ -1317,7 +1331,7 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 			/* it is convenient to allow NULL and written chdescs,
 			   so make sure here to not add these as befores: */
 			if(array[i] && !(array[i]->flags & CHDESC_WRITTEN))
-				if((r = chdesc_add_depend_fast(chdesc, array[i])) < 0)
+				if((r = chdesc_add_depend_no_cycles(chdesc, array[i])) < 0)
 				{
 					chdesc_destroy(&chdesc);
 					return r;
@@ -1476,7 +1490,7 @@ static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, 
 	chdesc_t * before = depbefore->before.desc;
 	int r;
 	chdesc_dep_remove(depbefore);
-	r = chdesc_add_depend_fast(new_after, before);
+	r = chdesc_add_depend_no_cycles(new_after, before);
 	assert(r >= 0); /* failure should be impossible */
 }
 
@@ -1594,7 +1608,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	{
 		if(!root_chdesc_stays)
 		{
-			int r = chdesc_add_depend_fast(merge_target, chdesc);
+			int r = chdesc_add_depend_no_cycles(merge_target, chdesc);
 			assert(r >= 0);
 		}
 		else
@@ -2279,7 +2293,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		for(i = 0; i < size; i++)
 		{
 			if(array[i] && !((array[i])->flags & CHDESC_WRITTEN))
-				if((r = chdesc_add_depend_fast(chdesc, array[i])) < 0)
+				if((r = chdesc_add_depend_no_cycles(chdesc, array[i])) < 0)
 				{
 					chdesc_destroy(&chdesc);
 					return r;
@@ -2686,7 +2700,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		r = -ENOMEM;
 		goto error;
 	}
-	if((r = chdesc_add_depend_fast(bit_changes, chdesc)) < 0)
+	if((r = chdesc_add_depend_no_cycles(bit_changes, chdesc)) < 0)
 		goto error;
 	
 	/* make sure it is after upon any pre-existing chdescs */
@@ -2696,7 +2710,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	/* this is a new chdesc, so we don't need to check for loops.
 	 * but we should check to make sure head has not already been written. */
 	if(*head && !((*head)->flags & CHDESC_WRITTEN))
-		if((r = chdesc_add_depend_fast(chdesc, *head)) < 0)
+		if((r = chdesc_add_depend_no_cycles(chdesc, *head)) < 0)
 			goto error;
 	
 	/* make sure it applies cleanly */
@@ -2856,19 +2870,6 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 		return 0;
 	}
 	
-	/* make sure we're not fiddling with chdescs that are already written */
-	if(after->flags & CHDESC_WRITTEN)
-	{
-		if(before->flags & CHDESC_WRITTEN)
-			return 0;
-		printf("%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
-		return -EINVAL;
-	}
-	if(before->flags & CHDESC_WRITTEN)
-		return 0;
-	if(after->flags & CHDESC_INFLIGHT)
-		printf("%s(): (%s:%d): Adding non-written before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
-	
 	/* avoid creating a dependency loop */
 #if CHDESC_CYCLE_CHECK
 	if(after == before || chdesc_has_before(before, after))
@@ -2881,7 +2882,7 @@ int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
 	chdesc_unmark_graph(before);
 #endif
 	
-	return chdesc_add_depend_fast(after, before);
+	return chdesc_add_depend_no_cycles(after, before);
 }
 
 void chdesc_dep_remove(chdepdesc_t * dep)
