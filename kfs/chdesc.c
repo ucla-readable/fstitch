@@ -1691,7 +1691,7 @@ static void clear_bit_changes(bdesc_t * block)
 		hash_map_it_init(&it, block->ddesc->bit_changes);
 	}
 	/* assert that a NULL val meant end of the map and not a NULL val entry */
-	assert(!hash_map_empty(block->ddesc->bit_changes));
+	assert(hash_map_empty(block->ddesc->bit_changes));
 }
 
 /* Merge all RBs on 'block' into a single NRB */
