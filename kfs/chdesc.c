@@ -1793,6 +1793,20 @@ static void merge_rbs(bdesc_t * block)
 		chdesc_unlink_all_changes(chdesc);
 		if(chdesc->type == BYTE)
 			chdesc_free_byte_data(chdesc);
+		else if(chdesc->type == BIT)
+		{
+			chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->bit.offset);
+			chdepdesc_t * dep;
+			if(bit_changes)
+				for(dep = bit_changes->befores; dep; dep = dep->before.next)
+				{
+					if(dep->before.desc == chdesc)
+					{
+						chdesc_dep_remove(dep);
+						break;
+					}
+				}
+		}
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "rb->nrb mergee");
 		account_nchdescs_convert(chdesc->type, NOOP);
