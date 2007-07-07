@@ -1658,7 +1658,7 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 }
 
 /* Remove all block bit_changes befores */
-static void empty_bit_changes(bdesc_t * block)
+static void clear_bit_changes(bdesc_t * block)
 {
 	hash_map_it_t it;
 	chdesc_t * chdesc;
@@ -1672,6 +1672,8 @@ static void empty_bit_changes(bdesc_t * block)
 		 * but it may be more efficient to not have to re-init... */
 		hash_map_it_init(&it, block->ddesc->bit_changes);
 	}
+	/* assert that a NULL val meant end of the map and not a NULL val entry */
+	assert(!hash_map_empty(block->ddesc->bit_changes));
 }
 
 /* Merge all RBs on 'block' into a single NRB */
@@ -1727,18 +1729,17 @@ static void merge_rbs(bdesc_t * block)
 	r = chdesc_weak_retain(merger, &block->ddesc->nrb, NULL, NULL);
 	assert(r >= 0);
 	//account_update(&act_nnrb, 1);
+
+	/* ensure merger is in overlaps (to complete NRB construction) and remove
+	 * all bit overlaps (to complete NRB construction and for non-mergers) */
+	clear_bit_changes(block);
+	chdesc_unlink_overlap(merger);
+	chdesc_link_overlap(merger, block->ddesc);
 	
 	/* convert non-merger data chdescs into noops so that pointers to them
 	 * remain valid.
 	 * TODO: could we destroy the noops with no afters after the runloop? */
-
-	/* first: remove bit overlaps and ensure merger is in overlaps to complete NRB construction. */
-	empty_bit_changes(block);
-	chdesc_unlink_overlap(merger);
-	chdesc_link_overlap(merger, block->ddesc);
-
-	/* second: convert data chdescs into noops
-	 * part a: unpropagate extern after counts (no more data chdesc afters)
+	/* part a: unpropagate extern after counts (no more data chdesc afters)
 	 * (do before rest of conversion to correctly (not) recurse) */
 	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 	{
@@ -1766,7 +1767,7 @@ static void merge_rbs(bdesc_t * block)
 			}
 		}
 	}
-	/* second, part b: convert into noops */
+	/* parb b: convert into noops */
 	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = next)
 	{
 		uint16_t level;
@@ -1793,20 +1794,6 @@ static void merge_rbs(bdesc_t * block)
 		chdesc_unlink_all_changes(chdesc);
 		if(chdesc->type == BYTE)
 			chdesc_free_byte_data(chdesc);
-		else if(chdesc->type == BIT)
-		{
-			chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->bit.offset);
-			chdepdesc_t * dep;
-			if(bit_changes)
-				for(dep = bit_changes->befores; dep; dep = dep->before.next)
-				{
-					if(dep->before.desc == chdesc)
-					{
-						chdesc_dep_remove(dep);
-						break;
-					}
-				}
-		}
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "rb->nrb mergee");
 		account_nchdescs_convert(chdesc->type, NOOP);
@@ -3137,17 +3124,14 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	
 	chdesc_weak_collect(*chdesc);
 	
-	if((*chdesc)->type == NOOP)
+	if((*chdesc)->flags & CHDESC_BIT_NOOP)
 	{
-		if((*chdesc)->flags & CHDESC_BIT_NOOP)
-		{
-			assert((*chdesc)->noop.bit_changes);
-			/* it should already be NULL from the weak reference */
-			assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
-			hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, *chdesc, CHDESC_BIT_NOOP);
-			(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
-		}
+		assert((*chdesc)->noop.bit_changes);
+		/* it should already be NULL from the weak reference */
+		assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
+		hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, *chdesc, CHDESC_BIT_NOOP);
+		(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
 	}
 	
 	*chdesc = NULL;
@@ -3277,6 +3261,16 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	chdesc_unlink_all_changes(*chdesc);
 	
 	chdesc_weak_collect(*chdesc);
+	
+	if((*chdesc)->flags & CHDESC_BIT_NOOP)
+	{
+		assert((*chdesc)->noop.bit_changes);
+		/* it should already be NULL from the weak reference */
+		assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
+		hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, *chdesc, CHDESC_BIT_NOOP);
+		(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
+	}
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, *chdesc);
 	
