@@ -546,10 +546,7 @@ hash_map_elt_t hash_map_elt_next(hash_map_it_t * it)
 
 void * hash_map_val_next(hash_map_it_t * it)
 {
-	hash_map_elt_t elt = hash_map_elt_next(it);
-	if(elt.key)
-		return elt.val;
-	return NULL;
+	return hash_map_elt_next(it).val;
 }
 
 
