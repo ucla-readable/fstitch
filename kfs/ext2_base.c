@@ -470,7 +470,7 @@ claim_block:
 	if(purpose == PURPOSE_FILEDATA)
 		info->last_fblock = lastblock;
 	else if(purpose == PURPOSE_DIRDATA)
-		info->last_fblock = lastblock;
+		info->last_dblock = lastblock;
 	else
 		info->last_iblock = lastblock;
 #endif

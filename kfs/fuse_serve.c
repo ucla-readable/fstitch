@@ -827,7 +827,6 @@ static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_n
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
 	assert(!r);
-	
 }
 
 static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_name)
