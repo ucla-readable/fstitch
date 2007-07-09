@@ -63,7 +63,33 @@ size_t hash_map_bucket_count(const hash_map_t * hm);
 int    hash_map_resize(hash_map_t * hm, size_t n);
 
 
-// Iteration
+// Iteration (current)
+
+struct hash_map_it2 {
+	void * key; // key of the current map entry
+	void * val; // value of the current map entry
+	struct {
+		hash_map_t * hm;
+		size_t next_bucket;
+		chain_elt_t * next_elt;
+#if HASH_MAP_IT_MOD_DEBUG
+		size_t loose_version;
+#endif
+	} internal;
+};
+typedef struct hash_map_it2 hash_map_it2_t;
+
+hash_map_it2_t hash_map_it2_create(hash_map_t * hm);
+// Iterate through the hash map values using it.
+// - Returns false once the end of the hash map is reached.
+// - Behavior is undefined if you begin iterating, then insert an element,
+//   resize the map, or delete the next element, and then continue iterating
+//   using the old iterator. (Define HASH_MAP_IT_MOD_DEBUG to detect some
+//   cases.)
+bool hash_map_it2_next(hash_map_it2_t * it);
+
+
+// Iteration (deprecated)
 
 struct hash_map_it {
 	hash_map_t * hm;

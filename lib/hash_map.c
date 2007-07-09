@@ -38,7 +38,8 @@ struct hash_map {
 	bool auto_resize;
 	vector_t * tbl;
 #if HASH_MAP_IT_MOD_DEBUG
-	size_t version;
+	size_t version; // Incremented for every change
+	size_t loose_version; // Incremented for inserts and resizes (not removes)
 #endif
 };
 
@@ -115,6 +116,7 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 	}
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version = 0;
+	hm->loose_version = 0;
 #endif
 
 	return hm;
@@ -194,6 +196,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 			existing_elt->elt.val = v;
 #if HASH_MAP_IT_MOD_DEBUG
 			hm->version++;
+			hm->loose_version++;
 #endif
 			return 1;
 		}
@@ -215,6 +218,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	head->elt.val = v;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
+	hm->loose_version++;
 #endif
 
 	if (hm->auto_resize && next_size(hash_map_size(hm)) > hash_map_bucket_count(hm))
@@ -246,6 +250,7 @@ static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 	hm->size++;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
+	hm->loose_version++;
 #endif
 }
 
@@ -277,6 +282,7 @@ static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 	hm->size--;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
+	/* do not update hm->loose_version */
 #endif
 
 	return k_chain;
@@ -358,6 +364,7 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 	vector_elt_set(hm->tbl, newk_elt_num, elt);
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
+	hm->loose_version++;
 #endif
 
 	return 0;
@@ -384,6 +391,7 @@ void hash_map_clear(hash_map_t * hm)
 	hm->size = 0;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
+	hm->loose_version++;
 #endif
 }
 
@@ -468,15 +476,89 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	free(new_hm);
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
+	hm->loose_version++;
 #endif
 
 	return 0;
 }
 
 
+//
+// Iteration (current)
+
+hash_map_it2_t hash_map_it2_create(hash_map_t * hm)
+{
+	hash_map_it2_t it;
+	size_t i;
+
+	it.key = NULL;
+	it.val = NULL;
+	it.internal.hm = hm;
+	it.internal.next_bucket = 0;
+	it.internal.next_elt = NULL;
+#if HASH_MAP_IT_MOD_DEBUG
+	it.internal.loose_version = hm->loose_version;
+#endif
+
+	if (!hm)
+		return it;
+
+	// Find the first entry and store it as next
+	for (i = 0; i < vector_size(hm->tbl); i++)
+	{
+		chain_elt_t * head = vector_elt(hm->tbl, i);
+		if (head)
+		{
+			it.internal.next_bucket = i;
+			it.internal.next_elt = head;
+			break;
+		}
+	}
+
+	return it;
+}
+
+bool hash_map_it2_next(hash_map_it2_t * it)
+{
+	size_t i;
+
+#if HASH_MAP_IT_MOD_DEBUG
+	assert(!it->internal.hm || it->internal.loose_version == it->internal.hm->loose_version);
+#endif
+
+	if (!it->internal.next_elt)
+		return 0;
+
+	it->key = it->internal.next_elt->elt.key;
+	it->val = it->internal.next_elt->elt.val;
+
+	// If there are more elts in this chain, use the next elt
+	if (it->internal.next_elt->next)
+	{
+		it->internal.next_elt = it->internal.next_elt->next;
+		return 1;
+	}
+
+	// Find the next bucket with an elt
+	for (i = it->internal.next_bucket + 1; i < vector_size(it->internal.hm->tbl); i++)
+	{
+		chain_elt_t * head = vector_elt(it->internal.hm->tbl, i);
+		if (head)
+		{
+			it->internal.next_bucket = i;
+			it->internal.next_elt = head;
+			return 1;
+		}
+	}
+
+	// The current entry is the last
+	it->internal.next_elt = NULL;
+	return 1;
+}
+
 
 //
-// Iteration
+// Iteration (deprecated)
 
 void hash_map_it_init(hash_map_it_t * it, hash_map_t * hm)
 {
