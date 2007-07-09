@@ -11,7 +11,7 @@
 
 #define EXT2_BASE_DEBUG 0
 
-#define ROUND_ROBIN_ALLOC 0
+#define ROUND_ROBIN_ALLOC 1
 
 #if EXT2_BASE_DEBUG
 #define Dprintf(x...) printf(x)
