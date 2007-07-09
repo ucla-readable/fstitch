@@ -83,16 +83,9 @@ int block_alloc_head_init(block_alloc_head_t * alloc)
 
 void block_alloc_head_destroy(block_alloc_head_t * alloc)
 {
-	alloc_record_t * record;
-	hash_map_it_t it;
-	hash_map_it_init(&it, alloc->map);
-	while((record = (alloc_record_t *) hash_map_val_next(&it)))
-	{
-		block_alloc_notify_alloc(alloc, record->block);
-		/* behavior is undefined if we modify the hash map while using
-		 * the iterator, but well-defined if we create a new iterator */
-		hash_map_it_init(&it, alloc->map);
-	}
+	hash_map_it2_t it = hash_map_it2_create(alloc->map);
+	while(hash_map_it2_next(&it))
+		block_alloc_notify_alloc(alloc, ((alloc_record_t *) it.val)->block);
 	assert(!hash_map_size(alloc->map));
 	hash_map_destroy(alloc->map);
 	alloc->map = NULL;

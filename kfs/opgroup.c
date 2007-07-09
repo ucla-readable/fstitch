@@ -158,8 +158,7 @@ size_t opgroup_scope_size(opgroup_scope_t * scope)
 
 void opgroup_scope_destroy(opgroup_scope_t * scope)
 {
-	hash_map_it_t it;
-	opgroup_state_t * state;
+	hash_map_it2_t it = hash_map_it2_create(scope->id_map);
 	opgroup_scope_t * old_scope = current_scope;
 	
 	/* opgroup_abandon() needs the current scope
@@ -167,17 +166,12 @@ void opgroup_scope_destroy(opgroup_scope_t * scope)
 	current_scope = scope;
 	
 	/* iterate over opgroups and abandon them */
-	hash_map_it_init(&it, scope->id_map);
-	while((state = hash_map_val_next(&it)))
+	while(hash_map_it2_next(&it))
 	{
-		/* This loop is tricky, because opgroup_abandon() will call
-		 * hash_map_erase() and free the opgroup_state_t we just got
-		 * from the iterator. So we have to restart the iterator every
-		 * time through the loop. */
+		opgroup_state_t * state = it.val;
 		int r = opgroup_disengage(state->opgroup);
 		assert(r >= 0);
 		opgroup_abandon(&state->opgroup);
-		hash_map_it_init(&it, scope->id_map);
 	}
 	hash_map_destroy(scope->id_map);
 	

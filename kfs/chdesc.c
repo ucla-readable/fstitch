@@ -1065,30 +1065,15 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	}
 	else if(chdesc->type == BYTE && block->ddesc->bit_changes)
 	{
-		// TODO: avoid malloc and double iteration
-		hash_map_it_t it;
-		chdesc_t * bit_changes;
-		size_t n_bit_changes = hash_map_size(block->ddesc->bit_changes);
-		size_t i, n_overlaps = 0;
-		chdesc_t ** overlaps = smalloc(n_bit_changes * sizeof(*overlaps));
-		int r;
-		if(!overlaps)
-			return -ENOMEM;
-
-		// find the lists to multiattach, but do not multiattach during
-		// iteration since that might modify the hash_map
-		hash_map_it_init(&it, block->ddesc->bit_changes);
-		while((bit_changes = hash_map_val_next(&it)))
+		hash_map_it2_t it = hash_map_it2_create(block->ddesc->bit_changes);
+		while(hash_map_it2_next(&it))
+		{
+			chdesc_t * bit_changes = it.val;
+			int r;
 			if(chdesc_overlap_check(chdesc, bit_changes->befores->before.desc))
-				overlaps[n_overlaps++] = bit_changes;
-
-		for(i = 0; i < n_overlaps; i++)
-			if((r = _chdesc_overlap_multiattach(chdesc, overlaps[i])) < 0)
-			{
-				sfree(overlaps, n_bit_changes * sizeof(*overlaps));
-				return r;
-			}
-		sfree(overlaps, n_bit_changes * sizeof(*overlaps));
+				if((r = _chdesc_overlap_multiattach(chdesc, bit_changes)) < 0)
+					return r;
+		}
 	}
 
 	// get range of buckets touched by this chdesc
@@ -1678,19 +1663,9 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 /* Remove all block bit_changes befores */
 static void clear_bit_changes(bdesc_t * block)
 {
-	hash_map_it_t it;
-	chdesc_t * chdesc;
-	if(!block->ddesc->bit_changes)
-		return;
-	hash_map_it_init(&it, block->ddesc->bit_changes);
-	while((chdesc = hash_map_val_next(&it)))
-	{
-		chdesc_destroy(&chdesc);
-		/* TODO: re-init is necessary since chdesc_destroy() removes chdesc,
-		 * but it may be more efficient to not have to re-init... */
-		hash_map_it_init(&it, block->ddesc->bit_changes);
-	}
-	/* assert that a NULL val meant end of the map and not a NULL val entry */
+	hash_map_it2_t it = hash_map_it2_create(block->ddesc->bit_changes);
+	while(hash_map_it2_next(&it))
+		chdesc_destroy((chdesc_t **) &it.val);
 	assert(hash_map_empty(block->ddesc->bit_changes));
 }
 
