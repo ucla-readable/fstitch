@@ -40,7 +40,8 @@ DATA=`mktemp plot_space.XXXXXX` || exit 1
 trap "rm -f $DATA" EXIT
 
 for test in `ls $KUDOSDIR/tests/`; do
-	[ "`cat $KUDOSDIR/tests/$test/host`" == "kudos" ] || continue
+	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "su" ]; then continue; fi
+
 	LINE="`$BENCHDIR/ex_space -d $KUDOSDIR/tests/$test -t $TESTNAME`"
 	[ -n "$LINE" ] || continue
 	if [ "$KEY" == "time" ] ; then

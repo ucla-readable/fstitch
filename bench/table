@@ -37,13 +37,14 @@ fi
 function most_recent_test () {
 	HOST="$1"
 	FS="$2"
+	CMODE="$3"
 	REV=0
 	MR=
 	for test in `ls -t $KUDOSDIR/tests/`; do
 		DIR="$KUDOSDIR/tests/$test"
 		REVN=`cat $DIR/svnversion | sed -r 's/:[0-9]+//;s/M$//'`
 		[ $REVN -le $REV ] && continue
-		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $DIR/fs`" == "$FS" ]; then
+		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $DIR/fs`" == "$FS" ] && [ "`cat $DIR/consistency_mode`" == "$CMODE" ]; then
 			MR="$test"
 			REV=$REVN
 		fi
@@ -56,16 +57,17 @@ JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
-for sys in "kudos ext2" "linux ext2" "linux ext3" "freebsd ufs"; do
+for sys in "kudos ext2 su" "kudos ext2 meta" "linux ext2 none" "linux ext3 ordered" "linux ext3 journal"; do
 	HOST=`echo "$sys" | awk '{print $1}'`
 	FS=`echo "$sys" | awk '{print $2}'`
-	RECENT="`most_recent_test $HOST $FS`"
+	CMODE=`echo "$sys" | awk '{print $3}'`
+	RECENT="`most_recent_test $HOST $FS $CMODE`"
 
-	[ -z "$RECENT" ] && echo "No data for $HOST $FS" && continue
+	[ -z "$RECENT" ] && echo "No data for $HOST $FS $CMODE" && continue
 
-	echo "Most recent for $HOST $FS is $RECENT"
+	echo "Most recent for $HOST $FS $CMODE is $RECENT"
 	DATA="`$BENCHDIR/ex_${MEASUREMENT} -d $KUDOSDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
-	[ -z "$DATA" ] && echo "No data for $HOST $FS" && continue
-	echo "${ARRAYNAME}[$I] = new Array(\"$HOST\", \"$FS\", ${DATA});" >> $JSFILE
+	[ -z "$DATA" ] && echo "No data for $HOST $FS $CMODE" && continue
+	echo "${ARRAYNAME}[$I] = new Array(\"$HOST\", \"$FS\", \"$CMODE\", ${DATA});" >> $JSFILE
 	I=$((I+1))
 done
