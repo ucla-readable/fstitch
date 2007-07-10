@@ -18,8 +18,6 @@
 #include <kfs/fuse_serve.h>
 #endif
 
-#define ONLY_METADATA 1
-
 #define DEBUG_JOURNAL 0
 #if DEBUG_JOURNAL
 #define Dprintf(x...) printf(x)
@@ -138,7 +136,7 @@ struct journal_info {
 	/* map from FS block number -> journal block number (note 0 is invalid) */
 	hash_map_t * block_map;
 	uint16_t trans_slot_count;
-	uint8_t recursion;
+	uint8_t recursion, only_metadata;
 };
 
 #define CREMPTY     0
@@ -565,10 +563,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	chdesc_t * chdesc;
 	chdesc_t * chdesc_index_next;
 	uint32_t number;
-	int r;
-#if ONLY_METADATA
-	int metadata = 0;
-#endif
+	int r, metadata = !info->only_metadata;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(block->count == 1);
@@ -592,20 +587,21 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	 * which would start a transaction for us */
 	assert(info->keep_w);
 	
-#if ONLY_METADATA
-	number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
-	/* if we already have the block in the journal, it must have metadata */
-	if(number)
-		metadata = 1;
-	else
-		/* otherwise, scan for metadata */
-		for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
-			if(!(chdesc->flags & CHDESC_DATA))
-			{
-				metadata = 1;
-				break;
-			}
-#endif
+	if(info->only_metadata)
+	{
+		number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
+		/* if we already have the block in the journal, it must have metadata */
+		if(number)
+			metadata = 1;
+		else
+			/* otherwise, scan for metadata */
+			for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
+				if(!(chdesc->flags & CHDESC_DATA))
+				{
+					metadata = 1;
+					break;
+				}
+	}
 	
 	/* inspect and modify all chdescs passing through */
 	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc_index_next)
@@ -616,9 +612,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		assert(chdesc->owner == object);
 		chdesc_index_next = chdesc->ddesc_index_next; /* in case changes */
 		
-#if ONLY_METADATA
 		if(metadata)
-#endif
 		{
 			r = chdesc_add_depend(info->data, chdesc);
 			if(r < 0)
@@ -653,9 +647,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		}
 	}
 	
-#if ONLY_METADATA
 	if(metadata)
-#endif
 	{
 		chdesc_t * head;
 		number = journal_bd_lookup_block(object, block);
@@ -1025,7 +1017,7 @@ static int replay_journal(BD_t * bd)
 	return 0;
 }
 
-BD_t * journal_bd(BD_t * disk)
+BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 {
 	struct journal_info * info;
 	BD_t * bd;
@@ -1069,6 +1061,7 @@ BD_t * journal_bd(BD_t * disk)
 	info->cr_count = 0;
 	info->cr_retain = NULL;
 	info->recursion = 0;
+	info->only_metadata = only_metadata;
 	bd->level = disk->level;
 	bd->graph_index = disk->graph_index + 1;
 	if(bd->graph_index >= NBDINDEX)

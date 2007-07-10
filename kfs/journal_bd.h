@@ -4,7 +4,7 @@
 #include <kfs/bd.h>
 
 /* journal_bd modules are initially created as passthrough, read-only devices */
-BD_t * journal_bd(BD_t * disk);
+BD_t * journal_bd(BD_t * disk, uint8_t only_metadata);
 
 /* ...and they are fully activated upon the addition of a journal device */
 int journal_bd_set_journal(BD_t * bd, BD_t * journal);

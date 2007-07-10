@@ -315,9 +315,9 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 
 #if ALLOW_JOURNAL
 	extern int use_journal;
-	if(use_journal)
+	if (use_journal)
 	{
-		journal = journal_bd(cache);
+		journal = journal_bd(cache, use_journal < 2);
 		if (journal)
 			is_journaled = 1;
 		else
@@ -390,7 +390,7 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 		return NULL;
 	}
 	if (is_journaled)
-		printf(" (journaled)");
+		printf(" (journaled; meta: %d)", use_journal < 2);
 	else
 		printf(" (not journaled)");
 	printf("\n");
