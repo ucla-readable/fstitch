@@ -8,16 +8,18 @@ OUTDIR="test"
 
 function usage () {
 	echo "About: create a new kudos test directory"
-	echo "Usage: `basename "$0"` [-f INITFS] [-h INITHOST] [-n NAME]"
+	echo "Usage: `basename "$0"` [-f INITFS] [-c INITCONSISTENCYMODE] [-h INITHOST] [-n NAME]"
 }
 
 FS=ext2
+CMODE=
 HOST=kudos
 NAME=
 
-while getopts "f:h:n:" flag; do
+while getopts "f:c:h:n:" flag; do
 	case "$flag" in
 		f) FS="$OPTARG";;
+		c) CMODE="$OPTARG";;
 		h) HOST="$OPTARG";;
 		n) NAME="$OPTARG";;
 		\?) usage 1>&2; exit 1;;
@@ -25,8 +27,10 @@ while getopts "f:h:n:" flag; do
 	esac
 done
 
-if ! supported_host_fs "${HOST}-${FS}"; then
-	echo "Unsupported host-filesystem pair \"${HOST}-${FS}\"" 1>&2
+CMODE="`canonicalize_cmode $HOST $FS $CMODE`"
+
+if ! supported_host_fs "${HOST}-${FS}-${CMODE}"; then
+	echo "Unsupported host-filesystem-cmode \"${HOST}-${FS}-${CMODE}\"" 1>&2
 	exit 1
 fi
 
@@ -40,6 +44,7 @@ try ln -s $TESTS/$NEWTEST $OUTDIR
 
 echo "$HOST" > $OUTDIR/host
 echo "$FS" > $OUTDIR/fs
+echo "$CMODE" > $OUTDIR/consistency_mode
 echo "$NAME" > $OUTDIR/name
 uname -a > $OUTDIR/uname
 svnversion . > $OUTDIR/svnversion

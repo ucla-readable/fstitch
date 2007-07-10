@@ -1,5 +1,7 @@
 # -*- mode: shell-script -*-
 
+shopt -s extglob
+
 # get the next test number
 function get_test_num () {
 	BASE=$1
@@ -132,14 +134,40 @@ function finish () {
 	fi
 }
 
-# Return whether "HOST-FS" pair is supported
+# Return whether "HOST-FS-CMODE" is supported
 function supported_host_fs () {
+	# note: the below case @() notation requires extglob
 	case "$1" in
-		kudos-ext2) true;;
-		uu-ext2) true;;
-		linux-ext2|linux-ext3) true;;
-		*) false;
+		@(kudos|uu)-ext2-@(su|meta|full)) true;;
+		linux-@(ext2-none|ext3-@(ordered|journal))) true;;
+		*) false;;
 	esac
+}
+
+# Return canonical consistency mode given "HOST", "FS", and "CMODE"
+function canonicalize_cmode () {
+	HOST="$1"
+	FS="$2"
+	CMODE="$3"
+	if [ -z "$CMODE" ]; then
+		case "$HOST" in
+			uu|kudos)
+				case "$FS" in
+					ext2) CMODE=su;;
+					*) echo "Unsupported $HOST FS $FS"; exit 1;;
+				esac
+				;;
+			linux)
+				case "$FS" in
+					ext2) CMODE=none;;
+					ext3) CMODE=ordered;;
+					*) echo "Unsupported linux FS $FS"; exit 1;;
+				esac
+				;;
+			*) echo "Unsupported HOST $HOST"; exit 1;;
+		esac
+	fi
+	echo "$CMODE"
 }
 
 KMNT=kfs:/

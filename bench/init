@@ -6,24 +6,28 @@ KUDOSDIR="$BENCHDIR/.."
 
 VMLINUX=/lib/modules/`uname -r`/source/vmlinux
 
+JOURNALSIZE=64
+
 function usage () {
 	echo "About: start and stop a file system" 
-	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-f FS] [-k]"
-	echo "       where HOST-FS may be kudos-ext2, linux-ext2, or linux-ext3"
-	echo "           default is kudos-ext2"
+	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-f FS] [-c CMODE] [-k]"
+	echo "       where HOST-FS-CMODE may be kudos-ext2-(su|meta|full), linux-ext2-none, or linux-ext3-(ordered|journal)"
+	echo "           default is kudos-ext2-su"
 	echo "       -k keeps the existing file system"
 	echo "           default is to format at start"
 }
 
 FS=ext2
+CMODE=
 HOST=kudos
 FORMAT=1
 ACTION=
 
-while getopts "a:f:h:k" flag; do
+while getopts "a:f:c:h:k" flag; do
 	case "$flag" in
 		a) ACTION="$OPTARG";;
 		f) FS="$OPTARG";;
+		c) CMODE="$OPTARG";;
 		h) HOST="$OPTARG";;
 		k) FORMAT=0;;
 		\?) usage 1>&2; exit 1;;
@@ -37,8 +41,10 @@ if [ "$ACTION" != "start" ] && [ "$ACTION" != "stop" ]; then
 	exit 1
 fi
 
-if ! supported_host_fs "${HOST}-${FS}"; then
-	echo "Unsupported host-filesystem pair \"${HOST}-${FS}\"" 1>&2
+CMODE="`canonicalize_cmode $HOST $FS $CMODE`"
+
+if ! supported_host_fs "${HOST}-${FS}-${CMODE}"; then
+	echo "Unsupported host-filesystem-cmode \"${HOST}-${FS}-${CMODE}\"" 1>&2
 	exit 1
 fi
 
@@ -58,13 +64,14 @@ PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 
 if [ "$ACTION" == "start" ]; then
 	sync
-	JOURNAL=${JOURNAL:-0}
 	if [ "$HOST" == "kudos" ]; then
+		JOURNAL=0
+		[[ $CMODE =~ '^(meta|full)$' ]] && JOURNAL=1
 		if [ $FORMAT -eq 1 ]; then
 			try sudo mkfs.$FS $PART
 			if [ $JOURNAL != 0 ]; then
 				try sudo mount -t $FS $PART $MNT
-				try sudo dd if=/dev/zero of=$MNT/.journal bs=1M count=64
+				try sudo dd if=/dev/zero of=$MNT/.journal bs=1M count=$JOURNALSIZE
 				try sudo umount $MNT
 			fi
 		fi
@@ -76,6 +83,8 @@ if [ "$ACTION" == "start" ]; then
 		try sudo mount -t kfs $KMNT $MNT
 		try sudo chmod 777 $MNT
 	elif [ "$HOST" == "uu" ]; then
+		JOURNAL=0
+		[[ $CMODE =~ '^(meta|full)$' ]] && JOURNAL=1
 		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
 		if [ "$NWBBLOCKS" == "" ]; then
 			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL $MNT &
@@ -83,8 +92,15 @@ if [ "$ACTION" == "start" ]; then
 			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL $MNT &
 		fi
 	else
-		[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
-		try sudo mount -t $FS $PART $MNT
+		if [ $FORMAT -eq 1 ]; then
+			if [ $FS == ext2 ]; then
+				try sudo mkfs.$FS $PART
+				try sudo mount -t $FS $PART $MNT
+			else
+				try sudo mkfs.$FS -J size=$JOURNALSIZE $PART
+				try sudo mount -t $FS -o data=$CMODE $PART $MNT
+			fi
+		fi
 		try sudo chmod 777 $MNT
 	fi
 	sleep 1 # give kfsd time to init

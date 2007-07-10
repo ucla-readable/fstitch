@@ -1,13 +1,13 @@
 #!/bin/bash
 
 function run () {
-	try $BENCHDIR/init -f $FS -h $HOST -a start -k
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start -k
 	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
 	prepare_postinit $T $N $OUTDIR $HOST
 	time (echo + rm; time rm -rf $MNT/$TAROUT;
 	      echo + sync; time fsync $KUDOSDIR $MNT;
 	      echo + total)
-	try $BENCHDIR/init -f $FS -h $HOST -a stop
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
@@ -16,6 +16,7 @@ KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
 HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
+CMODE=`cat "$OUTDIR/consistency_mode"`
 T=rm
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`

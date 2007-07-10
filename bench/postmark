@@ -20,10 +20,10 @@ function run () {
 	try gcc -O2 $BENCHDIR/postmark-1_5.c -o $BENCHDIR/postmark-1_5
 	try sync
 
-	try $BENCHDIR/init -f $FS -h $HOST -a start
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
 	prepare_postinit $T $N $OUTDIR $HOST
 	time run_postmark
-	try $BENCHDIR/init -f $FS -h $HOST -a stop
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
@@ -32,6 +32,7 @@ KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
 HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
+CMODE=`cat "$OUTDIR/consistency_mode"`
 T=postmark
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`
