@@ -65,9 +65,9 @@ PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 if [ "$ACTION" == "start" ]; then
 	sync
 	if [ "$HOST" == "kudos" ]; then
-		if [ "$CMODE" == "meta" ]; then JOURNAL=1;
-		elif [ "$CMODE" == "full" ]; then JOURNAL=2;
-		else JOURNAL=0;
+		if [ "$CMODE" == "meta" ]; then JOURNAL=1
+		elif [ "$CMODE" == "full" ]; then JOURNAL=2
+		else JOURNAL=0
 		fi
 		if [ $FORMAT -eq 1 ]; then
 			try sudo mkfs.$FS $PART
@@ -85,9 +85,9 @@ if [ "$ACTION" == "start" ]; then
 		try sudo mount -t kfs $KMNT $MNT
 		try sudo chmod 777 $MNT
 	elif [ "$HOST" == "uu" ]; then
-		if [ "$CMODE" == "meta" ]; then JOURNAL=1;
-		elif [ "$CMODE" == "full" ]; then JOURNAL=2;
-		else JOURNAL=0;
+		if [ "$CMODE" == "meta" ]; then JOURNAL=1
+		elif [ "$CMODE" == "full" ]; then JOURNAL=2
+		else JOURNAL=0
 		fi
 		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
 		if [ "$NWBBLOCKS" == "" ]; then
@@ -99,11 +99,14 @@ if [ "$ACTION" == "start" ]; then
 		if [ $FORMAT -eq 1 ]; then
 			if [ $FS == ext2 ]; then
 				try sudo mkfs.$FS $PART
-				try sudo mount -t $FS $PART $MNT
 			else
 				try sudo mkfs.$FS -J size=$JOURNALSIZE $PART
-				try sudo mount -t $FS -o data=$CMODE $PART $MNT
 			fi
+		fi
+		if [ $FS == ext2 ]; then
+			try sudo mount -t $FS $PART $MNT
+		else
+			try sudo mount -t $FS -o data=$CMODE $PART $MNT
 		fi
 		try sudo chmod 777 $MNT
 	fi
