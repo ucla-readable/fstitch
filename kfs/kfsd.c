@@ -234,6 +234,12 @@ MODULE_PARM_DESC(device, "The device to attach linux_bd to");
 module_param(linux_device, charp, 0);
 MODULE_PARM_DESC(linux_device, "Alias for device");
 
+#if ALLOW_JOURNAL
+int use_journal = 0;
+module_param(use_journal, int, 0);
+MODULE_PARM_DESC(use_journal, "Use journal device when .journal exists");
+#endif
+
 static int kfsd_is_shutdown = 0;
 
 static int kfsd_thread(void * thunk)

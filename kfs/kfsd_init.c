@@ -60,7 +60,6 @@ struct kfsd_partition {
 typedef struct kfsd_partition kfsd_partition_t;
 
 #define USE_ICASE 0
-#define USE_JOURNAL 0
 #define USE_UNLINK 0
 
 #define USE_WB_CACHE 2
@@ -76,11 +75,11 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define wb2_cache_bd wbr_cache_bd
 #endif
 
-#if USE_WB_CACHE != 2 && USE_JOURNAL
+#if USE_WB_CACHE != 2 && ALLOW_JOURNAL
 #error The journal requires a wb2_cache to function
 #endif
 
-#if USE_JOURNAL && USE_UNLINK
+#if ALLOW_JOURNAL && USE_UNLINK
 #error The journal is incompatible with the unlink device
 #endif
 
@@ -314,18 +313,22 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 	if (!cache)
 		return NULL;
 
-#if USE_JOURNAL
-	journal = journal_bd(cache);
-	if (journal)
-		is_journaled = 1;
-	else
+#if ALLOW_JOURNAL
+	extern int use_journal;
+	if(use_journal)
 	{
-		fprintf(stderr, "journal_bd failed, not journaling\n");
-		journal = cache;
+		journal = journal_bd(cache);
+		if (journal)
+			is_journaled = 1;
+		else
+		{
+			fprintf(stderr, "journal_bd failed, not journaling\n");
+			journal = cache;
+		}
 	}
-#else
-	journal = cache;
+	else
 #endif
+		journal = cache;
 
 	lfs = plain_lfs = fs(journal);
 
