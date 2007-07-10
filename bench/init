@@ -58,21 +58,29 @@ PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 
 if [ "$ACTION" == "start" ]; then
 	sync
+	JOURNAL=${JOURNAL:-0}
 	if [ "$HOST" == "kudos" ]; then
-		[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
+		if [ $FORMAT -eq 1 ]; then
+			try sudo mkfs.$FS $PART
+			if [ $JOURNAL != 0 ]; then
+				try sudo mount -t $FS $PART $MNT
+				try sudo dd if=/dev/zero of=$MNT/.journal bs=1M count=64
+				try sudo umount $MNT
+			fi
+		fi
 		if [ "$NWBBLOCKS" == "" ]; then
-			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV use_journal=$JOURNAL
 		else
-			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS"
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL
 		fi
 		try sudo mount -t kfs $KMNT $MNT
 		try sudo chmod 777 $MNT
 	elif [ "$HOST" == "uu" ]; then
 		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
 		if [ "$NWBBLOCKS" == "" ]; then
-			try $KUDOSDIR/uukfsd.sh unix_file=$DEV $MNT &
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL $MNT &
 		else
-			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" $MNT &
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL $MNT &
 		fi
 	else
 		[ $FORMAT -eq 1 ] && try sudo mkfs.$FS $PART
