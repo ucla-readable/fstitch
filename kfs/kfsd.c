@@ -16,6 +16,10 @@
 #define Dprintf(...)
 #endif
 
+#if ALLOW_JOURNAL
+int use_journal = 0;
+#endif
+
 struct module_shutdown {
 	const char * name;
 	kfsd_shutdown_module shutdown;
@@ -235,7 +239,6 @@ module_param(linux_device, charp, 0);
 MODULE_PARM_DESC(linux_device, "Alias for device");
 
 #if ALLOW_JOURNAL
-int use_journal = 0;
 module_param(use_journal, int, 0);
 MODULE_PARM_DESC(use_journal, "Use journal device when .journal exists");
 #endif
@@ -354,6 +357,13 @@ int main(int argc, char * argv[])
 			unix_file = &argv[i][10];
 			remove_arg(&argc, argv, i--);
 		}
+#if ALLOW_JOURNAL
+		else if(!strncmp(argv[i], "use_journal=", 12))
+		{
+			use_journal = atoi(&argv[i][12]);
+			remove_arg(&argc, argv, i--);
+		}
+#endif
 	}
 	kfsd_argc = argc;
 	kfsd_argv = argv;
