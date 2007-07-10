@@ -65,8 +65,10 @@ PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 if [ "$ACTION" == "start" ]; then
 	sync
 	if [ "$HOST" == "kudos" ]; then
-		JOURNAL=0
-		[[ $CMODE =~ '^(meta|full)$' ]] && JOURNAL=1
+		if [ "$CMODE" == "meta" ]; then JOURNAL=1;
+		elif [ "$CMODE" == "full" ]; then JOURNAL=2;
+		else JOURNAL=0;
+		fi
 		if [ $FORMAT -eq 1 ]; then
 			try sudo mkfs.$FS $PART
 			if [ $JOURNAL != 0 ]; then
@@ -83,8 +85,10 @@ if [ "$ACTION" == "start" ]; then
 		try sudo mount -t kfs $KMNT $MNT
 		try sudo chmod 777 $MNT
 	elif [ "$HOST" == "uu" ]; then
-		JOURNAL=0
-		[[ $CMODE =~ '^(meta|full)$' ]] && JOURNAL=1
+		if [ "$CMODE" == "meta" ]; then JOURNAL=1;
+		elif [ "$CMODE" == "full" ]; then JOURNAL=2;
+		else JOURNAL=0;
+		fi
 		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
 		if [ "$NWBBLOCKS" == "" ]; then
 			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL $MNT &
