@@ -57,7 +57,7 @@ JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
-for sys in "kudos ext2 su" "kudos ext2 meta" "linux ext2 none" "linux ext3 ordered" "linux ext3 journal"; do
+for sys in "kudos ext2 su" "kudos ext2 meta" "kudos ext2 full" "linux ext2 none" "linux ext3 ordered" "linux ext3 journal"; do
 	HOST=`echo "$sys" | awk '{print $1}'`
 	FS=`echo "$sys" | awk '{print $2}'`
 	CMODE=`echo "$sys" | awk '{print $3}'`
