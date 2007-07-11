@@ -293,7 +293,8 @@ static int journal_bd_grab_slot(BD_t * object)
 		CALL(info->journal, flush, FLUSH_DEVICE, NULL);
 		CALL(info->bd, flush, FLUSH_DEVICE, NULL);
 #ifdef __KERNEL__
-		revision_tail_wait_for_landing_requests();
+		if(revision_tail_flights_exist())
+			revision_tail_wait_for_landing_requests();
 #endif
 		CALL(info->journal, flush, FLUSH_DEVICE, NULL);
 	}
