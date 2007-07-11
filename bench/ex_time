@@ -27,61 +27,61 @@ if (!-f "$testdir/$testname.run.0") {
 	exit(1);
 }
 
+my $user_hz = 100;
+
 # track times for total
 my %real = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
 my %sys = %real;
 my %user = %real;
 my %io = %real;
 
-my %totals = ("real" => \%real, "sys" => \%sys, "user" => \%user, "io" => \%io);
 my @totalsa = (\%real, \%sys, \%user, \%io);
+
+sub updateStats {
+	my $total = shift;
+	my $time = shift;
+	$total->{"sum"} += $time;
+	$total->{"count"}++;
+	$total->{"min"} = $time if ($time < $total->{"min"} || $total->{"min"} == -1);
+	$total->{"max"} = $time if ($time > $total->{"max"});
+}
 
 foreach $run (<$testdir/$testname.run.*>) {
 	#print STDERR "run: $run\n";
 	open(R, "<$run") || die;
 	my $total_io = 0;
+	my $total_before;
 	my $state = 0;
 	while(<R>) {
 		my $line = $_;
-		if ($state == 0) {
-			if ($line =~ m/^\+ $testname$/) {
-				$state = 1;
-			} elsif ($line =~ m/^\+ sync$/) {
-				$state = 2;
-			} elsif ($line =~ m/^\+ total$/) {
-				$state = 3;
-			}
-		} else {
-			if ($line =~ m/^(real|user|sys)\s+(\d+)m(\d+\.\d+)s$/) {
-				if ($state == 3) {
-					my $time = $2 * 60 + $3;
-					my $total = $totals{$1};
-					if ($1 eq "real") {
-						$total_io += $time;
-					} else {
-						$total_io -= $time;
-					}
-					$total->{"sum"} += $time;
-					$total->{"count"}++;
-					$total->{"min"} = $time if ($time < $total->{"min"} || $total->{"min"} == -1);
-					$total->{"max"} = $time if ($time > $total->{"max"});
-				}
-				$state = 0 if $1 eq "sys";
-			} elsif (! $line =~ m/\w+/) {
-				print STDERR "Ignoring unexpected line \"$line\"\n";
-			}
+		if ($line =~ m/^total-before/) {
+			$total_before = $line;
+		} elsif ($line =~ m/^total-after/) {
+			my $total_after = $line;
+			# there is actually one more number in the cpu line. what is it?
+			$total_before =~ m/cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/;
+			my $user = $1 + $2;
+			my $sys = $3;
+			my $io = $4 + $5 + $6 + $7;
+
+			$total_after =~ m/cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/;
+			$user = ($1 + $2 - $user) / $user_hz;
+			$sys = ($3 - $sys) / $user_hz;
+			$io = ($4 + $5 + $6 + $7 - $io) / $user_hz;
+			my $real = $user + $sys + $io;
+
+			updateStats(\%user, $user);
+			updateStats(\%sys, $sys);
+			updateStats(\%io, $io);
+			updateStats(\%real, $real);
 		}
 	}
-	$io{"sum"} += $total_io;
-	$io{"count"}++;
-	$io{"min"} = $total_io if ($total_io < $io{"min"} || $io{"min"} == -1);
-	$io{"max"} = $total_io if ($total_io > $io{"max"});
 	close(R);
 }
 
 foreach $total (@totalsa) {
 	my $avg = 0;
 	$avg = $total->{"sum"} / $total->{"count"} if ($total->{"count"} != 0);
-	printf "%.3f %.3f %.3f  ", $avg, $total->{"min"}, $total->{"max"};
+	printf "%.2f %.2f %.2f  ", $avg, $total->{"min"}, $total->{"max"};
 }
 print "\n";

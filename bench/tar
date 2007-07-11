@@ -1,12 +1,15 @@
 #!/bin/bash
 
+function test () {
+	ktime tar tar -C $MNT/ -xf $TARFILE
+	ktime sync fsync $KUDOSDIR $MNT;
+}
+
 function run () {
 	try cat $TARFILE >/dev/null
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
 	prepare_postinit  $T $N $OUTDIR $HOST
-	time (echo + tar; time tar -C $MNT/ -xf $TARFILE;
-	      echo + sync; time fsync $KUDOSDIR $MNT;
-	      echo + total)
+	ktime total test
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 }
 

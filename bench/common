@@ -170,5 +170,17 @@ function canonicalize_cmode () {
 	echo "$CMODE"
 }
 
+# Run $2.. (and name it $1) and display time stats
+function ktime () {
+	local NAME="$1"
+	shift
+	echo "$NAME-before `head -1 /proc/stat`"
+	echo "+ $@"
+	$@
+	R=$?
+	echo "$NAME-after `head -1 /proc/stat`"
+	return $R
+}
+
 KMNT=kfs:/
 MNT=/mnt/test

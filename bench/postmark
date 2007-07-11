@@ -1,9 +1,8 @@
 #!/bin/bash
 
 function run_postmark () {
-	echo + postmark
 	# TODO: 200,000 kB is way too small, but we crash with larger (eg 2 MB)
-	time $BENCHDIR/postmark-1_5 <<- EOF
+	ktime postmark $BENCHDIR/postmark-1_5 <<- EOF
 		set location $MNT
 		set number 500
 		set size 500 200000
@@ -11,9 +10,7 @@ function run_postmark () {
 		set read 4096
 		run
 	EOF
-	echo + sync
-	time fsync $KUDOSDIR $MNT
-	echo + total
+	ktime sync fsync $KUDOSDIR $MNT
 }
 
 function run () {
@@ -22,7 +19,7 @@ function run () {
 
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
 	prepare_postinit $T $N $OUTDIR $HOST
-	time run_postmark
+	ktime total run_postmark
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 }
 
