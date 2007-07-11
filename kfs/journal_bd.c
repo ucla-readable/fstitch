@@ -30,6 +30,13 @@
 /* transaction slot size of 512 x 4K */
 #define TRANSACTION_SIZE (512 * 4096)
 
+/* In principle we can stack journal slots with later transactions, but this
+ * really hurts performance because of the effect it has on change descriptor
+ * optimizations and rollback. The simple and surprisingly effective fix is to
+ * cause the device to flush when this happens, to avoid ever needing to stack
+ * transactions. This could be made asynchronous later if necessary. */
+#define AVOID_STACKING_JOURNAL 1
+
 /* Theory of operation:
  * 
  * Basically, as chdescs pass through the journal_bd module, we copy their
@@ -257,28 +264,40 @@ static int journal_bd_grab_slot(BD_t * object)
 	/* we must stay below the total size of the journal */
 	assert(info->trans_slot_count != info->cr_count);
 	
-	do {
-		if(!info->cr_retain[scan].cr && info->cr_retain[scan].seq != info->trans_seq)
-		{
-			if(info->jdata_head)
-				chdesc_weak_release(&info->jdata_head, 0);
-			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
-			if(r < 0)
-				return r;
-			Dprintf("%s(): using unused transaction slot %d (sequence %u)\n", __FUNCTION__, scan, info->trans_seq);
-			info->cr_retain[scan].seq = info->trans_seq;
-			info->prev_slot = info->trans_slot;
-			info->trans_slot = scan;
-			/* if the transaction reaches half the
-			 * slots, make sure it finishes soon */
-			if(++info->trans_slot_count >= info->cr_count / 2)
-				kfsd_unlock_callback(journal_bd_unlock_callback, object);
-			return 0;
-		}
-		if(++scan == info->cr_count)
-			scan = 0;
-	} while(scan != info->trans_slot);
-	
+#if AVOID_STACKING_JOURNAL
+	for(;;)
+	{
+#endif
+		do {
+			if(!info->cr_retain[scan].cr && info->cr_retain[scan].seq != info->trans_seq)
+			{
+				if(info->jdata_head)
+					chdesc_weak_release(&info->jdata_head, 0);
+				r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
+				if(r < 0)
+					return r;
+				Dprintf("%s(): using unused transaction slot %d (sequence %u)\n", __FUNCTION__, scan, info->trans_seq);
+				info->cr_retain[scan].seq = info->trans_seq;
+				info->prev_slot = info->trans_slot;
+				info->trans_slot = scan;
+				/* if the transaction reaches half the
+				 * slots, make sure it finishes soon */
+				if(++info->trans_slot_count >= info->cr_count / 2)
+					kfsd_unlock_callback(journal_bd_unlock_callback, object);
+				return 0;
+			}
+			if(++scan == info->cr_count)
+				scan = 0;
+		} while(scan != info->trans_slot);
+#if AVOID_STACKING_JOURNAL
+		CALL(info->journal, flush, FLUSH_DEVICE, NULL);
+		CALL(info->bd, flush, FLUSH_DEVICE, NULL);
+#ifdef __KERNEL__
+		revision_tail_wait_for_landing_requests();
+#endif
+		CALL(info->journal, flush, FLUSH_DEVICE, NULL);
+	}
+#else
 	/* we could not find an available slot, so start stacking */
 	do {
 		if(info->cr_retain[scan].seq != info->trans_seq)
@@ -305,6 +324,7 @@ static int journal_bd_grab_slot(BD_t * object)
 	
 	/* this should probably never happen */
 	kpanic("all transaction slots used by the current transaction (%u)", info->trans_seq);
+#endif
 }
 
 static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
