@@ -1193,6 +1193,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 		modman_dec_bd(journal, bd);
 		return -ENOSPC;
 	}
+	printf("%s(): journal is %uK (%dx%d blocks)\n", __FUNCTION__, info->cr_count * info->trans_total_blocks * info->blocksize / 1024, info->cr_count, info->trans_total_blocks);
 	
 	info->cr_retain = scalloc(info->cr_count, sizeof(*info->cr_retain));
 	if(!info->cr_retain)

@@ -5,7 +5,25 @@
 #include <kfs/debug.h>
 #include <kfs/revision.h>
 
-typedef bool (*revision_decider_t)(chdesc_t * chdesc, void * data);
+enum decider {
+	OWNER,
+	FLIGHT
+};
+
+/* <% is equivalent to { but does not cause syntax highlighting to go nuts */
+#define decide(type, chdesc, data) (<% int __result; \
+	switch(type) <% \
+		case OWNER: \
+			/* it had better be either owned by us or rollbackable */ \
+			assert((chdesc)->owner == (BD_t *) (data) || chdesc_is_rollbackable(chdesc)); \
+			__result = (chdesc)->owner == (BD_t *) (data); \
+			break; \
+		case FLIGHT: \
+			__result = ((chdesc)->flags & CHDESC_INFLIGHT) != 0; \
+			break; \
+		default: \
+			kpanic("Unknown decider type %d", type); \
+	%> __result; %>)
 
 static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chdescs, const char * function)
 {
@@ -68,7 +86,7 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 	kpanic("too confused to continue");
 }
 
-static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, void * data)
+static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
 	size_t chdescs_size;
@@ -81,7 +99,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	/* find out how many chdescs are to be rolled back */
 	/* TODO: look into using ready_changes here? */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(!decider(scan, data))
+		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
 		return 0;
@@ -92,7 +110,7 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 		return -ENOMEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(!decider(scan, data))
+		if(!decide(decider, scan, data))
 			chdescs[i++] = scan;
 	
 	for(;;)
@@ -142,20 +160,13 @@ static int _revision_tail_prepare(bdesc_t * block, revision_decider_t decider, v
 	return count;
 }
 
-static bool revision_owner_decider(chdesc_t * chdesc, void * data)
-{
-	/* it had better be either owned by us or rollbackable */
-	assert(chdesc->owner == (BD_t *) data || chdesc_is_rollbackable(chdesc));
-	return chdesc->owner == (BD_t *) data;
-}
-
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 {
 	assert(!block->ddesc->in_flight);
-	return _revision_tail_prepare(block, revision_owner_decider, bd);
+	return _revision_tail_prepare(block, OWNER, bd);
 }
 
-static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, void * data)
+static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
 	size_t chdescs_size;
@@ -167,7 +178,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 	
 	/* find out how many chdescs are to be rolled forward */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(!decider(scan, data))
+		if(!decide(decider, scan, data))
 			count++;
 	
 	chdescs_size = sizeof(*chdescs) * count;
@@ -176,7 +187,7 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 		return -ENOMEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(!decider(scan, data))
+		if(!decide(decider, scan, data))
 			chdescs[i++] = scan;
 	
 	for(;;)
@@ -228,10 +239,10 @@ static int _revision_tail_revert(bdesc_t * block, revision_decider_t decider, vo
 
 int revision_tail_revert(bdesc_t * block, BD_t * bd)
 {
-	return _revision_tail_revert(block, revision_owner_decider, bd);
+	return _revision_tail_revert(block, OWNER, bd);
 }
 
-static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decider, void * data)
+static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
 	size_t chdescs_size;
@@ -243,7 +254,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decide
 	
 	/* find out how many chdescs are to be satisfied */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(decider(scan, data))
+		if(decide(decider, scan, data))
 			count++;
 	
 	chdescs_size = sizeof(*chdescs) * count;
@@ -252,7 +263,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decide
 		return -ENOMEM;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(decider(scan, data))
+		if(decide(decider, scan, data))
 			chdescs[i++] = scan;
 	
 	for(;;)
@@ -286,7 +297,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, revision_decider_t decide
 
 int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 {
-	int r = _revision_tail_acknowledge(block, revision_owner_decider, bd);
+	int r = _revision_tail_acknowledge(block, OWNER, bd);
 	if(r < 0)
 		return r;
 	return revision_tail_revert(block, bd);
@@ -361,14 +372,9 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 	return r;
 }
 
-static bool revision_flight_decider(chdesc_t * chdesc, void * data)
-{
-	return (chdesc->flags & CHDESC_INFLIGHT) != 0;
-}
-
 static int revision_tail_ack_landed(bdesc_t * block)
 {
-	int r = _revision_tail_acknowledge(block, revision_flight_decider, NULL);
+	int r = _revision_tail_acknowledge(block, FLIGHT, NULL);
 	assert(r >= 0);
 	block->ddesc->in_flight = 0;
 	bdesc_release(&block);
