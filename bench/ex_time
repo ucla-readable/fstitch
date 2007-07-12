@@ -9,6 +9,20 @@ sub usage() {
 	exit(1);
 }
 
+sub svnversion() {
+	my $dir = $_[0];
+	open(R, "<$dir/svnversion") || die;
+	while(<R>) {
+		my $line = $_;
+		$line =~ m/(\d+).*/;
+		my $rev = $1;
+		close(R);
+		return $rev;
+	}
+	close(R);
+	die;
+}
+
 my %opt;
 
 getopts("hd:t:", \%opt) or usage();
@@ -35,6 +49,7 @@ my %sys = %real;
 my %user = %real;
 my %io = %real;
 
+my %totals = ("real" => \%real, "sys" => \%sys, "user" => \%user, "io" => \%io);
 my @totalsa = (\%real, \%sys, \%user, \%io);
 
 sub updateStats {
@@ -46,12 +61,42 @@ sub updateStats {
 	$total->{"max"} = $time if ($time > $total->{"max"});
 }
 
-foreach $run (<$testdir/$testname.run.*>) {
-	#print STDERR "run: $run\n";
-	open(R, "<$run") || die;
+sub extractRunStatsVersion0 {
 	my $total_io = 0;
-	my $total_before;
 	my $state = 0;
+	while(<R>) {
+		my $line = $_;
+		if ($state == 0) {
+			if ($line =~ m/^\+ $testname$/) {
+				$state = 1;
+			} elsif ($line =~ m/^\+ sync$/) {
+				$state = 2;
+			} elsif ($line =~ m/^\+ total$/) {
+				$state = 3;
+			}
+		} else {
+			if ($line =~ m/^(real|user|sys)\s+(\d+)m(\d+\.\d+)s$/) {
+				if ($state == 3) {
+					my $time = $2 * 60 + $3;
+					my $total = $totals{$1};
+					if ($1 eq "real") {
+						$total_io += $time;
+					} else {
+						$total_io -= $time;
+					}
+					updateStats($total, $time);
+				}
+				$state = 0 if $1 eq "sys";
+			} elsif (! $line =~ m/\w+/) {
+				print STDERR "Ignoring unexpected line \"$line\"\n";
+			}
+		}
+	}
+	updateStats(\%io, $total_io);
+}
+
+sub extractRunStatsVersion1 {
+	my $total_before;
 	while(<R>) {
 		my $line = $_;
 		if ($line =~ m/^total-before/) {
@@ -75,6 +120,18 @@ foreach $run (<$testdir/$testname.run.*>) {
 			updateStats(\%io, $io);
 			updateStats(\%real, $real);
 		}
+	}
+}
+
+my $logversion = (&svnversion($testdir) >= 3587);
+
+foreach $run (<$testdir/$testname.run.*>) {
+	open(R, "<$run") || die;
+	if ($logversion == 0) {
+		# NOTE: version 0 stats are not accurate
+		extractRunStatsVersion0();
+	} else {
+		extractRunStatsVersion1();
 	}
 	close(R);
 }
