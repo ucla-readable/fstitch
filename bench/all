@@ -10,6 +10,7 @@ function accounting_on () {
 function accounting_restore () {
 	if [ "$OLDLINE" != "#define CHDESC_ACCOUNT 1" ]; then
 		sed -i "s/^#define CHDESC_ACCOUNT 1\$/$OLDLINE/" $KUDOSDIR/kfs/chdesc.c
+		rm -f $KUDOSDIR/obj/*/chdesc.o $KUDOSDIR/obj/*/*/chdesc.o
 	fi
 }
 
