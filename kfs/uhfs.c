@@ -422,7 +422,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 			number = CALL(state->lfs, allocate_block, uf->inner, 0, &prev_head);
 			if (number == INVALID_BLOCK)
+			{
+				r = -ENOSPC;
 				goto uhfs_write_written_exit;
+			}
 
 			/* get the block to zero it */
 			block = CALL(state->lfs, synthetic_lookup_block, number);
@@ -534,7 +537,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	}
 
 uhfs_write_written_exit:
-	r = size_written;
+	if(size_written)
+		r = size_written;
 uhfs_write_exit:
 	return r;
 }

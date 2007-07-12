@@ -421,9 +421,11 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	//There is no check to make sure that these blocks are all in the same block group
 	while(blockno - lastblock < 32)
 	{
-		blockno++;
-		if(ext2_read_block_bitmap(object, blockno) == EXT2_FREE)
+		int r = ext2_read_block_bitmap(object, ++blockno);
+		if(r == EXT2_FREE)
 			goto claim_block;
+		else if(r < 0)
+			return INVALID_BLOCK;
 	}
 	
 inode_search:	
