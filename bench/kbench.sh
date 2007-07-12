@@ -5,6 +5,7 @@ NRUNS=1
 TIME_LOG=time.log
 PROF_LOG=prof.log
 DISK=${DISK:-/dev/sdb}
+JOURNAL=${JOURNAL:-0}
 KMNT=kfs:/
 MNT=/mnt/test
 TARFILE=linux-2.6.15.tar
@@ -19,9 +20,9 @@ function start_kfsd() {
 	#~frost/acctrd/acctrdctl -s $DISK || exit 1
 
 	if [ "$NWBBLOCKS" == "" ]; then
-		insmod kfs/kkfsd.ko linux_device=$DISK || exit 1
+		insmod kfs/kkfsd.ko linux_device=$DISK use_journal=$JOURNAL || exit 1
 	else
-		insmod kfs/kkfsd.ko linux_device=$DISK nwbblocks="$NWBBLOCKS" || exit 1
+		insmod kfs/kkfsd.ko linux_device=$DISK use_journal=$JOURNAL nwbblocks="$NWBBLOCKS" || exit 1
 	fi
 	if [ -f /proc/kkfsd_debug ]
 	then
@@ -126,7 +127,7 @@ else
 	exit 1
 fi
 
-[ -f "$FSIMG" ] || make "$FSIMG" || exit 1
+[ -f "$FSIMG" ] || su "$REAL_USER" -c "make \"$FSIMG\"" || exit 1
 
 if [ $# -ge 3 ]
 then
@@ -173,7 +174,19 @@ do
 
 	echo -n "Copying disk image to disk"
 	dd if="$FSIMG" of="$DISK" bs=512K 2>/dev/null || exit 1
+	echo w | fdisk "$DISK" &> /dev/null || exit 1
 	echo "."
+
+	if [ $JOURNAL != 0 -a "${2#ext2}" != "$2" ]; then
+		mount "${DISK}1" "$MNT" -t ext2
+		if [ ! -f "$MNT/.journal" ]; then
+			echo -n "Creating journal"
+			dd if=/dev/zero of="$MNT/.journal" bs=1M count=64 2>/dev/null
+			sync
+			echo "."
+		fi
+		umount "$MNT"
+	fi
 
 	echo -n "Loading tar file into cache"
 	cat "$TARFILE" > /dev/null || exit 1
