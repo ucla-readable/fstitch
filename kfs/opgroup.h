@@ -89,6 +89,7 @@ int opgroup_abandon(opgroup_t ** opgroup);
 opgroup_t * opgroup_lookup(opgroup_id_t id);
 opgroup_id_t opgroup_id(const opgroup_t * opgroup);
 
+int opgroup_engaged(void);
 /* add change descriptors to the engaged opgroups in the current scope */
 int opgroup_prepare_head(chdesc_t ** head);
 int opgroup_finish_head(chdesc_t * head);

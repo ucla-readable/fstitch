@@ -575,6 +575,11 @@ opgroup_id_t opgroup_id(const opgroup_t * opgroup)
 	return opgroup->id;
 }
 
+int opgroup_engaged(void)
+{
+	return !!current_scope;
+}
+
 int opgroup_prepare_head(chdesc_t ** head)
 {
 	if(!current_scope || !current_scope->bottom)

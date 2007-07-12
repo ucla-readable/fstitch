@@ -614,6 +614,11 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		/* if we already have the block in the journal, it must have metadata */
 		if(number)
 			metadata = 1;
+		/* if there is an opgroup engaged, everything we do should be
+		 * put in the transaction to guarantee proper ordering of data
+		 * with respect to both metadata and other data */
+		else if(opgroup_engaged())
+			metadata = 1;
 		else
 			/* otherwise, scan for metadata */
 			for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
