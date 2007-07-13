@@ -52,6 +52,7 @@ struct opgroup_scope {
 	/* top_keep stays until we change the engaged set */
 	chdesc_t * top_keep;
 	chdesc_t * bottom;
+	int engaged_count;
 };
 
 /* Do not allow multiple atomic opgroups to exist at a single point in time
@@ -71,6 +72,7 @@ opgroup_scope_t * opgroup_scope_create(void)
 		scope->top = NULL;
 		scope->top_keep = NULL;
 		scope->bottom = NULL;
+		scope->engaged_count = 0;
 		scope->id_map = hash_map_create();
 		if(!scope->id_map)
 		{
@@ -125,8 +127,10 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 			dup->opgroup->engaged_count++;
 			/* FIXME: can we do better than just assert? */
 			assert(dup->opgroup->engaged_count);
+			copy->engaged_count++;
 		}
 	}
+	assert(copy->engaged_count == scope->engaged_count);
 	
 	return copy;
 	
@@ -448,16 +452,18 @@ int opgroup_engage(opgroup_t * opgroup)
 	opgroup->engaged_count++;
 	/* FIXME: can we do better than just assert? */
 	assert(state->opgroup->engaged_count);
+	current_scope->engaged_count++;
 	
 	r = opgroup_update_top_bottom(state, 0);
 	if(r < 0)
 	{
 		state->engaged = 0;
 		opgroup->engaged_count--;
+		current_scope->engaged_count--;
 	}
 	else
 	{
-		if ((opgroup->flags & OPGROUP_FLAG_ATOMIC) && !opgroup->has_data)
+		if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && !opgroup->has_data)
 			journal_bd_add_hold();
 		/* mark it as having data since it is now engaged */
 		/* (and therefore could acquire data at any time) */
@@ -485,12 +491,14 @@ int opgroup_disengage(opgroup_t * opgroup)
 	
 	state->engaged = 0;
 	opgroup->engaged_count--;
+	current_scope->engaged_count--;
 	
 	r = opgroup_update_top_bottom(state, 1);
 	if(r < 0)
 	{
 		state->engaged = 1;
 		opgroup->engaged_count++;
+		current_scope->engaged_count++;
 	}
 
 	return r;
@@ -506,7 +514,7 @@ int opgroup_release(opgroup_t * opgroup)
 	if(opgroup->tail_keep)
 	{
 		chdesc_satisfy(&opgroup->tail_keep);
-		if (opgroup->flags & OPGROUP_FLAG_ATOMIC)
+		if(opgroup->flags & OPGROUP_FLAG_ATOMIC)
 			journal_bd_remove_hold();
 		opgroup->is_released = 1;
 	}
@@ -577,7 +585,7 @@ opgroup_id_t opgroup_id(const opgroup_t * opgroup)
 
 int opgroup_engaged(void)
 {
-	return !!current_scope;
+	return current_scope && current_scope->engaged_count;
 }
 
 int opgroup_prepare_head(chdesc_t ** head)
