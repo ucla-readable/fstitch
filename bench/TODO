@@ -1,8 +1,6 @@
 - Add test daemon to automatically test relevant checkins
-- Add block trace data, extract, and report on web page
 - Add correctness extraction for existing tests
 - Add soft update order test
 - Add UFS support
-- Add journal support
-- Add comparision to linux and bsd
-- Add oprofile and gprof support
+- Add comparision to bsd
+- Add gprof support
