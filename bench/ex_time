@@ -14,8 +14,10 @@ sub svnversion() {
 	open(R, "<$dir/svnversion") || die;
 	while(<R>) {
 		my $line = $_;
-		$line =~ m/(\d+).*/;
-		my $rev = $1;
+		$line =~ m/(\d+\:)?(\d+).*/;
+		# Given a revision range, we probably care about the latest
+		# since we may be testing an old kudos with updated bench scripts
+		my $rev = $2;
 		close(R);
 		return $rev;
 	}
