@@ -437,6 +437,13 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	int r;
 	assert(block);
 	
+	if(!block->ddesc->bit_changes)
+	{
+		block->ddesc->bit_changes = hash_map_create();
+		if(!block->ddesc->bit_changes)
+			return NULL;
+	}
+	
 	chdesc = (chdesc_t *) hash_map_find_val(block->ddesc->bit_changes, key);
 	if(chdesc)
 	{
@@ -478,6 +485,8 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 /* get bdesc->ddesc->bit_changes[offset] */
 static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 {
+	if(!block->ddesc->bit_changes)
+		return NULL;
 	return hash_map_find_val(block->ddesc->bit_changes, (void *) (uint32_t) offset);
 }
 
@@ -1663,10 +1672,13 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 /* Remove all block bit_changes befores */
 static void clear_bit_changes(bdesc_t * block)
 {
-	hash_map_it2_t it = hash_map_it2_create(block->ddesc->bit_changes);
-	while(hash_map_it2_next(&it))
-		chdesc_destroy((chdesc_t **) &it.val);
-	assert(hash_map_empty(block->ddesc->bit_changes));
+	if(block->ddesc->bit_changes)
+	{
+		hash_map_it2_t it = hash_map_it2_create(block->ddesc->bit_changes);
+		while(hash_map_it2_next(&it))
+			chdesc_destroy((chdesc_t **) &it.val);
+		assert(hash_map_empty(block->ddesc->bit_changes));
+	}
 }
 
 /* Merge all RBs on 'block' into a single NRB */

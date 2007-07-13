@@ -2438,7 +2438,7 @@ static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
 	if(!bdesc)
 		return -EINVAL;
 	offset &= info->block_size - 1;
-	memcpy(inode, (bdesc->ddesc->data + offset ), sizeof(EXT2_inode_t));
+	memcpy(inode, bdesc->ddesc->data + offset, sizeof(EXT2_inode_t));
 
 	if(!inode)
 		return -ENOENT;

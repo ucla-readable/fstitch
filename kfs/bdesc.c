@@ -42,15 +42,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		free(bdesc);
 		return NULL;
 	}
-	/* FIXME: we don't need this on most blocks; create it on demand */
-	bdesc->ddesc->bit_changes = hash_map_create();
-	if(!bdesc->ddesc->bit_changes)
-	{
-		free(bdesc->ddesc->data);
-		free(bdesc->ddesc);
-		free(bdesc);
-		return NULL;
-	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->number = number;
@@ -81,6 +72,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 #endif
 	for (i = 0; i < NOVERLAP1 + 1; i++)
 		bdesc->ddesc->overlap1[i] = NULL;
+	bdesc->ddesc->bit_changes = NULL;
 	bdesc->ddesc->manager = NULL;
 	/* it has no manager, but give it a managed number anyway */
 	bdesc->ddesc->managed_number = number;
@@ -151,11 +143,14 @@ void bdesc_release(bdesc_t ** bdesc)
 			if((*bdesc)->ddesc->nrb)
 				fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
-			if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
-				fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 			for(i = 0; i < NBDLEVEL; i++)
 				assert(!(*bdesc)->ddesc->ready_changes[i].head);
-			hash_map_destroy((*bdesc)->ddesc->bit_changes);
+			if((*bdesc)->ddesc->bit_changes)
+			{
+				if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
+					fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+				hash_map_destroy((*bdesc)->ddesc->bit_changes);
+			}
 			if((*bdesc)->ddesc->manager)
 				blockman_remove((*bdesc)->ddesc);
 			free((*bdesc)->ddesc->data);
