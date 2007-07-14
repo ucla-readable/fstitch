@@ -5,7 +5,7 @@ BENCHDIR="`dirname "$0"`"
 KUDOSDIR="$BENCHDIR/.."
 
 PLOT_CMDS="plot_time plot_space plot_io"
-TESTS="tar rm postmark"
+TESTS="tar rm postmark andrew"
 
 function usage () {
 	echo "About: generate all plots"
