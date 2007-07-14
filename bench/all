@@ -42,3 +42,10 @@ if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
 		accounting_on; TESTNAME=mem $BENCHDIR/postmark; accounting_restore
 	fi
 fi
+
+$BENCHDIR/multi $NRUNS $BENCHDIR/andrew
+if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
+	if grep -v linux- $OUTDIR/fs; then
+		accounting_on; TESTNAME=mem $BENCHDIR/andrew; accounting_restore
+	fi
+fi
