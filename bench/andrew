@@ -1,0 +1,42 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+OUTDIR="$KUDOSDIR/test"
+HOST=`cat "$OUTDIR/host"`
+FS=`cat "$OUTDIR/fs"`
+CMODE=`cat "$OUTDIR/consistency_mode"`
+T=mab
+[ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
+N=`get_test_num $OUTDIR/$T`
+MAB=ab-leiz.tar.gz
+
+function test () {
+	mkdir $MNT/workingdir
+	ktime mab make -C $MNT/workingdir -f `pwd`/$KUDOSDIR/obj/ab/original/Makefile >& $MNT/logfile
+	ktime sync fsync $KUDOSDIR $MNT;
+}
+
+function run () {
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	prepare_postinit  $T $N $OUTDIR $HOST
+	ktime total test
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+}
+
+if [ $# -ne 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1;
+fi
+
+# Set up the Modified Andrew Benchmark
+mkdir -p $KUDOSDIR/obj
+rm -rf $KUDOSDIR/obj/ab
+tar C $KUDOSDIR/obj -xzf $BENCHDIR/$MAB
+rmdir $KUDOSDIR/obj/ab/workingdir
+sed -i "s,/home/leiz/ab/original,`pwd`/$KUDOSDIR/obj/ab/original," $KUDOSDIR/obj/ab/original/Makefile
+
+prepare $T $N $KUDOSDIR $OUTDIR $HOST
+run 2>&1 | tee $OUTDIR/$T.run.$N
+finish $T $N $KUDOSDIR $OUTDIR $HOST
