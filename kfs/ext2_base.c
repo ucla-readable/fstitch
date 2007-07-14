@@ -1713,9 +1713,10 @@ static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
 // FIXME: directory rename is incorrect (eg parent linkcounts are not updated)
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
-	Dprintf("EXT2DEBUG: ext2_rename\n");
+	Dprintf("EXT2DEBUG: ext2_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	ext2_fdesc_t * old, * new, * oldpar, * newpar;
+	size_t oldlen = strlen(oldname), newlen = strlen(newname);
 	int r, existing = 0;
 	uint32_t basep = 0, prev_basep = 0, prev_prev_basep = 0;
 	const EXT2_Dir_entry_t * old_dirent;
@@ -1724,32 +1725,32 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	chdesc_t * prev_head = NULL;
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 	
-	if (!head || strlen(oldname) > EXT2_NAME_LEN || strlen(newname) > EXT2_NAME_LEN)
+	if (!head || oldlen > EXT2_NAME_LEN || newlen > EXT2_NAME_LEN)
 		return -EINVAL;
 
 	if (!strcmp(oldname, newname) && (oldparent == newparent))
 		return 0;
 
-	oldpar = (ext2_fdesc_t *)ext2_lookup_inode(object, oldparent);
+	oldpar = (ext2_fdesc_t *) ext2_lookup_inode(object, oldparent);
 	if (!oldpar)
 		return -ENOENT;
 
 	for (r = 0; r >= 0; )
 	{
 		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
-		if (!r && strcmp(old_dirent->name, oldname) == 0)
+		if (!r && old_dirent->name_len == oldlen && !strncmp(old_dirent->name, oldname, oldlen))
 			break;
 		if (r < 0)
 			goto ext2_rename_exit;
 	}
 
-	old = (ext2_fdesc_t *)ext2_lookup_inode(object, old_dirent->inode);
+	old = (ext2_fdesc_t *) ext2_lookup_inode(object, old_dirent->inode);
 	if (!old) {
 		r = -ENOENT;
 		goto ext2_rename_exit;
 	}
 
-	newpar = (ext2_fdesc_t *)ext2_lookup_inode(object, newparent);
+	newpar = (ext2_fdesc_t *) ext2_lookup_inode(object, newparent);
 	if (!newpar) {
 		r = -ENOENT;
 		goto ext2_rename_exit2;
@@ -1759,8 +1760,8 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 	for (r = 0; r >= 0;)
 	{
 		r = ext2_get_disk_dirent(object, newpar, &basep, &new_dirent);
-		if (!r && strcmp(new_dirent->name, newname) == 0) {
-			new = (ext2_fdesc_t *)ext2_lookup_inode(object, new_dirent->inode);
+		if (!r && new_dirent->name_len == newlen && !strncmp(new_dirent->name, newname, newlen)) {
+			new = (ext2_fdesc_t *) ext2_lookup_inode(object, new_dirent->inode);
 			break;
 		}
 		
@@ -1813,7 +1814,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		prev_prev_basep = prev_basep;
 		prev_basep = basep;
 		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
-		if (!r && strcmp(old_dirent->name, oldname) == 0)
+		if (!r && old_dirent->name_len == oldlen && !strncmp(old_dirent->name, oldname, oldlen))
 			break;
 		if (r < 0)
 			goto ext2_rename_exit;
