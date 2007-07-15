@@ -56,6 +56,7 @@ struct cache_info {
 	} all, dirty;
 	/* map from (void *) number -> lru_slot * */
 	hash_map_t * block_map;
+	uint32_t blockcount;
 	uint16_t blocksize;
 };
 
@@ -99,7 +100,7 @@ static int wb2_cache_bd_get_status(void * object, int level, char * string, size
 
 static uint32_t wb2_cache_bd_get_numblocks(BD_t * object)
 {
-	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_numblocks);
+	return ((struct cache_info *) OBJLOCAL(object))->blockcount;
 }
 
 static uint16_t wb2_cache_bd_get_blocksize(BD_t * object)
@@ -502,7 +503,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > CALL(info->bd, get_numblocks))
+	if(!count || number + count > info->blockcount)
 		return NULL;
 	
 	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) number);
@@ -544,7 +545,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > CALL(info->bd, get_numblocks))
+	if(!count || number + count > info->blockcount)
 		return NULL;
 	
 	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) number);
@@ -579,7 +580,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	struct lru_slot * slot;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > CALL(info->bd, get_numblocks))
+	if(block->number + block->count > info->blockcount)
 		return -EINVAL;
 	
 	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) block->number);
@@ -748,6 +749,7 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	info->all.last = NULL;
 	info->dirty.first = NULL;
 	info->dirty.last = NULL;
+	info->blockcount = CALL(disk, get_numblocks);
 	info->blocksize = CALL(disk, get_blocksize);
 	
 	/* we generally delay blocks, so our level goes up */
