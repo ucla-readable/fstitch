@@ -190,17 +190,17 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 }
 
 /* return the BD level of chdesc_t * 'chdesc' */
-/* define as a macro instead of inline function because of include orderings */
 /* FIXME: INFLIGHT's l+1 can be incorrect when the module above l has multiple
  * paths to stable storage. */
 /* TODO: determine whether inlining affects runtime */
-#define chdesc_level(chdesc) \
-({ \
-	const chdesc_t * __chdesc = (chdesc); \
-	assert(!__chdesc->block || __chdesc->owner); \
-	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */ \
-	__chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc); \
-})
+static __inline uint16_t chdesc_level(const chdesc_t * chdesc) __attribute__((always_inline));
+static __inline uint16_t chdesc_level(const chdesc_t * chdesc)
+{
+	const chdesc_t * __chdesc = (chdesc);
+	assert(!__chdesc->block || __chdesc->owner);
+	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
+	return __chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc);
+}
 
 /* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */
 void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);

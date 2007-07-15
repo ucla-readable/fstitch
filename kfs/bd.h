@@ -1,3 +1,5 @@
+#include <kfs/chdesc.h>
+
 #ifndef __KUDOS_KFS_BD_H
 #define __KUDOS_KFS_BD_H
 
@@ -13,7 +15,6 @@
 struct BD;
 typedef struct BD BD_t;
 
-#include <kfs/chdesc.h>
 #include <kfs/bdesc.h>
 
 #define FLUSH_DEVICE 0xFFFFFFFF
