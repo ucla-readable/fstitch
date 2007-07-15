@@ -255,7 +255,7 @@ void chdesc_link_ready_changes(chdesc_t * chdesc);
 /* unlink chdesc from its ddesc's ready_changes list */
 void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 /* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
-void chdesc_update_ready_changes(chdesc_t * chdesc);
+static __inline void chdesc_update_ready_changes(chdesc_t * chdesc) __attribute__((always_inline));
 
 /* link chdesc into its ddesc's index_changes list */
 void chdesc_link_index_changes(chdesc_t * chdesc);
@@ -264,6 +264,37 @@ void chdesc_unlink_index_changes(chdesc_t * chdesc);
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc);
 void chdesc_untmpize_all_changes(chdesc_t * chdesc);
+
+
+/* return whether chdesc is ready to go down one level */
+/* FIXME: Can be incorrect when the below module's level differs by >1
+ * (eg the current module has multiple paths to stable storage). */
+static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((always_inline));
+static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
+{
+	/* empty noops are not on blocks and so cannot be on a ready list */
+	if(!chdesc->owner)
+		return 0;
+	uint16_t before_level = chdesc_before_level(chdesc);
+	return before_level < chdesc->owner->level || before_level == BDLEVEL_NONE;
+}
+
+static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)
+{
+	bool is_ready = chdesc_is_ready(chdesc);
+	bool is_in_ready_list = chdesc->ddesc_ready_pprev != NULL;
+	if(is_in_ready_list)
+	{
+		if(!is_ready)
+			chdesc_unlink_ready_changes(chdesc);
+	}
+	else
+	{
+		if(is_ready)
+			chdesc_link_ready_changes(chdesc);
+	}
+}
+
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>

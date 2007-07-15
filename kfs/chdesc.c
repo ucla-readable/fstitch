@@ -1183,35 +1183,6 @@ DEFINE_UNLINK_CHANGES(ready, level);
 DEFINE_LINK_CHANGES(index, graph_index);
 DEFINE_UNLINK_CHANGES(index, graph_index);
 
-/* return whether chdesc is ready to go down one level */
-/* FIXME: Can be incorrect when the below module's level differs by >1
- * (eg the current module has multiple paths to stable storage). */
-static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((always_inline));
-static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
-{
-	/* empty noops are not on blocks and so cannot be on a ready list */
-	if(!chdesc->owner)
-		return 0;
-	uint16_t before_level = chdesc_before_level(chdesc);
-	return before_level < chdesc->owner->level || before_level == BDLEVEL_NONE;
-}
-
-void chdesc_update_ready_changes(chdesc_t * chdesc)
-{
-	bool is_ready = chdesc_is_ready(chdesc);
-	bool is_in_ready_list = chdesc->ddesc_ready_pprev != NULL;
-	if(is_in_ready_list)
-	{
-		if(!is_ready)
-			chdesc_unlink_ready_changes(chdesc);
-	}
-	else
-	{
-		if(is_ready)
-			chdesc_link_ready_changes(chdesc);
-	}
-}
-
 void chdesc_tmpize_all_changes(chdesc_t * chdesc)
 {
 	assert(!chdesc->tmp_next && !chdesc->tmp_pprev);
@@ -1387,7 +1358,8 @@ int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...)
 	return r;
 }
 
-static bool new_chdescs_require_data(const bdesc_t * block)
+static __inline bool new_chdescs_require_data(const bdesc_t * block) __attribute__((always_inline));
+static __inline bool new_chdescs_require_data(const bdesc_t * block)
 {
 #if CHDESC_NRB
 	/* Rule: When adding chdesc C to block B,
