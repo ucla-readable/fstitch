@@ -259,18 +259,18 @@ static int icase_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	return r;
 }
 
-static size_t icase_get_num_features(CFS_t * cfs, inode_t ino)
+static size_t icase_get_max_feature_id(CFS_t * cfs)
 {
 	Dprintf("%s(%u)\n", __FUNCTION__, ino);
 	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_num_features, ino);
+	return CALL(state->frontend_cfs, get_max_feature_id);
 }
 
-static const feature_t * icase_get_feature(CFS_t * cfs, inode_t ino, size_t num)
+static const bool * icase_get_feature_array(CFS_t * cfs)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, num);
 	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
-	return CALL(state->frontend_cfs, get_feature, ino, num);
+	return CALL(state->frontend_cfs, get_feature_array);
 }
 
 static int icase_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)

@@ -248,14 +248,14 @@ static int32_t opgroup_lfs_get_block_space(LFS_t * object)
 	return CALL(info->lfs, get_block_space);
 }
 
-static size_t opgroup_lfs_get_num_features(LFS_t * object, inode_t ino)
+static size_t opgroup_lfs_get_max_feature_id(LFS_t * object)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_num_features, ino);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_max_feature_id);
 }
 
-static const feature_t * opgroup_lfs_get_feature(LFS_t * object, inode_t ino, size_t num)
+static const bool * opgroup_lfs_get_feature_array(LFS_t * object)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_feature, ino, num);
+	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_feature_array);
 }
 
 static int opgroup_lfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, void * data)

@@ -26,8 +26,8 @@ struct CFS {
 	DECLARE(CFS_t, int, rename, inode_t old_parent, const char * old_name, inode_t new_parent, const char * new_name);
 	DECLARE(CFS_t, int, mkdir, inode_t parent, const char * name, const metadata_set_t * initial_metadata, inode_t * inode);
 	DECLARE(CFS_t, int, rmdir, inode_t parent, const char * name);
-	DECLARE(CFS_t, size_t, get_num_features, inode_t inode);
-	DECLARE(CFS_t, const feature_t *, get_feature, inode_t inode, size_t num);
+	DECLARE(CFS_t, size_t, get_max_feature_id);
+	DECLARE(CFS_t, const bool *, get_feature_array);
 	DECLARE(CFS_t, int, get_metadata, inode_t inode, uint32_t id, size_t size, void * data);
 	DECLARE(CFS_t, int, set_metadata, inode_t inode, uint32_t id, size_t size, const void * data);
 };
@@ -48,8 +48,8 @@ struct CFS {
 	ASSIGN(cfs, module, rename); \
 	ASSIGN(cfs, module, mkdir); \
 	ASSIGN(cfs, module, rmdir); \
-	ASSIGN(cfs, module, get_num_features); \
-	ASSIGN(cfs, module, get_feature); \
+	ASSIGN(cfs, module, get_max_feature_id); \
+	ASSIGN(cfs, module, get_feature_array); \
 	ASSIGN(cfs, module, get_metadata); \
 	ASSIGN(cfs, module, set_metadata); \
 }

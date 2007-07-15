@@ -408,25 +408,18 @@ static int devfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	return -EPERM;
 }
 
-static const feature_t * devfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_blocksize, &KFS_feature_devicesize};
+static const bool devfs_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1};
 
-static size_t devfs_get_num_features(CFS_t * cfs, inode_t inode)
+static size_t devfs_get_max_feature_id(CFS_t * cfs)
 {
-	Dprintf("%s(%u)\n", __FUNCTION__, inode);
-	return sizeof(devfs_features) / sizeof(devfs_features[0]);
+	Dprintf("%s()\n", __FUNCTION__);
+	return sizeof(devfs_features) / sizeof(devfs_features[0]) - 1;
 }
 
-static const feature_t * devfs_get_feature(CFS_t * cfs, inode_t inode, size_t num)
+static const bool * devfs_get_feature_array(CFS_t * cfs)
 {
-	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, inode, num);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
-	devfs_fdesc_t * fdesc;
-	
-	fdesc = devfd_lookup_inode(state, inode);
-	
-	if(!fdesc || num < 0 || num >= sizeof(devfs_features) / sizeof(devfs_features[0]))
-		return NULL;
-	return devfs_features[num];
+	Dprintf("%s()\n", __FUNCTION__);
+	return devfs_features;
 }
 
 static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, void * data)
@@ -442,21 +435,21 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 			return -ENOENT;
 	}
 	
-	if(id == KFS_feature_size.id)
+	if(id == KFS_FEATURE_SIZE)
 	{
 		if(size < sizeof(size_t))
 			return -ENOMEM;
 		size = sizeof(size_t);
 		*((size_t *) data) = fdesc ? CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks) : 0;
 	}
-	else if(id == KFS_feature_filetype.id)
+	else if(id == KFS_FEATURE_FILETYPE)
 	{
 		if(size < sizeof(int32_t))
 			return -ENOMEM;
 		size = sizeof(int32_t);
 		*((int32_t *) data) = fdesc ? TYPE_DEVICE : TYPE_DIR;
 	}
-	else if(id == KFS_feature_freespace.id || id == KFS_feature_blocksize.id || id == KFS_feature_devicesize.id)
+	else if(id == KFS_FEATURE_FREESPACE || id == KFS_FEATURE_BLOCKSIZE || id == KFS_FEATURE_DEVSIZE)
 	{
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;

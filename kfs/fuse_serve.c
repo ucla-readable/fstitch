@@ -131,16 +131,13 @@ static CFS_t * reqcfs(fuse_req_t req)
 	return reqmount(req)->cfs;
 }
 
-static bool feature_supported(CFS_t * cfs, inode_t cfs_ino, int feature_id)
+static bool feature_supported(CFS_t * cfs, feature_id_t id)
 {
-	const size_t num_features = CALL(cfs, get_num_features, cfs_ino);
-	size_t i;
-
-	for (i=0; i < num_features; i++)
-		if (CALL(cfs, get_feature, cfs_ino, i)->id == feature_id)
-			return 1;
-
-	return 0;
+	const size_t max_id = CALL(cfs, get_max_feature_id);
+	const bool * id_array = CALL(cfs, get_feature_array);
+	if(id > max_id)
+		return 0;
+	return id_array[id];
 }
 
 static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, struct stat * stbuf)
@@ -149,18 +146,18 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	int r;
 	CFS_t * cfs = mount->cfs;
 	uint32_t type;
-	bool nlinks_supported = feature_supported(cfs, cfs_ino, KFS_feature_nlinks.id);
-	bool uid_supported = feature_supported(cfs, cfs_ino, KFS_feature_uid.id);
-	bool gid_supported = feature_supported(cfs, cfs_ino, KFS_feature_gid.id);
-	bool perms_supported = feature_supported(cfs, cfs_ino, KFS_feature_unix_permissions.id);
-	bool mtime_supported = feature_supported(cfs, cfs_ino, KFS_feature_mtime.id);
-	bool atime_supported = feature_supported(cfs, cfs_ino, KFS_feature_atime.id);
+	bool nlinks_supported = feature_supported(cfs, KFS_FEATURE_NLINKS);
+	bool uid_supported = feature_supported(cfs, KFS_FEATURE_UID);
+	bool gid_supported = feature_supported(cfs, KFS_FEATURE_GID);
+	bool perms_supported = feature_supported(cfs, KFS_FEATURE_UNIX_PERM);
+	bool mtime_supported = feature_supported(cfs, KFS_FEATURE_MTIME);
+	bool atime_supported = feature_supported(cfs, KFS_FEATURE_ATIME);
 	uint32_t nlinks = 0;
 	uint16_t perms;
 	time_t mtime = time(NULL);
 	time_t atime = mtime;
 
-	r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_filetype.id, sizeof(type), &type);
+	r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_FILETYPE, sizeof(type), &type);
 	if (r < 0)
 	{
 		Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
@@ -169,7 +166,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (nlinks_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
 		if (r < 0)
 			fprintf(stderr, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
 		else
@@ -207,7 +204,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		if (!nlinks)
 			nlinks = 1;
 
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_size.id, sizeof(filesize), &filesize);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_SIZE, sizeof(filesize), &filesize);
 		if (r < 0)
 		{
 			Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
@@ -237,7 +234,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	if (uid_supported)
 	{
 		uint32_t cfs_uid;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_uid.id, sizeof(cfs_uid), &cfs_uid);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_UID, sizeof(cfs_uid), &cfs_uid);
 		if (r >= 0)
 		{
 			assert(r == sizeof(cfs_uid));
@@ -254,7 +251,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	if (gid_supported)
 	{
 		uint32_t cfs_gid;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_gid.id, sizeof(cfs_gid), &cfs_gid);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_GID, sizeof(cfs_gid), &cfs_gid);
 		if (r >= 0)
 		{
 			assert(r == sizeof(cfs_gid));
@@ -270,7 +267,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (perms_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(perms), &perms);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_UNIX_PERM, sizeof(perms), &perms);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -279,7 +276,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (mtime_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_mtime.id, sizeof(mtime), &mtime);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_MTIME, sizeof(mtime), &mtime);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -288,7 +285,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (atime_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_feature_atime.id, sizeof(atime), &atime);
+		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_ATIME, sizeof(atime), &atime);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -339,38 +336,38 @@ struct fuse_metadata {
 };
 typedef struct fuse_metadata fuse_metadata_t;
 
-static int fuse_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+static int fuse_get_metadata(void * arg, feature_id_t id, size_t size, void * data)
 {
 	const fuse_metadata_t * fusemd = (fuse_metadata_t *) arg;
-	if (KFS_feature_uid.id == id)
+	if (KFS_FEATURE_UID == id)
 	{
 		if (size < sizeof(fusemd->ctx->uid))
 			return -ENOMEM;
 		*(uid_t *) data = fusemd->ctx->uid;
 		return sizeof(fusemd->ctx->uid);
 	}
-	else if (KFS_feature_gid.id == id)
+	else if (KFS_FEATURE_GID == id)
 	{
 		if (size < sizeof(fusemd->ctx->gid))
 			return -ENOMEM;
 		*(gid_t *) data = fusemd->ctx->gid;
 		return sizeof(fusemd->ctx->gid);
 	}
-	else if (KFS_feature_unix_permissions.id == id)
+	else if (KFS_FEATURE_UNIX_PERM == id)
 	{
 		if (size < sizeof(fusemd->mode))
 			return -ENOMEM;
 		*(uint16_t *) data = fusemd->mode;
 		return sizeof(fusemd->mode);
 	}
-	else if (KFS_feature_filetype.id == id)
+	else if (KFS_FEATURE_FILETYPE == id)
 	{
 		if (size < sizeof(fusemd->type))
 			return -ENOMEM;
 		*(int *) data = fusemd->type;
 		return sizeof(fusemd->type);
 	}
-	else if (KFS_feature_symlink.id == id && fusemd->type == TYPE_SYMLINK)
+	else if (KFS_FEATURE_SYMLINK == id && fusemd->type == TYPE_SYMLINK)
 	{
 		if (size < fusemd->type_info.symlink.link_len)
 			return -ENOMEM;
@@ -387,7 +384,7 @@ static void serve_statfs(fuse_req_t req)
 	struct statvfs st; // For more info, see: man 2 statvfs
 	int r;
 
-	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_blocksize.id, sizeof(st.f_frsize), &st.f_frsize);
+	r = CALL(reqcfs(req), get_metadata, 0, KFS_FEATURE_BLOCKSIZE, sizeof(st.f_frsize), &st.f_frsize);
 	if (r < 0)
 		goto serve_statfs_err;
 	else if (sizeof(st.f_bsize) != r)
@@ -397,12 +394,12 @@ static void serve_statfs(fuse_req_t req)
 	}
 	st.f_bsize = st.f_frsize;
 
-	r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_devicesize.id, sizeof(st.f_blocks), &st.f_blocks);
+	r = CALL(reqcfs(req), get_metadata, 0, KFS_FEATURE_DEVSIZE, sizeof(st.f_blocks), &st.f_blocks);
 	if (sizeof(st.f_blocks) != r)
 		st.f_blocks = st.f_bfree = st.f_bavail = 0;
 	else
 	{
-		r = CALL(reqcfs(req), get_metadata, 0, KFS_feature_freespace.id, sizeof(st.f_bavail), &st.f_bavail);
+		r = CALL(reqcfs(req), get_metadata, 0, KFS_FEATURE_FREESPACE, sizeof(st.f_bavail), &st.f_bavail);
 		if (sizeof(st.f_bavail) != r)
 			st.f_bfree = st.f_bavail = 0;
 		else
@@ -447,11 +444,11 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 {
 	inode_t cfs_ino = fusecfsino(req, fuse_ino);
 	int supported = FUSE_SET_ATTR_SIZE;
-	bool uid_supported   = feature_supported(reqcfs(req), cfs_ino, KFS_feature_uid.id);
-	bool gid_supported   = feature_supported(reqcfs(req), cfs_ino, KFS_feature_gid.id);
-	bool perms_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_unix_permissions.id);
-	bool mtime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
-	bool atime_supported = feature_supported(reqcfs(req), cfs_ino, KFS_feature_mtime.id);
+	bool uid_supported   = feature_supported(reqcfs(req), KFS_FEATURE_UID);
+	bool gid_supported   = feature_supported(reqcfs(req), KFS_FEATURE_GID);
+	bool perms_supported = feature_supported(reqcfs(req), KFS_FEATURE_UNIX_PERM);
+	bool mtime_supported = feature_supported(reqcfs(req), KFS_FEATURE_MTIME);
+	bool atime_supported = feature_supported(reqcfs(req), KFS_FEATURE_MTIME);
 	struct stat stbuf;
 	int r;
 	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
@@ -522,7 +519,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	if (to_set & FUSE_SET_ATTR_UID)
 	{
 		uint32_t cfs_uid = attr->st_uid;
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_uid.id, sizeof(cfs_uid), &cfs_uid);
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_UID, sizeof(cfs_uid), &cfs_uid);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -534,7 +531,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	if (to_set & FUSE_SET_ATTR_GID)
 	{
 		uint32_t cfs_gid = attr->st_gid;
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_gid.id, sizeof(cfs_gid), &cfs_gid);
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_GID, sizeof(cfs_gid), &cfs_gid);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -546,7 +543,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	if (to_set & FUSE_SET_ATTR_MODE)
 	{
 		uint16_t kfs_mode = attr->st_mode;
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_unix_permissions.id, sizeof(kfs_mode), &kfs_mode);
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_UNIX_PERM, sizeof(kfs_mode), &kfs_mode);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -557,7 +554,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 
 	if (to_set & FUSE_SET_ATTR_MTIME)
 	{
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_mtime.id, sizeof(attr->st_mtime), &attr->st_mtime);
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_MTIME, sizeof(attr->st_mtime), &attr->st_mtime);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -568,7 +565,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	
 	if (to_set & FUSE_SET_ATTR_ATIME)
 	{
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_feature_atime.id, sizeof(attr->st_mtime), &attr->st_mtime);
+		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_ATIME, sizeof(attr->st_mtime), &attr->st_mtime);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
@@ -623,7 +620,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	bool symlink_supported = feature_supported(reqcfs(req), fusecfsino(req, ino), KFS_feature_symlink.id);
+	bool symlink_supported = feature_supported(reqcfs(req), KFS_FEATURE_SYMLINK);
 	char link_name[PATH_MAX + 1];
 	int r;
 
@@ -634,7 +631,7 @@ static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 		return;
 	}
 
-	r = CALL(reqcfs(req), get_metadata, fusecfsino(req, ino), KFS_feature_symlink.id, sizeof(link_name) - 1, link_name);
+	r = CALL(reqcfs(req), get_metadata, fusecfsino(req, ino), KFS_FEATURE_SYMLINK, sizeof(link_name) - 1, link_name);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
@@ -750,7 +747,7 @@ static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
 	int r;
 	struct fuse_entry_param e;
 
-	if (!feature_supported(cfs, cfs_parent, KFS_feature_symlink.id))
+	if (!feature_supported(cfs, KFS_FEATURE_SYMLINK))
 	{
 		r = -ENOSYS;
 		goto error;
@@ -1060,7 +1057,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 
 	cfs_ino = fusecfsino(req, fuse_ino);
 
-	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_feature_filetype.id, sizeof(type), &type);
+	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_FEATURE_FILETYPE, sizeof(type), &type);
 	assert(r == sizeof(type));
 
 	if (type == TYPE_DIR)

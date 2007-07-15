@@ -154,7 +154,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 		}
 
 		// Set directory size
-		r = CALL(info->parts.base, set_metadata_fdesc, (fdesc_t *) dirf, KFS_feature_size.id, sizeof(uint32_t), &newsize, head);
+		r = CALL(info->parts.base, set_metadata_fdesc, (fdesc_t *) dirf, KFS_FEATURE_SIZE, sizeof(uint32_t), &newsize, head);
 		if (r < 0)
 			return r;
 	}

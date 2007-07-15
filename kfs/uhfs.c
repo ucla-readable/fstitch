@@ -22,7 +22,7 @@ struct uhfs_fdesc {
 	fdesc_common_t * common;
 	fdesc_t * inner;
 	inode_t inode;
-	uint32_t size_id; /* metadata id for filesize, 0 if not supported */
+	feature_id_t size_id; /* metadata id for filesize, 0 if not supported */
 	bool type; /* whether the type metadata is supported */
 };
 typedef struct uhfs_fdesc uhfs_fdesc_t;
@@ -33,25 +33,22 @@ struct uhfs_state {
 };
 
 
-static bool lfs_feature_supported(LFS_t * lfs, inode_t ino, int feature_id)
+static bool lfs_feature_supported(LFS_t * lfs, feature_id_t id)
 {
-	const size_t num_features = CALL(lfs, get_num_features, ino);
-	size_t i;
-
-	for (i=0; i < num_features; i++)
-		if (CALL(lfs, get_feature, ino, i)->id == feature_id)
-			return 1;
-
-	return 0;
+	const size_t max_id = CALL(lfs, get_max_feature_id);
+	const bool * id_array = CALL(lfs, get_feature_array);
+	if(id > max_id)
+		return 0;
+	return id_array[id];
 }
 
-static bool check_type_supported(LFS_t * lfs, inode_t ino, fdesc_t * f, uint32_t * filetype)
+static bool check_type_supported(LFS_t * lfs, fdesc_t * f, uint32_t * filetype)
 {
-	const bool type_supported = lfs_feature_supported(lfs, ino, KFS_feature_filetype.id);
+	const bool type_supported = lfs_feature_supported(lfs, KFS_FEATURE_FILETYPE);
 
 	if (type_supported)
 	{
-		int r = CALL(lfs, get_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(*filetype), filetype);
+		int r = CALL(lfs, get_metadata_fdesc, f, KFS_FEATURE_FILETYPE, sizeof(*filetype), filetype);
 		if (r < 0)
 			*filetype = TYPE_INVAL;
 		else
@@ -63,7 +60,7 @@ static bool check_type_supported(LFS_t * lfs, inode_t ino, fdesc_t * f, uint32_t
 	return type_supported;
 }
 
-static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, inode_t ino, uint32_t size_id, bool type)
+static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, inode_t ino, feature_id_t size_id, bool type)
 {
 	uhfs_fdesc_t * uf = malloc(sizeof(*uf));
 	if (!uf)
@@ -193,25 +190,18 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 
 static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, fdesc_t ** outer)
 {
-	uint32_t size_id = 0;
+	feature_id_t size_id = KFS_FEATURE_NONE;
 	bool type = 0;
 	uhfs_fdesc_t * uf;
 
 	/* detect whether the filesize and filetype features are supported */
 	{
-		const size_t num_features = CALL(state->lfs, get_num_features, ino);
-		size_t i;
-		for (i=0; i < num_features; i++)
-		{
-			const feature_t * f = CALL(state->lfs, get_feature, ino, i);
-			if (f->id == KFS_feature_size.id)
-				size_id = KFS_feature_size.id;
-			else if (f->id == KFS_feature_filetype.id)
-				type = 1;
-
-			if (size_id && type)
-				break;
-		}
+		const size_t max_id = CALL(state->lfs, get_max_feature_id);
+		const bool * id_array = CALL(state->lfs, get_feature_array);
+		if(KFS_FEATURE_SIZE <= max_id && id_array[KFS_FEATURE_SIZE])
+			size_id = KFS_FEATURE_SIZE;
+		if(KFS_FEATURE_FILETYPE <= max_id && id_array[KFS_FEATURE_FILETYPE])
+			type = 1;
 	}
 
 	uf = uhfs_fdesc_create(inner, ino, size_id, type);
@@ -233,9 +223,9 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	uint32_t filetype;
 	fdesc_t * inner;
 	int r;
-	uint32_t filetype;
 
 	if ((mode & O_CREAT))
 		return -EINVAL;
@@ -247,7 +237,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 
 	if ((mode & O_WRONLY) || (mode & O_RDWR))
 	{
-		if (check_type_supported(state->lfs, ino, inner, &filetype))
+		if (check_type_supported(state->lfs, inner, &filetype))
 		{
 			if (filetype == TYPE_DIR)
 				return -1; // -EISDIR
@@ -294,7 +284,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 		return -EEXIST;
 	}
 
-	r = initialmd->get(initialmd->arg, KFS_feature_filetype.id, sizeof(type), &type);
+	r = initialmd->get(initialmd->arg, KFS_FEATURE_FILETYPE, sizeof(type), &type);
 	if (r < 0)
 		return r;
 	assert(type == TYPE_FILE || type == TYPE_SYMLINK);
@@ -321,7 +311,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	uint32_t file_size = -1;
 	uint32_t filetype;
 
-	if (check_type_supported(state->lfs, uf->inode, uf->inner, &filetype))
+	if (check_type_supported(state->lfs, uf->inner, &filetype))
 	{
 		if (filetype == TYPE_DIR)
 			return -1; // -EISDIR
@@ -557,13 +547,13 @@ static int uhfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint1
 static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f, chdesc_t ** prev_head)
 {
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	const bool link_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_nlinks.id);
-	const bool delete_supported = lfs_feature_supported(state->lfs, ino, KFS_feature_delete.id);
+	const bool link_supported = lfs_feature_supported(state->lfs, KFS_FEATURE_NLINKS);
+	const bool delete_supported = lfs_feature_supported(state->lfs, KFS_FEATURE_DELETE);
 	int r;
 
 	if (link_supported) {
 		uint32_t nlinks;
-		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_feature_nlinks.id, sizeof(nlinks), &nlinks);
+		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
@@ -622,7 +612,7 @@ static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t 
 	if (!f)
 		return -1;
 
-	dir_supported = check_type_supported(state->lfs, ino, f, &filetype);
+	dir_supported = check_type_supported(state->lfs, f, &filetype);
 	if (dir_supported) {
 		if (filetype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, f);
@@ -646,7 +636,7 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 	return unlink_name(cfs, parent, name, &prev_head);
 }
 
-static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * data)
 {
 	return -ENOENT;
 }
@@ -667,7 +657,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	if (!oldf)
 		return -1;
 
-	type_supported = check_type_supported(state->lfs, ino, oldf, &oldtype);
+	type_supported = check_type_supported(state->lfs, oldf, &oldtype);
 	/* determine old's type to set new's type */
 	if (!type_supported)
 		kpanic("%s() requires LFS filetype feature support to determine whether newname is to be a file or directory", __FUNCTION__);
@@ -692,7 +682,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 
 	if (type_supported)
 	{
-		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_feature_filetype.id, sizeof(oldtype), &oldtype, &prev_head);
+		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_FEATURE_FILETYPE, sizeof(oldtype), &oldtype, &prev_head);
 		if (r < 0)
 		{
 			CALL(state->lfs, free_fdesc, oldf);
@@ -749,10 +739,10 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 		return -1;
 
 	/* set the filetype metadata */
-	if (lfs_feature_supported(state->lfs, *ino, KFS_feature_filetype.id))
+	if (lfs_feature_supported(state->lfs, KFS_FEATURE_FILETYPE))
 	{
 		const int type = TYPE_DIR;
-		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_feature_filetype.id, sizeof(type), &type, &prev_head);
+		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_FEATURE_FILETYPE, sizeof(type), &type, &prev_head);
 		if (r < 0)
 		{
 			/* ignore remove_name() error in favor of the real error */
@@ -788,7 +778,7 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 		return -1;
 	f->common->parent = parent;
 
-	dir_supported = check_type_supported(state->lfs, ino, f, &filetype);
+	dir_supported = check_type_supported(state->lfs, f, &filetype);
 	if (dir_supported) {
 		if (filetype == TYPE_INVAL) {
 			CALL(state->lfs, free_fdesc, f);
@@ -819,20 +809,18 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	return retval;
 }
 
-static size_t uhfs_get_num_features(CFS_t * cfs, inode_t ino)
+static size_t uhfs_get_max_feature_id(CFS_t * cfs)
 {
 	Dprintf("%s(%u)\n", __FUNCTION__, ino);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-
-	return CALL(state->lfs, get_num_features, ino);
+	return CALL(state->lfs, get_max_feature_id);
 }
 
-static const feature_t * uhfs_get_feature(CFS_t * cfs, inode_t ino, size_t num)
+static const bool * uhfs_get_feature_array(CFS_t * cfs)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, num);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-
-   return CALL(state->lfs, get_feature, ino, num);
+	return CALL(state->lfs, get_feature_array);
 }
 
 static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)

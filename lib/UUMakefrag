@@ -4,7 +4,6 @@ LIB_SRCFILES := \
 			lib/vector.c \
 			lib/hash_map.c \
 			lib/hash_set.c \
-			lib/kfs_feature.c \
 			lib/svnrevtol.c \
 			lib/sleep.c
 

@@ -66,8 +66,8 @@ struct LFS {
 	DECLARE(LFS_t, chdesc_t *, get_write_head);
 	/* see bd.h for a description of get_block_space */
 	DECLARE(LFS_t, int32_t, get_block_space);
-	DECLARE(LFS_t, size_t, get_num_features, inode_t ino);
-	DECLARE(LFS_t, const feature_t *, get_feature, inode_t ino, size_t num);
+	DECLARE(LFS_t, size_t, get_max_feature_id);
+	DECLARE(LFS_t, const bool *, get_feature_array);
 	DECLARE(LFS_t, int, get_metadata_inode, inode_t ino, uint32_t id, size_t size, void * data);
 	DECLARE(LFS_t, int, get_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t size, void * data);
 	DECLARE(LFS_t, int, set_metadata_inode, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head);
@@ -97,8 +97,8 @@ struct LFS {
 	ASSIGN(lfs, module, write_block); \
 	ASSIGN(lfs, module, get_write_head); \
 	ASSIGN(lfs, module, get_block_space); \
-	ASSIGN(lfs, module, get_num_features); \
-	ASSIGN(lfs, module, get_feature); \
+	ASSIGN(lfs, module, get_max_feature_id); \
+	ASSIGN(lfs, module, get_feature_array); \
 	ASSIGN(lfs, module, get_metadata_inode); \
 	ASSIGN(lfs, module, get_metadata_fdesc); \
 	ASSIGN(lfs, module, set_metadata_inode); \

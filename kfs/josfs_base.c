@@ -852,7 +852,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	dir = dir_fdesc->file;
 	updated_size = dir->f_size + JOSFS_BLKSIZE;
 	temp_head = *head;
-	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_feature_size.id, sizeof(uint32_t), &updated_size, &temp_head);
+	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_FEATURE_SIZE, sizeof(uint32_t), &updated_size, &temp_head);
 	josfs_free_fdesc(object, (fdesc_t *) dir_fdesc);
 	dir_fdesc = NULL;
 	dir = NULL;
@@ -895,7 +895,7 @@ allocate_name_exit:
 	return NULL;
 }
 
-static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * data)
 {
 	return -ENOENT;
 }
@@ -1182,18 +1182,16 @@ static int32_t josfs_get_block_space(LFS_t * object)
 	return CALL(info->ubd, get_block_space);
 }
 
-static const feature_t * josfs_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_delete};
+static const bool josfs_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1, [KFS_FEATURE_MTIME] = 1, [KFS_FEATURE_ATIME] = 1, [KFS_FEATURE_DELETE] = 1};
 
-static size_t josfs_get_num_features(LFS_t * object, inode_t ino)
+static size_t josfs_get_max_feature_id(LFS_t * object)
 {
-	return sizeof(josfs_features) / sizeof(josfs_features[0]);
+	return sizeof(josfs_features) / sizeof(josfs_features[0]) - 1;
 }
 
-static const feature_t * josfs_get_feature(LFS_t * object, inode_t ino, size_t num)
+static const bool * josfs_get_feature_array(LFS_t * object)
 {
-	if(num < 0 || num >= sizeof(josfs_features) / sizeof(josfs_features[0]))
-		return NULL;
-	return josfs_features[num];
+	return josfs_features;
 }
 
 static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, void * data)
@@ -1201,7 +1199,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 	Dprintf("JOSFSDEBUG: josfs_get_metadata\n");
 	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 
-	if (id == KFS_feature_size.id) {
+	if (id == KFS_FEATURE_SIZE) {
 		if (!f)
 			return -EINVAL;
 
@@ -1211,7 +1209,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 
 		*((int32_t *) data) = f->file->f_size;
 	}
-	else if (id == KFS_feature_filetype.id) {
+	else if (id == KFS_FEATURE_FILETYPE) {
 		if (!f)
 			return -EINVAL;
 
@@ -1226,35 +1224,35 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 		else
 			*((uint32_t *) data) = TYPE_INVAL;
 	}
-	else if (id == KFS_feature_freespace.id) {
+	else if (id == KFS_FEATURE_FREESPACE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = count_free_space(object);
 	}
-	else if (id == KFS_feature_file_lfs.id) {
+	else if (id == KFS_FEATURE_FILE_LFS) {
 		if (size < sizeof(object))
 			return -ENOMEM;
 		size = sizeof(object);
 
 		*((typeof(object) *) data) = object;
 	}
-	else if (id == KFS_feature_blocksize.id) {
+	else if (id == KFS_FEATURE_BLOCKSIZE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = josfs_get_blocksize(object);
 	}
-	else if (id == KFS_feature_devicesize.id) {
+	else if (id == KFS_FEATURE_DEVSIZE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = super->s_nblocks;
 	}
-	else if (id == KFS_feature_mtime.id || id == KFS_feature_atime.id) {
+	else if (id == KFS_FEATURE_MTIME || id == KFS_FEATURE_ATIME) {
 		if (!f)
 			return -EINVAL;
 
@@ -1262,7 +1260,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
-		if (id == KFS_feature_mtime.id)
+		if (id == KFS_FEATURE_MTIME)
 			*((uint32_t *) data) = f->file->f_mtime;
 		else
 			*((uint32_t *) data) = f->file->f_atime;
@@ -1302,7 +1300,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 	if (!head)
 		return -EINVAL;
 
-	if (id == KFS_feature_size.id) {
+	if (id == KFS_FEATURE_SIZE) {
 		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) > JOSFS_MAXFILESIZE)
 			return -EINVAL;
 
@@ -1323,7 +1321,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		f->file->f_size = *((int32_t *) data);
 		return 0;
 	}
-	else if (id == KFS_feature_filetype.id) {
+	else if (id == KFS_FEATURE_FILETYPE) {
 		uint32_t fs_type;
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
@@ -1357,7 +1355,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		f->file->f_type = fs_type;
 		return 0;
 	}
-	else if (id == KFS_feature_mtime.id || id == KFS_feature_atime.id) {
+	else if (id == KFS_FEATURE_MTIME || id == KFS_FEATURE_ATIME) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 
@@ -1366,7 +1364,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 			return -EINVAL;
 
 		offset = f->index;
-		if (id == KFS_feature_mtime.id)
+		if (id == KFS_FEATURE_MTIME)
 			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_mtime;
 		else
 			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_atime;
@@ -1378,7 +1376,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (r < 0)
 			return r;
 
-		if (id == KFS_feature_mtime.id)
+		if (id == KFS_FEATURE_MTIME)
 			f->file->f_mtime = *((uint32_t *) data);
 		else
 			f->file->f_atime = *((uint32_t *) data);

@@ -1389,7 +1389,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			goto allocate_name_exit2;
 		assert(r == 0);
 
-		r = initialmd->get(initialmd->arg, KFS_feature_uid.id, sizeof(x32), &x32);
+		r = initialmd->get(initialmd->arg, KFS_FEATURE_UID, sizeof(x32), &x32);
 		if (r > 0)
 			new_file->f_inode.i_uid = x32;
 		else if (r == -ENOENT)
@@ -1397,7 +1397,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 		else
 			assert(0);
 
-		r = initialmd->get(initialmd->arg, KFS_feature_gid.id, sizeof(x32), &x32);
+		r = initialmd->get(initialmd->arg, KFS_FEATURE_GID, sizeof(x32), &x32);
 		if (r > 0)
 			new_file->f_inode.i_gid = x32;
 		else if (r == -ENOENT)
@@ -1407,7 +1407,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 
 		new_file->f_inode.i_mode = mode | EXT2_S_IRUSR | EXT2_S_IWUSR;
 
-		r = initialmd->get(initialmd->arg, KFS_feature_unix_permissions.id, sizeof(x16), &x16);
+		r = initialmd->get(initialmd->arg, KFS_FEATURE_UNIX_PERM, sizeof(x16), &x16);
 		if (r > 0)
 			new_file->f_inode.i_mode |= x16;
 		else if (r != -ENOENT)
@@ -1426,11 +1426,11 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 				r = -ENOMEM;
 				goto allocate_name_exit2;
 			}
-			r = initialmd->get(initialmd->arg, KFS_feature_symlink.id, info->block_size, link_buf);
+			r = initialmd->get(initialmd->arg, KFS_FEATURE_SYMLINK, info->block_size, link_buf);
 			if (r < 0)
 				goto allocate_name_exit2;
 			else {
-				r = ext2_set_metadata(object, new_file, KFS_feature_symlink.id, r, link_buf, &head_set.array[1]);
+				r = ext2_set_metadata(object, new_file, KFS_FEATURE_SYMLINK, r, link_buf, &head_set.array[1]);
 				if (r < 0)
 					goto allocate_name_exit2;
 			}
@@ -1705,7 +1705,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	return ext2_erase_block_ptr(object, &f->f_inode, head);
 }
 
-static int empty_get_metadata(void * arg, uint32_t id, size_t size, void * data)
+static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * data)
 {
 	return -ENOENT;
 }
@@ -2088,25 +2088,23 @@ static int32_t ext2_get_block_space(LFS_t * object)
 	return CALL(info->ubd, get_block_space);
 }
 
-static const feature_t * ext2_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize, &KFS_feature_mtime, &KFS_feature_atime, &KFS_feature_gid, &KFS_feature_uid, &KFS_feature_unix_permissions, &KFS_feature_nlinks, &KFS_feature_symlink, &KFS_feature_delete};
+static const bool ext2_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1, [KFS_FEATURE_MTIME] = 1, [KFS_FEATURE_ATIME] = 1, [KFS_FEATURE_GID] = 1, [KFS_FEATURE_UID] = 1, [KFS_FEATURE_UNIX_PERM] = 1, [KFS_FEATURE_NLINKS] = 1, [KFS_FEATURE_SYMLINK] = 1, [KFS_FEATURE_DELETE] = 1};
 
-static size_t ext2_get_num_features(LFS_t * object, inode_t ino)
+static size_t ext2_get_max_feature_id(LFS_t * object)
 {
-	return sizeof(ext2_features) / sizeof(ext2_features[0]);
+	return sizeof(ext2_features) / sizeof(ext2_features[0]) - 1;
 }
 
-static const feature_t * ext2_get_feature(LFS_t * object, inode_t ino, size_t num)
+static const bool * ext2_get_feature_array(LFS_t * object)
 {
-	if(num < 0 || num >= sizeof(ext2_features) / sizeof(ext2_features[0]))
-		return NULL;
-	return ext2_features[num];
+	return ext2_features;
 }
 
 static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("EXT2DEBUG: ext2_get_metadata\n");
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	if (id == KFS_feature_size.id) {
+	if (id == KFS_FEATURE_SIZE) {
 		if (!f)
 			return -EINVAL;
 
@@ -2116,7 +2114,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_inode.i_size;
 	}
-	else if (id == KFS_feature_filetype.id) {
+	else if (id == KFS_FEATURE_FILETYPE) {
 		if (!f)
 			return -EINVAL;
 
@@ -2126,35 +2124,35 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_type;
 	}
-	else if (id == KFS_feature_freespace.id) {
+	else if (id == KFS_FEATURE_FREESPACE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = count_free_space(object);
 	}
-	else if (id == KFS_feature_file_lfs.id) {
+	else if (id == KFS_FEATURE_FILE_LFS) {
 		if (size < sizeof(object))
 			return -ENOMEM;
 		size = sizeof(object);
 
 		*((typeof(object) *) data) = object;
 	}
-	else if (id == KFS_feature_blocksize.id) {
+	else if (id == KFS_FEATURE_BLOCKSIZE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = ext2_get_blocksize(object);
 	}
-	else if (id == KFS_feature_devicesize.id) {
+	else if (id == KFS_FEATURE_DEVSIZE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = info->super->s_blocks_count;
 	}
-	else if (id == KFS_feature_nlinks.id) {
+	else if (id == KFS_FEATURE_NLINKS) {
 		if (!f)
 			return -EINVAL;
 
@@ -2164,7 +2162,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = (uint32_t) f->f_inode.i_links_count;
 	}
-	else if (id == KFS_feature_uid.id) {
+	else if (id == KFS_FEATURE_UID) {
 		if (!f)
 			return -EINVAL;
 
@@ -2174,7 +2172,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_inode.i_uid;
 	}
-	else if (id == KFS_feature_gid.id) {
+	else if (id == KFS_FEATURE_GID) {
 		if (!f)
 			return -EINVAL;
 
@@ -2184,7 +2182,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_inode.i_gid;
 	}
-	else if (id == KFS_feature_unix_permissions.id) {
+	else if (id == KFS_FEATURE_UNIX_PERM) {
 		if (!f)
 			return -EINVAL;
 
@@ -2194,7 +2192,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint16_t *) data) = f->f_inode.i_mode & ~EXT2_S_IFMT;
 	}
-	else if (id == KFS_feature_mtime.id) {
+	else if (id == KFS_FEATURE_MTIME) {
 		if (!f)
 			return -EINVAL;
 
@@ -2204,7 +2202,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_inode.i_mtime;
 	}
-	else if (id == KFS_feature_atime.id) {
+	else if (id == KFS_FEATURE_ATIME) {
 		if (!f)
 			return -EINVAL;
 
@@ -2214,7 +2212,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 
 		*((uint32_t *) data) = f->f_inode.i_atime;
 	}
-	else if (id == KFS_feature_symlink.id) {
+	else if (id == KFS_FEATURE_SYMLINK) {
 		struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 		if (!f || f->f_type != TYPE_SYMLINK)
 			return -EINVAL;
@@ -2297,13 +2295,13 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 	if (!head || !f || !data)
 		return -EINVAL;
 
-	if (id == KFS_feature_size.id) {
+	if (id == KFS_FEATURE_SIZE) {
 		if (sizeof(uint32_t) != size || *((uint32_t *) data) < 0 || *((uint32_t *) data) >= EXT2_MAX_FILE_SIZE)
 			return -EINVAL;
 		f->f_inode.i_size = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_filetype.id) {
+	else if (id == KFS_FEATURE_FILETYPE) {
 		uint32_t fs_type;
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
@@ -2323,38 +2321,38 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		f->f_type = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_uid.id) {
+	else if (id == KFS_FEATURE_UID) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_uid = *(uint32_t *) data;
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_gid.id) {
+	else if (id == KFS_FEATURE_GID) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_gid = *(uint32_t *) data;
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_unix_permissions.id) {
+	else if (id == KFS_FEATURE_UNIX_PERM) {
 		if (sizeof(uint16_t) != size)
 			return -EINVAL;
 		f->f_inode.i_mode = (f->f_inode.i_mode & EXT2_S_IFMT)
 			| (*((uint16_t *) data) & ~EXT2_S_IFMT);
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_mtime.id ) {
+	else if (id == KFS_FEATURE_MTIME) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_mtime = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_atime.id) {
+	else if (id == KFS_FEATURE_ATIME) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_atime = *((uint32_t *) data);
 		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
 	}
-	else if (id == KFS_feature_symlink.id) {
+	else if (id == KFS_FEATURE_SYMLINK) {
 		int r;
 		if (!f || f->f_type != TYPE_SYMLINK)
 			return -EINVAL;

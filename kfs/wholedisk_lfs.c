@@ -237,39 +237,37 @@ static int32_t wholedisk_get_block_space(LFS_t * object)
 	return CALL(state->bd, get_block_space);
 }
 
-static const feature_t * wholedisk_features[] = {&KFS_feature_size, &KFS_feature_filetype, &KFS_feature_freespace, &KFS_feature_file_lfs, &KFS_feature_blocksize, &KFS_feature_devicesize};
+static const bool wholedisk_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1};
 
-static size_t wholedisk_get_num_features(LFS_t * object, inode_t inode)
+static size_t wholedisk_get_max_feature_id(LFS_t * object)
 {
-	return sizeof(wholedisk_features) / sizeof(wholedisk_features[0]);
+	return sizeof(wholedisk_features) / sizeof(wholedisk_features[0]) - 1;
 }
 
-static const feature_t * wholedisk_get_feature(LFS_t * object, inode_t inode, size_t num)
+static const bool * wholedisk_get_feature_array(LFS_t * object)
 {
-	if(num < 0 || num >= sizeof(wholedisk_features) / sizeof(wholedisk_features[0]))
-		return NULL;
-	return wholedisk_features[num];
+	return wholedisk_features;
 }
 
 static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, void * data)
 {
 	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
 
-	if (id == KFS_feature_size.id)
+	if (id == KFS_FEATURE_SIZE)
 	{
 		if (size < sizeof(size_t))
 			return -ENOMEM;
 		size = sizeof(size_t);
 		*((size_t *) data) = (inode == INODE_DISK) ? state->blocksize * CALL(state->bd, get_numblocks) : 0;
 	}
-	else if (id == KFS_feature_filetype.id)
+	else if (id == KFS_FEATURE_FILETYPE)
 	{
 		if (size < sizeof(int32_t))
 			return -ENOMEM;
 		size = sizeof(int32_t);
 		*((int32_t *) data) = (inode == INODE_DISK) ? TYPE_DEVICE : TYPE_DIR;
 	}
-	else if (id == KFS_feature_freespace.id)
+	else if (id == KFS_FEATURE_FREESPACE)
 	{
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -277,7 +275,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 
 		*((uint32_t *) data) = 0;
 	}
-	else if (id == KFS_feature_file_lfs.id)
+	else if (id == KFS_FEATURE_FILE_LFS)
 	{
 		if (size < sizeof(object))
 			return -ENOMEM;
@@ -285,7 +283,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 
 		*((typeof(object) *) data) = object;
 	}
-	else if (id == KFS_feature_blocksize.id)
+	else if (id == KFS_FEATURE_BLOCKSIZE)
 	{
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -293,7 +291,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 
 		*((uint32_t *) data) = CALL(state->bd, get_blocksize);
 	}
-	else if (id == KFS_feature_devicesize.id)
+	else if (id == KFS_FEATURE_DEVSIZE)
 	{
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
