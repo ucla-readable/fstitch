@@ -395,8 +395,8 @@ void hash_map_clear(hash_map_t * hm)
 #endif
 }
 
-static __inline hash_map_find_internal(const hash_map_t * hm, const void * k) __attribute__((always_inline));
-static __inline hash_map_find_internal(const hash_map_t * hm, const void * k)
+static __inline hash_map_elt_t * hash_map_find_internal(const hash_map_t * hm, const void * k) __attribute__((always_inline));
+static __inline hash_map_elt_t * hash_map_find_internal(const hash_map_t * hm, const void * k)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
