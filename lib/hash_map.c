@@ -30,7 +30,7 @@ struct chain_elt {
 
 static chain_elt_t * chain_elt_create(void);
 static void          chain_elt_destroy(chain_elt_t * elt);
-static chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k);
+static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k) __attribute__((always_inline));
 
 
 struct hash_map {
@@ -395,13 +395,8 @@ void hash_map_clear(hash_map_t * hm)
 #endif
 }
 
-void * hash_map_find_val(const hash_map_t * hm, const void * k)
-{
-	hash_map_elt_t hme = hash_map_find_elt(hm, k);
-	return hme.val;
-}
-
-hash_map_elt_t * hash_map_find_eltp(const hash_map_t * hm, const void * k)
+static __inline hash_map_find_internal(const hash_map_t * hm, const void * k) __attribute__((always_inline));
+static __inline hash_map_find_internal(const hash_map_t * hm, const void * k)
 {
 	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
@@ -417,12 +412,29 @@ hash_map_elt_t * hash_map_find_eltp(const hash_map_t * hm, const void * k)
 	return &k_chain->elt;
 }
 
+void * hash_map_find_val(const hash_map_t * hm, const void * k)
+{
+	hash_map_elt_t * hme = hash_map_find_internal(hm, k);
+	if (!hme)
+	{
+		return NULL;
+	}
+	return hme->val;
+}
+
+hash_map_elt_t * hash_map_find_eltp(const hash_map_t * hm, const void * k)
+{
+	return hash_map_find_internal(hm, k);
+}
+
 hash_map_elt_t hash_map_find_elt(const hash_map_t * hm, const void * k)
 {
-	hash_map_elt_t not_found = { .key = NULL, .val = NULL };
-	hash_map_elt_t * hme = hash_map_find_eltp(hm, k);
+	hash_map_elt_t * hme = hash_map_find_internal(hm, k);
 	if (!hme)
+	{
+		hash_map_elt_t not_found = { .key = NULL, .val = NULL };
 		return not_found;
+	}
 	return *hme;
 }
 
@@ -655,7 +667,7 @@ static void chain_elt_destroy(chain_elt_t * elt)
 	free(elt);
 }
 
-static chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k)
+static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k)
 {
 	while (head)
 	{
