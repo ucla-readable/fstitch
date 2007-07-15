@@ -345,7 +345,6 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 
 static uint32_t count_free_space(LFS_t * object)
 {
-	//FIXME is this in bytes or blocks???
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	return info->super->s_free_blocks_count;
 }
@@ -388,7 +387,6 @@ static BD_t * ext2_get_blockdev(LFS_t * object)
 	return ((struct ext2_info *) OBJLOCAL(object))->ubd;
 }
 
-// FIXME currently the superblock and group descriptor structures are not adjusted
 static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** tail)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
@@ -408,7 +406,6 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 		goto inode_search;
 	
 	//Get the block number of the last block of the inode
-	//FIXME this offset might be off
 	if(f->f_lastblock != 0)
 		blockno = f->f_lastblock;
 	else
