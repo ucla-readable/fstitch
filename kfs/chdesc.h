@@ -172,35 +172,12 @@ int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** h
 int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
 
 static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc) __attribute__((always_inline));
-static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
-{
-	return chdesc->type != BYTE || chdesc->byte.data;
-}
 
 /* return the maximum before BD level */
-/* TODO: determine whether inlining affects runtime */
 static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc) __attribute__((always_inline));
-static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
-{
-	int i;
-	for(i = NBDLEVEL; i > 0; i--)
-		if(chdesc->nbefores[i - 1])
-			return i - 1;
-	return BDLEVEL_NONE;
-}
 
 /* return the BD level of chdesc_t * 'chdesc' */
-/* FIXME: INFLIGHT's l+1 can be incorrect when the module above l has multiple
- * paths to stable storage. */
-/* TODO: determine whether inlining affects runtime */
 static __inline uint16_t chdesc_level(const chdesc_t * chdesc) __attribute__((always_inline));
-static __inline uint16_t chdesc_level(const chdesc_t * chdesc)
-{
-	const chdesc_t * __chdesc = (chdesc);
-	assert(!__chdesc->block || __chdesc->owner);
-	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
-	return __chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc);
-}
 
 /* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */
 void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
@@ -265,6 +242,32 @@ void chdesc_unlink_index_changes(chdesc_t * chdesc);
 void chdesc_tmpize_all_changes(chdesc_t * chdesc);
 void chdesc_untmpize_all_changes(chdesc_t * chdesc);
 
+
+/* Implementations of inline functions */
+
+static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
+{
+	return chdesc->type != BYTE || chdesc->byte.data;
+}
+
+static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
+{
+	int i;
+	for(i = NBDLEVEL; i > 0; i--)
+		if(chdesc->nbefores[i - 1])
+			return i - 1;
+	return BDLEVEL_NONE;
+}
+
+/* FIXME: INFLIGHT's l+1 can be incorrect when the module above l has multiple
+ * paths to stable storage. */
+static __inline uint16_t chdesc_level(const chdesc_t * chdesc)
+{
+	const chdesc_t * __chdesc = (chdesc);
+	assert(!__chdesc->block || __chdesc->owner);
+	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
+	return __chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc);
+}
 
 /* return whether chdesc is ready to go down one level */
 /* FIXME: Can be incorrect when the below module's level differs by >1
