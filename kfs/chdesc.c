@@ -1045,7 +1045,8 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 	return 0;
 }
 
-static int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **list)
+static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **list) __attribute__((always_inline));
+static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **list)
 {
 	int r;
 	while(*list) {
