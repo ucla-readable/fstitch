@@ -39,6 +39,8 @@
 /* Set to enable chdesc accounting */
 #define CHDESC_ACCOUNT 0
 
+/* Allow malloc in recursion-on-the-heap support */
+#define HEAP_RECURSION_ALLOW_MALLOC 0
 
 #if CHDESC_ACCOUNT
 #ifdef __KERNEL__
@@ -395,6 +397,7 @@ static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 	return hash_map_find_val(block->ddesc->bit_changes, (void *) (uint32_t) offset);
 }
 
+#if HEAP_RECURSION_ALLOW_MALLOC
 /* Helper macro for recursion-on-the-heap support:
  * Increment 'state' pointer and, if needed, enlarge the 'states'
  * array (and 'states_capacity', accordingly) */
@@ -420,6 +423,17 @@ static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 			state = &states[next_index]; \
 		} \
 	} while(0)
+#else
+/* Helper macro for recursion-on-the-heap support */
+#define INCREMENT_STATE(state, static_states, states, states_capacity) \
+	do { \
+		size_t next_index = 1 + state - &states[0]; \
+		if(next_index < states_capacity) \
+			state++; \
+		else \
+			kpanic("recursion-on-the-heap needs %d bytes!", states_capacity * sizeof(*states)); \
+	} while(0)
+#endif
 
 #define STATIC_STATES_CAPACITY 1024 /* 1024 is fairly arbitrary */
 
