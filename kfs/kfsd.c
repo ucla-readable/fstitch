@@ -27,7 +27,7 @@ struct module_shutdown {
 	int when;
 };
 
-#define MAX_NR_SHUTDOWNS 10
+#define MAX_NR_SHUTDOWNS 16
 static struct module_shutdown module_shutdowns[MAX_NR_SHUTDOWNS];
 
 int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, void * arg, int when)
