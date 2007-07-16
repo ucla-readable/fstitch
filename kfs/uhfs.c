@@ -1,4 +1,5 @@
 #include <lib/platform.h>
+#include <lib/pool.h>
 
 #include <kfs/modman.h>
 #include <kfs/chdesc.h>
@@ -33,6 +34,8 @@ struct uhfs_state {
 	uint32_t nopen;
 };
 
+DECLARE_POOL(uhfs_fdesc, uhfs_fdesc_t);
+static int n_uhfs_instances;
 
 static bool lfs_feature_supported(LFS_t * lfs, feature_id_t id)
 {
@@ -63,7 +66,8 @@ static bool check_type_supported(LFS_t * lfs, fdesc_t * f, uint32_t * filetype)
 
 static uhfs_fdesc_t * uhfs_fdesc_create(fdesc_t * inner, inode_t ino, feature_id_t size_id, bool type)
 {
-	uhfs_fdesc_t * uf = malloc(sizeof(*uf));
+	// TODO: increase mem bucket resolution to diff 16 and 20B allocs?
+	uhfs_fdesc_t * uf = uhfs_fdesc_alloc();
 	if (!uf)
 		return NULL;
 	uf->common = inner->common;
@@ -80,7 +84,7 @@ static void uhfs_fdesc_destroy(uhfs_fdesc_t * uf)
 	uf->inner = NULL;
 	uf->size_id = 0;
 	uf->type = 0;
-	free(uf);
+	uhfs_fdesc_free(uf);
 }
 
 static void uhfs_fdesc_close(struct uhfs_state * state, uhfs_fdesc_t * uf)
@@ -855,6 +859,10 @@ static int uhfs_destroy(CFS_t * cfs)
 		return r;
 	modman_dec_lfs(state->lfs, cfs);
 
+	n_uhfs_instances--;
+	if(!n_uhfs_instances)
+		uhfs_fdesc_free_all();
+
 	free(OBJLOCAL(cfs));
 	memset(cfs, 0, sizeof(*cfs));
 	free(cfs);
@@ -897,6 +905,8 @@ CFS_t * uhfs(LFS_t * lfs)
 		DESTROY(cfs);
 		return NULL;
 	}
+	
+	n_uhfs_instances++;
 	
 	return cfs;
 }
