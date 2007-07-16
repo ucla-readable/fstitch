@@ -4,6 +4,8 @@
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 
+int revision_init(void);
+
 /* roll back change descriptors on the passed block which are not yet ready to
  * go to disk */
 int revision_tail_prepare(bdesc_t *block, BD_t *bd);

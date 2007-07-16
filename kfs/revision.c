@@ -330,6 +330,7 @@ int revision_tail_acknowledge(bdesc_t * block, BD_t * bd)
 }
 
 #ifdef __KERNEL__
+#include <lib/pool.h>
 #include <linux/sched.h>
 
 struct flight {
@@ -341,10 +342,17 @@ static struct flight * scheduled_flights = NULL;
 static struct flight * holding_pattern = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(control_tower);
 
+DECLARE_POOL(flight, struct flight);
+
+void flight_pool_free_all(void * ignore)
+{
+	flight_free_all();
+}
+
 int revision_tail_schedule_flight(void)
 {
 	unsigned long flags;
-	struct flight * slot = malloc(sizeof(*slot));
+	struct flight * slot = flight_alloc();
 	if(!slot)
 		return -ENOMEM;
 	spin_lock_irqsave(&flight_plan, flags);
@@ -362,7 +370,7 @@ void revision_tail_cancel_flight(void)
 	slot = scheduled_flights;
 	scheduled_flights = slot->next;
 	spin_unlock_irqrestore(&flight_plan, flags);
-	free(slot);
+	flight_free(slot);
 }
 
 int revision_tail_flights_exist(void)
@@ -657,4 +665,14 @@ void revision_slice_destroy(revision_slice_t * slice)
 	slice->target = NULL;
 	slice->all_ready = 0;
 	slice->ready_size = 0;
+}
+
+int revision_init(void)
+{
+#ifdef __KERNEL__
+	int r = kfsd_register_shutdown_module(flight_pool_free_all, NULL, SHUTDOWN_POSTMODULES);
+	if(r < 0)
+		return r;
+#endif
+	return 0;
 }

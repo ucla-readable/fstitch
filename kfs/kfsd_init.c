@@ -125,6 +125,11 @@ int kfsd_init(int nwbblocks)
 		fprintf(stderr, "chdesc_init: %i\n", r);
 		return r;
 	}
+	if ((r = revision_init()) < 0)
+	{
+		fprintf(stderr, "revision_init: %i\n", r);
+		return r;
+	}
 
 	if((r = modman_init()) < 0)
 	{
