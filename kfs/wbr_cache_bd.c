@@ -2,6 +2,7 @@
 #include <lib/jiffies.h>
 #include <lib/hash_map.h>
 #include <lib/vector.h>
+#include <lib/pool.h>
 
 #include <kfs/kfsd.h>
 #include <kfs/bd.h>
@@ -63,6 +64,9 @@ struct cache_info {
 	uint16_t blocksize;
 };
 
+DECLARE_POOL(rand_slot, struct rand_slot);
+static int n_wbr_instances;
+
 static int wbr_cache_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
@@ -119,7 +123,7 @@ static uint16_t wbr_cache_bd_get_atomicsize(BD_t * object)
 /* we are guaranteed that the block is not already in the list */
 static struct rand_slot * wbr_push_block(struct cache_info * info, bdesc_t * block)
 {
-	struct rand_slot * slot = malloc(sizeof(*slot));
+	struct rand_slot * slot = rand_slot_alloc();
 	if(!slot)
 		return NULL;
 	
@@ -131,7 +135,7 @@ static struct rand_slot * wbr_push_block(struct cache_info * info, bdesc_t * blo
 	assert(!hash_map_find_val(info->block_map, (void *) block->number));
 	if(hash_map_insert(info->block_map, (void *) block->number, slot) < 0)
 	{
-		free(slot);
+		rand_slot_free(slot);
 		return NULL;
 	}
 	
@@ -185,7 +189,7 @@ static void wbr_pop_slot(struct cache_info * info, struct rand_slot * slot)
 	}
 	
 	hash_map_erase(info->block_map, (void *) number);
-	free(slot);
+	rand_slot_free(slot);
 }
 
 static void wbr_pop_slot_dirty(struct cache_info * info, struct rand_slot * slot)
@@ -573,6 +577,10 @@ static int wbr_cache_bd_destroy(BD_t * bd)
 	while(info->first)
 		wbr_pop_slot(info, info->first);
 	
+	n_wbr_instances--;
+	if(!n_wbr_instances)
+		rand_slot_free_all();
+	
 	vector_destroy(info->dirty_list);
 	hash_map_destroy(info->block_map);
 	free(info);
@@ -663,6 +671,8 @@ BD_t * wbr_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		DESTROY(bd);
 		return NULL;
 	}
+	
+	n_wbr_instances++;
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
 	return bd;

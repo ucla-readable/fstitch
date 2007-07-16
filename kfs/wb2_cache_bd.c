@@ -1,6 +1,7 @@
 #include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/hash_map.h>
+#include <lib/pool.h>
 
 #include <kfs/kfsd.h>
 #include <kfs/bd.h>
@@ -60,6 +61,9 @@ struct cache_info {
 	uint16_t blocksize;
 };
 
+DECLARE_POOL(lru_slot, struct lru_slot);
+static int n_wb2_instances;
+
 static int wb2_cache_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
@@ -116,7 +120,7 @@ static uint16_t wb2_cache_bd_get_atomicsize(BD_t * object)
 /* we are guaranteed that the block is not already in the list */
 static struct lru_slot * wb2_push_block(struct cache_info * info, bdesc_t * block)
 {
-	struct lru_slot * slot = malloc(sizeof(*slot));
+	struct lru_slot * slot = lru_slot_alloc();
 	if(!slot)
 		return NULL;
 	
@@ -134,7 +138,7 @@ static struct lru_slot * wb2_push_block(struct cache_info * info, bdesc_t * bloc
 	assert(!hash_map_find_val(info->block_map, (void *) block->number));
 	if(hash_map_insert(info->block_map, (void *) block->number, slot) < 0)
 	{
-		free(slot);
+		lru_slot_free(slot);
 		return NULL;
 	}
 	
@@ -196,7 +200,7 @@ static void wb2_pop_slot(struct cache_info * info, struct lru_slot * slot)
 	}
 	
 	hash_map_erase(info->block_map, (void *) number);
-	free(slot);
+	lru_slot_free(slot);
 }
 
 static void wb2_pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
@@ -697,6 +701,10 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 	while(info->all.first)
 		wb2_pop_slot(info, info->all.first);
 	
+	n_wb2_instances--;
+	if(!n_wb2_instances)
+		lru_slot_free_all();
+	
 	hash_map_destroy(info->block_map);
 	free(info);
 	
@@ -779,6 +787,8 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		DESTROY(bd);
 		return NULL;
 	}
+	
+	n_wb2_instances++;
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
 	return bd;
