@@ -1,4 +1,5 @@
 #include <lib/platform.h>
+#include <lib/pool.h>
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
@@ -207,111 +208,15 @@ static int account_init_all(void)
 # define account_init_all() 0
 #endif
 
-
-#define CHDEPDESCPOOLSIZE ((int) ((PAGE_SIZE - sizeof(void*)) / sizeof(chdepdesc_t)))
-typedef struct chdepdescpool {
-		struct chdepdescpool *next;
-		chdepdesc_t chdeps[CHDEPDESCPOOLSIZE];
-} chdepdescpool_t;
-
-static chdepdesc_t *free_chdeps;
-static chdepdescpool_t *free_chdeps_pool;
-
-static chdepdesc_t *chdepdesc_pool_alloc(void)
-{
-	chdepdescpool_t *pool;
-	int i;
-	if (!(pool = malloc(sizeof(chdepdescpool_t))))
-		return NULL;
-	pool->next = free_chdeps_pool;
-	free_chdeps_pool = pool;
-	for (i = 1; i < CHDEPDESCPOOLSIZE; i++)
-		* ((chdepdesc_t **) &pool->chdeps[i]) = &pool->chdeps[i-1];
-	* ((chdepdesc_t **) &pool->chdeps[0]) = free_chdeps;
-	free_chdeps = &pool->chdeps[CHDEPDESCPOOLSIZE - 1];
-	return free_chdeps;
-}
-
-static __inline chdepdesc_t *chdepdesc_alloc(void) __attribute__((always_inline));
-static __inline chdepdesc_t *chdepdesc_alloc(void)
-{
-	chdepdesc_t *d;
-	if (unlikely(!free_chdeps))
-		if (unlikely(!chdepdesc_pool_alloc()))
-			return NULL;
-	d = free_chdeps;
-	free_chdeps = * ((chdepdesc_t **) d);
-	account_update(&act_ndeps, 1);
-	return d;
-}
-
-static __inline void chdepdesc_free(chdepdesc_t *d) __attribute__((always_inline));
-static __inline void chdepdesc_free(chdepdesc_t *d)
-{
-	* ((chdepdesc_t **) d) = free_chdeps;
-	free_chdeps = d;
-	account_update(&act_ndeps, -1);
-}
-
-
-#define CHDESCPOOLSIZE ((int) ((PAGE_SIZE - sizeof(void*)) / sizeof(chdesc_t)))
-typedef struct chdescpool {
-		struct chdescpool *next;
-		chdesc_t chdescs[CHDESCPOOLSIZE];
-} chdescpool_t;
-
-static chdesc_t *free_chdescs;
-static chdescpool_t *free_chdescs_pool;
-
-static chdesc_t *chdesc_pool_alloc(void)
-{
-	chdescpool_t *pool;
-	int i;
-	if (!(pool = malloc(sizeof(chdescpool_t))))
-		return NULL;
-	pool->next = free_chdescs_pool;
-	free_chdescs_pool = pool;
-	for (i = 1; i < CHDESCPOOLSIZE; i++)
-		* ((chdesc_t **) &pool->chdescs[i]) = &pool->chdescs[i-1];
-	* ((chdesc_t **) &pool->chdescs[0]) = free_chdescs;
-	free_chdescs = &pool->chdescs[CHDESCPOOLSIZE - 1];
-	return free_chdescs;
-}
-
-static __inline chdesc_t *chdesc_alloc(void) __attribute__((always_inline));
-static __inline chdesc_t *chdesc_alloc(void)
-{
-	chdesc_t *d;
-	if (unlikely(!free_chdescs))
-		if (unlikely(!chdesc_pool_alloc()))
-			return NULL;
-	d = free_chdescs;
-	free_chdescs = * ((chdesc_t **) d);
-	return d;
-}
-
-static __inline void chdesc_free(chdesc_t *d) __attribute__((always_inline));
-static __inline void chdesc_free(chdesc_t *d)
-{
-	* ((chdesc_t **) d) = free_chdescs;
-	free_chdescs = d;
-}
-
+DECLARE_POOL(chdesc, chdesc_t);
+DECLARE_POOL(chdepdesc, chdepdesc_t);
+DECLARE_POOL(chrefdesc, chrefdesc_t);
 
 static void chpools_free_all(void * ignore)
 {
-	chdepdescpool_t *p;
-	chdescpool_t *q;
-	while ((p = free_chdeps_pool))
-	{
-		free_chdeps_pool = p->next;
-		free(p);
-	}
-	while ((q = free_chdescs_pool))
-	{
-		free_chdescs_pool = q->next;
-		free(q);
-	}
+	chdesc_free_all();
+	chdepdesc_free_all();
+	chrefdesc_free_all();
 }
 
 
@@ -890,6 +795,7 @@ static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	dep = chdepdesc_alloc();
 	if(!dep)
 		return -ENOMEM;
+	account_update(&act_ndeps, 1);
 	
 	propagate_depend_add(after, before);
 	
@@ -2871,6 +2777,7 @@ void chdesc_dep_remove(chdepdesc_t * dep)
 	memset(dep, 0, sizeof(*dep));
 #endif
 	chdepdesc_free(dep);
+	account_update(&act_ndeps, -1);
 }
 
 void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
@@ -3030,7 +2937,7 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 			chrefdesc_t * next = chdesc->weak_refs;
 			printf("%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
 			chdesc->weak_refs = next->next;
-			free(next);
+			chrefdesc_free(next);
 			account_update(&act_nwrefs, -1);
 		}
 	}
@@ -3121,7 +3028,8 @@ int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_c
 	
 	if(chdesc)
 	{
-		chrefdesc_t * ref = malloc(sizeof(*ref));
+		// TODO: use a pool?
+		chrefdesc_t * ref = chrefdesc_alloc();
 		if(!ref)
 			return -ENOMEM;
 		account_update(&act_nwrefs, 1);
@@ -3162,7 +3070,7 @@ int chdesc_weak_forget(chdesc_t ** location, bool callback)
 		*prev = scan->next;
 		if(callback && scan->callback)
 			value = scan->callback(location, scan->callback_data);
-		free(scan);
+		chrefdesc_free(scan);
 		account_update(&act_nwrefs, -1);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, *location, location);
 	}
