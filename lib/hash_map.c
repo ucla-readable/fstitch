@@ -1,6 +1,9 @@
 #include <lib/platform.h>
 #include <lib/vector.h>
 #include <lib/hash_map.h>
+#include <lib/pool.h>
+
+#include <kfs/kfsd.h>
 
 #define HASH_MAP_DEBUG 0
 
@@ -662,9 +665,16 @@ void * hash_map_val_next(hash_map_it_t * it)
 //
 // Chains
 
+DECLARE_POOL(chain_elt, chain_elt_t);
+
+static void chain_elt_pool_free_all(void * ignore)
+{
+	chain_elt_free_all();
+}
+
 static chain_elt_t * chain_elt_create(void)
 {
-	chain_elt_t * elt = malloc(sizeof(*elt));
+	chain_elt_t * elt = chain_elt_alloc();
 	elt->elt.key = NULL;
 	elt->elt.val = NULL;
 	elt->next = NULL;
@@ -678,5 +688,10 @@ static void chain_elt_destroy(chain_elt_t * elt)
 	elt->elt.val = NULL;
 	elt->prev = NULL;
 	elt->next = NULL;
-	free(elt);
+	chain_elt_free(elt);
+}
+
+int hash_map_init(void)
+{
+	return kfsd_register_shutdown_module(chain_elt_pool_free_all, NULL, SHUTDOWN_POSTMODULES);
 }

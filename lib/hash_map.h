@@ -22,6 +22,8 @@ typedef struct chain_elt chain_elt_t;
 struct hash_map;
 typedef struct hash_map hash_map_t;
 
+int hash_map_init(void);
+
 // Create a hash_map.
 hash_map_t * hash_map_create(void);
 // Create a hash_map, reserve space for n entries, allow/don't auto resizing.

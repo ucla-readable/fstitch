@@ -110,6 +110,11 @@ int kfsd_init(int nwbblocks)
 	}
 	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
+	if ((r = hash_map_init()) < 0)
+	{
+		fprintf(stderr, "hash_map_init: %i\n", r);
+		return r;
+	}
 	if ((r = bdesc_init()) < 0)
 	{
 		fprintf(stderr, "bdesc_init: %i\n", r);
