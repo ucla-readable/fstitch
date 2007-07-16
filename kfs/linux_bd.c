@@ -1,4 +1,5 @@
 #include <lib/platform.h>
+#include <lib/pool.h>
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -92,6 +93,9 @@ struct linux_bio_private {
 	uint32_t seq;
 #endif
 };
+
+DECLARE_POOL(bio_private, struct linux_bio_private);
+static int n_linux_instances;
 
 static int linux_bd_get_config(void * object, int level, char * string, size_t length)
 {
@@ -201,7 +205,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 	else if(dir == WRITE)
 	{
 		revision_tail_request_landing(private->bdesc);
-		free(private);
+		bio_private_free(private);
 	}
 	bio_put(bio);
 	
@@ -473,7 +477,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 		return -EINVAL;
 	}
 	
-	private = (struct linux_bio_private *) malloc(sizeof(struct linux_bio_private));
+	private = bio_private_alloc();
 	assert(private);
 	
 	KDprintk(KERN_ERR "starting real work for the write\n");
@@ -647,7 +651,10 @@ int linux_bd_destroy(BD_t * bd)
 	}
 	chdesc_reclaim_written();
 	blockman_destroy(&info->blockman);
-	
+
+	n_linux_instances--;
+	if(!n_linux_instances)
+		bio_private_free_all();
 	bd_release(info->bdev);
 	blkdev_put(info->bdev);
 	free(info);
@@ -806,6 +813,8 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		debug_writes_dentry = NULL;
 	}
 #endif
+	
+	n_linux_instances++;
 	
 	return bd;
 }
