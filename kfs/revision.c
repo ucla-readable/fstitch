@@ -439,7 +439,7 @@ void revision_tail_process_landing_requests(void)
 		holding_pattern = slot->next;
 		spin_unlock_irqrestore(&flight_plan, flags);
 		revision_tail_ack_landed(slot->block);
-		free(slot);
+		flight_free(slot);
 		spin_lock_irqsave(&flight_plan, flags);
 	}
 	spin_unlock_irqrestore(&flight_plan, flags);
