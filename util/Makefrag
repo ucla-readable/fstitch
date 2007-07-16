@@ -39,4 +39,4 @@ GTKFLAGS:=$(shell pkg-config gtk+-2.0 --cflags --libs)
 $(UTILDIR)/kdb: util/kdb.c kfs/debug_opcode.h kfs/chdesc.h kfs/bdesc.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) $(GTKFLAGS) -I/sw/include -L/sw/lib -bind_at_load -lreadline -lm -I. -o $@ $<
+	$(V)$(CC) $(CFLAGS) $(GTKFLAGS) -lreadline -lm -I. -o $@ $<
