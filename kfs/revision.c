@@ -3,6 +3,7 @@
 #include <kfs/chdesc.h>
 #include <kfs/modman.h>
 #include <kfs/debug.h>
+#include <kfs/kfsd.h>
 #include <kfs/revision.h>
 
 enum decider {
@@ -86,10 +87,41 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 	kpanic("too confused to continue");
 }
 
+#define REVISION_ARRAY_SIZE 80
+
+static chdesc_t * revision_static_array[REVISION_ARRAY_SIZE];
+static chdesc_t ** revision_alloc_array = NULL;
+static size_t revision_alloc_array_count = 0;
+
+static void revision_array_free(void * ignore)
+{
+	if(revision_alloc_array)
+		sfree(revision_alloc_array, revision_alloc_array_count * sizeof(*revision_alloc_array));
+	revision_alloc_array_count = 0;
+}
+
+static chdesc_t ** revision_get_array(size_t count)
+{
+	if(count <= REVISION_ARRAY_SIZE)
+		return revision_static_array;
+	if(count <= revision_alloc_array_count)
+		return revision_alloc_array;
+	if(!revision_alloc_array_count)
+	{
+		int r = kfsd_register_shutdown_module(revision_array_free, NULL, SHUTDOWN_POSTMODULES);
+		if(r < 0)
+			return NULL;
+	}
+	if(revision_alloc_array)
+		sfree(revision_alloc_array, revision_alloc_array_count * sizeof(*revision_alloc_array));
+	revision_alloc_array_count = count;
+	revision_alloc_array = smalloc(count * sizeof(*revision_alloc_array));
+	return revision_alloc_array;
+}
+
 static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
-	size_t chdescs_size;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -104,8 +136,7 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 	if(!count)
 		return 0;
 	
-	chdescs_size = sizeof(*chdescs) * count;
-	chdescs = smalloc(chdescs_size);
+	chdescs = revision_get_array(count);
 	if(!chdescs)
 		return -ENOMEM;
 	
@@ -155,8 +186,6 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 		}
 	}
 	
-	sfree(chdescs, chdescs_size);
-	
 	return count;
 }
 
@@ -169,7 +198,6 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
-	size_t chdescs_size;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -180,9 +208,10 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
+	if(!count)
+		return 0;
 	
-	chdescs_size = sizeof(*chdescs) * count;
-	chdescs = smalloc(chdescs_size);
+	chdescs = revision_get_array(count);
 	if(!chdescs)
 		return -ENOMEM;
 	
@@ -232,8 +261,6 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 		}
 	}
 	
-	sfree(chdescs, chdescs_size);
-	
 	return count;
 }
 
@@ -245,7 +272,6 @@ int revision_tail_revert(bdesc_t * block, BD_t * bd)
 static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
-	size_t chdescs_size;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -256,9 +282,10 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			count++;
+	if(!count)
+		return 0;
 	
-	chdescs_size = sizeof(*chdescs) * count;
-	chdescs = smalloc(chdescs_size);
+	chdescs = revision_get_array(count);
 	if(!chdescs)
 		return -ENOMEM;
 	
@@ -290,7 +317,6 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 			break;
 		}
 	}
-	sfree(chdescs, chdescs_size);
 	
 	return 0;
 }
