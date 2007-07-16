@@ -371,7 +371,7 @@ static void ufs_super_wb_sync_callback(void * arg)
 {
 	UFSmod_super_t * object = (UFSmod_super_t *) arg;
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
-	chdesc_t * head = CALL(linfo->global_info->parts.base, get_write_head);
+	chdesc_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
 	int r;
 
 	r = ufs_super_wb_sync(object, &head);

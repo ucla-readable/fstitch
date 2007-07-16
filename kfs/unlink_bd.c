@@ -9,6 +9,7 @@
 
 struct unlink_info {
 	BD_t * bd;
+	chdesc_t ** write_head;
 };
 
 static int unlink_bd_get_config(void * object, int level, char * string, size_t length)
@@ -55,7 +56,7 @@ static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, 
 static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct unlink_info * info = (struct unlink_info *) OBJLOCAL(object);
-	chdesc_t * write_head = CALL(info->bd, get_write_head);
+	chdesc_t * write_head = info->write_head ? *info->write_head : NULL;
 	chdesc_t * next = NULL;
 	chdesc_t * chdesc;
 	int r;
@@ -63,7 +64,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
 	/* inspect and modify all chdescs passing through */
 	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = next)
 	{
-		int needs_head = 0;
+		int needs_head = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
 		assert(chdesc->owner == object);
@@ -76,13 +77,13 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
 			if(dep == write_head || (dep->block && dep->block->ddesc == block->ddesc))
 			{
 				deps = &(*deps)->before.next;
+				needs_head = 0;
 				continue;
 			}
 			/* otherwise remove this dependency */
 			/* WARNING: this makes this module incompatible
 			 * with opgroups between different file systems */
 			chdesc_dep_remove(*deps);
-			needs_head = 1;
 		}
 		
 		if(needs_head && write_head)
@@ -111,9 +112,9 @@ static int unlink_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t * unlink_bd_get_write_head(BD_t * object)
+static chdesc_t ** unlink_bd_get_write_head(BD_t * object)
 {
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, get_write_head);
+	return ((struct unlink_info *) OBJLOCAL(object))->write_head;
 }
 
 static int32_t unlink_bd_get_block_space(BD_t * object)
@@ -150,6 +151,7 @@ BD_t * unlink_bd(BD_t * disk)
 	BD_INIT(bd, unlink_bd, info);
 	
 	info->bd = disk;
+	info->write_head = CALL(disk, get_write_head);
 	bd->level = disk->level;
 	bd->graph_index = disk->graph_index + 1;
 	if(bd->graph_index >= NBDINDEX)

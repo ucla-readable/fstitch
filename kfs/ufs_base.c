@@ -1487,11 +1487,11 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static chdesc_t * ufs_get_write_head(LFS_t * object)
+static chdesc_t ** ufs_get_write_head(LFS_t * object)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, get_write_head);
+	return info->write_head;
 }
 
 static int32_t ufs_get_block_space(LFS_t * object)
@@ -1813,6 +1813,7 @@ LFS_t * ufs(BD_t * block_device)
 	OBJMAGIC(lfs) = UFS_MAGIC;
 
 	info->ubd = block_device;
+	info->write_head = CALL(block_device, get_write_head);
 	info->parts.base = lfs;
 	info->parts.p_super = ufs_super_wb(info); // Initialize first
 	info->parts.p_allocator = ufs_alloc_lastpos(info);

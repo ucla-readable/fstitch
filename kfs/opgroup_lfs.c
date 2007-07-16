@@ -236,7 +236,7 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 	return value;
 }
 
-static chdesc_t * opgroup_lfs_get_write_head(LFS_t * object)
+static chdesc_t ** opgroup_lfs_get_write_head(LFS_t * object)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
 	return CALL(info->lfs, get_write_head);

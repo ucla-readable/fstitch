@@ -63,7 +63,7 @@ struct LFS {
 	DECLARE(LFS_t, int, free_block, fdesc_t * file, uint32_t block, chdesc_t ** head);
 	DECLARE(LFS_t, int, remove_name, inode_t parent, const char * name, chdesc_t ** head);
 	DECLARE(LFS_t, int, write_block, bdesc_t * block, chdesc_t ** head);
-	DECLARE(LFS_t, chdesc_t *, get_write_head);
+	DECLARE(LFS_t, chdesc_t **, get_write_head);
 	/* see bd.h for a description of get_block_space */
 	DECLARE(LFS_t, int32_t, get_block_space);
 	DECLARE(LFS_t, size_t, get_max_feature_id);

@@ -20,6 +20,7 @@ struct ufs_parts
 struct ufs_info
 {
 	BD_t * ubd;
+	chdesc_t ** write_head;
 	bdesc_t * csum_block;
 	struct UFS_csum * csums;
 	struct ufs_parts parts;

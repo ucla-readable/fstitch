@@ -27,7 +27,8 @@
 
 struct ext2_info {
 	BD_t * ubd;
-        EXT2_Super_t * super;
+	chdesc_t ** write_head;
+	EXT2_Super_t * super;
 	EXT2_group_desc_t * groups;
 	hash_map_t * filemap;
 	bdesc_t ** gdescs;
@@ -455,7 +456,7 @@ inode_search:
 	return INVALID_BLOCK;
 	
 claim_block:
-	*tail = CALL(info->ubd, get_write_head);
+	*tail = info->write_head ? *info->write_head : NULL;
 	if(ext2_write_block_bitmap(object, blockno, 1, tail) < 0)
 	{
 		ext2_write_block_bitmap(object, blockno, 0, tail);
@@ -869,7 +870,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 	
 	DEFINE_CHDESC_PASS_SET(set, 2, NULL);
 	chdesc_pass_set_t * inode_dep = PASS_CHDESC_SET(set);
-	set.array[0] = CALL(object, get_write_head);
+	set.array[0] = info->write_head ? *info->write_head : NULL;
 	set.array[1] = NULL;
 	/* we only need size 2 in some cases */
 	set.size = 1;
@@ -1412,7 +1413,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 
 		new_file->f_inode.i_links_count = 1;
 
-		head_set.array[1] = CALL(info->ubd, get_write_head);
+		head_set.array[1] = info->write_head ? *info->write_head : NULL;
 		r = ext2_write_inode_bitmap(object, ino, 1, &head_set.array[1]);
 		if (r != 0)
 			goto allocate_name_exit2;
@@ -1465,7 +1466,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			prev_basep = dir_dirent.rec_len;
 
 			parent_file->f_inode.i_links_count++;
-			head_set.array[3] = CALL(info->ubd, get_write_head);
+			head_set.array[3] = info->write_head ? *info->write_head : NULL;
 			r = ext2_write_inode(info, parent_file->f_ino, &parent_file->f_inode, &head_set.array[3]);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[3], "linkcount++");
 
@@ -2071,11 +2072,11 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static chdesc_t * ext2_get_write_head(LFS_t * object)
+static chdesc_t ** ext2_get_write_head(LFS_t * object)
 {
 	Dprintf("EXT2DEBUG: ext2_get_write_head\n");
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	return CALL(info->ubd, get_write_head);
+	return info->write_head;
 }
 
 static int32_t ext2_get_block_space(LFS_t * object)
@@ -2503,7 +2504,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 {
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
 	int r = 0;
-	chdesc_t * head = CALL(lfs, get_write_head);
+	chdesc_t * head = info->write_head ? *info->write_head : NULL;
 	
 	//Deal with the super block
 	info->super->s_free_blocks_count += blocks;
@@ -2528,7 +2529,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 	info->groups[group].bg_free_inodes_count += inodes;
 	info->groups[group].bg_used_dirs_count += dirs;
 	
-	head = CALL(lfs, get_write_head);
+	head = info->write_head ? *info->write_head : NULL;
 	
 	int group_bdesc = group / info->block_descs;
 	int group_offset = group % info->block_descs;
@@ -2657,6 +2658,7 @@ LFS_t * ext2(BD_t * block_device)
 	OBJMAGIC(lfs) = EXT2_FS_MAGIC;
 
 	info->ubd = block_device;
+	info->write_head = CALL(block_device, get_write_head);
 
 	info->filemap = hash_map_create();
 	if (!info->filemap) {

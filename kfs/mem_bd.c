@@ -141,7 +141,7 @@ static int mem_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t * mem_bd_get_write_head(BD_t * object)
+static chdesc_t ** mem_bd_get_write_head(BD_t * object)
 {
 	return NULL;
 }

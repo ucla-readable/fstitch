@@ -29,6 +29,7 @@ typedef struct uhfs_fdesc uhfs_fdesc_t;
 
 struct uhfs_state {
 	LFS_t * lfs;
+	chdesc_t ** write_head;
 	uint32_t nopen;
 };
 
@@ -143,7 +144,8 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = CALL(state->lfs, get_blocksize);
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head), * save_head;
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	chdesc_t * save_head;
 	int r;
 
 	nblks = CALL(state->lfs, get_file_numblocks, uf->inner);
@@ -269,8 +271,8 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 {
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t existing_ino;
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
 	fdesc_t * inner;
 	int type, r;
 
@@ -366,7 +368,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * orig_head = CALL(state->lfs, get_write_head);
+	chdesc_t * orig_head = state->write_head ? *state->write_head : NULL;
 	chdesc_t * prev_head = orig_head, * tail;
 	int r = 0;
 
@@ -632,7 +634,7 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	return unlink_name(cfs, parent, name, &prev_head);
 }
 
@@ -649,7 +651,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	fdesc_t * oldf, * newf;
 	bool type_supported;
 	uint32_t oldtype;
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	metadata_set_t initialmd = { .get = empty_get_metadata, .arg = NULL };
 	int r;
 
@@ -700,7 +702,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t ino;
 	int r;
 
@@ -726,7 +728,7 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t existing_ino;
 	fdesc_t * f;
 	int r;
@@ -794,7 +796,7 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 					entry.d_name[0] = 0;
 				}
 				if (r < 0) {
-					chdesc_t * prev_head = CALL(state->lfs, get_write_head);
+					chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 					return unlink_file(cfs, ino, parent, name, f, &prev_head);
 				}
 			} while (r != 0);
@@ -835,7 +837,7 @@ static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, size, data);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	chdesc_t * prev_head = CALL(state->lfs, get_write_head);
+	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 
 	return CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head);
 }
@@ -881,6 +883,7 @@ CFS_t * uhfs(LFS_t * lfs)
 	OBJMAGIC(cfs) = UHFS_MAGIC;
 
 	state->lfs = lfs;
+	state->write_head = CALL(lfs, get_write_head);
 	state->nopen = 0;
 
 	if(modman_add_anon_cfs(cfs, __FUNCTION__))

@@ -389,9 +389,11 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 		fprintf(stderr, "\nlfs creation failed\n");
 		return NULL;
 	}
+#if ALLOW_JOURNAL
 	if (is_journaled)
 		printf(" (journaled; meta: %d)", use_journal < 2);
 	else
+#endif
 		printf(" (not journaled)");
 	printf("\n");
 

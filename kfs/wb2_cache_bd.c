@@ -651,7 +651,7 @@ static int wb2_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	}
 }
 
-static chdesc_t * wb2_cache_bd_get_write_head(BD_t * object)
+static chdesc_t ** wb2_cache_bd_get_write_head(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	return CALL(info->bd, get_write_head);

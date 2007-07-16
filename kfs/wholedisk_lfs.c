@@ -225,7 +225,7 @@ static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** he
 	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, write_block, block);
 }
 
-static chdesc_t * wholedisk_get_write_head(LFS_t * object)
+static chdesc_t ** wholedisk_get_write_head(LFS_t * object)
 {
 	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
 	return CALL(state->bd, get_write_head);

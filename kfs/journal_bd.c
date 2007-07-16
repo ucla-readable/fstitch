@@ -117,6 +117,7 @@
 struct journal_info {
 	BD_t * bd;
 	BD_t * journal;
+	chdesc_t * write_head;
 	uint16_t blocksize, cr_count;
 	uint32_t length;
 	uint32_t trans_total_blocks;
@@ -365,7 +366,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			assert(r >= 0);
 			head = info->jdata_head;
 			info->recursion = 1;
+			info->write_head = NULL;
 			r = CALL(info->journal, write_block, record);
+			info->write_head = info->hold;
 			info->recursion = 0;
 			assert(r >= 0);
 			
@@ -389,7 +392,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		r = chdesc_add_depend(info->wait, head);
 		assert(r >= 0);
 		info->recursion = 1;
+		info->write_head = NULL;
 		r = CALL(info->journal, write_block, number_block);
+		info->write_head = info->hold;
 		info->recursion = 0;
 		assert(r >= 0);
 		
@@ -451,6 +456,9 @@ static int journal_bd_start_transaction(BD_t * object)
 	
 	/* terminate the chain */
 	info->prev_slot = info->trans_slot;
+	
+	/* set the write head */
+	info->write_head = info->hold;
 	
 	return 0;
 	
@@ -542,13 +550,16 @@ static int journal_bd_stop_transaction(BD_t * object)
 	
 	/* ...and finally write the commit and cancellation records */
 	info->recursion = 1;
+	info->write_head = NULL;
 	r = CALL(info->journal, write_block, block);
+	info->write_head = info->hold;
 	info->recursion = 0;
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	
 	hash_map_clear(info->block_map);
 	
+	info->write_head = NULL;
 	info->keep_w = NULL;
 	info->wait = NULL;
 	info->hold = NULL;
@@ -573,8 +584,12 @@ static void journal_bd_unlock_callback(void * data, int count)
 {
 	BD_t * object = (BD_t *) data;
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	if(info->keep_w)
+	if(info->keep_w && hash_map_size(info->block_map))
+	{
+		/* FIXME: check return values here */
 		journal_bd_stop_transaction(object);
+		journal_bd_start_transaction(object);
+	}
 }
 
 static int journal_bd_write_block(BD_t * object, bdesc_t * block)
@@ -604,8 +619,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	if(!block->ddesc->index_changes[object->graph_index].head)
 		return 0;
 	
-	/* we should have gotten a get_write_head call,
-	 * which would start a transaction for us */
+	/* there is supposed to always be a transaction going on */
 	assert(info->keep_w);
 	
 	if(info->only_metadata)
@@ -692,7 +706,9 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		}
 		
 		info->recursion = 1;
+		info->write_head = NULL;
 		r = CALL(info->journal, write_block, journal_block);
+		info->write_head = info->hold;
 		info->recursion = 0;
 		assert(r >= 0);
 	}
@@ -708,27 +724,21 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	if(info->keep_w)
+	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		if(journal_bd_stop_transaction(object) < 0)
 			return FLUSH_NONE;
+		/* FIXME: check return value here */
+		journal_bd_start_transaction(object);
 		return FLUSH_DONE;
 	}
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t * journal_bd_get_write_head(BD_t * object)
+static chdesc_t ** journal_bd_get_write_head(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	assert(!CALL(info->bd, get_write_head));
-	if(info->recursion)
-		return NULL;
-	if(!info->keep_w)
-	{
-		int r = journal_bd_start_transaction(object);
-		assert(r >= 0);
-	}
-	return info->hold;
+	return &info->write_head;
 }
 
 static int32_t journal_bd_get_block_space(BD_t * object)
@@ -743,10 +753,12 @@ static void journal_bd_callback(void * arg)
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
-		int r;
-		r = journal_bd_stop_transaction(object);
+		int r = journal_bd_stop_transaction(object);
 		if(r < 0 && r != -EBUSY)
 			kpanic("Holy Mackerel!");
+		if(r >= 0)
+			/* FIXME: check return value here */
+			journal_bd_start_transaction(object);
 	}
 }
 
@@ -764,7 +776,11 @@ static int journal_bd_destroy(BD_t * bd)
 	
 	r = modman_rem_bd(bd);
 	if(r < 0)
+	{
+		/* FIXME: check return value here */
+		journal_bd_start_transaction(bd);
 		return r;
+	}
 	modman_dec_bd(info->bd, bd);
 	
 	if(info->journal)
@@ -933,7 +949,9 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		info->done = NULL;
 		/* and write it to disk */
 		info->recursion = 1;
+		info->write_head = NULL;
 		r = CALL(info->journal, write_block, commit_block);
+		info->write_head = info->hold;
 		info->recursion = 0;
 		if(r < 0)
 			kpanic("Holy Mackerel!");
@@ -1051,6 +1069,9 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	if(!disk->level)
 		return NULL;
 	
+	if(CALL(disk, get_write_head))
+		return NULL;
+	
 	bd = malloc(sizeof(*bd));
 	if(!bd)
 		return NULL;
@@ -1067,6 +1088,7 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	
 	info->bd = disk;
 	info->journal = NULL;
+	info->write_head = NULL;
 	info->blocksize = CALL(disk, get_blocksize);
 	info->length = CALL(disk, get_numblocks);
 	info->trans_total_blocks = (TRANSACTION_SIZE + info->blocksize - 1) / info->blocksize;
@@ -1130,6 +1152,7 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	chdesc_t ** write_head;
 	uint16_t level;
 	
 	if(OBJMAGIC(bd) != JOURNAL_MAGIC)
@@ -1166,6 +1189,12 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	
 	/* make sure there is no current journal */
 	if(info->journal)
+		return -EINVAL;
+	
+	/* if it is an internal journal, we don't have a
+	 * current write head so it won't show up here */
+	write_head = CALL(journal, get_write_head);
+	if(write_head && *write_head)
 		return -EINVAL;
 	
 	/* make sure the journal device has the same blocksize as the disk */
@@ -1205,6 +1234,8 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 		kpanic("Holy Mackerel!");
 	
 	replay_journal(bd);
+	/* FIXME: check return value here */
+	journal_bd_start_transaction(bd);
 	
 	return 0;
 }

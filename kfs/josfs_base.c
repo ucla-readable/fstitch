@@ -1168,7 +1168,7 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	return CALL(info->ubd, write_block, block);
 }
 
-static chdesc_t * josfs_get_write_head(LFS_t * object)
+static chdesc_t ** josfs_get_write_head(LFS_t * object)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_write_head\n");
 	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);

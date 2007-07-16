@@ -126,7 +126,7 @@ static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t * partition_bd_get_write_head(BD_t * object)
+static chdesc_t ** partition_bd_get_write_head(BD_t * object)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	return CALL(info->bd, get_write_head);

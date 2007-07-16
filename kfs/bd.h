@@ -46,7 +46,7 @@ struct BD {
 	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint16_t count);
 	DECLARE(BD_t, int, write_block, bdesc_t * block);
 	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
-	DECLARE(BD_t, chdesc_t *, get_write_head);
+	DECLARE(BD_t, chdesc_t **, get_write_head);
 	/* This function returns the number of dirtyable cache blocks in the
 	 * earliest cache. It returns negative numbers to indicate that a cache
 	 * already holds more dirty blocks than it wants. */

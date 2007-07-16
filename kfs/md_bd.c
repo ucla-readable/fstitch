@@ -125,18 +125,9 @@ static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t * md_bd_get_write_head(BD_t * object)
+static chdesc_t ** md_bd_get_write_head(BD_t * object)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
-	chdesc_t * result = NULL;
-	DEFINE_CHDESC_PASS_SET(head, 2, NULL);
-	head.array[0] = CALL(info->bd[0], get_write_head);
-	head.array[1] = CALL(info->bd[1], get_write_head);
-	if(head.array[0] && head.array[1])
-		chdesc_create_noop_set(NULL, &result, PASS_CHDESC_SET(head));
-	else if(head.array[0] || head.array[1])
-		result = head.array[0] ? head.array[0] : head.array[1];
-	return result;
+	return NULL;
 }
 
 static int32_t md_bd_get_block_space(BD_t * object)
@@ -173,6 +164,10 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	
 	/* block sizes must be the same */
 	if(blocksize != CALL(disk1, get_blocksize))
+		return NULL;
+	
+	/* no write heads allowed */
+	if(CALL(disk0, get_write_head) || CALL(disk1, get_write_head))
 		return NULL;
 	
 	bd = malloc(sizeof(*bd));
