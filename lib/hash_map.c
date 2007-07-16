@@ -87,6 +87,20 @@ inline static size_t hash_str(const char * s, size_t tbl_size)
     return h % tbl_size;
 }
 
+//
+// Inline implementations
+
+static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k)
+{
+	while (head)
+	{
+		if (head->elt.key == k)
+			return (chain_elt_t *) head;
+		head = head->next;
+	}
+
+	return NULL;
+}
 
 //
 // Construction/destruction
@@ -665,16 +679,4 @@ static void chain_elt_destroy(chain_elt_t * elt)
 	elt->prev = NULL;
 	elt->next = NULL;
 	free(elt);
-}
-
-static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k)
-{
-	while (head)
-	{
-		if (head->elt.key == k)
-			return (chain_elt_t *) head;
-		head = head->next;
-	}
-
-	return NULL;
 }
