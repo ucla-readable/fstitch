@@ -1,6 +1,7 @@
 #include <lib/platform.h>
 #include <lib/hash_set.h>
 #include <lib/jiffies.h>
+#include <lib/pool.h>
 
 #include <kfs/bd.h>
 #include <kfs/lfs.h>
@@ -76,6 +77,9 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
 int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** head);
 int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, chdesc_pass_set_t * befores);
+
+DECLARE_POOL(ext2_fdesc, ext2_fdesc_t);
+static int n_ext2_instances;
 
 static int check_super(LFS_t * object)
 {
@@ -507,7 +511,7 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 		return (fdesc_t *) fd;
 	}
 	
-	fd = (ext2_fdesc_t *) malloc(sizeof(ext2_fdesc_t));
+	fd = ext2_fdesc_alloc();
 	if(!fd)
 		goto ext2_lookup_inode_exit;
 	
@@ -533,7 +537,7 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	return (fdesc_t*) fd;
 	
 ext2_lookup_inode_exit:
-	free(fd);
+	ext2_fdesc_free(fd);
 	return NULL;
 }
 
@@ -551,7 +555,7 @@ static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 			return;
 		}
 		hash_map_erase(info->filemap, (void *) f->f_ino);
-		free(f);
+		ext2_fdesc_free(f);
 	}
 }
 
@@ -1367,7 +1371,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 		if (ino == EXT2_BAD_INO)
 			goto allocate_name_exit;
 
-		new_file = (ext2_fdesc_t *) malloc(sizeof(ext2_fdesc_t));
+		new_file = ext2_fdesc_alloc();
 		if (!new_file)
 			goto allocate_name_exit;
 
@@ -2404,6 +2408,9 @@ static int ext2_destroy(LFS_t * lfs)
 	for(i = 0; i < info->ngroupblocks; i++)
 		bdesc_release(&(info->gdescs[i]));
 	
+	n_ext2_instances--;
+	if(!n_ext2_instances)
+		ext2_fdesc_free_all();
 	free(info->gdescs);
 	free(info->super);
 	free(info->groups);
@@ -2690,6 +2697,8 @@ LFS_t * ext2(BD_t * block_device)
 		DESTROY(lfs);
 		return NULL;
 	}
+	
+	n_ext2_instances++;
 	
 	return lfs;
 }
