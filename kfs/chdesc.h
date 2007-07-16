@@ -129,6 +129,7 @@ struct chdepdesc {
  * the callback has done that itself, and the storage may now be gone. */
 typedef int (*chdesc_satisfy_callback_t)(chdesc_t ** location, void * data);
 
+/* TODO: require this at all weak reference sites, rather than allocate it? */
 struct chrefdesc {
 	chdesc_t ** desc;
 	chdesc_satisfy_callback_t callback;
