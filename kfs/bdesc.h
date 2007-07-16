@@ -67,6 +67,8 @@ struct bdesc {
 	uint16_t count;
 };
 
+int bdesc_init(void);
+
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count);

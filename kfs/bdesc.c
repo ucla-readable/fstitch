@@ -1,10 +1,12 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
+#include <lib/pool.h>
 
 #include <kfs/bd.h>
 #include <kfs/blockman.h>
 #include <kfs/bdesc.h>
 #include <kfs/debug.h>
+#include <kfs/kfsd.h>
 
 /* Statically allocate two autopools. We probably won't ever need more than the
  * main top-level one and one nested pool, and if we do, we can allocate them
@@ -20,26 +22,35 @@ static struct auto_pool * autorelease_stack = NULL;
 static struct auto_pool static_pool[STATIC_AUTO_POOLS];
 static unsigned int autorelease_depth = 0;
 
+DECLARE_POOL(bdesc_mem, bdesc_t);
+DECLARE_POOL(datadesc_mem, datadesc_t);
+
+static void bdesc_pools_free_all(void * ignore)
+{
+	bdesc_mem_free_all();
+	datadesc_mem_free_all();
+}
+
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
 bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 {
-	bdesc_t * bdesc = malloc(sizeof(*bdesc));
+	bdesc_t * bdesc = bdesc_mem_alloc();
 	uint16_t i;
 	if(!bdesc)
 		return NULL;
-	bdesc->ddesc = malloc(sizeof(*bdesc->ddesc));
+	bdesc->ddesc = datadesc_mem_alloc();
 	if(!bdesc->ddesc)
 	{
-		free(bdesc);
+		bdesc_mem_free(bdesc);
 		return NULL;
 	}
 	length *= count;
 	bdesc->ddesc->data = malloc(length);
 	if(!bdesc->ddesc->data)
 	{
-		free(bdesc->ddesc);
-		free(bdesc);
+		datadesc_mem_free(bdesc->ddesc);
+		bdesc_mem_free(bdesc);
 		return NULL;
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, count);
@@ -84,7 +95,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 /* wrap a ddesc in a new bdesc */
 bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number, uint16_t count)
 {
-	bdesc_t * bdesc = malloc(sizeof(*bdesc));
+	bdesc_t * bdesc = bdesc_mem_alloc();
 	if(!bdesc)
 		return NULL;
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number, count);
@@ -155,10 +166,10 @@ void bdesc_release(bdesc_t ** bdesc)
 				blockman_remove((*bdesc)->ddesc);
 			free((*bdesc)->ddesc->data);
 			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
-			free((*bdesc)->ddesc);
+			datadesc_mem_free((*bdesc)->ddesc);
 		}
 		memset(*bdesc, 0, sizeof(**bdesc));
-		free(*bdesc);
+		bdesc_mem_free(*bdesc);
 	}
 	/* released, so set pointer to NULL */
 	*bdesc = NULL;
@@ -247,4 +258,9 @@ int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc)
 				ar_count += scan->ar_count;
 	}
 	return ar_count;
+}
+
+int bdesc_init(void)
+{
+	return kfsd_register_shutdown_module(bdesc_pools_free_all, NULL, SHUTDOWN_POSTMODULES);
 }
