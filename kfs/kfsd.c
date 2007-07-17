@@ -20,6 +20,10 @@
 int use_journal = 0;
 #endif
 
+#if ALLOW_UNLINK
+int use_unlink = 0;
+#endif
+
 struct module_shutdown {
 	const char * name;
 	kfsd_shutdown_module shutdown;
@@ -243,6 +247,11 @@ module_param(use_journal, int, 0);
 MODULE_PARM_DESC(use_journal, "Use journal device when .journal exists");
 #endif
 
+#if ALLOW_UNLINK
+module_param(use_unlink, int, 0);
+MODULE_PARM_DESC(use_unlink, "Use the unlink device to remove dependencies");
+#endif
+
 static int kfsd_is_shutdown = 0;
 
 static int kfsd_thread(void * thunk)
@@ -361,6 +370,13 @@ int main(int argc, char * argv[])
 		else if(!strncmp(argv[i], "use_journal=", 12))
 		{
 			use_journal = atoi(&argv[i][12]);
+			remove_arg(&argc, argv, i--);
+		}
+#endif
+#if ALLOW_UNLINK
+		else if(!strncmp(argv[i], "use_unlink=", 11))
+		{
+			use_unlink = atoi(&argv[i][11]);
 			remove_arg(&argc, argv, i--);
 		}
 #endif

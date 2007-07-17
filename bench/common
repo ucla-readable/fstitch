@@ -138,7 +138,7 @@ function finish () {
 function supported_host_fs () {
 	# note: the below case @() notation requires extglob
 	case "$1" in
-		@(kudos|uu)-ext2-@(su|meta|full)) true;;
+		@(kudos|uu)-ext2-@(su|meta|full|none)) true;;
 		linux-@(ext2-none|ext3-@(ordered|journal))) true;;
 		*) false;;
 	esac

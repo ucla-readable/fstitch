@@ -60,7 +60,6 @@ struct kfsd_partition {
 typedef struct kfsd_partition kfsd_partition_t;
 
 #define USE_ICASE 0
-#define USE_UNLINK 0
 
 #define USE_WB_CACHE 2
 #ifndef USE_WB_CACHE
@@ -79,10 +78,6 @@ typedef struct kfsd_partition kfsd_partition_t;
 #error The journal requires a wb2_cache to function
 #endif
 
-#if ALLOW_JOURNAL && USE_UNLINK
-#error The journal is incompatible with the unlink device
-#endif
-
 int kfsd_init(int nwbblocks)
 {
 	const bool use_disk_1 = 1;
@@ -90,6 +85,15 @@ int kfsd_init(int nwbblocks)
 	const bool use_mem_bd = 0;
 	vector_t * uhfses = NULL;
 	int r;
+
+#if ALLOW_JOURNAL && ALLOW_UNLINK
+	extern int use_journal, use_unlink;
+	if(use_journal && use_unlink)
+	{
+		printf("%s(): use_journal and use_unlink are not compatible\n", __FUNCTION__);
+		return -1;
+	}
+#endif
 
 	printf("kfsd (%s) starting\n", RELEASE_NAME);
 
@@ -587,9 +591,14 @@ BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 			return NULL;
 	}
 
-#if USE_UNLINK
-	if (! (bd = unlink_bd(bd)) )
-		return NULL;
+#if ALLOW_UNLINK
+	extern int use_unlink;
+	if (use_unlink)
+	{
+		printf("Initializing unlink device.\n");
+		if (! (bd = unlink_bd(bd)) )
+			return NULL;
+	}
 #endif
 
 	return bd;
