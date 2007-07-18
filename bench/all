@@ -29,19 +29,19 @@ fi
 NRUNS=3
 [ $# -eq 1 ] && NRUNS="$1"
 
-$BENCHDIR/multi $NRUNS $BENCHDIR/tar
+$BENCHDIR/multi $NRUNS $BENCHDIR/tar_rm
 if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
 	if grep -v linux- $OUTDIR/fs; then
-		accounting_on; TESTNAME=mem $BENCHDIR/tar; accounting_restore
+		accounting_on; TESTNAME=mem $BENCHDIR/tar_rm; accounting_restore
 	fi
 fi
 
-$BENCHDIR/multi $NRUNS $BENCHDIR/rm_linux
-if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
-	if grep -v linux- $OUTDIR/fs; then
-		accounting_on; TESTNAME=mem $BENCHDIR/rm_linux; accounting_restore
-	fi
-fi
+#$BENCHDIR/multi $NRUNS $BENCHDIR/rm_linux
+#if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
+#	if grep -v linux- $OUTDIR/fs; then
+#		accounting_on; TESTNAME=mem $BENCHDIR/rm_linux; accounting_restore
+#	fi
+#fi
 
 $BENCHDIR/multi $NRUNS $BENCHDIR/postmark
 if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
