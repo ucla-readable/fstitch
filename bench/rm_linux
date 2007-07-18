@@ -6,10 +6,16 @@ function test () {
 }
 
 function run () {
-	try $BENCHDIR/init -f ext2 -c none -h linux -a start
+	# Create the file system
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+
+	# Untar using Linux ext2
+	try $BENCHDIR/init -f ext2 -c none -h linux -a start -k
 	try tar -C $MNT/ -xf $TARFILE
 	try $BENCHDIR/init -f ext2 -c none -h linux -a stop
 
+	# Remove using the specified parameters
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start -k
 	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
 	prepare_postinit $T $N $OUTDIR $HOST
