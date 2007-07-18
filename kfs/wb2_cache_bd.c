@@ -40,7 +40,7 @@ struct cache_info {
 	
 	/* map from block number to bdesc */
 	uint32_t map_capacity;
-	bdesc_t **map;
+	bdesc_t ** map;
 	
 	uint32_t blockcount;
 	uint16_t blocksize;
@@ -99,29 +99,29 @@ static uint16_t wb2_cache_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
-static inline bdesc_t *wb2_map_get_block(struct cache_info *info, uint32_t number)
+static inline bdesc_t * wb2_map_get_block(struct cache_info * info, uint32_t number)
 {
-	bdesc_t *b = info->map[number & (info->map_capacity - 1)];
-	while (b && b->number < number)
+	bdesc_t * b = info->map[number & (info->map_capacity - 1)];
+	while(b && b->number < number)
 		b = b->block_hash.next;
-	return (b && b->number == number ? b : 0);
+	return (b && b->number == number) ? b : NULL;
 }
 
-static inline void wb2_map_put_block(struct cache_info *info, bdesc_t *block)
+static inline void wb2_map_put_block(struct cache_info * info, bdesc_t * block)
 {
-	bdesc_t **b = &info->map[block->number & (info->map_capacity - 1)];
-	while (*b && (*b)->number < block->number)
+	bdesc_t ** b = &info->map[block->number & (info->map_capacity - 1)];
+	while(*b && (*b)->number < block->number)
 		b = &(*b)->block_hash.next;
 	block->block_hash.next = *b;
-	if (*b)
+	if(*b)
 		(*b)->block_hash.pprev = &block->block_hash.next;
 	block->block_hash.pprev = b;
 	*b = block;
 }
 
-static inline void wb2_map_remove_block(bdesc_t *block)
+static inline void wb2_map_remove_block(bdesc_t * block)
 {
-	if ((*block->block_hash.pprev = block->block_hash.next))
+	if((*block->block_hash.pprev = block->block_hash.next))
 		block->block_hash.next->block_hash.pprev = block->block_hash.pprev;
 }
 
@@ -152,7 +152,7 @@ static void wb2_push_block(struct cache_info * info, bdesc_t * block)
 }
 
 /* we are guaranteed that the block is not already in the list */
-static void wb2_push_slot_dirty(struct cache_info * info, bdesc_t * block)
+static void wb2_push_dirty(struct cache_info * info, bdesc_t * block)
 {
 	block->lru_dirty.prev = NULL;
 	block->lru_dirty.next = info->dirty.first;
@@ -169,7 +169,7 @@ static void wb2_push_slot_dirty(struct cache_info * info, bdesc_t * block)
 
 #define wb2_dirty_slot(info, block) ((info)->dirty.first == (block) || (block)->lru_dirty.prev)
 
-static void wb2_pop_slot(struct cache_info * info, bdesc_t *block)
+static void wb2_pop_slot(struct cache_info * info, bdesc_t * block)
 {
 	assert(wb2_map_get_block(info, block->number) == block);
 	
@@ -197,7 +197,7 @@ static void wb2_pop_slot(struct cache_info * info, bdesc_t *block)
 	bdesc_release(&block);
 }
 
-static void wb2_pop_slot_dirty(struct cache_info * info, bdesc_t *block)
+static void wb2_pop_slot_dirty(struct cache_info * info, bdesc_t * block)
 {
 	assert(wb2_dirty_slot(info, block));
 	if(block->lru_dirty.prev)
@@ -215,7 +215,7 @@ static void wb2_pop_slot_dirty(struct cache_info * info, bdesc_t *block)
 		info->soft_dblocks = info->soft_dblocks_high;
 }
 
-static void wb2_touch_block_read(struct cache_info * info, bdesc_t *block)
+static void wb2_touch_block_read(struct cache_info * info, bdesc_t * block)
 {
 	/* already the first? */
 	if(info->all.first == block)
@@ -314,7 +314,7 @@ static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t
 }
 
 /* move "slot" to before "before" */
-static void wb2_bounce_block_write(struct cache_info * info, bdesc_t *block, bdesc_t *before)
+static void wb2_bounce_block_write(struct cache_info * info, bdesc_t * block, bdesc_t * before)
 {
 	wb2_pop_slot_dirty(info, block);
 	block->lru_dirty.next = before;
@@ -342,7 +342,7 @@ enum dshrink_strategy {
 static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	bdesc_t *block = info->dirty.last;
+	bdesc_t * block = info->dirty.last;
 	
 #if DIRTY_QUEUE_REORDERING
 	bdesc_t * stop = NULL;
@@ -477,7 +477,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
  * possible, by evicting clean blocks in LRU order */
 static void wb2_shrink_blocks(struct cache_info * info)
 {
-	bdesc_t *block = info->all.last;
+	bdesc_t * block = info->all.last;
 	/* while there are more blocks than the soft limit, and there are clean blocks */
 	while(info->blocks >= info->soft_blocks && info->blocks > info->dblocks)
 	{
@@ -487,7 +487,7 @@ static void wb2_shrink_blocks(struct cache_info * info)
 			block = block->lru_all.prev;
 		else
 		{
-			bdesc_t *prev = block->lru_all.prev;
+			bdesc_t * prev = block->lru_all.prev;
 			wb2_pop_slot(info, block);
 			info->blocks--;
 			block = prev;
@@ -582,7 +582,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
 		if(!wb2_dirty_slot(info, block))
-			wb2_push_slot_dirty(info, block);
+			wb2_push_dirty(info, block);
 	}
 	else
 	{
@@ -600,7 +600,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		wb2_push_block(info, block);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
-		wb2_push_slot_dirty(info, block);
+		wb2_push_dirty(info, block);
 	}
 	
 	return 0;
@@ -715,11 +715,14 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	}
 
 	info->map_capacity = MAP_SIZE;
-	if (!(info->map = (bdesc_t **) malloc(info->map_capacity * sizeof(bdesc_t *)))) {
+	info->map = (bdesc_t **) malloc(info->map_capacity * sizeof(*info->map));
+	if(!info->map)
+	{
 		free(info);
 		free(bd);
 		return NULL;
 	}
+	memset(info->map, 0, info->map_capacity * sizeof(*info->map));
 	
 	BD_INIT(bd, wb2_cache_bd, info);
 	OBJMAGIC(bd) = WB_CACHE_MAGIC;
