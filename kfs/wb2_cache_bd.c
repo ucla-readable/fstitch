@@ -20,28 +20,10 @@
 #include <kfs/kernel_timing.h>
 KERNEL_TIMING(wait);
 
-/* reorder the queue to try and find a better flush order */
-#define DIRTY_QUEUE_REORDERING 0
-
 /* useful for looking at chdesc graphs */
 #define DELAY_FLUSH_UNTIL_EXIT 0
 
-/* each block in the cache has an lru_slot, and the dirty blocks are
- * hooked up using the dirty links in addition to the all links */
-struct lru_slot {
-	bdesc_t * block;
-#if DIRTY_QUEUE_REORDERING
-	uint32_t pass;
-	/* if we've put a block after this one already during this pass through
-	 * the dirty blocks, put further blocks after that one instead */
-	uint32_t block_after_number;
-	uint32_t block_after_pass;
-#endif
-	struct {
-		struct lru_slot * prev;
-		struct lru_slot * next;
-	} all, dirty;
-};
+#define MAP_SIZE 32768
 
 /* the all list is ordered by read/write usage, while the dirty list is ordered by write usage:
  * all.first -> most recently used -> next -> next -> least recently used <- all.last
@@ -52,17 +34,17 @@ struct cache_info {
 	uint32_t soft_dblocks, dblocks;
 	uint32_t soft_dblocks_low, soft_dblocks_high;
 	struct {
-		struct lru_slot * first;
-		struct lru_slot * last;
+		bdesc_t * first;
+		bdesc_t * last;
 	} all, dirty;
-	/* map from (void *) number -> lru_slot * */
-	hash_map_t * block_map;
+	
+	/* map from block number to bdesc */
+	uint32_t map_capacity;
+	bdesc_t **map;
+	
 	uint32_t blockcount;
 	uint16_t blocksize;
 };
-
-DECLARE_POOL(lru_slot, struct lru_slot);
-static int n_wb2_instances;
 
 static int wb2_cache_bd_get_config(void * object, int level, char * string, size_t length)
 {
@@ -117,131 +99,143 @@ static uint16_t wb2_cache_bd_get_atomicsize(BD_t * object)
 	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
-/* we are guaranteed that the block is not already in the list */
-static struct lru_slot * wb2_push_block(struct cache_info * info, bdesc_t * block)
+static inline bdesc_t *wb2_map_get_block(struct cache_info *info, uint32_t number)
 {
-	struct lru_slot * slot = lru_slot_alloc();
-	if(!slot)
-		return NULL;
-	
-	slot->block = block;
-#if DIRTY_QUEUE_REORDERING
-	slot->pass = 0;
-	slot->block_after_number = INVALID_BLOCK;
-	slot->block_after_pass = 0;
-#endif
-	slot->all.prev = NULL;
-	slot->all.next = info->all.first;
-	slot->dirty.prev = NULL;
-	slot->dirty.next = NULL;
-	
-	assert(!hash_map_find_val(info->block_map, (void *) block->number));
-	if(hash_map_insert(info->block_map, (void *) block->number, slot) < 0)
-	{
-		lru_slot_free(slot);
-		return NULL;
-	}
-	
-	info->all.first = slot;
-	if(slot->all.next)
-		slot->all.next->all.prev = slot;
-	else
-		info->all.last = slot;
-	info->blocks++;
-	
-	bdesc_retain(block);
-	
-	return slot;
+	bdesc_t *b = info->map[number & (info->map_capacity - 1)];
+	while (b && b->number < number)
+		b = b->block_hash.next;
+	return (b && b->number == number ? b : 0);
+}
+
+static inline void wb2_map_put_block(struct cache_info *info, bdesc_t *block)
+{
+	bdesc_t **b = &info->map[block->number & (info->map_capacity - 1)];
+	while (*b && (*b)->number < block->number)
+		b = &(*b)->block_hash.next;
+	block->block_hash.next = *b;
+	if (*b)
+		(*b)->block_hash.pprev = &block->block_hash.next;
+	block->block_hash.pprev = b;
+	*b = block;
+}
+
+static inline void wb2_map_remove_block(bdesc_t *block)
+{
+	if ((*block->block_hash.pprev = block->block_hash.next))
+		block->block_hash.next->block_hash.pprev = block->block_hash.pprev;
 }
 
 /* we are guaranteed that the block is not already in the list */
-static void wb2_push_slot_dirty(struct cache_info * info, struct lru_slot * slot)
+static void wb2_push_block(struct cache_info * info, bdesc_t * block)
 {
-	slot->dirty.prev = NULL;
-	slot->dirty.next = info->dirty.first;
+#if DIRTY_QUEUE_REORDERING
+	block->pass = 0;
+	block->block_after_number = INVALID_BLOCK;
+	block->block_after_pass = 0;
+#endif
+	block->lru_all.prev = NULL;
+	block->lru_all.next = info->all.first;
+	block->lru_dirty.prev = NULL;
+	block->lru_dirty.next = NULL;
 	
-	info->dirty.first = slot;
-	if(slot->dirty.next)
-		slot->dirty.next->dirty.prev = slot;
+	assert(!wb2_map_get_block(info, block->number));
+	wb2_map_put_block(info, block);
+	
+	info->all.first = block;
+	if(block->lru_all.next)
+		block->lru_all.next->lru_all.prev = block;
 	else
-		info->dirty.last = slot;
+		info->all.last = block;
+	info->blocks++;
+	
+	bdesc_retain(block);
+}
+
+/* we are guaranteed that the block is not already in the list */
+static void wb2_push_slot_dirty(struct cache_info * info, bdesc_t * block)
+{
+	block->lru_dirty.prev = NULL;
+	block->lru_dirty.next = info->dirty.first;
+	
+	info->dirty.first = block;
+	if(block->lru_dirty.next)
+		block->lru_dirty.next->lru_dirty.prev = block;
+	else
+		info->dirty.last = block;
 	/* if we go above the high mark, set the current mark low */
 	if(++info->dblocks > info->soft_dblocks_high)
 		info->soft_dblocks = info->soft_dblocks_low;
 }
 
-#define wb2_dirty_slot(info, slot) ((info)->dirty.first == (slot) || (slot)->dirty.prev)
+#define wb2_dirty_slot(info, block) ((info)->dirty.first == (block) || (block)->lru_dirty.prev)
 
-static void wb2_pop_slot(struct cache_info * info, struct lru_slot * slot)
+static void wb2_pop_slot(struct cache_info * info, bdesc_t *block)
 {
-	uint32_t number = slot->block->number;
-	assert(hash_map_find_val(info->block_map, (void *) number) == slot);
+	assert(wb2_map_get_block(info, block->number) == block);
 	
-	bdesc_release(&slot->block);
-	
-	if(slot->all.prev)
-		slot->all.prev->all.next = slot->all.next;
+	if(block->lru_all.prev)
+		block->lru_all.prev->lru_all.next = block->lru_all.next;
 	else
-		info->all.first = slot->all.next;
-	if(slot->all.next)
-		slot->all.next->all.prev = slot->all.prev;
+		info->all.first = block->lru_all.next;
+	if(block->lru_all.next)
+		block->lru_all.next->lru_all.prev = block->lru_all.prev;
 	else
-		info->all.last = slot->all.prev;
-	if(wb2_dirty_slot(info, slot))
+		info->all.last = block->lru_all.prev;
+	if(wb2_dirty_slot(info, block))
 	{
-		if(slot->dirty.prev)
-			slot->dirty.prev->dirty.next = slot->dirty.next;
+		if(block->lru_dirty.prev)
+			block->lru_dirty.prev->lru_dirty.next = block->lru_dirty.next;
 		else
-			info->dirty.first = slot->dirty.next;
-		if(slot->dirty.next)
-			slot->dirty.next->dirty.prev = slot->dirty.prev;
+			info->dirty.first = block->lru_dirty.next;
+		if(block->lru_dirty.next)
+			block->lru_dirty.next->lru_dirty.prev = block->lru_dirty.prev;
 		else
-			info->dirty.last = slot->dirty.prev;
+			info->dirty.last = block->lru_dirty.prev;
 	}
 	
-	hash_map_erase(info->block_map, (void *) number);
-	lru_slot_free(slot);
+	wb2_map_remove_block(block);
+	bdesc_release(&block);
 }
 
-static void wb2_pop_slot_dirty(struct cache_info * info, struct lru_slot * slot)
+static void wb2_pop_slot_dirty(struct cache_info * info, bdesc_t *block)
 {
-	assert(wb2_dirty_slot(info, slot));
-	if(slot->dirty.prev)
-		slot->dirty.prev->dirty.next = slot->dirty.next;
+	assert(wb2_dirty_slot(info, block));
+	if(block->lru_dirty.prev)
+		block->lru_dirty.prev->lru_dirty.next = block->lru_dirty.next;
 	else
-		info->dirty.first = slot->dirty.next;
-	if(slot->dirty.next)
-		slot->dirty.next->dirty.prev = slot->dirty.prev;
+		info->dirty.first = block->lru_dirty.next;
+	if(block->lru_dirty.next)
+		block->lru_dirty.next->lru_dirty.prev = block->lru_dirty.prev;
 	else
-		info->dirty.last = slot->dirty.prev;
-	slot->dirty.prev = NULL;
-	slot->dirty.next = NULL;
+		info->dirty.last = block->lru_dirty.prev;
+	block->lru_dirty.prev = NULL;
+	block->lru_dirty.next = NULL;
 	/* if we make it below the low mark, set the current mark high */
 	if(--info->dblocks <= info->soft_dblocks_low)
 		info->soft_dblocks = info->soft_dblocks_high;
 }
 
-static void wb2_touch_block_read(struct cache_info * info, struct lru_slot * slot)
+static void wb2_touch_block_read(struct cache_info * info, bdesc_t *block)
 {
 	/* already the first? */
-	if(info->all.first == slot)
+	if(info->all.first == block)
 		return;
 	
 	/* must have a prev, so detach it */
-	slot->all.prev->all.next = slot->all.next;
-	if(slot->all.next)
-		slot->all.next->all.prev = slot->all.prev;
+	block->lru_all.prev->lru_all.next = block->lru_all.next;
+	if(block->lru_all.next)
+		block->lru_all.next->lru_all.prev = block->lru_all.prev;
 	else
-		info->all.last = slot->all.prev;
+		info->all.last = block->lru_all.prev;
 	
 	/* now re-add it */
-	slot->all.prev = NULL;
-	slot->all.next = info->all.first;
-	info->all.first = slot;
-	if(slot->all.next)
-		slot->all.next->all.prev = slot;
+	block->lru_all.prev = NULL;
+	block->lru_all.next = info->all.first;
+	info->all.first = block;
+	if(block->lru_all.next)
+		block->lru_all.next->lru_all.prev = block;
 	else
-		info->all.last = slot;
+		info->all.last = block;
 }
 
 static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
@@ -320,16 +314,16 @@ static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t
 }
 
 /* move "slot" to before "before" */
-static void wb2_bounce_block_write(struct cache_info * info, struct lru_slot * slot, struct lru_slot * before)
+static void wb2_bounce_block_write(struct cache_info * info, bdesc_t *block, bdesc_t *before)
 {
-	wb2_pop_slot_dirty(info, slot);
-	slot->dirty.next = before;
-	slot->dirty.prev = before->dirty.prev;
-	before->dirty.prev = slot;
-	if(slot->dirty.prev)
-		slot->dirty.prev->dirty.next = slot;
+	wb2_pop_slot_dirty(info, block);
+	block->lru_dirty.next = before;
+	block->lru_dirty.prev = before->lru_dirty.prev;
+	before->lru_dirty.prev = block;
+	if(block->lru_dirty.prev)
+		block->lru_dirty.prev->lru_dirty.next = block;
 	else
-		info->dirty.first = slot;
+		info->dirty.first = block;
 	/* there is no way we could be putting this block at the end
 	 * of the queue, since it's going before some other block */
 	/* if we go above the high mark, set the current mark low */
@@ -348,10 +342,10 @@ enum dshrink_strategy {
 static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	struct lru_slot * slot = info->dirty.last;
+	bdesc_t *block = info->dirty.last;
 	
 #if DIRTY_QUEUE_REORDERING
-	struct lru_slot * stop = NULL;
+	bdesc_t * stop = NULL;
 #define STOP stop
 	static uint32_t pass = 0;
 	if(!++pass)
@@ -371,35 +365,36 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
-	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && slot != STOP)
+	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && block != STOP)
 	{
 		int status, delay = 0;
 #if DIRTY_QUEUE_REORDERING
-		if(slot->pass == pass)
+		if(block->pass == pass)
 		{
-			slot = slot->dirty.prev;
-			assert(slot || !stop);
+			block = block->lru_dirty.prev;
+			assert(block || !stop);
 			continue;
 		}
-		slot->pass = pass;
+		block->pass = pass;
 #endif
-		status = wb2_flush_block(object, slot->block, &delay);
+		status = wb2_flush_block(object, block, &delay);
 		/* still dirty? */
 		if(status < 0)
 		{
 #if DIRTY_QUEUE_REORDERING
+			this_is_not_updated_yet();
 			/* pick somewhere later in the queue to move it */
-			bdesc_t * block = NULL;
-			if(!slot->block->ddesc->in_flight)
+			bdesc_t * scan_block = NULL;
+			if(!block->ddesc->in_flight)
 			{
-				chdesc_t * scan = slot->block->ddesc->index_changes[object->graph_index].head;
-				for(; !block && scan; scan = scan->ddesc_index_next)
-					block = wb2_find_block_before(object, scan, slot->block);
+				chdesc_t * scan = block->ddesc->index_changes[object->graph_index].head;
+				for(; !scan_block && scan; scan = scan->ddesc_index_next)
+					scan_block = wb2_find_block_before(object, scan, slot->block);
 			}
-			if(block)
+			if(scan_block)
 			{
 				struct lru_slot * before_slot = NULL;
-				before_slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) block->number);
+				before_slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) scan_block->number);
 				assert(slot != before_slot);
 				if(before_slot)
 				{
@@ -438,34 +433,34 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			else
 #endif
 			{
-				slot = slot->dirty.prev;
-				assert(slot || !STOP);
+				block = block->lru_dirty.prev;
+				assert(block || !STOP);
 			}
 		}
 		else
 		{
-			uint32_t number = slot->block->number;
-			struct lru_slot * prev = slot->dirty.prev;
-			wb2_pop_slot_dirty(info, slot);
+			uint32_t number = block->number;
+			bdesc_t * prev = block->lru_dirty.prev;
+			wb2_pop_slot_dirty(info, block);
 			/* now try and find sequential blocks to write */
-			while((slot = hash_map_find_val(info->block_map, (void *) ++number)))
+			while((block = wb2_map_get_block(info, ++number)))
 			{
-				if(!wb2_dirty_slot(info, slot))
+				if(!wb2_dirty_slot(info, block))
 					break;
 				/* if we were about to examine this block, don't */
-				if(slot == prev)
-					prev = prev->dirty.prev;
+				if(block == prev)
+					prev = prev->lru_dirty.prev;
 				/* assume it will be merged, so don't ask for delay */
-				status = wb2_flush_block(object, slot->block, NULL);
+				status = wb2_flush_block(object, block, NULL);
 				/* clean slot now? */
 				if(status >= 0)
-					wb2_pop_slot_dirty(info, slot);
+					wb2_pop_slot_dirty(info, block);
 				/* if we didn't actually write it, stop looking */
 				if(status == FLUSH_EMPTY || status == FLUSH_NONE)
 					break;
 			}
-			slot = prev;
-			assert(slot || !STOP);
+			block = prev;
+			assert(block || !STOP);
 		}
 		/* if we're just preening, then stop if there was I/O delay */
 		if(strategy == PREEN && delay > 1)
@@ -482,20 +477,20 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
  * possible, by evicting clean blocks in LRU order */
 static void wb2_shrink_blocks(struct cache_info * info)
 {
-	struct lru_slot * slot = info->all.last;
+	bdesc_t *block = info->all.last;
 	/* while there are more blocks than the soft limit, and there are clean blocks */
 	while(info->blocks >= info->soft_blocks && info->blocks > info->dblocks)
 	{
-		assert(slot);
+		assert(block);
 		/* skip dirty blocks */
-		if(wb2_dirty_slot(info, slot))
-			slot = slot->all.prev;
+		if(wb2_dirty_slot(info, block))
+			block = block->lru_all.prev;
 		else
 		{
-			struct lru_slot * prev = slot->all.prev;
-			wb2_pop_slot(info, slot);
+			bdesc_t *prev = block->lru_all.prev;
+			wb2_pop_slot(info, block);
 			info->blocks--;
-			slot = prev;
+			block = prev;
 		}
 	}
 }
@@ -503,20 +498,18 @@ static void wb2_shrink_blocks(struct cache_info * info)
 static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	struct lru_slot * slot;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > info->blockcount)
 		return NULL;
 	
-	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) number);
-	if(slot)
+	block = wb2_map_get_block(info, number);
+	if(block)
 	{
 		/* in the cache, use it */
-		block = slot->block;
 		assert(block->count == count);
-		wb2_touch_block_read(info, slot);
+		wb2_touch_block_read(info, block);
 		if(!block->ddesc->synthetic)
 			return block;
 	}
@@ -535,9 +528,8 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
-	else if(!wb2_push_block(info, block))
-		/* kind of a waste of the read... but we have to do it */
-		return NULL;
+	else
+		wb2_push_block(info, block);
 	
 	return block;
 }
@@ -545,20 +537,19 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	struct lru_slot * slot;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > info->blockcount)
 		return NULL;
 	
-	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) number);
-	if(slot)
+	block = wb2_map_get_block(info, number);
+	if(block)
 	{
 		/* in the cache, use it */
-		assert(slot->block->count == count);
-		wb2_touch_block_read(info, slot);
-		return slot->block;
+		assert(block->count == count);
+		wb2_touch_block_read(info, block);
+		return block;
 	}
 	
 	if(info->dblocks > info->soft_dblocks)
@@ -571,33 +562,27 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(!block)
 		return NULL;
 	
-	if(!wb2_push_block(info, block))
-		/* kind of a waste of the read... but we have to do it */
-		return NULL;
-	
+	wb2_push_block(info, block);
 	return block;
 }
 
 static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	struct lru_slot * slot;
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > info->blockcount)
 		return -EINVAL;
 	
-	slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) block->number);
-	if(slot)
+	block = wb2_map_get_block(info, block->number);
+	if(block)
 	{
 		/* already have this block */
-		assert(slot->block->ddesc == block->ddesc);
-		assert(slot->block->count == block->count);
-		wb2_touch_block_read(info, slot);
+		wb2_touch_block_read(info, block);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
-		if(!wb2_dirty_slot(info, slot))
-			wb2_push_slot_dirty(info, slot);
+		if(!wb2_dirty_slot(info, block))
+			wb2_push_slot_dirty(info, block);
 	}
 	else
 	{
@@ -612,18 +597,16 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		if(info->blocks >= info->soft_blocks)
 			wb2_shrink_blocks(info);
 		
-		slot = wb2_push_block(info, block);
-		if(!slot)
-			return -ENOMEM;
+		wb2_push_block(info, block);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
-		wb2_push_slot_dirty(info, slot);
+		wb2_push_slot_dirty(info, block);
 	}
 	
 	return 0;
 }
 
-static int wb2_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	uint32_t start_dirty = info->dblocks;
@@ -701,11 +684,7 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 	while(info->all.first)
 		wb2_pop_slot(info, info->all.first);
 	
-	n_wb2_instances--;
-	if(!n_wb2_instances)
-		lru_slot_free_all();
-	
-	hash_map_destroy(info->block_map);
+	free(info->map);
 	free(info);
 	
 	memset(bd, 0, sizeof(*bd));
@@ -734,10 +713,9 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		free(bd);
 		return NULL;
 	}
-	
-	info->block_map = hash_map_create();
-	if(!info->block_map)
-	{
+
+	info->map_capacity = MAP_SIZE;
+	if (!(info->map = (bdesc_t **) malloc(info->map_capacity * sizeof(bdesc_t *)))) {
 		free(info);
 		free(bd);
 		return NULL;
@@ -787,8 +765,6 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		DESTROY(bd);
 		return NULL;
 	}
-	
-	n_wb2_instances++;
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
 	return bd;
