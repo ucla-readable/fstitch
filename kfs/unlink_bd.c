@@ -28,21 +28,6 @@ static int unlink_bd_get_status(void * object, int level, char * string, size_t 
 	return 0;
 }
 
-static uint32_t unlink_bd_get_numblocks(BD_t * object)
-{
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, get_numblocks);
-}
-
-static uint16_t unlink_bd_get_blocksize(BD_t * object)
-{
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, get_blocksize);
-}
-
-static uint16_t unlink_bd_get_atomicsize(BD_t * object)
-{
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, get_atomicsize);
-}
-
 static bdesc_t * unlink_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, read_block, number, count);
@@ -154,6 +139,9 @@ BD_t * unlink_bd(BD_t * disk)
 	info->write_head = CALL(disk, get_write_head);
 	bd->level = disk->level;
 	bd->graph_index = disk->graph_index + 1;
+	bd->numblocks = disk->numblocks;
+	bd->blocksize = disk->blocksize;
+	bd->atomicsize = disk->atomicsize;
 	if(bd->graph_index >= NBDINDEX)
 	{
 		DESTROY(bd);

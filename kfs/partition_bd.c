@@ -9,8 +9,6 @@
 struct partition_info {
 	BD_t * bd;
 	uint32_t start;
-	uint32_t length;
-	uint16_t blocksize;
 };
 
 static int partition_bd_get_config(void * object, int level, char * string, size_t length)
@@ -20,14 +18,14 @@ static int partition_bd_get_config(void * object, int level, char * string, size
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "start: %d, length: %d, blocksize: %d", info->start, info->length, info->blocksize);
+			snprintf(string, length, "start: %d, length: %d, blocksize: %d", info->start, bd->numblocks, bd->blocksize);
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "[%d:%d]", info->start, info->length);
+			snprintf(string, length, "[%d:%d]", info->start, bd->numblocks);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "start: %d, length: %d", info->start, info->length);
+			snprintf(string, length, "start: %d, length: %d", info->start, bd->numblocks);
 	}
 	return 0;
 }
@@ -40,28 +38,13 @@ static int partition_bd_get_status(void * object, int level, char * string, size
 	return 0;
 }
 
-static uint32_t partition_bd_get_numblocks(BD_t * object)
-{
-	return ((struct partition_info *) OBJLOCAL(object))->length;
-}
-
-static uint16_t partition_bd_get_blocksize(BD_t * object)
-{
-	return ((struct partition_info *) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t partition_bd_get_atomicsize(BD_t * object)
-{
-	return CALL(((struct partition_info *) OBJLOCAL(object))->bd, get_atomicsize);
-}
-
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->length)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	bdesc = CALL(info->bd, read_block, info->start + number, count);
@@ -82,7 +65,7 @@ static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->length)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	bdesc = CALL(info->bd, synthetic_read_block, info->start + number, count);
@@ -104,7 +87,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->length)
+	if(block->number + block->count > object->numblocks)
 		return -EINVAL;
 
 	wblock = bdesc_alloc_clone(block, block->number + info->start);
@@ -168,8 +151,9 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	
 	info->bd = disk;
 	info->start = start;
-	info->length = length;
-	info->blocksize = CALL(disk, get_blocksize);
+	bd->blocksize = disk->blocksize;
+	bd->numblocks = length;
+	bd->atomicsize = disk->atomicsize;
 	bd->level = disk->level;
 	bd->graph_index = disk->graph_index + 1;
 	if(bd->graph_index >= NBDINDEX)

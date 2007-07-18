@@ -17,24 +17,21 @@
 
 struct mem_info {
 	uint8_t *blocks;
-	uint32_t blockcount;
-	uint16_t blocksize;
 	blockman_t * blockman;
 };
 
 static int mem_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_BRIEF:
-			snprintf(string, length, "%d(%dblks)", info->blocksize, info->blockcount);
+			snprintf(string, length, "%d(%dblks)", bd->blocksize, bd->numblocks);
 			break;
 		case CONFIG_VERBOSE:
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "%d bytes x %d blocks", info->blocksize, info->blockcount);
+			snprintf(string, length, "%d bytes x %d blocks", bd->blocksize, bd->numblocks);
 	}
 	return 0;
 }
@@ -45,21 +42,6 @@ static int mem_bd_get_status(void * object, int level, char * string, size_t len
 	if (length >= 1)
 		string[0] = 0;
 	return 0;
-}
-
-static uint32_t mem_bd_get_numblocks(BD_t * object)
-{
-	return ((struct mem_info*) OBJLOCAL(object))->blockcount;
-}
-
-static uint16_t mem_bd_get_blocksize(BD_t * object)
-{
-	return ((struct mem_info*) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t mem_bd_get_atomicsize(BD_t * object)
-{
-	return mem_bd_get_blocksize(object);
 }
 
 static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
@@ -77,16 +59,16 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	else
 	{
 		/* make sure it's a valid block */
-		if (!count || number + count > info->blockcount)
+		if (!count || number + count > object->numblocks)
 			return NULL;
 
-		bdesc = bdesc_alloc(number, info->blocksize, count);
+		bdesc = bdesc_alloc(number, object->blocksize, count);
 		if (bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
 	}
 
-	memcpy(bdesc->ddesc->data, &info->blocks[info->blocksize * number], info->blocksize * count);
+	memcpy(bdesc->ddesc->data, &info->blocks[object->blocksize * number], object->blocksize * count);
 
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
 	if (bdesc->ddesc->synthetic)
@@ -108,11 +90,11 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
 	int r;
 	
-	if(block->ddesc->length != info->blocksize) {
+	if(block->ddesc->length != object->blocksize) {
 		kpanic("wrote block with bad length\n");
 		return -EINVAL;
 	}
-	if (block->number >= info->blockcount) {
+	if (block->number >= object->numblocks) {
 		kpanic("wrote bad block number\n");
 		return -EINVAL;
 	}
@@ -123,9 +105,9 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	}
 
-	memcpy(&info->blocks[block->number * info->blocksize],
+	memcpy(&info->blocks[block->number * object->blocksize],
 	       block->ddesc->data,
-	       info->blocksize);
+	       object->blocksize);
 
 	r = revision_tail_acknowledge(block, object);
 	if (r < 0) {
@@ -206,8 +188,9 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		return NULL;
 	}
 	
-	info->blockcount = blocks;
-	info->blocksize = blocksize;
+	bd->numblocks = blocks;
+	bd->blocksize = blocksize;
+	bd->atomicsize = blocksize;
 
 	/* When running in the Linux kernel, we can't allocate this much
 	 * memory with kmalloc(). So, we use vmalloc() instead. */

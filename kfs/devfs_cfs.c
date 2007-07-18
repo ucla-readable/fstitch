@@ -222,9 +222,9 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	devfs_fdesc_t * devfd = (devfs_fdesc_t *) fdesc;
 	
-	const uint32_t blocksize = CALL(devfd->bd, get_blocksize);
+	const uint32_t blocksize = devfd->bd->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
-	const uint32_t file_size = blocksize * CALL(devfd->bd, get_numblocks);
+	const uint32_t file_size = blocksize * devfd->bd->numblocks;
 	uint32_t size_read = 0, dataoffset = (offset % blocksize);
 	bdesc_t * bdesc;
 
@@ -256,9 +256,9 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	devfs_fdesc_t * devfd = (devfs_fdesc_t *) fdesc;
 	
-	const uint32_t blocksize = CALL(devfd->bd, get_blocksize);
+	const uint32_t blocksize = devfd->bd->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
-	const uint32_t file_size = blocksize * CALL(devfd->bd, get_numblocks);
+	const uint32_t file_size = blocksize * devfd->bd->numblocks;
 	uint32_t size_written = 0, dataoffset = (offset % blocksize);
 	bdesc_t * bdesc;
 	int r = 0;
@@ -335,7 +335,7 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 		devfs_fdesc_t * fdesc = (devfs_fdesc_t *) vector_elt(state->bd_table, *basep - 2);
 		name = fdesc->name;
 		inode = fdesc->inode;
-		filesize = CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks);
+		filesize = fdesc->bd->blocksize * fdesc->bd->numblocks;
 		type = TYPE_DEVICE;
 	}
 	
@@ -440,7 +440,7 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 		if(size < sizeof(size_t))
 			return -ENOMEM;
 		size = sizeof(size_t);
-		*((size_t *) data) = fdesc ? CALL(fdesc->bd, get_blocksize) * CALL(fdesc->bd, get_numblocks) : 0;
+		*((size_t *) data) = fdesc ? fdesc->bd->blocksize * fdesc->bd->numblocks : 0;
 	}
 	else if(id == KFS_FEATURE_FILETYPE)
 	{

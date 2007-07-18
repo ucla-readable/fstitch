@@ -34,7 +34,7 @@ void * bsd_ptable_init(BD_t * bd)
 		return NULL;
 
 	/* make sure the block size is SECTSIZE */
-	if (CALL(bd, get_blocksize) != SECTSIZE)
+	if (bd->blocksize != SECTSIZE)
 		return NULL;
 
 	info = malloc(sizeof(*info));
@@ -46,7 +46,7 @@ void * bsd_ptable_init(BD_t * bd)
 	if (!mbr)
 		goto bsd_init_error;
 	label = (struct disklabel *) &mbr->ddesc->data[BSDLABEL_LABELOFFSET];
-	maxblocks = CALL(bd, get_numblocks);
+	maxblocks = bd->numblocks;
 
 	// TODO check d_checksum
 	if (label->d_magic != BSDLABEL_DISKMAGIC ||

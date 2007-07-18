@@ -8,25 +8,22 @@
 
 struct md_info {
 	BD_t * bd[2];
-	uint32_t numblocks;
-	uint16_t blocksize, atomicsize;
 };
 
 static int md_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct md_info * info = (struct md_info *) OBJLOCAL(bd);
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "disks: 2, count: %d, blocksize: %d", info->numblocks, info->blocksize);
+			snprintf(string, length, "disks: 2, count: %d, blocksize: %d", bd->numblocks, bd->blocksize);
 			break;
 		case CONFIG_BRIEF:
 			snprintf(string, length, "disks: 2");
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "disks: 2, count: %d", info->numblocks);
+			snprintf(string, length, "disks: 2, count: %d", bd->numblocks);
 	}
 	return 0;
 }
@@ -39,28 +36,13 @@ static int md_bd_get_status(void * object, int level, char * string, size_t leng
 	return 0;
 }
 
-static uint32_t md_bd_get_numblocks(BD_t * object)
-{
-	return ((struct md_info *) OBJLOCAL(object))->numblocks;
-}
-
-static uint16_t md_bd_get_blocksize(BD_t * object)
-{
-	return ((struct md_info *) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t md_bd_get_atomicsize(BD_t * object)
-{
-	return ((struct md_info *) OBJLOCAL(object))->atomicsize;
-}
-
 static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct md_info * info = (struct md_info *) OBJLOCAL(object);
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->numblocks)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	read_bdesc = CALL(info->bd[number & 1], read_block, number >> 1, count);
@@ -81,7 +63,7 @@ static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->numblocks)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	read_bdesc = CALL(info->bd[number & 1], synthetic_read_block, number >> 1, count);
@@ -103,7 +85,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->numblocks)
+	if(block->number + block->count > object->numblocks)
 		return -EINVAL;
 	
 	wblock = bdesc_alloc_clone(block, block->number >> 1);
@@ -155,15 +137,15 @@ static int md_bd_destroy(BD_t * bd)
 BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 {
 	struct md_info * info;
-	uint32_t numblocks0 = CALL(disk0, get_numblocks);
-	uint32_t numblocks1 = CALL(disk1, get_numblocks);
-	uint16_t blocksize = CALL(disk0, get_blocksize);
-	uint16_t atomicsize0 = CALL(disk0, get_atomicsize);
-	uint16_t atomicsize1 = CALL(disk1, get_atomicsize);
+	uint32_t numblocks0 = disk0->numblocks;
+	uint32_t numblocks1 = disk1->numblocks;
+	uint16_t blocksize = disk0->blocksize;
+	uint16_t atomicsize0 = disk0->atomicsize;
+	uint16_t atomicsize1 = disk1->atomicsize;
 	BD_t * bd;
 	
 	/* block sizes must be the same */
-	if(blocksize != CALL(disk1, get_blocksize))
+	if(blocksize != disk1->blocksize)
 		return NULL;
 	
 	/* no write heads allowed */
@@ -186,9 +168,9 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;
 	/* we can use minimum number of blocks and atomic size safely */
-	info->numblocks = 2 * MIN(numblocks0, numblocks1);
-	info->blocksize = blocksize;
-	info->atomicsize = MIN(atomicsize0, atomicsize1);
+	bd->numblocks = 2 * MIN(numblocks0, numblocks1);
+	bd->blocksize = blocksize;
+	bd->atomicsize = MIN(atomicsize0, atomicsize1);
 	
 	if (disk0->level > disk1->level)
 		bd->level = disk0->level;

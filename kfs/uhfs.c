@@ -146,7 +146,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	Dprintf("%s(%p, 0x%x)\n", __FUNCTION__, fdesc, target_size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
-	const size_t blksize = CALL(state->lfs, get_blocksize);
+	const size_t blksize = state->lfs->blocksize;
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	chdesc_t * save_head;
@@ -310,7 +310,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	Dprintf("%s(cfs, %p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
-	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
+	const uint32_t blocksize = state->lfs->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_read = 0;
@@ -367,8 +367,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	Dprintf("%s(%p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
-	BD_t * const bd = CALL(state->lfs, get_blockdev);
-	const uint32_t blocksize = CALL(state->lfs, get_blocksize);
+	BD_t * const bd = state->lfs->blockdev;
+	const uint32_t blocksize = state->lfs->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;

@@ -12,10 +12,7 @@
 struct resize_info {
 	BD_t * bd;
 	uint16_t original_size;
-	uint16_t converted_size;
 	uint16_t merge_count;
-	uint16_t atomic_size;
-	uint32_t block_count;
 };
 
 static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
@@ -25,14 +22,14 @@ static int block_resizer_bd_get_config(void * object, int level, char * string, 
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "original: %d, converted: %d, count: %d, atomic: %d", info->original_size, info->converted_size, info->block_count, info->atomic_size);
+			snprintf(string, length, "original: %d, converted: %d, count: %d, atomic: %d", info->original_size, bd->blocksize, bd->numblocks, bd->atomicsize);
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "%d to %d", info->original_size, info->converted_size);
+			snprintf(string, length, "%d to %d", info->original_size, bd->blocksize);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "original: %d, converted: %d, count: %d", info->original_size, info->converted_size, info->block_count);
+			snprintf(string, length, "original: %d, converted: %d, count: %d", info->original_size, bd->blocksize, bd->numblocks);
 	}
 	return 0;
 }
@@ -45,35 +42,20 @@ static int block_resizer_bd_get_status(void * object, int level, char * string, 
 	return 0;
 }
 
-static uint32_t block_resizer_bd_get_numblocks(BD_t * object)
-{
-	return ((struct resize_info *) OBJLOCAL(object))->block_count;
-}
-
-static uint16_t block_resizer_bd_get_blocksize(BD_t * object)
-{
-	return ((struct resize_info *) OBJLOCAL(object))->converted_size;
-}
-
-static uint16_t block_resizer_bd_get_atomicsize(BD_t * object)
-{
-	return ((struct resize_info *) OBJLOCAL(object))->atomic_size;
-}
-
 static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->block_count)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	bdesc = CALL(info->bd, read_block, number * info->merge_count, count * info->merge_count);
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / info->converted_size);
+	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / object->blocksize);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -87,14 +69,14 @@ static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t n
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->block_count)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	bdesc = CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / info->converted_size);
+	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / object->blocksize);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -109,7 +91,7 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->block_count)
+	if(block->number + block->count > object->numblocks)
 		return -EINVAL;
 	
 	wblock = bdesc_alloc_wrap(block->ddesc, block->number * info->merge_count, block->ddesc->length / info->original_size);
@@ -165,7 +147,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	uint32_t original_size;
 	BD_t * bd;
 	
-	original_size = CALL(disk, get_blocksize);
+	original_size = disk->blocksize;
 	/* make sure it's an even multiple of the block size */
 	if(blocksize % original_size)
 		return NULL;
@@ -188,10 +170,10 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	
 	info->bd = disk;
 	info->original_size = original_size;
-	info->converted_size = blocksize;
+	bd->blocksize = blocksize;
 	info->merge_count = blocksize / original_size;
-	info->atomic_size = CALL(disk, get_atomicsize);
-	info->block_count = CALL(disk, get_numblocks) / info->merge_count;
+	bd->atomicsize = disk->atomicsize;
+	bd->numblocks = disk->numblocks / info->merge_count;
 	bd->level = disk->level;
 	bd->graph_index = disk->graph_index + 1;
 	if(bd->graph_index >= NBDINDEX)

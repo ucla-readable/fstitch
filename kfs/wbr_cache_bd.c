@@ -61,7 +61,6 @@ struct cache_info {
 	/* list of all dirty blocks, in random order (rand_slot *) */
 	vector_t * dirty_list;
 	size_t dirty_state;
-	uint16_t blocksize;
 };
 
 DECLARE_POOL(rand_slot, struct rand_slot);
@@ -74,14 +73,14 @@ static int wbr_cache_bd_get_config(void * object, int level, char * string, size
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, soft dirty: %d/%d, soft blocks: %d", info->blocksize, info->soft_dblocks_low, info->soft_dblocks_high, info->soft_blocks);
+			snprintf(string, length, "blocksize: %d, soft dirty: %d/%d, soft blocks: %d", bd->blocksize, info->soft_dblocks_low, info->soft_dblocks_high, info->soft_blocks);
 			break;
 		case CONFIG_BRIEF:
-			snprintf(string, length, "%d x %d", info->blocksize, info->soft_blocks);
+			snprintf(string, length, "%d x %d", bd->blocksize, info->soft_blocks);
 			break;
 		case CONFIG_NORMAL:
 		default:
-			snprintf(string, length, "blocksize: %d, soft blocks: %d", info->blocksize, info->soft_blocks);
+			snprintf(string, length, "blocksize: %d, soft blocks: %d", bd->blocksize, info->soft_blocks);
 	}
 	return 0;
 }
@@ -103,21 +102,6 @@ static int wbr_cache_bd_get_status(void * object, int level, char * string, size
 			snprintf(string, length, "blocks: %d",  info->blocks);
 	}
 	return 0;
-}
-
-static uint32_t wbr_cache_bd_get_numblocks(BD_t * object)
-{
-	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_numblocks);
-}
-
-static uint16_t wbr_cache_bd_get_blocksize(BD_t * object)
-{
-	return ((struct cache_info *) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t wbr_cache_bd_get_atomicsize(BD_t * object)
-{
-	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
 }
 
 /* we are guaranteed that the block is not already in the list */
@@ -383,7 +367,7 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > CALL(info->bd, get_numblocks))
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) number);
@@ -425,7 +409,7 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > CALL(info->bd, get_numblocks))
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) number);
@@ -460,7 +444,7 @@ static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	struct rand_slot * slot;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > CALL(info->bd, get_numblocks))
+	if(block->number + block->count > object->numblocks)
 		return -EINVAL;
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) block->number);
@@ -641,7 +625,9 @@ BD_t * wbr_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	info->dblocks = 0;
 	info->first = NULL;
 	info->last = NULL;
-	info->blocksize = CALL(disk, get_blocksize);
+	bd->numblocks = disk->numblocks;
+	bd->blocksize = disk->blocksize;
+	bd->atomicsize = disk->atomicsize;
 	info->dirty_state = 1;
 	
 	/* we generally delay blocks, so our level goes up */

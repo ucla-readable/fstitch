@@ -21,8 +21,6 @@ static size_t block_log_users = 0;
 struct unix_file_info {
 	char *fname;
 	int fd;
-	uint32_t blockcount;
-	uint16_t blocksize;
 	blockman_t * blockman;
 };
 
@@ -34,13 +32,13 @@ static int unix_file_bd_get_config(void * object, int level, char * string, size
 	{
 		case CONFIG_BRIEF:
 			snprintf(string, length, "%d(%dblks)",
-					 info->blocksize, info->blockcount);
+					 bd->blocksize, bd->numblocks);
 			break;
 		case CONFIG_VERBOSE:
 		case CONFIG_NORMAL:
 		default:
 			snprintf(string, length, "%d bytes x %d blocks, %s",
-					 info->blocksize, info->blockcount, info->fname);
+					 bd->blocksize, bd->numblocks, info->fname);
 	}
 	return 0;
 }
@@ -51,21 +49,6 @@ static int unix_file_bd_get_status(void * object, int level, char * string, size
 	if(length > 0)
 		string[0] = 0;
 	return 0;
-}
-
-static uint32_t unix_file_bd_get_numblocks(BD_t * object)
-{
-	return ((struct unix_file_info*) OBJLOCAL(object))->blockcount;
-}
-
-static uint16_t unix_file_bd_get_blocksize(BD_t * object)
-{
-	return ((struct unix_file_info*) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t unix_file_bd_get_atomicsize(BD_t * object)
-{
-	return unix_file_bd_get_blocksize(object);
 }
 
 static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
@@ -85,17 +68,17 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	else
 	{
 		/* make sure it's a valid block */
-		if(!count || number + count > info->blockcount)
+		if(!count || number + count > object->numblocks)
 			return NULL;
 		
-		bdesc = bdesc_alloc(number, info->blocksize, count);
+		bdesc = bdesc_alloc(number, object->blocksize, count);
 		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
 	}
 	
-	seeked = lseek(info->fd, number * info->blocksize, SEEK_SET);
-	if(seeked != number * info->blocksize)
+	seeked = lseek(info->fd, number * object->blocksize, SEEK_SET);
+	if(seeked != number * object->blocksize)
 	{
 		perror("lseek");
 		assert(0);
@@ -128,7 +111,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * bdesc;
 
 	/* make sure it's a valid block */
-	if(!count || number + count > info->blockcount)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 
 	bdesc = blockman_managed_lookup(info->blockman, number);
@@ -138,7 +121,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		return bdesc;
 	}
 
-	bdesc = bdesc_alloc(number, info->blocksize, count);
+	bdesc = bdesc_alloc(number, object->blocksize, count);
 	if(bdesc == NULL)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -158,7 +141,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	int revision_forward, revision_back;
 	off_t seeked;
 	
-	if(block->number + block->count > info->blockcount)
+	if(block->number + block->count > object->numblocks)
 	{
 		kpanic("wrote bad block number\n");
 		return -EINVAL;
@@ -172,8 +155,8 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	revision_back = r;
 
-	seeked = lseek(info->fd, block->number * info->blocksize, SEEK_SET);
-	if(seeked != block->number * info->blocksize)
+	seeked = lseek(info->fd, block->number * object->blocksize, SEEK_SET);
+	if(seeked != block->number * object->blocksize)
 	{
 		perror("lseek");
 		assert(0);
@@ -294,9 +277,6 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 		free(bd);
 		return NULL;
 	}
-	
-	info->blockcount = blocks;
-	info->blocksize = blocksize;
 
 	// TODO: use O_DIRECT open flag on linux
 	// NOTE: linux implements O_DSYNC using O_SYNC :(
@@ -324,6 +304,10 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 	BD_INIT(bd, unix_file_bd, info);
 	bd->level = 0;
 	bd->graph_index = 0;
+	
+	bd->numblocks = blocks;
+	bd->blocksize = blocksize;
+	bd->atomicsize = blocksize;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

@@ -34,9 +34,9 @@ typedef struct BD BD_t;
 struct BD {
 	OBJECT(BD_t);
 	uint16_t level, graph_index;
-	DECLARE(BD_t, uint32_t, get_numblocks);
-	DECLARE(BD_t, uint16_t, get_blocksize);
-	DECLARE(BD_t, uint16_t, get_atomicsize);
+	uint32_t numblocks;
+	uint16_t blocksize;
+	uint16_t atomicsize;
 	DECLARE(BD_t, bdesc_t *, read_block, uint32_t number, uint16_t count);
 	/* This function is used to avoid unnecessary reads. If the block is
 	 * already in memory, it is returned. If not, it is not read in from
@@ -56,9 +56,7 @@ struct BD {
 #define BD_INIT(bd, module, info) { \
 	OBJ_INIT(bd, module, info); \
 	bd->level = -1; bd->graph_index = -1; \
-	ASSIGN(bd, module, get_numblocks); \
-	ASSIGN(bd, module, get_blocksize); \
-	ASSIGN(bd, module, get_atomicsize); \
+	bd->blocksize = 0; bd->atomicsize = 0; bd->numblocks = 0; \
 	ASSIGN(bd, module, read_block); \
 	ASSIGN(bd, module, synthetic_read_block); \
 	ASSIGN(bd, module, write_block); \

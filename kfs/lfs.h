@@ -45,8 +45,8 @@ typedef struct LFS LFS_t;
 struct LFS {
 	OBJECT(LFS_t);
 	DECLARE(LFS_t, int, get_root, inode_t * ino);
-	DECLARE(LFS_t, uint32_t, get_blocksize);
-	DECLARE(LFS_t, BD_t *, get_blockdev);
+	uint32_t blocksize;
+	BD_t *blockdev;
 	DECLARE(LFS_t, uint32_t, allocate_block, fdesc_t * file, int purpose, chdesc_t ** head);
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number);
 	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number);
@@ -77,8 +77,7 @@ struct LFS {
 #define LFS_INIT(lfs, module, info) { \
 	OBJ_INIT(lfs, module, info); \
 	ASSIGN(lfs, module, get_root); \
-	ASSIGN(lfs, module, get_blocksize); \
-	ASSIGN(lfs, module, get_blockdev); \
+	lfs->blocksize = 0; lfs->blockdev = 0; \
 	ASSIGN(lfs, module, allocate_block); \
 	ASSIGN(lfs, module, lookup_block); \
 	ASSIGN(lfs, module, synthetic_lookup_block); \
