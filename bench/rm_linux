@@ -1,24 +1,19 @@
 #!/bin/bash
 
-function run_postmark () {
-	ktime postmark $BENCHDIR/postmark-1_5 <<- EOF
-		set location $MNT
-		set number 100
-		set size 512 8388608
-		set write 4096
-		set read 4096
-		run
-	EOF
+function test () {
+	ktime rm rm -rf $MNT/$TAROUT
 	ktime sync fsync $KUDOSDIR $MNT
 }
 
 function run () {
-	try gcc -O2 $BENCHDIR/postmark-1_5.c -o $BENCHDIR/postmark-1_5
-	try sync
+	try $BENCHDIR/init -f ext2 -c none -h linux -a start
+	try tar -C $MNT/ -xf $TARFILE
+	try $BENCHDIR/init -f ext2 -c none -h linux -a stop
 
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start -k
+	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
 	prepare_postinit $T $N $OUTDIR $HOST
-	ktime total run_postmark
+	ktime total test
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 }
 
@@ -29,9 +24,11 @@ OUTDIR="$KUDOSDIR/test"
 HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
 CMODE=`cat "$OUTDIR/consistency_mode"`
-T=postmark
+T=rm
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`
+TARFILE=linux-2.6.15.tar
+TAROUT=linux-2.6.15
 
 if [ $# -ne 0 ]; then
 	echo "Usage: `basename "$0"`" 1>&2
