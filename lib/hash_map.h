@@ -10,6 +10,10 @@
 # define HASH_MAP_IT_MOD_DEBUG 0
 #endif
 
+/* Set to track the number of elements in hash map buckets. */
+/* values: 0 (normal), 1 (track) */
+#define HASH_MAP_TRACK_BUCKET_SIZES 0
+
 struct hash_map_elt {
 	void * key;
 	void * val;
@@ -64,6 +68,11 @@ size_t hash_map_bucket_count(const hash_map_t * hm);
 // Returns 0 on success, 1 on no resize needed, or -ENOMEM.
 int    hash_map_resize(hash_map_t * hm, size_t n);
 
+#if HASH_MAP_TRACK_BUCKET_SIZES
+struct vector;
+// Return a vector of each bucket's maximum size (vector elts are size_ts)
+const struct vector * hash_map_max_sizes(const hash_map_t * hm);
+#endif
 
 // Iteration (current)
 

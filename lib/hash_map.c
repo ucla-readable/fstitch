@@ -40,6 +40,10 @@ struct hash_map {
 	size_t size;
 	bool auto_resize;
 	vector_t * tbl;
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	vector_t * tbl_size;
+	vector_t * tbl_max_size;
+#endif
 #if HASH_MAP_IT_MOD_DEBUG
 	size_t version; // Incremented for every change
 	size_t loose_version; // Incremented for inserts and resizes (not removes)
@@ -131,6 +135,19 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 		free(hm);
 		return NULL;
 	}
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	hm->tbl_size = vector_create_size(vector_size(hm->tbl));
+	assert(hm->tbl_size);
+	hm->tbl_max_size = vector_create_size(vector_size(hm->tbl));
+	assert(hm->tbl_max_size);
+	size_t i;
+	for(i = 0; i < vector_size(hm->tbl); i++)
+	{
+		vector_elt_set(hm->tbl_size, i, 0);
+		vector_elt_set(hm->tbl_max_size, i, 0);
+	}
+#endif
+
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version = 0;
 	hm->loose_version = 0;
@@ -174,6 +191,12 @@ void hash_map_destroy(hash_map_t * hm)
 	hash_map_clear(hm);
 	vector_destroy(hm->tbl);
 	hm->tbl = NULL;
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	vector_destroy(hm->tbl_size);
+	hm->tbl_size = NULL;
+	vector_destroy(hm->tbl_max_size);
+	hm->tbl_max_size = NULL;
+#endif
 	free(hm);
 }
 
@@ -230,6 +253,11 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 	}
 
 	vector_elt_set(hm->tbl, elt_num, head);
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	vector_elt_set(hm->tbl_size, elt_num, vector_elt(hm->tbl_size, elt_num) + 1);
+	if(vector_elt(hm->tbl_size, elt_num) > vector_elt(hm->tbl_max_size, elt_num))
+		vector_elt_set(hm->tbl_max_size, elt_num, vector_elt(hm->tbl_size, elt_num));
+#endif
 	hm->size++;
 	head->elt.key = k;
 	head->elt.val = v;
@@ -264,6 +292,11 @@ static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 	}
 
 	vector_elt_set(hm->tbl, elt_num, elt);
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	vector_elt_set(hm->tbl_size, elt_num, vector_elt(hm->tbl_size, elt_num) + 1);
+	if(vector_elt(hm->tbl_size, elt_num) > vector_elt(hm->tbl_max_size, elt_num))
+		vector_elt_set(hm->tbl_max_size, elt_num, vector_elt(hm->tbl_size, elt_num));
+#endif
 	hm->size++;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
@@ -296,6 +329,9 @@ static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 	k_chain->next = NULL;
 	k_chain->prev = NULL;
 
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	vector_elt_set(hm->tbl_size, elt_num, vector_elt(hm->tbl_size, elt_num) - 1);
+#endif
 	hm->size--;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
@@ -403,6 +439,9 @@ void hash_map_clear(hash_map_t * hm)
 			head = next;
 		}
 		vector_elt_set(hm->tbl, i, NULL);
+#if HASH_MAP_TRACK_BUCKET_SIZES
+		vector_elt_set(hm->tbl_size, i, 0);
+#endif
 	}
 
 	hm->size = 0;
@@ -502,6 +541,12 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	vector_destroy(hm->tbl);
 	hm->size = new_hm->size;
 	hm->tbl  = new_hm->tbl;
+#if HASH_MAP_TRACK_BUCKET_SIZES
+	vector_destroy(hm->tbl_size);
+	vector_destroy(hm->tbl_max_size);
+	hm->tbl_size = new_hm->tbl_size;
+	hm->tbl_max_size = new_hm->tbl_max_size;
+#endif
 	free(new_hm);
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
@@ -511,6 +556,12 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	return 0;
 }
 
+#if HASH_MAP_TRACK_BUCKET_SIZES
+const vector_t * hash_map_max_sizes(const hash_map_t * hm)
+{
+	return hm->tbl_max_size;
+}
+#endif
 
 //
 // Iteration (current)
