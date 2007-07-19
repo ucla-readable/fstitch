@@ -40,6 +40,9 @@ all: tags TAGS
 # make it so that no intermediate .o files are never deleted
 .PRECIOUS: %.o
 
+user:
+	$(MAKE) -f Makefile.user
+
 kfs/kkfsd.ko: always
 	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" == "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	@echo "$(KERNELRELEASE)" > .kernel_version
@@ -103,4 +106,4 @@ $(OBJDIR)/.deps: $(foreach dir, $(OBJDIRS), $(wildcard $(OBJDIR)/$(dir)/*.d))
 always:
 	@:
 
-.PHONY: all always install clean
+.PHONY: all always install clean user
