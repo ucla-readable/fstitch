@@ -28,6 +28,8 @@ struct cyl_info
 
 struct local_info
 {
+	UFSmod_cg_t ufsmod_cg;
+	
 	struct ufs_info * global_info;
 	struct cyl_info * cg;
 	int32_t ncg;
@@ -38,7 +40,7 @@ const int frsum_size = sizeof(int32_t) * UFS_MAXFRAG;
 
 static uint32_t ufs_cg_wb_get_cylstart(UFSmod_cg_t * object, int32_t num)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 
 	if (num < 0 || num >= linfo->ncg)
 		return 0; /* Is there a better error value? */
@@ -48,7 +50,7 @@ static uint32_t ufs_cg_wb_get_cylstart(UFSmod_cg_t * object, int32_t num)
 
 static const struct UFS_cg * ufs_cg_wb_read(UFSmod_cg_t * object, int32_t num)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 
 	if (num < 0 || num >= linfo->ncg)
 		return NULL;
@@ -59,7 +61,7 @@ static const struct UFS_cg * ufs_cg_wb_read(UFSmod_cg_t * object, int32_t num)
 
 static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
@@ -93,7 +95,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 
 static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_csum * sum, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
@@ -136,7 +138,7 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 
 static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t rotor, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
@@ -170,7 +172,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 
 static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t frotor, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
@@ -204,7 +206,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 
 static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t irotor, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
@@ -238,7 +240,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 
 static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_t * frsum, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (num < 0 || num >= linfo->ncg)
@@ -282,7 +284,7 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
  * parallel. */
 static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int i, r;
    	int begin, end;
 	chdesc_t ** oldhead;
@@ -392,7 +394,7 @@ exit:
 static void ufs_cg_wb_sync_callback(void * arg)
 {
 	UFSmod_cg_t * object = (UFSmod_cg_t *) arg;
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	chdesc_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
 	int r;
 
@@ -401,25 +403,9 @@ static void ufs_cg_wb_sync_callback(void * arg)
 		printf("%s failed\n", __FUNCTION__);
 }
 
-static int ufs_cg_wb_get_config(void * object, int level, char * string,
-		size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_cg_wb_get_status(void * object, int level, char * string,
-		size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int ufs_cg_wb_destroy(UFSmod_cg_t * obj)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(obj);
+	struct local_info * linfo = (struct local_info *) obj;
 	int i, r;
 
 	r = sched_unregister(ufs_cg_wb_sync_callback, obj);
@@ -430,9 +416,8 @@ static int ufs_cg_wb_destroy(UFSmod_cg_t * obj)
 		bdesc_release(&linfo->cg[i].cgblock);
 
 	sfree(linfo->cg, sizeof(struct cyl_info) * linfo->ncg);
+	memset(linfo, 0, sizeof(*linfo));
 	free(linfo);
-	memset(obj, 0, sizeof(*obj));
-	free(obj);
 
 	return 0;
 }
@@ -445,14 +430,10 @@ UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
    
 	if (!info)
 		return NULL;
-	obj = malloc(sizeof(*obj));
-	if (!obj)
+	linfo = malloc(sizeof(*linfo));
+	if (!linfo)
 		return NULL;
-	linfo = malloc(sizeof(struct local_info));
-	if (!linfo) {
-		free(obj);
-		return NULL;
-	}
+	obj = &linfo->ufsmod_cg;
 	linfo->global_info = info;
 
 	assert(info->parts.p_super);
@@ -461,7 +442,6 @@ UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
 
 	linfo->cg = smalloc(sizeof(struct cyl_info) * linfo->ncg);
 	if (!linfo->cg) {
-		free(obj);
 		free(linfo);
 		return NULL;
 	}
@@ -485,7 +465,7 @@ UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
 	}
 	linfo->syncing = 0;
 
-	UFS_CG_INIT(obj, ufs_cg_wb, linfo);
+	UFS_CG_INIT(obj, ufs_cg_wb);
 
 	r = sched_register(ufs_cg_wb_sync_callback, obj, SYNC_PERIOD);
 	assert(r >= 0);
@@ -499,7 +479,6 @@ read_block_failed:
 		i--;
 	}
 	sfree(linfo->cg, sizeof(struct cyl_info) * linfo->ncg);
-	free(obj);
 	free(linfo);
 	return NULL;
 }

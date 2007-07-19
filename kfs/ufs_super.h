@@ -24,8 +24,8 @@ struct UFSmod_super {
 	DECLARE(UFSmod_super_t, int, sync, chdesc_t ** head);
 };
 
-#define UFS_SUPER_INIT(ufs, module, info) { \
-	OBJ_INIT(ufs, module, info); \
+#define UFS_SUPER_INIT(ufs, module) { \
+	OBJ_INIT(ufs, module); \
 	ASSIGN(ufs, module, read); \
 	ASSIGN(ufs, module, write_time); \
 	ASSIGN(ufs, module, write_cstotal); \

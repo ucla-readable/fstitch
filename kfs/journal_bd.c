@@ -115,7 +115,9 @@
  * */
 
 struct journal_info {
-	BD_t * bd;
+	BD_t bd;
+	
+	BD_t * below_bd;
 	BD_t * journal;
 	chdesc_t * write_head;
 	uint16_t cr_count;
@@ -173,6 +175,7 @@ static uint32_t trans_number_block_count(uint16_t blocksize)
 	return (bpt - 1 + npb) / (npb + 1);
 }
 
+#if 0
 static int journal_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
@@ -193,7 +196,7 @@ static int journal_bd_get_config(void * object, int level, char * string, size_t
 
 static int journal_bd_get_status(void * object, int level, char * string, size_t length)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL((BD_t *) object);
+	struct journal_info * info = (struct journal_info *) object;
 	switch(level)
 	{
 		case STATUS_VERBOSE:
@@ -208,10 +211,11 @@ static int journal_bd_get_status(void * object, int level, char * string, size_t
 	}
 	return 0;
 }
+#endif
 
 static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -220,12 +224,12 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	return CALL(info->bd, read_block, number, count);
+	return CALL(info->below_bd, read_block, number, count);
 }
 
 static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -234,14 +238,14 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	return CALL(info->bd, synthetic_read_block, number, count);
+	return CALL(info->below_bd, synthetic_read_block, number, count);
 }
 
 static void journal_bd_unlock_callback(void * data, int count);
 
 static int journal_bd_grab_slot(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	uint16_t scan = info->trans_slot;
 	int r;
 	
@@ -275,7 +279,7 @@ static int journal_bd_grab_slot(BD_t * object)
 		} while(scan != info->trans_slot);
 #if AVOID_STACKING_JOURNAL
 		CALL(info->journal, flush, FLUSH_DEVICE, NULL);
-		CALL(info->bd, flush, FLUSH_DEVICE, NULL);
+		CALL(info->below_bd, flush, FLUSH_DEVICE, NULL);
 #ifdef __KERNEL__
 		if(revision_tail_flights_exist())
 			revision_tail_wait_for_landing_requests();
@@ -314,7 +318,7 @@ static int journal_bd_grab_slot(BD_t * object)
 
 static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	uint32_t number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
 	
 	if(!number)
@@ -393,7 +397,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 
 static int journal_bd_start_transaction(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	int r = -ENOMEM;
 	
 	/* do we have a journal yet? */
@@ -463,7 +467,7 @@ fail_keep_w:
 
 static int journal_bd_stop_transaction(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	struct commit_record commit;
 	bdesc_t * block;
 	chdesc_t * head;
@@ -566,7 +570,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 static void journal_bd_unlock_callback(void * data, int count)
 {
 	BD_t * object = (BD_t *) data;
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		/* FIXME: check return values here */
@@ -577,7 +581,7 @@ static void journal_bd_unlock_callback(void * data, int count)
 
 static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	bdesc_t * journal_block;
 	chdesc_t * chdesc;
 	chdesc_t * chdesc_index_next;
@@ -594,8 +598,8 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	if(info->recursion)
 	{
 		/* only used to write the journal itself: many fewer change descriptors there! */
-		chdesc_push_down(object, block, info->bd, block);
-		return CALL(info->bd, write_block, block);
+		chdesc_push_down(object, block, info->below_bd, block);
+		return CALL(info->below_bd, write_block, block);
 	}
 	
 	/* why write a block with no new changes? */
@@ -696,17 +700,17 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		assert(r >= 0);
 	}
 	
-	chdesc_push_down(object, block, info->bd, block);
+	chdesc_push_down(object, block, info->below_bd, block);
 	
-	r = CALL(info->bd, write_block, block);
-	if(CALL(info->bd, get_block_space) <= 0)
+	r = CALL(info->below_bd, write_block, block);
+	if(CALL(info->below_bd, get_block_space) <= 0)
 		kfsd_unlock_callback(journal_bd_unlock_callback, object);
 	return r;
 }
 
 static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		if(journal_bd_stop_transaction(object) < 0)
@@ -720,20 +724,20 @@ static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** journal_bd_get_write_head(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	return &info->write_head;
 }
 
 static int32_t journal_bd_get_block_space(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_block_space);
+	struct journal_info * info = (struct journal_info *) object;
+	return CALL(info->below_bd, get_block_space);
 }
 
 static void journal_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		int r = journal_bd_stop_transaction(object);
@@ -747,7 +751,7 @@ static void journal_bd_callback(void * arg)
 
 static int journal_bd_destroy(BD_t * bd)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	int r;
 	
 	if(info->keep_w)
@@ -764,7 +768,7 @@ static int journal_bd_destroy(BD_t * bd)
 		journal_bd_start_transaction(bd);
 		return r;
 	}
-	modman_dec_bd(info->bd, bd);
+	modman_dec_bd(info->below_bd, bd);
 	
 	if(info->journal)
 	{
@@ -781,16 +785,15 @@ static int journal_bd_destroy(BD_t * bd)
 	if(info->block_map)
 		hash_map_destroy(info->block_map);
 	
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
 
 static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint16_t expected_type)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	chdesc_t * head = NULL;
 	int r = -ENOMEM;
 	
@@ -875,18 +878,18 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 				goto data_error;
 			bdesc_retain(data_block);
 			
-			output = CALL(info->bd, synthetic_read_block, numbers[index], 1);
+			output = CALL(info->below_bd, synthetic_read_block, numbers[index], 1);
 			if(!output)
 				goto output_error;
 			
 			head = NULL;
-			r = chdesc_create_full(output, info->bd, data_block->ddesc->data, &head);
+			r = chdesc_create_full(output, info->below_bd, data_block->ddesc->data, &head);
 			if(r < 0)
 				goto output_error;
 			r = chdesc_add_depend(info->data, head);
 			if(r < 0)
 				goto chdesc_error;
-			r = CALL(info->bd, write_block, output);
+			r = CALL(info->below_bd, write_block, output);
 			if(r < 0)
 				goto chdesc_error;
 			bdesc_release(&data_block);
@@ -951,7 +954,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 
 static int replay_journal(BD_t * bd)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	uint32_t transaction;
 	uint32_t min_trans = 0;
 	uint32_t min_idx = 0;
@@ -1055,21 +1058,15 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	if(CALL(disk, get_write_head))
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
 	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->bd;
 	
-	BD_INIT(bd, journal_bd, info);
+	BD_INIT(bd, journal_bd);
 	OBJMAGIC(bd) = JOURNAL_MAGIC;
 	
-	info->bd = disk;
+	info->below_bd = disk;
 	info->journal = NULL;
 	info->write_head = NULL;
 	bd->blocksize = disk->blocksize;
@@ -1135,7 +1132,7 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 
 int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	chdesc_t ** write_head;
 	uint16_t level;
 	

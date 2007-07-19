@@ -31,6 +31,8 @@ struct file_hiding_fdesc {
 typedef struct file_hiding_fdesc file_hiding_fdesc_t;
 
 struct file_hiding_state {
+	CFS_t cfs;
+	
 	vector_t * hide_table;
 	CFS_t * frontend_cfs;
 	uint32_t nopen;
@@ -108,6 +110,7 @@ static void file_hiding_fdesc_destroy(file_hiding_fdesc_t * fhf)
 //
 // file_hiding_cfs
 
+#if 0
 static int file_hiding_get_config(void * object, int level, char * string, size_t length)
 {
 	CFS_t * cfs = (CFS_t *) object;
@@ -124,16 +127,17 @@ static int file_hiding_get_status(void * object, int level, char * string, size_
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
 		return -EINVAL;
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 
 	snprintf(string, length, "open fdescs: %u", state->nopen);
 	return 0;
 }
+#endif
 
 static int file_hiding_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	// root inode hiding is disallowed; others need the root inode
 	return CALL(state->frontend_cfs, get_root, ino);
 }
@@ -141,7 +145,7 @@ static int file_hiding_get_root(CFS_t * cfs, inode_t * ino)
 static int file_hiding_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	inode_t temp_ino;
 	int r;
 
@@ -155,7 +159,7 @@ static int file_hiding_lookup(CFS_t * cfs, inode_t parent, const char * name, in
 static int file_hiding_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	fdesc_t * inner;
 	int r;
 
@@ -177,7 +181,7 @@ static int file_hiding_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc
 static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	fdesc_t * inner;
 	inode_t temp_ino;
 	int r;
@@ -203,7 +207,7 @@ static int file_hiding_create(CFS_t * cfs, inode_t parent, const char * name, in
 static int file_hiding_close(CFS_t * cfs, fdesc_t * fdesc)
 {
 	Dprintf("%s(%d)\n", __FUNCTION__, fid);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 	int r;
 
@@ -216,7 +220,7 @@ static int file_hiding_close(CFS_t * cfs, fdesc_t * fdesc)
 static int file_hiding_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t ofhfset, uint32_t size)
 {
 	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, ofhfset, size);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
 	if (fhf->ino == INODE_NONE)
@@ -228,7 +232,7 @@ static int file_hiding_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t 
 static int file_hiding_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t ofhfset, uint32_t size)
 {
 	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, ofhfset, size);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
 	if (fhf->ino == INODE_NONE)
@@ -240,7 +244,7 @@ static int file_hiding_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, ui
 static int file_hiding_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("%s(%d, 0x%x, %d, 0x%x)\n", __FUNCTION__, fid, entry, size, basep);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 	int r;
 
@@ -256,7 +260,7 @@ static int file_hiding_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry
 
 static int file_hiding_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 {
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	file_hiding_fdesc_t * fhf = (file_hiding_fdesc_t *) fdesc;
 
 	if (fhf->ino == INODE_NONE)
@@ -268,7 +272,7 @@ static int file_hiding_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 static int file_hiding_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	inode_t ino;
 	int r;
 
@@ -282,7 +286,7 @@ static int file_hiding_unlink(CFS_t * cfs, inode_t parent, const char * name)
 static int file_hiding_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	inode_t newino;
 	int r;
 
@@ -299,7 +303,7 @@ static int file_hiding_link(CFS_t * cfs, inode_t ino, inode_t newparent, const c
 static int file_hiding_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	inode_t ino;
 	int r;
 
@@ -316,7 +320,7 @@ static int file_hiding_rename(CFS_t * cfs, inode_t oldparent, const char * oldna
 static int file_hiding_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	inode_t newino;
 	int r;
 
@@ -330,7 +334,7 @@ static int file_hiding_mkdir(CFS_t * cfs, inode_t parent, const char * name, con
 static int file_hiding_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	inode_t ino;
 	int r;
 
@@ -344,7 +348,7 @@ static int file_hiding_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 static size_t file_hiding_get_num_features(CFS_t * cfs, inode_t ino)
 {
 	Dprintf("%s(%u)\n", __FUNCTION__, ino);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
 		return -ENOENT;
@@ -355,7 +359,7 @@ static size_t file_hiding_get_num_features(CFS_t * cfs, inode_t ino)
 static const feature_t * file_hiding_get_feature(CFS_t * cfs, inode_t ino, size_t num)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, num);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
 		return NULL;
@@ -366,7 +370,7 @@ static const feature_t * file_hiding_get_feature(CFS_t * cfs, inode_t ino, size_
 static int file_hiding_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 
 	if (hide_lookup(state->hide_table, ino) >= 0)
 		return -ENOENT;
@@ -377,7 +381,7 @@ static int file_hiding_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_
 static int file_hiding_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, data);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	if (hide_lookup(state->hide_table, ino) >= 0)
 		return -ENOENT;
 
@@ -387,7 +391,7 @@ static int file_hiding_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_
 static int file_hiding_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, cfs);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
@@ -396,8 +400,6 @@ static int file_hiding_destroy(CFS_t * cfs)
 	vector_destroy(state->hide_table);
 	memset(state, 0, sizeof(*state));
 	free(state);
-	memset(cfs, 0, sizeof(*cfs));
-	free(cfs);
 	return 0;
 }
 
@@ -410,15 +412,12 @@ CFS_t * file_hiding_cfs(CFS_t * frontend_cfs)
 	if (!frontend_cfs)
 		return NULL;
 
-	cfs = malloc(sizeof(*cfs));
-	if (!cfs)
-		return NULL;
-
 	state = malloc(sizeof(*state));
 	if (!state)
-		goto error_cfs;
+		return NULL;
 
-	CFS_INIT(cfs, file_hiding, state);
+	cfs = &state->cfs;
+	CFS_INIT(cfs, file_hiding);
 	OBJMAGIC(cfs) = FILE_HIDING_MAGIC;
 
 	state->hide_table = vector_create();
@@ -443,16 +442,14 @@ CFS_t * file_hiding_cfs(CFS_t * frontend_cfs)
 	return cfs;
 
   error_state:
-	free(OBJLOCAL(cfs));
-  error_cfs:
-	free(cfs);
+	free(state);
 	return NULL;
 }
 
 int file_hiding_cfs_hide(CFS_t * cfs, inode_t ino)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, path, path_cfs);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	int r;
 
 	/* make sure this is really a table classifier */
@@ -482,7 +479,7 @@ int file_hiding_cfs_hide(CFS_t * cfs, inode_t ino)
 int file_hiding_cfs_unhide(CFS_t * cfs, inode_t ino)
 {
 	Dprintf("%s(%u)\n", __FUNCTION__, ino);
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
+	file_hiding_state_t * state = (file_hiding_state_t *) cfs;
 	hide_entry_t * me;
 
 	/* make sure this is really a table classifier */

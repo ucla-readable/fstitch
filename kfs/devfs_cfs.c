@@ -32,11 +32,13 @@ struct devfs_fdesc {
 };
 typedef struct devfs_fdesc devfs_fdesc_t;
 
-struct devfs_state {
+struct devfs_cfs {
+	CFS_t cfs;
+	
 	vector_t * bd_table;
 	devfs_fdesc_t root_fdesc;
 };
-typedef struct devfs_state devfs_state_t;
+typedef struct devfs_cfs devfs_cfs_t;
 
 
 static devfs_fdesc_t * devfs_fdesc_create(inode_t parent, const char * name, BD_t * bd)
@@ -65,7 +67,7 @@ static BD_t * devfs_fdesc_destroy(devfs_fdesc_t * fdesc)
 }
 
 
-static devfs_fdesc_t * devfd_lookup_name(devfs_state_t * state, const char * name, int * index)
+static devfs_fdesc_t * devfd_lookup_name(devfs_cfs_t * state, const char * name, int * index)
 {
 	Dprintf("%s(0x%08x, \"%s\")\n", __FUNCTION__, state, name);
 	const size_t bd_table_size = vector_size(state->bd_table);
@@ -87,7 +89,7 @@ static devfs_fdesc_t * devfd_lookup_name(devfs_state_t * state, const char * nam
 	return NULL;
 }
 
-static devfs_fdesc_t * devfd_lookup_inode(devfs_state_t * state, inode_t inode)
+static devfs_fdesc_t * devfd_lookup_inode(devfs_cfs_t * state, inode_t inode)
 {
 	Dprintf("%s(0x%08x, %u)\n", __FUNCTION__, state, inode);
 	const size_t bd_table_size = vector_size(state->bd_table);
@@ -106,7 +108,7 @@ static devfs_fdesc_t * devfd_lookup_inode(devfs_state_t * state, inode_t inode)
 	return NULL;
 }
 
-
+#if 0
 static int devfs_get_config(void * object, int level, char * string, size_t length)
 {
 	CFS_t * cfs = (CFS_t *) object;
@@ -123,13 +125,14 @@ static int devfs_get_status(void * object, int level, char * string, size_t leng
 	CFS_t * cfs = (CFS_t *) object;
 	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
 		return -EINVAL;
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	
 	snprintf(string, length, "devices: %u", vector_size(state->bd_table));
 	return 0;
 }
+#endif
 
-static bool devfs_bd_in_use(BD_t * bd)
+static bool devfs_cfs_in_use(BD_t * bd)
 {
 	int i;
 	const modman_entry_bd_t * entry = modman_lookup_bd(bd);
@@ -142,7 +145,7 @@ static bool devfs_bd_in_use(BD_t * bd)
 static int devfs_get_root(CFS_t * cfs, inode_t * inode)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	*inode = state->root_fdesc.inode;
 	return 0;
 }
@@ -150,7 +153,7 @@ static int devfs_get_root(CFS_t * cfs, inode_t * inode)
 static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * inode)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, inode, name);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	devfs_fdesc_t * fdesc;
 	
 	if(parent != state->root_fdesc.inode)
@@ -175,7 +178,7 @@ static int devfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, inode, mode);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	devfs_fdesc_t * devfd;
 	
 	/* open / as a directory */
@@ -192,7 +195,7 @@ static int devfs_open(CFS_t * cfs, inode_t inode, int mode, fdesc_t ** fdesc)
 	
 	/* don't allow writing to a BD that is used by another BD */
 	if((mode & O_ACCMODE) != O_RDONLY)
-		if(devfs_bd_in_use(devfd->bd))
+		if(devfs_cfs_in_use(devfd->bd))
 			return -EPERM;
 	
 	*fdesc = (fdesc_t *) devfd;
@@ -264,7 +267,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 	int r = 0;
 
 	/* don't allow writing to a BD that is used by another BD */
-	if(devfs_bd_in_use(devfd->bd))
+	if(devfs_cfs_in_use(devfd->bd))
 		return -EPERM;
 
 	/* now do the actual write */
@@ -303,7 +306,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 	return size_written ? size_written : (size ? ((r < 0) ? r : -1) : 0);
 }
 
-static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int nbytes, uint32_t * basep)
+static int devfs_get_dirent_helper(devfs_cfs_t * state, dirent_t * dirent, int nbytes, uint32_t * basep)
 {
 	const size_t size = vector_size(state->bd_table);
 	uint16_t reclen = sizeof(*dirent) - sizeof(dirent->d_name) + 1;
@@ -359,7 +362,7 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 static int devfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("%s(0x%08x, 0x%x, %d, 0x%x)\n", __FUNCTION__, fdesc, entry, size, basep);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	
 	/* check for the special file / */
 	if(fdesc != (fdesc_t *) &state->root_fdesc)
@@ -425,7 +428,7 @@ static const bool * devfs_get_feature_array(CFS_t * cfs)
 static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, inode, id);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	devfs_fdesc_t * fdesc = NULL;
 
 	if(inode && inode != state->root_fdesc.inode)
@@ -470,14 +473,11 @@ static int devfs_set_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 
 static void devfs_real_destroy(void * void_devfs_cfs)
 {
-	CFS_t * cfs = (CFS_t *) void_devfs_cfs;
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) void_devfs_cfs;
 	
 	vector_destroy(state->bd_table);
 	memset(state, 0, sizeof(*state));
 	free(state);
-	memset(cfs, 0, sizeof(*cfs));
-	free(cfs);
 }
 
 static int devfs_destroy(CFS_t * cfs)
@@ -495,20 +495,17 @@ static int devfs_destroy(CFS_t * cfs)
 
 CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 {
-	devfs_state_t * state;
+	devfs_cfs_t * state;
 	CFS_t * cfs;
 	size_t i;
 	int r;
 	
-	cfs = malloc(sizeof(*cfs));
-	if(!cfs)
-		return NULL;
-	
-	state = malloc(sizeof(*state));
+	state = malloc(sizeof(devfs_cfs_t));
 	if(!state)
-		goto error_cfs;
+		return NULL;
 
-	CFS_INIT(cfs, devfs, state);
+	cfs = &state->cfs;
+	CFS_INIT(cfs, devfs);
 	OBJMAGIC(cfs) = DEVFS_MAGIC;
 	
 	state->root_fdesc.common = &state->root_fdesc.base;
@@ -518,7 +515,7 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	
 	state->bd_table = vector_create();
 	if(!state->bd_table)
-		goto error_state;
+		goto error_cfs;
 	
 	for(i = 0; i < num_entries; i++)
 		if((r = devfs_bd_add(cfs, names[i], bds[i])) < 0)
@@ -534,8 +531,6 @@ CFS_t * devfs_cfs(const char * names[], BD_t * bds[], size_t num_entries)
 	
 error_bd_table:
 	vector_destroy(state->bd_table);
-error_state:
-	free(OBJLOCAL(cfs));
 error_cfs:
 	free(cfs);
 	return NULL;
@@ -544,7 +539,7 @@ error_cfs:
 int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 {
 	Dprintf("%s(\"%s\", 0x%x)\n", __FUNCTION__, name, bd);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	devfs_fdesc_t * fdesc;
 	int r;
 	
@@ -584,7 +579,7 @@ int devfs_bd_add(CFS_t * cfs, const char * name, BD_t * bd)
 BD_t * devfs_bd_remove(CFS_t * cfs, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
+	devfs_cfs_t * state = (devfs_cfs_t *) cfs;
 	devfs_fdesc_t * fdesc;
 	int i;
 	

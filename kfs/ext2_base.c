@@ -27,6 +27,8 @@
 #define PURPOSE_DINDIRECT 3
 
 struct ext2_info {
+	LFS_t lfs;
+	
 	BD_t * ubd;
 	chdesc_t ** write_head;
 	EXT2_Super_t * super;
@@ -84,7 +86,7 @@ static int n_ext2_instances;
 
 static int check_super(LFS_t * object)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 		
 	/* the superblock is in block 1 */
 	printf("\tMagic Number 0x%x \n", info->super->s_magic);
@@ -116,7 +118,7 @@ static int check_super(LFS_t * object)
 static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 {
 	Dprintf("EXT2DEBUG: %s blockno is %u\n", __FUNCTION__, *blockno);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t start_group, block_group;
 #if ROUND_ROBIN_ALLOC
 	uint32_t minimum, offset, offset_bits;
@@ -206,7 +208,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 
 static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t block_group, block_in_group;
 	uint32_t * bitmap;
 	
@@ -244,7 +246,7 @@ static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: write_bitmap %u -> %d\n", blockno, value);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t block_group, block_in_group;
 	int r;
 	
@@ -301,7 +303,7 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_write_inode_bitmap %u\n", inode_no);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t block_group, inode_in_group;
 	int r;
 	
@@ -351,10 +353,11 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 
 static uint32_t count_free_space(LFS_t * object)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	return info->super->s_free_blocks_count;
 }
 
+#if 0
 static int ext2_get_config(void * object, int level, char * string, size_t length)
 {
 	LFS_t * lfs = (LFS_t *) object;
@@ -376,6 +379,7 @@ static int ext2_get_status(void * object, int level, char * string, size_t lengt
 		string[0] = 0;
 	return 0;
 }
+#endif
 
 static int ext2_get_root(LFS_t * object, inode_t * ino)
 {
@@ -386,7 +390,7 @@ static int ext2_get_root(LFS_t * object, inode_t * ino)
 static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** tail)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	uint32_t blockno, lastblock = 0;
 #if !ROUND_ROBIN_ALLOC
@@ -475,21 +479,21 @@ claim_block:
 static bdesc_t * ext2_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("EXT2DEBUG: ext2_lookup_block %u\n", number);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	return CALL(info->ubd, read_block, number, 1);
 }
 
 static bdesc_t * ext2_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("EXT2DEBUG: ext2_synthetic_lookup_block %u\n", number);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 {
 	ext2_fdesc_t * fd = NULL;
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	int r;
 	
 	if(ino <= 0)
@@ -535,7 +539,7 @@ ext2_lookup_inode_exit:
 static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
 	Dprintf("EXT2DEBUG: ext2_free_fdesc %p\n", fdesc);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * f = (ext2_fdesc_t *) fdesc;
 	
 	if(f)
@@ -555,7 +559,7 @@ static int dir_lookup(LFS_t * object, ext2_fdesc_t * f, const char* name, uint32
                       uint32_t * pbasep, uint32_t * ppbasep, ext2_fdesc_t ** file)
 {
 	Dprintf("EXT2DEBUG: dir_lookup %s\n", name);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t name_length = strlen(name);
 	bdesc_t * dirblock1 = NULL, * dirblock2 = NULL;
 	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks, block_offset;
@@ -704,7 +708,7 @@ static uint32_t ext2_get_file_numblocks(LFS_t * object, fdesc_t * file)
 static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t offset)
 {
 	Dprintf("EXT2DEBUG: %s %p %d\n", __FUNCTION__, file, offset);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t blockno, n_per_block;
 	bdesc_t * block_desc;
 	uint32_t * inode_nums, blocknum;
@@ -804,7 +808,7 @@ static int fill_dirent(ext2_info_t * info, const EXT2_Dir_entry_t * dirfile, ino
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent)
 {
 	Dprintf("EXT2DEBUG: %s %u\n", __FUNCTION__, *basep);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	bdesc_t * dirblock = NULL;
 	uint32_t blockno, file_blockno, num_file_blocks, block_offset;
@@ -833,7 +837,7 @@ static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * 
 static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("EXT2DEBUG: ext2_get_dirent %p, %u\n", basep, *basep);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	const EXT2_Dir_entry_t * dirent;
 	int r = 0;
@@ -857,7 +861,7 @@ static int ext2_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry
 static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	Dprintf("EXT2DEBUG: %s %d\n", __FUNCTION__, block);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	const uint32_t n_per_block = object->blocksize / sizeof(uint32_t);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	uint32_t nblocks;
@@ -1078,7 +1082,7 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
                                         chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t blockno;
 	bdesc_t * dirblock;
 	int r;
@@ -1127,7 +1131,7 @@ static int ext2_write_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir
                                  uint32_t basep, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t blockno;
 	bdesc_t * dirblock;
 	int r;
@@ -1177,7 +1181,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 {
 	Dprintf("EXT2DEBUG: ext2_insert_dirent %s\n", new_dirent->name);
 	const EXT2_Dir_entry_t * entry;
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t basep = 0, prev_basep = 0, new_block;
 	int r = 0, newdir = 0;
 	bdesc_t * block;
@@ -1246,7 +1250,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 
 static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 	Dprintf("EXT2DEBUG: %s inode number is %u\n", __FUNCTION__, *ino);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	bdesc_t * bitmap;
 	inode_t curr = 0;
 
@@ -1296,7 +1300,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 
 static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
 	Dprintf("EXT2DEBUG: %s parent is %u\n", __FUNCTION__, parent);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	inode_t ino = 0;
 	int r;
 	
@@ -1314,7 +1318,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
                                     inode_t * new_ino, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_allocate_name %s\n", name);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * parent_file = NULL, * new_file = NULL;
 	uint16_t mode;
 	int r;
@@ -1550,7 +1554,7 @@ allocate_name_exit:
 static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: %s %p %d\n", __FUNCTION__, inode, inode->i_size);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t blocknum, n_per_block;
 	bdesc_t * block_desc, * double_block_desc;
 	uint32_t * block_nums,* double_block_nums, indir_ptr, double_indir_ptr;
@@ -1678,7 +1682,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 {
 	Dprintf("EXT2DEBUG: ext2_truncate_file_block\n");
 	int r;
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 
 	if (!f || f->f_inode.i_blocks == 0 || f->f_type == TYPE_SYMLINK)
@@ -1706,7 +1710,7 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * old, * new, * oldpar, * newpar;
 	size_t oldlen = strlen(oldname), newlen = strlen(newname);
 	int r, existing = 0;
@@ -1890,7 +1894,7 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_delete_dirent %u\n", basep);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t basep_blockno, prev_basep_blockno;
 	uint16_t len;
 	bdesc_t * dirblock;
@@ -1947,7 +1951,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_remove_name %s\n", name);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	chdesc_t * prev_head;
 	ext2_fdesc_t * pfile = NULL, * file = NULL;
 
@@ -2058,7 +2062,7 @@ remove_name_exit:
 static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_write_block\n");
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 
 	if (!head)
 		return -EINVAL;
@@ -2069,14 +2073,14 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 static chdesc_t ** ext2_get_write_head(LFS_t * object)
 {
 	Dprintf("EXT2DEBUG: ext2_get_write_head\n");
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	return info->write_head;
 }
 
 static int32_t ext2_get_block_space(LFS_t * object)
 {
 	Dprintf("EXT2DEBUG: ext2_get_block_space\n");
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	return CALL(info->ubd, get_block_space);
 }
 
@@ -2095,7 +2099,7 @@ static const bool * ext2_get_feature_array(LFS_t * object)
 static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("EXT2DEBUG: ext2_get_metadata\n");
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	if (id == KFS_FEATURE_SIZE) {
 		if (!f)
 			return -EINVAL;
@@ -2205,7 +2209,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 		*((uint32_t *) data) = f->f_inode.i_atime;
 	}
 	else if (id == KFS_FEATURE_SYMLINK) {
-		struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+		struct ext2_info * info = (struct ext2_info *) object;
 		if (!f || f->f_type != TYPE_SYMLINK)
 			return -EINVAL;
 
@@ -2250,7 +2254,7 @@ static int ext2_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_
 
 static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name, uint32_t name_len, chdesc_t ** head)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t new_block_no;
 	bdesc_t * new_block;
 	int r;
@@ -2282,7 +2286,7 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_set_metadata %u, %u\n", id, size);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	struct ext2_info * info = (struct ext2_info *) object;
 	
 	if (!head || !f || !data)
 		return -EINVAL;
@@ -2383,7 +2387,7 @@ static int ext2_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, 
 
 static int ext2_destroy(LFS_t * lfs)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
+	struct ext2_info * info = (struct ext2_info *) lfs;
 	int i,r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
@@ -2404,9 +2408,8 @@ static int ext2_destroy(LFS_t * lfs)
 	free(info->gdescs);
 	free(info->super);
 	free(info->groups);
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(lfs, 0, sizeof(*lfs));
-	free(lfs);
 	
 	return 0;
 }
@@ -2499,7 +2502,7 @@ int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode,
 
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
+	struct ext2_info * info = (struct ext2_info *) lfs;
 	int r = 0;
 	chdesc_t * head = info->write_head ? *info->write_head : NULL;
 	
@@ -2551,7 +2554,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 
 static int ext2_load_super(LFS_t * lfs)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
+	struct ext2_info * info = (struct ext2_info *) lfs;
 	
 	//initialize the pointers
 	info->bitmap_cache = NULL;
@@ -2641,18 +2644,14 @@ LFS_t * ext2(BD_t * block_device)
 		return NULL;
 	
 	struct ext2_info * info;
-	LFS_t * lfs = malloc(sizeof(*lfs));
-	
-	if (!lfs)
-		return NULL;
+	LFS_t * lfs;
 
 	info = malloc(sizeof(*info));
-	if (!info) {
-		free(lfs);
+	if (!info)
 		return NULL;
-	}
 
-	LFS_INIT(lfs, ext2, info);
+	lfs = &info->lfs;
+	LFS_INIT(lfs, ext2);
 	OBJMAGIC(lfs) = EXT2_FS_MAGIC;
 
 	info->ubd = lfs->blockdev = block_device;
@@ -2661,19 +2660,16 @@ LFS_t * ext2(BD_t * block_device)
 	info->filemap = hash_map_create();
 	if (!info->filemap) {
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 
 	if (ext2_load_super(lfs) == 0) {
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 
 	if (check_super(lfs)) {
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 	

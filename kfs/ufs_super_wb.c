@@ -19,6 +19,8 @@
 
 struct local_info
 {
+	UFSmod_super_t ufs;
+	
 	struct ufs_info * global_info;
 	bdesc_t * super_block;
 	struct UFS_Super super; /* In memory super block */
@@ -29,14 +31,14 @@ struct local_info
 
 static const struct UFS_Super * ufs_super_wb_read(UFSmod_super_t * object)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	assert(&linfo->super); /* Should never be NULL */
 	return &linfo->super;
 }
 
 static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (!linfo->syncing) {
@@ -66,7 +68,7 @@ static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc
 
 static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_csum * sum, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (!linfo->syncing) {
@@ -106,7 +108,7 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 
 static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (!linfo->syncing) {
@@ -136,7 +138,7 @@ static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_
 
 static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (!linfo->syncing) {
@@ -166,7 +168,7 @@ static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdes
 
 static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (!linfo->syncing) {
@@ -196,7 +198,7 @@ static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdes
 
 static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r, len;
 
 	if (!linfo->syncing) {
@@ -229,7 +231,7 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 
 static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	int r;
 
 	if (!linfo->syncing) {
@@ -261,7 +263,7 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
  * parallel. */
 static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	chdesc_t ** oldhead;
 	vector_t * oldheads;
 	int r;
@@ -370,7 +372,7 @@ exit:
 static void ufs_super_wb_sync_callback(void * arg)
 {
 	UFSmod_super_t * object = (UFSmod_super_t *) arg;
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(object);
+	struct local_info * linfo = (struct local_info *) object;
 	chdesc_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
 	int r;
 
@@ -379,25 +381,9 @@ static void ufs_super_wb_sync_callback(void * arg)
 		printf("%s failed\n", __FUNCTION__);
 }
 
-static int ufs_super_wb_get_config(void * object, int level, char * string,
-		size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_super_wb_get_status(void * object, int level, char * string,
-		size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int ufs_super_wb_destroy(UFSmod_super_t * obj)
 {
-	struct local_info * linfo = (struct local_info *) OBJLOCAL(obj);
+	struct local_info * linfo = (struct local_info *) obj;
 	int r;
 
 	r = sched_unregister(ufs_super_wb_sync_callback, obj);
@@ -405,9 +391,8 @@ static int ufs_super_wb_destroy(UFSmod_super_t * obj)
 		return r;
 
 	bdesc_release(&linfo->super_block);
-	free(OBJLOCAL(obj));
-	memset(obj, 0, sizeof(*obj));
-	free(obj);
+	memset(linfo, 0, sizeof(*linfo));
+	free(linfo);
 
 	return 0;
 }
@@ -420,14 +405,10 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
    
 	if (!info)
 		return NULL;
-	obj = malloc(sizeof(*obj));
-	if (!obj)
+	linfo = malloc(sizeof(*linfo));
+	if (!linfo)
 		return NULL;
-	linfo = malloc(sizeof(struct local_info));
-	if (!linfo) {
-		free(obj);
-		return NULL;
-	}
+	obj = &linfo->ufs;
 	linfo->global_info = info;
 
 	/* the superblock is in sector 16 */
@@ -435,7 +416,6 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	if (!linfo->super_block)
 	{
 		printf("Unable to read superblock!\n");
-		free(obj);
 		free(linfo);
 		return NULL;
 	}
@@ -446,7 +426,7 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	memset(&linfo->dirty, 0, sizeof(linfo->dirty));
 	linfo->syncing = 0;
 
-	UFS_SUPER_INIT(obj, ufs_super_wb, linfo);
+	UFS_SUPER_INIT(obj, ufs_super_wb);
 
 	r = sched_register(ufs_super_wb_sync_callback, obj, SYNC_PERIOD);
 	assert(r >= 0);

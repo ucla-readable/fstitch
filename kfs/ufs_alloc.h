@@ -21,8 +21,8 @@ struct UFSmod_alloc {
 	DECLARE(UFSmod_alloc_t, uint32_t, find_free_inode, fdesc_t * file, int purpose);
 };
 
-#define UFS_ALLOC_INIT(ufs, module, info) { \
-	OBJ_INIT(ufs, module, info); \
+#define UFS_ALLOC_INIT(ufs, module) { \
+	OBJ_INIT(ufs, module); \
 	ASSIGN(ufs, module, find_free_block); \
 	ASSIGN(ufs, module, find_free_frag); \
 	ASSIGN(ufs, module, find_free_inode); \

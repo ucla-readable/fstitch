@@ -16,10 +16,13 @@
 #endif
 
 struct mem_info {
+	BD_t bd;
+	
 	uint8_t *blocks;
 	blockman_t * blockman;
 };
 
+#if 0
 static int mem_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
@@ -43,10 +46,11 @@ static int mem_bd_get_status(void * object, int level, char * string, size_t len
 		string[0] = 0;
 	return 0;
 }
+#endif
 
 static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
+	struct mem_info * info = (struct mem_info *) object;
 	bdesc_t * bdesc;
 
 	bdesc = blockman_managed_lookup(info->blockman, number);
@@ -87,7 +91,7 @@ static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uin
 
 static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct mem_info * info = (struct mem_info *) OBJLOCAL(object);
+	struct mem_info * info = (struct mem_info *) object;
 	int r;
 	
 	if(block->ddesc->length != object->blocksize) {
@@ -135,7 +139,7 @@ static int32_t mem_bd_get_block_space(BD_t * object)
 
 static int mem_bd_destroy(BD_t * bd)
 {
-	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
+	struct mem_info * info = (struct mem_info *) bd;
 	int r;
 
 	r = modman_rem_bd(bd);
@@ -144,9 +148,8 @@ static int mem_bd_destroy(BD_t * bd)
 	blockman_destroy(&info->blockman);
 
 	vfree(info->blocks);
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
@@ -169,8 +172,8 @@ static void mark_block_used(uint8_t *b8, int blockno)
 
 BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 {
-	struct mem_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	struct mem_info * info = malloc(sizeof(*info));
+	BD_t * bd;
 	struct JOSFS_File *f;
 	struct JOSFS_Super *s;
 	int i;
@@ -178,15 +181,9 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	if (blocks < 1)
 		return NULL;
 
-	if(!bd)
-		return NULL;
-	
-	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->bd;
 	
 	bd->numblocks = blocks;
 	bd->blocksize = blocksize;
@@ -197,14 +194,12 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	info->blocks = vmalloc(blocks * blocksize);
 	if (!info->blocks) {
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	info->blockman = blockman_create(blocksize, NULL, NULL);
 	if (!info->blockman) {
 		free(info->blocks);
 		free(info);
-		free(bd);
 		return NULL;
 	}
 
@@ -232,7 +227,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		mark_block_used(&info->blocks[blocksize * 2], i + 2);
 	// done setting up JOS fs
 
-	BD_INIT(bd, mem_bd, info);
+	BD_INIT(bd, mem_bd);
 	bd->level = 0;
 	bd->graph_index = 0;
 	if(bd->graph_index >= NBDINDEX)

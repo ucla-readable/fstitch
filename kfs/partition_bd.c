@@ -7,14 +7,17 @@
 #include <kfs/partition_bd.h>
 
 struct partition_info {
-	BD_t * bd;
+	BD_t bd;
+	
+	BD_t * below_bd;
 	uint32_t start;
 };
 
+#if 0
 static int partition_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(bd);
+	struct partition_info * info = (struct partition_info *) bd;
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -37,17 +40,18 @@ static int partition_bd_get_status(void * object, int level, char * string, size
 		string[0] = 0;
 	return 0;
 }
+#endif
 
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	bdesc = CALL(info->bd, read_block, info->start + number, count);
+	bdesc = CALL(info->below_bd, read_block, info->start + number, count);
 	if(!bdesc)
 		return NULL;
 	
@@ -61,14 +65,14 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_
 
 static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	bdesc = CALL(info->bd, synthetic_read_block, info->start + number, count);
+	bdesc = CALL(info->below_bd, synthetic_read_block, info->start + number, count);
 	if(!bdesc)
 		return NULL;
 	
@@ -82,7 +86,7 @@ static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * wblock;
 	int value;
 	
@@ -96,12 +100,12 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	bdesc_autorelease(wblock);
 	
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd, wblock);
+	value = chdesc_push_down(object, block, info->below_bd, wblock);
 	if(value < 0)
 		return value;
 	
 	/* write it */
-	return CALL(info->bd, write_block, wblock);
+	return CALL(info->below_bd, write_block, wblock);
 }
 
 static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
@@ -111,45 +115,41 @@ static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** partition_bd_get_write_head(BD_t * object)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_write_head);
+	struct partition_info * info = (struct partition_info *) object;
+	return CALL(info->below_bd, get_write_head);
 }
 
 static int32_t partition_bd_get_block_space(BD_t * object)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_block_space);
+	struct partition_info * info = (struct partition_info *) object;
+	return CALL(info->below_bd, get_block_space);
 }
 
 static int partition_bd_destroy(BD_t * bd)
 {
+	struct partition_info *info = (struct partition_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct partition_info *) OBJLOCAL(bd))->bd, bd);
-	free(OBJLOCAL(bd));
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	modman_dec_bd(info->below_bd, bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
 BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 {
 	struct partition_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
+	BD_t * bd;
 	
 	info = malloc(sizeof(struct partition_info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->bd;
 	
-	BD_INIT(bd, partition_bd, info);
+	BD_INIT(bd, partition_bd);
 	
-	info->bd = disk;
+	info->below_bd = disk;
 	info->start = start;
 	bd->blocksize = disk->blocksize;
 	bd->numblocks = length;

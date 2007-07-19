@@ -19,15 +19,18 @@ static FILE * block_log = NULL;
 static size_t block_log_users = 0;
 
 struct unix_file_info {
+	BD_t bd;
+	
 	char *fname;
 	int fd;
 	blockman_t * blockman;
 };
 
+#if 0
 static int unix_file_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(bd);
+	struct unix_file_info * info = (struct unix_file_info *) bd;
 	switch(level)
 	{
 		case CONFIG_BRIEF:
@@ -42,18 +45,11 @@ static int unix_file_bd_get_config(void * object, int level, char * string, size
 	}
 	return 0;
 }
-
-static int unix_file_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if(length > 0)
-		string[0] = 0;
-	return 0;
-}
+#endif
 
 static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
+	struct unix_file_info * info = (struct unix_file_info *) object;
 	bdesc_t * bdesc;
 	off_t seeked;
 	int r;
@@ -107,7 +103,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 
 static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
+	struct unix_file_info * info = (struct unix_file_info *) object;
 	bdesc_t * bdesc;
 
 	/* make sure it's a valid block */
@@ -136,7 +132,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
+	struct unix_file_info * info = (struct unix_file_info *) object;
 	int r;
 	int revision_forward, revision_back;
 	off_t seeked;
@@ -193,7 +189,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 static int unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
 #if !RECKLESS_WRITE_SPEED
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(object);
+	struct unix_file_info * info = (struct unix_file_info *) object;
 	if(fsync(info->fd))
 	{
 		perror("fsync");
@@ -217,7 +213,7 @@ static int32_t unix_file_bd_get_block_space(BD_t * object)
 
 static int unix_file_bd_destroy(BD_t * bd)
 {
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(bd);
+	struct unix_file_info * info = (struct unix_file_info *) bd;
 	int r;
 
 	r = modman_rem_bd(bd);
@@ -226,9 +222,8 @@ static int unix_file_bd_destroy(BD_t * bd)
 	blockman_destroy(&info->blockman);
 
 	close(info->fd);
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 
 	if(block_log)
 	{
@@ -250,14 +245,15 @@ static int unix_file_bd_destroy(BD_t * bd)
 
 BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 {
-	struct unix_file_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	struct unix_file_info * info = malloc(sizeof(*info));
+	BD_t * bd;
 	struct stat sb;
 	uint32_t blocks;
 	int r;
 	
-	if(!bd)
+	if(!info)
 		return NULL;
+	bd = &info->bd;
 	
 	r = stat(fname, &sb);
 	if(r == -1)
@@ -268,13 +264,8 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 	blocks = sb.st_size / blocksize;
 	if(sb.st_size != (blocks * blocksize))
 		kpanic("file %s's size is not block-aligned\n", fname);
-	if(blocks < 1)
-		return NULL;
-
-	info = malloc(sizeof(*info));
-	if(!info)
-	{
-		free(bd);
+	if(blocks < 1) {
+		free(info);
 		return NULL;
 	}
 
@@ -289,7 +280,6 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 	{
 		perror("open");
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	info->blockman = blockman_create(blocksize, NULL, NULL);
@@ -297,11 +287,10 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 	{
 		close(info->fd);
 		free(info);
-		free(bd);
 		return NULL;
 	}
 
-	BD_INIT(bd, unix_file_bd, info);
+	BD_INIT(bd, unix_file_bd);
 	bd->level = 0;
 	bd->graph_index = 0;
 	

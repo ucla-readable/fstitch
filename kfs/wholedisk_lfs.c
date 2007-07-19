@@ -26,28 +26,6 @@ union fdesc_cast {
 static union fdesc_cast root_fdesc = {wd: {common: &root_fdesc.wd.base, base: {parent: INODE_NONE}}};
 static union fdesc_cast disk_fdesc = {wd: {common: &disk_fdesc.wd.base, base: {parent: INODE_ROOT}}};
 
-static int wholedisk_get_config(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int wholedisk_get_status(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != WHOLEDISK_MAGIC)
-		return -EINVAL;
-	
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int wholedisk_get_root(LFS_t * lfs, inode_t * ino)
 {
 	*ino = INODE_ROOT;
@@ -330,7 +308,7 @@ LFS_t * wholedisk(BD_t * bd)
 	if(!lfs)
 		return NULL;
 	
-	LFS_INIT(lfs, wholedisk, 0);
+	LFS_INIT(lfs, wholedisk);
 	OBJMAGIC(lfs) = WHOLEDISK_MAGIC;
 	
 	lfs->blockdev = bd;

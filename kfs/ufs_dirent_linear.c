@@ -3,9 +3,17 @@
 #include <kfs/debug.h>
 #include <kfs/ufs_dirent_linear.h>
 
+struct ufsmod_dirent_info {
+	UFSmod_dirent_t ufsmod_dirent;
+
+	struct ufs_info *info;
+};
+
+#define GET_UFS_INFO(object) (((struct ufsmod_dirent_info *) (object))->info)
+
 static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct * entry, uint32_t * basep)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	struct UFS_direct * dirent;
 	bdesc_t * dirblock = NULL;
 	uint32_t blockno, offset;
@@ -48,7 +56,7 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 // Writes a directory entry, does not check for free space
 static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct entry, uint32_t basep, chdesc_t ** head)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	bdesc_t * block;
 	uint32_t foffset, blockno;
 	uint16_t offset, actual_len;
@@ -79,7 +87,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 
 static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	struct UFS_direct entry, last_entry;
 	uint32_t offset, len, prev_offset, last_basep = 0, basep = 0;
 	int r;
@@ -181,7 +189,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 
 static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	struct UFS_direct dirent;
 	struct UFS_dinode inode;
 	uint32_t actual_len;
@@ -324,30 +332,17 @@ static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	return write_dirent(object, file, e, basep, head);
 }
 
-static int ufs_dirent_linear_get_config(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_dirent_linear_get_status(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int ufs_dirent_linear_destroy(UFSmod_dirent_t * obj)
 {
-	memset(obj, 0, sizeof(*obj));
-	free(obj);
+	struct ufsmod_dirent_info *info = (struct ufsmod_dirent_info *) obj;
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
 UFSmod_dirent_t * ufs_dirent_linear(struct ufs_info * info)
 {
-	UFSmod_dirent_t * obj;
+	struct ufsmod_dirent_info * obj;
    
 	if (!info)
 		return NULL;
@@ -356,6 +351,7 @@ UFSmod_dirent_t * ufs_dirent_linear(struct ufs_info * info)
 	if (!obj)
 		return NULL;
 
-	UFS_DIRENT_INIT(obj, ufs_dirent_linear, info);
-	return obj;
+	UFS_DIRENT_INIT(&obj->ufsmod_dirent, ufs_dirent_linear);
+	obj->info = info;
+	return &obj->ufsmod_dirent;
 }

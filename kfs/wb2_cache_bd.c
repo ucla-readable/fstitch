@@ -28,8 +28,10 @@ KERNEL_TIMING(wait);
 /* the all list is ordered by read/write usage, while the dirty list is ordered by write usage:
  * all.first -> most recently used -> next -> next -> least recently used <- all.last
  * dirty.first -> most recently written -> next -> next -> least recently written <- dirty.last */
-struct cache_info {
-	BD_t * bd;
+typedef struct wb2_cache_bd {
+	struct BD bd;
+	
+	BD_t *below_bd;
 	uint32_t soft_blocks, blocks;
 	uint32_t soft_dblocks, dblocks;
 	uint32_t soft_dblocks_low, soft_dblocks_high;
@@ -41,47 +43,9 @@ struct cache_info {
 	/* map from block number to bdesc */
 	uint32_t map_capacity;
 	bdesc_t ** map;
-};
+} wb2_cache_bd_t;
 
-static int wb2_cache_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, soft dirty: %d/%d, soft blocks: %d", bd->blocksize, info->soft_dblocks_low, info->soft_dblocks_high, info->soft_blocks);
-			break;
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d x %d", bd->blocksize, info->soft_blocks);
-			break;
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "blocksize: %d, soft blocks: %d", bd->blocksize, info->soft_blocks);
-	}
-	return 0;
-}
-
-static int wb2_cache_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case STATUS_VERBOSE:
-			snprintf(string, length, "dirty: %d, blocks: %d, soft dirty: %d", info->dblocks, info->blocks, info->soft_dblocks);
-			break;
-		case STATUS_BRIEF:
-			snprintf(string, length, "%d", info->blocks);
-			break;
-		case STATUS_NORMAL:
-		default:
-			snprintf(string, length, "blocks: %d",  info->blocks);
-	}
-	return 0;
-}
-
-static inline bdesc_t * wb2_map_get_block(struct cache_info * info, uint32_t number)
+static inline bdesc_t * wb2_map_get_block(wb2_cache_bd_t * info, uint32_t number)
 {
 	bdesc_t * b = info->map[number & (info->map_capacity - 1)];
 	while(b && b->number < number)
@@ -89,7 +53,7 @@ static inline bdesc_t * wb2_map_get_block(struct cache_info * info, uint32_t num
 	return (b && b->number == number) ? b : NULL;
 }
 
-static inline void wb2_map_put_block(struct cache_info * info, bdesc_t * block)
+static inline void wb2_map_put_block(wb2_cache_bd_t * info, bdesc_t * block)
 {
 	bdesc_t ** b = &info->map[block->number & (info->map_capacity - 1)];
 	while(*b && (*b)->number < block->number)
@@ -108,7 +72,7 @@ static inline void wb2_map_remove_block(bdesc_t * block)
 }
 
 /* we are guaranteed that the block is not already in the list */
-static void wb2_push_block(struct cache_info * info, bdesc_t * block)
+static void wb2_push_block(wb2_cache_bd_t * info, bdesc_t * block)
 {
 #if DIRTY_QUEUE_REORDERING
 	block->pass = 0;
@@ -134,7 +98,7 @@ static void wb2_push_block(struct cache_info * info, bdesc_t * block)
 }
 
 /* we are guaranteed that the block is not already in the list */
-static void wb2_push_dirty(struct cache_info * info, bdesc_t * block)
+static void wb2_push_dirty(wb2_cache_bd_t * info, bdesc_t * block)
 {
 	block->lru_dirty.prev = NULL;
 	block->lru_dirty.next = info->dirty.first;
@@ -151,7 +115,7 @@ static void wb2_push_dirty(struct cache_info * info, bdesc_t * block)
 
 #define wb2_dirty_slot(info, block) ((info)->dirty.first == (block) || (block)->lru_dirty.prev)
 
-static void wb2_pop_slot(struct cache_info * info, bdesc_t * block)
+static void wb2_pop_slot(wb2_cache_bd_t * info, bdesc_t * block)
 {
 	assert(wb2_map_get_block(info, block->number) == block);
 	
@@ -179,7 +143,7 @@ static void wb2_pop_slot(struct cache_info * info, bdesc_t * block)
 	bdesc_release(&block);
 }
 
-static void wb2_pop_slot_dirty(struct cache_info * info, bdesc_t * block)
+static void wb2_pop_slot_dirty(wb2_cache_bd_t * info, bdesc_t * block)
 {
 	assert(wb2_dirty_slot(info, block));
 	if(block->lru_dirty.prev)
@@ -197,7 +161,7 @@ static void wb2_pop_slot_dirty(struct cache_info * info, bdesc_t * block)
 		info->soft_dblocks = info->soft_dblocks_high;
 }
 
-static void wb2_touch_block_read(struct cache_info * info, bdesc_t * block)
+static void wb2_touch_block_read(wb2_cache_bd_t * info, bdesc_t * block)
 {
 	/* already the first? */
 	if(info->all.first == block)
@@ -222,7 +186,7 @@ static void wb2_touch_block_read(struct cache_info * info, bdesc_t * block)
 
 static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	revision_slice_t slice;
 	int r;
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
@@ -238,7 +202,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	if(!block->ddesc->index_changes[object->graph_index].head)
 		return FLUSH_EMPTY;
 	
-	r = revision_slice_create(block, object, info->bd, &slice);
+	r = revision_slice_create(block, object, info->below_bd, &slice);
 	if(r < 0)
 	{
 		printf("%s() returned %i; can't flush!\n", __FUNCTION__, r);
@@ -254,7 +218,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	else
 	{
 		int start = delay ? jiffy_time() : 0;
-		r = CALL(info->bd, write_block, block);
+		r = CALL(info->below_bd, write_block, block);
 		if(r < 0)
 		{
 			revision_slice_pull_up(&slice);
@@ -296,7 +260,7 @@ static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t
 }
 
 /* move "slot" to before "before" */
-static void wb2_bounce_block_write(struct cache_info * info, bdesc_t * block, bdesc_t * before)
+static void wb2_bounce_block_write(wb2_cache_bd_t * info, bdesc_t * block, bdesc_t * before)
 {
 	wb2_pop_slot_dirty(info, block);
 	block->lru_dirty.next = before;
@@ -323,7 +287,7 @@ enum dshrink_strategy {
  * blocks out (using the specified strategy) */
 static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	bdesc_t * block = info->dirty.last;
 	
 #if DIRTY_QUEUE_REORDERING
@@ -457,7 +421,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 
 /* reduce the number of blocks in the cache to below the soft limit, if
  * possible, by evicting clean blocks in LRU order */
-static void wb2_shrink_blocks(struct cache_info * info)
+static void wb2_shrink_blocks(wb2_cache_bd_t * info)
 {
 	bdesc_t * block = info->all.last;
 	/* while there are more blocks than the soft limit, and there are clean blocks */
@@ -479,7 +443,7 @@ static void wb2_shrink_blocks(struct cache_info * info)
 
 static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
@@ -504,7 +468,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, read_block, number, count);
+	block = CALL(info->below_bd, read_block, number, count);
 	if(!block)
 		return NULL;
 	
@@ -518,7 +482,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 
 static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
@@ -540,7 +504,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		wb2_shrink_blocks(info);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, synthetic_read_block, number, count);
+	block = CALL(info->below_bd, synthetic_read_block, number, count);
 	if(!block)
 		return NULL;
 	
@@ -550,7 +514,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > object->numblocks)
@@ -590,7 +554,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	uint32_t start_dirty = info->dblocks;
 
 	if(!start_dirty)
@@ -622,13 +586,13 @@ static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
 
 static chdesc_t ** wb2_cache_bd_get_write_head(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_write_head);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
+	return CALL(info->below_bd, get_write_head);
 }
 
 static int32_t wb2_cache_bd_get_block_space(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	return info->soft_dblocks - info->dblocks;
 }
 
@@ -637,14 +601,14 @@ static void wb2_cache_bd_callback(void * arg)
 	BD_t * object = (BD_t *) arg;
 	wb2_shrink_dblocks(object, PREEN);
 #if DEBUG_TIMING
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	printf("%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
 #endif
 }
 
 static int wb2_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	wb2_cache_bd_t * info = (wb2_cache_bd_t *) bd;
 	int r;
 	
 	if(info->dblocks)
@@ -658,7 +622,7 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 	r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(info->bd, bd);
+	modman_dec_bd(info->below_bd, bd);
 	
 	sched_unregister(wb2_cache_bd_callback, bd);
 	
@@ -667,10 +631,8 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 		wb2_pop_slot(info, info->all.first);
 	
 	free(info->map);
-	free(info);
-	
 	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	free(info);
 	
 	TIMING_DUMP(wait, "wb2_cache wait", "waits");
 	
@@ -679,37 +641,28 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 
 BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 {
-	struct cache_info * info;
-	BD_t * bd;
+	wb2_cache_bd_t * info;
 	
 	if(soft_dblocks > soft_blocks)
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
-	info = malloc(sizeof(*info));
+	info = malloc(sizeof(wb2_cache_bd_t));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
 
 	info->map_capacity = MAP_SIZE;
 	info->map = (bdesc_t **) malloc(info->map_capacity * sizeof(*info->map));
 	if(!info->map)
 	{
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	memset(info->map, 0, info->map_capacity * sizeof(*info->map));
 	
-	BD_INIT(bd, wb2_cache_bd, info);
-	OBJMAGIC(bd) = WB_CACHE_MAGIC;
+	BD_INIT(&info->bd, wb2_cache_bd);
+	OBJMAGIC(&info->bd) = WB_CACHE_MAGIC;
 	
-	info->bd = disk;
+	info->below_bd = disk;
 	info->soft_blocks = soft_blocks;
 	info->blocks = 0;
 	info->soft_dblocks_low = soft_dblocks * 9 / 10;
@@ -720,38 +673,38 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	info->all.last = NULL;
 	info->dirty.first = NULL;
 	info->dirty.last = NULL;
-	bd->numblocks = disk->numblocks;
-	bd->blocksize = disk->blocksize;
-	bd->atomicsize = disk->atomicsize;
+	info->bd.numblocks = disk->numblocks;
+	info->bd.blocksize = disk->blocksize;
+	info->bd.atomicsize = disk->atomicsize;
 	
 	/* we generally delay blocks, so our level goes up */
-	bd->level = disk->level + 1;
-	bd->graph_index = disk->graph_index + 1;
-	if(bd->graph_index >= NBDINDEX)
+	info->bd.level = disk->level + 1;
+	info->bd.graph_index = disk->graph_index + 1;
+	if(info->bd.graph_index >= NBDINDEX)
 	{
-		DESTROY(bd);
+		DESTROY(&info->bd);
 		return NULL;
 	}
 	
 	/* set up the callback */
-	if(sched_register(wb2_cache_bd_callback, bd, FLUSH_PERIOD) < 0)
+	if(sched_register(wb2_cache_bd_callback, &info->bd, FLUSH_PERIOD) < 0)
 	{
-		DESTROY(bd);
+		DESTROY(&info->bd);
 		return NULL;
 	}
 	
-	if(modman_add_anon_bd(bd, __FUNCTION__))
+	if(modman_add_anon_bd(&info->bd, __FUNCTION__))
 	{
-		DESTROY(bd);
+		DESTROY(&info->bd);
 		return NULL;
 	}
-	if(modman_inc_bd(disk, bd, NULL) < 0)
+	if(modman_inc_bd(disk, &info->bd, NULL) < 0)
 	{
-		modman_rem_bd(bd);
-		DESTROY(bd);
+		modman_rem_bd(&info->bd);
+		DESTROY(&info->bd);
 		return NULL;
 	}
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
-	return bd;
+	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, &info->bd);
+	return &info->bd;
 }

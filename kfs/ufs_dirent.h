@@ -36,8 +36,8 @@ struct UFSmod_dirent {
 	DECLARE(UFSmod_dirent_t, int, modify_dirent, ufs_fdesc_t * dirf, struct dirent entry, uint32_t basep, chdesc_t ** head);
 };
 
-#define UFS_DIRENT_INIT(ufs, module, info) { \
-	OBJ_INIT(ufs, module, info); \
+#define UFS_DIRENT_INIT(ufs, module) { \
+	OBJ_INIT(ufs, module); \
 	ASSIGN(ufs, module, search_dirent); \
 	ASSIGN(ufs, module, insert_dirent); \
 	ASSIGN(ufs, module, delete_dirent); \

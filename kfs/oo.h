@@ -13,22 +13,12 @@
 #define CALL(object, method, args...) ((object)->_##method(object, ##args))
 #define DESTROY(object) ((object)->uniform.__destroy(object))
 
-#define OBJCALL(object, method, args...) ((object)->uniform._##method(object, ##args))
-#define OBJFLAGS(object) (object)->uniform.flags
 #define OBJMAGIC(object) (object)->uniform.magic
-#define OBJLOCAL(object) (object)->uniform.local
 
-#define OBJ_INIT(object, module, info) { \
-	OBJLOCAL(object) = info; \
-	OBJFLAGS(object) = 0; \
+#define OBJ_INIT(object, module) { \
 	OBJMAGIC(object) = 0; \
-	OBJASSIGN(object, module, get_config); \
-	OBJASSIGN(object, module, get_status); \
 	DESTRUCTOR(object, module, destroy); \
 }
-
-/* values for OBJFLAGS */
-#define OBJ_PERSISTENT 0x01
 
 /* config and status levels */
 #define CONFIG_VERBOSE 0
@@ -39,11 +29,8 @@
 #define STATUS_BRIEF 2
 
 struct object {
-	uint32_t flags, magic;
-	DECLARE(void, int, get_config, int level, char * string, size_t length);
-	DECLARE(void, int, get_status, int level, char * string, size_t length);
+	uint32_t magic;
 	int (*__destroy)(void * object);
-	void * local;
 };
 typedef struct { struct object uniform; } object_t;
 

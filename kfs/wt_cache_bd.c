@@ -20,38 +20,13 @@ struct cache_slot {
 };
 
 struct cache_info {
-	BD_t * bd;
+	BD_t bd;
+	
+	BD_t *below_bd;
 	uint32_t size;
 	struct cache_slot * blocks; // blocks[0] holds BD mru and lru
 	hash_map_t * block_map; // block_number -> struct cache_slot *
 };
-
-static int wt_cache_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, size: %d, contention: x%d", bd->blocksize, info->size, (bd->numblocks + info->size - 1) / info->size);
-			break;
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d x %d", bd->blocksize, info->size);
-			break;
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "blocksize: %d, size: %d", bd->blocksize, info->size);
-	}
-	return 0;
-}
-
-static int wt_cache_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
 
 /* remove 'slot' from its list position */
 static void wt_list_remove(struct cache_slot * slot)
@@ -113,7 +88,7 @@ static void wt_pop_block(struct cache_info * info, struct cache_slot * slot)
 
 static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	bdesc_t * block;
 	
@@ -128,14 +103,14 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	else
 	{
 		/* make sure it's a valid block */
-		if(!count || number + count > info->bd->numblocks)
+		if(!count || number + count > info->below_bd->numblocks)
 			return NULL;
 		
 		if(info->blocks[0].lru->block)
 			wt_pop_block(info, info->blocks[0].lru);
 	}
 	
-	block = CALL(info->bd, read_block, number, count);
+	block = CALL(info->below_bd, read_block, number, count);
 	if(!block)
 		return NULL;
 	
@@ -149,13 +124,13 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 
 static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	bdesc_t * block;
 	int r;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->bd->numblocks)
+	if(!count || number + count > info->below_bd->numblocks)
 		return NULL;
 	
 	slot = hash_map_find_val(info->block_map, (void *) number);
@@ -169,7 +144,7 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(info->blocks[0].lru->block)
 		wt_pop_block(info, info->blocks[0].lru);
 	
-	block = CALL(info->bd, synthetic_read_block, number, count);
+	block = CALL(info->below_bd, synthetic_read_block, number, count);
 	if(!block)
 		return NULL;
 	
@@ -183,12 +158,12 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	int r;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->bd->numblocks)
+	if(block->number + block->count > info->below_bd->numblocks)
 		return -EINVAL;
 	
 	slot = hash_map_find_val(info->block_map, (void *) block->number);
@@ -209,12 +184,12 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	
 	/* this should never fail */
-	r = chdesc_push_down(object, block, info->bd, block);
+	r = chdesc_push_down(object, block, info->below_bd, block);
 	if(r < 0)
 		return r;
 	
 	/* write it */
-	return CALL(info->bd, write_block, block);
+	return CALL(info->below_bd, write_block, block);
 }
 
 static int wt_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
@@ -224,23 +199,23 @@ static int wt_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** wt_cache_bd_get_write_head(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_write_head);
+	struct cache_info * info = (struct cache_info *) object;
+	return CALL(info->below_bd, get_write_head);
 }
 
 static int32_t wt_cache_bd_get_block_space(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_block_space);
+	struct cache_info * info = (struct cache_info *) object;
+	return CALL(info->below_bd, get_block_space);
 }
 
 static int wt_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	struct cache_info * info = (struct cache_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(info->bd, bd);
+	modman_dec_bd(info->below_bd, bd);
 	
 	while(info->blocks[0].mru->block)
 		wt_pop_block(info, info->blocks[0].mru);
@@ -249,35 +224,26 @@ static int wt_cache_bd_destroy(BD_t * bd)
 	
 	hash_map_destroy(info->block_map);
 	
+	memset(info, 0, sizeof(*info));
 	free(info);
-	
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
 
 BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 {
-	struct cache_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	struct cache_info * info = malloc(sizeof(*info));
+	BD_t * bd;
 	uint32_t i;
 
-	if(!bd)
-		return NULL;
-	
-	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->bd;
 	
 	info->blocks = smalloc((blocks + 1) * sizeof(info->blocks[0]));
 	if(!info->blocks)
 	{
 		free(info);
-		free(bd);
 		return NULL;
 	}
 
@@ -293,9 +259,9 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 
 	info->block_map = hash_map_create_size(blocks, 0);
 
-	BD_INIT(bd, wt_cache_bd, info);
+	BD_INIT(bd, wt_cache_bd);
 	
-	info->bd = disk;
+	info->below_bd = disk;
 	info->size = blocks;
 	bd->blocksize = disk->blocksize;
 	bd->numblocks = disk->numblocks;

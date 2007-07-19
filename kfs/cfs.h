@@ -32,8 +32,8 @@ struct CFS {
 	DECLARE(CFS_t, int, set_metadata, inode_t inode, uint32_t id, size_t size, const void * data);
 };
 
-#define CFS_INIT(cfs, module, info) { \
-	OBJ_INIT(cfs, module, info); \
+#define CFS_INIT(cfs, module) { \
+	OBJ_INIT(cfs, module); \
 	ASSIGN(cfs, module, get_root); \
 	ASSIGN(cfs, module, lookup); \
 	ASSIGN(cfs, module, open); \

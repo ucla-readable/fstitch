@@ -7,9 +7,12 @@
 #include <kfs/md_bd.h>
 
 struct md_info {
-	BD_t * bd[2];
+	BD_t bd;
+	
+	BD_t * below_bd[2];
 };
 
+#if 0
 static int md_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
@@ -35,17 +38,18 @@ static int md_bd_get_status(void * object, int level, char * string, size_t leng
 		string[0] = 0;
 	return 0;
 }
+#endif
 
 static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	read_bdesc = CALL(info->bd[number & 1], read_block, number >> 1, count);
+	read_bdesc = CALL(info->below_bd[number & 1], read_block, number >> 1, count);
 	if(!read_bdesc)
 		return NULL;
 	
@@ -59,14 +63,14 @@ static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count
 
 static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	read_bdesc = CALL(info->bd[number & 1], synthetic_read_block, number >> 1, count);
+	read_bdesc = CALL(info->below_bd[number & 1], synthetic_read_block, number >> 1, count);
 	if(!read_bdesc)
 		return NULL;
 	
@@ -80,7 +84,7 @@ static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint
 
 static int md_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	bdesc_t * wblock;
 	int value;
 	
@@ -94,12 +98,12 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	bdesc_autorelease(wblock);
 	
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd[block->number & 1], wblock);
+	value = chdesc_push_down(object, block, info->below_bd[block->number & 1], wblock);
 	if(value < 0)
 		return value;
 	
 	/* write it */
-	return CALL(info->bd[block->number & 1], write_block, wblock);
+	return CALL(info->below_bd[block->number & 1], write_block, wblock);
 }
 
 static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
@@ -114,23 +118,23 @@ static chdesc_t ** md_bd_get_write_head(BD_t * object)
 
 static int32_t md_bd_get_block_space(BD_t * object)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	int32_t result[2];
-	result[0] = CALL(info->bd[0], get_block_space);
-	result[1] = CALL(info->bd[1], get_block_space);
+	result[0] = CALL(info->below_bd[0], get_block_space);
+	result[1] = CALL(info->below_bd[1], get_block_space);
 	return (result[0] > result[1]) ? result[1] : result[0];
 }
 
 static int md_bd_destroy(BD_t * bd)
 {
+	struct md_info *info = (struct md_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct md_info *) OBJLOCAL(bd))->bd[1], bd);
-	modman_dec_bd(((struct md_info *) OBJLOCAL(bd))->bd[0], bd);
-	free(OBJLOCAL(bd));
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	modman_dec_bd(info->below_bd[1], bd);
+	modman_dec_bd(info->below_bd[0], bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
@@ -152,21 +156,15 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	if(CALL(disk0, get_write_head) || CALL(disk1, get_write_head))
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
 	info = malloc(sizeof(struct md_info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->bd;
 	
-	BD_INIT(bd, md_bd, info);
+	BD_INIT(bd, md_bd);
 	
-	info->bd[0] = disk0;
-	info->bd[1] = disk1;
+	info->below_bd[0] = disk0;
+	info->below_bd[1] = disk1;
 	/* we can use minimum number of blocks and atomic size safely */
 	bd->numblocks = 2 * MIN(numblocks0, numblocks1);
 	bd->blocksize = blocksize;

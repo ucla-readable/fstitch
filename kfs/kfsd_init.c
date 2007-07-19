@@ -252,7 +252,6 @@ int kfsd_init(int nwbblocks)
 		}
 		if (bd)
 		{
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
 				return r;
 		}
@@ -271,7 +270,6 @@ int kfsd_init(int nwbblocks)
 #endif
 		if (bd)
 		{
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 			printf("Using disk 2\n");
 			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
 				return r;
@@ -285,7 +283,6 @@ int kfsd_init(int nwbblocks)
 			fprintf(stderr, "mem_bd(1024, 4096) failed\n");
 		if (bd)
 		{
-			OBJFLAGS(bd) |= OBJ_PERSISTENT;
 			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
 				return r;
 		}
@@ -455,7 +452,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				part->bd = pc_ptable_bd(ptbl, i);
 				if (part->bd)
 				{
-					OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
 					part->type = type;
 					part->subtype = 0;
 					snprintf(part->description, 32, "Partition %d", i);
@@ -472,7 +468,6 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 				tmppart = pc_ptable_bd(ptbl, i);
 				if (tmppart)
 				{
-					OBJFLAGS(tmppart) |= OBJ_PERSISTENT;
 					bsdtbl = bsd_ptable_init(tmppart);
 					if (bsdtbl)
 					{
@@ -623,7 +618,6 @@ int handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 			part->bd = bsd_ptable_bd(bsdtbl, j);
 			if (part->bd)
 			{
-				OBJFLAGS(part->bd) |= OBJ_PERSISTENT;
 				part->type = PTABLE_FREEBSD_TYPE;
 				part->subtype = fstype;
 				snprintf(part->description, 32, "BSD Partition %d", j);

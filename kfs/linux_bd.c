@@ -64,6 +64,8 @@ static struct dentry * debug_writes_dentry;
 #define LINUX_BLOCKSIZE 512
 
 struct linux_info {
+	BD_t bd;
+	
 	struct block_device * bdev;
 	const char * path;
 	blockman_t * blockman;
@@ -97,10 +99,11 @@ struct linux_bio_private {
 DECLARE_POOL(bio_private, struct linux_bio_private);
 static int n_linux_instances;
 
+#if 0
 static int linux_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
+	struct linux_info * info = (struct linux_info *) bd;
 	switch(level)
 	{
 		case CONFIG_BRIEF:
@@ -121,6 +124,7 @@ static int linux_bd_get_status(void * object, int level, char * string, size_t l
 		string[0] = 0;
 	return 0;
 }
+#endif
 
 static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 {
@@ -231,7 +235,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	DEFINE_WAIT(wait);
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
+	struct linux_info * info = (struct linux_info *) object;
 	bdesc_t * bdesc;
 	struct bio * bio;
 	struct bio_vec * bv;
@@ -403,7 +407,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 
 static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
+	struct linux_info * info = (struct linux_info *) object;
 	bdesc_t * bdesc;
 	
 	bdesc = blockman_managed_lookup(info->blockman, number);
@@ -433,7 +437,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 {
 	DEFINE_WAIT(wait);
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(object);
+	struct linux_info * info = (struct linux_info *) object;
 	struct bio * bio;
 	struct bio_vec * bv;
 	int vec_len, r, i;
@@ -594,7 +598,7 @@ static int32_t linux_bd_get_block_space(BD_t * object)
 
 int linux_bd_destroy(BD_t * bd)
 {
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
+	struct linux_info * info = (struct linux_info *) bd;
 	bool wait_printed = 0;
 	int r;
 	
@@ -642,9 +646,8 @@ int linux_bd_destroy(BD_t * bd)
 		bio_private_free_all();
 	bd_release(info->bdev);
 	blkdev_put(info->bdev);
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
@@ -715,25 +718,17 @@ static int open_bdev(const char *path, int mode, struct block_device ** bdev)
 
 BD_t * linux_bd(const char * linux_bdev_path)
 {
-	struct linux_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	struct linux_info * info = malloc(sizeof(*info));
+	BD_t * bd = &info->bd;
 	int r;
 	
 #if !BIO_RW_FUA
 	printk("Warning: not compiled with BIO_RW_FUA: writes will not be safe unless the disk write cache is disabled\n");
 #endif
 	
-	if(!bd)
-	{
-		printk("malloc() for bd failed\n");
-		return NULL;
-	}
-	
-	info = malloc(sizeof(*info));
 	if(!info)
 	{
-		printk("malloc for info failed\n");
-		free(bd);
+		printk("malloc() for bd failed\n");
 		return NULL;
 	}
 	
@@ -744,7 +739,6 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	{
 		printk("open_bdev() error\n");
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	
@@ -755,11 +749,10 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		bd_release(info->bdev);
 		blkdev_put(info->bdev);
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	
-	BD_INIT(bd, linux_bd, info);
+	BD_INIT(bd, linux_bd);
 	
 	bd->blocksize = LINUX_BLOCKSIZE;
 	bd->numblocks = info->bdev->bd_disk->capacity;

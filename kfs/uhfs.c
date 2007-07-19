@@ -29,6 +29,8 @@ struct uhfs_fdesc {
 typedef struct uhfs_fdesc uhfs_fdesc_t;
 
 struct uhfs_state {
+	CFS_t cfs;
+	
 	LFS_t * lfs;
 	chdesc_t ** write_head;
 	uint32_t nopen;
@@ -96,46 +98,24 @@ static void uhfs_fdesc_close(struct uhfs_state * state, uhfs_fdesc_t * uf)
 
 
 
-static int uhfs_get_config(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != UHFS_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int uhfs_get_status(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != UHFS_MAGIC)
-		return -EINVAL;
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	
-	snprintf(string, length, "open files: %u", state->nopen);
-	return 0;
-}
-
 static int uhfs_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	return CALL(state->lfs, get_root, ino);
 }
 
 static int uhfs_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	return CALL(state->lfs, lookup_name, parent, name, ino);
 }
 
 static int uhfs_close(CFS_t * cfs, fdesc_t * fdesc)
 {
 	Dprintf("%s(%p)\n", __FUNCTION__, fdesc);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	uhfs_fdesc_close(state, uf);
 	return 0;
@@ -144,7 +124,7 @@ static int uhfs_close(CFS_t * cfs, fdesc_t * fdesc)
 static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 {
 	Dprintf("%s(%p, 0x%x)\n", __FUNCTION__, fdesc, target_size);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = state->lfs->blocksize;
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
@@ -228,7 +208,7 @@ static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, 
 static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uint32_t filetype;
 	fdesc_t * inner;
 	int r;
@@ -274,7 +254,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * newino)
 {
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t existing_ino;
 	fdesc_t * inner;
@@ -308,7 +288,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(cfs, %p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const uint32_t blocksize = state->lfs->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
@@ -365,7 +345,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	BD_t * const bd = state->lfs->blockdev;
 	const uint32_t blocksize = state->lfs->blocksize;
@@ -542,7 +522,7 @@ uhfs_write_exit:
 static int uhfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("%s(%p, %p, %d, %p)\n", __FUNCTION__, fdesc, entry, size, basep);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 
 	if (!size)
@@ -552,7 +532,7 @@ static int uhfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint1
 
 static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f, chdesc_t ** prev_head)
 {
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	const bool link_supported = lfs_feature_supported(state->lfs, KFS_FEATURE_NLINKS);
 	const bool delete_supported = lfs_feature_supported(state->lfs, KFS_FEATURE_DELETE);
 	int r;
@@ -603,7 +583,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t ** head)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	inode_t ino;
 	bool dir_supported;
 	fdesc_t * f;
@@ -637,7 +617,7 @@ static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t 
 static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	return unlink_name(cfs, parent, name, &prev_head);
 }
@@ -650,7 +630,7 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	inode_t newino;
 	fdesc_t * oldf, * newf;
 	bool type_supported;
@@ -705,7 +685,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t ino;
 	int r;
@@ -731,7 +711,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t existing_ino;
 	fdesc_t * f;
@@ -766,7 +746,7 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	inode_t ino;
 	bool dir_supported;
 	fdesc_t * f;
@@ -818,21 +798,21 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 static size_t uhfs_get_max_feature_id(CFS_t * cfs)
 {
 	Dprintf("%s(%u)\n", __FUNCTION__, ino);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	return CALL(state->lfs, get_max_feature_id);
 }
 
 static const bool * uhfs_get_feature_array(CFS_t * cfs)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, num);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	return CALL(state->lfs, get_feature_array);
 }
 
 static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 
 	return CALL(state->lfs, get_metadata_inode, ino, id, size, data);
 }
@@ -840,7 +820,7 @@ static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, size, data);
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 
 	return CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head);
@@ -848,7 +828,7 @@ static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 
 static int uhfs_destroy(CFS_t * cfs)
 {
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
+	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	int r;
 
 	if (state->nopen > 0)
@@ -863,9 +843,8 @@ static int uhfs_destroy(CFS_t * cfs)
 	if(!n_uhfs_instances)
 		uhfs_fdesc_free_all();
 
-	free(OBJLOCAL(cfs));
-	memset(cfs, 0, sizeof(*cfs));
-	free(cfs);
+	memset(state, 0, sizeof(*state));
+	free(state);
 
 	return 0;
 }
@@ -876,18 +855,12 @@ CFS_t * uhfs(LFS_t * lfs)
 	struct uhfs_state * state;
 	CFS_t * cfs;
 
-	cfs = malloc(sizeof(*cfs));
-	if(!cfs)
-		return NULL;
-
 	state = malloc(sizeof(*state));
 	if(!state)
-	{
-		free(cfs);
 		return NULL;
-	}
+	cfs = &state->cfs;
 
-	CFS_INIT(cfs, uhfs, state);
+	CFS_INIT(cfs, uhfs);
 	OBJMAGIC(cfs) = UHFS_MAGIC;
 
 	state->lfs = lfs;

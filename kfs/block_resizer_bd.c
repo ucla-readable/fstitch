@@ -10,15 +10,18 @@
  * long as there is a cache above it. */
 
 struct resize_info {
-	BD_t * bd;
+	BD_t bd;
+	
+	BD_t * below_bd;
 	uint16_t original_size;
 	uint16_t merge_count;
 };
 
+#if 0
 static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
 {
 	BD_t * bd = (BD_t *) object;
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
+	struct resize_info * info = (struct resize_info *) object;
 	switch(level)
 	{
 		case CONFIG_VERBOSE:
@@ -41,17 +44,18 @@ static int block_resizer_bd_get_status(void * object, int level, char * string, 
 		string[0] = 0;
 	return 0;
 }
+#endif
 
 static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
+	struct resize_info * info = (struct resize_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	bdesc = CALL(info->bd, read_block, number * info->merge_count, count * info->merge_count);
+	bdesc = CALL(info->below_bd, read_block, number * info->merge_count, count * info->merge_count);
 	if(!bdesc)
 		return NULL;
 	
@@ -65,14 +69,14 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uin
 
 static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
+	struct resize_info * info = (struct resize_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
 	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	bdesc = CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
+	bdesc = CALL(info->below_bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
 	if(!bdesc)
 		return NULL;
 	
@@ -86,7 +90,7 @@ static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t n
 
 static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
+	struct resize_info * info = (struct resize_info *) object;
 	bdesc_t * wblock;
 	int value;
 	
@@ -100,12 +104,12 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	bdesc_autorelease(wblock);
 	
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd, wblock);
+	value = chdesc_push_down(object, block, info->below_bd, wblock);
 	if(value < 0)
 		return value;
 	
 	/* write it */
-	value = CALL(info->bd, write_block, wblock);
+	value = CALL(info->below_bd, write_block, wblock);
 	return value;
 }
 
@@ -116,23 +120,23 @@ static int block_resizer_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** block_resizer_bd_get_write_head(BD_t * object)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_write_head);
+	struct resize_info * info = (struct resize_info *) object;
+	return CALL(info->below_bd, get_write_head);
 }
 
 static int32_t block_resizer_bd_get_block_space(BD_t * object)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(object);
-	return CALL(info->bd, get_block_space) / info->merge_count;
+	struct resize_info * info = (struct resize_info *) object;
+	return CALL(info->below_bd, get_block_space) / info->merge_count;
 }
 
 static int block_resizer_bd_destroy(BD_t * bd)
 {
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
+	struct resize_info * info = (struct resize_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct resize_info *) OBJLOCAL(bd))->bd, bd);
+	modman_dec_bd(info->below_bd, bd);
 	
 	free(info);
 	memset(bd, 0, sizeof(*bd));
@@ -145,7 +149,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 {
 	struct resize_info * info;
 	uint32_t original_size;
-	BD_t * bd;
+	BD_t *bd;
 	
 	original_size = disk->blocksize;
 	/* make sure it's an even multiple of the block size */
@@ -155,20 +159,14 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	if(blocksize == original_size)
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
-	info = malloc(sizeof(*info));
+	info = malloc(sizeof(struct resize_info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+
+	bd = &info->bd;
+	BD_INIT(bd, block_resizer_bd);
 	
-	BD_INIT(bd, block_resizer_bd, info);
-	
-	info->bd = disk;
+	info->below_bd = disk;
 	info->original_size = original_size;
 	bd->blocksize = blocksize;
 	info->merge_count = blocksize / original_size;
