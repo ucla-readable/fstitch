@@ -26,15 +26,15 @@ void chdesc_unmark_graph(chdesc_t * root)
 
 int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
 {
-	chdesc_dlist_t * dlist = current_block->ddesc->index_changes;
+	chdesc_dlist_t * dlist = current_block->ddesc->level_changes;
 	if(target_block->ddesc != current_block->ddesc)
 		return -EINVAL;
-	if(dlist[current_bd->graph_index].head)
+	if(dlist[current_bd->level].head)
 	{
 		chdesc_t * chdesc;
-		for (chdesc = dlist[current_bd->graph_index].head;
+		for (chdesc = dlist[current_bd->level].head;
 		     chdesc;
-		     chdesc = chdesc->ddesc_index_next)
+		     chdesc = chdesc->ddesc_level_next)
 		{
 			uint16_t prev_level = chdesc_level(chdesc);
 			uint16_t new_level;
@@ -56,19 +56,19 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 		}
 		
 		/* append the target index list to ours */
-		*dlist[current_bd->graph_index].tail = dlist[target_bd->graph_index].head;
-		if(dlist[target_bd->graph_index].head)
-			dlist[target_bd->graph_index].head->ddesc_index_pprev = dlist[current_bd->graph_index].tail;
+		*dlist[current_bd->level].tail = dlist[target_bd->level].head;
+		if(dlist[target_bd->level].head)
+			dlist[target_bd->level].head->ddesc_level_pprev = dlist[current_bd->level].tail;
 		else
-			dlist[target_bd->graph_index].tail = dlist[current_bd->graph_index].tail;
+			dlist[target_bd->level].tail = dlist[current_bd->level].tail;
 		
 		/* make target index point at our list */
-		dlist[target_bd->graph_index].head = dlist[current_bd->graph_index].head;
-		dlist[current_bd->graph_index].head->ddesc_index_pprev = &dlist[target_bd->graph_index].head;
+		dlist[target_bd->level].head = dlist[current_bd->level].head;
+		dlist[current_bd->level].head->ddesc_level_pprev = &dlist[target_bd->level].head;
 		
 		/* make current index empty */
-		dlist[current_bd->graph_index].head = NULL;
-		dlist[current_bd->graph_index].tail = &dlist[current_bd->graph_index].head;
+		dlist[current_bd->level].head = NULL;
+		dlist[current_bd->level].tail = &dlist[current_bd->level].head;
 	}
 	return 0;
 }
@@ -80,7 +80,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
  * in *head. In case A, return the newly created change descriptor in *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	chdesc_t * rewrite = block->ddesc->index_changes[owner->graph_index].head;
+	chdesc_t * rewrite = block->ddesc->level_changes[owner->level].head;
 	
 	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->ddesc->length || (rewrite->flags & CHDESC_INFLIGHT))
 		return chdesc_create_full(block, owner, data, head);

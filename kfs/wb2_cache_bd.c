@@ -199,7 +199,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	if(!block->ddesc->index_changes[object->graph_index].head)
+	if(!block->ddesc->level_changes[object->level].head)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->below_bd, &slice);
@@ -333,8 +333,8 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			bdesc_t * scan_block = NULL;
 			if(!block->ddesc->in_flight)
 			{
-				chdesc_t * scan = block->ddesc->index_changes[object->graph_index].head;
-				for(; !scan_block && scan; scan = scan->ddesc_index_next)
+				chdesc_t * scan = block->ddesc->level_changes[object->level].head;
+				for(; !scan_block && scan; scan = scan->ddesc_level_next)
 					scan_block = wb2_find_block_before(object, scan, slot->block);
 			}
 			if(scan_block)

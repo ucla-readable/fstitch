@@ -33,13 +33,13 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 	int r;
 	
 	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = next)
+	for(chdesc = block->ddesc->level_changes[object->level].head; chdesc; chdesc = next)
 	{
 		int needs_head = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
 		assert(chdesc->owner == object);
-		next = chdesc->ddesc_index_next;
+		next = chdesc->ddesc_level_next;
 		
 		while(*deps)
 		{

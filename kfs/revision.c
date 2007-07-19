@@ -534,13 +534,13 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 
 		/* push down to update the ready list */
 		link_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
-		chdesc_unlink_index_changes(scan);
+		chdesc_unlink_level_changes(scan);
 		chdesc_unlink_ready_changes(scan);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
 		scan->owner = target;
 		chdesc_propagate_level_change(scan, owner->level, target->level);
 		chdesc_update_ready_changes(scan);
-		chdesc_link_index_changes(scan);
+		chdesc_link_level_changes(scan);
 	}
 
 #if CHDESC_NRB && !CHDESC_RB_NRB_READY
@@ -570,14 +570,14 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 			for(scan = tmp_ready; scan;)
 			{
 				chdesc_t * next = scan->ddesc_next;
-				chdesc_unlink_index_changes(scan);
+				chdesc_unlink_level_changes(scan);
 				chdesc_unlink_ready_changes(scan);
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
 				scan->owner = owner;
 				chdesc_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 				chdesc_update_ready_changes(scan);
-				chdesc_link_index_changes(scan);
+				chdesc_link_level_changes(scan);
 				scan = next;
 			}
 			
@@ -616,11 +616,11 @@ void revision_slice_push_down(revision_slice_t * slice)
 		{
 			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
-			chdesc_unlink_index_changes(slice->ready[i]);
+			chdesc_unlink_level_changes(slice->ready[i]);
 			chdesc_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->owner = slice->target;
 			chdesc_update_ready_changes(slice->ready[i]);
-			chdesc_link_index_changes(slice->ready[i]);
+			chdesc_link_level_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
 				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}
@@ -641,11 +641,11 @@ void revision_slice_pull_up(revision_slice_t * slice)
 		{
 			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
-			chdesc_unlink_index_changes(slice->ready[i]);
+			chdesc_unlink_level_changes(slice->ready[i]);
 			chdesc_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->owner = slice->owner;
 			chdesc_update_ready_changes(slice->ready[i]);
-			chdesc_link_index_changes(slice->ready[i]);
+			chdesc_link_level_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
 				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}

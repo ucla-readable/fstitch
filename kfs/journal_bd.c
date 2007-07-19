@@ -580,7 +580,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numbe
 	struct journal_info * info = (struct journal_info *) object;
 	bdesc_t * journal_block;
 	chdesc_t * chdesc;
-	chdesc_t * chdesc_index_next;
+	chdesc_t * chdesc_level_next;
 	uint32_t number;
 	int r, metadata = !info->only_metadata;
 	
@@ -598,7 +598,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numbe
 	}
 	
 	/* why write a block with no new changes? */
-	if(!block->ddesc->index_changes[object->graph_index].head)
+	if(!block->ddesc->level_changes[object->level].head)
 		return 0;
 	
 	/* there is supposed to always be a transaction going on */
@@ -617,7 +617,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numbe
 			metadata = 1;
 		else
 			/* otherwise, scan for metadata */
-			for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
+			for(chdesc = block->ddesc->level_changes[object->level].head; chdesc; chdesc = chdesc->ddesc_level_next)
 				if(!(chdesc->flags & CHDESC_DATA))
 				{
 					metadata = 1;
@@ -626,13 +626,13 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numbe
 	}
 	
 	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc_index_next)
+	for(chdesc = block->ddesc->level_changes[object->level].head; chdesc; chdesc = chdesc_level_next)
 	{
 		int needs_hold = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
 		assert(chdesc->owner == object);
-		chdesc_index_next = chdesc->ddesc_index_next; /* in case changes */
+		chdesc_level_next = chdesc->ddesc_level_next; /* in case changes */
 		
 		if(metadata)
 		{

@@ -100,9 +100,9 @@ struct chdesc {
 	chdesc_t * ddesc_ready_next;
 	chdesc_t ** ddesc_ready_pprev;
 
-	/* entry in the datadesc_t.index_changes list */
-	chdesc_t * ddesc_index_next;
-	chdesc_t ** ddesc_index_pprev;
+	/* entry in the datadesc_t.level_changes list */
+	chdesc_t * ddesc_level_next;
+	chdesc_t ** ddesc_level_pprev;
 	
 	/* entry in a temporary list */
 	/* TODO: are these two and the ddesc_ready/free fields used concurrently ?
@@ -235,10 +235,10 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 /* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
 static __inline void chdesc_update_ready_changes(chdesc_t * chdesc) __attribute__((always_inline));
 
-/* link chdesc into its ddesc's index_changes list */
-void chdesc_link_index_changes(chdesc_t * chdesc);
-/* unlink chdesc from its ddesc's index_changes list */
-void chdesc_unlink_index_changes(chdesc_t * chdesc);
+/* link chdesc into its ddesc's level_changes list */
+void chdesc_link_level_changes(chdesc_t * chdesc);
+/* unlink chdesc from its ddesc's level_changes list */
+void chdesc_unlink_level_changes(chdesc_t * chdesc);
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc);
 void chdesc_untmpize_all_changes(chdesc_t * chdesc);

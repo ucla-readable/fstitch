@@ -41,8 +41,8 @@ struct datadesc {
 	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
 	
-	/* For each graph index, the chdescs owned by that BD. */
-	chdesc_dlist_t index_changes[NBDINDEX];
+	/* For each level, the chdescs owned by BDs at that level. */
+	chdesc_dlist_t level_changes[NBDLEVEL];
 	
 #if CHDESC_NRB
 	chdesc_t * nrb;
