@@ -1,4 +1,4 @@
-EXTRA_CFLAGS += -I$(src)/.. -fms-extensions
+EXTRA_CFLAGS += -I$(src)/..
 EXTRA_CFLAGS += -DKFSD
 
 # TODO: why do these not work for the below warning test?
