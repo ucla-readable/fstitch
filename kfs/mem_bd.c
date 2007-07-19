@@ -48,7 +48,7 @@ static int mem_bd_get_status(void * object, int level, char * string, size_t len
 }
 #endif
 
-static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct mem_info * info = (struct mem_info *) object;
 	bdesc_t * bdesc;
@@ -56,23 +56,22 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if (bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == nbytes);
 		if (!bdesc->ddesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
 		/* make sure it's a valid block */
-		if (!count || number + count > object->numblocks)
-			return NULL;
+		assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 
-		bdesc = bdesc_alloc(number, object->blocksize, count);
+		bdesc = bdesc_alloc(number, nbytes);
 		if (bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
 	}
 
-	memcpy(bdesc->ddesc->data, &info->blocks[object->blocksize * number], object->blocksize * count);
+	memcpy(bdesc->ddesc->data, &info->blocks[object->blocksize * number], nbytes);
 
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
 	if (bdesc->ddesc->synthetic)
@@ -82,11 +81,11 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	return bdesc;
 }
 
-static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	/* mem_bd doesn't bother with synthetic blocks,
 	 * since it's just as fast to use real ones */
-	return mem_bd_read_block(object, number, count);
+	return mem_bd_read_block(object, number, nbytes);
 }
 
 static int mem_bd_write_block(BD_t * object, bdesc_t * block)

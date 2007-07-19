@@ -451,7 +451,7 @@ UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
 
 	for (i = 0; i < linfo->ncg; i++) {
 		linfo->cg[i].cgblock = CALL(info->ubd, read_block,
-				linfo->cg[i].cylstart + super->fs_cblkno, 1);
+				linfo->cg[i].cylstart + super->fs_cblkno, info->lfs.blocksize);
 		if (!linfo->cg[i].cgblock)
 			goto read_block_failed;
 		bdesc_retain(linfo->cg[i].cgblock);

@@ -324,22 +324,21 @@ static void wbr_shrink_blocks(struct cache_info * info)
 	}
 }
 
-static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
 		/* in the cache, use it */
 		block = slot->block;
-		assert(block->count == count);
+		assert(block->ddesc->length == nbytes);
 		wbr_touch_block_read(info, slot);
 		if(!block->ddesc->synthetic)
 			return block;
@@ -353,7 +352,7 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->below_bd, read_block, number, count);
+	block = CALL(info->below_bd, read_block, number, nbytes);
 	if(!block)
 		return NULL;
 	
@@ -366,21 +365,20 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return block;
 }
 
-static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
 		/* in the cache, use it */
-		assert(slot->block->count == count);
+		assert(slot->block->ddesc->length == nbytes);
 		wbr_touch_block_read(info, slot);
 		return slot->block;
 	}
@@ -391,7 +389,7 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		wbr_shrink_blocks(info);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->below_bd, synthetic_read_block, number, count);
+	block = CALL(info->below_bd, synthetic_read_block, number, nbytes);
 	if(!block)
 		return NULL;
 	
@@ -408,15 +406,13 @@ static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	struct rand_slot * slot;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) block->number);
 	if(slot)
 	{
 		/* already have this block */
 		assert(slot->block->ddesc == block->ddesc);
-		assert(slot->block->count == block->count);
 		wbr_touch_block_read(info, slot);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */

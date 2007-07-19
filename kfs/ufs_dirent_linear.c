@@ -73,7 +73,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, foffset);
 	if (blockno == INVALID_BLOCK)
 		return -ENOENT;
-	block = CALL(info->ubd, read_block, blockno, 1);
+	block = CALL(info->ubd, read_block, blockno, info->lfs.blocksize);
 	if (!block)
 		return -ENOENT;
 
@@ -151,7 +151,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			uint32_t blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
 				return -1;
-			block = CALL(info->ubd, synthetic_read_block, blockno, 1);
+			block = CALL(info->ubd, synthetic_read_block, blockno, info->lfs.blocksize);
 			assert(block); // FIXME Leiz == Lazy
 			r = chdesc_create_init(block, info->ubd, head);
 			assert(r >= 0); // FIXME Leiz == Lazy

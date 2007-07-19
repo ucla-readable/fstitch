@@ -240,7 +240,7 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 		uint32_t limit;
 		uint32_t read_byte = blockoffset + (offset % blocksize) - dataoffset + size_read;
 
-		bdesc = CALL(devfd->bd, read_block, read_byte / blocksize, 1);
+		bdesc = CALL(devfd->bd, read_block, read_byte / blocksize, blocksize);
 		if(!bdesc)
 			return size_read ? size_read : -1;
 
@@ -283,9 +283,9 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 
 		if(!dataoffset && limit == blocksize)
 			/* we can do a synthetic read in this case */
-			bdesc = CALL(devfd->bd, synthetic_read_block, write_byte / blocksize, 1);
+			bdesc = CALL(devfd->bd, synthetic_read_block, write_byte / blocksize, blocksize);
 		else
-			bdesc = CALL(devfd->bd, read_block, write_byte / blocksize, 1);
+			bdesc = CALL(devfd->bd, read_block, write_byte / blocksize, blocksize);
 		if(!bdesc)
 			return size_written ? size_written : -1;
 		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);

@@ -46,20 +46,19 @@ static int block_resizer_bd_get_status(void * object, int level, char * string, 
 }
 #endif
 
-static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct resize_info * info = (struct resize_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	bdesc = CALL(info->below_bd, read_block, number * info->merge_count, count * info->merge_count);
+	bdesc = CALL(info->below_bd, read_block, number * info->merge_count, nbytes);
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / object->blocksize);
+	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -67,20 +66,19 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uin
 	return new_bdesc;
 }
 
-static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct resize_info * info = (struct resize_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	bdesc = CALL(info->below_bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
+	bdesc = CALL(info->below_bd, synthetic_read_block, number * info->merge_count, nbytes);
 	if(!bdesc)
 		return NULL;
 	
-	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / object->blocksize);
+	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number);
 	if(!new_bdesc)
 		return NULL;
 	bdesc_autorelease(new_bdesc);
@@ -95,10 +93,9 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	wblock = bdesc_alloc_wrap(block->ddesc, block->number * info->merge_count, block->ddesc->length / info->original_size);
+	wblock = bdesc_alloc_wrap(block->ddesc, block->number * info->merge_count);
 	if(!wblock)
 		return -1;
 	bdesc_autorelease(wblock);

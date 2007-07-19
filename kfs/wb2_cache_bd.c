@@ -441,20 +441,19 @@ static void wb2_shrink_blocks(wb2_cache_bd_t * info)
 	}
 }
 
-static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
 	block = wb2_map_get_block(info, number);
 	if(block)
 	{
 		/* in the cache, use it */
-		assert(block->count == count);
+		assert(block->ddesc->length == nbytes);
 		wb2_touch_block_read(info, block);
 		if(!block->ddesc->synthetic)
 			return block;
@@ -468,7 +467,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->below_bd, read_block, number, count);
+	block = CALL(info->below_bd, read_block, number, nbytes);
 	if(!block)
 		return NULL;
 	
@@ -480,20 +479,19 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return block;
 }
 
-static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
 	block = wb2_map_get_block(info, number);
 	if(block)
 	{
 		/* in the cache, use it */
-		assert(block->count == count);
+		assert(block->ddesc->length == nbytes);
 		wb2_touch_block_read(info, block);
 		return block;
 	}
@@ -504,7 +502,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		wb2_shrink_blocks(info);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->below_bd, synthetic_read_block, number, count);
+	block = CALL(info->below_bd, synthetic_read_block, number, nbytes);
 	if(!block)
 		return NULL;
 	
@@ -517,8 +515,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	block = wb2_map_get_block(info, block->number);
 	if(block)

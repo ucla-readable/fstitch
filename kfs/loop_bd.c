@@ -54,7 +54,7 @@ static int loop_get_status(void * object, int level, char * string, size_t lengt
 }
 #endif
 
-static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
+static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint32_t nbytes)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) bd;
@@ -62,7 +62,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	bdesc_t * block;
 
 	/* FIXME: make this module support counts other than 1 */
-	assert(count == 1);
+	assert(nbytes == bd->blocksize);
 
 	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * bd->blocksize);
 	if (lfs_bno == INVALID_BLOCK)
@@ -80,7 +80,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	return block;
 }
 
-static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count)
+static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint32_t nbytes)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) bd;
@@ -88,7 +88,7 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 	bdesc_t * block;
 
 	/* FIXME: make this module support counts other than 1 */
-	assert(count == 1);
+	assert(nbytes == bd->blocksize);
 
 	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * bd->blocksize);
 	if (lfs_bno == INVALID_BLOCK)

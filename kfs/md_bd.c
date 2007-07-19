@@ -40,16 +40,15 @@ static int md_bd_get_status(void * object, int level, char * string, size_t leng
 }
 #endif
 
-static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct md_info * info = (struct md_info *) object;
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	read_bdesc = CALL(info->below_bd[number & 1], read_block, number >> 1, count);
+	read_bdesc = CALL(info->below_bd[number & 1], read_block, number >> 1, nbytes);
 	if(!read_bdesc)
 		return NULL;
 	
@@ -61,16 +60,15 @@ static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count
 	return bdesc;
 }
 
-static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct md_info * info = (struct md_info *) object;
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	read_bdesc = CALL(info->below_bd[number & 1], synthetic_read_block, number >> 1, count);
+	read_bdesc = CALL(info->below_bd[number & 1], synthetic_read_block, number >> 1, nbytes);
 	if(!read_bdesc)
 		return NULL;
 	
@@ -89,8 +87,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	wblock = bdesc_alloc_clone(block, block->number >> 1);
 	if(!wblock)

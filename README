@@ -35,3 +35,7 @@ probably better not to use the kfs:/dev file system anyway, since using it
 incorrectly can cause kfsd to crash.
 
 To shut down, just hit ^C to start the shut down process.
+
+To make ext2.img:
+dd if=/dev/zero of=obj/ext2.img bs=2048 count=400000
+mke2fs -F -b 2048 obj/ext2.img

@@ -37,13 +37,13 @@ struct BD {
 	uint32_t numblocks;
 	uint16_t blocksize;
 	uint16_t atomicsize;
-	DECLARE(BD_t, bdesc_t *, read_block, uint32_t number, uint16_t count);
+	DECLARE(BD_t, bdesc_t *, read_block, uint32_t number, uint32_t nbytes);
 	/* This function is used to avoid unnecessary reads. If the block is
 	 * already in memory, it is returned. If not, it is not read in from
 	 * disk: rather, it is synthesized and its synthetic bit is set. Note
 	 * that this behavior is only actually necessary at the terminal BD,
 	 * because this is where it really hurts to do unnecessary reads. */
-	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint16_t count);
+	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint32_t nbytes);
 	DECLARE(BD_t, int, write_block, bdesc_t * block);
 	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
 	DECLARE(BD_t, chdesc_t **, get_write_head);

@@ -212,22 +212,21 @@ static int wb_evict_block(BD_t * object, bool only_dirty)
 	}
 }
 
-static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
 	if(index)
 	{
 		/* in the cache, use it */
 		block = info->blocks[index].block;
-		assert(block->count == count);
+		assert(block->ddesc->length == nbytes);
 		wb_touch_block(info, index);
 		if(!block->ddesc->synthetic)
 			return block;
@@ -242,7 +241,7 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	}
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->below_bd, read_block, number, count);
+	block = CALL(info->below_bd, read_block, number, nbytes);
 	if(!block)
 		return NULL;
 	
@@ -255,21 +254,20 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	return block;
 }
 
-static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
 	if(index)
 	{
 		/* in the cache, use it */
-		assert(info->blocks[index].block->count == count);
+		assert(info->blocks[index].block->ddesc->length == nbytes);
 		wb_touch_block(info, index);
 		return info->blocks[index].block;
 	}
@@ -281,7 +279,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	assert(hash_map_size(info->block_map) < info->size);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->below_bd, synthetic_read_block, number, count);
+	block = CALL(info->below_bd, synthetic_read_block, number, nbytes);
 	if(!block)
 		return NULL;
 	
@@ -299,15 +297,13 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
 	if(index)
 	{
 		/* already have this block */
 		assert(info->blocks[index].block->ddesc == block->ddesc);
-		assert(info->blocks[index].block->count == block->count);
 		wb_touch_block(info, index);
 		
 		return 0;

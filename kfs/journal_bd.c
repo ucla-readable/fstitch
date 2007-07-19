@@ -213,32 +213,28 @@ static int journal_bd_get_status(void * object, int level, char * string, size_t
 }
 #endif
 
-static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct journal_info * info = (struct journal_info *) object;
 	
 	/* FIXME: make this module support counts other than 1 */
-	assert(count == 1);
+	assert(nbytes == object->blocksize);
+
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
-	
-	return CALL(info->below_bd, read_block, number, count);
+	return CALL(info->below_bd, read_block, number, nbytes);
 }
 
-static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct journal_info * info = (struct journal_info *) object;
 	
 	/* FIXME: make this module support counts other than 1 */
-	assert(count == 1);
+	assert(nbytes == object->blocksize);
+
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
-	
-	return CALL(info->below_bd, synthetic_read_block, number, count);
+	return CALL(info->below_bd, synthetic_read_block, number, nbytes);
 }
 
 static void journal_bd_unlock_callback(void * data, int count);
@@ -335,7 +331,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		{
 			/* we need to allocate a new transaction slot */
 			struct commit_record commit;
-			bdesc_t * record = CALL(info->journal, synthetic_read_block, info->trans_slot * info->trans_total_blocks, 1);
+			bdesc_t * record = CALL(info->journal, synthetic_read_block, info->trans_slot * info->trans_total_blocks, object->blocksize);
 			if(!record)
 				return INVALID_BLOCK;
 			Dprintf("%s(): writing subcommit record for slot %d (sequence %u) to journal block %u\n", __FUNCTION__, info->trans_slot, info->trans_seq, record->number);
@@ -367,9 +363,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		/* get next journal block, write block number to journal block number map */
 		number = info->trans_slot * info->trans_total_blocks + 1;
 		if(last % npb)
-			number_block = CALL(info->journal, read_block, number + last / npb, 1);
+			number_block = CALL(info->journal, read_block, number + last / npb, object->blocksize);
 		else
-			number_block = CALL(info->journal, synthetic_read_block, number + last / npb, 1);
+			number_block = CALL(info->journal, synthetic_read_block, number + last / npb, object->blocksize);
 		assert(number_block);
 		
 		data = block->number;
@@ -476,7 +472,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	if(nholds)
 		return -EBUSY;
 	
-	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
+	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, object->blocksize);
 	if(!block)
 	{
 		printf("Can't get the commit record block!\n");
@@ -589,11 +585,10 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	int r, metadata = !info->only_metadata;
 	
 	/* FIXME: make this module support counts other than 1 */
-	assert(block->count == 1);
+	assert(block->ddesc->length == object->blocksize);
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	if(info->recursion)
 	{
@@ -679,7 +674,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		chdesc_t * head;
 		number = journal_bd_lookup_block(object, block);
 		assert(number != INVALID_BLOCK);
-		journal_block = CALL(info->journal, synthetic_read_block, number, 1);
+		journal_block = CALL(info->journal, synthetic_read_block, number, object->blocksize);
 		assert(journal_block);
 		
 		/* copy it to the journal */
@@ -802,7 +797,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	
 	uint32_t block, bnb, db;
 	struct commit_record * cr;
-	bdesc_t * commit_block = CALL(info->journal, read_block, transaction_start, 1);
+	bdesc_t * commit_block = CALL(info->journal, read_block, transaction_start, bd->blocksize);
 	
 	if(!commit_block)
 		return -1;
@@ -863,7 +858,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	{
 		uint32_t index, max = MIN(bnpb, cr->nblocks - block);
 		uint32_t * numbers;
-		bdesc_t * number_block = CALL(info->journal, read_block, bnb, 1);
+		bdesc_t * number_block = CALL(info->journal, read_block, bnb, bd->blocksize);
 		if(!number_block)
 			return -1;
 		bdesc_retain(number_block);
@@ -872,13 +867,13 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		for(index = 0; index != max; index++)
 		{
 			bdesc_t * output;
-			bdesc_t * data_block = CALL(info->journal, read_block, db++, 1);
+			bdesc_t * data_block = CALL(info->journal, read_block, db++, bd->blocksize);
 			r = -1;
 			if(!data_block)
 				goto data_error;
 			bdesc_retain(data_block);
 			
-			output = CALL(info->below_bd, synthetic_read_block, numbers[index], 1);
+			output = CALL(info->below_bd, synthetic_read_block, numbers[index], bd->blocksize);
 			if(!output)
 				goto output_error;
 			
@@ -963,7 +958,7 @@ static int replay_journal(BD_t * bd)
 	for(transaction = 0; transaction < info->cr_count; transaction++)
 	{
 		struct commit_record * cr;
-		bdesc_t * commit_block = CALL(info->journal, read_block, transaction * info->trans_total_blocks, 1);
+		bdesc_t * commit_block = CALL(info->journal, read_block, transaction * info->trans_total_blocks, bd->blocksize);
 		
 		if(!commit_block)
 			return -1;

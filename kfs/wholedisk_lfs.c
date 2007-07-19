@@ -40,12 +40,12 @@ static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int pur
 
 static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(object->blockdev, read_block, number, 1);
+	return CALL(object->blockdev, read_block, number, object->blocksize);
 }
 
 static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(object->blockdev, synthetic_read_block, number, 1);
+	return CALL(object->blockdev, synthetic_read_block, number, object->blocksize);
 }
 
 static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t inode)

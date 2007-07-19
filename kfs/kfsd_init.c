@@ -45,7 +45,7 @@
 
 #define LINUX_BD_TIMING_TEST 0
 
-int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses);
+int construct_uhfses(BD_t *bd, uint32_t cache_nblks, vector_t *uhfses, int prefer);
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs);
 int handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
@@ -189,6 +189,7 @@ int kfsd_init(int nwbblocks)
 	if (use_disk_1)
 	{
 		BD_t * bd = NULL;
+		int prefer = PTABLE_KUDOS_TYPE;
 #ifdef __KERNEL__
 		extern char * linux_device;
 		if (linux_device)
@@ -246,13 +247,15 @@ int kfsd_init(int nwbblocks)
 		if (unix_file)
 		{
 			printf("Using file %s\n", unix_file);
-			if (! (bd = unix_file_bd(unix_file, 512)) )
+			if (!(bd = unix_file_bd(unix_file, 512)))
 				fprintf(stderr, "unix_file(\"%s\") failed\n", unix_file);
+			if (strstr(unix_file, "ext2.img") != 0)
+				prefer = PTABLE_LINUX_TYPE;
 #endif
 		}
 		if (bd)
 		{
-			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, uhfses, prefer)) < 0)
 				return r;
 		}
 	}
@@ -271,7 +274,7 @@ int kfsd_init(int nwbblocks)
 		if (bd)
 		{
 			printf("Using disk 2\n");
-			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, uhfses, PTABLE_KUDOS_TYPE)) < 0)
 				return r;
 		}
 	}
@@ -283,7 +286,7 @@ int kfsd_init(int nwbblocks)
 			fprintf(stderr, "mem_bd(1024, 4096) failed\n");
 		if (bd)
 		{
-			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)
+			if ((r = construct_uhfses(bd, nwbblocks, uhfses, PTABLE_KUDOS_TYPE)) < 0)
 				return r;
 		}
 	}
@@ -399,7 +402,7 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 	if (lfs)
 		printf("Using %s on %s", name, part->description);
 	else if ((lfs = wholedisk(cache)))
-		printf("Using wholedisk on %s", part->description);
+		printf("No LFS; using wholedisk on %s", part->description);
 	else
 	{
 		fprintf(stderr, "\nlfs creation failed\n");
@@ -418,7 +421,7 @@ static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_
 #define construct_lfs(part, cache_nblks, fs, blocksize) construct_lfs(part, cache_nblks, fs, #fs, blocksize)
 
 // Bring up the filesystems for bd and add them to uhfses.
-int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
+ int construct_uhfses(BD_t *bd, uint32_t cache_nblks, vector_t *uhfses, int prefer)
 {
 	void * ptbl = NULL;
 	void * bsdtbl = NULL;
@@ -444,7 +447,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			printf("Partition %d has type %02x\n", i, type);
 			if (type == PTABLE_KUDOS_TYPE || type == PTABLE_LINUX_TYPE)
 			{
-				if (! (part = malloc(sizeof(kfsd_partition_t))) )
+				if (!(part = malloc(sizeof(kfsd_partition_t))))
 				{
 					fprintf(stderr, "OOM, malloc\n");
 					return -ENOMEM;
@@ -489,14 +492,14 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	else
 	{
 		printf("Using whole disk.\n");
-		if (! (part = malloc(sizeof(kfsd_partition_t))) )
+		if (!(part = malloc(sizeof(kfsd_partition_t))))
 		{
 			fprintf(stderr, "OOM, malloc\n");
 			return -ENOMEM;
 		}
 		// No partition table, make it look like a KudOS partition...
 		part->bd = bd;
-		part->type = PTABLE_KUDOS_TYPE;
+		part->type = prefer;
 		part->subtype = 0;
 		snprintf(part->description, 32, "<entire disk>");
 		if (vector_push_back(partitions, part))

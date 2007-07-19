@@ -412,7 +412,7 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	linfo->global_info = info;
 
 	/* the superblock is in sector 16 */
-	linfo->super_block = CALL(info->ubd, read_block, 4, 1);
+	linfo->super_block = CALL(info->ubd, read_block, 4, info->lfs.blocksize);
 	if (!linfo->super_block)
 	{
 		printf("Unable to read superblock!\n");

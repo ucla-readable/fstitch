@@ -47,7 +47,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/sync.o \
 			$(OBJDIR)/kfs/destroy.o
 
-$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a obj/fs/ext2.img
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
 #	For normal usage:

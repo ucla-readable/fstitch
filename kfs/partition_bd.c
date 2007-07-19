@@ -42,16 +42,15 @@ static int partition_bd_get_status(void * object, int level, char * string, size
 }
 #endif
 
-static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	bdesc = CALL(info->below_bd, read_block, info->start + number, count);
+	bdesc = CALL(info->below_bd, read_block, info->start + number, nbytes);
 	if(!bdesc)
 		return NULL;
 	
@@ -63,16 +62,15 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return new_bdesc;
 }
 
-static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	bdesc = CALL(info->below_bd, synthetic_read_block, info->start + number, count);
+	bdesc = CALL(info->below_bd, synthetic_read_block, info->start + number, nbytes);
 	if(!bdesc)
 		return NULL;
 	
@@ -91,8 +89,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 
 	wblock = bdesc_alloc_clone(block, block->number + info->start);
 	if(!wblock)

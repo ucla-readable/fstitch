@@ -47,7 +47,7 @@ static int unix_file_bd_get_config(void * object, int level, char * string, size
 }
 #endif
 
-static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
 	bdesc_t * bdesc;
@@ -57,17 +57,16 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == nbytes);
 		if(!bdesc->ddesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
 		/* make sure it's a valid block */
-		if(!count || number + count > object->numblocks)
-			return NULL;
+		assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 		
-		bdesc = bdesc_alloc(number, object->blocksize, count);
+		bdesc = bdesc_alloc(number, nbytes);
 		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
@@ -89,8 +88,8 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	
 	if(block_log)
-		for(r = 0; r < count; r++)
-			fprintf(block_log, "%p read %u %d\n", object, number + r, r);
+		for(r = 0; r < nbytes; r += object->blocksize)
+			fprintf(block_log, "%p read %u %d\n", object, number + r / object->blocksize, r / object->blocksize);
 	
 	if(bdesc->ddesc->synthetic)
 		bdesc->ddesc->synthetic = 0;
@@ -101,23 +100,22 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return bdesc;
 }
 
-static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
 	bdesc_t * bdesc;
 
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 
 	bdesc = blockman_managed_lookup(info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == nbytes);
 		return bdesc;
 	}
 
-	bdesc = bdesc_alloc(number, object->blocksize, count);
+	bdesc = bdesc_alloc(number, nbytes);
 	if(bdesc == NULL)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -136,12 +134,8 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	int r;
 	int revision_forward, revision_back;
 	off_t seeked;
-	
-	if(block->number + block->count > object->numblocks)
-	{
-		kpanic("wrote bad block number\n");
-		return -EINVAL;
-	}
+
+	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
 
 	r = revision_tail_prepare(block, object);
 	if(r < 0)
