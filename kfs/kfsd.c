@@ -365,6 +365,9 @@ int main(int argc, char * argv[])
 		{
 			unix_file = &argv[i][10];
 			remove_arg(&argc, argv, i--);
+		} else if (strlen(argv[i]) > 4 && strcmp(argv[i] + strlen(argv[i]) - 4, ".img") == 0) {
+			unix_file = argv[i];
+			remove_arg(&argc, argv, i--);
 		}
 #if ALLOW_JOURNAL
 		else if(!strncmp(argv[i], "use_journal=", 12))
