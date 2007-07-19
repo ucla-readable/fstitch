@@ -21,9 +21,11 @@ KMACHINE=kudos-$1.cs.ucla.edu
 host $KMACHINE > /dev/null || arg_error "$0"
 
 rsync --rsh=ssh -vaSz \
+	--exclude=/linux-2.6.15.tar \
 	--exclude=/TAGS --exclude=/tags \
 	--exclude=/time.log --exclude=/prof.log\
 	--exclude=/test --exclude=/tests/ \
+	--exclude=/core --exclude=/uukfsd_debug \
 	--exclude=/obj/ --exclude=/emukern/ \
 	--exclude=/kfs/kkfsd.ko --exclude=/kfs/kkfsd.o \
 	--exclude=/kfs/kkfsd.mod.c --exclude=/kfs/kkfsd.mod.o \
