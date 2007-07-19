@@ -26,12 +26,50 @@
 #define PURPOSE_INDIRECT 2
 #define PURPOSE_DINDIRECT 3
 
+struct ext2_mdirent;
+struct mdirent_dlist {
+	struct ext2_mdirent ** pprev, * next;
+};
+typedef struct mdirent_dlist mdirent_dlist_t;
+
+/* in-memory dirent */
+struct ext2_mdirent {
+	EXT2_Dir_entry_t dirent;
+	char name_term; /* ensure room for dirent.name null termination */
+	uint32_t offset;
+	mdirent_dlist_t offsetl;
+	mdirent_dlist_t freel;
+};
+typedef struct ext2_mdirent ext2_mdirent_t;
+
+/* in-memory directory */
+struct ext2_mdir {
+	inode_t ino; /* inode of this directory */
+	hash_map_t * mdirents; /* file name -> ext2_mdirent */
+	ext2_mdirent_t * offset_first, * offset_last;
+	ext2_mdirent_t * free_first, * free_last;
+	struct ext2_mdir ** lru_polder, * lru_newer;
+};
+typedef struct ext2_mdir ext2_mdir_t;
+
+/* Perhaps this is a good number? */
+#define MAXCACHEDDIRS 1024
+
+struct ext2_mdir_cache {
+	hash_map_t * mdirs_map;
+	ext2_mdir_t mdirs_table[MAXCACHEDDIRS];
+	ext2_mdir_t * lru_oldest, * lru_newest;
+};
+typedef struct ext2_mdir_cache ext2_mdir_cache_t;
+
+
 struct ext2_info {
 	BD_t * ubd;
 	chdesc_t ** write_head;
 	EXT2_Super_t * super;
 	EXT2_group_desc_t * groups;
 	hash_map_t * filemap;
+	ext2_mdir_cache_t mdir_cache;
 	bdesc_t ** gdescs;
 	bdesc_t * super_cache;
 	bdesc_t * bitmap_cache;
@@ -72,12 +110,13 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs);
 static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode);
 static uint8_t ext2_to_kfs_type(uint16_t type);
-static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head);
+static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * dir, ext2_mdirent_t * mdirent, chdesc_t ** head);
 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
 int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** head);
 int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, chdesc_pass_set_t * befores);
 
+DECLARE_POOL(ext2_mdirent, ext2_mdirent_t);
 DECLARE_POOL(ext2_fdesc, ext2_fdesc_t);
 static int n_ext2_instances;
 
@@ -106,6 +145,390 @@ static int check_super(LFS_t * object)
 	
 	return 0;
 }
+
+static bool dirent_has_free_space(const EXT2_Dir_entry_t * entry)
+{
+	if(!entry->inode)
+		return 1;
+	// FIXME: should 8 be 12? (eg dirent "a" has rec_len 12)
+	if(entry->rec_len - (12 + entry->name_len) > 0)
+		return 1;
+	return 0;
+}
+
+// Return the previous (offset-wise) mdirent
+static ext2_mdirent_t * ext2_mdirent_offset_prev(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent)
+{
+	if(mdir->offset_first == mdirent)
+		return NULL;
+	return container_of(mdirent->offsetl.pprev, ext2_mdirent_t, offsetl.next);
+}
+
+// Return the next mdirent with free space
+static ext2_mdirent_t * ext2_mdirent_next_free(const ext2_mdir_t * mdir, const ext2_mdirent_t * used)
+{
+	ext2_mdirent_t * mdirent;
+	if(!mdir->free_last || mdir->free_last->offset < used->offset)
+		return NULL;
+	for(mdirent = used->offsetl.next; mdirent; mdirent = mdirent->offsetl.next)
+		if(mdirent->freel.pprev)
+			return mdirent;
+	assert(0);
+	return NULL;
+}
+
+// Insert mdirent into the free list
+static void ext2_mdirent_insert_free_list(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent)
+{
+	ext2_mdirent_t * next = ext2_mdirent_next_free(mdir, mdirent);
+	if(next)
+	{
+		mdirent->freel.next = next;
+		mdirent->freel.pprev = next->freel.pprev;
+		*mdirent->freel.pprev = mdirent;
+		next->freel.pprev = &mdirent->freel.next;
+	}
+	else
+	{
+		mdirent->freel.pprev = &mdir->free_last->freel.next;
+		*mdirent->freel.pprev = mdirent;
+		mdirent->freel.next = NULL;
+		mdir->free_last = mdirent;
+	}
+}
+
+// Remove mdirent from the free list
+static void ext2_mdirent_remove_free_list(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent)
+{
+	*mdirent->freel.pprev = mdirent->freel.next;
+	if(mdirent->freel.next)
+		mdirent->freel.next->freel.pprev = mdirent->freel.pprev;
+	else if(mdir->free_first != mdirent)
+		mdir->free_last = container_of(mdirent->freel.pprev, ext2_mdirent_t, freel.next);
+	else
+		mdir->free_last = NULL;
+}
+
+// Return the mdirent in mdir named 'name'
+static ext2_mdirent_t * ext2_mdirent_get(ext2_mdir_t * mdir, const char * name)
+{
+	return hash_map_find_val(mdir->mdirents, name);
+}
+
+static void ext2_mdirents_free(ext2_mdir_t * mdir)
+{
+	ext2_mdirent_t * mdirent;
+	hash_map_clear(mdir->mdirents);
+	for(mdirent = mdir->offset_first; mdirent; mdirent = mdirent->offsetl.next)
+		ext2_mdirent_free(mdirent);
+	mdir->offset_first = mdir->offset_last = NULL;
+	mdir->free_first = mdir->free_last = NULL;
+}
+
+// Add a new mdirent to mdir
+static int ext2_mdirent_add(ext2_mdir_t * mdir, const EXT2_Dir_entry_t * entry, uint32_t offset)
+{
+	ext2_mdirent_t * mdirent = ext2_mdirent_alloc();
+	int r;
+	if(!mdirent)
+		return -ENOMEM;
+
+	memcpy(&mdirent->dirent, entry, MIN(entry->rec_len, sizeof(*entry)));
+	mdirent->dirent.name[mdirent->dirent.name_len] = 0;
+	mdirent->offset = offset;
+
+	r = hash_map_insert(mdir->mdirents, mdirent->dirent.name, mdirent);
+	if(r < 0)
+	{
+		ext2_mdirent_free(mdirent);
+		return r;
+	}
+	assert(!r);
+
+	if(!mdir->offset_first)
+		mdirent->offsetl.pprev = &mdir->offset_first;
+	else
+	{
+		assert(mdir->offset_last->offset + mdir->offset_last->dirent.rec_len == offset);
+		mdirent->offsetl.pprev = &mdir->offset_last->offsetl.next;
+	}
+	*mdirent->offsetl.pprev = mdirent;
+	mdirent->offsetl.next = NULL;
+	mdir->offset_last = mdirent;
+
+	if(dirent_has_free_space(entry))
+	{
+		if(!mdir->free_last)
+			mdirent->freel.pprev = &mdir->free_first;
+		else
+			mdirent->freel.pprev = &mdir->free_last->freel.next;
+		*mdirent->freel.pprev = mdirent;
+		mdirent->freel.next = NULL;
+		mdir->free_last = mdirent;
+	}
+	else
+	{
+		mdirent->freel.pprev = NULL;
+		mdirent->freel.next = NULL;
+	}
+
+	return 0;
+}
+
+// Mark mdirent as used
+static int ext2_mdirent_use(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, const EXT2_Dir_entry_t * entry)
+{
+	int r;
+	assert(!mdirent->dirent.inode);
+	assert(mdirent->dirent.rec_len == entry->rec_len);
+
+	memcpy(&mdirent->dirent, entry, MIN(entry->rec_len, sizeof(*entry)));
+	mdirent->dirent.name[entry->name_len] = 0;
+	r = hash_map_insert(mdir->mdirents, mdirent->dirent.name, mdirent);
+	if(r < 0)
+		return r;
+
+	if(!dirent_has_free_space(entry))
+		ext2_mdirent_remove_free_list(mdir, mdirent);
+
+	return 0;
+}
+
+// Mark mdirent as unused
+static void ext2_mdirent_clear(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, uint32_t blocksize)
+{
+	ext2_mdirent_t * mde = hash_map_erase(mdir->mdirents, mdirent->dirent.name);
+	assert(mde == mdirent);
+
+	if(!(mdirent->offset % blocksize))
+	{
+		// convert to a jump (empty) dirent
+		mdirent->dirent.inode = 0;
+		if(!mdirent->freel.pprev)
+			ext2_mdirent_insert_free_list(mdir, mdirent);
+	}
+	else
+	{
+		// merge into the previous dirent
+		ext2_mdirent_t * oprev = ext2_mdirent_offset_prev(mdir, mdirent);
+		oprev->dirent.rec_len += mdirent->dirent.rec_len;
+
+		oprev->offsetl.next = mdirent->offsetl.next;
+		if(mdirent->offsetl.next)
+			mdirent->offsetl.next->offsetl.pprev = &oprev->offsetl.next;
+		else
+			mdir->offset_last = oprev;
+
+		if(oprev->freel.pprev)
+		{
+			if(mdirent->freel.pprev)
+			{
+				oprev->freel.next = mdirent->freel.next;
+				if(oprev->freel.next)
+					oprev->freel.next->freel.pprev = &oprev->freel.next;
+				else
+					mdir->free_last = oprev;
+			}
+		}
+		else
+		{
+			if(mdirent->freel.pprev)
+			{
+				oprev->freel.pprev = mdirent->freel.pprev;
+				*oprev->freel.pprev = oprev;
+				oprev->freel.next = mdirent->freel.next;
+				if(oprev->freel.next)
+					oprev->freel.next->freel.pprev = &oprev->freel.next;
+				else
+					mdir->free_last = oprev;
+			}
+			else
+				ext2_mdirent_insert_free_list(mdir, oprev);
+		}
+
+		ext2_mdirent_free(mdirent);
+	}
+}
+
+// Split a new dirent out of mdirent's unused space
+static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, const EXT2_Dir_entry_t * existing_dirent, const EXT2_Dir_entry_t * new_dirent)
+{
+	ext2_mdirent_t * nmdirent = ext2_mdirent_alloc();
+	int r;
+	if(!nmdirent)
+		return -ENOMEM;
+
+	memcpy(&nmdirent->dirent, new_dirent, MIN(new_dirent->rec_len, sizeof(*new_dirent)));
+	nmdirent->dirent.name[nmdirent->dirent.name_len] = 0;
+
+	r = hash_map_insert(mdir->mdirents, nmdirent->dirent.name, nmdirent);
+	if(r < 0)
+	{
+		ext2_mdirent_free(nmdirent);
+		return r;
+	}
+	assert(!r);
+
+	mdirent->dirent.rec_len = existing_dirent->rec_len;
+	nmdirent->offset = mdirent->offset + mdirent->dirent.rec_len;
+
+	nmdirent->offsetl.next = mdirent->offsetl.next;
+	nmdirent->offsetl.pprev = &mdirent->offsetl.next;
+	*nmdirent->offsetl.pprev = nmdirent;
+	if(nmdirent->offsetl.next)
+		nmdirent->offsetl.next->offsetl.pprev = &nmdirent->offsetl.next;
+	else
+		mdir->offset_last = nmdirent;
+
+	if(dirent_has_free_space(new_dirent))
+	{
+		nmdirent->freel.pprev = mdirent->freel.pprev;
+		*nmdirent->freel.pprev = nmdirent;
+		nmdirent->freel.next = mdirent->freel.next;
+		if(nmdirent->freel.next)
+			nmdirent->freel.next->freel.pprev = &nmdirent->freel.next;
+		else
+			mdir->free_last = nmdirent;
+	}
+	else
+		ext2_mdirent_remove_free_list(mdir, mdirent);
+
+	return 0;
+}
+
+// Add a directory to the directory cache
+static int ext2_mdir_add(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t ** pmdir)
+{
+	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	ext2_mdir_cache_t * cache = &info->mdir_cache;
+	ext2_mdir_t * mdir = cache->lru_oldest;
+	uint32_t cur_base = 0, next_base = 0;
+	int r;
+
+	if(mdir->ino != INODE_NONE)
+	{
+		ext2_mdirents_free(mdir); // Oldest mdir is still alive. Free it.
+		hash_map_erase(cache->mdirs_map, (void *) mdir->ino);
+	}
+	mdir->ino = dir_file->f_ino;
+	mdir->offset_first = mdir->offset_last = NULL;
+	mdir->free_first = mdir->free_last = NULL;
+	r = hash_map_insert(info->mdir_cache.mdirs_map, (void *) mdir->ino, mdir);
+	if(r < 0)
+		return r;
+	
+	// This reads the entire directory. Would it be better to read on demand?
+	for(; cur_base < dir_file->f_inode.i_size; cur_base = next_base)
+	{
+		const EXT2_Dir_entry_t * entry;
+		// TODO: pass disk block to ext2_get_disk_dirent()?
+		// or have it use an internal single item cache?
+		r = ext2_get_disk_dirent(object, dir_file, &next_base, &entry);
+		if(r < 0)
+		{
+			printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
+			goto fail;
+		}
+		r = ext2_mdirent_add(mdir, entry, cur_base);
+		if(r < 0)
+		{
+			printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
+			goto fail;
+		}
+	}
+
+	// Update mdir lru list to make mdir the most recent
+	mdir->lru_newer->lru_polder = mdir->lru_polder;
+	*mdir->lru_polder = mdir->lru_newer;
+	mdir->lru_polder = &info->mdir_cache.lru_newest->lru_newer;
+	*mdir->lru_polder = mdir;
+	mdir->lru_newer = NULL;
+	info->mdir_cache.lru_newest = mdir;
+	
+	*pmdir = mdir;
+	return 0;
+
+  fail:
+	mdir->ino = INODE_NONE;
+	ext2_mdirents_free(mdir);
+	return r;
+}
+
+// Get (and create, if it does not exist) a directory from the mdir cache
+static int ext2_mdir_get(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t ** pmdir)
+{
+	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	ext2_mdir_cache_t * cache = &info->mdir_cache;
+	ext2_mdir_t * mdir = hash_map_find_val(cache->mdirs_map, (void *) dir_file->f_ino);
+
+	if(mdir)
+	{
+		if(mdir->lru_newer)
+		{
+			// Update lru list to make mdir the most recent
+			mdir->lru_newer->lru_polder = mdir->lru_polder;
+			*mdir->lru_polder = mdir->lru_newer;
+			mdir->lru_polder = &cache->lru_newest->lru_newer;
+			*mdir->lru_polder = mdir;
+			mdir->lru_newer = NULL;
+			cache->lru_newest = mdir;
+		}
+		*pmdir = mdir;
+		return 0;
+	}
+
+	return ext2_mdir_add(object, dir_file, pmdir);
+}
+
+static void ext2_mdir_cache_deinit(ext2_mdir_cache_t * cache)
+{
+	size_t i;
+	hash_map_destroy(cache->mdirs_map);
+	for(i = 0; i < MAXCACHEDDIRS; i++)
+	{
+		ext2_mdirents_free(&cache->mdirs_table[i]);
+		hash_map_destroy(cache->mdirs_table[i].mdirents);
+	}
+}
+
+static int ext2_mdir_cache_init(ext2_mdir_cache_t * cache)
+{
+	size_t i;
+
+	cache->mdirs_map = hash_map_create_size(MAXCACHEDDIRS, 0);
+	if(!cache->mdirs_map)
+		return -ENOMEM;
+
+	for(i = 0; i < MAXCACHEDDIRS; i++)
+	{
+		cache->mdirs_table[i].ino = INODE_NONE;
+		cache->mdirs_table[i].mdirents = hash_map_create_str();
+		cache->mdirs_table[i].offset_first = NULL;
+		cache->mdirs_table[i].offset_last = NULL;
+		cache->mdirs_table[i].free_first = NULL;
+		cache->mdirs_table[i].free_last = NULL;
+		if(!cache->mdirs_table[i].mdirents)
+		{
+			ext2_mdir_cache_deinit(cache);
+			return -ENOMEM;
+		}
+	}
+	
+	cache->lru_oldest = &cache->mdirs_table[0];
+	cache->lru_oldest->lru_polder = &cache->lru_oldest;
+	cache->lru_oldest->lru_newer = &cache->mdirs_table[1];
+	for(i = 1; i < MAXCACHEDDIRS - 1; i++)
+	{
+		cache->mdirs_table[i].lru_polder = &cache->mdirs_table[i - 1].lru_newer;
+		cache->mdirs_table[i].lru_newer = &cache->mdirs_table[i + 1];
+	}
+	cache->lru_newest = &cache->mdirs_table[MAXCACHEDDIRS - 1];
+	cache->lru_newest->lru_polder = &cache->mdirs_table[MAXCACHEDDIRS - 2].lru_newer;
+	cache->lru_newest->lru_newer = NULL;
+	
+	return 0;
+}
+
 
 /* When round robin allocation is enabled, *blockno is used as the minimum block
  * number to allocate (unless we wrap around the end of the file system).
@@ -559,114 +982,13 @@ static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 	}
 }
 
-// Try to find a file named "name" in dir. If so, set *file to it.
-static int dir_lookup(LFS_t * object, ext2_fdesc_t * f, const char* name, uint32_t * basep,
-                      uint32_t * pbasep, uint32_t * ppbasep, ext2_fdesc_t ** file)
-{
-	Dprintf("EXT2DEBUG: dir_lookup %s\n", name);
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	uint32_t name_length = strlen(name);
-	bdesc_t * dirblock1 = NULL, * dirblock2 = NULL;
-	uint32_t blockno, file_blockno1, file_blockno2, num_file_blocks, block_offset;
-	EXT2_Dir_entry_t entry;
-	
-	num_file_blocks = f->f_inode.i_blocks / (info->block_size / 512);
-	
-	for(;;)
-	{
-		blockno = *basep / info->block_size;
-		file_blockno1 = get_file_block(object, f, *basep);
-
-		if(file_blockno1 == INVALID_BLOCK)
-			goto dir_lookup_error;
-		
-		dirblock1 = CALL(info->ubd, read_block, file_blockno1, 1);
-		if(!dirblock1)
-			goto dir_lookup_error;
-
-		while((*basep / info->block_size) == blockno)
-		{
-			*ppbasep = *pbasep;
-			*pbasep = *basep;
-			
-			if(*basep >= f->f_inode.i_size)
-				goto dir_lookup_error;
-			
-			block_offset = *basep % info->block_size;
-			
-			/* check if the rec_len is available yet */
-			uint16_t rec_len;
-			if(info->block_size - block_offset >= 6)
-			{
-				rec_len = *((uint16_t *) (dirblock1->ddesc->data + block_offset + 4));
-				if (*basep + rec_len > f->f_inode.i_size)
-					goto dir_lookup_error;
-			}
-			else
-				rec_len = 0;
-			
-			/* if the dirent overlaps two blocks */
-			if(rec_len == 0 || block_offset + rec_len > info->block_size)
-			{
-				if(blockno + 1 >= f->f_inode.i_blocks)
-					return -1;
-				
-				file_blockno2 = get_file_block(object, f, *basep + sizeof(EXT2_Dir_entry_t));
-				if(file_blockno2 == INVALID_BLOCK)
-					return -1;
-				
-				dirblock2 = CALL(info->ubd, read_block, file_blockno2, 1);
-				if(!dirblock2)
-					return -1; // should be: -ENOENT;
-				//TODO: Clean this up for the weird case of large rec_lens due to lots of deletes
-				uint32_t block1_len, block2_len;
-				block1_len = info->block_size - block_offset;
-				block2_len = sizeof(EXT2_Dir_entry_t) - block1_len;
-				if(block1_len > sizeof(EXT2_Dir_entry_t))
-					block2_len = 0;
-				if(block1_len > sizeof(EXT2_Dir_entry_t))
-					block1_len = sizeof(EXT2_Dir_entry_t);
-				
-				/* copy each part from each block into the dir entry */
-				memcpy(&entry, dirblock1->ddesc->data + block_offset, block1_len);
-				memcpy((uint8_t*)(&entry) + block1_len, dirblock2->ddesc->data, block2_len);
-				*basep += entry.rec_len;
-				if(entry.name_len == name_length && !strncmp(entry.name, name, entry.name_len))
-				{
-					*file = (ext2_fdesc_t *) ext2_lookup_inode(object, entry.inode);
-					if(!*file)
-						goto dir_lookup_error;
-					return 0;
-				}
-			}
-			else
-			{
-				EXT2_Dir_entry_t * pdirent = (EXT2_Dir_entry_t *) (dirblock1->ddesc->data + block_offset);
-				*basep += pdirent->rec_len;
-				if(pdirent->name_len == name_length && !strncmp(pdirent->name, name, pdirent->name_len))
-				{
-					*file = (ext2_fdesc_t *) ext2_lookup_inode(object, pdirent->inode);
-					if(!*file)
-						goto dir_lookup_error;
-					return 0;
-				}
-			}
-		}
-	}
-	
-dir_lookup_error:
-	Dprintf("EXT2DEBUG: dir_lookup done: NOT FOUND\n");
-	return -ENOENT;
-}
-
 static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("EXT2DEBUG: ext2_lookup_name %s\n", name);
 	ext2_fdesc_t * fd;
 	ext2_fdesc_t * parent_file;
-	uint32_t basep = 0;
-	const EXT2_Dir_entry_t * entry;
-	uint32_t name_length = strlen(name);
+	ext2_mdir_t * mdir;
+	ext2_mdirent_t * mdirent;
 	int r = 0;
 	
 	//TODO do some sanity checks on name
@@ -679,24 +1001,27 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 		return -ENOENT;
 	if(fd->f_type != TYPE_DIR)
 		return -ENOTDIR;
-	
 	parent_file = fd;
-	while(r >= 0)
+	
+	r = ext2_mdir_get(object, parent_file, &mdir);
+	if(r < 0)
+		goto exit;
+	mdirent = ext2_mdirent_get(mdir, name);
+	if(mdirent)
 	{
-		r = ext2_get_disk_dirent(object, parent_file, &basep, &entry);
-		if(!r && entry->inode && entry->name_len == name_length && !strncmp(entry->name, name, entry->name_len))
-		{
-			fd = (ext2_fdesc_t *) ext2_lookup_inode(object, entry->inode);
-			break;
-		}
+		fd = (ext2_fdesc_t *) ext2_lookup_inode(object, mdirent->dirent.inode);
+		if(fd && ino)
+			*ino = fd->f_ino;
 	}
-	if(fd && ino)
-		*ino = fd->f_ino;
+	else
+		r = -ENOENT;
+	
+  exit:
 	if(fd != parent_file)
 		ext2_free_fdesc(object, (fdesc_t *) fd);
 	ext2_free_fdesc(object, (fdesc_t *) parent_file);
 	if(r < 0)
-		return -ENOENT;
+		return r;
 	return 0;
 }
 
@@ -1094,10 +1419,16 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 	int r;
 	//check: off end of file?
 	if (!parent || !dirent_exists || !dirent_new || !tail)
+	{
+		printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 		return -EINVAL;
+	}
 
 	if (basep + dirent_exists->rec_len + dirent_new->rec_len > parent->f_inode.i_size)
+	{
+		printf("%s(): fail at line %d (basep = %u, exists = %d, new = %d, size = %u\n", __FUNCTION__, __LINE__, basep, dirent_exists->rec_len, dirent_new->rec_len, parent->f_inode.i_size);
 		return -EINVAL;
+	}
 
 	uint32_t exists_rec_len_actual = dirent_rec_len(dirent_exists->name_len);
 	uint32_t new_rec_len_actual = dirent_rec_len(dirent_new->name_len);
@@ -1109,25 +1440,37 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
 		blockno = get_file_block(object, parent, basep);
 		if (blockno == INVALID_BLOCK)
+		{
+			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return -1;
+		}
 
 		basep %= info->block_size;
 
 		dirblock = CALL(info->ubd, read_block, blockno, 1);
 		if (!dirblock)
+		{
+			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return -1;
+		}
 
 		memcpy(entries, dirent_exists, exists_rec_len_actual);
 		memcpy((void *) entries + exists_rec_len_actual, dirent_new, new_rec_len_actual);
 
 		if ((r = chdesc_create_byte_set(dirblock, info->ubd, basep, exists_rec_len_actual + new_rec_len_actual, (void *) entries, tail, befores )) < 0)
+		{
+			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return r;
+		}
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent '%s'", dirent_new->name);
 		dirblock->ddesc->flags |= BDESC_FLAG_DIRENT;
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
+		{
+			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return r;
+		}
 	} else
 		kpanic("overlapping dirent");
 	return 0;
@@ -1188,7 +1531,8 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	Dprintf("EXT2DEBUG: ext2_insert_dirent %s\n", new_dirent->name);
 	const EXT2_Dir_entry_t * entry;
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	uint32_t basep = 0, prev_basep = 0, new_block;
+	uint32_t prev_eof = parent->f_inode.i_size, new_block;
+	ext2_mdir_t * mdir;
 	int r = 0, newdir = 0;
 	bdesc_t * block;
 	chdesc_t * append_chdesc;
@@ -1198,35 +1542,64 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	if (parent->f_inode.i_size == 0)
 		newdir = 1;
 	
-	while (r >= 0 && !newdir) {
-		r = ext2_get_disk_dirent(object, parent, &basep, &entry);
-		if (r == -1)
-			return r;
-		else if (r < 0)
-			return r;
-
-		//check if we can overwrite a jump dirent:
-		if (!entry->inode && entry->rec_len >= new_dirent->rec_len) {
-			new_dirent->rec_len = entry->rec_len;
-			return ext2_write_dirent_set(object, parent, new_dirent, prev_basep, tail, befores);
+	r = ext2_mdir_get(object, parent, &mdir);
+	if(r < 0)
+		return r;
+	
+	if(!newdir)
+	{
+		ext2_mdirent_t * mdirent = mdir->free_first;
+		for(; mdirent; mdirent = mdirent->freel.next)
+		{
+			if(!mdirent->dirent.inode && mdirent->dirent.rec_len >= new_dirent->rec_len)
+			{
+				uint32_t offset = mdirent->offset;
+				new_dirent->rec_len = mdirent->dirent.rec_len;
+				r = ext2_mdirent_use(mdir, mdirent, new_dirent);
+				if(r < 0)
+				{
+					printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
+					return r;
+				}
+				r = ext2_write_dirent_set(object, parent, new_dirent, offset, tail, befores);
+				if(r < 0)
+					ext2_mdirent_clear(mdir, mdirent, info->block_size);
+				return r;
+			}
+			if(mdirent->dirent.inode && mdirent->dirent.rec_len - (8 + mdirent->dirent.name_len) > new_dirent->rec_len)
+			{
+				EXT2_Dir_entry_t entry_updated;
+				uint16_t entry_updated_len;
+				uint32_t existing_offset = mdirent->offset;
+				uint32_t new_offset;
+				uint16_t backup_rec_len = new_dirent->rec_len;
+				r = ext2_get_disk_dirent(object, parent, &existing_offset, &entry);
+				if(r < 0)
+				{
+					printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
+					return r;
+				}
+				existing_offset = mdirent->offset;
+				memcpy(&entry_updated, entry, MIN(entry->rec_len, sizeof(entry_updated)));
+				entry_updated_len = dirent_rec_len(entry_updated.name_len);
+				new_dirent->rec_len = entry_updated.rec_len - entry_updated_len;
+				entry_updated.rec_len = entry_updated_len;
+				
+				new_offset = existing_offset + entry_updated.rec_len;
+				r = ext2_mdirent_split(mdir, mdirent, &entry_updated, new_dirent);
+				if(r < 0)
+				{
+					new_dirent->rec_len = backup_rec_len;
+					return r;
+				}
+				r = ext2_write_dirent_extend_set(object, parent, &entry_updated, new_dirent, existing_offset, tail, befores);
+				if(r < 0)
+					assert(0); // TODO: join the existing and new mdirents
+				return r;
+			}
 		}
-
-		//check if we can insert the dirent:
-		else if ((entry->rec_len - (8 + entry->name_len)) > new_dirent->rec_len) {
-			EXT2_Dir_entry_t entry_updated;
-			uint16_t entry_updated_len;
-			memcpy(&entry_updated, entry, MIN(entry->rec_len, sizeof(entry_updated)));
-			entry_updated_len = dirent_rec_len(entry_updated.name_len);
-			new_dirent->rec_len = entry_updated.rec_len - entry_updated_len;
-			entry_updated.rec_len = entry_updated_len;
-			return ext2_write_dirent_extend_set(object, parent, &entry_updated, new_dirent, prev_basep, tail, befores);
-		}
-		//detect the end of file, and break
-		if (prev_basep + entry->rec_len == parent->f_inode.i_size)
-			break;
-		prev_basep = basep;
 	}
-
+	
 	//test the aligned case! test by having a 16 whatever file
 	new_block = ext2_allocate_block(object, (fdesc_t *) parent, PURPOSE_DIRDATA, &set.array[0]);
 	if (new_block == INVALID_BLOCK)
@@ -1250,8 +1623,15 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	lfs_add_fork_head(append_chdesc);
 	
 	new_dirent->rec_len = info->block_size;
-	basep = newdir ? 0 : prev_basep + entry->rec_len;
-	return ext2_write_dirent_set(object, parent, new_dirent, basep, tail, PASS_CHDESC_SET(set));
+	r = ext2_mdirent_add(mdir, new_dirent, prev_eof);
+	if(r < 0)
+	{
+		printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
+		return r;
+	}
+	r = ext2_write_dirent_set(object, parent, new_dirent, prev_eof, tail, PASS_CHDESC_SET(set));
+	assert(r >= 0); // need to undo ext2_dir_add()
+	return r;
 }
 
 static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
@@ -1717,160 +2097,150 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 {
 	Dprintf("EXT2DEBUG: ext2_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	ext2_fdesc_t * old, * new, * oldpar, * newpar;
-	size_t oldlen = strlen(oldname), newlen = strlen(newname);
-	int r, existing = 0;
-	uint32_t basep = 0, prev_basep = 0, prev_prev_basep = 0;
-	const EXT2_Dir_entry_t * old_dirent;
-	const EXT2_Dir_entry_t * new_dirent;
+	ext2_mdir_t * omdir, * nmdir;
+	ext2_mdirent_t * omdirent, * nmdirent;
+	ext2_fdesc_t * fold, * fnew, * foparent, * fnparent;
+	bool existing = 0;
 	inode_t newino;
 	chdesc_t * prev_head = NULL;
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
+	int r;
 	
-	if (!head || oldlen > EXT2_NAME_LEN || newlen > EXT2_NAME_LEN)
+	if (!head)
+		return -EINVAL;
+	if (strlen(oldname) > EXT2_NAME_LEN || strlen(newname) > EXT2_NAME_LEN)
 		return -EINVAL;
 
-	if (!strcmp(oldname, newname) && (oldparent == newparent))
+	if (oldparent == newparent && !strcmp(oldname, newname))
 		return 0;
 
-	oldpar = (ext2_fdesc_t *) ext2_lookup_inode(object, oldparent);
-	if (!oldpar)
+	foparent = (ext2_fdesc_t *) ext2_lookup_inode(object, oldparent);
+	if (!foparent)
 		return -ENOENT;
-
-	for (r = 0; r >= 0; )
+	r = ext2_mdir_get(object, foparent, &omdir);
+	if (r < 0)
+		goto exit_foparent;
+	omdirent = ext2_mdirent_get(omdir, oldname);
+	if (!omdirent)
 	{
-		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
-		if (!r && old_dirent->name_len == oldlen && !strncmp(old_dirent->name, oldname, oldlen))
-			break;
-		if (r < 0)
-			goto ext2_rename_exit;
-	}
-
-	old = (ext2_fdesc_t *) ext2_lookup_inode(object, old_dirent->inode);
-	if (!old) {
 		r = -ENOENT;
-		goto ext2_rename_exit;
+		goto exit_foparent;
 	}
-
-	newpar = (ext2_fdesc_t *) ext2_lookup_inode(object, newparent);
-	if (!newpar) {
-		r = -ENOENT;
-		goto ext2_rename_exit2;
-	}
-	
-	basep = 0;
-	for (r = 0; r >= 0;)
+	fold = (ext2_fdesc_t *) ext2_lookup_inode(object, omdirent->dirent.inode);
+	if (!fold)
 	{
-		r = ext2_get_disk_dirent(object, newpar, &basep, &new_dirent);
-		if (!r && new_dirent->name_len == newlen && !strncmp(new_dirent->name, newname, newlen)) {
-			new = (ext2_fdesc_t *) ext2_lookup_inode(object, new_dirent->inode);
-			break;
-		}
-		
-		if (r == -ENOENT || r == -1) {
-			new = NULL;
-			break;
-		}
-
-		if (r < 0)
-			goto ext2_rename_exit3;
+		r = -ENOENT;
+		goto exit_foparent;
 	}
 
-	if (new) {
+	fnparent = (ext2_fdesc_t *) ext2_lookup_inode(object, newparent);
+	if (!fnparent)
+	{
+		r = -ENOENT;
+		goto exit_fold;
+	}
+	r = ext2_mdir_get(object, fnparent, &nmdir);
+	if (r < 0)
+		goto exit_fold;
+	nmdirent = ext2_mdirent_get(nmdir, newname);
+	if (nmdirent)
+		fnew = (ext2_fdesc_t *) ext2_lookup_inode(object, nmdirent->dirent.inode);
+	else
+		fnew = NULL;
+
+	if (fnew)
+	{
 		EXT2_Dir_entry_t copy;
-		memcpy(&copy, new_dirent, MIN(new_dirent->rec_len, sizeof(copy)));
 
 		// Overwriting a directory makes little sense
-		if (new->f_type == TYPE_DIR) {
+		if (fnew->f_type == TYPE_DIR)
+		{
 			r = -ENOTEMPTY;
-			goto ext2_rename_exit4;
+			goto exit_fnew;
 		}
+
+		memcpy(&copy, &nmdirent->dirent, MIN(nmdirent->dirent.rec_len, sizeof(copy)));
+		copy.inode = fold->f_ino;
 
 		// File already exists
 		existing = 1;
 
-		copy.inode = old->f_ino;
-		r = ext2_write_dirent(object, newpar, &copy, basep, head);
+		r = ext2_write_dirent(object, fnparent, &copy, nmdirent->offset, head);
 		if (r < 0)
-			goto ext2_rename_exit4;
+			goto exit_fnew;
 		prev_head = *head;
+		nmdirent->dirent.inode = copy.inode;
 
-		old->f_inode.i_links_count++;
-		r = ext2_write_inode(info, old->f_ino, &old->f_inode, head);
-		if (r < 0)
-			goto ext2_rename_exit4;
+		fold->f_inode.i_links_count++;
+		r = ext2_write_inode(info, fold->f_ino, &fold->f_inode, head);
+		assert(r >= 0); // recover mdir and mdirent changes; then exit_fnew
 	}
-	else {
+	else
+	{
 		// Link files together
-		new = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, old->f_type, (fdesc_t *) old, &emptymd, &newino, head);
-		if (!new) {
+		fnew = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, fold->f_type, (fdesc_t *) fold, &emptymd, &newino, head);
+		if (!fnew)
+		{
 			r = -1;
-			goto ext2_rename_exit3;
+			goto exit_fnparent;
 		}
 		//assert(new_dirent->inode == newino);
 	}
 
-	basep = 0;
-	for (r = 0; r >= 0; )
+	r = ext2_delete_dirent(object, foparent, omdir, omdirent, head);
+	if (r < 0)
+		goto exit_fnew;
+
+	fold->f_inode.i_links_count--;
+	r = ext2_write_inode(info, fold->f_ino, &fold->f_inode, head);
+	if (r < 0)
+		goto exit_fnew;
+
+	if (existing)
 	{
-		prev_prev_basep = prev_basep;
-		prev_basep = basep;
-		r = ext2_get_disk_dirent(object, oldpar, &basep, &old_dirent);
-		if (!r && old_dirent->name_len == oldlen && !strncmp(old_dirent->name, oldname, oldlen))
-			break;
+		fnew->f_inode.i_links_count--;
+		r = ext2_write_inode(info, fnew->f_ino, &fnew->f_inode, &prev_head);
 		if (r < 0)
-			goto ext2_rename_exit;
-	}
-	r = ext2_delete_dirent(object, oldpar, prev_basep, prev_prev_basep, head);
-	if (r < 0)
-		goto ext2_rename_exit4;
+			goto exit_fnew;
 
-	old->f_inode.i_links_count--;
-	r = ext2_write_inode(info, old->f_ino, &old->f_inode, head);
-	if (r < 0)
-		goto ext2_rename_exit4;
-
-	if (existing) {
-		new->f_inode.i_links_count--;
-		r = ext2_write_inode(info, new->f_ino, &new->f_inode, &prev_head);
-		if (r < 0)
-			goto ext2_rename_exit4;
-
-		if (new->f_inode.i_links_count == 0) {
-			uint32_t block, i, n = ext2_get_file_numblocks(object, (fdesc_t *)new);
-			for (i = 0; i < n; i++) {
-				block = ext2_truncate_file_block(object, (fdesc_t *) new, &prev_head);
-				if (block == INVALID_BLOCK) {
+		if (fnew->f_inode.i_links_count == 0)
+		{
+			uint32_t i, n = ext2_get_file_numblocks(object, (fdesc_t *) fnew);
+			for (i = 0; i < n; i++)
+			{
+				uint32_t block = ext2_truncate_file_block(object, (fdesc_t *) fnew, &prev_head);
+				if (block == INVALID_BLOCK)
+				{
 					r = -1;
-					goto ext2_rename_exit4;
+					goto exit_fnew;
 				}
 				r = _ext2_free_block(object, block, &prev_head);
 				if (r < 0)
-					goto ext2_rename_exit4;
+					goto exit_fnew;
 			}
 
-			memset(&new->f_inode, 0, sizeof(EXT2_inode_t));
-			r = ext2_write_inode(info, new->f_ino, &new->f_inode, &prev_head);
+			memset(&fnew->f_inode, 0, sizeof(EXT2_inode_t));
+			r = ext2_write_inode(info, fnew->f_ino, &fnew->f_inode, &prev_head);
 			if (r < 0)
-				goto ext2_rename_exit4;
+				goto exit_fnew;
 
-			r = ext2_write_inode_bitmap(object, new->f_ino, 0, &prev_head);
+			r = ext2_write_inode_bitmap(object, fnew->f_ino, 0, &prev_head);
 			if (r < 0)
-				goto ext2_rename_exit4;
+				goto exit_fnew;
 			lfs_add_fork_head(prev_head);
 		}
 	}
 
 	r = 0;
 
-ext2_rename_exit4:
-	ext2_free_fdesc(object, (fdesc_t *) new);
-ext2_rename_exit3:
-	ext2_free_fdesc(object, (fdesc_t *) newpar);
-ext2_rename_exit2:
-	ext2_free_fdesc(object, (fdesc_t *) old);
-ext2_rename_exit:
-	ext2_free_fdesc(object, (fdesc_t *) oldpar);
+  exit_fnew:
+	ext2_free_fdesc(object, (fdesc_t *) fnew);
+  exit_fnparent:
+	ext2_free_fdesc(object, (fdesc_t *) fnparent);
+  exit_fold:
+	ext2_free_fdesc(object, (fdesc_t *) fold);
+  exit_foparent:
+	ext2_free_fdesc(object, (fdesc_t *) foparent);
 	return r;
 }
 
@@ -1897,61 +2267,70 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 	return _ext2_free_block(object, block, head);
 }
 
-static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t basep, uint32_t prev_basep, chdesc_t ** head)
+static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, chdesc_t ** head)
 {
-	Dprintf("EXT2DEBUG: ext2_delete_dirent %u\n", basep);
+	Dprintf("EXT2DEBUG: ext2_delete_dirent %u\n", mdirent->offset);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	uint32_t basep_blockno, prev_basep_blockno;
-	uint16_t len;
+	uint32_t base = mdirent->offset, prev_base;
+	uint32_t base_blockno, prev_base_blockno;
 	bdesc_t * dirblock;
-	int r = 0;
+	uint16_t len;
+	int r;
 
-
-	//if the basep is at the start of a block, zero it out.
-	if(basep % info->block_size == 0) {
+	if(base % info->block_size == 0)
+	{
+		//if the base is at the start of a block, zero it out
 		EXT2_Dir_entry_t jump_dirent;
-
-		basep_blockno = get_file_block(object, dir_file, basep);
-		if (basep_blockno == INVALID_BLOCK)
-
+		const EXT2_Dir_entry_t * disk_dirent;
+		base_blockno = get_file_block(object, dir_file, base);
+		if(base_blockno == INVALID_BLOCK)
 			return -1;
-		dirblock = CALL(info->ubd, read_block, basep_blockno, 1);
+		dirblock = CALL(info->ubd, read_block, base_blockno, 1);
 		if(!dirblock)
-			return -1;
-		len = *((uint16_t *)(dirblock->ddesc->data + (sizeof(inode_t))));
-		jump_dirent.rec_len = len;
+			return -EIO;
+		disk_dirent = (const EXT2_Dir_entry_t *) dirblock->ddesc->data;
 		jump_dirent.inode = 0;
-
-		if ((r = chdesc_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, head) < 0))
+		jump_dirent.rec_len = disk_dirent->rec_len;
+		r = chdesc_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, head);
+		if(r < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent, add jump dirent");
-
-		return CALL(info->ubd, write_block, dirblock);
-	}
-
-	//if deleting in the middle of a block, increase length of previous dirent
-	else {
-		prev_basep_blockno = get_file_block(object, dir_file, prev_basep);
-		if (prev_basep_blockno == INVALID_BLOCK)
-			return -1;
-		dirblock = CALL(info->ubd, read_block, prev_basep_blockno, 1);
-		if(!dirblock)
-			return -1;
-
-		//get the length of the deleted dirent
-
-		len = *((uint16_t *) (dirblock->ddesc->data + basep % info->block_size + (sizeof(inode_t))));
-
-		//get the length of the previous dirent:
-		len += basep - prev_basep;
-		
-		//update the length of the previous dirent:
-		if ((r = chdesc_create_byte(dirblock, info->ubd, ((prev_basep + 4) % info->block_size), sizeof(len), (void *) &len, head) < 0))
+		r = CALL(info->ubd, write_block, dirblock);
+		if(r >= 0)
+			ext2_mdirent_clear(mdir, mdirent, info->block_size);
+		else
+		{
+			assert(0); // must undo chdesc creation to recover
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
-	
-		return CALL(info->ubd, write_block, dirblock);
+		}
+		return 0;
 	}
+
+	//else in the middle of a block, so increase length of prev dirent
+	prev_base = ext2_mdirent_offset_prev(mdir, mdirent)->offset;
+	prev_base_blockno = get_file_block(object, dir_file, prev_base);
+	if(prev_base_blockno == INVALID_BLOCK)
+		return -1;
+	dirblock = CALL(info->ubd, read_block, prev_base_blockno, 1);
+	if(!dirblock)
+		return -1;
+
+	//update the length of the previous dirent:
+	len = mdirent->dirent.rec_len + ext2_mdirent_offset_prev(mdir, mdirent)->dirent.rec_len;
+	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % info->block_size, sizeof(len), (void *) &len, head);
+	if(r < 0)
+		return r;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
+	
+	r = CALL(info->ubd, write_block, dirblock);
+	if(r >= 0)
+		ext2_mdirent_clear(mdir, mdirent, info->block_size);
+	else
+	{
+		assert(0); // must undo chdesc creation to recover
+		return r;
+	}
+	return 0;
 }
 
 static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
@@ -1960,7 +2339,9 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	chdesc_t * prev_head;
 	ext2_fdesc_t * pfile = NULL, * file = NULL;
-
+	uint8_t minlinks = 1;
+	ext2_mdir_t * mdir;
+	ext2_mdirent_t * mdirent;
 	int r;
 
 	if (!head)
@@ -1975,14 +2356,16 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		goto remove_name_exit;
 	}	
 	
-	/* put in sanity checks here! */
-	uint32_t basep = 0, prev_basep = 0, prev_prev_basep;
-	uint8_t minlinks = 1;
-	
-	r = dir_lookup(object, pfile, name, &basep, &prev_basep, &prev_prev_basep, &file);
-	if (r < 0)
+	r = ext2_mdir_get(object, pfile, &mdir);
+	if(r < 0)
 		goto remove_name_exit;
-	
+	mdirent = ext2_mdirent_get(mdir, name);
+	if(!mdirent)
+		goto remove_name_exit;
+	file = (ext2_fdesc_t *) ext2_lookup_inode(object, mdirent->dirent.inode);
+	if(!file)
+		goto remove_name_exit;
+
 	if (file->f_type == TYPE_DIR) {
 		if (file->f_inode.i_links_count > 2 && !strcmp(name, "..")) {
 			r = -ENOTEMPTY;
@@ -1996,10 +2379,10 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 			minlinks = 2;
 	}
 
-	r = ext2_delete_dirent(object, pfile, prev_basep, prev_prev_basep, head);
+	r = ext2_delete_dirent(object, pfile, mdir, mdirent, head);
 	if (r < 0)
 		goto remove_name_exit;
-	assert (file->f_inode.i_links_count >= minlinks);
+	assert(file->f_inode.i_links_count >= minlinks);
 
 	/* remove link to parent directory */
 	if (file->f_type == TYPE_DIR) {
@@ -2408,9 +2791,13 @@ static int ext2_destroy(LFS_t * lfs)
 	for(i = 0; i < info->ngroupblocks; i++)
 		bdesc_release(&(info->gdescs[i]));
 	
+	ext2_mdir_cache_deinit(&info->mdir_cache);
 	n_ext2_instances--;
 	if(!n_ext2_instances)
+	{
+		ext2_mdirent_free_all();
 		ext2_fdesc_free_all();
+	}
 	free(info->gdescs);
 	free(info->super);
 	free(info->groups);
@@ -2674,13 +3061,17 @@ LFS_t * ext2(BD_t * block_device)
 		return NULL;
 	}
 
+	ext2_mdir_cache_init(&info->mdir_cache);
+
 	if (ext2_load_super(lfs) == 0) {
+		ext2_mdir_cache_deinit(&info->mdir_cache);
 		free(info);
 		free(lfs);
 		return NULL;
 	}
 
 	if (check_super(lfs)) {
+		ext2_mdir_cache_deinit(&info->mdir_cache);
 		free(info);
 		free(lfs);
 		return NULL;
