@@ -80,8 +80,8 @@ static struct rand_slot * wbr_push_block(struct cache_info * info, bdesc_t * blo
 	slot->next = info->first;
 	slot->index = -1;
 	
-	assert(!hash_map_find_val(info->block_map, (void *) block->number));
-	if(hash_map_insert(info->block_map, (void *) block->number, slot) < 0)
+	assert(!hash_map_find_val(info->block_map, (void *) block->b_number));
+	if(hash_map_insert(info->block_map, (void *) block->b_number, slot) < 0)
 	{
 		rand_slot_free(slot);
 		return NULL;
@@ -116,7 +116,7 @@ static int wbr_push_slot_dirty(struct cache_info * info, struct rand_slot * slot
 
 static void wbr_pop_slot(struct cache_info * info, struct rand_slot * slot)
 {
-	uint32_t number = slot->block->number;
+	uint32_t number = slot->block->b_number;
 	assert(hash_map_find_val(info->block_map, (void *) number) == slot);
 	
 	bdesc_release(&slot->block);
@@ -211,7 +211,7 @@ static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	else
 	{
 		int start = delay ? jiffy_time() : 0;
-		r = CALL(info->below_bd, write_block, block);
+		r = CALL(info->below_bd, write_block, block, block->b_number);
 		if(r < 0)
 		{
 			revision_slice_pull_up(&slice);
@@ -274,7 +274,7 @@ static void wbr_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		status = wbr_flush_block(object, slot->block, &delay);
 		if(status >= 0)
 		{
-			uint32_t number = slot->block->number;
+			uint32_t number = slot->block->b_number;
 			wbr_pop_slot_dirty(info, slot);
 			/* now try and find sequential blocks to write */
 			while((slot = hash_map_find_val(info->block_map, (void *) ++number)))
@@ -400,15 +400,15 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	return block;
 }
 
-static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block)
+static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
 	
 	/* make sure it's a valid block */
-	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) block->number);
+	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
 		/* already have this block */

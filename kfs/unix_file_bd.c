@@ -128,14 +128,14 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	return bdesc;
 }
 
-static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
+static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
 	int r;
 	int revision_forward, revision_back;
 	off_t seeked;
 
-	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
 
 	r = revision_tail_prepare(block, object);
 	if(r < 0)
@@ -145,8 +145,8 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	revision_back = r;
 
-	seeked = lseek(info->fd, block->number * object->blocksize, SEEK_SET);
-	if(seeked != block->number * object->blocksize)
+	seeked = lseek(info->fd, number * object->blocksize, SEEK_SET);
+	if(seeked != number * object->blocksize)
 	{
 		perror("lseek");
 		assert(0);
@@ -158,7 +158,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 
 	if(block_log)
-		fprintf(block_log, "%p write %u\n", object, block->number);
+		fprintf(block_log, "%p write %u\n", object, number);
 
 	r = revision_tail_acknowledge(block, object);
 	if(r < 0)
@@ -169,7 +169,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_forward = r;
 
 	if (revision_back != revision_forward)
-		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
+		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, revision_forward);
 
 	return 0;
 }

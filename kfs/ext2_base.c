@@ -292,7 +292,7 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate block" : "free block");
 	
-	r = CALL(info->ubd, write_block, info->bitmap_cache);
+	r = CALL(info->ubd, write_block, info->bitmap_cache, info->bitmap_cache->b_number);
 	if(r < 0)
 		return r;
 	
@@ -344,7 +344,7 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 		return r;	
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate inode" : "free inode");
 	
-	r = CALL(info->ubd, write_block, info->inode_cache);
+	r = CALL(info->ubd, write_block, info->inode_cache, info->inode_cache->b_number);
 	if (r < 0)
 		return r;
 	return ext2_super_report(object, block_group, 0, value ? -1 : 1, 0);
@@ -945,7 +945,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[0], "add block");
 		indirect->ddesc->flags |= BDESC_FLAG_INDIR;
 
-		r = CALL(info->ubd, write_block, indirect);
+		r = CALL(info->ubd, write_block, indirect, indirect->b_number);
 		if (r < 0)
 			return r;
 	}
@@ -1044,7 +1044,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[0], "add block");
 		indirect->ddesc->flags |= BDESC_FLAG_INDIR;
 		
-		r = CALL(info->ubd, write_block, indirect);
+		r = CALL(info->ubd, write_block, indirect, indirect->b_number);
 		if(r < 0)
 			return r;
 		
@@ -1052,7 +1052,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 		{
 			/* we write this one second since it probably
 			 * should be written second (to the disk) */
-			r = CALL(info->ubd, write_block, dindirect);
+			r = CALL(info->ubd, write_block, dindirect, dindirect->b_number);
 			if(r < 0)
 				return r;
 		}
@@ -1118,7 +1118,7 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent '%s'", dirent_new->name);
 		dirblock->ddesc->flags |= BDESC_FLAG_DIRENT;
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(info->ubd, write_block, dirblock, dirblock->b_number);
 		if (r < 0)
 			return r;
 	} else
@@ -1160,7 +1160,7 @@ static int ext2_write_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent '%s'", dirent->name);
 		dirblock->ddesc->flags |= BDESC_FLAG_DIRENT;
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(info->ubd, write_block, dirblock, dirblock->b_number);
 		if (r < 0)
 			return r;
 	} else
@@ -1233,7 +1233,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, set.array[0], "init new dirent block");
 	block->ddesc->flags |= BDESC_FLAG_DIRENT;
-	r = CALL(info->ubd, write_block, block);
+	r = CALL(info->ubd, write_block, block, block->b_number);
 	if (r < 0)
 		return r;
 	parent->f_inode.i_size += object->blocksize;
@@ -1482,7 +1482,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			prev_basep = dir_dirent.rec_len;
 
 			dirblock_bdesc->ddesc->flags |= BDESC_FLAG_DIRENT;
-			r = CALL(info->ubd, write_block, dirblock_bdesc);
+			r = CALL(info->ubd, write_block, dirblock_bdesc, dirblock_bdesc->b_number);
 
 			group = (new_file->f_ino - 1) / info->super->s_inodes_per_group;
 			r = ext2_super_report(object, group, 0, 0, 1);
@@ -1610,7 +1610,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 			//r = chdesc_create_byte(block_desc, info->ubd, blocknum * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
 			//if (r < 0)
 			//	return INVALID_BLOCK;
-			//r = CALL(info->ubd, write_block, block_desc);
+			//r = CALL(info->ubd, write_block, block_desc, block_desc->b_number);
 			//if (r < 0)
 			//	return INVALID_BLOCK;
 		}
@@ -1650,7 +1650,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 				//r = chdesc_create_byte(block_desc, info->ubd, (blocknum / n_per_block) * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
 				//if (r < 0)
 				//	return INVALID_BLOCK;
-				//r = CALL(info->ubd, write_block, block_desc);
+				//r = CALL(info->ubd, write_block, block_desc, block_desc->b_number);
 				//if (r < 0)
 				//	return INVALID_BLOCK;
 			}
@@ -1664,7 +1664,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 			//r = chdesc_create_byte(double_block_desc, info->ubd, (blocknum % n_per_block) * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
 			//if (r < 0)
 			//	return INVALID_BLOCK;
-			//r = CALL(info->ubd, write_block, double_block_desc);
+			//r = CALL(info->ubd, write_block, double_block_desc, double_block_desc->b_number);
 			//if (r < 0)
 			//	return INVALID_BLOCK;
 		}
@@ -1919,7 +1919,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent, add jump dirent");
 
-		return CALL(info->ubd, write_block, dirblock);
+		return CALL(info->ubd, write_block, dirblock, dirblock->b_number);
 	}
 
 	//if deleting in the middle of a block, increase length of previous dirent
@@ -1943,7 +1943,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, uint32_t 
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
 	
-		return CALL(info->ubd, write_block, dirblock);
+		return CALL(info->ubd, write_block, dirblock, dirblock->b_number);
 	}
 }
 
@@ -2066,7 +2066,7 @@ static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	if (!head)
 		return -EINVAL;
 
-	return CALL(info->ubd, write_block, block);
+	return CALL(info->ubd, write_block, block, block->b_number);
 }
 
 static chdesc_t ** ext2_get_write_head(LFS_t * object)
@@ -2279,7 +2279,7 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add slow symlink");
 
-	return CALL(info->ubd, write_block, new_block);
+	return CALL(info->ubd, write_block, new_block, new_block->b_number);
 }
 
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
@@ -2486,7 +2486,7 @@ int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * in
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write inode");
 		lfs_add_fork_head(*tail); // TODO: why do this?
-		r = CALL(info->ubd, write_block, bdesc);
+		r = CALL(info->ubd, write_block, bdesc, bdesc->b_number);
 	}
 
 	return r;
@@ -2518,7 +2518,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
 		lfs_add_fork_head(head);
-		r = CALL(info->ubd, write_block, info->super_cache);
+		r = CALL(info->ubd, write_block, info->super_cache, info->super_cache->b_number);
 		if (r < 0)
 			return r;
 	}
@@ -2545,7 +2545,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write group desc");
 		lfs_add_fork_head(head);
-		r = CALL(info->ubd, write_block, info->gdescs[group_bdesc]);
+		r = CALL(info->ubd, write_block, info->gdescs[group_bdesc], info->gdescs[group_bdesc]->b_number);
 	}
 	
 	return r;

@@ -85,7 +85,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg timestamp");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_TIME] = 0;
@@ -124,7 +124,7 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 	if (*head && r > 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg checksum");
-		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
 		if (r < 0)
 			return r;
 	}
@@ -162,7 +162,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg rotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_ROTOR] = 0;
@@ -196,7 +196,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_FROTOR] = 0;
@@ -230,7 +230,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg irotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_IROTOR] = 0;
@@ -268,7 +268,7 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 	if(*head && r > 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frsum");
-		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock);
+		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
 		if (r < 0)
 			return r;
 	}

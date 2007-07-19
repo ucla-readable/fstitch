@@ -106,17 +106,16 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint32_t 
 	return block;
 }
 
-static int loop_write_block(BD_t * bd, bdesc_t * block)
+static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t number)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_info_t * info = (loop_info_t *) bd;
-	uint32_t loop_number, lfs_number;
+	uint32_t lfs_number;
 	bdesc_t * wblock;
 	chdesc_t * head = NULL;
 	int r;
 
-	loop_number = block->number;
-	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * bd->blocksize);
+	lfs_number = CALL(info->lfs, get_file_block, info->file, number * bd->blocksize);
 	if(lfs_number == -1)
 		return -EINVAL;
 

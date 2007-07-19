@@ -16,8 +16,8 @@ enum decider {
 	switch(type) <% \
 		case OWNER: \
 			/* it had better be either owned by us or rollbackable */ \
-			assert((chdesc)->owner == (BD_t *) (data) || chdesc_is_rollbackable(chdesc)); \
-			__result = (chdesc)->owner == (BD_t *) (data); \
+			assert((chdesc)->owner->level == ((BD_t *) (data))->level || chdesc_is_rollbackable(chdesc)); \
+			__result = (chdesc)->owner->level == ((BD_t *) (data))->level; \
 			break; \
 		case FLIGHT: \
 			__result = ((chdesc)->flags & CHDESC_INFLIGHT) != 0; \

@@ -152,7 +152,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 			if (r >= 0)
 			{
 				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "wipe block");
-				r = CALL(info->ubd, write_block, block);
+				r = CALL(info->ubd, write_block, block, block->b_number);
 			}
 			if (r < 0)
 				return INVALID_BLOCK;
@@ -209,7 +209,7 @@ static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block,
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "indirect pointer");
-	return CALL(info->ubd, write_block, block);
+	return CALL(info->ubd, write_block, block, block->b_number);
 }
 
 // Update file's inode with an nth indirect ptr
@@ -557,7 +557,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "move fragment");
 
 		bdesc_release(&block);
-		r = CALL(info->ubd, write_block, newblock);
+		r = CALL(info->ubd, write_block, newblock, newblock->b_number);
 		if (r < 0)
 			return INVALID_BLOCK;
 	}
@@ -1458,7 +1458,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	if (!head)
 		return -EINVAL;
 
-	return CALL(info->ubd, write_block, block);
+	return CALL(info->ubd, write_block, block, block->b_number);
 }
 
 static chdesc_t ** ufs_get_write_head(LFS_t * object)

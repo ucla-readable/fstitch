@@ -44,7 +44,7 @@ struct BD {
 	 * that this behavior is only actually necessary at the terminal BD,
 	 * because this is where it really hurts to do unnecessary reads. */
 	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint32_t nbytes);
-	DECLARE(BD_t, int, write_block, bdesc_t * block);
+	DECLARE(BD_t, int, write_block, bdesc_t *block, uint32_t number);
 	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
 	DECLARE(BD_t, chdesc_t **, get_write_head);
 	/* This function returns the number of dirtyable cache blocks in the

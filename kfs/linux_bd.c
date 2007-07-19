@@ -427,7 +427,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	return bdesc;
 }
 
-static int linux_bd_write_block(BD_t * object, bdesc_t * block)
+static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	DEFINE_WAIT(wait);
 	struct linux_info * info = (struct linux_info *) object;
@@ -447,8 +447,8 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 #endif
 
-	KDprintk(KERN_ERR "entered write (blk: %d, nbytes: %d)\n", block->number, block->ddesc->nbytes);
-	assert(block->number < object->numblocks);
+	KDprintk(KERN_ERR "entered write (blk: %d, nbytes: %d)\n", number, block->ddesc->nbytes);
+	assert(number < object->numblocks);
 	
 	private = bio_private_alloc();
 	assert(private);
@@ -467,11 +467,11 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	if(debug_writes.next < MAXWRITES)
 	{
 		struct linux_bd_write * write = &debug_writes.writes[debug_writes.next];
-		write->blockno = block->number;
+		write->blockno = number;
 		write->checksum = block_checksum(block->ddesc->data, block->ddesc->length);
 		/* NOTE: ninflight may overcount as any inflight writes could complete before we actually make the request below... */
-		if(block->number < MAXBLOCKNO)
-			write->ninflight = atomic_inc_return(&debug_writes_ninflight[block->number]) - 1;
+		if(number < MAXBLOCKNO)
+			write->ninflight = atomic_inc_return(&debug_writes_ninflight[number]) - 1;
 		else
 			write->ninflight = -1;
 		debug_writes.next++;
@@ -512,7 +512,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	private->info = info;
 	private->bdesc = block;
-	private->number = block->number;
+	private->number = number;
 	private->nbytes = block->ddesc->length;
 #if DEBUG_LINUX_BD
 	private->seq = info->seq++;
@@ -520,7 +520,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	bio->bi_idx = 0;
 	bio->bi_vcnt = vec_len;
-	bio->bi_sector = block->number;
+	bio->bi_sector = number;
 	bio->bi_size = block->ddesc->length;
 	bio->bi_bdev = info->bdev;
 	bio->bi_rw = WRITE | (1 << BIO_RW_FUA);
@@ -558,7 +558,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_forward = r;
 	
 	if(revision_back != revision_forward)
-		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
+		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, revision_forward);
 	
 	KDprintk(KERN_ERR "exiting write\n");
 	return 0;

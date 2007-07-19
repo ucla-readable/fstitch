@@ -54,7 +54,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, nbytes / 4096); /* XXXXXXX */
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, nbytes / 4096); /* XXXXXXX */
-	bdesc->number = number;
+	bdesc->b_number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
@@ -99,7 +99,7 @@ bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number, ddesc->length / 4096); /* XXXXXXX */
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, ddesc->length / 4096); /* XXXXXXXX */
 	bdesc->ddesc = ddesc;
-	bdesc->number = number;
+	bdesc->b_number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;

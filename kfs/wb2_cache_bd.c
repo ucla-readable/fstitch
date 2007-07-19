@@ -48,15 +48,15 @@ typedef struct wb2_cache_bd {
 static inline bdesc_t * wb2_map_get_block(wb2_cache_bd_t * info, uint32_t number)
 {
 	bdesc_t * b = info->map[number & (info->map_capacity - 1)];
-	while(b && b->number < number)
+	while(b && b->b_number < number)
 		b = b->block_hash.next;
-	return (b && b->number == number) ? b : NULL;
+	return (b && b->b_number == number) ? b : NULL;
 }
 
 static inline void wb2_map_put_block(wb2_cache_bd_t * info, bdesc_t * block)
 {
-	bdesc_t ** b = &info->map[block->number & (info->map_capacity - 1)];
-	while(*b && (*b)->number < block->number)
+	bdesc_t ** b = &info->map[block->b_number & (info->map_capacity - 1)];
+	while(*b && (*b)->b_number < block->b_number)
 		b = &(*b)->block_hash.next;
 	block->block_hash.next = *b;
 	if(*b)
@@ -84,7 +84,7 @@ static void wb2_push_block(wb2_cache_bd_t * info, bdesc_t * block)
 	block->lru_dirty.prev = NULL;
 	block->lru_dirty.next = NULL;
 	
-	assert(!wb2_map_get_block(info, block->number));
+	assert(!wb2_map_get_block(info, block->b_number));
 	wb2_map_put_block(info, block);
 	
 	info->all.first = block;
@@ -117,7 +117,7 @@ static void wb2_push_dirty(wb2_cache_bd_t * info, bdesc_t * block)
 
 static void wb2_pop_slot(wb2_cache_bd_t * info, bdesc_t * block)
 {
-	assert(wb2_map_get_block(info, block->number) == block);
+	assert(wb2_map_get_block(info, block->b_number) == block);
 	
 	if(block->lru_all.prev)
 		block->lru_all.prev->lru_all.next = block->lru_all.next;
@@ -218,7 +218,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	else
 	{
 		int start = delay ? jiffy_time() : 0;
-		r = CALL(info->below_bd, write_block, block);
+		r = CALL(info->below_bd, write_block, block, block->b_number);
 		if(r < 0)
 		{
 			revision_slice_pull_up(&slice);
@@ -340,7 +340,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			if(scan_block)
 			{
 				struct lru_slot * before_slot = NULL;
-				before_slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) scan_block->number);
+				before_slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) scan_block->b_number);
 				assert(slot != before_slot);
 				if(before_slot)
 				{
@@ -355,13 +355,13 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 						{
 							assert(slot != try);
 							assert(try->dirty.prev || info->dirty.first == try);
-							before_slot->block_after_number = slot->block->number;
+							before_slot->block_after_number = slot->block->b_number;
 							before_slot = try;
 						}
 					}
 					else
 					{
-						before_slot->block_after_number = slot->block->number;
+						before_slot->block_after_number = slot->block->b_number;
 						before_slot->block_after_pass = pass;
 					}
 					wb2_bounce_block_write(info, slot, before_slot);
@@ -385,7 +385,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		}
 		else
 		{
-			uint32_t number = block->number;
+			uint32_t number = block->b_number;
 			bdesc_t * prev = block->lru_dirty.prev;
 			wb2_pop_slot_dirty(info, block);
 			/* now try and find sequential blocks to write */
@@ -510,14 +510,14 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	return block;
 }
 
-static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
+static int wb2_cache_bd_write_block(BD_t * object, bdesc_t *block, uint32_t number)
 {
 	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	
 	/* make sure it's a valid block */
-	assert(block->number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	block = wb2_map_get_block(info, block->number);
+	block = wb2_map_get_block(info, number);
 	if(block)
 	{
 		/* already have this block */

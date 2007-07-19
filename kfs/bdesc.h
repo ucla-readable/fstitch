@@ -62,7 +62,7 @@ struct datadesc {
 #define DIRTY_QUEUE_REORDERING 0
 
 struct bdesc {
-	uint32_t number;
+	uint32_t b_number;
 	uint32_t ref_count;
 	uint32_t ar_count;
 	bdesc_t * ar_next;

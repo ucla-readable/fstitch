@@ -94,7 +94,7 @@ datadesc_t * blockman_lookup(blockman_t * blockman, uint32_t number)
 
 int blockman_managed_add(blockman_t * blockman, bdesc_t * bdesc)
 {
-	return blockman_add(blockman, bdesc->number, bdesc->ddesc);
+	return blockman_add(blockman, bdesc->b_number, bdesc->ddesc);
 }
 
 bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number)

@@ -291,7 +291,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);
 		if(r < 0)
 			break;
-		r = CALL(devfd->bd, write_block, bdesc);
+		r = CALL(devfd->bd, write_block, bdesc, write_byte / blocksize);
 		if(r < 0)
 		{
 			/* FIXME clean up chdescs */
