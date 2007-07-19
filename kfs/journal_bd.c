@@ -526,7 +526,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	
 	/* unmanage the hold NOOP */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, info->hold, NULL);
-	info->hold->owner = NULL;
+	info->hold->level = CHDESC_LEVEL_NOOP;
 	/* satisfy the keep NOOPs */
 	chdesc_satisfy(&info->keep_w);
 	chdesc_satisfy(&info->keep_d);
@@ -631,7 +631,6 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numbe
 		int needs_hold = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
-		assert(chdesc->owner == object);
 		chdesc_level_next = chdesc->ddesc_level_next; /* in case changes */
 		
 		if(metadata)

@@ -131,7 +131,7 @@ static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 	
 	/* already flushed? */
 	for(chdesc = slot->block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-		if(chdesc->owner == object)
+		if(chdesc->level == object->level)
 			break;
 	if(!chdesc)
 		return FLUSH_EMPTY;
@@ -511,7 +511,7 @@ uint32_t wb_cache_dirty_count(BD_t * bd)
 			chdesc_t * scan = info->blocks[i].block->ddesc->all_changes;
 			while(scan)
 			{
-				if(scan->owner == bd)
+				if(scan->level == bd->level)
 					break;
 				scan = scan->ddesc_next;
 			}

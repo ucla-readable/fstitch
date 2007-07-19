@@ -44,8 +44,10 @@ typedef struct chrefdesc chrefdesc_t;
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
 
+#define CHDESC_LEVEL_NOOP ((uint32_t) -1)
+
 struct chdesc {
-	BD_t * owner;
+	uint32_t level;
 	bdesc_t * block;
 	enum {BIT, BYTE, NOOP} type;
 	union {
@@ -265,9 +267,9 @@ static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
 static __inline uint16_t chdesc_level(const chdesc_t * chdesc)
 {
 	const chdesc_t * __chdesc = (chdesc);
-	assert(!__chdesc->block || __chdesc->owner);
+	assert(!__chdesc->block || __chdesc->level != CHDESC_LEVEL_NOOP);
 	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
-	return __chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc);
+	return __chdesc->level != CHDESC_LEVEL_NOOP ? __chdesc->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc);
 }
 
 /* return whether chdesc is ready to go down one level */
@@ -277,10 +279,10 @@ static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((alw
 static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
 {
 	/* empty noops are not on blocks and so cannot be on a ready list */
-	if(!chdesc->owner)
+	if(chdesc->level == CHDESC_LEVEL_NOOP)
 		return 0;
 	uint16_t before_level = chdesc_before_level(chdesc);
-	return before_level < chdesc->owner->level || before_level == BDLEVEL_NONE;
+	return before_level < chdesc->level || before_level == BDLEVEL_NONE;
 }
 
 static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)

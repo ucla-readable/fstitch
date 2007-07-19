@@ -41,7 +41,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
 			/* don't unlink them from index here */
 			chdesc_unlink_ready_changes(chdesc);
-			chdesc->owner = target_bd;
+			chdesc->level = target_bd->level;
 			assert(chdesc->block);
 			bdesc_retain(target_block);
 			bdesc_release(&chdesc->block);

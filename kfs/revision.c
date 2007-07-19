@@ -16,8 +16,8 @@ enum decider {
 	switch(type) <% \
 		case OWNER: \
 			/* it had better be either owned by us or rollbackable */ \
-			assert((chdesc)->owner->level == ((BD_t *) (data))->level || chdesc_is_rollbackable(chdesc)); \
-			__result = (chdesc)->owner->level == ((BD_t *) (data))->level; \
+			assert((chdesc)->level == ((BD_t *) (data))->level || chdesc_is_rollbackable(chdesc)); \
+			__result = (chdesc)->level == ((BD_t *) (data))->level; \
 			break; \
 		case FLIGHT: \
 			__result = ((chdesc)->flags & CHDESC_INFLIGHT) != 0; \
@@ -392,7 +392,7 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 		return 0;
 	
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(scan->owner == bd)
+		if(scan->level == bd->level)
 			chdesc_set_inflight(scan);
 		else if(!chdesc_is_rollbackable(scan))
 			fprintf(stderr, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
@@ -490,7 +490,7 @@ static void link_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, c
 /* move 'chdesc' back from the list 'tmp_ready' to its ddesc's all_changes */
 static void unlink_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)
 {
-	assert(chdesc->block && chdesc->owner);
+	assert(chdesc->block && chdesc->level != CHDESC_LEVEL_NOOP);
 	if(chdesc->ddesc_pprev)
 	{
 		if(chdesc->ddesc_next)
@@ -537,20 +537,20 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		chdesc_unlink_level_changes(scan);
 		chdesc_unlink_ready_changes(scan);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
-		scan->owner = target;
+		scan->level = target->level;
 		chdesc_propagate_level_change(scan, owner->level, target->level);
 		chdesc_update_ready_changes(scan);
 		chdesc_link_level_changes(scan);
 	}
 
 #if CHDESC_NRB && !CHDESC_RB_NRB_READY
-	if(block->ddesc->nrb && block->ddesc->nrb->owner == owner)
+	if(block->ddesc->nrb && block->ddesc->nrb->level == owner->level)
 		nonready_nonrollbackable = 1;
 #endif
 
 	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
 	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
-		if(scan->owner == owner)
+		if(scan->level == owner->level)
 		{
 			slice->all_ready = 0;
 			break;
@@ -573,7 +573,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				chdesc_unlink_level_changes(scan);
 				chdesc_unlink_ready_changes(scan);
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
-				scan->owner = owner;
+				scan->level = owner->level;
 				chdesc_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 				chdesc_update_ready_changes(scan);
@@ -612,13 +612,13 @@ void revision_slice_push_down(revision_slice_t * slice)
 	{
 		if(!slice->ready[i])
 			continue;
-		if(slice->ready[i]->owner == slice->owner)
+		if(slice->ready[i]->level == slice->owner->level)
 		{
 			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
 			chdesc_unlink_level_changes(slice->ready[i]);
 			chdesc_unlink_ready_changes(slice->ready[i]);
-			slice->ready[i]->owner = slice->target;
+			slice->ready[i]->level = slice->target->level;
 			chdesc_update_ready_changes(slice->ready[i]);
 			chdesc_link_level_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))
@@ -637,13 +637,13 @@ void revision_slice_pull_up(revision_slice_t * slice)
 	{
 		if(!slice->ready[i])
 			continue;
-		if(slice->ready[i]->owner == slice->target)
+		if(slice->ready[i]->level == slice->target->level)
 		{
 			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
 			chdesc_unlink_level_changes(slice->ready[i]);
 			chdesc_unlink_ready_changes(slice->ready[i]);
-			slice->ready[i]->owner = slice->owner;
+			slice->ready[i]->level = slice->owner->level;
 			chdesc_update_ready_changes(slice->ready[i]);
 			chdesc_link_level_changes(slice->ready[i]);
 			if(prev_level != chdesc_level(slice->ready[i]))

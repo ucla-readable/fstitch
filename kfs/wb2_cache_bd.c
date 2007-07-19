@@ -245,7 +245,7 @@ static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t
 	for(; dep; dep = dep->before.next)
 	{
 		chdesc_t * before = dep->before.desc;
-		if(before->owner != object)
+		if(before->level != object->level)
 			continue;
 		if(!before->block)
 		{

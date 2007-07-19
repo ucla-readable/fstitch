@@ -454,7 +454,7 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 	state_t * state = states;
 
   recurse_enter:
-	assert(!noop_after->owner);
+	assert(noop_after->level == CHDESC_LEVEL_NOOP);
 	assert(prev_level != new_level);
 	assert(prev_level != BDLEVEL_NONE || new_level != BDLEVEL_NONE);
 
@@ -476,7 +476,7 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 		}
 		chdesc_update_ready_changes(after);
 
-		if(!after->owner)
+		if(after->level == CHDESC_LEVEL_NOOP)
 		{
 			uint16_t after_new_level = chdesc_level(after);
 			if(after_prev_level != after_new_level)
@@ -685,8 +685,9 @@ static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
 	after->nbefores[before_level]++;
 	assert(after->nbefores[before_level]);
 	chdesc_update_ready_changes(after);
-	if(!after->owner && (before_level > after_prev_level || after_prev_level == BDLEVEL_NONE))
-			propagate_level_change_thru_noop(after, after_prev_level, before_level);
+	if(after->level == CHDESC_LEVEL_NOOP
+	   && (before_level > after_prev_level || after_prev_level == BDLEVEL_NONE))
+		propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
 	/* an inflight chdesc does not contribute to its block's
 	 * extern_after_count */
@@ -708,7 +709,8 @@ static void propagate_depend_remove(chdesc_t * after, chdesc_t * before)
 	assert(after->nbefores[before_level]);
 	after->nbefores[before_level]--;
 	chdesc_update_ready_changes(after);
-	if(!after->owner && (before_level == after_prev_level && !after->nbefores[before_level]))
+	if(after->level == CHDESC_LEVEL_NOOP
+	   && (before_level == after_prev_level && !after->nbefores[before_level]))
 		propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
 	/* extern_after_count is pre-decremented when a chdesc goes inflight */
@@ -741,7 +743,7 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 		}
 		chdesc_update_ready_changes(after);
 
-		if(!after->owner)
+		if(after->level == CHDESC_LEVEL_NOOP)
 		{
 			uint16_t after_new_level = chdesc_level(after);
 			if(after_prev_level != after_new_level)
@@ -1059,14 +1061,14 @@ void chdesc_unlink_all_changes(chdesc_t * chdesc)
 		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
 }
 
-#define DEFINE_LINK_CHANGES(name, index) \
+#define DEFINE_LINK_CHANGES(name) \
 void chdesc_link_##name##_changes(chdesc_t * chdesc) \
 { \
 	assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
 	if(chdesc->block) \
 	{ \
 		datadesc_t * ddesc = chdesc->block->ddesc; \
-		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->owner->index]; \
+		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->level]; \
 		chdesc->ddesc_##name##_pprev = &rcl->head; \
 		chdesc->ddesc_##name##_next = rcl->head; \
 		rcl->head = chdesc; \
@@ -1077,13 +1079,13 @@ void chdesc_link_##name##_changes(chdesc_t * chdesc) \
 	} \
 }
 
-#define DEFINE_UNLINK_CHANGES(name, index) \
+#define DEFINE_UNLINK_CHANGES(name) \
 void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
 { \
 	if(chdesc->ddesc_##name##_pprev) \
 	{ \
 		datadesc_t * ddesc = chdesc->block->ddesc; \
-		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->owner->index]; \
+		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->level]; \
 		/* remove from old ddesc changes list */ \
 		if(chdesc->ddesc_##name##_next) \
 			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = chdesc->ddesc_##name##_pprev; \
@@ -1098,10 +1100,10 @@ void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
 }
 
 /* confuse ctags */
-DEFINE_LINK_CHANGES(ready, level);
-DEFINE_UNLINK_CHANGES(ready, level);
-DEFINE_LINK_CHANGES(level, level);
-DEFINE_UNLINK_CHANGES(level, level);
+DEFINE_LINK_CHANGES(ready);
+DEFINE_UNLINK_CHANGES(ready);
+DEFINE_LINK_CHANGES(level);
+DEFINE_UNLINK_CHANGES(level);
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc)
 {
@@ -1172,7 +1174,7 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 	dump_counts();
 #endif
 	
-	chdesc->owner = owner;
+	chdesc->level = (owner ? owner->level : CHDESC_LEVEL_NOOP);
 	chdesc->block = NULL;
 	chdesc->type = NOOP;
 	chdesc->befores = NULL;
@@ -1601,7 +1603,7 @@ static void merge_rbs(bdesc_t * block)
 		chdesc_free_byte_data(merger);
 	else if(merger->type == BIT)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, merger, 0, merger->owner->level);
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, merger, 0, merger->level);
 		account_nchdescs_convert(BIT, BYTE);
 # if COUNT_CHDESCS
 		chdesc_counts[BIT]--;
@@ -1704,14 +1706,14 @@ static void merge_rbs(bdesc_t * block)
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, NULL);
 		bdesc_release(&chdesc->block);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, NULL);
-		chdesc->owner = NULL;
+		chdesc->level = CHDESC_LEVEL_NOOP;
 		chdesc->noop.bit_changes = NULL;
 		chdesc->noop.hash_key = NULL;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_OVERLAP);
 		chdesc->flags &= ~CHDESC_OVERLAP;
 		
-		if(merger->owner->level != (level = chdesc_level(chdesc)))
-			propagate_level_change_thru_noop(chdesc, merger->owner->level, level);
+		if(merger->level != (level = chdesc_level(chdesc)))
+			propagate_level_change_thru_noop(chdesc, merger->level, level);
 	}
 # if CHDESC_MERGE_RBS_NRB_STATS
 	if(nmerged)
@@ -1758,7 +1760,7 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 	
 	chdesc_unlink_level_changes(merger);
 	/* move merger to correct owner */
-	merger->owner = owner;
+	merger->level = owner->level;
 	
 	chdesc_link_level_changes(merger);
 	
@@ -2029,7 +2031,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 	
 	chdesc_unlink_level_changes(overlap);
 	/* move merger to correct owner */
-	overlap->owner = (*new)->owner;
+	overlap->level = (*new)->level;
 
 	chdesc_link_level_changes(overlap);
 	
@@ -2095,7 +2097,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		return -ENOMEM;
 	account_nchdescs(BYTE, 1);	
 	
-	chdesc->owner = owner;		
+	chdesc->level = owner->level;		
 	chdesc->block = block;
 	chdesc->type = BYTE;
 	//chdesc->byte.satisfy_freed = 0;
@@ -2449,7 +2451,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	
 	chdesc_unlink_level_changes(overlap);
 	/* move merger to correct owner */
-	overlap->owner = owner;
+	overlap->level = owner->level;
 	
 	chdesc_link_level_changes(overlap);
 	
@@ -2542,7 +2544,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	dump_counts();
 #endif
 	
-	chdesc->owner = owner;
+	chdesc->level = owner->level;
 	chdesc->block = block;
 	chdesc->type = BIT;
 	chdesc->bit.offset = offset;

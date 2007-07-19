@@ -38,7 +38,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 		int needs_head = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
-		assert(chdesc->owner == object);
+		assert(chdesc->level == object->level);
 		next = chdesc->ddesc_level_next;
 		
 		while(*deps)
