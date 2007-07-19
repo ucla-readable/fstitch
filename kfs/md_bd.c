@@ -83,24 +83,12 @@ static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint
 static int md_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct md_info * info = (struct md_info *) object;
-	bdesc_t * wblock;
-	int value;
 	
 	/* make sure it's a valid block */
 	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	wblock = bdesc_alloc_clone(block, number >> 1);
-	if(!wblock)
-		return -1;
-	bdesc_autorelease(wblock);
-	
-	/* this should never fail */
-	value = chdesc_push_down(object, block, info->below_bd[number & 1], wblock);
-	if(value < 0)
-		return value;
-	
 	/* write it */
-	return CALL(info->below_bd[number & 1], write_block, wblock, number >> 1);
+	return CALL(info->below_bd[number & 1], write_block, block, number >> 1);
 }
 
 static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
