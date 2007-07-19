@@ -31,15 +31,11 @@ struct chain_elt {
 	struct chain_elt * prev;
 };
 
-static chain_elt_t * chain_elt_create(void);
-static void          chain_elt_destroy(chain_elt_t * elt);
-static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k) __attribute__((always_inline));
-
-
 struct hash_map {
 	size_t size;
 	bool auto_resize;
 	vector_t * tbl;
+	enum {PTR, STR} type;
 #if HASH_MAP_TRACK_BUCKET_SIZES
 	vector_t * tbl_size;
 	vector_t * tbl_max_size;
@@ -80,12 +76,13 @@ static inline unsigned long next_size(size_t n)
 	return pos == last ? *(last - 1) : *pos;
 }
 
+inline static size_t hash_ptr(const void * k, size_t tbl_size) __attribute__((always_inline));
 inline static size_t hash_ptr(const void * k, size_t tbl_size)
 {
 	return ((size_t) k) % tbl_size;
 }
 
-// Not yet in use, but here in case we later want it
+inline static size_t hash_str(const char * s, size_t tbl_size) __attribute__((always_inline));
 inline static size_t hash_str(const char * s, size_t tbl_size)
 {
     unsigned long h = 0;
@@ -94,10 +91,45 @@ inline static size_t hash_str(const char * s, size_t tbl_size)
     return h % tbl_size;
 }
 
-//
-// Inline implementations
+static __inline size_t hash(const hash_map_t * hm, const void * k) __attribute__((always_inline));
+static __inline size_t hash(const hash_map_t * hm, const void * k)
+{
+	switch(hm->type)
+	{
+		case PTR: return hash_ptr(k, vector_size(hm->tbl));
+		case STR: return hash_str(k, vector_size(hm->tbl));
+		default: assert(0); return -1;
+	}
+}
 
-static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const void * k)
+
+//
+// Chains
+
+DECLARE_POOL(chain_elt, chain_elt_t);
+
+static void chain_elt_pool_free_all(void * ignore)
+{
+	chain_elt_free_all();
+}
+
+static chain_elt_t * chain_elt_create(const hash_map_t * hm, void * k, void * v)
+{
+	chain_elt_t * elt = chain_elt_alloc();
+	elt->elt.key = k;
+	elt->elt.val = v;
+	elt->next = NULL;
+	elt->prev = NULL;
+	return elt;
+}
+
+static void chain_elt_destroy(chain_elt_t * elt)
+{
+	chain_elt_free(elt);
+}
+
+static __inline chain_elt_t * chain_search_ptr_key(const chain_elt_t * head, const void * k) __attribute__((always_inline));
+static __inline chain_elt_t * chain_search_ptr_key(const chain_elt_t * head, const void * k)
 {
 	while (head)
 	{
@@ -109,15 +141,35 @@ static __inline chain_elt_t * chain_search_key(const chain_elt_t * head, const v
 	return NULL;
 }
 
+static __inline chain_elt_t * chain_search_str_key(const chain_elt_t * head, const char * k) __attribute__((always_inline));
+static __inline chain_elt_t * chain_search_str_key(const chain_elt_t * head, const char * k)
+{
+	while (head)
+	{
+		// Cache key lengths?
+		if (!strcmp((const char *) head->elt.key, k))
+			return (chain_elt_t *) head;
+		head = head->next;
+	}
+
+	return NULL;
+}
+
+static __inline chain_elt_t * chain_search_key(const hash_map_t * hm, const chain_elt_t * head, const void * k)
+{
+	switch(hm->type)
+	{
+		case PTR: return chain_search_ptr_key(head, k);
+		case STR: return chain_search_str_key(head, k);
+		default: assert(0); return NULL;
+	}
+}
+
+
 //
 // Construction/destruction
 
-hash_map_t * hash_map_create(void)
-{
-	return hash_map_create_size(1, 1);
-}
-
-hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
+static hash_map_t * hash_map_create_size_type(size_t n, bool auto_resize, int type)
 {
 	hash_map_t * hm;
 	if (!n)
@@ -135,6 +187,8 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 		free(hm);
 		return NULL;
 	}
+	hm->type = type;
+
 #if HASH_MAP_TRACK_BUCKET_SIZES
 	hm->tbl_size = vector_create_size(vector_size(hm->tbl));
 	assert(hm->tbl_size);
@@ -156,6 +210,36 @@ hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
 	return hm;
 }
 
+hash_map_t * hash_map_create(void)
+{
+	return hash_map_create_size_type(1, 1, PTR);
+}
+
+hash_map_t * hash_map_create_ptr(void)
+{
+	return hash_map_create_size_type(1, 1, PTR);
+}
+
+hash_map_t * hash_map_create_str(void)
+{
+	return hash_map_create_size_type(1, 1, STR);
+}
+
+hash_map_t * hash_map_create_size(size_t n, bool auto_resize)
+{
+	return hash_map_create_size_type(1, 1, PTR);
+}
+
+hash_map_t * hash_map_create_size_ptr(size_t n, bool auto_resize)
+{
+	return hash_map_create_size_type(1, 1, PTR);
+}
+
+hash_map_t * hash_map_create_size_str(size_t n, bool auto_resize)
+{
+	return hash_map_create_size_type(1, 1, STR);
+}
+
 hash_map_t * hash_map_copy(const hash_map_t * hm)
 {
 	hash_map_t * hm_copy;
@@ -164,7 +248,7 @@ hash_map_t * hash_map_copy(const hash_map_t * hm)
 	int r;
 
 	// Create new hash table
-	hm_copy = hash_map_create_size(hm->size, hm->auto_resize);
+	hm_copy = hash_map_create_size_type(hm->size, hm->auto_resize, hm->type);
 	if (!hm_copy)
 		return NULL;
 
@@ -217,12 +301,12 @@ bool hash_map_empty(const hash_map_t * hm)
 int hash_map_insert(hash_map_t * hm, void * k, void * v)
 {
 	Dprintf("%s(%p, %p, %p)\n", __FUNCTION__, hm, k, v);
-	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
+	const size_t elt_num = hash(hm, k);
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
 	if (!head)
 	{
-		head = chain_elt_create();
+		head = chain_elt_create(hm, k, v);
 		if (!head)
 			return -ENOMEM;
 	}
@@ -231,7 +315,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 		// See if k is already in the chain, simply update its value if so.
 		chain_elt_t * existing_elt;
 		chain_elt_t * new_head;
-		if ((existing_elt = chain_search_key(head, k)))
+		if ((existing_elt = chain_search_key(hm, head, k)))
 		{
 			existing_elt->elt.val = v;
 #if HASH_MAP_IT_MOD_DEBUG
@@ -243,7 +327,7 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 
 		// k isn't already in the chain, add it.
 
-		new_head = chain_elt_create();
+		new_head = chain_elt_create(hm, k, v);
 		if (!new_head)
 			return -ENOMEM;
 
@@ -259,8 +343,6 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 		vector_elt_set(hm->tbl_max_size, elt_num, vector_elt(hm->tbl_size, elt_num));
 #endif
 	hm->size++;
-	head->elt.key = k;
-	head->elt.val = v;
 #if HASH_MAP_IT_MOD_DEBUG
 	hm->version++;
 	hm->loose_version++;
@@ -281,12 +363,12 @@ int hash_map_insert(hash_map_t * hm, void * k, void * v)
 static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 {
 	Dprintf("%s(%p, %p)\n", __FUNCTION__, hm, elt);
-	const size_t elt_num = hash_ptr(elt->elt.key, vector_size(hm->tbl));
+	const size_t elt_num = hash(hm, elt->elt.key);
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 
 	if (head)
 	{
-		// Assume !chain_search_key(head, elt->elt.key)
+		// Assume !chain_search_key(hm, head, elt->elt.key)
 		elt->next = head;
 		head->prev = elt;
 	}
@@ -308,14 +390,14 @@ static void insert_chain_elt(hash_map_t * hm, chain_elt_t * elt)
 static chain_elt_t * erase_chain_elt(hash_map_t * hm, const void * k)
 {
 	Dprintf("%s(%p, %p)\n", __FUNCTION__, hm, k);
-	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
+	const size_t elt_num = hash(hm, k);
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 	chain_elt_t * k_chain;
 
 	if (!head)
 		return NULL;
 
-	k_chain = chain_search_key(head, k);
+	k_chain = chain_search_key(hm, head, k);
 	if (!k_chain)
 		return NULL;
 
@@ -378,19 +460,19 @@ int hash_map_change_key(hash_map_t * hm, void * oldk, void * newk)
 
 	// Check that newk isn't already in use
 
-	const size_t newk_elt_num = hash_ptr(newk, vector_size(hm->tbl));
+	const size_t newk_elt_num = hash(hm, newk);
 	head = vector_elt(hm->tbl, newk_elt_num);
-	if (head && chain_search_key(head, newk))
+	if (head && chain_search_key(hm, head, newk))
 		return -EEXIST;
 
 	// Find oldk
 
-	const size_t oldk_elt_num = hash_ptr(oldk, vector_size(hm->tbl));
+	const size_t oldk_elt_num = hash(hm, oldk);
 	head = vector_elt(hm->tbl, oldk_elt_num);
 	if (!head)
 		return -ENOENT;
 
-	head = chain_search_key(head, oldk);
+	head = chain_search_key(hm, head, oldk);
 	if (!head)
 		return -ENOENT;
 
@@ -454,14 +536,14 @@ void hash_map_clear(hash_map_t * hm)
 static __inline hash_map_elt_t * hash_map_find_internal(const hash_map_t * hm, const void * k) __attribute__((always_inline));
 static __inline hash_map_elt_t * hash_map_find_internal(const hash_map_t * hm, const void * k)
 {
-	const size_t elt_num = hash_ptr(k, vector_size(hm->tbl));
+	const size_t elt_num = hash(hm, k);
 	chain_elt_t * head = vector_elt(hm->tbl, elt_num);
 	chain_elt_t * k_chain;
 
 	if (!head)
 		return NULL;
 
-	k_chain = chain_search_key(head, k);
+	k_chain = chain_search_key(hm, head, k);
 	if (!k_chain)
 		return NULL;
 
@@ -518,7 +600,7 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 	// http://sources.redhat.com/ml/guile/1998-10/msg00864.html
 
 	// Create new hash table
-	new_hm = hash_map_create_size(n, hm->auto_resize);
+	new_hm = hash_map_create_size_type(n, hm->auto_resize, hm->type);
 	if (!new_hm)
 		return -ENOMEM;
 
@@ -711,36 +793,6 @@ void * hash_map_val_next(hash_map_it_t * it)
 	return hash_map_elt_next(it).val;
 }
 
-
-
-//
-// Chains
-
-DECLARE_POOL(chain_elt, chain_elt_t);
-
-static void chain_elt_pool_free_all(void * ignore)
-{
-	chain_elt_free_all();
-}
-
-static chain_elt_t * chain_elt_create(void)
-{
-	chain_elt_t * elt = chain_elt_alloc();
-	elt->elt.key = NULL;
-	elt->elt.val = NULL;
-	elt->next = NULL;
-	elt->prev = NULL;
-	return elt;
-}
-
-static void chain_elt_destroy(chain_elt_t * elt)
-{
-	elt->elt.key = NULL;
-	elt->elt.val = NULL;
-	elt->prev = NULL;
-	elt->next = NULL;
-	chain_elt_free(elt);
-}
 
 int hash_map_init(void)
 {

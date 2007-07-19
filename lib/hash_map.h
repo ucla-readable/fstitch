@@ -30,8 +30,12 @@ int hash_map_init(void);
 
 // Create a hash_map.
 hash_map_t * hash_map_create(void);
+hash_map_t * hash_map_create_ptr(void);
+hash_map_t * hash_map_create_str(void);
 // Create a hash_map, reserve space for n entries, allow/don't auto resizing.
 hash_map_t * hash_map_create_size(size_t n, bool auto_resize);
+hash_map_t * hash_map_create_size_ptr(size_t n, bool auto_resize);
+hash_map_t * hash_map_create_size_str(size_t n, bool auto_resize);
 // Create a hash map that contains the same elements as hm
 hash_map_t * hash_map_copy(const hash_map_t * hm);
 // Destroy a hash_map, does not destroy keys or vals.
