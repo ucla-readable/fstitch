@@ -138,9 +138,8 @@ static int block_resizer_bd_destroy(BD_t * bd)
 		return r;
 	modman_dec_bd(info->below_bd, bd);
 	
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
