@@ -130,12 +130,6 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	bd->numblocks = length;
 	bd->atomicsize = disk->atomicsize;
 	bd->level = disk->level;
-	bd->graph_index = disk->graph_index + 1;
-	if(bd->graph_index >= NBDINDEX)
-	{
-		DESTROY(bd);
-		return NULL;
-	}
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

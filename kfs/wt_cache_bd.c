@@ -264,12 +264,6 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 	bd->atomicsize = disk->atomicsize;
 	
 	bd->level = disk->level;
-	bd->graph_index = disk->graph_index + 1;
-	if(bd->graph_index >= NBDINDEX)
-	{
-		DESTROY(bd);
-		return NULL;
-	}
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

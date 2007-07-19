@@ -171,12 +171,6 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 		bd->level = disk0->level;
 	else
 		bd->level = disk1->level;
-	if (disk0->graph_index > disk1->graph_index)
-		bd->graph_index = disk0->graph_index + 1;
-	else
-		bd->graph_index = disk1->graph_index + 1;
-	if(bd->graph_index >= NBDINDEX)
-		goto error_add;
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 		goto error_add;

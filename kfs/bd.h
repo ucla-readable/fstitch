@@ -33,7 +33,7 @@ typedef struct BD BD_t;
 
 struct BD {
 	OBJECT(BD_t);
-	uint16_t level, graph_index;
+	uint16_t level;
 	uint32_t numblocks;
 	uint16_t blocksize;
 	uint16_t atomicsize;
@@ -55,7 +55,7 @@ struct BD {
 
 #define BD_INIT(bd, module) { \
 	OBJ_INIT(bd, module); \
-	(bd)->level = -1; (bd)->graph_index = -1;			\
+	(bd)->level = -1; \
 	(bd)->blocksize = 0; (bd)->atomicsize = 0; (bd)->numblocks = 0;	\
 	ASSIGN(bd, module, read_block); \
 	ASSIGN(bd, module, synthetic_read_block); \

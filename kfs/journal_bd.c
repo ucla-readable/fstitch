@@ -1087,12 +1087,6 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	info->recursion = 0;
 	info->only_metadata = only_metadata;
 	bd->level = disk->level;
-	bd->graph_index = disk->graph_index + 1;
-	if(bd->graph_index >= NBDINDEX)
-	{
-		DESTROY(bd);
-		return NULL;
-	}
 	
 	info->block_map = hash_map_create();
 	if(!info->block_map)

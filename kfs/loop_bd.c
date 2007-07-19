@@ -196,12 +196,6 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 		goto error_inode;
 
 	bd->level = info->lfs->blockdev->level;
-	bd->graph_index = info->lfs->blockdev->graph_index + 1;
-	if(bd->graph_index >= NBDINDEX)
-	{
-		DESTROY(bd);
-		return NULL;
-	}
 
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

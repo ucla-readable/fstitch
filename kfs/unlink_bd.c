@@ -120,15 +120,9 @@ BD_t * unlink_bd(BD_t * disk)
 	info->below_bd = disk;
 	info->write_head = CALL(disk, get_write_head);
 	bd->level = disk->level;
-	bd->graph_index = disk->graph_index + 1;
 	bd->numblocks = disk->numblocks;
 	bd->blocksize = disk->blocksize;
 	bd->atomicsize = disk->atomicsize;
-	if(bd->graph_index >= NBDINDEX)
-	{
-		DESTROY(bd);
-		return NULL;
-	}
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{

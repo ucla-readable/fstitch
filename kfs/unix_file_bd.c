@@ -286,7 +286,6 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 
 	BD_INIT(bd, unix_file_bd);
 	bd->level = 0;
-	bd->graph_index = 0;
 	
 	bd->numblocks = blocks;
 	bd->blocksize = blocksize;

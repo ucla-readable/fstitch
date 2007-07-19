@@ -751,12 +751,6 @@ BD_t * linux_bd(const char * linux_bdev_path)
 #endif
 	init_waitqueue_head(&info->waitq);
 	bd->level = 0;
-	bd->graph_index = 0;
-	if(bd->graph_index >= NBDINDEX)
-	{
-		DESTROY(bd);
-		return NULL;
-	}
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
