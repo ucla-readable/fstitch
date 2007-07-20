@@ -14,7 +14,7 @@ MAB=ab-leiz.tar.gz
 
 function test () {
 	mkdir $MNT/workingdir
-	ktime andrew make -C $MNT/workingdir -f `pwd`/$KUDOSDIR/obj/ab/original/Makefile >& $MNT/logfile
+	ktime andrew sh -c "make -C $MNT/workingdir -f `pwd`/$KUDOSDIR/obj/ab/original/Makefile >& $MNT/logfile"
 	ktime sync fsync $KUDOSDIR $MNT;
 }
 
