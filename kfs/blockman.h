@@ -23,12 +23,9 @@ typedef struct blockman blockman_t;
 blockman_t * blockman_create(uint16_t length, BD_t * owner, destroy_notify_t destroy_notify);
 void blockman_destroy(blockman_t ** blockman);
 
-int blockman_add(blockman_t * blockman, uint32_t number, datadesc_t * ddesc);
-int blockman_remove(datadesc_t * ddesc);
+int blockman_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number);
+int blockman_remove(bdesc_t *bdesc);
 
-datadesc_t * blockman_lookup(blockman_t * blockman, uint32_t number);
-
-int blockman_managed_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number);
-bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number);
+bdesc_t *blockman_lookup(blockman_t * blockman, uint32_t number);
 
 #endif /* __KUDOS_KFS_BLOCKMAN_H */

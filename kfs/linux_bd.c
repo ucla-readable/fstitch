@@ -86,6 +86,7 @@ struct linux_info {
 struct linux_bio_private {
 	struct linux_info * info;
 	bdesc_t * bdesc;
+	int need_blockman;
 	uint32_t number;
 	uint32_t nbytes;
 #if DEBUG_WRITES
@@ -250,7 +251,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 	assert(nbytes && (nbytes & (object->blocksize - 1)) == 0);
 	nblocks = nbytes / object->blocksize;
 	
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	bdesc = blockman_lookup(info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->ddesc->length == nbytes);
@@ -273,39 +274,26 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 	j_number = number;
 	for(j = 0; j < READ_AHEAD_COUNT; j++, j_number += nblocks)
 	{
-		datadesc_t * dd;
-	
-		if(j_number + nblocks > object->numblocks)
-		{
+		private[j].need_blockman = 0;
+		if(j_number + nblocks > object->numblocks) {
 			blocks[j] = NULL;
 			continue;
-		}
-		
-		dd = blockman_lookup(info->blockman, j_number);
-		if(dd && !dd->synthetic)
-		{
-			blocks[j] = NULL;
-			continue;
-		}
-		else if(dd)
-		{
-			if(bdesc->ddesc == dd)
-				blocks[j] = bdesc;
-			else
-			{
-				/* blockman_managed_lookup? */
-				blocks[j] = bdesc_alloc_wrap(dd, j_number);
-				if(blocks[j] == NULL)
+		} else if (j_number == number) {
+			blocks[j] = bdesc;
+		} else {
+			bdesc_t *bd = blockman_lookup(info->blockman, j_number);
+			if (bd && !bd->ddesc->synthetic) {
+				blocks[j] = NULL;
+				continue;
+			} else if (bd)
+				blocks[j] = bd;
+			else {
+				blocks[j] = bdesc_alloc(j_number, nbytes);
+				if (blocks[j] == NULL)
 					return NULL;
 				bdesc_autorelease(blocks[j]);
+				private[j].need_blockman = 1;
 			}
-		}
-		else
-		{
-			blocks[j] = bdesc_alloc(j_number, nbytes);
-			if(blocks[j] == NULL)
-				return NULL;
-			bdesc_autorelease(blocks[j]);
 		}
 
 		assert(nbytes <= 4096);
@@ -388,11 +376,11 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 			if(++info->read_ahead_idx == READ_AHEAD_BUFFER)
 				info->read_ahead_idx = 0;
 		}
-		
-		r = blockman_managed_add(info->blockman, blocks[j], private[j].number);
-		assert(r >= 0);
-		if(r < 0)
-			return NULL;
+
+		if (private[j].need_blockman) {
+			r = blockman_add(info->blockman, blocks[j], private[j].number);
+			assert(r >= 0);
+		}
 	}
 	
 	KDprintk(KERN_ERR "exiting read\n");
@@ -404,7 +392,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	struct linux_info * info = (struct linux_info *) object;
 	bdesc_t * bdesc;
 	
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	bdesc = blockman_lookup(info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->ddesc->length == nbytes);
@@ -421,7 +409,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	
 	bdesc->ddesc->synthetic = 1;
 	
-	if(blockman_managed_add(info->blockman, bdesc, number) < 0)
+	if(blockman_add(info->blockman, bdesc, number) < 0)
 		return NULL;
 	
 	return bdesc;

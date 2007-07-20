@@ -90,23 +90,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 	return bdesc;
 }
 
-/* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number)
-{
-	bdesc_t * bdesc = bdesc_mem_alloc();
-	if(!bdesc)
-		return NULL;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number, ddesc->length / 4096); /* XXXXXXX */
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, ddesc->length / 4096); /* XXXXXXXX */
-	bdesc->ddesc = ddesc;
-	bdesc->cache_number = (uint32_t) -1;
-	bdesc->ref_count = 1;
-	bdesc->ar_count = 0;
-	bdesc->ar_next = NULL;
-	bdesc->ddesc->ref_count++;
-	return bdesc;
-}
-
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
@@ -165,7 +148,7 @@ void bdesc_release(bdesc_t ** bdesc)
 				hash_map_destroy((*bdesc)->ddesc->bit_changes);
 			}
 			if((*bdesc)->ddesc->manager)
-				blockman_remove((*bdesc)->ddesc);
+				blockman_remove(*bdesc);
 			free((*bdesc)->ddesc->data);
 			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
 			datadesc_mem_free((*bdesc)->ddesc);

@@ -35,77 +35,54 @@ blockman_t * blockman_create(uint16_t length, BD_t * owner, destroy_notify_t des
 	return man;
 }
 
-void blockman_destroy(blockman_t ** blockman)
+void blockman_destroy(blockman_t **blockman)
 {
 	hash_map_t * hash = (*blockman)->map;
 	hash_map_it_t it;
-	datadesc_t * ddesc;
+	bdesc_t * bdesc;
 	
 	hash_map_it_init(&it, hash);
-	while((ddesc = hash_map_val_next(&it)))
+	while((bdesc = hash_map_val_next(&it)))
 	{
-#if !DISABLE_ORPHAN_WARNING
-		if(bdesc_autorelease_poolstack_scan(ddesc) < ddesc->ref_count)
-			fprintf(stderr, "%s(): (%s:%d): orphaning data descriptor %p (manager %p, #%d, count %d)!\n", __FUNCTION__, __FILE__, __LINE__, ddesc, *blockman, ddesc->managed_number, ddesc->ref_count - bdesc_autorelease_poolstack_scan(ddesc));
-#endif
-		ddesc->manager = NULL;
+		bdesc->ddesc->manager = NULL;
 	}
 	hash_map_destroy(hash);
 	free(*blockman);
 	*blockman = NULL;
 }
 
-int blockman_add(blockman_t * blockman, uint32_t number, datadesc_t * ddesc)
+int blockman_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number)
 {
 	int r;
-	Dprintf("<blockman 0x%08x add %u: ddesc 0x%08x>\n", blockman, number, ddesc);
+	Dprintf("<blockman 0x%08x add %u: ddesc 0x%08x>\n", blockman, number, bdesc->ddesc);
 	
-	if(ddesc->manager)
+	if(bdesc->ddesc->manager)
 		return -EINVAL;
 	
-	r = hash_map_insert(blockman->map, (void *) number, ddesc);
+	r = hash_map_insert(blockman->map, (void *) number, bdesc);
 	if(r < 0)
 		return r;
 	
-	ddesc->manager = blockman;
-	ddesc->managed_number = number;
+	bdesc->ddesc->manager = blockman;
+	bdesc->ddesc->managed_number = number;
 	
 	return 0;
 }
 
-int blockman_remove(datadesc_t * ddesc)
+int blockman_remove(bdesc_t *bdesc)
 {
-	Dprintf("<blockman 0x%08x remove %u: ddesc 0x%08x>\n", blockman, ddesc->managed_number, ddesc);
-	if(ddesc->manager)
-	{
-		hash_map_erase(ddesc->manager->map, (void *) ddesc->managed_number);
-		if(ddesc->manager->destroy_notify)
-			ddesc->manager->destroy_notify(ddesc->manager->owner, ddesc->managed_number, ddesc->length);
-		ddesc->manager = NULL;
-	}
+	Dprintf("<blockman 0x%08x remove %u: ddesc 0x%08x>\n", blockman, bdesc->ddesc->managed_number, bdesc->ddesc);
+	blockman_t *blockman = bdesc->ddesc->manager;
+	assert(blockman);
+	hash_map_erase(blockman->map, (void *) bdesc->ddesc->managed_number);
+	if(blockman->destroy_notify)
+		blockman->destroy_notify(blockman->owner, bdesc->ddesc->managed_number, bdesc->ddesc->length);
+	bdesc->ddesc->manager = NULL;
 	return 0;
 }
 
-datadesc_t * blockman_lookup(blockman_t * blockman, uint32_t number)
+bdesc_t * blockman_lookup(blockman_t * blockman, uint32_t number)
 {
 	Dprintf("<blockman 0x%08x lookup %u>\n", blockman, number);
-	return (datadesc_t *) hash_map_find_val(blockman->map, (void *) number);
-}
-
-int blockman_managed_add(blockman_t *blockman, bdesc_t *bdesc, uint32_t number)
-{
-	return blockman_add(blockman, number, bdesc->ddesc);
-}
-
-bdesc_t * blockman_managed_lookup(blockman_t *blockman, uint32_t number)
-{
-	bdesc_t * bdesc;
-	datadesc_t * ddesc = blockman_lookup(blockman, number);
-	if(!ddesc)
-		return NULL;
-	bdesc = bdesc_alloc_wrap(ddesc, number);
-	if(!bdesc)
-		return NULL;
-	bdesc_autorelease(bdesc);
-	return bdesc;
+	return (bdesc_t *) hash_map_find_val(blockman->map, (void *) number);
 }

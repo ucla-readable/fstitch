@@ -54,7 +54,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint32_
 	off_t seeked;
 	int r;
 	
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	bdesc = blockman_lookup(info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->ddesc->length == nbytes);
@@ -93,7 +93,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint32_
 	
 	if(bdesc->ddesc->synthetic)
 		bdesc->ddesc->synthetic = 0;
-	else if(blockman_managed_add(info->blockman, bdesc, number) < 0)
+	else if(blockman_add(info->blockman, bdesc, number) < 0)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
@@ -108,7 +108,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	bdesc = blockman_lookup(info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->ddesc->length == nbytes);
@@ -122,7 +122,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 	bdesc->ddesc->synthetic = 1;
 
-	if(blockman_managed_add(info->blockman, bdesc, number) < 0)
+	if(blockman_add(info->blockman, bdesc, number) < 0)
 		return NULL;
 
 	return bdesc;
