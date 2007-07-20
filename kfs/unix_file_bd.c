@@ -24,6 +24,7 @@ struct unix_file_info {
 	char *fname;
 	int fd;
 	blockman_t blockman;
+	int user_name;
 };
 
 #if 0
@@ -89,7 +90,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint32_
 	
 	if(block_log)
 		for(r = 0; r < nbytes; r += object->blocksize)
-			fprintf(block_log, "%p read %u %d\n", object, number + r / object->blocksize, r / object->blocksize);
+			fprintf(block_log, "%d read %u %d\n", info->user_name, number + r / object->blocksize, r / object->blocksize);
 	
 	if(bdesc->synthetic)
 		bdesc->synthetic = 0;
@@ -156,7 +157,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	}
 
 	if(block_log)
-		fprintf(block_log, "%p write %u\n", object, number);
+		fprintf(block_log, "%d write %u %d\n", info->user_name, number, block->flags);
 
 	r = revision_tail_acknowledge(block, object);
 	if(r < 0)

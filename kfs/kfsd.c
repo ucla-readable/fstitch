@@ -383,6 +383,10 @@ int main(int argc, char * argv[])
 			remove_arg(&argc, argv, i--);
 		}
 #endif
+		else if (!strncmp(argv[i], "blocklog=", 9)) {
+			setenv("BLOCK_LOG", argv[i] + 9, 1);
+			remove_arg(&argc, argv, i--);
+		}
 	}
 	kfsd_argc = argc;
 	kfsd_argv = argv;
