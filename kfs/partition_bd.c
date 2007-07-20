@@ -45,7 +45,6 @@ static int partition_bd_get_status(void * object, int level, char * string, size
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct partition_info * info = (struct partition_info *) object;
-	bdesc_t *bdesc;
 	
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
@@ -56,7 +55,6 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint32_
 static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct partition_info * info = (struct partition_info *) object;
-	bdesc_t * bdesc;
 	
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);

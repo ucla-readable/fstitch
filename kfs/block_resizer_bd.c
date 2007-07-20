@@ -49,7 +49,6 @@ static int block_resizer_bd_get_status(void * object, int level, char * string, 
 static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct resize_info * info = (struct resize_info *) object;
-	bdesc_t *bdesc;
 	
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
@@ -60,7 +59,6 @@ static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uin
 static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct resize_info * info = (struct resize_info *) object;
-	bdesc_t *bdesc;
 	
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);

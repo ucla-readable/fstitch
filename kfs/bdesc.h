@@ -84,9 +84,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes);
 /* wrap a ddesc in a new bdesc */
 bdesc_t * bdesc_alloc_wrap(datadesc_t *ddesc, uint32_t number);
 
-/* make a new bdesc that shares a ddesc with another bdesc */
-bdesc_t * bdesc_alloc_clone(bdesc_t *original, uint32_t number);
-
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t *bdesc);
 
