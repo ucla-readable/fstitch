@@ -244,8 +244,8 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 		if(!bdesc)
 			return size_read ? size_read : -1;
 
-		limit = MIN(bdesc->ddesc->length - dataoffset, size - size_read);
-		memcpy((uint8_t *) data + size_read, bdesc->ddesc->data + dataoffset, limit);
+		limit = MIN(bdesc->length - dataoffset, size - size_read);
+		memcpy((uint8_t *) data + size_read, bdesc->data + dataoffset, limit);
 		size_read += limit;
 		/* dataoffset only needed for first block */
 		dataoffset = 0;

@@ -189,11 +189,11 @@ static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		*delay = 0;
 	
 	/* in flight? */
-	if(block->ddesc->in_flight)
+	if(block->in_flight)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	if(!block->ddesc->level_changes[object->level].head)
+	if(!block->level_changes[object->level].head)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->below_bd, &slice);
@@ -223,7 +223,7 @@ static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->ddesc->flags);
+			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->flags);
 		}
 	}
 	
@@ -339,9 +339,9 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint32_
 	{
 		/* in the cache, use it */
 		block = slot->block;
-		assert(block->ddesc->length == nbytes);
+		assert(block->length == nbytes);
 		wbr_touch_block_read(info, slot);
-		if(!block->ddesc->synthetic)
+		if(!block->synthetic)
 			return block;
 	}
 	else
@@ -357,8 +357,8 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint32_
 	if(!block)
 		return NULL;
 	
-	if(block->ddesc->synthetic)
-		block->ddesc->synthetic = 0;
+	if(block->synthetic)
+		block->synthetic = 0;
 	else if(!wbr_push_block(info, block, number))
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
@@ -379,7 +379,7 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(slot)
 	{
 		/* in the cache, use it */
-		assert(slot->block->ddesc->length == nbytes);
+		assert(slot->block->length == nbytes);
 		wbr_touch_block_read(info, slot);
 		return slot->block;
 	}
@@ -407,13 +407,13 @@ static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	struct rand_slot * slot;
 	
 	/* make sure it's a valid block */
-	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->length / object->blocksize <= object->numblocks);
 	
 	slot = (struct rand_slot *) hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
 		/* already have this block */
-		assert(slot->block->ddesc == block->ddesc);
+		assert(slot->block == block);
 		wbr_touch_block_read(info, slot);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */

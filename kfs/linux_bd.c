@@ -182,7 +182,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 				if(!len)
 					len = 4096;
 			}
-			memcpy(private->bdesc->ddesc->data + (4096 * i), p, len);
+			memcpy(private->bdesc->data + (4096 * i), p, len);
 		}
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
 		bio_iovec_idx(bio, i)->bv_page = NULL;
@@ -191,7 +191,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 	}
 	
 	if(dir == READ)
-		private->bdesc->ddesc->synthetic = 0;
+		private->bdesc->synthetic = 0;
 	else if(dir == WRITE)
 	{
 		revision_tail_request_landing(private->bdesc);
@@ -254,8 +254,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 	bdesc = blockman_lookup(info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->ddesc->length == nbytes);
-		if(!bdesc->ddesc->synthetic)
+		assert(bdesc->length == nbytes);
+		if(!bdesc->synthetic)
 		{
 			KDprintk(KERN_ERR "already got it. done w/ read\n");
 			return bdesc;
@@ -282,7 +282,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 			blocks[j] = bdesc;
 		} else {
 			bdesc_t *bd = blockman_lookup(info->blockman, j_number);
-			if (bd && !bd->ddesc->synthetic) {
+			if (bd && !bd->synthetic) {
 				blocks[j] = NULL;
 				continue;
 			} else if (bd)
@@ -395,7 +395,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	bdesc = blockman_lookup(info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->ddesc->length == nbytes);
+		assert(bdesc->length == nbytes);
 		return bdesc;
 	}
 	
@@ -407,7 +407,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
-	bdesc->ddesc->synthetic = 1;
+	bdesc->synthetic = 1;
 	
 	if(blockman_add(info->blockman, bdesc, number) < 0)
 		return NULL;
@@ -435,7 +435,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	}
 #endif
 
-	KDprintk(KERN_ERR "entered write (blk: %d, nbytes: %d)\n", number, block->ddesc->nbytes);
+	KDprintk(KERN_ERR "entered write (blk: %d, nbytes: %d)\n", number, block->length);
 	assert(number < object->numblocks);
 	
 	private = bio_private_alloc();
@@ -456,7 +456,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	{
 		struct linux_bd_write * write = &debug_writes.writes[debug_writes.next];
 		write->blockno = number;
-		write->checksum = block_checksum(block->ddesc->data, block->ddesc->length);
+		write->checksum = block_checksum(block->data, block->length);
 		/* NOTE: ninflight may overcount as any inflight writes could complete before we actually make the request below... */
 		if(number < MAXBLOCKNO)
 			write->ninflight = atomic_inc_return(&debug_writes_ninflight[number]) - 1;
@@ -471,7 +471,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	}
 #endif
 	
-	vec_len = (block->ddesc->length + 4095) / 4096;
+	vec_len = (block->length + 4095) / 4096;
 	assert(vec_len == 1);
 	
 	bio = bio_alloc(GFP_KERNEL, vec_len);
@@ -493,15 +493,15 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 		 * which works fine if you just have one block, but is a
 		 * problem if you have more. right now you can only pass one
 		 * block to this function, so it's not a problem. */
-		memcpy(page_address(bv->bv_page), block->ddesc->data, block->ddesc->length);
-		bv->bv_len = block->ddesc->length;
+		memcpy(page_address(bv->bv_page), block->data, block->length);
+		bv->bv_len = block->length;
 		bv->bv_offset = 0;
 	}
 	
 	private->info = info;
 	private->bdesc = block;
 	private->number = number;
-	private->nbytes = block->ddesc->length;
+	private->nbytes = block->length;
 #if DEBUG_LINUX_BD
 	private->seq = info->seq++;
 #endif
@@ -509,17 +509,17 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	bio->bi_idx = 0;
 	bio->bi_vcnt = vec_len;
 	bio->bi_sector = number;
-	bio->bi_size = block->ddesc->length;
+	bio->bi_size = block->length;
 	bio->bi_bdev = info->bdev;
 	bio->bi_rw = WRITE | (1 << BIO_RW_FUA);
 	bio->bi_end_io = linux_bd_end_io;
 	bio->bi_private = private;
 	
-	if(block->ddesc->in_flight)
+	if(block->in_flight)
 	{
 		KERNEL_INTERVAL(wait);
 		TIMING_START(wait);
-		while(block->ddesc->in_flight)
+		while(block->in_flight)
 		{
 			revision_tail_wait_for_landing_requests();
 			revision_tail_process_landing_requests();

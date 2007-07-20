@@ -56,8 +56,8 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint32_t nbyt
 	bdesc = blockman_lookup(info->blockman, number);
 	if (bdesc)
 	{
-		assert(bdesc->ddesc->length == nbytes);
-		if (!bdesc->ddesc->synthetic)
+		assert(bdesc->length == nbytes);
+		if (!bdesc->synthetic)
 			return bdesc;
 	}
 	else
@@ -71,11 +71,11 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint32_t nbyt
 		bdesc_autorelease(bdesc);
 	}
 
-	memcpy(bdesc->ddesc->data, &info->blocks[object->blocksize * number], nbytes);
+	memcpy(bdesc->data, &info->blocks[object->blocksize * number], nbytes);
 
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
-	if (bdesc->ddesc->synthetic)
-		bdesc->ddesc->synthetic = 0;
+	if (bdesc->synthetic)
+		bdesc->synthetic = 0;
 	else if (blockman_add(info->blockman, bdesc, number) < 0)
 		return NULL;
 	return bdesc;
@@ -93,7 +93,7 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	struct mem_info * info = (struct mem_info *) object;
 	int r;
 
-	assert(block->ddesc->length == object->blocksize
+	assert(block->length == object->blocksize
 	       && number < object->numblocks);
 
 	r = revision_tail_prepare(block, object);
@@ -103,7 +103,7 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	}
 
 	memcpy(&info->blocks[number * object->blocksize],
-	       block->ddesc->data,
+	       block->data,
 	       object->blocksize);
 
 	r = revision_tail_acknowledge(block, object);

@@ -44,7 +44,7 @@ void blockman_destroy(blockman_t **blockman)
 	hash_map_it_init(&it, hash);
 	while((bdesc = hash_map_val_next(&it)))
 	{
-		bdesc->ddesc->manager = NULL;
+		bdesc->manager = NULL;
 	}
 	hash_map_destroy(hash);
 	free(*blockman);
@@ -54,30 +54,30 @@ void blockman_destroy(blockman_t **blockman)
 int blockman_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number)
 {
 	int r;
-	Dprintf("<blockman 0x%08x add %u: ddesc 0x%08x>\n", blockman, number, bdesc->ddesc);
-	
-	if(bdesc->ddesc->manager)
+	Dprintf("<blockman 0x%08x add %u: bdesc 0x%08x>\n", blockman, number, bdesc);
+
+	if(bdesc->manager)
 		return -EINVAL;
 	
 	r = hash_map_insert(blockman->map, (void *) number, bdesc);
 	if(r < 0)
 		return r;
 	
-	bdesc->ddesc->manager = blockman;
-	bdesc->ddesc->managed_number = number;
+	bdesc->manager = blockman;
+	bdesc->managed_number = number;
 	
 	return 0;
 }
 
 int blockman_remove(bdesc_t *bdesc)
 {
-	Dprintf("<blockman 0x%08x remove %u: ddesc 0x%08x>\n", blockman, bdesc->ddesc->managed_number, bdesc->ddesc);
-	blockman_t *blockman = bdesc->ddesc->manager;
+	Dprintf("<blockman 0x%08x remove %u: bdesc 0x%08x>\n", blockman, bdesc->managed_number, bdesc);
+	blockman_t *blockman = bdesc->manager;
 	assert(blockman);
-	hash_map_erase(blockman->map, (void *) bdesc->ddesc->managed_number);
+	hash_map_erase(blockman->map, (void *) bdesc->managed_number);
 	if(blockman->destroy_notify)
-		blockman->destroy_notify(blockman->owner, bdesc->ddesc->managed_number, bdesc->ddesc->length);
-	bdesc->ddesc->manager = NULL;
+		blockman->destroy_notify(blockman->owner, bdesc->managed_number, bdesc->length);
+	bdesc->manager = NULL;
 	return 0;
 }
 

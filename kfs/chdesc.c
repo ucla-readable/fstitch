@@ -296,7 +296,7 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 
 static int chdesc_overlap_list(const chdesc_t *c)
 {
-	int sz = c->block->ddesc->length >> OVERLAP1SHIFT;
+	int sz = c->block->length >> OVERLAP1SHIFT;
 	if (c->type == BIT)
 		// but this will not be executed at the moment
 		return (c->bit.offset << 2) / sz + 1;
@@ -310,14 +310,14 @@ static int chdesc_overlap_list(const chdesc_t *c)
 		return -1;
 }
 
-static void chdesc_link_overlap(chdesc_t *chdesc, datadesc_t *ddesc)
+static void chdesc_link_overlap(chdesc_t *chdesc)
 {
-	assert(chdesc->type == BYTE);
-	assert(chdesc->block && chdesc->block->ddesc == ddesc);
+	bdesc_t *bdesc = chdesc->block;
+	assert(chdesc->type == BYTE && bdesc);
 	assert(!chdesc->overlap_pprev && !chdesc->overlap_next);
 	int list = chdesc_overlap_list(chdesc);
 	assert(list >= 0);
-	chdesc->overlap_pprev = &ddesc->overlap1[list];
+	chdesc->overlap_pprev = &bdesc->overlap1[list];
 	chdesc->overlap_next = *chdesc->overlap_pprev;
 	*chdesc->overlap_pprev = chdesc;
 	if(chdesc->overlap_next)
@@ -326,7 +326,7 @@ static void chdesc_link_overlap(chdesc_t *chdesc, datadesc_t *ddesc)
 
 static void chdesc_unlink_overlap(chdesc_t *chdesc)
 {
-	assert((!chdesc->overlap_pprev && !chdesc->overlap_next) || (chdesc->block && chdesc->block->ddesc));
+	assert((!chdesc->overlap_pprev && !chdesc->overlap_next) || chdesc->block);
 	if(chdesc->overlap_pprev)
 		*chdesc->overlap_pprev = chdesc->overlap_next;
 	if(chdesc->overlap_next)
@@ -335,7 +335,7 @@ static void chdesc_unlink_overlap(chdesc_t *chdesc)
 	chdesc->overlap_pprev = NULL;
 }
 
-/* ensure bdesc->ddesc->bit_changes[offset] has a noop chdesc */
+/* ensure bdesc->bit_changes[offset] has a noop chdesc */
 static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 {
 	chdesc_t * chdesc;
@@ -344,14 +344,14 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	int r;
 	assert(block);
 	
-	if(!block->ddesc->bit_changes)
+	if(!block->bit_changes)
 	{
-		block->ddesc->bit_changes = hash_map_create();
-		if(!block->ddesc->bit_changes)
+		block->bit_changes = hash_map_create();
+		if(!block->bit_changes)
 			return NULL;
 	}
 	
-	chdesc = (chdesc_t *) hash_map_find_val(block->ddesc->bit_changes, key);
+	chdesc = (chdesc_t *) hash_map_find_val(block->bit_changes, key);
 	if(chdesc)
 	{
 		assert(chdesc->type == NOOP);
@@ -363,25 +363,25 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 		return NULL;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "bit_changes");
 	
-	if(hash_map_insert(block->ddesc->bit_changes, key, chdesc) < 0)
+	if(hash_map_insert(block->bit_changes, key, chdesc) < 0)
 	{
 		chdesc_destroy(&chdesc);
 		return NULL;
 	}
-	elt = hash_map_find_eltp(block->ddesc->bit_changes, key);
+	elt = hash_map_find_eltp(block->bit_changes, key);
 	assert(elt);
 	
 	/* we don't really need a flag for this, since we could just use the
 	 * noop.bit_changes field to figure it out... but that would be error-prone */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_BIT_NOOP);
 	chdesc->flags |= CHDESC_BIT_NOOP;
-	chdesc->noop.bit_changes = block->ddesc->bit_changes;
+	chdesc->noop.bit_changes = block->bit_changes;
 	chdesc->noop.hash_key = key;
 	
 	/* FIXME: we could use the weak reference callbacks here... */
 	if(chdesc_weak_retain(chdesc, (chdesc_t **) &elt->val, NULL, NULL) < 0)
 	{
-		hash_map_erase(block->ddesc->bit_changes, key);
+		hash_map_erase(block->bit_changes, key);
 		chdesc_destroy(&chdesc);
 		return NULL;
 	}
@@ -389,12 +389,12 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	return chdesc;
 }
 
-/* get bdesc->ddesc->bit_changes[offset] */
+/* get bdesc->bit_changes[offset] */
 static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 {
-	if(!block->ddesc->bit_changes)
+	if(!block->bit_changes)
 		return NULL;
-	return hash_map_find_val(block->ddesc->bit_changes, (void *) (uint32_t) offset);
+	return hash_map_find_val(block->bit_changes, (void *) (uint32_t) offset);
 }
 
 #if HEAP_RECURSION_ALLOW_MALLOC
@@ -519,13 +519,13 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 static bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
 {
 	assert(chdesc);
-	assert(block && block->ddesc);
+	assert(block);
 	if(chdesc->type == NOOP)
 	{
-		if(chdesc->block && chdesc->block->ddesc != block->ddesc)
+		if(chdesc->block && chdesc->block != block)
 			return 1;
 	}
-	else if(chdesc->block->ddesc != block->ddesc)
+	else if(chdesc->block != block)
 		return 1;
 	return 0;
 }
@@ -546,7 +546,7 @@ static bool count_chdesc_external_afters(const chdesc_t * chdesc, const bdesc_t 
 			/* XXX: stack usage */
 			n += count_chdesc_external_afters(after, block);
 		}
-		else if(after->block->ddesc != block->ddesc)
+		else if(after->block != block)
 			n++;
 	}
 	return n;
@@ -557,7 +557,7 @@ static uint32_t count_bdesc_external_afters(const bdesc_t * block)
 {
 	const chdesc_t * c;
 	uint32_t n = 0;
-	for(c = block->ddesc->all_changes; c; c = c->ddesc_next)
+	for(c = block->all_changes; c; c = c->ddesc_next)
 		if(!(c->flags & CHDESC_INFLIGHT))
 			n += count_chdesc_external_afters(c, block);
 	return n;
@@ -567,7 +567,7 @@ static uint32_t count_bdesc_external_afters(const bdesc_t * block)
  * an actual count */
 static bool extern_after_count_is_correct(const bdesc_t * block)
 {
-	return !block || (count_bdesc_external_afters(block) == block->ddesc->extern_after_count);
+	return !block || (count_bdesc_external_afters(block) == block->extern_after_count);
 }
 #endif /* BDESC_EXTERN_AFTER_COUNT_DEBUG */
 
@@ -591,13 +591,13 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 		{
 			if(add)
 			{
-				block->ddesc->extern_after_count++;
-				assert(block->ddesc->extern_after_count);
+				block->extern_after_count++;
+				assert(block->extern_after_count);
 			}
 			else
 			{
-				assert(block->ddesc->extern_after_count);
-				block->ddesc->extern_after_count--;
+				assert(block->extern_after_count);
+				block->extern_after_count--;
 			}
 		}
 	}
@@ -623,13 +623,13 @@ static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_befor
 		{
 			if(add)
 			{
-				before->block->ddesc->extern_after_count++;
-				assert(before->block->ddesc->extern_after_count);
+				before->block->extern_after_count++;
+				assert(before->block->extern_after_count);
 			}
 			else
 			{
-				assert(before->block->ddesc->extern_after_count);
-				before->block->ddesc->extern_after_count--;
+				assert(before->block->extern_after_count);
+				before->block->extern_after_count--;
 			}
 		}
 	}
@@ -660,13 +660,13 @@ static void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, b
 	{
 		if(add)
 		{
-			before->block->ddesc->extern_after_count++;
-			assert(before->block->ddesc->extern_after_count);
+			before->block->extern_after_count++;
+			assert(before->block->extern_after_count);
 		}
 		else
 		{
-			assert(before->block->ddesc->extern_after_count);
-			before->block->ddesc->extern_after_count--;
+			assert(before->block->extern_after_count);
+			before->block->extern_after_count--;
 		}
 	}
 }
@@ -784,7 +784,7 @@ static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	
 	/* the block cannot be written until 'before' is on disk, so an explicit
 	 * dependency from a same-block chdesc is unnecessary */
-	if(after->block && before->block && after->block->ddesc == before->block->ddesc && (before->flags & CHDESC_INFLIGHT))
+	if(after->block && before->block && after->block == before->block && (before->flags & CHDESC_INFLIGHT))
 		return 0;
 	
 #if !CHDESC_ALLOW_MULTIGRAPH
@@ -842,7 +842,7 @@ static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	return 0;
 }
 
-/* CRUCIAL NOTE: does *not* check whether the chdescs are on the same ddesc */
+/* CRUCIAL NOTE: does *not* check whether the chdescs are on the same bdesc */
 /* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
 int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
 {
@@ -923,7 +923,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 	if(r < 0)
 		return r;
 	
-	/* if it overlaps completely, remove original from ddesc->overlaps or ddesc->bit_changes */
+	/* if it overlaps completely, remove original from bdesc->overlaps or bdesc->bit_changes */
 	if(overlap == 2)
 	{
 		if(original->type == BYTE)
@@ -995,9 +995,9 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 				return r;
 		}
 	}
-	else if(chdesc->type == BYTE && block->ddesc->bit_changes)
+	else if(chdesc->type == BYTE && block->bit_changes)
 	{
-		hash_map_it2_t it = hash_map_it2_create(block->ddesc->bit_changes);
+		hash_map_it2_t it = hash_map_it2_create(block->bit_changes);
 		while(hash_map_it2_next(&it))
 		{
 			chdesc_t * bit_changes = it.val;
@@ -1013,7 +1013,7 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	assert(list1 >= 0);
 	if (list1 == 0) {
 		assert(chdesc->type == BYTE);
-		int sz = block->ddesc->length >> OVERLAP1SHIFT;
+		int sz = block->length >> OVERLAP1SHIFT;
 		list1 = chdesc->byte.offset / sz + 1;
 		list2 = (chdesc->byte.offset + chdesc->byte.length - 1) / sz + 1;
 	} else
@@ -1021,10 +1021,10 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 
 	int r;
 	for (; list1 <= list2; list1++)
-		if ((r = _chdesc_overlap_multiattach_x(chdesc, &block->ddesc->overlap1[list1])) < 0)
+		if ((r = _chdesc_overlap_multiattach_x(chdesc, &block->overlap1[list1])) < 0)
 			return r;
 
-	return _chdesc_overlap_multiattach_x(chdesc, &block->ddesc->overlap1[0]);
+	return _chdesc_overlap_multiattach_x(chdesc, &block->overlap1[0]);
 }
 
 void chdesc_link_all_changes(chdesc_t * chdesc)
@@ -1032,14 +1032,14 @@ void chdesc_link_all_changes(chdesc_t * chdesc)
 	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
 	if(chdesc->block)
 	{
-		datadesc_t * ddesc = chdesc->block->ddesc;
-		chdesc->ddesc_pprev = &ddesc->all_changes;
-		chdesc->ddesc_next = ddesc->all_changes;
-		ddesc->all_changes = chdesc;
+		bdesc_t * bdesc = chdesc->block;
+		chdesc->ddesc_pprev = &bdesc->all_changes;
+		chdesc->ddesc_next = bdesc->all_changes;
+		bdesc->all_changes = chdesc;
 		if(chdesc->ddesc_next)
 			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
 		else
-			ddesc->all_changes_tail = &chdesc->ddesc_next;
+			bdesc->all_changes_tail = &chdesc->ddesc_next;
 	}
 }
 
@@ -1047,12 +1047,12 @@ void chdesc_unlink_all_changes(chdesc_t * chdesc)
 {
 	if(chdesc->ddesc_pprev)
 	{
-		datadesc_t * ddesc = chdesc->block->ddesc;
+		bdesc_t * bdesc = chdesc->block;
 		// remove from old ddesc changes list
 		if(chdesc->ddesc_next)
 			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
 		else
-			ddesc->all_changes_tail = chdesc->ddesc_pprev;
+			bdesc->all_changes_tail = chdesc->ddesc_pprev;
 		*chdesc->ddesc_pprev = chdesc->ddesc_next;
 		chdesc->ddesc_next = NULL;
 		chdesc->ddesc_pprev = NULL;
@@ -1067,8 +1067,8 @@ void chdesc_link_##name##_changes(chdesc_t * chdesc) \
 	assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
 	if(chdesc->block) \
 	{ \
-		datadesc_t * ddesc = chdesc->block->ddesc; \
-		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->level]; \
+		bdesc_t * bdesc = chdesc->block; \
+		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->level]; \
 		chdesc->ddesc_##name##_pprev = &rcl->head; \
 		chdesc->ddesc_##name##_next = rcl->head; \
 		rcl->head = chdesc; \
@@ -1084,8 +1084,8 @@ void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
 { \
 	if(chdesc->ddesc_##name##_pprev) \
 	{ \
-		datadesc_t * ddesc = chdesc->block->ddesc; \
-		chdesc_dlist_t * rcl = &ddesc->name##_changes[chdesc->level]; \
+		bdesc_t * bdesc = chdesc->block; \
+		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->level]; \
 		/* remove from old ddesc changes list */ \
 		if(chdesc->ddesc_##name##_next) \
 			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = chdesc->ddesc_##name##_pprev; \
@@ -1116,7 +1116,7 @@ void chdesc_tmpize_all_changes(chdesc_t * chdesc)
 		if(chdesc->ddesc_next)
 			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
 		else
-			chdesc->block->ddesc->all_changes_tail = chdesc->ddesc_pprev;
+			chdesc->block->all_changes_tail = chdesc->ddesc_pprev;
 		*chdesc->ddesc_pprev = chdesc->ddesc_next;
 
 		chdesc->ddesc_next = NULL;
@@ -1137,7 +1137,7 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
 		if(chdesc->ddesc_next)
 			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
 		else
-			chdesc->block->ddesc->all_changes_tail = &chdesc->ddesc_next;
+			chdesc->block->all_changes_tail = &chdesc->ddesc_next;
 		*chdesc->ddesc_pprev = chdesc;
 
 		chdesc->tmp_next = NULL;
@@ -1287,7 +1287,7 @@ static __inline bool new_chdescs_require_data(const bdesc_t * block)
 	/* Rule: When adding chdesc C to block B,
 	 * and forall C' on B, with C' != C: C' has no afters on blocks != B,
 	 * then C will never need to be rolled back. */
-	return block->ddesc->extern_after_count > 0;
+	return block->extern_after_count > 0;
 #else
 	return 1;
 #endif
@@ -1364,14 +1364,14 @@ static chdesc_t * select_chdesc_merger(const bdesc_t * block)
 		CHDESC_NRB_MERGE_STATS_LOG(1);
 		return NULL;
 	}
-	if(!block->ddesc->nrb)
+	if(!block->nrb)
 	{
 		CHDESC_NRB_MERGE_STATS_LOG(2);
 		return NULL;
 	}
 	CHDESC_NRB_MERGE_STATS_LOG(0);
-	assert(!(block->ddesc->nrb->flags & CHDESC_INFLIGHT));
-	return block->ddesc->nrb;
+	assert(!(block->nrb->flags & CHDESC_INFLIGHT));
+	return block->nrb;
 }
 
 static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, chdepdesc_t * depbefore)
@@ -1548,9 +1548,9 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 {
 	/* The last data chdesc should be the oldest chdesc on 'block'
 	 * and, since it is not an NRB, thus have no block befores */
-	chdesc_t ** pprev = block->ddesc->all_changes_tail;
+	chdesc_t ** pprev = block->all_changes_tail;
 	chdesc_t * chdesc;
-	for(; pprev != &block->ddesc->all_changes; pprev = chdesc->ddesc_pprev)
+	for(; pprev != &block->all_changes; pprev = chdesc->ddesc_pprev)
 	{
 		chdesc = pprev2chdesc(pprev);
 		if(chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT) && !chdesc_has_block_befores(chdesc, block))
@@ -1558,7 +1558,7 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 			assert(chdesc->type == BYTE || chdesc->type == BIT);
 			return chdesc;
 		}
-		if(chdesc == block->ddesc->all_changes)
+		if(chdesc == block->all_changes)
 			break;
 	}
 	return NULL;
@@ -1567,12 +1567,12 @@ static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
 /* Remove all block bit_changes befores */
 static void clear_bit_changes(bdesc_t * block)
 {
-	if(block->ddesc->bit_changes)
+	if(block->bit_changes)
 	{
-		hash_map_it2_t it = hash_map_it2_create(block->ddesc->bit_changes);
+		hash_map_it2_t it = hash_map_it2_create(block->bit_changes);
 		while(hash_map_it2_next(&it))
 			chdesc_destroy((chdesc_t **) &it.val);
-		assert(hash_map_empty(block->ddesc->bit_changes));
+		assert(hash_map_empty(block->bit_changes));
 	}
 }
 
@@ -1594,7 +1594,7 @@ static void merge_rbs(bdesc_t * block)
 		return;
 	
 	/* move the befores of each RB for their merge */
-	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+	for(chdesc = block->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 		if(chdesc != merger && chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT))
 			move_befores_for_merge(chdesc, merger, 1);
 	
@@ -1616,8 +1616,8 @@ static void merge_rbs(bdesc_t * block)
 		assert(0);
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, merger, 0);
 	merger->byte.offset = 0;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, merger, block->ddesc->length);
-	merger->byte.length = block->ddesc->length;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, merger, block->length);
+	merger->byte.length = block->length;
 	merger->byte.data = NULL;
 # if CHDESC_BYTE_SUM
 	merger->byte.old_sum = 0;
@@ -1625,8 +1625,8 @@ static void merge_rbs(bdesc_t * block)
 # endif
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, merger, CHDESC_OVERLAP);
 	merger->flags &= ~CHDESC_OVERLAP;
-	assert(!block->ddesc->nrb);
-	r = chdesc_weak_retain(merger, &block->ddesc->nrb, NULL, NULL);
+	assert(!block->nrb);
+	r = chdesc_weak_retain(merger, &block->nrb, NULL, NULL);
 	assert(r >= 0);
 	//account_update(&act_nnrb, 1);
 
@@ -1634,14 +1634,14 @@ static void merge_rbs(bdesc_t * block)
 	 * all bit overlaps (to complete NRB construction and for non-mergers) */
 	clear_bit_changes(block);
 	chdesc_unlink_overlap(merger);
-	chdesc_link_overlap(merger, block->ddesc);
+	chdesc_link_overlap(merger);
 	
 	/* convert non-merger data chdescs into noops so that pointers to them
 	 * remain valid.
 	 * TODO: could we destroy the noops with no afters after the runloop? */
 	/* part a: unpropagate extern after counts (no more data chdesc afters)
 	 * (do before rest of conversion to correctly (not) recurse) */
-	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+	for(chdesc = block->all_changes; chdesc; chdesc = chdesc->ddesc_next)
 	{
 		chdepdesc_t * dep, * next;
 		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
@@ -1656,8 +1656,8 @@ static void merge_rbs(bdesc_t * block)
 				propagate_extern_after_change_thru_noop_before(before, chdesc, 0);
 			else if(chdesc_is_external(chdesc, before->block))
 			{
-				assert(before->block->ddesc->extern_after_count);
-				before->block->ddesc->extern_after_count--;
+				assert(before->block->extern_after_count);
+				before->block->extern_after_count--;
 			}
 			else
 			{
@@ -1668,7 +1668,7 @@ static void merge_rbs(bdesc_t * block)
 		}
 	}
 	/* parb b: convert into noops */
-	for(chdesc = block->ddesc->all_changes; chdesc; chdesc = next)
+	for(chdesc = block->all_changes; chdesc; chdesc = next)
 	{
 		uint16_t level;
 		uint16_t flags;
@@ -1734,7 +1734,7 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 #if CHDESC_NRB
 	chdesc_t * merger;
 # if CHDESC_MERGE_RBS_NRB
-	if(!new_chdescs_require_data(block) && !block->ddesc->nrb)
+	if(!new_chdescs_require_data(block) && !block->nrb)
 		merge_rbs(block);
 # endif
 	if(!(merger = select_chdesc_merger(block)))
@@ -1820,7 +1820,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 	chdepdesc_t * dep;
 	chdesc_t * overlap = NULL;
 	uint16_t overlap_end, new_end, merge_offset, merge_length, merge_end;
-	datadesc_t * ddesc = (*new)->block->ddesc;
+	bdesc_t * bdesc = (*new)->block;
 	chdesc_pass_set_t * scan;
 	int r;
 	
@@ -1832,7 +1832,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 		chdesc_t * before = dep->before.desc;
 		if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
 			continue;
-		if(before->block && (*new)->block->ddesc == before->block->ddesc
+		if(before->block && (*new)->block == before->block
 		   && chdesc_overlap_check(*new, before))
 		{
 			/* note: *new may overlap a before[i] */
@@ -1843,9 +1843,9 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 #if CHDESC_RB_NRB_READY
 				/* TODO: does this actually require CHDESC_RB_NRB_READY? */
 				/* nrb depends on nothing on this block so an above is ok */
-				if(before == before->block->ddesc->nrb)
+				if(before == before->block->nrb)
 					continue;
-				if(overlap == before->block->ddesc->nrb)
+				if(overlap == before->block->nrb)
 				{
 					overlap = before;
 					continue;
@@ -1909,7 +1909,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 				continue;
 			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
 				continue;
-			if(before->block && (*new)->block->ddesc == before->block->ddesc
+			if(before->block && (*new)->block == before->block
 			   && chdesc_overlap_check(*new, before))
 				continue;
 			
@@ -1927,7 +1927,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 				{
 					/* we did not detect that overlap depends on before or its befores,
 					 * so we must check before's befores for chdesc cycles: */
-					if(before2->block && before2->block->ddesc == ddesc)
+					if(before2->block && before2->block == bdesc)
 						return 0;
 					if(before->befores->before.next)
 						return 0; /* could iterate, but it has not helped */
@@ -1980,7 +1980,7 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 	{
 		if(chdesc_overlap_check(*new, overlap) == 2)
 		{
-			chdesc_link_overlap(overlap, ddesc);
+			chdesc_link_overlap(overlap);
 		}
 		/* note: no need to restore fully overlapped WRITTENs or INFLIGHTs */
 		(*new)->flags &= ~CHDESC_OVERLAP;
@@ -2006,9 +2006,9 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 		}
 		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.data, overlap->byte.length);
 		if(merge_offset < overlap->byte.offset)
-			memcpy(merge_data, &ddesc->data[merge_offset], overlap->byte.offset - merge_offset);
+			memcpy(merge_data, &bdesc->data[merge_offset], overlap->byte.offset - merge_offset);
 		if(overlap_end < merge_end)
-			memcpy(merge_data + overlap_end - merge_offset, &ddesc->data[overlap_end], merge_end - overlap_end);
+			memcpy(merge_data + overlap_end - merge_offset, &bdesc->data[overlap_end], merge_end - overlap_end);
 		chdesc_free_byte_data(overlap);
 		overlap->byte.data = merge_data;
 
@@ -2019,15 +2019,15 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 		overlap->byte.length = merge_length;
 # if CHDESC_BYTE_SUM
 		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
-		overlap->byte.new_sum = chdesc_byte_sum(&ddesc->data[merge_offset], merge_length);
+		overlap->byte.new_sum = chdesc_byte_sum(&bdesc->data[merge_offset], merge_length);
 # endif
-		chdesc_link_overlap(overlap, overlap->block->ddesc);
+		chdesc_link_overlap(overlap);
 	}
 	
 	if(data)
-		memcpy(&ddesc->data[(*new)->byte.offset], data, (*new)->byte.length);
+		memcpy(&bdesc->data[(*new)->byte.offset], data, (*new)->byte.length);
 	else
-		memset(&ddesc->data[(*new)->byte.offset], 0, (*new)->byte.length);
+		memset(&bdesc->data[(*new)->byte.offset], 0, (*new)->byte.length);
 	
 	chdesc_unlink_level_changes(overlap);
 	/* move merger to correct owner */
@@ -2075,9 +2075,9 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc_t * chdesc;
 	int r;
 	
-	assert(block && block->ddesc && owner && tail);
+	assert(block && owner && tail);
 	
-	if(offset + length > block->ddesc->length)
+	if(offset + length > block->length)
 		return -EINVAL;
 	
 	r = chdesc_create_merge(block, owner, tail, befores);
@@ -2086,9 +2086,9 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	else if(r == 1)
 	{
 		if(data)
-			memcpy(&block->ddesc->data[offset], data, length);
+			memcpy(&block->data[offset], data, length);
 		else
-			memset(&block->ddesc->data[offset], 0, length);
+			memset(&block->data[offset], 0, length);
 		return 0;
 	}
 	
@@ -2114,7 +2114,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		 * this block at least implicitly have all nonrollbackables as befores.
 		 * Leave 'offset' and 'length' as is to copy source data. */
 		chdesc->byte.offset = 0;
-		chdesc->byte.length = block->ddesc->length;
+		chdesc->byte.length = block->length;
 		chdesc->byte.data = NULL;
 #if CHDESC_BYTE_SUM
 		chdesc->byte.old_sum = 0;
@@ -2180,7 +2180,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		}
 	}
 
-	chdesc_link_overlap(chdesc, block->ddesc);
+	chdesc_link_overlap(chdesc);
 	
 	/* make sure it is after upon any pre-existing chdescs */
 	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
@@ -2205,7 +2205,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	if(data_required)
 	{	
-		void * block_data = &chdesc->block->ddesc->data[offset];
+		void * block_data = &chdesc->block->data[offset];
 
 		if(length <= CHDESC_LOCALDATA)
 			chdesc->byte.data = &chdesc->byte.ldata[0];
@@ -2233,12 +2233,12 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	{
 #if CHDESC_NRB
 		if(data)
-			memcpy(&chdesc->block->ddesc->data[offset], data, length);
+			memcpy(&chdesc->block->data[offset], data, length);
 		else
-			memset(&chdesc->block->ddesc->data[offset], 0, length);
+			memset(&chdesc->block->data[offset], 0, length);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
-		assert(!block->ddesc->nrb);
-		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb, NULL, NULL)) < 0)
+		assert(!block->nrb);
+		if((r = chdesc_weak_retain(chdesc, &block->nrb, NULL, NULL)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
@@ -2250,7 +2250,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*tail = chdesc;
-	block->ddesc->synthetic = 0;
+	block->synthetic = 0;
 	
 	return 0;
 }
@@ -2259,14 +2259,14 @@ int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t 
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	if(&block->ddesc->data[offset] == data)
+	if(&block->data[offset] == data)
 		kpanic("Cannot create a change descriptor in place!");
 	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, head, PASS_CHDESC_SET(set));
 }
 
 int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
-	if(&block->ddesc->data[offset] == data)
+	if(&block->data[offset] == data)
 		kpanic("Cannot create a change descriptor in place!");
 	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, tail, befores);
 }
@@ -2275,14 +2275,14 @@ int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, NULL, head, PASS_CHDESC_SET(set));
+	return _chdesc_create_byte(block, owner, 0, block->length, NULL, head, PASS_CHDESC_SET(set));
 }
 
 int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return _chdesc_create_byte(block, owner, 0, block->ddesc->length, data, head, PASS_CHDESC_SET(set));
+	return _chdesc_create_byte(block, owner, 0, block->length, data, head, PASS_CHDESC_SET(set));
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
@@ -2413,12 +2413,12 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 		chdesc_t *before;
 
 	    retry:
-		for (before = overlap->block->ddesc->overlap1[list]; before; before = before->overlap_next) {
+		for (before = overlap->block->overlap1[list]; before; before = before->overlap_next) {
 #if CHDESC_RB_NRB_READY
 			/* NOTE: this wouldn't need CHDESC_RB_NRB_READY if an NRB
 			 * CHDESC_OVERLAPed the underlying bits */
 			/* nrb is guaranteed to not depend on overlap */
-			if(before == overlap->block->ddesc->nrb)
+			if(before == overlap->block->nrb)
 				continue;
 #endif
 			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
@@ -2444,7 +2444,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
-	((uint32_t *) overlap->block->ddesc->data)[overlap->bit.offset] ^= xor;
+	((uint32_t *) overlap->block->data)[overlap->bit.offset] ^= xor;
 	
 	chdesc_unlink_level_changes(overlap);
 	/* move merger to correct owner */
@@ -2472,7 +2472,7 @@ static bool has_inram_befores(const chdesc_t * chdesc)
 static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
 {
 	chdesc_t * c;
-	for(c = chdesc->block->ddesc->all_changes; c; c = c->ddesc_next)
+	for(c = chdesc->block->all_changes; c; c = c->ddesc_next)
 		if(c != chdesc && !(c->flags & CHDESC_INFLIGHT))
 			return 0;
 	return 1;
@@ -2481,7 +2481,7 @@ static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
 
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
 {
-	//uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+	//uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
 	//return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 
 	int r;
@@ -2496,13 +2496,13 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		return r;
 	else if(r == 1)
 	{
-		((uint32_t *) block->ddesc->data)[offset] ^= xor;
+		((uint32_t *) block->data)[offset] ^= xor;
 		return 0;
 	}
 	
 	if(!data_required)
 	{
-		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+		uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
 		set.array[0] = *head;
 #if CHDESC_NRB_MERGE_STATS
 		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
@@ -2521,9 +2521,9 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 			return 0;
 	}
 # if CHDESC_NRB
-	else if(block->ddesc->nrb && is_sole_inram_chdesc(block->ddesc->nrb) && bit_merge_overlap_ok_head(*head, block->ddesc->nrb))
+	else if(block->nrb && is_sole_inram_chdesc(block->nrb) && bit_merge_overlap_ok_head(*head, block->nrb))
 	{
-		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
+		uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
 		DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 		set.array[0] = *head;
 		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
@@ -2599,7 +2599,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
 	
-	block->ddesc->synthetic = 0;
+	block->synthetic = 0;
 	
 	return 0;
 	
@@ -2635,7 +2635,7 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 			if(!dep->after.desc->block)
 				continue;
 			/* not the same block? doesn't overlap */
-			if(dep->after.desc->block->ddesc != chdesc->block->ddesc)
+			if(dep->after.desc->block != chdesc->block)
 				continue;
 			/* chdesc_overlap_check doesn't check that the block is
 			 * the same, which is why we just checked it by hand */
@@ -2658,9 +2658,9 @@ int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, voi
 	}
 	else
 	{
-		memcpy(&chdesc->block->ddesc->data[chdesc->byte.offset + offset], data, length);
+		memcpy(&chdesc->block->data[chdesc->byte.offset + offset], data, length);
 #if CHDESC_BYTE_SUM
-		chdesc->byte.new_sum = chdesc_byte_sum(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.length);
+		chdesc->byte.new_sum = chdesc_byte_sum(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.length);
 #endif
 	}
 	return 0;
@@ -2841,7 +2841,7 @@ int chdesc_apply(chdesc_t * chdesc)
 	switch(chdesc->type)
 	{
 		case BIT:
-			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			((uint32_t *) chdesc->block->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
 			break;
 		case BYTE:
 			if(!chdesc->byte.data)
@@ -2850,7 +2850,7 @@ int chdesc_apply(chdesc_t * chdesc)
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
-			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+			memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
@@ -2875,7 +2875,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 	switch(chdesc->type)
 	{
 		case BIT:
-			((uint32_t *) chdesc->block->ddesc->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			((uint32_t *) chdesc->block->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
 			break;
 		case BYTE:
 			if(!chdesc->byte.data)
@@ -2884,7 +2884,7 @@ int chdesc_rollback(chdesc_t * chdesc)
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
-			memxchg(&chdesc->block->ddesc->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+			memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
@@ -2921,8 +2921,8 @@ void chdesc_set_inflight(chdesc_t * chdesc)
 #if CHDESC_NRB
 	/* New chdescs cannot be merged into an inflight chdesc so allow
 	 * for a new NRB */
-	if(chdesc == chdesc->block->ddesc->nrb)
-		(void) chdesc_weak_release(&chdesc->block->ddesc->nrb, 0);
+	if(chdesc == chdesc->block->nrb)
+		(void) chdesc_weak_release(&chdesc->block->nrb, 0);
 #endif
 	
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_INFLIGHT);

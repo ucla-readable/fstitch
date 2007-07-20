@@ -36,7 +36,7 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 		return -ENOENT;
 
 	offset = *basep % super->fs_fsize;
-	dirent = (struct UFS_direct *) (dirblock->ddesc->data + offset);
+	dirent = (struct UFS_direct *) (dirblock->data + offset);
 
 	if (offset + dirent->d_reclen > super->fs_fsize
 			|| dirent->d_reclen < dirent->d_namlen)

@@ -96,9 +96,9 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint32_t
 	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
-		assert(slot->block->ddesc->length == nbytes);
+		assert(slot->block->length == nbytes);
 		wt_touch_block(info, slot);
-		if(!slot->block->ddesc->synthetic)
+		if(!slot->block->synthetic)
 			return slot->block;
 	}
 	else
@@ -114,8 +114,8 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint32_t
 	if(!block)
 		return NULL;
 	
-	if(block->ddesc->synthetic)
-		block->ddesc->synthetic = 0;
+	if(block->synthetic)
+		block->synthetic = 0;
 	else if(wt_push_block(info, block, number) < 0)
 		return NULL;
 	
@@ -135,7 +135,7 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
-		assert(slot->block->ddesc->length == nbytes);
+		assert(slot->block->length == nbytes);
 		wt_touch_block(info, slot);
 		return slot->block;
 	}
@@ -162,12 +162,12 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	int r;
 	
 	/* make sure it's a valid block */
-	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->length / object->blocksize <= object->numblocks);
 	
 	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
-		assert(slot->block->ddesc == block->ddesc);
+		assert(slot->block == block);
 		wt_touch_block(info, slot);
 	}
 	else

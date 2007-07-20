@@ -325,12 +325,12 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 		if (!block)
 			return size_read ? size_read : -1;
 
-		limit = MIN(block->ddesc->length - dataoffset, size - size_read);
+		limit = MIN(block->length - dataoffset, size - size_read);
 		if (uf->size_id)
 			if (offset + size_read + limit > file_size)
 				limit = file_size - offset - size_read;
 
-		memcpy((uint8_t*)data + size_read, block->ddesc->data + dataoffset, limit);
+		memcpy((uint8_t*)data + size_read, block->data + dataoffset, limit);
 		size_read += limit;
 		/* dataoffset only needed for first block */
 		dataoffset = 0;

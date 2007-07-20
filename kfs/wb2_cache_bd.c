@@ -191,11 +191,11 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		*delay = 0;
 	
 	/* in flight? */
-	if(block->ddesc->in_flight)
+	if(block->in_flight)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	if(!block->ddesc->level_changes[object->level].head)
+	if(!block->level_changes[object->level].head)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->below_bd, &slice);
@@ -225,7 +225,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->ddesc->flags);
+			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->flags);
 		}
 	}
 	
@@ -335,9 +335,9 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint32_
 	if(block)
 	{
 		/* in the cache, use it */
-		assert(block->ddesc->length == nbytes);
+		assert(block->length == nbytes);
 		wb2_touch_block_read(info, block);
-		if(!block->ddesc->synthetic)
+		if(!block->synthetic)
 			return block;
 	}
 	else
@@ -353,8 +353,8 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint32_
 	if(!block)
 		return NULL;
 	
-	if(block->ddesc->synthetic)
-		block->ddesc->synthetic = 0;
+	if(block->synthetic)
+		block->synthetic = 0;
 	else
 		wb2_push_block(info, block, number);
 	
@@ -373,7 +373,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(block)
 	{
 		/* in the cache, use it */
-		assert(block->ddesc->length == nbytes);
+		assert(block->length == nbytes);
 		wb2_touch_block_read(info, block);
 		return block;
 	}
@@ -397,7 +397,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t *block, uint32_t numb
 	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	
 	/* make sure it's a valid block */
-	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->length / object->blocksize <= object->numblocks);
 	
 	block = wb2_map_get_block(info, number);
 	if(block)

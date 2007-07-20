@@ -424,7 +424,7 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	}
 
 	bdesc_retain(linfo->super_block);
-	memcpy(&linfo->super, linfo->super_block->ddesc->data, sizeof(struct UFS_Super));
+	memcpy(&linfo->super, linfo->super_block->data, sizeof(struct UFS_Super));
 	memcpy(&linfo->oldsum, &linfo->super.fs_cstotal, sizeof(struct UFS_csum));
 	memset(&linfo->dirty, 0, sizeof(linfo->dirty));
 	linfo->syncing = 0;

@@ -26,8 +26,8 @@ void chdesc_unmark_graph(chdesc_t * root)
 
 int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
 {
-	chdesc_dlist_t * dlist = current_block->ddesc->level_changes;
-	assert(target_block->ddesc == current_block->ddesc);
+	chdesc_dlist_t * dlist = current_block->level_changes;
+	assert(target_block == current_block);
 	assert(current_bd->level != target_bd->level);
 	if(dlist[current_bd->level].head)
 	{
@@ -78,9 +78,9 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
  * in *head. In case A, return the newly created change descriptor in *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	chdesc_t * rewrite = block->ddesc->level_changes[owner->level].head;
+	chdesc_t * rewrite = block->level_changes[owner->level].head;
 	
-	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->ddesc->length || (rewrite->flags & CHDESC_INFLIGHT))
+	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->length || (rewrite->flags & CHDESC_INFLIGHT))
 		return chdesc_create_full(block, owner, data, head);
 	
 	if(*head)

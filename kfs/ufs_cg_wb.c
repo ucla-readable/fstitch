@@ -461,7 +461,7 @@ UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
 	}
 
 	for (i = 0; i < linfo->ncg; i++) {
-		memcpy(&linfo->cg[i].cgdata, linfo->cg[i].cgblock->ddesc->data, sizeof(struct UFS_cg));
+		memcpy(&linfo->cg[i].cgdata, linfo->cg[i].cgblock->data, sizeof(struct UFS_cg));
 		memcpy(&linfo->cg[i].oldcgsum, &linfo->cg[i].cgdata.cg_cs, sizeof(struct UFS_csum));
 		memcpy(&linfo->cg[i].oldfrsum, &linfo->cg[i].cgdata.cg_frsum, frsum_size);
 		memset(&linfo->cg[i].dirty, 0, sizeof(linfo->cg[i].dirty));

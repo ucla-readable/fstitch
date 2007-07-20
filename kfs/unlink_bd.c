@@ -33,7 +33,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 	int r;
 	
 	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->ddesc->level_changes[object->level].head; chdesc; chdesc = next)
+	for(chdesc = block->level_changes[object->level].head; chdesc; chdesc = next)
 	{
 		int needs_head = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
@@ -45,7 +45,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 		{
 			chdesc_t * dep = (*deps)->before.desc;
 			/* if it's the write head, or if it's on the same block, leave it alone */
-			if(dep == write_head || (dep->block && dep->block->ddesc == block->ddesc))
+			if(dep == write_head || (dep->block && dep->block == block))
 			{
 				deps = &(*deps)->before.next;
 				needs_head = 0;

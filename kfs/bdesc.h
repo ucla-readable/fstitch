@@ -32,23 +32,30 @@ struct chdesc_dlist {
 };
 typedef struct chdesc_dlist chdesc_dlist_t;
 
-struct datadesc {
-	uint8_t * data;
-	uint32_t in_flight:1, synthetic:1;
+struct bdesc {
+	uint32_t ref_count;
 
+	uint8_t *data;
+	uint32_t length;
+
+	unsigned in_flight : 1;
+	unsigned synthetic : 1;
+	unsigned flags : 30;
+
+	// CHANGE DESCRIPTOR INFORMATION
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;
 
-#if BDESC_EXTERN_AFTER_COUNT
-	uint32_t extern_after_count;
-#endif
-	
-	/* For each level (at most one BD per level), the level's ready chdescs.
+	/* For each level (at most 1 BD per level), the level's ready chdescs.
 	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
 	
 	/* For each level, the chdescs owned by BDs at that level. */
 	chdesc_dlist_t level_changes[NBDLEVEL];
+
+#if BDESC_EXTERN_AFTER_COUNT
+	uint32_t extern_after_count;
+#endif
 	
 #if CHDESC_NRB
 	chdesc_t * nrb;
@@ -59,18 +66,8 @@ struct datadesc {
 	chdesc_t *overlap1[1 + NOVERLAP1];
 	
 	hash_map_t * bit_changes;
-	blockman_t * manager;
-	uint32_t managed_number;
-	uint16_t length, flags;
-};
-
-struct bdesc {
-	uint32_t ref_count;
-	uint32_t ar_count;
-	bdesc_t * ar_next;
-	datadesc_t * ddesc;
-
-	/* information for the write-back cache */
+	
+	// WB CACHE INFORMATION
 	uint32_t cache_number;
 	struct {
 		struct bdesc **pprev;
@@ -80,6 +77,14 @@ struct bdesc {
 		struct bdesc *prev;
 		struct bdesc *next;
 	} lru_all, lru_dirty;
+
+	// AUTORELEASE INFORMATION
+	uint32_t ar_count;
+	bdesc_t * ar_next;
+
+	// BLOCK MANAGER INFORMATION
+	blockman_t * manager;
+	uint32_t managed_number;
 };
 
 int bdesc_init(void);

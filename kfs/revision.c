@@ -46,14 +46,14 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 		for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
 		{
 			total++;
-			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
+			if(!scan->after.desc->block || scan->after.desc->block != block)
 				continue;
 			fprintf(stderr, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
 			if(!chdesc_is_rollbackable(scan->after.desc))
 				fprintf(stderr, "!");
 			if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
 				fprintf(stderr, "*");
-			if(scan->after.desc->block->ddesc->in_flight)
+			if(scan->after.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (->", total);
@@ -61,25 +61,25 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
 		{
 			total++;
-			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
+			if(!scan->before.desc->block || scan->before.desc->block != block)
 				continue;
 			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
 			if(!chdesc_is_rollbackable(scan->before.desc))
 				fprintf(stderr, "!");
 			if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
 				fprintf(stderr, "*");
-			if(scan->before.desc->block->ddesc->in_flight)
+			if(scan->before.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (-->", total);
 		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
 		{
-			if(!scan->before.desc->block || scan->before.desc->block->ddesc == block->ddesc)
+			if(!scan->before.desc->block || scan->before.desc->block == block)
 				continue;
 			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
 			if(!chdesc_is_rollbackable(scan->before.desc))
 				fprintf(stderr, "!");
-			if(scan->before.desc->block->ddesc->in_flight)
+			if(scan->before.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")\n");
@@ -125,12 +125,12 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
-	if(!block->ddesc->all_changes)
+	if(!block->all_changes)
 		return 0;
 	
 	/* find out how many chdescs are to be rolled back */
 	/* TODO: look into using ready_changes here? */
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
@@ -140,7 +140,7 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 	if(!chdescs)
 		return -ENOMEM;
 	
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			chdescs[i++] = scan;
 	
@@ -159,7 +159,7 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 			{
 				if(scan->after.desc->flags & CHDESC_ROLLBACK)
 					continue;
-				if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
+				if(!scan->after.desc->block || scan->after.desc->block != block)
 					continue;
 				if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
 					break;
@@ -191,7 +191,7 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 {
-	assert(!block->ddesc->in_flight);
+	assert(!block->in_flight);
 	return _revision_tail_prepare(block, OWNER, bd);
 }
 
@@ -201,11 +201,11 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
-	if(!block->ddesc->all_changes)
+	if(!block->all_changes)
 		return 0;
 	
 	/* find out how many chdescs are to be rolled forward */
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
@@ -215,7 +215,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 	if(!chdescs)
 		return -ENOMEM;
 	
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			chdescs[i++] = scan;
 	
@@ -234,7 +234,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 			{
 				if(!(scan->before.desc->flags & CHDESC_ROLLBACK))
 					continue;
-				if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
+				if(!scan->before.desc->block || scan->before.desc->block != block)
 					continue;
 				if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
 					break;
@@ -275,11 +275,11 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
-	if(!block->ddesc->all_changes)
+	if(!block->all_changes)
 		return 0;
 	
 	/* find out how many chdescs are to be satisfied */
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			count++;
 	if(!count)
@@ -289,7 +289,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 	if(!chdescs)
 		return -ENOMEM;
 	
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			chdescs[i++] = scan;
 	
@@ -388,16 +388,16 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 	chdesc_t * scan;
 	int r;
 	
-	if(!block->ddesc->all_changes)
+	if(!block->all_changes)
 		return 0;
 	
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(scan->level == bd->level)
 			chdesc_set_inflight(scan);
 		else if(!chdesc_is_rollbackable(scan))
 			fprintf(stderr, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
 	
-	block->ddesc->in_flight = 1;
+	block->in_flight = 1;
 	bdesc_retain(block);
 	
 	/* FIXME: recover if we fail here */
@@ -410,7 +410,7 @@ static int revision_tail_ack_landed(bdesc_t * block)
 {
 	int r = _revision_tail_acknowledge(block, FLIGHT, NULL);
 	assert(r >= 0);
-	block->ddesc->in_flight = 0;
+	block->in_flight = 0;
 	bdesc_release(&block);
 	return 0;
 }
@@ -473,7 +473,7 @@ void revision_tail_wait_for_landing_requests(void)
  * that we can figure out which ones are ready to be written down and which ones
  * are not. */
 
-/* move 'chdesc' from its ddesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
+/* move 'chdesc' from its bdesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
 static void link_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)
 {
 	chdesc_tmpize_all_changes(chdesc);
@@ -511,7 +511,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 {
 	chdesc_t * tmp_ready = NULL;
 	chdesc_t ** tmp_ready_tail = &tmp_ready;
-	chdesc_dlist_t * rcl = &block->ddesc->ready_changes[owner->level];
+	chdesc_dlist_t * rcl = &block->ready_changes[owner->level];
 	chdesc_t * scan;
 	/* To write a block revision, all non-ready chdescs on the block must
 	 * first be rolled back. Thus when there are non-ready chdescs with
@@ -549,7 +549,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 #endif
 
 	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
-	for(scan = block->ddesc->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(scan->level == owner->level)
 		{
 			slice->all_ready = 0;

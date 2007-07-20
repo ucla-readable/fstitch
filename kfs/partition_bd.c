@@ -67,7 +67,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	struct partition_info * info = (struct partition_info *) object;
 	
 	/* make sure it's a valid block */
-	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->length / object->blocksize <= object->numblocks);
 
 	/* write it */
 	return CALL(info->below_bd, write_block, block, number + info->start);

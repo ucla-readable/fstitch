@@ -110,7 +110,7 @@ static int check_super(LFS_t * object)
 	info->csums = smalloc(sizeof(struct UFS_csum) * super->fs_ncg);
 	if (!info->csums)
 		return -1;
-	memcpy(info->csums, info->csum_block->ddesc->data,
+	memcpy(info->csums, info->csum_block->data,
 			sizeof(struct UFS_csum) * super->fs_ncg);
 	bdesc_retain(info->csum_block);
 
@@ -307,7 +307,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 		if (!indirect[1])
 			return -ENOENT;
 
-		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
+		block_off[0] = *((uint32_t *) (indirect[1]->data) + pt_off[1]);
 
 		// Allocate single indirect block if needed
 		if (!block_off[0]) {
@@ -400,7 +400,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		if (!indirect[1])
 			return -ENOENT;
 
-		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
+		block_off[0] = *((uint32_t *) (indirect[1]->data) + pt_off[1]);
 		num[0] = block_off[0] / super->fs_frag;
 
 		indirect_number[0] = block_off[0] + frag_off[0];
@@ -557,7 +557,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		if (!newblock)
 			goto find_frags_new_home_failed;
 
-		r = chdesc_create_full(newblock, info->ubd, block->ddesc->data, head);
+		r = chdesc_create_full(newblock, info->ubd, block->data, head);
 		if (r < 0)
 			goto find_frags_new_home_failed;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "move fragment");
@@ -817,7 +817,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		if (!indirect[0])
 			return -ENOENT;
 
-		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
+		return (*((uint32_t *) (indirect[0]->data) + pt_off[0])) + fragno;
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb) {
 		block_off[1] = blockno - UFS_NDADDR - nindirb;
@@ -832,13 +832,13 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 		if (!indirect[1])
 			return -ENOENT;
 
-		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
+		block_off[0] = *((uint32_t *) (indirect[1]->data) + pt_off[1]);
 
 		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], info->lfs.blocksize);
 		if (!indirect[0])
 			return -ENOENT;
 
-		return (*((uint32_t *) (indirect[0]->ddesc->data) + pt_off[0])) + fragno;
+		return (*((uint32_t *) (indirect[0]->data) + pt_off[0])) + fragno;
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb * nindirb) {
 		// We'll only need triple indirect ptrs when the filesize is:
