@@ -21,6 +21,7 @@ int blockman_init(blockman_t *man)
 	man->capacity = BLOCKMAN_CAPACITY;
 	if (!(man->map = (bdesc_t **) malloc(man->capacity * sizeof(bdesc_t *))))
 		return -1;
+	memset(man->map, 0, man->capacity * sizeof(bdesc_t *));
 	return 0;
 }
 
