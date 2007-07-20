@@ -74,7 +74,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 	for (i = 0; i < NOVERLAP1 + 1; i++)
 		bdesc->overlap1[i] = NULL;
 	bdesc->bit_changes = NULL;
-	bdesc->manager = NULL;
+	bdesc->disk_hash.pprev = NULL;
 	bdesc->length = nbytes;
 	return bdesc;
 }
@@ -125,8 +125,7 @@ void bdesc_release(bdesc_t ** bdesc)
 			assert(hash_map_empty((*bdesc)->bit_changes));
 			hash_map_destroy((*bdesc)->bit_changes);
 		}
-		if((*bdesc)->manager)
-			blockman_remove(*bdesc);
+		blockman_remove(*bdesc);
 		free((*bdesc)->data);
 		free_memset(*bdesc, sizeof(**bdesc));
 		bdesc_mem_free(*bdesc);

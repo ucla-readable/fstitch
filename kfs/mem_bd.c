@@ -19,7 +19,7 @@ struct mem_info {
 	BD_t bd;
 	
 	uint8_t *blocks;
-	blockman_t * blockman;
+	blockman_t blockman;
 };
 
 #if 0
@@ -53,7 +53,7 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint32_t nbyt
 	struct mem_info * info = (struct mem_info *) object;
 	bdesc_t * bdesc;
 
-	bdesc = blockman_lookup(info->blockman, number);
+	bdesc = blockman_lookup(&info->blockman, number);
 	if (bdesc)
 	{
 		assert(bdesc->length == nbytes);
@@ -76,8 +76,8 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint32_t nbyt
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
 	if (bdesc->synthetic)
 		bdesc->synthetic = 0;
-	else if (blockman_add(info->blockman, bdesc, number) < 0)
-		return NULL;
+	else
+		blockman_add(&info->blockman, bdesc, number);
 	return bdesc;
 }
 
@@ -189,8 +189,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(info);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize, NULL, NULL);
-	if (!info->blockman) {
+	if (blockman_init(&info->blockman) < 0) {
 		free(info->blocks);
 		free(info);
 		return NULL;

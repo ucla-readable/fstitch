@@ -1,6 +1,7 @@
 #ifndef __KUDOS_KFS_BLOCKMAN_H
 #define __KUDOS_KFS_BLOCKMAN_H
 
+#include <kfs/bdesc.h>
 #include <lib/hash_map.h>
 
 /* We can't include bd.h because it includes bdesc.h, which we can't include
@@ -10,22 +11,51 @@ struct BD;
 typedef void (*destroy_notify_t)(struct BD * bd, uint32_t block, uint16_t length);
 
 struct blockman {
-	uint16_t length;
-	struct BD * owner;
-	destroy_notify_t destroy_notify;
-	hash_map_t * map;
+	uint32_t capacity;
+	bdesc_t **map;
 };
 typedef struct blockman blockman_t;
 
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 
-blockman_t * blockman_create(uint16_t length, BD_t * owner, destroy_notify_t destroy_notify);
-void blockman_destroy(blockman_t ** blockman);
+int blockman_init(blockman_t *blockman);
+void blockman_destroy(blockman_t *blockman);
 
-int blockman_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number);
-int blockman_remove(bdesc_t *bdesc);
 
-bdesc_t *blockman_lookup(blockman_t * blockman, uint32_t number);
+static inline void blockman_add(blockman_t *man, bdesc_t *bdesc, uint32_t number)
+{
+	bdesc_t **bptr;
+	assert(!bdesc->disk_hash.pprev);
+
+	bdesc->disk_number = number;
+	bptr = &man->map[number & (man->capacity - 1)];
+	while (*bptr && (*bptr)->disk_number < number)
+		bptr = &(*bptr)->disk_hash.next;
+	bdesc->disk_hash.pprev = bptr;
+	bdesc->disk_hash.next = *bptr;
+	*bptr = bdesc;
+	if (bdesc->disk_hash.next)
+		bdesc->disk_hash.next->disk_hash.pprev = &bdesc->disk_hash.next;
+}
+
+static inline void blockman_remove(bdesc_t *bdesc)
+{
+	if (bdesc->disk_hash.pprev) {
+		*bdesc->disk_hash.pprev = bdesc->disk_hash.next;
+		if (bdesc->disk_hash.next)
+			bdesc->disk_hash.next->disk_hash.pprev = bdesc->disk_hash.pprev;
+		bdesc->disk_hash.pprev = NULL;
+	}
+}
+
+static inline bdesc_t *blockman_lookup(blockman_t *man, uint32_t number)
+{
+	bdesc_t *bdesc;
+	bdesc = man->map[number & (man->capacity - 1)];
+	while (bdesc && bdesc->disk_number < number)
+		bdesc = bdesc->disk_hash.next;
+	return (bdesc && bdesc->disk_number == number ? bdesc : 0);
+}
 
 #endif /* __KUDOS_KFS_BLOCKMAN_H */

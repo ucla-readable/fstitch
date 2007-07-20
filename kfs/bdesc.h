@@ -21,7 +21,6 @@ typedef struct bdesc bdesc_t;
 
 #include <kfs/bd.h>
 #include <kfs/chdesc.h>
-#include <kfs/blockman.h>
 
 struct chdesc_dlist {
 	chdesc_t * head;
@@ -82,9 +81,12 @@ struct bdesc {
 	uint32_t ar_count;
 	bdesc_t * ar_next;
 
-	// BLOCK MANAGER INFORMATION
-	blockman_t * manager;
-	uint32_t managed_number;
+	// DISK/BLOCKMAN INFORMATION
+	uint32_t disk_number;
+	struct {
+		struct bdesc **pprev;
+		struct bdesc *next;
+	} disk_hash;
 };
 
 int bdesc_init(void);

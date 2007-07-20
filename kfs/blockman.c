@@ -14,75 +14,24 @@
 #define Dprintf(x...)
 #endif
 
-/* the length parameter is for calculating how many blocks each bdesc_t represents */
-blockman_t * blockman_create(uint16_t length, BD_t * owner, destroy_notify_t destroy_notify)
-{
-	blockman_t * man;
-	if(destroy_notify && !owner)
-		return NULL;
-	man = malloc(sizeof(*man));
-	if(!man)
-		return NULL;
-	man->map = hash_map_create();
-	if(!man->map)
-	{
-		free(man);
-		return NULL;
-	}
-	man->length = length;
-	man->owner = owner;
-	man->destroy_notify = destroy_notify;
-	return man;
-}
+#define BLOCKMAN_CAPACITY 16384
 
-void blockman_destroy(blockman_t **blockman)
+int blockman_init(blockman_t *man)
 {
-	hash_map_t * hash = (*blockman)->map;
-	hash_map_it_t it;
-	bdesc_t * bdesc;
-	
-	hash_map_it_init(&it, hash);
-	while((bdesc = hash_map_val_next(&it)))
-	{
-		bdesc->manager = NULL;
-	}
-	hash_map_destroy(hash);
-	free(*blockman);
-	*blockman = NULL;
-}
-
-int blockman_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number)
-{
-	int r;
-	Dprintf("<blockman 0x%08x add %u: bdesc 0x%08x>\n", blockman, number, bdesc);
-
-	if(bdesc->manager)
-		return -EINVAL;
-	
-	r = hash_map_insert(blockman->map, (void *) number, bdesc);
-	if(r < 0)
-		return r;
-	
-	bdesc->manager = blockman;
-	bdesc->managed_number = number;
-	
+	man->capacity = BLOCKMAN_CAPACITY;
+	if (!(man->map = (bdesc_t **) malloc(man->capacity * sizeof(bdesc_t *))))
+		return -1;
 	return 0;
 }
 
-int blockman_remove(bdesc_t *bdesc)
+void blockman_destroy(blockman_t *man)
 {
-	Dprintf("<blockman 0x%08x remove %u: bdesc 0x%08x>\n", blockman, bdesc->managed_number, bdesc);
-	blockman_t *blockman = bdesc->manager;
-	assert(blockman);
-	hash_map_erase(blockman->map, (void *) bdesc->managed_number);
-	if(blockman->destroy_notify)
-		blockman->destroy_notify(blockman->owner, bdesc->managed_number, bdesc->length);
-	bdesc->manager = NULL;
-	return 0;
-}
-
-bdesc_t * blockman_lookup(blockman_t * blockman, uint32_t number)
-{
-	Dprintf("<blockman 0x%08x lookup %u>\n", blockman, number);
-	return (bdesc_t *) hash_map_find_val(blockman->map, (void *) number);
+	bdesc_t **bptr;
+	bdesc_t **bendptr = (man->map ? man->map + man->capacity : man->map);
+	for (bptr = man->map; bptr != bendptr; ++bptr)
+		while (*bptr) {
+			(*bptr)->disk_hash.pprev = NULL;
+			*bptr = (*bptr)->disk_hash.next;
+		}
+	free(man->map);
 }

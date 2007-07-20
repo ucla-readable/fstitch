@@ -68,7 +68,7 @@ struct linux_info {
 	
 	struct block_device * bdev;
 	const char * path;
-	blockman_t * blockman;
+	blockman_t blockman;
 	
 	atomic_t outstanding_io_count;
 	spinlock_t dma_outstanding_lock;
@@ -251,7 +251,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 	assert(nbytes && (nbytes & (object->blocksize - 1)) == 0);
 	nblocks = nbytes / object->blocksize;
 	
-	bdesc = blockman_lookup(info->blockman, number);
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->length == nbytes);
@@ -281,7 +281,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 		} else if (j_number == number) {
 			blocks[j] = bdesc;
 		} else {
-			bdesc_t *bd = blockman_lookup(info->blockman, j_number);
+			bdesc_t *bd = blockman_lookup(&info->blockman, j_number);
 			if (bd && !bd->synthetic) {
 				blocks[j] = NULL;
 				continue;
@@ -296,7 +296,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 			}
 		}
 
-		assert(nbytes <= 4096);
+		assert(nbytes <= 8191);
 		
 		/* FIXME: these error returns do not clean up */
 		bio = bio_alloc(GFP_KERNEL, 1);
@@ -377,10 +377,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 				info->read_ahead_idx = 0;
 		}
 
-		if (private[j].need_blockman) {
-			r = blockman_add(info->blockman, blocks[j], private[j].number);
-			assert(r >= 0);
-		}
+		if (private[j].need_blockman)
+			blockman_add(&info->blockman, blocks[j], private[j].number);
 	}
 	
 	KDprintk(KERN_ERR "exiting read\n");
@@ -392,7 +390,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	struct linux_info * info = (struct linux_info *) object;
 	bdesc_t * bdesc;
 	
-	bdesc = blockman_lookup(info->blockman, number);
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->length == nbytes);
@@ -409,8 +407,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	
 	bdesc->synthetic = 1;
 	
-	if(blockman_add(info->blockman, bdesc, number) < 0)
-		return NULL;
+	blockman_add(&info->blockman, bdesc, number);
 	
 	return bdesc;
 }
@@ -714,8 +711,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 	
-	info->blockman = blockman_create(512, NULL, NULL);
-	if(!info->blockman)
+	if(blockman_init(&info->blockman) < 0)
 	{
 		printk("blockman_create() failed\n");
 		bd_release(info->bdev);

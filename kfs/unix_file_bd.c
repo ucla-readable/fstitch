@@ -23,7 +23,7 @@ struct unix_file_info {
 	
 	char *fname;
 	int fd;
-	blockman_t * blockman;
+	blockman_t blockman;
 };
 
 #if 0
@@ -54,7 +54,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint32_
 	off_t seeked;
 	int r;
 	
-	bdesc = blockman_lookup(info->blockman, number);
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->length == nbytes);
@@ -93,9 +93,8 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint32_
 	
 	if(bdesc->synthetic)
 		bdesc->synthetic = 0;
-	else if(blockman_add(info->blockman, bdesc, number) < 0)
-		/* kind of a waste of the read... but we have to do it */
-		return NULL;
+	else
+		blockman_add(&info->blockman, bdesc, number);
 	
 	return bdesc;
 }
@@ -108,7 +107,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 
-	bdesc = blockman_lookup(info->blockman, number);
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
 		assert(bdesc->length == nbytes);
@@ -122,8 +121,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 	bdesc->synthetic = 1;
 
-	if(blockman_add(info->blockman, bdesc, number) < 0)
-		return NULL;
+	blockman_add(&info->blockman, bdesc, number);
 
 	return bdesc;
 }
@@ -276,9 +274,7 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 		free(info);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize, NULL, NULL);
-	if(!info->blockman)
-	{
+	if (blockman_init(&info->blockman) < 0) {
 		close(info->fd);
 		free(info);
 		return NULL;
