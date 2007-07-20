@@ -67,7 +67,6 @@ struct linux_info {
 	BD_t bd;
 	
 	struct block_device * bdev;
-	const char * path;
 	blockman_t blockman;
 	
 	atomic_t outstanding_io_count;
@@ -129,11 +128,15 @@ static int linux_bd_get_status(void * object, int level, char * string, size_t l
 
 static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 {
-	struct linux_bio_private * private = (struct linux_bio_private *) bio->bi_private;
-	struct linux_info * info = private->info;
-	int i, dir = bio->bi_rw & (1 << BIO_RW);
+	struct linux_bio_private * private;
+	struct linux_info * info;
+	int i, dir;
 	unsigned long flags;
-	
+
+	assert(bio);
+	private = (struct linux_bio_private *) bio->bi_private;
+	info = private->info;
+	dir = bio->bi_rw & (1 << BIO_RW);
 	assert(info);
 	assert(info->waitq.task_list.next);
 	assert(info->waitq.task_list.next->next);
@@ -167,6 +170,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 #endif
 	
 	assert(bio->bi_vcnt == 1);
+	assert(private->bdesc);
 	for(i = 0; i < bio->bi_vcnt; i++)
 	{
 		int len;
@@ -241,7 +245,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 	struct bio * bio;
 	struct bio_vec * bv;
 	unsigned long flags;
-	int r, j;
+	int j;
 	uint32_t j_number, nblocks;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t * blocks[READ_AHEAD_COUNT];
@@ -278,10 +282,12 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 		if(j_number + nblocks > object->numblocks) {
 			blocks[j] = NULL;
 			continue;
-		} else if (j_number == number) {
-			blocks[j] = bdesc;
 		} else {
-			bdesc_t *bd = blockman_lookup(&info->blockman, j_number);
+			bdesc_t *bd;
+			if (j_number == number)
+				bd = bdesc;
+			else
+				bd = blockman_lookup(&info->blockman, j_number);
 			if (bd && !bd->synthetic) {
 				blocks[j] = NULL;
 				continue;
@@ -701,8 +707,6 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 	
-	atomic_set(&info->outstanding_io_count, 0);
-	
 	r = open_bdev(linux_bdev_path, WRITE, &info->bdev);
 	if(r)
 	{
@@ -725,16 +729,18 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	bd->blocksize = LINUX_BLOCKSIZE;
 	bd->numblocks = info->bdev->bd_disk->capacity;
 	bd->atomicsize = LINUX_BLOCKSIZE;
+	bd->level = 0;
+	
+	atomic_set(&info->outstanding_io_count, 0);
+	spin_lock_init(&info->dma_outstanding_lock);
+	info->dma_outstanding = 0;
+	init_waitqueue_head(&info->waitq);
 	info->read_ahead_idx = 0;
 	for(r = 0; r < READ_AHEAD_BUFFER; r++)
 		info->read_ahead[r] = NULL;
-	info->dma_outstanding = 0;
-	spin_lock_init(&info->dma_outstanding_lock);
 #if DEBUG_LINUX_BD
 	info->seq = 0;
 #endif
-	init_waitqueue_head(&info->waitq);
-	bd->level = 0;
 	
 	if(modman_add_anon_bd(bd, __FUNCTION__))
 	{
