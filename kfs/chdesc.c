@@ -1704,7 +1704,7 @@ static void merge_rbs(bdesc_t * block)
 # endif
 		chdesc->type = NOOP;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, NULL);
-		bdesc_release(&chdesc->block);
+		chdesc->block = NULL;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, NULL);
 		chdesc->level = CHDESC_LEVEL_NOOP;
 		chdesc->noop.bit_changes = NULL;
@@ -3177,9 +3177,6 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		default:
 			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
 	}
-	
-	if((*chdesc)->block)
-		bdesc_release(&(*chdesc)->block);
 	
 #if COUNT_CHDESCS && !COUNT_CHDESCS_IS_TOTAL
 	chdesc_counts[(*chdesc)->type]--;
