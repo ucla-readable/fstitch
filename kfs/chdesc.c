@@ -2149,9 +2149,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	dump_counts();
 #endif
 	
-	/* make sure our block sticks around */
-	bdesc_retain(block);
-	
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
 	chdesc_link_level_changes(chdesc);
@@ -2602,8 +2599,6 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
 	
-	/* make sure our block sticks around */
-	bdesc_retain(block);
 	block->ddesc->synthetic = 0;
 	
 	return 0;

@@ -43,8 +43,6 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 			chdesc_unlink_ready_changes(chdesc);
 			chdesc->level = target_bd->level;
 			assert(chdesc->block);
-			bdesc_retain(target_block);
-			bdesc_release(&chdesc->block);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, target_block);
 			chdesc->block = target_block;
 			chdesc_update_ready_changes(chdesc);
