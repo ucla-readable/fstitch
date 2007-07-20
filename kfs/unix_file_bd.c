@@ -308,6 +308,7 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 			fprintf(block_log, "block_log start\n");
 		}
 	}
+	info->user_name = block_log_users;
 	
 	return bd;
 }
