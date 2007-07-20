@@ -29,7 +29,7 @@ static inline void blockman_add(blockman_t *man, bdesc_t *bdesc, uint32_t number
 	assert(!bdesc->disk_hash.pprev);
 
 	bdesc->disk_number = number;
-	bptr = &man->map[number & (man->capacity - 1)];
+	bptr = &man->map[(number >> 3) & (man->capacity - 1)];
 	while (*bptr && (*bptr)->disk_number < number)
 		bptr = &(*bptr)->disk_hash.next;
 	bdesc->disk_hash.pprev = bptr;
@@ -52,7 +52,7 @@ static inline void blockman_remove(bdesc_t *bdesc)
 static inline bdesc_t *blockman_lookup(blockman_t *man, uint32_t number)
 {
 	bdesc_t *bdesc;
-	bdesc = man->map[number & (man->capacity - 1)];
+	bdesc = man->map[(number >> 3) & (man->capacity - 1)];
 	while (bdesc && bdesc->disk_number < number)
 		bdesc = bdesc->disk_hash.next;
 	return (bdesc && bdesc->disk_number == number ? bdesc : 0);
