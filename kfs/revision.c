@@ -535,12 +535,17 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		/* push down to update the ready list */
 		link_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 		chdesc_unlink_level_changes(scan);
+		if (scan->level)
+			--block->nactive;
 		chdesc_unlink_ready_changes(scan);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
 		scan->level = target->level;
 		chdesc_propagate_level_change(scan, owner->level, target->level);
 		chdesc_update_ready_changes(scan);
 		chdesc_link_level_changes(scan);
+		if (scan->level)
+			++block->nactive;
+		bdesc_check_level(block);
 	}
 
 #if CHDESC_NRB && !CHDESC_RB_NRB_READY
@@ -571,6 +576,8 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 			{
 				chdesc_t * next = scan->ddesc_next;
 				chdesc_unlink_level_changes(scan);
+				if (scan->level)
+					--block->nactive;
 				chdesc_unlink_ready_changes(scan);
 				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
 				scan->level = owner->level;
@@ -578,6 +585,9 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 				chdesc_update_ready_changes(scan);
 				chdesc_link_level_changes(scan);
+				if (scan->level)
+					++block->nactive;
+				bdesc_check_level(block);
 				scan = next;
 			}
 			
@@ -602,34 +612,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 	return 0;
 }
 
-void revision_slice_push_down(revision_slice_t * slice)
-{
-	/* like chdesc_push_down, but without block reassignment (only needed
-	 * for things changing block numbers) and for slices instead of all
-	 * chdescs: it only pushes down the ready part of the slice */
-	int i;
-	for(i = 0; i != slice->ready_size; i++)
-	{
-		if(!slice->ready[i])
-			continue;
-		if(slice->ready[i]->level == slice->owner->level)
-		{
-			uint16_t prev_level = chdesc_level(slice->ready[i]);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
-			chdesc_unlink_level_changes(slice->ready[i]);
-			chdesc_unlink_ready_changes(slice->ready[i]);
-			slice->ready[i]->level = slice->target->level;
-			chdesc_update_ready_changes(slice->ready[i]);
-			chdesc_link_level_changes(slice->ready[i]);
-			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
-		}
-		else
-			fprintf(stderr, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
-	}
-}
-
-void revision_slice_pull_up(revision_slice_t * slice)
+void revision_slice_pull_up(bdesc_t *block, revision_slice_t * slice)
 {
 	/* the reverse of revision_slice_push_down, in case write() fails */
 	int i;
@@ -642,10 +625,15 @@ void revision_slice_pull_up(revision_slice_t * slice)
 			uint16_t prev_level = chdesc_level(slice->ready[i]);
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
 			chdesc_unlink_level_changes(slice->ready[i]);
+			if (slice->ready[i]->level)
+				--block->nactive;
 			chdesc_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->level = slice->owner->level;
 			chdesc_update_ready_changes(slice->ready[i]);
 			chdesc_link_level_changes(slice->ready[i]);
+			if (slice->ready[i]->level)
+				++block->nactive;
+			bdesc_check_level(block);
 			if(prev_level != chdesc_level(slice->ready[i]))
 				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
 		}

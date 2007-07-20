@@ -59,6 +59,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 		bdesc->ready_changes[i].head = NULL;
 		bdesc->ready_changes[i].tail = &bdesc->ready_changes[i].head;
 	}
+	bdesc->nactive = 0;
 	for(i = 0; i < NBDLEVEL; i++)
 	{
 		bdesc->level_changes[i].head = NULL;

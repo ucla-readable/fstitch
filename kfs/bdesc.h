@@ -46,6 +46,9 @@ struct bdesc {
 	/* For each level (at most 1 BD per level), the level's ready chdescs.
 	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
+
+	// The number of changes that are not in flight. (sort of)
+	int32_t nactive;
 	
 	/* For each level, the chdescs owned by BDs at that level. */
 	chdesc_dlist_t level_changes[NBDLEVEL];
@@ -106,6 +109,21 @@ void bdesc_autorelease_pool_pop(void);
 
 /* get the number of autorelease pools on the stack */
 unsigned int bdesc_autorelease_pool_depth(void);
+
+#ifndef NDEBUG
+static inline void bdesc_check_level(bdesc_t *b) {
+	int i, nactive = 0;
+	if (b) {
+		assert(b->nactive >= 0);
+		for (i = 1; i < NBDLEVEL; i++)
+			if (b->level_changes[i].head)
+				nactive++;
+		assert((b->nactive == 0) == (nactive == 0));
+	}
+}
+#else
+#define bdesc_check_level(b) /* nada */
+#endif
 
 #endif /* CONSTANTS_ONLY */
 

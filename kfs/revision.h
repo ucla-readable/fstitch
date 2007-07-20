@@ -55,7 +55,7 @@ typedef struct revision_slice {
 
 /* create a new revision slice in 'new_slice' and push the slice down */
 int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision_slice_t * new_slice);
-void revision_slice_pull_up(revision_slice_t * slice);
+void revision_slice_pull_up(bdesc_t *block, revision_slice_t * slice);
 /* destroy the contents of 'slice' */
 void revision_slice_destroy(revision_slice_t * slice);
 

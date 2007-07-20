@@ -195,7 +195,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	if(!block->level_changes[object->level].head)
+	if(!block->nactive)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->below_bd, &slice);
@@ -207,7 +207,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	
 	if(!slice.ready_size)
 	{
-		revision_slice_pull_up(&slice);
+		revision_slice_pull_up(block, &slice);
 		/* otherwise we would have caught it above... */
 		r = FLUSH_NONE;
 	}
@@ -217,7 +217,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		r = CALL(info->below_bd, write_block, block, block->cache_number);
 		if(r < 0)
 		{
-			revision_slice_pull_up(&slice);
+			revision_slice_pull_up(block, &slice);
 			r = FLUSH_NONE;
 		}
 		else
