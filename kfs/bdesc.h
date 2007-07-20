@@ -19,9 +19,6 @@
 struct bdesc;
 typedef struct bdesc bdesc_t;
 
-struct datadesc;
-typedef struct datadesc datadesc_t;
-
 #include <kfs/bd.h>
 #include <kfs/chdesc.h>
 #include <kfs/blockman.h>
