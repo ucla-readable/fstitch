@@ -10,7 +10,6 @@
 #include <kfs/pc_ptable.h>
 #include <kfs/bsd_ptable.h>
 #include <kfs/wt_cache_bd.h>
-#include <kfs/wb_cache_bd.h>
 #include <kfs/wb2_cache_bd.h>
 #include <kfs/wbr_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
@@ -64,8 +63,6 @@ typedef struct kfsd_partition kfsd_partition_t;
 #define USE_WB_CACHE 2
 #ifndef USE_WB_CACHE
 #define wb2_cache_bd(bd, dblocks, blocks) wt_cache_bd(bd, dblocks)
-#elif USE_WB_CACHE != 2
-#define wb2_cache_bd(bd, dblocks, blocks) wb_cache_bd(bd, dblocks)
 #endif
 
 #define USE_WBR_CACHE 0
