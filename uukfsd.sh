@@ -3,6 +3,9 @@
 if [ $1 = '--gdb' ]; then
     KFSD_WRAP=gdb
     shift
+elif [ $1 = '--valgrind' ]; then
+    KFSD_WRAP=valgrind
+    shift
 fi
 
 if [ $# -lt 1 ]; then
