@@ -28,7 +28,7 @@ int blockman_remove(datadesc_t * ddesc);
 
 datadesc_t * blockman_lookup(blockman_t * blockman, uint32_t number);
 
-int blockman_managed_add(blockman_t * blockman, bdesc_t * bdesc);
+int blockman_managed_add(blockman_t * blockman, bdesc_t *bdesc, uint32_t number);
 bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number);
 
 #endif /* __KUDOS_KFS_BLOCKMAN_H */

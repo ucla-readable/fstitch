@@ -389,7 +389,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint32_t nb
 				info->read_ahead_idx = 0;
 		}
 		
-		r = blockman_managed_add(info->blockman, blocks[j]);
+		r = blockman_managed_add(info->blockman, blocks[j], private[j].number);
 		assert(r >= 0);
 		if(r < 0)
 			return NULL;
@@ -421,7 +421,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	
 	bdesc->ddesc->synthetic = 1;
 	
-	if(blockman_managed_add(info->blockman, bdesc) < 0)
+	if(blockman_managed_add(info->blockman, bdesc, number) < 0)
 		return NULL;
 	
 	return bdesc;

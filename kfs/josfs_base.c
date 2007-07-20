@@ -1139,9 +1139,7 @@ static int josfs_write_block_lfs(LFS_t * object, bdesc_t * block, uint32_t numbe
 {
 	Dprintf("JOSFSDEBUG: josfs_write_block\n");
 	struct josfs_info * info = (struct josfs_info *) object;
-
-	if (!head)
-		return -EINVAL;
+	assert(head);
 
 	/* XXX: with blockman, I don't think this can happen anymore... */
 	if (info->bitmap_cache && info->bitmap_cache->b_number == number)

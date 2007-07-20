@@ -92,12 +92,12 @@ datadesc_t * blockman_lookup(blockman_t * blockman, uint32_t number)
 	return (datadesc_t *) hash_map_find_val(blockman->map, (void *) number);
 }
 
-int blockman_managed_add(blockman_t * blockman, bdesc_t * bdesc)
+int blockman_managed_add(blockman_t *blockman, bdesc_t *bdesc, uint32_t number)
 {
-	return blockman_add(blockman, bdesc->b_number, bdesc->ddesc);
+	return blockman_add(blockman, number, bdesc->ddesc);
 }
 
-bdesc_t * blockman_managed_lookup(blockman_t * blockman, uint32_t number)
+bdesc_t * blockman_managed_lookup(blockman_t *blockman, uint32_t number)
 {
 	bdesc_t * bdesc;
 	datadesc_t * ddesc = blockman_lookup(blockman, number);
