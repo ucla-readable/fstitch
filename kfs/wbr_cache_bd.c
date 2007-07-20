@@ -529,7 +529,7 @@ static int wbr_cache_bd_destroy(BD_t * bd)
 	vector_destroy(info->dirty_list);
 	hash_map_destroy(info->block_map);
 	
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	TIMING_DUMP(wait, "wbr_cache wait", "waits");

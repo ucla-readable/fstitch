@@ -417,7 +417,7 @@ static int ufs_cg_wb_destroy(UFSmod_cg_t * obj)
 		bdesc_release(&linfo->cg[i].cgblock);
 
 	sfree(linfo->cg, sizeof(struct cyl_info) * linfo->ncg);
-	memset(linfo, 0, sizeof(*linfo));
+	free_memset(linfo, sizeof(*linfo));
 	free(linfo);
 
 	return 0;

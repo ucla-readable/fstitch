@@ -618,7 +618,7 @@ int linux_bd_destroy(BD_t * bd)
 		bio_private_free_all();
 	bd_release(info->bdev);
 	blkdev_put(info->bdev);
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	return 0;

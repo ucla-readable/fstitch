@@ -308,7 +308,7 @@ static int opgroup_lfs_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_lfs(info->below_lfs, lfs);
 	
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	return 0;

@@ -6,6 +6,12 @@
 #define BDESC_FLAG_DIRENT 0x0002
 #define BDESC_FLAG_INDIR  0x0004
 
+#ifndef NDEBUG
+#define free_memset(data, length) memset((data), 0, (length))
+#else
+#define free_memset(data, length)
+#endif
+
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
@@ -28,7 +34,7 @@ typedef struct chdesc_dlist chdesc_dlist_t;
 
 struct datadesc {
 	uint8_t * data;
-	uint32_t ref_count:30, in_flight:1, synthetic:1;
+	uint32_t in_flight:1, synthetic:1;
 
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;

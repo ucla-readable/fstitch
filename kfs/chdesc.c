@@ -2784,9 +2784,7 @@ void chdesc_dep_remove(chdepdesc_t * dep)
 		/* we just removed the last before of a NOOP chdesc, so satisfy it */
 		chdesc_satisfy(&dep->after.desc);
 
-#if 0 /* YOU_HAVE_TIME_TO_WASTE */
-	memset(dep, 0, sizeof(*dep));
-#endif
+	free_memset(dep, sizeof(*dep));
 	chdepdesc_free(dep);
 	account_update(&act_ndeps, -1);
 }
@@ -3182,9 +3180,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 	chdesc_counts[(*chdesc)->type]--;
 	dump_counts();
 #endif
-#if 0 /* YOU_HAVE_TIME_TO_WASTE */
-	memset(*chdesc, 0, sizeof(**chdesc));
-#endif
+	free_memset(*chdesc, sizeof(**chdesc));
 	chdesc_free(*chdesc);
 	*chdesc = NULL;
 }

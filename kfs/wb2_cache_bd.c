@@ -510,7 +510,7 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 		wb2_pop_slot(info, info->all.first);
 	
 	free(info->map);
-	memset(bd, 0, sizeof(*bd));
+	free_memset(bd, sizeof(*bd));
 	free(info);
 	
 	TIMING_DUMP(wait, "wb2_cache wait", "waits");

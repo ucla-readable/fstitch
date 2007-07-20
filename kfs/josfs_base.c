@@ -1396,7 +1396,7 @@ static int josfs_destroy(LFS_t * lfs)
 	bdesc_release(&info->super_block);
 	bdesc_release(&info->bitmap_cache);
 
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	return 0;

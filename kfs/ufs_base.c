@@ -1754,7 +1754,7 @@ static int ufs_destroy(LFS_t * lfs)
 	sfree(info->csums, sizeof(struct UFS_csum) * super_fs_ncg);
 	hash_map_destroy(info->filemap);
 
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 
 	return 0;

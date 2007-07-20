@@ -216,7 +216,7 @@ static int unix_file_bd_destroy(BD_t * bd)
 	blockman_destroy(&info->blockman);
 
 	close(info->fd);
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 
 	if(block_log)

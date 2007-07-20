@@ -295,7 +295,7 @@ static int wholedisk_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_bd(lfs->blockdev, lfs);
 	
-	memset(lfs, 0, sizeof(*lfs));
+	free_memset(lfs, sizeof(*lfs));
 	free(lfs);
 	
 	return 0;

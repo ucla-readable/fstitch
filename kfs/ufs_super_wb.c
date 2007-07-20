@@ -394,7 +394,7 @@ static int ufs_super_wb_destroy(UFSmod_super_t * obj)
 		return r;
 
 	bdesc_release(&linfo->super_block);
-	memset(linfo, 0, sizeof(*linfo));
+	free_memset(linfo, sizeof(*linfo));
 	free(linfo);
 
 	return 0;

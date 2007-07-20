@@ -335,7 +335,7 @@ static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 static int ufs_dirent_linear_destroy(UFSmod_dirent_t * obj)
 {
 	struct ufsmod_dirent_info *info = (struct ufsmod_dirent_info *) obj;
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	return 0;
 }

@@ -97,7 +97,7 @@ static int partition_bd_destroy(BD_t * bd)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->below_bd, bd);
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	return 0;
 }

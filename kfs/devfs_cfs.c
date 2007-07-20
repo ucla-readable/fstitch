@@ -476,7 +476,7 @@ static void devfs_real_destroy(void * void_devfs_cfs)
 	devfs_cfs_t * state = (devfs_cfs_t *) void_devfs_cfs;
 	
 	vector_destroy(state->bd_table);
-	memset(state, 0, sizeof(*state));
+	free_memset(state, sizeof(*state));
 	free(state);
 }
 

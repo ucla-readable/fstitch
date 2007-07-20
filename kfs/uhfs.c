@@ -843,7 +843,7 @@ static int uhfs_destroy(CFS_t * cfs)
 	if(!n_uhfs_instances)
 		uhfs_fdesc_free_all();
 
-	memset(state, 0, sizeof(*state));
+	free_memset(state, sizeof(*state));
 	free(state);
 
 	return 0;

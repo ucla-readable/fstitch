@@ -131,7 +131,7 @@ static int ufs_alloc_lastpos_get_status(void * object, int level, char * string,
 static int ufs_alloc_lastpos_destroy(UFSmod_alloc_t * obj)
 {
 	struct ufsmod_alloc_info * info = (struct ufsmod_alloc_info *) obj;
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	return 0;
 }

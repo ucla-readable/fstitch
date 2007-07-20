@@ -398,7 +398,7 @@ static int file_hiding_destroy(CFS_t * cfs)
 	modman_dec_cfs(state->frontend_cfs, cfs);
 
 	vector_destroy(state->hide_table);
-	memset(state, 0, sizeof(*state));
+	free_memset(state, sizeof(*state));
 	free(state);
 	return 0;
 }

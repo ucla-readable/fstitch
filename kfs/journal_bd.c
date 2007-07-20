@@ -782,7 +782,7 @@ static int journal_bd_destroy(BD_t * bd)
 	if(info->block_map)
 		hash_map_destroy(info->block_map);
 	
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	return 0;

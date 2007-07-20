@@ -141,7 +141,7 @@ static int mem_bd_destroy(BD_t * bd)
 	blockman_destroy(&info->blockman);
 
 	vfree(info->blocks);
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	return 0;

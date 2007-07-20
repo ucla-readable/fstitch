@@ -58,7 +58,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
-	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->in_flight = 0;
 	bdesc->ddesc->synthetic = 0;
 	bdesc->ddesc->all_changes = NULL;
@@ -94,66 +93,54 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
 	bdesc->ref_count++;
-	bdesc->ddesc->ref_count++;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc->ddesc, bdesc->ref_count, bdesc->ar_count, bdesc->ddesc->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc->ddesc, bdesc->ref_count, bdesc->ar_count, bdesc->ref_count);
 	return bdesc;
 }
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void bdesc_release(bdesc_t ** bdesc)
 {
-	(*bdesc)->ddesc->ref_count--;
 	(*bdesc)->ref_count--;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ddesc->ref_count);
-	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
-	{
-		fprintf(stderr, "%s(): (%s:%d): block %p had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
-		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
-		(*bdesc)->ref_count = (*bdesc)->ar_count;
-	}
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ref_count);
+	assert((*bdesc)->ref_count >= (*bdesc)->ar_count);
 	if(!(*bdesc)->ref_count)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, *bdesc, (*bdesc)->ddesc);
-		if(!(*bdesc)->ddesc->ref_count)
-		{
-			uint16_t i;
-			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
-			assert(!(*bdesc)->ddesc->all_changes);
-			assert(!(*bdesc)->ddesc->overlap1[0]);
-			/* XXX don't bother checking other overlap1[] */
+		uint16_t i;
+		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
+		assert(!(*bdesc)->ddesc->all_changes);
+		assert(!(*bdesc)->ddesc->overlap1[0]);
+		/* XXX don't bother checking other overlap1[] */
 #if BDESC_EXTERN_AFTER_COUNT
-			assert(!(*bdesc)->ddesc->extern_after_count);
+		assert(!(*bdesc)->ddesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-			assert(!(*bdesc)->ddesc->nrb);
+		assert(!(*bdesc)->ddesc->nrb);
 #endif
 #if 0
-			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
-				fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+		if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
+			fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 #if BDESC_EXTERN_AFTER_COUNT
-			if((*bdesc)->ddesc->extern_after_count)
-				fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
+		if((*bdesc)->ddesc->extern_after_count)
+			fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-			if((*bdesc)->ddesc->nrb)
-				fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
+		if((*bdesc)->ddesc->nrb)
+			fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
 #endif
-			for(i = 0; i < NBDLEVEL; i++)
-				assert(!(*bdesc)->ddesc->ready_changes[i].head);
-			if((*bdesc)->ddesc->bit_changes)
-			{
-				if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
-					fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
-				hash_map_destroy((*bdesc)->ddesc->bit_changes);
-			}
-			if((*bdesc)->ddesc->manager)
-				blockman_remove(*bdesc);
-			free((*bdesc)->ddesc->data);
-			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
-			datadesc_mem_free((*bdesc)->ddesc);
+		for(i = 0; i < NBDLEVEL; i++)
+			assert(!(*bdesc)->ddesc->ready_changes[i].head);
+		if((*bdesc)->ddesc->bit_changes) {
+			assert(hash_map_empty((*bdesc)->ddesc->bit_changes));
+			hash_map_destroy((*bdesc)->ddesc->bit_changes);
 		}
-		memset(*bdesc, 0, sizeof(**bdesc));
+		if((*bdesc)->ddesc->manager)
+			blockman_remove(*bdesc);
+		free((*bdesc)->ddesc->data);
+		free_memset((*bdesc)->ddesc, sizeof(*(*bdesc)->ddesc));
+		datadesc_mem_free((*bdesc)->ddesc);
+		free_memset(*bdesc, sizeof(**bdesc));
 		bdesc_mem_free(*bdesc);
 	}
 	/* released, so set pointer to NULL */

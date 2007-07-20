@@ -2421,7 +2421,7 @@ static int ext2_destroy(LFS_t * lfs)
 	free(info->gdescs);
 	free(info->super);
 	free(info->groups);
-	memset(info, 0, sizeof(*info));
+	free_memset(info, sizeof(*info));
 	free(info);
 	
 	return 0;
