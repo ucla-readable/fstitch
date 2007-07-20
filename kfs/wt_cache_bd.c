@@ -65,6 +65,7 @@ static int wt_push_block(struct cache_info * info, bdesc_t * block, uint32_t num
 	if((r = hash_map_insert(info->block_map, (void *) number, slot)) < 0)
 		return r;
 	slot->block = block;
+	block->cache_number = number;
 	
 	bdesc_retain(block);
 	wt_touch_block(info, slot);
@@ -78,7 +79,7 @@ static void wt_pop_block(struct cache_info * info, struct cache_slot * slot)
 	assert(slot);
 	assert(slot->block);
 	
-	erased_slot = hash_map_erase(info->block_map, (void *) slot->block->b_number);
+	erased_slot = hash_map_erase(info->block_map, (void *) slot->block->cache_number);
 	assert(slot == erased_slot);
 	bdesc_release(&slot->block);
 	

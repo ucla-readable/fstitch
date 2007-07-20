@@ -59,17 +59,17 @@ struct datadesc {
 };
 
 struct bdesc {
-	uint32_t b_number;
 	uint32_t ref_count;
 	uint32_t ar_count;
 	bdesc_t * ar_next;
 	datadesc_t * ddesc;
 
 	/* information for the write-back cache */
+	uint32_t cache_number;
 	struct {
 		struct bdesc **pprev;
 		struct bdesc *next;
-	} block_hash;
+	} cache_hash;
 	struct {
 		struct bdesc *prev;
 		struct bdesc *next;

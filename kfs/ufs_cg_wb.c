@@ -19,6 +19,7 @@
 struct cyl_info
 {
 	bdesc_t * cgblock;
+	uint32_t cgblock_number;
 	struct UFS_cg cgdata; /* In memory cylgrp */
 	struct UFS_csum oldcgsum; /* On disk version of the summary */
 	int32_t oldfrsum[UFS_MAXFRAG]; /* On disk version of the frsum */
@@ -85,7 +86,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg timestamp");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_TIME] = 0;
@@ -124,7 +125,7 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 	if (*head && r > 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg checksum");
-		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
+		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 		if (r < 0)
 			return r;
 	}
@@ -162,7 +163,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg rotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_ROTOR] = 0;
@@ -196,7 +197,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_FROTOR] = 0;
@@ -230,7 +231,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg irotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
 	linfo->cg[num].dirty[WB_IROTOR] = 0;
@@ -268,7 +269,7 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 	if(*head && r > 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frsum");
-		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock->b_number);
+		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 		if (r < 0)
 			return r;
 	}
@@ -446,12 +447,14 @@ UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info)
 		return NULL;
 	}
 
-	for (i = 0; i < linfo->ncg; i++)
+	for (i = 0; i < linfo->ncg; i++) {
 		linfo->cg[i].cylstart = super->fs_fpg * i + super->fs_cgoffset * (i & ~super->fs_cgmask);
+		linfo->cg[i].cgblock_number = linfo->cg[i].cylstart + super->fs_cblkno;
+	}
 
 	for (i = 0; i < linfo->ncg; i++) {
 		linfo->cg[i].cgblock = CALL(info->ubd, read_block,
-				linfo->cg[i].cylstart + super->fs_cblkno, info->lfs.blocksize);
+				linfo->cg[i].cgblock_number, info->lfs.blocksize);
 		if (!linfo->cg[i].cgblock)
 			goto read_block_failed;
 		bdesc_retain(linfo->cg[i].cgblock);

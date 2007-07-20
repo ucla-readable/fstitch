@@ -82,7 +82,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent");
 
-	return CALL(info->ubd, write_block, block, block->b_number);
+	return CALL(info->ubd, write_block, block, blockno);
 }
 
 static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head)

@@ -152,7 +152,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 			if (r >= 0)
 			{
 				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "wipe block");
-				r = CALL(info->ubd, write_block, block, block->b_number);
+				r = CALL(info->ubd, write_block, block, i);
 			}
 			if (r < 0)
 				return INVALID_BLOCK;
@@ -203,13 +203,13 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 }
 
 // Update a ptr in an indirect ptr block
-static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block, uint32_t offset, uint32_t n, chdesc_t ** head)
+static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block, uint32_t block_number, uint32_t offset, uint32_t n, chdesc_t ** head)
 {
 	int r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head);
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "indirect pointer");
-	return CALL(info->ubd, write_block, block, block->b_number);
+	return CALL(info->ubd, write_block, block, block_number);
 }
 
 // Update file's inode with an nth indirect ptr
@@ -250,7 +250,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t blockno, nindirb, nindirf;
-	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
+	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR], indirect_number[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -278,12 +278,13 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 				return r;
 		}
 
+		indirect_number[0] = f->f_inode.di_ib[0] + frag_off[0];
 		indirect[0] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[0] + frag_off[0], info->lfs.blocksize);
+				indirect_number[0], info->lfs.blocksize);
 		if (!indirect[0])
 			return -ENOENT;
 
-		return update_indirect_block(info, indirect[0], pt_off[0], value, head);
+		return update_indirect_block(info, indirect[0], indirect_number[0], pt_off[0], value, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb) {
 		block_off[1] = blockno - UFS_NDADDR - nindirb;
@@ -300,8 +301,9 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 				return r;
 		}
 
+		indirect_number[1] = f->f_inode.di_ib[1] + frag_off[1];
 		indirect[1] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[1] + frag_off[1], info->lfs.blocksize);
+				indirect_number[1], info->lfs.blocksize);
 		if (!indirect[1])
 			return -ENOENT;
 
@@ -312,16 +314,17 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 			block_off[0] = allocate_wholeblock(object, 1, file, head);
 			if (block_off[0] == INVALID_BLOCK)
 				return -ENOENT;
-			r = update_indirect_block(info, indirect[1], pt_off[1], block_off[0], head);
+			r = update_indirect_block(info, indirect[1], indirect_number[1], pt_off[1], block_off[0], head);
 			if (r < 0)
 				return r;
 		}
 
-		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], info->lfs.blocksize);
+		indirect_number[0] = block_off[0] + frag_off[0];
+		indirect[0] = CALL(info->ubd, read_block, indirect_number[0], info->lfs.blocksize);
 		if (!indirect[0])
 			return -ENOENT;
 
-		return update_indirect_block(info, indirect[0], pt_off[0], value, head);
+		return update_indirect_block(info, indirect[0], indirect_number[0], pt_off[0], value, head);
 	}
 	else if (blockno < UFS_NDADDR + nindirb * nindirb * nindirb) {
 		// We'll only need triple indirect ptrs when the filesize is:
@@ -345,7 +348,7 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 	int r;
 	uint32_t blockno, nindirb, nindirf;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
-	uint32_t num[UFS_NIADDR];
+	uint32_t num[UFS_NIADDR], indirect_number[UFS_NIADDR];
 	bdesc_t * indirect[UFS_NIADDR];
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -367,12 +370,13 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		pt_off[0] = block_off[0] % nindirf;
 		num[0] = f->f_inode.di_ib[0] / super->fs_frag;
 
+		indirect_number[0] = f->f_inode.di_ib[0] + frag_off[0];
 		indirect[0] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[0] + frag_off[0], info->lfs.blocksize);
+				indirect_number[0], info->lfs.blocksize);
 		if (!indirect[0])
 			return -ENOENT;
 
-		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head);
+		r = update_indirect_block(info, indirect[0], indirect_number[0], pt_off[0], 0, head);
 		// Deallocate indirect block if necessary
 		if (blockno == UFS_NDADDR && r >= 0) {
 			r = modify_indirect_ptr(object, file, 0, 1, head);
@@ -390,23 +394,25 @@ static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chde
 		frag_off[0] = (block_off[1] % nindirb) / nindirf;
 		pt_off[0] = block_off[1] % nindirf;
 
+		indirect_number[1] = f->f_inode.di_ib[1] + frag_off[1];
 		indirect[1] = CALL(info->ubd, read_block,
-				f->f_inode.di_ib[1] + frag_off[1], info->lfs.blocksize);
+				indirect_number[1], info->lfs.blocksize);
 		if (!indirect[1])
 			return -ENOENT;
 
 		block_off[0] = *((uint32_t *) (indirect[1]->ddesc->data) + pt_off[1]);
 		num[0] = block_off[0] / super->fs_frag;
 
-		indirect[0] = CALL(info->ubd, read_block, block_off[0] + frag_off[0], info->lfs.blocksize);
+		indirect_number[0] = block_off[0] + frag_off[0];
+		indirect[0] = CALL(info->ubd, read_block, indirect_number[0], info->lfs.blocksize);
 		if (!indirect[0])
 			return -ENOENT;
 
-		r = update_indirect_block(info, indirect[0], pt_off[0], 0, head);
+		r = update_indirect_block(info, indirect[0], indirect_number[0], pt_off[0], 0, head);
 
 		// Deallocate indirect block if necessary
 		if ((block_off[1] % nindirb == 0) && r >= 0) {
-			r = update_indirect_block(info, indirect[1], pt_off[1], 0, head);
+			r = update_indirect_block(info, indirect[1], indirect_number[1], pt_off[1], 0, head);
 			if (r >= 0)
 				r = erase_wholeblock(object, num[0], file, head);
 		}
@@ -557,7 +563,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "move fragment");
 
 		bdesc_release(&block);
-		r = CALL(info->ubd, write_block, newblock, newblock->b_number);
+		r = CALL(info->ubd, write_block, newblock, blockno + i);
 		if (r < 0)
 			return INVALID_BLOCK;
 	}

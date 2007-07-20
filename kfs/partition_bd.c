@@ -50,11 +50,7 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint32_
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	bdesc = CALL(info->below_bd, read_block, info->start + number, nbytes);
-	if (bdesc)
-		bdesc->b_number = number;
-	
-	return bdesc;
+	return CALL(info->below_bd, read_block, info->start + number, nbytes);
 }
 
 static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
@@ -65,11 +61,7 @@ static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	/* make sure it's a valid block */
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	bdesc = CALL(info->below_bd, synthetic_read_block, info->start + number, nbytes);
-	if (bdesc)
-		bdesc->b_number = number;
-	
-	return bdesc;
+	return CALL(info->below_bd, synthetic_read_block, info->start + number, nbytes);
 }
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)

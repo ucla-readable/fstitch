@@ -17,6 +17,9 @@
 
 #define SYNC_PERIOD HZ
 
+/* the superblock is in sector 16 */
+#define SUPER_NUMBER	4
+
 struct local_info
 {
 	UFSmod_super_t ufs;
@@ -58,7 +61,7 @@ static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock timestamp");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_TIME] = 0;
@@ -94,7 +97,7 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 	if (*head && r > 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CStotal");
-		r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+		r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 		if (r < 0)
 			return r;
 	}
@@ -128,7 +131,7 @@ static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock fmod");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_FMOD] = 0;
@@ -158,7 +161,7 @@ static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdes
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock clean");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_CLEAN] = 0;
@@ -188,7 +191,7 @@ static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdes
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock readonly");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_RONLY] = 0;
@@ -221,7 +224,7 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock FSmount");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_FSMNT] = 0;
@@ -251,7 +254,7 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CGrotor");
-	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, linfo->super_block->b_number);
+	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
 	linfo->dirty[WB_CGROTOR] = 0;
@@ -412,7 +415,7 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	linfo->global_info = info;
 
 	/* the superblock is in sector 16 */
-	linfo->super_block = CALL(info->ubd, read_block, 4, info->lfs.blocksize);
+	linfo->super_block = CALL(info->ubd, read_block, SUPER_NUMBER, info->lfs.blocksize);
 	if (!linfo->super_block)
 	{
 		printf("Unable to read superblock!\n");
