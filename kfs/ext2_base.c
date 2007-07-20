@@ -425,16 +425,10 @@ static int ext2_mdir_add(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t **
 		// or have it use an internal single item cache?
 		r = ext2_get_disk_dirent(object, dir_file, &next_base, &entry);
 		if(r < 0)
-		{
-			printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
 			goto fail;
-		}
 		r = ext2_mdirent_add(mdir, entry, cur_base);
 		if(r < 0)
-		{
-			printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
 			goto fail;
-		}
 	}
 
 	// Update mdir lru list to make mdir the most recent
@@ -1419,16 +1413,10 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 	int r;
 	//check: off end of file?
 	if (!parent || !dirent_exists || !dirent_new || !tail)
-	{
-		printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 		return -EINVAL;
-	}
 
 	if (basep + dirent_exists->rec_len + dirent_new->rec_len > parent->f_inode.i_size)
-	{
-		printf("%s(): fail at line %d (basep = %u, exists = %d, new = %d, size = %u\n", __FUNCTION__, __LINE__, basep, dirent_exists->rec_len, dirent_new->rec_len, parent->f_inode.i_size);
 		return -EINVAL;
-	}
 
 	uint32_t exists_rec_len_actual = dirent_rec_len(dirent_exists->name_len);
 	uint32_t new_rec_len_actual = dirent_rec_len(dirent_new->name_len);
@@ -1440,37 +1428,25 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
 		blockno = get_file_block(object, parent, basep);
 		if (blockno == INVALID_BLOCK)
-		{
-			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return -1;
-		}
 
 		basep %= info->block_size;
 
 		dirblock = CALL(info->ubd, read_block, blockno, 1);
 		if (!dirblock)
-		{
-			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return -1;
-		}
 
 		memcpy(entries, dirent_exists, exists_rec_len_actual);
 		memcpy((void *) entries + exists_rec_len_actual, dirent_new, new_rec_len_actual);
 
 		if ((r = chdesc_create_byte_set(dirblock, info->ubd, basep, exists_rec_len_actual + new_rec_len_actual, (void *) entries, tail, befores )) < 0)
-		{
-			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return r;
-		}
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write dirent '%s'", dirent_new->name);
 		dirblock->ddesc->flags |= BDESC_FLAG_DIRENT;
 
 		r = CALL(info->ubd, write_block, dirblock);
 		if (r < 0)
-		{
-			printf("%s(): fail at line %d\n", __FUNCTION__, __LINE__);
 			return r;
-		}
 	} else
 		kpanic("overlapping dirent");
 	return 0;
@@ -1557,10 +1533,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 				new_dirent->rec_len = mdirent->dirent.rec_len;
 				r = ext2_mdirent_use(mdir, mdirent, new_dirent);
 				if(r < 0)
-				{
-					printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
 					return r;
-				}
 				r = ext2_write_dirent_set(object, parent, new_dirent, offset, tail, befores);
 				if(r < 0)
 					ext2_mdirent_clear(mdir, mdirent, info->block_size);
@@ -1575,10 +1548,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 				uint16_t backup_rec_len = new_dirent->rec_len;
 				r = ext2_get_disk_dirent(object, parent, &existing_offset, &entry);
 				if(r < 0)
-				{
-					printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
 					return r;
-				}
 				existing_offset = mdirent->offset;
 				memcpy(&entry_updated, entry, MIN(entry->rec_len, sizeof(entry_updated)));
 				entry_updated_len = dirent_rec_len(entry_updated.name_len);
@@ -1625,10 +1595,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	new_dirent->rec_len = info->block_size;
 	r = ext2_mdirent_add(mdir, new_dirent, prev_eof);
 	if(r < 0)
-	{
-		printf("%s(): failed at line %d\n", __FUNCTION__, __LINE__);
 		return r;
-	}
 	r = ext2_write_dirent_set(object, parent, new_dirent, prev_eof, tail, PASS_CHDESC_SET(set));
 	assert(r >= 0); // need to undo ext2_dir_add()
 	return r;
