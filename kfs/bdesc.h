@@ -58,9 +58,6 @@ struct datadesc {
 	uint16_t length, flags;
 };
 
-/* reorder the queue to try and find a better flush order */
-#define DIRTY_QUEUE_REORDERING 0
-
 struct bdesc {
 	uint32_t b_number;
 	uint32_t ref_count;
@@ -69,13 +66,6 @@ struct bdesc {
 	datadesc_t * ddesc;
 
 	/* information for the write-back cache */
-#if DIRTY_QUEUE_REORDERING
-	uint32_t pass;
-	/* if we've put a block after this one already during this pass through
-	 * the dirty blocks, put further blocks after that one instead */
-	uint32_t block_after_number;
-	uint32_t block_after_pass;
-#endif
 	struct {
 		struct bdesc **pprev;
 		struct bdesc *next;

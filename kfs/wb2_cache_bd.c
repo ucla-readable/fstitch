@@ -74,11 +74,6 @@ static inline void wb2_map_remove_block(bdesc_t * block)
 /* we are guaranteed that the block is not already in the list */
 static void wb2_push_block(wb2_cache_bd_t * info, bdesc_t * block)
 {
-#if DIRTY_QUEUE_REORDERING
-	block->pass = 0;
-	block->block_after_number = INVALID_BLOCK;
-	block->block_after_pass = 0;
-#endif
 	block->lru_all.prev = NULL;
 	block->lru_all.next = info->all.first;
 	block->lru_dirty.prev = NULL;
@@ -238,46 +233,6 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	return r;
 }
 
-#if DIRTY_QUEUE_REORDERING
-static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * start_block)
-{
-	chdepdesc_t * dep = chdesc->befores;
-	for(; dep; dep = dep->before.next)
-	{
-		chdesc_t * before = dep->before.desc;
-		if(before->level != object->level)
-			continue;
-		if(!before->block)
-		{
-			bdesc_t * block = wb2_find_block_before(object, before, start_block);
-			if(block)
-				return block;
-		}
-		else if(before->block->ddesc != start_block->ddesc)
-			return before->block;
-	}
-	return NULL;
-}
-
-/* move "slot" to before "before" */
-static void wb2_bounce_block_write(wb2_cache_bd_t * info, bdesc_t * block, bdesc_t * before)
-{
-	wb2_pop_slot_dirty(info, block);
-	block->lru_dirty.next = before;
-	block->lru_dirty.prev = before->lru_dirty.prev;
-	before->lru_dirty.prev = block;
-	if(block->lru_dirty.prev)
-		block->lru_dirty.prev->lru_dirty.next = block;
-	else
-		info->dirty.first = block;
-	/* there is no way we could be putting this block at the end
-	 * of the queue, since it's going before some other block */
-	/* if we go above the high mark, set the current mark low */
-	if(++info->dblocks > info->soft_dblocks_high)
-		info->soft_dblocks = info->soft_dblocks_low;
-}
-#endif
-
 enum dshrink_strategy {
 	CLIP,  /* just get below the soft limit */
 	FLUSH, /* flush as much as possible */
@@ -290,16 +245,6 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	wb2_cache_bd_t * info = (wb2_cache_bd_t *) object;
 	bdesc_t * block = info->dirty.last;
 	
-#if DIRTY_QUEUE_REORDERING
-	bdesc_t * stop = NULL;
-#define STOP stop
-	static uint32_t pass = 0;
-	if(!++pass)
-		pass = 1;
-#else
-#define STOP NULL
-#endif
-	
 #if DELAY_FLUSH_UNTIL_EXIT
 	if(kfsd_is_running())
 		return;
@@ -311,77 +256,14 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
-	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && block != STOP)
+	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && block != NULL)
 	{
 		int status, delay = 0;
-#if DIRTY_QUEUE_REORDERING
-		if(block->pass == pass)
-		{
-			block = block->lru_dirty.prev;
-			assert(block || !stop);
-			continue;
-		}
-		block->pass = pass;
-#endif
 		status = wb2_flush_block(object, block, &delay);
 		/* still dirty? */
 		if(status < 0)
 		{
-#if DIRTY_QUEUE_REORDERING
-			this_is_not_updated_yet();
-			/* pick somewhere later in the queue to move it */
-			bdesc_t * scan_block = NULL;
-			if(!block->ddesc->in_flight)
-			{
-				chdesc_t * scan = block->ddesc->level_changes[object->level].head;
-				for(; !scan_block && scan; scan = scan->ddesc_level_next)
-					scan_block = wb2_find_block_before(object, scan, slot->block);
-			}
-			if(scan_block)
-			{
-				struct lru_slot * before_slot = NULL;
-				before_slot = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) scan_block->b_number);
-				assert(slot != before_slot);
-				if(before_slot)
-				{
-					struct lru_slot * prev = slot->dirty.prev;
-					/* it had better be in the dirty list */
-					assert(before_slot->dirty.prev || info->dirty.first == before_slot);
-					if(before_slot->block_after_pass == pass)
-					{
-						struct lru_slot * try;
-						try = (struct lru_slot *) hash_map_find_val(info->block_map, (void *) before_slot->block_after_number);
-						if(try)
-						{
-							assert(slot != try);
-							assert(try->dirty.prev || info->dirty.first == try);
-							before_slot->block_after_number = slot->block->b_number;
-							before_slot = try;
-						}
-					}
-					else
-					{
-						before_slot->block_after_number = slot->block->b_number;
-						before_slot->block_after_pass = pass;
-					}
-					wb2_bounce_block_write(info, slot, before_slot);
-					if(info->dirty.first == slot && !stop && prev)
-						stop = slot;
-					slot = prev;
-					assert(slot || !stop);
-				}
-				else
-				{
-					slot = slot->dirty.prev;
-					assert(slot || !stop);
-				}
-			}
-			else
-#endif
-			{
-				block = block->lru_dirty.prev;
-				assert(block || !STOP);
-			}
+			block = block->lru_dirty.prev;
 		}
 		else
 		{
@@ -406,7 +288,6 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 					break;
 			}
 			block = prev;
-			assert(block || !STOP);
 		}
 		/* if we're just preening, then stop if there was I/O delay */
 		if(strategy == PREEN && delay > 1)
