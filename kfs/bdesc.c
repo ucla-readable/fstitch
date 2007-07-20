@@ -231,20 +231,6 @@ unsigned int bdesc_autorelease_pool_depth(void)
 	return autorelease_depth;
 }
 
-int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc)
-{
-	int ar_count = 0;
-	struct auto_pool * pool;
-	for(pool = autorelease_stack; pool; pool = pool->next)
-	{
-		bdesc_t * scan;
-		for(scan = pool->list; scan; scan = scan->ar_next)
-			if(scan->ddesc == ddesc)
-				ar_count += scan->ar_count;
-	}
-	return ar_count;
-}
-
 int bdesc_init(void)
 {
 	return kfsd_register_shutdown_module(bdesc_pools_free_all, NULL, SHUTDOWN_POSTMODULES);
