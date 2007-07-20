@@ -1135,7 +1135,7 @@ remove_name_exit:
 	return r;
 }
 
-static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
+static int josfs_write_block_lfs(LFS_t * object, bdesc_t * block, uint32_t number, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_write_block\n");
 	struct josfs_info * info = (struct josfs_info *) object;
@@ -1144,10 +1144,10 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 		return -EINVAL;
 
 	/* XXX: with blockman, I don't think this can happen anymore... */
-	if (info->bitmap_cache && info->bitmap_cache->b_number == block->b_number)
+	if (info->bitmap_cache && info->bitmap_cache->b_number == number)
 		bdesc_release(&info->bitmap_cache);
 
-	return CALL(object->blockdev, write_block, block, block->b_number);
+	return CALL(object->blockdev, write_block, block, number);
 }
 
 static chdesc_t ** josfs_get_write_head(LFS_t * object)

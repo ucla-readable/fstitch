@@ -1450,15 +1450,12 @@ ufs_remove_name_error2:
 	return r;
 }
 
-static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
+static int ufs_write_block_lfs(LFS_t * object, bdesc_t *block, uint32_t number, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
-
-	if (!head)
-		return -EINVAL;
-
-	return CALL(info->ubd, write_block, block, block->b_number);
+	assert(head);
+	return CALL(info->ubd, write_block, block, number);
 }
 
 static chdesc_t ** ufs_get_write_head(LFS_t * object)

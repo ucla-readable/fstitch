@@ -128,7 +128,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t number)
 	if(r < 0)
 		return r;
 
-	return CALL(info->lfs, write_block, wblock, &head);
+	return CALL(info->lfs, write_block_lfs, wblock, lfs_number, &head);
 }
 
 static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)

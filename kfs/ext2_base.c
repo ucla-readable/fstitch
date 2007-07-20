@@ -2058,15 +2058,13 @@ remove_name_exit:
 	return r;
 }
 
-static int ext2_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
+static int ext2_write_block_lfs(LFS_t * object, bdesc_t *block, uint32_t number, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_write_block\n");
 	struct ext2_info * info = (struct ext2_info *) object;
+	assert(head);
 
-	if (!head)
-		return -EINVAL;
-
-	return CALL(info->ubd, write_block, block, block->b_number);
+	return CALL(info->ubd, write_block, block, number);
 }
 
 static chdesc_t ** ext2_get_write_head(LFS_t * object)
