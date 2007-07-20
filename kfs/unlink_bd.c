@@ -69,11 +69,6 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 		}
 	}
 	
-	/* this should never fail */
-	r = chdesc_push_down(object, block, info->below_bd, block);
-	if(r < 0)
-		return r;
-	
 	/* write it */
 	return CALL(info->below_bd, write_block, block, number);
 }

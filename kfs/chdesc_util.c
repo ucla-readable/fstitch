@@ -27,8 +27,8 @@ void chdesc_unmark_graph(chdesc_t * root)
 int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
 {
 	chdesc_dlist_t * dlist = current_block->ddesc->level_changes;
-	if(target_block->ddesc != current_block->ddesc)
-		return -EINVAL;
+	assert(target_block->ddesc == current_block->ddesc);
+	assert(current_bd->level != target_bd->level);
 	if(dlist[current_bd->level].head)
 	{
 		chdesc_t * chdesc;
@@ -52,7 +52,7 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 			if(prev_level != new_level)
 				chdesc_propagate_level_change(chdesc, prev_level, new_level);
 		}
-		
+
 		/* append the target index list to ours */
 		*dlist[current_bd->level].tail = dlist[target_bd->level].head;
 		if(dlist[target_bd->level].head)
