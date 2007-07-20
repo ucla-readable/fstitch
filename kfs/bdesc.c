@@ -141,6 +141,16 @@ void bdesc_release(bdesc_t ** bdesc)
 		{
 			uint16_t i;
 			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
+			assert(!(*bdesc)->ddesc->all_changes);
+			assert(!(*bdesc)->ddesc->overlap1[0]);
+			/* XXX don't bother checking other overlap1[] */
+#if BDESC_EXTERN_AFTER_COUNT
+			assert(!(*bdesc)->ddesc->extern_after_count);
+#endif
+#if CHDESC_NRB
+			assert(!(*bdesc)->ddesc->nrb);
+#endif
+#if 0
 			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
 				fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
 #if BDESC_EXTERN_AFTER_COUNT
@@ -150,6 +160,7 @@ void bdesc_release(bdesc_t ** bdesc)
 #if CHDESC_NRB
 			if((*bdesc)->ddesc->nrb)
 				fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
+#endif
 #endif
 			for(i = 0; i < NBDLEVEL; i++)
 				assert(!(*bdesc)->ddesc->ready_changes[i].head);
