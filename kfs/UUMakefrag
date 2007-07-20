@@ -24,7 +24,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/pc_ptable.o \
 			$(OBJDIR)/kfs/bsd_ptable.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
-			$(OBJDIR)/kfs/wb_cache_bd.o \
 			$(OBJDIR)/kfs/wb2_cache_bd.o \
 			$(OBJDIR)/kfs/wbr_cache_bd.o \
 			$(OBJDIR)/kfs/journal_bd.o \
