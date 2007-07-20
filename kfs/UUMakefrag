@@ -24,7 +24,6 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/pc_ptable.o \
 			$(OBJDIR)/kfs/bsd_ptable.o \
 			$(OBJDIR)/kfs/wt_cache_bd.o \
-			$(OBJDIR)/kfs/wb_cache_bd.o \
 			$(OBJDIR)/kfs/wb2_cache_bd.o \
 			$(OBJDIR)/kfs/wbr_cache_bd.o \
 			$(OBJDIR)/kfs/journal_bd.o \
@@ -47,11 +46,11 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/sync.o \
 			$(OBJDIR)/kfs/destroy.o
 
-$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a
+$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a obj/fs/ext2.img
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
 #	For normal usage:
 	$(V)$(CC) $(CFLAGS) -o $@ $(KFSOFILES) -L$(OBJDIR)/lib $(FUSE_LDFLAGS) -luser -lpthread
 #	For profiling: (you'll need debian/ubuntu's libc6-prof package)
 #	WARNING: -lfuse hardcoded here, because FUSE_LDFLAGS contains -lpthread
-#	$(V)$(CC) $(CFLAGS) -o $@ -pg -static $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -luser -lpthread_p -lc_p
+#	$(V)$(CC) $(CFLAGS) -fms-extensions -o $@ -pg -static $(KFSOFILES) -L$(OBJDIR)/lib -lfuse -luser -lpthread_p -lc_p

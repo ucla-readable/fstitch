@@ -365,6 +365,9 @@ int main(int argc, char * argv[])
 		{
 			unix_file = &argv[i][10];
 			remove_arg(&argc, argv, i--);
+		} else if (strlen(argv[i]) > 4 && strcmp(argv[i] + strlen(argv[i]) - 4, ".img") == 0) {
+			unix_file = argv[i];
+			remove_arg(&argc, argv, i--);
 		}
 #if ALLOW_JOURNAL
 		else if(!strncmp(argv[i], "use_journal=", 12))
@@ -380,6 +383,10 @@ int main(int argc, char * argv[])
 			remove_arg(&argc, argv, i--);
 		}
 #endif
+		else if (!strncmp(argv[i], "blocklog=", 9)) {
+			setenv("BLOCK_LOG", argv[i] + 9, 1);
+			remove_arg(&argc, argv, i--);
+		}
 	}
 	kfsd_argc = argc;
 	kfsd_argv = argv;

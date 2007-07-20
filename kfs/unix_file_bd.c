@@ -24,6 +24,7 @@ struct unix_file_info {
 	uint32_t blockcount;
 	uint16_t blocksize;
 	blockman_t * blockman;
+	int user_name;
 };
 
 static int unix_file_bd_get_config(void * object, int level, char * string, size_t length)
@@ -111,7 +112,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	
 	if(block_log)
 		for(r = 0; r < count; r++)
-			fprintf(block_log, "%p read %u %d\n", object, number + r, r);
+			fprintf(block_log, "%d read %u %d\n", info->user_name, number + r, r);
 	
 	if(bdesc->ddesc->synthetic)
 		bdesc->ddesc->synthetic = 0;
@@ -185,7 +186,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 
 	if(block_log)
-		fprintf(block_log, "%p write %u\n", object, block->number);
+		fprintf(block_log, "%d write %u %d\n", info->user_name, block->number, block->ddesc->flags);
 
 	r = revision_tail_acknowledge(block, object);
 	if(r < 0)
@@ -345,6 +346,7 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 			fprintf(block_log, "block_log start\n");
 		}
 	}
+	info->user_name = block_log_users;
 	
 	return bd;
 }
