@@ -103,7 +103,7 @@ sub extractRunStatsVersion1 {
 		my $line = $_;
 		if ($line =~ m/^total-before/) {
 			$total_before = $line;
-		} elsif ($line =~ m/^total-after/) {
+		} elsif ($line =~ m/^(pm\>)?total-after/) {
 			my $total_after = $line;
 			# there is actually one more number in the cpu line. what is it?
 			$total_before =~ m/cpu\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)/;
