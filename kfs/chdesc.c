@@ -335,6 +335,18 @@ static void chdesc_unlink_overlap(chdesc_t *chdesc)
 	chdesc->overlap_pprev = NULL;
 }
 
+static inline void chdesc_link_new_changes(chdesc_t *chdesc)
+{
+	if (chdesc->block->need_new_changes) {
+		bdesc_t *bdesc = chdesc->block;
+		chdesc->new_changes_pprev = &bdesc->new_changes;
+		chdesc->new_changes_next = bdesc->new_changes;
+		*chdesc->new_changes_pprev = chdesc;
+		if (chdesc->new_changes_next)
+			chdesc->new_changes_next->new_changes_pprev = &chdesc->new_changes_next;
+	}
+}
+
 /* ensure bdesc->bit_changes[offset] has a noop chdesc */
 static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 {
@@ -1195,6 +1207,8 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
 	chdesc->overlap_pprev = NULL;
+	chdesc->new_changes_next = NULL;
+	chdesc->new_changes_pprev = NULL;
 	
 	/* NOOP chdescs start applied */
 	chdesc->flags = CHDESC_SAFE_AFTER;
@@ -1688,6 +1702,7 @@ static void merge_rbs(bdesc_t * block)
 		assert(r >= 0);
 		chdesc->flags = flags;
 
+		chdesc_unlink_new_changes(chdesc);
 		chdesc_unlink_overlap(chdesc);
 		chdesc_unlink_level_changes(chdesc);
 		if (chdesc->level)
@@ -2152,6 +2167,8 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
 	chdesc->overlap_pprev = NULL;
+	chdesc->new_changes_next = NULL;
+	chdesc->new_changes_pprev = NULL;
 	chdesc->flags = CHDESC_SAFE_AFTER;
 		
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
@@ -2166,6 +2183,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if (chdesc->level)
 		++block->nactive;
 	bdesc_check_level(block);
+	chdesc_link_new_changes(chdesc);
 	
 	/* this is a new chdesc, so we don't need to check for loops. but we
 	 * should check to make sure each before has not already been written. */
@@ -2583,6 +2601,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
 	chdesc->overlap_pprev = NULL;
+	chdesc->new_changes_next = NULL;
+	chdesc->new_changes_pprev = NULL;
 
 	/* start rolled back so we can apply it */
 	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
@@ -2593,6 +2613,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	if (chdesc->level)
 		++block->nactive;
 	bdesc_check_level(block);
+	chdesc_link_new_changes(chdesc);
 	
 	/* add chdesc to block's befores */
 	if(!bit_changes && !(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
@@ -3018,7 +3039,8 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 			chdesc_free_push(*chdesc);
 		}
 	}
-	
+
+	chdesc_unlink_new_changes(*chdesc);
 	chdesc_unlink_overlap(*chdesc);
 	chdesc_unlink_level_changes(*chdesc);
 	if ((*chdesc)->level && (*chdesc)->block)
@@ -3162,6 +3184,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 		chdesc_satisfy(&desc);
 	}
 
+	chdesc_unlink_new_changes(*chdesc);
 	chdesc_unlink_overlap(*chdesc);
 	chdesc_unlink_level_changes(*chdesc);
 	if ((*chdesc)->level)

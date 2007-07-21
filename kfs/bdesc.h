@@ -36,6 +36,7 @@ struct bdesc {
 
 	unsigned in_flight : 1;
 	unsigned synthetic : 1;
+	unsigned need_new_changes : 1;
 	unsigned flags : 30;
 
 	// CHANGE DESCRIPTOR INFORMATION
@@ -51,6 +52,9 @@ struct bdesc {
 	
 	/* For each level, the chdescs owned by BDs at that level. */
 	chdesc_dlist_t level_changes[NBDLEVEL];
+
+	// A list of "new" change descriptors; only created if need_new.
+	chdesc_t *new_changes;
 
 #if BDESC_EXTERN_AFTER_COUNT
 	uint32_t extern_after_count;

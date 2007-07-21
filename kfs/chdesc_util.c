@@ -24,53 +24,6 @@ void chdesc_unmark_graph(chdesc_t * root)
 			chdesc_unmark_graph(dep->before.desc);
 }
 
-int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
-{
-	chdesc_dlist_t * dlist = current_block->level_changes;
-	assert(target_block == current_block);
-	assert(current_bd->level != target_bd->level);
-	if(dlist[current_bd->level].head)
-	{
-		chdesc_t * chdesc;
-		for (chdesc = dlist[current_bd->level].head;
-		     chdesc;
-		     chdesc = chdesc->ddesc_level_next)
-		{
-			uint16_t prev_level = chdesc_level(chdesc);
-			uint16_t new_level;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
-			/* don't unlink them from index here */
-			chdesc_unlink_ready_changes(chdesc);
-			chdesc->level = target_bd->level;
-			assert(chdesc->block);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, target_block);
-			chdesc->block = target_block;
-			chdesc_update_ready_changes(chdesc);
-			/* don't link them to index here */
-			
-			new_level = chdesc_level(chdesc);
-			if(prev_level != new_level)
-				chdesc_propagate_level_change(chdesc, prev_level, new_level);
-		}
-
-		/* append the target index list to ours */
-		*dlist[current_bd->level].tail = dlist[target_bd->level].head;
-		if(dlist[target_bd->level].head)
-			dlist[target_bd->level].head->ddesc_level_pprev = dlist[current_bd->level].tail;
-		else
-			dlist[target_bd->level].tail = dlist[current_bd->level].tail;
-		
-		/* make target index point at our list */
-		dlist[target_bd->level].head = dlist[current_bd->level].head;
-		dlist[current_bd->level].head->ddesc_level_pprev = &dlist[target_bd->level].head;
-		
-		/* make current index empty */
-		dlist[current_bd->level].head = NULL;
-		dlist[current_bd->level].tail = &dlist[current_bd->level].head;
-	}
-	return 0;
-}
-
 /* Write an entire block with new data, assuming that either A) no change
  * descriptors exist on the block or B) the entire block has a single BYTE
  * change descriptor on it. In case B, use chdesc_rewrite_byte() to rewrite

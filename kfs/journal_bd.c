@@ -216,25 +216,31 @@ static int journal_bd_get_status(void * object, int level, char * string, size_t
 static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct journal_info * info = (struct journal_info *) object;
+	bdesc_t *bdesc;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(nbytes == object->blocksize);
-
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
-	
-	return CALL(info->below_bd, read_block, number, nbytes);
+
+	bdesc = CALL(info->below_bd, read_block, number, nbytes);
+	if (bdesc)
+		bdesc->need_new_changes = 1;
+	return bdesc;
 }
 
 static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
 	struct journal_info * info = (struct journal_info *) object;
+	bdesc_t *bdesc;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(nbytes == object->blocksize);
-
 	assert(nbytes && number + nbytes / object->blocksize <= object->numblocks);
 	
-	return CALL(info->below_bd, synthetic_read_block, number, nbytes);
+	bdesc = CALL(info->below_bd, synthetic_read_block, number, nbytes);
+	if (bdesc)
+		bdesc->need_new_changes = 1;
+	return bdesc;
 }
 
 static void journal_bd_unlock_callback(void * data, int count);
@@ -583,7 +589,6 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	struct journal_info * info = (struct journal_info *) object;
 	bdesc_t * journal_block;
 	chdesc_t * chdesc;
-	chdesc_t * chdesc_level_next;
 	uint32_t number;
 	int r, metadata = !info->only_metadata;
 	
@@ -596,12 +601,13 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	if(info->recursion)
 	{
 		/* only used to write the journal itself: many fewer change descriptors there! */
-		chdesc_push_down(object, block, info->below_bd, block);
+		while ((chdesc = block->new_changes))
+			chdesc_unlink_new_changes(chdesc);
 		return CALL(info->below_bd, write_block, block, block_number);
 	}
 	
 	/* why write a block with no new changes? */
-	if(!block->level_changes[object->level].head)
+	if(!block->new_changes)
 		return 0;
 	
 	/* there is supposed to always be a transaction going on */
@@ -620,7 +626,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			metadata = 1;
 		else
 			/* otherwise, scan for metadata */
-			for(chdesc = block->level_changes[object->level].head; chdesc; chdesc = chdesc->ddesc_level_next)
+			for(chdesc = block->new_changes; chdesc; chdesc = chdesc->new_changes_next)
 				if(!(chdesc->flags & CHDESC_DATA))
 				{
 					metadata = 1;
@@ -629,12 +635,12 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	}
 	
 	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->level_changes[object->level].head; chdesc; chdesc = chdesc_level_next)
+	while ((chdesc = block->new_changes))
 	{
 		int needs_hold = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
-		
-		chdesc_level_next = chdesc->ddesc_level_next; /* in case changes */
+
+		chdesc_unlink_new_changes(chdesc);
 		
 		if(metadata)
 		{
@@ -696,8 +702,6 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		info->recursion = 0;
 		assert(r >= 0);
 	}
-	
-	chdesc_push_down(object, block, info->below_bd, block);
 	
 	r = CALL(info->below_bd, write_block, block, block_number);
 	if(CALL(info->below_bd, get_block_space) <= 0)

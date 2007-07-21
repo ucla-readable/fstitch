@@ -105,6 +105,10 @@ struct chdesc {
 	/* entry in the datadesc_t.level_changes list */
 	chdesc_t * ddesc_level_next;
 	chdesc_t ** ddesc_level_pprev;
+
+	// entry in the chdesc_t::new_changes list
+	chdesc_t *new_changes_next;
+	chdesc_t **new_changes_pprev;
 	
 	/* entry in a temporary list */
 	/* TODO: are these two and the ddesc_ready/free fields used concurrently ?
@@ -298,6 +302,17 @@ static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)
 	{
 		if(is_ready)
 			chdesc_link_ready_changes(chdesc);
+	}
+}
+
+static __inline void chdesc_unlink_new_changes(chdesc_t *chdesc)
+{
+	if(chdesc->new_changes_pprev) {
+		*chdesc->new_changes_pprev = chdesc->new_changes_next;
+		if(chdesc->new_changes_next)
+			chdesc->new_changes_next->new_changes_pprev = chdesc->new_changes_pprev;
+		chdesc->new_changes_next = NULL;
+		chdesc->new_changes_pprev = NULL;
 	}
 }
 

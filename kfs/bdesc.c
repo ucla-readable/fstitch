@@ -51,6 +51,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 	bdesc->ar_next = NULL;
 	bdesc->synthetic = 0;
 	bdesc->in_flight = 0;
+	bdesc->need_new_changes = 0;
 	bdesc->flags = 0;
 	bdesc->all_changes = NULL;
 	bdesc->all_changes_tail = &bdesc->all_changes;
@@ -65,6 +66,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 		bdesc->level_changes[i].head = NULL;
 		bdesc->level_changes[i].tail = &bdesc->level_changes[i].head;
 	}
+	bdesc->new_changes = NULL;
 #if BDESC_EXTERN_AFTER_COUNT
 	bdesc->extern_after_count = 0;
 #endif
