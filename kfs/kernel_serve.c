@@ -863,14 +863,10 @@ static int serve_link(struct dentry * src_dentry, struct inode * parent, struct 
 	r = CALL(dentry2cfs(src_dentry), link, src_dentry->d_inode->i_ino, parent->i_ino, target_dentry->d_name.name);
 	if (r >= 0)
 	{
-		struct inode * inode = new_inode(parent->i_sb);
-		if (!inode)
-		{
-			r = -ENOMEM;
-			goto out;
-		}
-		inode->i_ino = src_dentry->d_inode->i_ino;
-		read_inode_withlock(inode);
+		struct inode * inode = src_dentry->d_inode;
+		inode->i_mtime = inode->i_ctime = CURRENT_TIME_SEC;
+		inc_nlink(inode);
+		atomic_inc(&inode->i_count);
 		d_instantiate(target_dentry, inode);
 	}
 
