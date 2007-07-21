@@ -12,12 +12,14 @@ WRAP_PID=0
 function start_kfsd() {
 	NAME="$1"
 	echo "---- $NAME"
-	KFSD_WRAP=time KFSD_WRAP_OPTS="$NAME" ./uukfsd.sh "$MNT/" &
+	echo "+ kfsd"
+	KFSD_WRAP=time KFSD_WRAP_OPTS="$NAME" ./uukfsd.sh "$MNT" obj/fs/ext2.img &
 	WRAP_PID=$!
 	sleep 2 # wait for kfsd to export mounts
 }
 
 function stop_kfsd() {
+	echo "+ killall kfsd"
 	killall kfsd # assumes only one running kfsd (we are benchmarking!)
 	wait $WRAP_PID || exit $?
 }
@@ -25,6 +27,7 @@ function stop_kfsd() {
 function time_test() {
 	NAME="$1"
 	shift
+	echo "+ $@"
 	/usr/bin/time -f "$NAME %e real %U user %S sys" -a -o "$TIME_LOG" "$@"
 }
 
@@ -43,16 +46,15 @@ function avg() {
 }
 
 function usage() {
-	echo "Usage: `basename \"$0\"` <k1|k2> [NRUNS=1]"
+	echo "Usage: `basename \"$0\"` [NRUNS=1]"
 }
 
-if [ $# -ge 1 ] && [ "$1" == "-h" ] || [ $# -eq 0 ]
+if [ $# -ge 1 ] && [ "$1" == "-h" ] || [ $# -gt 1 ]
 then
 	usage 2>&1
 	exit 1
 fi
 
-KDIR="$1"
 if [ $# -eq 2 ]
 then
 	NRUNS=$1
@@ -69,12 +71,12 @@ do
 	cat "$TARFILE" > /dev/null
 
 	start_kfsd tar
-	time_test tar bash -c "tar -C \"$MNT/$KDIR/\" -xf \"$TARFILE\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
+	time_test tar bash -c "tar -C $MNT/ -xf $TARFILE; echo syncing; obj/util/fsync $MNT/"
 	stop_kfsd
 	[ -f gmon.out ] && mv gmon.out gmon-tar-$i.out
 
 	start_kfsd rm
-	time_test rm bash -c "rm -rf \"$MNT/$KDIR/$TAROUT/\"; echo syncing; obj/unix-user/user/fsync \"$MNT/\""
+	time_test rm bash -c "rm -rf $MNT/$TAROUT/; echo syncing; obj/util/fsync $MNT/"
 	stop_kfsd
 	[ -f gmon.out ] && mv gmon.out gmon-rm-$i.out
 done
