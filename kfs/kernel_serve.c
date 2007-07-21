@@ -707,6 +707,10 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	kfsd_enter();
 	cfs = dentry2cfs(dentry);
 
+#if ATTR_FILE != 0
+	supported |= ATTR_FILE;
+#endif
+
 	if(feature_supported(cfs, KFS_FEATURE_MTIME))
 		supported |= ATTR_MTIME | ATTR_MTIME_SET;
 	if(feature_supported(cfs, KFS_FEATURE_ATIME))
@@ -722,7 +726,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 
 	if(attr->ia_valid & ~supported)
 	{
-		Dprintf("%s: attribute set %u not supported\n", __FUNCTION__, attr->ia_valid);
+		Dprintf("%s: attribute set %u (out of %u) not supported\n", __FUNCTION__, attr->ia_valid & ~supported, attr->ia_valid);
 		kfsd_leave(0);
 		return -ENOSYS;
 	}
