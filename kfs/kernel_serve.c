@@ -1027,7 +1027,7 @@ static int serve_rmdir(struct inode * dir, struct dentry * dentry)
 
 static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * new_dir, struct dentry * new_dentry)
 {
-	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir, old_dentry->d_name.name, new_dir, new_dentry->d_name.name);
+	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
 	int r;
 
 	kfsd_enter();
@@ -1221,7 +1221,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 	fdesc_t * fdesc;
 	int r;
 
-	Dprintf("%s(filp = \"%s\", offset = %ld)\n", __FUNCTION__, filp->f_dentry->d_name.name, offset);
+	Dprintf("%s(filp = \"%s\", offset = %lld)\n", __FUNCTION__, filp->f_dentry->d_name.name, offset);
 
 	kfsd_enter();
 	page_cache_get(page);
@@ -1264,7 +1264,7 @@ static int serve_writepage_sync(struct inode * inode, fdesc_t * fdesc,
 	CFS_t * cfs = sb2cfs(inode->i_sb);
 	int r = 0;
 
-	Dprintf("%s(ino = %u, offset = %ld, count = %ld)\n", __FUNCTION__, inode->i_ino, offset, count);
+	Dprintf("%s(ino = %lu, offset = %lld, count = %u)\n", __FUNCTION__, inode->i_ino, offset, count);
 
 	assert(kfsd_have_lock());
 
@@ -1300,7 +1300,7 @@ static int serve_writepage(struct page * page, struct writeback_control * wbc)
 	inode = mapping->host;
 	assert(inode);
 
-	Dprintf("%s(ino = %u, index = %lu)\n", __FUNCTION__, inode->i_ino, page->index);
+	Dprintf("%s(ino = %lu, index = %lu)\n", __FUNCTION__, inode->i_ino, page->index);
 
 	end_index = inode->i_size >> PAGE_CACHE_SHIFT;
 
