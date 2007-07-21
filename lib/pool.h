@@ -3,6 +3,11 @@
 
 #include <lib/platform.h>
 
+// Set to 1 to use malloc() and free() instead of pools. Useful for debugging.
+#define POOL_MALLOC 0
+
+#if !POOL_MALLOC
+
 #define POOLSIZE(type) ((int) ((PAGE_SIZE - sizeof(void*)) / sizeof(type)))
 
 // Create a pool, allocator, and deallocators for 'type'.
@@ -55,5 +60,14 @@
 			free(pool); \
 		} \
 	}
+
+#else
+
+# define DECLARE_POOL(name, type) \
+	static type * name##_alloc(void) { return malloc(sizeof(type)); } \
+	static void name##_free(type * p) { free(p); } \
+	static void name##_free_all(void) { }
+
+#endif
 
 #endif
