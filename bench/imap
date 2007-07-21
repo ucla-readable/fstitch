@@ -1,0 +1,45 @@
+#!/bin/bash
+
+function test () {
+	LD_LIBRARY_PATH=$KUDOSDIR/obj/kernel/lib:$LD_LIBRARY_PATH IMAPD=$IMAPD MAILPATH=$MNT ktime imap $KUDOSDIR/bench/imap.expect
+	ktime sync fsync $KUDOSDIR $MNT;
+}
+
+function run () {
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	prepare_postinit  $T $N $OUTDIR $HOST
+
+	try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
+	try rm -f $MNT/mailbox.dst
+	try fsync $KUDOSDIR $MNT
+
+	ktime total test
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+}
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+OUTDIR="$KUDOSDIR/test"
+HOST=`cat "$OUTDIR/host"`
+FS=`cat "$OUTDIR/fs"`
+CMODE=`cat "$OUTDIR/consistency_mode"`
+T=imap
+[ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
+N=`get_test_num $OUTDIR/$T`
+
+# TODO: We probably want to also run kudos with ouwimap. Add $OUTDIR/pg?
+if [ "$HOST" == "kudos" ]; then
+	IMAPD=/home/kudos/puwimap/imapd/imapd
+else
+	IMAPD=/home/kudos/ouwimap/imapd/imapd
+fi
+
+if [ $# -ne 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1;
+fi
+
+prepare $T $N $KUDOSDIR $OUTDIR $HOST
+run 2>&1 | tee $OUTDIR/$T.run.$N
+finish $T $N $KUDOSDIR $OUTDIR $HOST
