@@ -874,7 +874,6 @@ static int serve_link(struct dentry * src_dentry, struct inode * parent, struct 
 		d_instantiate(target_dentry, inode);
 	}
 
-out:
 	kfsd_leave(1);
 	return r;
 }
