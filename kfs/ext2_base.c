@@ -146,12 +146,16 @@ static int check_super(LFS_t * object)
 	return 0;
 }
 
+static uint16_t dirent_rec_len(uint16_t name_len)
+{
+	return 8 + ((name_len - 1) / 4 + 1) * 4;
+}
+
 static bool dirent_has_free_space(const EXT2_Dir_entry_t * entry)
 {
 	if(!entry->inode)
 		return 1;
-	// FIXME: should 8 be 12? (eg dirent "a" has rec_len 12)
-	if(entry->rec_len - (12 + entry->name_len) > 0)
+	if(entry->rec_len > dirent_rec_len(entry->name_len))
 		return 1;
 	return 0;
 }
@@ -165,7 +169,7 @@ static ext2_mdirent_t * ext2_mdirent_offset_prev(ext2_mdir_t * mdir, ext2_mdiren
 }
 
 // Return the next mdirent with free space
-static ext2_mdirent_t * ext2_mdirent_next_free(const ext2_mdir_t * mdir, const ext2_mdirent_t * used)
+static ext2_mdirent_t * ext2_mdirent_free_next(const ext2_mdir_t * mdir, const ext2_mdirent_t * used)
 {
 	ext2_mdirent_t * mdirent;
 	if(!mdir->free_last || mdir->free_last->offset < used->offset)
@@ -180,7 +184,7 @@ static ext2_mdirent_t * ext2_mdirent_next_free(const ext2_mdir_t * mdir, const e
 // Insert mdirent into the free list
 static void ext2_mdirent_insert_free_list(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent)
 {
-	ext2_mdirent_t * next = ext2_mdirent_next_free(mdir, mdirent);
+	ext2_mdirent_t * next = ext2_mdirent_free_next(mdir, mdirent);
 	if(next)
 	{
 		mdirent->freel.next = next;
@@ -207,6 +211,8 @@ static void ext2_mdirent_remove_free_list(ext2_mdir_t * mdir, ext2_mdirent_t * m
 		mdir->free_last = container_of(mdirent->freel.pprev, ext2_mdirent_t, freel.next);
 	else
 		mdir->free_last = NULL;
+	mdirent->freel.pprev = NULL;
+	mdirent->freel.next = NULL;
 }
 
 // Return the mdirent in mdir named 'name'
@@ -215,12 +221,17 @@ static ext2_mdirent_t * ext2_mdirent_get(ext2_mdir_t * mdir, const char * name)
 	return hash_map_find_val(mdir->mdirents, name);
 }
 
+// Free the contents of mdir
 static void ext2_mdirents_free(ext2_mdir_t * mdir)
 {
-	ext2_mdirent_t * mdirent;
+	ext2_mdirent_t * mdirent = mdir->offset_first;
 	hash_map_clear(mdir->mdirents);
-	for(mdirent = mdir->offset_first; mdirent; mdirent = mdirent->offsetl.next)
+	while(mdirent)
+	{
+		ext2_mdirent_t * next = mdirent->offsetl.next;
 		ext2_mdirent_free(mdirent);
+		mdirent = next;
+	}
 	mdir->offset_first = mdir->offset_last = NULL;
 	mdir->free_first = mdir->free_last = NULL;
 }
@@ -389,9 +400,15 @@ static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, cons
 			nmdirent->freel.next->freel.pprev = &nmdirent->freel.next;
 		else
 			mdir->free_last = nmdirent;
+		mdirent->freel.pprev = NULL;
+		mdirent->freel.next = NULL;
 	}
 	else
+	{
 		ext2_mdirent_remove_free_list(mdir, mdirent);
+		nmdirent->freel.pprev = NULL;
+		nmdirent->freel.next = NULL;
+	}
 
 	return 0;
 }
@@ -1394,11 +1411,6 @@ static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
 	return ext2_append_file_block_set(object, file, block, head, PASS_CHDESC_SET(set));
-}
-
-static uint16_t dirent_rec_len(uint16_t name_len)
-{
-	return 8 + ((name_len - 1) / 4 + 1) * 4;
 }
 
 static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
