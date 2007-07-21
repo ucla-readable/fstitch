@@ -23,4 +23,4 @@ fi
 echo -n "Press return to run test: "
 read x
 
-IMAPD=$IMAPD MAILPATH=$MAILPATH ./imap
+IMAPD=$IMAPD MAILPATH=$MAILPATH ./imap.expect
