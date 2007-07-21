@@ -31,7 +31,7 @@ void chdesc_unmark_graph(chdesc_t * root)
  * in *head. In case A, return the newly created change descriptor in *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	chdesc_t * rewrite = block->level_changes[owner->level].head;
+	chdesc_t * rewrite = block->new_changes; /* XXX */
 	
 	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->length || (rewrite->flags & CHDESC_INFLIGHT))
 		return chdesc_create_full(block, owner, data, head);

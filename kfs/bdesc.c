@@ -61,11 +61,13 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes)
 		bdesc->ready_changes[i].tail = &bdesc->ready_changes[i].head;
 	}
 	bdesc->nactive = 0;
+#if HAVE_LEVEL_CHANGES
 	for(i = 0; i < NBDLEVEL; i++)
 	{
 		bdesc->level_changes[i].head = NULL;
 		bdesc->level_changes[i].tail = &bdesc->level_changes[i].head;
 	}
+#endif
 	bdesc->new_changes = NULL;
 #if BDESC_EXTERN_AFTER_COUNT
 	bdesc->extern_after_count = 0;

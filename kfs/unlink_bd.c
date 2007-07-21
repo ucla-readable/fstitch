@@ -16,30 +16,35 @@ struct unlink_info {
 
 static bdesc_t * unlink_bd_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
-	return CALL(((struct unlink_info *) object)->below_bd, read_block, number, nbytes);
+	bdesc_t *bdesc = CALL(((struct unlink_info *) object)->below_bd, read_block, number, nbytes);
+	if (bdesc)
+		bdesc->need_new_changes = 1;
+	return bdesc;
 }
 
 static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, uint32_t nbytes)
 {
-	return CALL(((struct unlink_info *) object)->below_bd, synthetic_read_block, number, nbytes);
+	bdesc_t *bdesc = CALL(((struct unlink_info *) object)->below_bd, synthetic_read_block, number, nbytes);
+	if (bdesc)
+		bdesc->need_new_changes = 1;
+	return bdesc;
 }
 
 static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct unlink_info * info = (struct unlink_info *) object;
 	chdesc_t * write_head = info->write_head ? *info->write_head : NULL;
-	chdesc_t * next = NULL;
 	chdesc_t * chdesc;
 	int r;
 	
 	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->level_changes[object->level].head; chdesc; chdesc = next)
+	while ((chdesc = block->new_changes))
 	{
 		int needs_head = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
 		
 		assert(chdesc->level == object->level);
-		next = chdesc->ddesc_level_next;
+		chdesc_unlink_new_changes(chdesc);
 		
 		while(*deps)
 		{

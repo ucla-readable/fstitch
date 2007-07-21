@@ -1114,8 +1114,10 @@ void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
 /* confuse ctags */
 DEFINE_LINK_CHANGES(ready);
 DEFINE_UNLINK_CHANGES(ready);
+#if HAVE_LEVEL_CHANGES
 DEFINE_LINK_CHANGES(level);
 DEFINE_UNLINK_CHANGES(level);
+#endif
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc)
 {
@@ -1201,8 +1203,10 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 	chdesc->ddesc_pprev = NULL;
 	chdesc->ddesc_ready_next = NULL;
 	chdesc->ddesc_ready_pprev = NULL;
+#if HAVE_LEVEL_CHANGES
 	chdesc->ddesc_level_next = NULL;
 	chdesc->ddesc_level_pprev = NULL;
+#endif
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
@@ -2161,8 +2165,10 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	chdesc->ddesc_pprev = NULL;
 	chdesc->ddesc_ready_next = NULL;
 	chdesc->ddesc_ready_pprev = NULL;
+#if HAVE_LEVEL_CHANGES
 	chdesc->ddesc_level_next = NULL;
 	chdesc->ddesc_level_pprev = NULL;
+#endif
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
@@ -2595,8 +2601,10 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->ddesc_pprev = NULL;
 	chdesc->ddesc_ready_next = NULL;
 	chdesc->ddesc_ready_pprev = NULL;
+#if HAVE_LEVEL_CHANGES
 	chdesc->ddesc_level_next = NULL;
 	chdesc->ddesc_level_pprev = NULL;
+#endif
 	chdesc->tmp_next = NULL;
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;

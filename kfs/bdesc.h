@@ -12,6 +12,8 @@
 #define free_memset(data, length)
 #endif
 
+#define HAVE_LEVEL_CHANGES 0
+
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
@@ -49,9 +51,11 @@ struct bdesc {
 
 	// The number of changes that are not in flight. (sort of)
 	int32_t nactive;
-	
+
+#if HAVE_LEVEL_CHANGES
 	/* For each level, the chdescs owned by BDs at that level. */
 	chdesc_dlist_t level_changes[NBDLEVEL];
+#endif
 
 	// A list of "new" change descriptors; only created if need_new.
 	chdesc_t *new_changes;
@@ -116,7 +120,7 @@ void bdesc_autorelease_pool_pop(void);
 /* get the number of autorelease pools on the stack */
 unsigned int bdesc_autorelease_pool_depth(void);
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) && HAVE_LEVEL_CHANGES
 static inline void bdesc_check_level(bdesc_t *b) {
 	int i, nactive = 0;
 	if (b) {

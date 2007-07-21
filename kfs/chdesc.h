@@ -102,9 +102,11 @@ struct chdesc {
 	chdesc_t * ddesc_ready_next;
 	chdesc_t ** ddesc_ready_pprev;
 
+#if HAVE_LEVEL_CHANGES
 	/* entry in the datadesc_t.level_changes list */
 	chdesc_t * ddesc_level_next;
 	chdesc_t ** ddesc_level_pprev;
+#endif
 
 	// entry in the chdesc_t::new_changes list
 	chdesc_t *new_changes_next;
@@ -241,10 +243,15 @@ void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 /* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
 static __inline void chdesc_update_ready_changes(chdesc_t * chdesc) __attribute__((always_inline));
 
+#if HAVE_LEVEL_CHANGES
 /* link chdesc into its ddesc's level_changes list */
 void chdesc_link_level_changes(chdesc_t * chdesc);
 /* unlink chdesc from its ddesc's level_changes list */
 void chdesc_unlink_level_changes(chdesc_t * chdesc);
+#else
+#define chdesc_link_level_changes(chdesc)	((void) (chdesc))
+#define chdesc_unlink_level_changes(chdesc)	((void) (chdesc))
+#endif
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc);
 void chdesc_untmpize_all_changes(chdesc_t * chdesc);
