@@ -21,7 +21,7 @@ function get_test_num () {
 # try to run args, or exit
 function try () {
 	echo "+ $@"
-	$@
+	"$@"
 	R=$?
 	if [ $R -ne 0 ]; then echo "FAILED ($R): $@"; exit 1; fi
 }
