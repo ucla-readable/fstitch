@@ -126,53 +126,40 @@ bdesc_t * bdesc_retain(bdesc_t * bdesc)
 }
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
-void bdesc_release(bdesc_t ** bdesc)
+void __bdesc_release(bdesc_t *bdesc)
 {
-	(*bdesc)->ddesc->ref_count--;
-	(*bdesc)->ref_count--;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, (*bdesc)->ddesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ddesc->ref_count);
-	if((*bdesc)->ref_count - (*bdesc)->ar_count < 0)
-	{
-		fprintf(stderr, "%s(): (%s:%d): block %p had negative reference count!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
-		(*bdesc)->ddesc->ref_count -= (*bdesc)->ref_count - (*bdesc)->ar_count;
-		(*bdesc)->ref_count = (*bdesc)->ar_count;
-	}
-	if(!(*bdesc)->ref_count)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, *bdesc, (*bdesc)->ddesc);
-		if(!(*bdesc)->ddesc->ref_count)
-		{
-			uint16_t i;
-			KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, (*bdesc)->ddesc);
-			if((*bdesc)->ddesc->all_changes || (*bdesc)->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
-				fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+	assert(bdesc->ref_count == 0);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, bdesc, bdesc->ddesc);
+	if(!bdesc->ddesc->ref_count) {
+		uint16_t i;
+		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, bdesc, bdesc->ddesc);
+		if(bdesc->ddesc->all_changes || bdesc->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
+			fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
 #if BDESC_EXTERN_AFTER_COUNT
-			if((*bdesc)->ddesc->extern_after_count)
-				fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->ddesc->extern_after_count);
+		if(bdesc->ddesc->extern_after_count)
+			fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, bdesc->ddesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-			if((*bdesc)->ddesc->nrb)
-				fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
+		if(bdesc->ddesc->nrb)
+			fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
-			for(i = 0; i < NBDLEVEL; i++)
-				assert(!(*bdesc)->ddesc->ready_changes[i].head);
-			if((*bdesc)->ddesc->bit_changes)
-			{
-				if(!hash_map_empty((*bdesc)->ddesc->bit_changes))
-					fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
-				hash_map_destroy((*bdesc)->ddesc->bit_changes);
-			}
-			if((*bdesc)->ddesc->manager)
-				blockman_remove((*bdesc)->ddesc);
-			free((*bdesc)->ddesc->data);
-			memset((*bdesc)->ddesc, 0, sizeof(*(*bdesc)->ddesc));
-			datadesc_mem_free((*bdesc)->ddesc);
+		for(i = 0; i < NBDLEVEL; i++)
+			assert(!bdesc->ddesc->ready_changes[i].head);
+		if(bdesc->ddesc->bit_changes) {
+			if(!hash_map_empty(bdesc->ddesc->bit_changes))
+				fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
+			hash_map_destroy(bdesc->ddesc->bit_changes);
 		}
-		memset(*bdesc, 0, sizeof(**bdesc));
-		bdesc_mem_free(*bdesc);
+		if(bdesc->ddesc->manager)
+			blockman_remove(bdesc->ddesc);
+		free(bdesc->ddesc->data);
+		memset(bdesc->ddesc, 0, sizeof(*bdesc->ddesc));
+		datadesc_mem_free(bdesc->ddesc);
 	}
-	/* released, so set pointer to NULL */
-	*bdesc = NULL;
+#ifndef NDEBUG
+	memset(bdesc, 0, sizeof(*bdesc));
+#endif
+	bdesc_mem_free(bdesc);
 }
 
 /* schedule the bdesc to be released at the end of the current run loop */

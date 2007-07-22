@@ -9,6 +9,7 @@
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
+#include <kfs/debug.h>
 
 struct bdesc;
 typedef struct bdesc bdesc_t;
@@ -103,7 +104,8 @@ bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number);
 bdesc_t * bdesc_retain(bdesc_t * bdesc);
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
-void bdesc_release(bdesc_t ** bdesc);
+static inline void bdesc_release(bdesc_t **bdp) __attribute__((always_inline));
+void __bdesc_release(bdesc_t *bdesc);
 
 /* schedule the bdesc to be released at the end of the current run loop */
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc);
@@ -119,6 +121,18 @@ unsigned int bdesc_autorelease_pool_depth(void);
 
 /* scan the autorelease pool stack and return the total ar_count of a ddesc */
 int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc);
+
+static inline void bdesc_release(bdesc_t **bdp)
+{
+	assert((*bdp)->ddesc->ref_count >= (*bdp)->ref_count);
+	assert((*bdp)->ref_count > (*bdp)->ar_count);
+	(*bdp)->ddesc->ref_count--;
+	(*bdp)->ref_count--;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, (*bdp)->ddesc, (*bdp)->ref_count, (*bdp)->ar_count, (*bdp)->ddesc->ref_count);
+	if (!(*bdp)->ref_count)
+		__bdesc_release(*bdp);
+	*bdp = NULL;
+}
 
 #endif /* CONSTANTS_ONLY */
 
