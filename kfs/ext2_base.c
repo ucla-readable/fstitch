@@ -66,8 +66,8 @@ typedef struct ext2_mdir_cache ext2_mdir_cache_t;
 struct ext2_info {
 	BD_t * ubd;
 	chdesc_t ** write_head;
-	EXT2_Super_t * super;
-	EXT2_group_desc_t * groups;
+	const EXT2_Super_t *super; /* const to limit who can change it */
+	const EXT2_group_desc_t *groups; /* const to limit who can change it */
 	hash_map_t * filemap;
 	ext2_mdir_cache_t mdir_cache;
 	bdesc_t ** gdescs;
@@ -2778,8 +2778,8 @@ static int ext2_destroy(LFS_t * lfs)
 		ext2_fdesc_free_all();
 	}
 	free(info->gdescs);
-	free(info->super);
-	free(info->groups);
+	free((EXT2_Super_t *) info->super);
+	free((EXT2_group_desc_t *) info->groups);
 	free(info);
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
@@ -2878,48 +2878,50 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(lfs);
 	int r = 0;
 	chdesc_t * head = info->write_head ? *info->write_head : NULL;
-	
+
 	//Deal with the super block
-	info->super->s_free_blocks_count += blocks;
-	info->super->s_free_inodes_count += inodes;
+	if (blocks || inodes) {
+		EXT2_Super_t *super = (EXT2_Super_t *) info->super;
+		super->s_free_blocks_count += blocks;
+		super->s_free_inodes_count += inodes;
 
-	r = chdesc_create_diff(info->super_cache, info->ubd, 1024, 12 * sizeof(uint32_t),
-	                       info->super_cache->ddesc->data + 1024, info->super, &head);
-	if (r < 0)
-		return r;
-	//chdesc_create_diff() returns 0 for "no change"
-	if (head && r > 0)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
-		lfs_add_fork_head(head);
-		r = CALL(info->ubd, write_block, info->super_cache);
-		if (r < 0)
-			return r;
+		int off1 = (blocks ? offsetof(EXT2_Super_t, s_free_blocks_count) : offsetof(EXT2_Super_t, s_free_inodes_count));
+		int off2 = (inodes ? offsetof(EXT2_Super_t, s_free_inodes_count) + sizeof(super->s_free_inodes_count) : offsetof(EXT2_Super_t, s_free_blocks_count) + sizeof(super->s_free_blocks_count));
+
+		r = chdesc_create_byte(info->super_cache, info->ubd,
+				       off1, off2 - off1,
+				       ((const uint8_t *) super) + off1, &head);
+		if (r >= 0 && head) {
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
+			lfs_add_fork_head(head);
+			r = CALL(info->ubd, write_block, info->super_cache);
+		}
 	}
-	
-	//Deal with the group descriptors
-	info->groups[group].bg_free_blocks_count += blocks;
-	info->groups[group].bg_free_inodes_count += inodes;
-	info->groups[group].bg_used_dirs_count += dirs;
-	
-	head = info->write_head ? *info->write_head : NULL;
-	
-	int group_bdesc = group / info->block_descs;
-	int group_offset = group % info->block_descs;
-	group_offset *= sizeof(EXT2_group_desc_t);
 
-	r = chdesc_create_diff(info->gdescs[group_bdesc], info->ubd,
-	                       group_offset, sizeof(EXT2_group_desc_t),
-	                       info->gdescs[group_bdesc]->ddesc->data + group_offset,
-	                       &info->groups[group], &head);
-	if (r < 0)
-		return r;
-	//chdesc_create_diff() returns 0 for "no change"
-	if (head && r > 0)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write group desc");
-		lfs_add_fork_head(head);
-		r = CALL(info->ubd, write_block, info->gdescs[group_bdesc]);
+	if (r >= 0 && (blocks || inodes || dirs)) {
+		//Deal with the group descriptors
+		EXT2_group_desc_t *gd = (EXT2_group_desc_t *) &info->groups[group];
+		gd->bg_free_blocks_count += blocks;
+		gd->bg_free_inodes_count += inodes;
+		gd->bg_used_dirs_count += dirs;
+	
+		head = info->write_head ? *info->write_head : NULL;
+	
+		int group_bdesc = group / info->block_descs;
+		int group_offset = group % info->block_descs;
+		group_offset *= sizeof(EXT2_group_desc_t);
+
+		int off1 = offsetof(EXT2_group_desc_t, bg_free_blocks_count);
+		int off2 = offsetof(EXT2_group_desc_t, bg_used_dirs_count) + sizeof(gd->bg_used_dirs_count);
+		
+		r = chdesc_create_byte(info->gdescs[group_bdesc], info->ubd,
+				       group_offset + off1, off2 - off1,
+				       ((const uint8_t *) gd) + off1, &head);
+		if (r >= 0 && head) {
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write group desc");
+			lfs_add_fork_head(head);
+			r = CALL(info->ubd, write_block, info->gdescs[group_bdesc]);
+		}
 	}
 	
 	return r;
@@ -2949,7 +2951,7 @@ static int ext2_load_super(LFS_t * lfs)
 	}
 	bdesc_retain(info->super_cache);
 	info->super = malloc(sizeof(struct EXT2_Super));
-	memcpy(info->super, info->super_cache->ddesc->data + 1024, sizeof(struct EXT2_Super));
+	memcpy((EXT2_Super_t *) info->super, info->super_cache->ddesc->data + 1024, sizeof(EXT2_Super_t));
 
 #if ROUND_ROBIN_ALLOC
 	/* start file data at the beginning, indirect blocks halfway through,
@@ -2989,7 +2991,7 @@ static int ext2_load_super(LFS_t * lfs)
 		else
 			nbytes = info->block_size;
 		
-		if (!memcpy(info->groups + (i * info->block_descs),
+		if (!memcpy((EXT2_group_desc_t *) info->groups + (i * info->block_descs),
 		            info->gdescs[i]->ddesc->data, nbytes))
 			goto wb_fail2;
 		bdesc_retain(info->gdescs[i]);
@@ -3001,8 +3003,8 @@ wb_fail2:
 	for(i = 0; i < ngroupblocks; i++)
 		bdesc_release(&(info->gdescs[i]));
 	free(info->gdescs);
-	free(info->super);
-	free(info->groups);
+	free((EXT2_Super_t *) info->super);
+	free((EXT2_group_desc_t *) info->groups);
  wb_fail1:
 	bdesc_release(&info->super_cache);
 	return 0;
