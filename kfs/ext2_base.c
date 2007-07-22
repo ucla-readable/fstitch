@@ -90,7 +90,8 @@ struct ext2_fdesc {
 	/* extend struct fdesc */
 	struct fdesc_common * common;
 	struct fdesc_common base;
-	
+
+	bdesc_t *f_inode_cache;
 	EXT2_inode_t f_inode;
 	uint8_t f_type;
 	inode_t	f_ino;
@@ -108,13 +109,13 @@ static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t off
 static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
 
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs);
-static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode);
+static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy);
 static uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * dir, ext2_mdirent_t * mdirent, chdesc_t ** head);
 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
-int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** head);
-int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, chdesc_pass_set_t * befores);
+int ext2_write_inode(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** head);
+int ext2_write_inode_set(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores);
 
 DECLARE_POOL(ext2_mdirent, ext2_mdirent_t);
 DECLARE_POOL(ext2_fdesc, ext2_fdesc_t);
@@ -978,13 +979,14 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	
 	fd->common = &fd->base;
 	fd->base.parent = INODE_NONE;
+	fd->f_inode_cache = NULL;
 	fd->f_ino = ino;
 	fd->f_nopen = 1;
 #if !ROUND_ROBIN_ALLOC
 	fd->f_lastblock = 0;
 #endif
 	
-	r = ext2_get_inode(info, ino, &fd->f_inode);
+	r = ext2_get_inode(info, fd, 1);
 	if(r < 0)
 		goto ext2_lookup_inode_exit;
 	
@@ -1015,6 +1017,8 @@ static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 			f->f_nopen--;
 			return;
 		}
+		if (f->f_inode_cache)
+			bdesc_release(&f->f_inode_cache);
 		hash_map_erase(info->filemap, (void *) f->f_ino);
 		ext2_fdesc_free(f);
 	}
@@ -1430,7 +1434,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 	
 	/* increment i_blocks for the block itself */
 	f->f_inode.i_blocks += info->block_size / 512;
-	return ext2_write_inode_set(info, f->f_ino, &f->f_inode, tail, inode_dep);
+	return ext2_write_inode_set(info, f, tail, inode_dep);
 }
 
 static int ext2_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
@@ -1763,6 +1767,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 
 		new_file->common = &new_file->base;
 		new_file->base.parent = INODE_NONE;
+		new_file->f_inode_cache = NULL;
 		new_file->f_nopen = 1;
 #if !ROUND_ROBIN_ALLOC
 		new_file->f_lastblock = 0;
@@ -1857,7 +1862,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 
 			parent_file->f_inode.i_links_count++;
 			head_set.array[3] = info->write_head ? *info->write_head : NULL;
-			r = ext2_write_inode(info, parent_file->f_ino, &parent_file->f_inode, &head_set.array[3]);
+			r = ext2_write_inode(info, parent_file, &head_set.array[3]);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[3], "linkcount++");
 
 			// insert ".."
@@ -1883,7 +1888,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 				goto allocate_name_exit2;
 		}
 
-		r = ext2_write_inode(info, new_file->f_ino, &new_file->f_inode, &head_set.array[1]);
+		r = ext2_write_inode(info, new_file, &head_set.array[1]);
 		if (r < 0)
 			goto allocate_name_exit2;
 
@@ -1898,7 +1903,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 
 		// Increase link count
 		ln->f_inode.i_links_count++;
-		r = ext2_write_inode(info, ln->f_ino, &ln->f_inode, &head_set.array[0]);
+		r = ext2_write_inode(info, ln, &head_set.array[0]);
 		if (r < 0)
 			goto allocate_name_exit2;
 	}
@@ -2088,7 +2093,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 
 	// FIXME: need to do [d]indirect block count decrement, and write it, here!
 	f->f_inode.i_blocks -= info->block_size / 512;
-	r = ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+	r = ext2_write_inode(info, f, head);
 	if (r < 0)
 		return INVALID_BLOCK;
 
@@ -2181,7 +2186,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		nmdirent->dirent.inode = copy.inode;
 
 		fold->f_inode.i_links_count++;
-		r = ext2_write_inode(info, fold->f_ino, &fold->f_inode, head);
+		r = ext2_write_inode(info, fold, head);
 		assert(r >= 0); // recover mdir and mdirent changes; then exit_fnew
 	}
 	else
@@ -2201,14 +2206,14 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		goto exit_fnew;
 
 	fold->f_inode.i_links_count--;
-	r = ext2_write_inode(info, fold->f_ino, &fold->f_inode, head);
+	r = ext2_write_inode(info, fold, head);
 	if (r < 0)
 		goto exit_fnew;
 
 	if (existing)
 	{
 		fnew->f_inode.i_links_count--;
-		r = ext2_write_inode(info, fnew->f_ino, &fnew->f_inode, &prev_head);
+		r = ext2_write_inode(info, fnew, &prev_head);
 		if (r < 0)
 			goto exit_fnew;
 
@@ -2229,7 +2234,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 			}
 
 			memset(&fnew->f_inode, 0, sizeof(EXT2_inode_t));
-			r = ext2_write_inode(info, fnew->f_ino, &fnew->f_inode, &prev_head);
+			r = ext2_write_inode(info, fnew, &prev_head);
 			if (r < 0)
 				goto exit_fnew;
 
@@ -2397,7 +2402,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 	if (file->f_type == TYPE_DIR) {
 		pfile->f_inode.i_links_count--;
 		prev_head = *head;
-		r = ext2_write_inode(info, pfile->f_ino, &pfile->f_inode, &prev_head);
+		r = ext2_write_inode(info, pfile, &prev_head);
 		if (r < 0)
 			goto remove_name_exit;
 		lfs_add_fork_head(prev_head);
@@ -2414,7 +2419,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 			ext2_mdir_remove(object, file->f_ino);
 		
 		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
-		r = ext2_write_inode(info, file->f_ino, &file->f_inode, head);
+		r = ext2_write_inode(info, file, head);
 		if (r < 0)
 			goto remove_name_exit;
 
@@ -2446,7 +2451,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		}
 	} else {
 		file->f_inode.i_links_count--;
-		r = ext2_write_inode(info, file->f_ino, &file->f_inode, head);
+		r = ext2_write_inode(info, file, head);
 		if (r < 0)
 			goto remove_name_exit;
 	}
@@ -2696,7 +2701,7 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		if (sizeof(uint32_t) != size || *((uint32_t *) data) < 0 || *((uint32_t *) data) >= EXT2_MAX_FILE_SIZE)
 			return -EINVAL;
 		f->f_inode.i_size = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_FILETYPE) {
 		uint32_t fs_type;
@@ -2716,38 +2721,38 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 
 		f->f_inode.i_mode = (f->f_inode.i_mode & ~EXT2_S_IFMT) | (fs_type);
 		f->f_type = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_UID) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_uid = *(uint32_t *) data;
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_GID) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_gid = *(uint32_t *) data;
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_UNIX_PERM) {
 		if (sizeof(uint16_t) != size)
 			return -EINVAL;
 		f->f_inode.i_mode = (f->f_inode.i_mode & EXT2_S_IFMT)
 			| (*((uint16_t *) data) & ~EXT2_S_IFMT);
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_MTIME) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_mtime = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_ATIME) {
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 		f->f_inode.i_atime = *((uint32_t *) data);
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else if (id == KFS_FEATURE_SYMLINK) {
 		int r;
@@ -2763,7 +2768,7 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 				return r;
 		}
 		f->f_inode.i_size = size; //size must include zerobyte!
-		return ext2_write_inode(info, f->f_ino, &f->f_inode, head);
+		return ext2_write_inode(info, f, head);
 	}
 	else
 		return -EINVAL;
@@ -2824,29 +2829,29 @@ static int ext2_destroy(LFS_t * lfs)
  * Reads group descriptor of inode number ino and sets inode to that inode
  */
 
-static int ext2_get_inode(ext2_info_t * info, inode_t ino, EXT2_inode_t * inode)
+static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy)
 {
 	uint32_t block_group, offset, block;
-	bdesc_t * bdesc;
-
-	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
-	   || ino > info->super->s_inodes_count)
-		return -EINVAL;
+	assert(f);
+	assert(f->f_ino == EXT2_ROOT_INO || (f->f_ino >= info->super->s_first_ino && f->f_ino <= info->super->s_inodes_count));
+	assert(!f->f_inode_cache);
 	
 	//Get the group the inode belongs in
-	block_group = (ino - 1) / info->super->s_inodes_per_group;
-	offset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
+	block_group = (f->f_ino - 1) / info->super->s_inodes_per_group;
+	offset = ((f->f_ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
 	block = info->groups[block_group].bg_inode_table + (offset >> (10 + info->super->s_log_block_size));
-	bdesc = CALL(info->ubd, read_block, block, 1);
-	if(!bdesc)
-		return -EINVAL;
-	offset &= info->block_size - 1;
-	memcpy(inode, bdesc->ddesc->data + offset, sizeof(EXT2_inode_t));
 
-	if(!inode)
-		return -ENOENT;
-	else
-		return ino;
+	f->f_inode_cache = CALL(info->ubd, read_block, block, 1);
+	if (!f->f_inode_cache)
+		return -EINVAL;
+	bdesc_retain(f->f_inode_cache);
+
+	if (copy) {
+		offset &= info->block_size - 1;
+		memcpy(&f->f_inode, f->f_inode_cache->ddesc->data + offset, sizeof(EXT2_inode_t));
+	}
+
+	return f->f_ino;
 }
 
 //TODO Make this pretty and better
@@ -2864,28 +2869,27 @@ static uint8_t ext2_to_kfs_type(uint16_t type)
 	}
 }
 
-int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** tail, chdesc_pass_set_t * befores)
+int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	uint32_t block_group, offset, block;
 	int r;
-	bdesc_t * bdesc;
-	if (!tail)
-		return -EINVAL;
 	
-	if((ino != EXT2_ROOT_INO && ino < info->super->s_first_ino)
-	   || ino > info->super->s_inodes_count)
-		return -EINVAL;
+	assert(tail);
+	assert(f);
+	assert(f->f_ino == EXT2_ROOT_INO || (f->f_ino >= info->super->s_first_ino && f->f_ino <= info->super->s_inodes_count));
+
+	if (!f->f_inode_cache)
+		if (ext2_get_inode(info, f, 0) < 0)
+			return -1;
 
 	//Get the group the inode belongs in
-	block_group = (ino - 1) / info->super->s_inodes_per_group;
+	block_group = (f->f_ino - 1) / info->super->s_inodes_per_group;
 	
-	offset = ((ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
+	offset = ((f->f_ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
 	block = info->groups[block_group].bg_inode_table + (offset >> (10 + info->super->s_log_block_size));
-	bdesc = CALL(info->ubd, read_block, block, 1);
-	if(!bdesc)
-		return -ENOENT;
+	
 	offset &= info->block_size - 1;
-	r = chdesc_create_diff_set(bdesc, info->ubd, offset, sizeof(EXT2_inode_t), &bdesc->ddesc->data[offset], inode, tail, befores);
+	r = chdesc_create_diff_set(f->f_inode_cache, info->ubd, offset, sizeof(EXT2_inode_t), &f->f_inode_cache->ddesc->data[offset], &f->f_inode, tail, befores);
 	if (r < 0)
 		return r;
 	//chdesc_create_diff() returns 0 for "no change"
@@ -2893,17 +2897,17 @@ int ext2_write_inode_set(struct ext2_info * info, inode_t ino, EXT2_inode_t * in
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *tail, "write inode");
 		lfs_add_fork_head(*tail); // TODO: why do this?
-		r = CALL(info->ubd, write_block, bdesc);
+		r = CALL(info->ubd, write_block, f->f_inode_cache);
 	}
 
 	return r;
 }
 
-int ext2_write_inode(struct ext2_info * info, inode_t ino, EXT2_inode_t * inode, chdesc_t ** head)
+int ext2_write_inode(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return ext2_write_inode_set(info, ino, inode, head, PASS_CHDESC_SET(set));
+	return ext2_write_inode_set(info, f, head, PASS_CHDESC_SET(set));
 }
 
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs)
