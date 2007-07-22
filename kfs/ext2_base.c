@@ -413,6 +413,30 @@ static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, cons
 	return 0;
 }
 
+static void ext2_mdir_remove(LFS_t * object, inode_t ino)
+{
+	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
+	ext2_mdir_cache_t * cache = &info->mdir_cache;
+	ext2_mdir_t * mdir = hash_map_find_val(cache->mdirs_map, (void *) ino);
+
+	if(!mdir)
+		return;
+
+	ext2_mdirents_free(mdir);
+	hash_map_erase(cache->mdirs_map, (void *) ino);
+	mdir->ino = INODE_NONE;
+
+	// Update mdir lru list to make mdir the oldest
+	if(mdir->lru_newer)
+		mdir->lru_newer->lru_polder = mdir->lru_polder;
+	else
+		info->mdir_cache.lru_newest = container_of(mdir->lru_polder, ext2_mdir_t, lru_newer);
+	*mdir->lru_polder = mdir->lru_newer;
+	mdir->lru_newer = info->mdir_cache.lru_oldest;
+	mdir->lru_polder = &info->mdir_cache.lru_oldest->lru_newer;
+	*mdir->lru_polder = mdir;
+}
+
 // Add a directory to the directory cache
 static int ext2_mdir_add(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t ** pmdir)
 {
@@ -448,13 +472,16 @@ static int ext2_mdir_add(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t **
 			goto fail;
 	}
 
-	// Update mdir lru list to make mdir the most recent
-	mdir->lru_newer->lru_polder = mdir->lru_polder;
-	*mdir->lru_polder = mdir->lru_newer;
-	mdir->lru_polder = &info->mdir_cache.lru_newest->lru_newer;
-	*mdir->lru_polder = mdir;
-	mdir->lru_newer = NULL;
-	info->mdir_cache.lru_newest = mdir;
+	if(mdir->lru_newer)
+	{
+		// Update mdir lru list to make mdir the most recent
+		mdir->lru_newer->lru_polder = mdir->lru_polder;
+		*mdir->lru_polder = mdir->lru_newer;
+		mdir->lru_polder = &info->mdir_cache.lru_newest->lru_newer;
+		*mdir->lru_polder = mdir;
+		mdir->lru_newer = NULL;
+		info->mdir_cache.lru_newest = mdir;
+	}
 	
 	*pmdir = mdir;
 	return 0;
@@ -2056,6 +2083,9 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	if (f->f_inode.i_size == 0)
 		return INVALID_BLOCK;
 
+	// Update ext2_mdir code if we want to directory truncation
+	assert(f->f_type != TYPE_DIR);
+
 	// FIXME: need to do [d]indirect block count decrement, and write it, here!
 	f->f_inode.i_blocks -= info->block_size / 512;
 	r = ext2_write_inode(info, f->f_ino, &f->f_inode, head);
@@ -2379,6 +2409,9 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, c
 		EXT2_inode_t inode = file->f_inode;
 		group = (file->f_ino - 1) / info->super->s_inodes_per_group;
 		nblocks = ext2_get_file_numblocks(object, (fdesc_t *) file);
+
+		if(file->f_type == TYPE_DIR)
+			ext2_mdir_remove(object, file->f_ino);
 		
 		memset(&file->f_inode, 0, sizeof(EXT2_inode_t));
 		r = ext2_write_inode(info, file->f_ino, &file->f_inode, head);
