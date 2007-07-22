@@ -297,7 +297,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	{
 		/* for efficiency, when that head and tail are not already connected
 		 * transitively: that is, head has only head_keep as a before */
-		if(before->head->befores && before->head->befores->before.next &&
+		if(before->head->befores && !before->head->befores->before.next &&
 		   before->head->befores->before.desc == before->head_keep)
 		{
 			r = chdesc_add_depend(before->head, before->tail);
@@ -309,8 +309,29 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	/* (in this case, it won't be engaged again since it will have
 	 * afters now, so we don't need to recreate it) */
 	if(before->head)
-		/* notice that this can fail if there is a before cycle */
-		r = chdesc_add_depend(after->tail, before->head);
+	{
+		if(!after->tail->befores->before.next)
+		{
+			/* this is the first before we are adding to after,
+			 * so we can inherit before's head as our tail */
+			assert(after->tail->befores->before.desc == after->tail_keep);
+			assert(!after->tail->afters);
+			r = chdesc_add_depend(before->head, after->tail_keep);
+			if(r >= 0)
+			{
+				chdesc_remove_depend(after->tail, after->tail_keep);
+				chdesc_weak_release(&after->tail, 0);
+				chdesc_weak_retain(before->head, &after->tail, NULL, NULL);
+				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, after->tail, "tail");
+			}
+			else
+				goto oh_well;
+		}
+		else
+			oh_well:
+			/* notice that this can fail if there is a before cycle */
+			r = chdesc_add_depend(after->tail, before->head);
+	}
 	if(r >= 0)
 	{
 		after->has_befores = 1;
@@ -326,37 +347,42 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool was_engaged)
 {
 	hash_map_it_t it;
-	opgroup_state_t * state;
+	opgroup_state_t * state = NULL;
 	chdesc_t * top;
 	chdesc_t * top_keep;
 	chdesc_t * bottom;
 	chdesc_t * save_top = current_scope->top;
 	int r, count = 0;
 	
-	/* attach heads to top only when done with the head so that
-	 * top can gain befores along the way */
-	hash_map_it_init(&it, current_scope->id_map);
-	while((state = hash_map_val_next(&it)))
-		if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
-		{
-			assert(state->opgroup->head);
-			r = chdesc_add_depend(state->opgroup->head, save_top);
-			if(r < 0)
+	/* when top has only top_keep as a before, then don't bother attaching any heads to it */
+	if(save_top && (save_top->befores->before.next ||
+	   save_top->befores->before.desc != current_scope->top_keep))
+	{
+		/* attach heads to top only when done with top so
+		 * that top can gain befores along the way */
+		hash_map_it_init(&it, current_scope->id_map);
+		while((state = hash_map_val_next(&it)))
+			if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
 			{
-				chdesc_t * failure_head;
-			  error_changed_state:
-				failure_head = state ? state->opgroup->head : NULL;
-				hash_map_it_init(&it, current_scope->id_map);
-				while((state = hash_map_val_next(&it)))
+				assert(state->opgroup->head);
+				r = chdesc_add_depend(state->opgroup->head, save_top);
+				if(r < 0)
 				{
-					if(state->opgroup->head == failure_head)
-						break;
-					if(state == changed_state ? was_engaged : state->engaged)
-						chdesc_remove_depend(state->opgroup->head, save_top);
+					chdesc_t * failure_head;
+				  error_changed_state:
+					failure_head = state ? state->opgroup->head : NULL;
+					hash_map_it_init(&it, current_scope->id_map);
+					while((state = hash_map_val_next(&it)))
+					{
+						if(state->opgroup->head == failure_head)
+							break;
+						if(state == changed_state ? was_engaged : state->engaged)
+							chdesc_remove_depend(state->opgroup->head, save_top);
+					}
+					return r;
 				}
-				return r;
 			}
-		}
+	}
 	
 	/* create new top and bottom */
 	r = chdesc_create_noop_list(NULL, &top_keep, NULL);
@@ -383,15 +409,13 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 			count++;
 		}
 	
-	assert(top_keep && bottom); /* top_keep must be non-NULL for create_noop */
-	r = chdesc_create_noop_list(NULL, &top, top_keep, bottom, NULL);
+	r = chdesc_create_noop_list(NULL, &top, top_keep, NULL);
 	if(r < 0)
 		goto error_bottom;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
 	
 	if(!bottom->befores)
 	{
-		chdesc_remove_depend(top, bottom);
 		/* let it get garbage collected */
 		bottom = NULL;
 	}
@@ -595,7 +619,17 @@ int opgroup_prepare_head(chdesc_t ** head)
 	
 	if(*head)
 	{
-		int r = chdesc_create_noop_list(NULL, head, current_scope->bottom, *head, NULL);
+		int r;
+		/* heuristic: does *head already depend on bottom as the first dependency? */
+		if((*head)->befores && (*head)->befores->before.desc == current_scope->bottom)
+			return 0;
+		/* heuristic: does bottom already depend on *head as the first dependency? */
+		if(current_scope->bottom->befores && current_scope->bottom->befores->before.desc == *head)
+		{
+			*head = current_scope->bottom;
+			return 0;
+		}
+		r = chdesc_create_noop_list(NULL, head, current_scope->bottom, *head, NULL);
 		if(r < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");
@@ -608,7 +642,7 @@ int opgroup_prepare_head(chdesc_t ** head)
 
 int opgroup_finish_head(chdesc_t * head)
 {
-	if(!current_scope || !current_scope->top || !head)
+	if(!current_scope || !current_scope->top || !head || head == current_scope->bottom)
 		return 0;
 	return chdesc_add_depend(current_scope->top, head);
 }
