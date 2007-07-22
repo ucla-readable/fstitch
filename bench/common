@@ -176,7 +176,7 @@ function ktime () {
 	shift
 	echo "$NAME-before `head -1 /proc/stat`"
 	echo "+ $@"
-	$@
+	"$@"
 	R=$?
 	echo "$NAME-after `head -1 /proc/stat`"
 	return $R
