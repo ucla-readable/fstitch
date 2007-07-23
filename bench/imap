@@ -6,13 +6,8 @@ function test () {
 }
 
 function run () {
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start -k
 	prepare_postinit  $T $N $OUTDIR $HOST
-
-	try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
-	try rm -f $MNT/mailbox.dst
-	try fsync $KUDOSDIR $MNT
-
 	ktime total test
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 }
@@ -39,6 +34,11 @@ if [ $# -ne 0 ]; then
 	echo "Usage: `basename "$0"`" 1>&2
 	exit 1;
 fi
+
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
+	try rm -f $MNT/mailbox.dst
+	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
 
 prepare $T $N $KUDOSDIR $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
