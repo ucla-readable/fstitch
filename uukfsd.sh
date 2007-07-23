@@ -21,6 +21,12 @@ KFSD=./obj/unix-user/kfs/kfsd
 # '-o allow_root' so that the (suid) fusermount can mount nested mountpoints
 KFSD_OPTS="-s -o allow_root"
 
+# An old version might already be mounted.
+if /bin/mount | grep "$MNT" >/dev/null; then
+	echo "* Something is already mounted on $MNT; unmounting it." 1>&2
+	/bin/umount -f "$MNT" 2>&1 | grep -v busy 1>&2
+fi
+
 # Run kfsd. If it exits non-zero (and so probably crashed) explicitly unmount.
 # Lazy unmount in case fusermount is called before kfsd's mount is removed.
 # Set KFSD_WRAP to run kfsd within a wrapper, such as gdb or valgrind.
