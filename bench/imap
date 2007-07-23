@@ -1,7 +1,11 @@
 #!/bin/bash
 
+function do_imap () {
+	LD_LIBRARY_PATH=$KUDOSDIR/obj/kernel/lib:$LD_LIBRARY_PATH IMAPD=$IMAPD MAILPATH=$MNT $KUDOSDIR/bench/imap.expect > $OUTDIR/$T.imap.$N
+}
+
 function test () {
-	LD_LIBRARY_PATH=$KUDOSDIR/obj/kernel/lib:$LD_LIBRARY_PATH IMAPD=$IMAPD MAILPATH=$MNT ktime imap $KUDOSDIR/bench/imap.expect
+	ktime imap do_imap
 	ktime sync fsync $KUDOSDIR $MNT;
 }
 

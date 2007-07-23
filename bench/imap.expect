@@ -7,7 +7,7 @@ set mailpath $env(MAILPATH)
 #set imapd [lrange $argv 0 1]
 #set mailpath [lrange $argv 1 2]
 
-set nmsgs 100
+set nmsgs 1000
 set cmdn 1
 
 if {![file exists $imapd]} {
