@@ -98,7 +98,7 @@ static int check_super(LFS_t * object)
 	printf("Superblock Cylinder Summary:\n\tDirectories: %d\n\tFree Blocks: %d\n\tFree Inodes: %d\n\tFree Frags: %d\n", super->fs_cstotal.cs_ndir,
 			super->fs_cstotal.cs_nbfree, super->fs_cstotal.cs_nifree,
 			super->fs_cstotal.cs_nffree);
-	object->blocksize = super->fs_bsize;
+	object->blocksize = super->fs_fsize;
 
 	info->csum_block = CALL(info->ubd, read_block, super->fs_csaddr, 1);
 	if (!info->csum_block)
@@ -1565,7 +1565,6 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = object->blocksize;
-		BANGA;
 	}
 	else if (id == KFS_FEATURE_DEVSIZE) {
 		const struct UFS_Super * super = CALL(info->parts.p_super, read);
