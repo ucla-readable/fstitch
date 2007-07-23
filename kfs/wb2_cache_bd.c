@@ -41,25 +41,7 @@ struct cache_info {
 	/* map from block number to bdesc */
 	uint32_t map_capacity;
 	bdesc_t ** map;
-	
-	uint32_t blockcount;
-	uint16_t blocksize;
 };
-
-static uint32_t wb2_cache_bd_get_numblocks(BD_t * object)
-{
-	return ((struct cache_info *) OBJLOCAL(object))->blockcount;
-}
-
-static uint16_t wb2_cache_bd_get_blocksize(BD_t * object)
-{
-	return ((struct cache_info *) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t wb2_cache_bd_get_atomicsize(BD_t * object)
-{
-	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_atomicsize);
-}
 
 static inline bdesc_t * wb2_map_get_block(struct cache_info * info, uint32_t number)
 {
@@ -463,7 +445,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->blockcount)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	block = wb2_map_get_block(info, number);
@@ -502,7 +484,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->blockcount)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	block = wb2_map_get_block(info, number);
@@ -533,7 +515,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->blockcount)
+	if(block->number + block->count > object->numblocks)
 		return -EINVAL;
 	
 	block = wb2_map_get_block(info, block->number);
@@ -700,8 +682,9 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	info->all.last = NULL;
 	info->dirty.first = NULL;
 	info->dirty.last = NULL;
-	info->blockcount = CALL(disk, get_numblocks);
-	info->blocksize = CALL(disk, get_blocksize);
+	bd->numblocks = disk->numblocks;
+	bd->blocksize = disk->blocksize;
+	bd->atomicsize = disk->atomicsize;
 	
 	/* we generally delay blocks, so our level goes up */
 	bd->level = disk->level + 1;

@@ -64,7 +64,7 @@ static int check_super(LFS_t * object)
 
 	// TODO better way of detecting fs block size
 	/* make sure we have the block size we expect */
-	bs = CALL(info->ubd, get_blocksize);
+	bs = info->ubd->blocksize;
 	if (bs != 2048) {
 		printf("Block device size is not 2048! (%d)\n", bs);
 		return -1;
@@ -80,7 +80,7 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 
-	numblocks = CALL(info->ubd, get_numblocks);
+	numblocks = info->ubd->numblocks;
 	info->ipf = super->fs_inopb / super->fs_frag;
 
 	printf("Superblock size %d\n", super->fs_sbsize);
@@ -98,6 +98,7 @@ static int check_super(LFS_t * object)
 	printf("Superblock Cylinder Summary:\n\tDirectories: %d\n\tFree Blocks: %d\n\tFree Inodes: %d\n\tFree Frags: %d\n", super->fs_cstotal.cs_ndir,
 			super->fs_cstotal.cs_nbfree, super->fs_cstotal.cs_nifree,
 			super->fs_cstotal.cs_nffree);
+	object->blocksize = super->fs_bsize;
 
 	info->csum_block = CALL(info->ubd, read_block, super->fs_csaddr, 1);
 	if (!info->csum_block)
@@ -499,18 +500,6 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 	r = hash_map_insert(filemap, (void *) ino, existing_file);
 	assert(r == 0);
 	return existing_file;
-}
-
-static uint32_t ufs_get_blocksize(LFS_t * object)
-{
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
-	const struct UFS_Super * super = CALL(info->parts.p_super, read);
-	return super->fs_fsize;
-}
-
-static BD_t * ufs_get_blockdev(LFS_t * object)
-{
-	return ((struct ufs_info *) OBJLOCAL(object))->ubd;
 }
 
 static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
@@ -1575,7 +1564,8 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = ufs_get_blocksize(object);
+		*((uint32_t *) data) = object->blocksize;
+		BANGA;
 	}
 	else if (id == KFS_FEATURE_DEVSIZE) {
 		const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -1789,6 +1779,7 @@ LFS_t * ufs(BD_t * block_device)
 
 	LFS_INIT(lfs, ufs, info);
 	OBJMAGIC(lfs) = UFS_MAGIC;
+	lfs->blockdev = block_device;
 
 	info->ubd = block_device;
 	info->write_head = CALL(block_device, get_write_head);

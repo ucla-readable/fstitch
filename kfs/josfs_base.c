@@ -23,7 +23,6 @@
 
 struct josfs_info
 {
-	BD_t * ubd;
 	bdesc_t * super_block;
 	bdesc_t * bitmap_cache; // Bitmap mini write through cache!
 };
@@ -60,13 +59,13 @@ static int check_super(LFS_t * object)
 	uint32_t numblocks;
 
 	/* make sure we have the block size we expect */
-	if (CALL(info->ubd, get_blocksize) != JOSFS_BLKSIZE) {
+	if (object->blockdev->blocksize != JOSFS_BLKSIZE) {
 		printf("Block device size is not JOSFS_BLKSIZE!\n");
 		return -1;
 	}
 
 	/* the superblock is in block 1 */
-	info->super_block = CALL(info->ubd, read_block, 1, 1);
+	info->super_block = CALL(object->blockdev, read_block, 1, 1);
 	if (!info->super_block)
 	{
 		printf("Unable to read superblock!\n");
@@ -77,7 +76,7 @@ static int check_super(LFS_t * object)
 		return -1;
 	}
 
-	numblocks = CALL(info->ubd, get_numblocks);
+	numblocks = object->blockdev->numblocks;
 
 	printf("JOS Filesystem size: %u blocks (%uMB)\n", (int) super->s_nblocks, (int) (super->s_nblocks / (1024 * 1024 / JOSFS_BLKSIZE)));
 	if (super->s_nblocks > numblocks) {
@@ -136,7 +135,7 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 		bdesc_release(&info->bitmap_cache);
 
 	if (! info->bitmap_cache) {
-		bdesc = CALL(info->ubd, read_block, target, 1);
+		bdesc = CALL(object->blockdev, read_block, target, 1);
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap! (blockno = %u)\n", blockno);
 			return -1;
@@ -178,7 +177,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	else {
 		if(info->bitmap_cache)
 			bdesc_release(&info->bitmap_cache);
-		bdesc = CALL(info->ubd, read_block, target, 1);
+		bdesc = CALL(object->blockdev, read_block, target, 1);
 
 		if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE) {
 			printf("josfs_base: trouble reading bitmap! (blockno = %u)\n", blockno);
@@ -193,12 +192,12 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 	if (((uint32_t *) bdesc->ddesc->data)[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value)
 		return 0;
 	/* bit chdescs take offset in increments of 32 bits */
-	r = chdesc_create_bit(bdesc, info->ubd, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32), head);
+	r = chdesc_create_bit(bdesc, object->blockdev, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32), head);
 	if (r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "free block" : "allocate block");
 
-	r = CALL(info->ubd, write_block, bdesc);
+	r = CALL(object->blockdev, write_block, bdesc);
 
 	return r;
 }
@@ -261,16 +260,6 @@ static int josfs_get_root(LFS_t * object, inode_t * ino)
 	return 0;
 }
 
-static uint32_t josfs_get_blocksize(LFS_t * object)
-{
-	return JOSFS_BLKSIZE;
-}
-
-static BD_t * josfs_get_blockdev(LFS_t * object)
-{
-	return ((struct josfs_info *) OBJLOCAL(object))->ubd;
-}
-
 // file and purpose parameter are ignored
 static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
@@ -291,7 +280,7 @@ static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose
 			bdesc_release(&info->bitmap_cache);
 		if (!info->bitmap_cache)
 		{
-			bdesc_t * bdesc = CALL(info->ubd, read_block, bitmap_block+2, 1);
+			bdesc_t * bdesc = CALL(object->blockdev, read_block, bitmap_block+2, 1);
 			if (!bdesc || bdesc->ddesc->length != JOSFS_BLKSIZE)
 			{
 				printf("josfs_base: trouble reading bitmap! (blockno = %u)\n", bitmap_block+2);
@@ -328,15 +317,13 @@ static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose
 static bdesc_t * josfs_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("JOSFSDEBUG: josfs_lookup_block %u\n", number);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, read_block, number, 1);
+	return CALL(object->blockdev, read_block, number, 1);
 }
 
 static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("JOSFSDEBUG: josfs_synthetic_lookup_block %u\n", number);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, synthetic_read_block, number, 1);
+	return CALL(object->blockdev, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
@@ -370,7 +357,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 		if (!file)
 			goto josfs_lookup_inode_exit;
 
-		dirblock = CALL(info->ubd, read_block, fd->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, fd->dirb, 1);
 		if (!dirblock)
 			goto josfs_lookup_inode_exit2;
 		
@@ -432,7 +419,7 @@ static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, 
 	return 0;
 }
 
-static uint32_t get_file_numblocks(struct josfs_info * info, JOSFS_File_t * file)
+static uint32_t get_file_numblocks(LFS_t *object, JOSFS_File_t * file)
 {
 	bdesc_t * indirect;
 	uint32_t nblocks = 0;
@@ -448,7 +435,7 @@ static uint32_t get_file_numblocks(struct josfs_info * info, JOSFS_File_t * file
 	assert(!file->f_indirect || i == JOSFS_NDIRECT);
 
 	if (file->f_indirect) {
-		indirect = CALL(info->ubd, read_block, file->f_indirect, 1);
+		indirect = CALL(object->blockdev, read_block, file->f_indirect, 1);
 		if (indirect) {
 			uint32_t * j = (uint32_t *) indirect->ddesc->data;
 			for (i = JOSFS_NDIRECT; i < JOSFS_NINDIRECT; i++) {
@@ -464,23 +451,21 @@ static uint32_t get_file_numblocks(struct josfs_info * info, JOSFS_File_t * file
 
 static uint32_t josfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	return get_file_numblocks(info, f->file);
+	return get_file_numblocks(object, f->file);
 }
 
 static uint32_t get_file_block(LFS_t * object, JOSFS_File_t * file, uint32_t offset)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	bdesc_t * indirect;
 	uint32_t blockno, nblocks;
 
-	nblocks = get_file_numblocks(info, file);
+	nblocks = get_file_numblocks(object, file);
 	if (offset % JOSFS_BLKSIZE || offset >= nblocks * JOSFS_BLKSIZE)
 		return INVALID_BLOCK;
 
 	if (offset >= JOSFS_NDIRECT * JOSFS_BLKSIZE) {
-		indirect = CALL(info->ubd, read_block, file->f_indirect, 1);
+		indirect = CALL(object->blockdev, read_block, file->f_indirect, 1);
 		if (!indirect)
 			return INVALID_BLOCK;
 		blockno = ((uint32_t *) indirect->ddesc->data)[offset / JOSFS_BLKSIZE];
@@ -540,7 +525,6 @@ static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entr
 // know an open file's inode number
 static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** name, uint32_t * basep)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	bdesc_t * dirblock = NULL;
 	JOSFS_File_t * dirfile;
 	uint32_t blockno;
@@ -551,7 +535,7 @@ static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** na
 
 	blockno = *basep / JOSFS_BLKFILES;
 
-	if (blockno >= get_file_numblocks(info, file))
+	if (blockno >= get_file_numblocks(object, file))
 		return -1;
 
 	blockno = get_file_block(object, file, blockno * JOSFS_BLKSIZE);
@@ -577,7 +561,6 @@ static int get_dirent_name(LFS_t * object, JOSFS_File_t * file, const char ** na
 static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_dirent %p, %u\n", basep, *basep);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
 	bdesc_t * dirblock = NULL;
 	JOSFS_File_t * dirfile;
@@ -628,7 +611,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 	do {
 		blockno = (*basep - 2) / JOSFS_BLKFILES;
 
-		if (blockno >= get_file_numblocks(info, f->file))
+		if (blockno >= get_file_numblocks(object, f->file))
 			return -1;
 
 		blockno = get_file_block(object, f->file, blockno * JOSFS_BLKSIZE);
@@ -646,9 +629,8 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_append_file_block\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	uint32_t nblocks = get_file_numblocks(info, f->file);
+	uint32_t nblocks = get_file_numblocks(object, f->file);
 	bdesc_t * indirect = NULL, * dirblock = NULL;
 	int r, offset;
 
@@ -658,16 +640,16 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		return -ENOSPC;
 
 	if (nblocks > JOSFS_NDIRECT) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
+		indirect = CALL(object->blockdev, read_block, f->file->f_indirect, 1);
 		if (!indirect)
 			return -ENOSPC;
 
 		offset = nblocks * sizeof(uint32_t);
-		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
+		if ((r = chdesc_create_byte(indirect, object->blockdev, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add indirect block");
 
-		return CALL(info->ubd, write_block, indirect);
+		return CALL(object->blockdev, write_block, indirect);
 	}
 	else if (nblocks == JOSFS_NDIRECT) {
 		uint32_t inumber = josfs_allocate_block(object, NULL, 0, head);
@@ -677,30 +659,30 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		indirect = josfs_synthetic_lookup_block(object, inumber);
 
 		// Initialize the new indirect block
-		if ((r = chdesc_create_init(indirect, info->ubd, head)) < 0)
+		if ((r = chdesc_create_init(indirect, object->blockdev, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init indirect block");
 
 		// Initialize the structure, then point to it
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -ENOSPC;
 
 		// this head is from josfs_allocate_block() above
 		offset = nblocks * sizeof(uint32_t);
-		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
+		if ((r = chdesc_create_byte(indirect, object->blockdev, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add indirect block");
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), &inumber, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &inumber, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "set indirect block");
 
 		/* FIXME handle the return values better? */
-		r = CALL(info->ubd, write_block, indirect);
-		r |= CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, indirect);
+		r |= CALL(object->blockdev, write_block, dirblock);
 
 		if (r >= 0)
 			f->file->f_indirect = inumber;
@@ -708,17 +690,17 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		return r;
 	}
 	else {
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -ENOSPC;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks];
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), &block, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "add direct block");
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, dirblock);
 		if (r < 0)
 			return r;
 
@@ -730,7 +712,6 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_allocate_name %s\n", name);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	JOSFS_File_t *dir = NULL, *f = NULL;
 	struct josfs_fdesc * dir_fdesc = NULL;
 	JOSFS_File_t temp_file;
@@ -769,7 +750,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		goto allocate_name_exit;
 
 	// Modified dir_alloc_file() from JOS
-	nblock = get_file_numblocks(info, ((struct josfs_fdesc *) pdir_fdesc)->file);
+	nblock = get_file_numblocks(object, ((struct josfs_fdesc *) pdir_fdesc)->file);
 
 	// Search existing blocks for empty spot
 	for (i = 0; i < nblock; i++) {
@@ -791,11 +772,11 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 				temp_file.f_type = type;
 
 				offset = j * sizeof(JOSFS_File_t);
-				if ((r = chdesc_create_byte(blk, info->ubd, offset, sizeof(JOSFS_File_t), &temp_file, head)) < 0) 
+				if ((r = chdesc_create_byte(blk, object->blockdev, offset, sizeof(JOSFS_File_t), &temp_file, head)) < 0) 
 					goto allocate_name_exit2;
 				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init dirent");
 
-				r = CALL(info->ubd, write_block, blk);
+				r = CALL(object->blockdev, write_block, blk);
 				if (r < 0)
 					goto allocate_name_exit2;
 
@@ -821,7 +802,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		blk = NULL;
 	if (!blk)
 		goto allocate_name_exit2;
-	if (chdesc_create_init(blk, info->ubd, head) < 0)
+	if (chdesc_create_init(blk, object->blockdev, head) < 0)
 		goto allocate_name_exit3;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init dir block");
 
@@ -844,11 +825,11 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	temp_file.f_type = type;
 
 	temp_head = *head;
-	if (chdesc_create_byte(blk, info->ubd, 0, sizeof(JOSFS_File_t), &temp_file, head) < 0)
+	if (chdesc_create_byte(blk, object->blockdev, 0, sizeof(JOSFS_File_t), &temp_file, head) < 0)
 		goto allocate_name_exit3;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "init dirent");
 
-	if ((r = CALL(info->ubd, write_block, blk)) < 0)
+	if ((r = CALL(object->blockdev, write_block, blk)) < 0)
 		goto allocate_name_exit3;
 		
 	if (josfs_append_file_block(object, pdir_fdesc, number, &temp_head) >= 0) {
@@ -881,7 +862,6 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_rename\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	fdesc_t * oldfdesc;
 	fdesc_t * newfdesc;
 	struct josfs_fdesc * old;
@@ -907,7 +887,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 		return -ENOENT;
 
 	old = (struct josfs_fdesc *) oldfdesc;
-	dirblock = CALL(info->ubd, read_block, old->dirb, 1);
+	dirblock = CALL(object->blockdev, read_block, old->dirb, 1);
 	if (!dirblock) {
 		josfs_free_fdesc(object, oldfdesc);
 		return -EINVAL;
@@ -940,7 +920,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 	for (i = 0; i < JOSFS_NDIRECT; i++)
 		new->file->f_direct[i] = temp_file.f_direct[i];
 
-	dirblock = CALL(info->ubd, read_block, new->dirb, 1);
+	dirblock = CALL(object->blockdev, read_block, new->dirb, 1);
 	if (!dirblock) {
 		josfs_free_fdesc(object, newfdesc);
 		return -EINVAL;
@@ -951,14 +931,14 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 	 * file. But this is not soft updates safe, as we might crash and later
 	 * delete one of the files, marking its resources as free. Oh well. */
 	offset = new->index;
-	if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(JOSFS_File_t), &temp_file, head)) < 0) {
+	if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(JOSFS_File_t), &temp_file, head)) < 0) {
 		josfs_free_fdesc(object, newfdesc);
 		return r;
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "rename");
 
 	josfs_free_fdesc(object, newfdesc);
-	r = CALL(info->ubd, write_block, dirblock);
+	r = CALL(object->blockdev, write_block, dirblock);
 
 	if (r < 0)
 		return r;
@@ -972,9 +952,8 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_truncate_file_block\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	uint32_t nblocks = get_file_numblocks(info, f->file);
+	uint32_t nblocks = get_file_numblocks(object, f->file);
 	bdesc_t * indirect = NULL, *dirblock = NULL;
 	uint32_t blockno, data = 0;
 	uint16_t offset;
@@ -984,37 +963,37 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 		return INVALID_BLOCK;
 
 	if (nblocks > JOSFS_NDIRECT + 1) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
+		indirect = CALL(object->blockdev, read_block, f->file->f_indirect, 1);
 		if (!indirect)
 			return INVALID_BLOCK;
 
 		blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 		offset = (nblocks - 1) * sizeof(uint32_t);
-		if ((r = chdesc_create_byte(indirect, info->ubd, offset, sizeof(uint32_t), &data, head)) < 0)
+		if ((r = chdesc_create_byte(indirect, object->blockdev, offset, sizeof(uint32_t), &data, head)) < 0)
 			return INVALID_BLOCK;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "detach indirect block");
 
-		r = CALL(info->ubd, write_block, indirect);
+		r = CALL(object->blockdev, write_block, indirect);
 		return blockno;
 	}
 	else if (nblocks == JOSFS_NDIRECT + 1) {
-		indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
+		indirect = CALL(object->blockdev, read_block, f->file->f_indirect, 1);
 		if (!indirect)
 			return INVALID_BLOCK;
 
 		blockno = *((uint32_t *) (indirect->ddesc->data) + nblocks - 1);
 
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return INVALID_BLOCK;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), &data, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &data, head)) < 0)
 			return INVALID_BLOCK;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "clear indirect block");
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, dirblock);
 
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -1026,17 +1005,17 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc
 	}
 	else {
 		blockno = f->file->f_direct[nblocks - 1];
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return INVALID_BLOCK;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks - 1];
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), &data, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &data, head)) < 0)
 			return INVALID_BLOCK;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "detach direct block");
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, dirblock);
 
 		if (r < 0)
 			return INVALID_BLOCK;
@@ -1056,7 +1035,6 @@ static int josfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chde
 static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_remove_name %s\n", name);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	fdesc_t * file;
 	bdesc_t * dirblock = NULL;
 	struct josfs_fdesc * f;
@@ -1078,7 +1056,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 
 	f = (struct josfs_fdesc *) file;
 
-	dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+	dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 	if (!dirblock) {
 		r = -ENOSPC;
 		goto remove_name_exit;
@@ -1086,11 +1064,11 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 
 	offset = f->index;
 	offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_name[0];
-	if ((r = chdesc_create_byte(dirblock, info->ubd, offset, 1, &data, head)) < 0)
+	if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, 1, &data, head)) < 0)
 		goto remove_name_exit;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "clear name[0]");
 
-	r = CALL(info->ubd, write_block, dirblock);
+	r = CALL(object->blockdev, write_block, dirblock);
 	if (r >= 0)
 		f->file->f_name[0] = '\0';
 
@@ -1102,7 +1080,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 		
 		if(f->file->f_indirect)
 		{
-			bdesc_t * indirect = CALL(info->ubd, read_block, f->file->f_indirect, 1);
+			bdesc_t * indirect = CALL(object->blockdev, read_block, f->file->f_indirect, 1);
 			uint32_t * blocks = (uint32_t *) indirect->ddesc->data;
 			
 			for(i = JOSFS_NDIRECT; i < JOSFS_NINDIRECT; i++)
@@ -1143,21 +1121,19 @@ static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 	if (info->bitmap_cache && info->bitmap_cache->number == block->number)
 		bdesc_release(&info->bitmap_cache);
 
-	return CALL(info->ubd, write_block, block);
+	return CALL(object->blockdev, write_block, block);
 }
 
 static chdesc_t ** josfs_get_write_head(LFS_t * object)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_write_head\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, get_write_head);
+	return CALL(object->blockdev, get_write_head);
 }
 
 static int32_t josfs_get_block_space(LFS_t * object)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_block_space\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
-	return CALL(info->ubd, get_block_space);
+	return CALL(object->blockdev, get_block_space);
 }
 
 static const bool josfs_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1, [KFS_FEATURE_MTIME] = 1, [KFS_FEATURE_ATIME] = 1, [KFS_FEATURE_DELETE] = 1};
@@ -1221,7 +1197,7 @@ static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = josfs_get_blocksize(object);
+		*((uint32_t *) data) = JOSFS_BLKSIZE;
 	}
 	else if (id == KFS_FEATURE_DEVSIZE) {
 		if (size < sizeof(uint32_t))
@@ -1270,7 +1246,6 @@ static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_set_metadata %s, %u, %u\n", f->file->f_name, id, size);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
 	bdesc_t * dirblock = NULL;
 	int r;
 	uint16_t offset;
@@ -1282,17 +1257,17 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) > JOSFS_MAXFILESIZE)
 			return -EINVAL;
 
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -EINVAL;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_size;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(int32_t), data, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(int32_t), data, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "set file size");
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, dirblock);
 		if (r < 0)
 			return r;
 
@@ -1315,17 +1290,17 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 				return -EINVAL;
 		}
 
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -EINVAL;
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_type;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), &fs_type, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &fs_type, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "set file type");
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, dirblock);
 
 		if (r < 0)
 			return r;
@@ -1337,7 +1312,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (sizeof(uint32_t) != size)
 			return -EINVAL;
 
-		dirblock = CALL(info->ubd, read_block, f->dirb, 1);
+		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -EINVAL;
 
@@ -1346,11 +1321,11 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_mtime;
 		else
 			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_atime;
-		if ((r = chdesc_create_byte(dirblock, info->ubd, offset, sizeof(uint32_t), data, head)) < 0)
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), data, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, (id == KFS_FEATURE_MTIME) ? "set file mtime" : "set file atime");
 
-		r = CALL(info->ubd, write_block, dirblock);
+		r = CALL(object->blockdev, write_block, dirblock);
 		if (r < 0)
 			return r;
 
@@ -1387,7 +1362,7 @@ static int josfs_destroy(LFS_t * lfs)
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_bd(info->ubd, lfs);
+	modman_dec_bd(lfs->blockdev, lfs);
 
 	bdesc_release(&info->super_block);
 	bdesc_release(&info->bitmap_cache);
@@ -1416,8 +1391,9 @@ LFS_t * josfs(BD_t * block_device)
 	LFS_INIT(lfs, josfs, info);
 	OBJMAGIC(lfs) = JOSFS_FS_MAGIC;
 
-	info->ubd = block_device;
+	lfs->blockdev = block_device;
 	info->bitmap_cache = NULL;
+	lfs->blocksize = JOSFS_BLKSIZE;
 
 	if (check_super(lfs)) {
 		free(info);

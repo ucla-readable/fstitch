@@ -77,12 +77,13 @@ struct ext2_info {
 	uint32_t ngroups, gnum;
 	uint32_t ngroupblocks;
 	uint32_t inode_gdesc;
-	uint16_t block_size, block_descs;
+	uint16_t block_descs;
 #if ROUND_ROBIN_ALLOC
 	/* the last block number allocated for each of file
 	 * data, directory data, and [d]indirect pointers */
 	uint32_t last_fblock, last_dblock, last_iblock;
 #endif
+	uint32_t _blocksize_;
 };
 typedef struct ext2_info ext2_info_t;
 
@@ -127,7 +128,7 @@ static int check_super(LFS_t * object)
 		
 	/* the superblock is in block 1 */
 	printf("\tMagic Number 0x%x \n", info->super->s_magic);
-	printf("\tBlocksize might be %i\n", CALL(info->ubd, get_blocksize));
+	printf("\tBlocksize might be %i\n", info->ubd->blocksize);
 	printf("\tNumber of inodes %i\n", info->super->s_inodes_count);
 	printf("\tSize of inode sturcture %i\n", info->super->s_inode_size);
 	printf("\tNumber of free inodes %i\n", info->super->s_free_inodes_count);
@@ -822,16 +823,6 @@ static int ext2_get_root(LFS_t * object, inode_t * ino)
 	return 0;
 }
 
-static uint32_t ext2_get_blocksize(LFS_t * object)
-{
-	return ((struct ext2_info *) OBJLOCAL(object))->block_size;
-}
-
-static BD_t * ext2_get_blockdev(LFS_t * object)
-{
-	return ((struct ext2_info *) OBJLOCAL(object))->ubd;
-}
-
 static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** tail)
 {
 	Dprintf("EXT2DEBUG: %s\n", __FUNCTION__);
@@ -1047,13 +1038,12 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 
 static uint32_t ext2_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
-	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	
 	if(f->f_type == TYPE_SYMLINK)
 		return 0;
 	
-	return (f->f_inode.i_size + info->block_size - 1) / info->block_size;
+	return (f->f_inode.i_size + object->blocksize - 1) / object->blocksize;
 }
 
 static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t offset)
@@ -1067,10 +1057,10 @@ static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t off
 	if (offset >= file->f_inode.i_size || file->f_type == TYPE_SYMLINK)
 		return INVALID_BLOCK;
 	
-	n_per_block = info->block_size / (sizeof(uint32_t));
+	n_per_block = object->blocksize / (sizeof(uint32_t));
 	
 	//non block aligned offsets suck (aka aren't supported)
-	blocknum = offset / info->block_size;
+	blocknum = offset / object->blocksize;
 	
 	//TODO: compress this code, but right now its much easier to understand...
 	if (blocknum >= n_per_block * n_per_block + n_per_block + EXT2_NDIRECT)
@@ -1164,13 +1154,13 @@ static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * 
 	bdesc_t * dirblock = NULL;
 	uint32_t blockno, file_blockno, num_file_blocks, block_offset;
 
-	num_file_blocks = f->f_inode.i_blocks / (info->block_size / 512);
-	block_offset = *basep % info->block_size;
+	num_file_blocks = f->f_inode.i_blocks / (object->blocksize / 512);
+	block_offset = *basep % object->blocksize;
 
 	if (*basep >= f->f_inode.i_size)
 		return -1; // should be: -ENOENT;
 
-	blockno = *basep / info->block_size;
+	blockno = *basep / object->blocksize;
 	file_blockno = get_file_block(object, f, *basep);
 	
 	if (file_blockno == INVALID_BLOCK)
@@ -1213,7 +1203,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 {
 	Dprintf("EXT2DEBUG: %s %d\n", __FUNCTION__, block);
 	struct ext2_info * info = (struct ext2_info *) OBJLOCAL(object);
-	const uint32_t n_per_block = info->block_size / sizeof(uint32_t);
+	const uint32_t n_per_block = object->blocksize / sizeof(uint32_t);
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
 	uint32_t nblocks;
 	
@@ -1231,7 +1221,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 		return -EINVAL;
 	
 	/* calculate current number of blocks */
-	nblocks = f->f_inode.i_blocks / (info->block_size / 512);
+	nblocks = f->f_inode.i_blocks / (object->blocksize / 512);
 	if(nblocks > EXT2_NDIRECT)
 		/* subtract the indirect block */
 		if(--nblocks > EXT2_NDIRECT + n_per_block)
@@ -1280,7 +1270,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			set.next = befores;
 			
 			/* these changes will be written later, depending on inode_dep (set) */
-			f->f_inode.i_blocks += info->block_size / 512;
+			f->f_inode.i_blocks += object->blocksize / 512;
 			f->f_inode.i_block[EXT2_INDIRECT] = blockno;
 		}
 		else
@@ -1326,7 +1316,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, dindir_init, "init double indirect block");
 			
 			/* these changes will be written later, depending on inode_dep (set) */
-			f->f_inode.i_blocks += info->block_size / 512;
+			f->f_inode.i_blocks += object->blocksize / 512;
 			f->f_inode.i_block[EXT2_DINDIRECT] = blockno;
 		}
 		else
@@ -1375,7 +1365,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			set.size = 2;
 			
 			/* this change will be written later, depending on inode_dep (set) */
-			f->f_inode.i_blocks += info->block_size / 512;
+			f->f_inode.i_blocks += object->blocksize / 512;
 			
 			set.array[0] = indir_init;
 			r = chdesc_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, &set.array[0]);
@@ -1411,7 +1401,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 	}
 	
 	/* increment i_blocks for the block itself */
-	f->f_inode.i_blocks += info->block_size / 512;
+	f->f_inode.i_blocks += object->blocksize / 512;
 	return ext2_write_inode_set(info, f, tail, inode_dep);
 }
 
@@ -1443,7 +1433,7 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 	uint32_t new_rec_len_actual = dirent_rec_len(dirent_new->name_len);
 
 	// dirents are in a single block:
-	if (basep % info->block_size + exists_rec_len_actual + new_rec_len_actual <= info->block_size) {
+	if (basep % object->blocksize + exists_rec_len_actual + new_rec_len_actual <= object->blocksize) {
 		EXT2_Dir_entry_t entries[2];
 
 		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
@@ -1451,7 +1441,7 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 		if (blockno == INVALID_BLOCK)
 			return -1;
 
-		basep %= info->block_size;
+		basep %= object->blocksize;
 
 		dirblock = CALL(info->ubd, read_block, blockno, 1);
 		if (!dirblock)
@@ -1490,13 +1480,13 @@ static int ext2_write_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir
 
 	//dirent is in a single block:
 	uint32_t actual_rec_len = dirent_rec_len(dirent->name_len);
-	if (basep % info->block_size + actual_rec_len <= info->block_size) {
+	if (basep % object->blocksize + actual_rec_len <= object->blocksize) {
 		//it would be brilliant if we could cache this, and not call get_file_block, read_block =)
 		blockno = get_file_block(object, parent, basep);
 		if (blockno == INVALID_BLOCK)
 			return -1;
 
-		basep %= info->block_size;
+		basep %= object->blocksize;
 
 		dirblock = CALL(info->ubd, read_block, blockno, 1);
 		if (!dirblock)
@@ -1557,7 +1547,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 					return r;
 				r = ext2_write_dirent_set(object, parent, new_dirent, offset, tail, befores);
 				if(r < 0)
-					ext2_mdirent_clear(mdir, mdirent, info->block_size);
+					ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 				return r;
 			}
 			if(mdirent->dirent.inode && mdirent->dirent.rec_len - (8 + mdirent->dirent.name_len) > new_dirent->rec_len)
@@ -1607,13 +1597,13 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	r = CALL(info->ubd, write_block, block);
 	if (r < 0)
 		return r;
-	parent->f_inode.i_size += info->block_size;
+	parent->f_inode.i_size += object->blocksize;
 	r = ext2_append_file_block_set(object, (fdesc_t *) parent, new_block, &append_chdesc, PASS_CHDESC_SET(set));
 	if (r < 0)
 		return r;
 	lfs_add_fork_head(append_chdesc);
 	
-	new_dirent->rec_len = info->block_size;
+	new_dirent->rec_len = object->blocksize;
 	r = ext2_mdirent_add(mdir, new_dirent, prev_eof);
 	if(r < 0)
 		return r;
@@ -1792,12 +1782,12 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			goto allocate_name_exit2;
 
 		if (type == TYPE_SYMLINK) {
-			link_buf = malloc(info->block_size);
+			link_buf = malloc(object->blocksize);
 			if (!link_buf) {
 				r = -ENOMEM;
 				goto allocate_name_exit2;
 			}
-			r = initialmd->get(initialmd->arg, KFS_FEATURE_SYMLINK, info->block_size, link_buf);
+			r = initialmd->get(initialmd->arg, KFS_FEATURE_SYMLINK, object->blocksize, link_buf);
 			if (r < 0)
 				goto allocate_name_exit2;
 			else {
@@ -1823,8 +1813,8 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			r = chdesc_create_init(dirblock_bdesc, info->ubd, &init_head);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, init_head, "init new dirent block");
 			new_file->f_inode.i_block[0] = dirblock_no;
-			new_file->f_inode.i_size = info->block_size;
-			new_file->f_inode.i_blocks = info->block_size / 512;
+			new_file->f_inode.i_size = object->blocksize;
+			new_file->f_inode.i_blocks = object->blocksize / 512;
 
 			// insert "."
 			dir_dirent.inode = ino;
@@ -1847,7 +1837,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			dir_dirent.inode = parent_ino;
 			strcpy(dir_dirent.name, "..");
 			dir_dirent.name_len = strlen(dir_dirent.name);
-			dir_dirent.rec_len = info->block_size - prev_basep;
+			dir_dirent.rec_len = object->blocksize - prev_basep;
 			dir_dirent.file_type = EXT2_TYPE_DIR;
 			dotdot_befores.array[0] = init_head;
 			// we needn't depend on links_count++, but any later files in this dir probably will
@@ -1936,23 +1926,23 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 	int r;
 	uint32_t target = INVALID_BLOCK;
 
-	n_per_block = info->block_size / (sizeof(uint32_t));
+	n_per_block = object->blocksize / (sizeof(uint32_t));
 
 	//non block aligned offsets suck (aka aren't supported)
 
-	if (inode->i_size <= info->block_size)
+	if (inode->i_size <= object->blocksize)
 		blocknum = 0;
-	else if ( (inode->i_size % info->block_size) == 0)
-		blocknum = (inode->i_size / info->block_size) - 1;
+	else if ( (inode->i_size % object->blocksize) == 0)
+		blocknum = (inode->i_size / object->blocksize) - 1;
 	else
-		blocknum = inode->i_size / info->block_size;
+		blocknum = inode->i_size / object->blocksize;
 
 	if (blocknum < EXT2_NDIRECT)
 	{
 		target = inode->i_block[blocknum];
 		inode->i_block[blocknum] = 0;
-		if (inode->i_size > info->block_size)
-			inode->i_size = inode->i_size - info->block_size;
+		if (inode->i_size > object->blocksize)
+			inode->i_size = inode->i_size - object->blocksize;
 		else
 			inode->i_size = 0;
 
@@ -1969,18 +1959,18 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 		if (blocknum == 0)
 		{
 			indir_ptr = inode->i_block[EXT2_INDIRECT];
-			if (inode->i_size > info->block_size)
-				inode->i_size = inode->i_size - info->block_size;
+			if (inode->i_size > object->blocksize)
+				inode->i_size = inode->i_size - object->blocksize;
 			else
 				inode->i_size = 0;
 			r = _ext2_free_block(object, indir_ptr, head);
 			if (r < 0)
 				return INVALID_BLOCK;
-			inode->i_blocks -= info->block_size / 512;
+			inode->i_blocks -= object->blocksize / 512;
 			inode->i_block[EXT2_INDIRECT] = 0;
 		} else {
-			if (inode->i_size > info->block_size)
-				inode->i_size -= info->block_size;
+			if (inode->i_size > object->blocksize)
+				inode->i_size -= object->blocksize;
 			else
 				inode->i_size = 0;
 			//r = chdesc_create_byte(block_desc, info->ubd, blocknum * sizeof(uint32_t), sizeof(uint32_t), &zero, head);
@@ -2006,8 +1996,8 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 		double_indir_ptr = (blocknum % n_per_block);
 		target = double_block_nums[double_indir_ptr];
 
-		if (inode->i_size > info->block_size)
-			inode->i_size -= info->block_size;
+		if (inode->i_size > object->blocksize)
+			inode->i_size -= object->blocksize;
 		else
 			inode->i_size = 0;
 
@@ -2018,7 +2008,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 				r = _ext2_free_block(object, inode->i_block[EXT2_DINDIRECT], head);
 				if (r < 0)
 					return INVALID_BLOCK;
-				inode->i_blocks -= info->block_size / 512;
+				inode->i_blocks -= object->blocksize / 512;
 				inode->i_block[EXT2_DINDIRECT] = 0;
 			}
 			else
@@ -2033,7 +2023,7 @@ static uint32_t ext2_erase_block_ptr(LFS_t * object, EXT2_inode_t * inode, chdes
 			r = _ext2_free_block(object, indir_ptr, head);
 			if (r < 0)
 				return INVALID_BLOCK;
-			inode->i_blocks -= info->block_size / 512;
+			inode->i_blocks -= object->blocksize / 512;
 		}
 		else
 		{
@@ -2070,7 +2060,7 @@ static uint32_t ext2_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_
 	assert(f->f_type != TYPE_DIR);
 
 	// FIXME: need to do [d]indirect block count decrement, and write it, here!
-	f->f_inode.i_blocks -= info->block_size / 512;
+	f->f_inode.i_blocks -= object->blocksize / 512;
 	r = ext2_write_inode(info, f, head);
 	if (r < 0)
 		return INVALID_BLOCK;
@@ -2269,7 +2259,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 	uint16_t len;
 	int r;
 
-	if(base % info->block_size == 0)
+	if(base % object->blocksize == 0)
 	{
 		//if the base is at the start of a block, zero it out
 		EXT2_Dir_entry_t jump_dirent;
@@ -2289,7 +2279,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent, add jump dirent");
 		r = CALL(info->ubd, write_block, dirblock);
 		if(r >= 0)
-			ext2_mdirent_clear(mdir, mdirent, info->block_size);
+			ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 		else
 		{
 			assert(0); // must undo chdesc creation to recover
@@ -2309,14 +2299,14 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 
 	//update the length of the previous dirent:
 	len = mdirent->dirent.rec_len + ext2_mdirent_offset_prev(mdir, mdirent)->dirent.rec_len;
-	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % info->block_size, sizeof(len), (void *) &len, head);
+	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, head);
 	if(r < 0)
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
 	
 	r = CALL(info->ubd, write_block, dirblock);
 	if(r >= 0)
-		ext2_mdirent_clear(mdir, mdirent, info->block_size);
+		ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 	else
 	{
 		assert(0); // must undo chdesc creation to recover
@@ -2523,7 +2513,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = ext2_get_blocksize(object);
+		*((uint32_t *) data) = object->blocksize;
 	}
 	else if (id == KFS_FEATURE_DEVSIZE) {
 		if (size < sizeof(uint32_t))
@@ -2646,7 +2636,7 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 	set.array[0] = *head;
 	set.array[1] = NULL;
 	
-	if (name_len > info->block_size)
+	if (name_len > object->blocksize)
 		return -ENAMETOOLONG;
 
 	new_block_no = ext2_allocate_block(object, (fdesc_t *) f, PURPOSE_FILEDATA, &set.array[1]);
@@ -2825,7 +2815,7 @@ static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy)
 	bdesc_retain(f->f_inode_cache);
 
 	if (copy) {
-		offset &= info->block_size - 1;
+		offset &= info->_blocksize_ - 1;
 		memcpy(&f->f_inode, f->f_inode_cache->ddesc->data + offset, sizeof(EXT2_inode_t));
 	}
 
@@ -2866,7 +2856,7 @@ int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** t
 	offset = ((f->f_ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
 	block = info->groups[block_group].bg_inode_table + (offset >> (10 + info->super->s_log_block_size));
 	
-	offset &= info->block_size - 1;
+	offset &= info->_blocksize_ - 1;
 	r = chdesc_create_diff_set(f->f_inode_cache, info->ubd, offset, sizeof(EXT2_inode_t), &f->f_inode_cache->ddesc->data[offset], &f->f_inode, tail, befores);
 	if (r < 0)
 		return r;
@@ -2979,8 +2969,9 @@ static int ext2_load_super(LFS_t * lfs)
 	//now load the gdescs
 	uint32_t block, i;
 	uint32_t ngroupblocks;
-	info->block_size = 1024 << info->super->s_log_block_size;
-	info->block_descs = info->block_size / sizeof(EXT2_group_desc_t);
+	lfs->blocksize = 1024 << info->super->s_log_block_size;
+	info->_blocksize_ = lfs->blocksize;
+	info->block_descs = lfs->blocksize / sizeof(EXT2_group_desc_t);
 	int ngroups = (info->super->s_blocks_count / info->super->s_blocks_per_group);
 	if (info->super->s_blocks_count % info->super->s_blocks_per_group != 0)
 		ngroups++;
@@ -3001,10 +2992,10 @@ static int ext2_load_super(LFS_t * lfs)
 		if(!info->gdescs[i])
 			goto wb_fail2;
 		
-		if ( (sizeof(EXT2_group_desc_t) * ngroups) < (info->block_size*(i+1)) )
-			nbytes = (sizeof(EXT2_group_desc_t) * ngroups) % info->block_size;
+		if ( (sizeof(EXT2_group_desc_t) * ngroups) < (lfs->blocksize*(i+1)) )
+			nbytes = (sizeof(EXT2_group_desc_t) * ngroups) % lfs->blocksize;
 		else
-			nbytes = info->block_size;
+			nbytes = lfs->blocksize;
 		
 		if (!memcpy((EXT2_group_desc_t *) info->groups + (i * info->block_descs),
 		            info->gdescs[i]->ddesc->data, nbytes))
@@ -3047,7 +3038,7 @@ LFS_t * ext2(BD_t * block_device)
 	LFS_INIT(lfs, ext2, info);
 	OBJMAGIC(lfs) = EXT2_FS_MAGIC;
 
-	info->ubd = block_device;
+	info->ubd = lfs->blockdev = block_device;
 	info->write_head = CALL(block_device, get_write_head);
 
 	info->filemap = hash_map_create();

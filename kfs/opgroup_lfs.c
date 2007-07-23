@@ -17,16 +17,6 @@ static int opgroup_lfs_get_root(LFS_t * object, inode_t * ino)
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_root, ino);	
 }
 
-static uint32_t opgroup_lfs_get_blocksize(LFS_t * object)
-{
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_blocksize);
-}
-
-static BD_t * opgroup_lfs_get_blockdev(LFS_t * object)
-{
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_blockdev);
-}
-
 static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
@@ -324,6 +314,8 @@ LFS_t * opgroup_lfs(LFS_t * base)
 	LFS_INIT(lfs, opgroup_lfs, info);
 	
 	info->lfs = base;
+	lfs->blocksize = base->blocksize;
+	lfs->blockdev = base->blockdev;
 	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{

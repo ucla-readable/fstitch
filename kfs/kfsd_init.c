@@ -575,7 +575,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 BD_t * construct_cacheing(BD_t * bd, uint32_t cache_nblks, uint32_t bs)
 {
-	if (bs != CALL(bd, get_blocksize))
+	if (bs != bd->blocksize)
 	{
 		/* create a resizer */
 		if (! (bd = block_resizer_bd(bd, bs)) )

@@ -11,11 +11,6 @@
 
 #define DISK_NAME "disk"
 
-struct wd_info {
-	BD_t * bd;
-	uint32_t blocksize;
-};
-
 struct wd_fdesc {
 	fdesc_common_t * common;
 	fdesc_common_t base;
@@ -37,16 +32,6 @@ static int wholedisk_get_root(LFS_t * lfs, inode_t * ino)
 	return 0;
 }
 
-static uint32_t wholedisk_get_blocksize(LFS_t * object)
-{
-	return ((struct wd_info *) OBJLOCAL(object))->blocksize;
-}
-
-static BD_t * wholedisk_get_blockdev(LFS_t * object)
-{
-	return ((struct wd_info *) OBJLOCAL(object))->bd;
-}
-
 static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	/* always fail - no block accounting */
@@ -55,12 +40,12 @@ static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int pur
 
 static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, read_block, number, 1);
+	return CALL(object->blockdev, read_block, number, 1);
 }
 
 static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, synthetic_read_block, number, 1);
+	return CALL(object->blockdev, synthetic_read_block, number, 1);
 }
 
 static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t inode)
@@ -91,19 +76,18 @@ static uint32_t wholedisk_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
 	if(file != (fdesc_t *) &disk_fdesc)
 		return INVALID_BLOCK;
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, get_numblocks);
+	return object->blockdev->numblocks;
 }
 
 static uint32_t wholedisk_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	if(file != (fdesc_t *) &disk_fdesc)
 		return INVALID_BLOCK;
-	return offset / ((struct wd_info *) OBJLOCAL(object))->blocksize;
+	return offset / object->blocksize;
 }
 
 static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
 	const char * name;
 	size_t namelen;
 	
@@ -141,7 +125,7 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			 * destination with nulls which we can't do here! */
 			assert(namelen < DIRENT_MAXNAMELEN);
 			entry->d_namelen = namelen;
-			entry->d_filesize = state->blocksize * CALL(state->bd, get_numblocks);
+			entry->d_filesize = object->blocksize * object->blockdev->numblocks;
 			name = DISK_NAME;
 			break;
 		default:
@@ -200,19 +184,17 @@ static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * na
 
 static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
-	return CALL(((struct wd_info *) OBJLOCAL(object))->bd, write_block, block);
+	return CALL(object->blockdev, write_block, block);
 }
 
 static chdesc_t ** wholedisk_get_write_head(LFS_t * object)
 {
-	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
-	return CALL(state->bd, get_write_head);
+	return CALL(object->blockdev, get_write_head);
 }
 
 static int32_t wholedisk_get_block_space(LFS_t * object)
 {
-	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
-	return CALL(state->bd, get_block_space);
+	return CALL(object->blockdev, get_block_space);
 }
 
 static const bool wholedisk_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1};
@@ -229,14 +211,12 @@ static const bool * wholedisk_get_feature_array(LFS_t * object)
 
 static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, void * data)
 {
-	struct wd_info * state = (struct wd_info *) OBJLOCAL(object);
-
 	if (id == KFS_FEATURE_SIZE)
 	{
 		if (size < sizeof(size_t))
 			return -ENOMEM;
 		size = sizeof(size_t);
-		*((size_t *) data) = (inode == INODE_DISK) ? state->blocksize * CALL(state->bd, get_numblocks) : 0;
+		*((size_t *) data) = (inode == INODE_DISK) ? object->blocksize * object->blockdev->numblocks : 0;
 	}
 	else if (id == KFS_FEATURE_FILETYPE)
 	{
@@ -267,7 +247,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = CALL(state->bd, get_blocksize);
+		*((uint32_t *) data) = object->blockdev->blocksize;
 	}
 	else if (id == KFS_FEATURE_DEVSIZE)
 	{
@@ -275,7 +255,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
-		*((uint32_t *) data) = CALL(state->bd, get_numblocks);
+		*((uint32_t *) data) = object->blockdev->numblocks;
 	}
 	else
 		return -EINVAL;
@@ -313,9 +293,8 @@ static int wholedisk_destroy(LFS_t * lfs)
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct wd_info *) OBJLOCAL(lfs))->bd, lfs);
+	modman_dec_bd(lfs->blockdev, lfs);
 	
-	free(OBJLOCAL(lfs));
 	memset(lfs, 0, sizeof(*lfs));
 	free(lfs);
 	
@@ -324,24 +303,16 @@ static int wholedisk_destroy(LFS_t * lfs)
 
 LFS_t * wholedisk(BD_t * bd)
 {
-	struct wd_info * info;
 	LFS_t * lfs = malloc(sizeof(*lfs));
 
 	if(!lfs)
 		return NULL;
 	
-	info = malloc(sizeof(*info));
-	if(!info)
-	{
-		free(lfs);
-		return NULL;
-	}
-
-	LFS_INIT(lfs, wholedisk, info);
+	LFS_INIT(lfs, wholedisk, NULL);
 	OBJMAGIC(lfs) = WHOLEDISK_MAGIC;
 	
-	info->bd = bd;
-	info->blocksize = CALL(bd, get_blocksize);
+	lfs->blockdev = bd;
+	lfs->blocksize = bd->blocksize;
 	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{

@@ -17,33 +17,10 @@
 
 struct loop_info {
 	LFS_t * lfs;
-	BD_t * lfs_bd;
 	fdesc_t * file;
 	inode_t inode;
-	uint16_t blocksize;
 };
 typedef struct loop_info loop_info_t;
-
-static uint32_t loop_get_numblocks(BD_t * bd)
-{
-	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	return CALL(info->lfs, get_file_numblocks, info->file);
-}
-
-static uint16_t loop_get_blocksize(BD_t * bd)
-{
-	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	return info->blocksize;
-}
-
-static uint16_t loop_get_atomicsize(BD_t * bd)
-{
-	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
-	return CALL(info->lfs_bd, get_atomicsize);
-}
 
 static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 {
@@ -55,7 +32,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
 
-	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
+	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * bd->blocksize);
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
@@ -81,7 +58,7 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
 
-	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * info->blocksize);
+	lfs_bno = CALL(info->lfs, get_file_block, info->file, number * bd->blocksize);
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
@@ -107,7 +84,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 	int r;
 
 	loop_number = block->number;
-	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * info->blocksize);
+	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * bd->blocksize);
 	if(lfs_number == -1)
 		return -EINVAL;
 
@@ -116,7 +93,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block)
 		return -1;
 	bdesc_autorelease(wblock);
 
-	r = chdesc_push_down(bd, block, info->lfs_bd, wblock);
+	r = chdesc_push_down(bd, block, info->lfs->blockdev, wblock);
 	if(r < 0)
 		return r;
 
@@ -181,7 +158,11 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 	BD_INIT(bd, loop, info);
 
 	info->lfs = lfs;
-	info->lfs_bd = CALL(info->lfs, get_blockdev);
+	bd->atomicsize = info->lfs->blockdev->atomicsize;
+	bd->blocksize = info->lfs->blockdev->blocksize;
+	/* this prevents someone from dynamically growing the disk */
+	bd->numblocks = CALL(info->lfs, get_file_numblocks, info->file);
+	assert(bd->blocksize == info->lfs->blocksize);
 
 	info->inode = inode;
 
@@ -189,9 +170,8 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 	if (!info->file)
 		goto error_inode;
 
-	info->blocksize = CALL(info->lfs, get_blocksize);
-	bd->level = info->lfs_bd->level;
-	bd->graph_index = info->lfs_bd->graph_index + 1;
+	bd->level = info->lfs->blockdev->level;
+	bd->graph_index = info->lfs->blockdev->graph_index + 1;
 	if(bd->graph_index >= NBDINDEX)
 	{
 		DESTROY(bd);

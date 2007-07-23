@@ -118,8 +118,7 @@ struct journal_info {
 	BD_t * bd;
 	BD_t * journal;
 	chdesc_t * write_head;
-	uint16_t blocksize, cr_count;
-	uint32_t length;
+	uint16_t cr_count;
 	uint32_t trans_total_blocks;
 	uint32_t trans_data_blocks;
 	/* state information below */
@@ -174,21 +173,6 @@ static uint32_t trans_number_block_count(uint16_t blocksize)
 	return (bpt - 1 + npb) / (npb + 1);
 }
 
-static uint32_t journal_bd_get_numblocks(BD_t * object)
-{
-	return CALL(((struct journal_info *) OBJLOCAL(object))->bd, get_numblocks);
-}
-
-static uint16_t journal_bd_get_blocksize(BD_t * object)
-{
-	return ((struct journal_info *) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t journal_bd_get_atomicsize(BD_t * object)
-{
-	return CALL(((struct journal_info *) OBJLOCAL(object))->bd, get_atomicsize);
-}
-
 static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
@@ -197,7 +181,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	assert(count == 1);
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->length)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	return CALL(info->bd, read_block, number, count);
@@ -211,7 +195,7 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	assert(count == 1);
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->length)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
 	return CALL(info->bd, synthetic_read_block, number, count);
@@ -303,7 +287,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		bdesc_t * number_block;
 		size_t blocks = hash_map_size(info->block_map);
 		size_t last = blocks % info->trans_data_blocks;
-		uint16_t npb = numbers_per_block(info->blocksize);
+		uint16_t npb = numbers_per_block(object->blocksize);
 		uint32_t data;
 		int r;
 		
@@ -362,7 +346,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		assert(r >= 0);
 		
 		/* add the journal block number to the map */
-		number += trans_number_block_count(info->blocksize) + last;
+		number += trans_number_block_count(object->blocksize) + last;
 		Dprintf("%s(): map FS block %u to journal block %u in number block %u\n", __FUNCTION__, block->number, number, number_block->number);
 		r = hash_map_insert(info->block_map, (void *) block->number, (void *) number);
 		assert(r >= 0);
@@ -568,7 +552,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	assert(block->count == 1);
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->length)
+	if(block->number + block->count > object->numblocks)
 		return -EINVAL;
 	
 	if(info->recursion)
@@ -774,7 +758,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	chdesc_t * head = NULL;
 	int r = -ENOMEM;
 	
-	const uint32_t bnpb = numbers_per_block(info->blocksize);
+	const uint32_t bnpb = numbers_per_block(bd->blocksize);
 	const uint32_t transaction_number = transaction_start / info->trans_total_blocks;
 	
 	uint32_t block, bnb, db;
@@ -835,7 +819,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
 	/* db is "data block" number */
-	db = bnb + trans_number_block_count(info->blocksize);
+	db = bnb + trans_number_block_count(bd->blocksize);
 	for(block = 0; block < cr->nblocks; block += bnpb)
 	{
 		uint32_t index, max = MIN(bnpb, cr->nblocks - block);
@@ -1052,10 +1036,11 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	info->bd = disk;
 	info->journal = NULL;
 	info->write_head = NULL;
-	info->blocksize = CALL(disk, get_blocksize);
-	info->length = CALL(disk, get_numblocks);
-	info->trans_total_blocks = (TRANSACTION_SIZE + info->blocksize - 1) / info->blocksize;
-	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(info->blocksize);
+	bd->blocksize = disk->blocksize;
+	bd->numblocks = disk->numblocks;
+	bd->atomicsize = disk->atomicsize;
+	info->trans_total_blocks = (TRANSACTION_SIZE + bd->blocksize - 1) / bd->blocksize;
+	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(bd->blocksize);
 	info->keep_w = NULL;
 	info->wait = NULL;
 	info->hold = NULL;
@@ -1161,11 +1146,11 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 		return -EINVAL;
 	
 	/* make sure the journal device has the same blocksize as the disk */
-	if(info->blocksize != CALL(journal, get_blocksize))
+	if(bd->blocksize != journal->blocksize)
 		return -EINVAL;
 	
 	/* make sure the atomic size of the journal device is big enough */
-	if(sizeof(struct commit_record) > CALL(journal, get_atomicsize))
+	if(sizeof(struct commit_record) > journal->atomicsize)
 		return -EINVAL;
 	
 	level = journal->level;
@@ -1181,7 +1166,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	
 	info->journal = journal;
 	
-	info->cr_count = CALL(journal, get_numblocks) / info->trans_total_blocks;
+	info->cr_count = journal->numblocks / info->trans_total_blocks;
 	if(info->cr_count < 3)
 	{
 		printf("%s(): journal is too small (only %d slots)\n", __FUNCTION__, info->cr_count);
@@ -1190,7 +1175,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 		modman_dec_bd(journal, bd);
 		return -ENOSPC;
 	}
-	printf("%s(): journal is %uK (%dx%d blocks)\n", __FUNCTION__, info->cr_count * info->trans_total_blocks * info->blocksize / 1024, info->cr_count, info->trans_total_blocks);
+	printf("%s(): journal is %uK (%dx%d blocks)\n", __FUNCTION__, info->cr_count * info->trans_total_blocks * bd->blocksize / 1024, info->cr_count, info->trans_total_blocks);
 	
 	info->cr_retain = scalloc(info->cr_count, sizeof(*info->cr_retain));
 	if(!info->cr_retain)

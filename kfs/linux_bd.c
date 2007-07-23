@@ -61,11 +61,11 @@ static struct dentry * debug_writes_dentry;
 # include <linux/reboot.h>
 #endif
 
+#define LINUX_BLOCKSIZE 512
+
 struct linux_info {
 	struct block_device * bdev;
 	const char * path;
-	uint32_t blockcount;
-	uint16_t blocksize;
 	blockman_t * blockman;
 	
 	atomic_t outstanding_io_count;
@@ -96,21 +96,6 @@ struct linux_bio_private {
 
 DECLARE_POOL(bio_private, struct linux_bio_private);
 static int n_linux_instances;
-
-static uint32_t linux_bd_get_numblocks(BD_t * object)
-{
-	return ((struct linux_info*) OBJLOCAL(object))->blockcount;
-}
-
-static uint16_t linux_bd_get_blocksize(BD_t * object)
-{
-	return ((struct linux_info*) OBJLOCAL(object))->blocksize;
-}
-
-static uint16_t linux_bd_get_atomicsize(BD_t * object)
-{
-	return 512;
-}
 
 static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 {
@@ -163,7 +148,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 			len = 4096;
 			if(i + 1 == bio->bi_vcnt)
 			{
-				len = (private->count * info->blocksize) % 4096;
+				len = (private->count * LINUX_BLOCKSIZE) % 4096;
 				if(!len)
 					len = 4096;
 			}
@@ -244,7 +229,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 			return bdesc;
 		}
 	}
-	else if(!count || number + count > info->blockcount)
+	else if(!count || number + count > object->numblocks)
 	{
 		printk(KERN_ERR "bailing on read 1\n");
 		return NULL;
@@ -255,14 +240,14 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	info->dma_outstanding = 0;
 	spin_unlock_irqrestore(&info->dma_outstanding_lock, flags);
 	
-	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, info->blocksize);
+	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, LINUX_BLOCKSIZE);
 	TIMING_START(read);
 	for(j = 0; j < READ_AHEAD_COUNT; j++)
 	{
 		uint32_t j_number = number + (count * j);
 		datadesc_t * dd;
 	
-		if(j_number + count > info->blockcount)
+		if(j_number + count > object->numblocks)
 		{
 			blocks[j] = NULL;
 			continue;
@@ -289,13 +274,13 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		}
 		else
 		{
-			blocks[j] = bdesc_alloc(j_number, info->blocksize, count);
+			blocks[j] = bdesc_alloc(j_number, LINUX_BLOCKSIZE, count);
 			if(blocks[j] == NULL)
 				return NULL;
 			bdesc_autorelease(blocks[j]);
 		}
 		
-		vec_len = (count * info->blocksize + 4095) / 4096;
+		vec_len = (count * LINUX_BLOCKSIZE + 4095) / 4096;
 		assert(vec_len == 1);
 		
 		/* FIXME: these error returns do not clean up */
@@ -314,7 +299,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 				printk(KERN_ERR "alloc_page() failed\n");
 				return NULL;
 			}
-			bv->bv_len = info->blocksize * count;
+			bv->bv_len = LINUX_BLOCKSIZE * count;
 			bv->bv_offset = 0;
 		}
 		
@@ -332,7 +317,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		bio->bi_idx = 0;
 		bio->bi_vcnt = vec_len;
 		bio->bi_sector = j_number;
-		bio->bi_size = info->blocksize * count;
+		bio->bi_size = LINUX_BLOCKSIZE * count;
 		bio->bi_bdev = info->bdev;
 		bio->bi_rw = READ;
 		bio->bi_end_io = linux_bd_end_io;
@@ -404,10 +389,10 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	}
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->blockcount)
+	if(!count || number + count > object->numblocks)
 		return NULL;
 	
-	bdesc = bdesc_alloc(number, info->blocksize, count);
+	bdesc = bdesc_alloc(number, LINUX_BLOCKSIZE, count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -441,12 +426,12 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 #endif
 
 	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n", block->number, block->count);
-	if((info->blocksize * block->count) != block->ddesc->length)
+	if((LINUX_BLOCKSIZE * block->count) != block->ddesc->length)
 	{
 		kpanic("wrote block with bad length (%d bytes)\n", block->ddesc->length);
 		return -EINVAL;
 	}
-	if(block->number >= info->blockcount)
+	if(block->number >= object->numblocks)
 	{
 		kpanic("wrote bad block number\n");
 		return -EINVAL;
@@ -751,8 +736,9 @@ BD_t * linux_bd(const char * linux_bdev_path)
 	
 	BD_INIT(bd, linux_bd, info);
 	
-	info->blocksize = 512;
-	info->blockcount = info->bdev->bd_disk->capacity;
+	bd->blocksize = LINUX_BLOCKSIZE;
+	bd->numblocks = info->bdev->bd_disk->capacity;
+	bd->atomicsize = LINUX_BLOCKSIZE;
 	info->read_ahead_idx = 0;
 	for(r = 0; r < READ_AHEAD_BUFFER; r++)
 		info->read_ahead[r] = NULL;

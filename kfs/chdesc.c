@@ -2056,7 +2056,7 @@ static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
 
 int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
-	uint16_t atomic_size = CALL(owner, get_atomicsize);
+	uint16_t atomic_size = owner->atomicsize;
 	uint16_t init_offset = offset % atomic_size;
 	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
 	

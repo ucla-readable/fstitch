@@ -97,7 +97,7 @@ void * pc_ptable_init(BD_t * bd)
 	bdesc_t * mbr;
 	
 	/* make sure the block size is SECTSIZE */
-	if(CALL(bd, get_blocksize) != SECTSIZE)
+	if(bd->blocksize != SECTSIZE)
 		return NULL;
 	
 	info = malloc(sizeof(*info));
