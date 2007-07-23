@@ -1781,14 +1781,16 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 	}
 	
 	/* move merger to correct owner */
-	chdesc_unlink_level_changes(merger);
-	if (merger->level)
-		--block->nactive;
-	merger->level = owner->level;
-	chdesc_link_level_changes(merger);
-	if (merger->level)
-		++block->nactive;
-	bdesc_check_level(block);
+	if (merger->level != owner->level) {
+		if (!merger->level && owner->level)
+			++block->nactive;
+		else if (merger->level && !owner->level)
+			--block->nactive;
+		chdesc_unlink_level_changes(merger);
+		merger->level = owner->level;
+		chdesc_link_level_changes(merger);
+		bdesc_check_level(block);
+	}
 	
 	*tail = merger;
 	return 1;
@@ -2056,14 +2058,16 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 		memset(&bdesc->data[(*new)->byte.offset], 0, (*new)->byte.length);
 	
 	/* move merger to correct owner */
-	chdesc_unlink_level_changes(overlap);
-	if (overlap->level)
-		--overlap->block->nactive;
-	overlap->level = (*new)->level;
-	chdesc_link_level_changes(overlap);
-	if (overlap->level)
-		++overlap->block->nactive;
-	bdesc_check_level(overlap->block);
+	if (overlap->level != (*new)->level) {
+		if (!overlap->level && (*new)->level)
+			++overlap->block->nactive;
+		else if (overlap->level && !(*new)->level)
+			--overlap->block->nactive;
+		chdesc_unlink_level_changes(overlap);
+		overlap->level = (*new)->level;
+		chdesc_link_level_changes(overlap);
+		bdesc_check_level(overlap->block);
+	}
 	
 	chdesc_destroy(new);
 	*tail = overlap;
@@ -2485,14 +2489,16 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	((uint32_t *) overlap->block->data)[overlap->bit.offset] ^= xor;
 	
 	/* move merger to correct owner */
-	chdesc_unlink_level_changes(overlap);
-	if (overlap->level)
-		--overlap->block->nactive;
-	overlap->level = owner->level;
-	chdesc_link_level_changes(overlap);
-	if (overlap->level)
-		++overlap->block->nactive;
-	bdesc_check_level(overlap->block);
+	if (overlap->level != owner->level) {
+		if (!overlap->level && owner->level)
+			++overlap->block->nactive;
+		else if (overlap->level && !owner->level)
+			--overlap->block->nactive;
+		chdesc_unlink_level_changes(overlap);
+		overlap->level = owner->level;
+		chdesc_link_level_changes(overlap);
+		bdesc_check_level(overlap->block);
+	}
 	
 	*head = overlap;
 	return 1;
