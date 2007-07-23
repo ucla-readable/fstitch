@@ -310,6 +310,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	 * afters now, so we don't need to recreate it) */
 	if(before->head)
 	{
+#ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
 		if(!after->tail->befores->before.next)
 		{
 			/* this is the first before we are adding to after,
@@ -329,6 +330,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 		}
 		else
 			oh_well:
+#endif
 			/* notice that this can fail if there is a before cycle */
 			r = chdesc_add_depend(after->tail, before->head);
 	}
@@ -364,22 +366,30 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		while((state = hash_map_val_next(&it)))
 			if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
 			{
-				assert(state->opgroup->head);
-				r = chdesc_add_depend(state->opgroup->head, save_top);
-				if(r < 0)
+				assert(state->opgroup->head && state->opgroup->head_keep);
+				if(!state->opgroup->head->befores->before.next)
 				{
-					chdesc_t * failure_head;
-				  error_changed_state:
-					failure_head = state ? state->opgroup->head : NULL;
-					hash_map_it_init(&it, current_scope->id_map);
-					while((state = hash_map_val_next(&it)))
+					/* this is the first top we are adding to head,
+					 * so we can inherit this top as our head */
+					assert(state->opgroup->head->befores->before.desc == state->opgroup->head_keep);
+					assert(!state->opgroup->head->afters);
+					r = chdesc_add_depend(save_top, state->opgroup->head_keep);
+					if(r >= 0)
 					{
-						if(state->opgroup->head == failure_head)
-							break;
-						if(state == changed_state ? was_engaged : state->engaged)
-							chdesc_remove_depend(state->opgroup->head, save_top);
+						chdesc_remove_depend(state->opgroup->head, state->opgroup->head_keep);
+						chdesc_weak_release(&state->opgroup->head, 0);
+						chdesc_weak_retain(save_top, &state->opgroup->head, NULL, NULL);
+						KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, state->opgroup->head, "head");
 					}
-					return r;
+					else
+						goto oh_well;
+				}
+				else
+				{
+					oh_well:
+					r = chdesc_add_depend(state->opgroup->head, save_top);
+					if(r < 0)
+						kpanic("Can't recover from failure!");
 				}
 			}
 	}
@@ -387,13 +397,13 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	/* create new top and bottom */
 	r = chdesc_create_noop_list(NULL, &top_keep, NULL);
 	if(r < 0)
-		goto error_changed_state;
+		kpanic("Can't recover from failure!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top_keep, "top_keep");
 	chdesc_claim_noop(top_keep);
 	
 	r = chdesc_create_noop_list(NULL, &bottom, NULL);
 	if(r < 0)
-		goto error_top_keep;
+		kpanic("Can't recover from failure!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
 	
 	hash_map_it_init(&it, current_scope->id_map);
@@ -402,16 +412,13 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		{
 			if(state->opgroup->tail)
 				if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
-				{
-					state = NULL;
-					goto error_bottom;
-				}
+					kpanic("Can't recover from failure!");
 			count++;
 		}
 	
 	r = chdesc_create_noop_list(NULL, &top, top_keep, NULL);
 	if(r < 0)
-		goto error_bottom;
+		kpanic("Can't recover from failure!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
 	
 	if(!bottom->befores)
@@ -419,13 +426,17 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		/* let it get garbage collected */
 		bottom = NULL;
 	}
+	else if(!bottom->befores->before.next)
+	{
+		/* only one tail; inherit it for bottom! */
+		chdesc_t * old = bottom;
+		bottom = bottom->befores->before.desc;
+		chdesc_remove_depend(old, bottom);
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
+	}
 	
 	if(chdesc_weak_retain(bottom, &current_scope->bottom, NULL, NULL) < 0)
-	{
-		r = chdesc_weak_retain(save_top, &current_scope->top, NULL, NULL);
-		assert(r >= 0);
-		goto error_bottom;
-	}
+		kpanic("Can't recover from failure!");
 	
 	if(!count)
 	{
@@ -440,12 +451,6 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	current_scope->top_keep = top_keep;
 	
 	return 0;
-	
-  error_bottom:
-	chdesc_destroy(&bottom);
-  error_top_keep:
-	chdesc_destroy(&top_keep);
-	goto error_changed_state;
 }
 
 int opgroup_engage(opgroup_t * opgroup)
