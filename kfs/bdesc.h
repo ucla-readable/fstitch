@@ -17,6 +17,7 @@
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
+#include <kfs/debug.h>
 
 struct bdesc;
 typedef struct bdesc bdesc_t;
@@ -106,7 +107,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t nbytes);
 bdesc_t * bdesc_retain(bdesc_t *bdesc);
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
-void bdesc_release(bdesc_t ** bdesc);
+static inline void bdesc_release(bdesc_t **bdp) __attribute__((always_inline));
+void __bdesc_release(bdesc_t *bdesc);
 
 /* schedule the bdesc to be released at the end of the current run loop */
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc);
@@ -134,6 +136,17 @@ static inline void bdesc_check_level(bdesc_t *b) {
 #else
 #define bdesc_check_level(b) /* nada */
 #endif
+
+static inline void bdesc_release(bdesc_t **bdp)
+{
+	assert(bdp && *bdp);
+	assert((*bdp)->ref_count > (*bdp)->ar_count);
+	(*bdp)->ref_count--;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count, (*bdp)->ref_count);
+	if (!(*bdp)->ref_count)
+		__bdesc_release(*bdp);
+	*bdp = NULL;
+}
 
 #endif /* CONSTANTS_ONLY */
 

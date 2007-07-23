@@ -92,50 +92,43 @@ bdesc_t * bdesc_retain(bdesc_t * bdesc)
 }
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
-void bdesc_release(bdesc_t ** bdesc)
+void __bdesc_release(bdesc_t *bdesc)
 {
-	(*bdesc)->ref_count--;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdesc, *bdesc, (*bdesc)->ref_count, (*bdesc)->ar_count, (*bdesc)->ref_count);
-	assert((*bdesc)->ref_count >= (*bdesc)->ar_count);
-	if(!(*bdesc)->ref_count)
-	{
-		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, *bdesc, *bdesc);
-		uint16_t i;
-		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, *bdesc, *bdesc);
-		assert(!(*bdesc)->all_changes);
-		assert(!(*bdesc)->overlap1[0]);
-		/* XXX don't bother checking other overlap1[] */
+	assert(bdesc && bdesc->ref_count == 0 && bdesc->ar_count == 0);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, bdesc, bdesc);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, bdesc, bdesc);
+	assert(!bdesc->all_changes);
+	assert(!bdesc->overlap1[0]);
+	/* XXX don't bother checking other overlap1[] */
 #if BDESC_EXTERN_AFTER_COUNT
-		assert(!(*bdesc)->extern_after_count);
+	assert(!bdesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-		assert(!(*bdesc)->nrb);
+	assert(!bdesc->nrb);
 #endif
 #if 0
-		if((*bdesc)->all_changes || (*bdesc)->overlap1[0]) /* XXX don't bother checking other overlap1[] */
-			fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, *bdesc);
+	if(bdesc->all_changes || bdesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
+		fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
 #if BDESC_EXTERN_AFTER_COUNT
-		if((*bdesc)->extern_after_count)
-			fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, (*bdesc)->extern_after_count);
+	if(bdesc->extern_after_count)
+		fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, bdesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-		if((*bdesc)->nrb)
-			fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
+	if(bdesc->nrb)
+		fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
 #endif
 #endif
-		for(i = 0; i < NBDLEVEL; i++)
-			assert(!(*bdesc)->ready_changes[i].head);
-		if((*bdesc)->bit_changes) {
-			assert(hash_map_empty((*bdesc)->bit_changes));
-			hash_map_destroy((*bdesc)->bit_changes);
-		}
-		blockman_remove(*bdesc);
-		free((*bdesc)->data);
-		free_memset(*bdesc, sizeof(**bdesc));
-		bdesc_mem_free(*bdesc);
+	int i;
+	for(i = 0; i < NBDLEVEL; i++)
+		assert(!bdesc->ready_changes[i].head);
+	if(bdesc->bit_changes) {
+		assert(hash_map_empty(bdesc->bit_changes));
+		hash_map_destroy(bdesc->bit_changes);
 	}
-	/* released, so set pointer to NULL */
-	*bdesc = NULL;
+	blockman_remove(bdesc);
+	free(bdesc->data);
+	free_memset(bdesc, sizeof(*bdesc));
+	bdesc_mem_free(bdesc);
 }
 
 /* schedule the bdesc to be released at the end of the current run loop */
