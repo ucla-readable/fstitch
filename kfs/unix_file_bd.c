@@ -27,33 +27,6 @@ struct unix_file_info {
 	int user_name;
 };
 
-static int unix_file_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct unix_file_info * info = (struct unix_file_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d(%dblks)",
-					 info->blocksize, info->blockcount);
-			break;
-		case CONFIG_VERBOSE:
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "%d bytes x %d blocks, %s",
-					 info->blocksize, info->blockcount, info->fname);
-	}
-	return 0;
-}
-
-static int unix_file_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if(length > 0)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t unix_file_bd_get_numblocks(BD_t * object)
 {
 	return ((struct unix_file_info*) OBJLOCAL(object))->blockcount;

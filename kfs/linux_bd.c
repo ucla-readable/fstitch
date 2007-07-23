@@ -97,31 +97,6 @@ struct linux_bio_private {
 DECLARE_POOL(bio_private, struct linux_bio_private);
 static int n_linux_instances;
 
-static int linux_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct linux_info * info = (struct linux_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%s", info->path);
-			break;
-		case CONFIG_VERBOSE:
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "%s: %d bytes x %d blocks", info->path, info->blocksize, info->blockcount);
-	}
-	return 0;
-}
-
-static int linux_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if(length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t linux_bd_get_numblocks(BD_t * object)
 {
 	return ((struct linux_info*) OBJLOCAL(object))->blockcount;

@@ -379,22 +379,6 @@ static void ufs_super_wb_sync_callback(void * arg)
 		printf("%s failed\n", __FUNCTION__);
 }
 
-static int ufs_super_wb_get_config(void * object, int level, char * string,
-		size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_super_wb_get_status(void * object, int level, char * string,
-		size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int ufs_super_wb_destroy(UFSmod_super_t * obj)
 {
 	struct local_info * linfo = (struct local_info *) OBJLOCAL(obj);

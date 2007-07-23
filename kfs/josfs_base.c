@@ -255,28 +255,6 @@ static int dir_lookup(LFS_t * object, JOSFS_File_t* dir, const char* name, JOSFS
 	return -ENOENT;
 }
 
-static int josfs_get_config(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int josfs_get_status(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != JOSFS_FS_MAGIC)
-		return -EINVAL;
-	
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int josfs_get_root(LFS_t * object, inode_t * ino)
 {
 	*ino = INODE_ROOT;

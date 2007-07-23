@@ -18,33 +18,6 @@ struct resize_info {
 	uint32_t block_count;
 };
 
-static int block_resizer_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct resize_info * info = (struct resize_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_VERBOSE:
-			snprintf(string, length, "original: %d, converted: %d, count: %d, atomic: %d", info->original_size, info->converted_size, info->block_count, info->atomic_size);
-			break;
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d to %d", info->original_size, info->converted_size);
-			break;
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "original: %d, converted: %d, count: %d", info->original_size, info->converted_size, info->block_count);
-	}
-	return 0;
-}
-
-static int block_resizer_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t block_resizer_bd_get_numblocks(BD_t * object)
 {
 	return ((struct resize_info *) OBJLOCAL(object))->block_count;

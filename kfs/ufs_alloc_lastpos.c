@@ -104,20 +104,6 @@ static uint32_t ufs_alloc_lastpos_find_free_inode(UFSmod_alloc_t * object, fdesc
 	return INVALID_BLOCK;
 }
 
-static int ufs_alloc_lastpos_get_config(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_alloc_lastpos_get_status(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int ufs_alloc_lastpos_destroy(UFSmod_alloc_t * obj)
 {
 	memset(obj, 0, sizeof(*obj));

@@ -66,26 +66,6 @@ static int icase_ignore (CFS_t * object, inode_t parent, const char * name, char
 //
 // icase_cfs
 
-static int icase_get_config(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != ICASE_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int icase_get_status(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != ICASE_MAGIC)
-		return -EINVAL;
-	snprintf(string, length, "case insensitivity is on!");
-	return 0;
-}
-
 static int icase_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);

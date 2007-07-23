@@ -22,31 +22,6 @@ struct mem_info {
 	blockman_t * blockman;
 };
 
-static int mem_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct mem_info * info = (struct mem_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d(%dblks)", info->blocksize, info->blockcount);
-			break;
-		case CONFIG_VERBOSE:
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "%d bytes x %d blocks", info->blocksize, info->blockcount);
-	}
-	return 0;
-}
-
-static int mem_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t mem_bd_get_numblocks(BD_t * object)
 {
 	return ((struct mem_info*) OBJLOCAL(object))->blockcount;

@@ -46,44 +46,6 @@ struct cache_info {
 	uint16_t blocksize;
 };
 
-static int wb2_cache_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, soft dirty: %d/%d, soft blocks: %d", info->blocksize, info->soft_dblocks_low, info->soft_dblocks_high, info->soft_blocks);
-			break;
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d x %d", info->blocksize, info->soft_blocks);
-			break;
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "blocksize: %d, soft blocks: %d", info->blocksize, info->soft_blocks);
-	}
-	return 0;
-}
-
-static int wb2_cache_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case STATUS_VERBOSE:
-			snprintf(string, length, "dirty: %d, blocks: %d, soft dirty: %d", info->dblocks, info->blocks, info->soft_dblocks);
-			break;
-		case STATUS_BRIEF:
-			snprintf(string, length, "%d", info->blocks);
-			break;
-		case STATUS_NORMAL:
-		default:
-			snprintf(string, length, "blocks: %d",  info->blocks);
-	}
-	return 0;
-}
-
 static uint32_t wb2_cache_bd_get_numblocks(BD_t * object)
 {
 	return ((struct cache_info *) OBJLOCAL(object))->blockcount;

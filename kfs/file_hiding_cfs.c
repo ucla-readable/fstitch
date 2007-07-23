@@ -108,28 +108,6 @@ static void file_hiding_fdesc_destroy(file_hiding_fdesc_t * fhf)
 //
 // file_hiding_cfs
 
-static int file_hiding_get_config(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int file_hiding_get_status(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != FILE_HIDING_MAGIC)
-		return -EINVAL;
-	file_hiding_state_t * state = (file_hiding_state_t *) OBJLOCAL(cfs);
-
-	snprintf(string, length, "open fdescs: %u", state->nopen);
-	return 0;
-}
-
 static int file_hiding_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);

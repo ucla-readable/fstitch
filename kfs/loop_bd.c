@@ -24,33 +24,6 @@ struct loop_info {
 };
 typedef struct loop_info loop_info_t;
 
-
-static int loop_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct loop_info * info = (struct loop_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_VERBOSE:
-			snprintf(string, length, "inode: %d, blocksize: %d, count: %d", info->inode, info->blocksize, CALL(info->lfs, get_file_numblocks, info->file));
-			break;
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d", info->inode);
-			break;
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "inode: %d, blocksize: %d", info->inode, info->blocksize);
-	}
-	return 0;
-}
-
-static int loop_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
 static uint32_t loop_get_numblocks(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);

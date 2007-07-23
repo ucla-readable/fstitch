@@ -96,28 +96,6 @@ static void uhfs_fdesc_close(struct uhfs_state * state, uhfs_fdesc_t * uf)
 
 
 
-static int uhfs_get_config(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != UHFS_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int uhfs_get_status(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != UHFS_MAGIC)
-		return -EINVAL;
-	struct uhfs_state * state = (struct uhfs_state *) OBJLOCAL(cfs);
-	
-	snprintf(string, length, "open files: %u", state->nopen);
-	return 0;
-}
-
 static int uhfs_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);

@@ -12,22 +12,6 @@ struct unlink_info {
 	chdesc_t ** write_head;
 };
 
-static int unlink_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	/* no config to report */
-	if(length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int unlink_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if(length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t unlink_bd_get_numblocks(BD_t * object)
 {
 	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, get_numblocks);

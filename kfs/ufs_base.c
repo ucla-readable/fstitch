@@ -501,28 +501,6 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 	return existing_file;
 }
 
-static int ufs_get_config(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != UFS_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_get_status(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != UFS_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t ufs_get_blocksize(LFS_t * object)
 {
 	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);

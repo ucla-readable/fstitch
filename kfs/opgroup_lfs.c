@@ -12,20 +12,6 @@ struct opgroup_info {
 
 /* TODO: convert this file to use get_write_head instead of opgroup_prepare_head? */
 
-static int opgroup_lfs_get_config(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int opgroup_lfs_get_status(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int opgroup_lfs_get_root(LFS_t * object, inode_t * ino)
 {
 	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_root, ino);	

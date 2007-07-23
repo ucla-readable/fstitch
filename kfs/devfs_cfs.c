@@ -107,28 +107,6 @@ static devfs_fdesc_t * devfd_lookup_inode(devfs_state_t * state, inode_t inode)
 }
 
 
-static int devfs_get_config(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
-		return -EINVAL;
-
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int devfs_get_status(void * object, int level, char * string, size_t length)
-{
-	CFS_t * cfs = (CFS_t *) object;
-	if(OBJMAGIC(cfs) != DEVFS_MAGIC)
-		return -EINVAL;
-	devfs_state_t * state = (devfs_state_t *) OBJLOCAL(cfs);
-	
-	snprintf(string, length, "devices: %u", vector_size(state->bd_table));
-	return 0;
-}
-
 static bool devfs_bd_in_use(BD_t * bd)
 {
 	int i;

@@ -816,28 +816,6 @@ static uint32_t count_free_space(LFS_t * object)
 	return info->super->s_free_blocks_count;
 }
 
-static int ext2_get_config(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != EXT2_FS_MAGIC)
-		return -EINVAL;
-	
-	if(length > 0)
-		string[0] = 0;
-	return 0;
-}
-
-static int ext2_get_status(void * object, int level, char * string, size_t length)
-{
-	LFS_t * lfs = (LFS_t *) object;
-	if(OBJMAGIC(lfs) != EXT2_FS_MAGIC)
-		return -EINVAL;
-	
-	if(length > 0)
-		string[0] = 0;
-	return 0;
-}
-
 static int ext2_get_root(LFS_t * object, inode_t * ino)
 {
 	*ino = EXT2_ROOT_INO;

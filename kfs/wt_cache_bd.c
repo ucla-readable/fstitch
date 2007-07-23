@@ -27,33 +27,6 @@ struct cache_info {
 	uint16_t blocksize;
 };
 
-static int wt_cache_bd_get_config(void * object, int level, char * string, size_t length)
-{
-	BD_t * bd = (BD_t *) object;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
-	switch(level)
-	{
-		case CONFIG_VERBOSE:
-			snprintf(string, length, "blocksize: %d, size: %d, contention: x%d", info->blocksize, info->size, (CALL(info->bd, get_numblocks) + info->size - 1) / info->size);
-			break;
-		case CONFIG_BRIEF:
-			snprintf(string, length, "%d x %d", info->blocksize, info->size);
-			break;
-		case CONFIG_NORMAL:
-		default:
-			snprintf(string, length, "blocksize: %d, size: %d", info->blocksize, info->size);
-	}
-	return 0;
-}
-
-static int wt_cache_bd_get_status(void * object, int level, char * string, size_t length)
-{
-	/* no status to report */
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static uint32_t wt_cache_bd_get_numblocks(BD_t * object)
 {
 	return CALL(((struct cache_info *) OBJLOCAL(object))->bd, get_numblocks);

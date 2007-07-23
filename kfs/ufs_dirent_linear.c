@@ -324,20 +324,6 @@ static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	return write_dirent(object, file, e, basep, head);
 }
 
-static int ufs_dirent_linear_get_config(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
-static int ufs_dirent_linear_get_status(void * object, int level, char * string, size_t length)
-{
-	if (length >= 1)
-		string[0] = 0;
-	return 0;
-}
-
 static int ufs_dirent_linear_destroy(UFSmod_dirent_t * obj)
 {
 	memset(obj, 0, sizeof(*obj));

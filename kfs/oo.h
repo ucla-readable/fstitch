@@ -22,26 +22,14 @@
 	OBJLOCAL(object) = info; \
 	OBJFLAGS(object) = 0; \
 	OBJMAGIC(object) = 0; \
-	OBJASSIGN(object, module, get_config); \
-	OBJASSIGN(object, module, get_status); \
 	DESTRUCTOR(object, module, destroy); \
 }
 
 /* values for OBJFLAGS */
 #define OBJ_PERSISTENT 0x01
 
-/* config and status levels */
-#define CONFIG_VERBOSE 0
-#define CONFIG_NORMAL 1
-#define CONFIG_BRIEF 2
-#define STATUS_VERBOSE 0
-#define STATUS_NORMAL 1
-#define STATUS_BRIEF 2
-
 struct object {
 	uint32_t flags, magic;
-	DECLARE(void, int, get_config, int level, char * string, size_t length);
-	DECLARE(void, int, get_status, int level, char * string, size_t length);
 	int (*__destroy)(void * object);
 	void * local;
 };
