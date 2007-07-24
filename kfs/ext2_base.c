@@ -2328,7 +2328,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		r = chdesc_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, &head);
 		if(r < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent, add jump dirent");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent '%s', add jump dirent", mdirent->dirent.name);
 		r = CALL(info->ubd, write_block, dirblock, base_blockno);
 		if(r >= 0)
 		{
@@ -2357,7 +2357,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, &head);
 	if(r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent '%s'", mdirent->dirent.name);
 	
 	r = CALL(info->ubd, write_block, dirblock, prev_base_blockno);
 	if(r >= 0)
