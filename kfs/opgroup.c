@@ -23,10 +23,10 @@
 
 struct opgroup {
 	opgroup_id_t id;
-	chdesc_t * head;
+	chweakref_t head;
 	/* head_keep stays until we get an after */
 	chdesc_t * head_keep;
-	chdesc_t * tail;
+	chweakref_t tail;
 	/* tail_keep stays until we are released */
 	chdesc_t * tail_keep;
 	uint32_t references:30;
@@ -51,7 +51,7 @@ struct opgroup_scope {
 	chdesc_t * top;
 	/* top_keep stays until we change the engaged set */
 	chdesc_t * top_keep;
-	chdesc_t * bottom;
+	chweakref_t bottom;
 	int engaged_count;
 };
 
@@ -71,7 +71,7 @@ opgroup_scope_t * opgroup_scope_create(void)
 		scope->next_id = 1;
 		scope->top = NULL;
 		scope->top_keep = NULL;
-		scope->bottom = NULL;
+		WEAK_INIT(scope->bottom);
 		scope->engaged_count = 0;
 		scope->id_map = hash_map_create();
 		if(!scope->id_map)
@@ -103,7 +103,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 			goto error_top_keep;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
 	}
-	if(chdesc_weak_retain(scope->bottom, &copy->bottom, NULL, NULL) < 0)
+	if(chdesc_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL) < 0)
 		goto error_top_keep;
 	
 	/* iterate over opgroups and increase reference counts */
@@ -197,6 +197,8 @@ opgroup_t * opgroup_create(int flags)
 {
 	opgroup_t * op;
 	opgroup_state_t * state;
+	chdesc_t * tail;
+	chdesc_t * head;
 	
 	if(!current_scope)
 		return NULL;
@@ -216,6 +218,8 @@ opgroup_t * opgroup_create(int flags)
 		goto error_op;
 	
 	op->id = current_scope->next_id++;
+	WEAK_INIT(op->head);
+	WEAK_INIT(op->tail);
 	op->references = 1;
 	op->has_data = 0;
 	op->is_released = 0;
@@ -236,16 +240,16 @@ opgroup_t * opgroup_create(int flags)
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail_keep, "tail_keep");
 	chdesc_claim_noop(op->tail_keep);
 	
-	if(chdesc_create_noop_list(NULL, &op->tail, op->tail_keep, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, &tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail, "tail");
-	if(chdesc_weak_retain(op->tail, &op->tail, NULL, NULL) < 0)
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, tail, "tail");
+	if(chdesc_weak_retain(tail, &op->tail, NULL, NULL) < 0)
 		goto error_tail;
 	
-	if(chdesc_create_noop_list(NULL, &op->head, op->head_keep, NULL) < 0)
+	if(chdesc_create_noop_list(NULL, &head, op->head_keep, NULL) < 0)
 		goto error_tail;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head, "head");
-	if(chdesc_weak_retain(op->head, &op->head, NULL, NULL) < 0)
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "head");
+	if(chdesc_weak_retain(head, &op->head, NULL, NULL) < 0)
 		goto error_head;
 	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
@@ -254,12 +258,11 @@ opgroup_t * opgroup_create(int flags)
 	return op;
 	
 error_head:
-	chdesc_remove_depend(op->head, op->head_keep);
-	chdesc_remove_depend(op->head, op->tail);
-	chdesc_destroy(&op->head);
+	chdesc_remove_depend(head, op->head_keep);
+	chdesc_destroy(&head);
 error_tail:
-	chdesc_remove_depend(op->tail, op->tail_keep);
-	chdesc_destroy(&op->tail);
+	chdesc_remove_depend(tail, op->tail_keep);
+	chdesc_destroy(&tail);
 error_tail_keep:
 	chdesc_destroy(&op->tail_keep);
 error_head_keep:
@@ -293,14 +296,14 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 		return -EINVAL;
 	/* we only create head => tail directly if we need to: when we are adding
 	 * an after to an opgroup and it still has both its head and tail */
-	if(before->head && before->tail)
+	if(WEAK(before->head) && WEAK(before->tail))
 	{
 		/* for efficiency, when that head and tail are not already connected
 		 * transitively: that is, head has only head_keep as a before */
-		if(before->head->befores && !before->head->befores->before.next &&
-		   before->head->befores->before.desc == before->head_keep)
+		if(WEAK(before->head)->befores && !WEAK(before->head)->befores->before.next &&
+		   WEAK(before->head)->befores->before.desc == before->head_keep)
 		{
-			r = chdesc_add_depend(before->head, before->tail);
+			r = chdesc_add_depend(WEAK(before->head), WEAK(before->tail));
 			if(r < 0)
 				return r;
 		}
@@ -308,22 +311,22 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	/* it might not have a head if it's already been written to disk */
 	/* (in this case, it won't be engaged again since it will have
 	 * afters now, so we don't need to recreate it) */
-	if(before->head)
+	if(WEAK(before->head))
 	{
 #ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
-		if(!after->tail->befores->before.next)
+		if(!WEAK(after->tail)->befores->before.next)
 		{
 			/* this is the first before we are adding to after,
 			 * so we can inherit before's head as our tail */
-			assert(after->tail->befores->before.desc == after->tail_keep);
-			assert(!after->tail->afters);
-			r = chdesc_add_depend(before->head, after->tail_keep);
+			assert(WEAK(after->tail)->befores->before.desc == after->tail_keep);
+			assert(!WEAK(after->tail)->afters);
+			r = chdesc_add_depend(WEAK(before->head), after->tail_keep);
 			if(r >= 0)
 			{
-				chdesc_remove_depend(after->tail, after->tail_keep);
+				chdesc_remove_depend(WEAK(after->tail), after->tail_keep);
 				chdesc_weak_release(&after->tail, 0);
-				chdesc_weak_retain(before->head, &after->tail, NULL, NULL);
-				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, after->tail, "tail");
+				chdesc_weak_retain(WEAK(before->head), &after->tail, NULL, NULL);
+				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(after->tail), "tail");
 			}
 			else
 				goto oh_well;
@@ -332,7 +335,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 			oh_well:
 #endif
 			/* notice that this can fail if there is a before cycle */
-			r = chdesc_add_depend(after->tail, before->head);
+			r = chdesc_add_depend(WEAK(after->tail), WEAK(before->head));
 	}
 	if(r >= 0)
 	{
@@ -366,20 +369,20 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		while((state = hash_map_val_next(&it)))
 			if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
 			{
-				assert(state->opgroup->head && state->opgroup->head_keep);
-				if(!state->opgroup->head->befores->before.next)
+				assert(WEAK(state->opgroup->head) && state->opgroup->head_keep);
+				if(!WEAK(state->opgroup->head)->befores->before.next)
 				{
 					/* this is the first top we are adding to head,
 					 * so we can inherit this top as our head */
-					assert(state->opgroup->head->befores->before.desc == state->opgroup->head_keep);
-					assert(!state->opgroup->head->afters);
+					assert(WEAK(state->opgroup->head)->befores->before.desc == state->opgroup->head_keep);
+					assert(!WEAK(state->opgroup->head)->afters);
 					r = chdesc_add_depend(save_top, state->opgroup->head_keep);
 					if(r >= 0)
 					{
-						chdesc_remove_depend(state->opgroup->head, state->opgroup->head_keep);
+						chdesc_remove_depend(WEAK(state->opgroup->head), state->opgroup->head_keep);
 						chdesc_weak_release(&state->opgroup->head, 0);
 						chdesc_weak_retain(save_top, &state->opgroup->head, NULL, NULL);
-						KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, state->opgroup->head, "head");
+						KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(state->opgroup->head), "head");
 					}
 					else
 						goto oh_well;
@@ -387,7 +390,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 				else
 				{
 					oh_well:
-					r = chdesc_add_depend(state->opgroup->head, save_top);
+					r = chdesc_add_depend(WEAK(state->opgroup->head), save_top);
 					if(r < 0)
 						kpanic("Can't recover from failure!");
 				}
@@ -410,8 +413,8 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	while((state = hash_map_val_next(&it)))
 		if(state->engaged)
 		{
-			if(state->opgroup->tail)
-				if(chdesc_add_depend(bottom, state->opgroup->tail) < 0)
+			if(WEAK(state->opgroup->tail))
+				if(chdesc_add_depend(bottom, WEAK(state->opgroup->tail)) < 0)
 					kpanic("Can't recover from failure!");
 			count++;
 		}
@@ -619,35 +622,35 @@ int opgroup_engaged(void)
 
 int opgroup_prepare_head(chdesc_t ** head)
 {
-	if(!current_scope || !current_scope->bottom)
+	if(!current_scope || !WEAK(current_scope->bottom))
 		return 0;
 	
 	if(*head)
 	{
 		int r;
 		/* heuristic: does *head already depend on bottom as the first dependency? */
-		if((*head)->befores && (*head)->befores->before.desc == current_scope->bottom)
+		if((*head)->befores && (*head)->befores->before.desc == WEAK(current_scope->bottom))
 			return 0;
 		/* heuristic: does bottom already depend on *head as the first dependency? */
-		if(current_scope->bottom->befores && current_scope->bottom->befores->before.desc == *head)
+		if(WEAK(current_scope->bottom)->befores && WEAK(current_scope->bottom)->befores->before.desc == *head)
 		{
-			*head = current_scope->bottom;
+			*head = WEAK(current_scope->bottom);
 			return 0;
 		}
-		r = chdesc_create_noop_list(NULL, head, current_scope->bottom, *head, NULL);
+		r = chdesc_create_noop_list(NULL, head, WEAK(current_scope->bottom), *head, NULL);
 		if(r < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");
 	}
 	else
-		*head = current_scope->bottom;
+		*head = WEAK(current_scope->bottom);
 	
 	return 0;
 }
 
 int opgroup_finish_head(chdesc_t * head)
 {
-	if(!current_scope || !current_scope->top || !head || head == current_scope->bottom)
+	if(!current_scope || !current_scope->top || !head || head == WEAK(current_scope->bottom))
 		return 0;
 	return chdesc_add_depend(current_scope->top, head);
 }

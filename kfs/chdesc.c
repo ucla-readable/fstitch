@@ -197,7 +197,6 @@ static int account_init_all(void)
 	//account_init("nnrb", &act_nnrb);
 	account_init("data", 1, &act_data);
 	account_init("ndeps", sizeof(chdepdesc_t), &act_ndeps);
-	account_init("nwrefs", sizeof(chrefdesc_t), &act_nwrefs);
 	return kfsd_register_shutdown_module(account_print_all, NULL, SHUTDOWN_POSTMODULES);
 }
 #else
@@ -212,13 +211,11 @@ static int account_init_all(void)
 
 DECLARE_POOL(chdesc, chdesc_t);
 DECLARE_POOL(chdepdesc, chdepdesc_t);
-DECLARE_POOL(chrefdesc, chrefdesc_t);
 
 static void chpools_free_all(void * ignore)
 {
 	chdesc_free_all();
 	chdepdesc_free_all();
-	chrefdesc_free_all();
 }
 
 
@@ -339,7 +336,6 @@ static void chdesc_unlink_overlap(chdesc_t *chdesc)
 static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 {
 	chdesc_t * chdesc;
-	hash_map_elt_t * elt;
 	void * key = (void *) (uint32_t) offset;
 	int r;
 	assert(block);
@@ -368,8 +364,6 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 		chdesc_destroy(&chdesc);
 		return NULL;
 	}
-	elt = hash_map_find_eltp(block->ddesc->bit_changes, key);
-	assert(elt);
 	
 	/* we don't really need a flag for this, since we could just use the
 	 * noop.bit_changes field to figure it out... but that would be error-prone */
@@ -377,14 +371,6 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 	chdesc->flags |= CHDESC_BIT_NOOP;
 	chdesc->noop.bit_changes = block->ddesc->bit_changes;
 	chdesc->noop.hash_key = key;
-	
-	/* FIXME: we could use the weak reference callbacks here... */
-	if(chdesc_weak_retain(chdesc, (chdesc_t **) &elt->val, NULL, NULL) < 0)
-	{
-		hash_map_erase(block->ddesc->bit_changes, key);
-		chdesc_destroy(&chdesc);
-		return NULL;
-	}
 	
 	return chdesc;
 }
@@ -1362,14 +1348,14 @@ static chdesc_t * select_chdesc_merger(const bdesc_t * block)
 		CHDESC_NRB_MERGE_STATS_LOG(1);
 		return NULL;
 	}
-	if(!block->ddesc->nrb)
+	if(!WEAK(block->ddesc->nrb))
 	{
 		CHDESC_NRB_MERGE_STATS_LOG(2);
 		return NULL;
 	}
 	CHDESC_NRB_MERGE_STATS_LOG(0);
-	assert(!(block->ddesc->nrb->flags & CHDESC_INFLIGHT));
-	return block->ddesc->nrb;
+	assert(!(WEAK(block->ddesc->nrb)->flags & CHDESC_INFLIGHT));
+	return WEAK(block->ddesc->nrb);
 }
 
 static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, chdepdesc_t * depbefore)
@@ -1623,7 +1609,7 @@ static void merge_rbs(bdesc_t * block)
 # endif
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, merger, CHDESC_OVERLAP);
 	merger->flags &= ~CHDESC_OVERLAP;
-	assert(!block->ddesc->nrb);
+	assert(!WEAK(block->ddesc->nrb));
 	r = chdesc_weak_retain(merger, &block->ddesc->nrb, NULL, NULL);
 	assert(r >= 0);
 	//account_update(&act_nnrb, 1);
@@ -1732,7 +1718,7 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 #if CHDESC_NRB
 	chdesc_t * merger;
 # if CHDESC_MERGE_RBS_NRB
-	if(!new_chdescs_require_data(block) && !block->ddesc->nrb)
+	if(!new_chdescs_require_data(block) && !WEAK(block->ddesc->nrb))
 		merge_rbs(block);
 # endif
 	if(!(merger = select_chdesc_merger(block)))
@@ -1841,9 +1827,9 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 #if CHDESC_RB_NRB_READY
 				/* TODO: does this actually require CHDESC_RB_NRB_READY? */
 				/* nrb depends on nothing on this block so an above is ok */
-				if(before == before->block->ddesc->nrb)
+				if(before == WEAK(before->block->ddesc->nrb))
 					continue;
-				if(overlap == before->block->ddesc->nrb)
+				if(overlap == WEAK(before->block->ddesc->nrb))
 				{
 					overlap = before;
 					continue;
@@ -2238,7 +2224,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		else
 			memset(&chdesc->block->ddesc->data[offset], 0, length);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
-		assert(!block->ddesc->nrb);
+		assert(!WEAK(block->ddesc->nrb));
 		if((r = chdesc_weak_retain(chdesc, &block->ddesc->nrb, NULL, NULL)) < 0)
 		{
 			chdesc_destroy(&chdesc);
@@ -2419,7 +2405,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 			/* NOTE: this wouldn't need CHDESC_RB_NRB_READY if an NRB
 			 * CHDESC_OVERLAPed the underlying bits */
 			/* nrb is guaranteed to not depend on overlap */
-			if(before == overlap->block->ddesc->nrb)
+			if(before == WEAK(overlap->block->ddesc->nrb))
 				continue;
 #endif
 			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
@@ -2522,7 +2508,9 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 			return 0;
 	}
 # if CHDESC_NRB
-	else if(block->ddesc->nrb && is_sole_inram_chdesc(block->ddesc->nrb) && bit_merge_overlap_ok_head(*head, block->ddesc->nrb))
+	else if(WEAK(block->ddesc->nrb) &&
+	        is_sole_inram_chdesc(WEAK(block->ddesc->nrb)) &&
+	        bit_merge_overlap_ok_head(*head, WEAK(block->ddesc->nrb)))
 	{
 		uint32_t data = ((uint32_t *) block->ddesc->data)[offset] ^ xor;
 		DEFINE_CHDESC_PASS_SET(set, 1, NULL);
@@ -2926,7 +2914,7 @@ void chdesc_set_inflight(chdesc_t * chdesc)
 #if CHDESC_NRB
 	/* New chdescs cannot be merged into an inflight chdesc so allow
 	 * for a new NRB */
-	if(chdesc == chdesc->block->ddesc->nrb)
+	if(chdesc == WEAK(chdesc->block->ddesc->nrb))
 		(void) chdesc_weak_release(&chdesc->block->ddesc->nrb, 0);
 #endif
 	
@@ -2942,18 +2930,9 @@ static void chdesc_weak_collect(chdesc_t * chdesc)
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_WEAK_COLLECT, chdesc);
 	while(chdesc->weak_refs)
 	{
-		/* in theory, this is all that is necessary... */
-		if(*chdesc->weak_refs->desc == chdesc)
-			chdesc_weak_release(chdesc->weak_refs->desc, 1);
-		else
-		{
-			/* ...but check for this anyway */
-			chrefdesc_t * next = chdesc->weak_refs;
-			printf("%s: (%s:%d): dangling chdesc weak reference! (of %p)\n", __FUNCTION__, __FILE__, __LINE__, chdesc);
-			chdesc->weak_refs = next->next;
-			chrefdesc_free(next);
-			account_update(&act_nwrefs, -1);
-		}
+		assert(chdesc->weak_refs->chdesc == chdesc);
+		assert(chdesc->weak_refs->prev == &chdesc->weak_refs);
+		chdesc_weak_release(chdesc->weak_refs, 1);
 	}
 }
 
@@ -3013,8 +2992,7 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	if((*chdesc)->flags & CHDESC_BIT_NOOP)
 	{
 		assert((*chdesc)->noop.bit_changes);
-		/* it should already be NULL from the weak reference */
-		assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
+		assert(hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key) == *chdesc);
 		hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, *chdesc, CHDESC_BIT_NOOP);
 		(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
@@ -3024,79 +3002,62 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	return 0;
 }
 
-int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_callback_t callback, void * callback_data)
+int chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data)
 {
-	if(*location && *location == chdesc)
+	if(weak->chdesc)
 	{
-		chrefdesc_t * ref = chdesc->weak_refs;
-		for(; ref; ref = ref->next)
-			if(ref->desc == location)
-			{
-				if(ref->callback)
-					return -EBUSY;
-				ref->callback = callback;
-				ref->callback_data = callback_data;
-				return 0;
-			}
+		if(weak->chdesc == chdesc)
+		{
+#if CHDESC_WEAKREF_CALLBACKS
+			if(weak->callback)
+				return -EBUSY;
+			weak->callback = callback;
+			weak->callback_data = callback_data;
+#endif
+			return 0;
+		}
+		else
+			chdesc_weak_release(weak, 0);
 	}
 	
 	if(chdesc)
 	{
-		// TODO: use a pool?
-		chrefdesc_t * ref = chrefdesc_alloc();
-		if(!ref)
-			return -ENOMEM;
-		account_update(&act_nwrefs, 1);
-		
-		ref->desc = location;
-		ref->callback = callback;
-		ref->callback_data = callback_data;
-		ref->next = chdesc->weak_refs;
-		chdesc->weak_refs = ref;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, location);
+		weak->chdesc = chdesc;
+#if CHDESC_WEAKREF_CALLBACKS
+		weak->callback = callback;
+		weak->callback_data = callback_data;
+#endif
+		weak->prev = &chdesc->weak_refs;
+		weak->next = chdesc->weak_refs;
+		if(chdesc->weak_refs)
+			chdesc->weak_refs->prev = &weak->next;
+		chdesc->weak_refs = weak;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, weak);
 	}
-	
-	/* should we even really allow this? */
-	if(*location && *location != chdesc)
-		chdesc_weak_release(location, 0);
-	*location = chdesc;
 	
 	return 0;
 }
 
-int chdesc_weak_forget(chdesc_t ** location, bool callback)
+int chdesc_weak_release(chweakref_t * weak, bool callback)
 {
-	int value = 0;
-	if(*location)
+	if(weak->chdesc)
 	{
-		chrefdesc_t ** prev = &(*location)->weak_refs;
-		chrefdesc_t * scan = (*location)->weak_refs;
-		while(scan && scan->desc != location)
-		{
-			prev = &scan->next;
-			scan = scan->next;
-		}
-		if(!scan)
-		{
-			printf("%s: (%s:%d) weak release/forget of non-weak chdesc pointer!\n", __FUNCTION__, __FILE__, __LINE__);
-			return -EBUSY;
-		}
-		*prev = scan->next;
-		if(callback && scan->callback)
-			value = scan->callback(location, scan->callback_data);
-		chrefdesc_free(scan);
-		account_update(&act_nwrefs, -1);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, *location, location);
+#if CHDESC_WEAKREF_CALLBACKS || KFS_DEBUG
+		chdesc_t * old = weak->chdesc;
+#endif
+		weak->chdesc = NULL;
+		*weak->prev = weak->next;
+		if(weak->next)
+			weak->next->prev = weak->prev;
+#if CHDESC_WEAKREF_CALLBACKS
+		/* notice that we do not touch weak again after the
+		 * callback, so it can free it if it wants */
+		if(callback && weak->callback)
+			weak->callback(weak, old, weak->callback_data);
+#endif
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, old, weak);
 	}
-	return value;
-}
-
-int chdesc_weak_release(chdesc_t ** location, bool callback)
-{
-	int value = chdesc_weak_forget(location, callback);
-	if(!value)
-		*location = NULL;
-	return value;
+	return 0;
 }
 
 void chdesc_destroy(chdesc_t ** chdesc)
@@ -3170,8 +3131,7 @@ void chdesc_destroy(chdesc_t ** chdesc)
 			if((*chdesc)->flags & CHDESC_BIT_NOOP)
 			{
 				assert((*chdesc)->noop.bit_changes);
-				/* it should already be NULL from the weak reference */
-				assert(!hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key));
+				assert(hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key) == *chdesc);
 				hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
 			}
 			/* fall through */

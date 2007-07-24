@@ -79,7 +79,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	bdesc->ddesc->extern_after_count = 0;
 #endif
 #if CHDESC_NRB
-	bdesc->ddesc->nrb = NULL;
+	WEAK_INIT(bdesc->ddesc->nrb);
 #endif
 	for (i = 0; i < NOVERLAP1 + 1; i++)
 		bdesc->ddesc->overlap1[i] = NULL;
@@ -140,8 +140,11 @@ void __bdesc_release(bdesc_t *bdesc)
 			fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, bdesc->ddesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-		if(bdesc->ddesc->nrb)
+		if(WEAK(bdesc->ddesc->nrb))
+		{
 			fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
+			chdesc_weak_release(&bdesc->ddesc->nrb, 0);
+		}
 #endif
 		for(i = 0; i < NBDLEVEL; i++)
 			assert(!bdesc->ddesc->ready_changes[i].head);

@@ -4,21 +4,23 @@
 #include <kfs/chdesc.h>
 #include <kfs/block_alloc.h>
 
+/* This library uses chdesc callbacks. But, we don't use this library yet, so
+ * just disable it unless the callbacks are enabled. */
+#if CHDESC_WEAKREF_CALLBACKS
+
 typedef struct {
 	/* clear must be the first element! */
-	chdesc_t * clear;
+	chweakref_t clear;
 	uint32_t block;
 } alloc_record_t;
 
-static int block_alloc_satisfy_callback(chdesc_t ** location, void * data)
+static void block_alloc_satisfy_callback(chweakref_t * weak, chdesc_t * old, void * data)
 {
 	/* count on clear being the first element */
-	alloc_record_t * record = (alloc_record_t *) location;
+	alloc_record_t * record = (alloc_record_t *) weak;
 	block_alloc_head_t * alloc = (block_alloc_head_t *) data;
 	hash_map_erase(alloc->map, (void *) record->block);
 	free(record);
-	/* we have freed the pointer, so return nonzero */
-	return 1;
 }
 
 int block_alloc_set_freed(block_alloc_head_t * alloc, uint32_t block, chdesc_t * clear)
@@ -50,9 +52,9 @@ int block_alloc_get_freed(block_alloc_head_t * alloc, uint32_t block, chdesc_t *
 	if(!record)
 		/* the block is not in the map, so nothing needed */
 		return 0;
-	assert(record->clear);
+	assert(WEAK(record->clear));
 	if(!*head)
-		*head = record->clear;
+		*head = WEAK(record->clear);
 	else
 	{
 		chdesc_t * noop;
@@ -90,3 +92,5 @@ void block_alloc_head_destroy(block_alloc_head_t * alloc)
 	hash_map_destroy(alloc->map);
 	alloc->map = NULL;
 }
+
+#endif /* CHDESC_WEAKREF_CALLBACKS */

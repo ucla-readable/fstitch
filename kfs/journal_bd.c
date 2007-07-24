@@ -135,11 +135,11 @@ struct journal_info {
 	/* If we are reusing a transaction slot, jdata_head stores a weak reference
 	 * to the previous "done" chdesc. Notice that we cannot reuse a transaction
 	 * slot during the same transaction as the last time it was used. */
-	chdesc_t * jdata_head;
-	chdesc_t * prev_cr;
-	chdesc_t * prev_cancel;
+	chweakref_t jdata_head;
+	chweakref_t prev_cr;
+	chweakref_t prev_cancel;
 	struct {
-		chdesc_t * cr;
+		chweakref_t cr;
 		uint32_t seq;
 	} * cr_retain;
 	/* map from FS block number -> journal block number (note 0 is invalid) */
@@ -219,9 +219,9 @@ static int journal_bd_grab_slot(BD_t * object)
 	{
 #endif
 		do {
-			if(!info->cr_retain[scan].cr && info->cr_retain[scan].seq != info->trans_seq)
+			if(!WEAK(info->cr_retain[scan].cr) && info->cr_retain[scan].seq != info->trans_seq)
 			{
-				if(info->jdata_head)
+				if(WEAK(info->jdata_head))
 					chdesc_weak_release(&info->jdata_head, 0);
 				r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
 				if(r < 0)
@@ -253,7 +253,7 @@ static int journal_bd_grab_slot(BD_t * object)
 	do {
 		if(info->cr_retain[scan].seq != info->trans_seq)
 		{
-			r = chdesc_weak_retain(info->cr_retain[scan].cr, &info->jdata_head, NULL, NULL);
+			r = chdesc_weak_retain(WEAK(info->cr_retain[scan].cr), &info->jdata_head, NULL, NULL);
 			if(r < 0)
 				return r;
 			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
@@ -285,7 +285,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 	
 	if(!number)
 	{
-		chdesc_t * head = info->jdata_head;
+		chdesc_t * head = WEAK(info->jdata_head);
 		bdesc_t * number_block;
 		size_t blocks = hash_map_size(info->block_map);
 		size_t last = blocks % info->trans_data_blocks;
@@ -313,7 +313,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "subcommit");
 			r = chdesc_add_depend(info->wait, head);
 			assert(r >= 0);
-			head = info->jdata_head;
+			head = WEAK(info->jdata_head);
 			info->recursion = 1;
 			info->write_head = NULL;
 			r = CALL(info->journal, write_block, record);
@@ -381,7 +381,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(keep_w, NULL);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	assert(info->keep_w); /* keep_w must be non-NULL for chdesc_create_noop_list */
-	r = chdesc_create_noop_list(NULL, &info->wait, info->keep_w, info->prev_cr, NULL);
+	r = chdesc_create_noop_list(NULL, &info->wait, info->keep_w, WEAK(info->prev_cr), NULL);
 	if(r < 0)
 		goto fail_wait;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
@@ -391,7 +391,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(keep_d, NULL);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
 	assert(info->keep_d); /* keep_d must be non-NULL for chdesc_create_noop_list */
-	r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, info->prev_cancel, NULL);
+	r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 	if(r < 0)
 		goto fail_data;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->data, "data");
@@ -645,7 +645,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		assert(journal_block);
 		
 		/* copy it to the journal */
-		head = info->jdata_head;
+		head = WEAK(info->jdata_head);
 		r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
 		assert(r >= 0);
 		if(head)
@@ -788,7 +788,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->keep_d, "keep_d");
 		chdesc_claim_noop(info->keep_d);
 		/* make the new complete record (via data) depend on the previous via info->prev_cancel */
-		r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, info->prev_cancel, NULL);
+		r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 		if(r < 0)
 			goto error_2;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->data, "data");
@@ -1046,9 +1046,9 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	info->prev_slot = 0;
 	/* start the transaction sequence numbering 65536 from overflow */
 	info->trans_seq = -65536;
-	info->jdata_head = NULL;
-	info->prev_cr = NULL;
-	info->prev_cancel = NULL;
+	WEAK_INIT(info->jdata_head);
+	WEAK_INIT(info->prev_cr);
+	WEAK_INIT(info->prev_cancel);
 	info->cr_count = 0;
 	info->cr_retain = NULL;
 	info->recursion = 0;
@@ -1120,7 +1120,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 			chdesc_weak_release(&info->prev_cr, 0);
 			chdesc_weak_release(&info->prev_cancel, 0);
 			for(i = 0; i != info->cr_count; i++)
-				if(info->cr_retain[i].cr)
+				if(WEAK(info->cr_retain[i].cr))
 					chdesc_weak_release(&info->cr_retain[i].cr, 0);
 			sfree(info->cr_retain, info->cr_count * sizeof(*info->cr_retain));
 			info->cr_retain = NULL;

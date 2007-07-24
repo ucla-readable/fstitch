@@ -4,6 +4,10 @@
 #include <lib/hash_map.h>
 #include <kfs/chdesc.h>
 
+/* This library uses chdesc callbacks. But, we don't use this library yet, so
+ * just disable it unless the callbacks are enabled. */
+#if CHDESC_WEAKREF_CALLBACKS
+
 struct block_alloc_head {
 	/* block number -> chdesc that clears all pointers to it */
 	hash_map_t * map;
@@ -25,5 +29,7 @@ int block_alloc_notify_alloc(block_alloc_head_t * alloc, uint32_t block);
 
 int block_alloc_head_init(block_alloc_head_t * alloc);
 void block_alloc_head_destroy(block_alloc_head_t * alloc);
+
+#endif /* CHDESC_WEAKREF_CALLBACKS */
 
 #endif /* __KUDOS_KFS_BLOCK_ALLOC_H */

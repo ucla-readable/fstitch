@@ -18,6 +18,9 @@
 
 #define CHDESC_BYTE_SUM 0
 
+/* Provide weak reference callbacks */
+#define CHDESC_WEAKREF_CALLBACKS 0
+
 /* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
  * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
@@ -38,8 +41,22 @@ typedef struct chdesc chdesc_t;
 struct chdepdesc;
 typedef struct chdepdesc chdepdesc_t;
 
-struct chrefdesc;
-typedef struct chrefdesc chrefdesc_t;
+struct chweakref;
+typedef struct chweakref chweakref_t;
+
+#if CHDESC_WEAKREF_CALLBACKS
+typedef void (*chdesc_satisfy_callback_t)(chweakref_t * weak, chdesc_t * old, void * data);
+#endif
+
+struct chweakref {
+	chdesc_t * chdesc;
+#if CHDESC_WEAKREF_CALLBACKS
+	chdesc_satisfy_callback_t callback;
+	void * callback_data;
+#endif
+	chweakref_t ** prev;
+	chweakref_t * next;
+};
 
 #include <kfs/bd.h>
 #include <kfs/bdesc.h>
@@ -79,7 +96,7 @@ struct chdesc {
 	chdepdesc_t * afters;
 	chdepdesc_t ** afters_tail;
 
-	chrefdesc_t * weak_refs;
+	chweakref_t * weak_refs;
 
 	/* nbefores[i] is the number of direct dependencies at level i */
 	uint32_t nbefores[NBDLEVEL];
@@ -122,19 +139,6 @@ struct chdepdesc {
 		chdesc_t * desc;
 		chdepdesc_t * next;
 	} before, after;
-};
-
-/* If the callback returns 0, then proceed and clear the weak reference.
- * If it returns any other value, then do not clear the weak reference:
- * the callback has done that itself, and the storage may now be gone. */
-typedef int (*chdesc_satisfy_callback_t)(chdesc_t ** location, void * data);
-
-/* TODO: require this at all weak reference sites, rather than allocate it? */
-struct chrefdesc {
-	chdesc_t ** desc;
-	chdesc_satisfy_callback_t callback;
-	void * callback_data;
-	chrefdesc_t * next;
 };
 
 /* chdesc pass sets allow easy prepending of new chdescs to argument lists */
@@ -208,9 +212,15 @@ void chdesc_set_inflight(chdesc_t * chdesc);
 int chdesc_satisfy(chdesc_t ** chdesc);
 
 /* create and remove weak references to a chdesc */
-int chdesc_weak_retain(chdesc_t * chdesc, chdesc_t ** location, chdesc_satisfy_callback_t callback, void * callback_data);
-int chdesc_weak_forget(chdesc_t ** location, bool callback);
-int chdesc_weak_release(chdesc_t ** location, bool callback);
+#if !CHDESC_WEAKREF_CALLBACKS
+/* these macros will adjust the function definitions and prototypes as well as callsites... */
+#define chdesc_weak_retain(chdesc, weak, callback, data) chdesc_weak_retain(chdesc, weak)
+#define chdesc_weak_release(weak, callback) chdesc_weak_release(weak)
+#endif
+int chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data);
+int chdesc_weak_release(chweakref_t * weak, bool callback);
+#define WEAK_INIT(weak) ((weak).chdesc = NULL)
+#define WEAK(weak) ((weak).chdesc)
 
 /* destroy a chdesc, actually freeing it - be careful calling this function */
 void chdesc_destroy(chdesc_t ** chdesc);

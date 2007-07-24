@@ -46,7 +46,7 @@ struct datadesc {
 	chdesc_dlist_t index_changes[NBDINDEX];
 	
 #if CHDESC_NRB
-	chdesc_t * nrb;
+	chweakref_t nrb;
 #endif
 
 #define OVERLAP1SHIFT	5
