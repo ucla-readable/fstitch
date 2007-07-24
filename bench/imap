@@ -11,6 +11,7 @@ function test () {
 
 function run () {
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	[ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
 	try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
 	try rm -f $MNT/mailbox.dst
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
