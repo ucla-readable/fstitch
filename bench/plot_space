@@ -74,6 +74,5 @@ plot [:] [0:] \
 	"$DATA" using 1:(\$15*\$16/1024) with linespoints title "noop chdescs", \
 	"$DATA" using 1:(\$20*\$21/1024) with linespoints title "all chdescs", \
 	"$DATA" using 1:(\$25*\$26/1024) with linespoints title "deps", \
-	"$DATA" using 1:(\$30*\$31/1024) with linespoints title "wrefs", \
-	"$DATA" using 1:(\$35*\$36/1024) with linespoints title "rollback data"
+	"$DATA" using 1:(\$30*\$31/1024) with linespoints title "rollback data"
 EOF

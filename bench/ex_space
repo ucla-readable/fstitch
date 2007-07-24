@@ -41,8 +41,9 @@ if (!-f "$testdir/$testname-mem.sys.0") {
 	exit(1);
 }
 my $rev = &svnversion($testdir);
+
 open(R, "<$testdir/$testname-mem.sys.0") || die;
-%careabouts = ("nchdescs (bit)" => 1, "nchdescs (byte)" => 1, "nchdescs (noop)" => 1, "nchdescs (total)" => 1, "ndeps" => 1, "nwrefs" => 1, "data" => 1);
+%careabouts = ("nchdescs (bit)" => 1, "nchdescs (byte)" => 1, "nchdescs (noop)" => 1, "nchdescs (total)" => 1, "ndeps" => 1, "data" => 1);
 while(<R>) {
 	my $line = $_;
 	if (! $line =~ m/account: /) {
