@@ -99,7 +99,7 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	if(CALL(disk0, get_write_head) || CALL(disk1, get_write_head))
 		return NULL;
 	
-	info = malloc(sizeof(struct md_info));
+	info = malloc(sizeof(*info));
 	if(!info)
 		return NULL;
 	bd = &info->my_bd;

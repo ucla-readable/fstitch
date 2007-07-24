@@ -207,7 +207,6 @@ static int journal_bd_grab_slot(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) object;
 	uint16_t scan = info->trans_slot;
-	int r;
 	
 	/* we must stay below the total size of the journal */
 	assert(info->trans_slot_count != info->cr_count);
@@ -221,9 +220,7 @@ static int journal_bd_grab_slot(BD_t * object)
 			{
 				if(WEAK(info->jdata_head))
 					chdesc_weak_release(&info->jdata_head, 0);
-				r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
-				if(r < 0)
-					return r;
+				chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
 				Dprintf("%s(): using unused transaction slot %d (sequence %u)\n", __FUNCTION__, scan, info->trans_seq);
 				info->cr_retain[scan].seq = info->trans_seq;
 				info->prev_slot = info->trans_slot;
@@ -471,9 +468,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	info->hold->flags &= ~CHDESC_SAFE_AFTER;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, info->hold, CHDESC_SAFE_AFTER);
 	/* set the new previous commit record */
-	r = chdesc_weak_retain(head, &info->prev_cr, NULL, NULL);
-	if(r < 0)
-		kpanic("Holy Mackerel!");
+	chdesc_weak_retain(head, &info->prev_cr, NULL, NULL);
 	
 	/* create cancellation, make it depend on data */
 	commit.type = CREMPTY;
@@ -487,9 +482,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	/* set the new previous cancellation record */
-	r = chdesc_weak_retain(head, &info->prev_cancel, NULL, NULL);
-	if(r < 0)
-		kpanic("Holy Mackerel!");
+	chdesc_weak_retain(head, &info->prev_cancel, NULL, NULL);
 	
 	/* unmanage the hold NOOP */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, info->hold, NULL);
@@ -870,9 +863,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		bdesc_release(&number_block);
 	}
 	
-	r = chdesc_weak_retain(info->done, &info->cr_retain[transaction_start / info->trans_total_blocks].cr, NULL, NULL);
-	if(r < 0)
-		kpanic("Holy Mackerel!");
+	chdesc_weak_retain(info->done, &info->cr_retain[transaction_start / info->trans_total_blocks].cr, NULL, NULL);
 	info->cr_retain[transaction_start / info->trans_total_blocks].seq = cr->seq;
 	
 	/* only CRCOMMIT records need to be cancelled */
@@ -888,9 +879,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		if(r < 0)
 			kpanic("Holy Mackerel!");
 		/* set the new previous cancellation record */
-		r = chdesc_weak_retain(head, &info->prev_cancel, NULL, NULL);
-		if(r < 0)
-			kpanic("Holy Mackerel!");
+		chdesc_weak_retain(head, &info->prev_cancel, NULL, NULL);
 		/* clean up the transaction state */
 		chdesc_satisfy(&info->keep_d);
 		info->data = NULL;

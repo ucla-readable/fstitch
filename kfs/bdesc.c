@@ -83,7 +83,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count)
 bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
 	bdesc->ref_count++;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count, bdesc->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
 	return bdesc;
 }
 
@@ -130,7 +130,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 		bdesc->ar_next = autorelease_stack->list;
 		autorelease_stack->list = bdesc;
 	}
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AUTORELEASE, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count, bdesc->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AUTORELEASE, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
 	return bdesc;
 }
 
@@ -169,7 +169,7 @@ void bdesc_autorelease_pool_pop(void)
 		int i = head->ar_count;
 		pool->list = head->ar_next;
 		head->ar_count = 0;
-		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_RESET, head, head, head->ref_count, head->ar_count, head->ref_count);
+		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_RESET, head, head, head->ref_count, head->ar_count);
 		while(i-- > 0)
 		{
 			bdesc_t * release = head;

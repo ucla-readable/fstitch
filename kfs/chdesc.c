@@ -1609,8 +1609,7 @@ static void merge_rbs(bdesc_t * block)
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, merger, CHDESC_OVERLAP);
 	merger->flags &= ~CHDESC_OVERLAP;
 	assert(!WEAK(block->nrb));
-	r = chdesc_weak_retain(merger, &block->nrb, NULL, NULL);
-	assert(r >= 0);
+	chdesc_weak_retain(merger, &block->nrb, NULL, NULL);
 	//account_update(&act_nnrb, 1);
 
 	/* ensure merger is in overlaps (to complete NRB construction) and remove
@@ -2224,11 +2223,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 			memset(&chdesc->block->data[offset], 0, length);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
 		assert(!WEAK(block->nrb));
-		if((r = chdesc_weak_retain(chdesc, &block->nrb, NULL, NULL)) < 0)
-		{
-			chdesc_destroy(&chdesc);
-			return r;
-		}
+		chdesc_weak_retain(chdesc, &block->nrb, NULL, NULL);
 #else
 		assert(0);
 #endif
@@ -3001,19 +2996,17 @@ int chdesc_satisfy(chdesc_t ** chdesc)
 	return 0;
 }
 
-int chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data)
+void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data)
 {
 	if(weak->chdesc)
 	{
 		if(weak->chdesc == chdesc)
 		{
 #if CHDESC_WEAKREF_CALLBACKS
-			if(weak->callback)
-				return -EBUSY;
 			weak->callback = callback;
 			weak->callback_data = callback_data;
 #endif
-			return 0;
+			return;
 		}
 		else
 			chdesc_weak_release(weak, 0);
@@ -3033,11 +3026,9 @@ int chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_cal
 		chdesc->weak_refs = weak;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, weak);
 	}
-	
-	return 0;
 }
 
-int chdesc_weak_release(chweakref_t * weak, bool callback)
+void chdesc_weak_release(chweakref_t * weak, bool callback)
 {
 	if(weak->chdesc)
 	{
@@ -3056,7 +3047,6 @@ int chdesc_weak_release(chweakref_t * weak, bool callback)
 #endif
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, old, weak);
 	}
-	return 0;
 }
 
 void chdesc_destroy(chdesc_t ** chdesc)

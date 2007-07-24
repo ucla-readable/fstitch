@@ -84,7 +84,7 @@ BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 	struct partition_info * info;
 	BD_t * bd;
 	
-	info = malloc(sizeof(struct partition_info));
+	info = malloc(sizeof(*info));
 	if(!info)
 		return NULL;
 	bd = &info->my_bd;

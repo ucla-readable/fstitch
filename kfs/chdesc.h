@@ -217,8 +217,8 @@ int chdesc_satisfy(chdesc_t ** chdesc);
 #define chdesc_weak_retain(chdesc, weak, callback, data) chdesc_weak_retain(chdesc, weak)
 #define chdesc_weak_release(weak, callback) chdesc_weak_release(weak)
 #endif
-int chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data);
-int chdesc_weak_release(chweakref_t * weak, bool callback);
+void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data);
+void chdesc_weak_release(chweakref_t * weak, bool callback);
 #define WEAK_INIT(weak) ((weak).chdesc = NULL)
 #define WEAK(weak) ((weak).chdesc)
 

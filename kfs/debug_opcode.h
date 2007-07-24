@@ -22,15 +22,14 @@ enum kdb_debug_opcode {
 	
 	/* bdesc (1xx) */
 	KDB_BDESC_ALLOC =                101,
-	KDB_BDESC_ALLOC_WRAP =           102,
-	KDB_BDESC_RETAIN =               103,
-	KDB_BDESC_RELEASE =              104,
-	KDB_BDESC_DESTROY =              105,
-	KDB_BDESC_FREE_DDESC =           106,
-	KDB_BDESC_AUTORELEASE =          107,
-	KDB_BDESC_AR_RESET =             108,
-	KDB_BDESC_AR_POOL_PUSH =         109,
-	KDB_BDESC_AR_POOL_POP =          110,
+	KDB_BDESC_RETAIN =               102,
+	KDB_BDESC_RELEASE =              103,
+	KDB_BDESC_DESTROY =              104,
+	KDB_BDESC_FREE_DDESC =           105,
+	KDB_BDESC_AUTORELEASE =          106,
+	KDB_BDESC_AR_RESET =             107,
+	KDB_BDESC_AR_POOL_PUSH =         108,
+	KDB_BDESC_AR_POOL_POP =          109,
 	
 	/* chdesc alter (2xx) */
 	KDB_CHDESC_CREATE_NOOP =         201,
@@ -118,7 +117,6 @@ static const struct param
 	param_chdesc =      {"chdesc",      UHEX32},
 	param_chdescs =     {"chdescs",     UHEX32},
 	param_count =       {"count",       UINT32},
-	param_dd_count =    {"dd_count",    UINT32},
 	param_ddesc =       {"ddesc",       UHEX32},
 	param_depth =       {"depth",       UINT32},
 	param_flags =       {"flags",       UHEX32},
@@ -176,7 +174,6 @@ static const struct param * params_bdesc_retain_release[] = {
 	&param_ddesc,
 	&param_ref_count,
 	&param_ar_count,
-	&param_dd_count,
 	&last_param
 };
 static const struct param * params_bdesc_destroy[] = {
@@ -315,7 +312,6 @@ static const struct opcode
 	opcode_info_bdesc_number =          OPCODE(KDB_INFO_BDESC_NUMBER,          params_info_bdesc_number),
 	opcode_info_chdesc_label =          OPCODE(KDB_INFO_CHDESC_LABEL,          params_info_chdesc_label),
 	opcode_bdesc_alloc =                OPCODE(KDB_BDESC_ALLOC,                params_bdesc_alloc),
-	opcode_bdesc_alloc_wrap =           OPCODE(KDB_BDESC_ALLOC_WRAP,           params_bdesc_alloc),
 	opcode_bdesc_retain =               OPCODE(KDB_BDESC_RETAIN,               params_bdesc_retain_release),
 	opcode_bdesc_release =              OPCODE(KDB_BDESC_RELEASE,              params_bdesc_retain_release),
 	opcode_bdesc_destroy =              OPCODE(KDB_BDESC_DESTROY,              params_bdesc_destroy),
@@ -370,7 +366,6 @@ static const struct opcode * opcodes_info[] = {
 };
 static const struct opcode * opcodes_bdesc[] = {
 	&opcode_bdesc_alloc,
-	&opcode_bdesc_alloc_wrap,
 	&opcode_bdesc_retain,
 	&opcode_bdesc_release,
 	&opcode_bdesc_destroy,

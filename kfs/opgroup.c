@@ -103,8 +103,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 			goto error_top_keep;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
 	}
-	if(chdesc_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL) < 0)
-		goto error_top_keep;
+	chdesc_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL);
 	
 	/* iterate over opgroups and increase reference counts */
 	hash_map_it_init(&it, scope->id_map);
@@ -243,14 +242,12 @@ opgroup_t * opgroup_create(int flags)
 	if(chdesc_create_noop_list(NULL, &tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, tail, "tail");
-	if(chdesc_weak_retain(tail, &op->tail, NULL, NULL) < 0)
-		goto error_tail;
+	chdesc_weak_retain(tail, &op->tail, NULL, NULL);
 	
 	if(chdesc_create_noop_list(NULL, &head, op->head_keep, NULL) < 0)
 		goto error_tail;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "head");
-	if(chdesc_weak_retain(head, &op->head, NULL, NULL) < 0)
-		goto error_head;
+	chdesc_weak_retain(head, &op->head, NULL, NULL);
 	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
 		goto error_head;
@@ -438,8 +435,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
 	}
 	
-	if(chdesc_weak_retain(bottom, &current_scope->bottom, NULL, NULL) < 0)
-		kpanic("Can't recover from failure!");
+	chdesc_weak_retain(bottom, &current_scope->bottom, NULL, NULL);
 	
 	if(!count)
 	{

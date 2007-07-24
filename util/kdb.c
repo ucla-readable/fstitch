@@ -368,7 +368,7 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if(debug_rev != 3486 || debug_opcode_rev != 3482)
+	if(debug_rev != 3486 || debug_opcode_rev != 3767)
 		return -EPROTO;
 	
 	r = read_lit_32(&initial_timestamp);
@@ -1582,7 +1582,6 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 		}
 		
 		case KDB_BDESC_ALLOC:
-		case KDB_BDESC_ALLOC_WRAP:
 		case KDB_BDESC_RETAIN:
 		case KDB_BDESC_RELEASE:
 		case KDB_BDESC_DESTROY:

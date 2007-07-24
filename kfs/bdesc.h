@@ -127,7 +127,7 @@ static inline void bdesc_release(bdesc_t **bdp)
 {
 	assert((*bdp)->ref_count > (*bdp)->ar_count);
 	(*bdp)->ref_count--;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count, *bdp->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count);
 	if (!(*bdp)->ref_count)
 		__bdesc_release(*bdp);
 	*bdp = NULL;

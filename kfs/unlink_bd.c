@@ -110,7 +110,7 @@ BD_t * unlink_bd(BD_t * disk)
 	struct unlink_info * info;
 	BD_t * bd;
 	
-	info = malloc(sizeof(struct unlink_info));
+	info = malloc(sizeof(*info));
 	if(!info)
 		return NULL;
 	bd = &info->my_bd;

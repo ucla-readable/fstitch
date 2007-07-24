@@ -99,7 +99,7 @@ BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 	if(blocksize == original_size)
 		return NULL;
 	
-	info = malloc(sizeof(struct resize_info));
+	info = malloc(sizeof(*info));
 	if(!info)
 		return NULL;
 
