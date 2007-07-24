@@ -15,6 +15,8 @@
 #endif
 
 struct icase_state {
+	CFS_t cfs;
+	
 	CFS_t * frontend_cfs;
 };
 typedef struct icase_state icase_state_t;
@@ -69,14 +71,14 @@ static int icase_ignore (CFS_t * object, inode_t parent, const char * name, char
 static int icase_get_root(CFS_t * cfs, inode_t * ino)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, get_root, ino);
 }
 
 static int icase_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	int r;
 
 	r =  CALL(state->frontend_cfs, lookup, parent, name, ino);
@@ -95,55 +97,55 @@ static int icase_lookup(CFS_t * cfs, inode_t parent, const char * name, inode_t 
 static int icase_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 {
 	Dprintf("%s(%u, %d)\n", __FUNCTION__, ino, mode);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, open, ino, mode, fdesc);
 }
 
 static int icase_create(CFS_t * cfs, inode_t parent, const char * name, int mode, const metadata_set_t * initialmd, fdesc_t ** fdesc, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\", %d)\n", __FUNCTION__, parent, name, mode);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, create, parent, name, mode, initialmd, fdesc, ino);
 }
 
 static int icase_close(CFS_t * cfs, fdesc_t * fdesc)
 {
 	Dprintf("%s\n", __FUNCTION__);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, close, fdesc);
 }
 
 static int icase_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t ofhfset, uint32_t size)
 {
 	Dprintf("%s\n", __FUNCTION__);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, read, fdesc, data, ofhfset, size);
 }
 
 static int icase_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t ofhfset, uint32_t size)
 {
 	Dprintf("%s\n", __FUNCTION__);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, write, fdesc, data, ofhfset, size);
 }
 
 static int icase_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("%s\n", __FUNCTION__);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, get_dirent, fdesc, entry, size, basep);
 }
 
 static int icase_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t size)
 {
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, truncate, fdesc, size);
 }
 
 static int icase_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, name);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	int r;
 
 	r = CALL(state->frontend_cfs, unlink, parent, name);
@@ -163,7 +165,7 @@ static int icase_unlink(CFS_t * cfs, inode_t parent, const char * name)
 static int icase_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, %u, \"%s\")\n", __FUNCTION__, ino, newparent, newname);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, link, ino, newparent, newname);
 }
 
@@ -184,7 +186,7 @@ static int icase_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * 
 static int icase_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname)
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	int r, q;
 
 	r = CALL(state->frontend_cfs, rename, oldparent, oldname, newparent, newname);
@@ -215,14 +217,14 @@ static int icase_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, in
 static int icase_mkdir(CFS_t * cfs, inode_t parent, const char * name, const metadata_set_t * initialmd, inode_t * ino)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, mkdir, parent, name, initialmd, ino);
 }
 
 static int icase_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	int r;
 
 	r = CALL(state->frontend_cfs, rmdir, parent, name);
@@ -242,43 +244,42 @@ static int icase_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 static size_t icase_get_max_feature_id(CFS_t * cfs)
 {
 	Dprintf("%s(%u)\n", __FUNCTION__, ino);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, get_max_feature_id);
 }
 
 static const bool * icase_get_feature_array(CFS_t * cfs)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, num);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, get_feature_array);
 }
 
 static int icase_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, id);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, get_metadata, ino, id, size, data);
 }
 
 static int icase_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, (signed int)data);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	return CALL(state->frontend_cfs, set_metadata, ino, id, size, data);
 }
 
 static int icase_destroy(CFS_t * cfs)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, (signed int)cfs);
-	icase_state_t * state = (icase_state_t *) OBJLOCAL(cfs);
+	icase_state_t * state = (icase_state_t *) cfs;
 	int r = modman_rem_cfs(cfs);
 	if(r < 0)
 		return r;
 	modman_dec_cfs(state->frontend_cfs, cfs);
 
+	memset(state, 0, sizeof(*state));
 	free(state);
-	memset(cfs, 0, sizeof(*cfs));
-	free(cfs);
 	return 0;
 }
 
@@ -291,15 +292,12 @@ CFS_t * icase_cfs(CFS_t * frontend_cfs)
 	if (!frontend_cfs)
 		return NULL;
 
-	cfs = malloc(sizeof(*cfs));
-	if (!cfs)
-		return NULL;
-
 	state = malloc(sizeof(*state));
 	if (!state)
 		goto error_cfs;
+	cfs = &state->cfs;
 
-	CFS_INIT(cfs, icase, state);
+	CFS_INIT(cfs, icase);
 	OBJMAGIC(cfs) = ICASE_MAGIC;
 
 	state->frontend_cfs = frontend_cfs;
@@ -320,6 +318,6 @@ CFS_t * icase_cfs(CFS_t * frontend_cfs)
 	return cfs;
 
   error_cfs:
-	free(cfs);
+	free(state);
 	return NULL;
 }

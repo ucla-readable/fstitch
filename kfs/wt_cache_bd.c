@@ -20,6 +20,8 @@ struct cache_slot {
 };
 
 struct cache_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	uint32_t size;
 	struct cache_slot * blocks; // blocks[0] holds BD mru and lru
@@ -86,7 +88,7 @@ static void wt_pop_block(struct cache_info * info, struct cache_slot * slot)
 
 static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	bdesc_t * block;
 	
@@ -122,7 +124,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 
 static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	bdesc_t * block;
 	int r;
@@ -156,7 +158,7 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 
 static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	int r;
 	
@@ -197,19 +199,19 @@ static int wt_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** wt_cache_bd_get_write_head(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
 }
 
 static int32_t wt_cache_bd_get_block_space(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_block_space);
 }
 
 static int wt_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	struct cache_info * info = (struct cache_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -222,35 +224,26 @@ static int wt_cache_bd_destroy(BD_t * bd)
 	
 	hash_map_destroy(info->block_map);
 	
+	memset(info, 0, sizeof(*info));
 	free(info);
-	
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
 
 BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 {
-	struct cache_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
+	struct cache_info * info = malloc(sizeof(*info));
+	BD_t * bd;
 	uint32_t i;
 
-	if(!bd)
-		return NULL;
-	
-	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
 	info->blocks = smalloc((blocks + 1) * sizeof(info->blocks[0]));
 	if(!info->blocks)
 	{
 		free(info);
-		free(bd);
 		return NULL;
 	}
 
@@ -266,7 +259,7 @@ BD_t * wt_cache_bd(BD_t * disk, uint32_t blocks)
 
 	info->block_map = hash_map_create_size(blocks, 0);
 
-	BD_INIT(bd, wt_cache_bd, info);
+	BD_INIT(bd, wt_cache_bd);
 	
 	info->bd = disk;
 	info->size = blocks;

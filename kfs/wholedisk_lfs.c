@@ -308,7 +308,7 @@ LFS_t * wholedisk(BD_t * bd)
 	if(!lfs)
 		return NULL;
 	
-	LFS_INIT(lfs, wholedisk, NULL);
+	LFS_INIT(lfs, wholedisk);
 	OBJMAGIC(lfs) = WHOLEDISK_MAGIC;
 	
 	lfs->blockdev = bd;

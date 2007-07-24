@@ -7,6 +7,8 @@
 #include <kfs/opgroup_lfs.h>
 
 struct opgroup_info {
+	LFS_t my_lfs;
+	
 	LFS_t * lfs;
 };
 
@@ -14,12 +16,12 @@ struct opgroup_info {
 
 static int opgroup_lfs_get_root(LFS_t * object, inode_t * ino)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_root, ino);	
+	return CALL(((struct opgroup_info *) object)->lfs, get_root, ino);	
 }
 
 static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	uint32_t block;
 	int r;
 
@@ -39,47 +41,47 @@ static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int p
 
 static bdesc_t * opgroup_lfs_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_block, number);
+	return CALL(((struct opgroup_info *) object)->lfs, lookup_block, number);
 }
 
 static bdesc_t * opgroup_lfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, synthetic_lookup_block, number);
+	return CALL(((struct opgroup_info *) object)->lfs, synthetic_lookup_block, number);
 }
 
 static fdesc_t * opgroup_lfs_lookup_inode(LFS_t * object, inode_t ino)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_inode, ino);
+	return CALL(((struct opgroup_info *) object)->lfs, lookup_inode, ino);
 }
 
 static int opgroup_lfs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, lookup_name, parent, name, ino);
+	return CALL(((struct opgroup_info *) object)->lfs, lookup_name, parent, name, ino);
 }
 
 static void opgroup_lfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
-	CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, free_fdesc, fdesc);
+	CALL(((struct opgroup_info *) object)->lfs, free_fdesc, fdesc);
 }
 
 static uint32_t opgroup_lfs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_file_numblocks, file);
+	return CALL(((struct opgroup_info *) object)->lfs, get_file_numblocks, file);
 }
 
 static uint32_t opgroup_lfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_file_block, file, offset);
+	return CALL(((struct opgroup_info *) object)->lfs, get_file_block, file, offset);
 }
 
 static int opgroup_lfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_dirent, file, entry, size, basep);
+	return CALL(((struct opgroup_info *) object)->lfs, get_dirent, file, entry, size, basep);
 }
 
 static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -98,7 +100,7 @@ static int opgroup_lfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_
 
 static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	fdesc_t * fdesc;
 	int r;
 
@@ -118,7 +120,7 @@ static fdesc_t * opgroup_lfs_allocate_name(LFS_t * object, inode_t parent, const
 
 static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -137,7 +139,7 @@ static int opgroup_lfs_rename(LFS_t * object, inode_t oldparent, const char * ol
 
 static uint32_t opgroup_lfs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	uint32_t block;
 	int r;
 
@@ -157,7 +159,7 @@ static uint32_t opgroup_lfs_truncate_file_block(LFS_t * object, fdesc_t * file, 
 
 static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -176,7 +178,7 @@ static int opgroup_lfs_free_block(LFS_t * object, fdesc_t * file, uint32_t block
 
 static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -195,7 +197,7 @@ static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * 
 
 static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -214,39 +216,39 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 
 static chdesc_t ** opgroup_lfs_get_write_head(LFS_t * object)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	return CALL(info->lfs, get_write_head);
 }
 
 static int32_t opgroup_lfs_get_block_space(LFS_t * object)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	return CALL(info->lfs, get_block_space);
 }
 
 static size_t opgroup_lfs_get_max_feature_id(LFS_t * object)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_max_feature_id);
+	return CALL(((struct opgroup_info *) object)->lfs, get_max_feature_id);
 }
 
 static const bool * opgroup_lfs_get_feature_array(LFS_t * object)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_feature_array);
+	return CALL(((struct opgroup_info *) object)->lfs, get_feature_array);
 }
 
 static int opgroup_lfs_get_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, void * data)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_inode, ino, id, size, data);
+	return CALL(((struct opgroup_info *) object)->lfs, get_metadata_inode, ino, id, size, data);
 }
 
 static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t id, size_t size, void * data)
 {
-	return CALL(((struct opgroup_info *) OBJLOCAL(object))->lfs, get_metadata_fdesc, file, id, size, data);
+	return CALL(((struct opgroup_info *) object)->lfs, get_metadata_fdesc, file, id, size, data);
 }
 
 static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -265,7 +267,7 @@ static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t 
 
 static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
-	struct opgroup_info * info = (struct opgroup_info *) OBJLOCAL(object);
+	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
 
 	r = opgroup_prepare_head(head);
@@ -284,14 +286,14 @@ static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32
 
 static int opgroup_lfs_destroy(LFS_t * lfs)
 {
+	struct opgroup_info *info = (struct opgroup_info *) lfs;
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_lfs(((struct opgroup_info *) OBJLOCAL(lfs))->lfs, lfs);
+	modman_dec_lfs(info->lfs, lfs);
 	
-	free(OBJLOCAL(lfs));
-	memset(lfs, 0, sizeof(*lfs));
-	free(lfs);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	
 	return 0;
 }
@@ -299,19 +301,14 @@ static int opgroup_lfs_destroy(LFS_t * lfs)
 LFS_t * opgroup_lfs(LFS_t * base)
 {
 	struct opgroup_info * info;
-	LFS_t * lfs = malloc(sizeof(*lfs));
+	LFS_t * lfs;
 
-	if(!lfs)
-		return NULL;
-	
 	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(lfs);
 		return NULL;
-	}
 
-	LFS_INIT(lfs, opgroup_lfs, info);
+	lfs = &info->my_lfs;
+	LFS_INIT(lfs, opgroup_lfs);
 	
 	info->lfs = base;
 	lfs->blocksize = base->blocksize;

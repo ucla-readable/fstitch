@@ -7,12 +7,14 @@
 #include <kfs/md_bd.h>
 
 struct md_info {
+	BD_t my_bd;
+	
 	BD_t * bd[2];
 };
 
 static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
@@ -33,7 +35,7 @@ static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count
 
 static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
@@ -54,7 +56,7 @@ static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint
 
 static int md_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	bdesc_t * wblock;
 	int value;
 	
@@ -88,7 +90,7 @@ static chdesc_t ** md_bd_get_write_head(BD_t * object)
 
 static int32_t md_bd_get_block_space(BD_t * object)
 {
-	struct md_info * info = (struct md_info *) OBJLOCAL(object);
+	struct md_info * info = (struct md_info *) object;
 	int32_t result[2];
 	result[0] = CALL(info->bd[0], get_block_space);
 	result[1] = CALL(info->bd[1], get_block_space);
@@ -97,14 +99,14 @@ static int32_t md_bd_get_block_space(BD_t * object)
 
 static int md_bd_destroy(BD_t * bd)
 {
+	struct md_info *info = (struct md_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct md_info *) OBJLOCAL(bd))->bd[1], bd);
-	modman_dec_bd(((struct md_info *) OBJLOCAL(bd))->bd[0], bd);
-	free(OBJLOCAL(bd));
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	modman_dec_bd(info->bd[1], bd);
+	modman_dec_bd(info->bd[0], bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
@@ -126,18 +128,12 @@ BD_t * md_bd(BD_t * disk0, BD_t * disk1)
 	if(CALL(disk0, get_write_head) || CALL(disk1, get_write_head))
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
 	info = malloc(sizeof(struct md_info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
-	BD_INIT(bd, md_bd, info);
+	BD_INIT(bd, md_bd);
 	
 	info->bd[0] = disk0;
 	info->bd[1] = disk1;

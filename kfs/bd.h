@@ -53,10 +53,10 @@ struct BD {
 	DECLARE(BD_t, int32_t, get_block_space);
 };
 
-#define BD_INIT(bd, module, info) { \
-	OBJ_INIT(bd, module, info); \
-	bd->level = -1; bd->graph_index = -1; \
-	bd->blocksize = 0; bd->atomicsize = 0; bd->numblocks = 0; \
+#define BD_INIT(bd, module) { \
+	OBJ_INIT(bd, module); \
+	(bd)->level = -1; (bd)->graph_index = -1;			\
+	(bd)->blocksize = 0; (bd)->atomicsize = 0; (bd)->numblocks = 0;	\
 	ASSIGN(bd, module, read_block); \
 	ASSIGN(bd, module, synthetic_read_block); \
 	ASSIGN(bd, module, write_block); \

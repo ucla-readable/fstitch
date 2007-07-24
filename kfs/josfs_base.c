@@ -23,6 +23,8 @@
 
 struct josfs_info
 {
+	LFS_t lfs;
+	
 	bdesc_t * super_block;
 	bdesc_t * bitmap_cache; // Bitmap mini write through cache!
 };
@@ -55,7 +57,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 // Equivalent to JOS's read_super
 static int check_super(LFS_t * object)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	uint32_t numblocks;
 
 	/* make sure we have the block size we expect */
@@ -91,7 +93,7 @@ static int check_super(LFS_t * object)
 // Equivalent to JOS's read_bitmap
 static int check_bitmap(LFS_t * object)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	int i, blocks_to_read;
 
 	blocks_to_read = super->s_nblocks / JOSFS_BLKBITSIZE;
@@ -119,7 +121,7 @@ static int check_bitmap(LFS_t * object)
 // Return 1 if block is free
 static int read_bitmap(LFS_t * object, uint32_t blockno)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	bdesc_t * bdesc;
 	uint32_t target;
 	uint32_t * ptr;
@@ -153,7 +155,7 @@ static int read_bitmap(LFS_t * object, uint32_t blockno)
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: write_bitmap %u\n", blockno);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	bdesc_t * bdesc;
 	uint32_t target;
 	int r;
@@ -204,7 +206,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t *
 
 static uint32_t count_free_space(LFS_t * object)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	const uint32_t s_nblocks = super->s_nblocks;
 	uint32_t i, count = 0;
 
@@ -264,7 +266,7 @@ static int josfs_get_root(LFS_t * object, inode_t * ino)
 static uint32_t josfs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_allocate_block\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	uint32_t s_nblocks = super->s_nblocks;
 	uint32_t bitmap_size = (s_nblocks + JOSFS_BLKBITSIZE + 1) / JOSFS_BLKBITSIZE;
 	uint32_t bitmap_block, blockno;
@@ -329,7 +331,7 @@ static bdesc_t * josfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 {
 	struct josfs_fdesc * fd;
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	bdesc_t *dirblock;
 
 	fd = (struct josfs_fdesc *)malloc(sizeof(struct josfs_fdesc));
@@ -377,7 +379,7 @@ static fdesc_t * josfs_lookup_inode(LFS_t * object, inode_t ino)
 static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
 	Dprintf("JOSFSDEBUG: josfs_free_fdesc %p\n", fdesc);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) fdesc;
 
 	if (f) {
@@ -390,7 +392,7 @@ static void josfs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 static int josfs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("JOSFSDEBUG: josfs_lookup_name %s\n", name);
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 	int index = 0;
 	struct josfs_fdesc *fd;
 	JOSFS_File_t * parent_file;
@@ -1112,7 +1114,7 @@ remove_name_exit:
 static int josfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_write_block\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 
 	if (!head)
 		return -EINVAL;
@@ -1151,7 +1153,7 @@ static const bool * josfs_get_feature_array(LFS_t * object)
 static int josfs_get_metadata(LFS_t * object, const struct josfs_fdesc * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("JOSFSDEBUG: josfs_get_metadata\n");
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(object);
+	struct josfs_info * info = (struct josfs_info *) object;
 
 	if (id == KFS_FEATURE_SIZE) {
 		if (!f)
@@ -1358,7 +1360,7 @@ static int josfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id,
 
 static int josfs_destroy(LFS_t * lfs)
 {
-	struct josfs_info * info = (struct josfs_info *) OBJLOCAL(lfs);
+	struct josfs_info * info = (struct josfs_info *) lfs;
 	int r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
@@ -1367,28 +1369,21 @@ static int josfs_destroy(LFS_t * lfs)
 	bdesc_release(&info->super_block);
 	bdesc_release(&info->bitmap_cache);
 
-	free(OBJLOCAL(lfs));
-	memset(lfs, 0, sizeof(*lfs));
-	free(lfs);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	
 	return 0;
 }
 
 LFS_t * josfs(BD_t * block_device)
 {
-	struct josfs_info * info;
-	LFS_t * lfs = malloc(sizeof(*lfs));
-
-	if (!lfs)
+	struct josfs_info * info = malloc(sizeof(*info));
+	LFS_t *lfs;
+	if (!info)
 		return NULL;
 
-	info = malloc(sizeof(*info));
-	if (!info) {
-		free(lfs);
-		return NULL;
-	}
-
-	LFS_INIT(lfs, josfs, info);
+	lfs = &info->lfs;
+	LFS_INIT(lfs, josfs);
 	OBJMAGIC(lfs) = JOSFS_FS_MAGIC;
 
 	lfs->blockdev = block_device;
@@ -1397,13 +1392,11 @@ LFS_t * josfs(BD_t * block_device)
 
 	if (check_super(lfs)) {
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 
 	if (check_bitmap(lfs)) {
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 

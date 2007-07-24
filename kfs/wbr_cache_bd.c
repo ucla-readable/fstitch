@@ -49,6 +49,8 @@ struct rand_slot {
 /* the block list is ordered by read/write usage:
  * first -> most recently used -> next -> next -> least recently used <- last */
 struct cache_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	uint32_t soft_blocks, blocks;
 	uint32_t soft_dblocks, dblocks;
@@ -177,7 +179,7 @@ static void wbr_touch_block_read(struct cache_info * info, struct rand_slot * sl
 
 static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
 	int r;
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
@@ -240,7 +242,7 @@ enum dshrink_strategy {
  * blocks out (using the specified strategy) */
 static void wbr_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	size_t left = vector_size(info->dirty_list), local_state = 1;
 	
 	next_state(info->dirty_state);
@@ -324,7 +326,7 @@ static void wbr_shrink_blocks(struct cache_info * info)
 
 static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
 	bdesc_t * block;
 	
@@ -366,7 +368,7 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 
 static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
 	bdesc_t * block;
 	
@@ -402,7 +404,7 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
 	
 	/* make sure it's a valid block */
@@ -447,7 +449,7 @@ static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int wbr_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	uint32_t start_dirty = info->dblocks;
 
 	if(!start_dirty)
@@ -479,13 +481,13 @@ static int wbr_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** wbr_cache_bd_get_write_head(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
 }
 
 static int32_t wbr_cache_bd_get_block_space(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return info->soft_dblocks - info->dblocks;
 }
 
@@ -494,14 +496,14 @@ static void wbr_cache_bd_callback(void * arg)
 	BD_t * object = (BD_t *) arg;
 	wbr_shrink_dblocks(object, PREEN);
 #if DEBUG_TIMING
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	printf("%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
 #endif
 }
 
 static int wbr_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	struct cache_info * info = (struct cache_info *) bd;
 	int r;
 	
 	if(info->dblocks)
@@ -529,10 +531,9 @@ static int wbr_cache_bd_destroy(BD_t * bd)
 	
 	vector_destroy(info->dirty_list);
 	hash_map_destroy(info->block_map);
-	free(info);
 	
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	
 	TIMING_DUMP(wait, "wbr_cache wait", "waits");
 	
@@ -547,22 +548,15 @@ BD_t * wbr_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	if(soft_dblocks > soft_blocks)
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
 	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
 	info->block_map = hash_map_create();
 	if(!info->block_map)
 	{
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	
@@ -571,11 +565,10 @@ BD_t * wbr_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	{
 		hash_map_destroy(info->block_map);
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	
-	BD_INIT(bd, wbr_cache_bd, info);
+	BD_INIT(bd, wbr_cache_bd);
 	OBJMAGIC(bd) = WB_CACHE_MAGIC;
 	
 	info->bd = disk;

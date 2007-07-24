@@ -7,13 +7,15 @@
 #include <kfs/partition_bd.h>
 
 struct partition_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	uint32_t start;
 };
 
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
@@ -34,7 +36,7 @@ static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_
 
 static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
@@ -55,7 +57,7 @@ static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	bdesc_t * wblock;
 	int value;
 	
@@ -84,43 +86,39 @@ static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** partition_bd_get_write_head(BD_t * object)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	return CALL(info->bd, get_write_head);
 }
 
 static int32_t partition_bd_get_block_space(BD_t * object)
 {
-	struct partition_info * info = (struct partition_info *) OBJLOCAL(object);
+	struct partition_info * info = (struct partition_info *) object;
 	return CALL(info->bd, get_block_space);
 }
 
 static int partition_bd_destroy(BD_t * bd)
 {
+	struct partition_info *info = (struct partition_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct partition_info *) OBJLOCAL(bd))->bd, bd);
-	free(OBJLOCAL(bd));
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	modman_dec_bd(info->bd, bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
 BD_t * partition_bd(BD_t * disk, uint32_t start, uint32_t length)
 {
 	struct partition_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
+	BD_t * bd;
 	
 	info = malloc(sizeof(struct partition_info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
-	BD_INIT(bd, partition_bd, info);
+	BD_INIT(bd, partition_bd);
 	
 	info->bd = disk;
 	info->start = start;

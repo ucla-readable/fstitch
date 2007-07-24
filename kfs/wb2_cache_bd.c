@@ -29,6 +29,8 @@ KERNEL_TIMING(wait);
  * all.first -> most recently used -> next -> next -> least recently used <- all.last
  * dirty.first -> most recently written -> next -> next -> least recently written <- dirty.last */
 struct cache_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	uint32_t soft_blocks, blocks;
 	uint32_t soft_dblocks, dblocks;
@@ -184,7 +186,7 @@ static void wb2_touch_block_read(struct cache_info * info, bdesc_t * block)
 
 static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
 	int r;
 	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
@@ -285,7 +287,7 @@ enum dshrink_strategy {
  * blocks out (using the specified strategy) */
 static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block = info->dirty.last;
 	
 #if DIRTY_QUEUE_REORDERING
@@ -441,7 +443,7 @@ static void wb2_shrink_blocks(struct cache_info * info)
 
 static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
@@ -480,7 +482,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 
 static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
@@ -512,7 +514,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 
 static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	
 	/* make sure it's a valid block */
 	if(block->number + block->count > object->numblocks)
@@ -552,7 +554,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	uint32_t start_dirty = info->dblocks;
 
 	if(!start_dirty)
@@ -584,13 +586,13 @@ static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
 
 static chdesc_t ** wb2_cache_bd_get_write_head(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
 }
 
 static int32_t wb2_cache_bd_get_block_space(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return info->soft_dblocks - info->dblocks;
 }
 
@@ -599,14 +601,14 @@ static void wb2_cache_bd_callback(void * arg)
 	BD_t * object = (BD_t *) arg;
 	wb2_shrink_dblocks(object, PREEN);
 #if DEBUG_TIMING
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	printf("%s(): dirty %d/%d, limit %d/%d\n", __FUNCTION__, info->dblocks, info->blocks, info->soft_dblocks, info->soft_blocks);
 #endif
 }
 
 static int wb2_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	struct cache_info * info = (struct cache_info *) bd;
 	int r;
 	
 	if(info->dblocks)
@@ -629,10 +631,8 @@ static int wb2_cache_bd_destroy(BD_t * bd)
 		wb2_pop_slot(info, info->all.first);
 	
 	free(info->map);
+	memset(info, 0, sizeof(*info));
 	free(info);
-	
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	TIMING_DUMP(wait, "wb2_cache wait", "waits");
 	
@@ -647,28 +647,21 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	if(soft_dblocks > soft_blocks)
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
 	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 
 	info->map_capacity = MAP_SIZE;
 	info->map = (bdesc_t **) malloc(info->map_capacity * sizeof(*info->map));
 	if(!info->map)
 	{
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	memset(info->map, 0, info->map_capacity * sizeof(*info->map));
 	
-	BD_INIT(bd, wb2_cache_bd, info);
+	BD_INIT(bd, wb2_cache_bd);
 	OBJMAGIC(bd) = WB_CACHE_MAGIC;
 	
 	info->bd = disk;

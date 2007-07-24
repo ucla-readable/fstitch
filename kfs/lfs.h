@@ -74,8 +74,8 @@ struct LFS {
 	DECLARE(LFS_t, int, set_metadata_fdesc, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head);
 };
 
-#define LFS_INIT(lfs, module, info) { \
-	OBJ_INIT(lfs, module, info); \
+#define LFS_INIT(lfs, module) { \
+	OBJ_INIT(lfs, module); \
 	ASSIGN(lfs, module, get_root); \
 	lfs->blocksize = 0; lfs->blockdev = 0; \
 	ASSIGN(lfs, module, allocate_block); \

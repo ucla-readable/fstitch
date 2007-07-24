@@ -115,6 +115,8 @@
  * */
 
 struct journal_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	BD_t * journal;
 	chdesc_t * write_head;
@@ -175,7 +177,7 @@ static uint32_t trans_number_block_count(uint16_t blocksize)
 
 static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -189,7 +191,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 
 static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -205,7 +207,7 @@ static void journal_bd_unlock_callback(void * data, int count);
 
 static int journal_bd_grab_slot(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	uint16_t scan = info->trans_slot;
 	int r;
 	
@@ -278,7 +280,7 @@ static int journal_bd_grab_slot(BD_t * object)
 
 static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	uint32_t number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
 	
 	if(!number)
@@ -357,7 +359,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 
 static int journal_bd_start_transaction(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	int r = -ENOMEM;
 	
 	/* do we have a journal yet? */
@@ -427,7 +429,7 @@ fail_keep_w:
 
 static int journal_bd_stop_transaction(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	struct commit_record commit;
 	bdesc_t * block;
 	chdesc_t * head;
@@ -530,7 +532,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 static void journal_bd_unlock_callback(void * data, int count)
 {
 	BD_t * object = (BD_t *) data;
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		/* FIXME: check return values here */
@@ -541,7 +543,7 @@ static void journal_bd_unlock_callback(void * data, int count)
 
 static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	bdesc_t * journal_block;
 	chdesc_t * chdesc;
 	chdesc_t * chdesc_index_next;
@@ -670,7 +672,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 
 static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		if(journal_bd_stop_transaction(object) < 0)
@@ -684,20 +686,20 @@ static int journal_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** journal_bd_get_write_head(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	return &info->write_head;
 }
 
 static int32_t journal_bd_get_block_space(BD_t * object)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	return CALL(info->bd, get_block_space);
 }
 
 static void journal_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(object);
+	struct journal_info * info = (struct journal_info *) object;
 	if(info->keep_w && hash_map_size(info->block_map))
 	{
 		int r = journal_bd_stop_transaction(object);
@@ -711,7 +713,7 @@ static void journal_bd_callback(void * arg)
 
 static int journal_bd_destroy(BD_t * bd)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	int r;
 	
 	if(info->keep_w)
@@ -745,16 +747,15 @@ static int journal_bd_destroy(BD_t * bd)
 	if(info->block_map)
 		hash_map_destroy(info->block_map);
 	
+	memset(info, 0, sizeof(*info));
 	free(info);
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 	
 	return 0;
 }
 
 static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint16_t expected_type)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	chdesc_t * head = NULL;
 	int r = -ENOMEM;
 	
@@ -915,7 +916,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 
 static int replay_journal(BD_t * bd)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	uint32_t transaction;
 	uint32_t min_trans = 0;
 	uint32_t min_idx = 0;
@@ -1019,18 +1020,12 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	if(CALL(disk, get_write_head))
 		return NULL;
 	
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
 	info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
-	BD_INIT(bd, journal_bd, info);
+	BD_INIT(bd, journal_bd);
 	OBJMAGIC(bd) = JOURNAL_MAGIC;
 	
 	info->bd = disk;
@@ -1099,7 +1094,7 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 
 int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 {
-	struct journal_info * info = (struct journal_info *) OBJLOCAL(bd);
+	struct journal_info * info = (struct journal_info *) bd;
 	chdesc_t ** write_head;
 	uint16_t level;
 	

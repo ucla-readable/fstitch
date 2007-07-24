@@ -57,7 +57,7 @@ static void print_inode(struct UFS_dinode inode)
 // TODO do more checks, move printf statements elsewhere, mark fs as unclean
 static int check_super(LFS_t * object)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	uint32_t numblocks;
 	int bs;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -120,7 +120,7 @@ static int check_super(LFS_t * object)
 // Find a free block and allocate all fragments in the block
 static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, chdesc_t ** head)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t i, num;
@@ -173,7 +173,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t i;
@@ -215,7 +215,7 @@ static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block,
 // Update file's inode with an nth indirect ptr
 static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil, chdesc_t ** head)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t newblock;
 
@@ -246,7 +246,7 @@ static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil,
 static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %p %d %d\n", __FUNCTION__, file, offset, value);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t blockno, nindirb, nindirf;
@@ -340,7 +340,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %p %d\n", __FUNCTION__, file, offset);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	uint32_t blockno, nindirb, nindirf;
@@ -504,7 +504,7 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 
 static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t i, blockno, offset;
 	int r, frags;
@@ -579,7 +579,7 @@ find_frags_new_home_failed:
 static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t blockno;
 	int r;
@@ -667,7 +667,7 @@ allocate_block_cleanup:
 
 static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	open_ufsfile_t * ef;
 	int r, exists = -1;
 	uint8_t type;
@@ -703,21 +703,21 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 static bdesc_t * ufs_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, number);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	return CALL(info->ubd, read_block, number, 1);
 }
 
 static bdesc_t * ufs_synthetic_lookup_block(LFS_t * object, uint32_t number)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, number);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
 static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
 	Dprintf("UFSDEBUG: %s %p\n", __FUNCTION__, fdesc);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) fdesc;
 	open_ufsfile_t * uf;
 
@@ -734,7 +734,7 @@ static void ufs_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("UFSDEBUG: %s %d, %s\n", __FUNCTION__, parent, name);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * pfile;
 	int r;
 
@@ -756,7 +756,7 @@ static int ufs_lookup_name(LFS_t * object, inode_t parent, const char * name, in
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
 	Dprintf("UFSDEBUG: %s %p\n", __FUNCTION__, file);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t n;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -776,7 +776,7 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file)
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	Dprintf("UFSDEBUG: %s %p %d\n", __FUNCTION__, file, offset);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t fragno, blockno, nindirb, nindirf;
 	uint32_t block_off[UFS_NIADDR], frag_off[UFS_NIADDR], pt_off[UFS_NIADDR];
@@ -841,7 +841,7 @@ static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offs
 
 static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	int r;
 
 	do {
@@ -856,7 +856,7 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t offset;
 	int r;
@@ -903,7 +903,7 @@ static char link_buf[UFS_MAXPATHLEN];
 
 static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * nf;
 	ufs_fdesc_t * pf;
 	open_ufsfile_t * open_file;
@@ -1114,7 +1114,7 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %s %s\n", __FUNCTION__, oldname, newname);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * old_pfdesc;
 	ufs_fdesc_t * new_pfdesc;
 	ufs_fdesc_t * oldf;
@@ -1252,7 +1252,7 @@ ufs_rename_exit:
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	uint32_t offset, blockno, truncated;
 	int r;
@@ -1297,7 +1297,7 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
@@ -1335,7 +1335,7 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d %s\n", __FUNCTION__, parent, name);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * pfile;
 	ufs_fdesc_t * f;
 	inode_t filenum;
@@ -1446,7 +1446,7 @@ ufs_remove_name_error2:
 static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 
 	if (!head)
 		return -EINVAL;
@@ -1457,14 +1457,14 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
 static chdesc_t ** ufs_get_write_head(LFS_t * object)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	return info->write_head;
 }
 
 static int32_t ufs_get_block_space(LFS_t * object)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	return CALL(info->ubd, get_block_space);
 }
 
@@ -1483,7 +1483,7 @@ static const bool * ufs_get_feature_array(LFS_t * object)
 static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, size_t size, void * data)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 
 	if (id == KFS_FEATURE_SIZE) {
 		if (!f)
@@ -1625,7 +1625,7 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = (struct ufs_info *) object;
 	
 	if (!head || !f || !data)
 		return -EINVAL;
@@ -1716,7 +1716,7 @@ static int ufs_get_root(LFS_t * lfs, inode_t * ino)
 
 static void ufs_destroy_parts(LFS_t * lfs)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(lfs);
+	struct ufs_info * info = (struct ufs_info *) lfs;
 	if (info->parts.p_allocator)
 		DESTROY(info->parts.p_allocator);
 	if (info->parts.p_dirent)
@@ -1730,7 +1730,7 @@ static void ufs_destroy_parts(LFS_t * lfs)
 static int ufs_destroy(LFS_t * lfs)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(lfs);
+	struct ufs_info * info = (struct ufs_info *) lfs;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	int32_t super_fs_ncg = super->fs_ncg;
 	int r = modman_rem_lfs(lfs);
@@ -1743,9 +1743,8 @@ static int ufs_destroy(LFS_t * lfs)
 	sfree(info->csums, sizeof(struct UFS_csum) * super_fs_ncg);
 	hash_map_destroy(info->filemap);
 
-	free(OBJLOCAL(lfs));
-	memset(lfs, 0, sizeof(*lfs));
-	free(lfs);
+	memset(info, 0, sizeof(*info));
+	free(info);
 
 	return 0;
 }
@@ -1766,17 +1765,12 @@ LFS_t * ufs(BD_t * block_device)
 
 	printf(frsum_warning);
 
-	lfs = malloc(sizeof(*lfs));
-	if (!lfs)
-		return NULL;
-
 	info = malloc(sizeof(*info));
-	if (!info) {
-		free(lfs);
+	if (!info)
 		return NULL;
-	}
 
-	LFS_INIT(lfs, ufs, info);
+	lfs = &info->lfs;
+	LFS_INIT(lfs, ufs);
 	OBJMAGIC(lfs) = UFS_MAGIC;
 	lfs->blockdev = block_device;
 
@@ -1801,14 +1795,12 @@ LFS_t * ufs(BD_t * block_device)
 	if (!info->filemap) {
 		ufs_destroy_parts(lfs);
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 
 	if (check_super(lfs)) {
 		ufs_destroy_parts(lfs);
 		free(info);
-		free(lfs);
 		return NULL;
 	}
 

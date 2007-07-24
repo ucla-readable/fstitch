@@ -2,12 +2,20 @@
 
 #include <kfs/ufs_alloc_linear.h>
 
+struct ufsmod_alloc_info {
+	UFSmod_alloc_t ufsmod_alloc;
+
+	struct ufs_info *info;
+};
+
+#define GET_UFS_INFO(object) (((struct ufsmod_alloc_info *) (object))->info)
+
 // FIXME this is a fairly inefficient way to scan for free blocks
 // we should take advantage of cylinder group summaries
 // and possibly even file and purpose.
 static uint32_t ufs_alloc_linear_find_free_block(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	uint32_t num = super->fs_dblkno / super->fs_frag;
@@ -29,7 +37,7 @@ static uint32_t ufs_alloc_linear_find_free_block(UFSmod_alloc_t * object, fdesc_
 // and possibly even file and purpose.
 static uint32_t ufs_alloc_linear_find_free_frag(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	uint32_t num = super->fs_dblkno;
@@ -49,7 +57,7 @@ static uint32_t ufs_alloc_linear_find_free_frag(UFSmod_alloc_t * object, fdesc_t
 // FIXME this is a fairly inefficient way to scan for free inodes
 static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_t * file, int purpose)
 {
-	struct ufs_info * info = (struct ufs_info *) OBJLOCAL(object);
+	struct ufs_info * info = GET_UFS_INFO(object);
 	int r;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 	uint32_t num = UFS_ROOT_INODE + 1;
@@ -68,14 +76,15 @@ static uint32_t ufs_alloc_linear_find_free_inode(UFSmod_alloc_t * object, fdesc_
 
 static int ufs_alloc_linear_destroy(UFSmod_alloc_t * obj)
 {
-	memset(obj, 0, sizeof(*obj));
-	free(obj);
+	struct ufsmod_alloc_info *info = (struct ufsmod_alloc_info *) obj;
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
 UFSmod_alloc_t * ufs_alloc_linear(struct ufs_info * info)
 {
-	UFSmod_alloc_t * obj;
+	struct ufsmod_alloc_info * obj;
 
 	if (!info)
 		return NULL;
@@ -84,7 +93,8 @@ UFSmod_alloc_t * ufs_alloc_linear(struct ufs_info * info)
 	if (!obj)
 		return NULL;
 
-	UFS_ALLOC_INIT(obj, ufs_alloc_linear, info);
-	return obj;
+	UFS_ALLOC_INIT(&obj->ufsmod_alloc, ufs_alloc_linear);
+	obj->info = info;
+	return &obj->ufsmod_alloc;
 }
 

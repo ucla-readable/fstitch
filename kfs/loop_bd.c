@@ -16,6 +16,8 @@
 
 
 struct loop_info {
+	BD_t bd;
+	
 	LFS_t * lfs;
 	fdesc_t * file;
 	inode_t inode;
@@ -25,7 +27,7 @@ typedef struct loop_info loop_info_t;
 static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) bd;
 	uint32_t lfs_bno;
 	bdesc_t * block;
 
@@ -51,7 +53,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) bd;
 	uint32_t lfs_bno;
 	bdesc_t * block;
 
@@ -77,7 +79,7 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 static int loop_write_block(BD_t * bd, bdesc_t * block)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) bd;
 	uint32_t loop_number, lfs_number;
 	bdesc_t * wblock;
 	chdesc_t * head = NULL;
@@ -107,20 +109,20 @@ static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** loop_get_write_head(BD_t * bd)
 {
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) bd;
 	return CALL(info->lfs, get_write_head);
 }
 
 static int32_t loop_get_block_space(BD_t * bd)
 {
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) bd;
 	return CALL(info->lfs, get_block_space);
 }
 
 static int loop_destroy(BD_t * bd)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	loop_info_t * info = (loop_info_t *) OBJLOCAL(bd);
+	loop_info_t * info = (loop_info_t *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
@@ -130,9 +132,6 @@ static int loop_destroy(BD_t * bd)
 	CALL(info->lfs, free_fdesc, info->file);
 	memset(info, 0, sizeof(*info));
 	free(info);
-
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
 
 	return 0;
 }
@@ -147,15 +146,12 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 	if (!lfs)
 		return NULL;
 
-	bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-
 	info = malloc(sizeof(*info));
 	if(!info)
-		goto error_bd;
+		goto error_inode;
+	bd = &info->bd;
 	
-	BD_INIT(bd, loop, info);
+	BD_INIT(bd, loop);
 
 	info->lfs = lfs;
 	bd->atomicsize = info->lfs->blockdev->atomicsize;
@@ -194,7 +190,5 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 
   error_inode:
 	free(info);
-  error_bd:
-	free(bd);
 	return NULL;
 }

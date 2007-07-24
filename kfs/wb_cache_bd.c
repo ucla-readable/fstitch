@@ -46,6 +46,8 @@ struct cache_slot {
 };
 
 struct cache_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	uint32_t size;
 	struct cache_slot * blocks;
@@ -118,7 +120,7 @@ static void wb_touch_block(struct cache_info * info, uint32_t index)
 
 static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
 	chdesc_t * chdesc;
 	int r;
@@ -169,7 +171,7 @@ static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 /* evict_block should evict exactly one block if it is successful */
 static int wb_evict_block(BD_t * object, bool only_dirty)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	
 #ifdef __KERNEL__
 	revision_tail_process_landing_requests();
@@ -212,7 +214,7 @@ static int wb_evict_block(BD_t * object, bool only_dirty)
 
 static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
 	uint32_t index;
 	
@@ -255,7 +257,7 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 
 static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
 	uint32_t index;
 	
@@ -293,7 +295,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 
 static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	uint32_t index;
 	
 	/* make sure it's a valid block */
@@ -348,7 +350,7 @@ static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** wb_cache_bd_get_write_head(BD_t * object)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
 }
 
@@ -361,7 +363,7 @@ static int32_t wb_cache_bd_get_block_space(BD_t * object)
 static void wb_cache_bd_callback(void * arg)
 {
 	BD_t * object = (BD_t *) arg;
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(object);
+	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	
 	/* FIXME: make this more efficient by only doing dirty blocks? */
@@ -377,7 +379,7 @@ static void wb_cache_bd_callback(void * arg)
 
 static int wb_cache_bd_destroy(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	struct cache_info * info = (struct cache_info *) bd;
 	uint32_t block;
 	int r;
 	
@@ -404,10 +406,9 @@ static int wb_cache_bd_destroy(BD_t * bd)
 			bdesc_release(&info->blocks[block].block);
 	
 	sfree(info->blocks, (info->size + 1) * sizeof(*info->blocks));
-	free(info);
 	
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	
 	TIMING_DUMP(wait, "wb_cache wait", "waits");
 	
@@ -417,17 +418,11 @@ static int wb_cache_bd_destroy(BD_t * bd)
 BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 {
 	uint32_t i;
-	struct cache_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
-	
-	info = malloc(sizeof(*info));
+	BD_t *bd;
+	struct cache_info * info = malloc(sizeof(*info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
 	/* allocate an extra cache slot: hash maps return NULL on failure, so we
 	 * can't have 0 be a valid index... besides, we need pointers to the
@@ -436,7 +431,6 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	if(!info->blocks)
 	{
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	/* set up the block cache pointers... this could all be in
@@ -470,11 +464,10 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 	{
 		sfree(info->blocks, (blocks + 1) * sizeof(*info->blocks));
 		free(info);
-		free(bd);
 		return NULL;
 	}
 	
-	BD_INIT(bd, wb_cache_bd, info);
+	BD_INIT(bd, wb_cache_bd);
 	OBJMAGIC(bd) = WB_CACHE_MAGIC;
 	
 	info->bd = disk;
@@ -516,7 +509,7 @@ BD_t * wb_cache_bd(BD_t * disk, uint32_t blocks)
 
 uint32_t wb_cache_dirty_count(BD_t * bd)
 {
-	struct cache_info * info = (struct cache_info *) OBJLOCAL(bd);
+	struct cache_info * info = (struct cache_info *) bd;
 	uint32_t i, dirty = 0;
 	
 	if(OBJMAGIC(bd) != WB_CACHE_MAGIC)

@@ -8,23 +8,25 @@
 #include <kfs/unlink_bd.h>
 
 struct unlink_info {
+	BD_t my_bd;
+	
 	BD_t * bd;
 	chdesc_t ** write_head;
 };
 
 static bdesc_t * unlink_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, read_block, number, count);
+	return CALL(((struct unlink_info *) object)->bd, read_block, number, count);
 }
 
 static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, synthetic_read_block, number, count);
+	return CALL(((struct unlink_info *) object)->bd, synthetic_read_block, number, count);
 }
 
 static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
 {
-	struct unlink_info * info = (struct unlink_info *) OBJLOCAL(object);
+	struct unlink_info * info = (struct unlink_info *) object;
 	chdesc_t * write_head = info->write_head ? *info->write_head : NULL;
 	chdesc_t * next = NULL;
 	chdesc_t * chdesc;
@@ -83,41 +85,37 @@ static int unlink_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 
 static chdesc_t ** unlink_bd_get_write_head(BD_t * object)
 {
-	return ((struct unlink_info *) OBJLOCAL(object))->write_head;
+	return ((struct unlink_info *) object)->write_head;
 }
 
 static int32_t unlink_bd_get_block_space(BD_t * object)
 {
-	return CALL(((struct unlink_info *) OBJLOCAL(object))->bd, get_block_space);
+	return CALL(((struct unlink_info *) object)->bd, get_block_space);
 }
 
 static int unlink_bd_destroy(BD_t * bd)
 {
+	struct unlink_info * info = (struct unlink_info *) bd;
 	int r = modman_rem_bd(bd);
 	if(r < 0)
 		return r;
-	modman_dec_bd(((struct unlink_info *) OBJLOCAL(bd))->bd, bd);
-	free(OBJLOCAL(bd));
-	memset(bd, 0, sizeof(*bd));
-	free(bd);
+	modman_dec_bd(info->bd, bd);
+	memset(info, 0, sizeof(*info));
+	free(info);
 	return 0;
 }
 
 BD_t * unlink_bd(BD_t * disk)
 {
 	struct unlink_info * info;
-	BD_t * bd = malloc(sizeof(*bd));
-	if(!bd)
-		return NULL;
+	BD_t * bd;
 	
 	info = malloc(sizeof(struct unlink_info));
 	if(!info)
-	{
-		free(bd);
 		return NULL;
-	}
+	bd = &info->my_bd;
 	
-	BD_INIT(bd, unlink_bd, info);
+	BD_INIT(bd, unlink_bd);
 	
 	info->bd = disk;
 	info->write_head = CALL(disk, get_write_head);

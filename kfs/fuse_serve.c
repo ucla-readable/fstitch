@@ -32,6 +32,8 @@
 // - Be safer; eg call open() only when we should
 // - Support delayed event response or multiple threads
 
+#define fuse_reply_assert(r) /* nothing */
+
 #define FUSE_SERVE_DEBUG 0
 
 #if FUSE_SERVE_DEBUG
@@ -413,12 +415,12 @@ static void serve_statfs(fuse_req_t req)
 	st.f_namemax = NAME_MAX;
 
 	r = fuse_reply_statfs(req, &st);
-	assert(!r);
+	fuse_reply_assert(!r);
 	return;
 
 serve_statfs_err:
 	r = fuse_reply_err(req, -r);
-	assert(!r);
+	fuse_reply_assert(!r);
 	return;
 }
 
@@ -436,7 +438,7 @@ static void serve_getattr(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 		r = fuse_reply_err(req, -r);
 	else
 		r = fuse_reply_attr(req, &stbuf, STDTIMEOUT);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * attr,
@@ -467,7 +469,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	if (to_set != (to_set & supported))
 	{
 		r = fuse_reply_err(req, ENOSYS);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -488,7 +490,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 			if (r < 0)
 			{
 				r = fuse_reply_err(req, -r);
-				assert(!r);
+				fuse_reply_assert(!r);
 				return;
 			}
 			fdesc->common->parent = (inode_t) hash_map_find_val(reqmount(req)->parents, (void *) cfs_ino);
@@ -503,7 +505,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 			if (r < 0)
 			{
 				r = fuse_reply_err(req, -r);
-				assert(!r);
+				fuse_reply_assert(!r);
 				return;
 			}
 		}
@@ -511,7 +513,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
-			assert(!r);
+			fuse_reply_assert(!r);
 			return;
 		}
 	}
@@ -523,7 +525,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
-			assert(!r);
+			fuse_reply_assert(!r);
 			return;
 		}
 	}
@@ -535,7 +537,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
-			assert(!r);
+			fuse_reply_assert(!r);
 			return;
 		}
 	}
@@ -547,7 +549,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
-			assert(!r);
+			fuse_reply_assert(!r);
 			return;
 		}
 	}
@@ -558,7 +560,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
-			assert(!r);
+			fuse_reply_assert(!r);
 			return;
 		}
 	}
@@ -569,7 +571,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);
-			assert(!r);
+			fuse_reply_assert(!r);
 			return;
 		}
 	}
@@ -580,7 +582,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		r = fuse_reply_err(req, -r);
 	else
 		r = fuse_reply_attr(req, &stbuf, STDTIMEOUT);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_name)
@@ -598,7 +600,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -609,12 +611,12 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 		fprintf(stderr, "%s(): possible parents entry leak for cfs inode %u\n", __FUNCTION__, cfs_ino);
 
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_entry(req, &e);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
@@ -627,7 +629,7 @@ static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 	if (!symlink_supported)
 	{
 		r = fuse_reply_err(req, ENOSYS);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -635,13 +637,13 @@ static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 	link_name[r] = '\0';
 
 	r = fuse_reply_readlink(req, link_name);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_forget(fuse_req_t req, fuse_ino_t ino, unsigned long nlookup)
@@ -666,7 +668,7 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -674,12 +676,12 @@ static void serve_mkdir(fuse_req_t req, fuse_ino_t parent,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_entry(req, &e);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static int create(fuse_req_t req, fuse_ino_t parent, const char * local_name,
@@ -723,14 +725,14 @@ static void serve_create(fuse_req_t req, fuse_ino_t parent,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_create(req, &e, fi);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
@@ -770,12 +772,12 @@ static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
 	}
 
 	r = fuse_reply_entry(req, &e);
-	assert(!r);
+	fuse_reply_assert(!r);
 	return;
 
   error:
 	r = fuse_reply_err(req, -r);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
@@ -789,7 +791,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 	if (!(mode & S_IFREG))
 	{
 		r = fuse_reply_err(req, ENOSYS);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -805,7 +807,7 @@ static void serve_mknod(fuse_req_t req, fuse_ino_t parent,
 	assert(r >= 0);
 
 	r = fuse_reply_entry(req, &e);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_name)
@@ -818,12 +820,12 @@ static void serve_unlink(fuse_req_t req, fuse_ino_t parent, const char * local_n
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_name)
@@ -835,12 +837,12 @@ static void serve_rmdir(fuse_req_t req, fuse_ino_t parent, const char * local_na
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_rename(fuse_req_t req,
@@ -856,12 +858,12 @@ static void serve_rename(fuse_req_t req,
 	{
 		// TODO: case -EINVAL: might mean files are on different filesystems
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_link(fuse_req_t req, fuse_ino_t fuse_ino,
@@ -878,7 +880,7 @@ static void serve_link(fuse_req_t req, fuse_ino_t fuse_ino,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -887,12 +889,12 @@ static void serve_link(fuse_req_t req, fuse_ino_t fuse_ino,
 	{
 		(void) CALL(reqmount(req)->cfs, unlink, new_cfs_parent, new_local_name);
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_entry(req, &e);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
@@ -905,11 +907,11 @@ static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_fsync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
@@ -943,7 +945,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 		// TODO: fid could be ENOENT, ENOENT, or other
 		// TODO: fuse_reply_err(req, ENOTDIR);
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -953,7 +955,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 		fprintf(stderr, "%s(): no parent ino for ino %u\n", __FUNCTION__, cfs_ino);
 		(void) CALL(reqcfs(req), close, fdesc);
 		r = fuse_reply_err(req, 1);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 	fdesc->common->parent = parent_cfs_ino;
@@ -961,7 +963,7 @@ static void serve_opendir(fuse_req_t req, fuse_ino_t fuse_ino,
 	fi_set_fdesc(fi, fdesc);
 
 	r = fuse_reply_open(req, fi);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
@@ -975,12 +977,12 @@ static void serve_releasedir(fuse_req_t req, fuse_ino_t fuse_ino,
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 #define RECLEN_MIN_SIZE (sizeof(((dirent_t *) NULL)->d_reclen) + (int) &((dirent_t *) NULL)->d_reclen)
@@ -1039,7 +1041,7 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	}
 
 	r = fuse_reply_buf(req, buf, total_size);
-	assert(!r);
+	fuse_reply_assert(!r);
 	free(buf);
 }
 
@@ -1063,7 +1065,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 	if (type == TYPE_DIR)
 	{
 		r = fuse_reply_err(req, EISDIR);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -1072,7 +1074,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 	fi_set_fdesc(fi, fdesc);
 	
 	r = fuse_reply_open(req, fi);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_release(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_info * fi)
@@ -1084,7 +1086,7 @@ static void serve_release(fuse_req_t req, fuse_ino_t fuse_ino, struct fuse_file_
 	r = CALL(reqcfs(req), close, fdesc);
 	assert(r >= 0);
 	r = fuse_reply_err(req, FUSE_ERR_SUCCESS);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
@@ -1100,7 +1102,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	{
 		fprintf(stderr, "%s:%d: kfsd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
 		r = fuse_reply_err(req, EINVAL);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -1112,7 +1114,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	{
 		// TODO: handle EOF?
 		r = fuse_reply_buf(req, NULL, 0);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -1136,7 +1138,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 	{
 		fprintf(stderr, "%s:%d: kfsd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
 		r = fuse_reply_err(req, EINVAL);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 
@@ -1147,12 +1149,12 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 	if (nbytes < size)
 	{
 		r = fuse_reply_write(req, nbytes);
-		assert(!r);
+		fuse_reply_assert(!r);
 		return;
 	}
 	
 	r = fuse_reply_write(req, nbytes);
-	assert(!r);
+	fuse_reply_assert(!r);
 }
 
 

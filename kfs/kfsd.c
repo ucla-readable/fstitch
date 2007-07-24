@@ -74,7 +74,7 @@ static void kfsd_callback_shutdowns(int when)
 	}
 }
 
-static int kfsd_running = 0;
+static volatile int kfsd_running = 0;
 
 // Shutdown kfsd: inform modules of impending shutdown, then exit.
 static void kfsd_shutdown(void)

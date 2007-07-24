@@ -24,8 +24,8 @@ struct UFSmod_cg {
 	DECLARE(UFSmod_cg_t, int, sync, int32_t num, chdesc_t ** head);
 };
 
-#define UFS_CG_INIT(ufs, module, info) { \
-	OBJ_INIT(ufs, module, info); \
+#define UFS_CG_INIT(ufs, module) { \
+	OBJ_INIT(ufs, module); \
 	ASSIGN(ufs, module, get_cylstart); \
 	ASSIGN(ufs, module, read); \
 	ASSIGN(ufs, module, write_time); \
