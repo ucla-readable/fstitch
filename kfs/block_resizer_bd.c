@@ -43,7 +43,7 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block, uint32_t
 	int value;
 	
 	/* make sure it's a valid block */
-	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(block->length && number + block->length / object->blocksize <= object->numblocks);
 	
 	/* this should never fail */
 	value = chdesc_push_down(block, object, info->bd);

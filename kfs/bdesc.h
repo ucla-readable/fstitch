@@ -33,8 +33,6 @@ typedef struct chdesc_dlist chdesc_dlist_t;
 #define DIRTY_QUEUE_REORDERING 0
 
 struct bdesc {
-	bdesc_t *ddesc; /* hee hee */
-	
 	uint8_t *data;
 	uint32_t length;
 
@@ -96,6 +94,8 @@ struct bdesc {
 	uint32_t ref_count;
 	uint32_t ar_count;
 	bdesc_t * ar_next;
+
+	bdesc_t *ddesc; /* hee hee */
 };
 
 int bdesc_init(void);
@@ -127,7 +127,7 @@ static inline void bdesc_release(bdesc_t **bdp)
 {
 	assert((*bdp)->ref_count > (*bdp)->ar_count);
 	(*bdp)->ref_count--;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, (*bdp)->ddesc, (*bdp)->ref_count, (*bdp)->ar_count, (*bdp)->ddesc->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count, *bdp->ref_count);
 	if (!(*bdp)->ref_count)
 		__bdesc_release(*bdp);
 	*bdp = NULL;

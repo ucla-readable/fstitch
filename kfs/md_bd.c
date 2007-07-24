@@ -38,7 +38,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	int value;
 	
 	/* make sure it's a valid block */
-	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(number + block->length / object->blocksize <= object->numblocks);
 	
 	/* this should never fail */
 	value = chdesc_push_down(block, object, info->bd[number & 1]);

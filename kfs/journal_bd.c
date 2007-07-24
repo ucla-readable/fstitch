@@ -552,10 +552,10 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	int r, metadata = !info->only_metadata;
 	
 	/* FIXME: make this module support counts other than 1 */
-	assert(block->ddesc->length == object->blocksize);
+	assert(block->length == object->blocksize);
 	
 	/* make sure it's a valid block */
-	assert(block->ddesc->length && block_number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(block->length && block_number + block->length / object->blocksize <= object->numblocks);
 	
 	if(info->recursion)
 	{
@@ -565,7 +565,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	}
 	
 	/* why write a block with no new changes? */
-	if(!block->ddesc->index_changes[object->graph_index].head)
+	if(!block->index_changes[object->graph_index].head)
 		return 0;
 	
 	/* there is supposed to always be a transaction going on */
@@ -584,7 +584,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			metadata = 1;
 		else
 			/* otherwise, scan for metadata */
-			for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
+			for(chdesc = block->index_changes[object->graph_index].head; chdesc; chdesc = chdesc->ddesc_index_next)
 				if(!(chdesc->flags & CHDESC_DATA))
 				{
 					metadata = 1;
@@ -593,7 +593,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	}
 	
 	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = chdesc_index_next)
+	for(chdesc = block->index_changes[object->graph_index].head; chdesc; chdesc = chdesc_index_next)
 	{
 		int needs_hold = 1;
 		chdepdesc_t ** deps = &chdesc->befores;
@@ -646,7 +646,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		
 		/* copy it to the journal */
 		head = WEAK(info->jdata_head);
-		r = chdesc_rewrite_block(journal_block, info->journal, block->ddesc->data, &head);
+		r = chdesc_rewrite_block(journal_block, info->journal, block->data, &head);
 		assert(r >= 0);
 		if(head)
 		{
@@ -769,7 +769,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	if(!commit_block)
 		return -1;
 	
-	cr = (struct commit_record *) commit_block->ddesc->data;
+	cr = (struct commit_record *) commit_block->data;
 	if(cr->magic != JOURNAL_MAGIC || cr->type != expected_type)
 	{
 		printf("%s(): journal subtransaction %d signature mismatch! (0x%08x:%d)\n", __FUNCTION__, transaction_number, cr->magic, cr->type);
@@ -830,7 +830,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			return -1;
 		bdesc_retain(number_block);
 		
-		numbers = (uint32_t *) number_block->ddesc->data;
+		numbers = (uint32_t *) number_block->data;
 		for(index = 0; index != max; index++)
 		{
 			bdesc_t * output;
@@ -845,7 +845,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 				goto output_error;
 			
 			head = NULL;
-			r = chdesc_create_full(output, info->bd, data_block->ddesc->data, &head);
+			r = chdesc_create_full(output, info->bd, data_block->data, &head);
 			if(r < 0)
 				goto output_error;
 			r = chdesc_add_depend(info->data, head);
@@ -932,7 +932,7 @@ static int replay_journal(BD_t * bd)
 			return -1;
 		
 		Dprintf("%s(): slot %d commit record on journal block %u\n", __FUNCTION__, transaction, commit_block_number);
-		cr = (struct commit_record *) commit_block->ddesc->data;
+		cr = (struct commit_record *) commit_block->data;
 		if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
 			continue;
 		Dprintf("%s(): transaction %d (sequence %u) will be recovered\n", __FUNCTION__, transaction, cr->seq);

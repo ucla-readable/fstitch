@@ -45,7 +45,7 @@ void * bsd_ptable_init(BD_t * bd)
 	mbr = CALL(bd, read_block, BSDLABEL_LABELSECTOR, 1);
 	if (!mbr)
 		goto bsd_init_error;
-	label = (struct disklabel *) &mbr->ddesc->data[BSDLABEL_LABELOFFSET];
+	label = (struct disklabel *) &mbr->data[BSDLABEL_LABELOFFSET];
 	maxblocks = bd->numblocks;
 
 	// TODO check d_checksum

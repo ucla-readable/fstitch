@@ -40,8 +40,8 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->ddesc->length == count * object->blocksize);
-		if(!bdesc->ddesc->synthetic)
+		assert(bdesc->length == count * object->blocksize);
+		if(!bdesc->synthetic)
 			return bdesc;
 	}
 	else
@@ -59,8 +59,8 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 		assert(0);
 	}
 	
-	r = read(info->fd, bdesc->ddesc->data, bdesc->ddesc->length);
-	if(r != bdesc->ddesc->length)
+	r = read(info->fd, bdesc->data, bdesc->length);
+	if(r != bdesc->length)
 	{
 		if(r < 0)
 			perror("read");
@@ -71,8 +71,8 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 		for(r = 0; r < count; r++)
 			fprintf(block_log, "%d read %u %d\n", info->user_name, number + r, r);
 	
-	if(bdesc->ddesc->synthetic)
-		bdesc->ddesc->synthetic = 0;
+	if(bdesc->synthetic)
+		bdesc->synthetic = 0;
 	else
 		blockman_add(&info->blockman, bdesc, number);
 	
@@ -90,7 +90,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->ddesc->length == count * object->blocksize);
+		assert(bdesc->length == count * object->blocksize);
 		return bdesc;
 	}
 
@@ -99,7 +99,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		return NULL;
 	bdesc_autorelease(bdesc);
 
-	bdesc->ddesc->synthetic = 1;
+	bdesc->synthetic = 1;
 
 	blockman_add(&info->blockman, bdesc, number);
 
@@ -114,7 +114,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	off_t seeked;
 
 	/* make sure it's a valid block */
-	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
+	assert(block->length && number + block->length / object->blocksize <= object->numblocks);
 
 	r = revision_tail_prepare(block, object);
 	if(r < 0)
@@ -130,14 +130,14 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 		perror("lseek");
 		assert(0);
 	}
-	if(write(info->fd, block->ddesc->data, block->ddesc->length) != block->ddesc->length)
+	if(write(info->fd, block->data, block->length) != block->length)
 	{
 		perror("write");
 		assert(0);
 	}
 
 	if(block_log)
-		fprintf(block_log, "%d write %u %d\n", info->user_name, number, block->ddesc->flags);
+		fprintf(block_log, "%d write %u %d\n", info->user_name, number, block->flags);
 
 	r = revision_tail_acknowledge(block, object);
 	if(r < 0)
