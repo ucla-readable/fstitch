@@ -24,7 +24,7 @@ static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, 
 	return CALL(((struct unlink_info *) object)->bd, synthetic_read_block, number, count);
 }
 
-static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
+static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct unlink_info * info = (struct unlink_info *) object;
 	chdesc_t * write_head = info->write_head ? *info->write_head : NULL;
@@ -75,7 +75,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	
 	/* write it */
-	return CALL(info->bd, write_block, block);
+	return CALL(info->bd, write_block, block, number);
 }
 
 static int unlink_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)

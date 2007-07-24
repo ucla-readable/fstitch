@@ -16,67 +16,38 @@ struct partition_info {
 static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct partition_info * info = (struct partition_info *) object;
-	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
-	bdesc = CALL(info->bd, read_block, info->start + number, count);
-	if(!bdesc)
-		return NULL;
-	
-	new_bdesc = bdesc_alloc_clone(bdesc, number);
-	if(!new_bdesc)
-		return NULL;
-	bdesc_autorelease(new_bdesc);
-	
-	return new_bdesc;
+	return CALL(info->bd, read_block, info->start + number, count);
 }
 
 static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct partition_info * info = (struct partition_info *) object;
-	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
-	bdesc = CALL(info->bd, synthetic_read_block, info->start + number, count);
-	if(!bdesc)
-		return NULL;
-	
-	new_bdesc = bdesc_alloc_clone(bdesc, number);
-	if(!new_bdesc)
-		return NULL;
-	bdesc_autorelease(new_bdesc);
-	
-	return new_bdesc;
+	return CALL(info->bd, synthetic_read_block, info->start + number, count);
 }
 
-static int partition_bd_write_block(BD_t * object, bdesc_t * block)
+static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct partition_info * info = (struct partition_info *) object;
-	bdesc_t * wblock;
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 
-	wblock = bdesc_alloc_clone(block, block->number + info->start);
-	if(!wblock)
-		return -1;
-	bdesc_autorelease(wblock);
-	
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd, wblock);
+	value = chdesc_push_down(object, block, info->bd, block);
 	if(value < 0)
 		return value;
 	
 	/* write it */
-	return CALL(info->bd, write_block, wblock);
+	return CALL(info->bd, write_block, block, number + info->start);
 }
 
 static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)

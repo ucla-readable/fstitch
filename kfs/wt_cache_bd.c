@@ -53,18 +53,19 @@ static void wt_touch_block(struct cache_info * info, struct cache_slot * slot)
 	}
 }
 
-static int wt_push_block(struct cache_info * info, bdesc_t * block)
+static int wt_push_block(struct cache_info * info, bdesc_t * block, uint32_t number)
 {
 	struct cache_slot * slot = info->blocks[0].lru;
 	int r;
 	
 	assert(block);
-	assert(!hash_map_find_val(info->block_map, (void *) block->number));
+	assert(!hash_map_find_val(info->block_map, (void *) number));
 	assert(!slot->block);
 	
-	if((r = hash_map_insert(info->block_map, (void *) block->number, slot)) < 0)
+	if((r = hash_map_insert(info->block_map, (void *) number, slot)) < 0)
 		return r;
 	slot->block = block;
+	block->cache_number = number;
 	
 	bdesc_retain(block);
 	wt_touch_block(info, slot);
@@ -78,7 +79,7 @@ static void wt_pop_block(struct cache_info * info, struct cache_slot * slot)
 	assert(slot);
 	assert(slot->block);
 	
-	erased_slot = hash_map_erase(info->block_map, (void *) slot->block->number);
+	erased_slot = hash_map_erase(info->block_map, (void *) slot->block->cache_number);
 	assert(slot == erased_slot);
 	bdesc_release(&slot->block);
 	
@@ -92,20 +93,19 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	struct cache_slot * slot;
 	bdesc_t * block;
 	
+	/* make sure it's a valid block */
+	assert(count && number + count <= object->numblocks);
+	
 	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
-		assert(slot->block->count == count);
+		assert(slot->block->ddesc->length == count * object->blocksize);
 		wt_touch_block(info, slot);
 		if(!slot->block->ddesc->synthetic)
 			return slot->block;
 	}
 	else
 	{
-		/* make sure it's a valid block */
-		if(!count || number + count > info->bd->numblocks)
-			return NULL;
-		
 		if(info->blocks[0].lru->block)
 			wt_pop_block(info, info->blocks[0].lru);
 	}
@@ -116,7 +116,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
-	else if(wt_push_block(info, block) < 0)
+	else if(wt_push_block(info, block, number) < 0)
 		return NULL;
 	
 	return block;
@@ -130,13 +130,12 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	int r;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > info->bd->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
-		assert(slot->block->count == count);
+		assert(slot->block->ddesc->length == count * object->blocksize);
 		wt_touch_block(info, slot);
 		return slot->block;
 	}
@@ -148,7 +147,7 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(!block)
 		return NULL;
 	
-	r = wt_push_block(info, block);
+	r = wt_push_block(info, block, number);
 	if(r < 0)
 		/* kind of a waste of a read... but we have to do it */
 		return NULL;
@@ -156,21 +155,19 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	return block;
 }
 
-static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
+static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
 	int r;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > info->bd->numblocks)
-		return -EINVAL;
+	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	slot = hash_map_find_val(info->block_map, (void *) block->number);
+	slot = hash_map_find_val(info->block_map, (void *) number);
 	if(slot)
 	{
 		assert(slot->block->ddesc == block->ddesc);
-		assert(slot->block->count == block->count);
 		wt_touch_block(info, slot);
 	}
 	else
@@ -178,7 +175,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		if(info->blocks[0].lru->block)
 			wt_pop_block(info, info->blocks[0].lru);
 
-		r = wt_push_block(info, block);
+		r = wt_push_block(info, block, number);
 		if(r < 0)
 			return r;
 	}
@@ -189,7 +186,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	
 	/* write it */
-	return CALL(info->bd, write_block, block);
+	return CALL(info->bd, write_block, block, number);
 }
 
 static int wt_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)

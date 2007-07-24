@@ -19,7 +19,7 @@ struct mem_info {
 	BD_t my_bd;
 	
 	uint8_t *blocks;
-	blockman_t * blockman;
+	blockman_t blockman;
 };
 
 static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
@@ -27,20 +27,19 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	struct mem_info * info = (struct mem_info *) object;
 	bdesc_t * bdesc;
 
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	/* make sure it's a valid block */
+	assert(count && number + count <= object->numblocks);
+	
+	bdesc = blockman_lookup(&info->blockman, number);
 	if (bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == count * object->blocksize);
 		if (!bdesc->ddesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
-		/* make sure it's a valid block */
-		if (!count || number + count > object->numblocks)
-			return NULL;
-
-		bdesc = bdesc_alloc(number, object->blocksize, count);
+		bdesc = bdesc_alloc(object->blocksize * count);
 		if (bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
@@ -51,8 +50,8 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
 	if (bdesc->ddesc->synthetic)
 		bdesc->ddesc->synthetic = 0;
-	else if (blockman_managed_add(info->blockman, bdesc) < 0)
-		return NULL;
+	else
+		blockman_add(&info->blockman, bdesc, number);
 	return bdesc;
 }
 
@@ -63,19 +62,13 @@ static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uin
 	return mem_bd_read_block(object, number, count);
 }
 
-static int mem_bd_write_block(BD_t * object, bdesc_t * block)
+static int mem_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct mem_info * info = (struct mem_info *) object;
 	int r;
-	
-	if(block->ddesc->length != object->blocksize) {
-		kpanic("wrote block with bad length\n");
-		return -EINVAL;
-	}
-	if (block->number >= object->numblocks) {
-		kpanic("wrote bad block number\n");
-		return -EINVAL;
-	}
+
+	assert(block->ddesc->length == object->blocksize);
+	assert(number < object->numblocks);
 
 	r = revision_tail_prepare(block, object);
 	if (r < 0) {
@@ -83,7 +76,7 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block)
 		return r;
 	}
 
-	memcpy(&info->blocks[block->number * object->blocksize],
+	memcpy(&info->blocks[number * object->blocksize],
 	       block->ddesc->data,
 	       object->blocksize);
 
@@ -170,8 +163,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 		free(info);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize, NULL, NULL);
-	if (!info->blockman) {
+	if (blockman_init(&info->blockman) < 0) {
 		free(info->blocks);
 		free(info);
 		return NULL;

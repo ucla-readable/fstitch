@@ -446,7 +446,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 				 * block - it was free anyhow, so we can leave
 				 * it alone if we write it as-is */
 				prev_head = orig_head;
-				CALL(state->lfs, write_block, block, &prev_head);
+				CALL(state->lfs, write_block, block, number, &prev_head);
 				goto no_block;
 			}
 
@@ -494,7 +494,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 		save_head = prev_head;
 
-		r = CALL(state->lfs, write_block, block, &prev_head);
+		r = CALL(state->lfs, write_block, block, number, &prev_head);
 		assert(r >= 0);
 
 		prev_head = save_head;

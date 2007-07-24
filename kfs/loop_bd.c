@@ -29,7 +29,6 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) bd;
 	uint32_t lfs_bno;
-	bdesc_t * block;
 
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -38,16 +37,7 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	block = CALL(info->lfs, lookup_block, lfs_bno);
-	if (!block)
-		return NULL;
-
-	block = bdesc_alloc_clone(block, number);
-	if (!block)
-		return NULL;
-	bdesc_autorelease(block);
-
-	return block;
+	return CALL(info->lfs, lookup_block, lfs_bno);
 }
 
 static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count)
@@ -55,7 +45,6 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) bd;
 	uint32_t lfs_bno;
-	bdesc_t * block;
 
 	/* FIXME: make this module support counts other than 1 */
 	assert(count == 1);
@@ -64,42 +53,26 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	block = CALL(info->lfs, synthetic_lookup_block, lfs_bno);
-	if (!block)
-		return NULL;
-
-	block = bdesc_alloc_clone(block, number);
-	if (!block)
-		return NULL;
-	bdesc_autorelease(block);
-
-	return block;
+	return CALL(info->lfs, synthetic_lookup_block, lfs_bno);
 }
 
-static int loop_write_block(BD_t * bd, bdesc_t * block)
+static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t loop_number)
 {
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_info_t * info = (loop_info_t *) bd;
-	uint32_t loop_number, lfs_number;
-	bdesc_t * wblock;
+	uint32_t lfs_number;
 	chdesc_t * head = NULL;
 	int r;
 
-	loop_number = block->number;
 	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * bd->blocksize);
 	if(lfs_number == -1)
 		return -EINVAL;
 
-	wblock = bdesc_alloc_clone(block, lfs_number);
-	if(!wblock)
-		return -1;
-	bdesc_autorelease(wblock);
-
-	r = chdesc_push_down(bd, block, info->lfs->blockdev, wblock);
+	r = chdesc_push_down(bd, block, info->lfs->blockdev, block);
 	if(r < 0)
 		return r;
 
-	return CALL(info->lfs, write_block, wblock, &head);
+	return CALL(info->lfs, write_block, block, lfs_number, &head);
 }
 
 static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)

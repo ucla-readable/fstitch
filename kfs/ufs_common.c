@@ -71,7 +71,7 @@ int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inod
 	if (*head && r > 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "update inode");
-		r = CALL(info->ubd, write_block, inode_table);
+		r = CALL(info->ubd, write_block, inode_table, fragno);
 	}
 
 	return r;
@@ -263,7 +263,7 @@ int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_
 	if (r >= 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write btotal");
-		r = CALL(info->ubd, write_block, block);
+		r = CALL(info->ubd, write_block, block, blockno);
 	}
 	if (r < 0)
 		return r;
@@ -302,7 +302,7 @@ int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t
 	if (r >= 0)
 	{
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write fbp");
-		r = CALL(info->ubd, write_block, block);
+		r = CALL(info->ubd, write_block, block, blockno);
 	}
 	if (r < 0)
 		return r;
@@ -364,7 +364,7 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate inode" : "free inode");
 	*(oldheads++) = *head;
 
-	r = CALL(info->ubd, write_block, block);
+	r = CALL(info->ubd, write_block, block, blockno);
 	if (r < 0)
 		goto write_inode_bitmap_end;
 
@@ -459,7 +459,7 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 		return r;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "free fragment" : "allocate fragment");
 
-	r = CALL(info->ubd, write_block, block);
+	r = CALL(info->ubd, write_block, block, blockno);
 	if (r < 0)
 		return r;
 
@@ -510,7 +510,7 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write frsum after");
 	}
 
-	r = CALL(info->ubd, write_block, cgblock);
+	r = CALL(info->ubd, write_block, cgblock, cgblock->xxx_number);
 	if (r < 0)
 		return r;
 	*/
@@ -580,7 +580,7 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	*(oldheads++) = *head;
 	*head = save_head;
 
-	r = CALL(info->ubd, write_block, block);
+	r = CALL(info->ubd, write_block, block, blockno);
 	if (r < 0)
 		return r;
 
@@ -659,7 +659,7 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 	if (*head != oldhead)
 		*(oldheads++) = *head;
 
-	r = CALL(info->ubd, write_block, info->csum_block);
+	r = CALL(info->ubd, write_block, info->csum_block, super->fs_csaddr);
 	if (r < 0)
 		return r;
 

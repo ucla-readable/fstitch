@@ -182,9 +182,9 @@ static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * na
 	return -EPERM;
 }
 
-static int wholedisk_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
+static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t number, chdesc_t ** head)
 {
-	return CALL(object->blockdev, write_block, block);
+	return CALL(object->blockdev, write_block, block, number);
 }
 
 static chdesc_t ** wholedisk_get_write_head(LFS_t * object)

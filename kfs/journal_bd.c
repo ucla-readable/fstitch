@@ -183,8 +183,7 @@ static bdesc_t * journal_bd_read_block(BD_t * object, uint32_t number, uint16_t 
 	assert(count == 1);
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	return CALL(info->bd, read_block, number, count);
 }
@@ -197,8 +196,7 @@ static bdesc_t * journal_bd_synthetic_read_block(BD_t * object, uint32_t number,
 	assert(count == 1);
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	return CALL(info->bd, synthetic_read_block, number, count);
 }
@@ -278,29 +276,30 @@ static int journal_bd_grab_slot(BD_t * object)
 #endif
 }
 
-static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
+static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t block_number)
 {
 	struct journal_info * info = (struct journal_info *) object;
-	uint32_t number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
+	uint32_t number = (uint32_t) hash_map_find_val(info->block_map, (void *) block_number);
 	
 	if(!number)
 	{
 		chdesc_t * head = WEAK(info->jdata_head);
 		bdesc_t * number_block;
+		uint32_t number_block_number;
 		size_t blocks = hash_map_size(info->block_map);
 		size_t last = blocks % info->trans_data_blocks;
 		uint16_t npb = numbers_per_block(object->blocksize);
-		uint32_t data;
 		int r;
 		
 		if(blocks && !last)
 		{
 			/* we need to allocate a new transaction slot */
 			struct commit_record commit;
-			bdesc_t * record = CALL(info->journal, synthetic_read_block, info->trans_slot * info->trans_total_blocks, 1);
+			uint32_t record_number = info->trans_slot * info->trans_total_blocks;
+			bdesc_t * record = CALL(info->journal, synthetic_read_block, record_number, 1);
 			if(!record)
 				return INVALID_BLOCK;
-			Dprintf("%s(): writing subcommit record for slot %d (sequence %u) to journal block %u\n", __FUNCTION__, info->trans_slot, info->trans_seq, record->number);
+			Dprintf("%s(): writing subcommit record for slot %d (sequence %u) to journal block %u\n", __FUNCTION__, info->trans_slot, info->trans_seq, record_number);
 			
 			/* first write the subcommit record */
 			commit.magic = JOURNAL_MAGIC;
@@ -316,7 +315,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 			head = WEAK(info->jdata_head);
 			info->recursion = 1;
 			info->write_head = NULL;
-			r = CALL(info->journal, write_block, record);
+			r = CALL(info->journal, write_block, record, record_number);
 			info->write_head = info->hold;
 			info->recursion = 0;
 			assert(r >= 0);
@@ -328,29 +327,29 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block)
 		
 		/* get next journal block, write block number to journal block number map */
 		number = info->trans_slot * info->trans_total_blocks + 1;
+		number_block_number = number + last / npb;
 		if(last % npb)
-			number_block = CALL(info->journal, read_block, number + last / npb, 1);
+			number_block = CALL(info->journal, read_block, number_block_number, 1);
 		else
-			number_block = CALL(info->journal, synthetic_read_block, number + last / npb, 1);
+			number_block = CALL(info->journal, synthetic_read_block, number_block_number, 1);
 		assert(number_block);
 		
-		data = block->number;
-		r = chdesc_create_byte(number_block, info->journal, (last % npb) * sizeof(uint32_t), sizeof(uint32_t), &data, &head);
+		r = chdesc_create_byte(number_block, info->journal, (last % npb) * sizeof(uint32_t), sizeof(uint32_t), &number_block_number, &head);
 		assert(r >= 0);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "journal number");
 		r = chdesc_add_depend(info->wait, head);
 		assert(r >= 0);
 		info->recursion = 1;
 		info->write_head = NULL;
-		r = CALL(info->journal, write_block, number_block);
+		r = CALL(info->journal, write_block, number_block, number_block_number);
 		info->write_head = info->hold;
 		info->recursion = 0;
 		assert(r >= 0);
 		
 		/* add the journal block number to the map */
 		number += trans_number_block_count(object->blocksize) + last;
-		Dprintf("%s(): map FS block %u to journal block %u in number block %u\n", __FUNCTION__, block->number, number, number_block->number);
-		r = hash_map_insert(info->block_map, (void *) block->number, (void *) number);
+		Dprintf("%s(): map FS block %u to journal block %u in number block %u\n", __FUNCTION__, block_number, number, number_block_number);
+		r = hash_map_insert(info->block_map, (void *) block_number, (void *) number);
 		assert(r >= 0);
 	}
 	
@@ -431,14 +430,16 @@ static int journal_bd_stop_transaction(BD_t * object)
 {
 	struct journal_info * info = (struct journal_info *) object;
 	struct commit_record commit;
+	uint32_t block_number;
 	bdesc_t * block;
 	chdesc_t * head;
 	int r;
 	
 	if(nholds)
 		return -EBUSY;
-	
-	block = CALL(info->journal, read_block, info->trans_slot * info->trans_total_blocks, 1);
+
+	block_number = info->trans_slot * info->trans_total_blocks;
+	block = CALL(info->journal, read_block, block_number, 1);
 	if(!block)
 	{
 		printf("Can't get the commit record block!\n");
@@ -500,7 +501,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	/* ...and finally write the commit and cancellation records */
 	info->recursion = 1;
 	info->write_head = NULL;
-	r = CALL(info->journal, write_block, block);
+	r = CALL(info->journal, write_block, block, block_number);
 	info->write_head = info->hold;
 	info->recursion = 0;
 	if(r < 0)
@@ -541,7 +542,7 @@ static void journal_bd_unlock_callback(void * data, int count)
 	}
 }
 
-static int journal_bd_write_block(BD_t * object, bdesc_t * block)
+static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block_number)
 {
 	struct journal_info * info = (struct journal_info *) object;
 	bdesc_t * journal_block;
@@ -551,17 +552,16 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	int r, metadata = !info->only_metadata;
 	
 	/* FIXME: make this module support counts other than 1 */
-	assert(block->count == 1);
+	assert(block->ddesc->length == object->blocksize);
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->ddesc->length && block_number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	if(info->recursion)
 	{
 		/* only used to write the journal itself: many fewer change descriptors there! */
 		chdesc_push_down(object, block, info->bd, block);
-		return CALL(info->bd, write_block, block);
+		return CALL(info->bd, write_block, block, block_number);
 	}
 	
 	/* why write a block with no new changes? */
@@ -573,7 +573,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	if(info->only_metadata)
 	{
-		number = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
+		number = (uint32_t) hash_map_find_val(info->block_map, (void *) block_number);
 		/* if we already have the block in the journal, it must have metadata */
 		if(number)
 			metadata = 1;
@@ -639,7 +639,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	if(metadata)
 	{
 		chdesc_t * head;
-		number = journal_bd_lookup_block(object, block);
+		number = journal_bd_lookup_block(object, block, block_number);
 		assert(number != INVALID_BLOCK);
 		journal_block = CALL(info->journal, synthetic_read_block, number, 1);
 		assert(journal_block);
@@ -656,7 +656,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 		
 		info->recursion = 1;
 		info->write_head = NULL;
-		r = CALL(info->journal, write_block, journal_block);
+		r = CALL(info->journal, write_block, journal_block, number);
 		info->write_head = info->hold;
 		info->recursion = 0;
 		assert(r >= 0);
@@ -664,7 +664,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	chdesc_push_down(object, block, info->bd, block);
 	
-	r = CALL(info->bd, write_block, block);
+	r = CALL(info->bd, write_block, block, block_number);
 	if(CALL(info->bd, get_block_space) <= 0)
 		kfsd_unlock_callback(journal_bd_unlock_callback, object);
 	return r;
@@ -851,7 +851,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			r = chdesc_add_depend(info->data, head);
 			if(r < 0)
 				goto chdesc_error;
-			r = CALL(info->bd, write_block, output);
+			r = CALL(info->bd, write_block, output, numbers[index]);
 			if(r < 0)
 				goto chdesc_error;
 			bdesc_release(&data_block);
@@ -898,7 +898,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		/* and write it to disk */
 		info->recursion = 1;
 		info->write_head = NULL;
-		r = CALL(info->journal, write_block, commit_block);
+		r = CALL(info->journal, write_block, commit_block, transaction_start);
 		info->write_head = info->hold;
 		info->recursion = 0;
 		if(r < 0)
@@ -925,12 +925,13 @@ static int replay_journal(BD_t * bd)
 	for(transaction = 0; transaction < info->cr_count; transaction++)
 	{
 		struct commit_record * cr;
-		bdesc_t * commit_block = CALL(info->journal, read_block, transaction * info->trans_total_blocks, 1);
+		uint32_t commit_block_number = transaction * info->trans_total_blocks;
+		bdesc_t * commit_block = CALL(info->journal, read_block, commit_block_number, 1);
 		
 		if(!commit_block)
 			return -1;
 		
-		Dprintf("%s(): slot %d commit record on journal block %u\n", __FUNCTION__, transaction, commit_block->number);
+		Dprintf("%s(): slot %d commit record on journal block %u\n", __FUNCTION__, transaction, commit_block_number);
 		cr = (struct commit_record *) commit_block->ddesc->data;
 		if(cr->magic != JOURNAL_MAGIC || cr->type != CRCOMMIT)
 			continue;

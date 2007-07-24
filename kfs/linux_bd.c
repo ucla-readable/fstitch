@@ -68,7 +68,7 @@ struct linux_info {
 	
 	struct block_device * bdev;
 	const char * path;
-	blockman_t * blockman;
+	blockman_t blockman;
 	
 	atomic_t outstanding_io_count;
 	spinlock_t dma_outstanding_lock;
@@ -86,8 +86,9 @@ struct linux_info {
 struct linux_bio_private {
 	struct linux_info * info;
 	bdesc_t * bdesc;
+	int need_blockman;
 	uint32_t number;
-	uint16_t count;
+	uint32_t nbytes;
 #if DEBUG_WRITES
 	uint32_t issue;
 #endif
@@ -139,6 +140,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 #endif
 	
 	assert(bio->bi_vcnt == 1);
+	assert(private->bdesc);
 	for(i = 0; i < bio->bi_vcnt; i++)
 	{
 		int len;
@@ -150,7 +152,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 			len = 4096;
 			if(i + 1 == bio->bi_vcnt)
 			{
-				len = (private->count * LINUX_BLOCKSIZE) % 4096;
+				len = private->nbytes % 4096;
 				if(!len)
 					len = 4096;
 			}
@@ -214,27 +216,25 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	struct bio_vec * bv;
 	int vec_len;
 	unsigned long flags;
-	int r, i, j;
+	int i, j;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t * blocks[READ_AHEAD_COUNT];
 	KERNEL_INTERVAL(read);
 	
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
 	
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	/* make sure it's a valid block */
+	assert(count && number + count <= object->numblocks);
+	
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == count * object->blocksize);
 		if(!bdesc->ddesc->synthetic)
 		{
 			KDprintk(KERN_ERR "already got it. done w/ read\n");
 			return bdesc;
 		}
-	}
-	else if(!count || number + count > object->numblocks)
-	{
-		printk(KERN_ERR "bailing on read 1\n");
-		return NULL;
 	}
 	
 	KDprintk(KERN_ERR "starting real read work\n");
@@ -247,7 +247,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	for(j = 0; j < READ_AHEAD_COUNT; j++)
 	{
 		uint32_t j_number = number + (count * j);
-		datadesc_t * dd;
+		bdesc_t *bd;
+		private[j].need_blockman = 0;
 	
 		if(j_number + count > object->numblocks)
 		{
@@ -255,31 +256,23 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 			continue;
 		}
 		
-		dd = blockman_lookup(info->blockman, j_number);
-		if(dd && !dd->synthetic)
+		if(j_number == number)
+			bd = bdesc;
+		else
+			bd = blockman_lookup(&info->blockman, j_number);
+		if(bd && !bd->ddesc->synthetic)
 		{
 			blocks[j] = NULL;
 			continue;
 		}
-		else if(dd)
-		{
-			if(bdesc->ddesc == dd)
-				blocks[j] = bdesc;
-			else
-			{
-				/* blockman_managed_lookup? */
-				blocks[j] = bdesc_alloc_wrap(dd, j_number, dd->length / info->blockman->length);
-				if(blocks[j] == NULL)
-					return NULL;
-				bdesc_autorelease(blocks[j]);
-			}
-		}
-		else
-		{
-			blocks[j] = bdesc_alloc(j_number, LINUX_BLOCKSIZE, count);
+		else if(bd)
+			blocks[j] = bd;
+		else {
+			blocks[j] = bdesc_alloc(LINUX_BLOCKSIZE * count);
 			if(blocks[j] == NULL)
 				return NULL;
 			bdesc_autorelease(blocks[j]);
+			private[j].need_blockman = 1;
 		}
 		
 		vec_len = (count * LINUX_BLOCKSIZE + 4095) / 4096;
@@ -308,7 +301,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		private[j].info = info;
 		private[j].bdesc = blocks[j];
 		private[j].number = j_number;
-		private[j].count = count;
+		private[j].nbytes = count * LINUX_BLOCKSIZE;
 #if DEBUG_LINUX_BD
 		private[j].seq = info->seq++;
 #endif
@@ -367,11 +360,9 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 			if(++info->read_ahead_idx == READ_AHEAD_BUFFER)
 				info->read_ahead_idx = 0;
 		}
-		
-		r = blockman_managed_add(info->blockman, blocks[j]);
-		assert(r >= 0);
-		if(r < 0)
-			return NULL;
+
+		if (private[j].need_blockman)
+			blockman_add(&info->blockman, blocks[j], private[j].number);
 	}
 	
 	KDprintk(KERN_ERR "exiting read\n");
@@ -383,31 +374,29 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	struct linux_info * info = (struct linux_info *) object;
 	bdesc_t * bdesc;
 	
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	/* make sure it's a valid block */
+	assert(count && number + count <= object->numblocks);
+	
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == count * object->blocksize);
 		return bdesc;
 	}
 	
-	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
-	
-	bdesc = bdesc_alloc(number, LINUX_BLOCKSIZE, count);
+	bdesc = bdesc_alloc(LINUX_BLOCKSIZE * count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
 	
 	bdesc->ddesc->synthetic = 1;
 	
-	if(blockman_managed_add(info->blockman, bdesc) < 0)
-		return NULL;
+	blockman_add(&info->blockman, bdesc, number);
 	
 	return bdesc;
 }
 
-static int linux_bd_write_block(BD_t * object, bdesc_t * block)
+static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	DEFINE_WAIT(wait);
 	struct linux_info * info = (struct linux_info *) object;
@@ -427,17 +416,8 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 #endif
 
-	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n", block->number, block->count);
-	if((LINUX_BLOCKSIZE * block->count) != block->ddesc->length)
-	{
-		kpanic("wrote block with bad length (%d bytes)\n", block->ddesc->length);
-		return -EINVAL;
-	}
-	if(block->number >= object->numblocks)
-	{
-		kpanic("wrote bad block number\n");
-		return -EINVAL;
-	}
+	KDprintk(KERN_ERR "entered write (blk: %d, cnt: %d)\n", number, block->ddesc->length / LINUX_BLOCKSIZE);
+	assert(number < object->numblocks);
 	
 	private = bio_private_alloc();
 	assert(private);
@@ -456,11 +436,11 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	if(debug_writes.next < MAXWRITES)
 	{
 		struct linux_bd_write * write = &debug_writes.writes[debug_writes.next];
-		write->blockno = block->number;
+		write->blockno = number;
 		write->checksum = block_checksum(block->ddesc->data, block->ddesc->length);
 		/* NOTE: ninflight may overcount as any inflight writes could complete before we actually make the request below... */
-		if(block->number < MAXBLOCKNO)
-			write->ninflight = atomic_inc_return(&debug_writes_ninflight[block->number]) - 1;
+		if(number < MAXBLOCKNO)
+			write->ninflight = atomic_inc_return(&debug_writes_ninflight[number]) - 1;
 		else
 			write->ninflight = -1;
 		debug_writes.next++;
@@ -501,15 +481,15 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	
 	private->info = info;
 	private->bdesc = block;
-	private->number = block->number;
-	private->count = block->count;
+	private->number = number;
+	private->nbytes = block->ddesc->length;
 #if DEBUG_LINUX_BD
 	private->seq = info->seq++;
 #endif
 	
 	bio->bi_idx = 0;
 	bio->bi_vcnt = vec_len;
-	bio->bi_sector = block->number;
+	bio->bi_sector = number;
 	bio->bi_size = block->ddesc->length;
 	bio->bi_bdev = info->bdev;
 	bio->bi_rw = WRITE | (1 << BIO_RW_FUA);
@@ -547,7 +527,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_forward = r;
 	
 	if(revision_back != revision_forward)
-		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
+		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, revision_forward);
 	
 	KDprintk(KERN_ERR "exiting write\n");
 	return 0;
@@ -715,8 +695,7 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		return NULL;
 	}
 	
-	info->blockman = blockman_create(512, NULL, NULL);
-	if(!info->blockman)
+	if(blockman_init(&info->blockman) < 0)
 	{
 		printk("blockman_create() failed\n");
 		bd_release(info->bdev);

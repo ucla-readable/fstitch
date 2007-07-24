@@ -195,7 +195,7 @@ static int opgroup_lfs_remove_name(LFS_t * object, inode_t parent, const char * 
 	return value;
 }
 
-static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** head)
+static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, uint32_t number, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
@@ -204,7 +204,7 @@ static int opgroup_lfs_write_block(LFS_t * object, bdesc_t * block, chdesc_t ** 
 	if(r < 0)
 		return r;
 
-	value = CALL(info->lfs, write_block, block, head);
+	value = CALL(info->lfs, write_block, block, number, head);
 	if(value >= 0)
 	{
 		r = opgroup_finish_head(*head);

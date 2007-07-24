@@ -20,68 +20,38 @@ struct resize_info {
 static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct resize_info * info = (struct resize_info *) object;
-	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
-	bdesc = CALL(info->bd, read_block, number * info->merge_count, count * info->merge_count);
-	if(!bdesc)
-		return NULL;
-	
-	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / object->blocksize);
-	if(!new_bdesc)
-		return NULL;
-	bdesc_autorelease(new_bdesc);
-	
-	return new_bdesc;
+	return CALL(info->bd, read_block, number * info->merge_count, count * info->merge_count);
 }
 
 static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct resize_info * info = (struct resize_info *) object;
-	bdesc_t * bdesc, * new_bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
-	bdesc = CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
-	if(!bdesc)
-		return NULL;
-	
-	new_bdesc = bdesc_alloc_wrap(bdesc->ddesc, number, bdesc->ddesc->length / object->blocksize);
-	if(!new_bdesc)
-		return NULL;
-	bdesc_autorelease(new_bdesc);
-	
-	return new_bdesc;
+	return CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
 }
 
-static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block)
+static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct resize_info * info = (struct resize_info *) object;
-	bdesc_t * wblock;
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
-	
-	wblock = bdesc_alloc_wrap(block->ddesc, block->number * info->merge_count, block->ddesc->length / info->original_size);
-	if(!wblock)
-		return -1;
-	bdesc_autorelease(wblock);
+	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd, wblock);
+	value = chdesc_push_down(object, block, info->bd, block);
 	if(value < 0)
 		return value;
 	
 	/* write it */
-	value = CALL(info->bd, write_block, wblock);
-	return value;
+	return CALL(info->bd, write_block, block, number * info->merge_count);
 }
 
 static int block_resizer_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)

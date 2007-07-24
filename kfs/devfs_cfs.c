@@ -256,19 +256,20 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 	{
 		const uint32_t limit = MIN(blocksize - dataoffset, size - size_written);
 		const uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
+		const uint32_t blockno = write_byte / blocksize;
 		chdesc_t * head = NULL;
 
 		if(!dataoffset && limit == blocksize)
 			/* we can do a synthetic read in this case */
-			bdesc = CALL(devfd->bd, synthetic_read_block, write_byte / blocksize, 1);
+			bdesc = CALL(devfd->bd, synthetic_read_block, blockno, 1);
 		else
-			bdesc = CALL(devfd->bd, read_block, write_byte / blocksize, 1);
+			bdesc = CALL(devfd->bd, read_block, blockno, 1);
 		if(!bdesc)
 			return size_written ? size_written : -1;
 		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);
 		if(r < 0)
 			break;
-		r = CALL(devfd->bd, write_block, bdesc);
+		r = CALL(devfd->bd, write_block, bdesc, blockno);
 		if(r < 0)
 		{
 			/* FIXME clean up chdescs */

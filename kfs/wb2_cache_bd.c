@@ -48,20 +48,21 @@ struct cache_info {
 static inline bdesc_t * wb2_map_get_block(struct cache_info * info, uint32_t number)
 {
 	bdesc_t * b = info->map[number & (info->map_capacity - 1)];
-	while(b && b->number < number)
+	while(b && b->cache_number < number)
 		b = b->block_hash.next;
-	return (b && b->number == number) ? b : NULL;
+	return (b && b->cache_number == number) ? b : NULL;
 }
 
-static inline void wb2_map_put_block(struct cache_info * info, bdesc_t * block)
+static inline void wb2_map_put_block(struct cache_info * info, bdesc_t * block, uint32_t number)
 {
-	bdesc_t ** b = &info->map[block->number & (info->map_capacity - 1)];
-	while(*b && (*b)->number < block->number)
+	bdesc_t ** b = &info->map[number & (info->map_capacity - 1)];
+	while(*b && (*b)->cache_number < number)
 		b = &(*b)->block_hash.next;
 	block->block_hash.next = *b;
 	if(*b)
 		(*b)->block_hash.pprev = &block->block_hash.next;
 	block->block_hash.pprev = b;
+	block->cache_number = number;
 	*b = block;
 }
 
@@ -72,7 +73,7 @@ static inline void wb2_map_remove_block(bdesc_t * block)
 }
 
 /* we are guaranteed that the block is not already in the list */
-static void wb2_push_block(struct cache_info * info, bdesc_t * block)
+static void wb2_push_block(struct cache_info * info, bdesc_t * block, uint32_t number)
 {
 #if DIRTY_QUEUE_REORDERING
 	block->pass = 0;
@@ -84,8 +85,8 @@ static void wb2_push_block(struct cache_info * info, bdesc_t * block)
 	block->lru_dirty.prev = NULL;
 	block->lru_dirty.next = NULL;
 	
-	assert(!wb2_map_get_block(info, block->number));
-	wb2_map_put_block(info, block);
+	assert(!wb2_map_get_block(info, number));
+	wb2_map_put_block(info, block, number);
 	
 	info->all.first = block;
 	if(block->lru_all.next)
@@ -117,7 +118,7 @@ static void wb2_push_dirty(struct cache_info * info, bdesc_t * block)
 
 static void wb2_pop_slot(struct cache_info * info, bdesc_t * block)
 {
-	assert(wb2_map_get_block(info, block->number) == block);
+	assert(wb2_map_get_block(info, block->cache_number) == block);
 	
 	if(block->lru_all.prev)
 		block->lru_all.prev->lru_all.next = block->lru_all.next;
@@ -218,7 +219,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	else
 	{
 		int start = delay ? jiffy_time() : 0;
-		r = CALL(info->bd, write_block, block);
+		r = CALL(info->bd, write_block, block, block->cache_number);
 		if(r < 0)
 		{
 			revision_slice_pull_up(&slice);
@@ -385,7 +386,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 		}
 		else
 		{
-			uint32_t number = block->number;
+			uint32_t number = block->cache_number;
 			bdesc_t * prev = block->lru_dirty.prev;
 			wb2_pop_slot_dirty(info, block);
 			/* now try and find sequential blocks to write */
@@ -447,14 +448,13 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	block = wb2_map_get_block(info, number);
 	if(block)
 	{
 		/* in the cache, use it */
-		assert(block->count == count);
+		assert(block->ddesc->length == count * object->blocksize);
 		wb2_touch_block_read(info, block);
 		if(!block->ddesc->synthetic)
 			return block;
@@ -475,7 +475,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
 	else
-		wb2_push_block(info, block);
+		wb2_push_block(info, block, number);
 	
 	return block;
 }
@@ -486,14 +486,13 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * block;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	block = wb2_map_get_block(info, number);
 	if(block)
 	{
 		/* in the cache, use it */
-		assert(block->count == count);
+		assert(block->ddesc->length == count * object->blocksize);
 		wb2_touch_block_read(info, block);
 		return block;
 	}
@@ -508,19 +507,18 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(!block)
 		return NULL;
 	
-	wb2_push_block(info, block);
+	wb2_push_block(info, block, number);
 	return block;
 }
 
-static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
+static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	block = wb2_map_get_block(info, block->number);
+	block = wb2_map_get_block(info, number);
 	if(block)
 	{
 		/* already have this block */
@@ -543,7 +541,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block)
 		if(info->blocks >= info->soft_blocks)
 			wb2_shrink_blocks(info);
 		
-		wb2_push_block(info, block);
+		wb2_push_block(info, block, number);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
 		wb2_push_dirty(info, block);

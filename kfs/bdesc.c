@@ -33,7 +33,7 @@ static void bdesc_pools_free_all(void * ignore)
 
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
-bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
+bdesc_t * bdesc_alloc(uint32_t nbytes)
 {
 	bdesc_t * bdesc = bdesc_mem_alloc();
 	uint16_t i;
@@ -45,8 +45,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 		bdesc_mem_free(bdesc);
 		return NULL;
 	}
-	length *= count;
-	bdesc->ddesc->data = malloc(length);
+	bdesc->ddesc->data = malloc(nbytes);
 	if(!bdesc->ddesc->data)
 	{
 		datadesc_mem_free(bdesc->ddesc);
@@ -55,11 +54,9 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	}
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
-	bdesc->number = number;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
-	bdesc->count = count;
 	bdesc->ddesc->ref_count = 1;
 	bdesc->ddesc->in_flight = 0;
 	bdesc->ddesc->synthetic = 0;
@@ -84,36 +81,10 @@ bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count)
 	for (i = 0; i < NOVERLAP1 + 1; i++)
 		bdesc->ddesc->overlap1[i] = NULL;
 	bdesc->ddesc->bit_changes = NULL;
-	bdesc->ddesc->manager = NULL;
-	/* it has no manager, but give it a managed number anyway */
-	bdesc->ddesc->managed_number = number;
-	bdesc->ddesc->length = length;
+	bdesc->disk_hash.pprev = NULL;
+	bdesc->ddesc->length = nbytes;
 	bdesc->ddesc->flags = 0;
 	return bdesc;
-}
-
-/* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number, uint16_t count)
-{
-	bdesc_t * bdesc = bdesc_mem_alloc();
-	if(!bdesc)
-		return NULL;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC_WRAP, bdesc, ddesc, number, count);
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
-	bdesc->ddesc = ddesc;
-	bdesc->number = number;
-	bdesc->ref_count = 1;
-	bdesc->ar_count = 0;
-	bdesc->ar_next = NULL;
-	bdesc->count = count;
-	bdesc->ddesc->ref_count++;
-	return bdesc;
-}
-
-/* make a new bdesc that shares a ddesc with another bdesc */
-bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number)
-{
-	return bdesc_alloc_wrap(original->ddesc, number, original->count);
 }
 
 /* increase the reference count of a bdesc */
@@ -153,8 +124,7 @@ void __bdesc_release(bdesc_t *bdesc)
 				fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
 			hash_map_destroy(bdesc->ddesc->bit_changes);
 		}
-		if(bdesc->ddesc->manager)
-			blockman_remove(bdesc->ddesc);
+		blockman_remove(bdesc);
 		free(bdesc->ddesc->data);
 		memset(bdesc->ddesc, 0, sizeof(*bdesc->ddesc));
 		datadesc_mem_free(bdesc->ddesc);

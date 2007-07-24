@@ -15,67 +15,38 @@ struct md_info {
 static bdesc_t * md_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct md_info * info = (struct md_info *) object;
-	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
-	read_bdesc = CALL(info->bd[number & 1], read_block, number >> 1, count);
-	if(!read_bdesc)
-		return NULL;
-	
-	bdesc = bdesc_alloc_clone(read_bdesc, number);
-	if(!bdesc)
-		return NULL;
-	bdesc_autorelease(bdesc);
-
-	return bdesc;
+	return CALL(info->bd[number & 1], read_block, number >> 1, count);
 }
 
 static bdesc_t * md_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
 {
 	struct md_info * info = (struct md_info *) object;
-	bdesc_t * read_bdesc, * bdesc;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
-	read_bdesc = CALL(info->bd[number & 1], synthetic_read_block, number >> 1, count);
-	if(!read_bdesc)
-		return NULL;
-	
-	bdesc = bdesc_alloc_clone(read_bdesc, number);
-	if(!bdesc)
-		return NULL;
-	bdesc_autorelease(bdesc);
-
-	return bdesc;
+	return CALL(info->bd[number & 1], synthetic_read_block, number >> 1, count);
 }
 
-static int md_bd_write_block(BD_t * object, bdesc_t * block)
+static int md_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct md_info * info = (struct md_info *) object;
-	bdesc_t * wblock;
 	int value;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
-	
-	wblock = bdesc_alloc_clone(block, block->number >> 1);
-	if(!wblock)
-		return -1;
-	bdesc_autorelease(wblock);
+	assert(number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd[block->number & 1], wblock);
+	value = chdesc_push_down(object, block, info->bd[number & 1], block);
 	if(value < 0)
 		return value;
 	
 	/* write it */
-	return CALL(info->bd[block->number & 1], write_block, wblock);
+	return CALL(info->bd[number & 1], write_block, block, number >> 1);
 }
 
 static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)

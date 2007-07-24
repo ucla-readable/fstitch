@@ -54,17 +54,18 @@ struct cache_info {
 	hash_map_t * block_map;
 };
 
-static uint32_t wb_push_block(struct cache_info * info, bdesc_t * block)
+static uint32_t wb_push_block(struct cache_info * info, bdesc_t * block, uint32_t number)
 {
 	uint32_t index = info->blocks[0].free_index;
 	
 	assert(index && index <= info->size && !info->blocks[index].block);
-	assert(!hash_map_find_val(info->block_map, (void *) block->number));
+	assert(!hash_map_find_val(info->block_map, (void *) number));
 	
-	if(hash_map_insert(info->block_map, (void *) block->number, (void *) index) < 0)
+	if(hash_map_insert(info->block_map, (void *) number, (void *) index) < 0)
 		return INVALID_BLOCK;
 	
 	info->blocks[index].block = block;
+	block->cache_number = number;
 	
 	/* not a free slot anymore */
 	info->blocks[0].free_index = info->blocks[index].next_index;
@@ -83,7 +84,7 @@ static uint32_t wb_push_block(struct cache_info * info, bdesc_t * block)
 static void wb_pop_block(struct cache_info * info, uint32_t number, uint32_t index)
 {
 	assert(info->blocks[index].block);
-	assert(info->blocks[index].block->number == number);
+	assert(info->blocks[index].block->cache_number == number);
 	
 	bdesc_release(&info->blocks[index].block);
 	
@@ -153,7 +154,7 @@ static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 	}
 	else
 	{
-		r = CALL(info->bd, write_block, slot->block);
+		r = CALL(info->bd, write_block, slot->block, slot->block->cache_number);
 		if(r < 0)
 		{
 			revision_slice_pull_up(&slice);
@@ -185,7 +186,7 @@ static int wb_evict_block(BD_t * object, bool only_dirty)
 			int code = wb_flush_block(object, slot);
 			if(code == FLUSH_DONE || (!only_dirty && code == FLUSH_EMPTY))
 			{
-				wb_pop_block(info, slot->block->number, (uint32_t) (slot - &info->blocks[0]));
+				wb_pop_block(info, slot->block->cache_number, (uint32_t) (slot - &info->blocks[0]));
 				return 0;
 			}
 			r |= code;
@@ -219,15 +220,14 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
 	if(index)
 	{
 		/* in the cache, use it */
 		block = info->blocks[index].block;
-		assert(block->count == count);
+		assert(block->ddesc->length == count * object->blocksize);
 		wb_touch_block(info, index);
 		if(!block->ddesc->synthetic)
 			return block;
@@ -248,7 +248,7 @@ static bdesc_t * wb_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	
 	if(block->ddesc->synthetic)
 		block->ddesc->synthetic = 0;
-	else if(wb_push_block(info, block) == INVALID_BLOCK)
+	else if(wb_push_block(info, block, number) == INVALID_BLOCK)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
 	
@@ -262,14 +262,13 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 	
 	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
 	if(index)
 	{
 		/* in the cache, use it */
-		assert(info->blocks[index].block->count == count);
+		assert(info->blocks[index].block->ddesc->length == count * object->blocksize);
 		wb_touch_block(info, index);
 		return info->blocks[index].block;
 	}
@@ -285,7 +284,7 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	if(!block)
 		return NULL;
 	
-	index = wb_push_block(info, block);
+	index = wb_push_block(info, block, number);
 	if(index == INVALID_BLOCK)
 		/* kind of a waste of the read... but we have to do it */
 		return NULL;
@@ -293,21 +292,19 @@ static bdesc_t * wb_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	return block;
 }
 
-static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
+static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	uint32_t index;
 	
 	/* make sure it's a valid block */
-	if(block->number + block->count > object->numblocks)
-		return -EINVAL;
+	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 	
-	index = (uint32_t) hash_map_find_val(info->block_map, (void *) block->number);
+	index = (uint32_t) hash_map_find_val(info->block_map, (void *) number);
 	if(index)
 	{
 		/* already have this block */
 		assert(info->blocks[index].block->ddesc == block->ddesc);
-		assert(info->blocks[index].block->count == block->count);
 		wb_touch_block(info, index);
 		
 		return 0;
@@ -320,7 +317,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block)
 				return -EBUSY;
 		assert(hash_map_size(info->block_map) < info->size);
 		
-		index = wb_push_block(info, block);
+		index = wb_push_block(info, block, number);
 		if(index == INVALID_BLOCK)
 			return -ENOMEM;
 		

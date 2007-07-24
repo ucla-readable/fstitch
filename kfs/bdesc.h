@@ -19,7 +19,6 @@ typedef struct datadesc datadesc_t;
 
 #include <kfs/bd.h>
 #include <kfs/chdesc.h>
-#include <kfs/blockman.h>
 
 struct chdesc_dlist {
 	chdesc_t * head;
@@ -54,8 +53,6 @@ struct datadesc {
 	chdesc_t *overlap1[1 + NOVERLAP1];
 	
 	hash_map_t * bit_changes;
-	blockman_t * manager;
-	uint32_t managed_number;
 	uint16_t length, flags;
 };
 
@@ -63,14 +60,13 @@ struct datadesc {
 #define DIRTY_QUEUE_REORDERING 0
 
 struct bdesc {
-	uint32_t number;
 	uint32_t ref_count;
 	uint32_t ar_count;
 	bdesc_t * ar_next;
 	datadesc_t * ddesc;
-	uint16_t count;
 
 	/* information for the write-back cache */
+	uint32_t cache_number;
 #if DIRTY_QUEUE_REORDERING
 	uint32_t pass;
 	/* if we've put a block after this one already during this pass through
@@ -86,19 +82,20 @@ struct bdesc {
 		struct bdesc *prev;
 		struct bdesc *next;
 	} lru_all, lru_dirty;
+
+	// DISK/BLOCKMAN INFORMATION
+	uint32_t disk_number;
+	struct {
+		struct bdesc **pprev;
+		struct bdesc *next;
+	} disk_hash;
 };
 
 int bdesc_init(void);
 
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
-bdesc_t * bdesc_alloc(uint32_t number, uint16_t length, uint16_t count);
-
-/* wrap a ddesc in a new bdesc */
-bdesc_t * bdesc_alloc_wrap(datadesc_t * ddesc, uint32_t number, uint16_t count);
-
-/* make a new bdesc that shares a ddesc with another bdesc */
-bdesc_t * bdesc_alloc_clone(bdesc_t * original, uint32_t number);
+bdesc_t * bdesc_alloc(uint32_t nbytes);
 
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc);

@@ -23,7 +23,7 @@ struct unix_file_info {
 	
 	char *fname;
 	int fd;
-	blockman_t * blockman;
+	blockman_t blockman;
 	int user_name;
 };
 
@@ -34,20 +34,19 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	off_t seeked;
 	int r;
 	
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	/* make sure it's a valid block */
+	assert(count && number + count <= object->numblocks);
+		
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == count * object->blocksize);
 		if(!bdesc->ddesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
-		/* make sure it's a valid block */
-		if(!count || number + count > object->numblocks)
-			return NULL;
-		
-		bdesc = bdesc_alloc(number, object->blocksize, count);
+		bdesc = bdesc_alloc(object->blocksize * count);
 		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
@@ -74,9 +73,8 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	
 	if(bdesc->ddesc->synthetic)
 		bdesc->ddesc->synthetic = 0;
-	else if(blockman_managed_add(info->blockman, bdesc) < 0)
-		/* kind of a waste of the read... but we have to do it */
-		return NULL;
+	else
+		blockman_add(&info->blockman, bdesc, number);
 	
 	return bdesc;
 }
@@ -87,41 +85,36 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	bdesc_t * bdesc;
 
 	/* make sure it's a valid block */
-	if(!count || number + count > object->numblocks)
-		return NULL;
+	assert(count && number + count <= object->numblocks);
 
-	bdesc = blockman_managed_lookup(info->blockman, number);
+	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
 	{
-		assert(bdesc->count == count);
+		assert(bdesc->ddesc->length == count * object->blocksize);
 		return bdesc;
 	}
 
-	bdesc = bdesc_alloc(number, object->blocksize, count);
+	bdesc = bdesc_alloc(object->blocksize * count);
 	if(bdesc == NULL)
 		return NULL;
 	bdesc_autorelease(bdesc);
 
 	bdesc->ddesc->synthetic = 1;
 
-	if(blockman_managed_add(info->blockman, bdesc) < 0)
-		return NULL;
+	blockman_add(&info->blockman, bdesc, number);
 
 	return bdesc;
 }
 
-static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
+static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
 	int r;
 	int revision_forward, revision_back;
 	off_t seeked;
-	
-	if(block->number + block->count > object->numblocks)
-	{
-		kpanic("wrote bad block number\n");
-		return -EINVAL;
-	}
+
+	/* make sure it's a valid block */
+	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 
 	r = revision_tail_prepare(block, object);
 	if(r < 0)
@@ -131,8 +124,8 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 	revision_back = r;
 
-	seeked = lseek(info->fd, block->number * object->blocksize, SEEK_SET);
-	if(seeked != block->number * object->blocksize)
+	seeked = lseek(info->fd, number * object->blocksize, SEEK_SET);
+	if(seeked != number * object->blocksize)
 	{
 		perror("lseek");
 		assert(0);
@@ -144,7 +137,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	}
 
 	if(block_log)
-		fprintf(block_log, "%d write %u %d\n", info->user_name, block->number, block->ddesc->flags);
+		fprintf(block_log, "%d write %u %d\n", info->user_name, number, block->ddesc->flags);
 
 	r = revision_tail_acknowledge(block, object);
 	if(r < 0)
@@ -155,7 +148,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block)
 	revision_forward = r;
 
 	if (revision_back != revision_forward)
-		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, block->number, revision_back, revision_forward);
+		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, revision_forward);
 
 	return 0;
 }
@@ -262,9 +255,7 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 		free(info);
 		return NULL;
 	}
-	info->blockman = blockman_create(blocksize, NULL, NULL);
-	if(!info->blockman)
-	{
+	if (blockman_init(&info->blockman) < 0) {
 		close(info->fd);
 		free(info);
 		return NULL;
