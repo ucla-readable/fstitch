@@ -12,6 +12,12 @@
 
 #define EXT2_BASE_DEBUG 0
 
+#ifndef NDEBUG
+# define DELETE_DIRENT_STATS 1
+#else
+# define DELETE_DIRENT_STATS 0
+#endif
+
 #define ROUND_ROBIN_ALLOC 1
 
 #if EXT2_BASE_DEBUG
@@ -41,6 +47,7 @@ struct ext2_mdirent {
 	EXT2_Dir_entry_t dirent;
 	char name_term; /* ensure room for dirent.name null termination */
 	uint32_t offset;
+	chweakref_t create; /* chdesc that created this dirent */
 	mdirent_dlist_t offsetl;
 	mdirent_dlist_t freel;
 };
@@ -90,6 +97,9 @@ struct ext2_info {
 	/* the last block number allocated for each of file
 	 * data, directory data, and [d]indirect pointers */
 	uint32_t last_fblock, last_dblock, last_iblock;
+#endif
+#if DELETE_DIRENT_STATS
+	unsigned dirent_delete_merged, dirent_delete_notmerged;
 #endif
 	uint32_t _blocksize_;
 };
@@ -239,6 +249,8 @@ static void ext2_mdirents_free(ext2_mdir_t * mdir)
 	while(mdirent)
 	{
 		ext2_mdirent_t * next = mdirent->offsetl.next;
+		if(WEAK(mdirent->create))
+			chdesc_weak_release(&mdirent->create, 0);
 		ext2_mdirent_free(mdirent);
 		mdirent = next;
 	}
@@ -247,7 +259,7 @@ static void ext2_mdirents_free(ext2_mdir_t * mdir)
 }
 
 // Add a new mdirent to mdir
-static int ext2_mdirent_add(ext2_mdir_t * mdir, const EXT2_Dir_entry_t * entry, uint32_t offset)
+static int ext2_mdirent_add(ext2_mdir_t * mdir, const EXT2_Dir_entry_t * entry, uint32_t offset, ext2_mdirent_t ** pmdirent)
 {
 	ext2_mdirent_t * mdirent = ext2_mdirent_alloc();
 	int r;
@@ -257,6 +269,7 @@ static int ext2_mdirent_add(ext2_mdir_t * mdir, const EXT2_Dir_entry_t * entry, 
 	memcpy(&mdirent->dirent, entry, MIN(entry->rec_len, sizeof(*entry)));
 	mdirent->dirent.name[mdirent->dirent.name_len] = 0;
 	mdirent->offset = offset;
+	WEAK_INIT(mdirent->create);
 
 	r = hash_map_insert(mdir->mdirents, mdirent->dirent.name, mdirent);
 	if(r < 0)
@@ -293,6 +306,8 @@ static int ext2_mdirent_add(ext2_mdir_t * mdir, const EXT2_Dir_entry_t * entry, 
 		mdirent->freel.next = NULL;
 	}
 
+	if(pmdirent)
+		*pmdirent = mdirent;
 	return 0;
 }
 
@@ -305,6 +320,7 @@ static int ext2_mdirent_use(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, const 
 
 	memcpy(&mdirent->dirent, entry, MIN(entry->rec_len, sizeof(*entry)));
 	mdirent->dirent.name[entry->name_len] = 0;
+	assert(!WEAK(mdirent->create));
 	r = hash_map_insert(mdir->mdirents, mdirent->dirent.name, mdirent);
 	if(r < 0)
 		return r;
@@ -325,6 +341,8 @@ static void ext2_mdirent_clear(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, uin
 	{
 		// convert to a jump (empty) dirent
 		mdirent->dirent.inode = 0;
+		if(WEAK(mdirent->create))
+			chdesc_weak_release(&mdirent->create, 0);
 		if(!mdirent->freel.pprev)
 			ext2_mdirent_insert_free_list(mdir, mdirent);
 	}
@@ -367,12 +385,14 @@ static void ext2_mdirent_clear(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, uin
 				ext2_mdirent_insert_free_list(mdir, oprev);
 		}
 
+		if(WEAK(mdirent->create))
+			chdesc_weak_release(&mdirent->create, 0);
 		ext2_mdirent_free(mdirent);
 	}
 }
 
 // Split a new dirent out of mdirent's unused space
-static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, const EXT2_Dir_entry_t * existing_dirent, const EXT2_Dir_entry_t * new_dirent)
+static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, const EXT2_Dir_entry_t * existing_dirent, const EXT2_Dir_entry_t * new_dirent, ext2_mdirent_t ** pnmdirent)
 {
 	ext2_mdirent_t * nmdirent = ext2_mdirent_alloc();
 	int r;
@@ -391,6 +411,7 @@ static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, cons
 	assert(!r);
 
 	mdirent->dirent.rec_len = existing_dirent->rec_len;
+	WEAK_INIT(nmdirent->create);
 	nmdirent->offset = mdirent->offset + mdirent->dirent.rec_len;
 
 	nmdirent->offsetl.next = mdirent->offsetl.next;
@@ -420,6 +441,8 @@ static int ext2_mdirent_split(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, cons
 		nmdirent->freel.next = NULL;
 	}
 
+	if(pnmdirent)
+		*pnmdirent = nmdirent;
 	return 0;
 }
 
@@ -477,7 +500,7 @@ static int ext2_mdir_add(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t **
 		r = ext2_get_disk_dirent(object, dir_file, &next_base, &entry);
 		if(r < 0)
 			goto fail;
-		r = ext2_mdirent_add(mdir, entry, cur_base);
+		r = ext2_mdirent_add(mdir, entry, cur_base, NULL);
 		if(r < 0)
 			goto fail;
 	}
@@ -1538,23 +1561,20 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	struct ext2_info * info = (struct ext2_info *) object;
 	uint32_t prev_eof = parent->f_inode.i_size, new_block;
 	ext2_mdir_t * mdir;
-	int r = 0, newdir = 0;
+	int r;
 	bdesc_t * block;
 	chdesc_t * append_chdesc;
+	ext2_mdirent_t * mdirent;
 	DEFINE_CHDESC_PASS_SET(set, 1, befores);
 	set.array[0] = NULL;
-	
-	if (parent->f_inode.i_size == 0)
-		newdir = 1;
 	
 	r = ext2_mdir_get(object, parent, &mdir);
 	if(r < 0)
 		return r;
-	
-	if(!newdir)
+
+	if(parent->f_inode.i_size)
 	{
-		ext2_mdirent_t * mdirent = mdir->free_first;
-		for(; mdirent; mdirent = mdirent->freel.next)
+		for(mdirent = mdir->free_first; mdirent; mdirent = mdirent->freel.next)
 		{
 			if(!mdirent->dirent.inode && mdirent->dirent.rec_len >= new_dirent->rec_len)
 			{
@@ -1565,8 +1585,12 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 					return r;
 				r = ext2_write_dirent_set(object, parent, new_dirent, offset, tail, befores);
 				if(r < 0)
+				{
 					ext2_mdirent_clear(mdir, mdirent, object->blocksize);
-				return r;
+					return r;
+				}
+				chdesc_weak_retain(*tail, &mdirent->create, NULL, NULL);
+				return 0;
 			}
 			if(mdirent->dirent.inode && mdirent->dirent.rec_len - (8 + mdirent->dirent.name_len) > new_dirent->rec_len)
 			{
@@ -1575,6 +1599,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 				uint32_t existing_offset = mdirent->offset;
 				uint32_t new_offset;
 				uint16_t backup_rec_len = new_dirent->rec_len;
+				ext2_mdirent_t * nmdirent;
 				r = ext2_get_disk_dirent(object, parent, &existing_offset, &entry);
 				if(r < 0)
 					return r;
@@ -1585,7 +1610,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 				entry_updated.rec_len = entry_updated_len;
 				
 				new_offset = existing_offset + entry_updated.rec_len;
-				r = ext2_mdirent_split(mdir, mdirent, &entry_updated, new_dirent);
+				r = ext2_mdirent_split(mdir, mdirent, &entry_updated, new_dirent, &nmdirent);
 				if(r < 0)
 				{
 					new_dirent->rec_len = backup_rec_len;
@@ -1594,7 +1619,9 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 				r = ext2_write_dirent_extend_set(object, parent, &entry_updated, new_dirent, existing_offset, tail, befores);
 				if(r < 0)
 					assert(0); // TODO: join the existing and new mdirents
-				return r;
+				else
+					chdesc_weak_retain(*tail, &nmdirent->create, NULL, NULL);
+				return 0;
 			}
 		}
 	}
@@ -1622,11 +1649,12 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Di
 	lfs_add_fork_head(append_chdesc);
 	
 	new_dirent->rec_len = object->blocksize;
-	r = ext2_mdirent_add(mdir, new_dirent, prev_eof);
+	r = ext2_mdirent_add(mdir, new_dirent, prev_eof, &mdirent);
 	if(r < 0)
 		return r;
 	r = ext2_write_dirent_set(object, parent, new_dirent, prev_eof, tail, PASS_CHDESC_SET(set));
 	assert(r >= 0); // need to undo ext2_dir_add()
+	chdesc_weak_retain(*tail, &mdirent->create, NULL, NULL);
 	return r;
 }
 
@@ -1834,6 +1862,9 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			new_file->f_inode.i_block[0] = dirblock_no;
 			new_file->f_inode.i_size = object->blocksize;
 			new_file->f_inode.i_blocks = object->blocksize / 512;
+
+			// should "." and ".." be inserted into the mdirent cache with their
+			// creation patch(es)?
 
 			// insert "."
 			dir_dirent.inode = ino;
@@ -2268,7 +2299,7 @@ static int ext2_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdes
 	return _ext2_free_block(object, block, head);
 }
 
-static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, chdesc_t ** head)
+static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, chdesc_t ** phead)
 {
 	Dprintf("EXT2DEBUG: ext2_delete_dirent %u\n", mdirent->offset);
 	struct ext2_info * info = (struct ext2_info *) object;
@@ -2276,6 +2307,8 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 	uint32_t base_blockno, prev_base_blockno;
 	bdesc_t * dirblock;
 	uint16_t len;
+	chdesc_t * head = *phead;
+	bool dirent_wont_exist;
 	int r;
 
 	if(base % object->blocksize == 0)
@@ -2292,13 +2325,16 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		disk_dirent = (const EXT2_Dir_entry_t *) dirblock->data;
 		jump_dirent.inode = 0;
 		jump_dirent.rec_len = disk_dirent->rec_len;
-		r = chdesc_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, head);
+		r = chdesc_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, &head);
 		if(r < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent, add jump dirent");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent, add jump dirent");
 		r = CALL(info->ubd, write_block, dirblock, base_blockno);
 		if(r >= 0)
+		{
+			dirent_wont_exist = (head == WEAK(mdirent->create));
 			ext2_mdirent_clear(mdir, mdirent, object->blocksize);
+		}
 		else
 		{
 			assert(0); // must undo chdesc creation to recover
@@ -2318,19 +2354,41 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 
 	//update the length of the previous dirent:
 	len = mdirent->dirent.rec_len + ext2_mdirent_offset_prev(mdir, mdirent)->dirent.rec_len;
-	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, head);
+	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, &head);
 	if(r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "delete dirent");
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent");
 	
 	r = CALL(info->ubd, write_block, dirblock, prev_base_blockno);
 	if(r >= 0)
+	{
+		dirent_wont_exist = (head == WEAK(mdirent->create));
 		ext2_mdirent_clear(mdir, mdirent, object->blocksize);
+	}
 	else
 	{
 		assert(0); // must undo chdesc creation to recover
 		return r;
 	}
+
+	if(dirent_wont_exist)
+	{
+		// Create and deleted merged so the dirent will never exist on disk.
+		// Therefore the caller need not depend on the dirent's deletion
+		// (which could otherwise require many disk writes to enforce SU).
+		lfs_add_fork_head(head);
+#if DELETE_DIRENT_STATS
+		info->dirent_delete_merged++;
+#endif
+	}
+	else
+	{
+		*phead = head;
+#if DELETE_DIRENT_STATS
+		info->dirent_delete_notmerged++;
+#endif
+	}
+
 	return 0;
 }
 
@@ -2779,7 +2837,13 @@ static int ext2_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, 
 static int ext2_destroy(LFS_t * lfs)
 {
 	struct ext2_info * info = (struct ext2_info *) lfs;
-	int i,r = modman_rem_lfs(lfs);
+	int i, r;
+
+#if DELETE_DIRENT_STATS
+	printf("ext2 dirent delete stats: merged %u/%u\n", info->dirent_delete_merged, info->dirent_delete_merged + info->dirent_delete_notmerged);
+#endif
+
+	r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->ubd, lfs);	
@@ -2956,8 +3020,12 @@ static int ext2_load_super(LFS_t * lfs)
 	info->bitmap_cache = NULL;
 	info->inode_cache = NULL;
 	info->groups = NULL;
-	info->gnum = INVALID_BLOCK;	
-	info->inode_gdesc = INVALID_BLOCK;	
+	info->gnum = INVALID_BLOCK;
+	info->inode_gdesc = INVALID_BLOCK;
+#if DELETE_DIRENT_STATS
+	info->dirent_delete_merged = 0;
+	info->dirent_delete_notmerged = 0;
+#endif
 #if ROUND_ROBIN_ALLOC
 	info->last_fblock = 0;
 	info->last_iblock = 0;
