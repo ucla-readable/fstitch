@@ -99,7 +99,9 @@ struct ext2_info {
 	uint32_t last_fblock, last_dblock, last_iblock;
 #endif
 #if DELETE_DIRENT_STATS
-	unsigned dirent_delete_merged, dirent_delete_notmerged;
+	struct {
+		unsigned merged, uncommitted, total;
+	} delete_dirent_stats;
 #endif
 	uint32_t _blocksize_;
 };
@@ -2333,6 +2335,10 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		if(r >= 0)
 		{
 			dirent_wont_exist = (head == WEAK(mdirent->create));
+#if DELETE_DIRENT_STATS
+			if(WEAK(mdirent->create) && !(WEAK(mdirent->create)->flags & CHDESC_INFLIGHT))
+				info->delete_dirent_stats.uncommitted++;
+#endif
 			ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 		}
 		else
@@ -2363,6 +2369,10 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 	if(r >= 0)
 	{
 		dirent_wont_exist = (head == WEAK(mdirent->create));
+#if DELETE_DIRENT_STATS
+		if(WEAK(mdirent->create) && !(WEAK(mdirent->create)->flags & CHDESC_INFLIGHT))
+			info->delete_dirent_stats.uncommitted++;
+#endif
 		ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 	}
 	else
@@ -2378,16 +2388,16 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		// (which could otherwise require many disk writes to enforce SU).
 		lfs_add_fork_head(head);
 #if DELETE_DIRENT_STATS
-		info->dirent_delete_merged++;
+		info->delete_dirent_stats.merged++;
 #endif
 	}
 	else
 	{
 		*phead = head;
-#if DELETE_DIRENT_STATS
-		info->dirent_delete_notmerged++;
-#endif
 	}
+#if DELETE_DIRENT_STATS
+	info->delete_dirent_stats.total++;
+#endif
 
 	return 0;
 }
@@ -2840,7 +2850,7 @@ static int ext2_destroy(LFS_t * lfs)
 	int i, r;
 
 #if DELETE_DIRENT_STATS
-	printf("ext2 dirent delete stats: merged %u/%u\n", info->dirent_delete_merged, info->dirent_delete_merged + info->dirent_delete_notmerged);
+	printf("ext2 delete dirent stats: %u merged of %u possible and %u total\n", info->delete_dirent_stats.merged, info->delete_dirent_stats.uncommitted, info->delete_dirent_stats.total);
 #endif
 
 	r = modman_rem_lfs(lfs);
@@ -3023,8 +3033,9 @@ static int ext2_load_super(LFS_t * lfs)
 	info->gnum = INVALID_BLOCK;
 	info->inode_gdesc = INVALID_BLOCK;
 #if DELETE_DIRENT_STATS
-	info->dirent_delete_merged = 0;
-	info->dirent_delete_notmerged = 0;
+	info->delete_dirent_stats.merged = 0;
+	info->delete_dirent_stats.uncommitted = 0;
+	info->delete_dirent_stats.total = 0;
 #endif
 #if ROUND_ROBIN_ALLOC
 	info->last_fblock = 0;
