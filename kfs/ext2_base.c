@@ -2850,7 +2850,7 @@ static int ext2_destroy(LFS_t * lfs)
 	int i, r;
 
 #if DELETE_DIRENT_STATS
-	printf("ext2 delete dirent stats: %u merged of %u possible and %u total\n", info->delete_dirent_stats.merged, info->delete_dirent_stats.uncommitted, info->delete_dirent_stats.total);
+	printf("ext2 delete dirent stats: merged %u/%u possible, %u total\n", info->delete_dirent_stats.merged, info->delete_dirent_stats.uncommitted, info->delete_dirent_stats.total);
 #endif
 
 	r = modman_rem_lfs(lfs);
