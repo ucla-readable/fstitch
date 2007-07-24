@@ -23,67 +23,59 @@ static struct auto_pool static_pool[STATIC_AUTO_POOLS];
 static unsigned int autorelease_depth = 0;
 
 DECLARE_POOL(bdesc_mem, bdesc_t);
-DECLARE_POOL(datadesc_mem, datadesc_t);
 
 static void bdesc_pools_free_all(void * ignore)
 {
 	bdesc_mem_free_all();
-	datadesc_mem_free_all();
 }
 
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
-bdesc_t * bdesc_alloc(uint32_t nbytes)
+bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count)
 {
 	bdesc_t * bdesc = bdesc_mem_alloc();
 	uint16_t i;
 	if(!bdesc)
 		return NULL;
-	bdesc->ddesc = datadesc_mem_alloc();
-	if(!bdesc->ddesc)
+	bdesc->data = malloc(blocksize * count);
+	if(!bdesc->data)
 	{
 		bdesc_mem_free(bdesc);
 		return NULL;
 	}
-	bdesc->ddesc->data = malloc(nbytes);
-	if(!bdesc->ddesc->data)
-	{
-		datadesc_mem_free(bdesc->ddesc);
-		bdesc_mem_free(bdesc);
-		return NULL;
-	}
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc->ddesc, number, count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
+	bdesc->cache_number = (uint32_t) -1;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
 	bdesc->ar_next = NULL;
-	bdesc->ddesc->ref_count = 1;
-	bdesc->ddesc->in_flight = 0;
-	bdesc->ddesc->synthetic = 0;
-	bdesc->ddesc->all_changes = NULL;
-	bdesc->ddesc->all_changes_tail = &bdesc->ddesc->all_changes;
+	bdesc->synthetic = 0;
+	bdesc->in_flight = 0;
+	bdesc->flags = 0;
+	bdesc->all_changes = NULL;
+	bdesc->all_changes_tail = &bdesc->all_changes;
 	for(i = 0; i < NBDLEVEL; i++)
 	{
-		bdesc->ddesc->ready_changes[i].head = NULL;
-		bdesc->ddesc->ready_changes[i].tail = &bdesc->ddesc->ready_changes[i].head;
+		bdesc->ready_changes[i].head = NULL;
+		bdesc->ready_changes[i].tail = &bdesc->ready_changes[i].head;
 	}
 	for(i = 0; i < NBDINDEX; i++)
 	{
-		bdesc->ddesc->index_changes[i].head = NULL;
-		bdesc->ddesc->index_changes[i].tail = &bdesc->ddesc->index_changes[i].head;
+		bdesc->index_changes[i].head = NULL;
+		bdesc->index_changes[i].tail = &bdesc->index_changes[i].head;
 	}
 #if BDESC_EXTERN_AFTER_COUNT
-	bdesc->ddesc->extern_after_count = 0;
+	bdesc->extern_after_count = 0;
 #endif
 #if CHDESC_NRB
-	WEAK_INIT(bdesc->ddesc->nrb);
+	WEAK_INIT(bdesc->nrb);
 #endif
 	for (i = 0; i < NOVERLAP1 + 1; i++)
-		bdesc->ddesc->overlap1[i] = NULL;
-	bdesc->ddesc->bit_changes = NULL;
+		bdesc->overlap1[i] = NULL;
+	bdesc->bit_changes = NULL;
 	bdesc->disk_hash.pprev = NULL;
-	bdesc->ddesc->length = nbytes;
-	bdesc->ddesc->flags = 0;
+	bdesc->length = blocksize * count;
+	bdesc->ddesc = bdesc; /* ha ha */
 	return bdesc;
 }
 
@@ -91,47 +83,35 @@ bdesc_t * bdesc_alloc(uint32_t nbytes)
 bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
 	bdesc->ref_count++;
-	bdesc->ddesc->ref_count++;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc->ddesc, bdesc->ref_count, bdesc->ar_count, bdesc->ddesc->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count, bdesc->ref_count);
 	return bdesc;
 }
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void __bdesc_release(bdesc_t *bdesc)
 {
-	assert(bdesc->ref_count == 0);
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, bdesc, bdesc->ddesc);
-	if(!bdesc->ddesc->ref_count) {
-		uint16_t i;
-		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, bdesc, bdesc->ddesc);
-		if(bdesc->ddesc->all_changes || bdesc->ddesc->overlap1[0]) /* XXX don't bother checking other overlap1[] */
-			fprintf(stderr, "%s(): (%s:%d): orphaning change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
+	assert(bdesc && bdesc->ref_count == 0 && bdesc->ar_count == 0);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, bdesc, bdesc);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, bdesc, bdesc);
+	assert(!bdesc->all_changes);
+	assert(!bdesc->overlap1[0]);
+	/* XXX don't bother checking other overlap1[] */
 #if BDESC_EXTERN_AFTER_COUNT
-		if(bdesc->ddesc->extern_after_count)
-			fprintf(stderr, "%s(): (%s:%d): block still has %u external afters\n", __FUNCTION__, __FILE__, __LINE__, bdesc->ddesc->extern_after_count);
+	assert(!bdesc->extern_after_count);
 #endif
 #if CHDESC_NRB
-		if(WEAK(bdesc->ddesc->nrb))
-		{
-			fprintf(stderr, "%s(): (%s:%d): block still has a NRB\n", __FUNCTION__, __FILE__, __LINE__);
-			chdesc_weak_release(&bdesc->ddesc->nrb, 0);
-		}
+	assert(!WEAK(bdesc->nrb));
 #endif
-		for(i = 0; i < NBDLEVEL; i++)
-			assert(!bdesc->ddesc->ready_changes[i].head);
-		if(bdesc->ddesc->bit_changes) {
-			if(!hash_map_empty(bdesc->ddesc->bit_changes))
-				fprintf(stderr, "%s(): (%s:%d): orphaning bit change descriptors for block %p!\n", __FUNCTION__, __FILE__, __LINE__, bdesc);
-			hash_map_destroy(bdesc->ddesc->bit_changes);
-		}
-		blockman_remove(bdesc);
-		free(bdesc->ddesc->data);
-		memset(bdesc->ddesc, 0, sizeof(*bdesc->ddesc));
-		datadesc_mem_free(bdesc->ddesc);
+	int i;
+	for(i = 0; i < NBDLEVEL; i++)
+		assert(!bdesc->ready_changes[i].head);
+	if(bdesc->bit_changes) {
+		assert(hash_map_empty(bdesc->bit_changes));
+		hash_map_destroy(bdesc->bit_changes);
 	}
-#ifndef NDEBUG
-	memset(bdesc, 0, sizeof(*bdesc));
-#endif
+	blockman_remove(bdesc);
+	free(bdesc->data);
+	free_memset(bdesc, sizeof(*bdesc));
 	bdesc_mem_free(bdesc);
 }
 
@@ -150,7 +130,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 		bdesc->ar_next = autorelease_stack->list;
 		autorelease_stack->list = bdesc;
 	}
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AUTORELEASE, bdesc, bdesc->ddesc, bdesc->ref_count, bdesc->ar_count, bdesc->ddesc->ref_count);
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AUTORELEASE, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count, bdesc->ref_count);
 	return bdesc;
 }
 
@@ -189,7 +169,7 @@ void bdesc_autorelease_pool_pop(void)
 		int i = head->ar_count;
 		pool->list = head->ar_next;
 		head->ar_count = 0;
-		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_RESET, head, head->ddesc, head->ref_count, head->ar_count, head->ddesc->ref_count);
+		KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_RESET, head, head, head->ref_count, head->ar_count, head->ref_count);
 		while(i-- > 0)
 		{
 			bdesc_t * release = head;
@@ -204,20 +184,6 @@ void bdesc_autorelease_pool_pop(void)
 unsigned int bdesc_autorelease_pool_depth(void)
 {
 	return autorelease_depth;
-}
-
-int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc)
-{
-	int ar_count = 0;
-	struct auto_pool * pool;
-	for(pool = autorelease_stack; pool; pool = pool->next)
-	{
-		bdesc_t * scan;
-		for(scan = pool->list; scan; scan = scan->ar_next)
-			if(scan->ddesc == ddesc)
-				ar_count += scan->ar_count;
-	}
-	return ar_count;
 }
 
 int bdesc_init(void)

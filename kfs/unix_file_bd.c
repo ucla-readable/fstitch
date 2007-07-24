@@ -46,7 +46,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	else
 	{
-		bdesc = bdesc_alloc(object->blocksize * count);
+		bdesc = bdesc_alloc(number, object->blocksize, count);
 		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
@@ -94,7 +94,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		return bdesc;
 	}
 
-	bdesc = bdesc_alloc(object->blocksize * count);
+	bdesc = bdesc_alloc(number, object->blocksize, count);
 	if(bdesc == NULL)
 		return NULL;
 	bdesc_autorelease(bdesc);

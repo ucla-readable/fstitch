@@ -560,7 +560,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	if(info->recursion)
 	{
 		/* only used to write the journal itself: many fewer change descriptors there! */
-		chdesc_push_down(object, block, info->bd, block);
+		chdesc_push_down(block, object, info->bd);
 		return CALL(info->bd, write_block, block, block_number);
 	}
 	
@@ -662,7 +662,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		assert(r >= 0);
 	}
 	
-	chdesc_push_down(object, block, info->bd, block);
+	chdesc_push_down(block, object, info->bd);
 	
 	r = CALL(info->bd, write_block, block, block_number);
 	if(CALL(info->bd, get_block_space) <= 0)

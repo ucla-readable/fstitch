@@ -181,7 +181,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	}
 	
 	/* this should never fail */
-	r = chdesc_push_down(object, block, info->bd, block);
+	r = chdesc_push_down(block, object, info->bd);
 	if(r < 0)
 		return r;
 	

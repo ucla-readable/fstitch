@@ -39,7 +39,7 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	}
 	else
 	{
-		bdesc = bdesc_alloc(object->blocksize * count);
+		bdesc = bdesc_alloc(number, object->blocksize, count);
 		if (bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);

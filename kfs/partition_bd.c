@@ -42,7 +42,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	assert(block->ddesc->length && number + block->ddesc->length / object->blocksize <= object->numblocks);
 
 	/* this should never fail */
-	value = chdesc_push_down(object, block, info->bd, block);
+	value = chdesc_push_down(block, object, info->bd);
 	if(value < 0)
 		return value;
 	

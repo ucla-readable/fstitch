@@ -268,7 +268,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		else if(bd)
 			blocks[j] = bd;
 		else {
-			blocks[j] = bdesc_alloc(LINUX_BLOCKSIZE * count);
+			blocks[j] = bdesc_alloc(j_number, LINUX_BLOCKSIZE, count);
 			if(blocks[j] == NULL)
 				return NULL;
 			bdesc_autorelease(blocks[j]);
@@ -384,7 +384,7 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 		return bdesc;
 	}
 	
-	bdesc = bdesc_alloc(LINUX_BLOCKSIZE * count);
+	bdesc = bdesc_alloc(number, LINUX_BLOCKSIZE, count);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);

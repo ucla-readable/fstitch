@@ -6,6 +6,12 @@
 #define BDESC_FLAG_DIRENT 0x0002
 #define BDESC_FLAG_INDIR  0x0004
 
+#ifndef NDEBUG
+#define free_memset(data, length) memset((data), 0, (length))
+#else
+#define free_memset(data, length)
+#endif
+
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
@@ -13,9 +19,6 @@
 
 struct bdesc;
 typedef struct bdesc bdesc_t;
-
-struct datadesc;
-typedef struct datadesc datadesc_t;
 
 #include <kfs/bd.h>
 #include <kfs/chdesc.h>
@@ -26,10 +29,20 @@ struct chdesc_dlist {
 };
 typedef struct chdesc_dlist chdesc_dlist_t;
 
-struct datadesc {
-	uint8_t * data;
-	uint32_t ref_count:30, in_flight:1, synthetic:1;
+/* reorder the queue to try and find a better flush order */
+#define DIRTY_QUEUE_REORDERING 0
 
+struct bdesc {
+	bdesc_t *ddesc; /* hee hee */
+	
+	uint8_t *data;
+	uint32_t length;
+
+	unsigned in_flight : 1;
+	unsigned synthetic : 1;
+	unsigned flags : 30;
+	
+	// CHANGE DESCRIPTOR INFORMATION
 	chdesc_t * all_changes;
 	chdesc_t ** all_changes_tail;
 
@@ -37,10 +50,10 @@ struct datadesc {
 	uint32_t extern_after_count;
 #endif
 	
-	/* For each level (at most one BD per level), the level's ready chdescs.
+	/* For each level (at most 1 BD per level), the level's ready chdescs.
 	 * ready chdesc: chdesc with no befores at its level or higher. */
 	chdesc_dlist_t ready_changes[NBDLEVEL];
-	
+
 	/* For each graph index, the chdescs owned by that BD. */
 	chdesc_dlist_t index_changes[NBDINDEX];
 	
@@ -53,19 +66,8 @@ struct datadesc {
 	chdesc_t *overlap1[1 + NOVERLAP1];
 	
 	hash_map_t * bit_changes;
-	uint16_t length, flags;
-};
-
-/* reorder the queue to try and find a better flush order */
-#define DIRTY_QUEUE_REORDERING 0
-
-struct bdesc {
-	uint32_t ref_count;
-	uint32_t ar_count;
-	bdesc_t * ar_next;
-	datadesc_t * ddesc;
-
-	/* information for the write-back cache */
+	
+	// WB CACHE INFORMATION
 	uint32_t cache_number;
 #if DIRTY_QUEUE_REORDERING
 	uint32_t pass;
@@ -89,13 +91,18 @@ struct bdesc {
 		struct bdesc **pprev;
 		struct bdesc *next;
 	} disk_hash;
+
+	// REFCOUNT INFORMATION
+	uint32_t ref_count;
+	uint32_t ar_count;
+	bdesc_t * ar_next;
 };
 
 int bdesc_init(void);
 
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
-bdesc_t * bdesc_alloc(uint32_t nbytes);
+bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count);
 
 /* increase the reference count of a bdesc */
 bdesc_t * bdesc_retain(bdesc_t * bdesc);
@@ -116,14 +123,9 @@ void bdesc_autorelease_pool_pop(void);
 /* get the number of autorelease pools on the stack */
 unsigned int bdesc_autorelease_pool_depth(void);
 
-/* scan the autorelease pool stack and return the total ar_count of a ddesc */
-int bdesc_autorelease_poolstack_scan(datadesc_t * ddesc);
-
 static inline void bdesc_release(bdesc_t **bdp)
 {
-	assert((*bdp)->ddesc->ref_count >= (*bdp)->ref_count);
 	assert((*bdp)->ref_count > (*bdp)->ar_count);
-	(*bdp)->ddesc->ref_count--;
 	(*bdp)->ref_count--;
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, (*bdp)->ddesc, (*bdp)->ref_count, (*bdp)->ar_count, (*bdp)->ddesc->ref_count);
 	if (!(*bdp)->ref_count)

@@ -68,7 +68,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t loop_number)
 	if(lfs_number == -1)
 		return -EINVAL;
 
-	r = chdesc_push_down(bd, block, info->lfs->blockdev, block);
+	r = chdesc_push_down(block, bd, info->lfs->blockdev);
 	if(r < 0)
 		return r;
 

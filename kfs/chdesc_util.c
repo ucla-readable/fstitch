@@ -24,11 +24,11 @@ void chdesc_unmark_graph(chdesc_t * root)
 			chdesc_unmark_graph(dep->before.desc);
 }
 
-int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block)
+int chdesc_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)
 {
-	chdesc_dlist_t * dlist = current_block->ddesc->index_changes;
-	if(target_block->ddesc != current_block->ddesc)
-		return -EINVAL;
+	chdesc_dlist_t * dlist = block->index_changes;
+	assert(current_bd && target_bd);
+	assert(current_bd->level == target_bd->level);
 	if(dlist[current_bd->graph_index].head)
 	{
 		chdesc_t * chdesc;
@@ -36,23 +36,9 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
 		     chdesc;
 		     chdesc = chdesc->ddesc_index_next)
 		{
-			uint16_t prev_level = chdesc_level(chdesc);
-			uint16_t new_level;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
 			/* don't unlink them from index here */
-			chdesc_unlink_ready_changes(chdesc);
 			chdesc->owner = target_bd;
-			assert(chdesc->block);
-			bdesc_retain(target_block);
-			bdesc_release(&chdesc->block);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, target_block);
-			chdesc->block = target_block;
-			chdesc_update_ready_changes(chdesc);
-			/* don't link them to index here */
-			
-			new_level = chdesc_level(chdesc);
-			if(prev_level != new_level)
-				chdesc_propagate_level_change(chdesc, prev_level, new_level);
 		}
 		
 		/* append the target index list to ours */
@@ -80,9 +66,9 @@ int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_b
  * in *head. In case A, return the newly created change descriptor in *head. */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
-	chdesc_t * rewrite = block->ddesc->index_changes[owner->graph_index].head;
+	chdesc_t * rewrite = block->index_changes[owner->graph_index].head;
 	
-	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->ddesc->length || (rewrite->flags & CHDESC_INFLIGHT))
+	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->length || (rewrite->flags & CHDESC_INFLIGHT))
 		return chdesc_create_full(block, owner, data, head);
 	
 	if(*head)

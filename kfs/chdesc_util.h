@@ -10,7 +10,7 @@ void chdesc_mark_graph(chdesc_t * root);
 void chdesc_unmark_graph(chdesc_t * root);
 
 /* push all change descriptors at this block device on a block (i.e. data) descriptor to a new block device and block */
-int chdesc_push_down(BD_t * current_bd, bdesc_t * current_block, BD_t * target_bd, bdesc_t * target_block);
+int chdesc_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd);
 
 /* write an entire block without creating many layers of change descriptors */
 int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
