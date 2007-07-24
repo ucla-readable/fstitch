@@ -879,8 +879,29 @@ int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
 	return (a_start <= b_start && start + b_len <= tag) ? 2 : 1;
 }
 
-/* make the recent chdesc depend on the given earlier chdesc in the same block if it overlaps */
-static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
+/* Conservatively return true iff 'after' depends on 'before' */
+static bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
+{
+	/* Quick (bidirectional width-2) check for after->before */
+	if(!after->befores || !before->afters)
+		return 0;
+	if(before->afters->after.desc == after)
+		return 1;
+	if(before->afters->after.next && before->afters->after.next->after.desc == after)
+		return 1;
+	if(after->befores->before.desc == before)
+		return 1;
+	if(after->befores->before.next && after->befores->before.next->before.desc == before)
+		return 1;
+	return 0; /* No after->before found */
+}
+
+/* make the recent chdesc depend on the given earlier chdesc in the same
+ * block if it overlaps.
+ * Return non-negative on success:
+ * 0 if no overlap
+ * 1 if there overlap and recent now (in)directly depends on original. */
+static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * middle, chdesc_t * original)
 {
 	int r, overlap;
 	
@@ -902,9 +923,12 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 		return -EBUSY;
 	}
 	
-	r = chdesc_add_depend(recent, original);
-	if(r < 0)
-		return r;
+	if(!middle || !quick_depends_on(middle, original))
+	{
+		r = chdesc_add_depend(recent, original);
+		if(r < 0)
+			return r;
+	}
 	
 	/* if it overlaps completely, remove original from ddesc->overlaps or ddesc->bit_changes */
 	if(overlap == 2)
@@ -923,7 +947,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * original)
 		recent->flags |= CHDESC_OVERLAP;
 	}
 	
-	return 0;
+	return 1;
 }
 
 static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc)
@@ -943,21 +967,26 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 		
 		if(chdesc == list_chdesc)
 			continue;
-		r = chdesc_overlap_attach(chdesc, list_chdesc);
+		r = chdesc_overlap_attach(chdesc, NULL, list_chdesc);
 		if(r < 0)
 			return r;
 	}
 	return 0;
 }
 
-static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **list) __attribute__((always_inline));
-static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **list)
+static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t ** middle, chdesc_t **list) __attribute__((always_inline));
+static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t ** middle, chdesc_t **list)
 {
 	int r;
 	while(*list) {
 		chdesc_t *c = *list;
-		if(c != chdesc && (r = chdesc_overlap_attach(chdesc, c)) < 0)
-			return r;
+		if(c != chdesc)
+		{
+			if((r = chdesc_overlap_attach(chdesc, *middle, c)) < 0)
+				return r;
+			if(r == 1)
+				*middle = c;
+		}
 		if(*list == c)
 			list = &c->overlap_next;
 	}
@@ -1003,11 +1032,12 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 		list2 = list1;
 
 	int r;
+	chdesc_t * middle = NULL;
 	for (; list1 <= list2; list1++)
-		if ((r = _chdesc_overlap_multiattach_x(chdesc, &block->overlap1[list1])) < 0)
+		if ((r = _chdesc_overlap_multiattach_x(chdesc, &middle, &block->overlap1[list1])) < 0)
 			return r;
 
-	return _chdesc_overlap_multiattach_x(chdesc, &block->overlap1[0]);
+	return _chdesc_overlap_multiattach_x(chdesc, &middle, &block->overlap1[0]);
 }
 
 void chdesc_link_all_changes(chdesc_t * chdesc)
@@ -1754,23 +1784,6 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 }
 
 #if CHDESC_BYTE_MERGE_OVERLAP
-/* Conservatively return true iff 'after' depends on 'before' */
-static bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
-{
-	/* Quick (bidirectional width-2) check for after->before */
-	if(!after->befores || !before->afters)
-		return 0;
-	if(before->afters->after.desc == after)
-		return 1;
-	if(before->afters->after.next && before->afters->after.next->after.desc == after)
-		return 1;
-	if(after->befores->before.desc == before)
-		return 1;
-	if(after->befores->before.next && after->befores->before.next->before.desc == before)
-		return 1;
-	return 0; /* No after->before found */
-}
-
 /* Conservatively return true iff left's befores are a subset of right's befores */
 static bool quick_befores_subset(const chdesc_t * left, const chdesc_t * right)
 {
