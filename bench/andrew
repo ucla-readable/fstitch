@@ -37,6 +37,8 @@ tar C $KUDOSDIR/obj -xzf $BENCHDIR/$MAB
 rmdir $KUDOSDIR/obj/ab/workingdir
 sed -i "s,/home/leiz/ab/original,`pwd`/$KUDOSDIR/obj/ab/original," $KUDOSDIR/obj/ab/original/Makefile
 
-prepare $T $N $KUDOSDIR $OUTDIR $HOST
+build $T $N $KUDOSDIR $HOST
+
+log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
 finish $T $N $KUDOSDIR $OUTDIR $HOST

@@ -48,12 +48,11 @@ function fsync () {
 }
 
 # prepare to run a test
-function prepare () {
+function build () {
 	T="$1"
 	N="$2"
 	KUDOSDIR="$3"
-	OUTDIR="$4"
-	HOST="$5"
+	HOST="$4"
 
 	echo "* Start test $T ($N)"
 
@@ -68,14 +67,22 @@ function prepare () {
 			echo "Unsupported host \"$HOST\"" 1>&2; exit 1;;
 	esac
 
+	try sync
+}
+
+# start kernel logging
+function log_kernel () {
+	T=$1
+	N=$2
+	OUTDIR=$3
+	HOST=$4
+
 	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]; then
 		echo "+ tail /var/log/syslog"
 		sudo tail -f -n 0 /var/log/syslog &>$OUTDIR/$T.sys.$N </dev/null &
 		SYSTAIL=$!
 		trap "echo + kill tail syslog; waitkkfsd; sudo kill $SYSTAIL" EXIT
 	fi
-
-	try sync
 }
 
 # start kdb and block logging

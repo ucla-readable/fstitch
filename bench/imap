@@ -10,13 +10,6 @@ function test () {
 }
 
 function run () {
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
-	[ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
-	try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
-	try rm -f $MNT/mailbox.dst
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
-	try sync
-
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start -k
 	prepare_postinit  $T $N $OUTDIR $HOST
 	ktime total test
@@ -46,6 +39,14 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR $HOST
+build $T $N $KUDOSDIR $HOST
+try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+[ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
+try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
+try rm -f $MNT/mailbox.dst
+try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+try sync
+
+log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
 finish $T $N $KUDOSDIR $OUTDIR $HOST

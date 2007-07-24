@@ -30,6 +30,8 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR $HOST
+build $T $N $KUDOSDIR $HOST
+
+log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
 finish $T $N $KUDOSDIR $OUTDIR $HOST

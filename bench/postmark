@@ -14,9 +14,6 @@ function run_postmark () {
 }
 
 function run () {
-	try gcc -O2 $BENCHDIR/postmark-1_5.c -o $BENCHDIR/postmark-1_5
-	try sync
-
 	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
 	prepare_postinit $T $N $OUTDIR $HOST
 	ktime total run_postmark
@@ -39,6 +36,10 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR $HOST
+build $T $N $KUDOSDIR $HOST
+try gcc -O2 $BENCHDIR/postmark-1_5.c -o $BENCHDIR/postmark-1_5
+try sync
+
+log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
 finish $T $N $KUDOSDIR $OUTDIR $HOST
