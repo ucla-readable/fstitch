@@ -154,17 +154,16 @@ BD_t * loop_bd(LFS_t * lfs, inode_t inode)
 	BD_INIT(bd, loop);
 
 	info->lfs = lfs;
+	info->file = CALL(info->lfs, lookup_inode, inode);
+	if (!info->file)
+		goto error_inode;
+	info->inode = inode;
+
 	bd->atomicsize = info->lfs->blockdev->atomicsize;
 	bd->blocksize = info->lfs->blockdev->blocksize;
 	/* this prevents someone from dynamically growing the disk */
 	bd->numblocks = CALL(info->lfs, get_file_numblocks, info->file);
 	assert(bd->blocksize == info->lfs->blocksize);
-
-	info->inode = inode;
-
-	info->file = CALL(info->lfs, lookup_inode, inode);
-	if (!info->file)
-		goto error_inode;
 
 	bd->level = info->lfs->blockdev->level;
 	bd->graph_index = info->lfs->blockdev->graph_index + 1;
