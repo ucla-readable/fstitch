@@ -1,9 +1,8 @@
-#include <kfs/chdesc.h>
-
 #ifndef __KUDOS_KFS_BD_H
 #define __KUDOS_KFS_BD_H
 
 #include <kfs/oo.h>
+#include <kfs/types.h>
 
 /* maximum number of BD levels */
 #define NBDLEVEL 2
@@ -11,11 +10,6 @@
 #define NBDINDEX 8
 /* this value represents no level */
 #define BDLEVEL_NONE ((uint16_t) -1)
-
-struct BD;
-typedef struct BD BD_t;
-
-#include <kfs/bdesc.h>
 
 #define FLUSH_DEVICE 0xFFFFFFFF
 #define INVALID_BLOCK 0xFFFFFFFF

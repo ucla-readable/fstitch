@@ -1810,7 +1810,7 @@ static bool quick_befores_subset(const chdesc_t * left, const chdesc_t * right)
  * chdesc has no explicit befores and has a single overlap.
  * Returns 1 on successful merge (*tail points to merged chdesc),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, chdesc_t ** new, chdesc_pass_set_t * befores)
+static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, chdesc_pass_set_t * befores)
 {
 	chdepdesc_t * dep;
 	chdesc_t * overlap = NULL;
@@ -2019,11 +2019,6 @@ static int chdesc_create_byte_merge_overlap(const void *data, chdesc_t ** tail, 
 		chdesc_link_overlap(overlap);
 	}
 	
-	if(data)
-		memcpy(&bdesc->data[(*new)->byte.offset], data, (*new)->byte.length);
-	else
-		memset(&bdesc->data[(*new)->byte.offset], 0, (*new)->byte.length);
-	
 	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
 	overlap->owner = (*new)->owner;
@@ -2063,7 +2058,7 @@ int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, ui
 }
 
 /* common code to create a byte chdesc */
-static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, uint8_t * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
+int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	bool data_required = new_chdescs_require_data(block);
 	chdesc_pass_set_t * scan;
@@ -2079,13 +2074,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	if(r < 0)
 		return r;
 	else if(r == 1)
-	{
-		if(data)
-			memcpy(&block->data[offset], data, length);
-		else
-			memset(&block->data[offset], 0, length);
 		return 0;
-	}
 	
 	chdesc = chdesc_alloc();
 	if(!chdesc)
@@ -2191,7 +2180,7 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	/* after the above work towards chdesc to avoid multiple overlap scans */
 	if(data_required)
 	{
-		if((r = chdesc_create_byte_merge_overlap(data, tail, &chdesc, befores)) < 0)
+		if((r = chdesc_create_byte_merge_overlap(tail, &chdesc, befores)) < 0)
 		{
 			chdesc_destroy(&chdesc);
 			return r;
@@ -2218,10 +2207,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 		}
 
 		memcpy(chdesc->byte.data, block_data, length);
-		if(data)
-			memcpy(block_data, data, length);
-		else
-			memset(block_data, 0, length);
 #if CHDESC_BYTE_SUM
 		chdesc->byte.new_sum = chdesc_byte_sum(block_data, length);
 		chdesc->byte.old_sum = chdesc_byte_sum(chdesc->byte.data, length);
@@ -2230,10 +2215,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	else
 	{
 #if CHDESC_NRB
-		if(data)
-			memcpy(&chdesc->block->data[offset], data, length);
-		else
-			memset(&chdesc->block->data[offset], 0, length);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
 		assert(!WEAK(block->nrb));
 		chdesc_weak_retain(chdesc, &block->nrb, NULL, NULL);
@@ -2247,36 +2228,6 @@ static int _chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, u
 	block->synthetic = 0;
 	
 	return 0;
-}
-
-int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
-{
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
-	set.array[0] = *head;
-	if(&block->data[offset] == data)
-		kpanic("Cannot create a change descriptor in place!");
-	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, head, PASS_CHDESC_SET(set));
-}
-
-int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
-{
-	if(&block->data[offset] == data)
-		kpanic("Cannot create a change descriptor in place!");
-	return _chdesc_create_byte(block, owner, offset, length, (uint8_t *) data, tail, befores);
-}
-
-int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
-{
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
-	set.array[0] = *head;
-	return _chdesc_create_byte(block, owner, 0, block->length, NULL, head, PASS_CHDESC_SET(set));
-}
-
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
-{
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
-	set.array[0] = *head;
-	return _chdesc_create_byte(block, owner, 0, block->length, data, head, PASS_CHDESC_SET(set));
 }
 
 #if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
@@ -2501,7 +2452,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 #if CHDESC_NRB_MERGE_STATS
 		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
 #endif
-		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
+		return chdesc_create_byte_set(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
 	}
 	
 #if CHDESC_BIT_MERGE_OVERLAP
@@ -2522,7 +2473,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
 		DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 		set.array[0] = *head;
-		return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
+		return chdesc_create_byte_set(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
 	}
 # endif
 #endif

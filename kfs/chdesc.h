@@ -12,54 +12,14 @@
 #define CHDESC_FUTURE_BEFORES 0x100 /* may gain befores that would break overlap merging */
 #define CHDESC_INFLIGHT       0x200 /* chdesc is being written to disk */
 
+#define CHDESC_BYTE_SUM 0
+
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
-
-#define CHDESC_BYTE_SUM 0
-
-/* Provide weak reference callbacks */
-#define CHDESC_WEAKREF_CALLBACKS 0
-
-/* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
- * and mulitple NRBs on a given ddesc are merged into one */
-/* values: 0 (disable), 1 (enable) */
-#define CHDESC_NRB 1
-/* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection */
-/* values: 0 (disable), 1 (enable) */
-#define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
-/* Set to ensure that, for a block with a NRB, all RBs on the block depend
- * on the NRB, thereby ensuring the ready list contains only ready chdescs */
-/* values: 0 (do not ensure), 1 (do ensure) */
-#define CHDESC_RB_NRB_READY (CHDESC_NRB && 1)
+#include <kfs/bdesc.h>
 
 #define CHDESC_LOCALDATA 4
-
-struct chdesc;
-typedef struct chdesc chdesc_t;
-
-struct chdepdesc;
-typedef struct chdepdesc chdepdesc_t;
-
-struct chweakref;
-typedef struct chweakref chweakref_t;
-
-#if CHDESC_WEAKREF_CALLBACKS
-typedef void (*chdesc_satisfy_callback_t)(chweakref_t * weak, chdesc_t * old, void * data);
-#endif
-
-struct chweakref {
-	chdesc_t * chdesc;
-#if CHDESC_WEAKREF_CALLBACKS
-	chdesc_satisfy_callback_t callback;
-	void * callback_data;
-#endif
-	chweakref_t ** prev;
-	chweakref_t * next;
-};
-
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
 
 struct chdesc {
 	BD_t * owner;
@@ -152,7 +112,6 @@ struct chdesc_pass_set {
 		chdesc_t ** list;
 	};
 };
-typedef struct chdesc_pass_set chdesc_pass_set_t;
 
 #define CHDESC_PASS_SET_TYPE(n) struct { chdesc_pass_set_t * next; ssize_t size; chdesc_t * array[n]; }
 #define DEFINE_CHDESC_PASS_SET(name, n, base) CHDESC_PASS_SET_TYPE(n) name = {.next = base, .size = n}
@@ -168,10 +127,11 @@ int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, ch
 /* create a noop using the NULL-terminated befores var_arg */
 int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...);
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head);
-int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
-int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores);
-int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head);
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head);
+int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, chdesc_t ** tail, chdesc_pass_set_t * befores);
+static inline int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head) __attribute__((always_inline));
+static inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores) __attribute__((always_inline));
+static inline int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head) __attribute__((always_inline));
+static inline int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head) __attribute__((always_inline));
 
 /* like chdesc_create_byte(), but guarantees to only create a single chdesc */
 int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
@@ -309,6 +269,39 @@ static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)
 	}
 }
 
+static __inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
+{
+	assert(&block->data[offset] != data);
+	int r = chdesc_create_byte_basic(block, owner, offset, length, tail, befores);
+	if (r >= 0) {
+		if (data)
+			memcpy(&block->data[offset], data, length);
+		else
+			memset(&block->data[offset], 0, length);
+	}
+	return r;
+}
+
+static __inline int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
+{
+	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	set.array[0] = *head;
+	return chdesc_create_byte_set(block, owner, offset, length, data, head, PASS_CHDESC_SET(set));
+}
+
+int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
+{
+	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	set.array[0] = *head;
+	return chdesc_create_byte_set(block, owner, 0, block->length, NULL, head, PASS_CHDESC_SET(set));
+}
+
+int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
+{
+	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	set.array[0] = *head;
+	return chdesc_create_byte_set(block, owner, 0, block->length, data, head, PASS_CHDESC_SET(set));
+}
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>

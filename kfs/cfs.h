@@ -2,13 +2,11 @@
 #define __KUDOS_KFS_CFS_H
 
 #include <kfs/oo.h>
+#include <kfs/types.h>
 #include <kfs/feature.h>
 #include <kfs/inode.h>
 #include <kfs/fdesc.h>
 #include <lib/dirent.h>
-
-struct CFS;
-typedef struct CFS CFS_t;
 
 struct CFS {
 	OBJECT(CFS_t);

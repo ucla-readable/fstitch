@@ -7,6 +7,7 @@
 #include <kfs/bdesc.h>
 #include <kfs/debug.h>
 #include <kfs/kfsd.h>
+#include <kfs/chdesc.h>
 
 /* Statically allocate two autopools. We probably won't ever need more than the
  * main top-level one and one nested pool, and if we do, we can allocate them

@@ -15,9 +15,6 @@
  * chdesc graph fork head not reachable from *head upon return */
 #define lfs_add_fork_head(head) opgroup_finish_head(head)
 
-struct LFS;
-typedef struct LFS LFS_t;
-
 /* Ideally, LFS wouldn't have any calls that weren't directly related to
  * blocks. However, the on-disk structure of directory files is a part
  * of the specification of the filesystem. So we have to handle it

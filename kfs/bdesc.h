@@ -14,20 +14,21 @@
 
 #ifndef CONSTANTS_ONLY
 
+/* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
+ * and mulitple NRBs on a given ddesc are merged into one */
+/* values: 0 (disable), 1 (enable) */
+#define CHDESC_NRB 1
+/* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection */
+/* values: 0 (disable), 1 (enable) */
+#define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
+/* Set to ensure that, for a block with a NRB, all RBs on the block depend
+ * on the NRB, thereby ensuring the ready list contains only ready chdescs */
+/* values: 0 (do not ensure), 1 (do ensure) */
+#define CHDESC_RB_NRB_READY (CHDESC_NRB && 1)
+
 #include <lib/hash_map.h>
 #include <kfs/debug.h>
-
-struct bdesc;
-typedef struct bdesc bdesc_t;
-
 #include <kfs/bd.h>
-#include <kfs/chdesc.h>
-
-struct chdesc_dlist {
-	chdesc_t * head;
-	chdesc_t ** tail;
-};
-typedef struct chdesc_dlist chdesc_dlist_t;
 
 /* reorder the queue to try and find a better flush order */
 #define DIRTY_QUEUE_REORDERING 0
