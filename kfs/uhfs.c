@@ -237,7 +237,7 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 		return r;
 
 	/* HACK: don't do this for wholedisk LFS modules */
-	if (mode & O_TRUNC && OBJMAGIC(state->lfs) != WHOLEDISK_MAGIC)
+	if ((mode & O_TRUNC) && OBJMAGIC(state->lfs) != WHOLEDISK_MAGIC)
 	{
 		int s = uhfs_truncate(cfs, *fdesc, 0);
 		if (s < 0)
