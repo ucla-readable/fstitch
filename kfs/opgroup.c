@@ -6,6 +6,14 @@
 #include <kfs/journal_bd.h>
 #include <kfs/opgroup.h>
 
+#define OPGROUP_DEBUG 0
+
+#if OPGROUP_DEBUG
+#define Dprintf(x...) printf(x)
+#else
+#define Dprintf(x...)
+#endif
+
 /* Atomic opgroup TODOs:
  *
  * Correctness:
@@ -68,6 +76,7 @@ opgroup_scope_t * opgroup_scope_create(void)
 	opgroup_scope_t * scope = malloc(sizeof(*scope));
 	if(scope)
 	{
+		Dprintf("%s(): scope = %p, debug = %d\n", __FUNCTION__, scope, KFS_DEBUG_COUNT());
 		scope->next_id = 1;
 		scope->top = NULL;
 		scope->top_keep = NULL;
@@ -90,6 +99,7 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	opgroup_scope_t * copy = opgroup_scope_create();
 	if(!copy)
 		return NULL;
+	Dprintf("%s(): scope = %p, copy = %p, debug = %d\n", __FUNCTION__, scope, copy, KFS_DEBUG_COUNT());
 	
 	copy->next_id = scope->next_id;
 	if(scope->top)
@@ -161,6 +171,7 @@ size_t opgroup_scope_size(opgroup_scope_t * scope)
 
 void opgroup_scope_destroy(opgroup_scope_t * scope)
 {
+	Dprintf("%s(): scope = %p, debug = %d\n", __FUNCTION__, scope, KFS_DEBUG_COUNT());
 	hash_map_it2_t it = hash_map_it2_create(scope->id_map);
 	opgroup_scope_t * old_scope = current_scope;
 	
@@ -215,6 +226,7 @@ opgroup_t * opgroup_create(int flags)
 		return NULL;
 	if(!(state = malloc(sizeof(*state))))
 		goto error_op;
+	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, op, KFS_DEBUG_COUNT());
 	
 	op->id = current_scope->next_id++;
 	WEAK_INIT(op->head);
@@ -291,6 +303,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 	assert(!after->tail_keep == after->is_released);
 	if(after->is_released || after->has_afters)
 		return -EINVAL;
+	Dprintf("%s(): after = %p -> before = %p, debug = %d\n", __FUNCTION__, after, before, KFS_DEBUG_COUNT());
 	/* we only create head => tail directly if we need to: when we are adding
 	 * an after to an opgroup and it still has both its head and tail */
 	if(WEAK(before->head) && WEAK(before->tail))
@@ -355,6 +368,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	chdesc_t * bottom;
 	chdesc_t * save_top = current_scope->top;
 	int r, count = 0;
+	Dprintf("%s(): start updating, debug = %d\n", __FUNCTION__, KFS_DEBUG_COUNT());
 	
 	/* when top has only top_keep as a before, then don't bother attaching any heads to it */
 	if(save_top && (save_top->befores->before.next ||
@@ -448,6 +462,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		chdesc_satisfy(&current_scope->top_keep);
 	/* we claimed it so no need to weak retain */
 	current_scope->top_keep = top_keep;
+	Dprintf("%s(): finished updating, debug = %d\n", __FUNCTION__, KFS_DEBUG_COUNT());
 	
 	return 0;
 }
@@ -475,6 +490,7 @@ int opgroup_engage(opgroup_t * opgroup)
 		return -EINVAL;
 	if(state->engaged)
 		return 0;
+	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, opgroup, KFS_DEBUG_COUNT());
 	
 	state->engaged = 1;
 	opgroup->engaged_count++;
@@ -516,6 +532,7 @@ int opgroup_disengage(opgroup_t * opgroup)
 	assert(state->opgroup == opgroup);
 	if(!state->engaged)
 		return 0;
+	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, opgroup, KFS_DEBUG_COUNT());
 	
 	state->engaged = 0;
 	opgroup->engaged_count--;
@@ -539,6 +556,7 @@ int opgroup_release(opgroup_t * opgroup)
 	/* can't release atomic opgroup if it is engaged */
 	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->engaged_count)
 		return -EINVAL;
+	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, opgroup, KFS_DEBUG_COUNT());
 	if(opgroup->tail_keep)
 	{
 		chdesc_satisfy(&opgroup->tail_keep);
@@ -566,6 +584,7 @@ int opgroup_abandon(opgroup_t ** opgroup)
 	/* can't abandon an engaged opgroup */
 	if(state->engaged)
 		return -EBUSY;
+	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, *opgroup, KFS_DEBUG_COUNT());
 	if(!--state->opgroup->references)
 	{
 		if((*opgroup)->flags & OPGROUP_FLAG_ATOMIC)
