@@ -659,19 +659,18 @@ static void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, b
 			propagate_extern_after_change_thru_noop_after(after, before->block, add);
 		else if(after->afters && before->befores)
 		{
-			/* If both after and before are noops after has an on-block after
-			 * and before an on-block before then we need to update the
+			/* If both after and before are noops and after has an on-block
+			 * after and before an on-block before then we need to update the
 			 * extern after count for each of before's on-block befores,
 			 * updating for each of after's on-block afters.
 			 * This seems complicated and slow and it turns out we do not
 			 * actually do this (for now?), so just assert that it does not
 			 * occur.
 			 * We assert 'either no on-block afters or befores', instead
-			 * of the simpler assert that there are 'either no afters or
-			 * befores', because move_befores_for_merge() can remove the
-			 * dependency between two noops, with the after having afters
-			 * and before having befores, but the after not having any
-			 * on-block afters. */
+			 * of the simpler assert 'either no afters or befores', because
+			 * move_befores_for_merge() can remove the dependency between
+			 * two noops with the after having afters, before having
+			 * befores, but the after not having any on-block afters. */
 			assert(!has_block_afters(after) || !has_block_befores(before));
 		}
 	}
