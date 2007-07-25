@@ -1417,6 +1417,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	
 	chdesc_t * root_chdesc = chdesc;
 	uint16_t saved_flags;
+	chdesc_t * marked_head;
 	
 	chdepdesc_t * dep;
 	bool reachable = 0; /* whether target is reachable from chdesc */
@@ -1424,16 +1425,16 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	saved_flags = merge_target->flags;
 	merge_target->flags |= CHDESC_SAFE_AFTER;
 	
+	assert(!merge_target->tmp_next && !merge_target->tmp_pprev);
+	merge_target->tmp_pprev = &marked_head;
+	marked_head = merge_target;
+	
   recurse_enter:
-	/* Use CHDESC_MARKED to indicate merge_target is reachable */
-	if(chdesc->flags & CHDESC_MARKED)
+	/* Use tmp list to indicate merge_target is reachable.
+	 * We don't need the pprev links, but they simplify this first check
+	 * (removing the need to also check for 'chdesc==marked_head'). */
+	if(chdesc->tmp_pprev)
 	{
-		reachable = 1;
-		goto recurse_return;
-	}
-	if(chdesc == merge_target)
-	{
-		chdesc->flags |= CHDESC_MARKED;
 		reachable = 1;
 		goto recurse_return;
 	}
@@ -1447,14 +1448,18 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 		{
 			/* Treat same-block, data chdescs as able to reach merge_target.
 			 * Caller will ensure they do reach merge_target. */
-			chdesc->flags |= CHDESC_MARKED;
+			chdesc->tmp_next = marked_head;
+			chdesc->tmp_pprev = &marked_head;
+			marked_head->tmp_pprev = &chdesc->tmp_next;
+			marked_head = chdesc;
 			reachable = 1;
 			goto recurse_return;
 		}
 	}
 	
 	/* discover the subset of befores that cannot reach target */
-	/* TODO: do not scan a given dep->before.desc multiple times? */	
+	/* TODO: do not scan a given dep->before.desc that cannot reach
+	 * merge_target multiple times? */
 	for(dep = chdesc->befores; dep; dep = dep->before.next)
 	{
 		// Recursively move befores; equivalent to:
@@ -1478,16 +1483,19 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	if(reachable)
 	{
 		chdepdesc_t * next;
-		chdesc->flags |= CHDESC_MARKED;
+		
+		assert(!chdesc->tmp_pprev);
+		chdesc->tmp_next = marked_head;
+		chdesc->tmp_pprev = &marked_head;
+		marked_head->tmp_pprev = &chdesc->tmp_next;
+		marked_head = chdesc;
+		
 		for(dep = chdesc->befores; dep; dep = next)
 		{
 			next = dep->before.next;
-			if(!(dep->before.desc->flags & CHDESC_MARKED))
+			if(!dep->before.desc->tmp_pprev)
 				chdesc_move_before_fast(chdesc, merge_target, dep);
 		}
-		/* remove marks only after the preceding loop because of multipaths */
-		for(dep = chdesc->befores; dep; dep = dep->before.next)
-			dep->before.desc->flags &= ~CHDESC_MARKED;
 	}
 	
   recurse_return:
@@ -1502,11 +1510,19 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	
 	if(states != static_states)
 		sfree(states, states_capacity * sizeof(*state));
-
+	
+	/* remove chdescs from the marked list only after all traversals
+	 * because of multipaths */
+	while(marked_head)
+	{
+		chdesc_t * head = marked_head;
+		marked_head = marked_head->tmp_next;
+		head->tmp_next = NULL;
+		head->tmp_pprev = NULL;
+	}
+	
 	/* take care of the intial before/chdesc */
-	if(reachable)
-		chdesc->flags &= ~CHDESC_MARKED;
-	else
+	if(!reachable)
 	{
 		if(!root_chdesc_stays)
 		{
