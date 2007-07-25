@@ -620,6 +620,36 @@ static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_befor
 	}
 }
 
+/* Return whether chdesc has any afters that are on a block */
+static bool has_block_afters(const chdesc_t * chdesc)
+{
+	const chdepdesc_t * dep;
+	for(dep = chdesc->afters; dep; dep = dep->after.next)
+	{
+		if(dep->after.desc->block)
+			return 1;
+		/* XXX: stack usage */
+		else if(has_block_afters(dep->after.desc))
+			return 1;
+	}
+	return 0;
+}
+
+/* Return whether chdesc has any befores that are on a block */
+static bool has_block_befores(const chdesc_t * chdesc)
+{
+	const chdepdesc_t * dep;
+	for(dep = chdesc->befores; dep; dep = dep->before.next)
+	{
+		if(dep->before.desc->block)
+			return 1;
+		/* XXX: stack usage */
+		else if(has_block_befores(dep->before.desc))
+			return 1;
+	}
+	return 0;
+}
+
 /* propagate extern_after_count changes for a depend add/remove */
 static void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, bool add)
 {
@@ -627,16 +657,22 @@ static void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, b
 	{
 		if(before->block)
 			propagate_extern_after_change_thru_noop_after(after, before->block, add);
-		else
+		else if(after->afters && before->befores)
 		{
-			/* Note: if we allow adding/removing a dependency from data->NOOP
-			 * to NOOP->data, propagate_extern_after_change_thru_noop_after()
-			 * should also propagate thru before noops to before blocks.
-			 * It seems likely that the propagate_extern_after_*() functions
-			 * should be merged into a single interface function that handles
-			 * all data/noop -before and -after combinations
-			 * TODO: Can move_befores_for_merge() remove such dependencies? */
-			assert(!after->afters || !before->befores);
+			/* If both after and before are noops after has an on-block after
+			 * and before an on-block before then we need to update the
+			 * extern after count for each of before's on-block befores,
+			 * updating for each of after's on-block afters.
+			 * This seems complicated and slow and it turns out we do not
+			 * actually do this (for now?), so just assert that it does not
+			 * occur.
+			 * We assert 'either no on-block afters or befores', instead
+			 * of the simpler assert that there are 'either no afters or
+			 * befores', because move_befores_for_merge() can remove the
+			 * dependency between two noops, with the after having afters
+			 * and before having befores, but the after not having any
+			 * on-block afters. */
+			assert(!has_block_afters(after) || !has_block_befores(before));
 		}
 	}
 	else if(!before->block)
