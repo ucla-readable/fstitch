@@ -8,10 +8,13 @@
 
 #define REBOOT 1
 
+int assert_failed = 0;
+
 void assert_fail(void)
 {
 	dump_stack();
 	kfsd_global_lock.locked = 0;
+	assert_failed = 1;
 	
 #if REBOOT
 	printk(KERN_EMERG "Waiting 15 seconds before reboot...\n");

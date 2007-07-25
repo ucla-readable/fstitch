@@ -26,6 +26,8 @@
 		assert_fail(); \
 	} while (0)
 
+extern int assert_failed;
+
 void assert_fail(void) __attribute__((__noreturn__));
 
 #endif // !__KUDOS_LIB_ASSERT_H

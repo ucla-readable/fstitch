@@ -35,6 +35,8 @@
  * input file to test the speed of non-sequential access. */
 #define RANDOM_TEST 0
 
+#define HISTORY_FILE ".kdb_history"
+
 /* Begin unique immutable strings {{{ */
 
 #define HASH_TABLE_SIZE 65521
@@ -368,7 +370,7 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if(debug_rev != 3486 || debug_opcode_rev != 3767)
+	if((debug_rev != 3486 && debug_rev != 3781) || debug_opcode_rev != 3767)
 		return -EPROTO;
 	
 	r = read_lit_32(&initial_timestamp);
@@ -4027,6 +4029,7 @@ int main(int argc, char * argv[])
 		printf("%sOK!\n", tty ? "\e[4D" : " ");
 #endif
 		
+		read_history(HISTORY_FILE);
 		rl_completion_entry_function = command_complete;
 		do {
 			int i;
@@ -4047,6 +4050,7 @@ int main(int argc, char * argv[])
 			else if(r == -ENOENT)
 				printf("No such command.\n");
 		} while(r != -EINTR);
+		write_history(HISTORY_FILE);
 	}
 	
 	input_finish();

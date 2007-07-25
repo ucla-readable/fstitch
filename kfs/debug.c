@@ -80,7 +80,7 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 	off_t size;
 	while(proc_buffer_rpos == proc_buffer_wpos)
 	{
-		if(!kfsd_is_running())
+		if(!kfsd_is_running() || assert_failed)
 			return 0;
 		/* buffer is empty, wait for writes */
 		current->state = TASK_INTERRUPTIBLE;
