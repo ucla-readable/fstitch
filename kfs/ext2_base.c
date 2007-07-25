@@ -134,17 +134,17 @@ struct ext2_fdesc {
 	} while (0)
 
 #define INODE_CLEAR(f)			do { \
-		INODE_PREPMOD(f); \
+		assert((f)->f_ip == &(f)->f_xinode); \
 		memset(&(f)->f_xinode, 0, sizeof(EXT2_inode_t)); \
 	} while (0)
 
 #define INODE_SET(f, field, val)	do { \
-		INODE_PREPMOD(f); \
+		assert((f)->f_ip == &(f)->f_xinode); \
 		(f)->f_xinode.field = (val); \
 	} while (0)
 
 #define INODE_ADD(f, field, val)	do { \
-		INODE_SET(f, field, (f)->f_ip->field + (val)); \
+		INODE_SET(f, field, (f)->f_xinode.field + (val)); \
 	} while (0)
 
 /* some prototypes */
@@ -2991,6 +2991,7 @@ int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** t
 		r = CALL(info->ubd, write_block, f->f_inode_cache, block);
 	}
 
+	f->f_ip = (const EXT2_inode_t *) &f->f_inode_cache->data[offset];
 	return r;
 }
 
