@@ -126,7 +126,7 @@ static account_t * act_all[] =
     { &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
       &act_nchdescs[NC_CONVERT_BIT_BYTE], &act_nchdescs[NC_CONVERT_NOOP],
       &act_nchdescs[NC_TOTAL],
-      &act_ndeps, &act_nwrefs, &act_data };
+      &act_ndeps, &act_data };
 
 static inline void account_nchdescs(int type, int add)
 {
