@@ -14,17 +14,18 @@
 /* values: 0 (normal), 1 (track) */
 #define HASH_MAP_TRACK_BUCKET_SIZES 0
 
+typedef struct hash_map_elt hash_map_elt_t;
+typedef struct chain_elt chain_elt_t;
+typedef struct hash_map hash_map_t;
+
 struct hash_map_elt {
 	void * key;
 	void * val;
 };
-typedef struct hash_map_elt hash_map_elt_t;
 
 struct chain_elt;
-typedef struct chain_elt chain_elt_t;
 
 struct hash_map;
-typedef struct hash_map hash_map_t;
 
 int hash_map_init(void);
 

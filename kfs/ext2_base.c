@@ -1,5 +1,4 @@
 #include <lib/platform.h>
-#include <lib/hash_set.h>
 #include <lib/jiffies.h>
 #include <lib/pool.h>
 

@@ -41,7 +41,8 @@
 // starting a shutdown
 #define MAX_START_SHUTDOWN_WAIT 4
 
-static hash_set_t * mounts = NULL; // set of mount_t*
+static mount_t ** mounts = NULL; // set of mount_t*
+static int nmounts = 0;
 static mount_t * root = NULL;
 
 struct fuse_lowlevel_ops * ops;
@@ -66,9 +67,32 @@ static int ensure_helper_is_running(void);
 static bool shutdown_has_started(void);
 
 
-hash_set_t * fuse_serve_mounts(void)
+mount_t ** fuse_serve_mounts(void)
 {
 	return mounts;
+}
+
+static void mounts_insert(mount_t *m)
+{
+	mount_t **mp;
+	for (mp = mounts; mp && *mp && *mp != m; mp++)
+		/* nada */;
+	if (!mp || !*mp) {
+		mounts = (mount_t **) realloc(mounts, (nmounts + 2) * sizeof(*mounts));
+		mounts[nmounts] = m;
+		mounts[++nmounts] = NULL;
+	}
+}
+
+static void mounts_remove(mount_t *m)
+{
+	mount_t **mp;
+	for (mp = mounts; mp && *mp; mp++)
+		if (*mp == m) {
+			*mp = mounts[--nmounts];
+			mounts[nmounts] = NULL;
+			break;
+		}
 }
 
 size_t fuse_serve_mount_chan_bufsize(void)
@@ -252,8 +276,8 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 	strcpy(m->mountpoint, root->mountpoint);
 	strcpy(m->mountpoint + strlen(root->mountpoint), path);
 
-	if ((r = hash_set_insert(mounts, m)) < 0)
-		goto error_mountpoint;
+	// add to mounts list
+	mounts_insert(m);
 
 	// helper_thread takes care of the channel_fd field and on down
 	if (enqueue_helper_request(qe))
@@ -270,8 +294,7 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 	return 0;
 
   error_insert:
-	(void) hash_set_erase(mounts, m);
-  error_mountpoint:
+	mounts_remove(m);
 	free(m->mountpoint);
   error_args:
 	fuse_opt_free_args(&m->args);
@@ -317,7 +340,6 @@ int fuse_serve_mount_remove(mount_t * m)
 
 static int mount_root(int argc, char ** argv)
 {
-	int r;
 	Dprintf("%s()\n", __FUNCTION__);
 
 	if (!(root = calloc(1, sizeof(*root))))
@@ -364,11 +386,7 @@ static int mount_root(int argc, char ** argv)
 
 	fuse_session_add_chan(root->session, root->channel);
 
-	if ((r = hash_set_insert(mounts, root)) < 0)
-	{
-		fprintf(stderr, "%s(): hash_set_insert(): %d\n", __FUNCTION__, r);
-		return r;
-	}
+	mounts_insert(root);
 
 	root->mounted = 1;
 
@@ -378,7 +396,7 @@ static int mount_root(int argc, char ** argv)
 // Destroy variables local to fuse_serve_mount
 static void destroy_locals()
 {
-	hash_set_destroy(mounts); // destroy even if non-empty
+	free(mounts); // destroy even if non-empty
 	mounts = NULL;
 	vector_destroy(remove_queue);
 	remove_queue = NULL;
@@ -399,8 +417,7 @@ static int unmount_root(void)
 	if (!root->mounted)
 		return -EINVAL;
 
-	if (hash_set_erase(mounts, root) != root)
-		return -EINVAL;
+	mounts_remove(root);
 
 	if (root->session)
 		fuse_session_destroy(root->session); // also destroys root->channel
@@ -408,7 +425,7 @@ static int unmount_root(void)
 		(void) close(root->channel_fd);
 
 	// only use fuse_unmount if there are no nested mounts
-	if (hash_set_size(mounts) == 0)
+	if (nmounts == 0)
 		fuse_unmount(root->mountpoint);
 
 	fuse_opt_free_args(&root->args);
@@ -437,9 +454,6 @@ int fuse_serve_mount_init(int argc, char ** argv, struct fuse_lowlevel_ops * _op
 	assert(!root);
 
 	root_service_started = 0;
-
-	if (!(mounts = hash_set_create()))
-		return -ENOMEM;
 
 	if (pipe(unmount_pipe) == -1)
 	{
@@ -476,7 +490,7 @@ int fuse_serve_mount_init(int argc, char ** argv, struct fuse_lowlevel_ops * _op
 	unmount_pipe[0] = -1;
 	unmount_pipe[1] = -1;
   error_mounts:
-	hash_set_destroy(mounts);
+	free(mounts);
 	mounts = NULL;
 	return r;
 }
@@ -489,7 +503,7 @@ void fuse_serve_mount_instant_shutdown(void)
 	if (!mounts)
 		return; // already shutdown
 
-	if (1 == hash_set_size(mounts))
+	if (nmounts == 1)
 	{
 		r = unmount_root();
 		assert(r >= 0);
@@ -521,7 +535,6 @@ void fuse_serve_mount_instant_shutdown(void)
 int fuse_serve_mount_step_remove(void)
 {
 	char b = 1;
-	vector_t * vmounts;
 	queue_entry_t * qe;
 	Dprintf("%s()\n", __FUNCTION__);
 
@@ -548,7 +561,7 @@ int fuse_serve_mount_step_remove(void)
 	{
 		assert(shutdown_has_started());
 
-		if (hash_set_size(mounts) == 1)
+		if (nmounts == 1)
 		{
 			Dprintf("%s(): unmounting root\n", __FUNCTION__);
 			return unmount_root();
@@ -559,20 +572,12 @@ int fuse_serve_mount_step_remove(void)
 			(void) write(unmount_pipe[1], &b, 1); // unzero the read fd's level
 			return -ENOMEM;
 		}
-		if (!(vmounts = vector_create_hashset(mounts)))
-		{
-			free(qe);
-			(void) write(unmount_pipe[1], &b, 1); // unzero the read fd's level
-			return -ENOMEM;
-		}
-		vector_sort(vmounts, mount_path_compar);
-		qe->mount = vector_elt(vmounts, vector_size(vmounts) - 1);
+		qsort(mounts, nmounts, sizeof(*mounts), mount_path_compar);
+		qe->mount = mounts[nmounts - 1];
 		qe->action = QEUNMOUNT;
-		vector_destroy(vmounts);
 	}
 
-	if (hash_set_erase(mounts, qe->mount) != qe->mount)
-		assert(0);
+	mounts_remove(qe->mount);
 
 	fuse_session_destroy(qe->mount->session);
 	qe->mount->session = NULL;
@@ -793,16 +798,13 @@ int fuse_serve_mount_start_shutdown(void)
 
 	// Purge failed mounts
 	do {
-		hash_set_it_t it;
-		mount_t * m;
+		mount_t ** mp;
 		failed_found = 0;
-		hash_set_it_init(&it, mounts);
-		while ((m = hash_set_next(&it)))
-		{
-			if (!m->mounted)
-			{
+		for (mp = mounts; mp && *mp; mp++)
+			if (!(*mp)->mounted) {
+				mount_t * m = *mp;
 				failed_found = 1;
-				hash_set_erase(mounts, m);
+				mounts_remove(m);
 				free(m->kfs_path);
 				fuse_opt_free_args(&m->args);
 				free(m->mountpoint);
@@ -811,11 +813,10 @@ int fuse_serve_mount_start_shutdown(void)
 				free(m);
 				break;
 			}
-		}
 	} while (failed_found);
 
 	// If only root is mounted unmount it and return shutdown
-	if (hash_set_size(mounts) == 1)
+	if (nmounts == 1)
 		return unmount_root();
 
 	// Start the calling of fuse_serve_mount_step_shutdown()

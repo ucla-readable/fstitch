@@ -1,5 +1,4 @@
 #include <lib/platform.h>
-#include <lib/hash_set.h> // for vector_create_hashset()
 #include <lib/vector.h>
 
 
@@ -41,25 +40,6 @@ vector_t * vector_create_size(size_t n)
 	memset(v->elts, 0, n*sizeof(v->elts));
 	v->capacity = n;
 
-	return v;
-}
-
-vector_t * vector_create_hashset(const hash_set_t * h)
-{
-	vector_t * v;
-	hash_set_it_t h_it;
-	void * elt;
-	size_t i = 0;
-
-	if (!h)
-		return NULL;
-
-	if (!(v = vector_create_size(hash_set_size(h))))
-		return NULL;
-
-	hash_set_it_init(&h_it, (hash_set_t *) h);
-	while ((elt = hash_set_next(&h_it)))
-		vector_elt_set(v, i++, elt);
 	return v;
 }
 

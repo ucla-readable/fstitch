@@ -26,7 +26,6 @@ KKFSD_LIB_OBJS := \
               qsort.o \
               vector.o \
               hash_map.o \
-              hash_set.o \
               strtol.o \
               svnrevtol.o \
               sleep.o

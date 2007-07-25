@@ -2066,9 +2066,7 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	int r;
 	
 	assert(block && owner && tail);
-	
-	if(offset + length > block->length)
-		return -EINVAL;
+	assert(offset + length <= block->length);
 	
 	r = chdesc_create_merge(block, owner, tail, befores);
 	if(r < 0)

@@ -1,12 +1,14 @@
 #!/bin/bash
 
-if [ $1 = '--gdb' ]; then
-    KFSD_WRAP=gdb
-    shift
-elif [ $1 = '--valgrind' ]; then
-    KFSD_WRAP=valgrind
-    shift
+if [ $1 = '--gdb' -o $1 = '--valgrind' -o $1 = '--callgrind' -o $1 = '--strace' ]; then
+	KFSD_WRAP=`echo "$1" | sed s/--//`
+	shift
 fi
+
+while expr "$1" : "--simulate-cache.*"; do
+	KFSD_WRAP_OPTS="$KFSD_WRAP_OPTS $1"
+	shift
+done
 
 if [ $# -lt 1 ]; then
 	echo "Usage: `basename \"$0\"` <MNT> [FUSE_OPTS...]"
@@ -35,10 +37,9 @@ then
 	KFSD_WRAP_OPTS="--suppressions=conf/memcheck.supp --leak-check=full --show-reachable=yes --leak-resolution=high"
 	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
-elif [ "$KFSD_WRAP" == "cachegrind" ] && [ "$KFSD_WRAP_OPTS" == "" ]
+elif [ "$KFSD_WRAP" == "cachegrind" -o "$KFSD_WRAP" == callgrind ]
 then
-	KFSD_WRAP_OPTS="--tool=cachegrind"
-	valgrind $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@" \
+	valgrind --tool=$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
 elif [ "$KFSD_WRAP" == "massif" ] && [ "$KFSD_WRAP_OPTS" == "" ]
 then

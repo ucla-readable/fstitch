@@ -1,8 +1,6 @@
 #ifndef KUDOS_INC_VECTOR_H
 #define KUDOS_INC_VECTOR_H
 
-#include <lib/hash_set.h> // for vector_create_hashset()
-
 struct vector {
 	size_t size;
 	size_t capacity;
@@ -14,8 +12,6 @@ typedef struct vector vector_t;
 vector_t * vector_create(void);
 // Create a vector of size n.
 vector_t * vector_create_size(size_t n);
-// Create a vector with the same elements as hs.
-vector_t * vector_create_hashset(const hash_set_t * hs);
 // Destroy the vector, does not destroy elts.
 void       vector_destroy(vector_t * v);
 

@@ -2,7 +2,6 @@
 #include <lib/platform.h>
 #include <lib/dirent.h>
 #include <lib/jiffies.h>
-#include <lib/hash_set.h>
 
 #include <fuse.h>
 #include <limits.h>
@@ -1383,6 +1382,7 @@ int kfsd_unlock_callback(unlock_callback_t callback, void * data)
 int fuse_serve_loop(void)
 {
 	struct timeval tv;
+	mount_t ** mp;
 	int r;
 	Dprintf("%s()\n", __FUNCTION__);
 
@@ -1401,12 +1401,10 @@ int fuse_serve_loop(void)
 	serving = 1;
 	tv = fuse_serve_timeout();
 
-	while (fuse_serve_mounts() && hash_set_size(fuse_serve_mounts()))
+	while ((mp = fuse_serve_mounts()) && mp && mp[0])
 	{
 		fd_set rfds;
 		int max_fd = 0;
-		hash_set_it_t mounts_it;
-		mount_t * mount;
 		struct timeval it_start, it_end;
 
 		FD_ZERO(&rfds);
@@ -1422,13 +1420,12 @@ int fuse_serve_loop(void)
 		if (remove_activity > max_fd)
 			max_fd = remove_activity;
 
-		hash_set_it_init(&mounts_it, fuse_serve_mounts());
-		while ((mount = hash_set_next(&mounts_it)))
+		for (mp = fuse_serve_mounts(); mp && *mp; mp++)
 		{
-			if (mount->mounted && !fuse_session_exited(mount->session))
+			if ((*mp)->mounted && !fuse_session_exited((*mp)->session))
 			{
 				//printf("[\"%s\"]", mount->kfs_path); fflush(stdout); // debug
-				int mount_fd = fuse_chan_fd(mount->channel);
+				int mount_fd = fuse_chan_fd((*mp)->channel);
 				FD_SET(mount_fd, &rfds);
 				if (mount_fd > max_fd)
 					max_fd = mount_fd;
@@ -1458,16 +1455,15 @@ int fuse_serve_loop(void)
 				break;
 			}
 
-			hash_set_it_init(&mounts_it, fuse_serve_mounts());
-			while ((mount = hash_set_next(&mounts_it)))
+			for (mp = fuse_serve_mounts(); mp && *mp; mp++)
 			{
-				if (mount->mounted && FD_ISSET(mount->channel_fd, &rfds))
+				if ((*mp)->mounted && FD_ISSET((*mp)->channel_fd, &rfds))
 				{
-					r = fuse_chan_receive(mount->channel, channel_buf, channel_buf_len);
+					r = fuse_chan_receive((*mp)->channel, channel_buf, channel_buf_len);
 					assert(r > 0); // what would this error mean?
 
-					Dprintf("fuse_serve: request for mount \"%s\"\n", mount->kfs_path);
-					fuse_session_process(mount->session, channel_buf, r, mount->channel);
+					Dprintf("fuse_serve: request for mount \"%s\"\n", (*mp)->kfs_path);
+					fuse_session_process((*mp)->session, channel_buf, r, (*mp)->channel);
 					sched_run_cleanup();
 				}
 			}

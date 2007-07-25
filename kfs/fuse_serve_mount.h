@@ -2,7 +2,7 @@
 #define __KUDOS_KFS_FUSE_SERVE_MOUNT_H
 
 #include <fuse/fuse_lowlevel.h>
-#include <lib/hash_set.h>
+#include <lib/hash_map.h>
 #include <kfs/cfs.h>
 
 // Purpose:
@@ -54,9 +54,9 @@ size_t fuse_serve_mount_chan_bufsize(void);
 // Can only be called after setting the root with fuse_serve_mount_set_root().
 int fuse_serve_mount_load_mounts(void);
 
-// Return the set of mounts; each entry is a mount_t*.
+// Return the set of mounts; each entry is a mount_t*; terminated by null.
 // You should assume this set can change after any call to fuse_serve_mount.
-hash_set_t * fuse_serve_mounts(void);
+mount_t ** fuse_serve_mounts(void);
 
 // Add a fuse mount at path for cfs.
 // The mount (immediately visible in mounts upon return) is active only
