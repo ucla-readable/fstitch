@@ -1222,7 +1222,7 @@ static int render_group(FILE * output, struct group * group, int level)
 static void render_groups(FILE * output)
 {
 	int i;
-	if(current_grouping == OFF)
+	if(current_grouping == OFF || !groups)
 		return;
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
 	{
@@ -3053,7 +3053,7 @@ static int command_mark(int argc, const char * argv[])
 				printf("[Info: interpreted %s as 0x%08x.]\n", argv[i], address);
 			if(!chdesc)
 			{
-				printf("No such change descriptor: 0x%08x\n", address);
+				printf("No such chdesc: 0x%08x\n", address);
 				continue;
 			}
 			r = mark_add(chdesc->address, chdesc->opcode);
