@@ -612,7 +612,7 @@ int hash_map_resize(hash_map_t * hm, size_t n)
 		{
 			chain_elt_t * next_elt = elt->next;
 			chain_elt_t * found = erase_chain_elt(hm, elt->elt.key);
-			assert(found); // we are rehashing; elt.key is in the source map
+			assert(found); (void) found; // we are rehashing; elt.key is in the source map
 			insert_chain_elt(new_hm, elt);
 			elt = next_elt;
 		}

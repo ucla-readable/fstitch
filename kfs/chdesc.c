@@ -1576,7 +1576,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 		if(!root_chdesc_stays)
 		{
 			int r = chdesc_add_depend_no_cycles(merge_target, chdesc);
-			assert(r >= 0);
+			assert(r >= 0); (void) r;
 		}
 		else
 		{

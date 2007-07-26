@@ -1377,7 +1377,7 @@ static void render(FILE * output, const char * title, int landscape)
 				if(!(chdesc->flags & CHDESC_WRITTEN))
 				{
 					int r = chdesc_group(chdesc);
-					assert(r >= 0);
+					assert(r >= 0); (void) r;
 				}
 				render_chdesc(output, chdesc, 1);
 			}
@@ -1386,7 +1386,7 @@ static void render(FILE * output, const char * title, int landscape)
 				if(!(chdesc->flags & CHDESC_WRITTEN))
 				{
 					int r = chdesc_group(chdesc);
-					assert(r >= 0);
+					assert(r >= 0); (void) r;
 				}
 				render_chdesc(output, chdesc, 0);
 			}

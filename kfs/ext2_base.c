@@ -216,7 +216,7 @@ static ext2_minode_t * ext2_minode_create(ext2_minode_cache_t * cache, inode_t i
 static void ext2_minode_destroy(ext2_minode_cache_t * cache, ext2_minode_t * minode)
 {
 	ext2_minode_t * mi = hash_map_erase(cache->minodes_map, (void *) minode->ino);
-	assert(mi == minode);
+	assert(mi == minode); (void) mi;
 	assert(!minode->ref_count);
 	if(WEAK(minode->create))
 		chdesc_weak_release(&minode->create, 0);
@@ -432,7 +432,7 @@ static int ext2_mdirent_use(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, const 
 static void ext2_mdirent_clear(ext2_mdir_t * mdir, ext2_mdirent_t * mdirent, uint32_t blocksize)
 {
 	ext2_mdirent_t * mde = hash_map_erase(mdir->mdirents, mdirent->dirent.name);
-	assert(mde == mdirent);
+	assert(mde == mdirent); (void) mde;
 
 	if(!(mdirent->offset % blocksize))
 	{
