@@ -1934,12 +1934,21 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 					array = scan->list;
 				}
 				for(i = 0; i < size; i++)
-					if(array[i] == before)
-						break;
-				if(i < size)
-					break;
+				{
+					if(array[i] && array[i]->flags & CHDESC_SET_NOOP)
+					{
+						chdepdesc_t * dep;
+						for(dep = array[i]->befores; dep; dep = dep->before.next)
+							if(dep->before.desc == before)
+								goto match;
+					}
+					else if(array[i] == before)
+						goto match;
+				}
 			}
-			assert(scan || !befores);
+			assert(!befores);
+		  match:
+			(void) 0; /* placate compiler re deprecated end labels */
 #endif
 		}
 	}
