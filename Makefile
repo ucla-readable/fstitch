@@ -6,7 +6,7 @@ UTILDIR := $(BASE_OBJDIR)/util
 
 V = @
 
-BIN := kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
+BIN = kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
 
 ifeq ($(KERNELRELEASE),)
 KERNELRELEASE = $(shell uname -r)
@@ -17,14 +17,18 @@ KERNELPATH = /lib/modules/${KERNELRELEASE}/build
 endif
 
 # Commands
-CC	:= gcc $(CC_VER) -pipe
-TAR	:= tar
-PERL	:= perl
-CTAGS	:= ctags
+CC	= gcc $(CC_VER) -pipe
+TAR	= tar
+PERL	= perl
+CTAGS	= ctags
 
 # Command flags
-CFLAGS	:= -Wall -std=gnu99
-CTAGSFLAGS	:= --extra=+q --langmap=make:+\(Makefile\)\(Makefile.user\).mk
+CFLAGS	= -Wall -std=gnu99
+CTAGSFLAGS = --extra=+q --langmap=make:+\(Makefile\)\(Makefile.user\).mk
+
+ifneq ($(NDEBUG),)
+CFLAGS += -DNDEBUG=$(NDEBUG)
+endif
 
 # Lists that the */Makefrag makefile fragments will add to
 OBJDIRS :=
