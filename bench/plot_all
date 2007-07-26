@@ -4,8 +4,9 @@ BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 
-PLOT_CMDS="plot_time plot_space plot_io"
+PLOT_CMDS="plot_space plot_io"
 TESTS="tar rm postmark andrew"
+CMS="su meta full"
 
 function usage () {
 	echo "About: generate all plots"
@@ -23,6 +24,11 @@ while getopts "o:k:" flag; do
 done
 [ -n "$KEY" ] && KEY="-k $KEY"
 
+for TESTNAME in $TESTS; do
+	for CM in $CMS; do
+		try $BENCHDIR/plot_time -c $CM -t $TESTNAME -o $OUTDIR $KEY
+	done
+done
 for PLOT in $PLOT_CMDS; do
 	for TESTNAME in $TESTS; do
 		try $BENCHDIR/$PLOT -t $TESTNAME -o $OUTDIR $KEY

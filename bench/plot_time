@@ -6,13 +6,14 @@ KUDOSDIR="$BENCHDIR/.."
 
 function usage () {
 	echo "About: Generate time plot for a given test"
-	echo "Usage: `basename "$0"` <-t TESTNAME> <-o OUTDIR> [-k time|rev]"
+	echo "Usage: `basename "$0"` <-t TESTNAME> <-c MODE> <-o OUTDIR> [-k time|rev]"
 }
 
 KEY=time
-while getopts "t:o:k:" flag; do
+while getopts "t:c:o:k:" flag; do
 	case "$flag" in
 		t) TESTNAME="$OPTARG";;
+		c) CM="$OPTARG";;
 		o) OUTDIR="$OPTARG";;
 		k) KEY="$OPTARG";;
 		/?) usage 1>&2; exit 1;;
@@ -20,7 +21,7 @@ while getopts "t:o:k:" flag; do
 	esac
 done
 
-if [ -z "$TESTNAME" ] || [ -z "$OUTDIR" ]; then
+if [ -z "$TESTNAME" ] || [ -z "$OUTDIR" ] || [ -z "$CM" ]; then
 	usage 1>&2
 	exit 1
 fi
@@ -40,7 +41,7 @@ DATA=`mktemp plot_time.XXXXXX` || exit 1
 trap "rm -f $DATA" EXIT
 
 for test in `ls $KUDOSDIR/tests/`; do
-	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "su" ]; then continue; fi
+	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "$CM" ]; then continue; fi
 
 	LINE="`$BENCHDIR/ex_time -d $KUDOSDIR/tests/$test -t $TESTNAME`"
 	[ -n "$LINE" ] || continue
@@ -65,9 +66,9 @@ set key outside
 set grid
 $XAXIS
 
-set title "$TESTNAME time"
+set title "$TESTNAME time ($CM)"
 set ylabel "Time (seconds)"
-set output "$OUTDIR/time_${TESTNAME}.png"
+set output "$OUTDIR/time_${TESTNAME}_${CM}.png"
 plot [:] [0:] \
 	"$DATA" using 1:2:3:4 with yerrorlines title "real", \
 	"$DATA" using 1:5:6:7 with yerrorlines title "sys", \
