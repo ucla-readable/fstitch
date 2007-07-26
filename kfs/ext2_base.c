@@ -2886,9 +2886,6 @@ static int ext2_write_slow_symlink(LFS_t * object, ext2_fdesc_t * f, char * name
 	if (!new_block)
 		return -1;
 
-	r = chdesc_create_init(new_block, info->ubd, &set.array[1]);
-	if (r < 0)
-		return r;
 	r = chdesc_create_byte_set(new_block, info->ubd, 0, name_len, (void *) name, head, PASS_CHDESC_SET(set));
 	if (r < 0)
 		return r;
