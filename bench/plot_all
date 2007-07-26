@@ -5,7 +5,7 @@ BENCHDIR="`dirname "$0"`"
 KUDOSDIR="$BENCHDIR/.."
 
 PLOT_CMDS="plot_space plot_io"
-TESTS="tar rm postmark andrew"
+TESTS="tar rm postmark andrew imap"
 CMS="su meta full"
 
 function usage () {
