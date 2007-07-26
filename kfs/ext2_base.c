@@ -35,23 +35,30 @@
 #define SUPER_BLOCKNO		0
 #define GDESC_BLOCKNO(i)	(1 + (i))
 
+/* typedefs */
+typedef struct ext2_minode ext2_minode_t;
+typedef struct ext2_minode_cache ext2_minode_cache_t;
+typedef struct mdirent_dlist mdirent_dlist_t;
+typedef struct ext2_mdirent ext2_mdirent_t;
+typedef struct ext2_mdir ext2_mdir_t;
+typedef struct ext2_mdir_cache ext2_mdir_cache_t;
+typedef struct ext2_info ext2_info_t;
+typedef struct ext2_fdesc ext2_fdesc_t;
+
+/* directory entry cache */
 struct ext2_minode {
 	inode_t ino;
 	chweakref_t create;
 	unsigned ref_count;
 };
-typedef struct ext2_minode ext2_minode_t;
 
 struct ext2_minode_cache {
 	hash_map_t * minodes_map;
 };
-typedef struct ext2_minode_cache ext2_minode_cache_t;
 
-struct ext2_mdirent;
 struct mdirent_dlist {
 	struct ext2_mdirent ** pprev, * next;
 };
-typedef struct mdirent_dlist mdirent_dlist_t;
 
 /* in-memory dirent */
 struct ext2_mdirent {
@@ -63,7 +70,6 @@ struct ext2_mdirent {
 	mdirent_dlist_t offsetl;
 	mdirent_dlist_t freel;
 };
-typedef struct ext2_mdirent ext2_mdirent_t;
 
 /* in-memory directory */
 struct ext2_mdir {
@@ -74,7 +80,6 @@ struct ext2_mdir {
 	ext2_mdirent_t * free_first, * free_last;
 	struct ext2_mdir ** lru_polder, * lru_newer;
 };
-typedef struct ext2_mdir ext2_mdir_t;
 
 /* Perhaps this is a good number? */
 #define MAXCACHEDDIRS 1024
@@ -84,9 +89,8 @@ struct ext2_mdir_cache {
 	ext2_mdir_t mdirs_table[MAXCACHEDDIRS];
 	ext2_mdir_t * lru_oldest, * lru_newest;
 };
-typedef struct ext2_mdir_cache ext2_mdir_cache_t;
 
-
+/* ext2 LFS structure */
 struct ext2_info {
 	LFS_t lfs;
 	
@@ -94,7 +98,7 @@ struct ext2_info {
 	chdesc_t ** write_head;
 	const EXT2_Super_t *super; /* const to limit who can change it */
 	const EXT2_group_desc_t *groups; /* const to limit who can change it */
-	hash_map_t * filemap;
+	ext2_fdesc_t *filecache;
 	ext2_mdir_cache_t mdir_cache;
 	ext2_minode_cache_t minode_cache;
 	bdesc_t ** gdescs;
@@ -117,15 +121,16 @@ struct ext2_info {
 		unsigned merged, uncommitted, total;
 	} delete_dirent_stats, delete_inode_stats;
 #endif
-	uint32_t _blocksize_;
 };
-typedef struct ext2_info ext2_info_t;
 
 struct ext2_fdesc {
 	/* extend struct fdesc */
 	struct fdesc_common * common;
 	struct fdesc_common base;
 
+	ext2_fdesc_t **f_cache_pprev;
+	ext2_fdesc_t *f_cache_next;
+	
 	bdesc_t *f_inode_cache;
 	EXT2_inode_t f_inode;
 	uint8_t f_type;
@@ -134,8 +139,8 @@ struct ext2_fdesc {
 #if !ROUND_ROBIN_ALLOC
 	uint32_t f_lastblock;
 #endif
+	uint32_t f_age;
 };
-typedef struct ext2_fdesc ext2_fdesc_t;
 
 /* some prototypes */
 static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno);
@@ -154,7 +159,7 @@ int ext2_write_inode_set(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** ta
 
 DECLARE_POOL(ext2_minode, ext2_minode_t);
 DECLARE_POOL(ext2_mdirent, ext2_mdirent_t);
-DECLARE_POOL(ext2_fdesc, ext2_fdesc_t);
+DECLARE_POOL(ext2_fdesc_pool, ext2_fdesc_t);
 static int n_ext2_instances;
 
 static int check_super(LFS_t * object)
@@ -1062,23 +1067,48 @@ static bdesc_t * ext2_synthetic_lookup_block(LFS_t * object, uint32_t number)
 	return CALL(info->ubd, synthetic_read_block, number, 1);
 }
 
+static void __ext2_free_fdesc(ext2_fdesc_t * f)
+{
+	assert(f && f->f_nopen == 0);
+	if (f->f_inode_cache)
+		bdesc_release(&f->f_inode_cache);
+	if ((*f->f_cache_pprev = f->f_cache_next))
+		f->f_cache_next->f_cache_pprev = f->f_cache_pprev;
+	ext2_fdesc_pool_free(f);
+}
+
+static inline void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
+{
+	ext2_fdesc_t * f = (ext2_fdesc_t *) fdesc;
+	if (f && --f->f_nopen == 0)
+		__ext2_free_fdesc(f);
+}
+
 static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 {
-	ext2_fdesc_t * fd = NULL;
+	ext2_fdesc_t * fd = NULL, * oldest_fd = NULL;
 	struct ext2_info * info = (struct ext2_info *) object;
-	int r;
+	static uint32_t age;
+	int r, nincache = 0;
 	
 	if(ino <= 0)
 		return NULL;
-	
-	fd = hash_map_find_val(info->filemap, (void *) ino);
-	if(fd)
-	{
-		fd->f_nopen++;
-		return (fdesc_t *) fd;
-	}
-	
-	fd = ext2_fdesc_alloc();
+
+	if (++age == 0)
+		++age;
+
+	for (fd = info->filecache; fd; fd = fd->f_cache_next)
+		if (fd->f_ino == ino) {
+			fd->f_nopen += (fd->f_age ? 1 : 2);
+			fd->f_age = age;
+			return (fdesc_t *) fd;
+		} else if (fd->f_age) {
+			++nincache;
+			if (!oldest_fd || (int32_t) (oldest_fd->f_age - fd->f_age) > 0)
+				oldest_fd = fd;
+		}
+
+	fd = ext2_fdesc_pool_alloc();
 	if(!fd)
 		goto ext2_lookup_inode_exit;
 	
@@ -1090,43 +1120,29 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 #if !ROUND_ROBIN_ALLOC
 	fd->f_lastblock = 0;
 #endif
-	
+	fd->f_age = age;
+
 	r = ext2_get_inode(info, fd, 1);
 	if(r < 0)
 		goto ext2_lookup_inode_exit;
-	
 	fd->f_type = ext2_to_kfs_type(fd->f_inode.i_mode);
-	
-	r = hash_map_insert(info->filemap, (void *) ino, fd);
-	if(r < 0)
-		goto ext2_lookup_inode_exit;
-	assert(r == 0);
+
+	// stick in cache
+	if (oldest_fd && nincache >= 4) {
+		oldest_fd->f_age = 0;
+		ext2_free_fdesc(object, (fdesc_t *) oldest_fd);
+	}
+	fd->f_cache_pprev = &info->filecache;
+	fd->f_cache_next = info->filecache;
+	info->filecache = fd;
+	if (fd->f_cache_next)
+		fd->f_cache_next->f_cache_pprev = &fd->f_cache_next;
 	
 	return (fdesc_t*) fd;
 	
 ext2_lookup_inode_exit:
-	ext2_fdesc_free(fd);
+	ext2_fdesc_pool_free(fd);
 	return NULL;
-}
-
-static void ext2_free_fdesc(LFS_t * object, fdesc_t * fdesc)
-{
-	Dprintf("EXT2DEBUG: ext2_free_fdesc %p\n", fdesc);
-	struct ext2_info * info = (struct ext2_info *) object;
-	ext2_fdesc_t * f = (ext2_fdesc_t *) fdesc;
-	
-	if(f)
-	{
-		if(f->f_nopen > 1)
-		{
-			f->f_nopen--;
-			return;
-		}
-		if (f->f_inode_cache)
-			bdesc_release(&f->f_inode_cache);
-		hash_map_erase(info->filemap, (void *) f->f_ino);
-		ext2_fdesc_free(f);
-	}
 }
 
 static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
@@ -1882,7 +1898,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 		if (ino == EXT2_BAD_INO)
 			goto allocate_name_exit;
 
-		new_file = ext2_fdesc_alloc();
+		new_file = (ext2_fdesc_t *) ext2_lookup_inode(object, ino);
 		if (!new_file)
 			goto allocate_name_exit;
 
@@ -1890,23 +1906,10 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 		if (!minode)
 			goto allocate_name_exit;
 
-		new_file->common = &new_file->base;
-		new_file->base.parent = INODE_NONE;
-		new_file->f_inode_cache = NULL;
-		new_file->f_nopen = 1;
-#if !ROUND_ROBIN_ALLOC
-		new_file->f_lastblock = 0;
-#endif
-		new_file->f_ino = ino;
 		new_file->f_type = type;
 
 		memset(&new_file->f_inode, 0, sizeof(struct EXT2_inode));
 		
-		r = hash_map_insert(info->filemap, (void *) ino, new_file);
-		if(r < 0)
-			goto allocate_name_exit2;
-		assert(r == 0);
-
 		r = initialmd->get(initialmd->arg, KFS_FEATURE_UID, sizeof(x32), &x32);
 		if (r > 0)
 			new_file->f_inode.i_uid = x32;
@@ -3010,7 +3013,6 @@ static int ext2_destroy(LFS_t * lfs)
 	if(r < 0)
 		return r;
 	modman_dec_bd(info->ubd, lfs);	
-	hash_map_destroy(info->filemap);
 	if(info->bitmap_cache != NULL)
 		bdesc_release(&info->bitmap_cache);
 	if(info->inode_cache != NULL)
@@ -3027,7 +3029,7 @@ static int ext2_destroy(LFS_t * lfs)
 	{
 		ext2_minode_free_all();
 		ext2_mdirent_free_all();
-		ext2_fdesc_free_all();
+		ext2_fdesc_pool_free_all();
 	}
 	free(info->gdescs);
 	free((EXT2_Super_t *) info->super);
@@ -3060,7 +3062,7 @@ static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy)
 	bdesc_retain(f->f_inode_cache);
 
 	if (copy) {
-		offset &= info->_blocksize_ - 1;
+		offset &= info->lfs.blocksize - 1;
 		memcpy(&f->f_inode, f->f_inode_cache->data + offset, sizeof(EXT2_inode_t));
 	}
 
@@ -3101,7 +3103,7 @@ int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** t
 	offset = ((f->f_ino - 1) % info->super->s_inodes_per_group) * info->super->s_inode_size;
 	block = info->groups[block_group].bg_inode_table + (offset >> (10 + info->super->s_log_block_size));
 	
-	offset &= info->_blocksize_ - 1;
+	offset &= info->lfs.blocksize - 1;
 	r = chdesc_create_diff_set(f->f_inode_cache, info->ubd, offset, sizeof(EXT2_inode_t), &f->f_inode_cache->data[offset], &f->f_inode, tail, befores);
 	if (r < 0)
 		return r;
@@ -3223,7 +3225,6 @@ static int ext2_load_super(LFS_t * lfs)
 	uint32_t i;
 	uint32_t ngroupblocks;
 	lfs->blocksize = 1024 << info->super->s_log_block_size;
-	info->_blocksize_ = lfs->blocksize;
 	info->block_descs = lfs->blocksize / sizeof(EXT2_group_desc_t);
 	int ngroups = (info->super->s_blocks_count / info->super->s_blocks_per_group);
 	if (info->super->s_blocks_count % info->super->s_blocks_per_group != 0)
@@ -3290,11 +3291,7 @@ LFS_t * ext2(BD_t * block_device)
 	info->ubd = lfs->blockdev = block_device;
 	info->write_head = CALL(block_device, get_write_head);
 
-	info->filemap = hash_map_create();
-	if (!info->filemap) {
-		free(info);
-		return NULL;
-	}
+	info->filecache = 0;
 
 	r = ext2_minode_cache_init(&info->minode_cache);
 	if(r < 0)
