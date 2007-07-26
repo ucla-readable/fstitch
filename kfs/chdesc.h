@@ -11,6 +11,8 @@
 #define CHDESC_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
 #define CHDESC_FUTURE_BEFORES 0x100 /* may gain befores that would break overlap merging */
 #define CHDESC_INFLIGHT       0x200 /* chdesc is being written to disk */
+#define CHDESC_NO_OPGROUP     0x400 /* chdesc is exempt from opgroup tops */
+#define CHDESC_SET_NOOP       0x800 /* NOOP whose would-be afters get its befores instead */
 
 #define CHDESC_BYTE_SUM 0
 
@@ -189,6 +191,9 @@ void chdesc_destroy(chdesc_t ** chdesc);
 void chdesc_claim_noop(chdesc_t * chdesc);
 /* add a NOOP chdesc with no dependencies back to the free list */
 void chdesc_autorelease_noop(chdesc_t * chdesc);
+
+/* mark a NOOP chdesc as a set NOOP: would-be afters get its befores instead */
+void chdesc_set_noop_declare(chdesc_t * chdesc);
 
 /* reclaim written chdescs, by chdesc_destroy() on them */
 void chdesc_reclaim_written(void);

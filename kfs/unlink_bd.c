@@ -30,6 +30,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 	chdesc_t * write_head = info->write_head ? *info->write_head : NULL;
 	chdesc_t * next = NULL;
 	chdesc_t * chdesc;
+	const int engaged = opgroup_engaged();
 	int r;
 	
 	/* inspect and modify all chdescs passing through */
@@ -53,7 +54,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 			}
 			/* otherwise remove this dependency */
 			/* WARNING: this makes this module incompatible
-			 * with opgroups between different file systems */
+			 * with opgroups, period */
 			chdesc_dep_remove(*deps);
 		}
 		
@@ -66,6 +67,21 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 				kpanic("Holy Mackerel!");
 			chdesc->flags &= ~CHDESC_SAFE_AFTER;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
+		}
+		
+		if(engaged)
+		{
+			/* scan the afters as well, and unhook any opgroup chdescs */
+			/* WARNING: see warning above */
+			deps = &chdesc->afters;
+			while(*deps)
+				if(((*deps)->after.desc->flags & CHDESC_NO_OPGROUP) && (*deps)->after.desc->type == NOOP)
+					chdesc_dep_remove(*deps);
+				else
+					deps = &(*deps)->before.next;
+			/* and set the opgroup exemption flag */
+			chdesc->flags |= CHDESC_NO_OPGROUP;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_NO_OPGROUP);
 		}
 	}
 	

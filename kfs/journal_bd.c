@@ -384,6 +384,8 @@ static int journal_bd_start_transaction(BD_t * object)
 	CREATE_NOOP(hold, object); /* this one is managed */
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_FUTURE_BEFORES);
 	info->hold->flags |= CHDESC_FUTURE_BEFORES;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_NO_OPGROUP);
+	info->hold->flags |= CHDESC_NO_OPGROUP;
 	CREATE_NOOP(keep_d, NULL);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
 	assert(info->keep_d); /* keep_d must be non-NULL for chdesc_create_noop_list */
@@ -543,6 +545,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	chdesc_t * chdesc_index_next;
 	uint32_t number;
 	int r, metadata = !info->only_metadata;
+	const int engaged = opgroup_engaged();
 	
 	/* FIXME: make this module support counts other than 1 */
 	assert(block->length == object->blocksize);
@@ -573,7 +576,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		/* if there is an opgroup engaged, everything we do should be
 		 * put in the transaction to guarantee proper ordering of data
 		 * with respect to both metadata and other data */
-		else if(opgroup_engaged())
+		else if(engaged)
 			metadata = 1;
 		else
 			/* otherwise, scan for metadata */
@@ -626,6 +629,21 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 				kpanic("Holy Mackerel!");
 			chdesc->flags &= ~CHDESC_SAFE_AFTER;
 			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
+		}
+		
+		if(engaged)
+		{
+			/* scan the afters as well, and unhook any opgroup chdescs */
+			/* WARNING: see warning above */
+			deps = &chdesc->afters;
+			while(*deps)
+				if(((*deps)->after.desc->flags & CHDESC_NO_OPGROUP) && (*deps)->after.desc->type == NOOP)
+					chdesc_dep_remove(*deps);
+				else
+					deps = &(*deps)->before.next;
+			/* and set the opgroup exemption flag */
+			chdesc->flags |= CHDESC_NO_OPGROUP;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_NO_OPGROUP);
 		}
 	}
 	

@@ -233,7 +233,7 @@ static void dump_counts(void)
 	{
 		while(jiffies - last_count_dump >= HZ)
 			last_count_dump += HZ;
-		printk(KERN_ERR "Bit: %4d, Byte: %4d, Noop: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP]);
+		printf("Bit: %4d, Byte: %4d, Noop: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP]);
 	}
 }
 #endif
@@ -825,6 +825,17 @@ static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	if(after->befores && container_of(after->befores_tail, chdepdesc_t, before.next)->before.desc == before)
 		return 0;
 #endif
+	
+	if(before->flags & CHDESC_SET_NOOP)
+	{
+		int r = 0;
+		assert(before->type == NOOP);
+		assert(!before->afters);
+		for(dep = before->befores; dep; dep = dep->before.next)
+			if((r = chdesc_add_depend_no_cycles(after, dep->before.desc)) < 0)
+				break;
+		return r;
+	}
 	
 	dep = chdepdesc_alloc();
 	if(!dep)
@@ -3027,6 +3038,7 @@ void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_ca
 	
 	if(chdesc)
 	{
+		assert(!(chdesc->flags & CHDESC_SET_NOOP));
 		weak->chdesc = chdesc;
 #if CHDESC_WEAKREF_CALLBACKS
 		weak->callback = callback;
@@ -3175,12 +3187,28 @@ void chdesc_autorelease_noop(chdesc_t * chdesc)
 		chdesc_free_push(chdesc);
 }
 
+void chdesc_set_noop_declare(chdesc_t * chdesc)
+{
+	assert(chdesc->type == NOOP && !chdesc->afters && !(chdesc->flags & CHDESC_WRITTEN));
+	chdesc->flags |= CHDESC_SET_NOOP;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SET_NOOP);
+	if(!chdesc->free_prev && free_head != chdesc)
+		chdesc_free_push(chdesc);
+}
+
 void chdesc_reclaim_written(void)
 {
 	while(free_head)
 	{
 		chdesc_t * first = free_head;
 		chdesc_free_remove(first);
+		if(first->flags & CHDESC_SET_NOOP)
+		{
+			assert(first->type == NOOP);
+			assert(!first->afters);
+			while(first->befores)
+				chdesc_dep_remove(first->befores);
+		}
 		chdesc_destroy(&first);
 	}
 }

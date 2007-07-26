@@ -112,6 +112,8 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 		if(chdesc_create_noop_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
 			goto error_top_keep;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
+		copy->top->flags |= CHDESC_NO_OPGROUP;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, copy->top, CHDESC_NO_OPGROUP);
 	}
 	chdesc_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL);
 	
@@ -434,6 +436,8 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	if(r < 0)
 		kpanic("Can't recover from failure!");
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
+	top->flags |= CHDESC_NO_OPGROUP;
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, top, CHDESC_NO_OPGROUP);
 	
 	if(!bottom->befores)
 	{
@@ -656,6 +660,7 @@ int opgroup_prepare_head(chdesc_t ** head)
 		if(r < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");
+		chdesc_set_noop_declare(*head);
 	}
 	else
 		*head = WEAK(current_scope->bottom);
@@ -666,6 +671,8 @@ int opgroup_prepare_head(chdesc_t ** head)
 int opgroup_finish_head(chdesc_t * head)
 {
 	if(!current_scope || !current_scope->top || !head || head == WEAK(current_scope->bottom))
+		return 0;
+	if(head->flags & CHDESC_NO_OPGROUP)
 		return 0;
 	return chdesc_add_depend(current_scope->top, head);
 }
