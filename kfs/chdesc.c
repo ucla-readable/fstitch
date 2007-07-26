@@ -36,6 +36,9 @@
 #define CHDESC_BYTE_MERGE_OVERLAP 1
 #define CHDESC_BIT_MERGE_OVERLAP 1
 
+/* Set to allow swapping of full-block byte data with pointers instead of memxchg() */
+#define SWAP_FULLBLOCK_DATA 1
+
 /* Set to enable chdesc accounting */
 #define CHDESC_ACCOUNT 0
 
@@ -2861,7 +2864,18 @@ int chdesc_apply(chdesc_t * chdesc)
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
-			memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+#if SWAP_FULLBLOCK_DATA
+			if(chdesc->byte.length == chdesc->block->length)
+			{
+				uint8_t * old_block = chdesc->block->data;
+				assert(!chdesc->byte.offset);
+				assert(chdesc->byte.data != chdesc->byte.ldata);
+				chdesc->block->data = chdesc->byte.data;
+				chdesc->byte.data = old_block;
+			}
+			else
+#endif
+				memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
@@ -2895,7 +2909,18 @@ int chdesc_rollback(chdesc_t * chdesc)
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
-			memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+#if SWAP_FULLBLOCK_DATA
+			if(chdesc->byte.length == chdesc->block->length)
+			{
+				uint8_t * new_block = chdesc->block->data;
+				assert(!chdesc->byte.offset);
+				assert(chdesc->byte.data != chdesc->byte.ldata);
+				chdesc->block->data = chdesc->byte.data;
+				chdesc->byte.data = new_block;
+			}
+			else
+#endif
+				memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());

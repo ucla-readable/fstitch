@@ -248,12 +248,8 @@ static int journal_bd_grab_slot(BD_t * object)
 	do {
 		if(info->cr_retain[scan].seq != info->trans_seq)
 		{
-			r = chdesc_weak_retain(WEAK(info->cr_retain[scan].cr), &info->jdata_head, NULL, NULL);
-			if(r < 0)
-				return r;
-			r = chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
-			if(r < 0)
-				return r;
+			chdesc_weak_retain(WEAK(info->cr_retain[scan].cr), &info->jdata_head, NULL, NULL);
+			chdesc_weak_retain(info->done, &info->cr_retain[scan].cr, NULL, NULL);
 			Dprintf("%s(): reusing currently used transaction slot %d (sequence %u, old %u)\n", __FUNCTION__, scan, info->trans_seq, info->cr_retain[scan].seq);
 			info->cr_retain[scan].seq = info->trans_seq;
 			info->prev_slot = info->trans_slot;
