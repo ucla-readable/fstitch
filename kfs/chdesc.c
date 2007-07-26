@@ -118,7 +118,7 @@ static inline void account_update(account_t * act, int32_t space_change)
 	return account_update_realloc(act, 0, space_change);
 }
 
-static account_t act_nchdescs[6], act_ndeps, act_nwrefs;
+static account_t act_nchdescs[6], act_ndeps;
 static account_t act_data;
 //static account_t act_nnrb;
 
