@@ -1116,7 +1116,7 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	fd->base.parent = INODE_NONE;
 	fd->f_inode_cache = NULL;
 	fd->f_ino = ino;
-	fd->f_nopen = 1;
+	fd->f_nopen = 2;
 #if !ROUND_ROBIN_ALLOC
 	fd->f_lastblock = 0;
 #endif
