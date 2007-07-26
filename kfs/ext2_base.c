@@ -3002,6 +3002,7 @@ static int ext2_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, 
 static int ext2_destroy(LFS_t * lfs)
 {
 	struct ext2_info * info = (struct ext2_info *) lfs;
+	ext2_fdesc_t *f;
 	int i, r;
 
 #if DELETE_MERGE_STATS
@@ -3021,6 +3022,10 @@ static int ext2_destroy(LFS_t * lfs)
 		bdesc_release(&info->super_cache);
 	for(i = 0; i < info->ngroupblocks; i++)
 		bdesc_release(&(info->gdescs[i]));
+	for (f = info->filecache; f; f = f->f_cache_next)
+		assert(f->f_nopen == 1 && f->f_age != 0);
+	while (info->filecache)
+		ext2_free_fdesc(lfs, (fdesc_t *) info->filecache);
 
 	ext2_mdir_cache_deinit(&info->mdir_cache);
 	ext2_minode_cache_deinit(&info->minode_cache);
