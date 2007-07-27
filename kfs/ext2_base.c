@@ -3177,7 +3177,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 		int off2 = (inodes ? offsetof(EXT2_Super_t, s_free_inodes_count) + sizeof(super->s_free_inodes_count) : offsetof(EXT2_Super_t, s_free_blocks_count) + sizeof(super->s_free_blocks_count));
 
 		r = chdesc_create_byte(info->super_cache, info->ubd,
-				       off1, off2 - off1,
+				       off1 + 1024, off2 - off1,
 				       ((const uint8_t *) super) + off1, &head);
 		if (r >= 0 && head) {
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write superblock");
