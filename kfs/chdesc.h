@@ -196,21 +196,21 @@ void chdesc_set_noop_declare(chdesc_t * chdesc);
 void chdesc_reclaim_written(void);
 
 /* link chdesc into its ddesc's all_changes list */
-void chdesc_link_all_changes(chdesc_t * chdesc);
+static inline void chdesc_link_all_changes(chdesc_t * chdesc);
 /* unlink chdesc from its ddesc's all_changes list */
-void chdesc_unlink_all_changes(chdesc_t * chdesc);
+static inline void chdesc_unlink_all_changes(chdesc_t * chdesc);
 
 /* link chdesc into its ddesc's ready_changes list */
-void chdesc_link_ready_changes(chdesc_t * chdesc);
+static inline void chdesc_link_ready_changes(chdesc_t * chdesc);
 /* unlink chdesc from its ddesc's ready_changes list */
-void chdesc_unlink_ready_changes(chdesc_t * chdesc);
+static inline void chdesc_unlink_ready_changes(chdesc_t * chdesc);
 /* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
 static __inline void chdesc_update_ready_changes(chdesc_t * chdesc) __attribute__((always_inline));
 
 /* link chdesc into its ddesc's index_changes list */
-void chdesc_link_index_changes(chdesc_t * chdesc);
+static inline void chdesc_link_index_changes(chdesc_t * chdesc);
 /* unlink chdesc from its ddesc's index_changes list */
-void chdesc_unlink_index_changes(chdesc_t * chdesc);
+static inline void chdesc_unlink_index_changes(chdesc_t * chdesc);
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc);
 void chdesc_untmpize_all_changes(chdesc_t * chdesc);
@@ -255,22 +255,6 @@ static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
 	return before_level < chdesc->owner->level || before_level == BDLEVEL_NONE;
 }
 
-static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)
-{
-	bool is_ready = chdesc_is_ready(chdesc);
-	bool is_in_ready_list = chdesc->ddesc_ready_pprev != NULL;
-	if(is_in_ready_list)
-	{
-		if(!is_ready)
-			chdesc_unlink_ready_changes(chdesc);
-	}
-	else
-	{
-		if(is_ready)
-			chdesc_link_ready_changes(chdesc);
-	}
-}
-
 static __inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
 	assert(&block->data[offset] != data);
@@ -303,6 +287,100 @@ static __inline int chdesc_create_full(bdesc_t * block, BD_t * owner, void * dat
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
 	return chdesc_create_byte_set(block, owner, 0, block->length, data, head, PASS_CHDESC_SET(set));
+}
+
+static inline void chdesc_link_all_changes(chdesc_t * chdesc)
+{
+	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+	if(chdesc->block)
+	{
+		bdesc_t * bdesc = chdesc->block;
+		chdesc->ddesc_pprev = &bdesc->all_changes;
+		chdesc->ddesc_next = bdesc->all_changes;
+		bdesc->all_changes = chdesc;
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+		else
+			bdesc->all_changes_tail = &chdesc->ddesc_next;
+	}
+}
+
+static inline void chdesc_unlink_all_changes(chdesc_t * chdesc)
+{
+	if(chdesc->ddesc_pprev)
+	{
+		bdesc_t * bdesc = chdesc->block;
+		// remove from old ddesc changes list
+		if(chdesc->ddesc_next)
+			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
+		else
+			bdesc->all_changes_tail = chdesc->ddesc_pprev;
+		*chdesc->ddesc_pprev = chdesc->ddesc_next;
+		chdesc->ddesc_next = NULL;
+		chdesc->ddesc_pprev = NULL;
+	}
+	else
+		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+}
+
+#define DEFINE_LINK_CHANGES(name, index) \
+static inline void chdesc_link_##name##_changes(chdesc_t * chdesc) \
+{ \
+	assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
+	if(chdesc->block) \
+	{ \
+		bdesc_t * bdesc = chdesc->block; \
+		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->owner->index]; \
+		chdesc->ddesc_##name##_pprev = &rcl->head; \
+		chdesc->ddesc_##name##_next = rcl->head; \
+		rcl->head = chdesc; \
+		if(chdesc->ddesc_##name##_next) \
+			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = &chdesc->ddesc_##name##_next; \
+		else \
+			rcl->tail = &chdesc->ddesc_##name##_next; \
+	} \
+}
+
+#define DEFINE_UNLINK_CHANGES(name, index) \
+static inline void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
+{ \
+	if(chdesc->ddesc_##name##_pprev) \
+	{ \
+		bdesc_t * bdesc = chdesc->block; \
+		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->owner->index]; \
+		/* remove from old ddesc changes list */ \
+		if(chdesc->ddesc_##name##_next) \
+			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = chdesc->ddesc_##name##_pprev; \
+		else \
+			rcl->tail = chdesc->ddesc_##name##_pprev; \
+		*chdesc->ddesc_##name##_pprev = chdesc->ddesc_##name##_next; \
+		chdesc->ddesc_##name##_next = NULL; \
+		chdesc->ddesc_##name##_pprev = NULL; \
+	} \
+	else \
+		assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
+}
+
+/* confuse ctags */
+DEFINE_LINK_CHANGES(ready, level);
+DEFINE_UNLINK_CHANGES(ready, level);
+DEFINE_LINK_CHANGES(index, graph_index);
+DEFINE_UNLINK_CHANGES(index, graph_index);
+
+static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)
+{
+	bool is_ready = chdesc_is_ready(chdesc);
+	bool is_in_ready_list = chdesc->ddesc_ready_pprev != NULL;
+	if(is_in_ready_list)
+	{
+		if(!is_ready)
+			chdesc_unlink_ready_changes(chdesc);
+	}
+	else
+	{
+		if(is_ready)
+			chdesc_link_ready_changes(chdesc);
+	}
 }
 
 #if CHDESC_BYTE_SUM

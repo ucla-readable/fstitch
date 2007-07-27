@@ -294,7 +294,7 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 	chdesc->free_next = NULL;
 }
 
-static int chdesc_overlap_list(const chdesc_t *c)
+static inline int chdesc_overlap_list(const chdesc_t *c)
 {
 	int sz = c->block->length >> OVERLAP1SHIFT;
 	if (c->type == BIT)
@@ -310,7 +310,7 @@ static int chdesc_overlap_list(const chdesc_t *c)
 		return -1;
 }
 
-static void chdesc_link_overlap(chdesc_t *chdesc)
+static inline void chdesc_link_overlap(chdesc_t *chdesc)
 {
 	assert(chdesc->type == BYTE);
 	assert(!chdesc->overlap_pprev && !chdesc->overlap_next);
@@ -323,7 +323,7 @@ static void chdesc_link_overlap(chdesc_t *chdesc)
 		chdesc->overlap_next->overlap_pprev = &chdesc->overlap_next;
 }
 
-static void chdesc_unlink_overlap(chdesc_t *chdesc)
+static inline void chdesc_unlink_overlap(chdesc_t *chdesc)
 {
 	assert((!chdesc->overlap_pprev && !chdesc->overlap_next) || chdesc->block);
 	if(chdesc->overlap_pprev)
@@ -1089,84 +1089,6 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	return _chdesc_overlap_multiattach_x(chdesc, &middle, &block->overlap1[0]);
 }
 
-void chdesc_link_all_changes(chdesc_t * chdesc)
-{
-	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
-	if(chdesc->block)
-	{
-		bdesc_t * bdesc = chdesc->block;
-		chdesc->ddesc_pprev = &bdesc->all_changes;
-		chdesc->ddesc_next = bdesc->all_changes;
-		bdesc->all_changes = chdesc;
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
-		else
-			bdesc->all_changes_tail = &chdesc->ddesc_next;
-	}
-}
-
-void chdesc_unlink_all_changes(chdesc_t * chdesc)
-{
-	if(chdesc->ddesc_pprev)
-	{
-		bdesc_t * bdesc = chdesc->block;
-		// remove from old ddesc changes list
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
-		else
-			bdesc->all_changes_tail = chdesc->ddesc_pprev;
-		*chdesc->ddesc_pprev = chdesc->ddesc_next;
-		chdesc->ddesc_next = NULL;
-		chdesc->ddesc_pprev = NULL;
-	}
-	else
-		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
-}
-
-#define DEFINE_LINK_CHANGES(name, index) \
-void chdesc_link_##name##_changes(chdesc_t * chdesc) \
-{ \
-	assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
-	if(chdesc->block) \
-	{ \
-		bdesc_t * bdesc = chdesc->block; \
-		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->owner->index]; \
-		chdesc->ddesc_##name##_pprev = &rcl->head; \
-		chdesc->ddesc_##name##_next = rcl->head; \
-		rcl->head = chdesc; \
-		if(chdesc->ddesc_##name##_next) \
-			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = &chdesc->ddesc_##name##_next; \
-		else \
-			rcl->tail = &chdesc->ddesc_##name##_next; \
-	} \
-}
-
-#define DEFINE_UNLINK_CHANGES(name, index) \
-void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
-{ \
-	if(chdesc->ddesc_##name##_pprev) \
-	{ \
-		bdesc_t * bdesc = chdesc->block; \
-		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->owner->index]; \
-		/* remove from old ddesc changes list */ \
-		if(chdesc->ddesc_##name##_next) \
-			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = chdesc->ddesc_##name##_pprev; \
-		else \
-			rcl->tail = chdesc->ddesc_##name##_pprev; \
-		*chdesc->ddesc_##name##_pprev = chdesc->ddesc_##name##_next; \
-		chdesc->ddesc_##name##_next = NULL; \
-		chdesc->ddesc_##name##_pprev = NULL; \
-	} \
-	else \
-		assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
-}
-
-/* confuse ctags */
-DEFINE_LINK_CHANGES(ready, level);
-DEFINE_UNLINK_CHANGES(ready, level);
-DEFINE_LINK_CHANGES(index, graph_index);
-DEFINE_UNLINK_CHANGES(index, graph_index);
-
 void chdesc_tmpize_all_changes(chdesc_t * chdesc)
 {
 	assert(!chdesc->tmp_next && !chdesc->tmp_pprev);
@@ -1835,11 +1757,12 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 				move_befores_for_merge(array[i], merger, 0);
 	}
 	
-	chdesc_unlink_index_changes(merger);
 	/* move merger to correct owner */
-	merger->owner = owner;
-	
-	chdesc_link_index_changes(merger);
+	if (merger->owner != owner) {
+		chdesc_unlink_index_changes(merger);
+		merger->owner = owner;
+		chdesc_link_index_changes(merger);
+	}
 	
 	*tail = merger;
 	return 1;
@@ -2093,11 +2016,12 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 		chdesc_link_overlap(overlap);
 	}
 	
-	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
-	overlap->owner = (*new)->owner;
-
-	chdesc_link_index_changes(overlap);
+	if (overlap->owner != (*new)->owner) {
+		chdesc_unlink_index_changes(overlap);
+		overlap->owner = (*new)->owner;
+		chdesc_link_index_changes(overlap);
+	}
 	
 	chdesc_destroy(new);
 	*tail = overlap;
@@ -2448,11 +2372,12 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
 	((uint32_t *) overlap->block->data)[overlap->bit.offset] ^= xor;
 	
-	chdesc_unlink_index_changes(overlap);
 	/* move merger to correct owner */
-	overlap->owner = owner;
-	
-	chdesc_link_index_changes(overlap);
+	if (overlap->owner != owner) {
+		chdesc_unlink_index_changes(overlap);
+		overlap->owner = owner;
+		chdesc_link_index_changes(overlap);
+	}
 	
 	*head = overlap;
 	return 1;
