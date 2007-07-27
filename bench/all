@@ -18,5 +18,5 @@ NRUNS=3
 [ $# -eq 1 ] && NRUNS="$1"
 
 for TEST in $TESTS; do
-	bench/single bench/$TEST
+	bench/single bench/$TEST $NRUNS
 done
