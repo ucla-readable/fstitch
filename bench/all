@@ -7,38 +7,16 @@ OUTDIR="$KUDOSDIR/test"
 HOST="`cat $KUDOSDIR/test/host`"
 FS="`cat $KUDOSDIR/test/fs`"
 
+TESTS="tar_rm postmark andrew imap"
+
 if [ $# -gt 1 ]; then
-	echo "About: run all tests"
+	echo "About: run all tests ($TESTS)"
 	echo "Usage: `basename "$0"` [NRUNS]" 1>&2
 	exit 1;
 fi
 NRUNS=3
 [ $# -eq 1 ] && NRUNS="$1"
 
-$BENCHDIR/multi $NRUNS $BENCHDIR/tar_rm
-if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
-	if grep -v linux- $OUTDIR/fs; then
-		accounting_on; TESTNAME=mem $BENCHDIR/tar_rm; accounting_restore
-	fi
-fi
-
-#$BENCHDIR/multi $NRUNS $BENCHDIR/rm_linux
-#if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
-#	if grep -v linux- $OUTDIR/fs; then
-#		accounting_on; TESTNAME=mem $BENCHDIR/rm_linux; accounting_restore
-#	fi
-#fi
-
-$BENCHDIR/multi $NRUNS $BENCHDIR/postmark
-if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
-	if grep -v linux- $OUTDIR/fs; then
-		accounting_on; TESTNAME=mem $BENCHDIR/postmark; accounting_restore
-	fi
-fi
-
-$BENCHDIR/multi $NRUNS $BENCHDIR/andrew
-if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
-	if grep -v linux- $OUTDIR/fs; then
-		accounting_on; TESTNAME=mem $BENCHDIR/andrew; accounting_restore
-	fi
-fi
+for TEST in $TESTS; do
+	bench/single bench/$TEST
+done
