@@ -214,9 +214,8 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	bdesc_t * bdesc;
 	struct bio * bio;
 	struct bio_vec * bv;
-	int vec_len;
 	unsigned long flags;
-	int i, j;
+	int i;
 	struct linux_bio_private private[READ_AHEAD_COUNT];
 	bdesc_t * blocks[READ_AHEAD_COUNT];
 	KERNEL_INTERVAL(read);
@@ -244,79 +243,75 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	
 	KDprintk(KERN_ERR "count: %d, bs: %d\n", count, LINUX_BLOCKSIZE);
 	TIMING_START(read);
-	for(j = 0; j < READ_AHEAD_COUNT; j++)
+	for(i = 0; i < READ_AHEAD_COUNT; i++)
 	{
-		uint32_t j_number = number + (count * j);
-		bdesc_t *bd;
-		private[j].need_blockman = 0;
+		uint32_t i_number = number + (count * i);
+		bdesc_t * bd;
+		private[i].need_blockman = 0;
 	
-		if(j_number + count > object->numblocks)
+		if(i_number + count > object->numblocks)
 		{
-			blocks[j] = NULL;
+			blocks[i] = NULL;
 			continue;
 		}
 		
-		if(j_number == number)
+		if(i_number == number)
 			bd = bdesc;
 		else
-			bd = blockman_lookup(&info->blockman, j_number);
+			bd = blockman_lookup(&info->blockman, i_number);
 		if(bd && !bd->synthetic)
 		{
-			blocks[j] = NULL;
+			blocks[i] = NULL;
 			continue;
 		}
 		else if(bd)
-			blocks[j] = bd;
+			blocks[i] = bd;
 		else {
-			blocks[j] = bdesc_alloc(j_number, LINUX_BLOCKSIZE, count);
-			if(blocks[j] == NULL)
+			blocks[i] = bdesc_alloc(i_number, LINUX_BLOCKSIZE, count);
+			if(blocks[i] == NULL)
 				return NULL;
-			bdesc_autorelease(blocks[j]);
-			private[j].need_blockman = 1;
+			bdesc_autorelease(blocks[i]);
+			private[i].need_blockman = 1;
 		}
 		
-		vec_len = (count * LINUX_BLOCKSIZE + 4095) / 4096;
-		assert(vec_len == 1);
+		assert(count * LINUX_BLOCKSIZE <= 4096);
 		
 		/* FIXME: these error returns do not clean up */
-		bio = bio_alloc(GFP_KERNEL, vec_len);
+		bio = bio_alloc(GFP_KERNEL, 1);
 		if(!bio)
 		{
 			printk(KERN_ERR "bio_alloc() failed\n");
 			return NULL;
 		}
-		for(i = 0; i < vec_len; i++)
+		bv = bio_iovec_idx(bio, 0);
+		bv->bv_page = alloc_page(GFP_KERNEL);
+		if(!bv->bv_page)
 		{
-			bv = bio_iovec_idx(bio, i);
-			bv->bv_page = alloc_page(GFP_KERNEL);
-			if(!bv->bv_page)
-			{
-				printk(KERN_ERR "alloc_page() failed\n");
-				return NULL;
-			}
-			bv->bv_len = LINUX_BLOCKSIZE * count;
-			bv->bv_offset = 0;
+			printk(KERN_ERR "alloc_page() failed\n");
+			return NULL;
 		}
+		bv->bv_len = LINUX_BLOCKSIZE * count;
+		bv->bv_offset = 0;
 		
-		private[j].info = info;
-		private[j].bdesc = blocks[j];
-		private[j].number = j_number;
-		private[j].nbytes = count * LINUX_BLOCKSIZE;
+		private[i].info = info;
+		private[i].bdesc = blocks[i];
+		private[i].number = i_number;
+		private[i].nbytes = count * LINUX_BLOCKSIZE;
 #if DEBUG_LINUX_BD
-		private[j].seq = info->seq++;
+		private[i].seq = info->seq++;
 #endif
 #if DEBUG_WRITES
-		private[j].issue = -1;
+		private[i].issue = -1;
 #endif
 		
 		bio->bi_idx = 0;
-		bio->bi_vcnt = vec_len;
-		bio->bi_sector = j_number;
+		bio->bi_vcnt = 1;
+		bio->bi_sector = i_number;
 		bio->bi_size = LINUX_BLOCKSIZE * count;
 		bio->bi_bdev = info->bdev;
 		bio->bi_rw = READ;
 		bio->bi_end_io = linux_bd_end_io;
-		bio->bi_private = &private[j];
+		bio->bi_private = &private[i];
 		
 		spin_lock_irqsave(&info->dma_outstanding_lock, flags);
 		info->dma_outstanding++;
@@ -325,7 +320,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		atomic_inc(&info->outstanding_io_count);
 		
 #if PRINT_EVERY_READ
-		printk(KERN_ERR "%d\n", j_number);
+		printk(KERN_ERR "%d\n", i_number);
 #endif
 		generic_make_request(bio);
 	}
@@ -347,22 +342,22 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	
 	TIMING_STOP(read, read);
 	
-	for(j = 0; j < READ_AHEAD_COUNT; j++)
+	for(i = 0; i < READ_AHEAD_COUNT; i++)
 	{
-		if(!blocks[j])
+		if(!blocks[i])
 			continue;
-		if(j)
+		if(i)
 		{
-			bdesc_retain(blocks[j]);
+			bdesc_retain(blocks[i]);
 			if(info->read_ahead[info->read_ahead_idx])
 				bdesc_release(&info->read_ahead[info->read_ahead_idx]);
-			info->read_ahead[info->read_ahead_idx] = blocks[j];
+			info->read_ahead[info->read_ahead_idx] = blocks[i];
 			if(++info->read_ahead_idx == READ_AHEAD_BUFFER)
 				info->read_ahead_idx = 0;
 		}
 
-		if (private[j].need_blockman)
-			blockman_add(&info->blockman, blocks[j], private[j].number);
+		if (private[i].need_blockman)
+			blockman_add(&info->blockman, blocks[i], private[i].number);
 	}
 	
 	KDprintk(KERN_ERR "exiting read\n");
@@ -402,8 +397,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	struct linux_info * info = (struct linux_info *) object;
 	struct bio * bio;
 	struct bio_vec * bv;
-	int vec_len, r, i;
-	int revision_forward, revision_back;
+	int r, revision_back;
 	struct linux_bio_private * private;
 	KERNEL_INTERVAL(write);
 	
@@ -422,14 +416,27 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	private = bio_private_alloc();
 	assert(private);
 	
+	assert(block->length <= 4096);
+	
+	bio = bio_alloc(GFP_KERNEL, 1);
+	assert(bio);
+	
+	bv = bio_iovec_idx(bio, 0);
+	bv->bv_page = alloc_page(GFP_KERNEL);
+	assert(bv->bv_page);
+	bv->bv_len = block->length;
+	bv->bv_offset = 0;
+	
 	KDprintk(KERN_ERR "starting real work for the write\n");
-	r = revision_tail_prepare(block, object);
-	if(r < 0)
-	{
-		kpanic("revision_tail_prepare gave: %i\n", r);
-		return r;
-	}
-	revision_back = r;
+	
+#if REVISION_TAIL_INPLACE
+	revision_back = revision_tail_prepare(block, object);
+	assert(revision_back >= 0);
+	memcpy(page_address(bv->bv_page), block->data, block->length);
+#else
+	revision_back = revision_tail_prepare(block, object, page_address(bv->bv_page));
+	assert(revision_back >= 0);
+#endif
 	
 #if DEBUG_WRITES
 	private->issue = debug_writes.next;
@@ -437,7 +444,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	{
 		struct linux_bd_write * write = &debug_writes.writes[debug_writes.next];
 		write->blockno = number;
-		write->checksum = block_checksum(block->data, block->length);
+		write->checksum = block_checksum(page_address(bv->bv_page), block->length);
 		/* NOTE: ninflight may overcount as any inflight writes could complete before we actually make the request below... */
 		if(number < MAXBLOCKNO)
 			write->ninflight = atomic_inc_return(&debug_writes_ninflight[number]) - 1;
@@ -452,33 +459,6 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	}
 #endif
 	
-	vec_len = (block->length + 4095) / 4096;
-	assert(vec_len == 1);
-	
-	bio = bio_alloc(GFP_KERNEL, vec_len);
-	if(!bio)
-	{
-		printk(KERN_ERR "bio_alloc() failed()\n");
-		return -ENOMEM;
-	}
-	for(i = 0; i < vec_len; i++)
-	{
-		bv = bio_iovec_idx(bio, i);
-		bv->bv_page = alloc_page(GFP_KERNEL);
-		if(!bv->bv_page)
-		{
-			printk(KERN_ERR "alloc_page() failed\n");
-			return -ENOMEM;
-		}
-		/* this memcpy always writes to the beginning of the page,
-		 * which works fine if you just have one block, but is a
-		 * problem if you have more. right now you can only pass one
-		 * block to this function, so it's not a problem. */
-		memcpy(page_address(bv->bv_page), block->data, block->length);
-		bv->bv_len = block->length;
-		bv->bv_offset = 0;
-	}
-	
 	private->info = info;
 	private->bdesc = block;
 	private->number = number;
@@ -488,7 +468,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 #endif
 	
 	bio->bi_idx = 0;
-	bio->bi_vcnt = vec_len;
+	bio->bi_vcnt = 1;
 	bio->bi_sector = number;
 	bio->bi_size = block->length;
 	bio->bi_bdev = info->bdev;
@@ -524,10 +504,9 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 		kpanic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
-	revision_forward = r;
 	
-	if(revision_back != revision_forward)
-		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, revision_forward);
+	if(revision_back != r)
+		printk("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, r);
 	
 	KDprintk(KERN_ERR "exiting write\n");
 	return 0;

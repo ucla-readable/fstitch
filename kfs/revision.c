@@ -119,11 +119,19 @@ static chdesc_t ** revision_get_array(size_t count)
 	return revision_alloc_array;
 }
 
+#if REVISION_TAIL_INPLACE
 static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * data)
+#else
+static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decider decider, void * data)
+#endif
 {
 	chdesc_t * scan;
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
+	
+#if !REVISION_TAIL_INPLACE
+	memcpy(buffer, block->data, block->length);
+#endif
 	
 	if(!block->all_changes)
 		return 0;
@@ -168,7 +176,11 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 				again = 1;
 			else
 			{
+#if REVISION_TAIL_INPLACE
 				int r = chdesc_rollback(chdescs[i]);
+#else
+				int r = chdesc_rollback(chdescs[i], buffer);
+#endif
 				if(r < 0)
 				{
 					fprintf(stderr, "chdesc_rollback() failed!\n");
@@ -189,15 +201,24 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 	return count;
 }
 
+#if REVISION_TAIL_INPLACE
 int revision_tail_prepare(bdesc_t * block, BD_t * bd)
 {
 	assert(!block->in_flight);
 	return _revision_tail_prepare(block, OWNER, bd);
 }
+#else
+int revision_tail_prepare(bdesc_t * block, BD_t * bd, uint8_t * buffer)
+{
+	assert(!block->in_flight);
+	return _revision_tail_prepare(block, buffer, OWNER, bd);
+}
+#endif
 
 static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * data)
 {
 	chdesc_t * scan;
+#if REVISION_TAIL_INPLACE
 	chdesc_t ** chdescs;
 	int i = 0, count = 0;
 	
@@ -260,6 +281,20 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 			break;
 		}
 	}
+#else
+	int count = 0;
+	
+	if(!block->all_changes)
+		return 0;
+	
+	/* we can roll them forward in any order we want, since it just marks it as rolled forward */
+	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+		if(!decide(decider, scan, data))
+		{
+			chdesc_apply(scan);
+			count++;
+		}
+#endif
 	
 	return count;
 }

@@ -109,20 +109,11 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
-	int r;
-	int revision_forward, revision_back;
+	int r, revision_back;
 	off_t seeked;
 
 	/* make sure it's a valid block */
 	assert(block->length && number + block->length / object->blocksize <= object->numblocks);
-
-	r = revision_tail_prepare(block, object);
-	if(r < 0)
-	{
-		kpanic("revision_tail_prepare gave: %i\n", r);
-		return r;
-	}
-	revision_back = r;
 
 	seeked = lseek(info->fd, number * object->blocksize, SEEK_SET);
 	if(seeked != number * object->blocksize)
@@ -130,11 +121,34 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 		perror("lseek");
 		assert(0);
 	}
+	
+#if REVISION_TAIL_INPLACE
+	revision_back = revision_tail_prepare(block, object);
+	if(revision_back < 0)
+	{
+		kpanic("revision_tail_prepare gave: %d\n", revision_back);
+		return revision_back;
+	}
 	if(write(info->fd, block->data, block->length) != block->length)
 	{
 		perror("write");
 		assert(0);
 	}
+#else
+	static uint8_t buffer[4096];
+	assert(block->length <= 4096);
+	revision_back = revision_tail_prepare(block, object, buffer);
+	if(revision_back < 0)
+	{
+		kpanic("revision_tail_prepare gave: %d\n", revision_back);
+		return revision_back;
+	}
+	if(write(info->fd, buffer, block->length) != block->length)
+	{
+		perror("write");
+		assert(0);
+	}
+#endif
 
 	if(block_log)
 		fprintf(block_log, "%d write %u %d\n", info->user_name, number, block->flags);
@@ -145,10 +159,9 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 		kpanic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
-	revision_forward = r;
 
-	if (revision_back != revision_forward)
-		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, revision_forward);
+	if(revision_back != r)
+		printf("%s(): block %u: revision_back (%d) != revision_forward (%d)\n", __FUNCTION__, number, revision_back, r);
 
 	return 0;
 }

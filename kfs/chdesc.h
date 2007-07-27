@@ -160,9 +160,19 @@ void chdesc_remove_depend(chdesc_t * after, chdesc_t * before);
 /* remove the given dependency */
 void chdesc_dep_remove(chdepdesc_t * dep);
 
+#include <kfs/revision.h>
+
+#if CHDESC_BYTE_SUM && !REVISION_TAIL_INPLACE
+#error CHDESC_BYTE_SUM is incompatible with !REVISION_TAIL_INPLACE
+#endif
+
 /* apply and roll back change descriptors */
 int chdesc_apply(chdesc_t * chdesc);
+#if REVISION_TAIL_INPLACE
 int chdesc_rollback(chdesc_t * chdesc);
+#else
+int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer);
+#endif
 
 /* mark chdesc as inflight */
 void chdesc_set_inflight(chdesc_t * chdesc);

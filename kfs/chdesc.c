@@ -3,8 +3,9 @@
 
 #include <kfs/debug.h>
 #include <kfs/bdesc.h>
-#include <kfs/chdesc.h>
 #include <kfs/kfsd.h>
+#include <kfs/revision.h>
+#include <kfs/chdesc.h>
 
 /* Set to check for chdesc dependency cycles. Values: 0 (disable), 1 (enable) */
 #define CHDESC_CYCLE_CHECK 0
@@ -37,7 +38,11 @@
 #define CHDESC_BIT_MERGE_OVERLAP 1
 
 /* Set to allow swapping of full-block byte data with pointers instead of memxchg() */
-#define SWAP_FULLBLOCK_DATA 1
+#define SWAP_FULLBLOCK_DATA 0
+
+#if SWAP_FULLBLOCK_DATA && !REVISION_TAIL_INPLACE
+#error SWAP_FULLBLOCK_DATA is incompatible with !REVISION_TAIL_INPLACE
+#endif
 
 /* Set to enable chdesc accounting */
 #define CHDESC_ACCOUNT 0
@@ -1179,8 +1184,6 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
 	chdesc->overlap_pprev = NULL;
-	
-	/* NOOP chdescs start applied */
 	chdesc->flags = CHDESC_SAFE_AFTER;
 	
 	chdesc_free_push(chdesc);
@@ -2494,9 +2497,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->tmp_pprev = NULL;
 	chdesc->overlap_next = NULL;
 	chdesc->overlap_pprev = NULL;
-
-	/* start rolled back so we can apply it */
-	chdesc->flags = CHDESC_ROLLBACK | CHDESC_SAFE_AFTER;
+	chdesc->flags = CHDESC_SAFE_AFTER;
 
 	chdesc_link_all_changes(chdesc);
 	chdesc_link_ready_changes(chdesc);
@@ -2521,9 +2522,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		if((r = chdesc_add_depend_no_cycles(chdesc, *head)) < 0)
 			goto error;
 	
-	/* make sure it applies cleanly */
-	if((r = chdesc_apply(chdesc)) < 0)
-		goto error;
+	/* apply the change manually */
+	((uint32_t *) block->data)[offset] ^= xor;
 	
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
@@ -2681,6 +2681,7 @@ void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
 		chdesc_dep_remove(scan_afters);
 }
 
+#if REVISION_TAIL_INPLACE
 static void memxchg(void * p, void * q, size_t n)
 {
 	/* align at least p on 32-bit boundary */
@@ -2708,11 +2709,13 @@ static void memxchg(void * p, void * q, size_t n)
 		n--;
 	}
 }
+#endif
 
 int chdesc_apply(chdesc_t * chdesc)
 {
 	if(!(chdesc->flags & CHDESC_ROLLBACK))
 		return -EINVAL;
+#if REVISION_TAIL_INPLACE
 	switch(chdesc->type)
 	{
 		case BIT:
@@ -2749,19 +2752,28 @@ int chdesc_apply(chdesc_t * chdesc)
 			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
 			return -EINVAL;
 	}
+#endif /* REVISION_TAIL_INPLACE */
 	chdesc->flags &= ~CHDESC_ROLLBACK;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
 	return 0;
 }
 
+#if REVISION_TAIL_INPLACE
 int chdesc_rollback(chdesc_t * chdesc)
+#else
+int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer)
+#endif
 {
 	if(chdesc->flags & CHDESC_ROLLBACK)
 		return -EINVAL;
 	switch(chdesc->type)
 	{
 		case BIT:
+#if REVISION_TAIL_INPLACE
 			((uint32_t *) chdesc->block->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+#else
+			((uint32_t *) buffer)[chdesc->bit.offset] ^= chdesc->bit.xor;
+#endif
 			break;
 		case BYTE:
 			if(!chdesc->byte.data)
@@ -2781,7 +2793,11 @@ int chdesc_rollback(chdesc_t * chdesc)
 			}
 			else
 #endif
+#if REVISION_TAIL_INPLACE
 				memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+#else
+			memcpy(&buffer[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+#endif
 #if CHDESC_BYTE_SUM
 			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());

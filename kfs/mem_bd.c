@@ -18,7 +18,7 @@
 struct mem_info {
 	BD_t my_bd;
 	
-	uint8_t *blocks;
+	uint8_t * blocks;
 	blockman_t blockman;
 };
 
@@ -31,16 +31,16 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	assert(count && number + count <= object->numblocks);
 	
 	bdesc = blockman_lookup(&info->blockman, number);
-	if (bdesc)
+	if(bdesc)
 	{
 		assert(bdesc->length == count * object->blocksize);
-		if (!bdesc->synthetic)
+		if(!bdesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
 		bdesc = bdesc_alloc(number, object->blocksize, count);
-		if (bdesc == NULL)
+		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
 	}
@@ -48,7 +48,7 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	memcpy(bdesc->data, &info->blocks[object->blocksize * number], object->blocksize * count);
 
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
-	if (bdesc->synthetic)
+	if(bdesc->synthetic)
 		bdesc->synthetic = 0;
 	else
 		blockman_add(&info->blockman, bdesc, number);
@@ -70,18 +70,29 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	assert(block->length == object->blocksize);
 	assert(number < object->numblocks);
 
+#if REVISION_TAIL_INPLACE
 	r = revision_tail_prepare(block, object);
-	if (r < 0) {
-		kpanic("revision_tail_prepare gave: %i\n", r);
+	if(r < 0)
+	{
+		kpanic("revision_tail_prepare gave: %d\n", r);
 		return r;
 	}
 
 	memcpy(&info->blocks[number * object->blocksize],
 	       block->data,
 	       object->blocksize);
+#else
+	r = revision_tail_prepare(block, object, &info->blocks[number * object->blocksize]);
+	if(r < 0)
+	{
+		kpanic("revision_tail_prepare gave: %d\n", r);
+		return r;
+	}
+#endif
 
 	r = revision_tail_acknowledge(block, object);
-	if (r < 0) {
+	if(r < 0)
+	{
 		kpanic("revision_tail_acknowledge gave error: %i\n", r);
 		return r;
 	}
@@ -110,7 +121,8 @@ static int mem_bd_destroy(BD_t * bd)
 	int r;
 
 	r = modman_rem_bd(bd);
-	if (r < 0) return r;
+	if(r < 0)
+		return r;
 
 	blockman_destroy(&info->blockman);
 
@@ -123,29 +135,29 @@ static int mem_bd_destroy(BD_t * bd)
 
 static void mark_block_free(uint8_t *b8, int blockno)
 {
-	uint32_t *b32 = (uint32_t*)b8;
+	uint32_t * b32 = (uint32_t *) b8;
 	int word = blockno / 32;
 	int bit = blockno % 32;
-	b32[word] |= 1<<bit;
+	b32[word] |= 1 << bit;
 }
 
-static void mark_block_used(uint8_t *b8, int blockno)
+static void mark_block_used(uint8_t * b8, int blockno)
 {
-	uint32_t *b32 = (uint32_t*)b8;
+	uint32_t * b32 = (uint32_t *) b8;
 	int word = blockno / 32;
 	int bit = blockno % 32;
-	b32[word] &= ~(1<<bit);
+	b32[word] &= ~(1 << bit);
 }
 
 BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 {
 	struct mem_info * info = malloc(sizeof(*info));
 	BD_t * bd;
-	struct JOSFS_File *f;
-	struct JOSFS_Super *s;
+	struct JOSFS_File * f;
+	struct JOSFS_Super * s;
 	int i;
 	
-	if (blocks < 1)
+	if(blocks < 1)
 		return NULL;
 
 	if(!info)
@@ -159,11 +171,13 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	/* When running in the Linux kernel, we can't allocate this much
 	 * memory with kmalloc(). So, we use vmalloc() instead. */
 	info->blocks = vmalloc(blocks * blocksize);
-	if (!info->blocks) {
+	if(!info->blocks)
+	{
 		free(info);
 		return NULL;
 	}
-	if (blockman_init(&info->blockman) < 0) {
+	if(blockman_init(&info->blockman) < 0)
+	{
 		free(info->blocks);
 		free(info);
 		return NULL;
@@ -181,15 +195,15 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 	strcpy(f->f_name, "/");
 	f->f_size = 0;
 	f->f_type = JOSFS_TYPE_DIR;
-	for (i = 0; i < JOSFS_NDIRECT; i++)
+	for(i = 0; i < JOSFS_NDIRECT; i++)
 		f->f_direct[i] = 0;
 	f->f_indirect = 0;
 
-	for (i = 0; i < blocks; i++)
+	for(i = 0; i < blocks; i++)
 		mark_block_free(&info->blocks[blocksize * 2], i);
 	mark_block_used(&info->blocks[blocksize * 2], 0);
 	mark_block_used(&info->blocks[blocksize * 2], 1);
-	for (i = 0; i < (blocks + JOSFS_BLKBITSIZE - 1) / JOSFS_BLKBITSIZE; i++)
+	for(i = 0; i < (blocks + JOSFS_BLKBITSIZE - 1) / JOSFS_BLKBITSIZE; i++)
 		mark_block_used(&info->blocks[blocksize * 2], i + 2);
 	// done setting up JOS fs
 

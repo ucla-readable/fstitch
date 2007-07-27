@@ -1,21 +1,34 @@
 #ifndef __KUDOS_KFS_REVISION_H
 #define __KUDOS_KFS_REVISION_H
 
+/* In-place revision tail code is the "classic" way of doing it: roll the data
+ * back on the actual copy of the block in memory. Turning this off uses a copy
+ * of the block data when rolling a block back, thus avoiding the need to roll
+ * it forward again. Since we already make a copy in many terminal BDs, this can
+ * be more efficient when there are many rollbacks. */
+#define REVISION_TAIL_INPLACE 0
+
 #include <kfs/bdesc.h>
 #include <kfs/bd.h>
 
 int revision_init(void);
 
+#if REVISION_TAIL_INPLACE
 /* roll back change descriptors on the passed block which are not yet ready to
- * go to disk */
-int revision_tail_prepare(bdesc_t *block, BD_t *bd);
+ * go to disk, constructing the previous version of the block in place */
+int revision_tail_prepare(bdesc_t * block, BD_t * bd);
+#else
+/* roll back change descriptors on the passed block which are not yet ready to
+ * go to disk, constructing the previous version of the block in the buffer */
+int revision_tail_prepare(bdesc_t * block, BD_t * bd, uint8_t * buffer);
+#endif
 
 /* undo everything done by revision_tail_prepare() above */
-int revision_tail_revert(bdesc_t *block, BD_t *bd);
+int revision_tail_revert(bdesc_t * block, BD_t * bd);
 
 /* this function calls chdesc_satisfy() on all the non-rolled back change
  * descriptors on the block, and rolls the others forward again */
-int revision_tail_acknowledge(bdesc_t *block, BD_t *bd);
+int revision_tail_acknowledge(bdesc_t * block, BD_t * bd);
 
 #if __KERNEL__
 /* this function marks the non-rolled back change descriptors as "in flight" and
