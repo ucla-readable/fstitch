@@ -152,9 +152,6 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 /* check whether two change descriptors overlap, even on different blocks */
 int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b);
 
-/* rewrite a byte change descriptor, if it is safe to do so */
-int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data);
-
 /* add a dependency from 'after' on 'before' */
 int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
 
@@ -294,19 +291,34 @@ static __inline int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t o
 	return chdesc_create_byte_set(block, owner, offset, length, data, head, PASS_CHDESC_SET(set));
 }
 
-int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
+static __inline int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
 	return chdesc_create_byte_set(block, owner, 0, block->length, NULL, head, PASS_CHDESC_SET(set));
 }
 
-int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
+static __inline int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
 {
 	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
 	return chdesc_create_byte_set(block, owner, 0, block->length, data, head, PASS_CHDESC_SET(set));
 }
+
+#if CHDESC_BYTE_SUM
+/* stupid little checksum, just to try and make sure we get the same data */
+static __inline uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
+{
+	uint16_t sum = 0x5AFE;
+	while(length-- > 0)
+	{
+		/* ROL 3 */
+		sum = (sum << 3) | (sum >> 13);
+		sum ^= *(data++);
+	}
+	return sum;
+}
+#endif
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>

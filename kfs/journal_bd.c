@@ -162,10 +162,7 @@ struct commit_record {
 static unsigned int nholds = 0;
 
 /* number of block numbers that can be stored in a block */
-static uint16_t numbers_per_block(uint16_t blocksize)
-{
-	return blocksize / sizeof(uint32_t);
-}
+#define numbers_per_block(blocksize) ((blocksize) / sizeof(uint32_t))
 
 /* number of blocks that must be used for block numbers in a transaction */
 static uint32_t trans_number_block_count(uint16_t blocksize)
@@ -269,7 +266,7 @@ static int journal_bd_grab_slot(BD_t * object)
 #endif
 }
 
-static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t block_number)
+static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t block_number, bool * fresh)
 {
 	struct journal_info * info = (struct journal_info *) object;
 	uint32_t number = (uint32_t) hash_map_find_val(info->block_map, (void *) block_number);
@@ -283,6 +280,9 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t
 		size_t last = blocks % info->trans_data_blocks;
 		uint16_t npb = numbers_per_block(object->blocksize);
 		int r;
+		
+		if(fresh)
+			*fresh = 1;
 		
 		if(blocks && !last)
 		{
@@ -345,6 +345,8 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t
 		r = hash_map_insert(info->block_map, (void *) block_number, (void *) number);
 		assert(r >= 0);
 	}
+	else if(fresh)
+		*fresh = 0;
 	
 	return number;
 }
@@ -645,16 +647,43 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	
 	if(metadata)
 	{
+		bool fresh = 0;
 		chdesc_t * head;
-		number = journal_bd_lookup_block(object, block, block_number);
+		number = journal_bd_lookup_block(object, block, block_number, &fresh);
 		assert(number != INVALID_BLOCK);
 		journal_block = CALL(info->journal, synthetic_read_block, number, 1);
 		assert(journal_block);
 		
 		/* copy it to the journal */
 		head = WEAK(info->jdata_head);
-		r = chdesc_rewrite_block(journal_block, info->journal, block->data, &head);
-		assert(r >= 0);
+		if(fresh || !journal_block->all_changes || (journal_block->all_changes->flags & CHDESC_INFLIGHT))
+		{
+#if DEBUG_JOURNAL
+			if(!fresh)
+				Dprintf("%s() new layer on journal block (in flight: %s)\n", __FUNCTION__, journal_block->all_changes ? "yes" : "no");
+#endif
+			r = chdesc_create_full(journal_block, info->journal, block->data, &head);
+			assert(r >= 0);
+		}
+		else
+		{
+#ifndef NDEBUG
+			if(head)
+			{
+				chdepdesc_t * befores;
+				for(befores = journal_block->all_changes->befores; befores; befores = befores->before.next)
+					if(befores->before.desc == head)
+						break;
+				assert(befores);
+			}
+#endif
+			assert(!(journal_block->all_changes->flags & CHDESC_ROLLBACK));
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REWRITE_BYTE, journal_block->all_changes);
+			memcpy(journal_block->data, block->data, object->blocksize);
+#if CHDESC_BYTE_SUM
+			journal_block->all_changes->byte.new_sum = chdesc_byte_sum(block->data, object->blocksize);
+#endif
+		}
 		if(head)
 		{
 			r = chdesc_add_depend(info->wait, head);
@@ -1048,8 +1077,8 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	info->done = NULL;
 	info->trans_slot = 0;
 	info->prev_slot = 0;
-	/* start the transaction sequence numbering 65536 from overflow */
-	info->trans_seq = -65536;
+	/* start the transaction sequence numbering 512 from overflow */
+	info->trans_seq = -512;
 	WEAK_INIT(info->jdata_head);
 	WEAK_INIT(info->prev_cr);
 	WEAK_INIT(info->prev_cancel);

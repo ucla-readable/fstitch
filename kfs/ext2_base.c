@@ -1803,7 +1803,8 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, ext2_md
 	return r;
 }
 
-static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
+static int find_free_inode_block_group(LFS_t * object, inode_t * ino)
+{
 	Dprintf("EXT2DEBUG: %s inode number is %u\n", __FUNCTION__, *ino);
 	struct ext2_info * info = (struct ext2_info *) object;
 	bdesc_t * bitmap;
@@ -1854,7 +1855,8 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino) {
 	return -ENOSPC;
 }
 
-static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent) {
+static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent)
+{
 	Dprintf("EXT2DEBUG: %s parent is %u\n", __FUNCTION__, parent);
 	struct ext2_info * info = (struct ext2_info *) object;
 	inode_t ino = 0;
@@ -3105,7 +3107,8 @@ static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy)
 //TODO Make this pretty and better
 static uint8_t ext2_to_kfs_type(uint16_t type)
 {
-	switch(type & EXT2_S_IFMT) {
+	switch(type & EXT2_S_IFMT)
+	{
 		case(EXT2_S_IFDIR):
 			return TYPE_DIR;
 		case(EXT2_S_IFREG):

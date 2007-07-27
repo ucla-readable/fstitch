@@ -2105,21 +2105,6 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 }
 #endif
 
-#if CHDESC_BYTE_SUM
-/* stupid little checksum, just to try and make sure we get the same data */
-static uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
-{
-	uint16_t sum = 0x5AFE;
-	while(length-- > 0)
-	{
-		/* ROL 3 */
-		sum = (sum << 3) | (sum >> 13);
-		sum ^= *(data++);
-	}
-	return sum;
-}
-#endif
-
 int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
 	uint16_t atomic_size = owner->atomicsize;
@@ -2627,64 +2612,6 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
   error:
 	chdesc_destroy(&chdesc);
 	return r;
-}
-
-/* Rewrite a byte change descriptor to have an updated "new data" field,
- * avoiding the need to create layers of byte change descriptors if the previous
- * changes are no longer relevant (e.g. if they are being overwritten and will
- * never need to be rolled back independently from the new data). The change
- * descriptor must not be overlapped by any other change descriptors. The offset
- * and length parameters are relative to the change descriptor itself. */
-/* NOTE: chdesc_create_byte() with NRBs could likely replace this function if
- * more general merging were supported (eg merge if no additional befores). */
-int chdesc_rewrite_byte(chdesc_t * chdesc, uint16_t offset, uint16_t length, void * data)
-{
-	/* sanity checks */
-	if(chdesc->type != BYTE)
-		return -EINVAL;
-	if(offset + length > chdesc->byte.offset + chdesc->byte.length)
-		return -EINVAL;
-	
-	/* scan for overlapping chdescs - they will all have us as a before, or at
-	 * least, if there are any, at least one will have us as a direct before */
-	if(chdesc->afters)
-	{
-		chdepdesc_t * dep;
-		for(dep = chdesc->afters; dep; dep = dep->after.next)
-		{
-			/* no block? doesn't overlap */
-			if(!dep->after.desc->block)
-				continue;
-			/* not the same block? doesn't overlap */
-			if(dep->after.desc->block != chdesc->block)
-				continue;
-			/* chdesc_overlap_check doesn't check that the block is
-			 * the same, which is why we just checked it by hand */
-			if(!chdesc_overlap_check(dep->after.desc, chdesc))
-				continue;
-			/* overlap detected! */
-			return -EPERM;
-		}
-	}
-	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REWRITE_BYTE, chdesc);
-	
-	/* no overlaps */
-	if(chdesc->flags & CHDESC_ROLLBACK)
-	{
-		memcpy(&chdesc->byte.data[offset], data, length);
-#if CHDESC_BYTE_SUM
-		chdesc->byte.new_sum = chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length);
-#endif
-	}
-	else
-	{
-		memcpy(&chdesc->block->data[chdesc->byte.offset + offset], data, length);
-#if CHDESC_BYTE_SUM
-		chdesc->byte.new_sum = chdesc_byte_sum(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.length);
-#endif
-	}
-	return 0;
 }
 
 #if CHDESC_CYCLE_CHECK

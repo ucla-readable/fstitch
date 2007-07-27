@@ -59,34 +59,6 @@ int chdesc_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)
 	return 0;
 }
 
-/* Write an entire block with new data, assuming that either A) no change
- * descriptors exist on the block or B) the entire block has a single BYTE
- * change descriptor on it. In case B, use chdesc_rewrite_byte() to rewrite
- * the existing change descriptor to reflect the new data, and return NULL
- * in *head. In case A, return the newly created change descriptor in *head. */
-int chdesc_rewrite_block(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
-{
-	chdesc_t * rewrite = block->index_changes[owner->graph_index].head;
-	
-	if(!rewrite || rewrite->type != BYTE || rewrite->byte.offset || rewrite->byte.length != block->length || (rewrite->flags & CHDESC_INFLIGHT))
-		return chdesc_create_full(block, owner, data, head);
-	
-	if(*head)
-	{
-		/* check to see whether *head is compatible with the existing chdesc */
-		chdepdesc_t * befores;
-		for(befores = rewrite->befores; befores; befores = befores->before.next)
-			if(befores->before.desc == *head)
-				break;
-		if(!befores)
-			/* we did not find *head among existing befores */
-			return chdesc_create_full(block, owner, data, head);
-	}
-	
-	*head = NULL;
-	return chdesc_rewrite_byte(rewrite, 0, rewrite->byte.length, data);
-}
-
 /* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
 int chdesc_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
