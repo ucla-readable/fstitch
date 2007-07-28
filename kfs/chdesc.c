@@ -2688,7 +2688,7 @@ int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer)
 	{
 		case BIT:
 #if REVISION_TAIL_INPLACE
-			*(uint32_t *) (chdesc->block->data + chdesc->bit.xoffset) ^= chdesc->bit.xor;
+			*(uint32_t *) (chdesc->block->data + chdesc->offset) ^= chdesc->bit.xor;
 #else
 			*(uint32_t *) (buffer + chdesc->offset) ^= chdesc->bit.xor;
 #endif
