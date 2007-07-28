@@ -182,8 +182,8 @@ static inline uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * dir, ext2_mdirent_t * mdirent, chdesc_t ** head);
 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
-int ext2_write_inode(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** head, int ioff1, int ioff2);
-int ext2_write_inode_set(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores, int ioff1, int ioff2);
+static int ext2_write_inode(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** head, int ioff1, int ioff2);
+static int ext2_write_inode_set(struct ext2_info *info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores, int ioff1, int ioff2);
 
 DECLARE_POOL(ext2_minode, ext2_minode_t);
 DECLARE_POOL(ext2_mdirent, ext2_mdirent_t);
@@ -3153,7 +3153,7 @@ static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy)
 	return f->f_ino;
 }
 
-int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores, int ioff1, int ioff2)
+static int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores, int ioff1, int ioff2)
 {
 	uint32_t block_group, offset, block;
 	int r;

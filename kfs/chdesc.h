@@ -14,6 +14,7 @@
 #define CHDESC_NO_OPGROUP     0x400 /* chdesc is exempt from opgroup tops */
 #define CHDESC_SET_NOOP       0x800 /* NOOP whose would-be afters get its befores instead */
 
+#define CHDESC_CYCLE_CHECK 0
 #define CHDESC_BYTE_SUM 0
 
 #ifndef CONSTANTS_ONLY

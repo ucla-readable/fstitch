@@ -7,9 +7,8 @@
 #include <kfs/revision.h>
 #include <kfs/chdesc.h>
 
-/* Set to check for chdesc dependency cycles. Values: 0 (disable), 1 (enable) */
-#define CHDESC_CYCLE_CHECK 0
-/* Set to print out chdesc cycles when they are discovered by the above check. */
+/* Set to print out chdesc cycles when they are discovered by
+ * CHDESC_CYCLE_CHECK. */
 #define CHDESC_CYCLE_PRINT 1
 
 /* Set to count change descriptors by type and display periodic output */
@@ -45,7 +44,7 @@
 #endif
 
 /* Set to enable chdesc accounting */
-#define CHDESC_ACCOUNT 0
+#define CHDESC_ACCOUNT 1
 
 /* Allow malloc in recursion-on-the-heap support */
 #define HEAP_RECURSION_ALLOW_MALLOC 0
