@@ -44,7 +44,7 @@
 #endif
 
 /* Set to enable chdesc accounting */
-#define CHDESC_ACCOUNT 1
+#define CHDESC_ACCOUNT 0
 
 /* Allow malloc in recursion-on-the-heap support */
 #define HEAP_RECURSION_ALLOW_MALLOC 0
