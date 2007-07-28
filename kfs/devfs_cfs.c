@@ -443,7 +443,7 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 	return size;
 }
 
-static int devfs_set_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t size, const void * data)
+static int devfs_set_metadata2(CFS_t * cfs, inode_t inode, const fsmetadata_t *fsm, size_t nfsm)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, inode, id, size, data);
 	return -EPERM;

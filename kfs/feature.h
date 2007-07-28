@@ -20,6 +20,17 @@ typedef uint16_t feature_id_t;
 #define KFS_FEATURE_SYMLINK   0x0D /* Symbolic links */
 #define KFS_FEATURE_DELETE    0x0E /* Delete full file in LFS */
 
+typedef struct fsmetadata {
+	uint32_t fsm_feature;
+	union {
+		uint32_t u;
+		struct {
+			void *data;
+			size_t length;
+		} p;
+	} fsm_value;
+} fsmetadata_t;
+
 // Get metadata associated with the opaque variable 'arg'.
 // Returns:
 // * >=0: fills 'data', return value is number of bytes filled

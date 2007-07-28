@@ -175,11 +175,10 @@ struct ext2_fdesc {
 static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno);
 static int _ext2_free_block(LFS_t * object, uint32_t block, chdesc_t ** head);
 static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t offset);
-static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
 
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs);
 static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy);
-static uint8_t ext2_to_kfs_type(uint16_t type);
+static inline uint8_t ext2_to_kfs_type(uint16_t type);
 static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir_t * dir, ext2_mdirent_t * mdirent, chdesc_t ** head);
 
 static int ext2_get_disk_dirent(LFS_t * object, ext2_fdesc_t * file, uint32_t * basep, const EXT2_Dir_entry_t ** dirent);
@@ -190,6 +189,28 @@ DECLARE_POOL(ext2_minode, ext2_minode_t);
 DECLARE_POOL(ext2_mdirent, ext2_mdirent_t);
 DECLARE_POOL(ext2_fdesc_pool, ext2_fdesc_t);
 static int n_ext2_instances;
+
+//TODO Make this pretty and better
+static inline uint8_t ext2_to_kfs_type(uint16_t type)
+{
+	switch(type & EXT2_S_IFMT) {
+		case(EXT2_S_IFDIR):
+			return TYPE_DIR;
+		case(EXT2_S_IFREG):
+			return TYPE_FILE;
+		case(EXT2_S_IFLNK):
+			return TYPE_SYMLINK;	
+		default:
+			return TYPE_INVAL;
+	}
+}
+
+static inline int ext2_write_inode(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** head, int ioff1, int ioff2)
+{
+	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	set.array[0] = *head;
+	return ext2_write_inode_set(info, f, head, PASS_CHDESC_SET(set), ioff1, ioff2);
+}
 
 static int check_super(LFS_t * object)
 {
@@ -2963,24 +2984,29 @@ static int ext2_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_
 	return ext2_get_metadata(object, f, id, size, data);
 }
 
-static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int ext2_set_metadata2(LFS_t * object, ext2_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_set_metadata %u, %u\n", id, size);
 	struct ext2_info * info = (struct ext2_info *) object;
 
-	assert(head && f && data);
+	assert(head && f && (!nfsm || fsm));
 	DECL_INODE_MOD(f);
 
-	if (id == KFS_FEATURE_SIZE) {
-		if (sizeof(uint32_t) != size || *((uint32_t *) data) < 0 || *((uint32_t *) data) >= EXT2_MAX_FILE_SIZE)
+ retry:
+	if (nfsm == 0)
+		return ext2_write_inode(info, f, head, ioff1, ioff2);
+	
+	//assert(fsm->fsm_feature < 100);
+	//metadatas[fsm->fsm_feature]++;
+	
+	if (fsm->fsm_feature == KFS_FEATURE_SIZE) {
+		if (fsm->fsm_value.u >= EXT2_MAX_FILE_SIZE)
 			return -EINVAL;
-		INODE_SET(f, i_size, *((uint32_t *) data));
+		INODE_SET(f, i_size, fsm->fsm_value.u);
 	}
-	else if (id == KFS_FEATURE_FILETYPE) {
+	else if (fsm->fsm_feature == KFS_FEATURE_FILETYPE) {
 		uint32_t fs_type;
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		switch(*((uint32_t *) data))
+		switch(fsm->fsm_value.u)
 		{
 			case TYPE_FILE:
 				fs_type = EXT2_S_IFREG;
@@ -2993,63 +3019,55 @@ static int ext2_set_metadata(LFS_t * object, ext2_fdesc_t * f, uint32_t id, size
 		}
 
 		INODE_SET(f, i_mode, (f->f_ip->i_mode & ~EXT2_S_IFMT) | (fs_type));
-		f->f_type = *((uint32_t *) data);
+		f->f_type = fsm->fsm_value.u;
 	}
-	else if (id == KFS_FEATURE_UID) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		INODE_SET(f, i_uid, *(uint32_t *) data);
+	else if (fsm->fsm_feature == KFS_FEATURE_UID) {
+		INODE_SET(f, i_uid, fsm->fsm_value.u);
 	}
-	else if (id == KFS_FEATURE_GID) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		INODE_SET(f, i_gid, *(uint32_t *) data);
+	else if (fsm->fsm_feature == KFS_FEATURE_GID) {
+		INODE_SET(f, i_gid, fsm->fsm_value.u);
 	}
-	else if (id == KFS_FEATURE_UNIX_PERM) {
-		if (sizeof(uint16_t) != size)
-			return -EINVAL;
+	else if (fsm->fsm_feature == KFS_FEATURE_UNIX_PERM) {
 		INODE_SET(f, i_mode, (f->f_ip->i_mode & EXT2_S_IFMT)
-			  | (*((uint16_t *) data) & ~EXT2_S_IFMT));
+			  | (fsm->fsm_value.u & ~EXT2_S_IFMT));
 	}
-	else if (id == KFS_FEATURE_MTIME) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		INODE_SET(f, i_mtime, *((uint32_t *) data));
+	else if (fsm->fsm_feature == KFS_FEATURE_MTIME) {
+		INODE_SET(f, i_mtime, fsm->fsm_value.u);
 	}
-	else if (id == KFS_FEATURE_ATIME) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		INODE_SET(f, i_atime, *((uint32_t *) data));
+	else if (fsm->fsm_feature == KFS_FEATURE_ATIME) {
+		INODE_SET(f, i_atime, fsm->fsm_value.u);
 	}
-	else if (id == KFS_FEATURE_SYMLINK) {
+	else if (fsm->fsm_feature == KFS_FEATURE_SYMLINK) {
 		if (f->f_type != TYPE_SYMLINK)
 			return -EINVAL;
 
-		int r = ext2_set_symlink(object, f, data, size, head, &ioff1, &ioff2);
+		int r = ext2_set_symlink(object, f, fsm->fsm_value.p.data, fsm->fsm_value.p.length, head, &ioff1, &ioff2);
 		if (r < 0)
 			return r;
 	}
 	else
 		return -EINVAL;
 
-	return ext2_write_inode(info, f, head, ioff1, ioff2);
+	fsm++;
+	nfsm--;
+	goto retry;
 }
 
-static int ext2_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int ext2_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	int r;
 	ext2_fdesc_t * f = (ext2_fdesc_t *) ext2_lookup_inode(object, ino);
 	if (!f)
 		return -EINVAL;
-	r = ext2_set_metadata(object, f, id, size, data, head);
+	r = ext2_set_metadata2(object, f, fsm, nfsm, head);
 	ext2_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
 
-static int ext2_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int ext2_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	ext2_fdesc_t * f = (ext2_fdesc_t *) file;
-	return ext2_set_metadata(object, f, id, size, data, head);
+	return ext2_set_metadata2(object, f, fsm, nfsm, head);
 }
 
 static int ext2_destroy(LFS_t * lfs)
@@ -3094,6 +3112,14 @@ static int ext2_destroy(LFS_t * lfs)
 	free((EXT2_group_desc_t *) info->groups);
 	memset(info, 0, sizeof(*info));
 	free(info);
+
+#if 0
+	{ int i;
+		for (i = 0; i < 100; i++)
+			if (metadatas[i])
+				printf("  metadata[%d] = %d\n", i, metadatas[i]);
+	}
+#endif
 	
 	return 0;
 }
@@ -3125,21 +3151,6 @@ static int ext2_get_inode(ext2_info_t * info, ext2_fdesc_t *f, int copy)
 	}
 
 	return f->f_ino;
-}
-
-//TODO Make this pretty and better
-static uint8_t ext2_to_kfs_type(uint16_t type)
-{
-	switch(type & EXT2_S_IFMT) {
-		case(EXT2_S_IFDIR):
-			return TYPE_DIR;
-		case(EXT2_S_IFREG):
-			return TYPE_FILE;
-		case(EXT2_S_IFLNK):
-			return TYPE_SYMLINK;	
-		default:
-			return TYPE_INVAL;
-	}
 }
 
 int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** tail, chdesc_pass_set_t * befores, int ioff1, int ioff2)
@@ -3192,13 +3203,6 @@ int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** t
 	}
 
 	return r;
-}
-
-int ext2_write_inode(struct ext2_info * info, ext2_fdesc_t *f, chdesc_t ** head, int ioff1, int ioff2)
-{
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
-	set.array[0] = *head;
-	return ext2_write_inode_set(info, f, head, PASS_CHDESC_SET(set), ioff1, ioff2);
 }
 
 static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_t inodes, int32_t dirs)

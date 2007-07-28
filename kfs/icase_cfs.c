@@ -262,11 +262,11 @@ static int icase_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size
 	return CALL(state->frontend_cfs, get_metadata, ino, id, size, data);
 }
 
-static int icase_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
+static int icase_set_metadata2(CFS_t * cfs, inode_t ino, const fsmetadata_t *fsm, size_t nfsm)
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, ino, id, size, (signed int)data);
 	icase_state_t * state = (icase_state_t *) cfs;
-	return CALL(state->frontend_cfs, set_metadata, ino, id, size, data);
+	return CALL(state->frontend_cfs, set_metadata2, ino, fsm, nfsm);
 }
 
 static int icase_destroy(CFS_t * cfs)

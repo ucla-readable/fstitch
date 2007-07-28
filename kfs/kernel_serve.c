@@ -762,42 +762,50 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
 			goto error;
 	}
+
+	fsmetadata_t fsm[5];
+	int nfsm = 0;
 	
 	if((attr->ia_valid & ATTR_UID) && feature_supported(cfs, KFS_FEATURE_UID))
 	{
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_FEATURE_UID, sizeof(attr->ia_uid), &attr->ia_uid)) < 0)
-			goto error;
+		fsm[nfsm].fsm_feature = KFS_FEATURE_UID;
+		fsm[nfsm].fsm_value.u = attr->ia_uid;
+		nfsm++;
 	}
 	if((attr->ia_valid & ATTR_GID) && feature_supported(cfs, KFS_FEATURE_GID))
 	{
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_FEATURE_GID, sizeof(attr->ia_gid), &attr->ia_gid)) < 0)
-			goto error;
+		fsm[nfsm].fsm_feature = KFS_FEATURE_GID;
+		fsm[nfsm].fsm_value.u = attr->ia_gid;
+		nfsm++;
 	}
 
 	if(attr->ia_valid & ATTR_MODE)
 	{
-		uint16_t kfs_mode = attr->ia_mode;
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_FEATURE_UNIX_PERM, sizeof(kfs_mode), &kfs_mode)) < 0)
-			goto error;
+		fsm[nfsm].fsm_feature = KFS_FEATURE_UNIX_PERM;
+		fsm[nfsm].fsm_value.u = attr->ia_mode;
+		nfsm++;
 	}
 	if(attr->ia_valid & (ATTR_MTIME | ATTR_MTIME_SET))
 	{
-		time_t mtime;
+		fsm[nfsm].fsm_feature = KFS_FEATURE_MTIME;
 		if(attr->ia_valid & ATTR_MTIME_SET)
-			mtime = now.tv_sec;
+			fsm[nfsm].fsm_value.u = now.tv_sec;
 		else
-			mtime = attr->ia_mtime.tv_sec;
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_FEATURE_MTIME, sizeof(mtime), &mtime)) < 0)
-			goto error;
+			fsm[nfsm].fsm_value.u = attr->ia_mtime.tv_sec;
+		nfsm++;
 	}
 	if(attr->ia_valid & (ATTR_ATIME | ATTR_ATIME_SET))
 	{
-		time_t atime;
+		fsm[nfsm].fsm_feature = KFS_FEATURE_ATIME;
 		if(attr->ia_valid & ATTR_ATIME_SET)
-			atime = now.tv_sec;
+			fsm[nfsm].fsm_value.u = now.tv_sec;
 		else
-			atime = attr->ia_atime.tv_sec;
-		if((r = CALL(cfs, set_metadata, inode->i_ino, KFS_FEATURE_ATIME, sizeof(atime), &atime)) < 0)
+			fsm[nfsm].fsm_value.u = attr->ia_atime.tv_sec;
+		nfsm++;
+	}
+
+	if (nfsm > 0) {
+		if((r = CALL(cfs, set_metadata2, inode->i_ino, fsm, nfsm)) < 0)
 			goto error;
 	}
 

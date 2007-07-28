@@ -27,7 +27,7 @@ struct CFS {
 	DECLARE(CFS_t, size_t, get_max_feature_id);
 	DECLARE(CFS_t, const bool *, get_feature_array);
 	DECLARE(CFS_t, int, get_metadata, inode_t inode, uint32_t id, size_t size, void * data);
-	DECLARE(CFS_t, int, set_metadata, inode_t inode, uint32_t id, size_t size, const void * data);
+	DECLARE(CFS_t, int, set_metadata2, inode_t inode, const fsmetadata_t *fsm, size_t nfsm);
 };
 
 #define CFS_INIT(cfs, module) { \
@@ -49,7 +49,7 @@ struct CFS {
 	ASSIGN(cfs, module, get_max_feature_id); \
 	ASSIGN(cfs, module, get_feature_array); \
 	ASSIGN(cfs, module, get_metadata); \
-	ASSIGN(cfs, module, set_metadata); \
+	ASSIGN(cfs, module, set_metadata2); \
 }
 
 #endif /* __KUDOS_KFS_CFS_H */

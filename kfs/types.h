@@ -24,7 +24,7 @@ struct chweakref {
 	chdesc_satisfy_callback_t callback;
 	void * callback_data;
 #endif
-	chweakref_t ** prev;
+	chweakref_t ** pprev;
 	chweakref_t * next;
 };
 

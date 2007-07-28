@@ -517,56 +517,47 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 		}
 	}
 
+	fsmetadata_t fsm[5];
+	uint32_t nfsm = 0;
+	
 	if (to_set & FUSE_SET_ATTR_UID)
 	{
-		uint32_t cfs_uid = attr->st_uid;
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_UID, sizeof(cfs_uid), &cfs_uid);
-		if (r < 0)
-		{
-			r = fuse_reply_err(req, -r);
-			fuse_reply_assert(!r);
-			return;
-		}
+		fsm[nfsm].fsm_feature = KFS_FEATURE_UID;
+		fsm[nfsm].fsm_value.u = attr->st_uid;
+		nfsm++;
 	}
 
 	if (to_set & FUSE_SET_ATTR_GID)
 	{
-		uint32_t cfs_gid = attr->st_gid;
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_GID, sizeof(cfs_gid), &cfs_gid);
-		if (r < 0)
-		{
-			r = fuse_reply_err(req, -r);
-			fuse_reply_assert(!r);
-			return;
-		}
+		fsm[nfsm].fsm_feature = KFS_FEATURE_GID;
+		fsm[nfsm].fsm_value.u = attr->st_gid;
+		nfsm++;
 	}
 
 	if (to_set & FUSE_SET_ATTR_MODE)
 	{
-		uint16_t kfs_mode = attr->st_mode;
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_UNIX_PERM, sizeof(kfs_mode), &kfs_mode);
-		if (r < 0)
-		{
-			r = fuse_reply_err(req, -r);
-			fuse_reply_assert(!r);
-			return;
-		}
+		fsm[nfsm].fsm_feature = KFS_FEATURE_UNIX_PERM;
+		fsm[nfsm].fsm_value.u = attr->st_mode;
+		nfsm++;
 	}
 
 	if (to_set & FUSE_SET_ATTR_MTIME)
 	{
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_MTIME, sizeof(attr->st_mtime), &attr->st_mtime);
-		if (r < 0)
-		{
-			r = fuse_reply_err(req, -r);
-			fuse_reply_assert(!r);
-			return;
-		}
+		fsm[nfsm].fsm_feature = KFS_FEATURE_MTIME;
+		fsm[nfsm].fsm_value.u = attr->st_mtime;
+		nfsm++;
 	}
 	
 	if (to_set & FUSE_SET_ATTR_ATIME)
 	{
-		r = CALL(reqcfs(req), set_metadata, cfs_ino, KFS_FEATURE_ATIME, sizeof(attr->st_mtime), &attr->st_mtime);
+		// XXX Why did we use attr->st_mtime here?
+		fsm[nfsm].fsm_feature = KFS_FEATURE_ATIME;
+		fsm[nfsm].fsm_value.u = attr->st_atime;
+		nfsm++;
+	}
+
+	if (nfsm > 0) {
+		r = CALL(reqcfs(req), set_metadata2, cfs_ino, fsm, nfsm);
 		if (r < 0)
 		{
 			r = fuse_reply_err(req, -r);

@@ -251,10 +251,10 @@ static __inline void chdesc_free_byte_data(chdesc_t *chdesc) __attribute((always
 static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
 {
 	assert(chdesc->type == BYTE);
-	if(chdesc->byte.length > CHDESC_LOCALDATA && chdesc->byte.data)
+	if(chdesc->length > CHDESC_LOCALDATA && chdesc->byte.data)
 	{
 		free(chdesc->byte.data);
-		account_update(&act_data, -chdesc->byte.length);
+		account_update(&act_data, -chdesc->length);
 	}
 }
 
@@ -302,17 +302,11 @@ static void chdesc_free_remove(chdesc_t * chdesc)
 static inline int chdesc_overlap_list(const chdesc_t *c)
 {
 	int sz = c->block->length >> OVERLAP1SHIFT;
-	if (c->type == BIT)
-		// but this will not be executed at the moment
-		return (c->bit.offset << 2) / sz + 1;
-	else if (c->type == BYTE) {
-		if ((c->byte.offset ^ (c->byte.offset + c->byte.length - 1))
-		    & ~(sz - 1))
-			return 0;
-		else
-			return c->byte.offset / sz + 1;
-	} else
+	if (c->length == 0)
 		return -1;
+	if ((c->offset ^ (c->offset + c->length - 1)) & ~(sz - 1))
+		return 0;
+	return c->offset / sz + 1;
 }
 
 static inline void chdesc_link_overlap(chdesc_t *chdesc)
@@ -343,7 +337,7 @@ static inline void chdesc_unlink_overlap(chdesc_t *chdesc)
 static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 {
 	chdesc_t * chdesc;
-	void * key = (void *) (uint32_t) offset;
+	void * key = (void *) (uint32_t) (offset << 2);
 	int r;
 	assert(block);
 	
@@ -659,7 +653,7 @@ static bool has_block_befores(const chdesc_t * chdesc)
 }
 
 /* propagate extern_after_count changes for a depend add/remove */
-static void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, bool add)
+static inline void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, bool add)
 {
 	if(!after->block)
 	{
@@ -779,7 +773,7 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 }
 
 /* add a dependency between change descriptors without checking for cycles */
-static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
+int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 {
 	chdepdesc_t * dep;
 	
@@ -879,60 +873,6 @@ static int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	return 0;
 }
 
-/* CRUCIAL NOTE: does *not* check whether the chdescs are on the same ddesc */
-/* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
-int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
-{
-	uint16_t a_start, a_len;
-	uint16_t b_start, b_len;
-	uint32_t start, end, tag;
-	
-	/* if either is a NOOP chdesc, they don't overlap */
-	if(a->type == NOOP || b->type == NOOP)
-		return 0;
-	
-	/* two bit chdescs overlap if they modify the same bits */
-	if(a->type == BIT && b->type == BIT)
-	{
-		uint32_t shared;
-		if(a->bit.offset != b->bit.offset)
-			return 0;
-		shared = a->bit.or & b->bit.or;
-		if(!shared)
-			return 0;
-		/* check for complete overlap */
-		return (shared == b->bit.or) ? 2 : 1;
-	}
-	
-	if(a->type == BIT)
-	{
-		a_len = sizeof(a->bit.xor);
-		a_start = a->bit.offset * a_len;
-	}
-	else
-	{
-		a_len = a->byte.length;
-		a_start = a->byte.offset;
-	}
-	if(b->type == BIT)
-	{
-		b_len = sizeof(b->bit.xor);
-		b_start = b->bit.offset * b_len;
-	}
-	else
-	{
-		b_len = b->byte.length;
-		b_start = b->byte.offset;
-	}
-	
-	start = b_start;
-	end = start + b_len + a_len;
-	tag = a_start + a_len;
-	if(tag <= start || end <= tag)
-		return 0;
-	return (a_start <= b_start && start + b_len <= tag) ? 2 : 1;
-}
-
 /* Conservatively return true iff 'after' depends on 'before' */
 static inline bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
 {
@@ -991,7 +931,7 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * middle, chdesc_t 
 			chdesc_unlink_overlap(original);
 		else if(original->type == BIT)
 		{
-			chdesc_t * bit_changes = chdesc_bit_changes(original->block, original->bit.offset);
+			chdesc_t * bit_changes = chdesc_bit_changes(original->block, original->offset);
 			assert(bit_changes);
 			chdesc_remove_depend(bit_changes, original);
 		}
@@ -1053,7 +993,7 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	
 	if(chdesc->type == BIT)
 	{
-		chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->bit.offset);
+		chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->offset);
 		if(bit_changes)
 		{
 			int r = _chdesc_overlap_multiattach(chdesc, bit_changes);
@@ -1080,8 +1020,8 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 	if (list1 == 0) {
 		assert(chdesc->type == BYTE);
 		int sz = block->length >> OVERLAP1SHIFT;
-		list1 = chdesc->byte.offset / sz + 1;
-		list2 = (chdesc->byte.offset + chdesc->byte.length - 1) / sz + 1;
+		list1 = chdesc->offset / sz + 1;
+		list2 = (chdesc->offset + chdesc->length - 1) / sz + 1;
 	} else
 		list2 = list1;
 
@@ -1166,6 +1106,8 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 	chdesc->owner = owner;
 	chdesc->block = NULL;
 	chdesc->type = NOOP;
+	chdesc->offset = 0;
+	chdesc->length = 0;
 	chdesc->befores = NULL;
 	chdesc->befores_tail = &chdesc->befores;
 	chdesc->afters = NULL;
@@ -1618,9 +1560,9 @@ static void merge_rbs(bdesc_t * block)
 	else
 		assert(0);
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, merger, 0);
-	merger->byte.offset = 0;
+	merger->offset = 0;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, merger, block->length);
-	merger->byte.length = block->length;
+	merger->length = block->length;
 	merger->byte.data = NULL;
 # if CHDESC_BYTE_SUM
 	merger->byte.old_sum = 0;
@@ -1936,13 +1878,13 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 	/* could support this, but it is not necessary to do so */
 	assert(!(overlap->flags & CHDESC_ROLLBACK));
 	
-	overlap_end = overlap->byte.offset + overlap->byte.length;
-	new_end = (*new)->byte.offset + (*new)->byte.length;
-	merge_offset = MIN(overlap->byte.offset, (*new)->byte.offset);
+	overlap_end = overlap->offset + overlap->length;
+	new_end = (*new)->offset + (*new)->length;
+	merge_offset = MIN(overlap->offset, (*new)->offset);
 	merge_length = MAX(overlap_end, new_end) - merge_offset;
 	merge_end = merge_offset + merge_length;
 	
-	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->byte.offset, overlap->byte.length, overlap, merge_offset, merge_length, (*new)->block->number);
+	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->offset, overlap->length, overlap, merge_offset, merge_length, (*new)->block->number);
 
 	for(scan = befores; scan; scan = scan->next)
 	{
@@ -1981,7 +1923,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 		(*new)->flags &= ~CHDESC_OVERLAP;
 	}
 	
-	if(merge_offset != overlap->byte.offset || merge_length != overlap->byte.length)
+	if(merge_offset != overlap->offset || merge_length != overlap->length)
 	{
 		/* handle updated data size change */
 		void * merge_data;
@@ -1997,11 +1939,11 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 					chdesc_unlink_overlap(overlap); /* XXX? */
 				return -ENOMEM;
 			}
-			account_update_realloc(&act_data, overlap->byte.length, merge_length);
+			account_update_realloc(&act_data, overlap->length, merge_length);
 		}
-		memmove(merge_data + overlap->byte.offset - merge_offset, overlap->byte.data, overlap->byte.length);
-		if(merge_offset < overlap->byte.offset)
-			memcpy(merge_data, &bdesc->data[merge_offset], overlap->byte.offset - merge_offset);
+		memmove(merge_data + overlap->offset - merge_offset, overlap->byte.data, overlap->length);
+		if(merge_offset < overlap->offset)
+			memcpy(merge_data, &bdesc->data[merge_offset], overlap->offset - merge_offset);
 		if(overlap_end < merge_end)
 			memcpy(merge_data + overlap_end - merge_offset, &bdesc->data[overlap_end], merge_end - overlap_end);
 		chdesc_free_byte_data(overlap);
@@ -2009,9 +1951,9 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 
 		chdesc_unlink_overlap(overlap);
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, overlap, merge_offset);
-		overlap->byte.offset = merge_offset;
+		overlap->offset = merge_offset;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, overlap, merge_length);
-		overlap->byte.length = merge_length;
+		overlap->length = merge_length;
 # if CHDESC_BYTE_SUM
 		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
 		overlap->byte.new_sum = chdesc_byte_sum(&bdesc->data[merge_offset], merge_length);
@@ -2072,8 +2014,8 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	
 	if(data_required)
 	{
-		chdesc->byte.offset = offset;
-		chdesc->byte.length = length;
+		chdesc->offset = offset;
+		chdesc->length = length;
 		chdesc->byte.data = NULL; /* XXX Is this OK? */
 	}
 	else
@@ -2081,8 +2023,8 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 		/* Expand to cover entire block. This is safe since all chdescs on
 		 * this block at least implicitly have all nonrollbackables as befores.
 		 * Leave 'offset' and 'length' as is to copy source data. */
-		chdesc->byte.offset = 0;
-		chdesc->byte.length = block->length;
+		chdesc->offset = 0;
+		chdesc->length = block->length;
 		chdesc->byte.data = NULL;
 #if CHDESC_BYTE_SUM
 		chdesc->byte.old_sum = 0;
@@ -2111,7 +2053,7 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	chdesc->overlap_pprev = NULL;
 	chdesc->flags = CHDESC_SAFE_AFTER;
 		
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->byte.offset, chdesc->byte.length);
+	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->offset, chdesc->length);
 #if COUNT_CHDESCS
 	chdesc_counts[BYTE]++;
 	dump_counts();
@@ -2373,7 +2315,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
-	((uint32_t *) overlap->block->data)[overlap->bit.offset] ^= xor;
+	*((uint32_t *) (overlap->block->data + overlap->offset)) ^= xor;
 	
 	/* move merger to correct owner */
 	if (overlap->owner != owner) {
@@ -2437,11 +2379,11 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 #if CHDESC_NRB_MERGE_STATS
 		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
 #endif
-		return chdesc_create_byte_set(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
+		return chdesc_create_byte_set(block, owner, offset << 2, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
 	}
 	
 #if CHDESC_BIT_MERGE_OVERLAP
-	bit_changes = chdesc_bit_changes(block, offset);
+	bit_changes = chdesc_bit_changes(block, offset << 2);
 	if(bit_changes && has_inram_befores(bit_changes))
 	{
 		r = chdesc_create_bit_merge_overlap(owner, xor, bit_changes, head);
@@ -2476,7 +2418,8 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	chdesc->owner = owner;
 	chdesc->block = block;
 	chdesc->type = BIT;
-	chdesc->bit.offset = offset;
+	chdesc->offset = offset << 2;
+	chdesc->length = 4;
 	chdesc->bit.xor = xor;
 	chdesc->bit.or = xor;
 	chdesc->befores = NULL;
@@ -2610,31 +2553,6 @@ static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 }
 #endif
 
-/* add a dependency between change descriptors */
-int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
-{
-	/* compensate for Heisenberg's uncertainty principle */
-	if(!after || !before)
-	{
-		printf("%s(): (%s:%d): Avoided use of NULL pointer!\n", __FUNCTION__, __FILE__, __LINE__);
-		return 0;
-	}
-	
-	/* avoid creating a dependency loop */
-#if CHDESC_CYCLE_CHECK
-	if(after == before || chdesc_has_before(before, after))
-	{
-		printf("%s(): (%s:%d): Avoided recursive dependency! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
-		assert(0);
-		return -EINVAL;
-	}
-	/* chdesc_has_before() marks the DAG rooted at "before" so we must unmark it */
-	chdesc_unmark_graph(before);
-#endif
-	
-	return chdesc_add_depend_no_cycles(after, before);
-}
-
 void chdesc_dep_remove(chdepdesc_t * dep)
 {
 	propagate_depend_remove(dep->after.desc, dep->before.desc);
@@ -2719,29 +2637,29 @@ int chdesc_apply(chdesc_t * chdesc)
 	switch(chdesc->type)
 	{
 		case BIT:
-			((uint32_t *) chdesc->block->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			*(uint32_t *) (chdesc->block->data + chdesc->offset) ^= chdesc->bit.xor;
 			break;
 		case BYTE:
 			if(!chdesc->byte.data)
 				return -EINVAL;
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 #if SWAP_FULLBLOCK_DATA
-			if(chdesc->byte.length == chdesc->block->length)
+			if(chdesc->length == chdesc->block->length)
 			{
 				uint8_t * old_block = chdesc->block->data;
-				assert(!chdesc->byte.offset);
+				assert(!chdesc->offset);
 				assert(chdesc->byte.data != chdesc->byte.ldata);
 				chdesc->block->data = chdesc->byte.data;
 				chdesc->byte.data = old_block;
 			}
 			else
 #endif
-				memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+				memxchg(&chdesc->block->data[chdesc->offset], chdesc->byte.data, chdesc->length);
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
@@ -2770,23 +2688,23 @@ int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer)
 	{
 		case BIT:
 #if REVISION_TAIL_INPLACE
-			((uint32_t *) chdesc->block->data)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			*(uint32_t *) (chdesc->block->data + chdesc->bit.xoffset) ^= chdesc->bit.xor;
 #else
-			((uint32_t *) buffer)[chdesc->bit.offset] ^= chdesc->bit.xor;
+			*(uint32_t *) (buffer + chdesc->offset) ^= chdesc->bit.xor;
 #endif
 			break;
 		case BYTE:
 			if(!chdesc->byte.data)
 				return -EINVAL;
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.old_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.old_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 #if SWAP_FULLBLOCK_DATA
-			if(chdesc->byte.length == chdesc->block->length)
+			if(chdesc->length == chdesc->block->length)
 			{
 				uint8_t * new_block = chdesc->block->data;
-				assert(!chdesc->byte.offset);
+				assert(!chdesc->offset);
 				assert(chdesc->byte.data != chdesc->byte.ldata);
 				chdesc->block->data = chdesc->byte.data;
 				chdesc->byte.data = new_block;
@@ -2794,12 +2712,12 @@ int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer)
 			else
 #endif
 #if REVISION_TAIL_INPLACE
-				memxchg(&chdesc->block->data[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+				memxchg(&chdesc->block->data[chdesc->offset], chdesc->byte.data, chdesc->length);
 #else
-			memcpy(&buffer[chdesc->byte.offset], chdesc->byte.data, chdesc->byte.length);
+			memcpy(&buffer[chdesc->offset], chdesc->byte.data, chdesc->length);
 #endif
 #if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->byte.length) != chdesc->byte.new_sum)
+			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.new_sum)
 				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
 #endif
 			break;
@@ -2845,13 +2763,13 @@ void chdesc_set_inflight(chdesc_t * chdesc)
 	chdesc_propagate_level_change(chdesc, owner_level, chdesc_level(chdesc));
 }
 
-static void chdesc_weak_collect(chdesc_t * chdesc)
+static inline void chdesc_weak_collect(chdesc_t * chdesc)
 {
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_WEAK_COLLECT, chdesc);
 	while(chdesc->weak_refs)
 	{
 		assert(chdesc->weak_refs->chdesc == chdesc);
-		assert(chdesc->weak_refs->prev == &chdesc->weak_refs);
+		assert(chdesc->weak_refs->pprev == &chdesc->weak_refs);
 		chdesc_weak_release(chdesc->weak_refs, 1);
 	}
 }
@@ -2946,33 +2864,12 @@ void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_ca
 		weak->callback = callback;
 		weak->callback_data = callback_data;
 #endif
-		weak->prev = &chdesc->weak_refs;
+		weak->pprev = &chdesc->weak_refs;
 		weak->next = chdesc->weak_refs;
 		if(chdesc->weak_refs)
-			chdesc->weak_refs->prev = &weak->next;
+			chdesc->weak_refs->pprev = &weak->next;
 		chdesc->weak_refs = weak;
 		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, weak);
-	}
-}
-
-void chdesc_weak_release(chweakref_t * weak, bool callback)
-{
-	if(weak->chdesc)
-	{
-#if CHDESC_WEAKREF_CALLBACKS || KFS_DEBUG
-		chdesc_t * old = weak->chdesc;
-#endif
-		weak->chdesc = NULL;
-		*weak->prev = weak->next;
-		if(weak->next)
-			weak->next->prev = weak->prev;
-#if CHDESC_WEAKREF_CALLBACKS
-		/* notice that we do not touch weak again after the
-		 * callback, so it can free it if it wants */
-		if(callback && weak->callback)
-			weak->callback(weak, old, weak->callback_data);
-#endif
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, old, weak);
 	}
 }
 

@@ -165,7 +165,10 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 
 		if (target_size <= size)
 		{
-			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head);
+			fsmetadata_t fsm;
+			fsm.fsm_feature = uf->size_id;
+			fsm.fsm_value.u = target_size;
+			r = CALL(state->lfs, set_metadata2_fdesc, uf->inner, &fsm, 1, &prev_head);
 			if (r < 0)
 				return r;
 		}
@@ -505,8 +508,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 
 	if (uf->size_id) {
 		if (offset + size_written > target_size) {
-			target_size = offset + size_written;
-			r = CALL(state->lfs, set_metadata_fdesc, uf->inner, uf->size_id, sizeof(target_size), &target_size, &prev_head);
+			fsmetadata_t fsm;
+			fsm.fsm_feature = uf->size_id;
+			fsm.fsm_value.u = offset + size_written;
+			r = CALL(state->lfs, set_metadata2_fdesc, uf->inner, &fsm, 1, &prev_head);
 			if (r < 0)
 				goto uhfs_write_exit;
 		}
@@ -668,7 +673,10 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 
 	if (type_supported)
 	{
-		r = CALL(state->lfs, set_metadata_fdesc, newf, KFS_FEATURE_FILETYPE, sizeof(oldtype), &oldtype, &prev_head);
+		fsmetadata_t fsm;
+		fsm.fsm_feature = KFS_FEATURE_FILETYPE;
+		fsm.fsm_value.u = oldtype;
+		r = CALL(state->lfs, set_metadata2_fdesc, newf, &fsm, 1, &prev_head);
 		if (r < 0)
 		{
 			CALL(state->lfs, free_fdesc, oldf);
@@ -727,8 +735,10 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 	/* set the filetype metadata */
 	if (lfs_feature_supported(state->lfs, KFS_FEATURE_FILETYPE))
 	{
-		const int type = TYPE_DIR;
-		r = CALL(state->lfs, set_metadata_fdesc, f, KFS_FEATURE_FILETYPE, sizeof(type), &type, &prev_head);
+		fsmetadata_t fsm;
+		fsm.fsm_feature = KFS_FEATURE_FILETYPE;
+		fsm.fsm_value.u = TYPE_DIR;
+		r = CALL(state->lfs, set_metadata2_fdesc, f, &fsm, 1, &prev_head);
 		if (r < 0)
 		{
 			/* ignore remove_name() error in favor of the real error */
@@ -817,13 +827,13 @@ static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 	return CALL(state->lfs, get_metadata_inode, ino, id, size, data);
 }
 
-static int uhfs_set_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size, const void * data)
+static int uhfs_set_metadata2(CFS_t * cfs, inode_t ino, const fsmetadata_t *fsm, size_t nfsm)
 {
-	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, size, data);
+	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, nfsm, fsm);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
 
-	return CALL(state->lfs, set_metadata_inode, ino, id, size, data, &prev_head);
+	return CALL(state->lfs, set_metadata2_inode, ino, fsm, nfsm, &prev_head);
 }
 
 static int uhfs_destroy(CFS_t * cfs)

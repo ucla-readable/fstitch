@@ -273,19 +273,19 @@ static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 	return wholedisk_get_metadata_inode(object, inode, id, size, data);
 }
 
-static int wholedisk_set_metadata(LFS_t * object, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int wholedisk_set_metadata2(LFS_t * object, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	return -EINVAL;
 }
 
-static int wholedisk_set_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int wholedisk_set_metadata2_inode(LFS_t * object, inode_t inode, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
-	return wholedisk_set_metadata(object, id, size, data, head);
+	return wholedisk_set_metadata2(object, fsm, nfsm, head);
 }
 
-static int wholedisk_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int wholedisk_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
-	return wholedisk_set_metadata(object, id, size, data, head);
+	return wholedisk_set_metadata2(object, fsm, nfsm, head);
 }
 
 static int wholedisk_destroy(LFS_t * lfs)

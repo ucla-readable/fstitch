@@ -29,7 +29,7 @@ static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
 static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head);
 static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
-static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
+static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head);
 
 #if 0
 static void print_inode(struct UFS_dinode inode)
@@ -1018,7 +1018,11 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 				goto allocate_name_exit2;
 			else
 			{
-				r = ufs_set_metadata(object, nf, KFS_FEATURE_SYMLINK, r, link_buf, head);
+				fsmetadata_t fsm;
+				fsm.fsm_feature = KFS_FEATURE_SYMLINK;
+				fsm.fsm_value.p.data = link_buf;
+				fsm.fsm_value.p.length = r;
+				r = ufs_set_metadata2(object, nf, &fsm, 1, head);
 				if (r < 0)
 					goto allocate_name_exit2;
 			}
@@ -1626,90 +1630,78 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 	return ufs_get_metadata(object, f, id, size, data);
 }
 
-static int ufs_set_metadata(LFS_t * object, ufs_fdesc_t * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
-	
-	if (!head || !f || !data)
-		return -EINVAL;
 
-	if (id == KFS_FEATURE_SIZE) {
-		if (sizeof(uint32_t) != size || *((uint32_t *) data) >= UFS_MAXFILESIZE)
+	assert(head && f && (!nfsm || fsm));
+
+ retry:
+	if (nfsm == 0)
+		return ufs_write_inode(info, f->f_num, f->f_inode, head);
+	
+	if (fsm->fsm_feature == KFS_FEATURE_SIZE) {
+		if (fsm->fsm_value.u >= UFS_MAXFILESIZE)
 			return -EINVAL;
 
-		f->f_inode.di_size = *((uint32_t *) data);
-		return ufs_write_inode(info, f->f_num, f->f_inode, head);
+		f->f_inode.di_size = fsm->fsm_value.u;
 	}
-	else if (id == KFS_FEATURE_FILETYPE) {
+	else if (fsm->fsm_feature == KFS_FEATURE_FILETYPE) {
 		uint8_t fs_type;
 
-		if (sizeof(uint32_t) != size)
+		fs_type = kfs_to_ufs_type(fsm->fsm_value.u);
+		if (fs_type == (uint8_t) -EINVAL
+		    || fs_type != (f->f_inode.di_mode >> 12))
 			return -EINVAL;
-
-		fs_type = kfs_to_ufs_type(*((uint32_t *) data));
-		if (fs_type == (uint8_t) -EINVAL)
-			return -EINVAL;
-
-		if (fs_type == (f->f_inode.di_mode >> 12))
-			return 0;
-		return -EINVAL;
 	}
-	else if (id == KFS_FEATURE_UID) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		f->f_inode.di_uid = *(uint32_t *) data;
-		return ufs_write_inode(info, f->f_num, f->f_inode, head);
+	else if (fsm->fsm_feature == KFS_FEATURE_UID) {
+		f->f_inode.di_uid = fsm->fsm_value.u;
 	}
-	else if (id == KFS_FEATURE_GID) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		f->f_inode.di_gid = *(uint32_t *) data;
-		return ufs_write_inode(info, f->f_num, f->f_inode, head);
+	else if (fsm->fsm_feature == KFS_FEATURE_GID) {
+		f->f_inode.di_gid = fsm->fsm_value.u;
 	}
-	else if (id == KFS_FEATURE_UNIX_PERM) {
-		if (sizeof(uint16_t) != size)
-			return -EINVAL;
+	else if (fsm->fsm_feature == KFS_FEATURE_UNIX_PERM) {
 		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
-			| (*((uint16_t *) data) & UFS_IPERM);
-		return ufs_write_inode(info, f->f_num, f->f_inode, head);
+			| (fsm->fsm_value.u & UFS_IPERM);
 	}
-	else if (id == KFS_FEATURE_MTIME) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		f->f_inode.di_mtime = f->f_inode.di_mtime;
-		return ufs_write_inode(info, f->f_num, f->f_inode, head);
+	else if (fsm->fsm_feature == KFS_FEATURE_MTIME) {
+		// XXX!!!!
+		//f->f_inode.di_mtime = f->f_inode.di_mtime;
+		f->f_inode.di_mtime = fsm->fsm_value.u;
 	}
-	else if (id == KFS_FEATURE_SYMLINK) {
+	else if (fsm->fsm_feature == KFS_FEATURE_SYMLINK) {
 		if (!f || f->f_type != TYPE_SYMLINK)
 			return -EINVAL;
 
-		f->f_inode.di_size = size;
-		if (size < CALL(info->parts.p_super, read)->fs_maxsymlinklen)
-			memcpy((char *) f->f_inode.di_db, data, size);
+		f->f_inode.di_size = fsm->fsm_value.p.length;
+		if (fsm->fsm_value.p.length < CALL(info->parts.p_super, read)->fs_maxsymlinklen)
+			memcpy((char *) f->f_inode.di_db, fsm->fsm_value.p.data, fsm->fsm_value.p.length);
 		else
 			assert(0); // TODO: write(link, size)
-		return ufs_write_inode(info, f->f_num, f->f_inode, head);
-	}
+	} else
+		return -EINVAL;
 
-	return -EINVAL;
+	fsm++;
+	nfsm--;
+	goto retry;
 }
 
-static int ufs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int ufs_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	int r;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
 	if (!f)
 		return -EINVAL;
-	r = ufs_set_metadata(object, f, id, size, data, head);
+	r = ufs_set_metadata2(object, f, fsm, nfsm, head);
 	ufs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
 
-static int ufs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int ufs_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
-	return ufs_set_metadata(object, f, id, size, data, head);
+	return ufs_set_metadata2(object, f, fsm, nfsm, head);
 }
 
 static int ufs_get_root(LFS_t * lfs, inode_t * ino)

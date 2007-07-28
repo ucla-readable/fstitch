@@ -246,7 +246,7 @@ static int opgroup_lfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, 
 	return CALL(((struct opgroup_info *) object)->lfs, get_metadata_fdesc, file, id, size, data);
 }
 
-static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int opgroup_lfs_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
@@ -255,7 +255,7 @@ static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t 
 	if(r < 0)
 		return r;
 
-	value = CALL(info->lfs, set_metadata_inode, ino, id, size, data, head);
+	value = CALL(info->lfs, set_metadata2_inode, ino, fsm, nfsm, head);
 	if(value >= 0)
 	{
 		r = opgroup_finish_head(*head);
@@ -265,7 +265,7 @@ static int opgroup_lfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t 
 	return value;
 }
 
-static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int opgroup_lfs_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	struct opgroup_info * info = (struct opgroup_info *) object;
 	int value, r;
@@ -274,7 +274,7 @@ static int opgroup_lfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32
 	if(r < 0)
 		return r;
 
-	value = CALL(info->lfs, set_metadata_fdesc, file, id, size, data, head);
+	value = CALL(info->lfs, set_metadata2_fdesc, file, fsm, nfsm, head);
 	if(value >= 0)
 	{
 		r = opgroup_finish_head(*head);

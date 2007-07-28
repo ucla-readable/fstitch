@@ -49,7 +49,7 @@ static int josfs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entr
 static uint32_t get_file_block(LFS_t * object, JOSFS_File_t * file, uint32_t offset);
 static uint32_t josfs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
 static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head);
-static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head);
+static int josfs_set_metadata2(LFS_t * object, struct josfs_fdesc * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head);
 
 static int read_bitmap(LFS_t * object, uint32_t blockno);
 static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, chdesc_t ** head);
@@ -816,7 +816,10 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	dir = dir_fdesc->file;
 	updated_size = dir->f_size + JOSFS_BLKSIZE;
 	temp_head = *head;
-	r = josfs_set_metadata(object, (struct josfs_fdesc *) pdir_fdesc, KFS_FEATURE_SIZE, sizeof(uint32_t), &updated_size, &temp_head);
+	fsmetadata_t fsm;
+	fsm.fsm_feature = KFS_FEATURE_SIZE;
+	fsm.fsm_value.u = updated_size;
+	r = josfs_set_metadata2(object, (struct josfs_fdesc *) pdir_fdesc, &fsm, 1, &temp_head);
 	josfs_free_fdesc(object, (fdesc_t *) dir_fdesc);
 	dir_fdesc = NULL;
 	dir = NULL;
@@ -1247,27 +1250,29 @@ static int josfs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32
 	return josfs_get_metadata(object, f, id, size, data);
 }
 
-static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int josfs_set_metadata2(LFS_t * object, struct josfs_fdesc * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	Dprintf("JOSFSDEBUG: josfs_set_metadata %s, %u, %u\n", f->file->f_name, id, size);
 	bdesc_t * dirblock = NULL;
 	int r;
 	uint16_t offset;
 
-	if (!head)
-		return -EINVAL;
+	assert(head);
 
-	if (id == KFS_FEATURE_SIZE) {
-		if (sizeof(int32_t) != size || *((int32_t *) data) < 0 || *((int32_t *) data) > JOSFS_MAXFILESIZE)
+ retry:
+	if (!nfsm)
+		return 0;
+
+	if (fsm->fsm_feature == KFS_FEATURE_SIZE) {
+		if ((int32_t) fsm->fsm_value.u < 0 || (int32_t) fsm->fsm_value.u > JOSFS_MAXFILESIZE)
 			return -EINVAL;
 
 		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -EINVAL;
 
-		offset = f->index;
-		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_size;
-		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(int32_t), data, head)) < 0)
+		offset = f->index + offsetof(JOSFS_File_t, f_size);
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(int32_t), &fsm->fsm_value.u, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "set file size");
 
@@ -1275,14 +1280,11 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (r < 0)
 			return r;
 
-		f->file->f_size = *((int32_t *) data);
-		return 0;
+		f->file->f_size = (int32_t) fsm->fsm_value.u;
 	}
-	else if (id == KFS_FEATURE_FILETYPE) {
+	else if (fsm->fsm_feature == KFS_FEATURE_FILETYPE) {
 		uint32_t fs_type;
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-		switch(*((uint32_t *) data))
+		switch(fsm->fsm_value.u)
 		{
 			case TYPE_FILE:
 				fs_type = JOSFS_TYPE_FILE;
@@ -1298,8 +1300,7 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (!dirblock)
 			return -EINVAL;
 
-		offset = f->index;
-		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_type;
+		offset = f->index + offsetof(JOSFS_File_t, f_type);
 		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &fs_type, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "set file type");
@@ -1310,22 +1311,18 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 			return r;
 
 		f->file->f_type = fs_type;
-		return 0;
 	}
-	else if (id == KFS_FEATURE_MTIME || id == KFS_FEATURE_ATIME) {
-		if (sizeof(uint32_t) != size)
-			return -EINVAL;
-
+	else if (fsm->fsm_feature == KFS_FEATURE_MTIME || fsm->fsm_feature == KFS_FEATURE_ATIME) {
 		dirblock = CALL(object->blockdev, read_block, f->dirb, 1);
 		if (!dirblock)
 			return -EINVAL;
 
 		offset = f->index;
-		if (id == KFS_FEATURE_MTIME)
-			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_mtime;
+		if (fsm->fsm_feature == KFS_FEATURE_MTIME)
+			offset += offsetof(JOSFS_File_t, f_mtime);
 		else
-			offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_atime;
-		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), data, head)) < 0)
+			offset += offsetof(JOSFS_File_t, f_atime);
+		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &fsm->fsm_value.u, head)) < 0)
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, (id == KFS_FEATURE_MTIME) ? "set file mtime" : "set file atime");
 
@@ -1333,31 +1330,33 @@ static int josfs_set_metadata(LFS_t * object, struct josfs_fdesc * f, uint32_t i
 		if (r < 0)
 			return r;
 
-		if (id == KFS_FEATURE_MTIME)
-			f->file->f_mtime = *((uint32_t *) data);
+		if (fsm->fsm_feature == KFS_FEATURE_MTIME)
+			f->file->f_mtime = fsm->fsm_value.u;
 		else
-			f->file->f_atime = *((uint32_t *) data);
-		return 0;
-	}
+			f->file->f_atime = fsm->fsm_value.u;
+	} else
+		return -EINVAL;
 
-	return -EINVAL;
+	fsm++;
+	nfsm--;
+	goto retry;
 }
 
-static int josfs_set_metadata_inode(LFS_t * object, inode_t ino, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int josfs_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	int r;
 	struct josfs_fdesc * f = (struct josfs_fdesc *) josfs_lookup_inode(object, ino);
 	if (!f)
 		return -EINVAL;
-	r = josfs_set_metadata(object, f, id, size, data, head);
+	r = josfs_set_metadata2(object, f, fsm, nfsm, head);
 	josfs_free_fdesc(object, (fdesc_t *) f);
 	return r;
 }
 
-static int josfs_set_metadata_fdesc(LFS_t * object, fdesc_t * file, uint32_t id, size_t size, const void * data, chdesc_t ** head)
+static int josfs_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
 {
 	struct josfs_fdesc * f = (struct josfs_fdesc *) file;
-	return josfs_set_metadata(object, f, id, size, data, head);
+	return josfs_set_metadata2(object, f, fsm, nfsm, head);
 }
 
 static int josfs_destroy(LFS_t * lfs)

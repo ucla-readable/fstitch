@@ -27,17 +27,15 @@ struct chdesc {
 	BD_t * owner;
 	bdesc_t * block;
 	enum {BIT, BYTE, NOOP} type;
+	uint16_t offset;	/* measured in bytes */
+	uint16_t length;	/* 4 for bit patches, 0 for noops */
 	union {
 		struct {
-			/* offset is in units of sizeof(xor) */
-			uint16_t offset;
 			uint32_t xor;
 			/* or allows merging */
 			uint32_t or;
 		} bit;
 		struct {
-			/* offset is in bytes */
-			uint16_t offset, length;
 			/* NULL data implies chdesc need not (and cannot) be rolled back */
 			uint8_t * data;
 			uint8_t ldata[CHDESC_LOCALDATA];
@@ -150,10 +148,11 @@ static __inline uint16_t chdesc_level(const chdesc_t * chdesc) __attribute__((al
 void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
 
 /* check whether two change descriptors overlap, even on different blocks */
-int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b);
+static inline int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b);
 
 /* add a dependency from 'after' on 'before' */
-int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
+static inline int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
+int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before);
 
 /* remove a dependency from 'after' on 'before' */
 void chdesc_remove_depend(chdesc_t * after, chdesc_t * before);
@@ -187,7 +186,7 @@ int chdesc_satisfy(chdesc_t ** chdesc);
 #define chdesc_weak_release(weak, callback) chdesc_weak_release(weak)
 #endif
 void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data);
-void chdesc_weak_release(chweakref_t * weak, bool callback);
+static inline void chdesc_weak_release(chweakref_t * weak, bool callback);
 #define WEAK_INIT(weak) ((weak).chdesc = NULL)
 #define WEAK(weak) ((weak).chdesc)
 
@@ -407,6 +406,78 @@ static __inline uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
 	return sum;
 }
 #endif
+
+static inline void chdesc_weak_release(chweakref_t * weak, bool callback)
+{
+	if(weak->chdesc)
+	{
+#if CHDESC_WEAKREF_CALLBACKS || KFS_DEBUG
+		chdesc_t * old = weak->chdesc;
+#endif
+		weak->chdesc = NULL;
+		*weak->pprev = weak->next;
+		if(weak->next)
+			weak->next->pprev = weak->pprev;
+#if CHDESC_WEAKREF_CALLBACKS
+		/* notice that we do not touch weak again after the
+		 * callback, so it can free it if it wants */
+		if(callback && weak->callback)
+			weak->callback(weak, old, weak->callback_data);
+#endif
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, old, weak);
+	}
+}
+
+/* add a dependency between change descriptors */
+static inline int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
+{
+	/* compensate for Heisenberg's uncertainty principle */
+	assert(after && before);
+	
+	/* avoid creating a dependency loop */
+#if CHDESC_CYCLE_CHECK
+	if(after == before || chdesc_has_before(before, after))
+	{
+		printf("%s(): (%s:%d): Avoided recursive dependency! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
+		assert(0);
+		return -EINVAL;
+	}
+	/* chdesc_has_before() marks the DAG rooted at "before" so we must unmark it */
+	chdesc_unmark_graph(before);
+#endif
+	
+	return chdesc_add_depend_no_cycles(after, before);
+}
+
+/* CRUCIAL NOTE: does *not* check whether the chdescs are on the same ddesc */
+/* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
+static inline int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
+{
+	// Given that noops have offset and length 0, don't need to check
+	// for them explicitly!
+	assert(a->type != NOOP || (a->offset == 0 && a->length == 0));
+	assert(b->type != NOOP || (b->offset == 0 && b->length == 0));
+	
+	if(a->offset >= b->offset + b->length
+	   || b->offset >= a->offset + a->length)
+		return 0;
+	
+	/* two bit chdescs overlap if they modify the same bits */
+	if(a->type == BIT && b->type == BIT)
+	{
+		assert(a->offset == b->offset);
+		uint32_t shared = a->bit.or & b->bit.or;
+		if(!shared)
+			return 0;
+		/* check for complete overlap */
+		return (shared == b->bit.or) ? 2 : 1;
+	}
+
+	if (a->offset <= b->offset && a->offset + a->length >= b->offset + b->length)
+		return 2;
+	else
+		return 1;
+}
 
 /* also include utility functions */
 #include <kfs/chdesc_util.h>
