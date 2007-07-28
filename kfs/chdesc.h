@@ -14,6 +14,8 @@
 #define CHDESC_NO_OPGROUP     0x400 /* chdesc is exempt from opgroup tops */
 #define CHDESC_SET_NOOP       0x800 /* NOOP whose would-be afters get its befores instead */
 
+#define CHDESC_FULLOVERLAP    0x1000 /* overlapped by current chdesc completely */
+
 #define CHDESC_CYCLE_CHECK 0
 #define CHDESC_BYTE_SUM 0
 
@@ -27,9 +29,14 @@
 struct chdesc {
 	BD_t * owner;
 	bdesc_t * block;
+	
 	enum {BIT, BYTE, NOOP} type;
+	
+	uint32_t flags;
+	
 	uint16_t offset;	/* measured in bytes */
 	uint16_t length;	/* 4 for bit patches, 0 for noops */
+	
 	union {
 		struct {
 			uint32_t xor;
@@ -90,8 +97,6 @@ struct chdesc {
 
 	chdesc_t * overlap_next;
 	chdesc_t ** overlap_pprev;
-
-	uint16_t flags;
 };
 
 struct chdepdesc {
