@@ -1319,7 +1319,7 @@ static int fill_dirent(ext2_info_t * info, const EXT2_Dir_entry_t * dirfile, ino
 	//entry->d_filesize = inode.i_size;
 	entry->d_reclen = reclen;
 	entry->d_namelen = namelen;
-	strncpy(entry->d_name, dirfile->name, namelen);
+	memcpy(entry->d_name, dirfile->name, namelen);
 	entry->d_name[namelen] = 0;
 	
 	Dprintf("EXT2DEBUG: %s, created %s\n", __FUNCTION__, entry->d_name);
@@ -1933,7 +1933,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 	struct ext2_info * info = (struct ext2_info *) object;
 	ext2_fdesc_t * parent_file = NULL, * new_file = NULL;
 	uint16_t mode;
-	int r;
+	int r, name_len;
 	ext2_fdesc_t * ln = (ext2_fdesc_t *) link;
 	EXT2_Dir_entry_t new_dirent;
 	char * link_buf = NULL;
@@ -1943,13 +1943,17 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 	DEFINE_CHDESC_PASS_SET(head_set, 4, NULL);
 
 	//what is link? link is a symlink fdesc. dont deal with it, yet.
-	assert(head && strlen(name) <= EXT2_NAME_LEN);
+	assert(head);
 
 	// Don't link files of different types
 	assert(!ln || type == ln->f_type);
 
 	//TODO: we need some way to prevent regular users from creating . and ..
 
+	name_len = strlen(name);
+	if (name_len >= EXT2_NAME_LEN)
+		return NULL;
+	
 	switch (type)
 	{
 		case TYPE_FILE:
@@ -2126,11 +2130,12 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 
 	// create the directory entry
 	new_dirent.inode = *new_ino;
-	strncpy(new_dirent.name, name, EXT2_NAME_LEN);
-	new_dirent.name_len = strlen(name);
+	new_dirent.name_len = name_len;
+	memcpy(new_dirent.name, name, name_len);
+	new_dirent.name[name_len] = 0;
 	//round len up to multiple of 4 bytes:
 	//(this value just computed for searching for a slot)
-	new_dirent.rec_len = dirent_rec_len(new_dirent.name_len);
+	new_dirent.rec_len = dirent_rec_len(name_len);
 	switch(type) {
 		case(TYPE_DIR):
 			new_dirent.file_type = EXT2_TYPE_DIR;

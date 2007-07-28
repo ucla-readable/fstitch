@@ -80,14 +80,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count)
 	return bdesc;
 }
 
-/* increase the reference count of a bdesc */
-bdesc_t * bdesc_retain(bdesc_t * bdesc)
-{
-	bdesc->ref_count++;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
-	return bdesc;
-}
-
 /* decrease the bdesc reference count and free it if it reaches 0 */
 void __bdesc_release(bdesc_t *bdesc)
 {

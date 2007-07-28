@@ -106,7 +106,7 @@ int bdesc_init(void);
 bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count);
 
 /* increase the reference count of a bdesc */
-bdesc_t * bdesc_retain(bdesc_t * bdesc);
+static inline bdesc_t * bdesc_retain(bdesc_t * bdesc);
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
 static inline void bdesc_release(bdesc_t **bdp) __attribute__((always_inline));
@@ -123,6 +123,14 @@ void bdesc_autorelease_pool_pop(void);
 
 /* get the number of autorelease pools on the stack */
 unsigned int bdesc_autorelease_pool_depth(void);
+
+/* increase the reference count of a bdesc */
+static inline bdesc_t * bdesc_retain(bdesc_t * bdesc)
+{
+	bdesc->ref_count++;
+	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
+	return bdesc;
+}
 
 static inline void bdesc_release(bdesc_t **bdp)
 {

@@ -509,7 +509,7 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 
 #if BDESC_EXTERN_AFTER_COUNT
 /* return whether 'chdesc' is on a different block than 'block' */
-static bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
+static inline bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
 {
 	assert(chdesc);
 	assert(block);
@@ -934,7 +934,7 @@ int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
 }
 
 /* Conservatively return true iff 'after' depends on 'before' */
-static bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
+static inline bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
 {
 	/* Quick (bidirectional width-2) check for after->before */
 	if(!after->befores || !before->afters)
