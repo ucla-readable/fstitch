@@ -35,7 +35,7 @@
 /* Set to merge a simple overlapping RB into the underlying chdesc */
 #define CHDESC_BYTE_MERGE_OVERLAP 1
 #define CHDESC_BIT_MERGE_OVERLAP 1
-#define CHDESC_OVERLAPS2 (1 && CHDESC_BYTE_MERGE_OVERLAP)
+#define CHDESC_OVERLAPS2 (CHDESC_BYTE_MERGE_OVERLAP && 1)
 
 /* Set to allow swapping of full-block byte data with pointers instead of memxchg() */
 #define SWAP_FULLBLOCK_DATA 0
@@ -1035,9 +1035,7 @@ static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
 }
 
 
-/*****************************************************************************/
-/*                           NEW STYLE OVERLAPS                              */
-
+#if CHDESC_OVERLAPS2
 static chdesc_t *chdesc_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t length, uint32_t mask)
 {
 	chdesc_t *olist = NULL;
@@ -1123,8 +1121,7 @@ static int chdesc_apply_overlaps(chdesc_t *chdesc, chdesc_t *overlap_list)
 
 	return r;
 }
-
-/*****************************************************************************/
+#endif /* CHDESC_OVERLAPS2 */
 
 
 void chdesc_tmpize_all_changes(chdesc_t * chdesc)
@@ -1832,6 +1829,7 @@ static bool quick_befores_subset(const chdesc_t * left, const chdesc_t * right)
 	return 1;
 }
 
+#if !CHDESC_OVERLAPS2
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
  * Returns 1 on successful merge (*tail points to merged chdesc),
@@ -2066,9 +2064,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 	return 1;
 }
 
-
-
-/*****************************************************************************/
+#else
 
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
@@ -2249,7 +2245,8 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 	*tail = overlap;
 	return 1;
 }
-#endif
+#endif /* !CHDESC_OVERLAPS2 */
+#endif /* CHDESC_BYTE_MERGE_OVERLAP */
 
 int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
 {
@@ -2267,7 +2264,10 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 {
 	bool data_required = new_chdescs_require_data(block);
 	chdesc_pass_set_t * scan;
-	chdesc_t * chdesc, * overlap_list;
+	chdesc_t * chdesc;
+#if CHDESC_OVERLAPS2
+	chdesc_t * overlap_list;
+#endif
 	int r;
 	
 	assert(block && owner && tail);
@@ -2394,7 +2394,7 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 		return r;
 	}
 	
-# if CHDESC_BYTE_MERGE_OVERLAP
+# if (CHDESC_BYTE_MERGE_OVERLAP && !CHDESC_OVERLAPS2)
 	/* after the above work towards chdesc to avoid multiple overlap scans */
 	if(data_required)
 	{
@@ -2449,7 +2449,7 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	return 0;
 }
 
-#if CHDESC_BIT_MERGE_OVERLAP || CHDESC_NRB
+#if CHDESC_BIT_MERGE_OVERLAP
 /* Quickly check whether creating head->merge may induce a cycle:
  * determine (heuristically) whether there exist chdescs x,y such that
  * merge->x->y and head->y and (conservatively) check that head~>merge
@@ -2633,6 +2633,7 @@ static bool has_inram_befores(const chdesc_t * chdesc)
 	return 0;
 }
 
+# if CHDESC_NRB
 /* Returns whether chdesc is the only chdesc on its ddesc and in ram */
 static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
 {
@@ -2642,6 +2643,7 @@ static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
 			return 0;
 	return 1;
 }
+# endif
 #endif
 
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
@@ -3029,7 +3031,9 @@ int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer)
 void chdesc_set_inflight(chdesc_t * chdesc)
 {
 	uint16_t owner_level = chdesc_level(chdesc);
+#if BDESC_EXTERN_AFTER_COUNT
 	chdepdesc_t * dep;
+#endif
 	
 	assert(!(chdesc->flags & CHDESC_INFLIGHT));
 	assert(chdesc->type != NOOP);
