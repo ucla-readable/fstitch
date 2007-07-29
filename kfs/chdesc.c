@@ -35,7 +35,7 @@
 /* Set to merge a simple overlapping RB into the underlying chdesc */
 #define CHDESC_BYTE_MERGE_OVERLAP 1
 #define CHDESC_BIT_MERGE_OVERLAP 1
-#define CHDESC_OVERLAPS2 1
+#define CHDESC_OVERLAPS2 (1 && CHDESC_BYTE_MERGE_OVERLAP)
 
 /* Set to allow swapping of full-block byte data with pointers instead of memxchg() */
 #define SWAP_FULLBLOCK_DATA 0
