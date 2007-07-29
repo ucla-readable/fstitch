@@ -13,7 +13,7 @@
 #include <kfs/opgroup.h>
 #include <kfs/kernel_opgroup_scopes.h>
 
-#define CONTENTION_WARNING 1
+#define CONTENTION_WARNING 0
 
 int kernel_serve_add_mount(const char * path, CFS_t * cfs);
 
