@@ -29,9 +29,17 @@ N=`get_test_num $OUTDIR/$T`
 
 # TODO: We probably want to also run kudos with ouwimap. Add $OUTDIR/pg?
 if [ "$HOST" == "kudos" ]; then
+	# unmodified server:
+	#IMAPD=/home/kudos/ouwimap/imapd/imapd
+	# full journal optimized server:
+	#IMAPD=/home/kudos/juwimap/imapd/imapd
+	# opgroup optimized server:
 	IMAPD=/home/kudos/puwimap/imapd/imapd
 else
+	# unmodified server:
 	IMAPD=/home/kudos/ouwimap/imapd/imapd
+	# full journal optimized server:
+	#IMAPD=/home/kudos/juwimap/imapd/imapd
 fi
 
 if [ $# -ne 0 ]; then
