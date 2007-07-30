@@ -1,11 +1,11 @@
 #!/bin/bash
 
 function run_postmark () {
-	# TODO: 200,000 kB is way too small, but we crash with larger (eg 2 MB)
+	# TODO: 500 kB is way too small, but we crash with larger (eg 1 MB)
 	ktime postmark $BENCHDIR/postmark-1_5 <<- EOF
 		set location $MNT
 		set number 500
-		set size 500 200000
+		set size 500 500000
 		set write 4096
 		set read 4096
 		run
