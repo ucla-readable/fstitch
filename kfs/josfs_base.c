@@ -1324,7 +1324,7 @@ static int josfs_set_metadata2(LFS_t * object, struct josfs_fdesc * f, const fsm
 			offset += offsetof(JOSFS_File_t, f_atime);
 		if ((r = chdesc_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &fsm->fsm_value.u, head)) < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, (id == KFS_FEATURE_MTIME) ? "set file mtime" : "set file atime");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, (fsm->fsm_feature == KFS_FEATURE_MTIME) ? "set file mtime" : "set file atime");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 		if (r < 0)
