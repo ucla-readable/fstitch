@@ -74,17 +74,17 @@
  * 
  * Here is the chdesc structure of a transaction:
  * 
- *   +-------------+------ NOOPs --------+---------------------+---------------------+
- *   |             |                     |                     |                     |
- *   |             |                     |                     |                     |
- *   v             |                     |                     |                     |
- * "keep_w" <--+   |                     |                     |                     |
- *            /    v                     v                     v                     v
+ *   +-------------+------ NOOPs ---------+--------------------+---------------------+
+ *   |             |                      |                    |                     |
+ *   |             |                      |                    |                     |
+ *   v             |      "keep_h" <---   |                    |                     |
+ * "keep_w" <--+   |                   \  |                    |                     |
+ *            /    v                    \ v                    v                     v
  * jrdata <--+-- "wait" <-- commit <-- "hold" <-- fsdata <-- "data" <-- cancel <-- "done"
- *           |                 ^         ^                     |           ^
- * subcmt <--+                 |         |         "keep_d" <--+           |
- *           |                 |         |                     |           |
- * prev_cr <-+                 |         |      prev_cancel <--+           |
+ *           |                 ^         ^ |                   |           ^
+ * subcmt <--+                 |         | |*      "keep_d" <--+           |
+ *           |                 |         | |                   |           |
+ * prev_cr <-+                 |         | +--> prev_cancel <--+           |
  *                             |         |                                 |
  *                             |         +--- Managed NOOP chdesc          |
  *                             |                                           |
@@ -103,6 +103,10 @@
  * hold:
  *   prevent the actual filesystem changes from being written until we have
  *   hooked up all the necessary dependencies for the transaction
+ * keep_h:
+ *   keep "hold" from becoming satisfied in the event that prev_cancel does
+ *   * the "hold" -> "prev_cancel" dependency is temporary; is is present only
+ *     until the end of the transaction to prevent merging with previous ones
  * keep_d:
  *   keep "data" from becoming satisfied in the event that prev_cancel does
  * data:
@@ -126,6 +130,7 @@ struct journal_info {
 	/* state information below */
 	chdesc_t * keep_w;
 	chdesc_t * wait;
+	chdesc_t * keep_h;
 	chdesc_t * hold;
 	chdesc_t * keep_d;
 	chdesc_t * data;
@@ -362,9 +367,9 @@ static int journal_bd_start_transaction(BD_t * object)
 	if(info->keep_w)
 		return 0;
 
-#define CREATE_NOOP(name, owner) \
+#define CREATE_NOOP(name) \
 	do { \
-		r = chdesc_create_noop_list(owner, &info->name, NULL); \
+		r = chdesc_create_noop_list(NULL, &info->name, NULL); \
 		if(r < 0) \
 			goto fail_##name; \
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->name, #name); \
@@ -372,26 +377,30 @@ static int journal_bd_start_transaction(BD_t * object)
 	} while(0)
 	
 	/* this order is important due to the error recovery code */
-	CREATE_NOOP(keep_w, NULL);
+	CREATE_NOOP(keep_w);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
 	assert(info->keep_w); /* keep_w must be non-NULL for chdesc_create_noop_list */
 	r = chdesc_create_noop_list(NULL, &info->wait, info->keep_w, WEAK(info->prev_cr), NULL);
 	if(r < 0)
 		goto fail_wait;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->wait, "wait");
-	CREATE_NOOP(hold, object); /* this one is managed */
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_FUTURE_BEFORES);
-	info->hold->flags |= CHDESC_FUTURE_BEFORES;
+	CREATE_NOOP(keep_h);
+	assert(info->keep_h);
+	/* this one is managed, and temporarily depends on prev_cancel */
+	r = chdesc_create_noop_list(object, &info->hold, info->keep_h, WEAK(info->prev_cancel), NULL);
+	if(r < 0)
+		goto fail_hold;
+	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->hold, "hold");
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, info->hold, CHDESC_NO_OPGROUP);
 	info->hold->flags |= CHDESC_NO_OPGROUP;
-	CREATE_NOOP(keep_d, NULL);
+	CREATE_NOOP(keep_d);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
 	assert(info->keep_d); /* keep_d must be non-NULL for chdesc_create_noop_list */
 	r = chdesc_create_noop_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 	if(r < 0)
 		goto fail_data;
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, info->data, "data");
-	CREATE_NOOP(done, NULL);
+	CREATE_NOOP(done);
 
 	Dprintf("%s(): starting new transaction (sequence %u, wait %p, hold %p, data %p, done %p)\n", __FUNCTION__, info->trans_seq, info->wait, info->hold, info->data, info->done);
 	info->trans_slot_count = 0;
@@ -416,6 +425,8 @@ fail_data:
 fail_keep_d:
 	chdesc_destroy(&info->hold);
 fail_hold:
+	chdesc_destroy(&info->keep_h);
+fail_keep_h:
 	chdesc_destroy(&info->wait);
 fail_wait:
 	chdesc_destroy(&info->keep_w);
@@ -470,6 +481,10 @@ static int journal_bd_stop_transaction(BD_t * object)
 	/* set the new previous commit record */
 	chdesc_weak_retain(head, &info->prev_cr, NULL, NULL);
 	
+	/* we no longer need hold -> prev_cancel */
+	if(WEAK(info->prev_cancel))
+		chdesc_remove_depend(info->hold, WEAK(info->prev_cancel));
+	
 	/* create cancellation, make it depend on data */
 	commit.type = CREMPTY;
 	head = info->data;
@@ -489,6 +504,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	info->hold->owner = NULL;
 	/* satisfy the keep NOOPs */
 	chdesc_satisfy(&info->keep_w);
+	chdesc_satisfy(&info->keep_h);
 	chdesc_satisfy(&info->keep_d);
 	
 	/* ...and finally write the commit and cancellation records */
@@ -505,6 +521,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	info->write_head = NULL;
 	info->keep_w = NULL;
 	info->wait = NULL;
+	info->keep_h = NULL;
 	info->hold = NULL;
 	info->keep_d = NULL;
 	info->data = NULL;
@@ -1072,6 +1089,7 @@ BD_t * journal_bd(BD_t * disk, uint8_t only_metadata)
 	info->trans_data_blocks = info->trans_total_blocks - 1 - trans_number_block_count(bd->blocksize);
 	info->keep_w = NULL;
 	info->wait = NULL;
+	info->keep_h = NULL;
 	info->hold = NULL;
 	info->keep_d = NULL;
 	info->data = NULL;
