@@ -873,7 +873,7 @@ int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	return 0;
 }
 
-/* Conservatively return true iff 'after' depends on 'before' */
+/* Conservatively return true iff 'after' directly depends on 'before' */
 static inline bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
 {
 	/* Quick (bidirectional width-2) check for after->before */
@@ -2062,6 +2062,33 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 
 #else
 
+/* Return true if after may depend on before. External callers pass depth=0. */
+static inline bool chdesc_may_have_before(const chdesc_t * after, const chdesc_t * before, unsigned depth)
+{
+/* Limit the search.
+ * These values do not use noticable cpu and give pretty good answers. */
+#define MAX_DEPTH 10
+#define MAX_DIRECT_BEFORES 10
+	
+	chdepdesc_t * dep = after->befores;
+	int i = 0;
+	for(; dep; dep = dep->before.next, i++)
+	{
+		if(i >= MAX_DIRECT_BEFORES)
+			return 1;
+		if(dep->before.desc == before)
+			return 1;
+		if(dep->before.desc->befores)
+		{
+			if(depth >= MAX_DEPTH)
+				return 1;
+			if(chdesc_may_have_before(dep->before.desc, before, depth + 1))
+				return 1;
+		}
+	}
+	return 0;
+}
+
 /* A simple RB merge opportunity:
  * chdesc has no explicit befores and has a single overlap.
  * Returns 1 on successful merge (*tail points to merged chdesc),
@@ -2123,27 +2150,22 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 				continue;
 			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
 				continue;
-			/* overlaps are not explicitly on the list any more */
-			//if(before->block && (*new)->block == before->block
-			//   && chdesc_overlap_check(*new, before))
-			//	continue;
+			/* note: overlaps are not explicitly on the list any more */
 			
 			if(before->befores)
 			{
 				/* Check that before's befores will not induce chdesc cycles */
-				chdesc_t * before2 = before->befores->before.desc;
-				/* there cannot be a cycle if overlap already depends on before
+				/* There cannot be a cycle if overlap already depends on before
 				 * or depends on all of before's befores */
 				if(!quick_depends_on(overlap, before) && !quick_befores_subset(before, overlap))
 				{
-					/* we did not detect that overlap depends on before or its befores,
-					 * so we must check before's befores for chdesc cycles: */
-					if(before2->block && before2->block == overlap->block)
+					/* We did not detect that overlap depends on before or
+					 * its befores, so we must check before's befores for
+					 * a possible path to overlap (would-be chdesc cycle).
+					 * Deep, newly created directory hierarchies in SU
+					 * benefit from descending their dependencies. */
+					if(chdesc_may_have_before(before, overlap, 0))
 						return 0;
-					if(before->befores->before.next)
-						return 0; /* could iterate, but it has not helped */
-					if(before2->befores)
-						return 0; /* could recurse, but it has not helped */
 				}
 			}
 		}
