@@ -2062,8 +2062,16 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 
 #else
 
+#if __GNUC__ == 4 && __GNUC_MINOR__ == 0
+/* gcc 4.0 detects this inlining opportunity but can't handle
+ * it; older versions ignore it and newer versions support it */
+#define recursive_inline
+#else
+#define recursive_inline inline
+#endif
+
 /* Return true if after may depend on before. External callers pass depth=0. */
-static inline bool chdesc_may_have_before(const chdesc_t * after, const chdesc_t * before, unsigned depth)
+static recursive_inline bool chdesc_may_have_before(const chdesc_t * after, const chdesc_t * before, unsigned depth)
 {
 /* Limit the search.
  * These values do not use noticable cpu and give pretty good answers. */
