@@ -356,7 +356,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
 	chdesc_t * write_head = state->write_head ? *state->write_head : NULL;
-	chdesc_t * tail;
+	chdesc_t * head = write_head, * tail;
 	int r = 0;
 
 	if (uf->size_id) {
@@ -392,7 +392,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		bdesc_t * block = NULL;
 		chdesc_t * save_head;
 		const uint32_t length = MIN(blocksize - dataoffset, size - size_written);
-		chdesc_t * head = write_head;
+		head = write_head;
 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
