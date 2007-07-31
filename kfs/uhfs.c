@@ -355,8 +355,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	const uint32_t blockoffset = offset - (offset % blocksize);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * orig_head = state->write_head ? *state->write_head : NULL;
-	chdesc_t * prev_head, * tail;
+	chdesc_t * write_head = state->write_head ? *state->write_head : NULL;
+	chdesc_t * tail;
 	int r = 0;
 
 	if (uf->size_id) {
@@ -392,16 +392,12 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		bdesc_t * block = NULL;
 		chdesc_t * save_head;
 		const uint32_t length = MIN(blocksize - dataoffset, size - size_written);
-		/* there are no intra-block dependencies that uhfs needs to enforce: */
-		prev_head = orig_head;
+		chdesc_t * head = write_head;
 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
-			save_head = prev_head;
-			prev_head = orig_head; /* no need to link with previous chains here */
-
-			number = CALL(state->lfs, allocate_block, uf->inner, 0, &prev_head);
+			number = CALL(state->lfs, allocate_block, uf->inner, 0, &head);
 			if (number == INVALID_BLOCK)
 			{
 				r = -ENOSPC;
@@ -414,50 +410,50 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			{
 				int t;
 				no_block:
-				prev_head = orig_head;
-				t = CALL(state->lfs, free_block, uf->inner, number, &prev_head);
+				head = write_head;
+				t = CALL(state->lfs, free_block, uf->inner, number, &head);
 				assert(t >= 0);
 				if(size_written)
 					goto uhfs_write_written_exit;
 				goto uhfs_write_exit;
 			}
 
-			r = opgroup_prepare_head(&prev_head);
+			r = opgroup_prepare_head(&head);
 			/* can we do better than this? */
 			assert(r >= 0);
 
 			/* save the tail */
-			tail = prev_head;
+			tail = head;
 
 			/* zero it */
-			r = chdesc_create_init(block, bd, &prev_head);
+			r = chdesc_create_init(block, bd, &head);
 			if (r < 0)
 				goto no_block;
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "init data block");
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "init data block");
 			/* note that we do not write it - we will write it later */
 
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, prev_head, CHDESC_DATA);
-			prev_head->flags |= CHDESC_DATA;
+			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
+			head->flags |= CHDESC_DATA;
 
-			r = opgroup_finish_head(prev_head);
+			r = opgroup_finish_head(head);
 			/* can we do better than this? */
 			assert(r >= 0);
 
 			/* append it to the file, depending on zeroing it */
-			r = CALL(state->lfs, append_file_block, uf->inner, number, &prev_head);
+			r = CALL(state->lfs, append_file_block, uf->inner, number, &head);
 			if (r < 0)
 			{
 				/* we don't need to worry about unzeroing the
 				 * block - it was free anyhow, so we can leave
 				 * it alone if we write it as-is */
-				prev_head = orig_head;
-				CALL(state->lfs, write_block, block, number, &prev_head);
+				head = write_head;
+				CALL(state->lfs, write_block, block, number, &head);
 				goto no_block;
 			}
 
 			/* the data written will end up depending on the zeroing
 			 * automatically, so just use the previous head here */
-			prev_head = save_head;
+			head = write_head;
 		}
 		else
 		{
@@ -477,32 +473,32 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 		}
 
-		r = opgroup_prepare_head(&prev_head);
+		r = opgroup_prepare_head(&head);
 		/* can we do better than this? */
 		assert(r >= 0);
 
 		/* save the tail */
-		tail = prev_head;
+		tail = head;
 
 		/* write the data to the block */
-		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &prev_head);
+		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, prev_head, "write file data");
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write file data");
 
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, prev_head, CHDESC_DATA);
-		prev_head->flags |= CHDESC_DATA;
+		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
+		head->flags |= CHDESC_DATA;
 
-		r = opgroup_finish_head(prev_head);
+		r = opgroup_finish_head(head);
 		/* can we do better than this? */
 		assert(r >= 0);
 
-		save_head = prev_head;
+		save_head = head;
 
-		r = CALL(state->lfs, write_block, block, number, &prev_head);
+		r = CALL(state->lfs, write_block, block, number, &head);
 		assert(r >= 0);
 
-		prev_head = save_head;
+		head = save_head;
 
 		size_written += length;
 		dataoffset = 0; /* dataoffset only needed for first block */
@@ -513,7 +509,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			fsmetadata_t fsm;
 			fsm.fsm_feature = uf->size_id;
 			fsm.fsm_value.u = offset + size_written;
-			r = CALL(state->lfs, set_metadata2_fdesc, uf->inner, &fsm, 1, &prev_head);
+			r = CALL(state->lfs, set_metadata2_fdesc, uf->inner, &fsm, 1, &head);
 			if (r < 0)
 				goto uhfs_write_exit;
 		}
