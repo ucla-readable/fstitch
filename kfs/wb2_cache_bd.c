@@ -514,19 +514,20 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct cache_info * info = (struct cache_info *) object;
+	bdesc_t * map_block;
 	
 	/* make sure it's a valid block */
 	assert(block->length && number + block->length / object->blocksize <= object->numblocks);
 	
-	block = wb2_map_get_block(info, number);
-	if(block)
+	map_block = wb2_map_get_block(info, number);
+	if(map_block)
 	{
 		/* already have this block */
-		wb2_touch_block_read(info, block);
+		wb2_touch_block_read(info, map_block);
 		/* assume it's dirty, even if it's not: we'll discover
 		 * it later when a revision slice has zero size */
-		if(!wb2_dirty_slot(info, block))
-			wb2_push_dirty(info, block);
+		if(!wb2_dirty_slot(info, map_block))
+			wb2_push_dirty(info, map_block);
 	}
 	else
 	{
