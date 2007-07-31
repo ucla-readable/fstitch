@@ -2552,7 +2552,6 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 	bdesc_t * dirblock;
 	uint16_t len;
 	chdesc_t * head = *phead;
-	bool dirent_wont_exist;
 	int r;
 
 	if(base % object->blocksize == 0)
@@ -2574,56 +2573,36 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 			return r;
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent '%s', add jump dirent", mdirent->dirent.name);
 		r = CALL(info->ubd, write_block, dirblock, base_blockno);
-		if(r >= 0)
-		{
-			dirent_wont_exist = (head == WEAK(mdirent->create));
-#if DELETE_MERGE_STATS
-			if(WEAK(mdirent->create) && !(WEAK(mdirent->create)->flags & CHDESC_INFLIGHT))
-				info->delete_dirent_stats.uncommitted++;
-#endif
-			ext2_mdirent_clear(mdir, mdirent, object->blocksize);
-		}
-		else
-		{
-			assert(0); // must undo chdesc creation to recover
-			return r;
-		}
-		return 0;
-	}
-
-	//else in the middle of a block, so increase length of prev dirent
-	prev_base = ext2_mdirent_offset_prev(mdir, mdirent)->offset;
-	prev_base_blockno = get_file_block(object, dir_file, prev_base);
-	if(prev_base_blockno == INVALID_BLOCK)
-		return -1;
-	dirblock = CALL(info->ubd, read_block, prev_base_blockno, 1);
-	if(!dirblock)
-		return -1;
-
-	//update the length of the previous dirent:
-	len = mdirent->dirent.rec_len + ext2_mdirent_offset_prev(mdir, mdirent)->dirent.rec_len;
-	r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, &head);
-	if(r < 0)
-		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent '%s'", mdirent->dirent.name);
-	
-	r = CALL(info->ubd, write_block, dirblock, prev_base_blockno);
-	if(r >= 0)
-	{
-		dirent_wont_exist = (head == WEAK(mdirent->create));
-#if DELETE_MERGE_STATS
-		if(WEAK(mdirent->create) && !(WEAK(mdirent->create)->flags & CHDESC_INFLIGHT))
-			info->delete_dirent_stats.uncommitted++;
-#endif
-		ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 	}
 	else
+	{
+		//else in the middle of a block, so increase length of prev dirent
+		prev_base = ext2_mdirent_offset_prev(mdir, mdirent)->offset;
+		prev_base_blockno = get_file_block(object, dir_file, prev_base);
+		if(prev_base_blockno == INVALID_BLOCK)
+			return -1;
+		dirblock = CALL(info->ubd, read_block, prev_base_blockno, 1);
+		if(!dirblock)
+			return -1;
+
+		//update the length of the previous dirent:
+		len = mdirent->dirent.rec_len + ext2_mdirent_offset_prev(mdir, mdirent)->dirent.rec_len;
+		r = chdesc_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, &head);
+		if(r < 0)
+			return r;
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "delete dirent '%s'", mdirent->dirent.name);
+	
+		r = CALL(info->ubd, write_block, dirblock, prev_base_blockno);
+	}
+
+	if(r < 0)
 	{
 		assert(0); // must undo chdesc creation to recover
 		return r;
 	}
 
-	if(dirent_wont_exist)
+	// Will the dirent never exist on disk?:
+	if(head == WEAK(mdirent->create))
 	{
 		// Create and delete merged so the dirent will never exist on disk.
 		// Therefore the caller need not depend on the dirent's deletion
@@ -2638,8 +2617,11 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		*phead = head;
 	}
 #if DELETE_MERGE_STATS
+	if(WEAK(mdirent->create) && !(WEAK(mdirent->create)->flags & CHDESC_INFLIGHT))
+		info->delete_dirent_stats.uncommitted++;
 	info->delete_dirent_stats.total++;
 #endif
+	ext2_mdirent_clear(mdir, mdirent, object->blocksize);
 
 	return 0;
 }
