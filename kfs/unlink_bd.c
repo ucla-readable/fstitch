@@ -49,7 +49,8 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 			if(dep == write_head || (dep->block && dep->block->ddesc == block->ddesc))
 			{
 				deps = &(*deps)->before.next;
-				needs_head = 0;
+				if(dep == write_head)
+					needs_head = 0;
 				continue;
 			}
 			/* otherwise remove this dependency */

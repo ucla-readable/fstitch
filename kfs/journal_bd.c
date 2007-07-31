@@ -609,7 +609,8 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
 			{
 				deps = &(*deps)->before.next;
-				needs_hold = 0;
+				if(dep == info->hold)
+					needs_hold = 0;
 				continue;
 			}
 			/* otherwise remove this dependency */
