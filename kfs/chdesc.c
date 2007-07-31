@@ -1941,14 +1941,10 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 			   && chdesc_overlap_check(*new, before))
 				continue;
 			
-			if(before->flags & CHDESC_FUTURE_BEFORES)
-				return 0;
 			if(before->befores)
 			{
 				/* Check that before's befores will not induce chdesc cycles */
 				chdesc_t * before2 = before->befores->before.desc;
-				if(before2->flags & CHDESC_FUTURE_BEFORES)
-					return 0;
 				/* there cannot be a cycle if overlap already depends on before
 				 * or depends on all of before's befores */
 				if(!quick_depends_on(overlap, before) && !quick_befores_subset(before, overlap))
@@ -2132,14 +2128,10 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 			//   && chdesc_overlap_check(*new, before))
 			//	continue;
 			
-			if(before->flags & CHDESC_FUTURE_BEFORES)
-				return 0;
 			if(before->befores)
 			{
 				/* Check that before's befores will not induce chdesc cycles */
 				chdesc_t * before2 = before->befores->before.desc;
-				if(before2->flags & CHDESC_FUTURE_BEFORES)
-					return 0;
 				/* there cannot be a cycle if overlap already depends on before
 				 * or depends on all of before's befores */
 				if(!quick_depends_on(overlap, before) && !quick_befores_subset(before, overlap))
@@ -2498,8 +2490,6 @@ static bool merge_head_dep_safe(const chdesc_t * head, const chdesc_t * merge)
 				break;
 		if(i < MAX_WIDTH)
 			continue;
-		if(before->flags & CHDESC_FUTURE_BEFORES)
-			return 0;
 		if(before == merge)
 			return 0;
 		if(before->befores)
@@ -2522,8 +2512,6 @@ static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * ov
 {
 	if(head && head != overlap && !(head->flags & CHDESC_INFLIGHT))
 	{
-		if(head->flags & CHDESC_FUTURE_BEFORES)
-			return 0;
 		/* Check whether creating overlap->head may induce a cycle.
 		 * If overlap->head already exists the answer is of course no: */
 		if(!(overlap->befores

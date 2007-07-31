@@ -9,12 +9,10 @@
 #define CHDESC_BIT_NOOP        0x20 /* bit_changes NOOP chdesc */
 #define CHDESC_OVERLAP         0x40 /* overlaps another chdesc completely */
 #define CHDESC_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
-#define CHDESC_FUTURE_BEFORES 0x100 /* may gain befores that would break overlap merging */
+#define CHDESC_SET_NOOP       0x100 /* NOOP whose would-be afters get its befores instead */
 #define CHDESC_INFLIGHT       0x200 /* chdesc is being written to disk */
 #define CHDESC_NO_OPGROUP     0x400 /* chdesc is exempt from opgroup tops */
-#define CHDESC_SET_NOOP       0x800 /* NOOP whose would-be afters get its befores instead */
-
-#define CHDESC_FULLOVERLAP    0x1000 /* overlapped by current chdesc completely */
+#define CHDESC_FULLOVERLAP    0x800 /* overlapped by current chdesc completely */
 
 #define CHDESC_CYCLE_CHECK 0
 #define CHDESC_BYTE_SUM 0
