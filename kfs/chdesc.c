@@ -1613,7 +1613,7 @@ static void clear_bit_changes(bdesc_t * block)
 
 /* Merge all RBs on 'block' into a single NRB */
 /* TODO: if this function ends up being heavily used during runtime,
- * it's two dependency move algorithms can be much simpler. */
+ * its two dependency move algorithms can be much simpler. */
 static void merge_rbs(bdesc_t * block)
 {
 # if CHDESC_MERGE_RBS_NRB_STATS
@@ -2210,9 +2210,7 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 		else
 		{
 			if(!(merge_data = malloc(merge_length)))
-			{
 				return -ENOMEM;
-			}
 			account_update_realloc(&act_data, overlap->length, merge_length);
 		}
 		memmove(merge_data + overlap->offset - merge_offset, overlap->byte.data, overlap->length);
