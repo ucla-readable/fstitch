@@ -41,7 +41,7 @@ DATA=`mktemp plot_time.XXXXXX` || exit 1
 trap "rm -f $DATA" EXIT
 
 for test in `ls $KUDOSDIR/tests/`; do
-	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "$CM" ]; then continue; fi
+	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "$CM" ] || [ "`cat $KUDOSDIR/tests/$test/app_consistency_mode`" != "opgroup" ]; then continue; fi
 
 	LINE="`$BENCHDIR/ex_time -d $KUDOSDIR/tests/$test -t $TESTNAME`"
 	[ -n "$LINE" ] || continue

@@ -41,7 +41,7 @@ function most_recent_test () {
 		DIR="$KUDOSDIR/tests/$test"
 		REVN=`cat $DIR/svnversion | sed -r 's/:[0-9]+//;s/M$//'`
 		[ $REVN -le $REV ] && continue
-		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $DIR/fs`" == "$FS" ] && [ "`cat $DIR/consistency_mode`" == "$CMODE" ] && [ -f $DIR/$TESTNAME.run.0 ]; then
+		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $KUDOSDIR/tests/$test/diskcache`" == "$DISKCACHE" ] && [ "`cat $DIR/fs`" == "$FS" ] && [ "`cat $DIR/consistency_mode`" == "$CMODE" ] && [ "`cat $KUDOSDIR/tests/$test/app_consistency_mode`" == "$ACMODE" ] && [ -f $DIR/$TESTNAME.run.0 ]; then
 			MR="$test"
 			REV=$REVN
 		fi
@@ -54,13 +54,15 @@ JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
-for sys in "kudos ext2 su" "kudos ext2 meta" "kudos ext2 full" "kudos ext2 none" "linux ext2 none" "linux ext3 ordered" "linux ext3 journal"; do
+for sys in "kudos safe ext2 su opgroup" "kudos safe ext2 meta opgroup" "kudos safe ext2 full opgroup" "kudos safe ext2 none opgroup" "linux unsafe ext2 none fsync" "linux unsafe ext3 ordered fsync" "linux unsafe ext3 journal fsync"; do
 	HOST=`echo "$sys" | awk '{print $1}'`
-	FS=`echo "$sys" | awk '{print $2}'`
-	CMODE=`echo "$sys" | awk '{print $3}'`
+	DISKCACHE=`echo "$sys" | awk '{print $2}'`
+	FS=`echo "$sys" | awk '{print $3}'`
+	CMODE=`echo "$sys" | awk '{print $4}'`
+	ACMODE=`echo "$sys" | awk '{print $5}'`
 	RECENT="`most_recent_test`"
 
-	[ -z "$RECENT" ] && echo "No data for $HOST $FS $CMODE $TESTNAME" && continue
+	[ -z "$RECENT" ] && echo "No data for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME" && continue
 	REV="`cat $KUDOSDIR/tests/$RECENT/svnversion`"
 
 	#echo "Most recent for $HOST $FS $CMODE $TESTNAME is $RECENT"

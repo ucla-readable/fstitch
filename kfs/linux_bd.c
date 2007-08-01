@@ -7,6 +7,7 @@
 #include <kfs/modman.h>
 #include <kfs/linux_bd.h>
 #include <kfs/revision.h>
+#include <kfs/kfsd_init.h>
 
 #include <linux/bio.h>
 #include <linux/blkdev.h>
@@ -69,6 +70,7 @@ struct linux_info {
 	struct block_device * bdev;
 	const char * path;
 	blockman_t blockman;
+	int fua;
 	
 	atomic_t outstanding_io_count;
 	spinlock_t dma_outstanding_lock;
@@ -472,7 +474,11 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	bio->bi_sector = number;
 	bio->bi_size = block->length;
 	bio->bi_bdev = info->bdev;
+#if ALLOW_UNSAFE_DISK_CACHE
+	bio->bi_rw = WRITE | info->fua;
+#else
 	bio->bi_rw = WRITE | (1 << BIO_RW_FUA);
+#endif
 	bio->bi_end_io = linux_bd_end_io;
 	bio->bi_private = private;
 	
@@ -648,21 +654,29 @@ static int open_bdev(const char *path, int mode, struct block_device ** bdev)
 	return r;
 }
 
-BD_t * linux_bd(const char * linux_bdev_path)
+BD_t * linux_bd(const char * linux_bdev_path, bool unsafe_disk_cache)
 {
-	struct linux_info * info = malloc(sizeof(*info));
-	BD_t * bd = &info->bd;
+	struct linux_info * info;
+	BD_t * bd;
 	int r;
 	
-#if !BIO_RW_FUA
-	printk("Warning: not compiled with BIO_RW_FUA: writes will not be safe unless the disk write cache is disabled\n");
+#if !ALLOW_UNSAFE_DISK_CACHE
+	if(unsafe_disk_cache && BIO_RW_FUA)
+	{
+		printk("%s(): FUA cannot be disabled as requested\n", __FUNCTION__);
+		return NULL;
+	}
 #endif
+	if(unsafe_disk_cache || !BIO_RW_FUA)
+		printk("Warning: Not using FUA: writes will not be safe unless the disk write cache is disabled\n");
 	
+	info = malloc(sizeof(*info));
 	if(!info)
 	{
 		printk("malloc() for bd failed\n");
 		return NULL;
 	}
+	bd = &info->bd;
 	
 	atomic_set(&info->outstanding_io_count, 0);
 	
@@ -682,12 +696,13 @@ BD_t * linux_bd(const char * linux_bdev_path)
 		free(info);
 		return NULL;
 	}
-	
+
 	BD_INIT(bd, linux_bd);
-	
+
 	bd->blocksize = LINUX_BLOCKSIZE;
 	bd->numblocks = info->bdev->bd_disk->capacity;
 	bd->atomicsize = LINUX_BLOCKSIZE;
+	info->fua = unsafe_disk_cache ? 0 : (1 << BIO_RW_FUA);
 	info->read_ahead_idx = 0;
 	for(r = 0; r < READ_AHEAD_BUFFER; r++)
 		info->read_ahead[r] = NULL;

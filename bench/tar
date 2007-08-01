@@ -6,19 +6,17 @@ function test () {
 }
 
 function run () {
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
 	prepare_postinit  $T $N $OUTDIR $HOST
 	ktime total test
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
-HOST=`cat "$OUTDIR/host"`
-FS=`cat "$OUTDIR/fs"`
-CMODE=`cat "$OUTDIR/consistency_mode"`
+load_config "$OUTDIR"
 T=tar
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`

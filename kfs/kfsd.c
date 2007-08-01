@@ -24,6 +24,10 @@ int use_journal = 0;
 int use_unlink = 0;
 #endif
 
+#if ALLOW_UNSAFE_DISK_CACHE
+int use_unsafe_disk_cache = 0;
+#endif
+
 struct module_shutdown {
 	const char * name;
 	kfsd_shutdown_module shutdown;
@@ -252,6 +256,11 @@ module_param(use_unlink, int, 0);
 MODULE_PARM_DESC(use_unlink, "Use the unlink device to remove dependencies");
 #endif
 
+#if ALLOW_UNSAFE_DISK_CACHE
+module_param(use_unsafe_disk_cache, int, 0);
+MODULE_PARM_DESC(use_unsafe_disk_cache, "Use disk cache unsafely");
+#endif
+
 static int kfsd_is_shutdown = 0;
 
 static int kfsd_thread(void * thunk)
@@ -383,8 +392,21 @@ int main(int argc, char * argv[])
 			remove_arg(&argc, argv, i--);
 		}
 #endif
+#if ALLOW_UNSAFE_DISK_CACHE
+		#define UDC_PARAMNAME "use_unsafe_disk_cache="
+		else if(!strncmp(argv[i], UDC_PARAMNAME, strlen(UDC_PARAMNAME)))
+		{
+			use_unsafe_disk_cache = atoi(&argv[i][strlen(UDC_PARAMNAME)]);
+			remove_arg(&argc, argv, i--);
+		}
+#endif
 		else if (!strncmp(argv[i], "blocklog=", 9)) {
 			setenv("BLOCK_LOG", argv[i] + 9, 1);
+			remove_arg(&argc, argv, i--);
+		}
+		else
+		{
+			printf("Ignoring parameter \"%s\"\n", argv[i]);
 			remove_arg(&argc, argv, i--);
 		}
 	}

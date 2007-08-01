@@ -10,37 +10,27 @@ function test () {
 }
 
 function run () {
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start -k
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start -k
 	prepare_postinit  $T $N $OUTDIR $HOST
 	ktime total test
-	try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
 KUDOSDIR="$BENCHDIR/.."
 OUTDIR="$KUDOSDIR/test"
-HOST=`cat "$OUTDIR/host"`
-FS=`cat "$OUTDIR/fs"`
-CMODE=`cat "$OUTDIR/consistency_mode"`
+load_config "$OUTDIR"
 T=imap
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`
 
-# TODO: We probably want to also run kudos with ouwimap. Add $OUTDIR/pg?
-if [ "$HOST" == "kudos" ]; then
-	# unmodified server:
-	#IMAPD=/home/kudos/ouwimap/imapd/imapd
-	# full journal optimized server:
-	#IMAPD=/home/kudos/juwimap/imapd/imapd
-	# opgroup optimized server:
-	IMAPD=/home/kudos/puwimap/imapd/imapd
-else
-	# unmodified server:
-	IMAPD=/home/kudos/ouwimap/imapd/imapd
-	# full journal optimized server:
-	#IMAPD=/home/kudos/juwimap/imapd/imapd
-fi
+case "$ACMODE" in
+	fsync)   IMAPD=/home/kudos/ouwimap/imapd/imapd;;
+	linear)  IMAPD=/home/kudos/juwimap/imapd/imapd;;
+	opgroup) IMAPD=/home/kudos/puwimap/imapd/imapd;;
+	*) echo "Unsupported ACMODE $ACMODE" 1>&2; exit 1;;
+esac
 
 if [ $# -ne 0 ]; then
 	echo "Usage: `basename "$0"`" 1>&2
@@ -48,11 +38,11 @@ if [ $# -ne 0 ]; then
 fi
 
 build $T $N $KUDOSDIR $HOST
-try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a start
+try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
 [ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
 try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
 try rm -f $MNT/mailbox.dst
-try $BENCHDIR/init -f $FS -c $CMODE -h $HOST -a stop
+try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
 try sync
 
 log_kernel $T $N $OUTDIR $HOST

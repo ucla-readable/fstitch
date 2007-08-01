@@ -193,8 +193,9 @@ int kfsd_init(int nwbblocks)
 		extern char * linux_device;
 		if (linux_device)
 		{
+			extern int use_unsafe_disk_cache;
 			printf("Using device %s\n", linux_device);
-			if (! (bd = linux_bd(linux_device)) )
+			if (! (bd = linux_bd(linux_device, use_unsafe_disk_cache)) )
 				fprintf(stderr, "linux_bd(\"%s\") failed\n", linux_device);
 #if LINUX_BD_TIMING_TEST
 			const uint32_t block_numbers[4][30] = {

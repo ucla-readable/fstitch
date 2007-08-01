@@ -10,25 +10,27 @@ JOURNALSIZE=64
 
 function usage () {
 	echo "About: start and stop a file system" 
-	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-f FS] [-c CMODE] [-k]"
-	echo "       where HOST-FS-CMODE may be kudos-ext2-(su|meta|full|none), linux-ext2-none, or linux-ext3-(ordered|journal)"
-	echo "           default is kudos-ext2-su"
+	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-d DISKCACHE] [-f FS] [-c CMODE] [-k]"
+	echo "       where HOST-DISKCACHE-FS-CMODE may be kudos-(safe|unsafe)-ext2-(su|meta|full|none), linux-(safe|unsafe)-ext2-none, or linux-(safe|unsafe)-ext3-(ordered|journal)"
+	echo "           default is kudos-safe-ext2-su"
 	echo "       -k keeps the existing file system"
 	echo "           default is to format at start"
 }
 
+DISKCACHE=
 FS=ext2
 CMODE=
 HOST=kudos
 FORMAT=1
 ACTION=
 
-while getopts "a:f:c:h:k" flag; do
+while getopts "a:h:d:f:c:k" flag; do
 	case "$flag" in
 		a) ACTION="$OPTARG";;
+		h) HOST="$OPTARG";;
+		d) DISKCACHE="$OPTARG";;
 		f) FS="$OPTARG";;
 		c) CMODE="$OPTARG";;
-		h) HOST="$OPTARG";;
 		k) FORMAT=0;;
 		\?) usage 1>&2; exit 1;;
 		*) usage 1>&2; exit 1;;
@@ -41,10 +43,10 @@ if [ "$ACTION" != "start" ] && [ "$ACTION" != "stop" ]; then
 	exit 1
 fi
 
-CMODE="`canonicalize_cmode $HOST $FS $CMODE`"
+canonicalize_modes "$HOST" "$DISKCACHE" "$FS" "$CMODE" ""
 
-if ! supported_host_fs "${HOST}-${FS}-${CMODE}"; then
-	echo "Unsupported host-filesystem-cmode \"${HOST}-${FS}-${CMODE}\"" 1>&2
+if ! supported_host_fs "${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}"; then
+	echo "Unsupported host-diskcache-filesystem-cmode-acmode \"${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}\"" 1>&2
 	exit 1
 fi
 
@@ -64,6 +66,11 @@ PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 
 if [ "$ACTION" == "start" ]; then
 	sync
+	case "$DISKCACHE" in
+		safe) UNSAFE=0;;
+		unsafe) UNSAFE=1;;
+		*) echo "Unknown DISKCACHE $DISKCACHE" 1>&2; exit 1;;
+	esac
 	if [ "$HOST" == "kudos" ]; then
 		if [ "$CMODE" == "meta" ]; then JOURNAL=1
 		elif [ "$CMODE" == "full" ]; then JOURNAL=2
@@ -79,9 +86,9 @@ if [ "$ACTION" == "start" ]; then
 			fi
 		fi
 		if [ "$NWBBLOCKS" == "" ]; then
-			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV use_journal=$JOURNAL use_unlink=$UNLINK
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE
 		else
-			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE
 		fi
 		try sudo mount -t kfs $KMNT $MNT
 		try sudo chmod 777 $MNT
@@ -93,11 +100,13 @@ if [ "$ACTION" == "start" ]; then
 		[ "$CMODE" == "none" ] && UNLINK=1 || UNLINK=0
 		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
 		if [ "$NWBBLOCKS" == "" ]; then
-			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL use_unlink=$UNLINK $MNT &
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE $MNT &
 		else
-			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK $MNT &
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE $MNT &
 		fi
 	else
+		echo "UNSAFE = $UNSAFE"
+		try sudo hdparm -W $(($UNSAFE == 1)) $DEV
 		if [ $FORMAT -eq 1 ]; then
 			if [ $FS == ext2 ]; then
 				try sudo mkfs.$FS $PART
@@ -133,7 +142,9 @@ elif [ "$ACTION" == "stop" ]; then
 			try sudo opcontrol --dump
 		fi
 		try sudo umount $MNT
-		if [ "$HOST" == "kudos" ]; then try sudo rmmod kkfsd; fi
+		if [ "$HOST" == "kudos" ]; then try sudo rmmod kkfsd
+		elif [ "$HOST" == "linux" ]; then try sudo hdparm -W 1 $DEV
+		fi
 	fi
 else
 	echo "Unknown action \"$1\"" 1>&2

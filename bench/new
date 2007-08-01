@@ -8,29 +8,32 @@ OUTDIR="test"
 
 function usage () {
 	echo "About: create a new kudos test directory"
-	echo "Usage: `basename "$0"` [-f INITFS] [-c INITCONSISTENCYMODE] [-h INITHOST] [-n NAME]"
+	echo "Usage: `basename "$0"` [-h HOST] [-d <safe|unafe>] [-f FS] [-c FS_CONSISTENCY_MODE] [-a APP_CONSISTENCY_MODE] [-n NAME]"
 }
 
+DISKCACHE=
 FS=ext2
 CMODE=
 HOST=kudos
 NAME=
 
-while getopts "f:c:h:n:" flag; do
+while getopts "h:d:f:c:a:n:" flag; do
 	case "$flag" in
+		h) HOST="$OPTARG";;
+		d) DISKCACHE="$OPTARG";;
 		f) FS="$OPTARG";;
 		c) CMODE="$OPTARG";;
-		h) HOST="$OPTARG";;
+		a) ACMODE="$OPTARG";;
 		n) NAME="$OPTARG";;
 		\?) usage 1>&2; exit 1;;
 		*) usage 1>&2; exit 1;;
 	esac
 done
 
-CMODE="`canonicalize_cmode $HOST $FS $CMODE`"
+canonicalize_modes "$HOST" "$DISKCACHE" "$FS" "$CMODE" "$ACMODE"
 
-if ! supported_host_fs "${HOST}-${FS}-${CMODE}"; then
-	echo "Unsupported host-filesystem-cmode \"${HOST}-${FS}-${CMODE}\"" 1>&2
+if ! supported_host_fs "${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}"; then
+	echo "Unsupported host-diskcache-filesystem-cmode-acmode \"${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}\"" 1>&2
 	exit 1
 fi
 
@@ -44,7 +47,9 @@ try ln -s $TESTS/$NEWTEST $OUTDIR
 
 echo "$HOST" > $OUTDIR/host
 echo "$FS" > $OUTDIR/fs
+echo "$DISKCACHE" > $OUTDIR/diskcache
 echo "$CMODE" > $OUTDIR/consistency_mode
+echo "$ACMODE" > $OUTDIR/app_consistency_mode
 echo "$NAME" > $OUTDIR/name
 uname -a > $OUTDIR/uname
 svnversion . > $OUTDIR/svnversion
