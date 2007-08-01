@@ -54,7 +54,16 @@ JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
-for sys in "kudos safe ext2 su opgroup" "kudos safe ext2 meta opgroup" "kudos safe ext2 full opgroup" "kudos safe ext2 none opgroup" "linux unsafe ext2 none fsync" "linux unsafe ext3 ordered fsync" "linux unsafe ext3 journal fsync"; do
+for sys in \
+	"kudos safe ext2 su opgroup" \
+	"kudos safe ext2 meta opgroup" \
+	"kudos safe ext2 full opgroup" \
+	"kudos safe ext2 none opgroup" \
+	"linux unsafe ext2 none fsync" \
+	"linux unsafe ext3 ordered fsync" \
+	"linux unsafe ext3 journal fsync" \
+	"linux safe ext3 ordered fsync" \
+	"linux safe ext3 journal fsync"; do
 	HOST=`echo "$sys" | awk '{print $1}'`
 	DISKCACHE=`echo "$sys" | awk '{print $2}'`
 	FS=`echo "$sys" | awk '{print $3}'`
@@ -62,12 +71,18 @@ for sys in "kudos safe ext2 su opgroup" "kudos safe ext2 meta opgroup" "kudos sa
 	ACMODE=`echo "$sys" | awk '{print $5}'`
 	RECENT="`most_recent_test`"
 
-	[ -z "$RECENT" ] && echo "No data for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME" && continue
+	if [ -z "$RECENT" ]; then
+		#echo "No data for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME"
+		continue
+	fi
 	REV="`cat $KUDOSDIR/tests/$RECENT/svnversion`"
 
-	#echo "Most recent for $HOST $FS $CMODE $TESTNAME is $RECENT"
+	#echo "Most recent for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME is $RECENT"
 	DATA="`$BENCHDIR/ex_${MEASUREMENT} -d $KUDOSDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
-	[ -z "$DATA" ] && echo "No data for $HOST $FS $CMODE $TESTNAME" && continue
-	echo "${ARRAYNAME}[$I] = new Array(\"$HOST\", \"$FS\", \"$CMODE\", \"$REV\", ${DATA});" >> $JSFILE
+	if [ -z "$DATA" ]; then
+		#echo "No data for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME"
+		continue
+	fi
+	echo "${ARRAYNAME}[$I] = new Array(\"$HOST\", \"$DISKCACHE\", \"$FS\", \"$CMODE\", \"$ACMODE\", \"$REV\", ${DATA});" >> $JSFILE
 	I=$((I+1))
 done
