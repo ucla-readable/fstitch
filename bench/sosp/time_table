@@ -1,0 +1,18 @@
+#!/bin/bash
+
+if [ ! -d tests-sosp-time ]; then
+	echo "No test directory tests-sosp-time" 1>&2
+	exit 1
+fi
+
+echo "# host diskcache fs cmode acmode wall_time sys_time write_reqs"
+for dir in tests-sosp-time/*; do
+	echo -n "`cat $dir/host` "
+	echo -n "`cat $dir/diskcache` "
+	echo -n "`cat $dir/fs` "
+	cat $dir/consistency_mode
+	for TEST in tar rm postmark andrew; do
+		echo -n "	$TEST "
+		bench/ex_time -d $dir -t $TEST | awk '{print $1, $4}'
+	done
+done

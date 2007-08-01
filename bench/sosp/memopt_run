@@ -1,0 +1,51 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/../common
+
+function run () {
+	echo "## $1"
+	try bench/new -n $1
+	for TEST in tar_rm postmark andrew; do
+		try bench/single bench/$TEST 0
+	done
+}
+
+function setmacro () {
+	VAR=$1
+	VAL=$2
+	FILE=$3
+	sed -i "s/^#define $VAR .$/#define $VAR $VAL/" $FILE
+}
+
+if [ $# -gt 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1
+fi
+
+if [ -a tests ] ; then
+	echo "Remove the tests/ directory and then run" 1>&2
+	exit 1
+fi
+if [ -a tests-sosp-memopt ]; then
+	echo "Remove the tests-sosp-memopt/ directory and then run" 1>&2
+	exit 1
+fi
+
+setmacro CHDESC_NRB 0 kfs/bdesc.h
+setmacro CHDESC_BYTE_MERGE_OVERLAP 0 kfs/chdesc.c
+setmacro CHDESC_BIT_MERGE_OVERLAP 0 kfs/chdesc.c
+run NONE
+
+setmacro CHDESC_NRB 1 kfs/bdesc.h
+run NRB
+
+setmacro CHDESC_NRB 0 kfs/bdesc.h
+setmacro CHDESC_BYTE_MERGE_OVERLAP 1 kfs/chdesc.c
+setmacro CHDESC_BIT_MERGE_OVERLAP 1 kfs/chdesc.c
+run OVERLAP
+
+setmacro CHDESC_NRB 1 kfs/bdesc.h
+run ALL
+
+mv tests tests-sosp-memopt

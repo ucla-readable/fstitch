@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [ ! -d tests-sosp-imap ]; then
+	echo "No test directory tests-sosp-imap" 1>&2
+	exit 1
+fi
+
+echo "# host diskcache fs cmode acmode wall_time sys_time write_reqs"
+for dir in tests-sosp-imap/*; do
+	echo -n "`cat $dir/host` "
+	echo -n "`cat $dir/diskcache` "
+	echo -n "`cat $dir/fs` "
+	echo -n "`cat $dir/consistency_mode` "
+	echo -n "`cat $dir/app_consistency_mode` "
+	echo -n "`bench/ex_time -d $dir -t imap | awk '{print $1, $4}'` "
+	if [ -n "`which blkparse`" ]; then
+		bench/ex_io -d $dir -t imap | awk '{print $1}'
+	else
+		echo
+	fi
+done
