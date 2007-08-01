@@ -41,4 +41,4 @@ run linux unsafe ext3 ordered fsync
 run linux unsafe ext3 journal fsync
 run linux safe ext3 journal fsync
 
-mv tests test-sosp-time
+mv tests tests-sosp-time
