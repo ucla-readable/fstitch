@@ -72,7 +72,11 @@ static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t loop_number)
 	if(r < 0)
 		return r;
 
-	return CALL(info->lfs, write_block, block, lfs_number, &head);
+	/* masquerade as an opgroup for things like the journal */
+	opgroup_masquerade();
+	r = CALL(info->lfs, write_block, block, lfs_number, &head);
+	opgroup_demasquerade();
+	return r;
 }
 
 static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)

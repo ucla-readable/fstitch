@@ -70,6 +70,7 @@ struct opgroup_scope {
 static bool atomic_opgroup_exists = 0;
 
 static opgroup_scope_t * current_scope = NULL;
+static int masquerade_count = 0;
 
 opgroup_scope_t * opgroup_scope_create(void)
 {
@@ -636,7 +637,18 @@ opgroup_id_t opgroup_id(const opgroup_t * opgroup)
 
 int opgroup_engaged(void)
 {
-	return current_scope && current_scope->engaged_count;
+	return (current_scope && current_scope->engaged_count) || masquerade_count;
+}
+
+void opgroup_masquerade(void)
+{
+	masquerade_count++;
+}
+
+void opgroup_demasquerade(void)
+{
+	assert(masquerade_count);
+	masquerade_count--;
 }
 
 int opgroup_prepare_head(chdesc_t ** head)
