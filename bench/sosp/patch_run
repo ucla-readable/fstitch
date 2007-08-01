@@ -7,7 +7,7 @@ function run () {
 	echo "## $1"
 	try bench/new -n $1
 	for TEST in tar_rm postmark andrew; do
-		try bench/single bench/$TEST 0
+		try bench/multi 3 bench/single bench/$TEST 0
 	done
 }
 
