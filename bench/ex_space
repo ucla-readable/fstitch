@@ -42,24 +42,108 @@ if (!-f "$testdir/$testname-mem.sys.0") {
 }
 my $rev = &svnversion($testdir);
 
-open(R, "<$testdir/$testname-mem.sys.0") || die;
+# I don't understand enough about perl to not write these by hand :(
+
+my %tmpla1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmpla2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmpla3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmpla4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %nbits = ("mean" => \%tmpla1, "max" => \%tmpla2, "total" => \%tmpa3, "total_realloc" => \%tmpa4, "sizeof" => 0);
+
+my %tmplb1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplb2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplb3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplb4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %nbytes = ("mean" => \%tmplb1, "max" => \%tmplb2, "total" => \%tmpb3, "total_realloc" => \%tmpb4, "sizeof" => 0);
+
+my %tmplc1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplc2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplc3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplc4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %nnoops = ("mean" => \%tmplc1, "max" => \%tmplc2, "total" => \%tmpc3, "total_realloc" => \%tmpc4, "sizeof" => 0);
+
+my %tmpld1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmpld2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmpld3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmpld4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %ntotal = ("mean" => \%tmpld1, "max" => \%tmpld2, "total" => \%tmpd3, "total_realloc" => \%tmpd4, "sizeof" => 0);
+
+my %tmple1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmple2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmple3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmple4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %ndeps = ("mean" => \%tmple1, "max" => \%tmple2, "total" => \%tmpe3, "total_realloc" => \%tmpe4, "sizeof" => 0);
+
+my %tmplf1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplf2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplf3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %tmplf4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+my %data = ("mean" => \%tmplf1, "max" => \%tmplf2, "total" => \%tmpf3, "total_realloc" => \%tmpf4, "sizeof" => 0);
+
+my %measurements = ("nchdescs (bit)" => \%nbits, "nchdescs (byte)" => \%nbytes, "nchdescs (noop)" => \%nnoops, "nchdescs (total)" => \%ntotal, "ndeps" => \%ndeps, "data" => \%data);
+my @measurementsa = (\%nbits, \%nbytes, \%nnoops, \%ntotal, \%ndeps, \%data);
+
+# update mean, max, or total
+sub updateStat {
+	my $stat = shift;
+	my $n = shift;
+	$stat->{"sum"} += $n;
+	$stat->{"count"}++;
+	$stat->{"min"} = $n if ($n < $stat->{"min"} || $stat->{"min"} == -1);
+	$stat->{"max"} = $n if ($n > $stat->{"max"});
+}
+
+# update nbits, nbytes, etc
+sub updateMeasurement {
+	my $measurement = shift;
+	my $mean = shift;
+	my $max = shift;
+	my $total = shift;
+	my $total_realloc = shift;
+	my $sizeof = shift;
+	updateStat($measurement->{"mean"}, $mean);
+	updateStat($measurement->{"max"}, $max);
+	updateStat($measurement->{"total"}, $total);
+	updateStat($measurement->{"total_realloc"}, $total_realloc);
+	$measurement->{"sizeof"} = $sizeof;
+}
+
 %careabouts = ("nchdescs (bit)" => 1, "nchdescs (byte)" => 1, "nchdescs (noop)" => 1, "nchdescs (total)" => 1, "ndeps" => 1, "data" => 1);
-while(<R>) {
-	my $line = $_;
-	if (! $line =~ m/account: /) {
-		next;
-	}
-	if ($rev <= 3450) {
-		$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) sizeof=(\d+)/;
-		print "$2 $3 $4 $4 $5  " if (exists($careabouts{$1}));
-	} else {
-		$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) total_realloc=(\d+) sizeof=(\d+)/;
-		if ($rev == 3451 || $rev == 3452) {
-			print "$2 $3 $5 $4 $6  " if (exists($careabouts{$1}));
+
+foreach $run (<$testdir/$testname-mem.sys.*>) {
+	open(R, "<$run") || die;
+	while(<R>) {
+		my $line = $_;
+		if (! $line =~ m/account: /) {
+			next;
+		}
+		if ($rev <= 3450) {
+			$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) sizeof=(\d+)/;
+			updateMeasurement($measurements{"$1"}, $2, $3, $4, $4, $5) if (exists($careabouts{$1}));
 		} else {
-			print "$2 $3 $4 $5 $6  " if (exists($careabouts{$1}));
+			$line =~ m/account: ([^:]+): mean=(\d+) max=(\d+) total=(\d+) total_realloc=(\d+) sizeof=(\d+)/;
+			if ($rev == 3451 || $rev == 3452) {
+				updateMeasurement($measurements{"$1"}, $2, $3, $5, $4, $6) if (exists($careabouts{$1}));
+			} else {
+				updateMeasurement($measurements{"$1"}, $2, $3, $4, $5, $6) if (exists($careabouts{$1}));
+			}
 		}
 	}
+	#print "\n";
+	close(R);
+}
+
+sub averageStat {
+	my $stat = shift;
+	my $avg = 0;
+	$avg = $stat->{"sum"} / $stat->{"count"} if ($stat->{"count"} != 0);
+	return $avg;
+}
+
+foreach $measurement (@measurementsa) {
+	foreach $stat ("mean", "max", "total", "total_realloc") {
+		printf "%.2f ", averageStat($measurement->{$stat});
+	}
+	printf "%d  ", $measurement->{"sizeof"};
 }
 print "\n";
-close(R);
