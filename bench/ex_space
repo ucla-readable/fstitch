@@ -42,43 +42,24 @@ if (!-f "$testdir/$testname-mem.sys.0") {
 }
 my $rev = &svnversion($testdir);
 
-# I don't understand enough about perl to not write these by hand :(
+sub createStat {
+	return ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
+}
 
-my %tmpla1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmpla2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmpla3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmpla4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %nbits = ("mean" => \%tmpla1, "max" => \%tmpla2, "total" => \%tmpa3, "total_realloc" => \%tmpa4, "sizeof" => 0);
+sub createMeasurement {
+	my %mean = createStat();
+	my %max = createStat();
+	my %total = createStat();
+	my %total_realloc = createStat();
+	return ("mean" => \%mean, "max" => \%max, "total" => \%total, "total_realloc" => \%total_realloc, "sizeof" => 0);
+}
 
-my %tmplb1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplb2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplb3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplb4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %nbytes = ("mean" => \%tmplb1, "max" => \%tmplb2, "total" => \%tmpb3, "total_realloc" => \%tmpb4, "sizeof" => 0);
-
-my %tmplc1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplc2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplc3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplc4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %nnoops = ("mean" => \%tmplc1, "max" => \%tmplc2, "total" => \%tmpc3, "total_realloc" => \%tmpc4, "sizeof" => 0);
-
-my %tmpld1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmpld2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmpld3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmpld4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %ntotal = ("mean" => \%tmpld1, "max" => \%tmpld2, "total" => \%tmpd3, "total_realloc" => \%tmpd4, "sizeof" => 0);
-
-my %tmple1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmple2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmple3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmple4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %ndeps = ("mean" => \%tmple1, "max" => \%tmple2, "total" => \%tmpe3, "total_realloc" => \%tmpe4, "sizeof" => 0);
-
-my %tmplf1 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplf2 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplf3 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %tmplf4 = ("sum" => 0, "count" => 0, "min" => -1, "max" => 0);
-my %data = ("mean" => \%tmplf1, "max" => \%tmplf2, "total" => \%tmpf3, "total_realloc" => \%tmpf4, "sizeof" => 0);
+my %nbits = createMeasurement();
+my %nbytes = createMeasurement();
+my %nnoops = createMeasurement();
+my %ntotal = createMeasurement();
+my %ndeps = createMeasurement();
+my %data = createMeasurement();
 
 my %measurements = ("nchdescs (bit)" => \%nbits, "nchdescs (byte)" => \%nbytes, "nchdescs (noop)" => \%nnoops, "nchdescs (total)" => \%ntotal, "ndeps" => \%ndeps, "data" => \%data);
 my @measurementsa = (\%nbits, \%nbytes, \%nnoops, \%ntotal, \%ndeps, \%data);
