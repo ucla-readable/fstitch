@@ -1,14 +1,14 @@
 #!/bin/bash
 
-if [ ! -d tests-sosp-memopt ]; then
-	echo "No test directory tests-sosp-memopt" 1>&2
+if [ ! -d tests-sosp-patch ]; then
+	echo "No test directory tests-sosp-patch" 1>&2
 	exit 1
 fi
 
 echo "# patches(#) undo(kB) systime(sec)"
 for TEST in tar rm postmark andrew; do
 	echo $TEST
-	for dir in tests-sosp-memopt/*; do
+	for dir in tests-sosp-patch/*; do
 		echo -n "	`cat $dir/name`  "
 		echo -n "`bench/ex_space -d $dir -t $TEST | awk '{print $19}'` "
 		echo -n "`bench/ex_space -d $dir -t $TEST | awk '{print $29/1024}'` "

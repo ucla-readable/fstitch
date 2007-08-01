@@ -27,8 +27,8 @@ if [ -a tests ] ; then
 	echo "Remove the tests/ directory and then run" 1>&2
 	exit 1
 fi
-if [ -a tests-sosp-memopt ]; then
-	echo "Remove the tests-sosp-memopt/ directory and then run" 1>&2
+if [ -a tests-sosp-patch ]; then
+	echo "Remove the tests-sosp-patch/ directory and then run" 1>&2
 	exit 1
 fi
 
@@ -48,4 +48,4 @@ run OVERLAP
 setmacro CHDESC_NRB 1 kfs/bdesc.h
 run ALL
 
-mv tests tests-sosp-memopt
+mv tests tests-sosp-patch
