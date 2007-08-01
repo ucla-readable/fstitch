@@ -5,7 +5,8 @@ if [ ! -d tests-sosp-time ]; then
 	exit 1
 fi
 
-echo "# host diskcache fs cmode acmode wall_time sys_time write_reqs"
+echo "# host diskcache fs cmode acmode"
+echo "#	wall_time sys_time write_reqs"
 for dir in tests-sosp-time/*; do
 	echo -n "`cat $dir/host` "
 	echo -n "`cat $dir/diskcache` "
