@@ -54,3 +54,5 @@ echo "$NAME" > $OUTDIR/name
 uname -a > $OUTDIR/uname
 svnversion . > $OUTDIR/svnversion
 svn diff > $OUTDIR/diff
+svn status -q > $OUTDIR/status
+true
