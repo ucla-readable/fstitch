@@ -22,6 +22,7 @@ sub svnversion() {
 		return $rev;
 	}
 	close(R);
+	printf STDERR "Unable to extract svnversion from '$dir/svnversion'.\n";
 	die;
 }
 
