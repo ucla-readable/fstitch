@@ -1,0 +1,51 @@
+#!/bin/bash
+
+function mysvn () {
+	LD_LIBRARY_PATH=$SVNPATH/install/lib:$KUDOSDIR/obj/kernel/lib:$LD_LIBRARY_PATH \
+		PATH=$SVNPATH/install/bin:$PATH \
+		try svn "$@"
+}
+
+function test () {
+	ktime svn mysvn up -q $MNT/trunk/
+	ktime sync fsync $KUDOSDIR $MNT;
+}
+
+function run () {
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start -k
+	prepare_postinit  $T $N $OUTDIR $HOST
+	ktime total test
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
+}
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
+OUTDIR="$KUDOSDIR/test"
+load_config "$OUTDIR"
+T=svn
+[ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
+N=`get_test_num $OUTDIR/$T`
+
+case "$ACMODE" in
+	fsync) SVNPATH=/home/kudos/osubversion;;
+	opgroup) SVNPATH=/home/kudos/psubversion;;
+	*) echo "Unsupported ACMODE $ACMODE" 1>&2; exit 1;;
+esac
+
+if [ $# -ne 0 ]; then
+	echo "Usage: `basename "$0"`" 1>&2
+	exit 1;
+fi
+
+build $T $N $KUDOSDIR $HOST
+try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
+[ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
+mysvn co -q -r 1000 file:///home/kudos/test-repo/trunk $MNT/trunk
+fsync $KUDOSDIR $MNT
+try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
+try sync
+
+log_kernel $T $N $OUTDIR $HOST
+run 2>&1 | tee $OUTDIR/$T.run.$N
+finish $T $N $KUDOSDIR $OUTDIR $HOST
