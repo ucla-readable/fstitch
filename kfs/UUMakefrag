@@ -29,6 +29,7 @@ KFSOFILES := \
 			$(OBJDIR)/kfs/devfs_cfs.o \
 			$(OBJDIR)/kfs/mem_bd.o \
 			$(OBJDIR)/kfs/unix_file_bd.o \
+			$(OBJDIR)/kfs/crashsim_bd.o \
 			$(OBJDIR)/kfs/md_bd.o \
 			$(OBJDIR)/kfs/block_resizer_bd.o \
 			$(OBJDIR)/kfs/partition_bd.o \

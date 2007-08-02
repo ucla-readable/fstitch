@@ -28,6 +28,10 @@ int use_unlink = 0;
 int use_unsafe_disk_cache = 0;
 #endif
 
+#if ALLOW_CRASHSIM
+int use_crashsim = 0;
+#endif
+
 struct module_shutdown {
 	const char * name;
 	kfsd_shutdown_module shutdown;
@@ -261,6 +265,11 @@ module_param(use_unsafe_disk_cache, int, 0);
 MODULE_PARM_DESC(use_unsafe_disk_cache, "Use disk cache unsafely");
 #endif
 
+#if ALLOW_CRASHSIM
+module_param(use_crashsim, int, 0);
+MODULE_PARM_DESC(use_crashsim, "Use crash simulator module");
+#endif
+
 static int kfsd_is_shutdown = 0;
 
 static int kfsd_thread(void * thunk)
@@ -397,6 +406,13 @@ int main(int argc, char * argv[])
 		else if(!strncmp(argv[i], UDC_PARAMNAME, strlen(UDC_PARAMNAME)))
 		{
 			use_unsafe_disk_cache = atoi(&argv[i][strlen(UDC_PARAMNAME)]);
+			remove_arg(&argc, argv, i--);
+		}
+#endif
+#if ALLOW_CRASHSIM
+		else if(!strncmp(argv[i], "use_crashsim=", 13))
+		{
+			use_crashsim = atoi(&argv[i][13]);
 			remove_arg(&argc, argv, i--);
 		}
 #endif

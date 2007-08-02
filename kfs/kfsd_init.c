@@ -14,6 +14,7 @@
 #include <kfs/wb2_cache_bd.h>
 #include <kfs/wbr_cache_bd.h>
 #include <kfs/block_resizer_bd.h>
+#include <kfs/crashsim_bd.h>
 #include <kfs/mem_bd.h>
 #include <kfs/loop_bd.h>
 
@@ -248,9 +249,19 @@ int kfsd_init(int nwbblocks)
 		{
 			printf("Using file %s\n", unix_file);
 			if (! (bd = unix_file_bd(unix_file, 512)) )
-				fprintf(stderr, "unix_file(\"%s\") failed\n", unix_file);
+				fprintf(stderr, "unix_file_bd(\"%s\") failed\n", unix_file);
 #endif
 		}
+#if ALLOW_CRASHSIM
+		extern int use_crashsim;
+		if (use_crashsim && bd)
+		{
+			if (use_crashsim == 1)
+				use_crashsim = 100000;
+			if (! (bd = crashsim_bd(bd, use_crashsim)) )
+				fprintf(stderr, "crashsim_bd(%d) failed\n", use_crashsim);
+		}
+#endif
 		if (bd)
 		{
 			if ((r = construct_uhfses(bd, nwbblocks, uhfses)) < 0)

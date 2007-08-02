@@ -48,6 +48,7 @@ KKFSD_KFS_OBJS := \
               devfs_cfs.o \
               mem_bd.o \
               linux_bd.o \
+              crashsim_bd.o \
               md_bd.o \
               block_resizer_bd.o \
               partition_bd.o \
