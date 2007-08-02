@@ -105,7 +105,6 @@ if [ "$ACTION" == "start" ]; then
 			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE $MNT &
 		fi
 	else
-		echo "UNSAFE = $UNSAFE"
 		try sudo hdparm -W $(($UNSAFE == 1)) $DEV
 		if [ $FORMAT -eq 1 ]; then
 			if [ $FS == ext2 ]; then
