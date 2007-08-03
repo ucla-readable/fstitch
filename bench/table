@@ -59,11 +59,21 @@ for sys in \
 	"kudos safe ext2 meta opgroup" \
 	"kudos safe ext2 full opgroup" \
 	"kudos safe ext2 none opgroup" \
+	"kudos safe ext2 full linearom" \
+	"kudos safe ext2 full linear" \
 	"linux unsafe ext2 none fsync" \
 	"linux unsafe ext3 ordered fsync" \
 	"linux unsafe ext3 journal fsync" \
+	"linux unsafe ext3 ordered linearom" \
+	"linux unsafe ext3 journal linearom" \
+	"linux unsafe ext3 journal linear" \
+	"linux safe ext2 none fsync" \
 	"linux safe ext3 ordered fsync" \
-	"linux safe ext3 journal fsync"; do
+	"linux safe ext3 journal fsync" \
+	"linux safe ext3 ordered linearom" \
+	"linux safe ext3 journal linearom" \
+	"linux safe ext3 journal linear"
+do
 	HOST=`echo "$sys" | awk '{print $1}'`
 	DISKCACHE=`echo "$sys" | awk '{print $2}'`
 	FS=`echo "$sys" | awk '{print $3}'`
