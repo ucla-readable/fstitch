@@ -621,7 +621,7 @@ static void ext2_mdir_remove(LFS_t * object, inode_t ino)
 		info->mdir_cache.lru_newest = container_of(mdir->lru_polder, ext2_mdir_t, lru_newer);
 	*mdir->lru_polder = mdir->lru_newer;
 	mdir->lru_newer = info->mdir_cache.lru_oldest;
-	mdir->lru_polder = &info->mdir_cache.lru_oldest->lru_newer;
+	mdir->lru_polder = &info->mdir_cache.lru_oldest;
 	*mdir->lru_polder = mdir;
 }
 
