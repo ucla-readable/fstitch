@@ -332,7 +332,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t
 			number_block = CALL(info->journal, synthetic_read_block, number_block_number, 1);
 		assert(number_block);
 		
-		r = chdesc_create_byte(number_block, info->journal, (last % npb) * sizeof(uint32_t), sizeof(uint32_t), &number_block_number, &head);
+		r = chdesc_create_byte(number_block, info->journal, (last % npb) * sizeof(uint32_t), sizeof(uint32_t), &block_number, &head);
 		assert(r >= 0);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "journal number");
 		r = chdesc_add_depend(info->wait, head);
@@ -869,17 +869,21 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			return r;
 	}
 	
-	Dprintf("%s(): recovering journal subtransaction %d (%d data blocks)\n", __FUNCTION__, transaction_number, cr->nblocks);
+	Dprintf("%s(): recovering journal subtransaction %d (%d data blocks, sequence %u)\n", __FUNCTION__, transaction_number, cr->nblocks, cr->seq);
 	
 	/* bnb is "block number block" number */
 	bnb = transaction_start + 1;
 	/* db is "data block" number */
 	db = bnb + trans_number_block_count(bd->blocksize);
+	Dprintf("%s(): first number block %u, first journal block %u\n", __FUNCTION__, bnb, db);
 	for(block = 0; block < cr->nblocks; block += bnpb)
 	{
 		uint32_t index, max = MIN(bnpb, cr->nblocks - block);
+		bdesc_t * number_block;
 		uint32_t * numbers;
-		bdesc_t * number_block = CALL(info->journal, read_block, bnb, 1);
+		
+		Dprintf("%s(): using number block %u (max = %d, bnpb = %d)\n", __FUNCTION__, bnb, max, bnpb);
+		number_block = CALL(info->journal, read_block, bnb++, 1);
 		if(!number_block)
 			return -1;
 		bdesc_retain(number_block);
@@ -888,7 +892,10 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		for(index = 0; index != max; index++)
 		{
 			bdesc_t * output;
-			bdesc_t * data_block = CALL(info->journal, read_block, db++, 1);
+			bdesc_t * data_block;
+			
+			Dprintf("%s(): recovering journal block %u -> data block %u\n", __FUNCTION__, db, numbers[index]);
+			data_block = CALL(info->journal, read_block, db++, 1);
 			r = -1;
 			if(!data_block)
 				goto data_error;
