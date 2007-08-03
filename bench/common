@@ -146,9 +146,11 @@ function supported_host_fs () {
 	# note: the below case @() notation requires extglob
 	case "$1" in
 		kudos-@(safe|unsafe)-ext2-@(su|meta|full|none)-@(opgroup|fsync)) true;;
-		kudos-@(safe|unsafe)-ext2-full-linear) true;;
+		kudos-@(safe|unsafe)-ext2-full-@(linerom|linear)) true;;
 		uu-unsafe-ext2-@(su|meta|full|none)-none) true;;
+		uu-unsafe-ext2-full-@(linearom|linear)) true;;
 		linux-@(safe|unsafe)-@(ext2-none|ext3-@(ordered|journal))-fsync) true;;
+		linux-@(safe|unsafe)-ext3-@(ordered|journal)-@(linearom|linear)) true;;
 		linux-@(safe|unsafe)-ext3-journal-linear) true;;
 		*) false;;
 	esac

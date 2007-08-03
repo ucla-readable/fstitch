@@ -28,7 +28,7 @@ T=svn
 N=`get_test_num $OUTDIR/$T`
 
 case "$ACMODE" in
-	fsync) SVNPATH=/home/kudos/osubversion;;
+	linearom|linear) SVNPATH=/home/kudos/osubversion;;
 	opgroup) SVNPATH=/home/kudos/psubversion;;
 	*) echo "Unsupported ACMODE $ACMODE" 1>&2; exit 1;;
 esac
@@ -39,11 +39,16 @@ if [ $# -ne 0 ]; then
 fi
 
 build $T $N $KUDOSDIR $HOST
+# Make an old checkout for the test to update
 try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
 [ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
 mysvn co -q -r 1000 file:///home/kudos/test-repo/trunk $MNT/trunk
 fsync $KUDOSDIR $MNT
 try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
+# Load 1000-HEAD into disk cache
+try svn co -q -r 1000 file:///home/kudos/test-repo/trunk /tmp/test-trunk
+try svn up -q /tmp/test-trunk/
+try rm -rf /tmp/test-trunk
 try sync
 
 log_kernel $T $N $OUTDIR $HOST
