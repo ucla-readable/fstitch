@@ -420,11 +420,6 @@ int main(int argc, char * argv[])
 			setenv("BLOCK_LOG", argv[i] + 9, 1);
 			remove_arg(&argc, argv, i--);
 		}
-		else
-		{
-			printf("Ignoring parameter \"%s\"\n", argv[i]);
-			remove_arg(&argc, argv, i--);
-		}
 	}
 	kfsd_argc = argc;
 	kfsd_argv = argv;
