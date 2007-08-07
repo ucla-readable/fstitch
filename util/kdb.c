@@ -1356,13 +1356,13 @@ static void render(FILE * output, const char * title, int landscape)
 	
 	/* header */
 	fprintf(output, "digraph \"debug: %d/%d opcode%s, %s\"\n", applied, opcodes, (opcodes == 1) ? "" : "s", input_name);
-	fprintf(output, "{\nnodesep=0.25;\nranksep=0.25;\n");
+	fprintf(output, "{\nnodesep=0.25;\nranksep=0.25;\nfontname=\"Helvetica\";\nfontsize=10;\n");
 	if(landscape)
 		fprintf(output, "rankdir=LR;\norientation=L;\nsize=\"10,7.5\";\n");
 	else
 		fprintf(output, "rankdir=LR;\norientation=P;\nsize=\"16,16\";\n");
 	fprintf(output, "subgraph clusterAll {\nlabel=\"%s\";\ncolor=white;\n", title);
-	fprintf(output, "node [shape=ellipse,color=black];\n");
+	fprintf(output, "node [shape=ellipse,color=black,fontname=\"Helvetica\",fontsize=10];\n");
 	
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
 	{
