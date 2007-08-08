@@ -1961,7 +1961,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 	ext2_mdir_t * mdir;
 	ext2_mdirent_t * mdirent;
 	ext2_minode_t * minode = NULL;
-	DEFINE_CHDESC_PASS_SET(head_set, 5, NULL);
+	DEFINE_CHDESC_PASS_SET(head_set, 4, NULL);
 
 	//what is link? link is a symlink fdesc. dont deal with it, yet.
 	assert(head);
@@ -2069,7 +2069,6 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			chdesc_t * init_head;
 			EXT2_Dir_entry_t dir_dirent;
 			uint32_t prev_basep, group;
-			DEFINE_CHDESC_PASS_SET(dotdot_befores, 2, NULL);
 
 			// allocate and append first directory entry block
 			dirblock_no = ext2_allocate_block(object, (fdesc_t *) new_file, 1, &init_head);
@@ -2110,13 +2109,11 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			dir_dirent.name_len = strlen(dir_dirent.name);
 			dir_dirent.rec_len = object->blocksize - prev_basep;
 			dir_dirent.file_type = EXT2_TYPE_DIR;
-			dotdot_befores.array[0] = init_head;
 			// we needn't depend on links_count++, but any later files in this dir probably will
 			// and having this dependency now makes merging easier
-			dotdot_befores.array[1] = head_set.array[3];
-			r = chdesc_create_byte_set(dirblock_bdesc, info->ubd, prev_basep, dirent_rec_len(dir_dirent.name_len), &dir_dirent, &head_set.array[4], PASS_CHDESC_SET(dotdot_befores));
+			r = chdesc_create_byte(dirblock_bdesc, info->ubd, prev_basep, dirent_rec_len(dir_dirent.name_len), &dir_dirent, &head_set.array[3]);
 			assert(r >= 0);
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[4], "write dirent '..'");
+			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[3], "write dirent '..'");
 			prev_basep = dir_dirent.rec_len;
 
 			dirblock_bdesc->flags |= BDESC_FLAG_DIRENT;
