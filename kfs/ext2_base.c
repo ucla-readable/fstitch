@@ -1961,7 +1961,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 	ext2_mdir_t * mdir;
 	ext2_mdirent_t * mdirent;
 	ext2_minode_t * minode = NULL;
-	DEFINE_CHDESC_PASS_SET(head_set, 4, NULL);
+	DEFINE_CHDESC_PASS_SET(head_set, 5, NULL);
 
 	//what is link? link is a symlink fdesc. dont deal with it, yet.
 	assert(head);
@@ -1990,7 +1990,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			return NULL;
 	}
 
-	//this might be redundent:
+	//this might be redundant:
 	parent_file = (ext2_fdesc_t *) ext2_lookup_inode(object, parent_ino);
 	if (!parent_file)
 		return NULL;
@@ -2047,6 +2047,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			goto allocate_name_exit2;
 
 		if (type == TYPE_SYMLINK) {
+			int ioff1 = 0, ioff2 = 0;
 			link_buf = malloc(object->blocksize);
 			if (!link_buf) {
 				r = -ENOMEM;
@@ -2055,13 +2056,11 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			r = initialmd->get(initialmd->arg, KFS_FEATURE_SYMLINK, object->blocksize, link_buf);
 			if (r < 0)
 				goto allocate_name_exit2;
-			else {
-				int ioff1 = 0, ioff2 = 0;
-				r = ext2_set_symlink(object, new_file, link_buf, r, &head_set.array[1], &ioff1, &ioff2);
-				if (r < 0)
-					goto allocate_name_exit2;
-			}
-			
+			/* we will only use 2 elements for this case */
+			head_set.size = 2;
+			r = ext2_set_symlink(object, new_file, link_buf, r, &head_set.array[1], &ioff1, &ioff2);
+			if (r < 0)
+				goto allocate_name_exit2;
 		}
 		else if (type == TYPE_DIR) {
 			// Create . and ..
@@ -2069,14 +2068,14 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			bdesc_t * dirblock_bdesc;
 			chdesc_t * init_head;
 			EXT2_Dir_entry_t dir_dirent;
-			uint32_t prev_basep;
+			uint32_t prev_basep, group;
 			DEFINE_CHDESC_PASS_SET(dotdot_befores, 2, NULL);
-			uint32_t group;
 
 			// allocate and append first directory entry block
 			dirblock_no = ext2_allocate_block(object, (fdesc_t *) new_file, 1, &init_head);
 			dirblock_bdesc = CALL(info->ubd, synthetic_read_block, dirblock_no, 1);
 			r = chdesc_create_init(dirblock_bdesc, info->ubd, &init_head);
+			assert(r >= 0);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, init_head, "init new dirent block");
 			new_file->f_xinode.i_block[0] = dirblock_no;
 			new_file->f_xinode.i_size = object->blocksize;
@@ -2093,6 +2092,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			dir_dirent.file_type = EXT2_TYPE_DIR;
 			head_set.array[2] = init_head;
 			r = chdesc_create_byte(dirblock_bdesc, info->ubd, 0, dir_dirent.rec_len, &dir_dirent, &head_set.array[2]);
+			assert(r >= 0);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[2], "write dirent '.'");
 			new_file->f_xinode.i_links_count++;
 			prev_basep = dir_dirent.rec_len;
@@ -2101,6 +2101,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			INODE_ADD(parent_file, i_links_count, 1);
 			head_set.array[3] = info->write_head ? *info->write_head : NULL;
 			r = ext2_write_inode(info, parent_file, &head_set.array[3], ioff1, ioff2);
+			assert(r >= 0);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[3], "linkcount++");
 
 			// insert ".."
@@ -2114,11 +2115,13 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			// and having this dependency now makes merging easier
 			dotdot_befores.array[1] = head_set.array[3];
 			r = chdesc_create_byte_set(dirblock_bdesc, info->ubd, prev_basep, dirent_rec_len(dir_dirent.name_len), &dir_dirent, &head_set.array[4], PASS_CHDESC_SET(dotdot_befores));
+			assert(r >= 0);
 			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head_set.array[4], "write dirent '..'");
 			prev_basep = dir_dirent.rec_len;
 
 			dirblock_bdesc->flags |= BDESC_FLAG_DIRENT;
 			r = CALL(info->ubd, write_block, dirblock_bdesc, dirblock_no);
+			assert(r >= 0);
 
 			group = (new_file->f_ino - 1) / info->super->s_inodes_per_group;
 			r = ext2_super_report(object, group, 0, 0, 1);
@@ -2142,7 +2145,10 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 		// Increase link count
 		DECL_INODE_MOD(ln);
 		INODE_ADD(ln, i_links_count, 1);
-		r = ext2_write_inode(info, ln, &head_set.array[0], ioff1, ioff2);
+		head_set.array[1] = info->write_head ? *info->write_head : NULL;
+		/* we will only use 2 elements for this case */
+		head_set.size = 2;
+		r = ext2_write_inode(info, ln, &head_set.array[1], ioff1, ioff2);
 		if (r < 0)
 			goto allocate_name_exit2;
 
