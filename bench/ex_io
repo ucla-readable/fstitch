@@ -53,11 +53,11 @@ sub printstats {
 	printf $stream "%.3f %.3f %.3f  ", $avg, $table->{"min"}, $table->{"max"};
 }
 
-sub unitMult {
+sub unitFactor {
 	my $prefix = shift;
-	if ($prefix == "K") { return 1; }
-	elsif ($prefix == "M") { return 1024; }
-	elsif ($prefix == "G") { return 1024*1024; }
+	if ($prefix eq "K") { return 1; }
+	elsif ($prefix eq "M") { return 1024; }
+	elsif ($prefix eq "G") { return 1024*1024; }
 	else { print STDERR "Unknown unit prefix '$prefix'"; die; }
 }
 
@@ -90,12 +90,22 @@ foreach $blk (<$testdir/$testname.blk.*>) {
 	while(<R>) {
 		if (m/Write Dispatches:\s+(\d+(,\d+){0,1}),\s+(\d+(,\d+){0,1})(.)iB/) {
 			$havedata = 1;
-			addtest(\%writes_dispatched, $1);
-			addtest(\%writes_size, $3 * unitMult($5));
+			my $num = $1;
+			my $size = $3;
+			my $factor = unitFactor($5);
+			$num =~ s/,//;
+			$size =~ s/,//;
+			addtest(\%writes_dispatched, $num);
+			addtest(\%writes_size, $size * $factor);
 		}
 		if (m/Read Dispatches:\s+(\d+(,\d+){0,1}),\s+(\d+(,\d+){0,1})(.)iB/) {
-			addtest(\%reads_dispatched, $1);
-			addtest(\%reads_size, $3 * unitMult($5));
+			my $num = $1;
+			my $size = $3;
+			my $factor = unitFactor($5);
+			$num =~ s/,//;
+			$size =~ s/,//;
+			addtest(\%reads_dispatched, $num);
+			addtest(\%reads_size, $size * $factor);
 		}
 		if (m/^\s*\d+,\d+\s+\d+\s+(\d+)\s+(\d+\.\d+)\s+\d+\s+([CDIQWBFMGSPUTXA]{1,2})\s+([RAWBS]{1,3})(.*)$/) {
 			my $seq = $1;
