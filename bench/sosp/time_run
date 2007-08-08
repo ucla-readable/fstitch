@@ -9,7 +9,7 @@ function run () {
 	[ $RUNLINUX -eq 0 ] && [ "$1" == "linux" ] && return
 	try bench/new -h $1 -d $2 -f $3 -c $4
 	for TEST in tar_rm postmark andrew; do
-		try bench/multi 1 bench/$TEST
+		try bench/multi 10 bench/$TEST
 	done
 }
 
@@ -25,20 +25,20 @@ if [ -a tests ] ; then
 	echo "Remove the tests/ directory and then run" 1>&2
 	exit 1
 fi
-if [ -a tests-sosp-imap ]; then
+if [ -a tests-sosp-time ]; then
 	echo "Remove the tests-sosp-time/ directory and then run" 1>&2
 	exit 1
 fi
 
-run kudos safe ext2 none opgroup
 run kudos safe ext2 su opgroup
 run kudos safe ext2 meta opgroup
 run kudos safe ext2 full opgroup
+run kudos unsafe ext2 none opgroup
 run kudos unsafe ext2 full opgroup
 
-run linux unsafe ext2 none fsync
-run linux unsafe ext3 ordered fsync
-run linux unsafe ext3 journal fsync
+run linux safe ext3 ordered fsync
 run linux safe ext3 journal fsync
+run linux unsafe ext2 none fsync
+run linux unsafe ext3 journal fsync
 
 mv tests tests-sosp-time
