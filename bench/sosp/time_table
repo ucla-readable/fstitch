@@ -6,7 +6,7 @@ if [ ! -d tests-sosp-time ]; then
 fi
 
 echo "# host diskcache fs cmode acmode"
-echo "#	wall_time sys_time write_reqs"
+echo "#	wall_time sys_time"
 for dir in tests-sosp-time/*; do
 	echo -n "`cat $dir/host` "
 	echo -n "`cat $dir/diskcache` "
@@ -14,7 +14,6 @@ for dir in tests-sosp-time/*; do
 	cat $dir/consistency_mode
 	for TEST in tar rm postmark andrew; do
 		echo -n "	$TEST "
-		echo -n "`bench/ex_time -d $dir -t $TEST | awk '{print $1, $4}'` "
-		bench/ex_io -d $dir -t $TEST | awk '{print $1}'
+		bench/ex_time -d $dir -t $TEST | awk '{print $1, $4}'
 	done
 done
