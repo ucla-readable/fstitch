@@ -52,6 +52,10 @@
 #define Dprintf(x...)
 #endif
 
+#if MALLOC_ACCOUNT
+unsigned long long malloc_total = 0;
+#endif
+
 static struct file_system_type  kfs_fs_type;
 static struct inode_operations  kfs_reg_inode_ops;
 static struct file_operations   kfs_reg_file_ops;
@@ -125,6 +129,9 @@ static void kernel_serve_shutdown(void * ignore)
 	int r = unregister_filesystem(&kfs_fs_type);
 	if (r < 0)
 		fprintf(stderr, "kernel_serve_shutdown(): unregister_filesystem: %d\n", r);
+#if MALLOC_ACCOUNT
+	printf("malloc_total = %llu\n", malloc_total);
+#endif
 }
 
 int kernel_serve_init(void)

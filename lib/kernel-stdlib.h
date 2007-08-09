@@ -1,11 +1,32 @@
 #ifndef __KUDOS_LIB_STDLIB_H
 #define __KUDOS_LIB_STDLIB_H
 
+#define MALLOC_ACCOUNT 0
+
 #include <linux/slab.h>
 // for non-huge regions only
-#define malloc(size) kmalloc(size, GFP_KERNEL)
-#define calloc(nmemb, size) kcalloc(nmemb, size, GFP_KERNEL)
-#define free(x) kfree(x)
+static inline void * malloc(size_t size)
+{
+#if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total;
+	malloc_total += size;
+#endif
+	return kmalloc(size, GFP_KERNEL);
+}
+
+static inline void * calloc(size_t nmemb, size_t size)
+{
+#if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total;
+	malloc_total += nmemb * size;
+#endif
+	return kcalloc(nmemb, size, GFP_KERNEL);
+}
+
+static inline void free(const void * x)
+{
+	kfree(x);
+}
 
 long strtol(const char * str, char ** end, int base);
 
@@ -33,6 +54,10 @@ static __inline void * smalloc(size_t size)
 {
 	if (size <= KMALLOC_MAX)
 		return kmalloc(size, GFP_KERNEL);
+#if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total;
+	malloc_total += size;
+#endif
 	return vmalloc(size);
 }
 
@@ -50,6 +75,10 @@ static __inline void * scalloc(size_t nmemb, size_t size)
 	if (unlikely(!p))
 		return NULL;
 	memset(p, 0, total);
+#if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total;
+	malloc_total += total;
+#endif
 	return p;
 }
 
@@ -62,6 +91,10 @@ static __inline void * srealloc(void * p, size_t p_size, size_t new_size)
 	if(p)
 		memcpy(q, p, p_size);
 	sfree(p, p_size);
+#if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total;
+	malloc_total += new_size - p_size;
+#endif
 	return q;
 }
 
