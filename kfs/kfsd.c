@@ -238,7 +238,7 @@ static void kfsd_main(int nwbblocks)
 	kfsd_leave(0);
 }
 
-static int nwbblocks = 16384;
+static int nwbblocks = 20000;
 module_param(nwbblocks, int, 0);
 MODULE_PARM_DESC(nwbblocks, "The number of write-back blocks to use");
 
@@ -364,7 +364,7 @@ static void remove_arg(int * argc, char ** argv, int idx)
 
 int main(int argc, char * argv[])
 {
-	int i, nwbblocks = 16384;
+	int i, nwbblocks = 20000;
 	for(i = 1; i < argc; i++)
 	{
 		if(!strcmp(argv[i], "--help"))
