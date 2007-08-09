@@ -54,6 +54,7 @@
 
 #if MALLOC_ACCOUNT
 unsigned long long malloc_total = 0;
+unsigned long long malloc_total_woblocks = 0;
 #endif
 
 static struct file_system_type  kfs_fs_type;
@@ -131,6 +132,7 @@ static void kernel_serve_shutdown(void * ignore)
 		fprintf(stderr, "kernel_serve_shutdown(): unregister_filesystem: %d\n", r);
 #if MALLOC_ACCOUNT
 	printf("malloc_total = %llu\n", malloc_total);
+	printf("malloc_total_woblocks = %llu\n", malloc_total_woblocks);
 #endif
 }
 
