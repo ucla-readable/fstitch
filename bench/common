@@ -151,11 +151,13 @@ function finish () {
 			DEV=${DEV:-$KUDOSDIR/obj/fs/ext2.img}
 			PART=${DEV}${PART:-}
 		fi
-		# run fsck on the file system
+		# run fsck on the file system: don't use "try" because we expect errors
 		echo "+ fsck -n"
-		try sudo fsck -f -n $PART &> "$OUTDIR/$T.fsck-n.$N"
+		sudo fsck -f -n $PART &> "$OUTDIR/$T.fsck-n.$N"
+		bench/filter_fsck < "$OUTDIR/$T.fsck-n.$N"
 		echo "+ fsck -y"
-		try sudo fsck -f -y $PART &> "$OUTDIR/$T.fsck-y.$N"
+		sudo fsck -f -y $PART &> "$OUTDIR/$T.fsck-y.$N"
+		bench/filter_fsck < "$OUTDIR/$T.fsck-y.$N"
 	fi
 }
 

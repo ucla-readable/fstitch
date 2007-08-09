@@ -1,0 +1,51 @@
+#!/bin/bash
+
+grep -v "^$" |
+grep -v "fsck 1" |
+grep -v "^Pass" |
+grep -v "^Fix? " |
+grep -v "^/dev/" |
+#grep -v "^Inode .* is a zero-length directory" |
+#grep -v "^Setting filetype for entry" |
+#grep -v "Directory entry for .* is big" |
+#grep -v "Missing '\\.\\.' in directory inode" |
+#grep -v "is <The NULL inode> (0), should be /linux-2\\.6" |
+grep -v "^Unattached inode" |
+grep -v "^Unattached zero-length inode" |
+grep -v "^Unconnected directory inode" |
+grep -v "^Connect to /lost+found?" |
+grep -v "^Directories count wrong" |
+grep -v "^Free blocks count wrong" |
+grep -v "^Free inodes count wrong" |
+grep -v "^Inode bitmap differences[^+]*$" |
+grep -v "^Block bitmap differences[^+]*$" |
+grep -v "^No room in lost+found directory." |
+# OK, these are not only incomplete but also much more complicated
+# than the < test that they represent... but grep doesn't do that.
+grep -v "^Inode [0-9]* ref count is [1-9][0-9]*, should be 1\\." |
+grep -v "^Inode [0-9]* ref count is [1-9][0-9]\\+, should be [1-9]\\." |
+grep -v "^Inode [0-9]* ref count is [3-9], should be 2\\." |
+grep -v "^Inode [0-9]* ref count is [4-9], should be 3\\." |
+grep -v "^Inode [0-9]* ref count is [5-9], should be 4\\." |
+grep -v "^Inode [0-9]* ref count is [6-9], should be 5\\." |
+grep -v "^Inode [0-9]* ref count is [7-9], should be 6\\." |
+grep -v "^Inode [0-9]* ref count is [89], should be 7\\." |
+grep -v "^Inode [0-9]* ref count is 9, should be 8\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[1-9], should be \\10\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[2-9], should be \\11\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[3-9], should be \\12\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[4-9], should be \\13\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[5-9], should be \\14\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[6-9], should be \\15\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[7-9], should be \\16\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)[89], should be \\17\\." |
+grep -v "^Inode [0-9]* ref count is \\([1-9]\\)9, should be \\18\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[2-9][0-9], should be 1[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[3-9][0-9], should be 2[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[4-9][0-9], should be 3[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[5-9][0-9], should be 4[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[6-9][0-9], should be 5[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[7-9][0-9], should be 6[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*[89][0-9], should be 7[0-9]\\." |
+grep -v "^Inode [0-9]* ref count is [0-9]*9[0-9], should be 8[0-9]\\." |
+grep -v "^'\\.\\.' in \\.\\.\\. ([0-9]*) is [^ ]* ([0-9]*), should be <The NULL inode> (0).$"
