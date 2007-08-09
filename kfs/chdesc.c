@@ -194,7 +194,7 @@ static void account_print(const account_t * act)
 	}
 	else
 		printf("-1");
-	printf("max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->space_max, act->space_total, act->space_total_realloc, act->size);
+	printf(" max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->space_max, act->space_total, act->space_total_realloc, act->size);
 }
 
 static void account_print_all(void * ignore)
