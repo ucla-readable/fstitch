@@ -1,6 +1,18 @@
 #!/bin/bash
 
-TESTS=${TESTS:-tests-sosp-patch}
+function usage () {
+	echo "Usage: `basename "$0"` [-h] [-d TESTS_DIR]"
+}
+
+TESTS=tests-sosp-patch
+
+while getopts "d:h\?" flag; do
+	case "$flag" in
+		d) TESTS="$OPTARG";;
+		h|\?) usage; exit 0;;
+		*) echo "Unknown argument \"$flag\"" 1>&2; usage 1>&2; exit 1;;
+	esac
+done
 
 if [ ! -d $TESTS ]; then
 	echo "No test directory $TESTS" 1>&2
