@@ -1,13 +1,14 @@
 #!/bin/bash
 
-BENCHDIR="`dirname "$0"`"
-. $BENCHDIR/../common
+BENCHDIR="`dirname "$0"`/.."
+. $BENCHDIR/common
+KUDOSDIR="$BENCHDIR/.."
 
 function run () {
 	echo "## $1"
 	try bench/new -n $1
 	for TEST in tar_rm postmark andrew; do
-		try bench/multi 3 bench/single bench/$TEST 0
+		TESTNAME=mem try bench/multi 3 bench/$TEST
 	done
 }
 
@@ -32,6 +33,8 @@ if [ -a tests-sosp-patch ]; then
 	exit 1
 fi
 
+accounting_on
+
 setmacro CHDESC_NRB 0 kfs/bdesc.h
 setmacro CHDESC_BYTE_MERGE_OVERLAP 0 kfs/chdesc.c
 setmacro CHDESC_BIT_MERGE_OVERLAP 0 kfs/chdesc.c
@@ -47,5 +50,7 @@ run OVERLAP
 
 setmacro CHDESC_NRB 1 kfs/bdesc.h
 run ALL
+
+accounting_restore
 
 mv tests tests-sosp-patch

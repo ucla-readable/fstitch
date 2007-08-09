@@ -241,5 +241,30 @@ function ktime () {
 	return $R
 }
 
+OLDLINE=
+OLDMALLOC=
+function accounting_on () {
+	OLDLINE="`grep '^#define CHDESC_ACCOUNT .$' $KUDOSDIR/kfs/chdesc.c`"
+	if [ "$OLDLINE" != "#define CHDESC_ACCOUNT 1" ]; then
+		sed -i "s/^#define CHDESC_ACCOUNT .\$/#define CHDESC_ACCOUNT 1/" $KUDOSDIR/kfs/chdesc.c
+	fi
+
+	OLDMALLOC="`grep '^#define MALLOC_ACCOUNT .$' $KUDOSDIR/lib/kernel-stdlib.h`"
+	if [ "$OLDMALLOC" != "#define MALLOC_ACCOUNT 1" ]; then
+		sed -i "s/^#define MALLOC_ACCOUNT .\$/#define MALLOC_ACCOUNT 1/" $KUDOSDIR/lib/kernel-stdlib.h
+	fi
+}
+function accounting_restore () {
+	if [ "$OLDLINE" != "#define CHDESC_ACCOUNT 1" ]; then
+		sed -i "s/^#define CHDESC_ACCOUNT 1\$/$OLDLINE/" $KUDOSDIR/kfs/chdesc.c
+		rm -f $KUDOSDIR/obj/*/chdesc.o $KUDOSDIR/obj/*/*/chdesc.o
+	fi
+
+	if [ "$OLDMALLOC" != "#define MALLOC_ACCOUNT 1" ]; then
+		sed -i "s/^#define MALLOC_ACCOUNT 1\$/$OLDMALLOC/" $KUDOSDIR/lib/kernel-stdlib.h
+		make clean
+	fi
+}
+
 KMNT=kfs:/
 MNT=/mnt/test
