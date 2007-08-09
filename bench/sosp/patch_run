@@ -8,7 +8,7 @@ function run () {
 	echo "## $1"
 	try bench/new -n $1
 	for TEST in tar_rm postmark andrew; do
-		TESTNAME=mem try bench/multi 3 bench/$TEST
+		TESTNAME=mem try bench/multi 5 bench/$TEST
 	done
 }
 
