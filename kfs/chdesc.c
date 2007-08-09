@@ -78,6 +78,7 @@ static inline uint64_t u64_diff(uint64_t start, uint64_t end)
 typedef struct account {
 	const char * name;
 	size_t size;
+	bool valid_space_time;
 	uint64_t space_time; /* total 'space * time' */
 	uint64_t space_total; /* total allocated */
 	uint64_t space_total_realloc; /* total allocated, minus realloc effect */
@@ -89,6 +90,7 @@ static inline void account_init(const char * name, size_t size, account_t * act)
 {
 	act->name = name;
 	act->size = size;
+	act->valid_space_time = 1;
 	act->space_time = 0;
 	act->space_total = 0;
 	act->space_total_realloc = 0;
@@ -106,7 +108,8 @@ static inline void account_update_realloc(account_t * act, int32_t prev_space_ch
 		act->time_first = act->time_last = get_cycles();
 	
 	act->space_time += act->space_last * time_diff;
-	assert(act->space_time >= spacetime_prev);
+	if(act->space_time < spacetime_prev)
+		act->valid_space_time = 0;
 	act->space_last += space_change;
 	act->time_last = time_current;
 	if(act->space_last > act->space_max)
@@ -183,8 +186,15 @@ static uint64_t do_div64(uint64_t n, uint64_t base)
 
 static void account_print(const account_t * act)
 {
-	uint64_t mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
-	printf("account: %s: mean=%llu max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->name, mean, act->space_max, act->space_total, act->space_total_realloc, act->size);
+	printf("account: %s: mean=", act->name);
+	if(act->valid_space_time)
+	{
+		uint64_t mean = do_div64(act->space_time, u64_diff(act->time_first, act->time_last));
+		printf("%llu", mean);
+	}
+	else
+		printf("-1");
+	printf("max=%u total=%llu total_realloc=%llu sizeof=%u\n", act->space_max, act->space_total, act->space_total_realloc, act->size);
 }
 
 static void account_print_all(void * ignore)
