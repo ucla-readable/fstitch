@@ -14,6 +14,7 @@ for dir in tests-sosp-time/*; do
 	cat $dir/consistency_mode
 	for TEST in tar rm postmark andrew; do
 		echo -n "	$TEST "
-		bench/ex_time -d $dir -t $TEST | awk '{print $1, $4}'
+		echo -n "`bench/ex_time -d $dir -t $TEST | awk '{print $1, $4}'` "
+		bench/ex_io -d $dir -t $TEST | awk '{print $1}'
 	done
 done
