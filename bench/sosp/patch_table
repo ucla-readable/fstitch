@@ -19,14 +19,15 @@ if [ ! -d $TESTS ]; then
 	exit 1
 fi
 
-echo "# patches(#) undo(kB) total(kB) systime(sec)"
+echo "# patches(#) undo(MB) total(MB) systime(sec)"
 for TEST in tar rm postmark andrew; do
 	echo $TEST
 	for dir in $TESTS/*; do
 		echo -n "	`cat $dir/name`  "
 		echo -n "`bench/ex_space -d $dir -t $TEST | awk '{print $19}'` "
-		echo -n "`bench/ex_space -d $dir -t $TEST | awk '{print $29/1024}'` "
-		echo -n "`bench/ex_space -d $dir -t $TEST | awk '{print $19*$20/1024 + $24*$25/1024 + $29/1024}'` "
+		echo -n "`bench/ex_space -d $dir -t $TEST | awk '{print $29/1024/1024}'` "
+		# FIXME: average multiple runs
+		echo -n "`grep malloc_total $dir/$TEST-mem.sys.0 | awk '{print $10/1024/1024}'` "
 		bench/ex_time -d $dir -t $TEST-mem | awk '{print $4}'
 	done
 done
