@@ -44,8 +44,10 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count)
 		bdesc_mem_free(bdesc);
 		return NULL;
 	}
+#if MALLOC_ACCOUNT
 	extern unsigned long long malloc_total_woblocks;
 	malloc_total_woblocks -= blocksize * count;
+#endif
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->cache_number = (uint32_t) -1;
