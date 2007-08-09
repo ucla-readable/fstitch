@@ -11,7 +11,7 @@ JOURNALSIZE=64
 function usage () {
 	echo "About: start and stop a file system" 
 	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-d DISKCACHE] [-f FS] [-c CMODE] [-k] [-C]"
-	echo "       where HOST-DISKCACHE-FS-CMODE may be kudos-(safe|unsafe)-ext2-(su|meta|full|none), linux-(safe|unsafe)-ext2-none, or linux-(safe|unsafe)-ext3-(ordered|journal)"
+	echo "       where HOST-DISKCACHE-FS-CMODE may be kudos-(safe|unsafe)-ext2-(su|meta|full|none), linux-(safe|unsafe)-ext2-none, or linux-(safe|unsafe)-ext3-(writeback|ordered|journal)"
 	echo "           default is kudos-safe-ext2-su"
 	echo "       -k keeps the existing file system"
 	echo "           default is to format at start"
