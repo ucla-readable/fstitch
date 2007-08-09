@@ -8,7 +8,8 @@ OUTDIR="test"
 
 function usage () {
 	echo "About: create a new kudos test directory"
-	echo "Usage: `basename "$0"` [-h HOST] [-d <safe|unafe>] [-f FS] [-c FS_CONSISTENCY_MODE] [-a APP_CONSISTENCY_MODE] [-n NAME]"
+	echo "Usage: `basename "$0"` [-h HOST] [-d <safe|unafe>] [-f FS] [-c FS_CONSISTENCY_MODE] [-a APP_CONSISTENCY_MODE] [-n NAME] [-C]"
+	echo "       -C enables random simulated crashing and fsck"
 }
 
 DISKCACHE=
@@ -16,8 +17,9 @@ FS=ext2
 CMODE=
 HOST=kudos
 NAME=
+CRASHSIM=0
 
-while getopts "h:d:f:c:a:n:" flag; do
+while getopts "h:d:f:c:a:n:C" flag; do
 	case "$flag" in
 		h) HOST="$OPTARG";;
 		d) DISKCACHE="$OPTARG";;
@@ -25,6 +27,7 @@ while getopts "h:d:f:c:a:n:" flag; do
 		c) CMODE="$OPTARG";;
 		a) ACMODE="$OPTARG";;
 		n) NAME="$OPTARG";;
+		C) CRASHSIM=1;;
 		\?) usage 1>&2; exit 1;;
 		*) usage 1>&2; exit 1;;
 	esac
@@ -34,6 +37,11 @@ canonicalize_modes "$HOST" "$DISKCACHE" "$FS" "$CMODE" "$ACMODE"
 
 if ! supported_host_fs "${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}"; then
 	echo "Unsupported host-diskcache-filesystem-cmode-acmode \"${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}\"" 1>&2
+	exit 1
+fi
+
+if [ "$HOST" != "kudos" -a "$CRASHSIM" != 0 ]; then
+	echo "Crash simulation only possible for kudos host" 1>&2
 	exit 1
 fi
 
@@ -51,6 +59,7 @@ echo "$DISKCACHE" > $OUTDIR/diskcache
 echo "$CMODE" > $OUTDIR/consistency_mode
 echo "$ACMODE" > $OUTDIR/app_consistency_mode
 echo "$NAME" > $OUTDIR/name
+[ $CRASHSIM == 0 ] || touch $OUTDIR/crash_simulate
 uname -a > $OUTDIR/uname
 svnversion . > $OUTDIR/svnversion
 svn diff > $OUTDIR/diff

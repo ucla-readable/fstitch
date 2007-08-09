@@ -10,11 +10,12 @@ JOURNALSIZE=64
 
 function usage () {
 	echo "About: start and stop a file system" 
-	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-d DISKCACHE] [-f FS] [-c CMODE] [-k]"
+	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-d DISKCACHE] [-f FS] [-c CMODE] [-k] [-C]"
 	echo "       where HOST-DISKCACHE-FS-CMODE may be kudos-(safe|unsafe)-ext2-(su|meta|full|none), linux-(safe|unsafe)-ext2-none, or linux-(safe|unsafe)-ext3-(ordered|journal)"
 	echo "           default is kudos-safe-ext2-su"
 	echo "       -k keeps the existing file system"
 	echo "           default is to format at start"
+	echo "       -C enables random simulated crashing"
 }
 
 DISKCACHE=
@@ -22,9 +23,10 @@ FS=ext2
 CMODE=
 HOST=kudos
 FORMAT=1
+CRASHSIM=0
 ACTION=
 
-while getopts "a:h:d:f:c:k" flag; do
+while getopts "a:h:d:f:c:kC" flag; do
 	case "$flag" in
 		a) ACTION="$OPTARG";;
 		h) HOST="$OPTARG";;
@@ -32,6 +34,7 @@ while getopts "a:h:d:f:c:k" flag; do
 		f) FS="$OPTARG";;
 		c) CMODE="$OPTARG";;
 		k) FORMAT=0;;
+		C) CRASHSIM=1;;
 		\?) usage 1>&2; exit 1;;
 		*) usage 1>&2; exit 1;;
 	esac
@@ -47,6 +50,11 @@ canonicalize_modes "$HOST" "$DISKCACHE" "$FS" "$CMODE" ""
 
 if ! supported_host_fs "${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}"; then
 	echo "Unsupported host-diskcache-filesystem-cmode-acmode \"${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}\"" 1>&2
+	exit 1
+fi
+
+if [ "$HOST" != "kudos" -a "$CRASHSIM" != 0 ]; then
+	echo "Crash simulation only possible for kudos host" 1>&2
 	exit 1
 fi
 
@@ -86,9 +94,9 @@ if [ "$ACTION" == "start" ]; then
 			fi
 		fi
 		if [ "$NWBBLOCKS" == "" ]; then
-			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM
 		else
-			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE
+			try sudo insmod $KUDOSDIR/kfs/kkfsd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM
 		fi
 		try sudo mount -t kfs $KMNT $MNT
 		try sudo chmod 777 $MNT
@@ -100,9 +108,9 @@ if [ "$ACTION" == "start" ]; then
 		[ "$CMODE" == "none" ] && UNLINK=1 || UNLINK=0
 		[ $FORMAT -eq 1 ] && try make -f Makefile.user fsclean all
 		if [ "$NWBBLOCKS" == "" ]; then
-			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE $MNT &
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM $MNT &
 		else
-			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE $MNT &
+			try $KUDOSDIR/uukfsd.sh unix_file=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM $MNT &
 		fi
 	else
 		try sudo hdparm -W $(($UNSAFE == 1)) $DEV

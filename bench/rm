@@ -6,11 +6,11 @@ function test () {
 }
 
 function run () {
-	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start -k
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE $CRASHSIM -a start -k
 	[ ! -d $MNT/$TAROUT ] && echo "$MNT/$TAROUT does not exist" && exit 1
 	prepare_postinit $T $N $OUTDIR $HOST
 	ktime total test
-	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE $CRASHSIM -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
@@ -32,4 +32,4 @@ build $T $N $KUDOSDIR $HOST
 
 log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST
+finish $T $N $KUDOSDIR $OUTDIR $HOST $CRASHSIM

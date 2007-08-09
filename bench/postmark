@@ -13,10 +13,10 @@ function run_postmark () {
 }
 
 function run () {
-	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE $CRASHSIM -a start
 	prepare_postinit $T $N $OUTDIR $HOST
 	ktime total run_postmark
-	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
+	try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE $CRASHSIM -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
@@ -39,4 +39,4 @@ try sync
 
 log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST
+finish $T $N $KUDOSDIR $OUTDIR $HOST $CRASHSIM

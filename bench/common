@@ -130,6 +130,7 @@ function finish () {
 	KUDOSDIR=$3
 	OUTDIR=$4
 	HOST=$5
+	CRASHSIM=$6
 	PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
 	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]); then
 		grep -q idle=poll /proc/cmdline && TP=.2 || TP=1
@@ -138,6 +139,23 @@ function finish () {
 	if ps -C blktrace >/dev/null; then
 		echo "+ kill blktrace"
 		sudo killall blktrace
+	fi
+	if [ "$CRASHSIM" ]; then
+		# ugly. can we avoid this duplication of code with bench/init easily?
+		DEV=
+		PART=
+		if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]; then
+			DEV=${DEV:-/dev/sdb}
+			PART=${DEV}${PART:-1}
+		elif [ "$HOST" == "uu" ]; then
+			DEV=${DEV:-$KUDOSDIR/obj/fs/ext2.img}
+			PART=${DEV}${PART:-}
+		fi
+		# run fsck on the file system
+		echo "+ fsck -n"
+		try sudo fsck -f -n $PART &> "$OUTDIR/$T.fsck-n.$N"
+		echo "+ fsck -y"
+		try sudo fsck -f -y $PART &> "$OUTDIR/$T.fsck-y.$N"
 	fi
 }
 
@@ -206,6 +224,7 @@ function load_config () {
 	FS=`cat "$OUTDIR/fs"`
 	CMODE=`cat "$OUTDIR/consistency_mode"`
 	ACMODE=`cat "$OUTDIR/app_consistency_mode"`
+	[ -f "$OUTDIR/crash_simulate" ] && CRASHSIM="-C" || CRASHSIM=
 }
 
 # Run $2.. (and name it $1) and display time stats
