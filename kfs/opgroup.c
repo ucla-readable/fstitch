@@ -693,7 +693,9 @@ int opgroup_label(opgroup_t * opgroup, const char * label)
 {
 	if(!opgroup)
 		return -EINVAL;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, opgroup->head, "og head: %s", label);
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, opgroup->tail, "og tail: %s", label);
+	if(WEAK(opgroup->head))
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(opgroup->head), "og head: %s", label);
+	if(WEAK(opgroup->tail))
+		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(opgroup->tail), "og tail: %s", label);
 	return 0;
 }
