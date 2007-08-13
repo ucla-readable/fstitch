@@ -831,50 +831,6 @@ error:
 	return r;
 }
 
-static ssize_t serve_read(struct file * filp, char __user * buffer, size_t count, loff_t * f_pos)
-{
-	Dprintf("%s(%s, %d, %d)\n", __FUNCTION__, filp->f_dentry->d_name.name, count, (int) *f_pos);
-	fdesc_t * fdesc = file2fdesc(filp);
-	CFS_t * cfs = dentry2cfs(filp->f_dentry);
-	/* pick a reasonably big, but not too big, maximum size we will allocate
-	 * on behalf of a requesting user process... TODO: use it repeatedly? */
-	size_t data_size = (count > 65536) ? 65536 : count;
-	char * data = vmalloc(data_size);
-	uint32_t offset = *f_pos;
-	ssize_t r = 0;
-	unsigned long bytes;
-	
-	if (!data)
-		return -ENOMEM;
-	
-	kfsd_enter();
-	r = CALL(cfs, read, fdesc, data, offset, data_size);
-	kfsd_leave(1);
-	
-	/* CFS gives us an "error" when we hit EOF */
-	if (r == -1)
-		r = 0;
-	else if (r < 0)
-		goto out;
-	
-	bytes = copy_to_user(buffer, data, r);
-	if (bytes)
-	{
-		if (r == bytes)
-		{
-			r = -EFAULT;
-			goto out;
-		}
-		r -= bytes;
-	}
-	
-	*f_pos += r;
-	
-out:
-	vfree(data);
-	return r;
-}
-
 static int serve_link(struct dentry * src_dentry, struct inode * parent, struct dentry * target_dentry)
 {
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, src_dentry->d_name.name, target_dentry->d_name.name);
@@ -1224,7 +1180,6 @@ static void serve_put_link(struct dentry * dentry, struct nameidata * nd)
 // fs/smbfs/file.c served as a good reference for implementing these operations
 
 // TODOs:
-// - should we use generic_file_read() since we now have pagecache support?
 // - should we use the generic vector and sendfile functions?
 // - linux's pagecache and kkfsd's caches do duplicate cacheing, can we
 //   improve this situation?
@@ -1248,6 +1203,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 
 	do {
 		r = CALL(cfs, read, fdesc, buffer, offset, count);
+		/* CFS gives us an "error" when we hit EOF */
 		if (r == -1)
 			r = 0;
 		else if (r < 0)
@@ -1394,7 +1350,7 @@ static ssize_t serve_generic_file_buffered_write(struct file * filp,
 			goto zero_length_segment;
 		}
 
-		/* serve_writepage() does work of prepare_write(),
+		/* serve_write_page() does work of prepare_write(),
 		 * filemap_copy_from_user(), and commit_write() */
 		copied = serve_write_page(filp, pos, page, buf, bytes);
 		flush_dcache_page(page);
@@ -1404,7 +1360,7 @@ static ssize_t serve_generic_file_buffered_write(struct file * filp,
 			status = copied;
 			unlock_page(page);
 			page_cache_release(page);
-			/* serve_writepage() may have instantiated a few blocks
+			/* serve_write_page() may have instantiated a few blocks
 			 * outside i_size. Trim these off again. */
 			if (pos + bytes > isize)
 				vmtruncate(inode, isize);
@@ -1429,7 +1385,7 @@ static ssize_t serve_generic_file_buffered_write(struct file * filp,
 	if (cached_page)
 		page_cache_release(cached_page);
 
-	/* OK to ignore O_SYNC since serve_writepage() does its work */
+	/* OK to ignore O_SYNC since serve_write_page() does its work */
 
 	assert(!(filp->f_flags & O_DIRECT));
 
@@ -1547,7 +1503,8 @@ static struct file_operations kfs_reg_file_ops = {
 	.open = serve_open,
 	.release = serve_release,
 	.llseek = generic_file_llseek,
-	.read = serve_read,
+	.read = do_sync_read,
+	.aio_read = generic_file_aio_read,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 # error Check that serve_do_sync_write works with this kernel version
 	//.write = serve_do_sync_write,
@@ -1580,9 +1537,6 @@ static struct file_operations kfs_dir_file_ops = {
 
 static struct address_space_operations kfs_aops = {
 	.readpage = serve_readpage,
-	//.writepage = serve_writepage,
-	//.prepare_write = serve_prepare_write,
-	//.commit_write = serve_commit_write
 };
 
 static struct dentry_operations kfs_dentry_ops = {
