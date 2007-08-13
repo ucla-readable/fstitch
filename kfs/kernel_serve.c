@@ -1,5 +1,6 @@
 #include <lib/platform.h>
 #include <lib/vector.h>
+#include <lib/linux_unexported.h>
 
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -1272,118 +1273,241 @@ static int serve_readpage(struct file * filp, struct page * page)
 	return r;
 }
 
-static int serve_writepage_sync(struct inode * inode, fdesc_t * fdesc,
-                                struct page * page, unsigned long pageoffset,
-                                unsigned int count)
-{
-	loff_t offset = ((loff_t) page->index << PAGE_CACHE_SHIFT) + pageoffset;
-	char * buffer = kmap(page) + pageoffset;
-	CFS_t * cfs = sb2cfs(inode->i_sb);
-	int r = 0;
 
-	Dprintf("%s(ino = %lu, offset = %lld, count = %u)\n", __FUNCTION__, inode->i_ino, offset, count);
-
-	assert(kfsd_have_lock());
-
-	do {
-		r = CALL(cfs, write, fdesc, buffer, offset, count);
-		if (r < 0)
-			break;
-
-		count -= r;
-		offset += r;
-		buffer += r;
-
-		inode->i_mtime = inode->i_atime = current_fs_time(inode->i_sb);
-		if (offset > inode->i_size)
-			inode->i_size = offset;
-	} while (count);
-
-	kunmap(page);
-	return r;
-}
-
-static int serve_writepage(struct page * page, struct writeback_control * wbc)
+static ssize_t serve_write_page(struct file * filp, loff_t pos,
+                                struct page * page,
+                                const char __user * buf, size_t len)
 {
 	struct address_space * mapping = page->mapping;
-	struct inode * inode;
-	unsigned long end_index;
-	unsigned offset = PAGE_CACHE_SIZE;
+	loff_t pageoffset = pos - ((loff_t) page->index << PAGE_CACHE_SHIFT);
+	size_t copied;
+	struct inode * inode = mapping->host;
 	CFS_t * cfs;
 	fdesc_t * fdesc;
-	int r;
+	char * buffer;
+	ssize_t written;
 
-	assert(mapping);
-	inode = mapping->host;
-	assert(inode);
-
-	Dprintf("%s(ino = %lu, index = %lu)\n", __FUNCTION__, inode->i_ino, page->index);
-
-	end_index = inode->i_size >> PAGE_CACHE_SHIFT;
-
-	if (page->index >= end_index)
-	{
-		offset = inode->i_size & (PAGE_CACHE_SIZE-1);
-		if (page->index >= end_index + 1 || !offset)
-			return 0;
-	}
-
-	assert(kfsd_have_lock());
-
-	cfs = sb2cfs(inode->i_sb);
-
-	// HACK: CFS can not write files without an fdesc, but writepage()
-	// has only an inode. Two workarounds:
-	if (kfsd_fdesc)
-	{
-		// We were called by kernel_serve code that knows to set kfsd_fdesc
-		fdesc = kfsd_fdesc;
-	}
-	else
-	{
-		// We were not called by kernel_serve code that knows about kfsd_fdesc
-		printf("%s: Please set kfsd_fdesc for this trace:\n", __FUNCTION__);
-		dump_stack();
-
-		r = CALL(cfs, open, inode->i_ino, 0, &fdesc);
-		if (r < 0)
-		{
-			fprintf(stderr, "%s(ino = %lu): open() = %d\n", __FUNCTION__, inode->i_ino, r);
-			unlock_page(page);
-			return r;
-		}
-	}
-		
-	page_cache_get(page);
-	r = serve_writepage_sync(inode, fdesc, page, 0, offset);
-	SetPageUptodate(page);
-	unlock_page(page);
-	page_cache_release(page);
-
-	if (!kfsd_fdesc)
-		if ((r = CALL(cfs, close, fdesc)) < 0)
-			fprintf(stderr, "%s(ino = %lu): close() = %d\n", __FUNCTION__, inode->i_ino, r);
-
-	return r;
-}
-
-static int serve_prepare_write(struct file * filp, struct page * page,
-                               unsigned from, unsigned to)
-{
-	return 0;
-}
-
-static int serve_commit_write(struct file * filp, struct page * page,
-                              unsigned offset, unsigned to)
-{
-	Dprintf("%s(filp = \"%s\", index = %lu)\n", __FUNCTION__, filp->f_dentry->d_name.name, page->index);
-	unsigned count = to - offset;
-	int r;
+	Dprintf("%s(file = \"%s\", pos = %lu, len = %u)\n", __FUNCTION__, filp->f_dentry->d_name.name, pos, len);
 
 	kfsd_enter();
-	r = serve_writepage_sync(filp->f_dentry->d_inode, file2fdesc(filp), page, offset, count);
+
+	copied = kudos_filemap_copy_from_user(page, pageoffset, buf, len);
+	assert(copied == len);
+
+	cfs = sb2cfs(inode->i_sb);
+	fdesc = file2fdesc(filp);
+	buffer = kmap(page) + pageoffset;
+	written = CALL(cfs, write, fdesc, buffer, pos, len);
+	kunmap(page);
+	if (written >= 0)
+	{
+		inode->i_mtime = inode->i_atime = current_fs_time(inode->i_sb);
+		pos += written;
+		if (pos > inode->i_size)
+			inode->i_size = pos;
+
+		assert(written == len);
+	}
+
 	kfsd_leave(1);
-	return r;
+	return written;
+}
+
+#include <linux/pagevec.h>
+#include <linux/swap.h>
+
+// Copy of 2.6.20.1 mm/filemap.c:__grab_cache_page() since it is not exported
+static inline struct page *
+__grab_cache_page(struct address_space *mapping, unsigned long index,
+            struct page **cached_page, struct pagevec *lru_pvec)
+{
+	int err;
+	struct page *page;
+  repeat:
+	page = find_lock_page(mapping, index);
+	if (!page) {
+		if (!*cached_page) {
+			*cached_page = page_cache_alloc(mapping);
+			if (!*cached_page)
+				return NULL;
+		}
+		err = add_to_page_cache(*cached_page, mapping,
+								index, GFP_KERNEL);
+		if (err == -EEXIST)
+			goto repeat;
+		if (err == 0) {
+			page = *cached_page;
+			page_cache_get(page);
+			if (!pagevec_add(lru_pvec, page))
+				__pagevec_lru_add(lru_pvec);
+			*cached_page = NULL;
+		}
+	}
+	return page;
+}
+
+// Reimplementation of 2.6.20.1 generic_file_buffered_write() to work with
+// integrated linux-kudos cache
+static ssize_t serve_generic_file_buffered_write(struct file * filp,
+                                                 loff_t * ppos,
+                                                 const char __user * buf,
+                                                 size_t count)
+{
+	struct address_space * mapping = filp->f_mapping;
+	struct inode * inode = mapping->host;
+	long status = 0;
+	struct page * cached_page = NULL;
+	size_t bytes;
+	ssize_t written = 0;
+	struct pagevec lru_pvec;
+	loff_t pos = *ppos;
+
+	pagevec_init(&lru_pvec, 0);
+
+	do
+	{
+		unsigned long index = pos >> PAGE_CACHE_SHIFT;
+		unsigned long offset = pos & (PAGE_CACHE_SIZE - 1);
+		struct page * page;
+		size_t copied;
+
+		bytes = PAGE_CACHE_SIZE - offset;
+		/* Limit the size of the copy to the caller's write size */
+		bytes = MIN(bytes, count);
+		/* We do not use io vectors so we need not sorry about segments */
+
+		/* Bring in the user page that we will copy from _first_.
+		 * Otherwise there's a nasty deadlock on copying from the
+		 * same page as we're writing to, without it being marked
+		 * up-to-date. */
+		fault_in_pages_readable(buf, bytes);
+
+		page = __grab_cache_page(mapping, index, &cached_page, &lru_pvec);
+		if (!page) {
+			status = -ENOMEM;
+			break;
+		}
+
+		if (unlikely(bytes == 0)) {
+			status = 0;
+			copied = 0;
+			goto zero_length_segment;
+		}
+
+		/* serve_writepage() does work of prepare_write(),
+		 * filemap_copy_from_user(), and commit_write() */
+		copied = serve_write_page(filp, pos, page, buf, bytes);
+		flush_dcache_page(page);
+		if (unlikely(copied < 0))
+		{
+			loff_t isize = i_size_read(inode);
+			status = copied;
+			unlock_page(page);
+			page_cache_release(page);
+			/* serve_writepage() may have instantiated a few blocks
+			 * outside i_size. Trim these off again. */
+			if (pos + bytes > isize)
+				vmtruncate(inode, isize);
+			break;
+		}
+
+	  zero_length_segment:
+		written += copied;
+		count -= copied;
+		pos += copied;
+		buf += copied;
+		if (unlikely(copied != bytes))
+			status = -EFAULT;
+		unlock_page(page);
+		mark_page_accessed(page);
+		page_cache_release(page);
+		balance_dirty_pages_ratelimited(mapping);
+		cond_resched();
+	} while(count);
+	*ppos = pos;
+
+	if (cached_page)
+		page_cache_release(cached_page);
+
+	/* OK to ignore O_SYNC since serve_writepage() does its work */
+
+	assert(!(filp->f_flags & O_DIRECT));
+
+	pagevec_lru_add(&lru_pvec);
+	return (written >= 0) ? written : status;
+}
+
+// Reimplementation of 2.6.20.1 __generic_file_aio_write_nolock() to call
+// kernel_serve's generic_file_buffered_write()
+static ssize_t serve__generic_file_aio_write_nolock(struct file * filp,
+                                                    loff_t * ppos,
+                                                    const char __user * buf,
+                                                    size_t len)
+{
+	struct address_space * mapping = filp->f_mapping;
+	struct inode * inode = mapping->host;
+	size_t count = len;
+	ssize_t written = 0;
+	ssize_t err;
+
+	if (!access_ok(VERIFY_READ, buf, len))
+		return -EFAULT;
+
+	vfs_check_frozen(inode->i_sb, SB_FREEZE_WRITE);
+
+	/* We can write back this queue in page reclaim */
+	current->backing_dev_info = mapping->backing_dev_info;
+
+	err = generic_write_checks(filp, ppos, &count, S_ISBLK(inode->i_mode));
+	if (err)
+		goto out;
+
+	if (count == 0)
+		goto out;
+
+	err = remove_suid(filp->f_path.dentry);
+	if (err)
+		goto out;
+
+	file_update_time(filp);
+
+	assert(!(filp->f_flags & O_DIRECT));
+
+	written = serve_generic_file_buffered_write(filp, ppos, buf, count);
+
+  out:
+	current->backing_dev_info = NULL;
+	return written ? written : err;
+}
+
+// Reimplementation of 2.6.20.1 generic_file_aio_write() to call kernel_serve's
+// __generic_file_aio_write_nolock()
+static ssize_t serve_generic_file_aio_write(struct file * filp,
+                                            loff_t * ppos,
+                                            const char __user * buf,
+                                            size_t len)
+{
+	struct address_space * mapping = filp->f_mapping;
+	struct inode * inode = mapping->host;
+	ssize_t ret;
+
+	mutex_lock(&inode->i_mutex);
+	ret = serve__generic_file_aio_write_nolock(filp, ppos, buf, len);
+	mutex_unlock(&inode->i_mutex);
+
+	/* No need to handle O_SYNC or IS_SYNC() because the above call does the
+	 * work */
+	return ret;
+}
+
+// Reimplementation of 2.6.20.1 do_sync_write() to just call kernel_serve's
+// generic_file_aio_write()
+static ssize_t serve_do_sync_write(struct file * filp,
+                                   const char __user * buf,
+                                   size_t len, loff_t * ppos)
+{
+	/* Call what kernel_serve would expose as filp->f_op->aio_write() */
+	return serve_generic_file_aio_write(filp, ppos, buf, len);
 }
 
 
@@ -1425,12 +1549,12 @@ static struct file_operations kfs_reg_file_ops = {
 	.llseek = generic_file_llseek,
 	.read = serve_read,
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-	.write = generic_file_write, // kfs_aops requires going thru the pagecache
+# error Check that serve_do_sync_write works with this kernel version
+	//.write = serve_do_sync_write,
 #else
-	.write = do_sync_write, // kfs_aops requires going thru the pagecache
-	.aio_write = generic_file_aio_write,
+	.write = serve_do_sync_write,
 #endif
-	.mmap = generic_file_mmap,
+	.mmap = generic_file_readonly_mmap,
 	.fsync = serve_fsync
 };
 
@@ -1456,9 +1580,9 @@ static struct file_operations kfs_dir_file_ops = {
 
 static struct address_space_operations kfs_aops = {
 	.readpage = serve_readpage,
-	.writepage = serve_writepage,
-	.prepare_write = serve_prepare_write,
-	.commit_write = serve_commit_write
+	//.writepage = serve_writepage,
+	//.prepare_write = serve_prepare_write,
+	//.commit_write = serve_commit_write
 };
 
 static struct dentry_operations kfs_dentry_ops = {
