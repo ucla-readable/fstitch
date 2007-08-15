@@ -1,13 +1,27 @@
 #!/bin/bash
 
-if [ ! -d tests-sosp-time ]; then
-	echo "No test directory tests-sosp-time" 1>&2
+function usage () {
+	echo "Usage: `basename "$0"` [-h] [-d TESTS_DIR]"
+}
+
+TESTS=tests-sosp-time
+
+while getopts "d:h\?" flag; do
+	case "$flag" in
+		d) TESTS="$OPTARG";;
+		h|\?) usage; exit 0;;
+		*) echo "Unknown argument \"$flag\"" 1>&2; usage 1>&2; exit 1;;
+	esac
+done
+
+if [ ! -d $TESTS ]; then
+	echo "No test directory $TESTS" 1>&2
 	exit 1
 fi
 
 echo "# host diskcache fs cmode acmode"
 echo "#	wall_time sys_time"
-for dir in tests-sosp-time/*; do
+for dir in $TESTS/*; do
 	echo -n "`cat $dir/host` "
 	echo -n "`cat $dir/diskcache` "
 	echo -n "`cat $dir/fs` "
