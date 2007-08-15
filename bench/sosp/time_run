@@ -7,18 +7,18 @@ RUNLINUX=0
 
 function run () {
 	[ $RUNLINUX -eq 0 ] && [ "$1" == "linux" ] && return
-	[ $RUNLINUX -eq 1 ] && [ "$1" != "linux" ] && return
+	#[ $RUNLINUX -eq 1 ] && [ "$1" != "linux" ] && return
 	try bench/new -h $1 -d $2 -f $3 -c $4
 	for TEST in tar_rm postmark andrew; do
 		try bench/multi 5 bench/$TEST
 	done
 }
 
-if [ $# -eq 1 -a "$1" != "--linux" ] || [ $# -gt 1 ]; then
-	echo "Usage: `basename "$0"` [--linux]" 1>&2
+if [ $# -eq 1 -a "$1" != "--with-linux" ] || [ $# -gt 1 ]; then
+	echo "Usage: `basename "$0"` [--with-linux]" 1>&2
 	exit 1
 fi
-if [ "$1" == "--linux" ]; then
+if [ "$1" == "--with-linux" ]; then
 	RUNLINUX=1
 fi
 

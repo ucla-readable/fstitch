@@ -7,16 +7,16 @@ RUNLINUX=0
 
 function run () {
 	[ $RUNLINUX -eq 0 ] && [ "$1" == "linux" ] && return
-	[ $RUNLINUX -eq 1 ] && [ "$1" != "linux" ] && return
+	#[ $RUNLINUX -eq 1 ] && [ "$1" != "linux" ] && return
 	try bench/new -h $1 -d $2 -f $3 -c $4 -a $5
 	try bench/multi 5 bench/imap
 }
 
-if [ $# -eq 1 -a "$1" != "--linux" ] || [ $# -gt 1 ]; then
-	echo "Usage: `basename "$0"` [--linux]" 1>&2
+if [ $# -eq 1 -a "$1" != "--with-linux" ] || [ $# -gt 1 ]; then
+	echo "Usage: `basename "$0"` [--with-linux]" 1>&2
 	exit 1
 fi
-if [ "$1" == "--linux" ]; then
+if [ "$1" == "--with-linux" ]; then
 	RUNLINUX=1
 fi
 
@@ -40,14 +40,17 @@ fi
 # safe
 # opgroup
 run kudos safe ext2 su opgroup
+run kudos safe ext2 meta opgroup
 run kudos safe ext2 full opgroup
 # linear
 #run kudos safe ext2 full linear
 run linux safe ext3 journal linear
 # fsync
 run kudos safe ext2 su fsync
+run kudos safe ext2 meta fsync
 run kudos safe ext2 full fsync
 #run linux safe ext2 none fsync
+run linux safe ext3 writeback fsync
 run linux safe ext3 journal fsync
 
 mv tests tests-sosp-imap
