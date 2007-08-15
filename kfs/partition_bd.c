@@ -13,24 +13,24 @@ struct partition_info {
 	uint32_t start;
 };
 
-static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * partition_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct partition_info * info = (struct partition_info *) object;
 	
 	/* make sure it's a valid block */
 	assert(count && number + count <= object->numblocks);
 	
-	return CALL(info->bd, read_block, info->start + number, count);
+	return CALL(info->bd, read_block, info->start + number, count, page);
 }
 
-static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * partition_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct partition_info * info = (struct partition_info *) object;
 	
 	/* make sure it's a valid block */
 	assert(count && number + count <= object->numblocks);
 	
-	return CALL(info->bd, synthetic_read_block, info->start + number, count);
+	return CALL(info->bd, synthetic_read_block, info->start + number, count, page);
 }
 
 static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)

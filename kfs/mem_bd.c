@@ -22,7 +22,7 @@ struct mem_info {
 	blockman_t blockman;
 };
 
-static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct mem_info * info = (struct mem_info *) object;
 	bdesc_t * bdesc;
@@ -34,18 +34,19 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	if(bdesc)
 	{
 		assert(bdesc->length == count * object->blocksize);
+		bdesc_ensure_linked_page(bdesc, page);
 		if(!bdesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
-		bdesc = bdesc_alloc(number, object->blocksize, count);
+		bdesc = bdesc_alloc(number, object->blocksize, count, page);
 		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
 	}
 
-	memcpy(bdesc->data, &info->blocks[object->blocksize * number], object->blocksize * count);
+	memcpy(bdesc_data(bdesc), &info->blocks[object->blocksize * number], object->blocksize * count);
 
 	/* currently we will never get synthetic blocks anyway, but it's easy to handle them */
 	if(bdesc->synthetic)
@@ -55,11 +56,11 @@ static bdesc_t * mem_bd_read_block(BD_t * object, uint32_t number, uint16_t coun
 	return bdesc;
 }
 
-static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * mem_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	/* mem_bd doesn't bother with synthetic blocks,
 	 * since it's just as fast to use real ones */
-	return mem_bd_read_block(object, number, count);
+	return mem_bd_read_block(object, number, count, page);
 }
 
 static int mem_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)

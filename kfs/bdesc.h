@@ -34,7 +34,11 @@
 #define DIRTY_QUEUE_REORDERING 0
 
 struct bdesc {
-	uint8_t *data;
+#ifdef __KERNEL__
+	page_t * page;
+#else
+	uint8_t * _data;
+#endif
 	uint32_t length;
 
 	unsigned in_flight : 1;
@@ -103,7 +107,14 @@ int bdesc_init(void);
 
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
-bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count);
+bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_t * page);
+
+/* return the address of the bdesc's data content.
+ * return value valid only until the bdesc's page changes. */
+static inline uint8_t * bdesc_data(bdesc_t * bdesc);
+
+/* ensure that the bdesc's backing page is 'page' */
+static inline void bdesc_ensure_linked_page(bdesc_t * bdesc, page_t * page);
 
 /* increase the reference count of a bdesc */
 static inline bdesc_t * bdesc_retain(bdesc_t * bdesc);
@@ -123,6 +134,30 @@ void bdesc_autorelease_pool_pop(void);
 
 /* get the number of autorelease pools on the stack */
 unsigned int bdesc_autorelease_pool_depth(void);
+
+#ifdef __KERNEL__
+# include <linux/page-flags.h>
+# include <linux/mm.h>
+#endif
+static inline uint8_t * bdesc_data(bdesc_t * bdesc)
+{
+#ifdef __KERNEL__
+	assert(!PageHighMem(bdesc->page));
+	return lowmem_page_address(bdesc->page);
+#else
+	return bdesc->_data;
+#endif
+}
+
+static inline void bdesc_ensure_linked_page(bdesc_t * bdesc, page_t * page)
+{
+#ifdef __KERNEL__
+	extern void bdesc_link_page(bdesc_t * bdesc, page_t * page);
+	if(!page || bdesc->page == page)
+		return;
+	bdesc_link_page(bdesc, page);
+#endif
+}
 
 /* increase the reference count of a bdesc */
 static inline bdesc_t * bdesc_retain(bdesc_t * bdesc)

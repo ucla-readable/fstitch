@@ -1099,7 +1099,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 	buf = malloc(size);
 	assert(buf);
 
-	r = CALL(reqcfs(req), read, fdesc, buf, off, size);
+	r = CALL(reqcfs(req), read, fdesc, NULL, buf, off, size);
 	if (r <= 0)
 	{
 		// TODO: handle EOF?
@@ -1135,7 +1135,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 	fdesc = fi_get_fdesc(fi);
 
 	static_assert(sizeof(uint32_t) == sizeof(size));
-	nbytes = CALL(reqcfs(req), write, fdesc, buf, offset, size);
+	nbytes = CALL(reqcfs(req), write, fdesc, NULL, buf, offset, size);
 	if (nbytes < size)
 	{
 		r = fuse_reply_write(req, nbytes);

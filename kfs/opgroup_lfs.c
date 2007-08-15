@@ -39,14 +39,14 @@ static uint32_t opgroup_lfs_allocate_block(LFS_t * object, fdesc_t * file, int p
 	return block;
 }
 
-static bdesc_t * opgroup_lfs_lookup_block(LFS_t * object, uint32_t number)
+static bdesc_t * opgroup_lfs_lookup_block(LFS_t * object, uint32_t number, page_t * page)
 {
-	return CALL(((struct opgroup_info *) object)->lfs, lookup_block, number);
+	return CALL(((struct opgroup_info *) object)->lfs, lookup_block, number, page);
 }
 
-static bdesc_t * opgroup_lfs_synthetic_lookup_block(LFS_t * object, uint32_t number)
+static bdesc_t * opgroup_lfs_synthetic_lookup_block(LFS_t * object, uint32_t number, page_t * page)
 {
-	return CALL(((struct opgroup_info *) object)->lfs, synthetic_lookup_block, number);
+	return CALL(((struct opgroup_info *) object)->lfs, synthetic_lookup_block, number, page);
 }
 
 static fdesc_t * opgroup_lfs_lookup_inode(LFS_t * object, inode_t ino)

@@ -158,7 +158,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 				if(!len)
 					len = 4096;
 			}
-			memcpy(private->bdesc->data + (4096 * i), p, len);
+			memcpy(bdesc_data(private->bdesc) + (4096 * i), p, len);
 		}
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
 		bio_iovec_idx(bio, i)->bv_page = NULL;
@@ -209,7 +209,7 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 	return error;
 }
 
-static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	DEFINE_WAIT(wait);
 	struct linux_info * info = (struct linux_info *) object;
@@ -231,6 +231,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	if(bdesc)
 	{
 		assert(bdesc->length == count * object->blocksize);
+		bdesc_ensure_linked_page(bdesc, page);
 		if(!bdesc->synthetic)
 		{
 			KDprintk(KERN_ERR "already got it. done w/ read\n");
@@ -269,7 +270,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		else if(bd)
 			blocks[i] = bd;
 		else {
-			blocks[i] = bdesc_alloc(i_number, LINUX_BLOCKSIZE, count);
+			blocks[i] = bdesc_alloc(i_number, LINUX_BLOCKSIZE, count, !i ? page : NULL);
 			if(blocks[i] == NULL)
 				return NULL;
 			bdesc_autorelease(blocks[i]);
@@ -366,7 +367,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	return blocks[0];
 }
 
-static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct linux_info * info = (struct linux_info *) object;
 	bdesc_t * bdesc;
@@ -378,10 +379,11 @@ static bdesc_t * linux_bd_synthetic_read_block(BD_t * object, uint32_t number, u
 	if(bdesc)
 	{
 		assert(bdesc->length == count * object->blocksize);
+		bdesc_ensure_linked_page(bdesc, page);
 		return bdesc;
 	}
 	
-	bdesc = bdesc_alloc(number, LINUX_BLOCKSIZE, count);
+	bdesc = bdesc_alloc(number, LINUX_BLOCKSIZE, count, page);
 	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
@@ -434,7 +436,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 #if REVISION_TAIL_INPLACE
 	revision_back = revision_tail_prepare(block, object);
 	assert(revision_back >= 0);
-	memcpy(page_address(bv->bv_page), block->data, block->length);
+	memcpy(page_address(bv->bv_page), bdesc_data(block), block->length);
 #else
 	revision_back = revision_tail_prepare(block, object, page_address(bv->bv_page));
 	assert(revision_back >= 0);

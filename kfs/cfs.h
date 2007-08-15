@@ -15,8 +15,8 @@ struct CFS {
 	DECLARE(CFS_t, int, open, inode_t inode, int mode, fdesc_t ** fdesc);
 	DECLARE(CFS_t, int, create, inode_t parent, const char * name, int mode, const metadata_set_t * initial_metadata, fdesc_t ** fdesc, inode_t * new_inode);
 	DECLARE(CFS_t, int, close, fdesc_t * fdesc);
-	DECLARE(CFS_t, int, read, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size);
-	DECLARE(CFS_t, int, write, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size);
+	DECLARE(CFS_t, int, read, fdesc_t * fdesc, page_t * page, void * data, uint32_t offset, uint32_t size);
+	DECLARE(CFS_t, int, write, fdesc_t * fdesc, page_t * page, const void * data, uint32_t offset, uint32_t size);
 	DECLARE(CFS_t, int, get_dirent, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep);
 	DECLARE(CFS_t, int, truncate, fdesc_t * fdesc, uint32_t size);
 	DECLARE(CFS_t, int, unlink, inode_t parent, const char * name);

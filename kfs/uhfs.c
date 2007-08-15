@@ -288,13 +288,14 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 	return r;
 }
 
-static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
+static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, page_t * page, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(cfs, %p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const uint32_t blocksize = state->lfs->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
+	const uint32_t pageoffset = offset & (PAGE_SIZE - 1);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_read = 0;
 	uint32_t file_size = -1;
@@ -324,7 +325,11 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_read);
 		if (number != INVALID_BLOCK)
-			block = CALL(state->lfs, lookup_block, number);
+		{
+			bool in_first_page = (pageoffset + size_read) < PAGE_SIZE;
+			page_t * cur_page = in_first_page ? page : NULL;
+			block = CALL(state->lfs, lookup_block, number, cur_page);
+		}
 		if (!block)
 			return size_read ? size_read : -1;
 
@@ -333,7 +338,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 			if (offset + size_read + limit > file_size)
 				limit = file_size - offset - size_read;
 
-		memcpy((uint8_t*)data + size_read, block->data + dataoffset, limit);
+		memcpy((uint8_t*)data + size_read, bdesc_data(block) + dataoffset, limit);
 		size_read += limit;
 		/* dataoffset only needed for first block */
 		dataoffset = 0;
@@ -345,7 +350,7 @@ static int uhfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset,
 	return size_read ? size_read : (size ? -1 : 0);
 }
 
-static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
+static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(%p, %p, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
@@ -353,6 +358,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	BD_t * const bd = state->lfs->blockdev;
 	const uint32_t blocksize = state->lfs->blocksize;
 	const uint32_t blockoffset = offset - (offset % blocksize);
+	const uint32_t pageoffset = offset & (PAGE_SIZE - 1);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
 	chdesc_t * write_head = state->write_head ? *state->write_head : NULL;
@@ -373,7 +379,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 	if (offset > filesize) {
 		while (offset > filesize)
 		{
-			r = uhfs_write(cfs, fdesc, NULL, filesize, offset - filesize);
+			r = uhfs_write(cfs, fdesc, NULL, NULL, filesize, offset - filesize);
 			if (r < 0)
 				return r;
 			if (r == 0)
@@ -392,6 +398,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		bdesc_t * block = NULL;
 		chdesc_t * save_head;
 		const uint32_t length = MIN(blocksize - dataoffset, size - size_written);
+		bool in_first_page = (pageoffset + size_written) < PAGE_SIZE;
+		page_t * cur_page = in_first_page ? page : NULL;
 		head = write_head;
 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
@@ -405,7 +413,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			}
 
 			/* get the block to zero it */
-			block = CALL(state->lfs, synthetic_lookup_block, number);
+			block = CALL(state->lfs, synthetic_lookup_block, number, cur_page);
 			if (!block)
 			{
 				int t;
@@ -459,7 +467,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 		{
 			if (length < blocksize)
 			{
-				block = CALL(state->lfs, lookup_block, number);
+				block = CALL(state->lfs, lookup_block, number, cur_page);
 				if (!block)
 					goto uhfs_write_written_exit;
 			}
@@ -467,7 +475,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t 
 			{
 				/* Since the entire block is to be overwritten we can
 				 * avoid a read and do a synthetic read. */
-				block = CALL(state->lfs, synthetic_lookup_block, number);
+				block = CALL(state->lfs, synthetic_lookup_block, number, cur_page);
 				if (!block)
 					goto uhfs_write_written_exit;
 			}

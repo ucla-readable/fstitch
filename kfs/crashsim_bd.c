@@ -27,7 +27,7 @@ struct crashsim_info {
 	hash_map_t * blocks;
 };
 
-static bdesc_t * crashsim_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * crashsim_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct crashsim_info * info = (struct crashsim_info *) object;
 	
@@ -40,14 +40,15 @@ static bdesc_t * crashsim_bd_read_block(BD_t * object, uint32_t number, uint16_t
 		if(copy)
 		{
 			assert(copy->length == object->blocksize * count);
+			bdesc_ensure_linked_page(copy, page);
 			return copy;
 		}
 	}
 	
-	return CALL(info->bd, read_block, number, count);
+	return CALL(info->bd, read_block, number, count, page);
 }
 
-static bdesc_t * crashsim_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * crashsim_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct crashsim_info * info = (struct crashsim_info *) object;
 	
@@ -60,11 +61,12 @@ static bdesc_t * crashsim_bd_synthetic_read_block(BD_t * object, uint32_t number
 		if(copy)
 		{
 			assert(copy->length == object->blocksize * count);
+			bdesc_ensure_linked_page(copy, page);
 			return copy;
 		}
 	}
 	
-	return CALL(info->bd, synthetic_read_block, number, count);
+	return CALL(info->bd, synthetic_read_block, number, count, page);
 }
 
 static int crashsim_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)

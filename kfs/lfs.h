@@ -45,8 +45,8 @@ struct LFS {
 	uint32_t blocksize;
 	BD_t * blockdev;
 	DECLARE(LFS_t, uint32_t, allocate_block, fdesc_t * file, int purpose, chdesc_t ** head);
-	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number);
-	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number);
+	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number, page_t * page);
+	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number, page_t * page);
 	DECLARE(LFS_t, fdesc_t *, lookup_inode, inode_t ino);
 	DECLARE(LFS_t, int, lookup_name, inode_t parent, const char * name, inode_t * ino);
 	DECLARE(LFS_t, void, free_fdesc, fdesc_t * fdesc);

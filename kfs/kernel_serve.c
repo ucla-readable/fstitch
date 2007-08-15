@@ -1,6 +1,5 @@
 #include <lib/platform.h>
 #include <lib/vector.h>
-#include <lib/linux_unexported.h>
 
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -1181,14 +1180,11 @@ static void serve_put_link(struct dentry * dentry, struct nameidata * nd)
 
 // TODOs:
 // - should we use the generic vector and sendfile functions?
-// - linux's pagecache and kkfsd's caches do duplicate cacheing, can we
-//   improve this situation?
 
 static int serve_readpage(struct file * filp, struct page * page)
 {
-	char * buffer = kmap(page);
+	char * buffer;
 	loff_t offset = (loff_t) page->index << PAGE_CACHE_SHIFT;
-	int count = PAGE_SIZE;
 	struct inode * inode = filp->f_dentry->d_inode;
 	CFS_t * cfs;
 	fdesc_t * fdesc;
@@ -1197,34 +1193,28 @@ static int serve_readpage(struct file * filp, struct page * page)
 	Dprintf("%s(filp = \"%s\", offset = %lld)\n", __FUNCTION__, filp->f_dentry->d_name.name, offset);
 
 	kfsd_enter();
-	page_cache_get(page);
+	assert(!PageHighMem(page));
+	buffer = lowmem_page_address(page);
 	cfs = dentry2cfs(filp->f_dentry);
 	fdesc = file2fdesc(filp);
 
-	do {
-		r = CALL(cfs, read, fdesc, buffer, offset, count);
-		/* CFS gives us an "error" when we hit EOF */
-		if (r == -1)
-			r = 0;
-		else if (r < 0)
-			goto out;
+	r = CALL(cfs, read, fdesc, page, buffer, offset, PAGE_SIZE);
+	/* CFS gives us an "error" when we hit EOF */
+	if (r == -1)
+		r = 0;
+	else if (r < 0)
+		goto out;
 
-		count -= r;
-		offset += r;
-		buffer += r;
-
-		inode->i_atime = current_fs_time(inode->i_sb);
-	} while (count && r > 0);
-
-	memset(buffer, 0, count);
+	if(r < PAGE_SIZE)
+		memset(buffer + r, 0, PAGE_SIZE - r);
 	flush_dcache_page(page);
 	SetPageUptodate(page);
+
+	inode->i_atime = current_fs_time(inode->i_sb);
 	r = 0;
 
   out:
-	page_cache_release(page);
 	kfsd_leave(1);
-	kunmap(page);
 	unlock_page(page);
 	return r;
 }
@@ -1235,26 +1225,22 @@ static ssize_t serve_write_page(struct file * filp, loff_t pos,
                                 const char __user * buf, size_t len)
 {
 	struct address_space * mapping = page->mapping;
-	loff_t pageoffset = pos - ((loff_t) page->index << PAGE_CACHE_SHIFT);
-	size_t copied;
 	struct inode * inode = mapping->host;
 	CFS_t * cfs;
 	fdesc_t * fdesc;
-	char * buffer;
 	ssize_t written;
 
 	Dprintf("%s(file = \"%s\", pos = %lu, len = %u)\n", __FUNCTION__, filp->f_dentry->d_name.name, pos, len);
 
 	kfsd_enter();
 
-	copied = kudos_filemap_copy_from_user(page, pageoffset, buf, len);
-	assert(copied == len);
+	if(!access_ok(VERIFY_READ, buf, len))
+		return -EFAULT;
 
 	cfs = sb2cfs(inode->i_sb);
 	fdesc = file2fdesc(filp);
-	buffer = kmap(page) + pageoffset;
-	written = CALL(cfs, write, fdesc, buffer, pos, len);
-	kunmap(page);
+	assert(!PageHighMem(page));
+	written = CALL(cfs, write, fdesc, page, buf, pos, len);
 	if (written >= 0)
 	{
 		inode->i_mtime = inode->i_atime = current_fs_time(inode->i_sb);

@@ -27,7 +27,7 @@ struct unix_file_info {
 	int user_name;
 };
 
-static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
 	bdesc_t * bdesc;
@@ -41,12 +41,13 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	if(bdesc)
 	{
 		assert(bdesc->length == count * object->blocksize);
+		bdesc_ensure_linked_page(bdesc, page);
 		if(!bdesc->synthetic)
 			return bdesc;
 	}
 	else
 	{
-		bdesc = bdesc_alloc(number, object->blocksize, count);
+		bdesc = bdesc_alloc(number, object->blocksize, count, page);
 		if(bdesc == NULL)
 			return NULL;
 		bdesc_autorelease(bdesc);
@@ -59,7 +60,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 		assert(0);
 	}
 	
-	r = read(info->fd, bdesc->data, bdesc->length);
+	r = read(info->fd, bdesc_data(bdesc), bdesc->length);
 	if(r != bdesc->length)
 	{
 		if(r < 0)
@@ -79,7 +80,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return bdesc;
 }
 
-static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct unix_file_info * info = (struct unix_file_info *) object;
 	bdesc_t * bdesc;
@@ -91,10 +92,11 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	if(bdesc)
 	{
 		assert(bdesc->length == count * object->blocksize);
+		bdesc_ensure_linked_page(bdesc, page);
 		return bdesc;
 	}
 
-	bdesc = bdesc_alloc(number, object->blocksize, count);
+	bdesc = bdesc_alloc(number, object->blocksize, count, page);
 	if(bdesc == NULL)
 		return NULL;
 	bdesc_autorelease(bdesc);

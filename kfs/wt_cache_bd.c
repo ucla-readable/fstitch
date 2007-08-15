@@ -87,7 +87,7 @@ static void wt_pop_block(struct cache_info * info, struct cache_slot * slot)
 	wt_list_insert(slot, &info->blocks[0]);
 }
 
-static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
@@ -102,7 +102,10 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 		assert(slot->block->ddesc->length == count * object->blocksize);
 		wt_touch_block(info, slot);
 		if(!slot->block->ddesc->synthetic)
+		{
+			bdesc_ensure_linked_page(slot->block, page);
 			return slot->block;
+		}
 	}
 	else
 	{
@@ -110,7 +113,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 			wt_pop_block(info, info->blocks[0].lru);
 	}
 	
-	block = CALL(info->bd, read_block, number, count);
+	block = CALL(info->bd, read_block, number, count, page);
 	if(!block)
 		return NULL;
 	
@@ -122,7 +125,7 @@ static bdesc_t * wt_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t
 	return block;
 }
 
-static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct cache_slot * slot;
@@ -137,13 +140,14 @@ static bdesc_t * wt_cache_bd_synthetic_read_block(BD_t * object, uint32_t number
 	{
 		assert(slot->block->ddesc->length == count * object->blocksize);
 		wt_touch_block(info, slot);
+		bdesc_ensure_linked_page(slot->block, page);
 		return slot->block;
 	}
 	
 	if(info->blocks[0].lru->block)
 		wt_pop_block(info, info->blocks[0].lru);
 	
-	block = CALL(info->bd, synthetic_read_block, number, count);
+	block = CALL(info->bd, synthetic_read_block, number, count, page);
 	if(!block)
 		return NULL;
 	

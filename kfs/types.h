@@ -5,6 +5,8 @@
 #define CHDESC_WEAKREF_CALLBACKS 0
 
 typedef struct bdesc bdesc_t;
+/* struct page pointers are non-NULL only in __KERNEL__ */
+typedef struct page page_t;
 typedef struct blockman blockman_t;
 
 typedef struct chdesc chdesc_t;

@@ -130,7 +130,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	int i = 0, count = 0;
 	
 #if !REVISION_TAIL_INPLACE
-	memcpy(buffer, block->data, block->length);
+	memcpy(buffer, bdesc_data(block), block->length);
 #endif
 	
 	if(!block->all_changes)

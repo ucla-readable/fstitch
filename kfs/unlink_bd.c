@@ -14,14 +14,14 @@ struct unlink_info {
 	chdesc_t ** write_head;
 };
 
-static bdesc_t * unlink_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unlink_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
-	return CALL(((struct unlink_info *) object)->bd, read_block, number, count);
+	return CALL(((struct unlink_info *) object)->bd, read_block, number, count, page);
 }
 
-static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
-	return CALL(((struct unlink_info *) object)->bd, synthetic_read_block, number, count);
+	return CALL(((struct unlink_info *) object)->bd, synthetic_read_block, number, count, page);
 }
 
 static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)

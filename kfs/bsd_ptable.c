@@ -42,10 +42,10 @@ void * bsd_ptable_init(BD_t * bd)
 		return NULL;
 
 	/* read the partition table */
-	mbr = CALL(bd, read_block, BSDLABEL_LABELSECTOR, 1);
+	mbr = CALL(bd, read_block, BSDLABEL_LABELSECTOR, 1, NULL);
 	if (!mbr)
 		goto bsd_init_error;
-	label = (struct disklabel *) &mbr->data[BSDLABEL_LABELOFFSET];
+	label = (struct disklabel *) &bdesc_data(mbr)[BSDLABEL_LABELOFFSET];
 	maxblocks = bd->numblocks;
 
 	// TODO check d_checksum

@@ -270,13 +270,13 @@ static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
 
 static __inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
 {
-	assert(&block->data[offset] != data);
+	assert(&bdesc_data(block)[offset] != data);
 	int r = chdesc_create_byte_basic(block, owner, offset, length, tail, befores);
 	if (r >= 0) {
 		if (data)
-			memcpy(&block->data[offset], data, length);
+			memcpy(&bdesc_data(block)[offset], data, length);
 		else
-			memset(&block->data[offset], 0, length);
+			memset(&bdesc_data(block)[offset], 0, length);
 	}
 	return r;
 }

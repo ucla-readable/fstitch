@@ -38,14 +38,14 @@ static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int pur
 	return INVALID_BLOCK;
 }
 
-static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number)
+static bdesc_t * wholedisk_lookup_block(LFS_t * object, uint32_t number, page_t * page)
 {
-	return CALL(object->blockdev, read_block, number, 1);
+	return CALL(object->blockdev, read_block, number, 1, page);
 }
 
-static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number)
+static bdesc_t * wholedisk_synthetic_lookup_block(LFS_t * object, uint32_t number, page_t * page)
 {
-	return CALL(object->blockdev, synthetic_read_block, number, 1);
+	return CALL(object->blockdev, synthetic_read_block, number, 1, page);
 }
 
 static fdesc_t * wholedisk_lookup_inode(LFS_t * object, inode_t inode)

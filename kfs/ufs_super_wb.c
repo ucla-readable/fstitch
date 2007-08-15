@@ -415,7 +415,7 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	linfo->global_info = info;
 
 	/* the superblock is in sector 16 */
-	linfo->super_block = CALL(info->ubd, read_block, SUPER_NUMBER, 1);
+	linfo->super_block = CALL(info->ubd, read_block, SUPER_NUMBER, 1, NULL);
 	if (!linfo->super_block)
 	{
 		printf("Unable to read superblock!\n");
@@ -424,7 +424,7 @@ UFSmod_super_t * ufs_super_wb(struct ufs_info * info)
 	}
 
 	bdesc_retain(linfo->super_block);
-	memcpy(&linfo->super, linfo->super_block->ddesc->data, sizeof(struct UFS_Super));
+	memcpy(&linfo->super, bdesc_data(linfo->super_block), sizeof(struct UFS_Super));
 	memcpy(&linfo->oldsum, &linfo->super.fs_cstotal, sizeof(struct UFS_csum));
 	memset(&linfo->dirty, 0, sizeof(linfo->dirty));
 	linfo->syncing = 0;

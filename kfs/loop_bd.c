@@ -24,7 +24,7 @@ struct loop_info {
 };
 typedef struct loop_info loop_info_t;
 
-static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
+static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count, page_t * page)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) bd;
@@ -37,10 +37,10 @@ static bdesc_t * loop_read_block(BD_t * bd, uint32_t number, uint16_t count)
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	return CALL(info->lfs, lookup_block, lfs_bno);
+	return CALL(info->lfs, lookup_block, lfs_bno, page);
 }
 
-static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count)
+static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t count, page_t * page)
 {
 	Dprintf("%s(0x%x)\n", __FUNCTION__, number);
 	loop_info_t * info = (loop_info_t *) bd;
@@ -53,7 +53,7 @@ static bdesc_t * loop_synthetic_read_block(BD_t * bd, uint32_t number, uint16_t 
 	if (lfs_bno == INVALID_BLOCK)
 		return NULL;
 
-	return CALL(info->lfs, synthetic_lookup_block, lfs_bno);
+	return CALL(info->lfs, synthetic_lookup_block, lfs_bno, page);
 }
 
 static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t loop_number)

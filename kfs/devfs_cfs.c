@@ -197,7 +197,7 @@ static int devfs_close(CFS_t * cfs, fdesc_t * fdesc)
 }
 
 /* This function looks a lot like uhfs_read() */
-static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset, uint32_t size)
+static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, page_t * page, void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	devfs_fdesc_t * devfd = (devfs_fdesc_t *) fdesc;
@@ -217,12 +217,12 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 		uint32_t limit;
 		uint32_t read_byte = blockoffset + (offset % blocksize) - dataoffset + size_read;
 
-		bdesc = CALL(devfd->bd, read_block, read_byte / blocksize, 1);
+		bdesc = CALL(devfd->bd, read_block, read_byte / blocksize, 1, page);
 		if(!bdesc)
 			return size_read ? size_read : -1;
 
 		limit = MIN(bdesc->length - dataoffset, size - size_read);
-		memcpy((uint8_t *) data + size_read, bdesc->data + dataoffset, limit);
+		memcpy((uint8_t *) data + size_read, bdesc_data(bdesc) + dataoffset, limit);
 		size_read += limit;
 		/* dataoffset only needed for first block */
 		dataoffset = 0;
@@ -231,7 +231,7 @@ static int devfs_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t offset
 	return size_read ? size_read : (size ? -1 : 0);
 }
 
-static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t offset, uint32_t size)
+static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * data, uint32_t offset, uint32_t size)
 {
 	Dprintf("%s(0x%08x, 0x%x, 0x%x, 0x%x)\n", __FUNCTION__, fdesc, data, offset, size);
 	devfs_fdesc_t * devfd = (devfs_fdesc_t *) fdesc;
@@ -261,9 +261,9 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t
 
 		if(!dataoffset && limit == blocksize)
 			/* we can do a synthetic read in this case */
-			bdesc = CALL(devfd->bd, synthetic_read_block, blockno, 1);
+			bdesc = CALL(devfd->bd, synthetic_read_block, blockno, 1, page);
 		else
-			bdesc = CALL(devfd->bd, read_block, blockno, 1);
+			bdesc = CALL(devfd->bd, read_block, blockno, 1, page);
 		if(!bdesc)
 			return size_written ? size_written : -1;
 		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);

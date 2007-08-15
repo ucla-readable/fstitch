@@ -17,24 +17,24 @@ struct resize_info {
 	uint16_t merge_count;
 };
 
-static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * block_resizer_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct resize_info * info = (struct resize_info *) object;
 	
 	/* make sure it's a valid block */
 	assert(count && number + count <= object->numblocks);
 	
-	return CALL(info->bd, read_block, number * info->merge_count, count * info->merge_count);
+	return CALL(info->bd, read_block, number * info->merge_count, count * info->merge_count, page);
 }
 
-static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * block_resizer_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct resize_info * info = (struct resize_info *) object;
 	
 	/* make sure it's a valid block */
 	assert(count && number + count <= object->numblocks);
 	
-	return CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count);
+	return CALL(info->bd, synthetic_read_block, number * info->merge_count, count * info->merge_count, page);
 }
 
 static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)

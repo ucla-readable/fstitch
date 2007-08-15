@@ -2247,9 +2247,9 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 		}
 		memmove(merge_data + overlap->offset - merge_offset, overlap->byte.data, overlap->length);
 		if(merge_offset < overlap->offset)
-			memcpy(merge_data, &overlap->block->data[merge_offset], overlap->offset - merge_offset);
+			memcpy(merge_data, &bdesc_data(overlap->block)[merge_offset], overlap->offset - merge_offset);
 		if(overlap_end < merge_end)
-			memcpy(merge_data + overlap_end - merge_offset, &overlap->block->data[overlap_end], merge_end - overlap_end);
+			memcpy(merge_data + overlap_end - merge_offset, &bdesc_data(overlap->block)[overlap_end], merge_end - overlap_end);
 		chdesc_free_byte_data(overlap);
 		overlap->byte.data = merge_data;
 
@@ -2260,7 +2260,7 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 		overlap->length = merge_length;
 # if CHDESC_BYTE_SUM
 		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
-		overlap->byte.new_sum = chdesc_byte_sum(&overlap->block->data[merge_offset], merge_length);
+		overlap->byte.new_sum = chdesc_byte_sum(&bdesc_data(overlap->block)[merge_offset], merge_length);
 # endif
 		chdesc_link_overlap(overlap);
 	}
@@ -2441,7 +2441,7 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	
 	if(data_required)
 	{	
-		void * block_data = &chdesc->block->data[offset];
+		void * block_data = &bdesc_data(chdesc->block)[offset];
 
 		if(length <= CHDESC_LOCALDATA)
 			chdesc->byte.data = &chdesc->byte.ldata[0];
@@ -2634,7 +2634,7 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
 	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
-	*((uint32_t *) (overlap->block->data + overlap->offset)) ^= xor;
+	*((uint32_t *) (bdesc_data(overlap->block) + overlap->offset)) ^= xor;
 	
 	/* move merger to correct owner */
 	if (overlap->owner != owner) {
@@ -2674,7 +2674,7 @@ static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
 
 int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
 {
-	//uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
+	//uint32_t data = ((uint32_t *) bdesc_data(block))[offset] ^ xor;
 	//return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 
 	int r;
@@ -2689,13 +2689,13 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 		return r;
 	else if(r == 1)
 	{
-		((uint32_t *) block->data)[offset] ^= xor;
+		((uint32_t *) bdesc_data(block))[offset] ^= xor;
 		return 0;
 	}
 	
 	if(!data_required)
 	{
-		uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
+		uint32_t data = ((uint32_t *) bdesc_data(block))[offset] ^ xor;
 		set.array[0] = *head;
 #if CHDESC_NRB_MERGE_STATS
 		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
@@ -2718,7 +2718,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	        is_sole_inram_chdesc(WEAK(block->nrb)) &&
 	        bit_merge_overlap_ok_head(*head, WEAK(block->nrb)))
 	{
-		uint32_t data = ((uint32_t *) block->data)[offset] ^ xor;
+		uint32_t data = ((uint32_t *) bdesc_data(block))[offset] ^ xor;
 		DEFINE_CHDESC_PASS_SET(set, 1, NULL);
 		set.array[0] = *head;
 		return chdesc_create_byte_set(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
@@ -2787,7 +2787,7 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 			goto error;
 	
 	/* apply the change manually */
-	((uint32_t *) block->data)[offset] ^= xor;
+	((uint32_t *) bdesc_data(block))[offset] ^= xor;
 	
 	chdesc->flags &= ~CHDESC_SAFE_AFTER;
 	*head = chdesc;
@@ -2958,7 +2958,7 @@ int chdesc_apply(chdesc_t * chdesc)
 	switch(chdesc->type)
 	{
 		case BIT:
-			*(uint32_t *) (chdesc->block->data + chdesc->offset) ^= chdesc->bit.xor;
+			*(uint32_t *) (bdesc_data(chdesc->block) + chdesc->offset) ^= chdesc->bit.xor;
 			break;
 		case BYTE:
 			if(!chdesc->byte.data)
@@ -2970,8 +2970,10 @@ int chdesc_apply(chdesc_t * chdesc)
 #if SWAP_FULLBLOCK_DATA
 			if(chdesc->length == chdesc->block->length)
 			{
-				uint8_t * old_block = chdesc->block->data;
+				uint8_t * old_block = bdesc_data(chdesc->block);
 				assert(!chdesc->offset);
+				/* NOTE: these three lines need to be updated for the
+				 * integrated linux-kudos buffer cache */
 				assert(chdesc->byte.data != chdesc->byte.ldata);
 				chdesc->block->data = chdesc->byte.data;
 				chdesc->byte.data = old_block;

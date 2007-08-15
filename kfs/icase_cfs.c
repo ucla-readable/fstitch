@@ -115,18 +115,18 @@ static int icase_close(CFS_t * cfs, fdesc_t * fdesc)
 	return CALL(state->frontend_cfs, close, fdesc);
 }
 
-static int icase_read(CFS_t * cfs, fdesc_t * fdesc, void * data, uint32_t ofhfset, uint32_t size)
+static int icase_read(CFS_t * cfs, fdesc_t * fdesc, page_t * page, void * data, uint32_t ofhfset, uint32_t size)
 {
 	Dprintf("%s\n", __FUNCTION__);
 	icase_state_t * state = (icase_state_t *) cfs;
-	return CALL(state->frontend_cfs, read, fdesc, data, ofhfset, size);
+	return CALL(state->frontend_cfs, read, fdesc, page, data, ofhfset, size);
 }
 
-static int icase_write(CFS_t * cfs, fdesc_t * fdesc, const void * data, uint32_t ofhfset, uint32_t size)
+static int icase_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * data, uint32_t ofhfset, uint32_t size)
 {
 	Dprintf("%s\n", __FUNCTION__);
 	icase_state_t * state = (icase_state_t *) cfs;
-	return CALL(state->frontend_cfs, write, fdesc, data, ofhfset, size);
+	return CALL(state->frontend_cfs, write, fdesc, page, data, ofhfset, size);
 }
 
 static int icase_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint16_t size, uint32_t * basep)

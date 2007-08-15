@@ -35,13 +35,13 @@ static void condense_ptable(struct pc_ptable * ptable, struct partition * partit
 
 static int _detect_extended(struct ptable_info * info, uint32_t table_offset, uint32_t ext_offset)
 {
-	bdesc_t * table = CALL(info->bd, read_block, table_offset, 1);
+	bdesc_t * table = CALL(info->bd, read_block, table_offset, 1, NULL);
 	struct partition ptable[4];
 	int i;
 	
 	if(!table)
 		return -1;
-	condense_ptable((struct pc_ptable *) &table->data[PTABLE_OFFSET], ptable);
+	condense_ptable((struct pc_ptable *) &bdesc_data(table)[PTABLE_OFFSET], ptable);
 	
 	for(i = 0; i != 4; i++)
 	{
@@ -109,18 +109,18 @@ void * pc_ptable_init(BD_t * bd)
 		goto error_extended;
 	
 	/* read the partition table */
-	mbr = CALL(bd, read_block, 0, 1);
+	mbr = CALL(bd, read_block, 0, 1, NULL);
 	if(!mbr)
 		goto error_mbr;
-	ptable = (struct pc_ptable *) &mbr->data[PTABLE_OFFSET];
+	ptable = (struct pc_ptable *) &bdesc_data(mbr)[PTABLE_OFFSET];
 	
 	/* FIXME: support EZDrive partition tables here!
 	 * They have shadow partitions of type PTABLE_EZDRIVE_TYPE listed
 	 * in sector 0, and the real partition table is in sector 1. */
 	/* Note: we'd also have to support this in the bootloader. */
 	
-	if(mbr->data[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
-	   mbr->data[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
+	if(bdesc_data(mbr)[PTABLE_MAGIC_OFFSET] != PTABLE_MAGIC[0] ||
+	   bdesc_data(mbr)[PTABLE_MAGIC_OFFSET + 1] != PTABLE_MAGIC[1])
 	{
 		printf("No partition table found!\n");
 		goto error_mbr;

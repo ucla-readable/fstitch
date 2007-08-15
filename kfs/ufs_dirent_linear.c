@@ -31,12 +31,12 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, ROUNDDOWN32(*basep, super->fs_fsize));
 	if (blockno != INVALID_BLOCK)
-		dirblock = CALL(info->parts.base, lookup_block, blockno);
+		dirblock = CALL(info->parts.base, lookup_block, blockno, NULL);
 	if (!dirblock)
 		return -ENOENT;
 
 	offset = *basep % super->fs_fsize;
-	dirent = (struct UFS_direct *) (dirblock->ddesc->data + offset);
+	dirent = (struct UFS_direct *) (bdesc_data(dirblock) + offset);
 
 	if (offset + dirent->d_reclen > super->fs_fsize
 			|| dirent->d_reclen < dirent->d_namlen)
@@ -73,7 +73,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	blockno = CALL(info->parts.base, get_file_block, (fdesc_t *) dirf, foffset);
 	if (blockno == INVALID_BLOCK)
 		return -ENOENT;
-	block = CALL(info->ubd, read_block, blockno, 1);
+	block = CALL(info->ubd, read_block, blockno, 1, NULL);
 	if (!block)
 		return -ENOENT;
 
@@ -151,7 +151,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			uint32_t blockno = CALL(info->parts.base, allocate_block, (fdesc_t *) dirf, 0, head);
 			if (blockno == INVALID_BLOCK)
 				return -1;
-			block = CALL(info->ubd, synthetic_read_block, blockno, 1);
+			block = CALL(info->ubd, synthetic_read_block, blockno, 1, NULL);
 			assert(block); // FIXME Leiz == Lazy
 			r = chdesc_create_init(block, info->ubd, head);
 			assert(r >= 0); // FIXME Leiz == Lazy

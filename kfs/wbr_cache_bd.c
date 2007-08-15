@@ -325,7 +325,7 @@ static void wbr_shrink_blocks(struct cache_info * info)
 	}
 }
 
-static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
@@ -341,6 +341,7 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 		block = slot->block;
 		assert(block->ddesc->length == count * object->blocksize);
 		wbr_touch_block_read(info, slot);
+		bdesc_ensure_linked_page(block, page);
 		if(!block->ddesc->synthetic)
 			return block;
 	}
@@ -353,7 +354,7 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, read_block, number, count);
+	block = CALL(info->bd, read_block, number, count, page);
 	if(!block)
 		return NULL;
 	
@@ -366,7 +367,7 @@ static bdesc_t * wbr_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return block;
 }
 
-static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	struct rand_slot * slot;
@@ -381,6 +382,7 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		/* in the cache, use it */
 		assert(slot->block->ddesc->length == count * object->blocksize);
 		wbr_touch_block_read(info, slot);
+		bdesc_ensure_linked_page(slot->block, page);
 		return slot->block;
 	}
 	
@@ -390,7 +392,7 @@ static bdesc_t * wbr_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		wbr_shrink_blocks(info);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, synthetic_read_block, number, count);
+	block = CALL(info->bd, synthetic_read_block, number, count, page);
 	if(!block)
 		return NULL;
 	

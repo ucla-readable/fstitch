@@ -442,7 +442,7 @@ static void wb2_shrink_blocks(struct cache_info * info)
 	}
 }
 
-static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
@@ -457,7 +457,10 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 		assert(block->length == count * object->blocksize);
 		wb2_touch_block_read(info, block);
 		if(!block->synthetic)
+		{
+			bdesc_ensure_linked_page(block, page);
 			return block;
+		}
 	}
 	else
 	{
@@ -468,7 +471,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	}
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, read_block, number, count);
+	block = CALL(info->bd, read_block, number, count, page);
 	if(!block)
 		return NULL;
 	
@@ -480,7 +483,7 @@ static bdesc_t * wb2_cache_bd_read_block(BD_t * object, uint32_t number, uint16_
 	return block;
 }
 
-static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count)
+static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	bdesc_t * block;
@@ -494,6 +497,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		/* in the cache, use it */
 		assert(block->length == count * object->blocksize);
 		wb2_touch_block_read(info, block);
+		bdesc_ensure_linked_page(block, page);
 		return block;
 	}
 	
@@ -503,7 +507,7 @@ static bdesc_t * wb2_cache_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 		wb2_shrink_blocks(info);
 	
 	/* not in the cache, need to read it */
-	block = CALL(info->bd, synthetic_read_block, number, count);
+	block = CALL(info->bd, synthetic_read_block, number, count, page);
 	if(!block)
 		return NULL;
 	

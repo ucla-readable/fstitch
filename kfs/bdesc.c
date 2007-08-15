@@ -9,6 +9,11 @@
 #include <kfs/kfsd.h>
 #include <kfs/chdesc.h>
 
+#ifdef __KERNEL__
+# include <linux/page-flags.h>
+# include <linux/mm.h>
+#endif
+
 /* Statically allocate two autopools. We probably won't ever need more than the
  * main top-level one and one nested pool, and if we do, we can allocate them
  * with malloc(). */
@@ -30,23 +35,57 @@ static void bdesc_pools_free_all(void * ignore)
 	bdesc_mem_free_all();
 }
 
+#ifdef __KERNEL__
+/* make 'page' the backing page for 'bdesc'. it might be more efficient
+ * to tell linux to use the current backing page? */
+void bdesc_link_page(bdesc_t * bdesc, page_t * page)
+{
+	assert(page && bdesc->page != page);
+	assert(page_count(bdesc->page) == 1);
+	assert(!PageHighMem(page));
+	memcpy(lowmem_page_address(page), lowmem_page_address(bdesc->page), PAGE_SIZE);
+	put_page(bdesc->page);
+	bdesc->page = page;
+	get_page(bdesc->page);
+}
+#endif
+
 /* allocate a new bdesc */
 /* the actual size will be length * count bytes */
-bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count)
+bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_t * page)
 {
 	bdesc_t * bdesc = bdesc_mem_alloc();
 	uint16_t i;
 	if(!bdesc)
 		return NULL;
-	bdesc->data = malloc(blocksize * count);
-	if(!bdesc->data)
+#ifdef __KERNEL__
+	/* NOTE: wasteful for <PAGE_SIZE (eg FS setup and UFS) */
+	assert(blocksize * count <= PAGE_SIZE);
+	if(page)
+	{
+		bdesc->page = page;
+		get_page(bdesc->page);
+	}
+	else
+	{
+		bdesc->page = alloc_page(GFP_KERNEL);
+		if(!bdesc->page)
+		{
+			bdesc_mem_free(bdesc);
+			return NULL;
+		}
+	}
+#else
+	bdesc->_data = malloc(blocksize * count);
+	if(!bdesc->_data)
 	{
 		bdesc_mem_free(bdesc);
 		return NULL;
 	}
-#if MALLOC_ACCOUNT
+# if MALLOC_ACCOUNT
 	extern unsigned long long malloc_total_woblocks;
 	malloc_total_woblocks -= blocksize * count;
+# endif
 #endif
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
@@ -107,7 +146,11 @@ void __bdesc_release(bdesc_t *bdesc)
 		hash_map_destroy(bdesc->bit_changes);
 	}
 	blockman_remove(bdesc);
-	free(bdesc->data);
+#ifdef __KERNEL__
+	put_page(bdesc->page);
+#else
+	free(bdesc->_data);
+#endif
 	free_memset(bdesc, sizeof(*bdesc));
 	bdesc_mem_free(bdesc);
 }

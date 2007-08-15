@@ -22,7 +22,6 @@ kfsobj = $(src)/$(kfsobjrel)
 obj-m += kkfsd.o
 
 KKFSD_LIB_OBJS := \
-              linux_unexported.o \
               assert.o \
               qsort.o \
               vector.o \
