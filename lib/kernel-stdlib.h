@@ -8,9 +8,8 @@
 static inline void * malloc(size_t size)
 {
 #if MALLOC_ACCOUNT
-	extern unsigned long long malloc_total, malloc_total_woblocks;
+	extern unsigned long long malloc_total;
 	malloc_total += size;
-	malloc_total_woblocks += size;
 #endif
 	return kmalloc(size, GFP_KERNEL);
 }
@@ -18,10 +17,8 @@ static inline void * malloc(size_t size)
 static inline void * calloc(size_t nmemb, size_t size)
 {
 #if MALLOC_ACCOUNT
-	extern unsigned long long malloc_total, malloc_total_woblocks;
-	size_t total = nmemb * size;
-	malloc_total += total;
-	malloc_total_woblocks += total;
+	extern unsigned long long malloc_total;
+	malloc_total += nmemb * size;
 #endif
 	return kcalloc(nmemb, size, GFP_KERNEL);
 }

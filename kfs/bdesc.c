@@ -47,6 +47,11 @@ void bdesc_link_page(bdesc_t * bdesc, page_t * page)
 	put_page(bdesc->page);
 	bdesc->page = page;
 	get_page(bdesc->page);
+# if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total, malloc_blocks;
+	malloc_total += PAGE_SIZE;
+	malloc_blocks += PAGE_SIZE;
+# endif
 }
 #endif
 
@@ -75,6 +80,11 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 			return NULL;
 		}
 	}
+# if MALLOC_ACCOUNT
+	extern unsigned long long malloc_total, malloc_blocks;
+	malloc_total += PAGE_SIZE;
+	malloc_blocks += PAGE_SIZE;
+# endif
 #else
 	bdesc->_data = malloc(blocksize * count);
 	if(!bdesc->_data)
@@ -82,10 +92,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 		bdesc_mem_free(bdesc);
 		return NULL;
 	}
-# if MALLOC_ACCOUNT
-	extern unsigned long long malloc_total_woblocks;
-	malloc_total_woblocks -= blocksize * count;
-# endif
 #endif
 	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc, number, count);
 	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
