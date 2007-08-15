@@ -384,6 +384,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 			if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
 			{
 				assert(WEAK(state->opgroup->head) && state->opgroup->head_keep);
+#ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
 				if(!WEAK(state->opgroup->head)->befores->before.next)
 				{
 					/* this is the first top we are adding to head,
@@ -404,10 +405,13 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 				else
 				{
 					oh_well:
+#endif
 					r = chdesc_add_depend(WEAK(state->opgroup->head), save_top);
 					if(r < 0)
 						kpanic("Can't recover from failure!");
+#ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
 				}
+#endif
 			}
 	}
 	
@@ -445,6 +449,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		/* let it get garbage collected */
 		bottom = NULL;
 	}
+#ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
 	else if(!bottom->befores->before.next)
 	{
 		/* only one tail; inherit it for bottom! */
@@ -453,6 +458,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		chdesc_remove_depend(old, bottom);
 		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
 	}
+#endif
 	
 	chdesc_weak_retain(bottom, &current_scope->bottom, NULL, NULL);
 	
