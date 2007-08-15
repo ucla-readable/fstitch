@@ -1,0 +1,29 @@
+#!/bin/bash
+
+BENCHDIR="`dirname "$0"`"
+. $BENCHDIR/../common
+
+RUNLINUX=0
+
+if [ $# -eq 1 -a "$1" != "--with-linux" ] || [ $# -gt 1 ]; then
+	echo "Usage: `basename "$0"` [--with-linux]" 1>&2
+	exit 1
+fi
+if [ "$1" == "--with-linux" ]; then
+	RUNLINUX=1
+fi
+
+
+if [ $RUNLINUX -eq 1 ]; then
+	NOBLKTRACE=1 try bench/sosp/time_run --with-linux
+else
+	NOBLKTRACE=1 try bench/sosp/time_run
+fi
+
+NOBLKTRACE=1 try bench/sosp/patch_run
+
+if [ $RUNLINUX -eq 1 ]; then
+	try bench/sosp/imap_run --with-linux
+else
+	try bench/sosp/imap_run
+fi

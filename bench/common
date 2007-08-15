@@ -105,7 +105,7 @@ function prepare_postinit () {
 			done &>/dev/null &
 	fi
 
-	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
+	if [ "$NOBLKTRACE" == "" ] && [ "$HOST" == "kudos" -o "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
 		if ! mount | grep -q /debug; then
 			sudo mount /debug
 		fi
