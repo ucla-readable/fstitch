@@ -7,40 +7,41 @@
 #include <lib/jiffies.h>
 #include <lib/disklabel.h>
 
-#include <fscore/pc_ptable.h>
-#include <fscore/bsd_ptable.h>
-#include <fscore/wt_cache_bd.h>
-#include <fscore/wb_cache_bd.h>
-#include <fscore/wb2_cache_bd.h>
-#include <fscore/wbr_cache_bd.h>
-#include <fscore/block_resizer_bd.h>
-#include <fscore/crashsim_bd.h>
-#include <fscore/mem_bd.h>
-#include <fscore/loop_bd.h>
-
-#include <fscore/ext2_base.h>
-#include <fscore/journal_bd.h>
-#include <fscore/unlink_bd.h>
-#include <fscore/wholedisk_lfs.h>
-#include <fscore/josfs_base.h>
-#include <fscore/ufs_base.h>
-#include <fscore/patchgroup_lfs.h>
-#include <fscore/uhfs.h>
-#include <fscore/icase_cfs.h>
 #include <fscore/revision.h>
 #include <fscore/modman.h>
 #include <fscore/sched.h>
 #include <fscore/fstitchd.h>
 #include <fscore/debug.h>
+#include <fscore/pc_ptable.h>
+#include <fscore/bsd_ptable.h>
+
+#include <modules/wt_cache_bd.h>
+#include <modules/wb_cache_bd.h>
+#include <modules/wb2_cache_bd.h>
+#include <modules/wbr_cache_bd.h>
+#include <modules/block_resizer_bd.h>
+#include <modules/crashsim_bd.h>
+#include <modules/mem_bd.h>
+#include <modules/loop_bd.h>
+#include <modules/ext2_lfs.h>
+#include <modules/journal_bd.h>
+#include <modules/unlink_bd.h>
+#include <modules/wholedisk_lfs.h>
+#include <modules/josfs_lfs.h>
+#include <modules/ufs_lfs.h>
+#include <modules/patchgroup_lfs.h>
+#include <modules/uhfs_cfs.h>
+#include <modules/icase_cfs.h>
+
 #include <fscore/fstitchd_init.h>
 
 #ifdef __KERNEL__
-#include <fscore/linux_bd.h>
+#include <modules/linux_bd.h>
 #include <fscore/kernel_serve.h>
 #include <fscore/kernel_patchgroup_ops.h>
 #include <fscore/kernel_patchgroup_scopes.h>
 #elif defined(UNIXUSER)
-#include <fscore/unix_file_bd.h>
+#include <modules/unix_file_bd.h>
 #include <fscore/fuse_serve.h>
 #endif
 
@@ -530,17 +531,17 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (part->type == PTABLE_FSTITCH_TYPE)
 		{
-			lfs = construct_lfs(part, cache_nblks, josfs, 4096);
+			lfs = construct_lfs(part, cache_nblks, josfs_lfs, 4096);
 		}
 		else if (part->type == PTABLE_FREEBSD_TYPE)
 		{
 			// TODO handle 1K fragment size in UFS?
-			lfs = construct_lfs(part, cache_nblks, ufs, 2048);
+			lfs = construct_lfs(part, cache_nblks, ufs_lfs, 2048);
 		}
 		else if (part->type == PTABLE_LINUX_TYPE)
 		{
 			// TODO handle differnt block sizes
-			lfs = construct_lfs(part, cache_nblks, ext2, 4096);
+			lfs = construct_lfs(part, cache_nblks, ext2_lfs, 4096);
 		}
 		else
 		{
@@ -552,9 +553,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (! (lfs = patchgroup_lfs(lfs)))
 			return -1;
-		if (! (u = uhfs(lfs)) )
+		if (! (u = uhfs_cfs(lfs)) )
 		{
-			fprintf(stderr, "uhfs() failed\n");
+			fprintf(stderr, "uhfs_cfs() failed\n");
 			return -1;
 		}
 #if USE_ICASE

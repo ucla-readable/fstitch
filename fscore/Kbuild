@@ -31,54 +31,58 @@ KFSTITCHD_LIB_OBJS := \
               sleep.o
 
 KFSTITCHD_FSTITCH_OBJS := \
-              fstitchd.o \
-              fstitchd_init.o \
+              bdesc.o \
+              block_alloc.o \
+              blockman.o \
+              bsd_ptable.o \
               debug.o \
-              kernel_serve.o \
+              destroy.o \
+              fstitchd_init.o \
+              fstitchd.o \
               kernel_patchgroup_ops.o \
               kernel_patchgroup_scopes.o \
-              bdesc.o \
-              blockman.o \
-              block_alloc.o \
-              patch.o \
-              patch_util.o \
-              revision.o \
+              kernel_serve.o \
               modman.o \
               patchgroup.o \
-              devfs_cfs.o \
-              mem_bd.o \
-              linux_bd.o \
-              crashsim_bd.o \
-              md_bd.o \
-              block_resizer_bd.o \
-              partition_bd.o \
+              patch.o \
+              patch_util.o \
               pc_ptable.o \
-              bsd_ptable.o \
-              wt_cache_bd.o \
+              revision.o \
+              sched.o \
+              sync.o
+
+KFSTITCHD_MODULE_OBJS := \
+              block_resizer_bd.o \
+              crashsim_bd.o \
+              journal_bd.o \
+              linux_bd.o \
+              loop_bd.o \
+              md_bd.o \
+              mem_bd.o \
+              partition_bd.o \
+              unlink_bd.o \
+              wb_cache_bd.o \
               wb2_cache_bd.o \
               wbr_cache_bd.o \
-              journal_bd.o \
-              unlink_bd.o \
-              loop_bd.o \
-              josfs_base.o \
-              ext2_base.o \
-              ufs_base.o \
-              ufs_common.o \
+              wt_cache_bd.o \
+              ext2_lfs.o \
+              josfs_lfs.o \
+              ufs_lfs.o \
               ufs_alloc_lastpos.o \
               ufs_alloc_linear.o \
+              ufs_cg_wb.o \
+              ufs_common.o \
               ufs_dirent_linear.o \
               ufs_super_wb.o \
-              ufs_cg_wb.o \
-              icase_cfs.o \
               patchgroup_lfs.o \
               wholedisk_lfs.o \
-              uhfs.o \
-              sched.o \
-              sync.o \
-              destroy.o
+              devfs_cfs.o \
+              icase_cfs.o \
+              uhfs_cfs.o
 
 kfstitchd-objs := $(addprefix $(fstitchobjrel)/,$(KFSTITCHD_LIB_OBJS)) \
-		$(addprefix $(fstitchobjrel)/,$(KFSTITCHD_FSTITCH_OBJS))
+		$(addprefix $(fstitchobjrel)/,$(KFSTITCHD_FSTITCH_OBJS)) \
+		$(addprefix $(fstitchobjrel)/,$(KFSTITCHD_MODULE_OBJS))
 
 $(addprefix $(fstitchobj)/,$(KFSTITCHD_LIB_OBJS)): $(fstitchobj)/%.o : $(src)/../lib/%.c
 	@test -d $(fstitchobj)/kernel || mkdir -p $(fstitchobj)/kernel
@@ -86,6 +90,11 @@ $(addprefix $(fstitchobj)/,$(KFSTITCHD_LIB_OBJS)): $(fstitchobj)/%.o : $(src)/..
 	$(call if_changed_rule,cc_o_c)
 
 $(addprefix $(fstitchobj)/,$(KFSTITCHD_FSTITCH_OBJS)): $(fstitchobj)/%.o : $(src)/%.c
+	@test -d $(fstitchobj)/kernel || mkdir -p $(fstitchobj)/kernel
+	$(call cmd,force_checksrc)
+	$(call if_changed_rule,cc_o_c)
+
+$(addprefix $(fstitchobj)/,$(KFSTITCHD_MODULE_OBJS)): $(fstitchobj)/%.o : $(src)/../modules/%.c
 	@test -d $(fstitchobj)/kernel || mkdir -p $(fstitchobj)/kernel
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)

@@ -56,6 +56,11 @@ $(OBJDIR)/fscore/%.o: fscore/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -DFSTITCHD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
 
+$(OBJDIR)/modules/%.o: modules/%.c
+	@echo + cc[modules] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -DFSTITCHD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
+
 # Include [UU]Makefrags for subdirectories
 include fs/Makefrag
 include lib/UUMakefrag

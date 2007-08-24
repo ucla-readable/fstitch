@@ -14,12 +14,12 @@ $(UTILDIR)/check_writes: util/check_writes.c fscore/linux_bd_debug.h
 	@mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/fsck.jos: util/fsck.jos.c fscore/josfs_base.h
+$(UTILDIR)/fsck.jos: util/fsck.jos.c modules/josfs_lfs.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/fsformat: util/fsformat.c fscore/josfs_base.h
+$(UTILDIR)/fsformat: util/fsformat.c modules/josfs_lfs.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $<

@@ -10,9 +10,10 @@
 #include <fscore/cfs.h>
 #include <fscore/lfs.h>
 #include <fscore/debug.h>
-#include <fscore/devfs_cfs.h>
 #include <fscore/fstitchd.h>
 #include <fscore/modman.h>
+
+#include <modules/devfs_cfs.h>
 
 #define MODMAN_DEBUG 0
 

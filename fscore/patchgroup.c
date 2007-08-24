@@ -3,8 +3,9 @@
 
 #include <fscore/debug.h>
 #include <fscore/sync.h>
-#include <fscore/journal_bd.h>
 #include <fscore/patchgroup.h>
+
+#include <modules/journal_bd.h>
 
 #define PATCHGROUP_DEBUG 0
 

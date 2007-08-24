@@ -4,8 +4,9 @@
 
 #include <fscore/bd.h>
 #include <fscore/bdesc.h>
-#include <fscore/partition_bd.h>
 #include <fscore/pc_ptable.h>
+
+#include <modules/partition_bd.h>
 
 struct partition {
 	uint32_t start, length;

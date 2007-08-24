@@ -4,10 +4,10 @@
 #include <fscore/cfs.h>
 #include <fscore/lfs.h>
 #include <fscore/bd.h>
-#include <fscore/journal_bd.h>
 #include <fscore/modman.h>
 #include <fscore/destroy.h>
 
+#include <modules/journal_bd.h>
 
 // Destroy all modules of type 'module' that have no users.
 // Note:

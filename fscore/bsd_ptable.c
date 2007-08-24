@@ -3,10 +3,11 @@
 
 #include <fscore/bd.h>
 #include <fscore/bdesc.h>
-#include <fscore/partition_bd.h>
 #include <fscore/bsd_ptable.h>
 
 #include <lib/disklabel.h>
+
+#include <modules/partition_bd.h>
 
 struct bsdpart {
 	uint32_t start, length;

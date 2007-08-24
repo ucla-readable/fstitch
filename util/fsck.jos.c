@@ -15,7 +15,7 @@
 #include <errno.h>
 
 #include <lib/partition.h>
-#include <fscore/josfs_base.h>
+#include <modules/josfs_lfs.h>
 
 static int fix = 0;
 
