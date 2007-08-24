@@ -5,7 +5,7 @@ diff -Nrud linux-2.6.15.7/fs/exec.c linux-2.6.15.7/fs/exec.c
  #include <linux/rmap.h>
  #include <linux/acct.h>
  #include <linux/cn_proc.h>
-+#include <linux/fsttich_proc.h>
++#include <linux/fstitch_proc.h>
  
  #include <asm/uaccess.h>
  #include <asm/mmu_context.h>
@@ -13,7 +13,7 @@ diff -Nrud linux-2.6.15.7/fs/exec.c linux-2.6.15.7/fs/exec.c
  				bprm->file = NULL;
  				current->did_exec = 1;
  				proc_exec_connector(current);
-+				fsttich_exec_hook(current);
++				fstitch_exec_hook(current);
  				return retval;
  			}
  			read_lock(&binfmt_lock);
@@ -24,26 +24,26 @@ diff -Nrud linux-2.6.15.7/fs/Kconfig linux-2.6.15.7/fs/Kconfig
  
  menu "File systems"
  
-+source "fs/fsttich/Kconfig"
++source "fs/fstitch/Kconfig"
 +
  config EXT2_FS
  	tristate "Second extended fs support"
  	help
-diff -Nrud linux-2.6.15.7/fs/fsttich/Kconfig linux-2.6.15.7/fs/fsttich/Kconfig
---- linux-2.6.15.7/fs/fsttich/Kconfig	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.15.7/fs/fsttich/Kconfig	2006-04-06 01:22:48.000000000 -0700
+diff -Nrud linux-2.6.15.7/fs/fstitch/Kconfig linux-2.6.15.7/fs/fstitch/Kconfig
+--- linux-2.6.15.7/fs/fstitch/Kconfig	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15.7/fs/fstitch/Kconfig	2006-04-06 01:22:48.000000000 -0700
 @@ -0,0 +1,5 @@
 +config FSTITCH_PROC
 +	boolean "Provide process event hooks for KudOS"
 +	---help---
 +	  This option provides hooks for the KudOS kernel module to find out
 +          about process events, which it needs to support patchgroups.
-diff -Nrud linux-2.6.15.7/fs/fsttich/fsttich_proc.c linux-2.6.15.7/fs/fsttich/fsttich_proc.c
---- linux-2.6.15.7/fs/fsttich/fsttich_proc.c	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.15.7/fs/fsttich/fsttich_proc.c	2006-04-06 01:27:07.000000000 -0700
+diff -Nrud linux-2.6.15.7/fs/fstitch/fstitch_proc.c linux-2.6.15.7/fs/fstitch/fstitch_proc.c
+--- linux-2.6.15.7/fs/fstitch/fstitch_proc.c	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15.7/fs/fstitch/fstitch_proc.c	2006-04-06 01:27:07.000000000 -0700
 @@ -0,0 +1,102 @@
 +/*
-+ * fsttich_proc.c - provide process event hooks for KudOS
++ * fstitch_proc.c - provide process event hooks for KudOS
 + *
 + * Copyright (C) 2006 Regents of the University of California
 + * Based loosely on cn_proc.c by Matt Helsley
@@ -74,81 +74,81 @@ diff -Nrud linux-2.6.15.7/fs/fsttich/fsttich_proc.c linux-2.6.15.7/fs/fsttich/fs
 +#include <linux/init.h>
 +#include <asm/atomic.h>
 +
-+#include <linux/fsttich_proc.h>
++#include <linux/fstitch_proc.h>
 +
-+static atomic_t fsttich_module_loaded = ATOMIC_INIT(0);
-+static spinlock_t fsttich_spinlock = SPIN_LOCK_UNLOCKED;
-+static struct fsttich_proc_ops * fsttich_module = NULL;
++static atomic_t fstitch_module_loaded = ATOMIC_INIT(0);
++static spinlock_t fstitch_spinlock = SPIN_LOCK_UNLOCKED;
++static struct fstitch_proc_ops * fstitch_module = NULL;
 +
-+void fsttich_fork_hook(struct task_struct * task)
++void fstitch_fork_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&fsttich_module_loaded) < 1)
++	if(atomic_read(&fstitch_module_loaded) < 1)
 +		return;
 +	
-+	fsttich_module->fork(task);
++	fstitch_module->fork(task);
 +}
 +
-+void fsttich_exec_hook(struct task_struct * task)
++void fstitch_exec_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&fsttich_module_loaded) < 1)
++	if(atomic_read(&fstitch_module_loaded) < 1)
 +		return;
 +	
-+	fsttich_module->exec(task);
++	fstitch_module->exec(task);
 +}
 +
-+void fsttich_exit_hook(struct task_struct * task)
++void fstitch_exit_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&fsttich_module_loaded) < 1)
++	if(atomic_read(&fstitch_module_loaded) < 1)
 +		return;
 +	
-+	fsttich_module->exit(task);
++	fstitch_module->exit(task);
 +}
 +
-+int fsttich_register_module(struct fsttich_proc_ops * ops)
++int fstitch_register_module(struct fstitch_proc_ops * ops)
 +{
-+	spin_lock(&fsttich_spinlock);
++	spin_lock(&fstitch_spinlock);
 +	
-+	if(atomic_read(&fsttich_module_loaded) > 0)
++	if(atomic_read(&fstitch_module_loaded) > 0)
 +	{
-+		spin_unlock(&fsttich_spinlock);
++		spin_unlock(&fstitch_spinlock);
 +		return -EBUSY;
 +	}
 +	
-+	fsttich_module = ops;
++	fstitch_module = ops;
 +	
-+	atomic_inc(&fsttich_module_loaded);
++	atomic_inc(&fstitch_module_loaded);
 +	
-+	spin_unlock(&fsttich_spinlock);
++	spin_unlock(&fstitch_spinlock);
 +	
 +	return 0;
 +}
 +
-+int fsttich_unregister_module(struct fsttich_proc_ops * ops)
++int fstitch_unregister_module(struct fstitch_proc_ops * ops)
 +{
-+	spin_lock(&fsttich_spinlock);
++	spin_lock(&fstitch_spinlock);
 +	
-+	if(atomic_read(&fsttich_module_loaded) < 1 || fsttich_module != ops)
++	if(atomic_read(&fstitch_module_loaded) < 1 || fstitch_module != ops)
 +	{
-+		spin_unlock(&fsttich_spinlock);
++		spin_unlock(&fstitch_spinlock);
 +		return -EINVAL;
 +	}
 +	
-+	atomic_dec(&fsttich_module_loaded);
++	atomic_dec(&fstitch_module_loaded);
 +	
-+	fsttich_module = NULL;
++	fstitch_module = NULL;
 +	
-+	spin_unlock(&fsttich_spinlock);
++	spin_unlock(&fstitch_spinlock);
 +	
 +	return 0;
 +}
 +
-+EXPORT_SYMBOL(fsttich_register_module);
-+EXPORT_SYMBOL(fsttich_unregister_module);
-diff -Nrud linux-2.6.15.7/fs/fsttich/Makefile linux-2.6.15.7/fs/fsttich/Makefile
---- linux-2.6.15.7/fs/fsttich/Makefile	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.15.7/fs/fsttich/Makefile	2006-04-06 01:22:48.000000000 -0700
++EXPORT_SYMBOL(fstitch_register_module);
++EXPORT_SYMBOL(fstitch_unregister_module);
+diff -Nrud linux-2.6.15.7/fs/fstitch/Makefile linux-2.6.15.7/fs/fstitch/Makefile
+--- linux-2.6.15.7/fs/fstitch/Makefile	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15.7/fs/fstitch/Makefile	2006-04-06 01:22:48.000000000 -0700
 @@ -0,0 +1 @@
-+obj-$(CONFIG_FSTITCH_PROC)	+= fsttich_proc.o
++obj-$(CONFIG_FSTITCH_PROC)	+= fstitch_proc.o
 diff -Nrud linux-2.6.15.7/fs/Makefile linux-2.6.15.7/fs/Makefile
 --- linux-2.6.15.7/fs/Makefile	2006-03-27 23:06:28.000000000 -0800
 +++ linux-2.6.15.7/fs/Makefile	2006-04-06 22:27:11.000000000 -0700
@@ -156,17 +156,17 @@ diff -Nrud linux-2.6.15.7/fs/Makefile linux-2.6.15.7/fs/Makefile
  		seq_file.o xattr.o libfs.o fs-writeback.o mpage.o direct-io.o \
  		ioprio.o pnode.o
  
-+obj-$(CONFIG_FSTITCH_PROC)   += fsttich/
++obj-$(CONFIG_FSTITCH_PROC)   += fstitch/
 +
  obj-$(CONFIG_INOTIFY)		+= inotify.o
  obj-$(CONFIG_EPOLL)		+= eventpoll.o
  obj-$(CONFIG_COMPAT)		+= compat.o
-diff -Nrud linux-2.6.15.7/include/linux/fsttich_proc.h linux-2.6.15.7/include/linux/fsttich_proc.h
---- linux-2.6.15.7/include/linux/fsttich_proc.h	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.15.7/include/linux/fsttich_proc.h	2006-04-06 01:22:48.000000000 -0700
+diff -Nrud linux-2.6.15.7/include/linux/fstitch_proc.h linux-2.6.15.7/include/linux/fstitch_proc.h
+--- linux-2.6.15.7/include/linux/fstitch_proc.h	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.15.7/include/linux/fstitch_proc.h	2006-04-06 01:22:48.000000000 -0700
 @@ -0,0 +1,61 @@
 +/*
-+ * fsttich_proc.h - provide process event hooks for KudOS
++ * fstitch_proc.h - provide process event hooks for KudOS
 + *
 + * Copyright (C) 2006 Regents of the University of California
 + * Based loosely on cn_proc.h by Matt Helsley
@@ -203,24 +203,24 @@ diff -Nrud linux-2.6.15.7/include/linux/fsttich_proc.h linux-2.6.15.7/include/li
 +
 +struct task_struct;
 +
-+struct fsttich_proc_ops {
++struct fstitch_proc_ops {
 +	void (*fork)(struct task_struct * child);
 +	void (*exec)(struct task_struct * process);
 +	void (*exit)(struct task_struct * process);
 +};
 +
-+void fsttich_fork_hook(struct task_struct * task);
-+void fsttich_exec_hook(struct task_struct * task);
-+void fsttich_exit_hook(struct task_struct * task);
++void fstitch_fork_hook(struct task_struct * task);
++void fstitch_exec_hook(struct task_struct * task);
++void fstitch_exit_hook(struct task_struct * task);
 +
-+int fsttich_register_module(struct fsttich_proc_ops * ops);
-+int fsttich_unregister_module(struct fsttich_proc_ops * ops);
++int fstitch_register_module(struct fstitch_proc_ops * ops);
++int fstitch_unregister_module(struct fstitch_proc_ops * ops);
 +
 +#else
 +
-+static inline void fsttich_fork_hook(struct task_struct * task) {}
-+static inline void fsttich_exec_hook(struct task_struct * task) {}
-+static inline void fsttich_exit_hook(struct task_struct * task) {}
++static inline void fstitch_fork_hook(struct task_struct * task) {}
++static inline void fstitch_exec_hook(struct task_struct * task) {}
++static inline void fstitch_exit_hook(struct task_struct * task) {}
 +
 +#endif	/* CONFIG_FSTITCH_PROC */
 +
@@ -233,7 +233,7 @@ diff -Nrud linux-2.6.15.7/kernel/exit.c linux-2.6.15.7/kernel/exit.c
  #include <linux/syscalls.h>
  #include <linux/signal.h>
  #include <linux/cn_proc.h>
-+#include <linux/fsttich_proc.h>
++#include <linux/fstitch_proc.h>
  
  #include <asm/uaccess.h>
  #include <asm/unistd.h>
@@ -241,7 +241,7 @@ diff -Nrud linux-2.6.15.7/kernel/exit.c linux-2.6.15.7/kernel/exit.c
  
  	tsk->exit_code = code;
  	proc_exit_connector(tsk);
-+	fsttich_exit_hook(tsk);
++	fstitch_exit_hook(tsk);
  	exit_notify(tsk);
  #ifdef CONFIG_NUMA
  	mpol_free(tsk->mempolicy);
@@ -252,7 +252,7 @@ diff -Nrud linux-2.6.15.7/kernel/fork.c linux-2.6.15.7/kernel/fork.c
  #include <linux/rmap.h>
  #include <linux/acct.h>
  #include <linux/cn_proc.h>
-+#include <linux/fsttich_proc.h>
++#include <linux/fstitch_proc.h>
  
  #include <asm/pgtable.h>
  #include <asm/pgalloc.h>
@@ -260,7 +260,7 @@ diff -Nrud linux-2.6.15.7/kernel/fork.c linux-2.6.15.7/kernel/fork.c
  	total_forks++;
  	write_unlock_irq(&tasklist_lock);
  	proc_fork_connector(p);
-+	fsttich_fork_hook(p);
++	fstitch_fork_hook(p);
  	cpuset_fork(p);
  	retval = 0;
  
