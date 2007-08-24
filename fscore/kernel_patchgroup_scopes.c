@@ -9,7 +9,7 @@
 #endif
 
 #ifdef CONFIG_FSTITCH_PROC
-#include <linux/fsttich_proc.h>
+#include <linux/fstitch_proc.h>
 
 #include <fscore/fstitchd.h>
 #include <fscore/kernel_serve.h>
@@ -110,7 +110,7 @@ patchgroup_scope_t * process_patchgroup_scope(const struct task_struct * task)
 }
 
 
-static struct fsttich_proc_ops ops = {
+static struct fstitch_proc_ops ops = {
 	.fork = fork_handler,
 	.exec = exec_handler,
 	.exit = exit_handler
@@ -119,7 +119,7 @@ static struct fsttich_proc_ops ops = {
 static void kernel_patchgroup_scopes_shutdown(void * ignore)
 {
 	/* check return value? */
-	fsttich_unregister_module(&ops);
+	fstitch_unregister_module(&ops);
 	hash_map_destroy(scope_map);
 	scope_map = NULL;
 }
@@ -132,7 +132,7 @@ int kernel_patchgroup_scopes_init(void)
 	if(!scope_map)
 		return -ENOMEM;
 	
-	r = fsttich_register_module(&ops);
+	r = fstitch_register_module(&ops);
 	if(r < 0)
 	{
 		kernel_patchgroup_scopes_shutdown(NULL);
