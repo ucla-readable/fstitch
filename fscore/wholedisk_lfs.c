@@ -1,10 +1,10 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/lfs.h>
-#include <kfs/feature.h>
-#include <kfs/modman.h>
-#include <kfs/wholedisk_lfs.h>
+#include <fscore/bd.h>
+#include <fscore/lfs.h>
+#include <fscore/feature.h>
+#include <fscore/modman.h>
+#include <fscore/wholedisk_lfs.h>
 
 #define INODE_ROOT ((inode_t) 1)
 #define INODE_DISK ((inode_t) 2)
@@ -32,7 +32,7 @@ static int wholedisk_get_root(LFS_t * lfs, inode_t * ino)
 	return 0;
 }
 
-static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
+static uint32_t wholedisk_allocate_block(LFS_t * object, fdesc_t * file, int purpose, patch_t ** head)
 {
 	/* always fail - no block accounting */
 	return INVALID_BLOCK;
@@ -146,48 +146,48 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 	return 0;
 }
 
-static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
+static int wholedisk_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
 {
 	/* always fail - size immutable */
 	return -EINVAL;
 }
 
-static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
+static fdesc_t * wholedisk_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, patch_t ** head)
 {
 	/* always fail - no filenames */
 	return NULL;
 }
 
-static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
+static int wholedisk_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, patch_t ** head)
 {
 	/* always fail - no filenames */
 	return -EPERM;
 }
 
-static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
+static uint32_t wholedisk_truncate_file_block(LFS_t * object, fdesc_t * file, patch_t ** head)
 {
 	/* always fail - size immutable */
 	return INVALID_BLOCK;
 }
 
-static int wholedisk_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
+static int wholedisk_free_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
 {
 	/* always fail - no block accounting */
 	return -EINVAL;
 }
 
-static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
+static int wholedisk_remove_name(LFS_t * object, inode_t parent, const char * name, patch_t ** head)
 {
 	/* always fail - no filenames */
 	return -EPERM;
 }
 
-static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t number, chdesc_t ** head)
+static int wholedisk_write_block(LFS_t * object, bdesc_t * block, uint32_t number, patch_t ** head)
 {
 	return CALL(object->blockdev, write_block, block, number);
 }
 
-static chdesc_t ** wholedisk_get_write_head(LFS_t * object)
+static patch_t ** wholedisk_get_write_head(LFS_t * object)
 {
 	return CALL(object->blockdev, get_write_head);
 }
@@ -197,7 +197,7 @@ static int32_t wholedisk_get_block_space(LFS_t * object)
 	return CALL(object->blockdev, get_block_space);
 }
 
-static const bool wholedisk_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1};
+static const bool wholedisk_features[] = {[FSTITCH_FEATURE_SIZE] = 1, [FSTITCH_FEATURE_FILETYPE] = 1, [FSTITCH_FEATURE_FREESPACE] = 1, [FSTITCH_FEATURE_FILE_LFS] = 1, [FSTITCH_FEATURE_BLOCKSIZE] = 1, [FSTITCH_FEATURE_DEVSIZE] = 1};
 
 static size_t wholedisk_get_max_feature_id(LFS_t * object)
 {
@@ -211,21 +211,21 @@ static const bool * wholedisk_get_feature_array(LFS_t * object)
 
 static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t id, size_t size, void * data)
 {
-	if (id == KFS_FEATURE_SIZE)
+	if (id == FSTITCH_FEATURE_SIZE)
 	{
 		if (size < sizeof(size_t))
 			return -ENOMEM;
 		size = sizeof(size_t);
 		*((size_t *) data) = (inode == INODE_DISK) ? object->blocksize * object->blockdev->numblocks : 0;
 	}
-	else if (id == KFS_FEATURE_FILETYPE)
+	else if (id == FSTITCH_FEATURE_FILETYPE)
 	{
 		if (size < sizeof(int32_t))
 			return -ENOMEM;
 		size = sizeof(int32_t);
 		*((int32_t *) data) = (inode == INODE_DISK) ? TYPE_DEVICE : TYPE_DIR;
 	}
-	else if (id == KFS_FEATURE_FREESPACE)
+	else if (id == FSTITCH_FEATURE_FREESPACE)
 	{
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -233,7 +233,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 
 		*((uint32_t *) data) = 0;
 	}
-	else if (id == KFS_FEATURE_FILE_LFS)
+	else if (id == FSTITCH_FEATURE_FILE_LFS)
 	{
 		if (size < sizeof(object))
 			return -ENOMEM;
@@ -241,7 +241,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 
 		*((typeof(object) *) data) = object;
 	}
-	else if (id == KFS_FEATURE_BLOCKSIZE)
+	else if (id == FSTITCH_FEATURE_BLOCKSIZE)
 	{
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -249,7 +249,7 @@ static int wholedisk_get_metadata_inode(LFS_t * object, inode_t inode, uint32_t 
 
 		*((uint32_t *) data) = object->blockdev->blocksize;
 	}
-	else if (id == KFS_FEATURE_DEVSIZE)
+	else if (id == FSTITCH_FEATURE_DEVSIZE)
 	{
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -273,17 +273,17 @@ static int wholedisk_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, ui
 	return wholedisk_get_metadata_inode(object, inode, id, size, data);
 }
 
-static int wholedisk_set_metadata2(LFS_t * object, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
+static int wholedisk_set_metadata2(LFS_t * object, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
 {
 	return -EINVAL;
 }
 
-static int wholedisk_set_metadata2_inode(LFS_t * object, inode_t inode, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
+static int wholedisk_set_metadata2_inode(LFS_t * object, inode_t inode, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
 {
 	return wholedisk_set_metadata2(object, fsm, nfsm, head);
 }
 
-static int wholedisk_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
+static int wholedisk_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
 {
 	return wholedisk_set_metadata2(object, fsm, nfsm, head);
 }

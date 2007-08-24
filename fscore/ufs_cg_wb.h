@@ -1,9 +1,9 @@
-#ifndef __KUDOS_KFS_UFS_CG_WB_H
-#define __KUDOS_KFS_UFS_CG_WB_H
+#ifndef __FSTITCH_FSCORE_UFS_CG_WB_H
+#define __FSTITCH_FSCORE_UFS_CG_WB_H
 
-#include <kfs/ufs_cg.h>
-#include <kfs/ufs_common.h>
+#include <fscore/ufs_cg.h>
+#include <fscore/ufs_common.h>
 
 UFSmod_cg_t * ufs_cg_wb(struct ufs_info * info);
 
-#endif /* __KUDOS_KFS_UFS_CG_WB_H */
+#endif /* __FSTITCH_FSCORE_UFS_CG_WB_H */

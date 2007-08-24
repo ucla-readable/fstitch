@@ -2,9 +2,9 @@
 #include <lib/vector.h>
 #include <lib/dirent.h>
 
-#include <kfs/modman.h>
-#include <kfs/cfs.h>
-#include <kfs/file_hiding_cfs.h>
+#include <fscore/modman.h>
+#include <fscore/cfs.h>
+#include <fscore/file_hiding_cfs.h>
 
 #define FILE_HIDING_DEBUG 0
 

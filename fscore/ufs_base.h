@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_UFS_BASE_H
-#define __KUDOS_KFS_UFS_BASE_H
+#ifndef __FSTITCH_FSCORE_UFS_BASE_H
+#define __FSTITCH_FSCORE_UFS_BASE_H
 
-#include <kfs/bd.h>
-#include <kfs/lfs.h>
+#include <fscore/bd.h>
+#include <fscore/lfs.h>
 
 // Maximum size of a filename (a single path component), including null
 #define UFS_MAXNAMELEN	255
@@ -275,4 +275,4 @@ struct UFS_File {
 
 LFS_t * ufs(BD_t * block_device);
 
-#endif /* __KUDOS_KFS_UFS_BASE_H */
+#endif /* __FSTITCH_FSCORE_UFS_BASE_H */

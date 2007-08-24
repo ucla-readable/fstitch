@@ -1,5 +1,5 @@
-#ifndef KUDOS_INC_HASH_SET_H
-#define KUDOS_INC_HASH_SET_H
+#ifndef FSTITCH_INC_HASH_SET_H
+#define FSTITCH_INC_HASH_SET_H
 
 #include <lib/hash_map.h>
 
@@ -46,4 +46,4 @@ void hash_set_it_init(hash_set_it_t * it, hash_set_t * hs);
 //   iterating using the old hs_it.
 void * hash_set_next(hash_set_it_t * it);
 
-#endif /* !KUDOS_INC_HASH_SET_H */
+#endif /* !FSTITCH_INC_HASH_SET_H */

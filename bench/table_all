@@ -2,7 +2,7 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 
 TESTS="tar rm postmark andrew imap svn"
 

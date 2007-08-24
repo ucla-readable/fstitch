@@ -7,41 +7,41 @@
 #include <lib/jiffies.h>
 #include <lib/disklabel.h>
 
-#include <kfs/pc_ptable.h>
-#include <kfs/bsd_ptable.h>
-#include <kfs/wt_cache_bd.h>
-#include <kfs/wb_cache_bd.h>
-#include <kfs/wb2_cache_bd.h>
-#include <kfs/wbr_cache_bd.h>
-#include <kfs/block_resizer_bd.h>
-#include <kfs/crashsim_bd.h>
-#include <kfs/mem_bd.h>
-#include <kfs/loop_bd.h>
+#include <fscore/pc_ptable.h>
+#include <fscore/bsd_ptable.h>
+#include <fscore/wt_cache_bd.h>
+#include <fscore/wb_cache_bd.h>
+#include <fscore/wb2_cache_bd.h>
+#include <fscore/wbr_cache_bd.h>
+#include <fscore/block_resizer_bd.h>
+#include <fscore/crashsim_bd.h>
+#include <fscore/mem_bd.h>
+#include <fscore/loop_bd.h>
 
-#include <kfs/ext2_base.h>
-#include <kfs/journal_bd.h>
-#include <kfs/unlink_bd.h>
-#include <kfs/wholedisk_lfs.h>
-#include <kfs/josfs_base.h>
-#include <kfs/ufs_base.h>
-#include <kfs/opgroup_lfs.h>
-#include <kfs/uhfs.h>
-#include <kfs/icase_cfs.h>
-#include <kfs/revision.h>
-#include <kfs/modman.h>
-#include <kfs/sched.h>
-#include <kfs/kfsd.h>
-#include <kfs/debug.h>
-#include <kfs/kfsd_init.h>
+#include <fscore/ext2_base.h>
+#include <fscore/journal_bd.h>
+#include <fscore/unlink_bd.h>
+#include <fscore/wholedisk_lfs.h>
+#include <fscore/josfs_base.h>
+#include <fscore/ufs_base.h>
+#include <fscore/patchgroup_lfs.h>
+#include <fscore/uhfs.h>
+#include <fscore/icase_cfs.h>
+#include <fscore/revision.h>
+#include <fscore/modman.h>
+#include <fscore/sched.h>
+#include <fscore/fstitchd.h>
+#include <fscore/debug.h>
+#include <fscore/fstitchd_init.h>
 
 #ifdef __KERNEL__
-#include <kfs/linux_bd.h>
-#include <kfs/kernel_serve.h>
-#include <kfs/kernel_opgroup_ops.h>
-#include <kfs/kernel_opgroup_scopes.h>
+#include <fscore/linux_bd.h>
+#include <fscore/kernel_serve.h>
+#include <fscore/kernel_patchgroup_ops.h>
+#include <fscore/kernel_patchgroup_scopes.h>
 #elif defined(UNIXUSER)
-#include <kfs/unix_file_bd.h>
-#include <kfs/fuse_serve.h>
+#include <fscore/unix_file_bd.h>
+#include <fscore/fuse_serve.h>
 #endif
 
 #define LINUX_BD_TIMING_TEST 0
@@ -52,13 +52,13 @@ int handle_bsd_partitions(void * bsdtbl, vector_t * partitions);
 
 static const char * fspaths[] = {"/", "/k0", "/k1", "/k2", "/k3"};
 
-struct kfsd_partition {
+struct fstitchd_partition {
 	BD_t * bd;
 	uint16_t type;
 	uint16_t subtype;
 	char description[32];
 };
-typedef struct kfsd_partition kfsd_partition_t;
+typedef struct fstitchd_partition fstitchd_partition_t;
 
 #define USE_ICASE 0
 
@@ -79,7 +79,7 @@ typedef struct kfsd_partition kfsd_partition_t;
 #error The journal requires a wb2_cache to function
 #endif
 
-int kfsd_init(int nwbblocks)
+int fstitchd_init(int nwbblocks)
 {
 	const bool use_disk_1 = 1;
 	const bool use_disk_2 = 1;
@@ -96,24 +96,24 @@ int kfsd_init(int nwbblocks)
 	}
 #endif
 
-	printf("kfsd (%s) starting\n", RELEASE_NAME);
+	printf("fstitchd (%s) starting\n", RELEASE_NAME);
 
-	/* we do kfsd_sched_init() before KFS_DEBUG_INIT() because the debugger
+	/* we do fstitchd_sched_init() before FSTITCH_DEBUG_INIT() because the debugger
 	 * registers a periodic callback... but aside from this exception, the
 	 * debugger should be initialized first so we don't miss any interesting
 	 * events by accident */
-	if ((r = kfsd_sched_init()) < 0)
+	if ((r = fstitchd_sched_init()) < 0)
 	{
 		fprintf(stderr, "sched_init: %i\n", r);
 		return r;
 	}
 
-	if((r = KFS_DEBUG_INIT()) < 0)
+	if((r = FSTITCH_DEBUG_INIT()) < 0)
 	{
-		fprintf(stderr, "kfs_debug_init: %i\n", r);
+		fprintf(stderr, "fstitch_debug_init: %i\n", r);
 		return r;
 	}
-	KFS_DEBUG_COMMAND(KFS_DEBUG_DISABLE, KDB_MODULE_BDESC);
+	FSTITCH_DEBUG_COMMAND(FSTITCH_DEBUG_DISABLE, KDB_MODULE_BDESC);
 
 	if ((r = hash_map_init()) < 0)
 	{
@@ -125,9 +125,9 @@ int kfsd_init(int nwbblocks)
 		fprintf(stderr, "bdesc_init: %i\n", r);
 		return r;
 	}
-	if ((r = chdesc_init()) < 0)
+	if ((r = patch_init()) < 0)
 	{
-		fprintf(stderr, "chdesc_init: %i\n", r);
+		fprintf(stderr, "patch_init: %i\n", r);
 		return r;
 	}
 	if ((r = revision_init()) < 0)
@@ -148,20 +148,20 @@ int kfsd_init(int nwbblocks)
 		fprintf(stderr, "kernel_serve_init: %d\n", r);
 		return r;
 	}
-	if ((r = kernel_opgroup_ops_init()) < 0)
+	if ((r = kernel_patchgroup_ops_init()) < 0)
 	{
-		fprintf(stderr, "kernel_opgroup_ops_init: %d\n", r);
+		fprintf(stderr, "kernel_patchgroup_ops_init: %d\n", r);
 		return r;
 	}
-	if ((r = kernel_opgroup_scopes_init()) < 0)
+	if ((r = kernel_patchgroup_scopes_init()) < 0)
 	{
-		fprintf(stderr, "kernel_opgroup_scopes_init: %d\n", r);
+		fprintf(stderr, "kernel_patchgroup_scopes_init: %d\n", r);
 		return r;
 	}
 #elif defined(UNIXUSER)
-	extern int kfsd_argc;
-	extern char ** kfsd_argv;
-	if ((r = fuse_serve_init(kfsd_argc, kfsd_argv)) < 0)
+	extern int fstitchd_argc;
+	extern char ** fstitchd_argv;
+	if ((r = fuse_serve_init(fstitchd_argc, fstitchd_argv)) < 0)
 	{
 		fprintf(stderr, "fuse_serve_init: %d\n", r);
 		return r;
@@ -174,9 +174,9 @@ int kfsd_init(int nwbblocks)
 		return r;
 	}
 	
-	printf("kfsd basic initialization complete!\n");
+	printf("fstitchd basic initialization complete!\n");
 	
-	printf("kfsd: default write back cache size = %d\n", nwbblocks);
+	printf("fstitchd: default write back cache size = %d\n", nwbblocks);
 
 	//
 	// Setup uhfses
@@ -227,9 +227,9 @@ int kfsd_init(int nwbblocks)
 				for(number = 0; number < 30; number++)
 				{
 					bdesc_t * block;
-					chdesc_t * init = NULL;
+					patch_t * init = NULL;
 					block = CALL(bd, synthetic_read_block, block_numbers[0][number] * 8, 8);
-					chdesc_create_init(block, bd, &init);
+					patch_create_init(block, bd, &init);
 					CALL(bd, write_block, block);
 				}
 				while(revision_tail_flights_exist())
@@ -308,10 +308,10 @@ int kfsd_init(int nwbblocks)
 		size_t i;
 		for (i=0; i < uhfses_size; i++)
 		{
-			r = kfsd_add_mount(fspaths[i], vector_elt(uhfses, i));
+			r = fstitchd_add_mount(fspaths[i], vector_elt(uhfses, i));
 			if (r < 0)
 			{
-				fprintf(stderr, "kfsd_add_mount: %i\n", r);
+				fprintf(stderr, "fstitchd_add_mount: %i\n", r);
 				return r;
 			}
 		}
@@ -320,17 +320,17 @@ int kfsd_init(int nwbblocks)
 		uhfses = NULL;
 	}
 
-	r = kfsd_add_mount("/dev", modman_devfs);
+	r = fstitchd_add_mount("/dev", modman_devfs);
 	if (r < 0)
 	{
-		fprintf(stderr, "kfsd_add_mount: %i\n", r);
+		fprintf(stderr, "fstitchd_add_mount: %i\n", r);
 		return r;
 	}
 
 	return 0;
 }
 
-static LFS_t * construct_lfs(kfsd_partition_t * part, uint32_t cache_nblks, LFS_t * (*fs)(BD_t *), const char * name, uint16_t blocksize)
+static LFS_t * construct_lfs(fstitchd_partition_t * part, uint32_t cache_nblks, LFS_t * (*fs)(BD_t *), const char * name, uint16_t blocksize)
 {
 	LFS_t * plain_lfs;
 	LFS_t * lfs = NULL;
@@ -435,7 +435,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	void * ptbl = NULL;
 	void * bsdtbl = NULL;
 	vector_t * partitions = NULL;
-	kfsd_partition_t * part = NULL;
+	fstitchd_partition_t * part = NULL;
 	uint32_t i;
 
 	if (! (partitions = vector_create()) )
@@ -454,9 +454,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		{
 			uint8_t type = pc_ptable_type(ptbl, i);
 			printf("Partition %d has type %02x\n", i, type);
-			if (type == PTABLE_KUDOS_TYPE || type == PTABLE_LINUX_TYPE)
+			if (type == PTABLE_FSTITCH_TYPE || type == PTABLE_LINUX_TYPE)
 			{
-				if (! (part = malloc(sizeof(kfsd_partition_t))) )
+				if (! (part = malloc(sizeof(fstitchd_partition_t))) )
 				{
 					fprintf(stderr, "OOM, malloc\n");
 					return -ENOMEM;
@@ -501,14 +501,14 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 	else
 	{
 		printf("Using whole disk.\n");
-		if (! (part = malloc(sizeof(kfsd_partition_t))) )
+		if (! (part = malloc(sizeof(fstitchd_partition_t))) )
 		{
 			fprintf(stderr, "OOM, malloc\n");
 			return -ENOMEM;
 		}
 		// No partition table, make it look like a KudOS partition...
 		part->bd = bd;
-		part->type = PTABLE_KUDOS_TYPE;
+		part->type = PTABLE_FSTITCH_TYPE;
 		part->subtype = 0;
 		snprintf(part->description, 32, "<entire disk>");
 		if (vector_push_back(partitions, part))
@@ -528,7 +528,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		if (!part)
 			continue;
 
-		if (part->type == PTABLE_KUDOS_TYPE)
+		if (part->type == PTABLE_FSTITCH_TYPE)
 		{
 			lfs = construct_lfs(part, cache_nblks, josfs, 4096);
 		}
@@ -550,7 +550,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		if(!lfs)
 			continue;
 
-		if (! (lfs = opgroup_lfs(lfs)))
+		if (! (lfs = patchgroup_lfs(lfs)))
 			return -1;
 		if (! (u = uhfs(lfs)) )
 		{
@@ -615,14 +615,14 @@ int handle_bsd_partitions(void * bsdtbl, vector_t * partitions)
 {
 	uint32_t j, bsd_max = bsd_ptable_count(bsdtbl);
 	uint8_t fstype;
-	kfsd_partition_t * part = NULL;
+	fstitchd_partition_t * part = NULL;
 
 	for (j = 1; j <= bsd_max; j++)
 	{
 		fstype = bsd_ptable_type(bsdtbl, j);
 		if (fstype != BSDLABEL_FS_UNUSED)
 		{
-			if (! (part = malloc(sizeof(kfsd_partition_t))) )
+			if (! (part = malloc(sizeof(fstitchd_partition_t))) )
 			{
 				fprintf(stderr, "OOM, malloc\n");
 				return -ENOMEM;

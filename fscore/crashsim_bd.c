@@ -1,12 +1,12 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/revision.h>
-#include <kfs/crashsim_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/revision.h>
+#include <fscore/crashsim_bd.h>
 
 #ifdef __KERNEL__
 #include <linux/random.h>
@@ -126,7 +126,7 @@ static int crashsim_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	}
 	
 	/* this should never fail */
-	value = chdesc_push_down(block, object, info->bd);
+	value = patch_push_down(block, object, info->bd);
 	if(value < 0)
 		return value;
 	
@@ -134,12 +134,12 @@ static int crashsim_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	return CALL(info->bd, write_block, block, number);
 }
 
-static int crashsim_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int crashsim_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** crashsim_bd_get_write_head(BD_t * object)
+static patch_t ** crashsim_bd_get_write_head(BD_t * object)
 {
 	struct crashsim_info * info = (struct crashsim_info *) object;
 	return CALL(info->bd, get_write_head);

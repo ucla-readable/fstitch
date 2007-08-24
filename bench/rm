@@ -2,7 +2,7 @@
 
 function test () {
 	ktime rm rm -rf $MNT/$TAROUT
-	ktime sync fsync $KUDOSDIR $MNT
+	ktime sync fsync $FSTITCHDIR $MNT
 }
 
 function run () {
@@ -15,8 +15,8 @@ function run () {
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 load_config "$OUTDIR"
 T=rm
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
@@ -28,8 +28,8 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-build $T $N $KUDOSDIR $HOST
+build $T $N $FSTITCHDIR $HOST
 
 log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST $CRASHSIM
+finish $T $N $FSTITCHDIR $OUTDIR $HOST $CRASHSIM

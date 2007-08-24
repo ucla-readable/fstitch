@@ -1,19 +1,19 @@
-#ifndef __KUDOS_KFS_CHDESC_UTIL_H
-#define __KUDOS_KFS_CHDESC_UTIL_H
+#ifndef __FSTITCH_FSCORE_PATCH_UTIL_H
+#define __FSTITCH_FSCORE_PATCH_UTIL_H
 
-#include <kfs/chdesc.h>
+#include <fscore/patch.h>
 
-/* mark a chdesc graph (i.e. set CHDESC_MARKED) */
-void chdesc_mark_graph(chdesc_t * root);
+/* mark a patch graph (i.e. set PATCH_MARKED) */
+void patch_mark_graph(patch_t * root);
 
-/* unmark a chdesc graph (i.e. clear CHDESC_MARKED) */
-void chdesc_unmark_graph(chdesc_t * root);
+/* unmark a patch graph (i.e. clear PATCH_MARKED) */
+void patch_unmark_graph(patch_t * root);
 
 /* push all change descriptors at this block device on a block (i.e. data) descriptor to a new block device and block */
-int chdesc_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd);
+int patch_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd);
 
 /* create change descriptors based on the diff of two data regions */
-int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head);
-int chdesc_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** tail, chdesc_pass_set_t * befores);
+int patch_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, patch_t ** head);
+int patch_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, patch_t ** tail, patch_pass_set_t * befores);
 
-#endif /* __KUDOS_KFS_CHDESC_UTIL_H */
+#endif /* __FSTITCH_FSCORE_PATCH_UTIL_H */

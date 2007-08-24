@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_BD_H
-#define __KUDOS_KFS_BD_H
+#ifndef __FSTITCH_FSCORE_BD_H
+#define __FSTITCH_FSCORE_BD_H
 
-#include <kfs/oo.h>
-#include <kfs/types.h>
+#include <fscore/oo.h>
+#include <fscore/types.h>
 
 /* maximum number of BD levels */
 #define NBDLEVEL 2
@@ -39,8 +39,8 @@ struct BD {
 	 * because this is where it really hurts to do unnecessary reads. */
 	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint16_t count, page_t * page);
 	DECLARE(BD_t, int, write_block, bdesc_t * block, uint32_t number);
-	DECLARE(BD_t, int, flush, uint32_t block, chdesc_t * ch);
-	DECLARE(BD_t, chdesc_t **, get_write_head);
+	DECLARE(BD_t, int, flush, uint32_t block, patch_t * ch);
+	DECLARE(BD_t, patch_t **, get_write_head);
 	/* This function returns the number of dirtyable cache blocks in the
 	 * earliest cache. It returns negative numbers to indicate that a cache
 	 * already holds more dirty blocks than it wants. */
@@ -59,4 +59,4 @@ struct BD {
 	ASSIGN(bd, module, get_block_space); \
 }
 
-#endif /* __KUDOS_KFS_BD_H */
+#endif /* __FSTITCH_FSCORE_BD_H */

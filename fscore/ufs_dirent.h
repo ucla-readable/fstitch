@@ -1,17 +1,17 @@
-#ifndef __KUDOS_KFS_UFS_DIRENT_H
-#define __KUDOS_KFS_UFS_DIRENT_H
+#ifndef __FSTITCH_FSCORE_UFS_DIRENT_H
+#define __FSTITCH_FSCORE_UFS_DIRENT_H
 
-#include <kfs/oo.h>
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/chdesc.h>
-#include <kfs/fdesc.h>
-#include <kfs/feature.h>
-#include <kfs/inode.h>
-#include <kfs/lfs.h>
+#include <fscore/oo.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/patch.h>
+#include <fscore/fdesc.h>
+#include <fscore/feature.h>
+#include <fscore/inode.h>
+#include <fscore/lfs.h>
 #include <lib/dirent.h>
 
-#include <kfs/ufs_base.h>
+#include <fscore/ufs_base.h>
 
 /*
  * search_dirent:    Sets 'offset' to the offset of a file named 'file' in
@@ -30,10 +30,10 @@ typedef struct UFSmod_dirent UFSmod_dirent_t;
 struct UFSmod_dirent {
 	OBJECT(UFSmod_dirent_t);
 	DECLARE(UFSmod_dirent_t, int, search_dirent, ufs_fdesc_t * dirf, const char * name, inode_t * ino, int * offset);
-	DECLARE(UFSmod_dirent_t, int, insert_dirent, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head);
-	DECLARE(UFSmod_dirent_t, int, delete_dirent, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head);
+	DECLARE(UFSmod_dirent_t, int, insert_dirent, ufs_fdesc_t * dirf, struct dirent dirinfo, patch_t ** head);
+	DECLARE(UFSmod_dirent_t, int, delete_dirent, ufs_fdesc_t * dirf, const char * name, patch_t ** head);
 	DECLARE(UFSmod_dirent_t, int, get_dirent, ufs_fdesc_t * dirf, struct dirent * entry, uint16_t size, uint32_t * basep);
-	DECLARE(UFSmod_dirent_t, int, modify_dirent, ufs_fdesc_t * dirf, struct dirent entry, uint32_t basep, chdesc_t ** head);
+	DECLARE(UFSmod_dirent_t, int, modify_dirent, ufs_fdesc_t * dirf, struct dirent entry, uint32_t basep, patch_t ** head);
 };
 
 #define UFS_DIRENT_INIT(ufs, module) { \
@@ -45,4 +45,4 @@ struct UFSmod_dirent {
 	ASSIGN(ufs, module, modify_dirent); \
 }
 
-#endif /* __KUDOS_KFS_UFS_DIRENT_H */
+#endif /* __FSTITCH_FSCORE_UFS_DIRENT_H */

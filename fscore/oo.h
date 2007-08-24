@@ -1,7 +1,7 @@
-#ifndef __KUDOS_KFS_OO_H
-#define __KUDOS_KFS_OO_H
+#ifndef __FSTITCH_FSCORE_OO_H
+#define __FSTITCH_FSCORE_OO_H
 
-#include <kfs/magic.h>
+#include <fscore/magic.h>
 
 #define OBJECT(interface) struct object uniform; int (*__destroy_type)(interface * object)
 #define DECLARE(interface, type, method, args...) type (*_##method)(interface * object, ##args)
@@ -26,4 +26,4 @@ struct object {
 };
 typedef struct { struct object uniform; } object_t;
 
-#endif /* __KUDOS_KFS_OO_H */
+#endif /* __FSTITCH_FSCORE_OO_H */

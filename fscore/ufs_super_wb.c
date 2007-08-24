@@ -2,9 +2,9 @@
 #include <lib/jiffies.h>
 #include <lib/vector.h>
 
-#include <kfs/debug.h>
-#include <kfs/sched.h>
-#include <kfs/ufs_super_wb.h>
+#include <fscore/debug.h>
+#include <fscore/sched.h>
+#include <fscore/ufs_super_wb.h>
 
 #define WB_TIME     0
 #define WB_CSTOTAL  1
@@ -39,7 +39,7 @@ static const struct UFS_Super * ufs_super_wb_read(UFSmod_super_t * object)
 	return &linfo->super;
 }
 
-static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc_t ** head)
+static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -55,12 +55,12 @@ static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc
 	if (!linfo->dirty[WB_TIME])
 		return 0;
 
-	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_time,
 			sizeof(linfo->super.fs_time), &linfo->super.fs_time, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock timestamp");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock timestamp");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
@@ -69,7 +69,7 @@ static int ufs_super_wb_write_time(UFSmod_super_t * object, int32_t time, chdesc
 	return 0;
 }
 
-static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_csum * sum, chdesc_t ** head)
+static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_csum * sum, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -87,16 +87,16 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 	if (!linfo->dirty[WB_CSTOTAL])
 		return 0;
 
-	r = chdesc_create_diff(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_diff(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_cstotal,
 			sizeof(struct UFS_csum), &linfo->oldsum, &linfo->super.fs_cstotal,
 			head);
 	if (r < 0)
 		return r;
-	/* chdesc_create_diff() returns 0 for "no change" */
+	/* patch_create_diff() returns 0 for "no change" */
 	if (*head && r > 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CStotal");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock CStotal");
 		r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 		if (r < 0)
 			return r;
@@ -109,7 +109,7 @@ static int ufs_super_wb_write_cstotal(UFSmod_super_t * object, const struct UFS_
 	return 0;
 }
 
-static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_t ** head)
+static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -125,12 +125,12 @@ static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_
 	if (!linfo->dirty[WB_FMOD])
 		return 0;
 
-	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_fmod,
 			sizeof(linfo->super.fs_fmod), &linfo->super.fs_fmod, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock fmod");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock fmod");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
@@ -139,7 +139,7 @@ static int ufs_super_wb_write_fmod(UFSmod_super_t * object, int8_t fmod, chdesc_
 	return 0;
 }
 
-static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdesc_t ** head)
+static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -155,12 +155,12 @@ static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdes
 	if (!linfo->dirty[WB_CLEAN])
 		return 0;
 
-	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_clean,
 			sizeof(linfo->super.fs_clean), &linfo->super.fs_clean, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock clean");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock clean");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
@@ -169,7 +169,7 @@ static int ufs_super_wb_write_clean(UFSmod_super_t * object, int8_t clean, chdes
 	return 0;
 }
 
-static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdesc_t ** head)
+static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -185,12 +185,12 @@ static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdes
 	if (!linfo->dirty[WB_RONLY])
 		return 0;
 
-	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_ronly,
 			sizeof(linfo->super.fs_ronly), &linfo->super.fs_ronly, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock readonly");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock readonly");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
@@ -199,7 +199,7 @@ static int ufs_super_wb_write_ronly(UFSmod_super_t * object, int8_t ronly, chdes
 	return 0;
 }
 
-static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt, chdesc_t ** head)
+static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r, len;
@@ -218,12 +218,12 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 	if (!linfo->dirty[WB_FSMNT])
 		return 0;
 
-	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_fsmnt,
 			strlen((char *) linfo->super.fs_fsmnt) + 1, &linfo->super.fs_fsmnt, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock FSmount");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock FSmount");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
@@ -232,7 +232,7 @@ static int ufs_super_wb_write_fsmnt(UFSmod_super_t * object, const char * fsmnt,
 	return 0;
 }
 
-static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, chdesc_t ** head)
+static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -248,12 +248,12 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 	if (!linfo->dirty[WB_CGROTOR])
 		return 0;
 
-	r = chdesc_create_byte(linfo->super_block, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->super_block, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_Super *) NULL)->fs_cgrotor,
 			sizeof(linfo->super.fs_cgrotor), &linfo->super.fs_cgrotor, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "superblock CGrotor");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "superblock CGrotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->super_block, SUPER_NUMBER);
 	if (r < 0)
 		return r;
@@ -264,10 +264,10 @@ static int ufs_super_wb_write_cgrotor(UFSmod_super_t * object, int32_t cgrotor, 
 
 /* Writes all outstanding changes to disk. Changes are hooked up in
  * parallel. */
-static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
+static int ufs_super_wb_sync(UFSmod_super_t * object, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
-	chdesc_t ** oldhead;
+	patch_t ** oldhead;
 	vector_t * oldheads;
 	int r;
 
@@ -360,7 +360,7 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, chdesc_t ** head)
 
 	if (vector_size(oldheads))
 	{
-		r = chdesc_create_noop_array(NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		r = patch_create_noop_array(NULL, head, vector_size(oldheads), (patch_t **) oldheads->elts);
 		if (r < 0)
 			goto exit;
 	}
@@ -376,7 +376,7 @@ static void ufs_super_wb_sync_callback(void * arg)
 {
 	UFSmod_super_t * object = (UFSmod_super_t *) arg;
 	struct local_info * linfo = (struct local_info *) object;
-	chdesc_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
+	patch_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
 	int r;
 
 	r = ufs_super_wb_sync(object, &head);

@@ -1,12 +1,12 @@
-#ifndef __KUDOS_KFS_UNIX_FILE_BD_H
-#define __KUDOS_KFS_UNIX_FILE_BD_H
+#ifndef __FSTITCH_FSCORE_UNIX_FILE_BD_H
+#define __FSTITCH_FSCORE_UNIX_FILE_BD_H
 
 #if !defined(UNIXUSER)
 #error requires unixuser
 #endif
 
-#include <kfs/bd.h>
+#include <fscore/bd.h>
 
 BD_t * unix_file_bd(const char *fname, uint16_t blocksize);
 
-#endif /* __KUDOS_KFS_UNIX_FILE_BD_H */
+#endif /* __FSTITCH_FSCORE_UNIX_FILE_BD_H */

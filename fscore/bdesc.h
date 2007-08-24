@@ -1,5 +1,5 @@
-#ifndef __KUDOS_KFS_BDESC_H
-#define __KUDOS_KFS_BDESC_H
+#ifndef __FSTITCH_FSCORE_BDESC_H
+#define __FSTITCH_FSCORE_BDESC_H
 
 /* These flags are purely for debugging, and are set only when helpful. */
 #define BDESC_FLAG_BITMAP 0x0001
@@ -14,21 +14,21 @@
 
 #ifndef CONSTANTS_ONLY
 
-/* Set to allow non-rollbackable chdescs; these chdescs omit their data ptr
+/* Set to allow non-rollbackable patchs; these patchs omit their data ptr
  * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
-#define CHDESC_NRB 1
+#define PATCH_NRB 1
 /* BDESC_EXTERN_AFTER_COUNT speeds up data omittance detection */
 /* values: 0 (disable), 1 (enable) */
-#define BDESC_EXTERN_AFTER_COUNT CHDESC_NRB
+#define BDESC_EXTERN_AFTER_COUNT PATCH_NRB
 /* Set to ensure that, for a block with a NRB, all RBs on the block depend
- * on the NRB, thereby ensuring the ready list contains only ready chdescs */
+ * on the NRB, thereby ensuring the ready list contains only ready patchs */
 /* values: 0 (do not ensure), 1 (do ensure) */
-#define CHDESC_RB_NRB_READY (CHDESC_NRB && 1)
+#define PATCH_RB_NRB_READY (PATCH_NRB && 1)
 
 #include <lib/hash_map.h>
-#include <kfs/debug.h>
-#include <kfs/bd.h>
+#include <fscore/debug.h>
+#include <fscore/bd.h>
 
 /* reorder the queue to try and find a better flush order */
 #define DIRTY_QUEUE_REORDERING 0
@@ -46,27 +46,27 @@ struct bdesc {
 	unsigned flags : 30;
 	
 	// CHANGE DESCRIPTOR INFORMATION
-	chdesc_t * all_changes;
-	chdesc_t ** all_changes_tail;
+	patch_t * all_changes;
+	patch_t ** all_changes_tail;
 
 #if BDESC_EXTERN_AFTER_COUNT
 	uint32_t extern_after_count;
 #endif
 	
-	/* For each level (at most 1 BD per level), the level's ready chdescs.
-	 * ready chdesc: chdesc with no befores at its level or higher. */
-	chdesc_dlist_t ready_changes[NBDLEVEL];
+	/* For each level (at most 1 BD per level), the level's ready patchs.
+	 * ready patch: patch with no befores at its level or higher. */
+	patch_dlist_t ready_changes[NBDLEVEL];
 
-	/* For each graph index, the chdescs owned by that BD. */
-	chdesc_dlist_t index_changes[NBDINDEX];
+	/* For each graph index, the patchs owned by that BD. */
+	patch_dlist_t index_changes[NBDINDEX];
 	
-#if CHDESC_NRB
+#if PATCH_NRB
 	chweakref_t nrb;
 #endif
 
 #define OVERLAP1SHIFT	5
 #define NOVERLAP1	32
-	chdesc_t *overlap1[1 + NOVERLAP1];
+	patch_t *overlap1[1 + NOVERLAP1];
 	
 	hash_map_t * bit_changes;
 	
@@ -163,7 +163,7 @@ static inline void bdesc_ensure_linked_page(bdesc_t * bdesc, page_t * page)
 static inline bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
 	bdesc->ref_count++;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
 	return bdesc;
 }
 
@@ -171,7 +171,7 @@ static inline void bdesc_release(bdesc_t **bdp)
 {
 	assert((*bdp)->ref_count > (*bdp)->ar_count);
 	(*bdp)->ref_count--;
-	KFS_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count);
 	if (!(*bdp)->ref_count)
 		__bdesc_release(*bdp);
 	*bdp = NULL;
@@ -179,4 +179,4 @@ static inline void bdesc_release(bdesc_t **bdp)
 
 #endif /* CONSTANTS_ONLY */
 
-#endif /* __KUDOS_KFS_BDESC_H */
+#endif /* __FSTITCH_FSCORE_BDESC_H */

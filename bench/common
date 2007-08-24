@@ -26,24 +26,24 @@ function try () {
 	if [ $R -ne 0 ]; then echo "FAILED ($R): $@"; exit 1; fi
 }
 
-# wait (a bit) for kkfsd to exit
-function waitkkfsd () {
+# wait (a bit) for kfstitchd to exit
+function waitkfstitchd () {
 	MAX=10
 	I=0
 	while [ $I -lt $MAX ]; do
-		ps -C kkfsd | grep -vq kkfsd && break
+		ps -C kfstitchd | grep -vq kfstitchd && break
 		sleep 0.5
 		I=$((I + 1))
 	done
-	[ $I -eq $MAX ] && echo "kkfsd has not exited" 1>&2
-	sleep 1 # try to wait for syslogd to log kkfsd exit output
+	[ $I -eq $MAX ] && echo "kfstitchd has not exited" 1>&2
+	sleep 1 # try to wait for syslogd to log kfstitchd exit output
 }
 
-# fsync after a test (both kudos and linux)
+# fsync after a test (both fsttich and linux)
 function fsync () {
-	KUDOSDIR=$1
+	FSTITCHDIR=$1
 	MNT=$2
-	$KUDOSDIR/obj/util/fsync $MNT
+	$FSTITCHDIR/obj/util/fsync $MNT
 	sync
 }
 
@@ -51,16 +51,16 @@ function fsync () {
 function build () {
 	T="$1"
 	N="$2"
-	KUDOSDIR="$3"
+	FSTITCHDIR="$3"
 	HOST="$4"
 
 	echo "* Start test $T ($N)"
 
 	case "$HOST" in
-		kudos)
-			pushd $KUDOSDIR; try make; popd;;
+		fsttich)
+			pushd $FSTITCHDIR; try make; popd;;
 		uu)
-			pushd $KUDOSDIR; try make -f Makefile.user; popd;;
+			pushd $FSTITCHDIR; try make -f Makefile.user; popd;;
 		linux)
 			;;
 		*)
@@ -77,11 +77,11 @@ function log_kernel () {
 	OUTDIR=$3
 	HOST=$4
 
-	if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]; then
+	if [ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]; then
 		echo "+ tail /var/log/syslog"
 		sudo tail -f -n 0 /var/log/syslog &>$OUTDIR/$T.sys.$N </dev/null &
 		SYSTAIL=$!
-		trap "echo + kill tail syslog; waitkkfsd; sudo kill $SYSTAIL" EXIT
+		trap "echo + kill tail syslog; waitkfstitchd; sudo kill $SYSTAIL" EXIT
 	fi
 }
 
@@ -92,20 +92,20 @@ function prepare_postinit () {
 	OUTDIR=$3
 	HOST=$4
 
-	if [ "$HOST" == "kudos" ] && [ -f /proc/kkfsd_debug ]; then
-		echo "+ sudo log /proc/kkfsd_debug"
-		sudo cat /proc/kkfsd_debug &>$OUTDIR/$T.kdb.$N </dev/null &
+	if [ "$HOST" == "fsttich" ] && [ -f /proc/kfstitchd_debug ]; then
+		echo "+ sudo log /proc/kfstitchd_debug"
+		sudo cat /proc/kfstitchd_debug &>$OUTDIR/$T.kdb.$N </dev/null &
 		KDBCAT=$!
 		sudo tail -f -n 1 /var/log/syslog 2>&1 </dev/null \
 			| while read line; do
-				echo "$line" | grep -q "Please kill /proc/kkfsd_debug"
+				echo "$line" | grep -q "Please kill /proc/kfstitchd_debug"
 				[ $? -eq 0 ] || continue
 				sudo kill $KDBCAT
 				break
 			done &>/dev/null &
 	fi
 
-	if [ "$NOBLKTRACE" == "" ] && [ "$HOST" == "kudos" -o "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
+	if [ "$NOBLKTRACE" == "" ] && [ "$HOST" == "fsttich" -o "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
 		if ! mount | grep -q /debug; then
 			sudo mount /debug
 		fi
@@ -127,14 +127,14 @@ function prepare_postinit () {
 function finish () {
 	T=$1
 	N=$2
-	KUDOSDIR=$3
+	FSTITCHDIR=$3
 	OUTDIR=$4
 	HOST=$5
 	CRASHSIM=$6
 	PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
-	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]); then
+	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]); then
 		grep -q idle=poll /proc/cmdline && TP=.2 || TP=1
-		try sudo opreport -l -g -p $KUDOSDIR/kfs/ -t $TP | tee -a $OUTDIR/$T.oprof.$N
+		try sudo opreport -l -g -p $FSTITCHDIR/fscore/ -t $TP | tee -a $OUTDIR/$T.oprof.$N
 	fi
 	if ps -C blktrace >/dev/null; then
 		echo "+ kill blktrace"
@@ -144,11 +144,11 @@ function finish () {
 		# ugly. can we avoid this duplication of code with bench/init easily?
 		DEV=
 		PART=
-		if [ "$HOST" == "kudos" ] || [ "$HOST" == "linux" ]; then
+		if [ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]; then
 			DEV=${DEV:-/dev/sdb}
 			PART=${DEV}${PART:-1}
 		elif [ "$HOST" == "uu" ]; then
-			DEV=${DEV:-$KUDOSDIR/obj/fs/ext2.img}
+			DEV=${DEV:-$FSTITCHDIR/obj/fs/ext2.img}
 			PART=${DEV}${PART:-}
 		fi
 		# run fsck on the file system: don't use "try" because we expect errors
@@ -165,8 +165,8 @@ function finish () {
 function supported_host_fs () {
 	# note: the below case @() notation requires extglob
 	case "$1" in
-		kudos-@(safe|unsafe)-ext2-@(su|meta|full|none)-@(opgroup|fsync)) true;;
-		kudos-@(safe|unsafe)-ext2-full-@(linearom|linear)) true;;
+		fsttich-@(safe|unsafe)-ext2-@(su|meta|full|none)-@(patchgroup|fsync)) true;;
+		fsttich-@(safe|unsafe)-ext2-full-@(linearom|linear)) true;;
 		uu-unsafe-ext2-@(su|meta|full|none)-none) true;;
 		uu-unsafe-ext2-full-@(linearom|linear)) true;;
 		linux-@(safe|unsafe)-@(ext2-none|ext3-@(writeback|ordered|journal))-fsync) true;;
@@ -185,7 +185,7 @@ function canonicalize_modes () {
 	ACMODE="$5"
 	if [ -z "$DISKCACHE" ]; then
 		case "$HOST" in
-			kudos) DISKCACHE=safe;;
+			fsttich) DISKCACHE=safe;;
 			linux) DISKCACHE=unsafe;;
 			uu) DISKCACHE=unsafe;;
 			*) echo "Unsupported HOST $HOST"; exit 1;;
@@ -193,7 +193,7 @@ function canonicalize_modes () {
 	fi
 	if [ -z "$CMODE" ]; then
 		case "$HOST" in
-			uu|kudos)
+			uu|fsttich)
 				case "$FS" in
 					ext2) CMODE=su;;
 					*) echo "Unsupported $HOST FS $FS"; exit 1;;
@@ -211,7 +211,7 @@ function canonicalize_modes () {
 	fi
 	if [ -z "$ACMODE" ]; then
 		case "$HOST" in
-			kudos) ACMODE=opgroup;;
+			fsttich) ACMODE=patchgroup;;
 			linux) ACMODE=fsync;;
 			uu) ACMODE=none;;
 			*) echo "Unsupported HOST $HOST"; exit 1;;
@@ -244,27 +244,27 @@ function ktime () {
 OLDLINE=
 OLDMALLOC=
 function accounting_on () {
-	OLDLINE="`grep '^#define CHDESC_ACCOUNT .$' $KUDOSDIR/kfs/chdesc.c`"
-	if [ "$OLDLINE" != "#define CHDESC_ACCOUNT 1" ]; then
-		sed -i "s/^#define CHDESC_ACCOUNT .\$/#define CHDESC_ACCOUNT 1/" $KUDOSDIR/kfs/chdesc.c
+	OLDLINE="`grep '^#define PATCH_ACCOUNT .$' $FSTITCHDIR/fscore/patch.c`"
+	if [ "$OLDLINE" != "#define PATCH_ACCOUNT 1" ]; then
+		sed -i "s/^#define PATCH_ACCOUNT .\$/#define PATCH_ACCOUNT 1/" $FSTITCHDIR/fscore/patch.c
 	fi
 
-	OLDMALLOC="`grep '^#define MALLOC_ACCOUNT .$' $KUDOSDIR/lib/kernel-stdlib.h`"
+	OLDMALLOC="`grep '^#define MALLOC_ACCOUNT .$' $FSTITCHDIR/lib/kernel-stdlib.h`"
 	if [ "$OLDMALLOC" != "#define MALLOC_ACCOUNT 1" ]; then
-		sed -i "s/^#define MALLOC_ACCOUNT .\$/#define MALLOC_ACCOUNT 1/" $KUDOSDIR/lib/kernel-stdlib.h
+		sed -i "s/^#define MALLOC_ACCOUNT .\$/#define MALLOC_ACCOUNT 1/" $FSTITCHDIR/lib/kernel-stdlib.h
 	fi
 }
 function accounting_restore () {
-	if [ "$OLDLINE" != "#define CHDESC_ACCOUNT 1" ]; then
-		sed -i "s/^#define CHDESC_ACCOUNT 1\$/$OLDLINE/" $KUDOSDIR/kfs/chdesc.c
-		rm -f $KUDOSDIR/obj/*/chdesc.o $KUDOSDIR/obj/*/*/chdesc.o
+	if [ "$OLDLINE" != "#define PATCH_ACCOUNT 1" ]; then
+		sed -i "s/^#define PATCH_ACCOUNT 1\$/$OLDLINE/" $FSTITCHDIR/fscore/patch.c
+		rm -f $FSTITCHDIR/obj/*/patch.o $FSTITCHDIR/obj/*/*/patch.o
 	fi
 
 	if [ "$OLDMALLOC" != "#define MALLOC_ACCOUNT 1" ]; then
-		sed -i "s/^#define MALLOC_ACCOUNT 1\$/$OLDMALLOC/" $KUDOSDIR/lib/kernel-stdlib.h
+		sed -i "s/^#define MALLOC_ACCOUNT 1\$/$OLDMALLOC/" $FSTITCHDIR/lib/kernel-stdlib.h
 		make clean
 	fi
 }
 
-KMNT=kfs:/
+KMNT=fstitch:/
 MNT=/mnt/test

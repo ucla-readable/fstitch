@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_UNLINK_BD_H
-#define __KUDOS_KFS_UNLINK_BD_H
+#ifndef __FSTITCH_FSCORE_UNLINK_BD_H
+#define __FSTITCH_FSCORE_UNLINK_BD_H
 
-#include <kfs/bd.h>
+#include <fscore/bd.h>
 
 BD_t * unlink_bd(BD_t * disk);
 
-#endif /* __KUDOS_KFS_UNLINK_BD_H */
+#endif /* __FSTITCH_FSCORE_UNLINK_BD_H */

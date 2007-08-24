@@ -1,6 +1,6 @@
 #include <lib/platform.h>
 
-#include <kfs/ufs_alloc_lastpos.h>
+#include <fscore/ufs_alloc_lastpos.h>
 
 struct ufsmod_alloc_info {
 	UFSmod_alloc_t ufsmod_alloc;

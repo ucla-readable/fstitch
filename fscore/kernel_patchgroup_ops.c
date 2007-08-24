@@ -1,40 +1,40 @@
 #include <lib/platform.h>
 
-#include <kfs/kernel_opgroup_ops.h>
+#include <fscore/kernel_patchgroup_ops.h>
 
 #include <linux/version.h>
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 18)
 #include <linux/config.h>
 #endif
 
-#ifdef CONFIG_KUDOS_PROC
+#ifdef CONFIG_FSTITCH_PROC
 #include <linux/blkdev.h>
 #include <linux/spinlock.h>
 
-#include <kfs/kfsd.h>
-#include <kfs/opgroup.h>
-#include <kfs/kernel_serve.h>
-#include <kfs/kernel_opgroup_ioctl.h>
+#include <fscore/fstitchd.h>
+#include <fscore/patchgroup.h>
+#include <fscore/kernel_serve.h>
+#include <fscore/kernel_patchgroup_ioctl.h>
 
 /* Limit strings to something quite reasonable */
 #define STR_LEN_MAX 128
 
-static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsigned int cmd, unsigned long arg)
+static int kernel_patchgroup_ioctl(struct inode * inode, struct file * filp, unsigned int cmd, unsigned long arg)
 {
-	opgroup_ioctl_cmd_t cmd_args;
-	opgroup_t * opgroup_a = NULL;
-	opgroup_t * opgroup_b = NULL;
+	patchgroup_ioctl_cmd_t cmd_args;
+	patchgroup_t * patchgroup_a = NULL;
+	patchgroup_t * patchgroup_b = NULL;
 	char str[STR_LEN_MAX];
 	int r;
 
 	if (copy_from_user((void *) &cmd_args, (void __user *) arg, sizeof(cmd_args)))
 		return -EFAULT;
 
-	kfsd_enter();
-	if (cmd_args.opgroup_a >= 0)
-		opgroup_a = opgroup_lookup(cmd_args.opgroup_a);
-	if (cmd_args.opgroup_b >= 0)
-		opgroup_b = opgroup_lookup(cmd_args.opgroup_b);
+	fstitchd_enter();
+	if (cmd_args.patchgroup_a >= 0)
+		patchgroup_a = patchgroup_lookup(cmd_args.patchgroup_a);
+	if (cmd_args.patchgroup_b >= 0)
+		patchgroup_b = patchgroup_lookup(cmd_args.patchgroup_b);
 	if (cmd_args.str)
 	{
 		long len = strnlen_user(cmd_args.str, STR_LEN_MAX);
@@ -46,41 +46,41 @@ static int kernel_opgroup_ioctl(struct inode * inode, struct file * filp, unsign
 
 	switch (cmd)
 	{
-		case OPGROUP_IOCTL_CREATE:
-			r = opgroup_id(opgroup_create(cmd_args.flags));
+		case PATCHGROUP_IOCTL_CREATE:
+			r = patchgroup_id(patchgroup_create(cmd_args.flags));
 			break;
-		case OPGROUP_IOCTL_SYNC:
-			r = opgroup_sync(opgroup_a);
+		case PATCHGROUP_IOCTL_SYNC:
+			r = patchgroup_sync(patchgroup_a);
 			break;
-		case OPGROUP_IOCTL_ADD_DEPEND:
-			r = opgroup_add_depend(opgroup_a, opgroup_b);
+		case PATCHGROUP_IOCTL_ADD_DEPEND:
+			r = patchgroup_add_depend(patchgroup_a, patchgroup_b);
 			break;
-		case OPGROUP_IOCTL_ENGAGE:
-			r = opgroup_engage(opgroup_a);
+		case PATCHGROUP_IOCTL_ENGAGE:
+			r = patchgroup_engage(patchgroup_a);
 			break;
-		case OPGROUP_IOCTL_DISENGAGE:
-			r = opgroup_disengage(opgroup_a);
+		case PATCHGROUP_IOCTL_DISENGAGE:
+			r = patchgroup_disengage(patchgroup_a);
 			break;
-		case OPGROUP_IOCTL_RELEASE:
-			r = opgroup_release(opgroup_a);
+		case PATCHGROUP_IOCTL_RELEASE:
+			r = patchgroup_release(patchgroup_a);
 			break;
-		case OPGROUP_IOCTL_ABANDON:
-			r = opgroup_abandon(&opgroup_a);
+		case PATCHGROUP_IOCTL_ABANDON:
+			r = patchgroup_abandon(&patchgroup_a);
 			break;
-		case OPGROUP_IOCTL_LABEL:
-			r = opgroup_label(opgroup_a, str);
+		case PATCHGROUP_IOCTL_LABEL:
+			r = patchgroup_label(patchgroup_a, str);
 			break;
 		default:
 			r = -ENOTTY;
 	}
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	return r;
 }
 
 
-static void kernel_opgroup_process_request_queue(request_queue_t * q)
+static void kernel_patchgroup_process_request_queue(request_queue_t * q)
 {
 	struct request *req;
 	while ((req = elv_next_request(q)) != NULL)
@@ -88,9 +88,9 @@ static void kernel_opgroup_process_request_queue(request_queue_t * q)
 }
 
 
-static struct block_device_operations kernel_opgroup_dev_ops = {
+static struct block_device_operations kernel_patchgroup_dev_ops = {
 	.owner = THIS_MODULE,
-	.ioctl = kernel_opgroup_ioctl
+	.ioctl = kernel_patchgroup_ioctl
 };
 
 struct state {
@@ -101,20 +101,20 @@ struct state {
 static struct state state;
 
 
-static void kernel_opgroup_ops_shutdown(void * ignored)
+static void kernel_patchgroup_ops_shutdown(void * ignored)
 {
 	assert(state.gd);
 	del_gendisk(state.gd);
 	put_disk(state.gd);
-	unregister_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
+	unregister_blkdev(PATCHGROUP_MAJOR, PATCHGROUP_DEVICE);
 	state.gd = NULL;
 }
 
-int kernel_opgroup_ops_init(void)
+int kernel_patchgroup_ops_init(void)
 {
 	int r;
 
-	r = register_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
+	r = register_blkdev(PATCHGROUP_MAJOR, PATCHGROUP_DEVICE);
 	if (r < 0)
 	{
 		fprintf(stderr, "%s: unable to get major number\n", __FUNCTION__);
@@ -122,30 +122,30 @@ int kernel_opgroup_ops_init(void)
 	}
 
 	spin_lock_init(&state.queue_lock);
-	if (!(blk_init_queue(kernel_opgroup_process_request_queue, &state.queue_lock)))
+	if (!(blk_init_queue(kernel_patchgroup_process_request_queue, &state.queue_lock)))
 	{
 		fprintf(stderr, "%s: blk_init_queue() failed\n", __FUNCTION__);
-		unregister_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
+		unregister_blkdev(PATCHGROUP_MAJOR, PATCHGROUP_DEVICE);
 		return -1;
 	}
 	if (!(state.gd = alloc_disk(1)))
 	{
 		fprintf(stderr, "%s: alloc_disk() failed\n", __FUNCTION__);
-		unregister_blkdev(OPGROUP_MAJOR, OPGROUP_DEVICE);
+		unregister_blkdev(PATCHGROUP_MAJOR, PATCHGROUP_DEVICE);
 		return -1;
 	}
-	state.gd->major = OPGROUP_MAJOR;
+	state.gd->major = PATCHGROUP_MAJOR;
 	state.gd->first_minor = 0;
-	state.gd->fops = &kernel_opgroup_dev_ops;
+	state.gd->fops = &kernel_patchgroup_dev_ops;
 	state.gd->queue = state.queue;
-	snprintf(state.gd->disk_name, 32, "%s", OPGROUP_DEVICE);
+	snprintf(state.gd->disk_name, 32, "%s", PATCHGROUP_DEVICE);
 	set_capacity(state.gd, 0);
 	add_disk(state.gd);
 
-	r = kfsd_register_shutdown_module(kernel_opgroup_ops_shutdown, NULL, SHUTDOWN_PREMODULES);
+	r = fstitchd_register_shutdown_module(kernel_patchgroup_ops_shutdown, NULL, SHUTDOWN_PREMODULES);
 	if (r < 0)
 	{
-		kernel_opgroup_ops_shutdown(NULL);
+		kernel_patchgroup_ops_shutdown(NULL);
 		return r;
 	}
 
@@ -154,9 +154,9 @@ int kernel_opgroup_ops_init(void)
 
 #else
 
-int kernel_opgroup_ops_init(void)
+int kernel_patchgroup_ops_init(void)
 {
-	/* a message is printed that there is no support in kernel_opgroup_scopes_init() */
+	/* a message is printed that there is no support in kernel_patchgroup_scopes_init() */
 	return 0;
 }
 

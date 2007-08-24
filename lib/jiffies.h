@@ -1,5 +1,5 @@
-#ifndef KUDOS_LIB_JIFFIES_H
-#define KUDOS_LIB_JIFFIES_H
+#ifndef FSTITCH_LIB_JIFFIES_H
+#define FSTITCH_LIB_JIFFIES_H
 
 static __inline int jiffy_time(void) __attribute__((always_inline));
 
@@ -35,4 +35,4 @@ static __inline int jiffy_time(void)
 
 #endif
 
-#endif /* !KUDOS_LIB_JIFFIES_H */
+#endif /* !FSTITCH_LIB_JIFFIES_H */

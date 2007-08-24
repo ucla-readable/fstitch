@@ -1,6 +1,6 @@
-#ifndef KUDOS_INC_CONFIG_H
-#define KUDOS_INC_CONFIG_H
+#ifndef FSTITCH_INC_CONFIG_H
+#define FSTITCH_INC_CONFIG_H
 
 #define RELEASE_NAME "dextrin"
 
-#endif // !KUDOS_INC_CONFIG_H
+#endif // !FSTITCH_INC_CONFIG_H

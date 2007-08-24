@@ -31,11 +31,11 @@ if [ -a tests-sosp-time ]; then
 	exit 1
 fi
 
-run kudos safe ext2 su opgroup
-run kudos safe ext2 meta opgroup
-run kudos safe ext2 full opgroup
-run kudos unsafe ext2 none opgroup
-run kudos unsafe ext2 full opgroup
+run fsttich safe ext2 su patchgroup
+run fsttich safe ext2 meta patchgroup
+run fsttich safe ext2 full patchgroup
+run fsttich unsafe ext2 none patchgroup
+run fsttich unsafe ext2 full patchgroup
 
 run linux safe ext3 writeback fsync
 run linux safe ext3 ordered fsync

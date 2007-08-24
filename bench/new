@@ -2,12 +2,12 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 TESTS="tests"
 OUTDIR="test"
 
 function usage () {
-	echo "About: create a new kudos test directory"
+	echo "About: create a new fsttich test directory"
 	echo "Usage: `basename "$0"` [-h HOST] [-d <safe|unafe>] [-f FS] [-c FS_CONSISTENCY_MODE] [-a APP_CONSISTENCY_MODE] [-n NAME] [-C]"
 	echo "       -C enables random simulated crashing and fsck"
 }
@@ -15,7 +15,7 @@ function usage () {
 DISKCACHE=
 FS=ext2
 CMODE=
-HOST=kudos
+HOST=fsttich
 NAME=
 CRASHSIM=0
 
@@ -40,14 +40,14 @@ if ! supported_host_fs "${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}"; then
 	exit 1
 fi
 
-if [ "$HOST" != "kudos" -a "$CRASHSIM" != 0 ]; then
-	echo "Crash simulation only possible for kudos host" 1>&2
+if [ "$HOST" != "fsttich" -a "$CRASHSIM" != 0 ]; then
+	echo "Crash simulation only possible for fsttich host" 1>&2
 	exit 1
 fi
 
 NEWTEST=`date --iso=seconds`
 
-cd $KUDOSDIR
+cd $FSTITCHDIR
 [ -d $TESTS ] || try mkdir $TESTS
 try mkdir $TESTS/$NEWTEST
 try rm -f $OUTDIR

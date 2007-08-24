@@ -1,9 +1,9 @@
-#ifndef __KUDOS_KFS_UHFS_H
-#define __KUDOS_KFS_UHFS_H
+#ifndef __FSTITCH_FSCORE_UHFS_H
+#define __FSTITCH_FSCORE_UHFS_H
 
-#include <kfs/lfs.h>
-#include <kfs/cfs.h>
+#include <fscore/lfs.h>
+#include <fscore/cfs.h>
 
 CFS_t * uhfs(LFS_t * lfs);
 
-#endif // not __KUDOS_KFS_UHFS_H
+#endif // not __FSTITCH_FSCORE_UHFS_H

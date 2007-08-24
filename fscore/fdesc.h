@@ -1,7 +1,7 @@
-#ifndef __KUDOS_KFS_FDESC_H
-#define __KUDOS_KFS_FDESC_H
+#ifndef __FSTITCH_FSCORE_FDESC_H
+#define __FSTITCH_FSCORE_FDESC_H
 
-#include <kfs/inode.h>
+#include <fscore/inode.h>
 
 struct fdesc;
 typedef struct fdesc fdesc_t;
@@ -29,4 +29,4 @@ struct fdesc {
  * malloc(). Modules which wrap an fdesc should store a pointer to the wrapped
  * fdesc in their subclass of fdesc, as well as their local data. */
 
-#endif /* __KUDOS_KFS_FDESC_H */
+#endif /* __FSTITCH_FSCORE_FDESC_H */

@@ -6,13 +6,13 @@
 #include <asm/page.h> // for PAGE_OFFSET
 #endif
 
-#include <kfs/bd.h>
-#include <kfs/cfs.h>
-#include <kfs/lfs.h>
-#include <kfs/debug.h>
-#include <kfs/devfs_cfs.h>
-#include <kfs/kfsd.h>
-#include <kfs/modman.h>
+#include <fscore/bd.h>
+#include <fscore/cfs.h>
+#include <fscore/lfs.h>
+#include <fscore/debug.h>
+#include <fscore/devfs_cfs.h>
+#include <fscore/fstitchd.h>
+#include <fscore/modman.h>
 
 #define MODMAN_DEBUG 0
 
@@ -70,7 +70,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 		r = devfs_bd_add(modman_devfs, mod->name, (BD_t *) module);
 		if(r < 0)
 			goto error_hack;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BD_NAME, module, name);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BD_NAME, module, name);
 		/* usage count will have increased to 1, put it down to 0 again */
 		mod->usage = 0;
 		vector_pop_back(mod->users);
@@ -229,7 +229,7 @@ int modman_init(void)
 		modman_devfs = devfs_cfs(NULL, NULL, 0);
 		if(modman_devfs)
 		{
-			int r = kfsd_register_shutdown_module(modman_shutdown, NULL, SHUTDOWN_POSTMODULES);
+			int r = fstitchd_register_shutdown_module(modman_shutdown, NULL, SHUTDOWN_POSTMODULES);
 			if(r >= 0)
 				return 0;
 		}
@@ -244,7 +244,7 @@ int modman_init(void)
 	return -ENOMEM;
 }
 
-/* Generate all the modman_op_type() functions which are exposed to the rest of kfsd with some handy macros... */
+/* Generate all the modman_op_type() functions which are exposed to the rest of fstitchd with some handy macros... */
 
 typedef BD_t bd_t;
 typedef CFS_t cfs_t;

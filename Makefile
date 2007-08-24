@@ -1,4 +1,4 @@
-# Linux kernel KFS Makefile
+# Linux kernel featherstitch Makefile
 
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kernel
@@ -6,7 +6,7 @@ UTILDIR := $(BASE_OBJDIR)/util
 
 V = @
 
-BIN = kfs/kkfsd.ko $(OBJDIR)/lib/libopgroup.so
+BIN = fscore/kfstitchd.ko $(OBJDIR)/lib/libpatchgroup.so
 
 ifeq ($(KERNELRELEASE),)
 KERNELRELEASE = $(shell uname -r)
@@ -52,16 +52,16 @@ andrew: bench/ab-leiz.tar.gz
 	tar -Cobj -xzf bench/ab-leiz.tar.gz
 	sed -i "s,/home/leiz,`pwd`/obj," obj/ab/original/Makefile
 
-kfs/kkfsd.ko: always
+fscore/kfstitchd.ko: always
 	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" == "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	@echo "$(KERNELRELEASE)" > .kernel_version
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
 	@[ -f .user ] && $(MAKE) -f Makefile.user || true
 
-install: kfs/kkfsd.ko
+install: fscore/kfstitchd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
 
-$(OBJDIR)/lib/libopgroup.so: lib/kernel_opgroup.c
+$(OBJDIR)/lib/libpatchgroup.so: lib/kernel_patchgroup.c
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -std=gnu99 -g -o $@ $< -shared

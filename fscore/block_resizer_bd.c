@@ -1,9 +1,9 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/block_resizer_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/block_resizer_bd.h>
 
 /* This simple size converter can only convert up in size (i.e. aggregate blocks
  * together on read, split them on write). It should not be too ineffieicent, so
@@ -46,7 +46,7 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block, uint32_t
 	assert(block->length && number + block->length / object->blocksize <= object->numblocks);
 	
 	/* this should never fail */
-	value = chdesc_push_down(block, object, info->bd);
+	value = patch_push_down(block, object, info->bd);
 	if(value < 0)
 		return value;
 	
@@ -54,12 +54,12 @@ static int block_resizer_bd_write_block(BD_t * object, bdesc_t * block, uint32_t
 	return CALL(info->bd, write_block, block, number * info->merge_count);
 }
 
-static int block_resizer_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int block_resizer_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** block_resizer_bd_get_write_head(BD_t * object)
+static patch_t ** block_resizer_bd_get_write_head(BD_t * object)
 {
 	struct resize_info * info = (struct resize_info *) object;
 	return CALL(info->bd, get_write_head);

@@ -1,5 +1,5 @@
-OBJDIRS += kfs
-BIN += $(OBJDIR)/kfs/kfsd
+OBJDIRS += fscore
+BIN += $(OBJDIR)/fscore/fstitchd
 
 ifeq ($(P),)
 LDFLAGS =
@@ -12,53 +12,53 @@ FUSE_LDFLAGS_P = $(shell echo "$(FUSE_LDFLAGS)" | sed s/-lpthread/-lpthread_p/)
 LIBS = -L$(OBJDIR)/lib $(FUSE_LDFLAGS_P) -luser
 endif
 
-KFSOFILES := \
-			$(OBJDIR)/kfs/kfsd.o \
-			$(OBJDIR)/kfs/kfsd_init.o \
-			$(OBJDIR)/kfs/debug.o \
-			$(OBJDIR)/kfs/fuse_serve.o \
-			$(OBJDIR)/kfs/fuse_serve_mount.o \
-			$(OBJDIR)/kfs/bdesc.o \
-			$(OBJDIR)/kfs/blockman.o \
-			$(OBJDIR)/kfs/block_alloc.o \
-			$(OBJDIR)/kfs/chdesc.o \
-			$(OBJDIR)/kfs/chdesc_util.o \
-			$(OBJDIR)/kfs/revision.o \
-			$(OBJDIR)/kfs/modman.o \
-			$(OBJDIR)/kfs/opgroup.o \
-			$(OBJDIR)/kfs/devfs_cfs.o \
-			$(OBJDIR)/kfs/mem_bd.o \
-			$(OBJDIR)/kfs/unix_file_bd.o \
-			$(OBJDIR)/kfs/crashsim_bd.o \
-			$(OBJDIR)/kfs/md_bd.o \
-			$(OBJDIR)/kfs/block_resizer_bd.o \
-			$(OBJDIR)/kfs/partition_bd.o \
-			$(OBJDIR)/kfs/pc_ptable.o \
-			$(OBJDIR)/kfs/bsd_ptable.o \
-			$(OBJDIR)/kfs/wt_cache_bd.o \
-			$(OBJDIR)/kfs/wb2_cache_bd.o \
-			$(OBJDIR)/kfs/wbr_cache_bd.o \
-			$(OBJDIR)/kfs/journal_bd.o \
-			$(OBJDIR)/kfs/unlink_bd.o \
-			$(OBJDIR)/kfs/loop_bd.o \
-			$(OBJDIR)/kfs/josfs_base.o \
-			$(OBJDIR)/kfs/ext2_base.o \
-			$(OBJDIR)/kfs/ufs_base.o \
-			$(OBJDIR)/kfs/ufs_common.o \
-			$(OBJDIR)/kfs/ufs_alloc_lastpos.o \
-			$(OBJDIR)/kfs/ufs_alloc_linear.o \
-			$(OBJDIR)/kfs/ufs_dirent_linear.o \
-			$(OBJDIR)/kfs/ufs_super_wb.o \
-			$(OBJDIR)/kfs/ufs_cg_wb.o \
-			$(OBJDIR)/kfs/icase_cfs.o \
-			$(OBJDIR)/kfs/opgroup_lfs.o \
-			$(OBJDIR)/kfs/wholedisk_lfs.o \
-			$(OBJDIR)/kfs/uhfs.o \
-			$(OBJDIR)/kfs/sched.o \
-			$(OBJDIR)/kfs/sync.o \
-			$(OBJDIR)/kfs/destroy.o
+FSCOREOFILES := \
+			$(OBJDIR)/fscore/fstitchd.o \
+			$(OBJDIR)/fscore/fstitchd_init.o \
+			$(OBJDIR)/fscore/debug.o \
+			$(OBJDIR)/fscore/fuse_serve.o \
+			$(OBJDIR)/fscore/fuse_serve_mount.o \
+			$(OBJDIR)/fscore/bdesc.o \
+			$(OBJDIR)/fscore/blockman.o \
+			$(OBJDIR)/fscore/block_alloc.o \
+			$(OBJDIR)/fscore/patch.o \
+			$(OBJDIR)/fscore/patch_util.o \
+			$(OBJDIR)/fscore/revision.o \
+			$(OBJDIR)/fscore/modman.o \
+			$(OBJDIR)/fscore/patchgroup.o \
+			$(OBJDIR)/fscore/devfs_cfs.o \
+			$(OBJDIR)/fscore/mem_bd.o \
+			$(OBJDIR)/fscore/unix_file_bd.o \
+			$(OBJDIR)/fscore/crashsim_bd.o \
+			$(OBJDIR)/fscore/md_bd.o \
+			$(OBJDIR)/fscore/block_resizer_bd.o \
+			$(OBJDIR)/fscore/partition_bd.o \
+			$(OBJDIR)/fscore/pc_ptable.o \
+			$(OBJDIR)/fscore/bsd_ptable.o \
+			$(OBJDIR)/fscore/wt_cache_bd.o \
+			$(OBJDIR)/fscore/wb2_cache_bd.o \
+			$(OBJDIR)/fscore/wbr_cache_bd.o \
+			$(OBJDIR)/fscore/journal_bd.o \
+			$(OBJDIR)/fscore/unlink_bd.o \
+			$(OBJDIR)/fscore/loop_bd.o \
+			$(OBJDIR)/fscore/josfs_base.o \
+			$(OBJDIR)/fscore/ext2_base.o \
+			$(OBJDIR)/fscore/ufs_base.o \
+			$(OBJDIR)/fscore/ufs_common.o \
+			$(OBJDIR)/fscore/ufs_alloc_lastpos.o \
+			$(OBJDIR)/fscore/ufs_alloc_linear.o \
+			$(OBJDIR)/fscore/ufs_dirent_linear.o \
+			$(OBJDIR)/fscore/ufs_super_wb.o \
+			$(OBJDIR)/fscore/ufs_cg_wb.o \
+			$(OBJDIR)/fscore/icase_cfs.o \
+			$(OBJDIR)/fscore/patchgroup_lfs.o \
+			$(OBJDIR)/fscore/wholedisk_lfs.o \
+			$(OBJDIR)/fscore/uhfs.o \
+			$(OBJDIR)/fscore/sched.o \
+			$(OBJDIR)/fscore/sync.o \
+			$(OBJDIR)/fscore/destroy.o
 
-$(OBJDIR)/kfs/kfsd: $(KFSOFILES) $(OBJDIR)/lib/libuser.a obj/fs/ext2.img
+$(OBJDIR)/fscore/fstitchd: $(FSCOREOFILES) $(OBJDIR)/lib/libuser.a obj/fs/ext2.img
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(KFSOFILES) $(LIBS)
+	$(V)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FSCOREOFILES) $(LIBS)

@@ -1,5 +1,5 @@
-#ifndef KUDOS_INC_HASH_MAP_H
-#define KUDOS_INC_HASH_MAP_H
+#ifndef FSTITCH_INC_HASH_MAP_H
+#define FSTITCH_INC_HASH_MAP_H
 
 /* Set to check for illegal hash map modifications during iteration.
  * If hash map iteration code tries to deref bad pointers, try this. */
@@ -129,4 +129,4 @@ void * hash_map_val_next(hash_map_it_t * it);
 //   iterating using the old hm_it. (Define HASH_MAP_IT_MOD_DEBUG to detect.)
 hash_map_elt_t hash_map_elt_next(hash_map_it_t * it);
 
-#endif /* !KUDOS_INC_HASH_MAP_H */
+#endif /* !FSTITCH_INC_HASH_MAP_H */

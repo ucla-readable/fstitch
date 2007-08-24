@@ -1,7 +1,7 @@
-This is the Kudos repository.
+This is the Featherstitch repository.
 
 To compile the kernel version, you'll need a 2.6 series kernel, optionally
-patched with the bio-fua, kfs-linux, and softlockup patches in the patches
+patched with the bio-fua, fstitch-linux, and softlockup patches in the patches
 directory. Then just run make.
 
 To compile the userspace version, you'll need a recent version of FUSE
@@ -9,29 +9,29 @@ installed. Then run make -f Makefile.user. Alternately, if you create a file
 called .user, you can just run make to compile first the kernel version and then
 the FUSE version.
 
-To use the kernel version, load kfs/kkfsd.ko and specify the device to attach to
+To use the kernel version, load fscore/kfstitchd.ko and specify the device to attach to
 in the linux_device module parameter. For example:
 
-$ sudo insmod kfs/kkfsd.ko linux_device=/dev/sdb
+$ sudo insmod fscore/kfstitchd.ko linux_device=/dev/sdb
 
-Kudos will internally mount all detected file systems, but you must tell Linux
-to mount the Kudos pseudo-devices (which start with kfs:). For example:
+Featherstitch will internally mount all detected file systems, but you must tell Linux
+to mount the Featherstitch pseudo-devices (which start with fstitch:). For example:
 
-$ sudo mount kfs:/ /mnt/test -t kfs
+$ sudo mount fstitch:/ /mnt/test -t fstitch
 
-To shut down, just unmount all kfs file systems and unload the module.
+To shut down, just unmount all fstitch file systems and unload the module.
 
 To run the userspace version, you need to copy the fuse.conf file from the conf
 directory to /etc, and set a mountpoint (like /mnt/test) to be writable to your
-user. Then run uukfsd.sh, specifying the file/device to attach to in the
+user. Then run uufstitchd.sh, specifying the file/device to attach to in the
 unix_file command line option. For example:
 
-$ ./uukfsd.sh /mnt/test unix_file=obj/fs/ext2.img
+$ ./uufstitchd.sh /mnt/test unix_file=obj/fs/ext2.img
 
 By default, the userspace version will attempt to mount all detected file
-systems, including the special kfs:/dev file system. If a dev directory does not
-exist within kfs:/ you will get an error which can be ignored. It's actually
-probably better not to use the kfs:/dev file system anyway, since using it
-incorrectly can cause kfsd to crash.
+systems, including the special fstitch:/dev file system. If a dev directory does not
+exist within fstitch:/ you will get an error which can be ignored. It's actually
+probably better not to use the fstitch:/dev file system anyway, since using it
+incorrectly can cause fstitchd to crash.
 
 To shut down, just hit ^C to start the shut down process.

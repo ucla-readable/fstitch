@@ -9,14 +9,14 @@
 #include <signal.h>
 #include <time.h>
 
-#include <kfs/cfs.h>
-#include <kfs/feature.h>
-#include <kfs/kfsd.h>
-#include <kfs/sync.h>
-#include <kfs/modman.h>
-#include <kfs/sched.h>
-#include <kfs/fuse_serve.h>
-#include <kfs/fuse_serve_mount.h>
+#include <fscore/cfs.h>
+#include <fscore/feature.h>
+#include <fscore/fstitchd.h>
+#include <fscore/sync.h>
+#include <fscore/modman.h>
+#include <fscore/sched.h>
+#include <fscore/fuse_serve.h>
+#include <fscore/fuse_serve_mount.h>
 
 // Helpful documentation: FUSE's fuse_lowlevel.h, README, and FAQ
 // Helpful debugging options:
@@ -147,18 +147,18 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	int r;
 	CFS_t * cfs = mount->cfs;
 	uint32_t type;
-	bool nlinks_supported = feature_supported(cfs, KFS_FEATURE_NLINKS);
-	bool uid_supported = feature_supported(cfs, KFS_FEATURE_UID);
-	bool gid_supported = feature_supported(cfs, KFS_FEATURE_GID);
-	bool perms_supported = feature_supported(cfs, KFS_FEATURE_UNIX_PERM);
-	bool mtime_supported = feature_supported(cfs, KFS_FEATURE_MTIME);
-	bool atime_supported = feature_supported(cfs, KFS_FEATURE_ATIME);
+	bool nlinks_supported = feature_supported(cfs, FSTITCH_FEATURE_NLINKS);
+	bool uid_supported = feature_supported(cfs, FSTITCH_FEATURE_UID);
+	bool gid_supported = feature_supported(cfs, FSTITCH_FEATURE_GID);
+	bool perms_supported = feature_supported(cfs, FSTITCH_FEATURE_UNIX_PERM);
+	bool mtime_supported = feature_supported(cfs, FSTITCH_FEATURE_MTIME);
+	bool atime_supported = feature_supported(cfs, FSTITCH_FEATURE_ATIME);
 	uint32_t nlinks = 0;
 	uint16_t perms;
 	time_t mtime = time(NULL);
 	time_t atime = mtime;
 
-	r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_FILETYPE, sizeof(type), &type);
+	r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_FILETYPE, sizeof(type), &type);
 	if (r < 0)
 	{
 		Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
@@ -167,7 +167,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (nlinks_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
 		if (r < 0)
 			fprintf(stderr, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
 		else
@@ -205,7 +205,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 		if (!nlinks)
 			nlinks = 1;
 
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_SIZE, sizeof(filesize), &filesize);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_SIZE, sizeof(filesize), &filesize);
 		if (r < 0)
 		{
 			Dprintf("%d:cfs->get_metadata() = %d\n", __LINE__, r);
@@ -235,7 +235,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	if (uid_supported)
 	{
 		uint32_t cfs_uid;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_UID, sizeof(cfs_uid), &cfs_uid);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_UID, sizeof(cfs_uid), &cfs_uid);
 		if (r >= 0)
 		{
 			assert(r == sizeof(cfs_uid));
@@ -252,7 +252,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 	if (gid_supported)
 	{
 		uint32_t cfs_gid;
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_GID, sizeof(cfs_gid), &cfs_gid);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_GID, sizeof(cfs_gid), &cfs_gid);
 		if (r >= 0)
 		{
 			assert(r == sizeof(cfs_gid));
@@ -268,7 +268,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (perms_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_UNIX_PERM, sizeof(perms), &perms);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_UNIX_PERM, sizeof(perms), &perms);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -277,7 +277,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (mtime_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_MTIME, sizeof(mtime), &mtime);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_MTIME, sizeof(mtime), &mtime);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -286,7 +286,7 @@ static int fill_stat(mount_t * mount, inode_t cfs_ino, fuse_ino_t fuse_ino, stru
 
 	if (atime_supported)
 	{
-		r = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_ATIME, sizeof(atime), &atime);
+		r = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_ATIME, sizeof(atime), &atime);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -340,35 +340,35 @@ typedef struct fuse_metadata fuse_metadata_t;
 static int fuse_get_metadata(void * arg, feature_id_t id, size_t size, void * data)
 {
 	const fuse_metadata_t * fusemd = (fuse_metadata_t *) arg;
-	if (KFS_FEATURE_UID == id)
+	if (FSTITCH_FEATURE_UID == id)
 	{
 		if (size < sizeof(fusemd->ctx->uid))
 			return -ENOMEM;
 		*(uid_t *) data = fusemd->ctx->uid;
 		return sizeof(fusemd->ctx->uid);
 	}
-	else if (KFS_FEATURE_GID == id)
+	else if (FSTITCH_FEATURE_GID == id)
 	{
 		if (size < sizeof(fusemd->ctx->gid))
 			return -ENOMEM;
 		*(gid_t *) data = fusemd->ctx->gid;
 		return sizeof(fusemd->ctx->gid);
 	}
-	else if (KFS_FEATURE_UNIX_PERM == id)
+	else if (FSTITCH_FEATURE_UNIX_PERM == id)
 	{
 		if (size < sizeof(fusemd->mode))
 			return -ENOMEM;
 		*(uint16_t *) data = fusemd->mode;
 		return sizeof(fusemd->mode);
 	}
-	else if (KFS_FEATURE_FILETYPE == id)
+	else if (FSTITCH_FEATURE_FILETYPE == id)
 	{
 		if (size < sizeof(fusemd->type))
 			return -ENOMEM;
 		*(int *) data = fusemd->type;
 		return sizeof(fusemd->type);
 	}
-	else if (KFS_FEATURE_SYMLINK == id && fusemd->type == TYPE_SYMLINK)
+	else if (FSTITCH_FEATURE_SYMLINK == id && fusemd->type == TYPE_SYMLINK)
 	{
 		if (size < fusemd->type_info.symlink.link_len)
 			return -ENOMEM;
@@ -385,7 +385,7 @@ static void serve_statfs(fuse_req_t req)
 	struct statvfs st; // For more info, see: man 2 statvfs
 	int r;
 
-	r = CALL(reqcfs(req), get_metadata, 0, KFS_FEATURE_BLOCKSIZE, sizeof(st.f_frsize), &st.f_frsize);
+	r = CALL(reqcfs(req), get_metadata, 0, FSTITCH_FEATURE_BLOCKSIZE, sizeof(st.f_frsize), &st.f_frsize);
 	if (r < 0)
 		goto serve_statfs_err;
 	else if (sizeof(st.f_bsize) != r)
@@ -395,12 +395,12 @@ static void serve_statfs(fuse_req_t req)
 	}
 	st.f_bsize = st.f_frsize;
 
-	r = CALL(reqcfs(req), get_metadata, 0, KFS_FEATURE_DEVSIZE, sizeof(st.f_blocks), &st.f_blocks);
+	r = CALL(reqcfs(req), get_metadata, 0, FSTITCH_FEATURE_DEVSIZE, sizeof(st.f_blocks), &st.f_blocks);
 	if (sizeof(st.f_blocks) != r)
 		st.f_blocks = st.f_bfree = st.f_bavail = 0;
 	else
 	{
-		r = CALL(reqcfs(req), get_metadata, 0, KFS_FEATURE_FREESPACE, sizeof(st.f_bavail), &st.f_bavail);
+		r = CALL(reqcfs(req), get_metadata, 0, FSTITCH_FEATURE_FREESPACE, sizeof(st.f_bavail), &st.f_bavail);
 		if (sizeof(st.f_bavail) != r)
 			st.f_bfree = st.f_bavail = 0;
 		else
@@ -445,11 +445,11 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 {
 	inode_t cfs_ino = fusecfsino(req, fuse_ino);
 	int supported = FUSE_SET_ATTR_SIZE;
-	bool uid_supported   = feature_supported(reqcfs(req), KFS_FEATURE_UID);
-	bool gid_supported   = feature_supported(reqcfs(req), KFS_FEATURE_GID);
-	bool perms_supported = feature_supported(reqcfs(req), KFS_FEATURE_UNIX_PERM);
-	bool mtime_supported = feature_supported(reqcfs(req), KFS_FEATURE_MTIME);
-	bool atime_supported = feature_supported(reqcfs(req), KFS_FEATURE_MTIME);
+	bool uid_supported   = feature_supported(reqcfs(req), FSTITCH_FEATURE_UID);
+	bool gid_supported   = feature_supported(reqcfs(req), FSTITCH_FEATURE_GID);
+	bool perms_supported = feature_supported(reqcfs(req), FSTITCH_FEATURE_UNIX_PERM);
+	bool mtime_supported = feature_supported(reqcfs(req), FSTITCH_FEATURE_MTIME);
+	bool atime_supported = feature_supported(reqcfs(req), FSTITCH_FEATURE_MTIME);
 	struct stat stbuf;
 	int r;
 	Dprintf("%s(ino = %lu, to_set = %d)\n", __FUNCTION__, fuse_ino, to_set);
@@ -522,28 +522,28 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	
 	if (to_set & FUSE_SET_ATTR_UID)
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_UID;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_UID;
 		fsm[nfsm].fsm_value.u = attr->st_uid;
 		nfsm++;
 	}
 
 	if (to_set & FUSE_SET_ATTR_GID)
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_GID;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_GID;
 		fsm[nfsm].fsm_value.u = attr->st_gid;
 		nfsm++;
 	}
 
 	if (to_set & FUSE_SET_ATTR_MODE)
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_UNIX_PERM;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_UNIX_PERM;
 		fsm[nfsm].fsm_value.u = attr->st_mode;
 		nfsm++;
 	}
 
 	if (to_set & FUSE_SET_ATTR_MTIME)
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_MTIME;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_MTIME;
 		fsm[nfsm].fsm_value.u = attr->st_mtime;
 		nfsm++;
 	}
@@ -551,7 +551,7 @@ static void serve_setattr(fuse_req_t req, fuse_ino_t fuse_ino, struct stat * att
 	if (to_set & FUSE_SET_ATTR_ATIME)
 	{
 		// XXX Why did we use attr->st_mtime here?
-		fsm[nfsm].fsm_feature = KFS_FEATURE_ATIME;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_ATIME;
 		fsm[nfsm].fsm_value.u = attr->st_atime;
 		nfsm++;
 	}
@@ -612,7 +612,7 @@ static void serve_lookup(fuse_req_t req, fuse_ino_t parent, const char *local_na
 static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, ino);
-	bool symlink_supported = feature_supported(reqcfs(req), KFS_FEATURE_SYMLINK);
+	bool symlink_supported = feature_supported(reqcfs(req), FSTITCH_FEATURE_SYMLINK);
 	char link_name[PATH_MAX + 1];
 	int r;
 
@@ -623,7 +623,7 @@ static void serve_readlink(fuse_req_t req, fuse_ino_t ino)
 		return;
 	}
 
-	r = CALL(reqcfs(req), get_metadata, fusecfsino(req, ino), KFS_FEATURE_SYMLINK, sizeof(link_name) - 1, link_name);
+	r = CALL(reqcfs(req), get_metadata, fusecfsino(req, ino), FSTITCH_FEATURE_SYMLINK, sizeof(link_name) - 1, link_name);
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
@@ -739,7 +739,7 @@ static void serve_symlink(fuse_req_t req, const char * link, fuse_ino_t parent,
 	int r;
 	struct fuse_entry_param e;
 
-	if (!feature_supported(cfs, KFS_FEATURE_SYMLINK))
+	if (!feature_supported(cfs, FSTITCH_FEATURE_SYMLINK))
 	{
 		r = -ENOSYS;
 		goto error;
@@ -893,7 +893,7 @@ static void ssync(fuse_req_t req, fuse_ino_t fuse_ino, int datasync,
 	int r;
 
 	// ignore datasync
-	r = kfs_sync();
+	r = fstitch_sync();
 	if (r < 0)
 	{
 		r = fuse_reply_err(req, -r);
@@ -1049,7 +1049,7 @@ static void serve_open(fuse_req_t req, fuse_ino_t fuse_ino,
 
 	cfs_ino = fusecfsino(req, fuse_ino);
 
-	r = CALL(reqcfs(req), get_metadata, cfs_ino, KFS_FEATURE_FILETYPE, sizeof(type), &type);
+	r = CALL(reqcfs(req), get_metadata, cfs_ino, FSTITCH_FEATURE_FILETYPE, sizeof(type), &type);
 	assert(r == sizeof(type));
 
 	if (type == TYPE_DIR)
@@ -1090,7 +1090,7 @@ static void serve_read(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 
 	if (offset != off)
 	{
-		fprintf(stderr, "%s:%d: kfsd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
+		fprintf(stderr, "%s:%d: fstitchd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
 		r = fuse_reply_err(req, EINVAL);
 		fuse_reply_assert(!r);
 		return;
@@ -1126,7 +1126,7 @@ static void serve_write(fuse_req_t req, fuse_ino_t fuse_ino, const char * buf,
 
 	if (offset != off)
 	{
-		fprintf(stderr, "%s:%d: kfsd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
+		fprintf(stderr, "%s:%d: fstitchd offset not able to satisfy request for %lld\n", __FILE__, __LINE__, off);
 		r = fuse_reply_err(req, EINVAL);
 		fuse_reply_assert(!r);
 		return;
@@ -1186,7 +1186,7 @@ static void signal_handler(int sig)
 		fprintf(stderr, "%s(%d): write() failed\n", __FUNCTION__, sig);
 		perror("write");
 	}
-	kfsd_request_shutdown();
+	fstitchd_request_shutdown();
 	printf("Shutdown started.\n");
 	fflush(stdout);
 }
@@ -1269,9 +1269,9 @@ int fuse_serve_init(int argc, char ** argv)
 	root_cfs = NULL;
 	serving = 0;
 
-	if ((r = kfsd_register_shutdown_module(fuse_serve_shutdown, NULL, SHUTDOWN_PREMODULES)) < 0)
+	if ((r = fstitchd_register_shutdown_module(fuse_serve_shutdown, NULL, SHUTDOWN_PREMODULES)) < 0)
 	{
-		fprintf(stderr, "%s(): kfsd_register_shutdown_module() = %d\n", __FUNCTION__, r);
+		fprintf(stderr, "%s(): fstitchd_register_shutdown_module() = %d\n", __FUNCTION__, r);
 		return r;
 	}
 
@@ -1351,7 +1351,7 @@ struct callback_list {
 };
 static struct callback_list * callbacks;
 
-int kfsd_unlock_callback(unlock_callback_t callback, void * data)
+int fstitchd_unlock_callback(unlock_callback_t callback, void * data)
 {
 	if(callbacks && callbacks->callback == callback && callbacks->data == data)
 		callbacks->count++;
@@ -1415,7 +1415,7 @@ int fuse_serve_loop(void)
 		{
 			if ((*mp)->mounted && !fuse_session_exited((*mp)->session))
 			{
-				//printf("[\"%s\"]", mount->kfs_path); fflush(stdout); // debug
+				//printf("[\"%s\"]", mount->fstitch_path); fflush(stdout); // debug
 				int mount_fd = fuse_chan_fd((*mp)->channel);
 				FD_SET(mount_fd, &rfds);
 				if (mount_fd > max_fd)
@@ -1453,7 +1453,7 @@ int fuse_serve_loop(void)
 					r = fuse_chan_receive((*mp)->channel, channel_buf, channel_buf_len);
 					assert(r > 0); // what would this error mean?
 
-					Dprintf("fuse_serve: request for mount \"%s\"\n", (*mp)->kfs_path);
+					Dprintf("fuse_serve: request for mount \"%s\"\n", (*mp)->fstitch_path);
 					fuse_session_process((*mp)->session, channel_buf, r, (*mp)->channel);
 					sched_run_cleanup();
 				}

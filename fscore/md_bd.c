@@ -1,10 +1,10 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/md_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/md_bd.h>
 
 struct md_info {
 	BD_t my_bd;
@@ -41,7 +41,7 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	assert(number + block->length / object->blocksize <= object->numblocks);
 	
 	/* this should never fail */
-	value = chdesc_push_down(block, object, info->bd[number & 1]);
+	value = patch_push_down(block, object, info->bd[number & 1]);
 	if(value < 0)
 		return value;
 	
@@ -49,12 +49,12 @@ static int md_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	return CALL(info->bd[number & 1], write_block, block, number >> 1);
 }
 
-static int md_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int md_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** md_bd_get_write_head(BD_t * object)
+static patch_t ** md_bd_get_write_head(BD_t * object)
 {
 	return NULL;
 }

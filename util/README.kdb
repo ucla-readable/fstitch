@@ -13,11 +13,11 @@ offset and a bitmask. These are denoted as colon-separated values inside square
 brackets.
 
 The color of the text is also significant. Black text is normal; blue text
-indicates that the change descriptor has been written (i.e. the CHDESC_WRITTEN
+indicates that the change descriptor has been written (i.e. the PATCH_WRITTEN
 flag is set). Red text indicates that the change descriptor is being freed.
 
 The outline of a change descriptor may be black, green, or red. Black is normal;
-green indicates that it is ready to be written (i.e. the CHDESC_READY flag is
+green indicates that it is ready to be written (i.e. the PATCH_READY flag is
 set), and red indicates that it is marked. A change descriptor that is both
 ready and marked appears red. The outline may also be dashed, in addition to
 having a color. When the outline is dashed, it means that the change descriptor

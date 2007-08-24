@@ -1,7 +1,7 @@
-#ifndef __KUDOS_KFS_DIRENT_H
-#define __KUDOS_KFS_DIRENT_H
+#ifndef __FSTITCH_FSCORE_DIRENT_H
+#define __FSTITCH_FSCORE_DIRENT_H
 
-#include <kfs/inode.h>
+#include <fscore/inode.h>
 
 #define DIRENT_MAXNAMELEN 255
 
@@ -22,4 +22,4 @@ typedef struct dirent dirent_t;
 
 // int getdirentries(int fd, char * buf, int nbytes, long * basep);
 
-#endif /* __KUDOS_KFS_DIRENT_H */
+#endif /* __FSTITCH_FSCORE_DIRENT_H */

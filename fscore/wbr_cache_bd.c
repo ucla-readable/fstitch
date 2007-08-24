@@ -4,15 +4,15 @@
 #include <lib/vector.h>
 #include <lib/pool.h>
 
-#include <kfs/kfsd.h>
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/sched.h>
-#include <kfs/debug.h>
-#include <kfs/revision.h>
-#include <kfs/wbr_cache_bd.h>
+#include <fscore/fstitchd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/sched.h>
+#include <fscore/debug.h>
+#include <fscore/revision.h>
+#include <fscore/wbr_cache_bd.h>
 
 /* This is the random write cache. It is based on the wb2 cache, and can be used
  * interchangably. It maintains a list of the dirty blocks, and tries to write
@@ -31,10 +31,10 @@
 #define FLUSH_PERIOD HZ
 
 #define DEBUG_TIMING 0
-#include <kfs/kernel_timing.h>
+#include <fscore/kernel_timing.h>
 KERNEL_TIMING(wait);
 
-/* useful for looking at chdesc graphs */
+/* useful for looking at patch graphs */
 #define DELAY_FLUSH_UNTIL_EXIT 0
 
 struct rand_slot {
@@ -183,7 +183,7 @@ static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
 	int r;
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
 	
 	if(delay)
 		*delay = 0;
@@ -223,7 +223,7 @@ static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->ddesc->flags);
+			FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->ddesc->flags);
 		}
 	}
 	
@@ -249,14 +249,14 @@ static void wbr_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 	next_state(info->dirty_state);
 	
 #if DELAY_FLUSH_UNTIL_EXIT
-	if(kfsd_is_running())
+	if(fstitchd_is_running())
 		return;
 #endif
 	
 #ifdef __KERNEL__
 	revision_tail_process_landing_requests();
 #endif
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
 	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && left)
@@ -446,7 +446,7 @@ static int wbr_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	return 0;
 }
 
-static int wbr_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int wbr_cache_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	uint32_t start_dirty = info->dblocks;
@@ -478,7 +478,7 @@ static int wbr_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	}
 }
 
-static chdesc_t ** wbr_cache_bd_get_write_head(BD_t * object)
+static patch_t ** wbr_cache_bd_get_write_head(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
@@ -614,6 +614,6 @@ BD_t * wbr_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	
 	n_wbr_instances++;
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
 	return bd;
 }

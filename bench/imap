@@ -1,12 +1,12 @@
 #!/bin/bash
 
 function do_imap () {
-	LD_LIBRARY_PATH=$KUDOSDIR/obj/kernel/lib:$LD_LIBRARY_PATH IMAPD=$IMAPD MAILPATH=$MNT $KUDOSDIR/bench/imap.expect > $OUTDIR/$T.imap.$N
+	LD_LIBRARY_PATH=$FSTITCHDIR/obj/kernel/lib:$LD_LIBRARY_PATH IMAPD=$IMAPD MAILPATH=$MNT $FSTITCHDIR/bench/imap.expect > $OUTDIR/$T.imap.$N
 }
 
 function test () {
 	ktime imap do_imap
-	ktime sync fsync $KUDOSDIR $MNT;
+	ktime sync fsync $FSTITCHDIR $MNT;
 }
 
 function run () {
@@ -18,17 +18,17 @@ function run () {
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 load_config "$OUTDIR"
 T=imap
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
 N=`get_test_num $OUTDIR/$T`
 
 case "$ACMODE" in
-	fsync)   IMAPD=/home/kudos/ouwimap/imapd/imapd;;
-	linear)  IMAPD=/home/kudos/juwimap/imapd/imapd;;
-	opgroup) IMAPD=/home/kudos/puwimap/imapd/imapd;;
+	fsync)   IMAPD=/home/fsttich/ouwimap/imapd/imapd;;
+	linear)  IMAPD=/home/fsttich/juwimap/imapd/imapd;;
+	patchgroup) IMAPD=/home/fsttich/puwimap/imapd/imapd;;
 	*) echo "Unsupported ACMODE $ACMODE" 1>&2; exit 1;;
 esac
 
@@ -37,14 +37,14 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-build $T $N $KUDOSDIR $HOST
+build $T $N $FSTITCHDIR $HOST
 try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
-[ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
-try sh -c "gunzip -c $KUDOSDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
+[ -f /proc/kfstitchd_debug ] && cat /proc/kfstitchd_debug > /dev/null &
+try sh -c "gunzip -c $FSTITCHDIR/bench/mailbox.src.gz > $MNT/mailbox.src"
 try rm -f $MNT/mailbox.dst
 try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
 try sync
 
 log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST $CRASHSIM
+finish $T $N $FSTITCHDIR $OUTDIR $HOST $CRASHSIM

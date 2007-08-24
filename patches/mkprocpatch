@@ -1,9 +1,9 @@
 #/bin/bash
 
-FILES="fs/exec.c fs/Kconfig fs/kudos/Kconfig fs/kudos/kudos_proc.c fs/kudos/Makefile fs/Makefile include/linux/kudos_proc.h kernel/exit.c kernel/fork.c"
+FILES="fs/exec.c fs/Kconfig fs/fsttich/Kconfig fs/fsttich/fsttich_proc.c fs/fsttich/Makefile fs/Makefile include/linux/fsttich_proc.h kernel/exit.c kernel/fork.c"
 
 if [ $# -ne 1 ]; then
-	echo "About: Create a kudos proc diff" 1>&2
+	echo "About: Create a feathersttich proc diff" 1>&2
 	echo "Usage: `basename "$0"` <LINUS_KERNEL_VERSION>" 1>&2
 	echo "       e.g. `basename "$0"` 2.6.19.1" 1>&2
 	exit 1
@@ -13,6 +13,6 @@ KV=$1
 for FILE in $FILES
 do
   echo "diff -Nrud linux-$KV/$FILE linux-$KV/$FILE"
-  diff -Nrud linux-$KV/$FILE linux-$KV-kudos/$FILE \
-	  | sed "s/linux-$KV-kudos/linux-$KV/"
+  diff -Nrud linux-$KV/$FILE linux-$KV-fsttich/$FILE \
+	  | sed "s/linux-$KV-fsttich/linux-$KV/"
 done

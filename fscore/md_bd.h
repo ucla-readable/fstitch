@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_MD_BD_H
-#define __KUDOS_KFS_MD_BD_H
+#ifndef __FSTITCH_FSCORE_MD_BD_H
+#define __FSTITCH_FSCORE_MD_BD_H
 
-#include <kfs/bd.h>
+#include <fscore/bd.h>
 
 BD_t * md_bd(BD_t * disk0, BD_t * disk1);
 
-#endif /* __KUDOS_KFS_MD_BD_H */
+#endif /* __FSTITCH_FSCORE_MD_BD_H */

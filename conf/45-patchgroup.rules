@@ -1,2 +1,2 @@
-# Place this file in /etc/udev/rules.d/ to give all users opgroup access
-KERNEL=="opgroup", MODE="0666"
+# Place this file in /etc/udev/rules.d/ to give all users patchgroup access
+KERNEL=="patchgroup", MODE="0666"

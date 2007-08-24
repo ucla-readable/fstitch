@@ -1,10 +1,10 @@
 #include <lib/platform.h>
 #include <lib/vector.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/partition_bd.h>
-#include <kfs/bsd_ptable.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/partition_bd.h>
+#include <fscore/bsd_ptable.h>
 
 #include <lib/disklabel.h>
 

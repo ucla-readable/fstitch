@@ -1,6 +1,6 @@
 #include <lib/platform.h>
 
-#include <kfs/ufs_alloc_linear.h>
+#include <fscore/ufs_alloc_linear.h>
 
 struct ufsmod_alloc_info {
 	UFSmod_alloc_t ufsmod_alloc;

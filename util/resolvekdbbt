@@ -1,7 +1,7 @@
 #!/bin/bash
 # read kdb backtrace and corresponding symbols
 
-BIN=obj/unix-user/kfs/kfsd
+BIN=obj/unix-user/fscore/fstitchd
 
 if [ $# -ge 1 ] && [ "$1" == "-h" ] || [ "$1" == "--help" ]
 then

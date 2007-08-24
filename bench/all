@@ -2,10 +2,10 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
-HOST="`cat $KUDOSDIR/test/host`"
-FS="`cat $KUDOSDIR/test/fs`"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
+HOST="`cat $FSTITCHDIR/test/host`"
+FS="`cat $FSTITCHDIR/test/fs`"
 
 TESTS="tar_rm postmark andrew imap"
 

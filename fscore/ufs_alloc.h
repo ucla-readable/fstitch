@@ -1,14 +1,14 @@
-#ifndef __KUDOS_KFS_UFS_ALLOC_H
-#define __KUDOS_KFS_UFS_ALLOC_H
+#ifndef __FSTITCH_FSCORE_UFS_ALLOC_H
+#define __FSTITCH_FSCORE_UFS_ALLOC_H
 
-#include <kfs/oo.h>
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/chdesc.h>
-#include <kfs/fdesc.h>
-#include <kfs/feature.h>
-#include <kfs/inode.h>
-#include <kfs/lfs.h>
+#include <fscore/oo.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/patch.h>
+#include <fscore/fdesc.h>
+#include <fscore/feature.h>
+#include <fscore/inode.h>
+#include <fscore/lfs.h>
 #include <lib/dirent.h>
 
 struct UFSmod_alloc;
@@ -28,4 +28,4 @@ struct UFSmod_alloc {
 	ASSIGN(ufs, module, find_free_inode); \
 }
 
-#endif /* __KUDOS_KFS_UFS_ALLOC_H */
+#endif /* __FSTITCH_FSCORE_UFS_ALLOC_H */

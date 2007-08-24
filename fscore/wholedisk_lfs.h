@@ -1,9 +1,9 @@
-#ifndef __KUDOS_KFS_WHOLEDISK_LFS_H
-#define __KUDOS_KFS_WHOLEDISK_LFS_H
+#ifndef __FSTITCH_FSCORE_WHOLEDISK_LFS_H
+#define __FSTITCH_FSCORE_WHOLEDISK_LFS_H
 
-#include <kfs/bd.h>
-#include <kfs/lfs.h>
+#include <fscore/bd.h>
+#include <fscore/lfs.h>
 
 LFS_t * wholedisk(BD_t * bd);
 
-#endif /* __KUDOS_KFS_WHOLEDISK_LFS_H */
+#endif /* __FSTITCH_FSCORE_WHOLEDISK_LFS_H */

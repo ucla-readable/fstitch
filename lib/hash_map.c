@@ -3,7 +3,7 @@
 #include <lib/hash_map.h>
 #include <lib/pool.h>
 
-#include <kfs/kfsd.h>
+#include <fscore/fstitchd.h>
 
 #define HASH_MAP_DEBUG 0
 
@@ -796,5 +796,5 @@ void * hash_map_val_next(hash_map_it_t * it)
 
 int hash_map_init(void)
 {
-	return kfsd_register_shutdown_module(chain_elt_pool_free_all, NULL, SHUTDOWN_POSTMODULES);
+	return fstitchd_register_shutdown_module(chain_elt_pool_free_all, NULL, SHUTDOWN_POSTMODULES);
 }

@@ -1,11 +1,11 @@
-#ifndef __KUDOS_KFS_CFS_H
-#define __KUDOS_KFS_CFS_H
+#ifndef __FSTITCH_FSCORE_CFS_H
+#define __FSTITCH_FSCORE_CFS_H
 
-#include <kfs/oo.h>
-#include <kfs/types.h>
-#include <kfs/feature.h>
-#include <kfs/inode.h>
-#include <kfs/fdesc.h>
+#include <fscore/oo.h>
+#include <fscore/types.h>
+#include <fscore/feature.h>
+#include <fscore/inode.h>
+#include <fscore/fdesc.h>
 #include <lib/dirent.h>
 
 struct CFS {
@@ -52,4 +52,4 @@ struct CFS {
 	ASSIGN(cfs, module, set_metadata2); \
 }
 
-#endif /* __KUDOS_KFS_CFS_H */
+#endif /* __FSTITCH_FSCORE_CFS_H */

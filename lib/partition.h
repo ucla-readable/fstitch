@@ -2,7 +2,7 @@
 #define _PARTITION_H_ 1
 
 #define PTABLE_OFFSET           446
-#define PTABLE_KUDOS_TYPE       0xF8
+#define PTABLE_FSTITCH_TYPE       0xF8
 #define PTABLE_DOS_EXT_TYPE     0x05
 #define PTABLE_W95_EXT_TYPE     0x0F
 #define PTABLE_LINUX_TYPE       0x83

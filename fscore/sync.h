@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_SYNC_H
-#define __KUDOS_KFS_SYNC_H
+#ifndef __FSTITCH_FSCORE_SYNC_H
+#define __FSTITCH_FSCORE_SYNC_H
 
-#include <kfs/inode.h>
+#include <fscore/inode.h>
 
-int kfs_sync(void);
+int fstitch_sync(void);
 
-#endif /* __KUDOS_KFS_SYNC_H */
+#endif /* __FSTITCH_FSCORE_SYNC_H */

@@ -1,12 +1,12 @@
-#ifndef __KUDOS_KFS_MODMAN_BD_H
-#define __KUDOS_KFS_MODMAN_BD_H
+#ifndef __FSTITCH_FSCORE_MODMAN_BD_H
+#define __FSTITCH_FSCORE_MODMAN_BD_H
 
 #include <lib/vector.h>
 #include <lib/hash_map.h>
 
-#include <kfs/bd.h>
-#include <kfs/cfs.h>
-#include <kfs/lfs.h>
+#include <fscore/bd.h>
+#include <fscore/cfs.h>
+#include <fscore/lfs.h>
 
 extern CFS_t * modman_devfs;
 
@@ -23,7 +23,7 @@ MODMAN_ENTRY_STRUCT(BD_t, bd, const);
 MODMAN_ENTRY_STRUCT(CFS_t, cfs, const);
 MODMAN_ENTRY_STRUCT(LFS_t, lfs, const);
 
-#ifdef KFSD
+#ifdef FSTITCHD
 typedef hash_map_it_t modman_it_t;
 #else
 struct modman_it {
@@ -78,10 +78,10 @@ BD_t * modman_it_next_bd(modman_it_t * it);
 CFS_t * modman_it_next_cfs(modman_it_t * it);
 LFS_t * modman_it_next_lfs(modman_it_t * it);
 
-#ifdef KFSD
+#ifdef FSTITCHD
 #define modman_it_destroy(it)
 #else
 void modman_it_destroy(modman_it_t * it);
 #endif
 
-#endif /* __KUDOS_KFS_MODMAN_BD_H */
+#endif /* __FSTITCH_FSCORE_MODMAN_BD_H */

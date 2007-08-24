@@ -1,9 +1,9 @@
-#ifndef __KUDOS_KFS_FUSE_SERVE_MOUNT_H
-#define __KUDOS_KFS_FUSE_SERVE_MOUNT_H
+#ifndef __FSTITCH_FSCORE_FUSE_SERVE_MOUNT_H
+#define __FSTITCH_FSCORE_FUSE_SERVE_MOUNT_H
 
 #include <fuse/fuse_lowlevel.h>
 #include <lib/hash_map.h>
-#include <kfs/cfs.h>
+#include <fscore/cfs.h>
 
 // Purpose:
 // fuse_serve_mount provides an abstraction for mounting and unmounting
@@ -15,7 +15,7 @@ typedef struct mount {
 
 	hash_map_t * parents; // directory inode_t -> parent inode_t
 
-	char * kfs_path;
+	char * fstitch_path;
 	CFS_t * cfs;
 	inode_t root_ino;
 
@@ -69,4 +69,4 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path);
 // Has no effect once a shutdown has started.
 int fuse_serve_mount_remove(mount_t * m);
 
-#endif // __KUDOS_KFS_FUSE_SERVE_MOUNT_H
+#endif // __FSTITCH_FSCORE_FUSE_SERVE_MOUNT_H

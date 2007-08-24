@@ -30,25 +30,25 @@ if [ -a tests-sosp-imap ]; then
 fi
 
 # unsafe
-# opgroup
-#run kudos unsafe ext2 none opgroup
-#run kudos unsafe ext2 full opgroup
+# patchgroup
+#run fsttich unsafe ext2 none patchgroup
+#run fsttich unsafe ext2 full patchgroup
 # fsyncs
 #run linux unsafe ext2 none fsync
 #run linux unsafe ext3 journal fsync
 
 # safe
-# opgroup
-run kudos safe ext2 su opgroup
-run kudos safe ext2 meta opgroup
-run kudos safe ext2 full opgroup
+# patchgroup
+run fsttich safe ext2 su patchgroup
+run fsttich safe ext2 meta patchgroup
+run fsttich safe ext2 full patchgroup
 # linear
-#run kudos safe ext2 full linear
+#run fsttich safe ext2 full linear
 run linux safe ext3 journal linear
 # fsync
-run kudos safe ext2 su fsync
-run kudos safe ext2 meta fsync
-run kudos safe ext2 full fsync
+run fsttich safe ext2 su fsync
+run fsttich safe ext2 meta fsync
+run fsttich safe ext2 full fsync
 #run linux safe ext2 none fsync
 run linux safe ext3 writeback fsync
 run linux safe ext3 journal fsync

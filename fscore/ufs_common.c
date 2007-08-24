@@ -1,7 +1,7 @@
 #include <lib/platform.h>
 
-#include <kfs/debug.h>
-#include <kfs/ufs_common.h>
+#include <fscore/debug.h>
+#include <fscore/ufs_common.h>
 
 // Assuming fixed number of inodes per cylinder group, so we don't have
 // to read the cylinder group descriptor and confirm this every time.
@@ -39,7 +39,7 @@ int ufs_read_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode * ino
 	return 0;
 }
 
-int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inode, chdesc_t ** head)
+int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inode, patch_t ** head)
 {
 	int cg, cg_off, fragno, frag_off, r, offset;
 	bdesc_t * inode_table;
@@ -64,13 +64,13 @@ int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inod
 	if (!inode_table)
 		return -ENOENT;
 	offset = sizeof(struct UFS_dinode) * frag_off;
-	r = chdesc_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &bdesc_data(inode_table)[offset], &inode, head);
+	r = patch_create_diff(inode_table, info->ubd, offset, sizeof(struct UFS_dinode), &bdesc_data(inode_table)[offset], &inode, head);
 	if (r < 0)
 		return r;
-	/* chdesc_create_diff() returns 0 for "no change" */
+	/* patch_create_diff() returns 0 for "no change" */
 	if (*head && r > 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "update inode");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "update inode");
 		r = CALL(info->ubd, write_block, inode_table, fragno);
 	}
 
@@ -232,7 +232,7 @@ int ufs_read_block_bitmap(struct ufs_info * info, uint32_t num)
 	return UFS_USED;
 }
 
-int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_t ** head)
+int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, patch_t ** head)
 {
 	uint32_t blockno, offset;
 	int r;
@@ -259,10 +259,10 @@ int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_
 	if (!block)
 		return -ENOENT;
 
-	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
+	r = patch_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
 	if (r >= 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write btotal");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write btotal");
 		r = CALL(info->ubd, write_block, block, blockno);
 	}
 	if (r < 0)
@@ -271,7 +271,7 @@ int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, chdesc_
 	return 0;
 }
 
-int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t ** head)
+int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, patch_t ** head)
 {
 	uint32_t blockno, offset;
 	int r;
@@ -298,10 +298,10 @@ int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t
 	if (!block)
 		return -ENOENT;
 
-	r = chdesc_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
+	r = patch_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
 	if (r >= 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write fbp");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write fbp");
 		r = CALL(info->ubd, write_block, block, blockno);
 	}
 	if (r < 0)
@@ -310,13 +310,13 @@ int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, chdesc_t
 	return 0;
 }
 
-int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
+int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, patch_t ** head)
 {
 	uint32_t blockno, offset, * ptr;
 	int r, cyl, inode_offset;
 	bdesc_t * block;
-	DEFINE_CHDESC_PASS_SET(oldheads_set, 2, NULL);
-	chdesc_t ** oldheads = oldheads_set.array;
+	DEFINE_PATCH_PASS_SET(oldheads_set, 2, NULL);
+	patch_t ** oldheads = oldheads_set.array;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -358,10 +358,10 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 		return 1;
 	}
 
-	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
+	r = patch_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		goto write_inode_bitmap_end;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "allocate inode" : "free inode");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "allocate inode" : "free inode");
 	*(oldheads++) = *head;
 
 	r = CALL(info->ubd, write_block, block, blockno);
@@ -373,7 +373,7 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 		goto write_inode_bitmap_end;
 	*(oldheads++) = *head;
 
-	r = chdesc_create_noop_set(NULL, head, PASS_CHDESC_SET(oldheads_set));
+	r = patch_create_noop_set(NULL, head, PASS_PATCH_SET(oldheads_set));
 	if (r < 0)
 		goto write_inode_bitmap_end;
 
@@ -382,7 +382,7 @@ write_inode_bitmap_end:
 }
 
 char * frsum_warning = "Warning: frsum code needs to be correctly reimplemented\n";
-int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
+int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, patch_t ** head)
 {
 	const struct UFS_cg * cg;
 	uint32_t blockno, offset, * ptr;
@@ -454,10 +454,10 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 		return -ENOENT;
 		*/
 
-	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
+	r = patch_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "free fragment" : "allocate fragment");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "free fragment" : "allocate fragment");
 
 	r = CALL(info->ubd, write_block, block, blockno);
 	if (r < 0)
@@ -492,22 +492,22 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 	if (nfrags_before > 0 && nfrags_before < 8) {
 		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_before];
 		cg->cg_frsum[nfrags_before]--;
-		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
+		r = patch_create_byte(cgblock, info->ubd, (uint16_t) offset,
 				sizeof(cg->cg_frsum[nfrags_before]),
 				&cg->cg_frsum[nfrags_before], head);
 		if (r < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write frsum before");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write frsum before");
 	}
 	if (nfrags_after > 0 && nfrags_after < 8) {
 		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_after];
 		cg->cg_frsum[nfrags_after]++;
-		r = chdesc_create_byte(cgblock, info->ubd, (uint16_t) offset,
+		r = patch_create_byte(cgblock, info->ubd, (uint16_t) offset,
 				sizeof(cg->cg_frsum[nfrags_after]),
 				&cg->cg_frsum[nfrags_after], head);
 		if (r < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write frsum after");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write frsum after");
 	}
 
 	r = CALL(info->ubd, write_block, cgblock, cgblock->xxx_number);
@@ -520,15 +520,15 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 
 // This is the 'raw' function to write the block bitmap
 // You probably want allocate_wholeblock()
-int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chdesc_t ** head)
+int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, patch_t ** head)
 {
 	uint32_t blocknum, blockno, offset, * ptr, btot;
 	uint16_t fbp;
 	int r, cyl, block_offset;
 	bdesc_t * block;
-	chdesc_t * save_head;
-	DEFINE_CHDESC_PASS_SET(oldheads_set, 2, NULL);
-	chdesc_t ** oldheads = oldheads_set.array;
+	patch_t * save_head;
+	DEFINE_PATCH_PASS_SET(oldheads_set, 2, NULL);
+	patch_t ** oldheads = oldheads_set.array;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
 
@@ -573,10 +573,10 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 	}
 
 	save_head = *head;
-	r = chdesc_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
+	r = patch_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, value ? "free block" : "allocate block");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "free block" : "allocate block");
 	*(oldheads++) = *head;
 	*head = save_head;
 
@@ -604,19 +604,19 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, chd
 		return r;
 	*(oldheads++) = *head;
 
-	return chdesc_create_noop_set(NULL, head, PASS_CHDESC_SET(oldheads_set));
+	return patch_create_noop_set(NULL, head, PASS_PATCH_SET(oldheads_set));
 }
 
 // [ndir, ..., nffree] parameters are deltas
-int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, chdesc_t ** head)
+int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, int nifree, int nffree, patch_t ** head)
 {
 	struct UFS_csum sum;
 	struct UFS_csum * csum;
 	const struct UFS_cg * cg;
 	const struct UFS_Super * super = CALL(info->parts.p_super, read);
-	DEFINE_CHDESC_PASS_SET(oldheads_set, 3, NULL);
-	chdesc_t ** oldheads = oldheads_set.array;
-	chdesc_t * oldhead;
+	DEFINE_PATCH_PASS_SET(oldheads_set, 3, NULL);
+	patch_t ** oldheads = oldheads_set.array;
+	patch_t * oldhead;
 	int r;
 
 	oldheads_set.array[0] = NULL;
@@ -650,12 +650,12 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 	csum->cs_nifree += nifree;
 	csum->cs_nffree += nffree;
 
-	r = chdesc_create_byte(info->csum_block, info->ubd,
+	r = patch_create_byte(info->csum_block, info->ubd,
 			cyl * sizeof(struct UFS_csum), sizeof(struct UFS_csum),
 			csum, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "update summary");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "update summary");
 	if (*head != oldhead)
 		*(oldheads++) = *head;
 
@@ -680,7 +680,7 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 		assert(*head == oldhead);
 		return 0;
 	}
-	return chdesc_create_noop_set(NULL, head, PASS_CHDESC_SET(oldheads_set));
+	return patch_create_noop_set(NULL, head, PASS_PATCH_SET(oldheads_set));
 }
 
 int ufs_check_name(const char * p)
@@ -701,7 +701,7 @@ int ufs_check_name(const char * p)
 	return 0;
 }
 
-uint8_t kfs_to_ufs_type(uint8_t type)
+uint8_t fstitch_to_ufs_type(uint8_t type)
 {
 	switch(type)
 	{
@@ -718,7 +718,7 @@ uint8_t kfs_to_ufs_type(uint8_t type)
 	
 }
 
-uint8_t ufs_to_kfs_type(uint8_t type)
+uint8_t ufs_to_fstitch_type(uint8_t type)
 {
 	switch(type)
 	{

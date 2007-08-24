@@ -1,5 +1,5 @@
-#ifndef KUDOS_INC_VECTOR_H
-#define KUDOS_INC_VECTOR_H
+#ifndef FSTITCH_INC_VECTOR_H
+#define FSTITCH_INC_VECTOR_H
 
 struct vector {
 	size_t size;
@@ -109,4 +109,4 @@ void * vector_elt_end(vector_t * v)
 	return v->elts[v->size - 1];
 }
 
-#endif /* !KUDOS_INC_VECTOR_H */
+#endif /* !FSTITCH_INC_VECTOR_H */

@@ -2,15 +2,15 @@
 #include <lib/jiffies.h>
 #include <lib/vector.h>
 
-#include <kfs/kfsd.h>
-#include <kfs/sched.h>
-#include <kfs/bdesc.h>
-#include <kfs/chdesc.h>
-#include <kfs/debug.h>
-#include <kfs/revision.h>
+#include <fscore/fstitchd.h>
+#include <fscore/sched.h>
+#include <fscore/bdesc.h>
+#include <fscore/patch.h>
+#include <fscore/debug.h>
+#include <fscore/revision.h>
 
 #define DEBUG_TIMING 0
-#include <kfs/kernel_timing.h>
+#include <fscore/kernel_timing.h>
 KERNEL_TIMING(timing);
 
 struct fn_entry {
@@ -68,7 +68,7 @@ int sched_unregister(const sched_callback fn, void * arg)
 	return -ENOENT;
 }
 
-static void kfsd_sched_shutdown(void * ignore)
+static void fstitchd_sched_shutdown(void * ignore)
 {
 	size_t i;
 
@@ -84,7 +84,7 @@ static void kfsd_sched_shutdown(void * ignore)
 	TIMING_DUMP(timing, "CALLBACK", "callbacks");
 }
 
-int kfsd_sched_init(void)
+int fstitchd_sched_init(void)
 {
 	int r;
 
@@ -95,7 +95,7 @@ int kfsd_sched_init(void)
 	if (!fes)
 		return -ENOMEM;
 
-	r = kfsd_register_shutdown_module(kfsd_sched_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	r = fstitchd_register_shutdown_module(fstitchd_sched_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if (r < 0)
 	{
 		vector_destroy(fes);
@@ -148,6 +148,6 @@ void sched_run_cleanup(void)
 	r = bdesc_autorelease_pool_push();
 	assert(r >= 0);
 
-	// Run chdesc reclamation
-	chdesc_reclaim_written();
+	// Run patch reclamation
+	patch_reclaim_written();
 }

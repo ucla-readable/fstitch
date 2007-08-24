@@ -2,7 +2,7 @@
 
 BENCHDIR="`dirname "$0"`/.."
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 
 function run () {
 	echo "## $1"
@@ -35,20 +35,20 @@ fi
 
 accounting_on
 
-setmacro CHDESC_NRB 0 kfs/bdesc.h
-setmacro CHDESC_BYTE_MERGE_OVERLAP 0 kfs/chdesc.c
-setmacro CHDESC_BIT_MERGE_OVERLAP 0 kfs/chdesc.c
+setmacro PATCH_NRB 0 fscore/bdesc.h
+setmacro PATCH_BYTE_MERGE_OVERLAP 0 fscore/patch.c
+setmacro PATCH_BIT_MERGE_OVERLAP 0 fscore/patch.c
 run NONE
 
-setmacro CHDESC_NRB 1 kfs/bdesc.h
+setmacro PATCH_NRB 1 fscore/bdesc.h
 run NRB
 
-setmacro CHDESC_NRB 0 kfs/bdesc.h
-setmacro CHDESC_BYTE_MERGE_OVERLAP 1 kfs/chdesc.c
-setmacro CHDESC_BIT_MERGE_OVERLAP 1 kfs/chdesc.c
+setmacro PATCH_NRB 0 fscore/bdesc.h
+setmacro PATCH_BYTE_MERGE_OVERLAP 1 fscore/patch.c
+setmacro PATCH_BIT_MERGE_OVERLAP 1 fscore/patch.c
 run OVERLAP
 
-setmacro CHDESC_NRB 1 kfs/bdesc.h
+setmacro PATCH_NRB 1 fscore/bdesc.h
 run ALL
 
 accounting_restore

@@ -1,7 +1,7 @@
-#ifndef __KUDOS_KFS_BSD_PTABLE_BD_H
-#define __KUDOS_KFS_BSD_PTABLE_BD_H
+#ifndef __FSTITCH_FSCORE_BSD_PTABLE_BD_H
+#define __FSTITCH_FSCORE_BSD_PTABLE_BD_H
 
-#include <kfs/bd.h>
+#include <fscore/bd.h>
 
 #define  DKTYPENAMES
 #define  FSTYPENAMES
@@ -12,4 +12,4 @@ uint8_t bsd_ptable_type(void * info, int index);
 BD_t * bsd_ptable_bd(void * info, int index);
 void bsd_ptable_free(void * info);
 
-#endif /* __KUDOS_KFS_BSD_PTABLE_BD_H */
+#endif /* __FSTITCH_FSCORE_BSD_PTABLE_BD_H */

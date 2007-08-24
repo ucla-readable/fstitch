@@ -1,24 +1,24 @@
-#ifndef __KUDOS_KFS_FEATURE_H
-#define __KUDOS_KFS_FEATURE_H
+#ifndef __FSTITCH_FSCORE_FEATURE_H
+#define __FSTITCH_FSCORE_FEATURE_H
 
 typedef uint16_t feature_id_t;
 
-#define KFS_FEATURE_NONE      0x00 /* Reserved: no feature */
+#define FSTITCH_FEATURE_NONE      0x00 /* Reserved: no feature */
 
-#define KFS_FEATURE_SIZE      0x01 /* File size in bytes */
-#define KFS_FEATURE_FILETYPE  0x02 /* File type */
-#define KFS_FEATURE_NLINKS    0x03 /* Hard link count */
-#define KFS_FEATURE_FREESPACE 0x04 /* Free space on disk (in blocks) */
-#define KFS_FEATURE_FILE_LFS  0x05 /* File top-level LFS */
-#define KFS_FEATURE_UID       0x06 /* Owner ID */
-#define KFS_FEATURE_GID       0x07 /* Group ID */
-#define KFS_FEATURE_UNIX_PERM 0x08 /* Standard UNIX permissions */
-#define KFS_FEATURE_BLOCKSIZE 0x09 /* File system block size (in bytes) */
-#define KFS_FEATURE_DEVSIZE   0x0A /* Device size (in blocks) */
-#define KFS_FEATURE_MTIME     0x0B /* File modification time */
-#define KFS_FEATURE_ATIME     0x0C /* File access time */
-#define KFS_FEATURE_SYMLINK   0x0D /* Symbolic links */
-#define KFS_FEATURE_DELETE    0x0E /* Delete full file in LFS */
+#define FSTITCH_FEATURE_SIZE      0x01 /* File size in bytes */
+#define FSTITCH_FEATURE_FILETYPE  0x02 /* File type */
+#define FSTITCH_FEATURE_NLINKS    0x03 /* Hard link count */
+#define FSTITCH_FEATURE_FREESPACE 0x04 /* Free space on disk (in blocks) */
+#define FSTITCH_FEATURE_FILE_LFS  0x05 /* File top-level LFS */
+#define FSTITCH_FEATURE_UID       0x06 /* Owner ID */
+#define FSTITCH_FEATURE_GID       0x07 /* Group ID */
+#define FSTITCH_FEATURE_UNIX_PERM 0x08 /* Standard UNIX permissions */
+#define FSTITCH_FEATURE_BLOCKSIZE 0x09 /* File system block size (in bytes) */
+#define FSTITCH_FEATURE_DEVSIZE   0x0A /* Device size (in blocks) */
+#define FSTITCH_FEATURE_MTIME     0x0B /* File modification time */
+#define FSTITCH_FEATURE_ATIME     0x0C /* File access time */
+#define FSTITCH_FEATURE_SYMLINK   0x0D /* Symbolic links */
+#define FSTITCH_FEATURE_DELETE    0x0E /* Delete full file in LFS */
 
 typedef struct fsmetadata {
 	uint32_t fsm_feature;
@@ -71,4 +71,4 @@ typedef struct metadata_set metadata_set_t;
 
 #endif
 
-#endif /* __KUDOS_KFS_FEATURE_H */
+#endif /* __FSTITCH_FSCORE_FEATURE_H */

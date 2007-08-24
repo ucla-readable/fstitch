@@ -1,10 +1,10 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/lfs.h>
-#include <kfs/modman.h>
-#include <kfs/loop_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/lfs.h>
+#include <fscore/modman.h>
+#include <fscore/loop_bd.h>
 
 #define LOOP_DEBUG 0
 
@@ -61,30 +61,30 @@ static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t loop_number)
 	Dprintf("%s(0x%08x)\n", __FUNCTION__, block);
 	loop_info_t * info = (loop_info_t *) bd;
 	uint32_t lfs_number;
-	chdesc_t * head = NULL;
+	patch_t * head = NULL;
 	int r;
 
 	lfs_number = CALL(info->lfs, get_file_block, info->file, loop_number * bd->blocksize);
 	if(lfs_number == -1)
 		return -EINVAL;
 
-	r = chdesc_push_down(block, bd, info->lfs->blockdev);
+	r = patch_push_down(block, bd, info->lfs->blockdev);
 	if(r < 0)
 		return r;
 
-	/* masquerade as an opgroup for things like the journal */
-	opgroup_masquerade();
+	/* masquerade as an patchgroup for things like the journal */
+	patchgroup_masquerade();
 	r = CALL(info->lfs, write_block, block, lfs_number, &head);
-	opgroup_demasquerade();
+	patchgroup_demasquerade();
 	return r;
 }
 
-static int loop_flush(BD_t * bd, uint32_t block, chdesc_t * ch)
+static int loop_flush(BD_t * bd, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** loop_get_write_head(BD_t * bd)
+static patch_t ** loop_get_write_head(BD_t * bd)
 {
 	loop_info_t * info = (loop_info_t *) bd;
 	return CALL(info->lfs, get_write_head);

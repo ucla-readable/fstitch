@@ -1,5 +1,5 @@
-#ifndef KUDOS_LIB_POOL_H
-#define KUDOS_LIB_POOL_H
+#ifndef FSTITCH_LIB_POOL_H
+#define FSTITCH_LIB_POOL_H
 
 #include <lib/platform.h>
 

@@ -2,8 +2,8 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 
 if [ $# -lt 2 ]; then
 	echo "About: run a test multiple times and name output files accordingly" 1>&2

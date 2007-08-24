@@ -1,8 +1,8 @@
-#ifdef __KUDOS_KERNEL_TIMING_H
+#ifdef __FSTITCH_KERNEL_TIMING_H
 #error kernel_timing.h should only be included once
 #endif
 
-#define __KUDOS_KERNEL_TIMING_H
+#define __FSTITCH_KERNEL_TIMING_H
 
 #if defined(__KERNEL__) && defined(DEBUG_TIMING) && DEBUG_TIMING
 

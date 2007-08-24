@@ -4,12 +4,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/blockman.h>
-#include <kfs/modman.h>
-#include <kfs/unix_file_bd.h>
-#include <kfs/revision.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/blockman.h>
+#include <fscore/modman.h>
+#include <fscore/unix_file_bd.h>
+#include <fscore/revision.h>
 
 // define as 1 to make writes and syncs non-synchronous
 #define RECKLESS_WRITE_SPEED 1
@@ -174,7 +174,7 @@ static int unix_file_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
  * not physically write the data to the platters for quite some time
  * and it may be written in an out-of-order sequence." */
 // NOTE: Mac OS X has the fcntl() command F_FULLFSYNC to flush a drive's buffer
-static int unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int unix_file_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 #if !RECKLESS_WRITE_SPEED
 	struct unix_file_info * info = (struct unix_file_info *) object;
@@ -189,7 +189,7 @@ static int unix_file_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** unix_file_bd_get_write_head(BD_t * object)
+static patch_t ** unix_file_bd_get_write_head(BD_t * object)
 {
 	return NULL;
 }

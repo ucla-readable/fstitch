@@ -6,8 +6,8 @@
 #include <unistd.h>
 #include <fuse/fuse_lowlevel.h>
 
-#include <kfs/modman.h>
-#include <kfs/fuse_serve_mount.h>
+#include <fscore/modman.h>
+#include <fscore/fuse_serve_mount.h>
 
 // High level overview:
 // The complex aspect of fuse_serve_mount is that fuse_mount() and
@@ -188,7 +188,7 @@ static int mount_path_compar(const void * v1, const void * v2)
 	else if (!m2)
 		return 1;
 
-	return path_compar(m1->kfs_path, m2->kfs_path);
+	return path_compar(m1->fstitch_path, m2->fstitch_path);
 }
 
 static int fuse_args_copy(const struct fuse_args * src, struct fuse_args * copy)
@@ -244,7 +244,7 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
 
 	m->mounted = 0;
 
-	if (!(m->kfs_path = strdup(path)))
+	if (!(m->fstitch_path = strdup(path)))
 	{
 		r = -ENOMEM;
 		goto error_qe;
@@ -301,7 +301,7 @@ int fuse_serve_mount_add(CFS_t * cfs, const char * path)
   error_parents:
 	hash_map_destroy(m->parents);
   error_path:
-	free(m->kfs_path);
+	free(m->fstitch_path);
   error_qe:
 	memset(qe, 0, sizeof(*qe));
 	free(qe);
@@ -315,7 +315,7 @@ int fuse_serve_mount_remove(mount_t * m)
 {
 	queue_entry_t * qe;
 	char b = 1;
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->kfs_path);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->fstitch_path);
 
 	if (!m || !m->mounted)
 		return -EINVAL;
@@ -352,7 +352,7 @@ static int mount_root(int argc, char ** argv)
 	root->args.argv = argv;
 	root->args.allocated = 0;
 
-	if (!(root->kfs_path = strdup("")))
+	if (!(root->fstitch_path = strdup("")))
 		return -ENOMEM;
 
 	if (!(root->parents = hash_map_create()))
@@ -431,7 +431,7 @@ static int unmount_root(void)
 	fuse_opt_free_args(&root->args);
 
 	free(root->mountpoint);
-	free(root->kfs_path);
+	free(root->fstitch_path);
 	hash_map_destroy(root->parents);
 
 	memset(root, 0, sizeof(*root));
@@ -588,13 +588,13 @@ int fuse_serve_mount_step_remove(void)
 
 	if (enqueue_helper_request(qe) < 0)
 	{
-		fprintf(stderr, "%s(): enqueue_helper_request failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->kfs_path);
+		fprintf(stderr, "%s(): enqueue_helper_request failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->fstitch_path);
 		free(qe);
 		return -1;
 	}
 	if (ensure_helper_is_running() < 0)
 	{
-		fprintf(stderr, "%s(): ensure_helper_is_running failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->kfs_path);
+		fprintf(stderr, "%s(): ensure_helper_is_running failed; unmount \"%s\" is unrecoverable\n", __FUNCTION__, qe->mount->fstitch_path);
 		return -1;
 	}
 
@@ -614,7 +614,7 @@ int fuse_serve_mount_step_remove(void)
 // Do a mount for helper_thread()
 static void helper_thread_mount(mount_t * m)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->kfs_path);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->fstitch_path);
 
 	if ((m->channel_fd = fuse_mount(m->mountpoint, &m->args)) == -1)
 	{
@@ -641,16 +641,16 @@ static void helper_thread_mount(mount_t * m)
 
 	m->mounted = 1;
 
-	printf("Mounted \"%s\" from %s\n", m->kfs_path, modman_name_cfs(m->cfs));
+	printf("Mounted \"%s\" from %s\n", m->fstitch_path, modman_name_cfs(m->cfs));
 }
 
 // Do an unmount for helper_thread()
 static void helper_thread_unmount(mount_t * m)
 {
-	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->kfs_path);
+	Dprintf("%s(\"%s\")\n", __FUNCTION__, m->fstitch_path);
 	fuse_unmount(m->mountpoint);
 	free(m->mountpoint);
-	free(m->kfs_path);
+	free(m->fstitch_path);
 	hash_map_destroy(m->parents);
 	memset(m, 0, sizeof(*m));
 	free(m);
@@ -805,7 +805,7 @@ int fuse_serve_mount_start_shutdown(void)
 				mount_t * m = *mp;
 				failed_found = 1;
 				mounts_remove(m);
-				free(m->kfs_path);
+				free(m->fstitch_path);
 				fuse_opt_free_args(&m->args);
 				free(m->mountpoint);
 				hash_map_destroy(m->parents);
@@ -834,7 +834,7 @@ int fuse_serve_mount_start_shutdown(void)
 static int enqueue_helper_request(queue_entry_t * qe)
 {
 	int r;
-	Dprintf("%s(%d, \"%s\")\n", __FUNCTION__, qe->action, qe->mount->kfs_path);
+	Dprintf("%s(%d, \"%s\")\n", __FUNCTION__, qe->action, qe->mount->fstitch_path);
 	mutex_lock(&helper.mutex);
 	r = vector_push_back(helper.queue, qe);
 	mutex_unlock(&helper.mutex);

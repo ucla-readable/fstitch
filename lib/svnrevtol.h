@@ -1,6 +1,6 @@
-#ifndef KUDOS_LIB_SVNREVTOL_H
-#define KUDOS_LIB_SVNREVTOL_H
+#ifndef FSTITCH_LIB_SVNREVTOL_H
+#define FSTITCH_LIB_SVNREVTOL_H
 
 long svnrevtol(const char *rev_str);
 
-#endif // !KUDOS_LIB_SVNREVTOL_H
+#endif // !FSTITCH_LIB_SVNREVTOL_H

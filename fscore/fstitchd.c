@@ -1,13 +1,13 @@
 #include <lib/platform.h>
 
-#include <kfs/sync.h>
-#include <kfs/sched.h>
-#include <kfs/bdesc.h>
-#include <kfs/chdesc.h>
-#include <kfs/debug.h>
-#include <kfs/kfsd.h>
-#include <kfs/kfsd_init.h>
-#include <kfs/destroy.h>
+#include <fscore/sync.h>
+#include <fscore/sched.h>
+#include <fscore/bdesc.h>
+#include <fscore/patch.h>
+#include <fscore/debug.h>
+#include <fscore/fstitchd.h>
+#include <fscore/fstitchd_init.h>
+#include <fscore/destroy.h>
 
 #define DEBUG_TOPLEVEL 0
 #if DEBUG_TOPLEVEL
@@ -34,7 +34,7 @@ int use_crashsim = 0;
 
 struct module_shutdown {
 	const char * name;
-	kfsd_shutdown_module shutdown;
+	fstitchd_shutdown_module shutdown;
 	void * arg;
 	int when;
 };
@@ -42,7 +42,7 @@ struct module_shutdown {
 #define MAX_NR_SHUTDOWNS 16
 static struct module_shutdown module_shutdowns[MAX_NR_SHUTDOWNS];
 
-int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, void * arg, int when)
+int _fstitchd_register_shutdown_module(const char * name, fstitchd_shutdown_module fn, void * arg, int when)
 {
 	int i;
 
@@ -66,7 +66,7 @@ int _kfsd_register_shutdown_module(const char * name, kfsd_shutdown_module fn, v
 	return -ENOMEM;
 }
 
-static void kfsd_callback_shutdowns(int when)
+static void fstitchd_callback_shutdowns(int when)
 {
 	int i;
 	for (i = MAX_NR_SHUTDOWNS - 1; i >= 0; i--)
@@ -82,29 +82,29 @@ static void kfsd_callback_shutdowns(int when)
 	}
 }
 
-static volatile int kfsd_running = 0;
+static volatile int fstitchd_running = 0;
 
-// Shutdown kfsd: inform modules of impending shutdown, then exit.
-static void kfsd_shutdown(void)
+// Shutdown fstitchd: inform modules of impending shutdown, then exit.
+static void fstitchd_shutdown(void)
 {
 	printf("Syncing and shutting down");
-#if KFS_DEBUG
-	printf(" (debug = %d)", KFS_DEBUG_COUNT());
+#if FSTITCH_DEBUG
+	printf(" (debug = %d)", FSTITCH_DEBUG_COUNT());
 #endif
 	printf(".\n");
-	if(kfsd_running > 0)
-		kfsd_running = 0;
+	if(fstitchd_running > 0)
+		fstitchd_running = 0;
 	
-	if(kfs_sync() < 0)
+	if(fstitch_sync() < 0)
 		fprintf(stderr, "Sync failed!\n");
 
 	Dprintf("Calling pre-shutdown callbacks.\n");
-	kfsd_callback_shutdowns(SHUTDOWN_PREMODULES);
+	fstitchd_callback_shutdowns(SHUTDOWN_PREMODULES);
 
-	// Reclaim chdescs written by sync and shutdowns so that when destroy_all()
+	// Reclaim patchs written by sync and shutdowns so that when destroy_all()
 	// destroys BDs that destroy a blockman no ddescs are orphaned.
 	Dprintf("Reclaiming written change descriptors.\n");
-	chdesc_reclaim_written();
+	patch_reclaim_written();
 
 	Dprintf("Destroying all modules.\n");
 	destroy_all();
@@ -117,27 +117,27 @@ static void kfsd_shutdown(void)
 		assert(!bdesc_autorelease_pool_depth());
 	}
 
-	// Run chdesc reclamation
+	// Run patch reclamation
 	Dprintf("Reclaiming written change descriptors.\n");
-	chdesc_reclaim_written();
+	patch_reclaim_written();
 
 	Dprintf("Calling post-shutdown callbacks.\n");
-	kfsd_callback_shutdowns(SHUTDOWN_POSTMODULES);
+	fstitchd_callback_shutdowns(SHUTDOWN_POSTMODULES);
 }
 
-void kfsd_request_shutdown(void)
+void fstitchd_request_shutdown(void)
 {
-	kfsd_running = 0;
+	fstitchd_running = 0;
 }
 
-int kfsd_is_running(void)
+int fstitchd_is_running(void)
 {
-	return kfsd_running > 0;
+	return fstitchd_running > 0;
 }
 
 #ifdef __KERNEL__
 
-#include <kfs/kernel_serve.h>
+#include <fscore/kernel_serve.h>
 #include <linux/version.h>
 #include <linux/pagemap.h>
 #include <linux/module.h>
@@ -149,19 +149,19 @@ int kfsd_is_running(void)
 # include <linux/stacktrace.h>
 #endif
 
-struct task_struct * kfsd_task;
-struct stealth_lock kfsd_global_lock;
+struct task_struct * fstitchd_task;
+struct stealth_lock fstitchd_global_lock;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-static void kudos_sysrq_unlock(int key, struct pt_regs * regs, struct tty_struct * tty)
+static void fsttich_sysrq_unlock(int key, struct pt_regs * regs, struct tty_struct * tty)
 #else
-static void kudos_sysrq_unlock(int key, struct tty_struct * tty)
+static void fsttich_sysrq_unlock(int key, struct tty_struct * tty)
 #endif
 {
-	spin_lock(&kfsd_global_lock.lock);
-	kfsd_global_lock.locked = 0;
-	kfsd_global_lock.process = 0;
-	spin_unlock(&kfsd_global_lock.lock);
+	spin_lock(&fstitchd_global_lock.lock);
+	fstitchd_global_lock.locked = 0;
+	fstitchd_global_lock.process = 0;
+	spin_unlock(&fstitchd_global_lock.lock);
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
@@ -173,10 +173,10 @@ static void kudos_sysrq_unlock(int key, struct tty_struct * tty)
 #define PRINT_STACK_DEPTH 128
 
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
-static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
+static void fsttich_sysrq_showlock(int key, struct tty_struct * tty)
 {
-	spin_lock(&kfsd_global_lock.lock);
-	if(kfsd_global_lock.locked)
+	spin_lock(&fstitchd_global_lock.lock);
+	if(fstitchd_global_lock.locked)
 	{
 		struct task_struct * task;
 		unsigned long entries[PRINT_STACK_DEPTH];
@@ -187,12 +187,12 @@ static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
 		trace.skip = 0;
 		trace.all_contexts = 0;
 		rcu_read_lock();
-		task = find_task_by_pid_type(PIDTYPE_PID, kfsd_global_lock.process);
+		task = find_task_by_pid_type(PIDTYPE_PID, fstitchd_global_lock.process);
 		save_stack_trace(&trace, task);
 		rcu_read_unlock();
 		print_stack_trace(&trace, 0);
 	}
-	spin_unlock(&kfsd_global_lock.lock);
+	spin_unlock(&fstitchd_global_lock.lock);
 }
 #endif
 #endif
@@ -200,42 +200,42 @@ static void kudos_sysrq_showlock(int key, struct tty_struct * tty)
 static struct {
 	int key;
 	struct sysrq_key_op op;
-} kfsd_sysrqs[] = {
-	{'c', {handler: kudos_sysrq_unlock, help_msg: "kfsd_unlock(C)", action_msg: "Unlocked kfsd_lock", enable_mask: 1}},
+} fstitchd_sysrqs[] = {
+	{'c', {handler: fsttich_sysrq_unlock, help_msg: "fstitchd_unlock(C)", action_msg: "Unlocked fstitchd_lock", enable_mask: 1}},
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
-	{'w', {handler: kudos_sysrq_showlock, help_msg: "kfsd_tracelock(W)", action_msg: "Showing kfsd_lock owner trace", enable_mask: 1}},
+	{'w', {handler: fsttich_sysrq_showlock, help_msg: "fstitchd_tracelock(W)", action_msg: "Showing fstitchd_lock owner trace", enable_mask: 1}},
 #endif
 #endif
 };
-#define KFSD_SYSRQS (sizeof(kfsd_sysrqs) / sizeof(kfsd_sysrqs[0]))
+#define FSTITCHD_SYSRQS (sizeof(fstitchd_sysrqs) / sizeof(fstitchd_sysrqs[0]))
 
-static void kfsd_main(int nwbblocks)
+static void fstitchd_main(int nwbblocks)
 {
 	int r;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
-	kfsd_enter();
-	if ((r = kfsd_init(nwbblocks)) < 0)
+	fstitchd_enter();
+	if ((r = fstitchd_init(nwbblocks)) < 0)
 	{
-		printf("kfsd_init() failed in the kernel! (error = %d)\n", r);
-		kfsd_running = r;
+		printf("fstitchd_init() failed in the kernel! (error = %d)\n", r);
+		fstitchd_running = r;
 	}
 	else
 	{
-		kfsd_running = 1;
-		while(kfsd_running)
+		fstitchd_running = 1;
+		while(fstitchd_running)
 		{
 			sched_run_callbacks();
-			kfsd_leave(0);
+			fstitchd_leave(0);
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ / 25);
-			kfsd_enter();
+			fstitchd_enter();
 		}
 	}
-	kfsd_shutdown();
-	kfsd_leave(0);
+	fstitchd_shutdown();
+	fstitchd_leave(0);
 }
 
 static int nwbblocks = 40000;
@@ -270,89 +270,89 @@ module_param(use_crashsim, int, 0);
 MODULE_PARM_DESC(use_crashsim, "Use crash simulator module");
 #endif
 
-static int kfsd_is_shutdown = 0;
+static int fstitchd_is_shutdown = 0;
 
-static int kfsd_thread(void * thunk)
+static int fstitchd_thread(void * thunk)
 {
 	int i;
-	printf("kkfsd started (PID = %d)\n", current ? current->pid : 0);
-	daemonize("kkfsd");
-	kfsd_task = current;
-	spin_lock_init(&kfsd_global_lock.lock);
-	kfsd_global_lock.locked = 0;
-	kfsd_global_lock.process = 0;
-	for(i = 0; i < KFSD_SYSRQS; i++)
-		if(register_sysrq_key(kfsd_sysrqs[i].key, &kfsd_sysrqs[i].op) < 0)
-			printf("kkfsd unable to register sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
-	Dprintf("Running kfsd_main()\n");
-	kfsd_main(nwbblocks);
-	Dprintf("kfsd_main() completed\n");
-	for(i = 0; i < KFSD_SYSRQS; i++)
-		if(unregister_sysrq_key(kfsd_sysrqs[i].key, &kfsd_sysrqs[i].op) < 0)
-			printf("kkfsd unable to unregister sysrq[%c] (%d/%d)\n", kfsd_sysrqs[i].key, i + 1, KFSD_SYSRQS);
-	printf("kkfsd exiting (PID = %d)\n", current ? current->pid : 0);
-	kfsd_is_shutdown = 1;
+	printf("kfstitchd started (PID = %d)\n", current ? current->pid : 0);
+	daemonize("kfstitchd");
+	fstitchd_task = current;
+	spin_lock_init(&fstitchd_global_lock.lock);
+	fstitchd_global_lock.locked = 0;
+	fstitchd_global_lock.process = 0;
+	for(i = 0; i < FSTITCHD_SYSRQS; i++)
+		if(register_sysrq_key(fstitchd_sysrqs[i].key, &fstitchd_sysrqs[i].op) < 0)
+			printf("kfstitchd unable to register sysrq[%c] (%d/%d)\n", fstitchd_sysrqs[i].key, i + 1, FSTITCHD_SYSRQS);
+	Dprintf("Running fstitchd_main()\n");
+	fstitchd_main(nwbblocks);
+	Dprintf("fstitchd_main() completed\n");
+	for(i = 0; i < FSTITCHD_SYSRQS; i++)
+		if(unregister_sysrq_key(fstitchd_sysrqs[i].key, &fstitchd_sysrqs[i].op) < 0)
+			printf("kfstitchd unable to unregister sysrq[%c] (%d/%d)\n", fstitchd_sysrqs[i].key, i + 1, FSTITCHD_SYSRQS);
+	printf("kfstitchd exiting (PID = %d)\n", current ? current->pid : 0);
+	fstitchd_is_shutdown = 1;
 	return 0;
 }
 
-static int __init init_kfsd(void)
+static int __init init_fstitchd(void)
 {
-	pid_t pid = kernel_thread(kfsd_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	pid_t pid = kernel_thread(fstitchd_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	if(pid < 0)
-		printf("kkfsd unable to start kernel thread!\n");
-	while(!kfsd_running && !signal_pending(current))
+		printf("kfstitchd unable to start kernel thread!\n");
+	while(!fstitchd_running && !signal_pending(current))
 	{
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 10);
 	}
-	/* FIXME: we should kill the kernel thread if kfsd_running is false */
-	return (kfsd_running > 0) ? 0 : kfsd_running;
+	/* FIXME: we should kill the kernel thread if fstitchd_running is false */
+	return (fstitchd_running > 0) ? 0 : fstitchd_running;
 }
 
-static void __exit exit_kfsd(void)
+static void __exit exit_fstitchd(void)
 {
-	kfsd_request_shutdown();
-	while(!kfsd_is_shutdown)
+	fstitchd_request_shutdown();
+	while(!fstitchd_is_shutdown)
 	{
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ / 10);
 	}
 }
 
-module_init(init_kfsd);
-module_exit(exit_kfsd);
+module_init(init_fstitchd);
+module_exit(exit_fstitchd);
 
-MODULE_AUTHOR("Kudos Team");
-MODULE_DESCRIPTION("Kudos File System Architecture");
+MODULE_AUTHOR("Featherstitch Team");
+MODULE_DESCRIPTION("Featherstitch File System Architecture");
 MODULE_LICENSE("GPL");
 
 #elif defined(UNIXUSER)
 
-#include <kfs/fuse_serve.h>
+#include <fscore/fuse_serve.h>
 #include <unistd.h>
 
-static void kfsd_main(int nwbblocks)
+static void fstitchd_main(int nwbblocks)
 {
 	int r;
 
 	memset(module_shutdowns, 0, sizeof(module_shutdowns));
 
-	if ((r = kfsd_init(nwbblocks)) < 0)
+	if ((r = fstitchd_init(nwbblocks)) < 0)
 	{
-		printf("kfsd_init() failed! (error = %d)\n", r);
-		kfsd_running = r;
+		printf("fstitchd_init() failed! (error = %d)\n", r);
+		fstitchd_running = r;
 	}
 	else
 	{
-		kfsd_running = 1;
+		fstitchd_running = 1;
 		fuse_serve_loop();
 	}
-	kfsd_shutdown();
+	fstitchd_shutdown();
 }
 
 char * unix_file = NULL;
-int kfsd_argc = 0;
-char ** kfsd_argv = NULL;
+int fstitchd_argc = 0;
+char ** fstitchd_argv = NULL;
 
 static void remove_arg(int * argc, char ** argv, int idx)
 {
@@ -421,14 +421,14 @@ int main(int argc, char * argv[])
 			remove_arg(&argc, argv, i--);
 		}
 	}
-	kfsd_argc = argc;
-	kfsd_argv = argv;
+	fstitchd_argc = argc;
+	fstitchd_argv = argv;
 	
-	printf("ukfsd started (PID = %d)\n", getpid());
-	Dprintf("Running kfsd_main()\n");
-	kfsd_main(nwbblocks);
-	Dprintf("kfsd_main() completed\n");
-	printf("ukfsd exiting (PID = %d)\n", getpid());
+	printf("ufstitchd started (PID = %d)\n", getpid());
+	Dprintf("Running fstitchd_main()\n");
+	fstitchd_main(nwbblocks);
+	Dprintf("fstitchd_main() completed\n");
+	printf("ufstitchd exiting (PID = %d)\n", getpid());
 	return 0;
 }
 

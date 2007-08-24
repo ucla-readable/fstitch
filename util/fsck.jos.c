@@ -15,7 +15,7 @@
 #include <errno.h>
 
 #include <lib/partition.h>
-#include <kfs/josfs_base.h>
+#include <fscore/josfs_base.h>
 
 static int fix = 0;
 
@@ -239,7 +239,7 @@ static void partition_adjust(off_t * size)
 		return;
 	ptable = (struct pc_ptable *) &mbr[PTABLE_OFFSET];
 	for(i = 0; i < 4; i++)
-		if(ptable[i].type == PTABLE_KUDOS_TYPE)
+		if(ptable[i].type == PTABLE_FSTITCH_TYPE)
 			break;
 	if(i == 4)
 		return;

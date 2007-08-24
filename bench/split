@@ -5,15 +5,15 @@ function run () {
 	prepare_postinit  $T $N $OUTDIR $HOST
 	time (echo + split; dd if=/dev/zero bs=$FILESZ count=$NFILE | \
 	                    time split -b $FILESZ - $MNT/file_;
-	      echo + sync; time fsync $KUDOSDIR $MNT;
+	      echo + sync; time fsync $FSTITCHDIR $MNT;
 	      echo + total)
 	try $BENCHDIR/init -f $FS -h $HOST -a stop
 }
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
 T=split
@@ -27,6 +27,6 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR $HOST
+prepare $T $N $FSTITCHDIR $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST
+finish $T $N $FSTITCHDIR $OUTDIR $HOST

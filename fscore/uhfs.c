@@ -1,13 +1,13 @@
 #include <lib/platform.h>
 #include <lib/pool.h>
 
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/debug.h>
-#include <kfs/opgroup.h>
-#include <kfs/lfs.h>
-#include <kfs/cfs.h>
-#include <kfs/uhfs.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/debug.h>
+#include <fscore/patchgroup.h>
+#include <fscore/lfs.h>
+#include <fscore/cfs.h>
+#include <fscore/uhfs.h>
 
 
 #define UHFS_DEBUG 0
@@ -32,7 +32,7 @@ struct uhfs_state {
 	CFS_t cfs;
 	
 	LFS_t * lfs;
-	chdesc_t ** write_head;
+	patch_t ** write_head;
 	uint32_t nopen;
 };
 
@@ -50,11 +50,11 @@ static bool lfs_feature_supported(LFS_t * lfs, feature_id_t id)
 
 static bool check_type_supported(LFS_t * lfs, fdesc_t * f, uint32_t * filetype)
 {
-	const bool type_supported = lfs_feature_supported(lfs, KFS_FEATURE_FILETYPE);
+	const bool type_supported = lfs_feature_supported(lfs, FSTITCH_FEATURE_FILETYPE);
 
 	if (type_supported)
 	{
-		int r = CALL(lfs, get_metadata_fdesc, f, KFS_FEATURE_FILETYPE, sizeof(*filetype), filetype);
+		int r = CALL(lfs, get_metadata_fdesc, f, FSTITCH_FEATURE_FILETYPE, sizeof(*filetype), filetype);
 		if (r < 0)
 			*filetype = TYPE_INVAL;
 		else
@@ -128,8 +128,8 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 	uhfs_fdesc_t * uf = (uhfs_fdesc_t *) fdesc;
 	const size_t blksize = state->lfs->blocksize;
 	size_t nblks, target_nblks = ROUNDUP32(target_size, blksize) / blksize;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
-	chdesc_t * save_head;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * save_head;
 	int r;
 
 	nblks = CALL(state->lfs, get_file_numblocks, uf->inner);
@@ -179,7 +179,7 @@ static int uhfs_truncate(CFS_t * cfs, fdesc_t * fdesc, uint32_t target_size)
 
 static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, fdesc_t ** outer)
 {
-	feature_id_t size_id = KFS_FEATURE_NONE;
+	feature_id_t size_id = FSTITCH_FEATURE_NONE;
 	bool type = 0;
 	uhfs_fdesc_t * uf;
 
@@ -187,9 +187,9 @@ static int open_common(struct uhfs_state * state, fdesc_t * inner, inode_t ino, 
 	{
 		const size_t max_id = CALL(state->lfs, get_max_feature_id);
 		const bool * id_array = CALL(state->lfs, get_feature_array);
-		if(KFS_FEATURE_SIZE <= max_id && id_array[KFS_FEATURE_SIZE])
-			size_id = KFS_FEATURE_SIZE;
-		if(KFS_FEATURE_FILETYPE <= max_id && id_array[KFS_FEATURE_FILETYPE])
+		if(FSTITCH_FEATURE_SIZE <= max_id && id_array[FSTITCH_FEATURE_SIZE])
+			size_id = FSTITCH_FEATURE_SIZE;
+		if(FSTITCH_FEATURE_FILETYPE <= max_id && id_array[FSTITCH_FEATURE_FILETYPE])
 			type = 1;
 	}
 
@@ -258,7 +258,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 {
 	Dprintf("%s(parent %u, name %s, %d)\n", __FUNCTION__, parent, name, mode);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t existing_ino;
 	fdesc_t * inner;
 	int type, r;
@@ -273,7 +273,7 @@ static int uhfs_create(CFS_t * cfs, inode_t parent, const char * name, int mode,
 		return -EEXIST;
 	}
 
-	r = initialmd->get(initialmd->arg, KFS_FEATURE_FILETYPE, sizeof(type), &type);
+	r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_FILETYPE, sizeof(type), &type);
 	if (r < 0)
 		return r;
 	assert(type == TYPE_FILE || type == TYPE_SYMLINK);
@@ -361,8 +361,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 	const uint32_t pageoffset = offset & (PAGE_SIZE - 1);
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
-	chdesc_t * write_head = state->write_head ? *state->write_head : NULL;
-	chdesc_t * head = write_head, * tail;
+	patch_t * write_head = state->write_head ? *state->write_head : NULL;
+	patch_t * head = write_head, * tail;
 	int r = 0;
 
 	if (uf->size_id) {
@@ -396,7 +396,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 	{
 		uint32_t number;
 		bdesc_t * block = NULL;
-		chdesc_t * save_head;
+		patch_t * save_head;
 		const uint32_t length = MIN(blocksize - dataoffset, size - size_written);
 		bool in_first_page = (pageoffset + size_written) < PAGE_SIZE;
 		page_t * cur_page = in_first_page ? page : NULL;
@@ -426,7 +426,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 				goto uhfs_write_exit;
 			}
 
-			r = opgroup_prepare_head(&head);
+			r = patchgroup_prepare_head(&head);
 			/* can we do better than this? */
 			assert(r >= 0);
 
@@ -434,16 +434,16 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 			tail = head;
 
 			/* zero it */
-			r = chdesc_create_init(block, bd, &head);
+			r = patch_create_init(block, bd, &head);
 			if (r < 0)
 				goto no_block;
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "init data block");
+			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "init data block");
 			/* note that we do not write it - we will write it later */
 
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
-			head->flags |= CHDESC_DATA;
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, head, PATCH_DATA);
+			head->flags |= PATCH_DATA;
 
-			r = opgroup_finish_head(head);
+			r = patchgroup_finish_head(head);
 			/* can we do better than this? */
 			assert(r >= 0);
 
@@ -481,7 +481,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 			}
 		}
 
-		r = opgroup_prepare_head(&head);
+		r = patchgroup_prepare_head(&head);
 		/* can we do better than this? */
 		assert(r >= 0);
 
@@ -489,15 +489,15 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 		tail = head;
 
 		/* write the data to the block */
-		r = chdesc_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &head);
+		r = patch_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "write file data");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "write file data");
 
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, head, CHDESC_DATA);
-		head->flags |= CHDESC_DATA;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, head, PATCH_DATA);
+		head->flags |= PATCH_DATA;
 
-		r = opgroup_finish_head(head);
+		r = patchgroup_finish_head(head);
 		/* can we do better than this? */
 		assert(r >= 0);
 
@@ -541,16 +541,16 @@ static int uhfs_get_dirent(CFS_t * cfs, fdesc_t * fdesc, dirent_t * entry, uint1
 	return CALL(state->lfs, get_dirent, uf->inner, entry, size, basep);
 }
 
-static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f, chdesc_t ** prev_head)
+static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * name, fdesc_t * f, patch_t ** prev_head)
 {
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
-	const bool link_supported = lfs_feature_supported(state->lfs, KFS_FEATURE_NLINKS);
-	const bool delete_supported = lfs_feature_supported(state->lfs, KFS_FEATURE_DELETE);
+	const bool link_supported = lfs_feature_supported(state->lfs, FSTITCH_FEATURE_NLINKS);
+	const bool delete_supported = lfs_feature_supported(state->lfs, FSTITCH_FEATURE_DELETE);
 	int r;
 
 	if (link_supported) {
 		uint32_t nlinks;
-		r = CALL(state->lfs, get_metadata_fdesc, f, KFS_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
+		r = CALL(state->lfs, get_metadata_fdesc, f, FSTITCH_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
 		if (r < 0) {
 			CALL(state->lfs, free_fdesc, f);
 			return r;
@@ -565,7 +565,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 
 	if (!delete_supported) {
 		int i;
-		chdesc_t * save_head;
+		patch_t * save_head;
 		uint32_t nblocks = CALL(state->lfs, get_file_numblocks, f);
 		for (i = 0 ; i < nblocks; i++) {
 			uint32_t number = CALL(state->lfs, truncate_file_block, f, prev_head);
@@ -591,7 +591,7 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 	return CALL(state->lfs, remove_name, parent, name, prev_head);
 }
 
-static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, chdesc_t ** head)
+static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, patch_t ** head)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
@@ -629,7 +629,7 @@ static int uhfs_unlink(CFS_t * cfs, inode_t parent, const char * name)
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 	return unlink_name(cfs, parent, name, &prev_head);
 }
 
@@ -646,7 +646,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	fdesc_t * oldf, * newf;
 	bool type_supported;
 	uint32_t oldtype;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 	metadata_set_t initialmd = { .get = empty_get_metadata, .arg = NULL };
 	int r;
 
@@ -680,7 +680,7 @@ static int uhfs_link(CFS_t * cfs, inode_t ino, inode_t newparent, const char * n
 	if (type_supported)
 	{
 		fsmetadata_t fsm;
-		fsm.fsm_feature = KFS_FEATURE_FILETYPE;
+		fsm.fsm_feature = FSTITCH_FEATURE_FILETYPE;
 		fsm.fsm_value.u = oldtype;
 		r = CALL(state->lfs, set_metadata2_fdesc, newf, &fsm, 1, &prev_head);
 		if (r < 0)
@@ -700,7 +700,7 @@ static int uhfs_rename(CFS_t * cfs, inode_t oldparent, const char * oldname, ino
 {
 	Dprintf("%s(%u, \"%s\", %u, \"%s\")\n", __FUNCTION__, oldparent, oldname, newparent, newname);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t ino;
 	int r;
 
@@ -726,7 +726,7 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 {
 	Dprintf("%s(%u, \"%s\")\n", __FUNCTION__, parent, name);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 	inode_t existing_ino;
 	fdesc_t * f;
 	int r;
@@ -739,10 +739,10 @@ static int uhfs_mkdir(CFS_t * cfs, inode_t parent, const char * name, const meta
 		return -1;
 
 	/* set the filetype metadata */
-	if (lfs_feature_supported(state->lfs, KFS_FEATURE_FILETYPE))
+	if (lfs_feature_supported(state->lfs, FSTITCH_FEATURE_FILETYPE))
 	{
 		fsmetadata_t fsm;
-		fsm.fsm_feature = KFS_FEATURE_FILETYPE;
+		fsm.fsm_feature = FSTITCH_FEATURE_FILETYPE;
 		fsm.fsm_value.u = TYPE_DIR;
 		r = CALL(state->lfs, set_metadata2_fdesc, f, &fsm, 1, &prev_head);
 		if (r < 0)
@@ -796,7 +796,7 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 					entry.d_name[0] = 0;
 				}
 				if (r < 0) {
-					chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+					patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 					return unlink_file(cfs, ino, parent, name, f, &prev_head);
 				}
 			} while (r != 0);
@@ -837,7 +837,7 @@ static int uhfs_set_metadata2(CFS_t * cfs, inode_t ino, const fsmetadata_t *fsm,
 {
 	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, nfsm, fsm);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
-	chdesc_t * prev_head = state->write_head ? *state->write_head : NULL;
+	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 
 	return CALL(state->lfs, set_metadata2_inode, ino, fsm, nfsm, &prev_head);
 }

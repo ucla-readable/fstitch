@@ -9,7 +9,7 @@ function assert()
 	then
 		echo "FAIL: $@" >&2
 		mount | grep -q /mnt/test && sudo umount /mnt/test
-		lsmod | grep -q kkfsd && sudo rmmod kkfsd
+		lsmod | grep -q kfstitchd && sudo rmmod kfstitchd
 		exit $V
 	fi
 }
@@ -27,13 +27,13 @@ PRISTINE=~mdm2000/linux-2.6.15
 DISK=${1:-/dev/sdb}
 
 if [ $# -gt 2 ]; then
-	echo "About: run a kkfsd test" 1>&2
+	echo "About: run a kfstitchd test" 1>&2
 	echo "Usage: `basename "$0"` [DISK]" 1>&2
 	exit 1
 fi
 
-if lsmod | grep -q kkfsd; then
-	echo "kkfsd is already loaded" 1>&2
+if lsmod | grep -q kfstitchd; then
+	echo "kfstitchd is already loaded" 1>&2
 	exit 1
 fi
 
@@ -52,31 +52,31 @@ DISKIMGSIZE=`du -m --apparent-size $DISKIMG | cut -f 1`
 mount | grep -q /debug || sudo mount /debug
 assert sync
 
-assert sudo insmod kfs/kkfsd.ko linux_device=$DISK
-if [ -f /proc/kkfsd_debug ]
+assert sudo insmod fscore/kfstitchd.ko linux_device=$DISK
+if [ -f /proc/kfstitchd_debug ]
 then
-	sudo cat /proc/kkfsd_debug > debug/kkfsd_debug &
+	sudo cat /proc/kfstitchd_debug > debug/kfstitchd_debug &
 	CAT=$!
 fi
-assert sudo mount kfs:/ /mnt/test -t kfs
+assert sudo mount fstitch:/ /mnt/test -t kfs
 assert time sudo tar -C /mnt/test -xf linux-2.6.15.tar
 assert time obj/util/fsync /mnt/test
 assert sudo umount /mnt/test
 mount | grep -q /debug && cp /debug/* debug/
 [ "$CAT" ] && kill $CAT
 assert sync
-assert sudo rmmod kkfsd
+assert sudo rmmod kfstitchd
 sudo dd if=$DISK of=debug/disk.img bs=1M count=$DISKIMGSIZE
 assert sync
 
-assert sudo insmod kfs/kkfsd.ko linux_device=$DISK
-assert sudo mount kfs:/ /mnt/test -t kfs
+assert sudo insmod fscore/kfstitchd.ko linux_device=$DISK
+assert sudo mount fstitch:/ /mnt/test -t kfs
 warning find /mnt/test > list
 [ `wc -l list | cut -f 1 -d\ ` -eq 20158 ] || echo "list length mismatch: `wc -l list`"
 [ "`md5sum list | cut -f 1 -d\ `" == "1562f3a4a17b6d72f8672d5e22d8a46f" ] || echo "list hash mismatch"
 warning diff -Nurd $PRISTINE /mnt/test/linux-2.6.15 | tee diff
 warning sudo umount /mnt/test
-warning sudo rmmod kkfsd
+warning sudo rmmod kfstitchd
 if [ -f debug/linux_bd_writes ]; then
 	assert obj/util/check_writes debug/linux_bd_writes debug/disk.img | tee debug/check_writes
 fi

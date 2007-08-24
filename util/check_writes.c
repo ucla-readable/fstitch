@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <kfs/linux_bd_debug.h>
+#include <fscore/linux_bd_debug.h>
 
 #define BLKSIZE 2048
 
@@ -97,7 +97,7 @@ int main(int argc, char ** argv)
 		if (blocks[blockno].read_checksum == last_write->checksum)
 			continue;
 
-		printf("block %u differs. written %u times. %d writes inflight. checksums: 0x%x (kkfsd), 0x%x (read).\n", blockno, blocks[blockno].nwrites, last_write->ninflight, last_write->checksum, blocks[blockno].read_checksum);
+		printf("block %u differs. written %u times. %d writes inflight. checksums: 0x%x (kfstitchd), 0x%x (read).\n", blockno, blocks[blockno].nwrites, last_write->ninflight, last_write->checksum, blocks[blockno].read_checksum);
 
 		printf("block %u previous write checksum matches: ", blockno);
 		for (index = 0; index < MAXWRITES; index++)

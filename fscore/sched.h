@@ -1,14 +1,14 @@
-#ifndef __KUDOS_KFS_SCHED_H
-#define __KUDOS_KFS_SCHED_H
+#ifndef __FSTITCH_FSCORE_SCHED_H
+#define __FSTITCH_FSCORE_SCHED_H
 
 typedef void (*sched_callback)(void * arg);
 
 int  sched_register(const sched_callback fn, void * arg, int32_t freq_jiffies);
 int  sched_unregister(const sched_callback fn, void * arg);
 
-int  kfsd_sched_init(void);
+int  fstitchd_sched_init(void);
 
 void sched_run_callbacks(void);
 void sched_run_cleanup(void);
 
-#endif /* __KUDOS_KFS_SCHED_H */
+#endif /* __FSTITCH_FSCORE_SCHED_H */

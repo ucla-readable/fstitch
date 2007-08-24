@@ -2,10 +2,10 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
-HOST="`cat $KUDOSDIR/test/host`"
-FS="`cat $KUDOSDIR/test/fs`"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
+HOST="`cat $FSTITCHDIR/test/host`"
+FS="`cat $FSTITCHDIR/test/fs`"
 
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
 	echo "About: run a single test (multiple times and for memory accounting)"
@@ -17,7 +17,7 @@ NRUNS=3
 [ $# -eq 2 ] && NRUNS="$2"
 
 $BENCHDIR/multi $NRUNS "$TESTNAME"
-if [ "$HOST" == "kudos" ] || [ "$HOST" == "uu" ]; then
+if [ "$HOST" == "fstitch" ] || [ "$HOST" == "uu" ]; then
 	if grep -v linux- $OUTDIR/fs; then
 		accounting_on; TESTNAME=mem "$TESTNAME"; accounting_restore
 	fi

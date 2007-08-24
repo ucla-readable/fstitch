@@ -1,6 +1,6 @@
-#ifndef KUDOS_LIB_SLEEP_H
-#define KUDOS_LIB_SLEEP_H
+#ifndef FSTITCH_LIB_SLEEP_H
+#define FSTITCH_LIB_SLEEP_H
 
 int jsleep(int32_t jiffies);
 
-#endif /* !KUDOS_LIB_SLEEP_H */
+#endif /* !FSTITCH_LIB_SLEEP_H */

@@ -2,9 +2,9 @@
 #include <lib/jiffies.h>
 #include <lib/vector.h>
 
-#include <kfs/debug.h>
-#include <kfs/sched.h>
-#include <kfs/ufs_cg_wb.h>
+#include <fscore/debug.h>
+#include <fscore/sched.h>
+#include <fscore/ufs_cg_wb.h>
 
 #define WB_TIME     0
 #define WB_CS       1
@@ -60,7 +60,7 @@ static const struct UFS_cg * ufs_cg_wb_read(UFSmod_cg_t * object, int32_t num)
 	return &linfo->cg[num].cgdata;
 }
 
-static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time, chdesc_t ** head)
+static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -79,13 +79,13 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 	if (!linfo->cg[num].dirty[WB_TIME])
 		return 0;
 
-	r = chdesc_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_time,
 			sizeof(linfo->cg[num].cgdata.cg_time),
 			&linfo->cg[num].cgdata.cg_time, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg timestamp");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg timestamp");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -94,7 +94,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 	return 0;
 }
 
-static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_csum * sum, chdesc_t ** head)
+static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_csum * sum, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -115,16 +115,16 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 	if (!linfo->cg[num].dirty[WB_CS])
 		return 0;
 
-	r = chdesc_create_diff(linfo->cg[num].cgblock, linfo->global_info->ubd,
+	r = patch_create_diff(linfo->cg[num].cgblock, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_cs,
 			sizeof(struct UFS_csum), &linfo->cg[num].oldcgsum,
 			&linfo->cg[num].cgdata.cg_cs, head);
 	if (r < 0)
 		return r;
-	/* chdesc_create_diff() returns 0 for "no change" */
+	/* patch_create_diff() returns 0 for "no change" */
 	if (*head && r > 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg checksum");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg checksum");
 		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 		if (r < 0)
 			return r;
@@ -137,7 +137,7 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 	return 0;
 }
 
-static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t rotor, chdesc_t ** head)
+static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t rotor, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -156,13 +156,13 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 	if (!linfo->cg[num].dirty[WB_ROTOR])
 		return 0;
 
-	r = chdesc_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_rotor,
 			sizeof(linfo->cg[num].cgdata.cg_rotor),
 			&linfo->cg[num].cgdata.cg_rotor, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg rotor");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg rotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -171,7 +171,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 	return 0;
 }
 
-static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t frotor, chdesc_t ** head)
+static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t frotor, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -190,13 +190,13 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 	if (!linfo->cg[num].dirty[WB_FROTOR])
 		return 0;
 
-	r = chdesc_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_frotor,
 			sizeof(linfo->cg[num].cgdata.cg_frotor),
 			&linfo->cg[num].cgdata.cg_frotor, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frotor");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg frotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -205,7 +205,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 	return 0;
 }
 
-static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t irotor, chdesc_t ** head)
+static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t irotor, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -224,13 +224,13 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 	if (!linfo->cg[num].dirty[WB_IROTOR])
 		return 0;
 
-	r = chdesc_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
+	r = patch_create_byte(linfo->cg[num].cgblock, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_irotor,
 			sizeof(linfo->cg[num].cgdata.cg_irotor),
 			&linfo->cg[num].cgdata.cg_irotor, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg irotor");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg irotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -239,7 +239,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 	return 0;
 }
 
-static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_t * frsum, chdesc_t ** head)
+static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_t * frsum, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int r;
@@ -260,15 +260,15 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 	if (!linfo->cg[num].dirty[WB_FRSUM])
 		return 0;
 
-	r = chdesc_create_diff(linfo->cg[num].cgblock, linfo->global_info->ubd,
+	r = patch_create_diff(linfo->cg[num].cgblock, linfo->global_info->ubd,
 			(uint16_t) &((struct UFS_cg *) NULL)->cg_frsum, frsum_size,
 			&linfo->cg[num].oldfrsum, &linfo->cg[num].cgdata.cg_frsum, head);
 	if (r < 0)
 		return r;
-	/* chdesc_create_diff() returns 0 for "no change" */
+	/* patch_create_diff() returns 0 for "no change" */
 	if(*head && r > 0)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "cg frsum");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg frsum");
 		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 		if (r < 0)
 			return r;
@@ -283,12 +283,12 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 
 /* Writes all outstanding changes to disk. Changes are hooked up in
  * parallel. */
-static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
+static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, patch_t ** head)
 {
 	struct local_info * linfo = (struct local_info *) object;
 	int i, r;
    	int begin, end;
-	chdesc_t ** oldhead;
+	patch_t ** oldhead;
 	vector_t * oldheads;
 
 	if (!head)
@@ -380,7 +380,7 @@ static int ufs_cg_wb_sync(UFSmod_cg_t * object, int32_t num, chdesc_t ** head)
 
 	if (vector_size(oldheads))
 	{
-		r = chdesc_create_noop_array(NULL, head, vector_size(oldheads), (chdesc_t **) oldheads->elts);
+		r = patch_create_noop_array(NULL, head, vector_size(oldheads), (patch_t **) oldheads->elts);
 		if (r < 0)
 			goto exit;
 	}
@@ -396,7 +396,7 @@ static void ufs_cg_wb_sync_callback(void * arg)
 {
 	UFSmod_cg_t * object = (UFSmod_cg_t *) arg;
 	struct local_info * linfo = (struct local_info *) object;
-	chdesc_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
+	patch_t * head = linfo->global_info->write_head ? *linfo->global_info->write_head : NULL;
 	int r;
 
 	r = ufs_cg_wb_sync(object, -1, &head);

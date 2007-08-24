@@ -1,4 +1,4 @@
-# unix-user KFS Makefile
+# unix-user featherstitch Makefile
 
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/unix-user
@@ -41,7 +41,7 @@ all: tags TAGS
 
 # make it so that no intermediate .o files are never deleted
 .PRECIOUS: %.o \
-	$(OBJDIR)/lib/%.o $(OBJDIR)/kfs/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
+	$(OBJDIR)/lib/%.o $(OBJDIR)/fscore/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
 
 $(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[LIB] $<
@@ -51,15 +51,15 @@ $(OBJDIR)/lib/%.o: lib/%.c
 FUSE_CFLAGS := $(shell pkg-config fuse --cflags) -DFUSE_USE_VERSION=25
 FUSE_LDFLAGS := $(shell pkg-config fuse --libs)
 
-$(OBJDIR)/kfs/%.o: kfs/%.c
-	@echo + cc[KFS] $<
+$(OBJDIR)/fscore/%.o: fscore/%.c
+	@echo + cc[fscore] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKFSD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
+	$(V)$(CC) -DFSTITCHD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
 
 # Include [UU]Makefrags for subdirectories
 include fs/Makefrag
 include lib/UUMakefrag
-include kfs/UUMakefrag
+include fscore/UUMakefrag
 include util/Makefrag
 
 # Build vi/emacs tag files

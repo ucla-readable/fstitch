@@ -3,7 +3,7 @@ How to run benchmarks:
 First, run:
 	$ bench/new <ext2|linux-ext2|linux-ext3> [OPTIONAL_NAME]
 This creates tests/DATE, symlinks test to tests/DATE, and populates
-several files describing the current kudos system.
+several files describing the current feathersttich system.
 You will run new each time you change the system. You can then compare
 systems by comparing their tests/DATE/ contents.
 
@@ -11,7 +11,7 @@ Then run a test(s):
 	$ bench/tar
 	$ bench/rm (run this after tar)
 	$ bench/postmark
-These will make kudos, init and mount the fs, load kudos, run the test,
+These will make featherstitch, init and mount the fs, load featherstitch, run the test,
 and shutdown. Application output is logged to test/TESTNAME.run.N
 and kernel output is logged to test/TESTNAME.sys.N.
 

@@ -1,8 +1,8 @@
 EXTRA_CFLAGS += -I$(src)/..
-EXTRA_CFLAGS += -DKFSD
+EXTRA_CFLAGS += -DFSTITCHD
 
 # TODO: why do these not work for the below warning test?
-# (Tested 2006/5/30 on kudos-mm by Frost)
+# (Tested 2006/5/30 on fsttich-mm by Frost)
 #GCC_VERSION := $(call cc-version)
 #ifeq ($(shell echo $(GCC_VERSION) -ge 0304),0)
 # The more appropriate "$(call cc-option,foo)" also does not work.
@@ -16,12 +16,12 @@ ifeq ($(shell [ $(GCC_VERSION) -ge 0304 ] && echo 1 || echo 0),1)
 	EXTRA_CFLAGS += -Wno-declaration-after-statement
 endif
 
-kfsobjrel = ../obj/kernel
-kfsobj = $(src)/$(kfsobjrel)
+fstitchobjrel = ../obj/kernel
+fstitchobj = $(src)/$(fstitchobjrel)
 
-obj-m += kkfsd.o
+obj-m += kfstitchd.o
 
-KKFSD_LIB_OBJS := \
+KFSTITCHD_LIB_OBJS := \
               assert.o \
               qsort.o \
               vector.o \
@@ -30,21 +30,21 @@ KKFSD_LIB_OBJS := \
               svnrevtol.o \
               sleep.o
 
-KKFSD_KFS_OBJS := \
-              kfsd.o \
-              kfsd_init.o \
+KFSTITCHD_FSTITCH_OBJS := \
+              fstitchd.o \
+              fstitchd_init.o \
               debug.o \
               kernel_serve.o \
-              kernel_opgroup_ops.o \
-              kernel_opgroup_scopes.o \
+              kernel_patchgroup_ops.o \
+              kernel_patchgroup_scopes.o \
               bdesc.o \
               blockman.o \
               block_alloc.o \
-              chdesc.o \
-              chdesc_util.o \
+              patch.o \
+              patch_util.o \
               revision.o \
               modman.o \
-              opgroup.o \
+              patchgroup.o \
               devfs_cfs.o \
               mem_bd.o \
               linux_bd.o \
@@ -70,22 +70,22 @@ KKFSD_KFS_OBJS := \
               ufs_super_wb.o \
               ufs_cg_wb.o \
               icase_cfs.o \
-              opgroup_lfs.o \
+              patchgroup_lfs.o \
               wholedisk_lfs.o \
               uhfs.o \
               sched.o \
               sync.o \
               destroy.o
 
-kkfsd-objs := $(addprefix $(kfsobjrel)/,$(KKFSD_LIB_OBJS)) \
-		$(addprefix $(kfsobjrel)/,$(KKFSD_KFS_OBJS))
+kfstitchd-objs := $(addprefix $(fstitchobjrel)/,$(KFSTITCHD_LIB_OBJS)) \
+		$(addprefix $(fstitchobjrel)/,$(KFSTITCHD_FSTITCH_OBJS))
 
-$(addprefix $(kfsobj)/,$(KKFSD_LIB_OBJS)): $(kfsobj)/%.o : $(src)/../lib/%.c
-	@test -d $(kfsobj)/kernel || mkdir -p $(kfsobj)/kernel
+$(addprefix $(fstitchobj)/,$(KFSTITCHD_LIB_OBJS)): $(fstitchobj)/%.o : $(src)/../lib/%.c
+	@test -d $(fstitchobj)/kernel || mkdir -p $(fstitchobj)/kernel
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)
 
-$(addprefix $(kfsobj)/,$(KKFSD_KFS_OBJS)): $(kfsobj)/%.o : $(src)/%.c
-	@test -d $(kfsobj)/kernel || mkdir -p $(kfsobj)/kernel
+$(addprefix $(fstitchobj)/,$(KFSTITCHD_FSTITCH_OBJS)): $(fstitchobj)/%.o : $(src)/%.c
+	@test -d $(fstitchobj)/kernel || mkdir -p $(fstitchobj)/kernel
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)

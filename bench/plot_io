@@ -2,7 +2,7 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 
 function usage () {
 	echo "About: Generate io plot for a given test"
@@ -39,15 +39,15 @@ fi
 DATA=`mktemp plot_io.XXXXXX` || exit 1
 trap "rm -f $DATA" EXIT
 
-for test in `ls $KUDOSDIR/tests/`; do
-	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "su" ] || [ "`cat $KUDOSDIR/tests/$test/app_consistency_mode`" != "opgroup" ]; then continue; fi
+for test in `ls $FSTITCHDIR/tests/`; do
+	if [ "`cat $FSTITCHDIR/tests/$test/host`" != "fsttich" ] || [ "`cat $FSTITCHDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $FSTITCHDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $FSTITCHDIR/tests/$test/consistency_mode`" != "su" ] || [ "`cat $FSTITCHDIR/tests/$test/app_consistency_mode`" != "patchgroup" ]; then continue; fi
 
-	LINE="`$BENCHDIR/ex_io -d $KUDOSDIR/tests/$test -t $TESTNAME`"
+	LINE="`$BENCHDIR/ex_io -d $FSTITCHDIR/tests/$test -t $TESTNAME`"
 	[ -n "$LINE" ] || continue
 	if [ "$KEY" == "time" ] ; then
 		echo -n "$test"
 	elif [ "$KEY" == "rev" ]; then
-		echo -n "`cat $KUDOSDIR/tests/$test/svnversion | sed -r 's/:[0-9]+//;s/M$//'`"
+		echo -n "`cat $FSTITCHDIR/tests/$test/svnversion | sed -r 's/:[0-9]+//;s/M$//'`"
 	fi
 	echo "  $LINE"
 done | sort > $DATA

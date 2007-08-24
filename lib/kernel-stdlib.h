@@ -1,5 +1,5 @@
-#ifndef __KUDOS_LIB_STDLIB_H
-#define __KUDOS_LIB_STDLIB_H
+#ifndef __FSTITCH_LIB_STDLIB_H
+#define __FSTITCH_LIB_STDLIB_H
 
 #define MALLOC_ACCOUNT 0
 

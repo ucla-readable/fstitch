@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_OPGROUP_LFS_H
-#define __KUDOS_KFS_OPGROUP_LFS_H
+#ifndef __FSTITCH_FSCORE_PATCHGROUP_LFS_H
+#define __FSTITCH_FSCORE_PATCHGROUP_LFS_H
 
-#include <kfs/lfs.h>
+#include <fscore/lfs.h>
 
-LFS_t * opgroup_lfs(LFS_t * base);
+LFS_t * patchgroup_lfs(LFS_t * base);
 
-#endif /* __KUDOS_KFS_OPGROUP_LFS_H */
+#endif /* __FSTITCH_FSCORE_PATCHGROUP_LFS_H */

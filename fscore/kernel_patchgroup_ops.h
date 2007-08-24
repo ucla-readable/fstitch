@@ -1,6 +1,6 @@
-#ifndef __KUDOS_KFS_KERNEL_OPGROUP_OPS_H
-#define __KUDOS_KFS_KERNEL_OPGROUP_OPS_H
+#ifndef __FSTITCH_FSCORE_KERNEL_PATCHGROUP_OPS_H
+#define __FSTITCH_FSCORE_KERNEL_PATCHGROUP_OPS_H
 
-int kernel_opgroup_ops_init(void);
+int kernel_patchgroup_ops_init(void);
 
-#endif /* __KUDOS_KFS_KERNEL_OPGROUP_OPS_H */
+#endif /* __FSTITCH_FSCORE_KERNEL_PATCHGROUP_OPS_H */

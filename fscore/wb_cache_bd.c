@@ -2,25 +2,25 @@
 #include <lib/jiffies.h> // HZ
 #include <lib/hash_map.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/sched.h>
-#include <kfs/revision.h>
-#include <kfs/wb_cache_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/sched.h>
+#include <fscore/revision.h>
+#include <fscore/wb_cache_bd.h>
 
 /* try to flush every second */
 #define FLUSH_PERIOD HZ
 
 /* This file implements the first whack at our new WB cache. It's an LRU cache,
- * and it allows you to give it chdescs with unsatisfied dependencies. However,
+ * and it allows you to give it patchs with unsatisfied dependencies. However,
  * it will fill up and deadlock if you give it too many. If this ever causes a
  * problem, an appropriate error message is displayed on the console and -EBUSY
  * is returned. */
 
 #define DEBUG_TIMING 0
-#include <kfs/kernel_timing.h>
+#include <fscore/kernel_timing.h>
 KERNEL_TIMING(wait);
 
 /* This structure is optimized for memory footprint with unions.
@@ -123,7 +123,7 @@ static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
-	chdesc_t * chdesc;
+	patch_t * patch;
 	int r;
 	
 	/* in flight? */
@@ -131,10 +131,10 @@ static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	for(chdesc = slot->block->ddesc->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-		if(chdesc->owner == object)
+	for(patch = slot->block->ddesc->all_changes; patch; patch = patch->ddesc_next)
+		if(patch->owner == object)
 			break;
-	if(!chdesc)
+	if(!patch)
 		return FLUSH_EMPTY;
 	if(!slot->block->ddesc->ready_changes[object->level].head)
 		return FLUSH_NONE;
@@ -325,7 +325,7 @@ static int wb_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	}
 }
 
-static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int wb_cache_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	int dirty, start_dirty = wb_cache_dirty_count(object);
 
@@ -345,7 +345,7 @@ static int wb_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
 	return FLUSH_DONE;
 }
 
-static chdesc_t ** wb_cache_bd_get_write_head(BD_t * object)
+static patch_t ** wb_cache_bd_get_write_head(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
@@ -515,7 +515,7 @@ uint32_t wb_cache_dirty_count(BD_t * bd)
 	for(i = 1; i <= info->size; i++)
 		if(info->blocks[i].block && info->blocks[i].block->ddesc->all_changes)
 		{
-			chdesc_t * scan = info->blocks[i].block->ddesc->all_changes;
+			patch_t * scan = info->blocks[i].block->ddesc->all_changes;
 			while(scan)
 			{
 				if(scan->owner == bd)

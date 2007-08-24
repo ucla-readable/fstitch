@@ -1,7 +1,7 @@
 #include <lib/platform.h>
 
-#include <kfs/debug.h>
-#include <kfs/ufs_dirent_linear.h>
+#include <fscore/debug.h>
+#include <fscore/ufs_dirent_linear.h>
 
 struct ufsmod_dirent_info {
 	UFSmod_dirent_t ufsmod_dirent;
@@ -54,7 +54,7 @@ static int read_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_
 }
 
 // Writes a directory entry, does not check for free space
-static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct entry, uint32_t basep, chdesc_t ** head)
+static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS_direct entry, uint32_t basep, patch_t ** head)
 {
 	struct ufs_info * info = GET_UFS_INFO(object);
 	bdesc_t * block;
@@ -77,15 +77,15 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	if (!block)
 		return -ENOENT;
 
-	r = chdesc_create_byte(block, info->ubd, offset, actual_len, &entry, head);
+	r = patch_create_byte(block, info->ubd, offset, actual_len, &entry, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "write dirent");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write dirent");
 
 	return CALL(info->ubd, write_block, block, blockno);
 }
 
-static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, chdesc_t ** head)
+static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct dirent dirinfo, patch_t ** head)
 {
 	struct ufs_info * info = GET_UFS_INFO(object);
 	struct UFS_direct entry, last_entry;
@@ -99,7 +99,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 		return -EINVAL;
 
 	// Prepare the UFS_direct entry
-	fs_type = kfs_to_ufs_type(dirinfo.d_type);
+	fs_type = fstitch_to_ufs_type(dirinfo.d_type);
 	if (fs_type == (uint8_t) -EINVAL)
 		return -EINVAL;
 
@@ -153,9 +153,9 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 				return -1;
 			block = CALL(info->ubd, synthetic_read_block, blockno, 1, NULL);
 			assert(block); // FIXME Leiz == Lazy
-			r = chdesc_create_init(block, info->ubd, head);
+			r = patch_create_init(block, info->ubd, head);
 			assert(r >= 0); // FIXME Leiz == Lazy
-			KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "clear dirblock");
+			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "clear dirblock");
 			r = CALL(info->parts.base, append_file_block, (fdesc_t *) dirf, blockno, head);
 			if (r < 0)
 				return r;
@@ -163,7 +163,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 
 		// Set directory size
 		fsmetadata_t fsm;
-		fsm.fsm_feature = KFS_FEATURE_SIZE;
+		fsm.fsm_feature = FSTITCH_FEATURE_SIZE;
 		fsm.fsm_value.u = newsize;
 		r = CALL(info->parts.base, set_metadata2_fdesc, (fdesc_t *) dirf, &fsm, 1, head);
 		if (r < 0)
@@ -225,7 +225,7 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 	else
 		entry->d_filesize = 0;
 
-	entry->d_type = ufs_to_kfs_type(dirent.d_type);
+	entry->d_type = ufs_to_fstitch_type(dirent.d_type);
 	entry->d_fileno = dirent.d_ino;
 	entry->d_reclen = actual_len;
 	entry->d_namelen = dirent.d_namlen;
@@ -269,7 +269,7 @@ static int ufs_dirent_linear_search_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	return 0;
 }
 
-static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, const char * name, chdesc_t ** head)
+static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, const char * name, patch_t ** head)
 {
 	struct UFS_direct last_entry, entry;
 	uint32_t basep, last_basep, p;
@@ -319,11 +319,11 @@ static int ufs_dirent_linear_delete_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 	return write_dirent(object, dirf, last_entry, last_basep, head);
 }
 
-static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * file, struct dirent entry, uint32_t basep, chdesc_t ** head)
+static int ufs_dirent_linear_modify_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * file, struct dirent entry, uint32_t basep, patch_t ** head)
 {
 	struct UFS_direct e;
 
-	e.d_type = kfs_to_ufs_type(entry.d_type);
+	e.d_type = fstitch_to_ufs_type(entry.d_type);
 	if (e.d_type == (uint8_t) -EINVAL)
 		return -EINVAL;
 

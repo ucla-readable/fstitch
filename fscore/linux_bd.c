@@ -1,13 +1,13 @@
 #include <lib/platform.h>
 #include <lib/pool.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/blockman.h>
-#include <kfs/modman.h>
-#include <kfs/linux_bd.h>
-#include <kfs/revision.h>
-#include <kfs/kfsd_init.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/blockman.h>
+#include <fscore/modman.h>
+#include <fscore/linux_bd.h>
+#include <fscore/revision.h>
+#include <fscore/fstitchd_init.h>
 
 #include <linux/bio.h>
 #include <linux/blkdev.h>
@@ -16,7 +16,7 @@
 #include <asm/atomic.h>
 
 #define DEBUG_TIMING 0
-#include <kfs/kernel_timing.h>
+#include <fscore/kernel_timing.h>
 KERNEL_TIMING(read);
 KERNEL_TIMING(write);
 KERNEL_TIMING(wait);
@@ -49,7 +49,7 @@ KERNEL_TIMING(wait);
 
 #if DEBUG_WRITES
 #include <linux/debugfs.h>
-#include <kfs/linux_bd_debug.h>
+#include <fscore/linux_bd_debug.h>
 static struct linux_bd_writes debug_writes;
 static atomic_t debug_writes_ninflight[MAXBLOCKNO];
 static uint32_t debug_writes_completed;
@@ -520,13 +520,13 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	return 0;
 }
 
-static int linux_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int linux_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	/* FIXME: technically we should wait for all pending DMA writes to complete */
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** linux_bd_get_write_head(BD_t * object)
+static patch_t ** linux_bd_get_write_head(BD_t * object)
 {
 	return NULL;
 }
@@ -578,7 +578,7 @@ int linux_bd_destroy(BD_t * bd)
 		revision_tail_wait_for_landing_requests();
 		revision_tail_process_landing_requests();
 	}
-	chdesc_reclaim_written();
+	patch_reclaim_written();
 	blockman_destroy(&info->blockman);
 
 	n_linux_instances--;
@@ -626,7 +626,7 @@ out:
 
 static int open_bdev(const char *path, int mode, struct block_device ** bdev)
 {
-	static char *_claim_ptr = "kkfsd/linux_bd";
+	static char *_claim_ptr = "kfstitchd/linux_bd";
 	/* initialize to make the compiler happy */
 	dev_t dev = 0;
 	int r;

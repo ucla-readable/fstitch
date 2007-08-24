@@ -2,8 +2,8 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 load_config "$OUTDIR"
 T=andrew
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
@@ -12,8 +12,8 @@ MAB=ab-leiz.tar.gz
 
 function test () {
 	mkdir $MNT/workingdir
-	ktime andrew sh -c "make -C $MNT/workingdir -f `pwd`/$KUDOSDIR/obj/ab/original/Makefile >& $MNT/logfile"
-	ktime sync fsync $KUDOSDIR $MNT;
+	ktime andrew sh -c "make -C $MNT/workingdir -f `pwd`/$FSTITCHDIR/obj/ab/original/Makefile >& $MNT/logfile"
+	ktime sync fsync $FSTITCHDIR $MNT;
 }
 
 function run () {
@@ -29,14 +29,14 @@ if [ $# -ne 0 ]; then
 fi
 
 # Set up the Modified Andrew Benchmark
-mkdir -p $KUDOSDIR/obj
-rm -rf $KUDOSDIR/obj/ab
-tar C $KUDOSDIR/obj -xzf $BENCHDIR/$MAB
-rmdir $KUDOSDIR/obj/ab/workingdir
-sed -i "s,/home/leiz/ab/original,`pwd`/$KUDOSDIR/obj/ab/original," $KUDOSDIR/obj/ab/original/Makefile
+mkdir -p $FSTITCHDIR/obj
+rm -rf $FSTITCHDIR/obj/ab
+tar C $FSTITCHDIR/obj -xzf $BENCHDIR/$MAB
+rmdir $FSTITCHDIR/obj/ab/workingdir
+sed -i "s,/home/leiz/ab/original,`pwd`/$FSTITCHDIR/obj/ab/original," $FSTITCHDIR/obj/ab/original/Makefile
 
-build $T $N $KUDOSDIR $HOST
+build $T $N $FSTITCHDIR $HOST
 
 log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST $CRASHSIM
+finish $T $N $FSTITCHDIR $OUTDIR $HOST $CRASHSIM

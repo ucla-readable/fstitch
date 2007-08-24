@@ -16,7 +16,7 @@ sub svnversion() {
 		my $line = $_;
 		$line =~ m/(\d+\:)?(\d+).*/;
 		# Given a revision range, we probably care about the latest
-		# since we may be testing an old kudos with updated bench scripts
+		# since we may be testing an old fsttich with updated bench scripts
 		my $rev = $2;
 		close(R);
 		return $rev;

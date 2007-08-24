@@ -3,24 +3,24 @@
 #include <lib/hash_map.h>
 #include <lib/pool.h>
 
-#include <kfs/kfsd.h>
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/sched.h>
-#include <kfs/debug.h>
-#include <kfs/revision.h>
-#include <kfs/wb2_cache_bd.h>
+#include <fscore/fstitchd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/sched.h>
+#include <fscore/debug.h>
+#include <fscore/revision.h>
+#include <fscore/wb2_cache_bd.h>
 
 /* try to flush every second */
 #define FLUSH_PERIOD HZ
 
 #define DEBUG_TIMING 0
-#include <kfs/kernel_timing.h>
+#include <fscore/kernel_timing.h>
 KERNEL_TIMING(wait);
 
-/* useful for looking at chdesc graphs */
+/* useful for looking at patch graphs */
 #define DELAY_FLUSH_UNTIL_EXIT 0
 
 #define MAP_SIZE 32768
@@ -190,7 +190,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
 	int r;
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
 	
 	if(delay)
 		*delay = 0;
@@ -230,7 +230,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->flags);
+			FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->flags);
 		}
 	}
 	
@@ -240,12 +240,12 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 }
 
 #if DIRTY_QUEUE_REORDERING
-static bdesc_t * wb2_find_block_before(BD_t * object, chdesc_t * chdesc, bdesc_t * start_block)
+static bdesc_t * wb2_find_block_before(BD_t * object, patch_t * patch, bdesc_t * start_block)
 {
-	chdepdesc_t * dep = chdesc->befores;
+	chdepdesc_t * dep = patch->befores;
 	for(; dep; dep = dep->before.next)
 	{
-		chdesc_t * before = dep->before.desc;
+		patch_t * before = dep->before.desc;
 		if(before->owner != object)
 			continue;
 		if(!before->block)
@@ -302,14 +302,14 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 #endif
 	
 #if DELAY_FLUSH_UNTIL_EXIT
-	if(kfsd_is_running())
+	if(fstitchd_is_running())
 		return;
 #endif
 	
 #ifdef __KERNEL__
 	revision_tail_process_landing_requests();
 #endif
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
 	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && block != STOP)
@@ -334,7 +334,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			bdesc_t * scan_block = NULL;
 			if(!block->in_flight)
 			{
-				chdesc_t * scan = block->index_changes[object->graph_index].head;
+				patch_t * scan = block->index_changes[object->graph_index].head;
 				for(; !scan_block && scan; scan = scan->ddesc_index_next)
 					scan_block = wb2_find_block_before(object, scan, slot->block);
 			}
@@ -555,7 +555,7 @@ static int wb2_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	return 0;
 }
 
-static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
+static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, patch_t * ch)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	uint32_t start_dirty = info->dblocks;
@@ -587,7 +587,7 @@ static int wb2_cache_bd_flush(BD_t * object, uint32_t blockno, chdesc_t * ch)
 	}
 }
 
-static chdesc_t ** wb2_cache_bd_get_write_head(BD_t * object)
+static patch_t ** wb2_cache_bd_get_write_head(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);
@@ -710,6 +710,6 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		return NULL;
 	}
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
 	return bd;
 }

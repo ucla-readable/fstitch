@@ -2,9 +2,9 @@
 #include <lib/vector.h>
 #include <lib/dirent.h>
 
-#include <kfs/modman.h>
-#include <kfs/cfs.h>
-#include <kfs/icase_cfs.h>
+#include <fscore/modman.h>
+#include <fscore/cfs.h>
+#include <fscore/icase_cfs.h>
 
 #define ICASE_DEBUG 0
 

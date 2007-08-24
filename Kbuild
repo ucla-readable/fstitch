@@ -1,1 +1,1 @@
-obj-m += kfs/
+obj-m += fscore/

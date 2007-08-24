@@ -24,28 +24,28 @@
 #define vuint16_t uint32_t
 #endif
 
-#include <kfs/chdesc.h>
-#include <kfs/sched.h>
-#include <kfs/debug.h>
-#include <kfs/kfsd.h>
+#include <fscore/patch.h>
+#include <fscore/sched.h>
+#include <fscore/debug.h>
+#include <fscore/fstitchd.h>
 
-#if KFS_DEBUG
+#if FSTITCH_DEBUG
 
 /* For a lean and mean debug output stream, set both of these to 1. */
-#define KFS_OMIT_FILE_FUNC 0
-#define KFS_OMIT_BTRACE 0
+#define FSTITCH_OMIT_FILE_FUNC 0
+#define FSTITCH_OMIT_BTRACE 0
 
-#if !KFS_OMIT_BTRACE && !defined(__i386__)
+#if !FSTITCH_OMIT_BTRACE && !defined(__i386__)
 #warning Debug backtraces only available on x86 platforms; disabling
-#undef KFS_OMIT_BTRACE
-#define KFS_OMIT_BTRACE 1
+#undef FSTITCH_OMIT_BTRACE
+#define FSTITCH_OMIT_BTRACE 1
 #endif
 
 #ifdef __KERNEL__
-#if !KFS_OMIT_BTRACE && !defined(CONFIG_FRAME_POINTER)
+#if !FSTITCH_OMIT_BTRACE && !defined(CONFIG_FRAME_POINTER)
 #warning Frame pointers are required for backtraces in the kernel; disabling
-#undef KFS_OMIT_BTRACE
-#define KFS_OMIT_BTRACE 1
+#undef FSTITCH_OMIT_BTRACE
+#define FSTITCH_OMIT_BTRACE 1
 #endif
 #endif
 
@@ -60,9 +60,9 @@ static int debug_count = 0;
 #define END 0
 
 /* I/O system prototypes */
-static int kfs_debug_io_init(void);
-static int kfs_debug_io_write(void * data, uint32_t size);
-static void kfs_debug_io_command(void * arg);
+static int fstitch_debug_io_init(void);
+static int fstitch_debug_io_write(void * data, uint32_t size);
+static void fstitch_debug_io_command(void * arg);
 
 #ifdef __KERNEL__
 
@@ -75,12 +75,12 @@ static off_t proc_buffer_wpos;
 static struct dentry * debug_count_dentry;
 #endif
 
-static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
+static int fstitch_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
 {
 	off_t size;
 	while(proc_buffer_rpos == proc_buffer_wpos)
 	{
-		if(!kfsd_is_running() || assert_failed)
+		if(!fstitchd_is_running() || assert_failed)
 			return 0;
 		/* buffer is empty, wait for writes */
 		current->state = TASK_INTERRUPTIBLE;
@@ -97,7 +97,7 @@ static int kfs_debug_proc_read(char * page, char ** start, off_t off, int count,
 	return count;
 }
 
-static int kfs_debug_io_write(void * data, uint32_t len)
+static int fstitch_debug_io_write(void * data, uint32_t len)
 {
 	uint8_t * buf = data;
 	size_t i;
@@ -114,12 +114,12 @@ static int kfs_debug_io_write(void * data, uint32_t len)
 	return len;
 }
 
-static void kfs_debug_io_command(void * arg)
+static void fstitch_debug_io_command(void * arg)
 {
-	/* kkfsd does not currently support command reading */
+	/* kfstitchd does not currently support command reading */
 }
 
-static void kfs_debug_shutdown(void * ignore)
+static void fstitch_debug_shutdown(void * ignore)
 {
 	int tries = 0;
 	if(atomic_read(&proc_entry->count) > 0)
@@ -142,7 +142,7 @@ static void kfs_debug_shutdown(void * ignore)
 #endif
 }
 
-static int kfs_debug_io_init(void)
+static int fstitch_debug_io_init(void)
 {
 	int r;
 	proc_buffer = vmalloc(DEBUG_PROC_SIZE);
@@ -151,7 +151,7 @@ static int kfs_debug_io_init(void)
 	proc_buffer_wpos = 0;
 	proc_buffer_rpos = 0;
 	
-	proc_entry = create_proc_read_entry(DEBUG_PROC_FILENAME, 0444, &proc_root, kfs_debug_proc_read, NULL);
+	proc_entry = create_proc_read_entry(DEBUG_PROC_FILENAME, 0444, &proc_root, fstitch_debug_proc_read, NULL);
 	if(!proc_entry)
 	{
 		fprintf(stderr, "%s: unable to create proc entry\n", __FUNCTION__);
@@ -167,7 +167,7 @@ static int kfs_debug_io_init(void)
 	}
 #endif
 	
-	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	r = fstitchd_register_shutdown_module(fstitch_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if(r < 0)
 	{
 		fprintf(stderr, "%s: unable to register shutdown callback\n", __FUNCTION__);
@@ -182,23 +182,23 @@ static int kfs_debug_io_init(void)
 
 static FILE * file_output;
 
-static int kfs_debug_io_write(void * data, uint32_t len)
+static int fstitch_debug_io_write(void * data, uint32_t len)
 {
 	return fwrite(data, 1, len, file_output);
 }
 
-static void kfs_debug_io_command(void * arg)
+static void fstitch_debug_io_command(void * arg)
 {
-	/* uukfsd does not currently support command reading */
+	/* uufstitchd does not currently support command reading */
 }
 
-static void kfs_debug_shutdown(void * ignore)
+static void fstitch_debug_shutdown(void * ignore)
 {
 	fclose(file_output);
 	file_output = NULL;
 }
 
-static int kfs_debug_io_init(void)
+static int fstitch_debug_io_init(void)
 {
 	int r;
 	file_output = fopen(DEBUG_FILENAME, "w");
@@ -207,11 +207,11 @@ static int kfs_debug_io_init(void)
 		fprintf(stderr, "%s: unable to open debug trace file %s\n", __FUNCTION__, DEBUG_FILENAME);
 		return -1;
 	}
-	r = kfsd_register_shutdown_module(kfs_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
+	r = fstitchd_register_shutdown_module(fstitch_debug_shutdown, NULL, SHUTDOWN_POSTMODULES);
 	if(r < 0)
 	{
 		fprintf(stderr, "%s: unable to register shutdown callback\n", __FUNCTION__);
-		kfs_debug_shutdown(NULL);
+		fstitch_debug_shutdown(NULL);
 		return r;
 	}
 	return 0;
@@ -230,7 +230,7 @@ static int kfs_debug_io_init(void)
  * total number of bytes written is returned, or a negative value on error when
  * no bytes have been written. Note that an error may cause the number of bytes
  * written to be smaller than requested. */
-static int kfs_debug_write(int size, ...)
+static int fstitch_debug_write(int size, ...)
 {
 	int bytes = 0;
 	va_list ap;
@@ -243,7 +243,7 @@ static int kfs_debug_write(int size, ...)
 		if(size > 0)
 		{
 			void * data = va_arg(ap, void *);
-			result = kfs_debug_io_write(data, size);
+			result = fstitch_debug_io_write(data, size);
 		}
 		else if(size < 0)
 		{
@@ -252,17 +252,17 @@ static int kfs_debug_write(int size, ...)
 			if(size == 1)
 			{
 				uint8_t data = va_arg(ap, vuint8_t);
-				result = kfs_debug_io_write(&data, 1);
+				result = fstitch_debug_io_write(&data, 1);
 			}
 			else if(size == 2)
 			{
 				uint16_t data = htons(va_arg(ap, vuint16_t));
-				result = kfs_debug_io_write(&data, 2);
+				result = fstitch_debug_io_write(&data, 2);
 			}
 			else if(size == 4)
 			{
 				uint32_t data = htonl(va_arg(ap, uint32_t));
-				result = kfs_debug_io_write(&data, 4);
+				result = fstitch_debug_io_write(&data, 4);
 			}
 			else if(size == 3)
 			{
@@ -270,7 +270,7 @@ static int kfs_debug_write(int size, ...)
 				char * string = va_arg(ap, char *);
 				int length = strlen(string);
 				size = length + 1;
-				result = kfs_debug_io_write(string, size);
+				result = fstitch_debug_io_write(string, size);
 			}
 			else
 				/* restricted to 1, 2, and 4 bytes, or strings */
@@ -290,7 +290,7 @@ static int kfs_debug_write(int size, ...)
 	return bytes;
 }
 
-int kfs_debug_init(void)
+int fstitch_debug_init(void)
 {
 	int m, o, r;
 	int timestamp = jiffy_time();
@@ -299,27 +299,27 @@ int kfs_debug_init(void)
 	debug_rev = svnrevtol("$Rev$");
 	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
 	
-	printf("Initializing KFS debugging interface... (%d, %d)\n", debug_rev, debug_opcode_rev);
+	printf("Initializing featherstitch debugging interface... (%d, %d)\n", debug_rev, debug_opcode_rev);
 	
-	r = sched_register(kfs_debug_io_command, NULL, HZ / 10);
+	r = sched_register(fstitch_debug_io_command, NULL, HZ / 10);
 	if(r < 0)
 		return r;
 
-	r = kfs_debug_io_init();
+	r = fstitch_debug_io_init();
 	if(r < 0)
 		return r;
 	
-	kfs_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, LIT_32, timestamp, END);
+	fstitch_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, LIT_32, timestamp, END);
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
 		{
 			int p;
-			kfs_debug_write(LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
+			fstitch_debug_write(LIT_16, modules[m].module, LIT_16, modules[m].opcodes[o]->opcode, LIT_STR, modules[m].opcodes[o]->name, END);
 			for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 			{
 				uint8_t size = type_sizes[modules[m].opcodes[o]->params[p]->type];
-				kfs_debug_write(LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
+				fstitch_debug_write(LIT_8, size, LIT_STR, modules[m].opcodes[o]->params[p]->name, END);
 				if(modules[m].opcodes[o]->params[p]->type == FORMAT)
 					if(modules[m].opcodes[o]->params[p + 1]->name)
 					{
@@ -327,24 +327,24 @@ int kfs_debug_init(void)
 						break;
 					}
 			}
-			kfs_debug_write(LIT_8, 0, END);
+			fstitch_debug_write(LIT_8, 0, END);
 		}
-	kfs_debug_write(LIT_16, 0, END);
+	fstitch_debug_write(LIT_16, 0, END);
 	
 	printf("Debugging interface initialized OK\n");
 	
 	return 0;
 }
 
-void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int line, const char * function)
+void fstitch_debug_command(uint16_t command, uint16_t module, const char * file, int line, const char * function)
 {
 	switch(command)
 	{
-		case KFS_DEBUG_MARK:
+		case FSTITCH_DEBUG_MARK:
 			printf("Sent mark [%04x] from %s() at %s:%d\n", module, function, file, line);
-			kfs_debug_send(KDB_MODULE_INFO, KDB_INFO_MARK, file, line, function, module);
+			fstitch_debug_send(KDB_MODULE_INFO, KDB_INFO_MARK, file, line, function, module);
 			break;
-		case KFS_DEBUG_DISABLE:
+		case FSTITCH_DEBUG_DISABLE:
 		{
 			int m;
 			for(m = 0; modules[m].opcodes; m++)
@@ -356,7 +356,7 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 				}
 			break;
 		}
-		case KFS_DEBUG_ENABLE:
+		case FSTITCH_DEBUG_ENABLE:
 		{
 			int m;
 			for(m = 0; modules[m].opcodes; m++)
@@ -375,14 +375,14 @@ void kfs_debug_command(uint16_t command, uint16_t module, const char * file, int
 #define x86_get_ebp(bp) { void * __bp; __asm__ __volatile__ ("movl %%ebp, %0" : "=r" (__bp) : ); bp = __bp; }
 #endif
 
-int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
+int fstitch_debug_send(uint16_t module, uint16_t opcode, const char * file, int line, const char * function, ...)
 {
 	int m, o = 0, r = 0;
 	int timestamp = jiffy_time();
 	va_list ap;
 	va_start(ap, function);
 	
-	kfs_debug_io_command(NULL);
+	fstitch_debug_io_command(NULL);
 	
 	/* look up the right module and opcode indices */
 	for(m = 0; modules[m].opcodes; m++)
@@ -397,22 +397,22 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		}
 	
 	debug_count++;
-#if KFS_OMIT_FILE_FUNC
-	kfs_debug_write(LIT_32, timestamp, LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
+#if FSTITCH_OMIT_FILE_FUNC
+	fstitch_debug_write(LIT_32, timestamp, LIT_STR, "", LIT_32, line, LIT_STR, "", LIT_16, module, LIT_16, opcode, END);
 #else
-	kfs_debug_write(LIT_32, timestamp, LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
+	fstitch_debug_write(LIT_32, timestamp, LIT_STR, file, LIT_32, line, LIT_STR, function, LIT_16, module, LIT_16, opcode, END);
 #endif
 	
 	if(!modules[m].opcodes)
 	{
 		/* unknown module */
-		kfs_debug_write(LIT_8, 0, LIT_8, 1, END);
+		fstitch_debug_write(LIT_8, 0, LIT_8, 1, END);
 		r = -EINVAL;
 	}
 	else if(!modules[m].opcodes[o]->params)
 	{
 		/* unknown opcode */
-		kfs_debug_write(LIT_8, 0, LIT_8, 2, END);
+		fstitch_debug_write(LIT_8, 0, LIT_8, 2, END);
 		r = -EINVAL;
 	}
 	else
@@ -425,45 +425,45 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 			if(size == 4)
 			{
 				uint32_t param = va_arg(ap, uint32_t);
-				kfs_debug_write(LIT_8, 4, LIT_32, param, END);
+				fstitch_debug_write(LIT_8, 4, LIT_32, param, END);
 			}
 			else if(size == 2)
 			{
 				uint16_t param = va_arg(ap, vuint16_t);
-				kfs_debug_write(LIT_8, 2, LIT_16, param, END);
+				fstitch_debug_write(LIT_8, 2, LIT_16, param, END);
 			}
 			else if(size == 1)
 			{
 				uint8_t param = va_arg(ap, vuint8_t);
-				kfs_debug_write(LIT_8, 1, LIT_8, param, END);
+				fstitch_debug_write(LIT_8, 1, LIT_8, param, END);
 			}
 			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == STRING)
 			{
 				char * param = va_arg(ap, char *);
-				kfs_debug_write(LIT_8, -1, LIT_STR, param, END);
+				fstitch_debug_write(LIT_8, -1, LIT_STR, param, END);
 			}
 			else if(size == (uint8_t) -1 && modules[m].opcodes[o]->params[p]->type == FORMAT)
 			{
 				char buffer[128] = {0};
 				char * param = va_arg(ap, char *);
 				vsnprintf(buffer, sizeof(buffer), param, ap);
-				kfs_debug_write(LIT_8, -1, LIT_STR, buffer, END);
+				fstitch_debug_write(LIT_8, -1, LIT_STR, buffer, END);
 				/* FORMAT must be the last declared parameter */
 				break;
 			}
 			else
 			{
 				/* unknown type */
-				kfs_debug_write(LIT_8, 0, LIT_8, 3, END);
+				fstitch_debug_write(LIT_8, 0, LIT_8, 3, END);
 				r = -EINVAL;
 			}
 		}
 	}
 	
 	/* TODO: not technically necessary, see above */
-	kfs_debug_write(LIT_16, 0, END);
+	fstitch_debug_write(LIT_16, 0, END);
 	
-#if !KFS_OMIT_BTRACE
+#if !FSTITCH_OMIT_BTRACE
 	{
 		int preamble = 1;
 		void ** ebp;
@@ -475,7 +475,7 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 				break;
 			if(!preamble || ebp[1] == __builtin_return_address(0))
 			{
-				kfs_debug_write(LIT_32, ebp[1], END);
+				fstitch_debug_write(LIT_32, ebp[1], END);
 				preamble = 0;
 			}
 			last_ebp = ebp;
@@ -483,20 +483,20 @@ int kfs_debug_send(uint16_t module, uint16_t opcode, const char * file, int line
 		}
 	}
 #endif
-	kfs_debug_write(LIT_32, 0, END);
+	fstitch_debug_write(LIT_32, 0, END);
 	
 	va_end(ap);
 	
 	/* for debugging the debugging interface... */
 	if(r < 0)
 	{
-		printf("kfs_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %i\n", file, line, function, module, opcode, r);
+		printf("fstitch_debug_send(%s, %d, %s(), 0x%04x, 0x%04x, ...) = %i\n", file, line, function, module, opcode, r);
 		assert(0);
 	}
 	return r;
 }
 
-int kfs_debug_count(void)
+int fstitch_debug_count(void)
 {
 	return debug_count;
 }

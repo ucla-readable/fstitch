@@ -1,11 +1,11 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/wt_cache_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/wt_cache_bd.h>
 
 struct cache_slot {
 	bdesc_t * block;
@@ -185,7 +185,7 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	}
 	
 	/* this should never fail */
-	r = chdesc_push_down(block, object, info->bd);
+	r = patch_push_down(block, object, info->bd);
 	if(r < 0)
 		return r;
 	
@@ -193,12 +193,12 @@ static int wt_cache_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 	return CALL(info->bd, write_block, block, number);
 }
 
-static int wt_cache_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int wt_cache_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** wt_cache_bd_get_write_head(BD_t * object)
+static patch_t ** wt_cache_bd_get_write_head(BD_t * object)
 {
 	struct cache_info * info = (struct cache_info *) object;
 	return CALL(info->bd, get_write_head);

@@ -1,10 +1,10 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/partition_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/partition_bd.h>
 
 struct partition_info {
 	BD_t my_bd;
@@ -42,7 +42,7 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	assert(block->length && number + block->length / object->blocksize <= object->numblocks);
 
 	/* this should never fail */
-	value = chdesc_push_down(block, object, info->bd);
+	value = patch_push_down(block, object, info->bd);
 	if(value < 0)
 		return value;
 	
@@ -50,12 +50,12 @@ static int partition_bd_write_block(BD_t * object, bdesc_t * block, uint32_t num
 	return CALL(info->bd, write_block, block, number + info->start);
 }
 
-static int partition_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int partition_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** partition_bd_get_write_head(BD_t * object)
+static patch_t ** partition_bd_get_write_head(BD_t * object)
 {
 	struct partition_info * info = (struct partition_info *) object;
 	return CALL(info->bd, get_write_head);

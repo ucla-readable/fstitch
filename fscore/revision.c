@@ -1,10 +1,10 @@
 #include <lib/platform.h>
 
-#include <kfs/chdesc.h>
-#include <kfs/modman.h>
-#include <kfs/debug.h>
-#include <kfs/kfsd.h>
-#include <kfs/revision.h>
+#include <fscore/patch.h>
+#include <fscore/modman.h>
+#include <fscore/debug.h>
+#include <fscore/fstitchd.h>
+#include <fscore/revision.h>
 
 enum decider {
 	OWNER,
@@ -12,72 +12,72 @@ enum decider {
 };
 
 /* <% is equivalent to { but does not cause syntax highlighting to go nuts */
-#define decide(type, chdesc, data) (<% int __result; \
+#define decide(type, patch, data) (<% int __result; \
 	switch(type) <% \
 		case OWNER: \
 			/* it had better be either owned by us or rollbackable */ \
-			assert((chdesc)->owner == (BD_t *) (data) || chdesc_is_rollbackable(chdesc)); \
-			__result = (chdesc)->owner == (BD_t *) (data); \
+			assert((patch)->owner == (BD_t *) (data) || patch_is_rollbackable(patch)); \
+			__result = (patch)->owner == (BD_t *) (data); \
 			break; \
 		case FLIGHT: \
-			__result = ((chdesc)->flags & CHDESC_INFLIGHT) != 0; \
+			__result = ((patch)->flags & PATCH_INFLIGHT) != 0; \
 			break; \
 		default: \
 			kpanic("Unknown decider type %d", type); \
 	%> __result; %>)
 
-static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chdescs, const char * function)
+static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patchs, const char * function)
 {
 	int i;
-	fprintf(stderr, "%s() is very confused! (debug = %d)\n", function, KFS_DEBUG_COUNT());
+	fprintf(stderr, "%s() is very confused! (debug = %d)\n", function, FSTITCH_DEBUG_COUNT());
 	for(i = 0; i != count; i++)
 	{
 		chdepdesc_t * scan;
 		int total = 0;
-		if(!chdescs[i])
+		if(!patchs[i])
 		{
 			fprintf(stderr, "(slot null)\n");
 			continue;
 		}
-		fprintf(stderr, "%p [T%d, L%d, F%x]", chdescs[i], chdescs[i]->type, chdesc_level(chdescs[i]), chdescs[i]->flags);
-		if(!chdesc_is_rollbackable(chdescs[i]))
+		fprintf(stderr, "%p [T%d, L%d, F%x]", patchs[i], patchs[i]->type, patch_level(patchs[i]), patchs[i]->flags);
+		if(!patch_is_rollbackable(patchs[i]))
 			fprintf(stderr, "!");
 		fprintf(stderr, " (<-");
-		for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
+		for(scan = patchs[i]->afters; scan; scan = scan->after.next)
 		{
 			total++;
 			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
 				continue;
 			fprintf(stderr, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
-			if(!chdesc_is_rollbackable(scan->after.desc))
+			if(!patch_is_rollbackable(scan->after.desc))
 				fprintf(stderr, "!");
-			if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
+			if(patch_overlap_check(scan->after.desc, patchs[i]))
 				fprintf(stderr, "*");
 			if(scan->after.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (->", total);
 		total = 0;
-		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
+		for(scan = patchs[i]->befores; scan; scan = scan->before.next)
 		{
 			total++;
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
 				continue;
 			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
-			if(!chdesc_is_rollbackable(scan->before.desc))
+			if(!patch_is_rollbackable(scan->before.desc))
 				fprintf(stderr, "!");
-			if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
+			if(patch_overlap_check(scan->before.desc, patchs[i]))
 				fprintf(stderr, "*");
 			if(scan->before.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (-->", total);
-		for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
+		for(scan = patchs[i]->befores; scan; scan = scan->before.next)
 		{
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc == block->ddesc)
 				continue;
 			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
-			if(!chdesc_is_rollbackable(scan->before.desc))
+			if(!patch_is_rollbackable(scan->before.desc))
 				fprintf(stderr, "!");
 			if(scan->before.desc->block->in_flight)
 				fprintf(stderr, "^");
@@ -89,8 +89,8 @@ static void dump_revision_loop_state(bdesc_t * block, int count, chdesc_t ** chd
 
 #define REVISION_ARRAY_SIZE 80
 
-static chdesc_t * revision_static_array[REVISION_ARRAY_SIZE];
-static chdesc_t ** revision_alloc_array = NULL;
+static patch_t * revision_static_array[REVISION_ARRAY_SIZE];
+static patch_t ** revision_alloc_array = NULL;
 static size_t revision_alloc_array_count = 0;
 
 static void revision_array_free(void * ignore)
@@ -100,7 +100,7 @@ static void revision_array_free(void * ignore)
 	revision_alloc_array_count = 0;
 }
 
-static chdesc_t ** revision_get_array(size_t count)
+static patch_t ** revision_get_array(size_t count)
 {
 	if(count <= REVISION_ARRAY_SIZE)
 		return revision_static_array;
@@ -108,7 +108,7 @@ static chdesc_t ** revision_get_array(size_t count)
 		return revision_alloc_array;
 	if(!revision_alloc_array_count)
 	{
-		int r = kfsd_register_shutdown_module(revision_array_free, NULL, SHUTDOWN_POSTMODULES);
+		int r = fstitchd_register_shutdown_module(revision_array_free, NULL, SHUTDOWN_POSTMODULES);
 		if(r < 0)
 			return NULL;
 	}
@@ -125,8 +125,8 @@ static int _revision_tail_prepare(bdesc_t * block, enum decider decider, void * 
 static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decider decider, void * data)
 #endif
 {
-	chdesc_t * scan;
-	chdesc_t ** chdescs;
+	patch_t * scan;
+	patch_t ** patchs;
 	int i = 0, count = 0;
 	
 #if !REVISION_TAIL_INPLACE
@@ -136,7 +136,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	if(!block->all_changes)
 		return 0;
 	
-	/* find out how many chdescs are to be rolled back */
+	/* find out how many patchs are to be rolled back */
 	/* TODO: look into using ready_changes here? */
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
@@ -144,13 +144,13 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	if(!count)
 		return 0;
 	
-	chdescs = revision_get_array(count);
-	if(!chdescs)
+	patchs = revision_get_array(count);
+	if(!patchs)
 		return -ENOMEM;
 	
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
-			chdescs[i++] = scan;
+			patchs[i++] = scan;
 	
 	for(;;)
 	{
@@ -160,16 +160,16 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 		{
 			chdepdesc_t * scan;
 			/* already rolled back? */
-			if(chdescs[i]->flags & CHDESC_ROLLBACK)
+			if(patchs[i]->flags & PATCH_ROLLBACK)
 				continue;
-			/* check for overlapping, non-rolled back chdescs above us */
-			for(scan = chdescs[i]->afters; scan; scan = scan->after.next)
+			/* check for overlapping, non-rolled back patchs above us */
+			for(scan = patchs[i]->afters; scan; scan = scan->after.next)
 			{
-				if(scan->after.desc->flags & CHDESC_ROLLBACK)
+				if(scan->after.desc->flags & PATCH_ROLLBACK)
 					continue;
 				if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
 					continue;
-				if(chdesc_overlap_check(scan->after.desc, chdescs[i]))
+				if(patch_overlap_check(scan->after.desc, patchs[i]))
 					break;
 			}
 			if(scan)
@@ -177,13 +177,13 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 			else
 			{
 #if REVISION_TAIL_INPLACE
-				int r = chdesc_rollback(chdescs[i]);
+				int r = patch_rollback(patchs[i]);
 #else
-				int r = chdesc_rollback(chdescs[i], buffer);
+				int r = patch_rollback(patchs[i], buffer);
 #endif
 				if(r < 0)
 				{
-					fprintf(stderr, "chdesc_rollback() failed!\n");
+					fprintf(stderr, "patch_rollback() failed!\n");
 					assert(0);
 				}
 				progress = 1;
@@ -193,7 +193,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 			break;
 		if(!progress)
 		{
-			dump_revision_loop_state(block, count, chdescs, __FUNCTION__);
+			dump_revision_loop_state(block, count, patchs, __FUNCTION__);
 			break;
 		}
 	}
@@ -217,28 +217,28 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd, uint8_t * buffer)
 
 static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * data)
 {
-	chdesc_t * scan;
+	patch_t * scan;
 #if REVISION_TAIL_INPLACE
-	chdesc_t ** chdescs;
+	patch_t ** patchs;
 	int i = 0, count = 0;
 	
 	if(!block->all_changes)
 		return 0;
 	
-	/* find out how many chdescs are to be rolled forward */
+	/* find out how many patchs are to be rolled forward */
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
 		return 0;
 	
-	chdescs = revision_get_array(count);
-	if(!chdescs)
+	patchs = revision_get_array(count);
+	if(!patchs)
 		return -ENOMEM;
 	
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
-			chdescs[i++] = scan;
+			patchs[i++] = scan;
 	
 	for(;;)
 	{
@@ -248,26 +248,26 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 		{
 			chdepdesc_t * scan;
 			/* already rolled forward? */
-			if(!(chdescs[i]->flags & CHDESC_ROLLBACK))
+			if(!(patchs[i]->flags & PATCH_ROLLBACK))
 				continue;
-			/* check for overlapping, rolled back chdescs below us */
-			for(scan = chdescs[i]->befores; scan; scan = scan->before.next)
+			/* check for overlapping, rolled back patchs below us */
+			for(scan = patchs[i]->befores; scan; scan = scan->before.next)
 			{
-				if(!(scan->before.desc->flags & CHDESC_ROLLBACK))
+				if(!(scan->before.desc->flags & PATCH_ROLLBACK))
 					continue;
 				if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
 					continue;
-				if(chdesc_overlap_check(scan->before.desc, chdescs[i]))
+				if(patch_overlap_check(scan->before.desc, patchs[i]))
 					break;
 			}
 			if(scan)
 				again = 1;
 			else
 			{
-				int r = chdesc_apply(chdescs[i]);
+				int r = patch_apply(patchs[i]);
 				if(r < 0)
 				{
-					fprintf(stderr, "chdesc_apply() failed!\n");
+					fprintf(stderr, "patch_apply() failed!\n");
 					assert(0);
 				}
 				progress = 1;
@@ -277,7 +277,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 			break;
 		if(!progress)
 		{
-			dump_revision_loop_state(block, count, chdescs, __FUNCTION__);
+			dump_revision_loop_state(block, count, patchs, __FUNCTION__);
 			break;
 		}
 	}
@@ -291,7 +291,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 		{
-			chdesc_apply(scan);
+			patch_apply(scan);
 			count++;
 		}
 #endif
@@ -306,27 +306,27 @@ int revision_tail_revert(bdesc_t * block, BD_t * bd)
 
 static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, void * data)
 {
-	chdesc_t * scan;
-	chdesc_t ** chdescs;
+	patch_t * scan;
+	patch_t ** patchs;
 	int i = 0, count = 0;
 	
 	if(!block->all_changes)
 		return 0;
 	
-	/* find out how many chdescs are to be satisfied */
+	/* find out how many patchs are to be satisfied */
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			count++;
 	if(!count)
 		return 0;
 	
-	chdescs = revision_get_array(count);
-	if(!chdescs)
+	patchs = revision_get_array(count);
+	if(!patchs)
 		return -ENOMEM;
 	
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
-			chdescs[i++] = scan;
+			patchs[i++] = scan;
 	
 	for(;;)
 	{
@@ -334,13 +334,13 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 		int progress = 0;
 		for(i = count - 1; i != -1; i--)
 		{
-			if(!chdescs[i])
+			if(!patchs[i])
 				continue;
-			if(chdescs[i]->befores)
+			if(patchs[i]->befores)
 				again = 1;
 			else
 			{
-				chdesc_satisfy(&chdescs[i]);
+				patch_satisfy(&patchs[i]);
 				progress = 1;
 			}
 		}
@@ -348,7 +348,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 			break;
 		if(!progress)
 		{
-			dump_revision_loop_state(block, count, chdescs, __FUNCTION__);
+			dump_revision_loop_state(block, count, patchs, __FUNCTION__);
 			break;
 		}
 	}
@@ -420,7 +420,7 @@ int revision_tail_flights_exist(void)
 
 int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 {
-	chdesc_t * scan;
+	patch_t * scan;
 	int r;
 	
 	if(!block->all_changes)
@@ -428,8 +428,8 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 	
 	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
 		if(scan->owner == bd)
-			chdesc_set_inflight(scan);
-		else if(!chdesc_is_rollbackable(scan))
+			patch_set_inflight(scan);
+		else if(!patch_is_rollbackable(scan))
 			fprintf(stderr, "%s(): NRB that doesn't belong to us!\n", __FUNCTION__);
 	
 	block->in_flight = 1;
@@ -500,57 +500,57 @@ void revision_tail_wait_for_landing_requests(void)
 
 /* ---- Revision slices ---- */
 
-/* Modules don't in general know whether chdescs that they don't own are above
+/* Modules don't in general know whether patchs that they don't own are above
  * or below them. But that's OK, because they don't need to. Hence there is no
  * revision_slice_prepare() function, because modules don't need to apply or
- * roll back any chdescs to use revision slices. Basically a revision slice is a
+ * roll back any patchs to use revision slices. Basically a revision slice is a
  * set of change descriptors at a particular time, organized in a nice way so
  * that we can figure out which ones are ready to be written down and which ones
  * are not. */
 
-/* move 'chdesc' from its ddesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
-static void link_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)
+/* move 'patch' from its ddesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
+static void link_tmp_ready(patch_t ** tmp_ready, patch_t *** tmp_ready_tail, patch_t * patch)
 {
-	chdesc_tmpize_all_changes(chdesc);
+	patch_tmpize_all_changes(patch);
 
-	chdesc->ddesc_pprev = tmp_ready;
-	chdesc->ddesc_next = *tmp_ready;
-	*tmp_ready = chdesc;
-	if(chdesc->ddesc_next)
-		chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+	patch->ddesc_pprev = tmp_ready;
+	patch->ddesc_next = *tmp_ready;
+	*tmp_ready = patch;
+	if(patch->ddesc_next)
+		patch->ddesc_next->ddesc_pprev = &patch->ddesc_next;
 	else
-		*tmp_ready_tail = &chdesc->ddesc_next;
+		*tmp_ready_tail = &patch->ddesc_next;
 }
 
-/* move 'chdesc' back from the list 'tmp_ready' to its ddesc's all_changes */
-static void unlink_tmp_ready(chdesc_t ** tmp_ready, chdesc_t *** tmp_ready_tail, chdesc_t * chdesc)
+/* move 'patch' back from the list 'tmp_ready' to its ddesc's all_changes */
+static void unlink_tmp_ready(patch_t ** tmp_ready, patch_t *** tmp_ready_tail, patch_t * patch)
 {
-	assert(chdesc->block && chdesc->owner);
-	if(chdesc->ddesc_pprev)
+	assert(patch->block && patch->owner);
+	if(patch->ddesc_pprev)
 	{
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
+		if(patch->ddesc_next)
+			patch->ddesc_next->ddesc_pprev = patch->ddesc_pprev;
 		else
-			*tmp_ready_tail = chdesc->ddesc_pprev;
-		*chdesc->ddesc_pprev = chdesc->ddesc_next;
-		chdesc->ddesc_next = NULL;
-		chdesc->ddesc_pprev = NULL;
+			*tmp_ready_tail = patch->ddesc_pprev;
+		*patch->ddesc_pprev = patch->ddesc_next;
+		patch->ddesc_next = NULL;
+		patch->ddesc_pprev = NULL;
 	}
 	else
-		assert(!chdesc->ddesc_next);
+		assert(!patch->ddesc_next);
 
-	chdesc_untmpize_all_changes(chdesc);
+	patch_untmpize_all_changes(patch);
 }
 
 int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision_slice_t * slice)
 {
-	chdesc_t * tmp_ready = NULL;
-	chdesc_t ** tmp_ready_tail = &tmp_ready;
-	chdesc_dlist_t * rcl = &block->ready_changes[owner->level];
-	chdesc_t * scan;
-	/* To write a block revision, all non-ready chdescs on the block must
-	 * first be rolled back. Thus when there are non-ready chdescs with
-	 * omitted data fields the revision cannot contain any chdescs.
+	patch_t * tmp_ready = NULL;
+	patch_t ** tmp_ready_tail = &tmp_ready;
+	patch_dlist_t * rcl = &block->ready_changes[owner->level];
+	patch_t * scan;
+	/* To write a block revision, all non-ready patchs on the block must
+	 * first be rolled back. Thus when there are non-ready patchs with
+	 * omitted data fields the revision cannot contain any patchs.
 	 * 'nonready_nonrollbackable' implements this. */
 	bool nonready_nonrollbackable = 0;
 
@@ -562,23 +562,23 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 	slice->ready_size = 0;
 	slice->ready = NULL;
 
-	/* move all the chdescs down a level that can be moved down a level */
+	/* move all the patchs down a level that can be moved down a level */
 	while((scan = rcl->head))
 	{
 		slice->ready_size++;
 
 		/* push down to update the ready list */
 		link_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
-		chdesc_unlink_index_changes(scan);
-		chdesc_unlink_ready_changes(scan);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, target);
+		patch_unlink_index_changes(scan);
+		patch_unlink_ready_changes(scan);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, scan, target);
 		scan->owner = target;
-		chdesc_propagate_level_change(scan, owner->level, target->level);
-		chdesc_update_ready_changes(scan);
-		chdesc_link_index_changes(scan);
+		patch_propagate_level_change(scan, owner->level, target->level);
+		patch_update_ready_changes(scan);
+		patch_link_index_changes(scan);
 	}
 
-#if CHDESC_NRB && !CHDESC_RB_NRB_READY
+#if PATCH_NRB && !PATCH_RB_NRB_READY
 	if(block->nrb && block->nrb->owner == owner)
 		nonready_nonrollbackable = 1;
 #endif
@@ -593,7 +593,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 
 	if(slice->ready_size)
 	{
-		chdesc_t * scan;
+		patch_t * scan;
 		int j = 0;
 		if(!nonready_nonrollbackable)
 			slice->ready = scalloc(slice->ready_size, sizeof(*slice->ready));
@@ -604,15 +604,15 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 			 * and it's sad that this scalloc() exists solely for pull_up. */
 			for(scan = tmp_ready; scan;)
 			{
-				chdesc_t * next = scan->ddesc_next;
-				chdesc_unlink_index_changes(scan);
-				chdesc_unlink_ready_changes(scan);
-				KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, scan, owner);
+				patch_t * next = scan->ddesc_next;
+				patch_unlink_index_changes(scan);
+				patch_unlink_ready_changes(scan);
+				FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, scan, owner);
 				scan->owner = owner;
-				chdesc_propagate_level_change(scan, target->level, owner->level);
+				patch_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
-				chdesc_update_ready_changes(scan);
-				chdesc_link_index_changes(scan);
+				patch_update_ready_changes(scan);
+				patch_link_index_changes(scan);
 				scan = next;
 			}
 			
@@ -626,7 +626,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 
 		for(scan = tmp_ready; scan;)
 		{
-			chdesc_t * next = scan->ddesc_next;
+			patch_t * next = scan->ddesc_next;
 			slice->ready[j++] = scan;
 			unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 			scan = next;
@@ -639,9 +639,9 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 
 void revision_slice_push_down(revision_slice_t * slice)
 {
-	/* like chdesc_push_down, but without block reassignment (only needed
+	/* like patch_push_down, but without block reassignment (only needed
 	 * for things changing block numbers) and for slices instead of all
-	 * chdescs: it only pushes down the ready part of the slice */
+	 * patchs: it only pushes down the ready part of the slice */
 	int i;
 	for(i = 0; i != slice->ready_size; i++)
 	{
@@ -649,18 +649,18 @@ void revision_slice_push_down(revision_slice_t * slice)
 			continue;
 		if(slice->ready[i]->owner == slice->owner)
 		{
-			uint16_t prev_level = chdesc_level(slice->ready[i]);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->target);
-			chdesc_unlink_index_changes(slice->ready[i]);
-			chdesc_unlink_ready_changes(slice->ready[i]);
+			uint16_t prev_level = patch_level(slice->ready[i]);
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, slice->ready[i], slice->target);
+			patch_unlink_index_changes(slice->ready[i]);
+			patch_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->owner = slice->target;
-			chdesc_update_ready_changes(slice->ready[i]);
-			chdesc_link_index_changes(slice->ready[i]);
-			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
+			patch_update_ready_changes(slice->ready[i]);
+			patch_link_index_changes(slice->ready[i]);
+			if(prev_level != patch_level(slice->ready[i]))
+				patch_propagate_level_change(slice->ready[i], prev_level, patch_level(slice->ready[i]));
 		}
 		else
-			fprintf(stderr, "%s(): chdesc is not owned by us, but it's in our slice...\n", __FUNCTION__);
+			fprintf(stderr, "%s(): patch is not owned by us, but it's in our slice...\n", __FUNCTION__);
 	}
 }
 
@@ -674,18 +674,18 @@ void revision_slice_pull_up(revision_slice_t * slice)
 			continue;
 		if(slice->ready[i]->owner == slice->target)
 		{
-			uint16_t prev_level = chdesc_level(slice->ready[i]);
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, slice->ready[i], slice->owner);
-			chdesc_unlink_index_changes(slice->ready[i]);
-			chdesc_unlink_ready_changes(slice->ready[i]);
+			uint16_t prev_level = patch_level(slice->ready[i]);
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, slice->ready[i], slice->owner);
+			patch_unlink_index_changes(slice->ready[i]);
+			patch_unlink_ready_changes(slice->ready[i]);
 			slice->ready[i]->owner = slice->owner;
-			chdesc_update_ready_changes(slice->ready[i]);
-			chdesc_link_index_changes(slice->ready[i]);
-			if(prev_level != chdesc_level(slice->ready[i]))
-				chdesc_propagate_level_change(slice->ready[i], prev_level, chdesc_level(slice->ready[i]));
+			patch_update_ready_changes(slice->ready[i]);
+			patch_link_index_changes(slice->ready[i]);
+			if(prev_level != patch_level(slice->ready[i]))
+				patch_propagate_level_change(slice->ready[i], prev_level, patch_level(slice->ready[i]));
 		}
 		else
-			fprintf(stderr, "%s(): chdesc is not owned by target, but it's in our slice...\n", __FUNCTION__);
+			fprintf(stderr, "%s(): patch is not owned by target, but it's in our slice...\n", __FUNCTION__);
 	}
 }
 
@@ -705,7 +705,7 @@ void revision_slice_destroy(revision_slice_t * slice)
 int revision_init(void)
 {
 #ifdef __KERNEL__
-	int r = kfsd_register_shutdown_module(flight_pool_free_all, NULL, SHUTDOWN_POSTMODULES);
+	int r = fstitchd_register_shutdown_module(flight_pool_free_all, NULL, SHUTDOWN_POSTMODULES);
 	if(r < 0)
 		return r;
 #endif

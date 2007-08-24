@@ -1,42 +1,42 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
 
-#include <kfs/debug.h>
-#include <kfs/sync.h>
-#include <kfs/journal_bd.h>
-#include <kfs/opgroup.h>
+#include <fscore/debug.h>
+#include <fscore/sync.h>
+#include <fscore/journal_bd.h>
+#include <fscore/patchgroup.h>
 
-#define OPGROUP_DEBUG 0
+#define PATCHGROUP_DEBUG 0
 
-#if OPGROUP_DEBUG
+#if PATCHGROUP_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
 #endif
 
-/* Atomic opgroup TODOs:
+/* Atomic patchgroup TODOs:
  *
  * Correctness:
- * - detect that a journal is present for the filesystems used by an opgroup
- * - detect cyclic dependencies among opgroup transactions (chdesc update)
- *   and block the second opgroup transaction
+ * - detect that a journal is present for the filesystems used by an patchgroup
+ * - detect cyclic dependencies among patchgroup transactions (patch update)
+ *   and block the second patchgroup transaction
  * - support multi-device transactions
  *
  * Performance:
  * - only add holds to the needed journal_bds
- * - make dependencies on an opgroup transaction depend on the commit record
+ * - make dependencies on an patchgroup transaction depend on the commit record
  */
 
-/* TODO: describe big picture re why chdesc_add_depend() usage is safe */
+/* TODO: describe big picture re why patch_add_depend() usage is safe */
 
-struct opgroup {
-	opgroup_id_t id;
+struct patchgroup {
+	patchgroup_id_t id;
 	chweakref_t head;
 	/* head_keep stays until we get an after */
-	chdesc_t * head_keep;
+	patch_t * head_keep;
 	chweakref_t tail;
 	/* tail_keep stays until we are released */
-	chdesc_t * tail_keep;
+	patch_t * tail_keep;
 	uint32_t references:30;
 	/* has_data is set when we engage, not when we actually get data */
 	uint32_t has_data:1;
@@ -47,37 +47,37 @@ struct opgroup {
 	int flags;
 };
 
-typedef struct opgroup_state {
-	opgroup_t * opgroup;
+typedef struct patchgroup_state {
+	patchgroup_t * patchgroup;
 	int engaged;
-} opgroup_state_t;
+} patchgroup_state_t;
 
-struct opgroup_scope {
-	opgroup_id_t next_id;
-	/* map from ID to opgroup state */
+struct patchgroup_scope {
+	patchgroup_id_t next_id;
+	/* map from ID to patchgroup state */
 	hash_map_t * id_map;
-	chdesc_t * top;
+	patch_t * top;
 	/* top_keep stays until we change the engaged set */
-	chdesc_t * top_keep;
+	patch_t * top_keep;
 	chweakref_t bottom;
 	int engaged_count;
 };
 
-/* Do not allow multiple atomic opgroups to exist at a single point in time
- * for now. Soon we will detect inter-atomic opgroup dependencies and remove
+/* Do not allow multiple atomic patchgroups to exist at a single point in time
+ * for now. Soon we will detect inter-atomic patchgroup dependencies and remove
  * this restriction.
  */
-static bool atomic_opgroup_exists = 0;
+static bool atomic_patchgroup_exists = 0;
 
-static opgroup_scope_t * current_scope = NULL;
+static patchgroup_scope_t * current_scope = NULL;
 static int masquerade_count = 0;
 
-opgroup_scope_t * opgroup_scope_create(void)
+patchgroup_scope_t * patchgroup_scope_create(void)
 {
-	opgroup_scope_t * scope = malloc(sizeof(*scope));
+	patchgroup_scope_t * scope = malloc(sizeof(*scope));
 	if(scope)
 	{
-		Dprintf("%s(): scope = %p, debug = %d\n", __FUNCTION__, scope, KFS_DEBUG_COUNT());
+		Dprintf("%s(): scope = %p, debug = %d\n", __FUNCTION__, scope, FSTITCH_DEBUG_COUNT());
 		scope->next_id = 1;
 		scope->top = NULL;
 		scope->top_keep = NULL;
@@ -93,52 +93,52 @@ opgroup_scope_t * opgroup_scope_create(void)
 	return scope;
 }
 
-opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
+patchgroup_scope_t * patchgroup_scope_copy(patchgroup_scope_t * scope)
 {
 	hash_map_it_t it;
-	opgroup_state_t * state;
-	opgroup_scope_t * copy = opgroup_scope_create();
+	patchgroup_state_t * state;
+	patchgroup_scope_t * copy = patchgroup_scope_create();
 	if(!copy)
 		return NULL;
-	Dprintf("%s(): scope = %p, copy = %p, debug = %d\n", __FUNCTION__, scope, copy, KFS_DEBUG_COUNT());
+	Dprintf("%s(): scope = %p, copy = %p, debug = %d\n", __FUNCTION__, scope, copy, FSTITCH_DEBUG_COUNT());
 	
 	copy->next_id = scope->next_id;
 	if(scope->top)
 	{
 		/* we need our own top_keep */
-		if(chdesc_create_noop_list(NULL, &copy->top_keep, NULL) < 0)
+		if(patch_create_noop_list(NULL, &copy->top_keep, NULL) < 0)
 			goto error_copy;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top_keep, "top_keep");
-		chdesc_claim_noop(copy->top_keep);
-		if(chdesc_create_noop_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, copy->top_keep, "top_keep");
+		patch_claim_noop(copy->top_keep);
+		if(patch_create_noop_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
 			goto error_top_keep;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, copy->top, "top");
-		copy->top->flags |= CHDESC_NO_OPGROUP;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, copy->top, CHDESC_NO_OPGROUP);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, copy->top, "top");
+		copy->top->flags |= PATCH_NO_PATCHGROUP;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, copy->top, PATCH_NO_PATCHGROUP);
 	}
-	chdesc_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL);
+	patch_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL);
 	
-	/* iterate over opgroups and increase reference counts */
+	/* iterate over patchgroups and increase reference counts */
 	hash_map_it_init(&it, scope->id_map);
 	while((state = hash_map_val_next(&it)))
 	{
-		opgroup_state_t * dup = malloc(sizeof(*dup));
+		patchgroup_state_t * dup = malloc(sizeof(*dup));
 		if(!dup)
 			goto error_bottom;
 		*dup = *state;
-		if(hash_map_insert(copy->id_map, (void *) dup->opgroup->id, dup) < 0)
+		if(hash_map_insert(copy->id_map, (void *) dup->patchgroup->id, dup) < 0)
 		{
 			free(dup);
 			goto error_bottom;
 		}
-		dup->opgroup->references++;
+		dup->patchgroup->references++;
 		/* FIXME: can we do better than just assert? */
-		assert(dup->opgroup->references);
+		assert(dup->patchgroup->references);
 		if(dup->engaged)
 		{
-			dup->opgroup->engaged_count++;
+			dup->patchgroup->engaged_count++;
 			/* FIXME: can we do better than just assert? */
-			assert(dup->opgroup->engaged_count);
+			assert(dup->patchgroup->engaged_count);
 			copy->engaged_count++;
 		}
 	}
@@ -151,44 +151,44 @@ opgroup_scope_t * opgroup_scope_copy(opgroup_scope_t * scope)
 	while((state = hash_map_val_next(&it)))
 	{
 		/* don't need to check for 0 */
-		state->opgroup->references--;
+		state->patchgroup->references--;
 		if(state->engaged)
-			state->opgroup->engaged_count--;
+			state->patchgroup->engaged_count--;
 		free(state);
 	}
 	hash_map_destroy(copy->id_map);
 	
-	chdesc_weak_release(&copy->bottom, 0);
+	patch_weak_release(&copy->bottom, 0);
   error_top_keep:
 	if(copy->top_keep)
-		chdesc_satisfy(&copy->top_keep);	
+		patch_satisfy(&copy->top_keep);	
   error_copy:
 	free(copy);
 	return NULL;
 }
 
-size_t opgroup_scope_size(opgroup_scope_t * scope)
+size_t patchgroup_scope_size(patchgroup_scope_t * scope)
 {
 	return hash_map_size(scope->id_map);
 }
 
-void opgroup_scope_destroy(opgroup_scope_t * scope)
+void patchgroup_scope_destroy(patchgroup_scope_t * scope)
 {
-	Dprintf("%s(): scope = %p, debug = %d\n", __FUNCTION__, scope, KFS_DEBUG_COUNT());
+	Dprintf("%s(): scope = %p, debug = %d\n", __FUNCTION__, scope, FSTITCH_DEBUG_COUNT());
 	hash_map_it2_t it = hash_map_it2_create(scope->id_map);
-	opgroup_scope_t * old_scope = current_scope;
+	patchgroup_scope_t * old_scope = current_scope;
 	
-	/* opgroup_abandon() needs the current scope
+	/* patchgroup_abandon() needs the current scope
 	 * to be the one we are destroying... */
 	current_scope = scope;
 	
-	/* iterate over opgroups and abandon them */
+	/* iterate over patchgroups and abandon them */
 	while(hash_map_it2_next(&it))
 	{
-		opgroup_state_t * state = it.val;
-		int r = opgroup_disengage(state->opgroup);
+		patchgroup_state_t * state = it.val;
+		int r = patchgroup_disengage(state->patchgroup);
 		assert(r >= 0);
-		opgroup_abandon(&state->opgroup);
+		patchgroup_abandon(&state->patchgroup);
 	}
 	hash_map_destroy(scope->id_map);
 	
@@ -196,40 +196,40 @@ void opgroup_scope_destroy(opgroup_scope_t * scope)
 	current_scope = (old_scope == scope) ? NULL : old_scope;
 	
 	if(scope->top_keep)
-		chdesc_satisfy(&scope->top_keep);
-	chdesc_weak_release(&scope->bottom, 0);
+		patch_satisfy(&scope->top_keep);
+	patch_weak_release(&scope->bottom, 0);
 	free(scope);
 }
 
-void opgroup_scope_set_current(opgroup_scope_t * scope)
+void patchgroup_scope_set_current(patchgroup_scope_t * scope)
 {
 	current_scope = scope;
 }
 
-opgroup_t * opgroup_create(int flags)
+patchgroup_t * patchgroup_create(int flags)
 {
-	opgroup_t * op;
-	opgroup_state_t * state;
-	chdesc_t * tail;
-	chdesc_t * head;
+	patchgroup_t * op;
+	patchgroup_state_t * state;
+	patch_t * tail;
+	patch_t * head;
 	
 	if(!current_scope)
 		return NULL;
-	if(!(!flags || flags == OPGROUP_FLAG_ATOMIC))
+	if(!(!flags || flags == PATCHGROUP_FLAG_ATOMIC))
 		return NULL;
 
-	if(flags & OPGROUP_FLAG_ATOMIC)
+	if(flags & PATCHGROUP_FLAG_ATOMIC)
 	{
-		if(atomic_opgroup_exists)
+		if(atomic_patchgroup_exists)
 			return NULL;
-		atomic_opgroup_exists = 1;
+		atomic_patchgroup_exists = 1;
 	}
 	
 	if(!(op = malloc(sizeof(*op))))
 		return NULL;
 	if(!(state = malloc(sizeof(*state))))
 		goto error_op;
-	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, op, KFS_DEBUG_COUNT());
+	Dprintf("%s(): patchgroup = %p, debug = %d\n", __FUNCTION__, op, FSTITCH_DEBUG_COUNT());
 	
 	op->id = current_scope->next_id++;
 	WEAK_INIT(op->head);
@@ -241,28 +241,28 @@ opgroup_t * opgroup_create(int flags)
 	op->has_afters = 0;
 	op->has_befores = 0;
 	op->flags = flags;
-	state->opgroup = op;
+	state->patchgroup = op;
 	state->engaged = 0;
 	
-	if(chdesc_create_noop_list(NULL, &op->head_keep, NULL) < 0)
+	if(patch_create_noop_list(NULL, &op->head_keep, NULL) < 0)
 		goto error_state;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->head_keep, "head_keep");
-	chdesc_claim_noop(op->head_keep);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, op->head_keep, "head_keep");
+	patch_claim_noop(op->head_keep);
 	
-	if(chdesc_create_noop_list(NULL, &op->tail_keep, NULL) < 0)
+	if(patch_create_noop_list(NULL, &op->tail_keep, NULL) < 0)
 		goto error_head_keep;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, op->tail_keep, "tail_keep");
-	chdesc_claim_noop(op->tail_keep);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, op->tail_keep, "tail_keep");
+	patch_claim_noop(op->tail_keep);
 	
-	if(chdesc_create_noop_list(NULL, &tail, op->tail_keep, NULL) < 0)
+	if(patch_create_noop_list(NULL, &tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, tail, "tail");
-	chdesc_weak_retain(tail, &op->tail, NULL, NULL);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, tail, "tail");
+	patch_weak_retain(tail, &op->tail, NULL, NULL);
 	
-	if(chdesc_create_noop_list(NULL, &head, op->head_keep, NULL) < 0)
+	if(patch_create_noop_list(NULL, &head, op->head_keep, NULL) < 0)
 		goto error_tail;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, head, "head");
-	chdesc_weak_retain(head, &op->head, NULL, NULL);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "head");
+	patch_weak_retain(head, &op->head, NULL, NULL);
 	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
 		goto error_head;
@@ -270,15 +270,15 @@ opgroup_t * opgroup_create(int flags)
 	return op;
 	
 error_head:
-	chdesc_remove_depend(head, op->head_keep);
-	chdesc_destroy(&head);
+	patch_remove_depend(head, op->head_keep);
+	patch_destroy(&head);
 error_tail:
-	chdesc_remove_depend(tail, op->tail_keep);
-	chdesc_destroy(&tail);
+	patch_remove_depend(tail, op->tail_keep);
+	patch_destroy(&tail);
 error_tail_keep:
-	chdesc_destroy(&op->tail_keep);
+	patch_destroy(&op->tail_keep);
 error_head_keep:
-	chdesc_destroy(&op->head_keep);
+	patch_destroy(&op->head_keep);
 error_state:
 	free(state);
 error_op:
@@ -286,29 +286,29 @@ error_op:
 	return NULL;
 }
 
-int opgroup_sync(opgroup_t * opgroup)
+int patchgroup_sync(patchgroup_t * patchgroup)
 {
-	// TODO: sync just the needed opgroups
-	return kfs_sync();
+	// TODO: sync just the needed patchgroups
+	return fstitch_sync();
 }
 
-int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
+int patchgroup_add_depend(patchgroup_t * after, patchgroup_t * before)
 {
 	int r = 0;
 	if(!after || !before)
 		return -EINVAL;
 	/* from before's perspective, we are adding an after
 	 *   => before must not be engaged [anywhere] if it is not atomic */
-	if(!(before->flags & OPGROUP_FLAG_ATOMIC) && before->engaged_count)
+	if(!(before->flags & PATCHGROUP_FLAG_ATOMIC) && before->engaged_count)
 		return -EBUSY;
 	/* from after's perspective, we are adding a before
 	 *   => after must not be released (standard case) or have an after (noop case) */
 	assert(!after->tail_keep == after->is_released);
 	if(after->is_released || after->has_afters)
 		return -EINVAL;
-	Dprintf("%s(): after = %p -> before = %p, debug = %d\n", __FUNCTION__, after, before, KFS_DEBUG_COUNT());
+	Dprintf("%s(): after = %p -> before = %p, debug = %d\n", __FUNCTION__, after, before, FSTITCH_DEBUG_COUNT());
 	/* we only create head => tail directly if we need to: when we are adding
-	 * an after to an opgroup and it still has both its head and tail */
+	 * an after to an patchgroup and it still has both its head and tail */
 	if(WEAK(before->head) && WEAK(before->tail))
 	{
 		/* for efficiency, when that head and tail are not already connected
@@ -316,7 +316,7 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 		if(WEAK(before->head)->befores && !WEAK(before->head)->befores->before.next &&
 		   WEAK(before->head)->befores->before.desc == before->head_keep)
 		{
-			r = chdesc_add_depend(WEAK(before->head), WEAK(before->tail));
+			r = patch_add_depend(WEAK(before->head), WEAK(before->tail));
 			if(r < 0)
 				return r;
 		}
@@ -333,13 +333,13 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 			 * so we can inherit before's head as our tail */
 			assert(WEAK(after->tail)->befores->before.desc == after->tail_keep);
 			assert(!WEAK(after->tail)->afters);
-			r = chdesc_add_depend(WEAK(before->head), after->tail_keep);
+			r = patch_add_depend(WEAK(before->head), after->tail_keep);
 			if(r >= 0)
 			{
-				chdesc_remove_depend(WEAK(after->tail), after->tail_keep);
-				chdesc_weak_release(&after->tail, 0);
-				chdesc_weak_retain(WEAK(before->head), &after->tail, NULL, NULL);
-				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(after->tail), "tail");
+				patch_remove_depend(WEAK(after->tail), after->tail_keep);
+				patch_weak_release(&after->tail, 0);
+				patch_weak_retain(WEAK(before->head), &after->tail, NULL, NULL);
+				FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(after->tail), "tail");
 			}
 			else
 				goto oh_well;
@@ -348,30 +348,30 @@ int opgroup_add_depend(opgroup_t * after, opgroup_t * before)
 			oh_well:
 #endif
 			/* notice that this can fail if there is a before cycle */
-			r = chdesc_add_depend(WEAK(after->tail), WEAK(before->head));
+			r = patch_add_depend(WEAK(after->tail), WEAK(before->head));
 	}
 	if(r >= 0)
 	{
 		after->has_befores = 1;
 		before->has_afters = 1;
 		if(before->head_keep)
-			chdesc_satisfy(&before->head_keep);
+			patch_satisfy(&before->head_keep);
 	}
 	else
-		fprintf(stderr, "%s: chdesc_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
+		fprintf(stderr, "%s: patch_add_depend() unexpectedly failed (%i)\n", __FUNCTION__, r);
 	return r;
 }
 
-static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool was_engaged)
+static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state, bool was_engaged)
 {
 	hash_map_it_t it;
-	opgroup_state_t * state = NULL;
-	chdesc_t * top;
-	chdesc_t * top_keep;
-	chdesc_t * bottom;
-	chdesc_t * save_top = current_scope->top;
+	patchgroup_state_t * state = NULL;
+	patch_t * top;
+	patch_t * top_keep;
+	patch_t * bottom;
+	patch_t * save_top = current_scope->top;
 	int r, count = 0;
-	Dprintf("%s(): start updating, debug = %d\n", __FUNCTION__, KFS_DEBUG_COUNT());
+	Dprintf("%s(): start updating, debug = %d\n", __FUNCTION__, FSTITCH_DEBUG_COUNT());
 	
 	/* when top has only top_keep as a before, then don't bother attaching any heads to it */
 	if(save_top && (save_top->befores->before.next ||
@@ -383,21 +383,21 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 		while((state = hash_map_val_next(&it)))
 			if(save_top && ((state == changed_state) ? was_engaged : state->engaged))
 			{
-				assert(WEAK(state->opgroup->head) && state->opgroup->head_keep);
+				assert(WEAK(state->patchgroup->head) && state->patchgroup->head_keep);
 #ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
-				if(!WEAK(state->opgroup->head)->befores->before.next)
+				if(!WEAK(state->patchgroup->head)->befores->before.next)
 				{
 					/* this is the first top we are adding to head,
 					 * so we can inherit this top as our head */
-					assert(WEAK(state->opgroup->head)->befores->before.desc == state->opgroup->head_keep);
-					assert(!WEAK(state->opgroup->head)->afters);
-					r = chdesc_add_depend(save_top, state->opgroup->head_keep);
+					assert(WEAK(state->patchgroup->head)->befores->before.desc == state->patchgroup->head_keep);
+					assert(!WEAK(state->patchgroup->head)->afters);
+					r = patch_add_depend(save_top, state->patchgroup->head_keep);
 					if(r >= 0)
 					{
-						chdesc_remove_depend(WEAK(state->opgroup->head), state->opgroup->head_keep);
-						chdesc_weak_release(&state->opgroup->head, 0);
-						chdesc_weak_retain(save_top, &state->opgroup->head, NULL, NULL);
-						KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(state->opgroup->head), "head");
+						patch_remove_depend(WEAK(state->patchgroup->head), state->patchgroup->head_keep);
+						patch_weak_release(&state->patchgroup->head, 0);
+						patch_weak_retain(save_top, &state->patchgroup->head, NULL, NULL);
+						FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(state->patchgroup->head), "head");
 					}
 					else
 						goto oh_well;
@@ -406,7 +406,7 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 				{
 					oh_well:
 #endif
-					r = chdesc_add_depend(WEAK(state->opgroup->head), save_top);
+					r = patch_add_depend(WEAK(state->patchgroup->head), save_top);
 					if(r < 0)
 						kpanic("Can't recover from failure!");
 #ifdef YOU_LIKE_INCORRECT_OPTIMIZATIONS
@@ -416,33 +416,33 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	}
 	
 	/* create new top and bottom */
-	r = chdesc_create_noop_list(NULL, &top_keep, NULL);
+	r = patch_create_noop_list(NULL, &top_keep, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top_keep, "top_keep");
-	chdesc_claim_noop(top_keep);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, top_keep, "top_keep");
+	patch_claim_noop(top_keep);
 	
-	r = chdesc_create_noop_list(NULL, &bottom, NULL);
+	r = patch_create_noop_list(NULL, &bottom, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, bottom, "bottom");
 	
 	hash_map_it_init(&it, current_scope->id_map);
 	while((state = hash_map_val_next(&it)))
 		if(state->engaged)
 		{
-			if(WEAK(state->opgroup->tail))
-				if(chdesc_add_depend(bottom, WEAK(state->opgroup->tail)) < 0)
+			if(WEAK(state->patchgroup->tail))
+				if(patch_add_depend(bottom, WEAK(state->patchgroup->tail)) < 0)
 					kpanic("Can't recover from failure!");
 			count++;
 		}
 	
-	r = chdesc_create_noop_list(NULL, &top, top_keep, NULL);
+	r = patch_create_noop_list(NULL, &top, top_keep, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, top, "top");
-	top->flags |= CHDESC_NO_OPGROUP;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, top, CHDESC_NO_OPGROUP);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, top, "top");
+	top->flags |= PATCH_NO_PATCHGROUP;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, top, PATCH_NO_PATCHGROUP);
 	
 	if(!bottom->befores)
 	{
@@ -453,211 +453,211 @@ static int opgroup_update_top_bottom(const opgroup_state_t * changed_state, bool
 	else if(!bottom->befores->before.next)
 	{
 		/* only one tail; inherit it for bottom! */
-		chdesc_t * old = bottom;
+		patch_t * old = bottom;
 		bottom = bottom->befores->before.desc;
-		chdesc_remove_depend(old, bottom);
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, bottom, "bottom");
+		patch_remove_depend(old, bottom);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, bottom, "bottom");
 	}
 #endif
 	
-	chdesc_weak_retain(bottom, &current_scope->bottom, NULL, NULL);
+	patch_weak_retain(bottom, &current_scope->bottom, NULL, NULL);
 	
 	if(!count)
 	{
-		chdesc_satisfy(&top_keep);
+		patch_satisfy(&top_keep);
 		top = NULL;
 	}
 	
 	current_scope->top = top;
 	if(current_scope->top_keep)
-		chdesc_satisfy(&current_scope->top_keep);
+		patch_satisfy(&current_scope->top_keep);
 	/* we claimed it so no need to weak retain */
 	current_scope->top_keep = top_keep;
-	Dprintf("%s(): finished updating, debug = %d\n", __FUNCTION__, KFS_DEBUG_COUNT());
+	Dprintf("%s(): finished updating, debug = %d\n", __FUNCTION__, FSTITCH_DEBUG_COUNT());
 	
 	return 0;
 }
 
-int opgroup_engage(opgroup_t * opgroup)
+int patchgroup_engage(patchgroup_t * patchgroup)
 {
 	int r;
-	opgroup_state_t * state;
+	patchgroup_state_t * state;
 	
 	if(!current_scope)
 		return -ENODEV;
-	if(!opgroup)
+	if(!patchgroup)
 		return -EINVAL;
-	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
+	state = hash_map_find_val(current_scope->id_map, (void *) patchgroup->id);
 	if(!state)
 		return -ENOENT;
-	assert(state->opgroup == opgroup);
-	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && (!opgroup->is_released || !opgroup->is_released))
+	assert(state->patchgroup == patchgroup);
+	if(!(patchgroup->flags & PATCHGROUP_FLAG_ATOMIC) && (!patchgroup->is_released || !patchgroup->is_released))
 		return -EINVAL;
 	/* can't engage it if it is not atomic and it has afters */
-	if(!(opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->has_afters)
+	if(!(patchgroup->flags & PATCHGROUP_FLAG_ATOMIC) && patchgroup->has_afters)
 		return -EINVAL;
 	/* can't engage it if it is atomic and has been released */
-	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->is_released)
+	if((patchgroup->flags & PATCHGROUP_FLAG_ATOMIC) && patchgroup->is_released)
 		return -EINVAL;
 	if(state->engaged)
 		return 0;
-	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, opgroup, KFS_DEBUG_COUNT());
+	Dprintf("%s(): patchgroup = %p, debug = %d\n", __FUNCTION__, patchgroup, FSTITCH_DEBUG_COUNT());
 	
 	state->engaged = 1;
-	opgroup->engaged_count++;
+	patchgroup->engaged_count++;
 	/* FIXME: can we do better than just assert? */
-	assert(state->opgroup->engaged_count);
+	assert(state->patchgroup->engaged_count);
 	current_scope->engaged_count++;
 	
-	r = opgroup_update_top_bottom(state, 0);
+	r = patchgroup_update_top_bottom(state, 0);
 	if(r < 0)
 	{
 		state->engaged = 0;
-		opgroup->engaged_count--;
+		patchgroup->engaged_count--;
 		current_scope->engaged_count--;
 	}
 	else
 	{
-		if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && !opgroup->has_data)
+		if((patchgroup->flags & PATCHGROUP_FLAG_ATOMIC) && !patchgroup->has_data)
 			journal_bd_add_hold();
 		/* mark it as having data since it is now engaged */
 		/* (and therefore could acquire data at any time) */
-		opgroup->has_data = 1;
+		patchgroup->has_data = 1;
 	}
 
 	return r;
 }
 
-int opgroup_disengage(opgroup_t * opgroup)
+int patchgroup_disengage(patchgroup_t * patchgroup)
 {
 	int r;
-	opgroup_state_t * state;
+	patchgroup_state_t * state;
 	
 	if(!current_scope)
 		return -ENODEV;
-	if(!opgroup)
+	if(!patchgroup)
 		return -EINVAL;
-	state = hash_map_find_val(current_scope->id_map, (void *) opgroup->id);
+	state = hash_map_find_val(current_scope->id_map, (void *) patchgroup->id);
 	if(!state)
 		return -ENOENT;
-	assert(state->opgroup == opgroup);
+	assert(state->patchgroup == patchgroup);
 	if(!state->engaged)
 		return 0;
-	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, opgroup, KFS_DEBUG_COUNT());
+	Dprintf("%s(): patchgroup = %p, debug = %d\n", __FUNCTION__, patchgroup, FSTITCH_DEBUG_COUNT());
 	
 	state->engaged = 0;
-	opgroup->engaged_count--;
+	patchgroup->engaged_count--;
 	current_scope->engaged_count--;
 	
-	r = opgroup_update_top_bottom(state, 1);
+	r = patchgroup_update_top_bottom(state, 1);
 	if(r < 0)
 	{
 		state->engaged = 1;
-		opgroup->engaged_count++;
+		patchgroup->engaged_count++;
 		current_scope->engaged_count++;
 	}
 
 	return r;
 }
 
-int opgroup_release(opgroup_t * opgroup)
+int patchgroup_release(patchgroup_t * patchgroup)
 {
-	if(!opgroup)
+	if(!patchgroup)
 		return -EINVAL;
-	/* can't release atomic opgroup if it is engaged */
-	if((opgroup->flags & OPGROUP_FLAG_ATOMIC) && opgroup->engaged_count)
+	/* can't release atomic patchgroup if it is engaged */
+	if((patchgroup->flags & PATCHGROUP_FLAG_ATOMIC) && patchgroup->engaged_count)
 		return -EINVAL;
-	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, opgroup, KFS_DEBUG_COUNT());
-	if(opgroup->tail_keep)
+	Dprintf("%s(): patchgroup = %p, debug = %d\n", __FUNCTION__, patchgroup, FSTITCH_DEBUG_COUNT());
+	if(patchgroup->tail_keep)
 	{
-		chdesc_satisfy(&opgroup->tail_keep);
-		if(opgroup->flags & OPGROUP_FLAG_ATOMIC)
+		patch_satisfy(&patchgroup->tail_keep);
+		if(patchgroup->flags & PATCHGROUP_FLAG_ATOMIC)
 			journal_bd_remove_hold();
-		opgroup->is_released = 1;
+		patchgroup->is_released = 1;
 	}
 	return 0;
 }
 
-int opgroup_abandon(opgroup_t ** opgroup)
+int patchgroup_abandon(patchgroup_t ** patchgroup)
 {
-	opgroup_state_t * state;
+	patchgroup_state_t * state;
 	if(!current_scope)
 		return -ENODEV;
-	if(!opgroup || !*opgroup)
+	if(!patchgroup || !*patchgroup)
 		return -EINVAL;
-	state = hash_map_erase(current_scope->id_map, (void *) (*opgroup)->id);
+	state = hash_map_erase(current_scope->id_map, (void *) (*patchgroup)->id);
 	if(!state)
 		return -ENOENT;
-	assert(state->opgroup == *opgroup);
-	/* can't abandon a non-released atomic opgroup */
-	if(((*opgroup)->flags & OPGROUP_FLAG_ATOMIC) && !(*opgroup)->is_released)
+	assert(state->patchgroup == *patchgroup);
+	/* can't abandon a non-released atomic patchgroup */
+	if(((*patchgroup)->flags & PATCHGROUP_FLAG_ATOMIC) && !(*patchgroup)->is_released)
 		return -EINVAL;
-	/* can't abandon an engaged opgroup */
+	/* can't abandon an engaged patchgroup */
 	if(state->engaged)
 		return -EBUSY;
-	Dprintf("%s(): opgroup = %p, debug = %d\n", __FUNCTION__, *opgroup, KFS_DEBUG_COUNT());
-	if(!--state->opgroup->references)
+	Dprintf("%s(): patchgroup = %p, debug = %d\n", __FUNCTION__, *patchgroup, FSTITCH_DEBUG_COUNT());
+	if(!--state->patchgroup->references)
 	{
-		if((*opgroup)->flags & OPGROUP_FLAG_ATOMIC)
+		if((*patchgroup)->flags & PATCHGROUP_FLAG_ATOMIC)
 		{
-			assert(atomic_opgroup_exists);
-			atomic_opgroup_exists = 0;
+			assert(atomic_patchgroup_exists);
+			atomic_patchgroup_exists = 0;
 		}
 
-		/* no more references to this opgroup */
-		if(state->opgroup->tail_keep || !state->opgroup->is_released)
+		/* no more references to this patchgroup */
+		if(state->patchgroup->tail_keep || !state->patchgroup->is_released)
 		{
-			if(!state->opgroup->has_data)
-				opgroup_release(state->opgroup);
+			if(!state->patchgroup->has_data)
+				patchgroup_release(state->patchgroup);
 			else
-				kpanic("Don't know how to roll back an abandoned opgroup!");
+				kpanic("Don't know how to roll back an abandoned patchgroup!");
 		}
-		if(state->opgroup->head_keep)
-			chdesc_satisfy(&state->opgroup->head_keep);
-		chdesc_weak_release(&state->opgroup->head, 0);
-		chdesc_weak_release(&state->opgroup->tail, 0);
-		free(state->opgroup);
+		if(state->patchgroup->head_keep)
+			patch_satisfy(&state->patchgroup->head_keep);
+		patch_weak_release(&state->patchgroup->head, 0);
+		patch_weak_release(&state->patchgroup->tail, 0);
+		free(state->patchgroup);
 	}
 
-	/* opgroup_scope_destroy() passes us *opgroup inside state... */
-	*opgroup = NULL;
+	/* patchgroup_scope_destroy() passes us *patchgroup inside state... */
+	*patchgroup = NULL;
 	free(state);
 	return 0;
 }
 
-opgroup_t * opgroup_lookup(opgroup_id_t id)
+patchgroup_t * patchgroup_lookup(patchgroup_id_t id)
 {
-	opgroup_state_t * state;
+	patchgroup_state_t * state;
 	if(!current_scope)
 		return NULL;
-	state = (opgroup_state_t *) hash_map_find_val(current_scope->id_map, (void *) id);
-	return state ? state->opgroup : NULL;
+	state = (patchgroup_state_t *) hash_map_find_val(current_scope->id_map, (void *) id);
+	return state ? state->patchgroup : NULL;
 }
 
-opgroup_id_t opgroup_id(const opgroup_t * opgroup)
+patchgroup_id_t patchgroup_id(const patchgroup_t * patchgroup)
 {
-	if(!opgroup)
+	if(!patchgroup)
 		return -EINVAL;
-	return opgroup->id;
+	return patchgroup->id;
 }
 
-int opgroup_engaged(void)
+int patchgroup_engaged(void)
 {
 	return (current_scope && current_scope->engaged_count) || masquerade_count;
 }
 
-void opgroup_masquerade(void)
+void patchgroup_masquerade(void)
 {
 	masquerade_count++;
 }
 
-void opgroup_demasquerade(void)
+void patchgroup_demasquerade(void)
 {
 	assert(masquerade_count);
 	masquerade_count--;
 }
 
-int opgroup_prepare_head(chdesc_t ** head)
+int patchgroup_prepare_head(patch_t ** head)
 {
 	if(!current_scope || !WEAK(current_scope->bottom))
 		return 0;
@@ -674,11 +674,11 @@ int opgroup_prepare_head(chdesc_t ** head)
 			*head = WEAK(current_scope->bottom);
 			return 0;
 		}
-		r = chdesc_create_noop_list(NULL, head, WEAK(current_scope->bottom), *head, NULL);
+		r = patch_create_noop_list(NULL, head, WEAK(current_scope->bottom), *head, NULL);
 		if(r < 0)
 			return r;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "and");
-		chdesc_set_noop_declare(*head);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "and");
+		patch_set_noop_declare(*head);
 	}
 	else
 		*head = WEAK(current_scope->bottom);
@@ -686,22 +686,22 @@ int opgroup_prepare_head(chdesc_t ** head)
 	return 0;
 }
 
-int opgroup_finish_head(chdesc_t * head)
+int patchgroup_finish_head(patch_t * head)
 {
 	if(!current_scope || !current_scope->top || !head || head == WEAK(current_scope->bottom))
 		return 0;
-	if(head->flags & CHDESC_NO_OPGROUP)
+	if(head->flags & PATCH_NO_PATCHGROUP)
 		return 0;
-	return chdesc_add_depend(current_scope->top, head);
+	return patch_add_depend(current_scope->top, head);
 }
 
-int opgroup_label(opgroup_t * opgroup, const char * label)
+int patchgroup_label(patchgroup_t * patchgroup, const char * label)
 {
-	if(!opgroup)
+	if(!patchgroup)
 		return -EINVAL;
-	if(WEAK(opgroup->head))
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(opgroup->head), "og head: %s", label);
-	if(WEAK(opgroup->tail))
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, WEAK(opgroup->tail), "og tail: %s", label);
+	if(WEAK(patchgroup->head))
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(patchgroup->head), "og head: %s", label);
+	if(WEAK(patchgroup->tail))
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(patchgroup->tail), "og tail: %s", label);
 	return 0;
 }

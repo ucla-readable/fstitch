@@ -1,12 +1,12 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
 
-#include <kfs/chdesc.h>
-#include <kfs/block_alloc.h>
+#include <fscore/patch.h>
+#include <fscore/block_alloc.h>
 
-/* This library uses chdesc callbacks. But, we don't use this library yet, so
+/* This library uses patch callbacks. But, we don't use this library yet, so
  * just disable it unless the callbacks are enabled. */
-#if CHDESC_WEAKREF_CALLBACKS
+#if PATCH_WEAKREF_CALLBACKS
 
 typedef struct {
 	/* clear must be the first element! */
@@ -14,7 +14,7 @@ typedef struct {
 	uint32_t block;
 } alloc_record_t;
 
-static void block_alloc_satisfy_callback(chweakref_t * weak, chdesc_t * old, void * data)
+static void block_alloc_satisfy_callback(chweakref_t * weak, patch_t * old, void * data)
 {
 	/* count on clear being the first element */
 	alloc_record_t * record = (alloc_record_t *) weak;
@@ -23,25 +23,25 @@ static void block_alloc_satisfy_callback(chweakref_t * weak, chdesc_t * old, voi
 	free(record);
 }
 
-int block_alloc_set_freed(block_alloc_head_t * alloc, uint32_t block, chdesc_t * clear)
+int block_alloc_set_freed(block_alloc_head_t * alloc, uint32_t block, patch_t * clear)
 {
 	int r;
 	alloc_record_t * record = malloc(sizeof(*record));
 	if(!record)
 		return -ENOMEM;
 	record->block = block;
-	chdesc_weak_retain(clear, &record->clear, block_alloc_satisfy_callback, alloc);
+	patch_weak_retain(clear, &record->clear, block_alloc_satisfy_callback, alloc);
 	r = hash_map_insert(alloc->map, (void *) block, record);
 	if(r < 0)
 	{
-		chdesc_weak_release(&record->clear, 0);
+		patch_weak_release(&record->clear, 0);
 		free(record);
 		return r;
 	}
 	return 0;
 }
 
-int block_alloc_get_freed(block_alloc_head_t * alloc, uint32_t block, chdesc_t ** head)
+int block_alloc_get_freed(block_alloc_head_t * alloc, uint32_t block, patch_t ** head)
 {
 	alloc_record_t * record = (alloc_record_t *) hash_map_find_val(alloc->map, (void *) block);
 	if(!record)
@@ -52,8 +52,8 @@ int block_alloc_get_freed(block_alloc_head_t * alloc, uint32_t block, chdesc_t *
 		*head = WEAK(record->clear);
 	else
 	{
-		chdesc_t * noop;
-		int r = chdesc_create_noop_list(NULL, &noop, record->clear, *head, NULL);
+		patch_t * noop;
+		int r = patch_create_noop_list(NULL, &noop, record->clear, *head, NULL);
 		if(r < 0)
 			return r;
 		*head = noop;
@@ -67,7 +67,7 @@ int block_alloc_notify_alloc(block_alloc_head_t * alloc, uint32_t block)
 	if(!record)
 		return 0;
 	hash_map_erase(alloc->map, (void *) block);
-	chdesc_weak_release(&record->clear, 0);
+	patch_weak_release(&record->clear, 0);
 	free(record);
 	return 0;
 }
@@ -88,4 +88,4 @@ void block_alloc_head_destroy(block_alloc_head_t * alloc)
 	alloc->map = NULL;
 }
 
-#endif /* CHDESC_WEAKREF_CALLBACKS */
+#endif /* PATCH_WEAKREF_CALLBACKS */

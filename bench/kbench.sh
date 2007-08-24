@@ -1,12 +1,12 @@
 #!/bin/sh
-# kkfsd benchmark automater
+# kfstitchd benchmark automater
 
 NRUNS=1
 TIME_LOG=time.log
 PROF_LOG=prof.log
 DISK=${DISK:-/dev/sdb}
 JOURNAL=${JOURNAL:-0}
-KMNT=kfs:/
+KMNT=fstitch:/
 MNT=/mnt/test
 TARFILE=linux-2.6.15.tar
 TAROUT=linux-2.6.15
@@ -14,31 +14,31 @@ VMLINUX=/lib/modules/`uname -r`/source/vmlinux
 
 WRAP_PID=0
 
-function start_kfsd() {
+function start_fstitchd() {
 	#mkfs.ext3 -b 4096 $DISK || exit 1
 	#mount -t ext3 $DISK $MNT || exit 1
 	#~frost/acctrd/acctrdctl -s $DISK || exit 1
 
 	if [ "$NWBBLOCKS" == "" ]; then
-		insmod kfs/kkfsd.ko linux_device=$DISK use_journal=$JOURNAL || exit 1
+		insmod fscore/kfstitchd.ko linux_device=$DISK use_journal=$JOURNAL || exit 1
 	else
-		insmod kfs/kkfsd.ko linux_device=$DISK use_journal=$JOURNAL nwbblocks="$NWBBLOCKS" || exit 1
+		insmod fscore/kfstitchd.ko linux_device=$DISK use_journal=$JOURNAL nwbblocks="$NWBBLOCKS" || exit 1
 	fi
-	if [ -f /proc/kkfsd_debug ]
+	if [ -f /proc/kfstitchd_debug ]
 	then
-		echo "Start reading from /proc/kkfsd_debug, then press enter."
+		echo "Start reading from /proc/kfstitchd_debug, then press enter."
 		read
 	fi
-	mount -t kfs "$KMNT" "$MNT"
-	if [ $? -ne 0 ]; then rmmod kkfsd; exit 1; fi
+	mount -t fstitch "$KMNT" "$MNT"
+	if [ $? -ne 0 ]; then rmmod kfstitchd; exit 1; fi
 	[ $PROFILE -eq 1 ] && (opcontrol --start; opcontrol --reset)
 }
 
-function stop_kfsd() {
+function stop_fstitchd() {
 	[ $PROFILE -eq 1 ] && (opcontrol --stop; opcontrol --dump)
 	umount "$MNT" || echo "umount "$MNT" failed: $?"
 	#~frost/acctrd/acctrdctl -s $DISK || exit 1
-	rmmod kkfsd || echo "rmmod kkfsd failed: $?"
+	rmmod kfstitchd || echo "rmmod kfstitchd failed: $?"
 }
 
 function time_test() {
@@ -192,15 +192,15 @@ do
 	cat "$TARFILE" > /dev/null || exit 1
 	echo "."
 
-	start_kfsd
+	start_fstitchd
 
 	time_test tar bash -c "time tar -C \"$MNT/\" -xf \"$TARFILE\"; time obj/util/fsync \"$MNT/\""
 	time_test rm bash -c "time rm -rf \"$MNT/$TAROUT/\"; time obj/util/fsync \"$MNT/\""
 
-	stop_kfsd
+	stop_fstitchd
 
 	echo "==== `date`" >> "$PROF_LOG"
-	[ $PROFILE -eq 1 ] && opreport -l -g -p kfs/ -t $TP | su $REAL_USER -c "tee -a \"$PROF_LOG\""
+	[ $PROFILE -eq 1 ] && opreport -l -g -p fscore/ -t $TP | su $REAL_USER -c "tee -a \"$PROF_LOG\""
 done
 
 echo "---- complete"

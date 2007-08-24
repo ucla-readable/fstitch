@@ -1,5 +1,5 @@
 #! /usr/bin/env perl
-# Filter unnecessary chdesc dot elements from stdin and write to stdout
+# Filter unnecessary patch dot elements from stdin and write to stdout
 
 my %overlaps = ();
 

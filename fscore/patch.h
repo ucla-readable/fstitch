@@ -1,30 +1,30 @@
-#ifndef __KUDOS_KFS_CHDESC_H
-#define __KUDOS_KFS_CHDESC_H
+#ifndef __FSTITCH_FSCORE_PATCH_H
+#define __FSTITCH_FSCORE_PATCH_H
 
-#define CHDESC_MARKED          0x01 /* marker for graph traversal */
-#define CHDESC_ROLLBACK        0x02 /* chdesc is rolled back */
-#define CHDESC_WRITTEN         0x04 /* chdesc has been written to disk */
-#define CHDESC_FREEING         0x08 /* chdesc is being freed */
-#define CHDESC_DATA            0x10 /* user data change (not metadata) */
-#define CHDESC_BIT_NOOP        0x20 /* bit_changes NOOP chdesc */
-#define CHDESC_OVERLAP         0x40 /* overlaps another chdesc completely */
-#define CHDESC_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
-#define CHDESC_SET_NOOP       0x100 /* NOOP whose would-be afters get its befores instead */
-#define CHDESC_INFLIGHT       0x200 /* chdesc is being written to disk */
-#define CHDESC_NO_OPGROUP     0x400 /* chdesc is exempt from opgroup tops */
-#define CHDESC_FULLOVERLAP    0x800 /* overlapped by current chdesc completely */
+#define PATCH_MARKED          0x01 /* marker for graph traversal */
+#define PATCH_ROLLBACK        0x02 /* patch is rolled back */
+#define PATCH_WRITTEN         0x04 /* patch has been written to disk */
+#define PATCH_FREEING         0x08 /* patch is being freed */
+#define PATCH_DATA            0x10 /* user data change (not metadata) */
+#define PATCH_BIT_NOOP        0x20 /* bit_changes NOOP patch */
+#define PATCH_OVERLAP         0x40 /* overlaps another patch completely */
+#define PATCH_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
+#define PATCH_SET_NOOP       0x100 /* NOOP whose would-be afters get its befores instead */
+#define PATCH_INFLIGHT       0x200 /* patch is being written to disk */
+#define PATCH_NO_PATCHGROUP     0x400 /* patch is exempt from patchgroup tops */
+#define PATCH_FULLOVERLAP    0x800 /* overlapped by current patch completely */
 
-#define CHDESC_CYCLE_CHECK 0
-#define CHDESC_BYTE_SUM 0
+#define PATCH_CYCLE_CHECK 0
+#define PATCH_BYTE_SUM 0
 
 #ifndef CONSTANTS_ONLY
 
 #include <lib/hash_map.h>
-#include <kfs/bdesc.h>
+#include <fscore/bdesc.h>
 
-#define CHDESC_LOCALDATA 4
+#define PATCH_LOCALDATA 4
 
-struct chdesc {
+struct patch {
 	BD_t * owner;
 	bdesc_t * block;
 	
@@ -42,11 +42,11 @@ struct chdesc {
 			uint32_t or;
 		} bit;
 		struct {
-			/* NULL data implies chdesc need not (and cannot) be rolled back */
+			/* NULL data implies patch need not (and cannot) be rolled back */
 			uint8_t * data;
-			uint8_t ldata[CHDESC_LOCALDATA];
+			uint8_t ldata[PATCH_LOCALDATA];
 			//uint16_t satisfy_freed;
-#if CHDESC_BYTE_SUM
+#if PATCH_BYTE_SUM
 			uint16_t old_sum, new_sum;
 #endif
 		} byte;
@@ -68,210 +68,210 @@ struct chdesc {
 	uint32_t nbefores[NBDLEVEL];
 
 	/* entry in the free list */
-	/* TODO: can a chdesc be an entry in the free list and all_changes at
+	/* TODO: can a patch be an entry in the free list and all_changes at
 	 * the same time? If not, we can unionize these. */
-	chdesc_t * free_prev;
-	chdesc_t * free_next;
+	patch_t * free_prev;
+	patch_t * free_next;
 
 	/* entry in the datadesc_t.all_changes list */
-	/* TODO: change all_changes to be not_ready_changes so that a chdesc
+	/* TODO: change all_changes to be not_ready_changes so that a patch
 	 * is in only one of these lists; reduces these 4 fields to 2. */
-	chdesc_t * ddesc_next;
-	chdesc_t ** ddesc_pprev;
+	patch_t * ddesc_next;
+	patch_t ** ddesc_pprev;
 
 	/* entry in the datadesc_t.ready_changes list */
-	chdesc_t * ddesc_ready_next;
-	chdesc_t ** ddesc_ready_pprev;
+	patch_t * ddesc_ready_next;
+	patch_t ** ddesc_ready_pprev;
 
 	/* entry in the datadesc_t.index_changes list */
-	chdesc_t * ddesc_index_next;
-	chdesc_t ** ddesc_index_pprev;
+	patch_t * ddesc_index_next;
+	patch_t ** ddesc_index_pprev;
 	
 	/* entry in a temporary list */
 	/* TODO: are these two and the ddesc_ready/free fields used concurrently ?
 	 *       or, is tmp_pprev needed? */
-	chdesc_t * tmp_next;
-	chdesc_t ** tmp_pprev;
+	patch_t * tmp_next;
+	patch_t ** tmp_pprev;
 
-	chdesc_t * overlap_next;
-	chdesc_t ** overlap_pprev;
+	patch_t * overlap_next;
+	patch_t ** overlap_pprev;
 };
 
 struct chdepdesc {
 	struct {
 		chdepdesc_t ** ptr;
-		chdesc_t * desc;
+		patch_t * desc;
 		chdepdesc_t * next;
 	} before, after;
 };
 
-/* chdesc pass sets allow easy prepending of new chdescs to argument lists */
-struct chdesc_pass_set {
-	struct chdesc_pass_set * next;
+/* patch pass sets allow easy prepending of new patchs to argument lists */
+struct patch_pass_set {
+	struct patch_pass_set * next;
 	ssize_t size;
 	/* must be last */
 	union {
-		chdesc_t * array[0];
+		patch_t * array[0];
 		/* when size is negative, use list rather than array */
-		chdesc_t ** list;
+		patch_t ** list;
 	};
 };
 
-#define CHDESC_PASS_SET_TYPE(n) struct { chdesc_pass_set_t * next; ssize_t size; chdesc_t * array[n]; }
-#define DEFINE_CHDESC_PASS_SET(name, n, base) CHDESC_PASS_SET_TYPE(n) name = {.next = base, .size = n}
-#define PASS_CHDESC_SET(set) ((chdesc_pass_set_t *) (void *) &(set))
+#define PATCH_PASS_SET_TYPE(n) struct { patch_pass_set_t * next; ssize_t size; patch_t * array[n]; }
+#define DEFINE_PATCH_PASS_SET(name, n, base) PATCH_PASS_SET_TYPE(n) name = {.next = base, .size = n}
+#define PASS_PATCH_SET(set) ((patch_pass_set_t *) (void *) &(set))
 
-int chdesc_init(void);
+int patch_init(void);
 
-/* create new chdescs */
+/* create new patchs */
 /* create a noop using a pass set */
-int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * befores);
+int patch_create_noop_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * befores);
 /* create a noop using befores array */
-int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[]);
+int patch_create_noop_array(BD_t * owner, patch_t ** tail, size_t nbefores, patch_t * befores[]);
 /* create a noop using the NULL-terminated befores var_arg */
-int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...);
-int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head);
-int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, chdesc_t ** tail, chdesc_pass_set_t * befores);
-static inline int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head) __attribute__((always_inline));
-static inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores) __attribute__((always_inline));
-static inline int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head) __attribute__((always_inline));
-static inline int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head) __attribute__((always_inline));
+int patch_create_noop_list(BD_t * owner, patch_t ** tail, ...);
+int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, patch_t ** head);
+int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, patch_t ** tail, patch_pass_set_t * befores);
+static inline int patch_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, patch_t ** head) __attribute__((always_inline));
+static inline int patch_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, patch_t ** tail, patch_pass_set_t * befores) __attribute__((always_inline));
+static inline int patch_create_init(bdesc_t * block, BD_t * owner, patch_t ** head) __attribute__((always_inline));
+static inline int patch_create_full(bdesc_t * block, BD_t * owner, void * data, patch_t ** head) __attribute__((always_inline));
 
-/* like chdesc_create_byte(), but guarantees to only create a single chdesc */
-int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head);
+/* like patch_create_byte(), but guarantees to only create a single patch */
+int patch_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, patch_t ** head);
 
-static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc) __attribute__((always_inline));
+static __inline bool patch_is_rollbackable(const patch_t * patch) __attribute__((always_inline));
 
 /* return the maximum before BD level */
-static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc) __attribute__((always_inline));
+static __inline uint16_t patch_before_level(const patch_t * patch) __attribute__((always_inline));
 
-/* return the BD level of chdesc_t * 'chdesc' */
-static __inline uint16_t chdesc_level(const chdesc_t * chdesc) __attribute__((always_inline));
+/* return the BD level of patch_t * 'patch' */
+static __inline uint16_t patch_level(const patch_t * patch) __attribute__((always_inline));
 
-/* propagate a level change to chdesc->afters, from 'prev_level' to 'new_level' */
-void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level);
+/* propagate a level change to patch->afters, from 'prev_level' to 'new_level' */
+void patch_propagate_level_change(patch_t * patch, uint16_t prev_level, uint16_t new_level);
 
 /* check whether two change descriptors overlap, even on different blocks */
-static inline int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b);
+static inline int patch_overlap_check(const patch_t * a, const patch_t * b);
 
 /* add a dependency from 'after' on 'before' */
-static inline int chdesc_add_depend(chdesc_t * after, chdesc_t * before);
-int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before);
+static inline int patch_add_depend(patch_t * after, patch_t * before);
+int patch_add_depend_no_cycles(patch_t * after, patch_t * before);
 
 /* remove a dependency from 'after' on 'before' */
-void chdesc_remove_depend(chdesc_t * after, chdesc_t * before);
+void patch_remove_depend(patch_t * after, patch_t * before);
 /* remove the given dependency */
-void chdesc_dep_remove(chdepdesc_t * dep);
+void patch_dep_remove(chdepdesc_t * dep);
 
-#include <kfs/revision.h>
+#include <fscore/revision.h>
 
-#if CHDESC_BYTE_SUM && !REVISION_TAIL_INPLACE
-#error CHDESC_BYTE_SUM is incompatible with !REVISION_TAIL_INPLACE
+#if PATCH_BYTE_SUM && !REVISION_TAIL_INPLACE
+#error PATCH_BYTE_SUM is incompatible with !REVISION_TAIL_INPLACE
 #endif
 
 /* apply and roll back change descriptors */
-int chdesc_apply(chdesc_t * chdesc);
+int patch_apply(patch_t * patch);
 #if REVISION_TAIL_INPLACE
-int chdesc_rollback(chdesc_t * chdesc);
+int patch_rollback(patch_t * patch);
 #else
-int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer);
+int patch_rollback(patch_t * patch, uint8_t * buffer);
 #endif
 
-/* mark chdesc as inflight */
-void chdesc_set_inflight(chdesc_t * chdesc);
+/* mark patch as inflight */
+void patch_set_inflight(patch_t * patch);
 
-/* satisfy a change descriptor, i.e. remove it from all others that depend on it and add it to the list of written chdescs */
-int chdesc_satisfy(chdesc_t ** chdesc);
+/* satisfy a change descriptor, i.e. remove it from all others that depend on it and add it to the list of written patchs */
+int patch_satisfy(patch_t ** patch);
 
-/* create and remove weak references to a chdesc */
-#if !CHDESC_WEAKREF_CALLBACKS
+/* create and remove weak references to a patch */
+#if !PATCH_WEAKREF_CALLBACKS
 /* these macros will adjust the function definitions and prototypes as well as callsites... */
-#define chdesc_weak_retain(chdesc, weak, callback, data) chdesc_weak_retain(chdesc, weak)
-#define chdesc_weak_release(weak, callback) chdesc_weak_release(weak)
+#define patch_weak_retain(patch, weak, callback, data) patch_weak_retain(patch, weak)
+#define patch_weak_release(weak, callback) patch_weak_release(weak)
 #endif
-void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data);
-static inline void chdesc_weak_release(chweakref_t * weak, bool callback);
-#define WEAK_INIT(weak) ((weak).chdesc = NULL)
-#define WEAK(weak) ((weak).chdesc)
+void patch_weak_retain(patch_t * patch, chweakref_t * weak, patch_satisfy_callback_t callback, void * callback_data);
+static inline void patch_weak_release(chweakref_t * weak, bool callback);
+#define WEAK_INIT(weak) ((weak).patch = NULL)
+#define WEAK(weak) ((weak).patch)
 
-/* destroy a chdesc, actually freeing it - be careful calling this function */
-void chdesc_destroy(chdesc_t ** chdesc);
+/* destroy a patch, actually freeing it - be careful calling this function */
+void patch_destroy(patch_t ** patch);
 
-/* remove a new NOOP chdesc from the free list without adding a dependency */
-void chdesc_claim_noop(chdesc_t * chdesc);
-/* add a NOOP chdesc with no dependencies back to the free list */
-void chdesc_autorelease_noop(chdesc_t * chdesc);
+/* remove a new NOOP patch from the free list without adding a dependency */
+void patch_claim_noop(patch_t * patch);
+/* add a NOOP patch with no dependencies back to the free list */
+void patch_autorelease_noop(patch_t * patch);
 
-/* mark a NOOP chdesc as a set NOOP: would-be afters get its befores instead */
-void chdesc_set_noop_declare(chdesc_t * chdesc);
+/* mark a NOOP patch as a set NOOP: would-be afters get its befores instead */
+void patch_set_noop_declare(patch_t * patch);
 
-/* reclaim written chdescs, by chdesc_destroy() on them */
-void chdesc_reclaim_written(void);
+/* reclaim written patchs, by patch_destroy() on them */
+void patch_reclaim_written(void);
 
-/* link chdesc into its ddesc's all_changes list */
-static inline void chdesc_link_all_changes(chdesc_t * chdesc);
-/* unlink chdesc from its ddesc's all_changes list */
-static inline void chdesc_unlink_all_changes(chdesc_t * chdesc);
+/* link patch into its ddesc's all_changes list */
+static inline void patch_link_all_changes(patch_t * patch);
+/* unlink patch from its ddesc's all_changes list */
+static inline void patch_unlink_all_changes(patch_t * patch);
 
-/* link chdesc into its ddesc's ready_changes list */
-static inline void chdesc_link_ready_changes(chdesc_t * chdesc);
-/* unlink chdesc from its ddesc's ready_changes list */
-static inline void chdesc_unlink_ready_changes(chdesc_t * chdesc);
-/* ensure chdesc is properly linked into/unlinked from its ddesc's ready_changes list */
-static __inline void chdesc_update_ready_changes(chdesc_t * chdesc) __attribute__((always_inline));
+/* link patch into its ddesc's ready_changes list */
+static inline void patch_link_ready_changes(patch_t * patch);
+/* unlink patch from its ddesc's ready_changes list */
+static inline void patch_unlink_ready_changes(patch_t * patch);
+/* ensure patch is properly linked into/unlinked from its ddesc's ready_changes list */
+static __inline void patch_update_ready_changes(patch_t * patch) __attribute__((always_inline));
 
-/* link chdesc into its ddesc's index_changes list */
-static inline void chdesc_link_index_changes(chdesc_t * chdesc);
-/* unlink chdesc from its ddesc's index_changes list */
-static inline void chdesc_unlink_index_changes(chdesc_t * chdesc);
+/* link patch into its ddesc's index_changes list */
+static inline void patch_link_index_changes(patch_t * patch);
+/* unlink patch from its ddesc's index_changes list */
+static inline void patch_unlink_index_changes(patch_t * patch);
 
-void chdesc_tmpize_all_changes(chdesc_t * chdesc);
-void chdesc_untmpize_all_changes(chdesc_t * chdesc);
+void patch_tmpize_all_changes(patch_t * patch);
+void patch_untmpize_all_changes(patch_t * patch);
 
 
 /* Implementations of inline functions */
 
-static __inline bool chdesc_is_rollbackable(const chdesc_t * chdesc)
+static __inline bool patch_is_rollbackable(const patch_t * patch)
 {
-	return chdesc->type != BYTE || chdesc->byte.data;
+	return patch->type != BYTE || patch->byte.data;
 }
 
-static __inline uint16_t chdesc_before_level(const chdesc_t * chdesc)
+static __inline uint16_t patch_before_level(const patch_t * patch)
 {
 	int i;
 	for(i = NBDLEVEL; i > 0; i--)
-		if(chdesc->nbefores[i - 1])
+		if(patch->nbefores[i - 1])
 			return i - 1;
 	return BDLEVEL_NONE;
 }
 
 /* FIXME: INFLIGHT's l+1 can be incorrect when the module above l has multiple
  * paths to stable storage. */
-static __inline uint16_t chdesc_level(const chdesc_t * chdesc)
+static __inline uint16_t patch_level(const patch_t * patch)
 {
-	const chdesc_t * __chdesc = (chdesc);
-	assert(!__chdesc->block || __chdesc->owner);
-	/* in-flight chdescs have +1 to their level to prevent other chdescs from following */
-	return __chdesc->owner ? __chdesc->owner->level + ((chdesc->flags & CHDESC_INFLIGHT) ? 1 : 0): chdesc_before_level(__chdesc);
+	const patch_t * __patch = (patch);
+	assert(!__patch->block || __patch->owner);
+	/* in-flight patchs have +1 to their level to prevent other patchs from following */
+	return __patch->owner ? __patch->owner->level + ((patch->flags & PATCH_INFLIGHT) ? 1 : 0): patch_before_level(__patch);
 }
 
-/* return whether chdesc is ready to go down one level */
+/* return whether patch is ready to go down one level */
 /* FIXME: Can be incorrect when the below module's level differs by >1
  * (eg the current module has multiple paths to stable storage). */
-static __inline bool chdesc_is_ready(const chdesc_t * chdesc) __attribute__((always_inline));
-static __inline bool chdesc_is_ready(const chdesc_t * chdesc)
+static __inline bool patch_is_ready(const patch_t * patch) __attribute__((always_inline));
+static __inline bool patch_is_ready(const patch_t * patch)
 {
 	/* empty noops are not on blocks and so cannot be on a ready list */
-	if(!chdesc->owner)
+	if(!patch->owner)
 		return 0;
-	uint16_t before_level = chdesc_before_level(chdesc);
-	return before_level < chdesc->owner->level || before_level == BDLEVEL_NONE;
+	uint16_t before_level = patch_before_level(patch);
+	return before_level < patch->owner->level || before_level == BDLEVEL_NONE;
 }
 
-static __inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** tail, chdesc_pass_set_t * befores)
+static __inline int patch_create_byte_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, patch_t ** tail, patch_pass_set_t * befores)
 {
 	assert(&bdesc_data(block)[offset] != data);
-	int r = chdesc_create_byte_basic(block, owner, offset, length, tail, befores);
+	int r = patch_create_byte_basic(block, owner, offset, length, tail, befores);
 	if (r >= 0) {
 		if (data)
 			memcpy(&bdesc_data(block)[offset], data, length);
@@ -281,97 +281,97 @@ static __inline int chdesc_create_byte_set(bdesc_t * block, BD_t * owner, uint16
 	return r;
 }
 
-static __inline int chdesc_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
+static __inline int patch_create_byte(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, patch_t ** head)
 {
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	DEFINE_PATCH_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return chdesc_create_byte_set(block, owner, offset, length, data, head, PASS_CHDESC_SET(set));
+	return patch_create_byte_set(block, owner, offset, length, data, head, PASS_PATCH_SET(set));
 }
 
-static __inline int chdesc_create_init(bdesc_t * block, BD_t * owner, chdesc_t ** head)
+static __inline int patch_create_init(bdesc_t * block, BD_t * owner, patch_t ** head)
 {
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	DEFINE_PATCH_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return chdesc_create_byte_set(block, owner, 0, block->length, NULL, head, PASS_CHDESC_SET(set));
+	return patch_create_byte_set(block, owner, 0, block->length, NULL, head, PASS_PATCH_SET(set));
 }
 
-static __inline int chdesc_create_full(bdesc_t * block, BD_t * owner, void * data, chdesc_t ** head)
+static __inline int patch_create_full(bdesc_t * block, BD_t * owner, void * data, patch_t ** head)
 {
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	DEFINE_PATCH_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return chdesc_create_byte_set(block, owner, 0, block->length, data, head, PASS_CHDESC_SET(set));
+	return patch_create_byte_set(block, owner, 0, block->length, data, head, PASS_PATCH_SET(set));
 }
 
-static inline void chdesc_link_all_changes(chdesc_t * chdesc)
+static inline void patch_link_all_changes(patch_t * patch)
 {
-	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
-	if(chdesc->block)
+	assert(!patch->ddesc_next && !patch->ddesc_pprev);
+	if(patch->block)
 	{
-		bdesc_t * bdesc = chdesc->block;
-		chdesc->ddesc_pprev = &bdesc->all_changes;
-		chdesc->ddesc_next = bdesc->all_changes;
-		bdesc->all_changes = chdesc;
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+		bdesc_t * bdesc = patch->block;
+		patch->ddesc_pprev = &bdesc->all_changes;
+		patch->ddesc_next = bdesc->all_changes;
+		bdesc->all_changes = patch;
+		if(patch->ddesc_next)
+			patch->ddesc_next->ddesc_pprev = &patch->ddesc_next;
 		else
-			bdesc->all_changes_tail = &chdesc->ddesc_next;
+			bdesc->all_changes_tail = &patch->ddesc_next;
 	}
 }
 
-static inline void chdesc_unlink_all_changes(chdesc_t * chdesc)
+static inline void patch_unlink_all_changes(patch_t * patch)
 {
-	if(chdesc->ddesc_pprev)
+	if(patch->ddesc_pprev)
 	{
-		bdesc_t * bdesc = chdesc->block;
+		bdesc_t * bdesc = patch->block;
 		// remove from old ddesc changes list
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
+		if(patch->ddesc_next)
+			patch->ddesc_next->ddesc_pprev = patch->ddesc_pprev;
 		else
-			bdesc->all_changes_tail = chdesc->ddesc_pprev;
-		*chdesc->ddesc_pprev = chdesc->ddesc_next;
-		chdesc->ddesc_next = NULL;
-		chdesc->ddesc_pprev = NULL;
+			bdesc->all_changes_tail = patch->ddesc_pprev;
+		*patch->ddesc_pprev = patch->ddesc_next;
+		patch->ddesc_next = NULL;
+		patch->ddesc_pprev = NULL;
 	}
 	else
-		assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+		assert(!patch->ddesc_next && !patch->ddesc_pprev);
 }
 
 #define DEFINE_LINK_CHANGES(name, index) \
-static inline void chdesc_link_##name##_changes(chdesc_t * chdesc) \
+static inline void patch_link_##name##_changes(patch_t * patch) \
 { \
-	assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
-	if(chdesc->block) \
+	assert(!patch->ddesc_##name##_next && !patch->ddesc_##name##_pprev); \
+	if(patch->block) \
 	{ \
-		bdesc_t * bdesc = chdesc->block; \
-		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->owner->index]; \
-		chdesc->ddesc_##name##_pprev = &rcl->head; \
-		chdesc->ddesc_##name##_next = rcl->head; \
-		rcl->head = chdesc; \
-		if(chdesc->ddesc_##name##_next) \
-			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = &chdesc->ddesc_##name##_next; \
+		bdesc_t * bdesc = patch->block; \
+		patch_dlist_t * rcl = &bdesc->name##_changes[patch->owner->index]; \
+		patch->ddesc_##name##_pprev = &rcl->head; \
+		patch->ddesc_##name##_next = rcl->head; \
+		rcl->head = patch; \
+		if(patch->ddesc_##name##_next) \
+			patch->ddesc_##name##_next->ddesc_##name##_pprev = &patch->ddesc_##name##_next; \
 		else \
-			rcl->tail = &chdesc->ddesc_##name##_next; \
+			rcl->tail = &patch->ddesc_##name##_next; \
 	} \
 }
 
 #define DEFINE_UNLINK_CHANGES(name, index) \
-static inline void chdesc_unlink_##name##_changes(chdesc_t * chdesc) \
+static inline void patch_unlink_##name##_changes(patch_t * patch) \
 { \
-	if(chdesc->ddesc_##name##_pprev) \
+	if(patch->ddesc_##name##_pprev) \
 	{ \
-		bdesc_t * bdesc = chdesc->block; \
-		chdesc_dlist_t * rcl = &bdesc->name##_changes[chdesc->owner->index]; \
+		bdesc_t * bdesc = patch->block; \
+		patch_dlist_t * rcl = &bdesc->name##_changes[patch->owner->index]; \
 		/* remove from old ddesc changes list */ \
-		if(chdesc->ddesc_##name##_next) \
-			chdesc->ddesc_##name##_next->ddesc_##name##_pprev = chdesc->ddesc_##name##_pprev; \
+		if(patch->ddesc_##name##_next) \
+			patch->ddesc_##name##_next->ddesc_##name##_pprev = patch->ddesc_##name##_pprev; \
 		else \
-			rcl->tail = chdesc->ddesc_##name##_pprev; \
-		*chdesc->ddesc_##name##_pprev = chdesc->ddesc_##name##_next; \
-		chdesc->ddesc_##name##_next = NULL; \
-		chdesc->ddesc_##name##_pprev = NULL; \
+			rcl->tail = patch->ddesc_##name##_pprev; \
+		*patch->ddesc_##name##_pprev = patch->ddesc_##name##_next; \
+		patch->ddesc_##name##_next = NULL; \
+		patch->ddesc_##name##_pprev = NULL; \
 	} \
 	else \
-		assert(!chdesc->ddesc_##name##_next && !chdesc->ddesc_##name##_pprev); \
+		assert(!patch->ddesc_##name##_next && !patch->ddesc_##name##_pprev); \
 }
 
 /* confuse ctags */
@@ -380,25 +380,25 @@ DEFINE_UNLINK_CHANGES(ready, level);
 DEFINE_LINK_CHANGES(index, graph_index);
 DEFINE_UNLINK_CHANGES(index, graph_index);
 
-static __inline void chdesc_update_ready_changes(chdesc_t * chdesc)
+static __inline void patch_update_ready_changes(patch_t * patch)
 {
-	bool is_ready = chdesc_is_ready(chdesc);
-	bool is_in_ready_list = chdesc->ddesc_ready_pprev != NULL;
+	bool is_ready = patch_is_ready(patch);
+	bool is_in_ready_list = patch->ddesc_ready_pprev != NULL;
 	if(is_in_ready_list)
 	{
 		if(!is_ready)
-			chdesc_unlink_ready_changes(chdesc);
+			patch_unlink_ready_changes(patch);
 	}
 	else
 	{
 		if(is_ready)
-			chdesc_link_ready_changes(chdesc);
+			patch_link_ready_changes(patch);
 	}
 }
 
-#if CHDESC_BYTE_SUM
+#if PATCH_BYTE_SUM
 /* stupid little checksum, just to try and make sure we get the same data */
-static __inline uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
+static __inline uint16_t patch_byte_sum(uint8_t * data, size_t length)
 {
 	uint16_t sum = 0x5AFE;
 	while(length-- > 0)
@@ -411,51 +411,51 @@ static __inline uint16_t chdesc_byte_sum(uint8_t * data, size_t length)
 }
 #endif
 
-static inline void chdesc_weak_release(chweakref_t * weak, bool callback)
+static inline void patch_weak_release(chweakref_t * weak, bool callback)
 {
-	if(weak->chdesc)
+	if(weak->patch)
 	{
-#if CHDESC_WEAKREF_CALLBACKS || KFS_DEBUG
-		chdesc_t * old = weak->chdesc;
+#if PATCH_WEAKREF_CALLBACKS || FSTITCH_DEBUG
+		patch_t * old = weak->patch;
 #endif
-		weak->chdesc = NULL;
+		weak->patch = NULL;
 		*weak->pprev = weak->next;
 		if(weak->next)
 			weak->next->pprev = weak->pprev;
-#if CHDESC_WEAKREF_CALLBACKS
+#if PATCH_WEAKREF_CALLBACKS
 		/* notice that we do not touch weak again after the
 		 * callback, so it can free it if it wants */
 		if(callback && weak->callback)
 			weak->callback(weak, old, weak->callback_data);
 #endif
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_FORGET, old, weak);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_WEAK_FORGET, old, weak);
 	}
 }
 
 /* add a dependency between change descriptors */
-static inline int chdesc_add_depend(chdesc_t * after, chdesc_t * before)
+static inline int patch_add_depend(patch_t * after, patch_t * before)
 {
 	/* compensate for Heisenberg's uncertainty principle */
 	assert(after && before);
 	
 	/* avoid creating a dependency loop */
-#if CHDESC_CYCLE_CHECK
-	if(after == before || chdesc_has_before(before, after))
+#if PATCH_CYCLE_CHECK
+	if(after == before || patch_has_before(before, after))
 	{
-		printf("%s(): (%s:%d): Avoided recursive dependency! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, KFS_DEBUG_COUNT());
+		printf("%s(): (%s:%d): Avoided recursive dependency! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, FSTITCH_DEBUG_COUNT());
 		assert(0);
 		return -EINVAL;
 	}
-	/* chdesc_has_before() marks the DAG rooted at "before" so we must unmark it */
-	chdesc_unmark_graph(before);
+	/* patch_has_before() marks the DAG rooted at "before" so we must unmark it */
+	patch_unmark_graph(before);
 #endif
 	
-	return chdesc_add_depend_no_cycles(after, before);
+	return patch_add_depend_no_cycles(after, before);
 }
 
-/* CRUCIAL NOTE: does *not* check whether the chdescs are on the same ddesc */
+/* CRUCIAL NOTE: does *not* check whether the patchs are on the same ddesc */
 /* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
-static inline int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
+static inline int patch_overlap_check(const patch_t * a, const patch_t * b)
 {
 	// Given that noops have offset and length 0, don't need to check
 	// for them explicitly!
@@ -466,7 +466,7 @@ static inline int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
 	   || b->offset >= a->offset + a->length)
 		return 0;
 	
-	/* two bit chdescs overlap if they modify the same bits */
+	/* two bit patchs overlap if they modify the same bits */
 	if(a->type == BIT && b->type == BIT)
 	{
 		assert(a->offset == b->offset);
@@ -484,8 +484,8 @@ static inline int chdesc_overlap_check(const chdesc_t * a, const chdesc_t * b)
 }
 
 /* also include utility functions */
-#include <kfs/chdesc_util.h>
+#include <fscore/patch_util.h>
 
 #endif /* CONSTANTS_ONLY */
 
-#endif /* __KUDOS_KFS_CHDESC_H */
+#endif /* __FSTITCH_FSCORE_PATCH_H */

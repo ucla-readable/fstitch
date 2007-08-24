@@ -1,5 +1,5 @@
-#ifndef KUDOS_LIB_STDARG_H
-#define KUDOS_LIB_STDARG_H
+#ifndef FSTITCH_LIB_STDARG_H
+#define FSTITCH_LIB_STDARG_H
 
 #include <linux/kernel.h>
 // kernel va_arg does not allow types less than sizeof(int), so cast these to
@@ -9,4 +9,4 @@
 //#define va_arg(ap, type) (assert(sizeof(int) >= sizeof(type)), (type) __builtin_va_arg(ap, int))
 #define va_arg(ap, type) (type) __builtin_va_arg(ap, int)
 
-#endif // !KUDOS_LIB_STDARG_H
+#endif // !FSTITCH_LIB_STDARG_H

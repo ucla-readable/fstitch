@@ -2,7 +2,7 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 
 function usage () {
 	echo "About: Generate space plot for a given test"
@@ -39,16 +39,16 @@ fi
 DATA=`mktemp plot_space.XXXXXX` || exit 1
 trap "rm -f $DATA" EXIT
 
-for test in `ls $KUDOSDIR/tests/`; do
-#	echo "`cat $KUDOSDIR/tests/$test/host` `cat $KUDOSDIR/tests/$test/diskcache` `cat $KUDOSDIR/tests/$test/fs` `cat $KUDOSDIR/tests/$test/consistency_mode` `cat $KUDOSDIR/tests/$test/app_consistency_mode`"
-	if [ "`cat $KUDOSDIR/tests/$test/host`" != "kudos" ] || [ "`cat $KUDOSDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $KUDOSDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $KUDOSDIR/tests/$test/consistency_mode`" != "su" ] || [ "`cat $KUDOSDIR/tests/$test/app_consistency_mode`" != "opgroup" ]; then continue; fi
+for test in `ls $FSTITCHDIR/tests/`; do
+#	echo "`cat $FSTITCHDIR/tests/$test/host` `cat $FSTITCHDIR/tests/$test/diskcache` `cat $FSTITCHDIR/tests/$test/fs` `cat $FSTITCHDIR/tests/$test/consistency_mode` `cat $FSTITCHDIR/tests/$test/app_consistency_mode`"
+	if [ "`cat $FSTITCHDIR/tests/$test/host`" != "fsttich" ] || [ "`cat $FSTITCHDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $FSTITCHDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $FSTITCHDIR/tests/$test/consistency_mode`" != "su" ] || [ "`cat $FSTITCHDIR/tests/$test/app_consistency_mode`" != "patchgroup" ]; then continue; fi
 
-	LINE="`$BENCHDIR/ex_space -d $KUDOSDIR/tests/$test -t $TESTNAME`"
+	LINE="`$BENCHDIR/ex_space -d $FSTITCHDIR/tests/$test -t $TESTNAME`"
 	[ -n "$LINE" ] || continue
 	if [ "$KEY" == "time" ] ; then
 		echo -n "$test"
 	elif [ "$KEY" == "rev" ]; then
-		echo -n "`cat $KUDOSDIR/tests/$test/svnversion | sed -r 's/:[0-9]+//;s/M$//'`"
+		echo -n "`cat $FSTITCHDIR/tests/$test/svnversion | sed -r 's/:[0-9]+//;s/M$//'`"
 	fi
 	echo "  $LINE"
 done | sort > $DATA
@@ -70,10 +70,10 @@ set title "$TESTNAME space"
 set output "$OUTDIR/space_${TESTNAME}.png"
 set ylabel "Total space allocated (kBs)"
 plot [:] [0:] \
-	"$DATA" using 1:(\$5*\$6/1024) with linespoints title "bit chdescs", \
-	"$DATA" using 1:(\$10*\$11/1024) with linespoints title "byte chdescs", \
-	"$DATA" using 1:(\$15*\$16/1024) with linespoints title "noop chdescs", \
-	"$DATA" using 1:(\$20*\$21/1024) with linespoints title "all chdescs", \
+	"$DATA" using 1:(\$5*\$6/1024) with linespoints title "bit patchs", \
+	"$DATA" using 1:(\$10*\$11/1024) with linespoints title "byte patchs", \
+	"$DATA" using 1:(\$15*\$16/1024) with linespoints title "noop patchs", \
+	"$DATA" using 1:(\$20*\$21/1024) with linespoints title "all patchs", \
 	"$DATA" using 1:(\$25*\$26/1024) with linespoints title "deps", \
 	"$DATA" using 1:(\$30*\$31/1024) with linespoints title "rollback data"
 EOF

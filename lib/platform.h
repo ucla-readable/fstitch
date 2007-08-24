@@ -1,5 +1,5 @@
-#ifndef __KUDOS_KFS_PLATFORM_H
-#define __KUDOS_KFS_PLATFORM_H
+#ifndef __FSTITCH_FSCORE_PLATFORM_H
+#define __FSTITCH_FSCORE_PLATFORM_H
 
 #ifdef __KERNEL__
 
@@ -137,4 +137,4 @@ static __inline int find_first_zero_bit(const unsigned long * addr, unsigned siz
 // static_assert(x) will generate a compile-time error if 'x' is false.
 #define static_assert(x) switch (x) case 0: case (x):
 
-#endif /* __KUDOS_KFS_PLATFORM_H */
+#endif /* __FSTITCH_FSCORE_PLATFORM_H */

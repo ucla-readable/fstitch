@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SIMPLIFY=~/trunk/kudos/util/chdescdotsimplify
+SIMPLIFY=~/trunk/fsttich/util/patchdotsimplify
 DOT="`which -a dot | tail +2 | head -n 1`"
 
 if [ "${!#%.dot}" != "${!#}" ]

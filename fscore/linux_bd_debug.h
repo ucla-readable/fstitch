@@ -1,5 +1,5 @@
-#ifndef __KUDOS_KFS_LINUX_BD_DEBUG_H
-#define __KUDOS_KFS_LINUX_BD_DEBUG_H
+#ifndef __FSTITCH_FSCORE_LINUX_BD_DEBUG_H
+#define __FSTITCH_FSCORE_LINUX_BD_DEBUG_H
 
 /* Acceptable constants for UFS and ext2 linux-2.6.15 untar */
 #define MAXBLOCKNO 557056

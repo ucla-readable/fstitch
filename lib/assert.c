@@ -3,7 +3,7 @@
 #include <linux/reboot.h>
 #include <asm/bug.h>
 
-#include <kfs/kernel_serve.h>
+#include <fscore/kernel_serve.h>
 #include <lib/kernel-assert.h>
 
 #define REBOOT 1
@@ -13,7 +13,7 @@ int assert_failed = 0;
 void assert_fail(void)
 {
 	dump_stack();
-	kfsd_global_lock.locked = 0;
+	fstitchd_global_lock.locked = 0;
 	assert_failed = 1;
 	
 #if REBOOT

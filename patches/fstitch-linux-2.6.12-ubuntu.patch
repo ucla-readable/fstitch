@@ -5,7 +5,7 @@ diff -u linux-2.6.12/drivers/Kconfig linux-2.6.12/drivers/Kconfig
  
  source "drivers/base/Kconfig"
  
-+source "drivers/kudos/Kconfig"
++source "drivers/fsttich/Kconfig"
 +
  source "drivers/mtd/Kconfig"
  
@@ -17,31 +17,31 @@ diff -u linux-2.6.12/drivers/Makefile linux-2.6.12/drivers/Makefile
  # default.
  obj-y				+= char/
  
-+obj-$(CONFIG_KUDOS_PROC)	+= kudos/
++obj-$(CONFIG_FSTITCH_PROC)	+= fsttich/
 +
  # i810fb and intelfb depend on char/agp/
  obj-$(CONFIG_FB_I810)           += video/i810/
  obj-$(CONFIG_FB_INTEL)          += video/intelfb/
-diff -u linux-2.6.12/drivers/kudos/Kconfig linux-2.6.12/drivers/kudos/Kconfig
---- linux-2.6.12/drivers/kudos/Kconfig	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.12/drivers/kudos/Kconfig	2006-04-03 16:01:11.000000000 -0700
+diff -u linux-2.6.12/drivers/fsttich/Kconfig linux-2.6.12/drivers/fsttich/Kconfig
+--- linux-2.6.12/drivers/fsttich/Kconfig	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.12/drivers/fsttich/Kconfig	2006-04-03 16:01:11.000000000 -0700
 @@ -0,0 +1,5 @@
-+config KUDOS_PROC
++config FSTITCH_PROC
 +	boolean "Provide process event hooks for KudOS"
 +	---help---
 +	  This option provides hooks for the KudOS kernel module to find out
-+          about process events, which it needs to support opgroups.
-diff -u linux-2.6.12/drivers/kudos/Makefile linux-2.6.12/drivers/kudos/Makefile
---- linux-2.6.12/drivers/kudos/Makefile	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.12/drivers/kudos/Makefile	2006-04-03 16:12:41.000000000 -0700
++          about process events, which it needs to support patchgroups.
+diff -u linux-2.6.12/drivers/fsttich/Makefile linux-2.6.12/drivers/fsttich/Makefile
+--- linux-2.6.12/drivers/fsttich/Makefile	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.12/drivers/fsttich/Makefile	2006-04-03 16:12:41.000000000 -0700
 @@ -0,0 +1 @@
-+obj-$(CONFIG_KUDOS_PROC)	+= kudos_proc.o
-diff -u linux-2.6.12/drivers/kudos/kudos_proc.c linux-2.6.12/drivers/kudos/kudos_proc.c
---- linux-2.6.12/drivers/kudos/kudos_proc.c	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.12/drivers/kudos/kudos_proc.c	2006-04-04 01:43:28.000000000 -0700
++obj-$(CONFIG_FSTITCH_PROC)	+= fsttich_proc.o
+diff -u linux-2.6.12/drivers/fsttich/fsttich_proc.c linux-2.6.12/drivers/fsttich/fsttich_proc.c
+--- linux-2.6.12/drivers/fsttich/fsttich_proc.c	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.12/drivers/fsttich/fsttich_proc.c	2006-04-04 01:43:28.000000000 -0700
 @@ -0,0 +1,102 @@
 +/*
-+ * kudos_proc.c - provide process event hooks for KudOS
++ * fsttich_proc.c - provide process event hooks for KudOS
 + *
 + * Copyright (C) 2006 Regents of the University of California
 + * Based loosely on cn_proc.c by Matt Helsley
@@ -72,76 +72,76 @@ diff -u linux-2.6.12/drivers/kudos/kudos_proc.c linux-2.6.12/drivers/kudos/kudos
 +#include <linux/init.h>
 +#include <asm/atomic.h>
 +
-+#include <linux/kudos_proc.h>
++#include <linux/fsttich_proc.h>
 +
-+static atomic_t kudos_module_loaded = ATOMIC_INIT(0);
-+static spinlock_t kudos_spinlock = SPIN_LOCK_UNLOCKED;
-+static struct kudos_proc_ops * kudos_module = NULL;
++static atomic_t fsttich_module_loaded = ATOMIC_INIT(0);
++static spinlock_t fsttich_spinlock = SPIN_LOCK_UNLOCKED;
++static struct fsttich_proc_ops * fsttich_module = NULL;
 +
-+void kudos_fork_hook(struct task_struct * task)
++void fsttich_fork_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&kudos_module_loaded) < 1)
++	if(atomic_read(&fsttich_module_loaded) < 1)
 +		return;
 +	
-+	kudos_module->fork(task);
++	fsttich_module->fork(task);
 +}
 +
-+void kudos_exec_hook(struct task_struct * task)
++void fsttich_exec_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&kudos_module_loaded) < 1)
++	if(atomic_read(&fsttich_module_loaded) < 1)
 +		return;
 +	
-+	kudos_module->exec(task);
++	fsttich_module->exec(task);
 +}
 +
-+void kudos_exit_hook(struct task_struct * task)
++void fsttich_exit_hook(struct task_struct * task)
 +{
-+	if(atomic_read(&kudos_module_loaded) < 1)
++	if(atomic_read(&fsttich_module_loaded) < 1)
 +		return;
 +	
-+	kudos_module->exit(task);
++	fsttich_module->exit(task);
 +}
 +
-+int kudos_register_module(struct kudos_proc_ops * ops)
++int fsttich_register_module(struct fsttich_proc_ops * ops)
 +{
-+	spin_lock(&kudos_spinlock);
++	spin_lock(&fsttich_spinlock);
 +	
-+	if(atomic_read(&kudos_module_loaded) > 0)
++	if(atomic_read(&fsttich_module_loaded) > 0)
 +	{
-+		spin_unlock(&kudos_spinlock);
++		spin_unlock(&fsttich_spinlock);
 +		return -EBUSY;
 +	}
 +	
-+	kudos_module = ops;
++	fsttich_module = ops;
 +	
-+	atomic_inc(&kudos_module_loaded);
++	atomic_inc(&fsttich_module_loaded);
 +	
-+	spin_unlock(&kudos_spinlock);
++	spin_unlock(&fsttich_spinlock);
 +	
 +	return 0;
 +}
 +
-+int kudos_unregister_module(struct kudos_proc_ops * ops)
++int fsttich_unregister_module(struct fsttich_proc_ops * ops)
 +{
-+	spin_lock(&kudos_spinlock);
++	spin_lock(&fsttich_spinlock);
 +	
-+	if(atomic_read(&kudos_module_loaded) < 1 || kudos_module != ops)
++	if(atomic_read(&fsttich_module_loaded) < 1 || fsttich_module != ops)
 +	{
-+		spin_unlock(&kudos_spinlock);
++		spin_unlock(&fsttich_spinlock);
 +		return -EINVAL;
 +	}
 +	
-+	atomic_dec(&kudos_module_loaded);
++	atomic_dec(&fsttich_module_loaded);
 +	
-+	kudos_module = NULL;
++	fsttich_module = NULL;
 +	
-+	spin_unlock(&kudos_spinlock);
++	spin_unlock(&fsttich_spinlock);
 +	
 +	return 0;
 +}
 +
-+EXPORT_SYMBOL(kudos_register_module);
-+EXPORT_SYMBOL(kudos_unregister_module);
++EXPORT_SYMBOL(fsttich_register_module);
++EXPORT_SYMBOL(fsttich_unregister_module);
 diff -u linux-2.6.12/fs/exec.c linux-2.6.12/fs/exec.c
 --- linux-2.6.12/fs/exec.c	2006-03-11 08:12:04.000000000 -0800
 +++ linux-2.6.12/fs/exec.c	2006-04-04 00:56:06.000000000 -0700
@@ -149,7 +149,7 @@ diff -u linux-2.6.12/fs/exec.c linux-2.6.12/fs/exec.c
  #include <linux/syscalls.h>
  #include <linux/rmap.h>
  #include <linux/acct.h>
-+#include <linux/kudos_proc.h>
++#include <linux/fsttich_proc.h>
  
  #include <asm/uaccess.h>
  #include <asm/mmu_context.h>
@@ -157,16 +157,16 @@ diff -u linux-2.6.12/fs/exec.c linux-2.6.12/fs/exec.c
  					fput(bprm->file);
  				bprm->file = NULL;
  				current->did_exec = 1;
-+				kudos_exec_hook(current);
++				fsttich_exec_hook(current);
  				return retval;
  			}
  			read_lock(&binfmt_lock);
-diff -u linux-2.6.12/include/linux/kudos_proc.h linux-2.6.12/include/linux/kudos_proc.h
---- linux-2.6.12/include/linux/kudos_proc.h	1969-12-31 16:00:00.000000000 -0800
-+++ linux-2.6.12/include/linux/kudos_proc.h	2006-04-04 01:43:34.000000000 -0700
+diff -u linux-2.6.12/include/linux/fsttich_proc.h linux-2.6.12/include/linux/fsttich_proc.h
+--- linux-2.6.12/include/linux/fsttich_proc.h	1969-12-31 16:00:00.000000000 -0800
++++ linux-2.6.12/include/linux/fsttich_proc.h	2006-04-04 01:43:34.000000000 -0700
 @@ -0,0 +1,61 @@
 +/*
-+ * kudos_proc.h - provide process event hooks for KudOS
++ * fsttich_proc.h - provide process event hooks for KudOS
 + *
 + * Copyright (C) 2006 Regents of the University of California
 + * Based loosely on cn_proc.h by Matt Helsley
@@ -192,40 +192,40 @@ diff -u linux-2.6.12/include/linux/kudos_proc.h linux-2.6.12/include/linux/kudos
 + * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 + */
 +
-+#ifndef KUDOS_PROC_H
-+#define KUDOS_PROC_H
++#ifndef FSTITCH_PROC_H
++#define FSTITCH_PROC_H
 +
 +#include <linux/config.h>
 +
 +#ifdef __KERNEL__
 +
-+#ifdef CONFIG_KUDOS_PROC
++#ifdef CONFIG_FSTITCH_PROC
 +
 +struct task_struct;
 +
-+struct kudos_proc_ops {
++struct fsttich_proc_ops {
 +	void (*fork)(struct task_struct * child);
 +	void (*exec)(struct task_struct * process);
 +	void (*exit)(struct task_struct * process);
 +};
 +
-+void kudos_fork_hook(struct task_struct * task);
-+void kudos_exec_hook(struct task_struct * task);
-+void kudos_exit_hook(struct task_struct * task);
++void fsttich_fork_hook(struct task_struct * task);
++void fsttich_exec_hook(struct task_struct * task);
++void fsttich_exit_hook(struct task_struct * task);
 +
-+int kudos_register_module(struct kudos_proc_ops * ops);
-+int kudos_unregister_module(struct kudos_proc_ops * ops);
++int fsttich_register_module(struct fsttich_proc_ops * ops);
++int fsttich_unregister_module(struct fsttich_proc_ops * ops);
 +
 +#else
 +
-+static inline void kudos_fork_hook(struct task_struct * task) {}
-+static inline void kudos_exec_hook(struct task_struct * task) {}
-+static inline void kudos_exit_hook(struct task_struct * task) {}
++static inline void fsttich_fork_hook(struct task_struct * task) {}
++static inline void fsttich_exec_hook(struct task_struct * task) {}
++static inline void fsttich_exit_hook(struct task_struct * task) {}
 +
-+#endif	/* CONFIG_KUDOS_PROC */
++#endif	/* CONFIG_FSTITCH_PROC */
 +
 +#endif	/* __KERNEL__ */
-+#endif	/* KUDOS_PROC_H */
++#endif	/* FSTITCH_PROC_H */
 diff -u linux-2.6.12/kernel/exit.c linux-2.6.12/kernel/exit.c
 --- linux-2.6.12/kernel/exit.c	2006-03-11 08:12:12.000000000 -0800
 +++ linux-2.6.12/kernel/exit.c	2006-04-04 00:57:59.000000000 -0700
@@ -233,7 +233,7 @@ diff -u linux-2.6.12/kernel/exit.c linux-2.6.12/kernel/exit.c
  #include <linux/cpuset.h>
  #include <linux/syscalls.h>
  #include <linux/signal.h>
-+#include <linux/kudos_proc.h>
++#include <linux/fsttich_proc.h>
  
  #include <asm/uaccess.h>
  #include <asm/unistd.h>
@@ -241,7 +241,7 @@ diff -u linux-2.6.12/kernel/exit.c linux-2.6.12/kernel/exit.c
  		module_put(tsk->binfmt->module);
  
  	tsk->exit_code = code;
-+	kudos_exit_hook(tsk);
++	fsttich_exit_hook(tsk);
  	exit_notify(tsk);
  #ifdef CONFIG_NUMA
  	mpol_free(tsk->mempolicy);
@@ -252,7 +252,7 @@ diff -u linux-2.6.12/kernel/fork.c linux-2.6.12/kernel/fork.c
  #include <linux/profile.h>
  #include <linux/rmap.h>
  #include <linux/acct.h>
-+#include <linux/kudos_proc.h>
++#include <linux/fsttich_proc.h>
  
  #include <asm/pgtable.h>
  #include <asm/pgalloc.h>
@@ -260,7 +260,7 @@ diff -u linux-2.6.12/kernel/fork.c linux-2.6.12/kernel/fork.c
  	nr_threads++;
  	total_forks++;
  	write_unlock_irq(&tasklist_lock);
-+	kudos_fork_hook(p);
++	fsttich_fork_hook(p);
  	retval = 0;
  
  fork_out:

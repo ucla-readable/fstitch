@@ -17,31 +17,31 @@
 #include <linux/mount.h>
 #endif
 
-#include <kfs/feature.h>
-#include <kfs/kfsd.h>
-#include <kfs/modman.h>
-#include <kfs/sync.h>
-#include <kfs/sched.h>
-#include <kfs/kernel_serve.h>
+#include <fscore/feature.h>
+#include <fscore/fstitchd.h>
+#include <fscore/modman.h>
+#include <fscore/sync.h>
+#include <fscore/sched.h>
+#include <fscore/kernel_serve.h>
 
 #ifdef CONFIG_LBD
-# warning CONFIG_LBD enabled. kkfsd assumes 32bit sector values.
+# warning CONFIG_LBD enabled. kfstitchd assumes 32bit sector values.
 #endif
 
 /* 2.6.12 has only CONFIG_PREEMPT or nothing.
  * By 2.6.13.4 linux added voluntary preemption and changed the defines. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 13)
 # ifndef CONFIG_PREEMPT_NONE
-#  warning CONFIG_PREEMPT_NONE not enabled. kkfsd does not lock everything it should.
+#  warning CONFIG_PREEMPT_NONE not enabled. kfstitchd does not lock everything it should.
 # endif
 #else
 # ifdef CONFIG_PREEMPT
-#  warning CONFIG_PREEMPT enabled. kkfsd does not lock everything it should.
+#  warning CONFIG_PREEMPT enabled. kfstitchd does not lock everything it should.
 # endif
 #endif
 
 #ifdef CONFIG_SMP
-# warning CONFIG_SMP enabled. kkfsd does not lock everything it should.
+# warning CONFIG_SMP enabled. kfstitchd does not lock everything it should.
 #endif
 
 #define KERNEL_SERVE_DEBUG 0
@@ -52,24 +52,26 @@
 #define Dprintf(x...)
 #endif
 
+#define FSTITCHDEVROOT "fstitch:"
+
 #if MALLOC_ACCOUNT
 unsigned long long malloc_total = 0;
 unsigned long long malloc_blocks = 0;
 #endif
 
-static struct file_system_type  kfs_fs_type;
-static struct inode_operations  kfs_reg_inode_ops;
-static struct file_operations   kfs_reg_file_ops;
-static struct inode_operations  kfs_lnk_inode_ops;
-static struct inode_operations  kfs_dir_inode_ops;
-static struct file_operations   kfs_dir_file_ops;
-static struct address_space_operations kfs_aops;
-static struct dentry_operations kfs_dentry_ops;
-static struct super_operations  kfs_superblock_ops;
+static struct file_system_type  fstitch_fs_type;
+static struct inode_operations  fstitch_reg_inode_ops;
+static struct file_operations   fstitch_reg_file_ops;
+static struct inode_operations  fstitch_lnk_inode_ops;
+static struct inode_operations  fstitch_dir_inode_ops;
+static struct file_operations   fstitch_dir_file_ops;
+static struct address_space_operations fstitch_aops;
+static struct dentry_operations fstitch_dentry_ops;
+static struct super_operations  fstitch_superblock_ops;
 
 
-// The current fdesc, to help kfs_aops.writepage()
-static fdesc_t * kfsd_fdesc;
+// The current fdesc, to help fstitch_aops.writepage()
+static fdesc_t * fstitchd_fdesc;
 
 
 struct mount_desc {
@@ -120,14 +122,14 @@ int kernel_serve_add_mount(const char * path, CFS_t * cfs)
 		mount_desc_destroy(m);
 		return r;
 	}
-	printk("kkfsd: made \"kfs:%s\" available for mounting\n", path);
+	printk("kfstitchd: made \"fstitch:%s\" available for mounting\n", path);
 	return 0;
 }
 
 static void kernel_serve_shutdown(void * ignore)
 {
 	Dprintf("%s()\n", __FUNCTION__);
-	int r = unregister_filesystem(&kfs_fs_type);
+	int r = unregister_filesystem(&fstitch_fs_type);
 	if (r < 0)
 		fprintf(stderr, "kernel_serve_shutdown(): unregister_filesystem: %d\n", r);
 #if MALLOC_ACCOUNT
@@ -142,14 +144,14 @@ int kernel_serve_init(void)
 	mounts = vector_create();
 	if (!mounts)
 		return -ENOMEM;
-	r = kfsd_register_shutdown_module(kernel_serve_shutdown, NULL, SHUTDOWN_PREMODULES);
+	r = fstitchd_register_shutdown_module(kernel_serve_shutdown, NULL, SHUTDOWN_PREMODULES);
 	if (r < 0)
 	{
 		vector_destroy(mounts);
 		mounts = NULL;
 		return r;
 	}
-	return register_filesystem(&kfs_fs_type);
+	return register_filesystem(&fstitch_fs_type);
 }
 
 
@@ -196,35 +198,35 @@ typedef struct kernel_metadata kernel_metadata_t;
 static int kernel_get_metadata(void * arg, feature_id_t id, size_t size, void * data)
 {
 	const kernel_metadata_t * kernelmd = (kernel_metadata_t *) arg;
-	if (KFS_FEATURE_UID == id)
+	if (FSTITCH_FEATURE_UID == id)
 	{
 		if (size < sizeof(current->euid))
 			return -ENOMEM;
 		*(typeof(current->euid) *) data = current->euid;
 		return sizeof(current->euid);
 	}
-	else if (KFS_FEATURE_GID == id)
+	else if (FSTITCH_FEATURE_GID == id)
 	{
 		if (size < sizeof(current->egid))
 			return -ENOMEM;
 		*(typeof(current->egid) *) data = current->egid;
 		return sizeof(current->egid);
 	}
-	else if (KFS_FEATURE_UNIX_PERM == id)
+	else if (FSTITCH_FEATURE_UNIX_PERM == id)
 	{
 		if (size < sizeof(kernelmd->mode))
 			return -ENOMEM;
 		*(uint16_t *) data = kernelmd->mode;
 		return sizeof(kernelmd->mode);
 	}
-	else if (KFS_FEATURE_FILETYPE == id)
+	else if (FSTITCH_FEATURE_FILETYPE == id)
 	{
 		if (size < sizeof(kernelmd->type))
 			return -ENOMEM;
 		*(int *) data = kernelmd->type;
 		return sizeof(kernelmd->type);
 	}
-	else if (KFS_FEATURE_SYMLINK == id && kernelmd->type == TYPE_SYMLINK)
+	else if (FSTITCH_FEATURE_SYMLINK == id && kernelmd->type == TYPE_SYMLINK)
 	{
 		if (size < kernelmd->type_info.symlink.link_len)
 			return -ENOMEM;
@@ -261,18 +263,18 @@ static void read_inode_withlock(struct inode * inode)
 	bool nlinks_supported, uid_supported, gid_supported, perms_supported, mtime_supported, atime_supported;
 	int r;
 
-	assert(kfsd_have_lock());
+	assert(fstitchd_have_lock());
 
 	cfs = sb2cfs(inode->i_sb);
 
-	nlinks_supported = feature_supported(cfs, KFS_FEATURE_NLINKS);
-	uid_supported = feature_supported(cfs, KFS_FEATURE_UID);
-	gid_supported = feature_supported(cfs, KFS_FEATURE_GID);
-	perms_supported = feature_supported(cfs, KFS_FEATURE_UNIX_PERM);
-	mtime_supported = feature_supported(cfs, KFS_FEATURE_MTIME);
-	atime_supported = feature_supported(cfs, KFS_FEATURE_ATIME);
+	nlinks_supported = feature_supported(cfs, FSTITCH_FEATURE_NLINKS);
+	uid_supported = feature_supported(cfs, FSTITCH_FEATURE_UID);
+	gid_supported = feature_supported(cfs, FSTITCH_FEATURE_GID);
+	perms_supported = feature_supported(cfs, FSTITCH_FEATURE_UNIX_PERM);
+	mtime_supported = feature_supported(cfs, FSTITCH_FEATURE_MTIME);
+	atime_supported = feature_supported(cfs, FSTITCH_FEATURE_ATIME);
 
-	r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_FILETYPE, sizeof(type), &type);
+	r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_FILETYPE, sizeof(type), &type);
 	if (r < 0)
 	{
 		fprintf(stderr, "%s: CALL(get_metadata, ino = %lu) = %d\n", __FUNCTION__, inode->i_ino, r);
@@ -281,7 +283,7 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (nlinks_supported)
 	{
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_NLINKS, sizeof(inode->i_nlink), &inode->i_nlink);
+		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_NLINKS, sizeof(inode->i_nlink), &inode->i_nlink);
 		if (r < 0)
 			fprintf(stderr, "%s: get_metadata for nlinks failed, manually counting links for directories and assuming files have 1 link\n", __FUNCTION__);
 		else
@@ -290,7 +292,7 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (uid_supported)
 	{
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_UID, sizeof(inode->i_uid), &inode->i_uid);
+		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_UID, sizeof(inode->i_uid), &inode->i_uid);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -301,7 +303,7 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (gid_supported)
 	{
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_GID, sizeof(inode->i_gid), &inode->i_gid);
+		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_GID, sizeof(inode->i_gid), &inode->i_gid);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -312,20 +314,20 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (perms_supported)
 	{
-		uint16_t kfs_mode;
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_UNIX_PERM, sizeof(kfs_mode), &kfs_mode);
+		uint16_t fstitch_mode;
+		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_UNIX_PERM, sizeof(fstitch_mode), &fstitch_mode);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 		{
 			assert(r == sizeof(inode->i_mode));
-			inode->i_mode = kfs_mode;
+			inode->i_mode = fstitch_mode;
 		}
 	}
 
 	if (mtime_supported)
 	{
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_MTIME, sizeof(inode->i_mtime.tv_sec), &inode->i_mtime.tv_sec);
+		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_MTIME, sizeof(inode->i_mtime.tv_sec), &inode->i_mtime.tv_sec);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -337,7 +339,7 @@ static void read_inode_withlock(struct inode * inode)
 
 	if (atime_supported)
 	{
-		r = CALL(cfs, get_metadata, inode->i_ino, KFS_FEATURE_ATIME, sizeof(inode->i_atime.tv_sec), &inode->i_atime.tv_sec);
+		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_ATIME, sizeof(inode->i_atime.tv_sec), &inode->i_atime.tv_sec);
 		if (r < 0)
 			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
@@ -371,8 +373,8 @@ static void read_inode_withlock(struct inode * inode)
 		if (!perms_supported)
 			inode->i_mode = 0777; // default, in case permissions are not supported
 		inode->i_mode |= S_IFDIR;
-		inode->i_op = &kfs_dir_inode_ops;
-		inode->i_fop = &kfs_dir_file_ops;
+		inode->i_op = &fstitch_dir_inode_ops;
+		inode->i_fop = &fstitch_dir_file_ops;
 	}
 	else if (type == TYPE_FILE || type == TYPE_SYMLINK || type == TYPE_DEVICE)
 	{
@@ -383,15 +385,15 @@ static void read_inode_withlock(struct inode * inode)
 		if (type == TYPE_SYMLINK)
 		{
 			inode->i_mode |= S_IFLNK;
-			inode->i_op = &kfs_lnk_inode_ops;
+			inode->i_op = &fstitch_lnk_inode_ops;
 		}
 		else
 		{
 			inode->i_mode |= S_IFREG;
-			inode->i_op = &kfs_reg_inode_ops;
+			inode->i_op = &fstitch_reg_inode_ops;
 		}
-		inode->i_fop = &kfs_reg_file_ops;
-		inode->i_mapping->a_ops = &kfs_aops;
+		inode->i_fop = &fstitch_reg_file_ops;
+		inode->i_mapping->a_ops = &fstitch_aops;
 	}
 	else if (type == TYPE_INVAL)
 	{
@@ -404,7 +406,7 @@ static void read_inode_withlock(struct inode * inode)
 		goto exit;
 	}
 
-	CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, KFS_FEATURE_SIZE, sizeof(inode->i_size), &inode->i_size);
+	CALL(sb2cfs(inode->i_sb), get_metadata, inode->i_ino, FSTITCH_FEATURE_SIZE, sizeof(inode->i_size), &inode->i_size);
 
   exit:
 	return;
@@ -413,9 +415,9 @@ static void read_inode_withlock(struct inode * inode)
 static void serve_read_inode(struct inode * inode)
 {
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, inode->i_ino);
-	kfsd_enter();
+	fstitchd_enter();
 	read_inode_withlock(inode);
-	kfsd_leave(1);
+	fstitchd_leave(1);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
@@ -427,25 +429,25 @@ static int serve_stat_fs(struct dentry * de, struct kstatfs * st)
 {
 	mount_desc_t * m = (mount_desc_t *) de->d_inode->i_sb->s_fs_info;
 #endif
-	Dprintf("%s(kfs:%s)\n", __FUNCTION__, m->path);
+	Dprintf("%s(fstitch:%s)\n", __FUNCTION__, m->path);
 	CFS_t * cfs = m->cfs;
 	unsigned long temp;
 	int r;
 	
-	kfsd_enter();
-	r = CALL(cfs, get_metadata, 0, KFS_FEATURE_BLOCKSIZE, sizeof(st->f_frsize), &st->f_frsize);
+	fstitchd_enter();
+	r = CALL(cfs, get_metadata, 0, FSTITCH_FEATURE_BLOCKSIZE, sizeof(st->f_frsize), &st->f_frsize);
 	if (r < 0)
 		goto out;
 	assert(sizeof(st->f_frsize) == r);
 	st->f_bsize = st->f_frsize;
 	
-	r = CALL(cfs, get_metadata, 0, KFS_FEATURE_DEVSIZE, sizeof(temp), &temp);
+	r = CALL(cfs, get_metadata, 0, FSTITCH_FEATURE_DEVSIZE, sizeof(temp), &temp);
 	if (r < 0)
 		goto out;
 	assert(sizeof(temp) == r);
 	st->f_blocks = temp;
 	
-	r = CALL(cfs, get_metadata, 0, KFS_FEATURE_FREESPACE, sizeof(temp), &temp);
+	r = CALL(cfs, get_metadata, 0, FSTITCH_FEATURE_FREESPACE, sizeof(temp), &temp);
 	if (r < 0)
 		goto out;
 	assert(sizeof(temp) == r);
@@ -461,7 +463,7 @@ static int serve_stat_fs(struct dentry * de, struct kstatfs * st)
 	r = 0;
         
 out:
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -471,13 +473,13 @@ static int serve_fill_super(struct super_block * sb, mount_desc_t * m)
 	struct inode * k_root;
 	int r;
 	
-	assert(kfsd_have_lock());
+	assert(fstitchd_have_lock());
 	
 	/* FIXME? */
 	sb->s_blocksize = 4096;
 	sb->s_blocksize_bits = 12;
 	sb->s_magic = 0x88F50CF5;
-	sb->s_op = &kfs_superblock_ops;
+	sb->s_op = &fstitch_superblock_ops;
 	
 	r = CALL(m->cfs, get_root, &cfs_root);
 	assert(r >= 0);
@@ -511,24 +513,24 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 {
 	Dprintf("%s()\n", __FUNCTION__);
 	int i, size;
-	if (strncmp(dev_name, "kfs:", 4))
+	if (strncmp(dev_name, FSTITCHDEVROOT, strlen(FSTITCHDEVROOT)))
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 		return ERR_PTR(-EINVAL);
 #else
 		return -EINVAL;
 #endif
 	
-	kfsd_enter();
+	fstitchd_enter();
 	size = vector_size(mounts);
 	for (i = 0; i < size; i++)
 	{
 		mount_desc_t * m = vector_elt(mounts, i);
-		if (!strcmp(m->path, &dev_name[4]))
+		if (!strcmp(m->path, &dev_name[strlen(FSTITCHDEVROOT)]))
 		{
 			struct super_block * sb;
 			if (m->mounted)
 			{
-				kfsd_leave(1);
+				fstitchd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return ERR_PTR(-EBUSY);
 #else
@@ -537,7 +539,7 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 			}
 			if (modman_inc_cfs(m->cfs, fs_type, m->path) < 0)
 			{
-				kfsd_leave(1);
+				fstitchd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return ERR_PTR(-ENOMEM);
 #else
@@ -548,7 +550,7 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 			if (IS_ERR(sb) || sb->s_root) /* sb->s_root means it is mounted already? */
 			{
 				modman_dec_cfs(m->cfs, fs_type);
-				kfsd_leave(1);
+				fstitchd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return sb;
 #else
@@ -562,7 +564,7 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 				modman_dec_cfs(m->cfs, fs_type);
 				up_write(&sb->s_umount);
 				deactivate_super(sb);
-				kfsd_leave(1);
+				fstitchd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 				return ERR_PTR(i);
 #else
@@ -571,8 +573,8 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 			}
 			m->mounted = 1;
 			sb->s_flags |= MS_ACTIVE;
-			kfsd_leave(1);
-			printk("kkfsd: mounted \"kfs:%s\"\n", m->path);
+			fstitchd_leave(1);
+			printk("kfstitchd: mounted \"fstitch:%s\"\n", m->path);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 			return sb;
 #else
@@ -580,7 +582,7 @@ static int serve_get_sb(struct file_system_type * fs_type, int flags, const char
 #endif
 		}
 	}
-	kfsd_leave(1);
+	fstitchd_leave(1);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
 	return ERR_PTR(-ENOENT);
 #else
@@ -603,23 +605,23 @@ static int serve_open(struct inode * inode, struct file * filp)
 	int r;
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, filp->f_dentry->d_name.name);
 
-	/* don't cache above KFS - we have our own caches */
+	/* don't cache above featherstitch - we have our own caches */
 	filp->f_mode |= O_SYNC;
 
 	r = generic_file_open(inode, filp);
 	if (r < 0)
 		return r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
 	fdesc->common->parent = filp->f_dentry->d_parent->d_inode->i_ino;
 	if (r < 0)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return r;
 	}
 	filp->private_data = fdesc;
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return 0;
 }
 
@@ -642,17 +644,17 @@ static int serve_release(struct inode * inode, struct file * filp)
 	Dprintf("%s(filp = \"%s\", fdesc = %p)\n", __FUNCTION__, filp->f_dentry->d_name.name, file2fdesc(filp));
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 
-	kfsd_fdesc = file2fdesc(filp);
+	fstitchd_fdesc = file2fdesc(filp);
 	r = serve_filemap_write_and_wait(inode->i_mapping);
-	kfsd_fdesc = NULL;
+	fstitchd_fdesc = NULL;
 	if (r < 0)
 		fprintf(stderr, "%s(filp = \"%s\"): serve_filemap_write_and_wait() = %d\n", __FUNCTION__, filp->f_dentry->d_name.name, r);
 
 	r = CALL(dentry2cfs(filp->f_dentry), close, file2fdesc(filp));
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -665,18 +667,18 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 
 	Dprintf("%s(dentry = \"%s\") (pid = %d)\n", __FUNCTION__, dentry->d_name.name, current->pid);
 
-	kfsd_enter();
+	fstitchd_enter();
 	assert(dentry2cfs(dentry));
 	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
 	if (r == -ENOENT)
 		cfs_ino = 0;
 	else if (r < 0)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return ERR_PTR(r);
 	}
 	k_ino = cfs_ino;
-	kfsd_leave(1); // TODO: do we need to hold the lock for iget() et al, too?
+	fstitchd_leave(1); // TODO: do we need to hold the lock for iget() et al, too?
 
 	if (k_ino)
 	{
@@ -688,7 +690,7 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 	{
 		struct dentry * d = d_splice_alias(inode, dentry);
 		if (d)
-			d->d_op = &kfs_dentry_ops;
+			d->d_op = &fstitch_dentry_ops;
 		return d;
 	}
 	/* add a negative dentry */
@@ -713,18 +715,18 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	struct timespec now = current_fs_time(inode->i_sb);
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	cfs = dentry2cfs(dentry);
 
 #if ATTR_FILE != 0
 	supported |= ATTR_FILE;
 #endif
 
-	if(feature_supported(cfs, KFS_FEATURE_MTIME))
+	if(feature_supported(cfs, FSTITCH_FEATURE_MTIME))
 		supported |= ATTR_MTIME | ATTR_MTIME_SET;
-	if(feature_supported(cfs, KFS_FEATURE_ATIME))
+	if(feature_supported(cfs, FSTITCH_FEATURE_ATIME))
 		supported |= ATTR_ATIME | ATTR_ATIME_SET;
-	if(feature_supported(cfs, KFS_FEATURE_UNIX_PERM))
+	if(feature_supported(cfs, FSTITCH_FEATURE_UNIX_PERM))
 		supported |= ATTR_MODE;
 
 	// always at least act as if we support, so we do not error
@@ -736,7 +738,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	if(attr->ia_valid & ~supported)
 	{
 		Dprintf("%s: attribute set %u (out of %u) not supported\n", __FUNCTION__, attr->ia_valid & ~supported, attr->ia_valid);
-		kfsd_leave(0);
+		fstitchd_leave(0);
 		return -ENOSYS;
 	}
 
@@ -750,7 +752,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
 		if(r < 0)
 		{
-			kfsd_leave(0);
+			fstitchd_leave(0);
 			return r;
 		}
 	}
@@ -775,28 +777,28 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	fsmetadata_t fsm[5];
 	int nfsm = 0;
 	
-	if((attr->ia_valid & ATTR_UID) && feature_supported(cfs, KFS_FEATURE_UID))
+	if((attr->ia_valid & ATTR_UID) && feature_supported(cfs, FSTITCH_FEATURE_UID))
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_UID;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_UID;
 		fsm[nfsm].fsm_value.u = attr->ia_uid;
 		nfsm++;
 	}
-	if((attr->ia_valid & ATTR_GID) && feature_supported(cfs, KFS_FEATURE_GID))
+	if((attr->ia_valid & ATTR_GID) && feature_supported(cfs, FSTITCH_FEATURE_GID))
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_GID;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_GID;
 		fsm[nfsm].fsm_value.u = attr->ia_gid;
 		nfsm++;
 	}
 
 	if(attr->ia_valid & ATTR_MODE)
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_UNIX_PERM;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_UNIX_PERM;
 		fsm[nfsm].fsm_value.u = attr->ia_mode;
 		nfsm++;
 	}
 	if(attr->ia_valid & (ATTR_MTIME | ATTR_MTIME_SET))
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_MTIME;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_MTIME;
 		if(attr->ia_valid & ATTR_MTIME_SET)
 			fsm[nfsm].fsm_value.u = now.tv_sec;
 		else
@@ -805,7 +807,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	}
 	if(attr->ia_valid & (ATTR_ATIME | ATTR_ATIME_SET))
 	{
-		fsm[nfsm].fsm_feature = KFS_FEATURE_ATIME;
+		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_ATIME;
 		if(attr->ia_valid & ATTR_ATIME_SET)
 			fsm[nfsm].fsm_value.u = now.tv_sec;
 		else
@@ -826,7 +828,7 @@ error:
 	if(!(attr->ia_valid & ATTR_FILE))
 		if(CALL(cfs, close, fdesc) < 0)
 			fprintf(stderr, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -835,7 +837,7 @@ static int serve_link(struct dentry * src_dentry, struct inode * parent, struct 
 	Dprintf("%s(\"%s\", \"%s\")\n", __FUNCTION__, src_dentry->d_name.name, target_dentry->d_name.name);
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	assert(dentry2cfs(src_dentry) == dentry2cfs(target_dentry));
 	r = CALL(dentry2cfs(src_dentry), link, src_dentry->d_inode->i_ino, parent->i_ino, target_dentry->d_name.name);
 	if (r >= 0)
@@ -847,7 +849,7 @@ static int serve_link(struct dentry * src_dentry, struct inode * parent, struct 
 		d_instantiate(target_dentry, inode);
 	}
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -856,11 +858,11 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
 	if (r >= 0 && dentry->d_inode->i_mode & S_IFDIR)
 		dir->i_nlink--;
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -873,7 +875,7 @@ static int create_withlock(struct inode * dir, struct dentry * dentry, uint16_t 
 	struct inode * inode;
 	int r;
 
-	assert(kfsd_have_lock());
+	assert(fstitchd_have_lock());
 
 	cfs = dentry2cfs(dentry);
 
@@ -907,9 +909,9 @@ static int serve_create(struct inode * dir, struct dentry * dentry, int mode, st
 	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_FILE };
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	r = create_withlock(dir, dentry, mode, &kernelmd);
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	return r;
 }
@@ -923,9 +925,9 @@ static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev
 	if (!(mode & S_IFREG))
 		return -EPERM;
 
-	kfsd_enter();
+	fstitchd_enter();
 	r = create_withlock(dir, dentry, mode, &kernelmd);
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -936,17 +938,17 @@ static int serve_symlink(struct inode * dir, struct dentry * dentry, const char 
 	kernel_metadata_t kernelmd = { .mode = mode, .type = TYPE_SYMLINK, .type_info.symlink = { .link = link, .link_len = strlen(link) } };
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 
-	if (!feature_supported(dentry2cfs(dentry), KFS_FEATURE_SYMLINK))
+	if (!feature_supported(dentry2cfs(dentry), FSTITCH_FEATURE_SYMLINK))
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return -ENOSYS;
 	}
 
 	r = create_withlock(dir, dentry, mode, &kernelmd);
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	return r;
 }
@@ -960,19 +962,19 @@ static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	struct inode * inode;
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 
 	r = CALL(dentry2cfs(dentry), mkdir, dir->i_ino, dentry->d_name.name, &initialmd, &cfs_ino);
 	if (r < 0)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return r;
 	}
 
 	inode = new_inode(dir->i_sb);
 	if (!inode)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return -ENOMEM;
 	}
 	inode->i_ino = cfs_ino;
@@ -980,7 +982,7 @@ static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	d_instantiate(dentry, inode);
 	dir->i_nlink++;
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	return 0;
 }
@@ -990,11 +992,11 @@ static int serve_rmdir(struct inode * dir, struct dentry * dentry)
 	Dprintf("%s(%s)\n", __FUNCTION__, dentry->d_name.name);
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	r = CALL(dentry2cfs(dentry), rmdir, dir->i_ino, dentry->d_name.name);
 	if (r >= 0)
 		dir->i_nlink--;
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -1003,14 +1005,14 @@ static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, stru
 	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	if (dentry2cfs(old_dentry) != dentry2cfs(new_dentry))
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return -EPERM;
 	}
 	r = CALL(dentry2cfs(old_dentry), rename, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -1021,7 +1023,7 @@ static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t fill
 	Dprintf("%s()\n", __FUNCTION__);
 	int r;
 
-	kfsd_enter();
+	fstitchd_enter();
 	while (1)
 	{
 		uint32_t cfs_fpos = filp->f_pos;
@@ -1036,7 +1038,7 @@ static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t fill
 			break;
 		filp->f_pos = cfs_fpos;
 	}
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	if (r == -1)
 		return 1;
@@ -1048,9 +1050,9 @@ static int serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, dentry->d_name.name);
 	int r;
 
-	kfsd_enter();
-	r = kfs_sync();
-	kfsd_leave(1);
+	fstitchd_enter();
+	r = fstitch_sync();
+	fstitchd_leave(1);
 	return r;
 }
 
@@ -1063,10 +1065,10 @@ static int read_link(struct dentry * dentry, char * buffer, int buflen)
 	cfs = dentry2cfs(dentry);
 	cfs_ino = dentry->d_inode->i_ino;
 
-	if (!feature_supported(cfs, KFS_FEATURE_SYMLINK))
+	if (!feature_supported(cfs, FSTITCH_FEATURE_SYMLINK))
 		return -ENOSYS;
 
-	link_len = CALL(cfs, get_metadata, cfs_ino, KFS_FEATURE_SYMLINK, buflen - 1, buffer);
+	link_len = CALL(cfs, get_metadata, cfs_ino, FSTITCH_FEATURE_SYMLINK, buflen - 1, buffer);
 	if (link_len < 0)
 	{
 		if (link_len == -ENOMEM)
@@ -1093,12 +1095,12 @@ static int serve_readlink(struct dentry * dentry, char __user * buffer, int bufl
 	if (buflen > sizeof(link_name))
 		buflen = sizeof(link_name);
 
-	kfsd_enter();
+	fstitchd_enter();
 
 	link_len = read_link(dentry, link_name, buflen);
 	if (link_len < 0)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return link_len;
 	}
 
@@ -1106,11 +1108,11 @@ static int serve_readlink(struct dentry * dentry, char __user * buffer, int bufl
 	r = copy_to_user(buffer, link_name, link_len);
 	if (r > 0)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return -EFAULT;
 	}
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	return link_len;
 }
@@ -1136,25 +1138,25 @@ serve_follow_link(struct dentry * dentry, struct nameidata * nd)
 	int link_len;
 	char * nd_link_name;
 
-	kfsd_enter();
+	fstitchd_enter();
 
 	link_len = read_link(dentry, link_name, sizeof(link_name));
 	if (link_len < 0)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return FOLLOW_LINK_RET_VAL(link_len);
 	}
 
 	nd_link_name = malloc(link_len);
 	if (!nd_link_name)
 	{
-		kfsd_leave(1);
+		fstitchd_leave(1);
 		return FOLLOW_LINK_RET_VAL(-ENOMEM);
 	}
 	memcpy(nd_link_name, link_name, link_len);
 	nd_set_link(nd, nd_link_name);
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 
 	return FOLLOW_LINK_RET_VAL(0);
 }
@@ -1192,7 +1194,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 
 	Dprintf("%s(filp = \"%s\", offset = %lld)\n", __FUNCTION__, filp->f_dentry->d_name.name, offset);
 
-	kfsd_enter();
+	fstitchd_enter();
 	assert(!PageHighMem(page));
 	buffer = lowmem_page_address(page);
 	cfs = dentry2cfs(filp->f_dentry);
@@ -1214,7 +1216,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 	r = 0;
 
   out:
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	unlock_page(page);
 	return r;
 }
@@ -1232,7 +1234,7 @@ static ssize_t serve_write_page(struct file * filp, loff_t pos,
 
 	Dprintf("%s(file = \"%s\", pos = %lu, len = %u)\n", __FUNCTION__, filp->f_dentry->d_name.name, pos, len);
 
-	kfsd_enter();
+	fstitchd_enter();
 
 	if(!access_ok(VERIFY_READ, buf, len))
 		return -EFAULT;
@@ -1251,7 +1253,7 @@ static ssize_t serve_write_page(struct file * filp, loff_t pos,
 		assert(written == len);
 	}
 
-	kfsd_leave(1);
+	fstitchd_leave(1);
 	return written;
 }
 
@@ -1289,7 +1291,7 @@ __grab_cache_page(struct address_space *mapping, unsigned long index,
 }
 
 // Reimplementation of 2.6.20.1 generic_file_buffered_write() to work with
-// integrated linux-kudos cache
+// integrated linux-fsttich cache
 static ssize_t serve_generic_file_buffered_write(struct file * filp,
                                                  loff_t * ppos,
                                                  const char __user * buf,
@@ -1466,26 +1468,26 @@ static int serve_delete_dentry(struct dentry * dentry)
 //
 // Linux VFS struct definitions
 
-static struct file_system_type kfs_fs_type = {
+static struct file_system_type fstitch_fs_type = {
 	.owner = THIS_MODULE,
-	.name = "kfs",
+	.name = "fstitch",
 	.get_sb = serve_get_sb,
 	.kill_sb = serve_kill_sb
 };
 
-static struct inode_operations kfs_reg_inode_ops = {
+static struct inode_operations fstitch_reg_inode_ops = {
 	//.truncate =  // TODO: add? (what happens now?)
 	.setattr = serve_setattr
 };
 
-static struct inode_operations kfs_lnk_inode_ops = {
+static struct inode_operations fstitch_lnk_inode_ops = {
 	.setattr = serve_setattr,
 	.readlink = serve_readlink,
 	.follow_link = serve_follow_link,
 	.put_link = serve_put_link
 };
 
-static struct file_operations kfs_reg_file_ops = {
+static struct file_operations fstitch_reg_file_ops = {
 	.open = serve_open,
 	.release = serve_release,
 	.llseek = generic_file_llseek,
@@ -1501,7 +1503,7 @@ static struct file_operations kfs_reg_file_ops = {
 	.fsync = serve_fsync
 };
 
-static struct inode_operations kfs_dir_inode_ops = {
+static struct inode_operations fstitch_dir_inode_ops = {
 	.lookup	= serve_dir_lookup,
 	.link = serve_link,
 	.unlink	= serve_unlink,
@@ -1513,7 +1515,7 @@ static struct inode_operations kfs_dir_inode_ops = {
 	.rename = serve_rename
 };
 
-static struct file_operations kfs_dir_file_ops = {
+static struct file_operations fstitch_dir_file_ops = {
 	.open = serve_open,
 	.release = serve_release,
 	.read = generic_read_dir,
@@ -1521,15 +1523,15 @@ static struct file_operations kfs_dir_file_ops = {
 	.fsync = serve_fsync
 };
 
-static struct address_space_operations kfs_aops = {
+static struct address_space_operations fstitch_aops = {
 	.readpage = serve_readpage,
 };
 
-static struct dentry_operations kfs_dentry_ops = {
+static struct dentry_operations fstitch_dentry_ops = {
 	.d_delete = serve_delete_dentry
 };
 
-static struct super_operations kfs_superblock_ops = {
+static struct super_operations fstitch_superblock_ops = {
 	.read_inode = serve_read_inode,
 	.statfs = serve_stat_fs
 };

@@ -1,17 +1,17 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/debug.h>
-#include <kfs/modman.h>
-#include <kfs/chdesc.h>
-#include <kfs/unlink_bd.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/debug.h>
+#include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/unlink_bd.h>
 
 struct unlink_info {
 	BD_t my_bd;
 	
 	BD_t * bd;
-	chdesc_t ** write_head;
+	patch_t ** write_head;
 };
 
 static bdesc_t * unlink_bd_read_block(BD_t * object, uint32_t number, uint16_t count, page_t * page)
@@ -27,24 +27,24 @@ static bdesc_t * unlink_bd_synthetic_read_block(BD_t * object, uint32_t number, 
 static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 {
 	struct unlink_info * info = (struct unlink_info *) object;
-	chdesc_t * write_head = info->write_head ? *info->write_head : NULL;
-	chdesc_t * next = NULL;
-	chdesc_t * chdesc;
-	const int engaged = opgroup_engaged();
+	patch_t * write_head = info->write_head ? *info->write_head : NULL;
+	patch_t * next = NULL;
+	patch_t * patch;
+	const int engaged = patchgroup_engaged();
 	int r;
 	
-	/* inspect and modify all chdescs passing through */
-	for(chdesc = block->ddesc->index_changes[object->graph_index].head; chdesc; chdesc = next)
+	/* inspect and modify all patchs passing through */
+	for(patch = block->ddesc->index_changes[object->graph_index].head; patch; patch = next)
 	{
 		int needs_head = 1;
-		chdepdesc_t ** deps = &chdesc->befores;
+		chdepdesc_t ** deps = &patch->befores;
 		
-		assert(chdesc->owner == object);
-		next = chdesc->ddesc_index_next;
+		assert(patch->owner == object);
+		next = patch->ddesc_index_next;
 		
 		while(*deps)
 		{
-			chdesc_t * dep = (*deps)->before.desc;
+			patch_t * dep = (*deps)->before.desc;
 			/* if it's the write head, or if it's on the same block, leave it alone */
 			if(dep == write_head || (dep->block && dep->block->ddesc == block->ddesc))
 			{
@@ -55,39 +55,39 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 			}
 			/* otherwise remove this dependency */
 			/* WARNING: this makes this module incompatible
-			 * with opgroups, period */
-			chdesc_dep_remove(*deps);
+			 * with patchgroups, period */
+			patch_dep_remove(*deps);
 		}
 		
 		if(needs_head && write_head)
 		{
-			chdesc->flags |= CHDESC_SAFE_AFTER;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SAFE_AFTER);
-			r = chdesc_add_depend(chdesc, write_head);
+			patch->flags |= PATCH_SAFE_AFTER;
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
+			r = patch_add_depend(patch, write_head);
 			if(r < 0)
 				kpanic("Holy Mackerel!");
-			chdesc->flags &= ~CHDESC_SAFE_AFTER;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_SAFE_AFTER);
+			patch->flags &= ~PATCH_SAFE_AFTER;
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
 		}
 		
 		if(engaged)
 		{
-			/* scan the afters as well, and unhook any opgroup chdescs */
+			/* scan the afters as well, and unhook any patchgroup patchs */
 			/* WARNING: see warning above */
-			deps = &chdesc->afters;
+			deps = &patch->afters;
 			while(*deps)
-				if(((*deps)->after.desc->flags & CHDESC_NO_OPGROUP) && (*deps)->after.desc->type == NOOP)
-					chdesc_dep_remove(*deps);
+				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == NOOP)
+					patch_dep_remove(*deps);
 				else
 					deps = &(*deps)->before.next;
-			/* and set the opgroup exemption flag */
-			chdesc->flags |= CHDESC_NO_OPGROUP;
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_NO_OPGROUP);
+			/* and set the patchgroup exemption flag */
+			patch->flags |= PATCH_NO_PATCHGROUP;
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_NO_PATCHGROUP);
 		}
 	}
 	
 	/* this should never fail */
-	r = chdesc_push_down(block, object, info->bd);
+	r = patch_push_down(block, object, info->bd);
 	if(r < 0)
 		return r;
 	
@@ -95,12 +95,12 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 	return CALL(info->bd, write_block, block, number);
 }
 
-static int unlink_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int unlink_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** unlink_bd_get_write_head(BD_t * object)
+static patch_t ** unlink_bd_get_write_head(BD_t * object)
 {
 	return ((struct unlink_info *) object)->write_head;
 }

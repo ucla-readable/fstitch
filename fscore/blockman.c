@@ -1,9 +1,9 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/blockman.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/blockman.h>
 
 #define BLOCKMAN_DEBUG 0
 #define DISABLE_ORPHAN_WARNING 0

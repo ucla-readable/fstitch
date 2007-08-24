@@ -2,7 +2,7 @@
 
 function test () {
 	ktime rm rm -rf $MNT/$TAROUT
-	ktime sync fsync $KUDOSDIR $MNT
+	ktime sync fsync $FSTITCHDIR $MNT
 }
 
 function run () {
@@ -25,8 +25,8 @@ function run () {
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 HOST=`cat "$OUTDIR/host"`
 FS=`cat "$OUTDIR/fs"`
 CMODE=`cat "$OUTDIR/consistency_mode"`
@@ -41,6 +41,6 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-prepare $T $N $KUDOSDIR $OUTDIR $HOST
+prepare $T $N $FSTITCHDIR $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST $CRASHSIM
+finish $T $N $FSTITCHDIR $OUTDIR $HOST $CRASHSIM

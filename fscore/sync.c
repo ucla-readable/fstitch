@@ -1,11 +1,11 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/modman.h>
-#include <kfs/sync.h>
-#include <kfs/modman.h>
+#include <fscore/bd.h>
+#include <fscore/modman.h>
+#include <fscore/sync.h>
+#include <fscore/modman.h>
 
-int kfs_sync(void)
+int fstitch_sync(void)
 {
 	for(;;)
 	{

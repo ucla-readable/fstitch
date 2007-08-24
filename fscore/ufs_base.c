@@ -1,15 +1,15 @@
 #include <lib/platform.h>
 #include <lib/hash_map.h>
 
-#include <kfs/debug.h>
-#include <kfs/modman.h>
-#include <kfs/ufs_base.h>
-#include <kfs/ufs_common.h>
-#include <kfs/ufs_alloc_lastpos.h>
-#include <kfs/ufs_alloc_linear.h>
-#include <kfs/ufs_dirent_linear.h>
-#include <kfs/ufs_cg_wb.h>
-#include <kfs/ufs_super_wb.h>
+#include <fscore/debug.h>
+#include <fscore/modman.h>
+#include <fscore/ufs_base.h>
+#include <fscore/ufs_common.h>
+#include <fscore/ufs_alloc_lastpos.h>
+#include <fscore/ufs_alloc_linear.h>
+#include <fscore/ufs_dirent_linear.h>
+#include <fscore/ufs_cg_wb.h>
+#include <fscore/ufs_super_wb.h>
 
 #define UFS_BASE_DEBUG 0
 
@@ -26,10 +26,10 @@ struct open_ufsfile {
 typedef struct open_ufsfile open_ufsfile_t;
 
 static uint32_t ufs_get_file_numblocks(LFS_t * object, fdesc_t * file);
-static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head);
-static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head);
+static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, patch_t ** head);
+static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head);
 static uint32_t ufs_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset);
-static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head);
+static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head);
 
 #if 0
 static void print_inode(struct UFS_dinode inode)
@@ -118,7 +118,7 @@ static int check_super(LFS_t * object)
 }
 
 // Find a free block and allocate all fragments in the block
-static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, chdesc_t ** head)
+static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, patch_t ** head)
 {
 	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
@@ -149,10 +149,10 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 			// FIXME revert all previously allocated blocks?
 			if (!block)
 				return INVALID_BLOCK;
-			r = chdesc_create_init(block, info->ubd, head);
+			r = patch_create_init(block, info->ubd, head);
 			if (r >= 0)
 			{
-				KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "wipe block");
+				FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "wipe block");
 				r = CALL(info->ubd, write_block, block, i);
 			}
 			if (r < 0)
@@ -171,7 +171,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, ch
 }
 
 // Deallocate an entire block
-static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc_t ** head)
+static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, num);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -204,17 +204,17 @@ static int erase_wholeblock(LFS_t * object, uint32_t num, fdesc_t * file, chdesc
 }
 
 // Update a ptr in an indirect ptr block
-static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block, uint32_t block_number, uint32_t offset, uint32_t n, chdesc_t ** head)
+static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block, uint32_t block_number, uint32_t offset, uint32_t n, patch_t ** head)
 {
-	int r = chdesc_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head);
+	int r = patch_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head);
 	if (r < 0)
 		return r;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "indirect pointer");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "indirect pointer");
 	return CALL(info->ubd, write_block, block, block_number);
 }
 
 // Update file's inode with an nth indirect ptr
-static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil, chdesc_t ** head)
+static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil, patch_t ** head)
 {
 	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
@@ -244,7 +244,7 @@ static int modify_indirect_ptr(LFS_t * object, fdesc_t * file, int n, bool evil,
 
 // Write the block ptrs for a file, allocate indirect blocks as needed
 // Offset is a byte offset
-static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, chdesc_t ** head)
+static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint32_t value, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %p %d %d\n", __FUNCTION__, file, offset, value);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -341,7 +341,7 @@ static int write_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, uint
 
 // Erase the block ptrs for a file, deallocate indirect blocks as needed
 // Offset is a byte offset
-static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, chdesc_t ** head)
+static int erase_block_ptr(LFS_t * object, fdesc_t * file, uint32_t offset, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %p %d\n", __FUNCTION__, file, offset);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -509,7 +509,7 @@ static open_ufsfile_t * get_ufsfile(hash_map_t * filemap, inode_t ino, int * exi
 	return existing_file;
 }
 
-static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
+static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose, patch_t ** head)
 {
 	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
@@ -553,10 +553,10 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		if (!newblock)
 			goto find_frags_new_home_failed;
 
-		r = chdesc_create_full(newblock, info->ubd, bdesc_data(block), head);
+		r = patch_create_full(newblock, info->ubd, bdesc_data(block), head);
 		if (r < 0)
 			goto find_frags_new_home_failed;
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, *head, "move fragment");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "move fragment");
 
 		bdesc_release(&block);
 		r = CALL(info->ubd, write_block, newblock, blockno + i);
@@ -585,7 +585,7 @@ find_frags_new_home_failed:
 }
 
 // Allocates fragments, really
-static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, chdesc_t ** head)
+static uint32_t ufs_allocate_block(LFS_t * object, fdesc_t * file, int purpose, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -700,7 +700,7 @@ static fdesc_t * ufs_lookup_inode(LFS_t * object, inode_t ino)
 		ef->file->f_lastalloc = INVALID_BLOCK;
 		ef->file->f_num = ino;
 		type = ef->file->f_inode.di_mode >> 12;
-		ef->file->f_type = ufs_to_kfs_type(type);
+		ef->file->f_type = ufs_to_fstitch_type(type);
 		ef->file->f_numfrags = ufs_get_file_numblocks(object, (fdesc_t *) ef->file);
 		ef->file->f_lastfrag = ufs_get_file_block(object, (fdesc_t *) ef->file, (ef->file->f_numfrags - 1) * super->fs_fsize);
 		return (fdesc_t *) ef->file;
@@ -862,7 +862,7 @@ static int ufs_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry,
 	return r;
 }
 
-static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
+static int ufs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -910,7 +910,7 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 
 static char link_buf[UFS_MAXPATHLEN];
 
-static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
+static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, patch_t ** head)
 {
 	struct ufs_info * info = (struct ufs_info *) object;
 	ufs_fdesc_t * nf;
@@ -988,7 +988,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 		memset(&nf->f_inode, 0, sizeof(struct UFS_dinode));
 
-		r = initialmd->get(initialmd->arg, KFS_FEATURE_UID, sizeof(x32), &x32);
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_UID, sizeof(x32), &x32);
 		if (r > 0)
 			nf->f_inode.di_uid = x32;
 		else if (r == -ENOENT)
@@ -996,7 +996,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 		else
 			assert(0);
 
-		r = initialmd->get(initialmd->arg, KFS_FEATURE_GID, sizeof(x32), &x32);
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_GID, sizeof(x32), &x32);
 		if (r > 0)
 			nf->f_inode.di_gid = x32;
 		else if (r == -ENOENT)
@@ -1005,7 +1005,7 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 			assert(0);
 
 		nf->f_inode.di_mode = mode | UFS_IREAD | UFS_IWRITE;
-		r = initialmd->get(initialmd->arg, KFS_FEATURE_UNIX_PERM, sizeof(x16), &x16);
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_UNIX_PERM, sizeof(x16), &x16);
 		if (r > 0)
 			nf->f_inode.di_mode |= x16;
 		else if (r != -ENOENT)
@@ -1016,13 +1016,13 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 		if (type == TYPE_SYMLINK)
 		{
-			r = initialmd->get(initialmd->arg, KFS_FEATURE_SYMLINK, sizeof(link_buf), link_buf);
+			r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_SYMLINK, sizeof(link_buf), link_buf);
 			if (r < 0)
 				goto allocate_name_exit2;
 			else
 			{
 				fsmetadata_t fsm;
-				fsm.fsm_feature = KFS_FEATURE_SYMLINK;
+				fsm.fsm_feature = FSTITCH_FEATURE_SYMLINK;
 				fsm.fsm_value.p.data = link_buf;
 				fsm.fsm_value.p.length = r;
 				r = ufs_set_metadata2(object, nf, &fsm, 1, head);
@@ -1104,7 +1104,7 @@ allocate_name_exit:
 	return NULL;
 }
 
-static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, chdesc_t ** head)
+static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * name, uint8_t type, fdesc_t * link, const metadata_set_t * initialmd, inode_t * newino, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %s\n", __FUNCTION__, name);
 	int createdot = 0;
@@ -1124,7 +1124,7 @@ static fdesc_t * ufs_allocate_name(LFS_t * object, inode_t parent, const char * 
 	return allocate_name(object, parent, name, type, link, initialmd, newino, head);
 }
 
-static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, chdesc_t ** head)
+static int ufs_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %s %s\n", __FUNCTION__, oldname, newname);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1262,7 +1262,7 @@ ufs_rename_exit:
 	return r;
 }
 
-static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t ** head)
+static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1307,7 +1307,7 @@ static uint32_t ufs_truncate_file_block(LFS_t * object, fdesc_t * file, chdesc_t
 }
 
 /* FIXME: we need to unset f_lastalloc (i.e. to INVALID_BLOCK) here somehow */
-static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc_t ** head)
+static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d\n", __FUNCTION__, block);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1345,7 +1345,7 @@ static int ufs_free_block(LFS_t * object, fdesc_t * file, uint32_t block, chdesc
 	return ufs_write_fragment_bitmap(info, block, UFS_FREE, head);
 }
 
-static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, chdesc_t ** head)
+static int ufs_remove_name(LFS_t * object, inode_t parent, const char * name, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s %d %s\n", __FUNCTION__, parent, name);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1456,7 +1456,7 @@ ufs_remove_name_error2:
 	return r;
 }
 
-static int ufs_write_block(LFS_t * object, bdesc_t * block, uint32_t number, chdesc_t ** head)
+static int ufs_write_block(LFS_t * object, bdesc_t * block, uint32_t number, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1465,7 +1465,7 @@ static int ufs_write_block(LFS_t * object, bdesc_t * block, uint32_t number, chd
 	return CALL(info->ubd, write_block, block, number);
 }
 
-static chdesc_t ** ufs_get_write_head(LFS_t * object)
+static patch_t ** ufs_get_write_head(LFS_t * object)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1479,7 +1479,7 @@ static int32_t ufs_get_block_space(LFS_t * object)
 	return CALL(info->ubd, get_block_space);
 }
 
-static const bool ufs_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_NLINKS] = 1, [KFS_FEATURE_FILE_LFS] = 1, [KFS_FEATURE_UID] = 1, [KFS_FEATURE_GID] = 1, [KFS_FEATURE_UNIX_PERM] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1, [KFS_FEATURE_MTIME] = 1, [KFS_FEATURE_SYMLINK] = 1};
+static const bool ufs_features[] = {[FSTITCH_FEATURE_SIZE] = 1, [FSTITCH_FEATURE_FILETYPE] = 1, [FSTITCH_FEATURE_NLINKS] = 1, [FSTITCH_FEATURE_FILE_LFS] = 1, [FSTITCH_FEATURE_UID] = 1, [FSTITCH_FEATURE_GID] = 1, [FSTITCH_FEATURE_UNIX_PERM] = 1, [FSTITCH_FEATURE_BLOCKSIZE] = 1, [FSTITCH_FEATURE_DEVSIZE] = 1, [FSTITCH_FEATURE_MTIME] = 1, [FSTITCH_FEATURE_SYMLINK] = 1};
 
 static size_t ufs_get_max_feature_id(LFS_t * object)
 {
@@ -1496,7 +1496,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
 
-	if (id == KFS_FEATURE_SIZE) {
+	if (id == FSTITCH_FEATURE_SIZE) {
 		if (!f)
 			return -EINVAL;
 
@@ -1506,7 +1506,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((int32_t *) data) = f->f_inode.di_size;
 	}
-	else if (id == KFS_FEATURE_FILETYPE) {
+	else if (id == FSTITCH_FEATURE_FILETYPE) {
 		if (!f)
 			return -EINVAL;
 
@@ -1516,7 +1516,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((uint32_t *) data) = f->f_type;
 	}
-	else if (id == KFS_FEATURE_NLINKS) {
+	else if (id == FSTITCH_FEATURE_NLINKS) {
 		if (!f)
 			return -EINVAL;
 
@@ -1526,21 +1526,21 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((uint32_t *) data) = (uint32_t) f->f_inode.di_nlink;
 	}
-	else if (id == KFS_FEATURE_FREESPACE) {
+	else if (id == FSTITCH_FEATURE_FREESPACE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = count_free_space(info);
 	}
-	else if (id == KFS_FEATURE_FILE_LFS) {
+	else if (id == FSTITCH_FEATURE_FILE_LFS) {
 		if (size < sizeof(object))
 			return -ENOMEM;
 		size = sizeof(object);
 
 		*((typeof(object) *) data) = object;
 	}
-	else if (id == KFS_FEATURE_UID) {
+	else if (id == FSTITCH_FEATURE_UID) {
 		if (!f)
 			return -EINVAL;
 
@@ -1550,7 +1550,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((uint32_t *) data) = f->f_inode.di_uid;
 	}
-	else if (id == KFS_FEATURE_GID) {
+	else if (id == FSTITCH_FEATURE_GID) {
 		if (!f)
 			return -EINVAL;
 
@@ -1560,7 +1560,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((uint32_t *) data) = f->f_inode.di_gid;
 	}
-	else if (id == KFS_FEATURE_UNIX_PERM) {
+	else if (id == FSTITCH_FEATURE_UNIX_PERM) {
 		if (!f)
 			return -EINVAL;
 
@@ -1570,14 +1570,14 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((uint16_t *) data) = f->f_inode.di_mode & UFS_IPERM;
 	}
-	else if (id == KFS_FEATURE_BLOCKSIZE) {
+	else if (id == FSTITCH_FEATURE_BLOCKSIZE) {
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
 
 		*((uint32_t *) data) = object->blocksize;
 	}
-	else if (id == KFS_FEATURE_DEVSIZE) {
+	else if (id == FSTITCH_FEATURE_DEVSIZE) {
 		const struct UFS_Super * super = CALL(info->parts.p_super, read);
 		if (size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -1585,7 +1585,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((uint32_t *) data) = super->fs_dsize;
 	}
-	else if (id == KFS_FEATURE_MTIME) {
+	else if (id == FSTITCH_FEATURE_MTIME) {
 		if (!f)
 			return -EINVAL;
 
@@ -1595,7 +1595,7 @@ static int ufs_get_metadata(LFS_t * object, const ufs_fdesc_t * f, uint32_t id, 
 
 		*((int32_t *) data) = f->f_inode.di_mtime;
 	}
-	else if (id == KFS_FEATURE_SYMLINK) {
+	else if (id == FSTITCH_FEATURE_SYMLINK) {
 		if (!f || f->f_type != TYPE_SYMLINK)
 			return -EINVAL;
 
@@ -1633,7 +1633,7 @@ static int ufs_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_t
 	return ufs_get_metadata(object, f, id, size, data);
 }
 
-static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
+static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
 {
 	Dprintf("UFSDEBUG: %s\n", __FUNCTION__);
 	struct ufs_info * info = (struct ufs_info *) object;
@@ -1644,36 +1644,36 @@ static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t
 	if (nfsm == 0)
 		return ufs_write_inode(info, f->f_num, f->f_inode, head);
 	
-	if (fsm->fsm_feature == KFS_FEATURE_SIZE) {
+	if (fsm->fsm_feature == FSTITCH_FEATURE_SIZE) {
 		if (fsm->fsm_value.u >= UFS_MAXFILESIZE)
 			return -EINVAL;
 
 		f->f_inode.di_size = fsm->fsm_value.u;
 	}
-	else if (fsm->fsm_feature == KFS_FEATURE_FILETYPE) {
+	else if (fsm->fsm_feature == FSTITCH_FEATURE_FILETYPE) {
 		uint8_t fs_type;
 
-		fs_type = kfs_to_ufs_type(fsm->fsm_value.u);
+		fs_type = fstitch_to_ufs_type(fsm->fsm_value.u);
 		if (fs_type == (uint8_t) -EINVAL
 		    || fs_type != (f->f_inode.di_mode >> 12))
 			return -EINVAL;
 	}
-	else if (fsm->fsm_feature == KFS_FEATURE_UID) {
+	else if (fsm->fsm_feature == FSTITCH_FEATURE_UID) {
 		f->f_inode.di_uid = fsm->fsm_value.u;
 	}
-	else if (fsm->fsm_feature == KFS_FEATURE_GID) {
+	else if (fsm->fsm_feature == FSTITCH_FEATURE_GID) {
 		f->f_inode.di_gid = fsm->fsm_value.u;
 	}
-	else if (fsm->fsm_feature == KFS_FEATURE_UNIX_PERM) {
+	else if (fsm->fsm_feature == FSTITCH_FEATURE_UNIX_PERM) {
 		f->f_inode.di_mode = (f->f_inode.di_mode & ~UFS_IPERM)
 			| (fsm->fsm_value.u & UFS_IPERM);
 	}
-	else if (fsm->fsm_feature == KFS_FEATURE_MTIME) {
+	else if (fsm->fsm_feature == FSTITCH_FEATURE_MTIME) {
 		// XXX!!!!
 		//f->f_inode.di_mtime = f->f_inode.di_mtime;
 		f->f_inode.di_mtime = fsm->fsm_value.u;
 	}
-	else if (fsm->fsm_feature == KFS_FEATURE_SYMLINK) {
+	else if (fsm->fsm_feature == FSTITCH_FEATURE_SYMLINK) {
 		if (!f || f->f_type != TYPE_SYMLINK)
 			return -EINVAL;
 
@@ -1690,7 +1690,7 @@ static int ufs_set_metadata2(LFS_t * object, ufs_fdesc_t * f, const fsmetadata_t
 	goto retry;
 }
 
-static int ufs_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
+static int ufs_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
 {
 	int r;
 	ufs_fdesc_t * f = (ufs_fdesc_t *) ufs_lookup_inode(object, ino);
@@ -1701,7 +1701,7 @@ static int ufs_set_metadata2_inode(LFS_t * object, inode_t ino, const fsmetadata
 	return r;
 }
 
-static int ufs_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, chdesc_t ** head)
+static int ufs_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
 {
 	ufs_fdesc_t * f = (ufs_fdesc_t *) file;
 	return ufs_set_metadata2(object, f, fsm, nfsm, head);

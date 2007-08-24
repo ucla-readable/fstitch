@@ -1,12 +1,12 @@
 #!/bin/bash
 
 if [ $1 = '--gdb' -o $1 = '--valgrind' -o $1 = '--callgrind' -o $1 = '--strace' ]; then
-	KFSD_WRAP=`echo "$1" | sed s/--//`
+	FSTITCHD_WRAP=`echo "$1" | sed s/--//`
 	shift
 fi
 
 while expr "$1" : "--simulate-cache.*"; do
-	KFSD_WRAP_OPTS="$KFSD_WRAP_OPTS $1"
+	FSTITCHD_WRAP_OPTS="$FSTITCHD_WRAP_OPTS $1"
 	shift
 done
 
@@ -18,45 +18,45 @@ fi
 MNT="$1"
 shift
 
-KFSD=./obj/unix-user/kfs/kfsd
-# -s because kkfsd is not multithread safe
+FSTITCHD=./obj/unix-user/fscore/fstitchd
+# -s because kfstitchd is not multithread safe
 # '-o allow_root' so that the (suid) fusermount can mount nested mountpoints
-KFSD_OPTS="-s -o allow_root"
+FSTITCHD_OPTS="-s -o allow_root"
 
-# Run kfsd. If it exits non-zero (and so probably crashed) explicitly unmount.
-# Lazy unmount in case fusermount is called before kfsd's mount is removed.
-# Set KFSD_WRAP to run kfsd within a wrapper, such as gdb or valgrind.
+# Run fstitchd. If it exits non-zero (and so probably crashed) explicitly unmount.
+# Lazy unmount in case fusermount is called before fstitchd's mount is removed.
+# Set FSTITCHD_WRAP to run fstitchd within a wrapper, such as gdb or valgrind.
 # TODO: from C we could use WIFEXITED() to know exactly when to fusermount.
-if [ "$KFSD_WRAP" == "gdb" ] && [ "$KFSD_WRAP_OPTS" == "" ]
+if [ "$FSTITCHD_WRAP" == "gdb" ] && [ "$FSTITCHD_WRAP_OPTS" == "" ]
 then
-	KFSD_WRAP_OPTS="-q --args"
-	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@"
+	FSTITCHD_WRAP_OPTS="-q --args"
+	$FSTITCHD_WRAP $FSTITCHD_WRAP_OPTS "$FSTITCHD" "$MNT" $FSTITCHD_OPTS "$@"
 	[ "$MNT" != "-h" ] && fusermount -uz "$MNT"
-elif [ "$KFSD_WRAP" == "valgrind" ] && [ "$KFSD_WRAP_OPTS" == "" ]
+elif [ "$FSTITCHD_WRAP" == "valgrind" ] && [ "$FSTITCHD_WRAP_OPTS" == "" ]
 then
-	KFSD_WRAP_OPTS="--suppressions=conf/memcheck.supp --leak-check=full --show-reachable=yes --leak-resolution=high"
-	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@" \
+	FSTITCHD_WRAP_OPTS="--suppressions=conf/memcheck.supp --leak-check=full --show-reachable=yes --leak-resolution=high"
+	$FSTITCHD_WRAP $FSTITCHD_WRAP_OPTS "$FSTITCHD" "$MNT" $FSTITCHD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
-elif [ "$KFSD_WRAP" == "cachegrind" -o "$KFSD_WRAP" == callgrind ]
+elif [ "$FSTITCHD_WRAP" == "cachegrind" -o "$FSTITCHD_WRAP" == callgrind ]
 then
-	valgrind --tool=$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@" \
+	valgrind --tool=$FSTITCHD_WRAP $FSTITCHD_WRAP_OPTS "$FSTITCHD" "$MNT" $FSTITCHD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
-elif [ "$KFSD_WRAP" == "massif" ] && [ "$KFSD_WRAP_OPTS" == "" ]
+elif [ "$FSTITCHD_WRAP" == "massif" ] && [ "$FSTITCHD_WRAP_OPTS" == "" ]
 then
 	KWO="--tool=massif"
 	KWO="$KWO --depth=5"
 	KWO="$KWO --alloc-fn=chain_elt_create --alloc-fn=hash_map_insert --alloc-fn=hash_map_resize --alloc-fn=hash_map_create_size --alloc-fn=hash_map_create"
 	KWO="$KWO --alloc-fn=vector_create_elts --alloc-fn=vector_create_size"
 	KWO="$KWO --alloc-fn=memdup"
-	valgrind $KWO "$KFSD" "$MNT" $KFSD_OPTS "$@" \
+	valgrind $KWO "$FSTITCHD" "$MNT" $FSTITCHD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
-elif [ "$KFSD_WRAP" == "time" ]
+elif [ "$FSTITCHD_WRAP" == "time" ]
 then
 	LOG=time.log
-	NAME="$KFSD_WRAP_OPTS"
-	$KFSD_WRAP -f "kfsd-$NAME %e real %U user %S sys" -a -o "$LOG" "$KFSD" "$MNT" $KFSD_OPTS "$@" \
+	NAME="$FSTITCHD_WRAP_OPTS"
+	$FSTITCHD_WRAP -f "fstitchd-$NAME %e real %U user %S sys" -a -o "$LOG" "$FSTITCHD" "$MNT" $FSTITCHD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
 else
-	$KFSD_WRAP $KFSD_WRAP_OPTS "$KFSD" "$MNT" $KFSD_OPTS "$@" \
+	$FSTITCHD_WRAP $FSTITCHD_WRAP_OPTS "$FSTITCHD" "$MNT" $FSTITCHD_OPTS "$@" \
 		|| ([ "$MNT" != "-h" ] && fusermount -uz "$MNT")
 fi

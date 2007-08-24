@@ -1,12 +1,12 @@
-#ifndef __KUDOS_KFS_KERNEL_OPGROUP_SCOPES_H
-#define __KUDOS_KFS_KERNEL_OPGROUP_SCOPES_H
+#ifndef __FSTITCH_FSCORE_KERNEL_PATCHGROUP_SCOPES_H
+#define __FSTITCH_FSCORE_KERNEL_PATCHGROUP_SCOPES_H
 
-#include <kfs/opgroup.h>
+#include <fscore/patchgroup.h>
 
 struct task_struct;
 
-int kernel_opgroup_scopes_init(void);
+int kernel_patchgroup_scopes_init(void);
 
-opgroup_scope_t * process_opgroup_scope(const struct task_struct * task);
+patchgroup_scope_t * process_patchgroup_scope(const struct task_struct * task);
 
-#endif /* __KUDOS_KFS_KERNEL_OPGROUP_SCOPES_H */
+#endif /* __FSTITCH_FSCORE_KERNEL_PATCHGROUP_SCOPES_H */

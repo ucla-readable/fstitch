@@ -1,11 +1,11 @@
 #!/bin/bash
 
 function set_nrb () {
-	sed -i "s/^#define CHDESC_NRB .$/#define CHDESC_NRB $1/" kfs/chdesc.h
+	sed -i "s/^#define PATCH_NRB .$/#define PATCH_NRB $1/" fscore/patch.h
 }
 
 function set_overlap_merge () {
-	sed -i "s/^#define CHDESC_BYTE_MERGE_OVERLAP .$/#define CHDESC_BYTE_MERGE_OVERLAP $1/;s/^#define CHDESC_BIT_MERGE_OVERLAP .$/#define CHDESC_BIT_MERGE_OVERLAP $1/" kfs/chdesc.c
+	sed -i "s/^#define PATCH_BYTE_MERGE_OVERLAP .$/#define PATCH_BYTE_MERGE_OVERLAP $1/;s/^#define PATCH_BIT_MERGE_OVERLAP .$/#define PATCH_BIT_MERGE_OVERLAP $1/" fscore/patch.c
 }
 
 if [ $# -ne 1 ] && [ $# -ne 2 ]; then

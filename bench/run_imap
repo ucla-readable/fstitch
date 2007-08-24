@@ -2,13 +2,13 @@
 # Run the imap test
 
 if [ $# -ne 3 ]; then
-	echo "Usage: $0 <imapd_file> <mailpath> <kfspath>"
+	echo "Usage: $0 <imapd_file> <mailpath> <fscorepath>"
 	exit 1
 fi
 
 IMAPD=$1
 MAILPATH=$2
-KFSPATH=$3
+FSTITCHPATH=$3
 
 rm -f $MAILPATH/mailbox.src
 cp mailbox.src.gz $MAILPATH || exit 1
@@ -16,8 +16,8 @@ gunzip $MAILPATH/mailbox.src.gz
 rm -f $MAILPATH/mailbox.dst
 
 sync
-if [ "$KFSPATH" != "" ]; then
-	$KFSPATH/obj/util/fsync $MAILPATH
+if [ "$FSTITCHPATH" != "" ]; then
+	$FSTITCHPATH/obj/util/fsync $MAILPATH
 fi
 
 echo -n "Press return to run test: "

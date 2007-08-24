@@ -21,11 +21,11 @@
 #include <gtk/gtk.h>
 
 #define WANT_DEBUG_STRUCTURES 1
-#include "kfs/debug_opcode.h"
+#include "fscore/debug_opcode.h"
 
 #define CONSTANTS_ONLY 1
-#include "kfs/chdesc.h"
-#include "kfs/bdesc.h"
+#include "fscore/patch.h"
+#include "fscore/bdesc.h"
 
 /* Set HASH_PRIME to do an extra pass over the input file to prime the string
  * and stack hash tables, and to report on the result. */
@@ -648,7 +648,7 @@ struct weak {
 };
 
 struct arrow {
-	uint32_t chdesc;
+	uint32_t patch;
 	struct arrow * next;
 };
 
@@ -658,7 +658,7 @@ struct label {
 	struct label * next;
 };
 
-struct chdesc {
+struct patch {
 	uint32_t address;
 	int opcode;
 	uint32_t owner, block;
@@ -679,18 +679,18 @@ struct chdesc {
 	struct label * labels;
 	uint32_t free_prev, free_next;
 	/* hash table */
-	struct chdesc * next;
+	struct patch * next;
 	/* groups */
-	struct chdesc * group_next[2];
+	struct patch * group_next[2];
 };
 
 static const char * type_names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [NOOP] = "NOOP"};
 
 static struct bd * bds = NULL;
 static struct block * blocks[HASH_TABLE_SIZE];
-static struct chdesc * chdescs[HASH_TABLE_SIZE];
-static uint32_t chdesc_free_head = 0;
-static int chdesc_count = 0;
+static struct patch * patchs[HASH_TABLE_SIZE];
+static uint32_t patch_free_head = 0;
+static int patch_count = 0;
 static int arrow_count = 0;
 
 static int applied = 0;
@@ -733,16 +733,16 @@ static void reset_state(void)
 			free(old);
 		}
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
-		while(chdescs[i])
+		while(patchs[i])
 		{
-			struct chdesc * old = chdescs[i];
-			chdescs[i] = old->next;
+			struct patch * old = patchs[i];
+			patchs[i] = old->next;
 			free_arrows(&old->befores);
 			free_arrows(&old->afters);
 			free_labels(&old->labels);
 			free(old);
 		}
-	chdesc_count = 0;
+	patch_count = 0;
 	arrow_count = 0;
 	applied = 0;
 }
@@ -766,11 +766,11 @@ static struct block * lookup_block(uint32_t address)
 	return scan;
 }
 
-static struct chdesc * lookup_chdesc(uint32_t address)
+static struct patch * lookup_patch(uint32_t address)
 {
-	struct chdesc * scan;
+	struct patch * scan;
 	int index = address % HASH_TABLE_SIZE;
-	for(scan = chdescs[index]; scan; scan = scan->next)
+	for(scan = patchs[index]; scan; scan = scan->next)
 		if(scan->address == address)
 			break;
 	return scan;
@@ -813,78 +813,78 @@ static int add_block_number(uint32_t address, uint32_t number)
 	return 0;
 }
 
-static struct chdesc * _chdesc_create(uint32_t address, uint32_t owner)
+static struct patch * _patch_create(uint32_t address, uint32_t owner)
 {
 	int index = address % HASH_TABLE_SIZE;
-	struct chdesc * chdesc = malloc(sizeof(*chdesc));
-	if(!chdesc)
+	struct patch * patch = malloc(sizeof(*patch));
+	if(!patch)
 		return NULL;
-	chdesc->address = address;
-	chdesc->opcode = applied + 1;
-	chdesc->owner = owner;
-	chdesc->flags = 0;
-	chdesc->local_flags = 0;
-	chdesc->weak_refs = NULL;
-	chdesc->befores = NULL;
-	chdesc->afters = NULL;
-	chdesc->labels = NULL;
-	chdesc->free_prev = 0;
-	chdesc->free_next = 0;
-	chdesc->next = chdescs[index];
-	chdescs[index] = chdesc;
-	chdesc_count++;
-	return chdesc;
+	patch->address = address;
+	patch->opcode = applied + 1;
+	patch->owner = owner;
+	patch->flags = 0;
+	patch->local_flags = 0;
+	patch->weak_refs = NULL;
+	patch->befores = NULL;
+	patch->afters = NULL;
+	patch->labels = NULL;
+	patch->free_prev = 0;
+	patch->free_next = 0;
+	patch->next = patchs[index];
+	patchs[index] = patch;
+	patch_count++;
+	return patch;
 }
 
-static struct chdesc * chdesc_create_bit(uint32_t address, uint32_t owner, uint32_t block, uint16_t offset, uint32_t xor)
+static struct patch * patch_create_bit(uint32_t address, uint32_t owner, uint32_t block, uint16_t offset, uint32_t xor)
 {
-	struct chdesc * chdesc = _chdesc_create(address, owner);
-	if(!chdesc)
+	struct patch * patch = _patch_create(address, owner);
+	if(!patch)
 		return NULL;
-	chdesc->block = block;
-	chdesc->type = BIT;
-	chdesc->bit.offset = offset;
-	chdesc->bit.xor = xor;
-	return chdesc;
+	patch->block = block;
+	patch->type = BIT;
+	patch->bit.offset = offset;
+	patch->bit.xor = xor;
+	return patch;
 }
 
-static struct chdesc * chdesc_create_byte(uint32_t address, uint32_t owner, uint32_t block, uint16_t offset, uint16_t length)
+static struct patch * patch_create_byte(uint32_t address, uint32_t owner, uint32_t block, uint16_t offset, uint16_t length)
 {
-	struct chdesc * chdesc = _chdesc_create(address, owner);
-	if(!chdesc)
+	struct patch * patch = _patch_create(address, owner);
+	if(!patch)
 		return NULL;
-	chdesc->block = block;
-	chdesc->type = BYTE;
-	chdesc->byte.offset = offset;
-	chdesc->byte.length = length;
-	return chdesc;
+	patch->block = block;
+	patch->type = BYTE;
+	patch->byte.offset = offset;
+	patch->byte.length = length;
+	return patch;
 }
 
-static struct chdesc * chdesc_create_noop(uint32_t address, uint32_t owner)
+static struct patch * patch_create_noop(uint32_t address, uint32_t owner)
 {
-	struct chdesc * chdesc = _chdesc_create(address, owner);
-	if(!chdesc)
+	struct patch * patch = _patch_create(address, owner);
+	if(!patch)
 		return NULL;
-	chdesc->block = 0;
-	chdesc->type = NOOP;
-	return chdesc;
+	patch->block = 0;
+	patch->type = NOOP;
+	return patch;
 }
 
-static int chdesc_add_weak(struct chdesc * chdesc, uint32_t location)
+static int patch_add_weak(struct patch * patch, uint32_t location)
 {
 	struct weak * weak = malloc(sizeof(*weak));
 	if(!weak)
 		return -ENOMEM;
 	weak->location = location;
-	weak->next = chdesc->weak_refs;
-	chdesc->weak_refs = weak;
+	weak->next = patch->weak_refs;
+	patch->weak_refs = weak;
 	return 0;
 }
 
-static int chdesc_rem_weak(struct chdesc * chdesc, uint32_t location)
+static int patch_rem_weak(struct patch * patch, uint32_t location)
 {
 	struct weak ** point;
-	for(point = &chdesc->weak_refs; *point; point = &(*point)->next)
+	for(point = &patch->weak_refs; *point; point = &(*point)->next)
 		if((*point)->location == location)
 		{
 			struct weak * old = *point;
@@ -895,10 +895,10 @@ static int chdesc_rem_weak(struct chdesc * chdesc, uint32_t location)
 	return -ENOENT;
 }
 
-static int chdesc_add_label(struct chdesc * chdesc, const char * label)
+static int patch_add_label(struct patch * patch, const char * label)
 {
 	struct label * scan;
-	for(scan = chdesc->labels; scan; scan = scan->next)
+	for(scan = patch->labels; scan; scan = scan->next)
 		if(!strcmp(scan->label, label))
 		{
 			scan->count++;
@@ -909,40 +909,40 @@ static int chdesc_add_label(struct chdesc * chdesc, const char * label)
 		return -ENOMEM;
 	scan->label = label;
 	scan->count = 1;
-	scan->next = chdesc->labels;
-	chdesc->labels = scan;
+	scan->next = patch->labels;
+	patch->labels = scan;
 	return 0;
 }
 
-static int chdesc_add_before(struct chdesc * after, uint32_t before)
+static int patch_add_before(struct patch * after, uint32_t before)
 {
 	struct arrow * arrow = malloc(sizeof(*arrow));
 	if(!arrow)
 		return -ENOMEM;
-	arrow->chdesc = before;
+	arrow->patch = before;
 	arrow->next = after->befores;
 	after->befores = arrow;
 	arrow_count++;
 	return 0;
 }
 
-static int chdesc_add_after(struct chdesc * before, uint32_t after)
+static int patch_add_after(struct patch * before, uint32_t after)
 {
 	struct arrow * arrow = malloc(sizeof(*arrow));
 	if(!arrow)
 		return -ENOMEM;
-	arrow->chdesc = after;
+	arrow->patch = after;
 	arrow->next = before->afters;
 	before->afters = arrow;
 	arrow_count++;
 	return 0;
 }
 
-static int chdesc_rem_before(struct chdesc * after, uint32_t before)
+static int patch_rem_before(struct patch * after, uint32_t before)
 {
 	struct arrow ** point;
 	for(point = &after->befores; *point; point = &(*point)->next)
-		if((*point)->chdesc == before)
+		if((*point)->patch == before)
 		{
 			struct arrow * old = *point;
 			*point = old->next;
@@ -953,11 +953,11 @@ static int chdesc_rem_before(struct chdesc * after, uint32_t before)
 	return -ENOENT;
 }
 
-static int chdesc_rem_after(struct chdesc * before, uint32_t after)
+static int patch_rem_after(struct patch * before, uint32_t after)
 {
 	struct arrow ** point;
 	for(point = &before->afters; *point; point = &(*point)->next)
-		if((*point)->chdesc == after)
+		if((*point)->patch == after)
 		{
 			struct arrow * old = *point;
 			*point = old->next;
@@ -968,20 +968,20 @@ static int chdesc_rem_after(struct chdesc * before, uint32_t after)
 	return -ENOENT;
 }
 
-static int chdesc_destroy(uint32_t address)
+static int patch_destroy(uint32_t address)
 {
 	int index = address % HASH_TABLE_SIZE;
-	struct chdesc ** point;
-	for(point = &chdescs[index]; *point; point = &(*point)->next)
+	struct patch ** point;
+	for(point = &patchs[index]; *point; point = &(*point)->next)
 		if((*point)->address == address)
 		{
-			struct chdesc * old = *point;
+			struct patch * old = *point;
 			*point = old->next;
 			free_arrows(&old->befores);
 			free_arrows(&old->afters);
 			free_labels(&old->labels);
 			free(old);
-			chdesc_count--;
+			patch_count--;
 			return 0;
 		}
 	return -ENOENT;
@@ -1031,7 +1031,7 @@ static struct mark * marks = NULL;
 struct group_hash;
 struct group {
 	uint32_t key;
-	struct chdesc * chdescs;
+	struct patch * patchs;
 	struct group_hash * sub;
 	struct group * next;
 };
@@ -1096,7 +1096,7 @@ static int mark_remove_index(int index)
 	return 0;
 }
 
-static struct group * chdesc_group_key(struct group_hash * hash, uint32_t key, int level, struct chdesc * chdesc)
+static struct group * patch_group_key(struct group_hash * hash, uint32_t key, int level, struct patch * patch)
 {
 	int index = key % HASH_TABLE_SIZE;
 	struct group * group;
@@ -1107,17 +1107,17 @@ static struct group * chdesc_group_key(struct group_hash * hash, uint32_t key, i
 	{
 		group = malloc(sizeof(*group));
 		group->key = key;
-		group->chdescs = NULL;
+		group->patchs = NULL;
 		group->sub = NULL;
 		group->next = hash->hash_table[index];
 		hash->hash_table[index] = group;
 	}
-	chdesc->group_next[level] = group->chdescs;
-	group->chdescs = chdesc;
+	patch->group_next[level] = group->patchs;
+	group->patchs = patch;
 	return group;
 }
 
-static int chdesc_group(struct chdesc * chdesc)
+static int patch_group(struct patch * patch)
 {
 	uint32_t key = 0;
 	struct group * group;
@@ -1130,10 +1130,10 @@ static int chdesc_group(struct chdesc * chdesc)
 			return -ENOMEM;
 	}
 	if(current_grouping == BLOCK || current_grouping == BLOCK_OWNER)
-		key = chdesc->block;
+		key = patch->block;
 	else if(current_grouping == OWNER || current_grouping == OWNER_BLOCK)
-		key = chdesc->owner;
-	group = chdesc_group_key(groups, key, 0, chdesc);
+		key = patch->owner;
+	group = patch_group_key(groups, key, 0, patch);
 	if(!group)
 		return -ENOMEM;
 	if(current_grouping == BLOCK_OWNER || current_grouping == OWNER_BLOCK)
@@ -1146,10 +1146,10 @@ static int chdesc_group(struct chdesc * chdesc)
 				return -ENOMEM;
 		}
 		if(current_grouping == BLOCK_OWNER)
-			key = chdesc->owner;
+			key = patch->owner;
 		else if(current_grouping == OWNER_BLOCK)
-			key = chdesc->block;
-		group = chdesc_group_key(group->sub, key, 1, chdesc);
+			key = patch->block;
+		group = patch_group_key(group->sub, key, 1, patch);
 		if(!group)
 			return -ENOMEM;
 	}
@@ -1211,10 +1211,10 @@ static int render_group(FILE * output, struct group * group, int level)
 	}
 	if(level == 1 || current_grouping == BLOCK || current_grouping == OWNER)
 	{
-		/* actually list the chdescs */
-		struct chdesc * chdesc;
-		for(chdesc = group->chdescs; chdesc; chdesc = chdesc->group_next[level])
-			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, (void *) chdesc);
+		/* actually list the patchs */
+		struct patch * patch;
+		for(patch = group->patchs; patch; patch = patch->group_next[level])
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", patch->address, (void *) patch);
 	}
 	return !!group->key;
 }
@@ -1253,100 +1253,100 @@ static void render_groups(FILE * output)
 	}
 }
 
-static void render_block_owner(FILE * output, struct chdesc * chdesc)
+static void render_block_owner(FILE * output, struct patch * patch)
 {
-	if(chdesc->block && render_block)
+	if(patch->block && render_block)
 	{
-		struct block * block = lookup_block(chdesc->block);
+		struct block * block = lookup_block(patch->block);
 		if(block)
 			fprintf(output, "\\n#%d (0x%08x)", block->number, block->address);
 		else
-			fprintf(output, "\\non 0x%08x", chdesc->block);
+			fprintf(output, "\\non 0x%08x", patch->block);
 	}
-	if(chdesc->owner && render_owner)
+	if(patch->owner && render_owner)
 	{
-		struct bd * bd = lookup_bd(chdesc->owner);
+		struct bd * bd = lookup_bd(patch->owner);
 		if(bd)
 			fprintf(output, "\\n%s", bd->name);
 		else
-			fprintf(output, "\\nat 0x%08x", chdesc->owner);
+			fprintf(output, "\\nat 0x%08x", patch->owner);
 	}
 }
 
-static void render_chdesc(FILE * output, struct chdesc * chdesc, int render_free)
+static void render_patch(FILE * output, struct patch * patch, int render_free)
 {
 	struct label * label;
 	struct arrow * arrow;
 	struct weak * weak;
 	struct mark * mark;
 	
-	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", chdesc->address, (void *) chdesc, chdesc->address);
-	for(label = chdesc->labels; label; label = label->next)
+	fprintf(output, "\"ch0x%08x-hc%p\" [label=\"0x%08x", patch->address, (void *) patch, patch->address);
+	for(label = patch->labels; label; label = label->next)
 		if(label->count > 1)
 			fprintf(output, "\\n\\\"%s\\\" (x%d)", label->label, label->count);
 		else
 			fprintf(output, "\\n\\\"%s\\\"", label->label);
-	mark = mark_find(chdesc->address, chdesc->opcode);
-	switch(chdesc->type)
+	mark = mark_find(patch->address, patch->opcode);
+	switch(patch->type)
 	{
 		case NOOP:
-			render_block_owner(output, chdesc);
+			render_block_owner(output, patch);
 			if(mark)
 				fprintf(output, "\",fillcolor=orange,style=\"filled");
 			else
 				fprintf(output, "\",style=\"");
 			break;
 		case BIT:
-			fprintf(output, "\\n[%d:0x%08x]", chdesc->bit.offset, chdesc->bit.xor);
-			render_block_owner(output, chdesc);
+			fprintf(output, "\\n[%d:0x%08x]", patch->bit.offset, patch->bit.xor);
+			render_block_owner(output, patch);
 			fprintf(output, "\",fillcolor=%s,style=\"filled", mark ? "orange" : "springgreen1");
 			break;
 		case BYTE:
-			fprintf(output, "\\n[%d:%d]", chdesc->byte.offset, chdesc->byte.length);
-			render_block_owner(output, chdesc);
+			fprintf(output, "\\n[%d:%d]", patch->byte.offset, patch->byte.length);
+			render_block_owner(output, patch);
 			fprintf(output, "\",fillcolor=%s,style=\"filled", mark ? "orange" : "slateblue1");
 			break;
 	}
-	if(chdesc->flags & CHDESC_ROLLBACK)
+	if(patch->flags & PATCH_ROLLBACK)
 		fprintf(output, ",dashed,bold");
-	if(chdesc->flags & CHDESC_MARKED)
+	if(patch->flags & PATCH_MARKED)
 		fprintf(output, ",bold\",color=red");
 	else
 		fprintf(output, "\"");
-	if(chdesc->flags & CHDESC_FREEING)
+	if(patch->flags & PATCH_FREEING)
 		fprintf(output, ",fontcolor=red");
-	else if(chdesc->flags & CHDESC_WRITTEN)
+	else if(patch->flags & PATCH_WRITTEN)
 		fprintf(output, ",fontcolor=blue");
 	fprintf(output, "]\n");
 	
-	for(arrow = chdesc->befores; arrow; arrow = arrow->next)
+	for(arrow = patch->befores; arrow; arrow = arrow->next)
 	{
-		struct chdesc * before = lookup_chdesc(arrow->chdesc);
+		struct patch * before = lookup_patch(arrow->patch);
 		if(before)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", chdesc->address, (void *) chdesc, before->address, (void *) before);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=black]\n", patch->address, (void *) patch, before->address, (void *) before);
 	}
-	for(arrow = chdesc->afters; arrow; arrow = arrow->next)
+	for(arrow = patch->afters; arrow; arrow = arrow->next)
 	{
-		struct chdesc * after = lookup_chdesc(arrow->chdesc);
+		struct patch * after = lookup_patch(arrow->patch);
 		if(after)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, (void *) after, chdesc->address, (void *) chdesc);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=gray]\n", after->address, (void *) after, patch->address, (void *) patch);
 	}
-	for(weak = chdesc->weak_refs; weak; weak = weak->next)
+	for(weak = patch->weak_refs; weak; weak = weak->next)
 	{
 		fprintf(output, "\"0x%08x\" [shape=box,fillcolor=yellow,style=filled]\n", weak->location);
-		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, chdesc->address, (void *) chdesc);
+		fprintf(output, "\"0x%08x\" -> \"ch0x%08x-hc%p\" [color=green]\n", weak->location, patch->address, (void *) patch);
 	}
-	if(chdesc->free_prev)
+	if(patch->free_prev)
 	{
-		struct chdesc * prev = lookup_chdesc(chdesc->free_prev);
+		struct patch * prev = lookup_patch(patch->free_prev);
 		if(prev)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, (void *) prev, chdesc->address, (void *) chdesc);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=orange]\n", prev->address, (void *) prev, patch->address, (void *) patch);
 	}
-	if(chdesc->free_next && render_free)
+	if(patch->free_next && render_free)
 	{
-		struct chdesc * next = lookup_chdesc(chdesc->free_next);
+		struct patch * next = lookup_patch(patch->free_next);
 		if(next)
-			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", chdesc->address, (void *) chdesc, next->address, (void *) next);
+			fprintf(output, "\"ch0x%08x-hc%p\" -> \"ch0x%08x-hc%p\" [color=red]\n", patch->address, (void *) patch, next->address, (void *) next);
 	}
 }
 
@@ -1366,44 +1366,44 @@ static void render(FILE * output, const char * title, int landscape)
 	
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
 	{
-		struct chdesc * chdesc;
-		for(chdesc = chdescs[i]; chdesc; chdesc = chdesc->next)
+		struct patch * patch;
+		for(patch = patchs[i]; patch; patch = patch->next)
 		{
-			int is_free = chdesc->address == chdesc_free_head || chdesc->free_prev;
+			int is_free = patch->address == patch_free_head || patch->free_prev;
 			if(is_free)
 				free++;
 			if(render_free)
 			{
-				if(!(chdesc->flags & CHDESC_WRITTEN))
+				if(!(patch->flags & PATCH_WRITTEN))
 				{
-					int r = chdesc_group(chdesc);
+					int r = patch_group(patch);
 					assert(r >= 0); (void) r;
 				}
-				render_chdesc(output, chdesc, 1);
+				render_patch(output, patch, 1);
 			}
-			else if(chdesc->address == chdesc_free_head || !chdesc->free_prev)
+			else if(patch->address == patch_free_head || !patch->free_prev)
 			{
-				if(!(chdesc->flags & CHDESC_WRITTEN))
+				if(!(patch->flags & PATCH_WRITTEN))
 				{
-					int r = chdesc_group(chdesc);
+					int r = patch_group(patch);
 					assert(r >= 0); (void) r;
 				}
-				render_chdesc(output, chdesc, 0);
+				render_patch(output, patch, 0);
 			}
 		}
 	}
 	
-	if(chdesc_free_head)
+	if(patch_free_head)
 	{
 		fprintf(output, "subgraph cluster_free {\ncolor=red;\nstyle=dashed;\n");
 		if(render_free)
 		{
-			struct chdesc * chdesc = lookup_chdesc(chdesc_free_head);
+			struct patch * patch = lookup_patch(patch_free_head);
 			fprintf(output, "label=\"Free List\";\n");
-			while(chdesc)
+			while(patch)
 			{
-				fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, (void *) chdesc);
-				chdesc = lookup_chdesc(chdesc->free_next);
+				fprintf(output, "\"ch0x%08x-hc%p\"\n", patch->address, (void *) patch);
+				patch = lookup_patch(patch->free_next);
 			}
 			if(free > 3)
 			{
@@ -1411,16 +1411,16 @@ static void render(FILE * output, const char * title, int landscape)
 				int cluster = 0;
 				free = 0;
 				fprintf(output, "subgraph cluster_align {\nstyle=invis;\n");
-				chdesc = lookup_chdesc(chdesc_free_head);
-				while(chdesc)
+				patch = lookup_patch(patch_free_head);
+				while(patch)
 				{
 					free++;
 					if(cluster < ratio * free)
 					{
 						cluster++;
-						fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc->address, (void *) chdesc);
+						fprintf(output, "\"ch0x%08x-hc%p\"\n", patch->address, (void *) patch);
 					}
-					chdesc = lookup_chdesc(chdesc->free_next);
+					patch = lookup_patch(patch->free_next);
 				}
 				fprintf(output, "}\n");
 			}
@@ -1428,7 +1428,7 @@ static void render(FILE * output, const char * title, int landscape)
 		else
 		{
 			fprintf(output, "label=\"Free Head (+%d)\";\n", free - 1);
-			fprintf(output, "\"ch0x%08x-hc%p\"\n", chdesc_free_head, (void *) lookup_chdesc(chdesc_free_head));
+			fprintf(output, "\"ch0x%08x-hc%p\"\n", patch_free_head, (void *) lookup_patch(patch_free_head));
 		}
 		fprintf(output, "}\n");
 	}
@@ -1468,10 +1468,10 @@ static int param_lookup(struct debug_opcode * opcode, struct debug_param * table
 	return 0;
 }
 
-static int param_chdesc_int_apply(struct debug_opcode * opcode, const char * name1, const char * name2, int (*apply)(struct chdesc *, uint32_t))
+static int param_patch_int_apply(struct debug_opcode * opcode, const char * name1, const char * name2, int (*apply)(struct patch *, uint32_t))
 {
 	int r;
-	struct chdesc * chdesc;
+	struct patch * patch;
 	struct debug_param params[3];
 	params[0].name = name1;
 	params[1].name = name2;
@@ -1480,10 +1480,10 @@ static int param_chdesc_int_apply(struct debug_opcode * opcode, const char * nam
 	if(r < 0)
 		return r;
 	assert(params[0].size == 4 && params[1].size == 4);
-	chdesc = lookup_chdesc(params[0].data_4);
-	if(!chdesc)
+	patch = lookup_patch(params[0].data_4);
+	if(!patch)
 		return -EFAULT;
-	return apply(chdesc, params[1].data_4);
+	return apply(patch, params[1].data_4);
 }
 
 #ifndef ptrdiff_t
@@ -1491,10 +1491,10 @@ static int param_chdesc_int_apply(struct debug_opcode * opcode, const char * nam
 #endif
 #define field_offset(struct, field) ((ptrdiff_t) &((struct *) NULL)->field)
 
-static int param_chdesc_set_field(struct debug_opcode * opcode, const char * name1, const char * name2, ptrdiff_t field)
+static int param_patch_set_field(struct debug_opcode * opcode, const char * name1, const char * name2, ptrdiff_t field)
 {
 	int r;
-	struct chdesc * chdesc;
+	struct patch * patch;
 	struct debug_param params[3];
 	params[0].name = name1;
 	params[1].name = name2;
@@ -1503,11 +1503,11 @@ static int param_chdesc_set_field(struct debug_opcode * opcode, const char * nam
 	if(r < 0)
 		return r;
 	assert(params[0].size == 4 && params[1].size == 4);
-	chdesc = lookup_chdesc(params[0].data_4);
-	if(!chdesc)
+	patch = lookup_patch(params[0].data_4);
+	if(!patch)
 		return -EFAULT;
 	/* looks ugly but it's the only way */
-	*(uint32_t *) (((uintptr_t) chdesc) + field) = params[1].data_4;
+	*(uint32_t *) (((uintptr_t) patch) + field) = params[1].data_4;
 	return 0;
 }
 
@@ -1561,11 +1561,11 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			r = add_block_number(params[0].data_4, params[1].data_4);
 			break;
 		}
-		case KDB_INFO_CHDESC_LABEL:
+		case KDB_INFO_PATCH_LABEL:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "label"}},
 				{{.name = NULL}}
 			};
@@ -1573,13 +1573,13 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == (uint8_t) -1);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			r = chdesc_add_label(chdesc, params[1].data_v);
+			r = patch_add_label(patch, params[1].data_v);
 			break;
 		}
 		
@@ -1595,10 +1595,10 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			/* unsupported */
 			break;
 		
-		case KDB_CHDESC_CREATE_NOOP:
+		case KDB_PATCH_CREATE_NOOP:
 		{
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "owner"}},
 				{{.name = NULL}}
 			};
@@ -1606,14 +1606,14 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 4);
-			if(!chdesc_create_noop(params[0].data_4, params[1].data_4))
+			if(!patch_create_noop(params[0].data_4, params[1].data_4))
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_CHDESC_CREATE_BIT:
+		case KDB_PATCH_CREATE_BIT:
 		{
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "block"}},
 				{{.name = "owner"}},
 				{{.name = "offset"}},
@@ -1626,14 +1626,14 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			assert(params[0].size == 4 && params[1].size == 4 &&
 					params[2].size == 4 && params[3].size == 2 &&
 					params[4].size == 4);
-			if(!chdesc_create_bit(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_4))
+			if(!patch_create_bit(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_4))
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_CHDESC_CREATE_BYTE:
+		case KDB_PATCH_CREATE_BYTE:
 		{
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "block"}},
 				{{.name = "owner"}},
 				{{.name = "offset"}},
@@ -1646,35 +1646,35 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			assert(params[0].size == 4 && params[1].size == 4 &&
 					params[2].size == 4 && params[3].size == 2 &&
 					params[4].size == 2);
-			if(!chdesc_create_byte(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_2))
+			if(!patch_create_byte(params[0].data_4, params[2].data_4, params[1].data_4, params[3].data_2, params[4].data_2))
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_CHDESC_CONVERT_NOOP:
+		case KDB_PATCH_CONVERT_NOOP:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = NULL}}
 			};
 			r = param_lookup(opcode, params);
 			if(r < 0)
 				break;
 			assert(params[0].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->type = NOOP;
+			patch->type = NOOP;
 			break;
 		}
-		case KDB_CHDESC_CONVERT_BIT:
+		case KDB_PATCH_CONVERT_BIT:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "offset"}},
 				{{.name = "xor"}},
 				{{.name = NULL}}
@@ -1684,22 +1684,22 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				break;
 			assert(params[0].size == 4 && params[1].size == 2 &&
 					params[2].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->type = BIT;
-			chdesc->bit.offset = params[1].data_2;
-			chdesc->bit.xor = params[2].data_4;
+			patch->type = BIT;
+			patch->bit.offset = params[1].data_2;
+			patch->bit.xor = params[2].data_4;
 			break;
 		}
-		case KDB_CHDESC_CONVERT_BYTE:
+		case KDB_PATCH_CONVERT_BYTE:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "offset"}},
 				{{.name = "length"}},
 				{{.name = NULL}}
@@ -1709,65 +1709,65 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				break;
 			assert(params[0].size == 4 && params[1].size == 2 &&
 					params[2].size == 2);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->type = BYTE;
-			chdesc->byte.offset = params[1].data_2;
-			chdesc->byte.length = params[2].data_2;
+			patch->type = BYTE;
+			patch->byte.offset = params[1].data_2;
+			patch->byte.length = params[2].data_2;
 			break;
 		}
-		case KDB_CHDESC_REWRITE_BYTE:
+		case KDB_PATCH_REWRITE_BYTE:
 			/* nothing */
 			break;
-		case KDB_CHDESC_APPLY:
+		case KDB_PATCH_APPLY:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = NULL}}
 			};
 			r = param_lookup(opcode, params);
 			if(r < 0)
 				break;
 			assert(params[0].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->flags &= ~CHDESC_ROLLBACK;
+			patch->flags &= ~PATCH_ROLLBACK;
 			break;
 		}
-		case KDB_CHDESC_ROLLBACK:
+		case KDB_PATCH_ROLLBACK:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = NULL}}
 			};
 			r = param_lookup(opcode, params);
 			if(r < 0)
 				break;
 			assert(params[0].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->flags |= CHDESC_ROLLBACK;
+			patch->flags |= PATCH_ROLLBACK;
 			break;
 		}
-		case KDB_CHDESC_SET_FLAGS:
+		case KDB_PATCH_SET_FLAGS:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "flags"}},
 				{{.name = NULL}}
 			};
@@ -1775,20 +1775,20 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->flags |= params[1].data_4;
+			patch->flags |= params[1].data_4;
 			break;
 		}
-		case KDB_CHDESC_CLEAR_FLAGS:
+		case KDB_PATCH_CLEAR_FLAGS:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "flags"}},
 				{{.name = NULL}}
 			};
@@ -1796,51 +1796,51 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			chdesc->flags &= ~params[1].data_4;
+			patch->flags &= ~params[1].data_4;
 			break;
 		}
-		case KDB_CHDESC_DESTROY:
+		case KDB_PATCH_DESTROY:
 		{
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = NULL}}
 			};
 			r = param_lookup(opcode, params);
 			if(r < 0)
 				break;
 			assert(params[0].size == 4);
-			r = chdesc_destroy(params[0].data_4);
+			r = patch_destroy(params[0].data_4);
 			break;
 		}
-		case KDB_CHDESC_ADD_BEFORE:
-			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_add_before);
+		case KDB_PATCH_ADD_BEFORE:
+			r = param_patch_int_apply(opcode, "source", "target", patch_add_before);
 			break;
-		case KDB_CHDESC_ADD_AFTER:
-			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_add_after);
+		case KDB_PATCH_ADD_AFTER:
+			r = param_patch_int_apply(opcode, "source", "target", patch_add_after);
 			break;
-		case KDB_CHDESC_REM_BEFORE:
-			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_rem_before);
+		case KDB_PATCH_REM_BEFORE:
+			r = param_patch_int_apply(opcode, "source", "target", patch_rem_before);
 			break;
-		case KDB_CHDESC_REM_AFTER:
-			r = param_chdesc_int_apply(opcode, "source", "target", chdesc_rem_after);
+		case KDB_PATCH_REM_AFTER:
+			r = param_patch_int_apply(opcode, "source", "target", patch_rem_after);
 			break;
-		case KDB_CHDESC_WEAK_RETAIN:
-			r = param_chdesc_int_apply(opcode, "chdesc", "location", chdesc_add_weak);
+		case KDB_PATCH_WEAK_RETAIN:
+			r = param_patch_int_apply(opcode, "patch", "location", patch_add_weak);
 			break;
-		case KDB_CHDESC_WEAK_FORGET:
-			r = param_chdesc_int_apply(opcode, "chdesc", "location", chdesc_rem_weak);
+		case KDB_PATCH_WEAK_FORGET:
+			r = param_patch_int_apply(opcode, "patch", "location", patch_rem_weak);
 			break;
-		case KDB_CHDESC_SET_OFFSET:
+		case KDB_PATCH_SET_OFFSET:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "offset"}},
 				{{.name = NULL}}
 			};
@@ -1848,25 +1848,25 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 2);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			if(chdesc->type == BIT)
-				chdesc->bit.offset = params[1].data_2;
-			else if(chdesc->type == BYTE)
-				chdesc->byte.offset = params[1].data_2;
+			if(patch->type == BIT)
+				patch->bit.offset = params[1].data_2;
+			else if(patch->type == BYTE)
+				patch->byte.offset = params[1].data_2;
 			else
 				r = -ENOMSG;
 			break;
 		}
-		case KDB_CHDESC_SET_XOR:
+		case KDB_PATCH_SET_XOR:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "xor"}},
 				{{.name = NULL}}
 			};
@@ -1874,25 +1874,25 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			if(chdesc->type != BIT)
+			if(patch->type != BIT)
 			{
 				r = -ENOMSG;
 				break;
 			}
-			chdesc->bit.xor = params[1].data_4;
+			patch->bit.xor = params[1].data_4;
 			break;
 		}
-		case KDB_CHDESC_SET_LENGTH:
+		case KDB_PATCH_SET_LENGTH:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "length"}},
 				{{.name = NULL}}
 			};
@@ -1900,25 +1900,25 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 2);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			if(chdesc->type != BYTE)
+			if(patch->type != BYTE)
 			{
 				r = -ENOMSG;
 				break;
 			}
-			chdesc->byte.length = params[1].data_2;
+			patch->byte.length = params[1].data_2;
 			break;
 		}
-		case KDB_CHDESC_SET_BLOCK:
+		case KDB_PATCH_SET_BLOCK:
 		{
-			struct chdesc * chdesc;
+			struct patch * patch;
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = "block"}},
 				{{.name = NULL}}
 			};
@@ -1926,47 +1926,47 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 4);
-			chdesc = lookup_chdesc(params[0].data_4);
-			if(!chdesc)
+			patch = lookup_patch(params[0].data_4);
+			if(!patch)
 			{
 				r = -EFAULT;
 				break;
 			}
-			if(chdesc->type != BIT && chdesc->type != BYTE && params[1].data_4)
+			if(patch->type != BIT && patch->type != BYTE && params[1].data_4)
 			{
 				r = -ENOMSG;
 				break;
 			}
-			chdesc->block = params[1].data_4;
+			patch->block = params[1].data_4;
 			break;
 		}
-		case KDB_CHDESC_SET_OWNER:
-			r = param_chdesc_set_field(opcode, "chdesc", "owner", field_offset(struct chdesc, owner));
+		case KDB_PATCH_SET_OWNER:
+			r = param_patch_set_field(opcode, "patch", "owner", field_offset(struct patch, owner));
 			break;
-		case KDB_CHDESC_SET_FREE_PREV:
-			r = param_chdesc_set_field(opcode, "chdesc", "free_prev", field_offset(struct chdesc, free_prev));
+		case KDB_PATCH_SET_FREE_PREV:
+			r = param_patch_set_field(opcode, "patch", "free_prev", field_offset(struct patch, free_prev));
 			break;
-		case KDB_CHDESC_SET_FREE_NEXT:
-			r = param_chdesc_set_field(opcode, "chdesc", "free_next", field_offset(struct chdesc, free_next));
+		case KDB_PATCH_SET_FREE_NEXT:
+			r = param_patch_set_field(opcode, "patch", "free_next", field_offset(struct patch, free_next));
 			break;
-		case KDB_CHDESC_SET_FREE_HEAD:
+		case KDB_PATCH_SET_FREE_HEAD:
 		{
 			struct debug_param params[] = {
-				{{.name = "chdesc"}},
+				{{.name = "patch"}},
 				{{.name = NULL}}
 			};
 			r = param_lookup(opcode, params);
 			if(r < 0)
 				break;
 			assert(params[0].size == 4);
-			chdesc_free_head = params[0].data_4;
+			patch_free_head = params[0].data_4;
 			break;
 		}
 		
-		case KDB_CHDESC_SATISFY:
-		case KDB_CHDESC_WEAK_COLLECT:
-		case KDB_CHDESC_OVERLAP_ATTACH:
-		case KDB_CHDESC_OVERLAP_MULTIATTACH:
+		case KDB_PATCH_SATISFY:
+		case KDB_PATCH_WEAK_COLLECT:
+		case KDB_PATCH_OVERLAP_ATTACH:
+		case KDB_PATCH_OVERLAP_MULTIATTACH:
 			/* nothing */
 			if(effect)
 				*effect = 0;
@@ -2093,7 +2093,7 @@ static int snprint_opcode(char * string, size_t length, struct debug_opcode * op
 
 /* Begin cache analysis {{{ */
 
-#define CACHE_CHDESC_READY    0x01
+#define CACHE_PATCH_READY    0x01
 
 #define CACHE_BLOCK_DIRTY     0x01
 #define CACHE_BLOCK_INFLIGHT  0x02
@@ -2105,9 +2105,9 @@ static struct cache_block {
 	uint32_t address;
 	uint32_t local_flags;
 	struct block * block;
-	struct chdesc * chdescs;
-	int chdesc_count;
-	struct chdesc * ready;
+	struct patch * patchs;
+	int patch_count;
+	struct patch * ready;
 	int ready_count;
 	int dep_count;
 	int dblock_count;
@@ -2141,8 +2141,8 @@ static struct cache_block * cache_block_lookup(uint32_t address)
 	scan->address = address;
 	scan->local_flags = 0;
 	scan->block = lookup_block(address);
-	scan->chdescs = NULL;
-	scan->chdesc_count = 0;
+	scan->patchs = NULL;
+	scan->patch_count = 0;
 	scan->ready = NULL;
 	scan->ready_count = 0;
 	scan->dep_count = 0;
@@ -2165,42 +2165,42 @@ static void cache_block_clean(void)
 		}
 }
 
-static int chdesc_is_ready(struct chdesc * chdesc, uint32_t block)
+static int patch_is_ready(struct patch * patch, uint32_t block)
 {
 	struct arrow * scan;
-	for(scan = chdesc->befores; scan; scan = scan->next)
+	for(scan = patch->befores; scan; scan = scan->next)
 	{
-		struct chdesc * before = lookup_chdesc(scan->chdesc);
+		struct patch * before = lookup_patch(scan->patch);
 		assert(before);
 		if(before->type == NOOP)
 		{
 			/* recursive */
-			if(!chdesc_is_ready(before, block))
+			if(!patch_is_ready(before, block))
 				return 0;
 		}
 		else if(before->block != block)
 			return 0;
-		else if(!(before->local_flags & CACHE_CHDESC_READY))
+		else if(!(before->local_flags & CACHE_PATCH_READY))
 			return 0;
 	}
 	return 1;
 }
 
-static void dblock_update(struct chdesc * depender, struct chdesc * chdesc)
+static void dblock_update(struct patch * depender, struct patch * patch)
 {
-	if(depender == chdesc || chdesc->type == NOOP)
+	if(depender == patch || patch->type == NOOP)
 	{
 		struct arrow * scan;
-		for(scan = chdesc->befores; scan; scan = scan->next)
+		for(scan = patch->befores; scan; scan = scan->next)
 		{
-			struct chdesc * before = lookup_chdesc(scan->chdesc);
+			struct patch * before = lookup_patch(scan->patch);
 			assert(before);
 			dblock_update(depender, before);
 		}
 	}
-	else if(chdesc->block != depender->block)
+	else if(patch->block != depender->block)
 	{
-		struct cache_block * block = cache_block_lookup(chdesc->block);
+		struct cache_block * block = cache_block_lookup(patch->block);
 		block->dep_count++;
 		if(block->dblock_last != depender->block)
 		{
@@ -2216,30 +2216,30 @@ static void dblock_update(struct chdesc * depender, struct chdesc * chdesc)
 static void cache_situation_snapshot(uint32_t cache, struct cache_situation * info)
 {
 	int i;
-	struct chdesc * chdesc;
+	struct patch * patch;
 	memset(info, 0, sizeof(*info));
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
-		for(chdesc = chdescs[i]; chdesc; chdesc = chdesc->next)
+		for(patch = patchs[i]; patch; patch = patch->next)
 		{
 			struct cache_block * block;
 			/* the local flags will be used to track readiness */
-			chdesc->local_flags &= ~CACHE_CHDESC_READY;
-			if(chdesc->flags & CHDESC_INFLIGHT)
+			patch->local_flags &= ~CACHE_PATCH_READY;
+			if(patch->flags & PATCH_INFLIGHT)
 			{
-				assert(chdesc->block);
-				block = cache_block_lookup(chdesc->block);
+				assert(patch->block);
+				block = cache_block_lookup(patch->block);
 				assert(block);
 				if(!(block->local_flags & CACHE_BLOCK_INFLIGHT))
 				{
 					info->inflight++;
-					if(block->chdescs)
+					if(block->patchs)
 						info->dirty_inflight++;
 					block->local_flags |= CACHE_BLOCK_INFLIGHT;
 				}
 			}
-			else if(chdesc->owner == cache && chdesc->block)
+			else if(patch->owner == cache && patch->block)
 			{
-				block = cache_block_lookup(chdesc->block);
+				block = cache_block_lookup(patch->block);
 				assert(block);
 				if(!(block->local_flags & CACHE_BLOCK_DIRTY))
 				{
@@ -2248,11 +2248,11 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 						info->dirty_inflight++;
 					block->local_flags |= CACHE_BLOCK_DIRTY;
 				}
-				/* use the group_next fields in the chdescs to keep
-				 * track of which chdescs are on the block or ready */
-				chdesc->group_next[0] = block->chdescs;
-				block->chdescs = chdesc;
-				block->chdesc_count++;
+				/* use the group_next fields in the patchs to keep
+				 * track of which patchs are on the block or ready */
+				patch->group_next[0] = block->patchs;
+				block->patchs = patch;
+				block->patch_count++;
 			}
 		}
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
@@ -2266,20 +2266,20 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 				continue;
 			do {
 				change = 0;
-				for(chdesc = scan->chdescs; chdesc; chdesc = chdesc->group_next[0])
+				for(patch = scan->patchs; patch; patch = patch->group_next[0])
 				{
 					/* already found to be ready */
-					if(chdesc->local_flags & CACHE_CHDESC_READY)
+					if(patch->local_flags & CACHE_PATCH_READY)
 						continue;
-					if(chdesc_is_ready(chdesc, chdesc->block))
+					if(patch_is_ready(patch, patch->block))
 					{
-						chdesc->local_flags |= CACHE_CHDESC_READY;
+						patch->local_flags |= CACHE_PATCH_READY;
 						scan->ready_count++;
 						change = 1;
 					}
 				}
 			} while(change);
-			if(scan->chdesc_count == scan->ready_count)
+			if(scan->patch_count == scan->ready_count)
 			{
 				info->full_ready++;
 				scan->local_flags |= CACHE_BLOCK_READY;
@@ -2300,8 +2300,8 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 	{
 		struct cache_block * scan = cache_blocks[i];
 		for(; scan; scan = scan->next)
-			for(chdesc = scan->chdescs; chdesc; chdesc = chdesc->group_next[0])
-				dblock_update(chdesc, chdesc);
+			for(patch = scan->patchs; patch; patch = patch->group_next[0])
+				dblock_update(patch, patch);
 	}
 }
 
@@ -2874,7 +2874,7 @@ static int command_find(int argc, const char * argv[])
 	}
 	
 	/* find the extreme */
-	extreme = chdesc_count;
+	extreme = patch_count;
 	count = applied;
 	while(applied < stop)
 	{
@@ -2903,9 +2903,9 @@ static int command_find(int argc, const char * argv[])
 		}
 		applied++;
 		progress++;
-		if(chdesc_count * direction > extreme * direction)
+		if(patch_count * direction > extreme * direction)
 		{
-			extreme = chdesc_count;
+			extreme = patch_count;
 			count = applied;
 		}
 	}
@@ -2920,30 +2920,30 @@ static int command_find(int argc, const char * argv[])
 	return 0;
 }
 
-static void print_chdesc_brief(struct chdesc * chdesc)
+static void print_patch_brief(struct patch * patch)
 {
 	struct arrow * count;
 	int afters = 0, befores = 0;
-	for(count = chdesc->afters; count; count = count->next)
+	for(count = patch->afters; count; count = count->next)
 		afters++;
-	for(count = chdesc->befores; count; count = count->next)
+	for(count = patch->befores; count; count = count->next)
 		befores++;
-	printf(" 0x%08x, %s, ", chdesc->address, type_names[chdesc->type]);
-	if(chdesc->block)
+	printf(" 0x%08x, %s, ", patch->address, type_names[patch->type]);
+	if(patch->block)
 	{
-		struct block * block = lookup_block(chdesc->block);
+		struct block * block = lookup_block(patch->block);
 		if(block)
 			printf("block #%d, ", block->number);
 		else
-			printf("block 0x%08x, ", chdesc->block);
+			printf("block 0x%08x, ", patch->block);
 	}
-	switch(chdesc->type)
+	switch(patch->type)
 	{
 		case BIT:
-			printf("offset %d, xor 0x%08x, ", chdesc->bit.offset, chdesc->bit.xor);
+			printf("offset %d, xor 0x%08x, ", patch->bit.offset, patch->bit.xor);
 			break;
 		case BYTE:
-			printf("offset %d, length %d, ", chdesc->byte.offset, chdesc->byte.length);
+			printf("offset %d, length %d, ", patch->byte.offset, patch->byte.length);
 			break;
 		case NOOP:
 			break;
@@ -2998,18 +2998,18 @@ static int command_lookup(int argc, const char * argv[])
 				if(verbose)
 				{
 					int index;
-					struct chdesc * scan;
+					struct patch * scan;
 					printf("Change descriptors:\n");
 					for(index = 0; index < HASH_TABLE_SIZE; index++)
-						for(scan = chdescs[index]; scan; scan = scan->next)
+						for(scan = patchs[index]; scan; scan = scan->next)
 						{
 							struct block * compare = lookup_block(scan->block);
 							if(scan->block == block->address)
-								print_chdesc_brief(scan);
+								print_patch_brief(scan);
 							else if(compare && compare->number == block->number)
 							{
 								printf("(#) ");
-								print_chdesc_brief(scan);
+								print_patch_brief(scan);
 							}
 						}
 				}
@@ -3048,23 +3048,23 @@ static int command_mark(int argc, const char * argv[])
 		if(mark)
 		{
 			int r;
-			struct chdesc * chdesc = lookup_chdesc(address);
+			struct patch * patch = lookup_patch(address);
 			if(*end)
 				printf("[Info: interpreted %s as 0x%08x.]\n", argv[i], address);
-			if(!chdesc)
+			if(!patch)
 			{
-				printf("No such chdesc: 0x%08x\n", address);
+				printf("No such patch: 0x%08x\n", address);
 				continue;
 			}
-			r = mark_add(chdesc->address, chdesc->opcode);
+			r = mark_add(patch->address, patch->opcode);
 			if(r == -EEXIST)
 			{
-				printf("[Info: ignoring duplicate mark 0x%08x:%d.]\n", chdesc->address, chdesc->opcode);
+				printf("[Info: ignoring duplicate mark 0x%08x:%d.]\n", patch->address, patch->opcode);
 				continue;
 			}
 			else if(r < 0)
 				return r;
-			printf("Created mark 0x%08x:%d\n", chdesc->address, chdesc->opcode);
+			printf("Created mark 0x%08x:%d\n", patch->address, patch->opcode);
 		}
 		else
 		{
@@ -3253,7 +3253,7 @@ static int command_status(int argc, const char * argv[])
 	{
 		int arrows = (arrow_count + 1) / 2;
 		printf("Debugging %s, read %d opcode%s, applied %d\n", input_name, opcodes, (opcodes == 1) ? "" : "s", applied);
-		printf("[Info: %d chdesc%s, %d dependenc%s (%d raw)]\n", chdesc_count, (chdesc_count == 1) ? "" : "s", arrows, (arrows == 1) ? "y" : "ies", arrow_count);
+		printf("[Info: %d patch%s, %d dependenc%s (%d raw)]\n", patch_count, (patch_count == 1) ? "" : "s", arrows, (arrows == 1) ? "y" : "ies", arrow_count);
 	}
 	else
 	{
@@ -3273,54 +3273,54 @@ static int command_status(int argc, const char * argv[])
 		{
 			char * end;
 			uint32_t address = strtoul(argv[i], &end, 16);
-			struct chdesc * chdesc = lookup_chdesc(address);
+			struct patch * patch = lookup_patch(address);
 			if(*end)
 				printf("[Info: interpreted %s as 0x%08x.]\n", argv[i], address);
-			if(!chdesc)
+			if(!patch)
 			{
-				printf("No such chdesc: 0x%08x\n", address);
+				printf("No such patch: 0x%08x\n", address);
 				continue;
 			}
-			printf("Chdesc 0x%08x (%s) was created by opcode %d\n", chdesc->address, type_names[chdesc->type], chdesc->opcode);
+			printf("Patch 0x%08x (%s) was created by opcode %d\n", patch->address, type_names[patch->type], patch->opcode);
 			if(verbose)
 			{
 				struct label * label;
-				for(label = chdesc->labels; label; label = label->next)
+				for(label = patch->labels; label; label = label->next)
 					printf("Label = \"%s\"\n", label->label);
-				printf("block address = 0x%08x", chdesc->block);
-				if(chdesc->block)
+				printf("block address = 0x%08x", patch->block);
+				if(patch->block)
 				{
-					struct block * block = lookup_block(chdesc->block);
+					struct block * block = lookup_block(patch->block);
 					if(block)
 						printf(", number = %u", block->number);
 				}
-				if(chdesc->owner)
+				if(patch->owner)
 				{
-					struct bd * bd = lookup_bd(chdesc->owner);
+					struct bd * bd = lookup_bd(patch->owner);
 					if(bd)
 						printf(", name = %s", bd->name);
 				}
-				printf("\nFlags: 0x%08x\n", chdesc->flags);
+				printf("\nFlags: 0x%08x\n", patch->flags);
 				if(verbose > 1)
 				{
 					struct arrow * arrow;
 					printf("Afters:\n");
-					for(arrow = chdesc->afters; arrow; arrow = arrow->next)
+					for(arrow = patch->afters; arrow; arrow = arrow->next)
 					{
-						struct chdesc * after = lookup_chdesc(arrow->chdesc);
+						struct patch * after = lookup_patch(arrow->patch);
 						if(after)
-							print_chdesc_brief(after);
+							print_patch_brief(after);
 						else
-							printf(" 0x%08x\n", arrow->chdesc);
+							printf(" 0x%08x\n", arrow->patch);
 					}
 					printf("Befores:\n");
-					for(arrow = chdesc->befores; arrow; arrow = arrow->next)
+					for(arrow = patch->befores; arrow; arrow = arrow->next)
 					{
-						struct chdesc * before = lookup_chdesc(arrow->chdesc);
+						struct patch * before = lookup_patch(arrow->patch);
 						if(before)
-							print_chdesc_brief(before);
+							print_patch_brief(before);
 						else
-							printf(" 0x%08x\n", arrow->chdesc);
+							printf(" 0x%08x\n", arrow->patch);
 					}
 				}
 			}
@@ -3559,7 +3559,7 @@ static char * command_complete(const char * text, int state)
 	static int index, length;
 	static enum {
 		COMMAND,
-		CHDESC,
+		PATCH,
 		BLOCK,
 		BD,
 		KDB,
@@ -3571,8 +3571,8 @@ static char * command_complete(const char * text, int state)
 	} type = COMMAND;
 	static union {
 		struct {
-			struct chdesc * last;
-		} chdesc;
+			struct patch * last;
+		} patch;
 		struct {
 			struct block * last;
 		} block;
@@ -3619,8 +3619,8 @@ static char * command_complete(const char * text, int state)
 		{
 			if(!strncmp(argv[0], "status ", 7) || !strncmp(argv[0], "mark ", 5))
 			{
-				type = CHDESC;
-				local.chdesc.last = NULL;
+				type = PATCH;
+				local.patch.last = NULL;
 			}
 			else if(!strncmp(argv[0], "list ", 5))
 			{
@@ -3674,27 +3674,27 @@ static char * command_complete(const char * text, int state)
 				if(!strncmp(commands[index].command, text, length))
 					return strdup(commands[index++].command);
 			break;
-		case CHDESC:
+		case PATCH:
 		{
 			char name[11];
 			do {
-				while(!local.chdesc.last && index < HASH_TABLE_SIZE)
-					local.chdesc.last = chdescs[index++];
-				for(; local.chdesc.last; local.chdesc.last = local.chdesc.last->next)
+				while(!local.patch.last && index < HASH_TABLE_SIZE)
+					local.patch.last = patchs[index++];
+				for(; local.patch.last; local.patch.last = local.patch.last->next)
 				{
-					sprintf(name, "0x%08x", local.chdesc.last->address);
+					sprintf(name, "0x%08x", local.patch.last->address);
 					if(!strncmp(name, text, length))
 					{
-						local.chdesc.last = local.chdesc.last->next;
+						local.patch.last = local.patch.last->next;
 						return strdup(name);
 					}
-					if(local.chdesc.last->address < 0x10000000)
+					if(local.patch.last->address < 0x10000000)
 					{
-						sprintf(name, "0x%x", local.chdesc.last->address);
+						sprintf(name, "0x%x", local.patch.last->address);
 						if(!strncmp(name, text, length))
 						{
-							sprintf(name, "0x%08x", local.chdesc.last->address);
-							local.chdesc.last = local.chdesc.last->next;
+							sprintf(name, "0x%08x", local.patch.last->address);
+							local.patch.last = local.patch.last->next;
 							return strdup(name);
 						}
 					}

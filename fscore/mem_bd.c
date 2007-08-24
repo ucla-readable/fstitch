@@ -1,12 +1,12 @@
 #include <lib/platform.h>
 
-#include <kfs/bd.h>
-#include <kfs/bdesc.h>
-#include <kfs/blockman.h>
-#include <kfs/modman.h>
-#include <kfs/mem_bd.h>
-#include <kfs/revision.h>
-#include <kfs/josfs_base.h>
+#include <fscore/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/blockman.h>
+#include <fscore/modman.h>
+#include <fscore/mem_bd.h>
+#include <fscore/revision.h>
+#include <fscore/josfs_base.h>
 
 #ifdef __KERNEL__
 #include <linux/vmalloc.h>
@@ -101,12 +101,12 @@ static int mem_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	return 0;
 }
 
-static int mem_bd_flush(BD_t * object, uint32_t block, chdesc_t * ch)
+static int mem_bd_flush(BD_t * object, uint32_t block, patch_t * ch)
 {
 	return FLUSH_EMPTY;
 }
 
-static chdesc_t ** mem_bd_get_write_head(BD_t * object)
+static patch_t ** mem_bd_get_write_head(BD_t * object)
 {
 	return NULL;
 }

@@ -1,44 +1,44 @@
 #include <lib/platform.h>
 
-#include <kfs/debug.h>
-#include <kfs/bdesc.h>
-#include <kfs/chdesc.h>
+#include <fscore/debug.h>
+#include <fscore/bdesc.h>
+#include <fscore/patch.h>
 
-void chdesc_mark_graph(chdesc_t * root)
+void patch_mark_graph(patch_t * root)
 {
 	chdepdesc_t * dep;
-	root->flags |= CHDESC_MARKED;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, root, CHDESC_MARKED);
+	root->flags |= PATCH_MARKED;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, root, PATCH_MARKED);
 	for(dep = root->befores; dep; dep = dep->before.next)
-		if(!(dep->before.desc->flags & CHDESC_MARKED))
-			chdesc_mark_graph(dep->before.desc);
+		if(!(dep->before.desc->flags & PATCH_MARKED))
+			patch_mark_graph(dep->before.desc);
 }
 
-void chdesc_unmark_graph(chdesc_t * root)
+void patch_unmark_graph(patch_t * root)
 {
 	chdepdesc_t * dep;
-	root->flags &= ~CHDESC_MARKED;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, root, CHDESC_MARKED);
+	root->flags &= ~PATCH_MARKED;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, root, PATCH_MARKED);
 	for(dep = root->befores; dep; dep = dep->before.next)
-		if(dep->before.desc->flags & CHDESC_MARKED)
-			chdesc_unmark_graph(dep->before.desc);
+		if(dep->before.desc->flags & PATCH_MARKED)
+			patch_unmark_graph(dep->before.desc);
 }
 
-int chdesc_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)
+int patch_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)
 {
-	chdesc_dlist_t * dlist = block->index_changes;
+	patch_dlist_t * dlist = block->index_changes;
 	assert(current_bd && target_bd);
 	assert(current_bd->level == target_bd->level);
 	if(dlist[current_bd->graph_index].head)
 	{
-		chdesc_t * chdesc;
-		for (chdesc = dlist[current_bd->graph_index].head;
-		     chdesc;
-		     chdesc = chdesc->ddesc_index_next)
+		patch_t * patch;
+		for (patch = dlist[current_bd->graph_index].head;
+		     patch;
+		     patch = patch->ddesc_index_next)
 		{
-			KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, target_bd);
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, patch, target_bd);
 			/* don't unlink them from index here */
-			chdesc->owner = target_bd;
+			patch->owner = target_bd;
 		}
 		
 		/* append the target index list to ours */
@@ -60,7 +60,7 @@ int chdesc_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)
 }
 
 /* FIXME: get rid of the olddata parameter here, and just use the block's data as the old data */
-int chdesc_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** tail, chdesc_pass_set_t * befores)
+int patch_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, patch_t ** tail, patch_pass_set_t * befores)
 {
 	int r, start, end;
 	uint8_t * old = (uint8_t *) olddata;
@@ -75,15 +75,15 @@ int chdesc_create_diff_set(bdesc_t * block, BD_t * owner, uint16_t offset, uint1
 	for(end = length - 1; end >= start && old[end] == new[end]; end--);
 	assert(start <= end);
 	
-	r = chdesc_create_byte_set(block, owner, offset + start, end - start + 1, &new[start], tail, befores);
+	r = patch_create_byte_set(block, owner, offset + start, end - start + 1, &new[start], tail, befores);
 	if(r < 0)
 		return r;
 	return 1;
 }
 
-int chdesc_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, chdesc_t ** head)
+int patch_create_diff(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * olddata, const void * newdata, patch_t ** head)
 {
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	DEFINE_PATCH_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
-	return chdesc_create_diff_set(block, owner, offset, length, olddata, newdata, head, PASS_CHDESC_SET(set));
+	return patch_create_diff_set(block, owner, offset, length, olddata, newdata, head, PASS_PATCH_SET(set));
 }

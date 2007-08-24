@@ -1,5 +1,5 @@
-#ifndef __KUDOS_KFS_REVISION_H
-#define __KUDOS_KFS_REVISION_H
+#ifndef __FSTITCH_FSCORE_REVISION_H
+#define __FSTITCH_FSCORE_REVISION_H
 
 /* In-place revision tail code is the "classic" way of doing it: roll the data
  * back on the actual copy of the block in memory. Turning this off uses a copy
@@ -8,8 +8,8 @@
  * be more efficient when there are many rollbacks. */
 #define REVISION_TAIL_INPLACE 0
 
-#include <kfs/bdesc.h>
-#include <kfs/bd.h>
+#include <fscore/bdesc.h>
+#include <fscore/bd.h>
 
 int revision_init(void);
 
@@ -26,7 +26,7 @@ int revision_tail_prepare(bdesc_t * block, BD_t * bd, uint8_t * buffer);
 /* undo everything done by revision_tail_prepare() above */
 int revision_tail_revert(bdesc_t * block, BD_t * bd);
 
-/* this function calls chdesc_satisfy() on all the non-rolled back change
+/* this function calls patch_satisfy() on all the non-rolled back change
  * descriptors on the block, and rolls the others forward again */
 int revision_tail_acknowledge(bdesc_t * block, BD_t * bd);
 
@@ -63,7 +63,7 @@ typedef struct revision_slice {
 	BD_t * target;
 	int ready_size;
 	bool all_ready;
-	chdesc_t ** ready;
+	patch_t ** ready;
 } revision_slice_t;
 
 /* create a new revision slice in 'new_slice' and push the slice down */
@@ -72,4 +72,4 @@ void revision_slice_pull_up(revision_slice_t * slice);
 /* destroy the contents of 'slice' */
 void revision_slice_destroy(revision_slice_t * slice);
 
-#endif /* __KUDOS_KFS_REVISION_H */
+#endif /* __FSTITCH_FSCORE_REVISION_H */

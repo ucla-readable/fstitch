@@ -2,7 +2,7 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 
 PLOT_CMDS="plot_space plot_io"
 TESTS="tar rm postmark andrew imap"

@@ -2,7 +2,7 @@
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
+FSTITCHDIR="$BENCHDIR/.."
 
 function usage () {
 	echo "About: Generate javascript table data for a given test and measurement"
@@ -37,11 +37,11 @@ fi
 function most_recent_test () {
 	REV=0
 	MR=
-	for test in `ls -t $KUDOSDIR/tests/`; do
-		DIR="$KUDOSDIR/tests/$test"
+	for test in `ls -t $FSTITCHDIR/tests/`; do
+		DIR="$FSTITCHDIR/tests/$test"
 		REVN=`cat $DIR/svnversion | sed -r 's/:[0-9]+//;s/M$//'`
 		[ $REVN -le $REV ] && continue
-		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $KUDOSDIR/tests/$test/diskcache`" == "$DISKCACHE" ] && [ "`cat $DIR/fs`" == "$FS" ] && [ "`cat $DIR/consistency_mode`" == "$CMODE" ] && [ "`cat $KUDOSDIR/tests/$test/app_consistency_mode`" == "$ACMODE" ] && [ -f $DIR/$TESTNAME.run.0 ]; then
+		if [ "`cat $DIR/host`" == "$HOST" ] && [ "`cat $FSTITCHDIR/tests/$test/diskcache`" == "$DISKCACHE" ] && [ "`cat $DIR/fs`" == "$FS" ] && [ "`cat $DIR/consistency_mode`" == "$CMODE" ] && [ "`cat $FSTITCHDIR/tests/$test/app_consistency_mode`" == "$ACMODE" ] && [ -f $DIR/$TESTNAME.run.0 ]; then
 			MR="$test"
 			REV=$REVN
 		fi
@@ -55,12 +55,12 @@ JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
 for sys in \
-	"kudos safe ext2 su opgroup" \
-	"kudos safe ext2 meta opgroup" \
-	"kudos safe ext2 full opgroup" \
-	"kudos safe ext2 none opgroup" \
-	"kudos safe ext2 full linearom" \
-	"kudos safe ext2 full linear" \
+	"fsttich safe ext2 su patchgroup" \
+	"fsttich safe ext2 meta patchgroup" \
+	"fsttich safe ext2 full patchgroup" \
+	"fsttich safe ext2 none patchgroup" \
+	"fsttich safe ext2 full linearom" \
+	"fsttich safe ext2 full linear" \
 	"linux unsafe ext2 none fsync" \
 	"linux unsafe ext3 ordered fsync" \
 	"linux unsafe ext3 journal fsync" \
@@ -85,10 +85,10 @@ do
 		#echo "No data for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME"
 		continue
 	fi
-	REV="`cat $KUDOSDIR/tests/$RECENT/svnversion`"
+	REV="`cat $FSTITCHDIR/tests/$RECENT/svnversion`"
 
 	#echo "Most recent for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME is $RECENT"
-	DATA="`$BENCHDIR/ex_${MEASUREMENT} -d $KUDOSDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
+	DATA="`$BENCHDIR/ex_${MEASUREMENT} -d $FSTITCHDIR/tests/$RECENT -t $TESTNAME | sed 's/\([0-9]\) /\1, /g;s/, *$//'`"
 	if [ -z "$DATA" ]; then
 		#echo "No data for $HOST $DISKCACHE $FS $CMODE $ACMODE $TESTNAME"
 		continue

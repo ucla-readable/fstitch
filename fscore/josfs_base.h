@@ -1,9 +1,9 @@
-#ifndef __KUDOS_KFS_JOSFS_BASE_H
-#define __KUDOS_KFS_JOSFS_BASE_H
+#ifndef __FSTITCH_FSCORE_JOSFS_BASE_H
+#define __FSTITCH_FSCORE_JOSFS_BASE_H
 
-#ifdef KFSD
-#include <kfs/bd.h>
-#include <kfs/lfs.h>
+#ifdef FSTITCHD
+#include <fscore/bd.h>
+#include <fscore/lfs.h>
 #endif
 
 /* Bytes per file system block */
@@ -54,8 +54,8 @@ struct JOSFS_Super {
 	struct JOSFS_File s_root;	/* Root directory node */
 };
 
-#ifdef KFSD
+#ifdef FSTITCHD
 LFS_t * josfs(BD_t * block_device);
 #endif
 
-#endif /* __KUDOS_KFS_JOSFS_BASE_H */
+#endif /* __FSTITCH_FSCORE_JOSFS_BASE_H */

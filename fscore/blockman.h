@@ -1,7 +1,7 @@
-#ifndef __KUDOS_KFS_BLOCKMAN_H
-#define __KUDOS_KFS_BLOCKMAN_H
+#ifndef __FSTITCH_FSCORE_BLOCKMAN_H
+#define __FSTITCH_FSCORE_BLOCKMAN_H
 
-#include <kfs/bdesc.h>
+#include <fscore/bdesc.h>
 #include <lib/hash_map.h>
 
 struct blockman {
@@ -47,4 +47,4 @@ static inline bdesc_t *blockman_lookup(blockman_t *man, uint32_t number)
 	return (bdesc && bdesc->disk_number == number ? bdesc : 0);
 }
 
-#endif /* __KUDOS_KFS_BLOCKMAN_H */
+#endif /* __FSTITCH_FSCORE_BLOCKMAN_H */

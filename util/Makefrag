@@ -1,7 +1,7 @@
 OBJDIRS += util
 BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/kdb
 ifeq ($(OBJDIR),$(BASE_OBJDIR)/kernel)
-BIN += $(UTILDIR)/testopgroup
+BIN += $(UTILDIR)/testpatchgroup
 endif
 
 $(UTILDIR)/bdsplit: util/bdsplit.c
@@ -9,17 +9,17 @@ $(UTILDIR)/bdsplit: util/bdsplit.c
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -o $@ $<
 
-$(UTILDIR)/check_writes: util/check_writes.c kfs/linux_bd_debug.h
+$(UTILDIR)/check_writes: util/check_writes.c fscore/linux_bd_debug.h
 	@echo + cc[UTIL] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/fsck.jos: util/fsck.jos.c kfs/josfs_base.h
+$(UTILDIR)/fsck.jos: util/fsck.jos.c fscore/josfs_base.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
 
-$(UTILDIR)/fsformat: util/fsformat.c kfs/josfs_base.h
+$(UTILDIR)/fsformat: util/fsformat.c fscore/josfs_base.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $<
@@ -29,14 +29,14 @@ $(UTILDIR)/fsync: util/fsync.c
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -o $@ $<
 
-$(UTILDIR)/testopgroup: util/testopgroup.c $(OBJDIR)/lib/libopgroup.so
+$(UTILDIR)/testpatchgroup: util/testpatchgroup.c $(OBJDIR)/lib/libpatchgroup.so
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) -I. -o $@ $< -L$(OBJDIR)/lib -lopgroup
+	$(V)$(CC) $(CFLAGS) -I. -o $@ $< -L$(OBJDIR)/lib -lpatchgroup
 
 GTKFLAGS:=$(shell pkg-config gtk+-2.0 --cflags --libs)
 
-$(UTILDIR)/kdb: util/kdb.c kfs/debug_opcode.h kfs/chdesc.h kfs/bdesc.h
+$(UTILDIR)/kdb: util/kdb.c fscore/debug_opcode.h fscore/patch.h fscore/bdesc.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $< $(GTKFLAGS) -lreadline -ltermcap -lm

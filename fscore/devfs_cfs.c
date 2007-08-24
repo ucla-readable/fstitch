@@ -2,12 +2,12 @@
 #include <lib/vector.h>
 #include <lib/dirent.h>
 
-#include <kfs/chdesc.h>
-#include <kfs/modman.h>
-#include <kfs/cfs.h>
-#include <kfs/bd.h>
-#include <kfs/kfsd.h>
-#include <kfs/devfs_cfs.h>
+#include <fscore/patch.h>
+#include <fscore/modman.h>
+#include <fscore/cfs.h>
+#include <fscore/bd.h>
+#include <fscore/fstitchd.h>
+#include <fscore/devfs_cfs.h>
 
 #define DEVFS_DEBUG 0
 
@@ -257,7 +257,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void *
 		const uint32_t limit = MIN(blocksize - dataoffset, size - size_written);
 		const uint32_t write_byte = blockoffset + (offset % blocksize) - dataoffset + size_written;
 		const uint32_t blockno = write_byte / blocksize;
-		chdesc_t * head = NULL;
+		patch_t * head = NULL;
 
 		if(!dataoffset && limit == blocksize)
 			/* we can do a synthetic read in this case */
@@ -266,13 +266,13 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void *
 			bdesc = CALL(devfd->bd, read_block, blockno, 1, page);
 		if(!bdesc)
 			return size_written ? size_written : -1;
-		r = chdesc_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);
+		r = patch_create_byte(bdesc, devfd->bd, dataoffset, limit, (uint8_t *) data + size_written, &head);
 		if(r < 0)
 			break;
 		r = CALL(devfd->bd, write_block, bdesc, blockno);
 		if(r < 0)
 		{
-			/* FIXME clean up chdescs */
+			/* FIXME clean up patchs */
 			break;
 		}
 
@@ -389,7 +389,7 @@ static int devfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	return -EPERM;
 }
 
-static const bool devfs_features[] = {[KFS_FEATURE_SIZE] = 1, [KFS_FEATURE_FILETYPE] = 1, [KFS_FEATURE_FREESPACE] = 1, [KFS_FEATURE_BLOCKSIZE] = 1, [KFS_FEATURE_DEVSIZE] = 1};
+static const bool devfs_features[] = {[FSTITCH_FEATURE_SIZE] = 1, [FSTITCH_FEATURE_FILETYPE] = 1, [FSTITCH_FEATURE_FREESPACE] = 1, [FSTITCH_FEATURE_BLOCKSIZE] = 1, [FSTITCH_FEATURE_DEVSIZE] = 1};
 
 static size_t devfs_get_max_feature_id(CFS_t * cfs)
 {
@@ -416,21 +416,21 @@ static int devfs_get_metadata(CFS_t * cfs, inode_t inode, uint32_t id, size_t si
 			return -ENOENT;
 	}
 	
-	if(id == KFS_FEATURE_SIZE)
+	if(id == FSTITCH_FEATURE_SIZE)
 	{
 		if(size < sizeof(size_t))
 			return -ENOMEM;
 		size = sizeof(size_t);
 		*((size_t *) data) = fdesc ? fdesc->bd->blocksize * fdesc->bd->numblocks : 0;
 	}
-	else if(id == KFS_FEATURE_FILETYPE)
+	else if(id == FSTITCH_FEATURE_FILETYPE)
 	{
 		if(size < sizeof(int32_t))
 			return -ENOMEM;
 		size = sizeof(int32_t);
 		*((int32_t *) data) = fdesc ? TYPE_DEVICE : TYPE_DIR;
 	}
-	else if(id == KFS_FEATURE_FREESPACE || id == KFS_FEATURE_BLOCKSIZE || id == KFS_FEATURE_DEVSIZE)
+	else if(id == FSTITCH_FEATURE_FREESPACE || id == FSTITCH_FEATURE_BLOCKSIZE || id == FSTITCH_FEATURE_DEVSIZE)
 	{
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
@@ -465,7 +465,7 @@ static int devfs_destroy(CFS_t * cfs)
 	if(r < 0)
 		return r;
 
-	r = kfsd_register_shutdown_module(devfs_real_destroy, cfs, SHUTDOWN_POSTMODULES);
+	r = fstitchd_register_shutdown_module(devfs_real_destroy, cfs, SHUTDOWN_POSTMODULES);
 	assert(!r);
 
 	return 0;

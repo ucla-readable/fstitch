@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_BLOCK_RESIZER_BD_H
-#define __KUDOS_KFS_BLOCK_RESIZER_BD_H
+#ifndef __FSTITCH_FSCORE_BLOCK_RESIZER_BD_H
+#define __FSTITCH_FSCORE_BLOCK_RESIZER_BD_H
 
-#include <kfs/bd.h>
+#include <fscore/bd.h>
 
 BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize);
 
-#endif /* __KUDOS_KFS_BLOCK_RESIZER_BD_H */
+#endif /* __FSTITCH_FSCORE_BLOCK_RESIZER_BD_H */

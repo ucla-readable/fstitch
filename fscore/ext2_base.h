@@ -1,8 +1,8 @@
-#ifndef __KUDOS_KFS_EXT2FS_BASE_H
-#define __KUDOS_KFS_EXT2FS_BASE_H
+#ifndef __FSTITCH_FSCORE_EXT2FS_BASE_H
+#define __FSTITCH_FSCORE_EXT2FS_BASE_H
 
-#include <kfs/bd.h>
-#include <kfs/lfs.h>
+#include <fscore/bd.h>
+#include <fscore/lfs.h>
 
 /*
  * Constants relative to the data blocks
@@ -243,5 +243,5 @@ typedef struct EXT2_Dir_entry EXT2_Dir_entry_t;
 
 LFS_t * ext2(BD_t * block_device);
 
-#endif /* __KUDOS_KFS_EXT2FS_BASE_H */
+#endif /* __FSTITCH_FSCORE_EXT2FS_BASE_H */
 

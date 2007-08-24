@@ -1,41 +1,41 @@
 #include <lib/platform.h>
 #include <lib/pool.h>
 
-#include <kfs/debug.h>
-#include <kfs/bdesc.h>
-#include <kfs/kfsd.h>
-#include <kfs/revision.h>
-#include <kfs/chdesc.h>
+#include <fscore/debug.h>
+#include <fscore/bdesc.h>
+#include <fscore/fstitchd.h>
+#include <fscore/revision.h>
+#include <fscore/patch.h>
 
-/* Set to print out chdesc cycles when they are discovered by
- * CHDESC_CYCLE_CHECK. */
-#define CHDESC_CYCLE_PRINT 1
+/* Set to print out patch cycles when they are discovered by
+ * PATCH_CYCLE_CHECK. */
+#define PATCH_CYCLE_PRINT 1
 
 /* Set to count change descriptors by type and display periodic output */
-#define COUNT_CHDESCS 0
+#define COUNT_PATCHS 0
 /* Set for count to be a total instead of the current */
-#define COUNT_CHDESCS_IS_TOTAL 0
+#define COUNT_PATCHS_IS_TOTAL 0
 
 /* Change descriptor multigraphs allow more than one dependency between the same
  * two change descriptors. This currently saves us the trouble of making sure we
- * don't create a duplicate dependency between chdescs, though it also causes us
+ * don't create a duplicate dependency between patchs, though it also causes us
  * to allocate somewhat more memory in many cases where we would otherwise
  * detect the duplicate dependency. Allowing multigraphs results in a reasonable
  * speedup, even though we use more memory, so it is enabled by default. */
-#define CHDESC_ALLOW_MULTIGRAPH 1
+#define PATCH_ALLOW_MULTIGRAPH 1
 
-/* Set to track the nrb chdesc merge stats and print them after shutdown */
-#define CHDESC_NRB_MERGE_STATS (CHDESC_NRB && 0)
+/* Set to track the nrb patch merge stats and print them after shutdown */
+#define PATCH_NRB_MERGE_STATS (PATCH_NRB && 0)
 
 /* Set to merge all existing RBs into a NRB when creating a NRB on the block */
-#define CHDESC_MERGE_RBS_NRB CHDESC_RB_NRB_READY
+#define PATCH_MERGE_RBS_NRB PATCH_RB_NRB_READY
 /* Set to track RBs->NRB merge stats */
-#define CHDESC_MERGE_RBS_NRB_STATS (CHDESC_MERGE_RBS_NRB && 0)
+#define PATCH_MERGE_RBS_NRB_STATS (PATCH_MERGE_RBS_NRB && 0)
 
-/* Set to merge a simple overlapping RB into the underlying chdesc */
-#define CHDESC_BYTE_MERGE_OVERLAP 1
-#define CHDESC_BIT_MERGE_OVERLAP 1
-#define CHDESC_OVERLAPS2 (CHDESC_BYTE_MERGE_OVERLAP && 1)
+/* Set to merge a simple overlapping RB into the underlying patch */
+#define PATCH_BYTE_MERGE_OVERLAP 1
+#define PATCH_BIT_MERGE_OVERLAP 1
+#define PATCH_OVERLAPS2 (PATCH_BYTE_MERGE_OVERLAP && 1)
 
 /* Set to allow swapping of full-block byte data with pointers instead of memxchg() */
 #define SWAP_FULLBLOCK_DATA 0
@@ -44,13 +44,13 @@
 #error SWAP_FULLBLOCK_DATA is incompatible with !REVISION_TAIL_INPLACE
 #endif
 
-/* Set to enable chdesc accounting */
-#define CHDESC_ACCOUNT 0
+/* Set to enable patch accounting */
+#define PATCH_ACCOUNT 0
 
 /* Allow malloc in recursion-on-the-heap support */
 #define HEAP_RECURSION_ALLOW_MALLOC 0
 
-#if CHDESC_ACCOUNT
+#if PATCH_ACCOUNT
 #ifdef __KERNEL__
 #include <asm/tsc.h>
 #else
@@ -126,7 +126,7 @@ static inline void account_update(account_t * act, int32_t space_change)
 	return account_update_realloc(act, 0, space_change);
 }
 
-static account_t act_nchdescs[6], act_ndeps;
+static account_t act_npatchs[6], act_ndeps;
 static account_t act_data;
 //static account_t act_nnrb;
 
@@ -134,36 +134,36 @@ static account_t act_data;
 #define NC_CONVERT_NOOP 4
 #define NC_TOTAL 5
 static account_t * act_all[] =
-    { &act_nchdescs[BIT], &act_nchdescs[BYTE], &act_nchdescs[NOOP],
-      &act_nchdescs[NC_CONVERT_BIT_BYTE], &act_nchdescs[NC_CONVERT_NOOP],
-      &act_nchdescs[NC_TOTAL],
+    { &act_npatchs[BIT], &act_npatchs[BYTE], &act_npatchs[NOOP],
+      &act_npatchs[NC_CONVERT_BIT_BYTE], &act_npatchs[NC_CONVERT_NOOP],
+      &act_npatchs[NC_TOTAL],
       &act_ndeps, &act_data };
 
-static inline void account_nchdescs(int type, int add)
+static inline void account_npatchs(int type, int add)
 {
-	account_update(&act_nchdescs[type], add);
-	account_update(&act_nchdescs[NC_TOTAL], add);
+	account_update(&act_npatchs[type], add);
+	account_update(&act_npatchs[NC_TOTAL], add);
 }
 
-static inline void account_nchdescs_undo(int type)
+static inline void account_npatchs_undo(int type)
 {
 	/* count undone in 'total space'? (do not decrement space_total) */
-	account_update(&act_nchdescs[type], -1);
-	act_nchdescs[type].space_total--;
-	act_nchdescs[type].space_total_realloc--;
-	account_update(&act_nchdescs[NC_TOTAL], -1);
-	act_nchdescs[NC_TOTAL].space_total--;
-	act_nchdescs[NC_TOTAL].space_total_realloc--;
+	account_update(&act_npatchs[type], -1);
+	act_npatchs[type].space_total--;
+	act_npatchs[type].space_total_realloc--;
+	account_update(&act_npatchs[NC_TOTAL], -1);
+	act_npatchs[NC_TOTAL].space_total--;
+	act_npatchs[NC_TOTAL].space_total_realloc--;
 }
 
-static inline void account_nchdescs_convert(int type_old, int type_new)
+static inline void account_npatchs_convert(int type_old, int type_new)
 {
-	account_update(&act_nchdescs[type_old], -1);
-	account_update(&act_nchdescs[type_new], 1);
+	account_update(&act_npatchs[type_old], -1);
+	account_update(&act_npatchs[type_new], 1);
 	if(type_old == BIT && type_new == BYTE)
-		account_update(&act_nchdescs[NC_CONVERT_BIT_BYTE], 1);
+		account_update(&act_npatchs[NC_CONVERT_BIT_BYTE], 1);
 	else if(type_new == NOOP)
-		account_update(&act_nchdescs[NC_CONVERT_NOOP], 1);
+		account_update(&act_npatchs[NC_CONVERT_NOOP], 1);
 	else
 		assert(0);
 }
@@ -206,41 +206,41 @@ static void account_print_all(void * ignore)
 
 static int account_init_all(void)
 {
-	account_init("nchdescs (byte)", sizeof(chdesc_t), &act_nchdescs[BYTE]);
-	account_init("nchdescs (bit)", sizeof(chdesc_t), &act_nchdescs[BIT]);
-	account_init("nchdescs (noop)", sizeof(chdesc_t), &act_nchdescs[NOOP]);
-	account_init("nchdescs (bit->byte)", 0, &act_nchdescs[NC_CONVERT_BIT_BYTE]);
-	account_init("nchdescs (->noop)", 0, &act_nchdescs[NC_CONVERT_NOOP]);
-	account_init("nchdescs (total)", sizeof(chdesc_t), &act_nchdescs[NC_TOTAL]);
+	account_init("npatchs (byte)", sizeof(patch_t), &act_npatchs[BYTE]);
+	account_init("npatchs (bit)", sizeof(patch_t), &act_npatchs[BIT]);
+	account_init("npatchs (noop)", sizeof(patch_t), &act_npatchs[NOOP]);
+	account_init("npatchs (bit->byte)", 0, &act_npatchs[NC_CONVERT_BIT_BYTE]);
+	account_init("npatchs (->noop)", 0, &act_npatchs[NC_CONVERT_NOOP]);
+	account_init("npatchs (total)", sizeof(patch_t), &act_npatchs[NC_TOTAL]);
 	//account_init("nnrb", &act_nnrb);
 	account_init("data", 1, &act_data);
 	account_init("ndeps", sizeof(chdepdesc_t), &act_ndeps);
-	return kfsd_register_shutdown_module(account_print_all, NULL, SHUTDOWN_POSTMODULES);
+	return fstitchd_register_shutdown_module(account_print_all, NULL, SHUTDOWN_POSTMODULES);
 }
 #else
 # define account_init(x) do {} while(0)
 # define account_update_realloc(act, sc, ad) do {} while(0)
 # define account_update(act, sc) do {} while(0)
-# define account_nchdescs(type, add) do {} while (0)
-# define account_nchdescs_undo(type) do {} while (0)
-# define account_nchdescs_convert(type_old, type_new) do {} while (0)
+# define account_npatchs(type, add) do {} while (0)
+# define account_npatchs_undo(type) do {} while (0)
+# define account_npatchs_convert(type_old, type_new) do {} while (0)
 # define account_init_all() 0
 #endif
 
-DECLARE_POOL(chdesc, chdesc_t);
+DECLARE_POOL(patch, patch_t);
 DECLARE_POOL(chdepdesc, chdepdesc_t);
 
 static void chpools_free_all(void * ignore)
 {
-	chdesc_free_all();
+	patch_free_all();
 	chdepdesc_free_all();
 }
 
 
-#if COUNT_CHDESCS
+#if COUNT_PATCHS
 #include <lib/jiffies.h>
-/* indices match chdesc->type */
-static uint32_t chdesc_counts[3];
+/* indices match patch->type */
+static uint32_t patch_counts[3];
 static void dump_counts(void)
 {
 	static int last_count_dump = 0;
@@ -251,65 +251,65 @@ static void dump_counts(void)
 	{
 		while(jiffies - last_count_dump >= HZ)
 			last_count_dump += HZ;
-		printf("Bit: %4d, Byte: %4d, Noop: %4d\n", chdesc_counts[BIT], chdesc_counts[BYTE], chdesc_counts[NOOP]);
+		printf("Bit: %4d, Byte: %4d, Noop: %4d\n", patch_counts[BIT], patch_counts[BYTE], patch_counts[NOOP]);
 	}
 }
 #endif
 
 
-static __inline void chdesc_free_byte_data(chdesc_t *chdesc) __attribute((always_inline));
-static __inline void chdesc_free_byte_data(chdesc_t *chdesc)
+static __inline void patch_free_byte_data(patch_t *patch) __attribute((always_inline));
+static __inline void patch_free_byte_data(patch_t *patch)
 {
-	assert(chdesc->type == BYTE);
-	if(chdesc->length > CHDESC_LOCALDATA && chdesc->byte.data)
+	assert(patch->type == BYTE);
+	if(patch->length > PATCH_LOCALDATA && patch->byte.data)
 	{
-		free(chdesc->byte.data);
-		account_update(&act_data, -chdesc->length);
+		free(patch->byte.data);
+		account_update(&act_data, -patch->length);
 	}
 }
 
 
-static chdesc_t * free_head = NULL;
+static patch_t * free_head = NULL;
 
-static void chdesc_free_push(chdesc_t * chdesc)
+static void patch_free_push(patch_t * patch)
 {
-	assert(free_head != chdesc && !chdesc->free_prev);
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_NEXT, chdesc, free_head);
-	chdesc->free_next = free_head;
+	assert(free_head != patch && !patch->free_prev);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_NEXT, patch, free_head);
+	patch->free_next = free_head;
 	if(free_head)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_PREV, free_head, chdesc);
-		free_head->free_prev = chdesc;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_PREV, free_head, patch);
+		free_head->free_prev = patch;
 	}
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_HEAD, chdesc);
-	free_head = chdesc;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_HEAD, patch);
+	free_head = patch;
 }
 
-static void chdesc_free_remove(chdesc_t * chdesc)
+static void patch_free_remove(patch_t * patch)
 {
-	assert(chdesc->free_prev || free_head == chdesc);
-	if(chdesc->free_prev)
+	assert(patch->free_prev || free_head == patch);
+	if(patch->free_prev)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_NEXT, chdesc->free_prev, chdesc->free_next);
-		chdesc->free_prev->free_next = chdesc->free_next;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_NEXT, patch->free_prev, patch->free_next);
+		patch->free_prev->free_next = patch->free_next;
 	}
 	else
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_HEAD, chdesc->free_next);
-		free_head = chdesc->free_next;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_HEAD, patch->free_next);
+		free_head = patch->free_next;
 	}
-	if(chdesc->free_next)
+	if(patch->free_next)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_PREV, chdesc->free_next, chdesc->free_prev);
-		chdesc->free_next->free_prev = chdesc->free_prev;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_PREV, patch->free_next, patch->free_prev);
+		patch->free_next->free_prev = patch->free_prev;
 	}
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_PREV, chdesc, NULL);
-	chdesc->free_prev = NULL;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FREE_NEXT, chdesc, NULL);
-	chdesc->free_next = NULL;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_PREV, patch, NULL);
+	patch->free_prev = NULL;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_NEXT, patch, NULL);
+	patch->free_next = NULL;
 }
 
-static inline int chdesc_overlap_list(const chdesc_t *c)
+static inline int patch_overlap_list(const patch_t *c)
 {
 	int sz = c->block->length >> OVERLAP1SHIFT;
 	if (c->length == 0)
@@ -319,34 +319,34 @@ static inline int chdesc_overlap_list(const chdesc_t *c)
 	return c->offset / sz + 1;
 }
 
-static inline void chdesc_link_overlap(chdesc_t *chdesc)
+static inline void patch_link_overlap(patch_t *patch)
 {
-	assert(chdesc->type == BYTE);
-	assert(!chdesc->overlap_pprev && !chdesc->overlap_next);
-	int list = chdesc_overlap_list(chdesc);
+	assert(patch->type == BYTE);
+	assert(!patch->overlap_pprev && !patch->overlap_next);
+	int list = patch_overlap_list(patch);
 	assert(list >= 0);
-	chdesc->overlap_pprev = &chdesc->block->overlap1[list];
-	chdesc->overlap_next = *chdesc->overlap_pprev;
-	*chdesc->overlap_pprev = chdesc;
-	if(chdesc->overlap_next)
-		chdesc->overlap_next->overlap_pprev = &chdesc->overlap_next;
+	patch->overlap_pprev = &patch->block->overlap1[list];
+	patch->overlap_next = *patch->overlap_pprev;
+	*patch->overlap_pprev = patch;
+	if(patch->overlap_next)
+		patch->overlap_next->overlap_pprev = &patch->overlap_next;
 }
 
-static inline void chdesc_unlink_overlap(chdesc_t *chdesc)
+static inline void patch_unlink_overlap(patch_t *patch)
 {
-	assert((!chdesc->overlap_pprev && !chdesc->overlap_next) || chdesc->block);
-	if(chdesc->overlap_pprev)
-		*chdesc->overlap_pprev = chdesc->overlap_next;
-	if(chdesc->overlap_next)
-		chdesc->overlap_next->overlap_pprev = chdesc->overlap_pprev;
-	chdesc->overlap_next = NULL;
-	chdesc->overlap_pprev = NULL;
+	assert((!patch->overlap_pprev && !patch->overlap_next) || patch->block);
+	if(patch->overlap_pprev)
+		*patch->overlap_pprev = patch->overlap_next;
+	if(patch->overlap_next)
+		patch->overlap_next->overlap_pprev = patch->overlap_pprev;
+	patch->overlap_next = NULL;
+	patch->overlap_pprev = NULL;
 }
 
-/* ensure bdesc->bit_changes[offset] has a noop chdesc */
-static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
+/* ensure bdesc->bit_changes[offset] has a noop patch */
+static patch_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 {
-	chdesc_t * chdesc;
+	patch_t * patch;
 	void * key = (void *) (uint32_t) (offset << 2);
 	int r;
 	assert(block);
@@ -358,36 +358,36 @@ static chdesc_t * ensure_bdesc_has_bit_changes(bdesc_t * block, uint16_t offset)
 			return NULL;
 	}
 	
-	chdesc = (chdesc_t *) hash_map_find_val(block->bit_changes, key);
-	if(chdesc)
+	patch = (patch_t *) hash_map_find_val(block->bit_changes, key);
+	if(patch)
 	{
-		assert(chdesc->type == NOOP);
-		return chdesc;
+		assert(patch->type == NOOP);
+		return patch;
 	}
 	
-	r = chdesc_create_noop_list(NULL, &chdesc, NULL);
+	r = patch_create_noop_list(NULL, &patch, NULL);
 	if(r < 0)
 		return NULL;
-	KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "bit_changes");
+	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, patch, "bit_changes");
 	
-	if(hash_map_insert(block->bit_changes, key, chdesc) < 0)
+	if(hash_map_insert(block->bit_changes, key, patch) < 0)
 	{
-		chdesc_destroy(&chdesc);
+		patch_destroy(&patch);
 		return NULL;
 	}
 	
 	/* we don't really need a flag for this, since we could just use the
 	 * noop.bit_changes field to figure it out... but that would be error-prone */
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_BIT_NOOP);
-	chdesc->flags |= CHDESC_BIT_NOOP;
-	chdesc->noop.bit_changes = block->bit_changes;
-	chdesc->noop.hash_key = key;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_BIT_NOOP);
+	patch->flags |= PATCH_BIT_NOOP;
+	patch->noop.bit_changes = block->bit_changes;
+	patch->noop.hash_key = key;
 	
-	return chdesc;
+	return patch;
 }
 
 /* get bdesc->bit_changes[offset] */
-static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
+static patch_t * patch_bit_changes(bdesc_t * block, uint16_t offset)
 {
 	if(!block->bit_changes)
 		return NULL;
@@ -436,7 +436,7 @@ static chdesc_t * chdesc_bit_changes(bdesc_t * block, uint16_t offset)
 
 /* propagate a level change through the noop after,
  * to update the ready state */
-static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t prev_level, uint16_t new_level)
+static void propagate_level_change_thru_noop(patch_t * noop_after, uint16_t prev_level, uint16_t new_level)
 {
 	/* recursion-on-the-heap support */
 	struct state {
@@ -458,8 +458,8 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 	chdepdesc_t * noops_afters = noop_after->afters;
 	for(; noops_afters; noops_afters = noops_afters->after.next)
 	{
-		chdesc_t * after = noops_afters->after.desc;
-		uint16_t after_prev_level = chdesc_level(after);
+		patch_t * after = noops_afters->after.desc;
+		uint16_t after_prev_level = patch_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
 		{
@@ -471,11 +471,11 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 			after->nbefores[new_level]++;
 			assert(after->nbefores[new_level]);
 		}
-		chdesc_update_ready_changes(after);
+		patch_update_ready_changes(after);
 
 		if(!after->owner)
 		{
-			uint16_t after_new_level = chdesc_level(after);
+			uint16_t after_new_level = patch_level(after);
 			if(after_prev_level != after_new_level)
 			{
 				/* Recursively propagate the level change; equivalent to
@@ -512,36 +512,36 @@ static void propagate_level_change_thru_noop(chdesc_t * noop_after, uint16_t pre
 }
 
 #if BDESC_EXTERN_AFTER_COUNT
-/* return whether 'chdesc' is on a different block than 'block' */
-static inline bool chdesc_is_external(const chdesc_t * chdesc, const bdesc_t * block)
+/* return whether 'patch' is on a different block than 'block' */
+static inline bool patch_is_external(const patch_t * patch, const bdesc_t * block)
 {
-	assert(chdesc);
+	assert(patch);
 	assert(block);
-	if(chdesc->type == NOOP)
+	if(patch->type == NOOP)
 	{
-		if(chdesc->block && chdesc->block != block)
+		if(patch->block && patch->block != block)
 			return 1;
 	}
-	else if(chdesc->block != block)
+	else if(patch->block != block)
 		return 1;
 	return 0;
 }
 
 #define BDESC_EXTERN_AFTER_COUNT_DEBUG 0
 #if BDESC_EXTERN_AFTER_COUNT_DEBUG
-/* return the number of external afters 'chdesc' has with respect
+/* return the number of external afters 'patch' has with respect
  * to 'block' */
-static bool count_chdesc_external_afters(const chdesc_t * chdesc, const bdesc_t * block)
+static bool count_patch_external_afters(const patch_t * patch, const bdesc_t * block)
 {
 	const chdepdesc_t * afters;
 	uint32_t n = 0;
-	for(afters = chdesc->afters; afters; afters = afters->after.next)
+	for(afters = patch->afters; afters; afters = afters->after.next)
 	{
-		const chdesc_t * after = afters->after.desc;
+		const patch_t * after = afters->after.desc;
 		if(!after->block)
 		{
 			/* XXX: stack usage */
-			n += count_chdesc_external_afters(after, block);
+			n += count_patch_external_afters(after, block);
 		}
 		else if(after->block != block)
 			n++;
@@ -552,11 +552,11 @@ static bool count_chdesc_external_afters(const chdesc_t * chdesc, const bdesc_t 
 /* return the number of external afters for 'block' */
 static uint32_t count_bdesc_external_afters(const bdesc_t * block)
 {
-	const chdesc_t * c;
+	const patch_t * c;
 	uint32_t n = 0;
 	for(c = block->all_changes; c; c = c->ddesc_next)
-		if(!(c->flags & CHDESC_INFLIGHT))
-			n += count_chdesc_external_afters(c, block);
+		if(!(c->flags & PATCH_INFLIGHT))
+			n += count_patch_external_afters(c, block);
 	return n;
 }
 
@@ -570,21 +570,21 @@ static bool extern_after_count_is_correct(const bdesc_t * block)
 
 /* propagate a depend add/remove through a noop after,
  * to increment/decrement extern_after_count for 'block' */
-static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_after, bdesc_t * block, bool add)
+static void propagate_extern_after_change_thru_noop_after(const patch_t * noop_after, bdesc_t * block, bool add)
 {
 	chdepdesc_t * dep;
 	assert(noop_after->type == NOOP && !noop_after->block);
 	assert(block);
 	for(dep = noop_after->afters; dep; dep = dep->after.next)
 	{
-		chdesc_t * after = dep->after.desc;
+		patch_t * after = dep->after.desc;
 		if(!after->block)
 		{
 			assert(after->type == NOOP);
 			/* XXX: stack usage */
 			propagate_extern_after_change_thru_noop_after(after, block, add);
 		}
-		else if(chdesc_is_external(after, block))
+		else if(patch_is_external(after, block))
 		{
 			if(add)
 			{
@@ -602,21 +602,21 @@ static void propagate_extern_after_change_thru_noop_after(const chdesc_t * noop_
 
 /* propagate a depend add/remove through a noop before,
  * to increment extern_after_count for before's block */
-static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_before, const chdesc_t * after, bool add)
+static void propagate_extern_after_change_thru_noop_before(patch_t * noop_before, const patch_t * after, bool add)
 {
 	chdepdesc_t * dep;
 	assert(noop_before->type == NOOP && !noop_before->block);
 	assert(after->type != NOOP);
 	for(dep = noop_before->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * before = dep->before.desc;
+		patch_t * before = dep->before.desc;
 		if(!before->block)
 		{
 			assert(before->type == NOOP);
 			/* XXX: stack usage */
 			propagate_extern_after_change_thru_noop_before(before, after, add);
 		}
-		else if(chdesc_is_external(after, before->block) && !(before->flags & CHDESC_INFLIGHT))
+		else if(patch_is_external(after, before->block) && !(before->flags & PATCH_INFLIGHT))
 		{
 			if(add)
 			{
@@ -632,11 +632,11 @@ static void propagate_extern_after_change_thru_noop_before(chdesc_t * noop_befor
 	}
 }
 
-/* Return whether chdesc has any afters that are on a block */
-static bool has_block_afters(const chdesc_t * chdesc)
+/* Return whether patch has any afters that are on a block */
+static bool has_block_afters(const patch_t * patch)
 {
 	const chdepdesc_t * dep;
-	for(dep = chdesc->afters; dep; dep = dep->after.next)
+	for(dep = patch->afters; dep; dep = dep->after.next)
 	{
 		if(dep->after.desc->block)
 			return 1;
@@ -647,11 +647,11 @@ static bool has_block_afters(const chdesc_t * chdesc)
 	return 0;
 }
 
-/* Return whether chdesc has any befores that are on a block */
-static bool has_block_befores(const chdesc_t * chdesc)
+/* Return whether patch has any befores that are on a block */
+static bool has_block_befores(const patch_t * patch)
 {
 	const chdepdesc_t * dep;
-	for(dep = chdesc->befores; dep; dep = dep->before.next)
+	for(dep = patch->befores; dep; dep = dep->before.next)
 	{
 		if(dep->before.desc->block)
 			return 1;
@@ -663,7 +663,7 @@ static bool has_block_befores(const chdesc_t * chdesc)
 }
 
 /* propagate extern_after_count changes for a depend add/remove */
-static inline void propagate_extern_after_change(chdesc_t * after, chdesc_t * before, bool add)
+static inline void propagate_extern_after_change(patch_t * after, patch_t * before, bool add)
 {
 	if(!after->block)
 	{
@@ -688,7 +688,7 @@ static inline void propagate_extern_after_change(chdesc_t * after, chdesc_t * be
 	}
 	else if(!before->block)
 		propagate_extern_after_change_thru_noop_before(before, after, add);
-	else if(chdesc_is_external(after, before->block))
+	else if(patch_is_external(after, before->block))
 	{
 		if(add)
 		{
@@ -705,61 +705,61 @@ static inline void propagate_extern_after_change(chdesc_t * after, chdesc_t * be
 #endif /* BDESC_EXTERN_AFTER_COUNT */
 
 /* propagate a depend add, to update ready and extern_after state */
-static void propagate_depend_add(chdesc_t * after, chdesc_t * before)
+static void propagate_depend_add(patch_t * after, patch_t * before)
 {
-	uint16_t before_level = chdesc_level(before);
+	uint16_t before_level = patch_level(before);
 	uint16_t after_prev_level;
 	
 	if(before_level == BDLEVEL_NONE)
 		return;
-	after_prev_level = chdesc_level(after);
+	after_prev_level = patch_level(after);
 	
 	after->nbefores[before_level]++;
 	assert(after->nbefores[before_level]);
-	chdesc_update_ready_changes(after);
+	patch_update_ready_changes(after);
 	if(!after->owner && (before_level > after_prev_level || after_prev_level == BDLEVEL_NONE))
 			propagate_level_change_thru_noop(after, after_prev_level, before_level);
 #if BDESC_EXTERN_AFTER_COUNT
-	/* an inflight chdesc does not contribute to its block's
+	/* an inflight patch does not contribute to its block's
 	 * extern_after_count */
-	if(!(before->flags & CHDESC_INFLIGHT))
+	if(!(before->flags & PATCH_INFLIGHT))
 		propagate_extern_after_change(after, before, 1);
 #endif
 }
 
 /* propagate a depend remove, to update ready and extern_after state */
-static void propagate_depend_remove(chdesc_t * after, chdesc_t * before)
+static void propagate_depend_remove(patch_t * after, patch_t * before)
 {
-	uint16_t before_level = chdesc_level(before);
+	uint16_t before_level = patch_level(before);
 	uint16_t after_prev_level;
 	
 	if(before_level == BDLEVEL_NONE)
 		return;
-	after_prev_level = chdesc_level(after);
+	after_prev_level = patch_level(after);
 	
 	assert(after->nbefores[before_level]);
 	after->nbefores[before_level]--;
-	chdesc_update_ready_changes(after);
+	patch_update_ready_changes(after);
 	if(!after->owner && (before_level == after_prev_level && !after->nbefores[before_level]))
-		propagate_level_change_thru_noop(after, after_prev_level, chdesc_level(after));
+		propagate_level_change_thru_noop(after, after_prev_level, patch_level(after));
 #if BDESC_EXTERN_AFTER_COUNT
-	/* extern_after_count is pre-decremented when a chdesc goes inflight */
-	if(!(before->flags & CHDESC_INFLIGHT))
+	/* extern_after_count is pre-decremented when a patch goes inflight */
+	if(!(before->flags & PATCH_INFLIGHT))
 		propagate_extern_after_change(after, before, 0);
 #endif
 }
 
 /* propagate a level change, to update ready state */
-void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint16_t new_level)
+void patch_propagate_level_change(patch_t * patch, uint16_t prev_level, uint16_t new_level)
 {
-	chdepdesc_t * afters = chdesc->afters;
+	chdepdesc_t * afters = patch->afters;
 	assert(prev_level < NBDLEVEL || prev_level == BDLEVEL_NONE);
 	assert(new_level < NBDLEVEL || new_level == BDLEVEL_NONE);
 	assert(prev_level != new_level);
 	for(; afters; afters = afters->after.next)
 	{
-		chdesc_t * after = afters->after.desc;
-		uint16_t after_prev_level = chdesc_level(after);
+		patch_t * after = afters->after.desc;
+		uint16_t after_prev_level = patch_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
 		{
@@ -771,11 +771,11 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 			after->nbefores[new_level]++;
 			assert(after->nbefores[new_level]);
 		}
-		chdesc_update_ready_changes(after);
+		patch_update_ready_changes(after);
 
 		if(!after->owner)
 		{
-			uint16_t after_new_level = chdesc_level(after);
+			uint16_t after_new_level = patch_level(after);
 			if(after_prev_level != after_new_level)
 				propagate_level_change_thru_noop(after, after_prev_level, after_new_level);
 		}
@@ -783,41 +783,41 @@ void chdesc_propagate_level_change(chdesc_t * chdesc, uint16_t prev_level, uint1
 }
 
 /* add a dependency between change descriptors without checking for cycles */
-int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
+int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 {
 	chdepdesc_t * dep;
 	
-	if(!(after->flags & CHDESC_SAFE_AFTER))
+	if(!(after->flags & PATCH_SAFE_AFTER))
 	{
 		assert(after->type == NOOP && !after->afters); /* quickly catch bugs for now */
 		if(after->type != NOOP || after->afters)
 			return -EINVAL;
 	}
 	
-	/* in-flight and on-disk chdescs cannot (generally) safely gain befores */
-	if(after->flags & CHDESC_INFLIGHT)
+	/* in-flight and on-disk patchs cannot (generally) safely gain befores */
+	if(after->flags & PATCH_INFLIGHT)
 	{
 		printf("%s(): (%s:%d): Adding before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -EINVAL;
 	}
-	if(after->flags & CHDESC_WRITTEN)
+	if(after->flags & PATCH_WRITTEN)
 	{
-		if(before->flags & CHDESC_WRITTEN)
+		if(before->flags & PATCH_WRITTEN)
 			return 0;
 		printf("%s(): (%s:%d): Attempt to add before to already written data!\n", __FUNCTION__, __FILE__, __LINE__);
 		return -EINVAL;
 	}
 	
-	/* no need to actually create a dependency on a written chdesc */
-	if(before->flags & CHDESC_WRITTEN)
+	/* no need to actually create a dependency on a written patch */
+	if(before->flags & PATCH_WRITTEN)
 		return 0;
 	
 	/* the block cannot be written until 'before' is on disk, so an explicit
-	 * dependency from a same-block chdesc is unnecessary */
-	if(after->block && before->block && after->block == before->block && (before->flags & CHDESC_INFLIGHT))
+	 * dependency from a same-block patch is unnecessary */
+	if(after->block && before->block && after->block == before->block && (before->flags & PATCH_INFLIGHT))
 		return 0;
 	
-#if !CHDESC_ALLOW_MULTIGRAPH
+#if !PATCH_ALLOW_MULTIGRAPH
 	/* make sure it's not already there */
 	for(dep = after->befores; dep; dep = dep->before.next)
 		if(dep->desc == before)
@@ -838,13 +838,13 @@ int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 		return 0;
 #endif
 	
-	if(before->flags & CHDESC_SET_NOOP)
+	if(before->flags & PATCH_SET_NOOP)
 	{
 		int r = 0;
 		assert(before->type == NOOP);
 		assert(!before->afters);
 		for(dep = before->befores; dep; dep = dep->before.next)
-			if((r = chdesc_add_depend_no_cycles(after, dep->before.desc)) < 0)
+			if((r = patch_add_depend_no_cycles(after, dep->before.desc)) < 0)
 				break;
 		return r;
 	}
@@ -857,7 +857,7 @@ int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	propagate_depend_add(after, before);
 	
 	/* add the before to the after */
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_BEFORE, after, before);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_ADD_BEFORE, after, before);
 	dep->before.desc = before;
 	dep->before.next = NULL;
 	dep->before.ptr = after->befores_tail;
@@ -865,26 +865,26 @@ int chdesc_add_depend_no_cycles(chdesc_t * after, chdesc_t * before)
 	after->befores_tail = &dep->before.next;
 	
 	/* add the after to the before */
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ADD_AFTER, before, after);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_ADD_AFTER, before, after);
 	dep->after.desc = after;
 	dep->after.next = NULL;
 	dep->after.ptr = before->afters_tail;
 	*before->afters_tail = dep;
 	before->afters_tail = &dep->after.next;
 	
-	/* virgin NOOP chdesc getting its first before */
+	/* virgin NOOP patch getting its first before */
 	if(free_head == after || after->free_prev)
 	{
 		assert(after->type == NOOP);
-		assert(!(after->flags & CHDESC_WRITTEN));
-		chdesc_free_remove(after);
+		assert(!(after->flags & PATCH_WRITTEN));
+		patch_free_remove(after);
 	}
 	
 	return 0;
 }
 
 /* Conservatively return true iff 'after' directly depends on 'before' */
-static inline bool quick_depends_on(const chdesc_t * after, const chdesc_t * before)
+static inline bool quick_depends_on(const patch_t * after, const patch_t * before)
 {
 	/* Quick (bidirectional width-2) check for after->before */
 	if(!after->befores || !before->afters)
@@ -900,36 +900,36 @@ static inline bool quick_depends_on(const chdesc_t * after, const chdesc_t * bef
 	return 0; /* No after->before found */
 }
 
-/* make the recent chdesc depend on the given earlier chdesc in the same
+/* make the recent patch depend on the given earlier patch in the same
  * block if it overlaps.
  * Return non-negative on success:
  * 0 if no overlap
  * 1 if there overlap and recent now (in)directly depends on original. */
-static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * middle, chdesc_t * original)
+static int patch_overlap_attach(patch_t * recent, patch_t * middle, patch_t * original)
 {
 	int r, overlap;
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_ATTACH, recent, original);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_OVERLAP_ATTACH, recent, original);
 	
-	/* if either is a NOOP chdesc, warn about it */
+	/* if either is a NOOP patch, warn about it */
 	if(recent->type == NOOP || original->type == NOOP)
-		printf("%s(): (%s:%d): Unexpected NOOP chdesc\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): Unexpected NOOP patch\n", __FUNCTION__, __FILE__, __LINE__);
 	
 	/* if they don't overlap, we are done */
-	overlap = chdesc_overlap_check(recent, original);
+	overlap = patch_overlap_check(recent, original);
 	if(!overlap)
 		return 0;
 	
-	if(original->flags & CHDESC_ROLLBACK)
+	if(original->flags & PATCH_ROLLBACK)
 	{
 		/* it's not clear what to do in this case... just fail with a warning for now */
-		printf("Attempt to overlap a new chdesc (%p) with a rolled-back chdesc (%p)! (debug = %d)\n", recent, original, KFS_DEBUG_COUNT());
+		printf("Attempt to overlap a new patch (%p) with a rolled-back patch (%p)! (debug = %d)\n", recent, original, FSTITCH_DEBUG_COUNT());
 		return -EBUSY;
 	}
 	
 	if(!middle || !quick_depends_on(middle, original))
 	{
-		r = chdesc_add_depend(recent, original);
+		r = patch_add_depend(recent, original);
 		if(r < 0)
 			return r;
 	}
@@ -938,25 +938,25 @@ static int chdesc_overlap_attach(chdesc_t * recent, chdesc_t * middle, chdesc_t 
 	if(overlap == 2)
 	{
 		if(original->type == BYTE)
-			chdesc_unlink_overlap(original);
+			patch_unlink_overlap(original);
 		else if(original->type == BIT)
 		{
-			chdesc_t * bit_changes = chdesc_bit_changes(original->block, original->offset);
+			patch_t * bit_changes = patch_bit_changes(original->block, original->offset);
 			assert(bit_changes);
-			chdesc_remove_depend(bit_changes, original);
+			patch_remove_depend(bit_changes, original);
 		}
 		else
-			kpanic("Complete overlap of unhandled chdesc type!");
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, recent, CHDESC_OVERLAP);
-		recent->flags |= CHDESC_OVERLAP;
+			kpanic("Complete overlap of unhandled patch type!");
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, recent, PATCH_OVERLAP);
+		recent->flags |= PATCH_OVERLAP;
 	}
 	
 	return 1;
 }
 
-static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc)
+static int _patch_overlap_multiattach(patch_t * patch, patch_t * list_patch)
 {
-	chdepdesc_t * list = list_chdesc->befores;
+	chdepdesc_t * list = list_patch->befores;
 	chdepdesc_t * next = list;
 	while((list = next))
 	{
@@ -967,26 +967,26 @@ static int _chdesc_overlap_multiattach(chdesc_t * chdesc, chdesc_t * list_chdesc
 		 * prefetch the next pointer at the top of the loop */
 		next = list->before.next;
 		
-		list_chdesc = list->before.desc;
+		list_patch = list->before.desc;
 		
-		if(chdesc == list_chdesc)
+		if(patch == list_patch)
 			continue;
-		r = chdesc_overlap_attach(chdesc, NULL, list_chdesc);
+		r = patch_overlap_attach(patch, NULL, list_patch);
 		if(r < 0)
 			return r;
 	}
 	return 0;
 }
 
-static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t ** middle, chdesc_t **list) __attribute__((always_inline));
-static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t ** middle, chdesc_t **list)
+static __inline int _patch_overlap_multiattach_x(patch_t * patch, patch_t ** middle, patch_t **list) __attribute__((always_inline));
+static __inline int _patch_overlap_multiattach_x(patch_t * patch, patch_t ** middle, patch_t **list)
 {
 	int r;
 	while(*list) {
-		chdesc_t *c = *list;
-		if(c != chdesc)
+		patch_t *c = *list;
+		if(c != patch)
 		{
-			if((r = chdesc_overlap_attach(chdesc, *middle, c)) < 0)
+			if((r = patch_overlap_attach(patch, *middle, c)) < 0)
 				return r;
 			if(r == 1)
 				*middle = c;
@@ -997,66 +997,66 @@ static __inline int _chdesc_overlap_multiattach_x(chdesc_t * chdesc, chdesc_t **
 	return 0;
 }
 
-static int chdesc_overlap_multiattach(chdesc_t * chdesc, bdesc_t * block)
+static int patch_overlap_multiattach(patch_t * patch, bdesc_t * block)
 {
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_OVERLAP_MULTIATTACH, chdesc, block);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_OVERLAP_MULTIATTACH, patch, block);
 	
-	if(chdesc->type == BIT)
+	if(patch->type == BIT)
 	{
-		chdesc_t * bit_changes = chdesc_bit_changes(block, chdesc->offset);
+		patch_t * bit_changes = patch_bit_changes(block, patch->offset);
 		if(bit_changes)
 		{
-			int r = _chdesc_overlap_multiattach(chdesc, bit_changes);
+			int r = _patch_overlap_multiattach(patch, bit_changes);
 			if(r < 0)
 				return r;
 		}
 	}
-	else if(chdesc->type == BYTE && block->bit_changes)
+	else if(patch->type == BYTE && block->bit_changes)
 	{
 		hash_map_it2_t it = hash_map_it2_create(block->bit_changes);
 		while(hash_map_it2_next(&it))
 		{
-			chdesc_t * bit_changes = it.val;
+			patch_t * bit_changes = it.val;
 			int r;
-			if(chdesc_overlap_check(chdesc, bit_changes->befores->before.desc))
-				if((r = _chdesc_overlap_multiattach(chdesc, bit_changes)) < 0)
+			if(patch_overlap_check(patch, bit_changes->befores->before.desc))
+				if((r = _patch_overlap_multiattach(patch, bit_changes)) < 0)
 					return r;
 		}
 	}
 
-	// get range of buckets touched by this chdesc
-	int list1 = chdesc_overlap_list(chdesc), list2;
+	// get range of buckets touched by this patch
+	int list1 = patch_overlap_list(patch), list2;
 	assert(list1 >= 0);
 	if (list1 == 0) {
-		assert(chdesc->type == BYTE);
+		assert(patch->type == BYTE);
 		int sz = block->length >> OVERLAP1SHIFT;
-		list1 = chdesc->offset / sz + 1;
-		list2 = (chdesc->offset + chdesc->length - 1) / sz + 1;
+		list1 = patch->offset / sz + 1;
+		list2 = (patch->offset + patch->length - 1) / sz + 1;
 	} else
 		list2 = list1;
 
 	int r;
-	chdesc_t * middle = NULL;
+	patch_t * middle = NULL;
 	for (; list1 <= list2; list1++)
-		if ((r = _chdesc_overlap_multiattach_x(chdesc, &middle, &block->overlap1[list1])) < 0)
+		if ((r = _patch_overlap_multiattach_x(patch, &middle, &block->overlap1[list1])) < 0)
 			return r;
 
-	return _chdesc_overlap_multiattach_x(chdesc, &middle, &block->overlap1[0]);
+	return _patch_overlap_multiattach_x(patch, &middle, &block->overlap1[0]);
 }
 
 
-#if CHDESC_OVERLAPS2
-static chdesc_t *chdesc_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t length, uint32_t mask)
+#if PATCH_OVERLAPS2
+static patch_t *patch_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t length, uint32_t mask)
 {
-	chdesc_t *olist = NULL;
-	chdesc_t *oprev = NULL;
-	chdesc_t **opprev = &olist;
-	chdesc_t *c;
+	patch_t *olist = NULL;
+	patch_t *oprev = NULL;
+	patch_t **opprev = &olist;
+	patch_t *c;
 
 	if (block->bit_changes) {
 		uint32_t o;
 		for (o = (offset & ~3); o < offset + length; o += 4) {
-			if (!(c = chdesc_bit_changes(block, o)))
+			if (!(c = patch_bit_changes(block, o)))
 				continue;
 			chdepdesc_t *dep;
 			for (dep = c->befores; dep; dep = dep->before.next) {
@@ -1066,16 +1066,16 @@ static chdesc_t *chdesc_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t
 				if (oprev && quick_depends_on(oprev, c))
 					continue;
 				if ((mask & c->bit.or) == c->bit.or)
-					c->flags |= CHDESC_FULLOVERLAP;
+					c->flags |= PATCH_FULLOVERLAP;
 				else
-					c->flags &= ~CHDESC_FULLOVERLAP;
+					c->flags &= ~PATCH_FULLOVERLAP;
 				*opprev = oprev = c;
 				opprev = &c->tmp_next;
 			}
 		}
 	}
 
-	// get range of buckets touched by this chdesc
+	// get range of buckets touched by this patch
 	int sz = block->length >> OVERLAP1SHIFT;
 	int list1 = offset / sz + 1;
 	int list2 = (offset + length - 1) / sz + 1;
@@ -1089,9 +1089,9 @@ static chdesc_t *chdesc_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t
 					continue;
 				if (offset <= c->offset
 				    && c->offset + c->length <= offset + length)
-					c->flags |= CHDESC_FULLOVERLAP;
+					c->flags |= PATCH_FULLOVERLAP;
 				else
-					c->flags &= ~CHDESC_FULLOVERLAP;
+					c->flags &= ~PATCH_FULLOVERLAP;
 				*opprev = oprev = c;
 				opprev = &c->tmp_next;
 			}
@@ -1105,78 +1105,78 @@ static chdesc_t *chdesc_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t
 	return olist;
 }
 
-static int chdesc_apply_overlaps(chdesc_t *chdesc, chdesc_t *overlap_list)
+static int patch_apply_overlaps(patch_t *patch, patch_t *overlap_list)
 {
 	int r = 0;
-	chdesc_t *next;
+	patch_t *next;
 
 	for (; overlap_list; overlap_list = next) {
 		next = overlap_list->tmp_next;
 		overlap_list->tmp_next = NULL;
 
-		r = chdesc_add_depend(chdesc, overlap_list);
+		r = patch_add_depend(patch, overlap_list);
 		if(r < 0)
 			return r;
 
-		if (overlap_list->flags & CHDESC_FULLOVERLAP) {
+		if (overlap_list->flags & PATCH_FULLOVERLAP) {
 			if (overlap_list->type == BYTE)
-				chdesc_unlink_overlap(overlap_list);
+				patch_unlink_overlap(overlap_list);
 			else if (overlap_list->type == BIT) {
-				chdesc_t * bit_changes = chdesc_bit_changes(chdesc->block, overlap_list->offset);
+				patch_t * bit_changes = patch_bit_changes(patch->block, overlap_list->offset);
 				assert(bit_changes);
-				chdesc_remove_depend(bit_changes, overlap_list);
+				patch_remove_depend(bit_changes, overlap_list);
 			}
 		}
 	}
 
 	return r;
 }
-#endif /* CHDESC_OVERLAPS2 */
+#endif /* PATCH_OVERLAPS2 */
 
 
-void chdesc_tmpize_all_changes(chdesc_t * chdesc)
+void patch_tmpize_all_changes(patch_t * patch)
 {
-	assert(!chdesc->tmp_next && !chdesc->tmp_pprev);
+	assert(!patch->tmp_next && !patch->tmp_pprev);
 
-	if(chdesc->ddesc_pprev)
+	if(patch->ddesc_pprev)
 	{
-		chdesc->tmp_next = chdesc->ddesc_next;
-		chdesc->tmp_pprev = chdesc->ddesc_pprev;
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = chdesc->ddesc_pprev;
+		patch->tmp_next = patch->ddesc_next;
+		patch->tmp_pprev = patch->ddesc_pprev;
+		if(patch->ddesc_next)
+			patch->ddesc_next->ddesc_pprev = patch->ddesc_pprev;
 		else
-			chdesc->block->all_changes_tail = chdesc->ddesc_pprev;
-		*chdesc->ddesc_pprev = chdesc->ddesc_next;
+			patch->block->all_changes_tail = patch->ddesc_pprev;
+		*patch->ddesc_pprev = patch->ddesc_next;
 
-		chdesc->ddesc_next = NULL;
-		chdesc->ddesc_pprev = NULL;
+		patch->ddesc_next = NULL;
+		patch->ddesc_pprev = NULL;
 	}
 	else
-		assert(!chdesc->ddesc_next);
+		assert(!patch->ddesc_next);
 }
 
-void chdesc_untmpize_all_changes(chdesc_t * chdesc)
+void patch_untmpize_all_changes(patch_t * patch)
 {
-	assert(!chdesc->ddesc_next && !chdesc->ddesc_pprev);
+	assert(!patch->ddesc_next && !patch->ddesc_pprev);
 
-	if(chdesc->tmp_pprev)
+	if(patch->tmp_pprev)
 	{
-		chdesc->ddesc_next = chdesc->tmp_next;
-		chdesc->ddesc_pprev = chdesc->tmp_pprev;
-		if(chdesc->ddesc_next)
-			chdesc->ddesc_next->ddesc_pprev = &chdesc->ddesc_next;
+		patch->ddesc_next = patch->tmp_next;
+		patch->ddesc_pprev = patch->tmp_pprev;
+		if(patch->ddesc_next)
+			patch->ddesc_next->ddesc_pprev = &patch->ddesc_next;
 		else
-			chdesc->block->all_changes_tail = &chdesc->ddesc_next;
-		*chdesc->ddesc_pprev = chdesc;
+			patch->block->all_changes_tail = &patch->ddesc_next;
+		*patch->ddesc_pprev = patch;
 
-		chdesc->tmp_next = NULL;
-		chdesc->tmp_pprev = NULL;
+		patch->tmp_next = NULL;
+		patch->tmp_pprev = NULL;
 	}
 	else
-		assert(!chdesc->tmp_next);
+		assert(!patch->tmp_next);
 }
 
-/* NOOP chdescs may have:
+/* NOOP patchs may have:
  * - NULL block and owner, in which case it is a "normal" NOOP.
  *   (propagates before/after counts. propagates external counts.)
  * - NULL block and non-NULL owner: has a device level and thus prevents its afters
@@ -1186,54 +1186,54 @@ void chdesc_untmpize_all_changes(chdesc_t * chdesc)
  *   being evicted from a cache, is internal/external.
  *   (counts towards before/after counts. counts towards external counts.) */
 
-int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * befores)
+int patch_create_noop_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * befores)
 {
-	chdesc_t * chdesc;
+	patch_t * patch;
 	int r;
 	
 	assert(tail);
 	
-	chdesc = chdesc_alloc();
-	if(!chdesc)
+	patch = patch_alloc();
+	if(!patch)
 		return -ENOMEM;
-	account_nchdescs(NOOP, 1);
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_NOOP, chdesc, owner);
-#if COUNT_CHDESCS
-	chdesc_counts[NOOP]++;
+	account_npatchs(NOOP, 1);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_NOOP, patch, owner);
+#if COUNT_PATCHS
+	patch_counts[NOOP]++;
 	dump_counts();
 #endif
 	
-	chdesc->owner = owner;
-	chdesc->block = NULL;
-	chdesc->type = NOOP;
-	chdesc->offset = 0;
-	chdesc->length = 0;
-	chdesc->befores = NULL;
-	chdesc->befores_tail = &chdesc->befores;
-	chdesc->afters = NULL;
-	chdesc->afters_tail = &chdesc->afters;
-	chdesc->weak_refs = NULL;
-	memset(chdesc->nbefores, 0, sizeof(chdesc->nbefores));
-	chdesc->free_prev = NULL;
-	chdesc->free_next = NULL;
-	chdesc->ddesc_next = NULL;
-	chdesc->ddesc_pprev = NULL;
-	chdesc->ddesc_ready_next = NULL;
-	chdesc->ddesc_ready_pprev = NULL;
-	chdesc->ddesc_index_next = NULL;
-	chdesc->ddesc_index_pprev = NULL;
-	chdesc->tmp_next = NULL;
-	chdesc->tmp_pprev = NULL;
-	chdesc->overlap_next = NULL;
-	chdesc->overlap_pprev = NULL;
-	chdesc->flags = CHDESC_SAFE_AFTER;
+	patch->owner = owner;
+	patch->block = NULL;
+	patch->type = NOOP;
+	patch->offset = 0;
+	patch->length = 0;
+	patch->befores = NULL;
+	patch->befores_tail = &patch->befores;
+	patch->afters = NULL;
+	patch->afters_tail = &patch->afters;
+	patch->weak_refs = NULL;
+	memset(patch->nbefores, 0, sizeof(patch->nbefores));
+	patch->free_prev = NULL;
+	patch->free_next = NULL;
+	patch->ddesc_next = NULL;
+	patch->ddesc_pprev = NULL;
+	patch->ddesc_ready_next = NULL;
+	patch->ddesc_ready_pprev = NULL;
+	patch->ddesc_index_next = NULL;
+	patch->ddesc_index_pprev = NULL;
+	patch->tmp_next = NULL;
+	patch->tmp_pprev = NULL;
+	patch->overlap_next = NULL;
+	patch->overlap_pprev = NULL;
+	patch->flags = PATCH_SAFE_AFTER;
 	
-	chdesc_free_push(chdesc);
+	patch_free_push(patch);
 	
 	for(; befores; befores = befores->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(befores->size > 0)
 		{
 			size = befores->size;
@@ -1245,47 +1245,47 @@ int chdesc_create_noop_set(BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * b
 			array = befores->list;
 		}
 		for(i = 0; i < size; i++)
-			/* it is convenient to allow NULL and written chdescs,
+			/* it is convenient to allow NULL and written patchs,
 			   so make sure here to not add these as befores: */
-			if(array[i] && !(array[i]->flags & CHDESC_WRITTEN))
-				if((r = chdesc_add_depend_no_cycles(chdesc, array[i])) < 0)
+			if(array[i] && !(array[i]->flags & PATCH_WRITTEN))
+				if((r = patch_add_depend_no_cycles(patch, array[i])) < 0)
 				{
-					chdesc_destroy(&chdesc);
+					patch_destroy(&patch);
 					return r;
 				}
 	}
-	chdesc->flags &= ~CHDESC_SAFE_AFTER;
-	*tail = chdesc;
+	patch->flags &= ~PATCH_SAFE_AFTER;
+	*tail = patch;
 	
 	return 0;
 }
 
-int chdesc_create_noop_array(BD_t * owner, chdesc_t ** tail, size_t nbefores, chdesc_t * befores[])
+int patch_create_noop_array(BD_t * owner, patch_t ** tail, size_t nbefores, patch_t * befores[])
 {
-	chdesc_pass_set_t set = {.next = NULL, .size = -nbefores};
+	patch_pass_set_t set = {.next = NULL, .size = -nbefores};
 	set.list = befores;
-	return chdesc_create_noop_set(owner, tail, &set);
+	return patch_create_noop_set(owner, tail, &set);
 }
 
 #define STATIC_BEFORES_CAPACITY 10 /* 10 should cover most cases */
 
-int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...)
+int patch_create_noop_list(BD_t * owner, patch_t ** tail, ...)
 {
-	static chdesc_t * static_befores[STATIC_BEFORES_CAPACITY];
-	chdesc_t ** befores;
+	static patch_t * static_befores[STATIC_BEFORES_CAPACITY];
+	patch_t ** befores;
 	size_t nbefores = 0;
 	size_t i;
 	va_list ap;
 	int r;
 	
 	va_start(ap, tail);
-	while(va_arg(ap, chdesc_t *))
+	while(va_arg(ap, patch_t *))
 		nbefores++;
 	va_end(ap);
 	/* TODO: consider doing this instead of copying the array */
 	/*
 		va_start(ap, tail);
-		&va_arg(ap, chdesc_t *)
+		&va_arg(ap, patch_t *)
 	*/
 	
 	if(nbefores <= STATIC_BEFORES_CAPACITY)
@@ -1299,21 +1299,21 @@ int chdesc_create_noop_list(BD_t * owner, chdesc_t ** tail, ...)
 	
 	va_start(ap, tail);
 	for(i = 0; i < nbefores; i++)
-		befores[i] = va_arg(ap, chdesc_t *);
+		befores[i] = va_arg(ap, patch_t *);
 	va_end(ap);
 	
-	r = chdesc_create_noop_array(owner, tail, nbefores, befores);
+	r = patch_create_noop_array(owner, tail, nbefores, befores);
 	
 	if(befores != static_befores)
 		sfree(befores, nbefores * sizeof(befores[0]));
 	return r;
 }
 
-static __inline bool new_chdescs_require_data(const bdesc_t * block) __attribute__((always_inline));
-static __inline bool new_chdescs_require_data(const bdesc_t * block)
+static __inline bool new_patchs_require_data(const bdesc_t * block) __attribute__((always_inline));
+static __inline bool new_patchs_require_data(const bdesc_t * block)
 {
-#if CHDESC_NRB
-	/* Rule: When adding chdesc C to block B,
+#if PATCH_NRB
+	/* Rule: When adding patch C to block B,
 	 * and forall C' on B, with C' != C: C' has no afters on blocks != B,
 	 * then C will never need to be rolled back. */
 	return block->extern_after_count > 0;
@@ -1322,107 +1322,107 @@ static __inline bool new_chdescs_require_data(const bdesc_t * block)
 #endif
 }
 
-/* chdesc merge stat tracking definitions */
-#if CHDESC_NRB_MERGE_STATS
-# define N_CHDESC_NRB_MERGE_STATS 3
-static uint32_t chdesc_nrb_merge_stats[N_CHDESC_NRB_MERGE_STATS] = {0, 1, 2};
-static unsigned chdesc_nrb_merge_stats_idx = -1;
-static bool chdesc_nrb_merge_stats_callback_registered = 0;
+/* patch merge stat tracking definitions */
+#if PATCH_NRB_MERGE_STATS
+# define N_PATCH_NRB_MERGE_STATS 3
+static uint32_t patch_nrb_merge_stats[N_PATCH_NRB_MERGE_STATS] = {0, 1, 2};
+static unsigned patch_nrb_merge_stats_idx = -1;
+static bool patch_nrb_merge_stats_callback_registered = 0;
 
-static void print_chdesc_nrb_merge_stats(void * ignore)
+static void print_patch_nrb_merge_stats(void * ignore)
 {
 	unsigned i;
-	uint32_t nchdescs = 0;
-	uint32_t nchdescs_notmerged = 0;
+	uint32_t npatchs = 0;
+	uint32_t npatchs_notmerged = 0;
 	(void) ignore;
 
-	for(i = 0; i < N_CHDESC_NRB_MERGE_STATS; i++)
+	for(i = 0; i < N_PATCH_NRB_MERGE_STATS; i++)
 	{
-		nchdescs += chdesc_nrb_merge_stats[i];
+		npatchs += patch_nrb_merge_stats[i];
 		if(i > 0)
-			nchdescs_notmerged += chdesc_nrb_merge_stats[i];
+			npatchs_notmerged += patch_nrb_merge_stats[i];
 	}
 	
-	printf("chdescs merge stats:\n");
+	printf("patchs merge stats:\n");
 	
-	if(!nchdescs)
+	if(!npatchs)
 	{
 		/* protect against divide by zero */
-		printf("\tno chdescs created\n");
+		printf("\tno patchs created\n");
 		return;
 	}
-	printf("\tmerged: %u (%3.1f%% all)\n", chdesc_nrb_merge_stats[0], 100 * ((float) chdesc_nrb_merge_stats[0]) / ((float) nchdescs));
+	printf("\tmerged: %u (%3.1f%% all)\n", patch_nrb_merge_stats[0], 100 * ((float) patch_nrb_merge_stats[0]) / ((float) npatchs));
 
-	if(!nchdescs_notmerged)
+	if(!npatchs_notmerged)
 	{
 		/* protect against divide by zero */
-		printf("\tall chdescs merged?!\n");
+		printf("\tall patchs merged?!\n");
 		return;
 	}
-	for(i = 1; i < N_CHDESC_NRB_MERGE_STATS; i++)
-		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, chdesc_nrb_merge_stats[i], 100 * ((float) chdesc_nrb_merge_stats[i]) / ((float) nchdescs_notmerged));
+	for(i = 1; i < N_PATCH_NRB_MERGE_STATS; i++)
+		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, patch_nrb_merge_stats[i], 100 * ((float) patch_nrb_merge_stats[i]) / ((float) npatchs_notmerged));
 }
 
-# include <kfs/kfsd.h>
-static void chdesc_nrb_merge_stats_log(unsigned idx)
+# include <fscore/fstitchd.h>
+static void patch_nrb_merge_stats_log(unsigned idx)
 {
-	if(!chdesc_nrb_merge_stats_callback_registered)
+	if(!patch_nrb_merge_stats_callback_registered)
 	{
-		int r = kfsd_register_shutdown_module(print_chdesc_nrb_merge_stats, NULL, SHUTDOWN_POSTMODULES);
+		int r = fstitchd_register_shutdown_module(print_patch_nrb_merge_stats, NULL, SHUTDOWN_POSTMODULES);
 		if(r < 0)
-			kpanic("kfsd_register_shutdown_module() = %i", r);
-		chdesc_nrb_merge_stats_callback_registered = 1;
+			kpanic("fstitchd_register_shutdown_module() = %i", r);
+		patch_nrb_merge_stats_callback_registered = 1;
 	}
-	chdesc_nrb_merge_stats_idx = idx;
-	chdesc_nrb_merge_stats[idx]++;
+	patch_nrb_merge_stats_idx = idx;
+	patch_nrb_merge_stats[idx]++;
 }
-# define CHDESC_NRB_MERGE_STATS_LOG(_idx) chdesc_nrb_merge_stats_log(_idx)
+# define PATCH_NRB_MERGE_STATS_LOG(_idx) patch_nrb_merge_stats_log(_idx)
 #else
-# define CHDESC_NRB_MERGE_STATS_LOG(_idx) do { } while(0)
+# define PATCH_NRB_MERGE_STATS_LOG(_idx) do { } while(0)
 #endif
 
-#if CHDESC_NRB
-/* Determine whether a new chdesc on 'block' and with the before 'before'
- * can be merged into an existing chdesc.
- * Return such a chdesc if so, else return NULL. */
-static chdesc_t * select_chdesc_merger(const bdesc_t * block)
+#if PATCH_NRB
+/* Determine whether a new patch on 'block' and with the before 'before'
+ * can be merged into an existing patch.
+ * Return such a patch if so, else return NULL. */
+static patch_t * select_patch_merger(const bdesc_t * block)
 {
-	if(new_chdescs_require_data(block))
+	if(new_patchs_require_data(block))
 	{
-		/* rollbackable chdesc dep relations can be complicated, give up */
-		CHDESC_NRB_MERGE_STATS_LOG(1);
+		/* rollbackable patch dep relations can be complicated, give up */
+		PATCH_NRB_MERGE_STATS_LOG(1);
 		return NULL;
 	}
 	if(!WEAK(block->nrb))
 	{
-		CHDESC_NRB_MERGE_STATS_LOG(2);
+		PATCH_NRB_MERGE_STATS_LOG(2);
 		return NULL;
 	}
-	CHDESC_NRB_MERGE_STATS_LOG(0);
-	assert(!(WEAK(block->nrb)->flags & CHDESC_INFLIGHT));
+	PATCH_NRB_MERGE_STATS_LOG(0);
+	assert(!(WEAK(block->nrb)->flags & PATCH_INFLIGHT));
 	return WEAK(block->nrb);
 }
 
-static void chdesc_move_before_fast(chdesc_t * old_after, chdesc_t * new_after, chdepdesc_t * depbefore)
+static void patch_move_before_fast(patch_t * old_after, patch_t * new_after, chdepdesc_t * depbefore)
 {
-	chdesc_t * before = depbefore->before.desc;
+	patch_t * before = depbefore->before.desc;
 	int r;
-	chdesc_dep_remove(depbefore);
-	r = chdesc_add_depend_no_cycles(new_after, before);
+	patch_dep_remove(depbefore);
+	r = patch_add_depend_no_cycles(new_after, before);
 	assert(r >= 0); /* failure should be impossible */
 }
 
-/* Move chdesc's (transitive) befores that cannot reach merge_target
+/* Move patch's (transitive) befores that cannot reach merge_target
  * to be merge_target's befores, so that a merge into merge_target
- * maintains the needed befores. root_chdesc_stays == 0 implies that
- * chdesc is a before (the new chdesc does not yet exist) and == 1 implies
- * that chdesc is a pre-existing chdesc (that can thus not be moved)*/
-static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, bool root_chdesc_stays)
+ * maintains the needed befores. root_patch_stays == 0 implies that
+ * patch is a before (the new patch does not yet exist) and == 1 implies
+ * that patch is a pre-existing patch (that can thus not be moved)*/
+static void move_befores_for_merge(patch_t * patch, patch_t * merge_target, bool root_patch_stays)
 {
 	/* recursion-on-the-heap support */
 	struct state {
 		chdepdesc_t * dep;
-		chdesc_t * chdesc;
+		patch_t * patch;
 		bool reachable;
 	};
 	typedef struct state state_t;
@@ -1431,15 +1431,15 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	state_t * states = static_states;
 	state_t * state = states;
 	
-	chdesc_t * root_chdesc = chdesc;
+	patch_t * root_patch = patch;
 	uint16_t saved_flags;
-	chdesc_t * marked_head;
+	patch_t * marked_head;
 	
 	chdepdesc_t * dep;
-	bool reachable = 0; /* whether target is reachable from chdesc */
+	bool reachable = 0; /* whether target is reachable from patch */
 	
 	saved_flags = merge_target->flags;
-	merge_target->flags |= CHDESC_SAFE_AFTER;
+	merge_target->flags |= PATCH_SAFE_AFTER;
 	
 	assert(!merge_target->tmp_next && !merge_target->tmp_pprev);
 	merge_target->tmp_pprev = &marked_head;
@@ -1448,26 +1448,26 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
   recurse_enter:
 	/* Use tmp list to indicate merge_target is reachable.
 	 * We don't need the pprev links, but they simplify this first check
-	 * (removing the need to also check for 'chdesc==marked_head'). */
-	if(chdesc->tmp_pprev)
+	 * (removing the need to also check for 'patch==marked_head'). */
+	if(patch->tmp_pprev)
 	{
 		reachable = 1;
 		goto recurse_return;
 	}
-	if(chdesc_is_external(chdesc, merge_target->block))
+	if(patch_is_external(patch, merge_target->block))
 		goto recurse_return;
-	if(root_chdesc_stays && chdesc != root_chdesc)
+	if(root_patch_stays && patch != root_patch)
 	{
-		if(chdesc->flags & CHDESC_INFLIGHT)
+		if(patch->flags & PATCH_INFLIGHT)
 			goto recurse_return;
-		if(chdesc->type != NOOP)
+		if(patch->type != NOOP)
 		{
-			/* Treat same-block, data chdescs as able to reach merge_target.
+			/* Treat same-block, data patchs as able to reach merge_target.
 			 * Caller will ensure they do reach merge_target. */
-			chdesc->tmp_next = marked_head;
-			chdesc->tmp_pprev = &marked_head;
-			marked_head->tmp_pprev = &chdesc->tmp_next;
-			marked_head = chdesc;
+			patch->tmp_next = marked_head;
+			patch->tmp_pprev = &marked_head;
+			marked_head->tmp_pprev = &patch->tmp_next;
+			marked_head = patch;
 			reachable = 1;
 			goto recurse_return;
 		}
@@ -1476,15 +1476,15 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	/* discover the subset of befores that cannot reach target */
 	/* TODO: do not scan a given dep->before.desc that cannot reach
 	 * merge_target multiple times? */
-	for(dep = chdesc->befores; dep; dep = dep->before.next)
+	for(dep = patch->befores; dep; dep = dep->before.next)
 	{
 		// Recursively move befores; equivalent to:
 		// reachable |= move_befores_for_merge(dep->before.desc, merge_target)
 		state->dep = dep;
-		state->chdesc = chdesc;
+		state->patch = patch;
 		state->reachable = reachable;
 		
-		chdesc = dep->before.desc;
+		patch = dep->before.desc;
 		reachable = 0;
 		
 		INCREMENT_STATE(state, static_states, states, states_capacity);
@@ -1495,22 +1495,22 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	}
 	
 	/* if only some befores can reach target, move them.
-	 * if none can reach target, caller will move chdesc. */
+	 * if none can reach target, caller will move patch. */
 	if(reachable)
 	{
 		chdepdesc_t * next;
 		
-		assert(!chdesc->tmp_pprev);
-		chdesc->tmp_next = marked_head;
-		chdesc->tmp_pprev = &marked_head;
-		marked_head->tmp_pprev = &chdesc->tmp_next;
-		marked_head = chdesc;
+		assert(!patch->tmp_pprev);
+		patch->tmp_next = marked_head;
+		patch->tmp_pprev = &marked_head;
+		marked_head->tmp_pprev = &patch->tmp_next;
+		marked_head = patch;
 		
-		for(dep = chdesc->befores; dep; dep = next)
+		for(dep = patch->befores; dep; dep = next)
 		{
 			next = dep->before.next;
 			if(!dep->before.desc->tmp_pprev)
-				chdesc_move_before_fast(chdesc, merge_target, dep);
+				patch_move_before_fast(patch, merge_target, dep);
 		}
 	}
 	
@@ -1519,7 +1519,7 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	{
 		state--;
 		dep = state->dep;
-		chdesc = state->chdesc;
+		patch = state->patch;
 		reachable |= state->reachable;
 		goto recurse_resume;
 	}
@@ -1527,33 +1527,33 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 	if(states != static_states)
 		sfree(states, states_capacity * sizeof(*state));
 	
-	/* remove chdescs from the marked list only after all traversals
+	/* remove patchs from the marked list only after all traversals
 	 * because of multipaths */
 	while(marked_head)
 	{
-		chdesc_t * head = marked_head;
+		patch_t * head = marked_head;
 		marked_head = marked_head->tmp_next;
 		head->tmp_next = NULL;
 		head->tmp_pprev = NULL;
 	}
 	
-	/* take care of the intial before/chdesc */
+	/* take care of the intial before/patch */
 	if(!reachable)
 	{
-		if(!root_chdesc_stays)
+		if(!root_patch_stays)
 		{
-			int r = chdesc_add_depend_no_cycles(merge_target, chdesc);
+			int r = patch_add_depend_no_cycles(merge_target, patch);
 			assert(r >= 0); (void) r;
 		}
 		else
 		{
 			chdepdesc_t * next;
-			for(dep = chdesc->befores; dep; dep = next)
+			for(dep = patch->befores; dep; dep = next)
 			{
-				chdesc_t * before = dep->before.desc;
+				patch_t * before = dep->before.desc;
 				next = dep->before.next;
-				if(chdesc_is_external(before, merge_target->block) || (before->flags & CHDESC_INFLIGHT))
-					chdesc_move_before_fast(chdesc, merge_target, dep);
+				if(patch_is_external(before, merge_target->block) || (before->flags & PATCH_INFLIGHT))
+					patch_move_before_fast(patch, merge_target, dep);
 			}
 		}
 	}
@@ -1562,48 +1562,48 @@ static void move_befores_for_merge(chdesc_t * chdesc, chdesc_t * merge_target, b
 }
 #endif
 
-#if CHDESC_MERGE_RBS_NRB
-/* Return whether 'after' depends on any data chdesc on its block.
+#if PATCH_MERGE_RBS_NRB
+/* Return whether 'after' depends on any data patch on its block.
  * Requires 'bdesc' to have no external afters. */
-static bool chdesc_has_block_befores(const chdesc_t * after, const bdesc_t * bdesc)
+static bool patch_has_block_befores(const patch_t * after, const bdesc_t * bdesc)
 {
 	chdepdesc_t * dep;
 	for(dep = after->befores; dep; dep = dep->before.next)
 	{
-		const chdesc_t * before = dep->before.desc;
-		if(chdesc_is_external(before, bdesc) || (before->flags & CHDESC_INFLIGHT))
+		const patch_t * before = dep->before.desc;
+		if(patch_is_external(before, bdesc) || (before->flags & PATCH_INFLIGHT))
 			continue;
 		if(before->type != NOOP)
 			return 1;
-		if(chdesc_has_block_befores(before, bdesc))
+		if(patch_has_block_befores(before, bdesc))
 			return 1;
 	}
 	return 0;
 }
 
-/* Return the address of the chdesc containing the pointed to ddesc_next */
-static chdesc_t * pprev2chdesc(chdesc_t ** chdesc_ddesc_pprev)
+/* Return the address of the patch containing the pointed to ddesc_next */
+static patch_t * pprev2patch(patch_t ** patch_ddesc_pprev)
 {
-	return container_of(chdesc_ddesc_pprev, chdesc_t, ddesc_next);
+	return container_of(patch_ddesc_pprev, patch_t, ddesc_next);
 }
 
-/* Return a data chdesc on 'block' that has no before path to a chdesc
- * on its block. Return NULL if there are no data chdescs on 'block'. */
-static chdesc_t * find_chdesc_without_block_befores(bdesc_t * block)
+/* Return a data patch on 'block' that has no before path to a patch
+ * on its block. Return NULL if there are no data patchs on 'block'. */
+static patch_t * find_patch_without_block_befores(bdesc_t * block)
 {
-	/* The last data chdesc should be the oldest chdesc on 'block'
+	/* The last data patch should be the oldest patch on 'block'
 	 * and, since it is not an NRB, thus have no block befores */
-	chdesc_t ** pprev = block->all_changes_tail;
-	chdesc_t * chdesc;
-	for(; pprev != &block->all_changes; pprev = chdesc->ddesc_pprev)
+	patch_t ** pprev = block->all_changes_tail;
+	patch_t * patch;
+	for(; pprev != &block->all_changes; pprev = patch->ddesc_pprev)
 	{
-		chdesc = pprev2chdesc(pprev);
-		if(chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT) && !chdesc_has_block_befores(chdesc, block))
+		patch = pprev2patch(pprev);
+		if(patch->type != NOOP && !(patch->flags & PATCH_INFLIGHT) && !patch_has_block_befores(patch, block))
 		{
-			assert(chdesc->type == BYTE || chdesc->type == BIT);
-			return chdesc;
+			assert(patch->type == BYTE || patch->type == BIT);
+			return patch;
 		}
-		if(chdesc == block->all_changes)
+		if(patch == block->all_changes)
 			break;
 	}
 	return NULL;
@@ -1616,7 +1616,7 @@ static void clear_bit_changes(bdesc_t * block)
 	{
 		hash_map_it2_t it = hash_map_it2_create(block->bit_changes);
 		while(hash_map_it2_next(&it))
-			chdesc_destroy((chdesc_t **) &it.val);
+			patch_destroy((patch_t **) &it.val);
 		assert(hash_map_empty(block->bit_changes));
 	}
 }
@@ -1626,79 +1626,79 @@ static void clear_bit_changes(bdesc_t * block)
  * its two dependency move algorithms can be much simpler. */
 static void merge_rbs(bdesc_t * block)
 {
-# if CHDESC_MERGE_RBS_NRB_STATS
+# if PATCH_MERGE_RBS_NRB_STATS
 	static uint32_t ncalls = 0, nmerged_total = 0;
 	uint32_t nmerged = 0;
 # endif
-	chdesc_t * merger, * chdesc, * next;
+	patch_t * merger, * patch, * next;
 	int r;
 	
-	/* choose merger so that it does not depend on any other data chdescs
+	/* choose merger so that it does not depend on any other data patchs
 	 * on the block to simplify before merging */ 
-	if(!(merger = find_chdesc_without_block_befores(block)))
+	if(!(merger = find_patch_without_block_befores(block)))
 		return;
 	
 	/* move the befores of each RB for their merge */
-	for(chdesc = block->all_changes; chdesc; chdesc = chdesc->ddesc_next)
-		if(chdesc != merger && chdesc->type != NOOP && !(chdesc->flags & CHDESC_INFLIGHT))
-			move_befores_for_merge(chdesc, merger, 1);
+	for(patch = block->all_changes; patch; patch = patch->ddesc_next)
+		if(patch != merger && patch->type != NOOP && !(patch->flags & PATCH_INFLIGHT))
+			move_befores_for_merge(patch, merger, 1);
 	
 	/* convert RB merger into a NRB (except overlaps, done later) */
 	if(merger->type == BYTE)
-		chdesc_free_byte_data(merger);
+		patch_free_byte_data(merger);
 	else if(merger->type == BIT)
 	{
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_BYTE, merger, 0, merger->owner->level);
-		account_nchdescs_convert(BIT, BYTE);
-# if COUNT_CHDESCS
-		chdesc_counts[BIT]--;
-		chdesc_counts[BYTE]++;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CONVERT_BYTE, merger, 0, merger->owner->level);
+		account_npatchs_convert(BIT, BYTE);
+# if COUNT_PATCHS
+		patch_counts[BIT]--;
+		patch_counts[BYTE]++;
 		dump_counts();
 # endif
 		merger->type = BYTE;
 	}
 	else
 		assert(0);
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, merger, 0);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OFFSET, merger, 0);
 	merger->offset = 0;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, merger, block->length);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_LENGTH, merger, block->length);
 	merger->length = block->length;
 	merger->byte.data = NULL;
-# if CHDESC_BYTE_SUM
+# if PATCH_BYTE_SUM
 	merger->byte.old_sum = 0;
 	merger->byte.new_sum = 0;
 # endif
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, merger, CHDESC_OVERLAP);
-	merger->flags &= ~CHDESC_OVERLAP;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, merger, PATCH_OVERLAP);
+	merger->flags &= ~PATCH_OVERLAP;
 	assert(!WEAK(block->nrb));
-	chdesc_weak_retain(merger, &block->nrb, NULL, NULL);
+	patch_weak_retain(merger, &block->nrb, NULL, NULL);
 	//account_update(&act_nnrb, 1);
 
 	/* ensure merger is in overlaps (to complete NRB construction) and remove
 	 * all bit overlaps (to complete NRB construction and for non-mergers) */
 	clear_bit_changes(block);
-	chdesc_unlink_overlap(merger);
-	chdesc_link_overlap(merger);
+	patch_unlink_overlap(merger);
+	patch_link_overlap(merger);
 	
-	/* convert non-merger data chdescs into noops so that pointers to them
+	/* convert non-merger data patchs into noops so that pointers to them
 	 * remain valid.
 	 * TODO: could we destroy the noops with no afters after the runloop? */
-	/* part a: unpropagate extern after counts (no more data chdesc afters)
+	/* part a: unpropagate extern after counts (no more data patch afters)
 	 * (do before rest of conversion to correctly (not) recurse) */
-	for(chdesc = block->all_changes; chdesc; chdesc = chdesc->ddesc_next)
+	for(patch = block->all_changes; patch; patch = patch->ddesc_next)
 	{
 		chdepdesc_t * dep, * next;
-		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
+		if(patch == merger || patch->type == NOOP || (patch->flags & PATCH_INFLIGHT))
 			continue;
-		for(dep = chdesc->befores; dep; dep = next)
+		for(dep = patch->befores; dep; dep = next)
 		{
-			chdesc_t * before = dep->before.desc;
+			patch_t * before = dep->before.desc;
 			next = dep->before.next;
-			if(before->flags & CHDESC_INFLIGHT)
+			if(before->flags & PATCH_INFLIGHT)
 				continue;
 			if(!before->block)
-				propagate_extern_after_change_thru_noop_before(before, chdesc, 0);
-			else if(chdesc_is_external(chdesc, before->block))
+				propagate_extern_after_change_thru_noop_before(before, patch, 0);
+			else if(patch_is_external(patch, before->block))
 			{
 				assert(before->block->extern_after_count);
 				before->block->extern_after_count--;
@@ -1707,59 +1707,59 @@ static void merge_rbs(bdesc_t * block)
 			{
 				/* intra-block noop dependencies, other than noop->merger, are
 				 * unnecessary & can lead to noop path blowup. Remove them. */
-				chdesc_dep_remove(dep);
+				patch_dep_remove(dep);
 			}
 		}
 	}
 	/* parb b: convert into noops */
-	for(chdesc = block->all_changes; chdesc; chdesc = next)
+	for(patch = block->all_changes; patch; patch = next)
 	{
 		uint16_t level;
 		uint16_t flags;
-		next = chdesc->ddesc_next;
-		if(chdesc == merger || chdesc->type == NOOP || (chdesc->flags & CHDESC_INFLIGHT))
+		next = patch->ddesc_next;
+		if(patch == merger || patch->type == NOOP || (patch->flags & PATCH_INFLIGHT))
 			continue;
 		
-# if CHDESC_MERGE_RBS_NRB_STATS
+# if PATCH_MERGE_RBS_NRB_STATS
 		nmerged++;
 # endif
 		
-		/* ensure chdesc depends on merger. add dep prior to noop conversion
-		 * to do correct level propagation inside chdesc_add_depend(). */
-		flags = chdesc->flags;
-		chdesc->flags |= CHDESC_SAFE_AFTER;
-		r = chdesc_add_depend(chdesc, merger);
+		/* ensure patch depends on merger. add dep prior to noop conversion
+		 * to do correct level propagation inside patch_add_depend(). */
+		flags = patch->flags;
+		patch->flags |= PATCH_SAFE_AFTER;
+		r = patch_add_depend(patch, merger);
 		assert(r >= 0);
-		chdesc->flags = flags;
+		patch->flags = flags;
 
-		chdesc_unlink_overlap(chdesc);
-		chdesc_unlink_index_changes(chdesc);
-		chdesc_unlink_ready_changes(chdesc);
-		chdesc_unlink_all_changes(chdesc);
-		if(chdesc->type == BYTE)
-			chdesc_free_byte_data(chdesc);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CONVERT_NOOP, chdesc);
-		KFS_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_CHDESC_LABEL, chdesc, "rb->nrb mergee");
-		account_nchdescs_convert(chdesc->type, NOOP);
-# if COUNT_CHDESCS
-		chdesc_counts[chdesc->type]--;
-		chdesc_counts[NOOP]++;
+		patch_unlink_overlap(patch);
+		patch_unlink_index_changes(patch);
+		patch_unlink_ready_changes(patch);
+		patch_unlink_all_changes(patch);
+		if(patch->type == BYTE)
+			patch_free_byte_data(patch);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CONVERT_NOOP, patch);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, patch, "rb->nrb mergee");
+		account_npatchs_convert(patch->type, NOOP);
+# if COUNT_PATCHS
+		patch_counts[patch->type]--;
+		patch_counts[NOOP]++;
 		dump_counts();
 # endif
-		chdesc->type = NOOP;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_BLOCK, chdesc, NULL);
-		bdesc_release(&chdesc->block);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OWNER, chdesc, NULL);
-		chdesc->owner = NULL;
-		chdesc->noop.bit_changes = NULL;
-		chdesc->noop.hash_key = NULL;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, chdesc, CHDESC_OVERLAP);
-		chdesc->flags &= ~CHDESC_OVERLAP;
+		patch->type = NOOP;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_BLOCK, patch, NULL);
+		bdesc_release(&patch->block);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, patch, NULL);
+		patch->owner = NULL;
+		patch->noop.bit_changes = NULL;
+		patch->noop.hash_key = NULL;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, patch, PATCH_OVERLAP);
+		patch->flags &= ~PATCH_OVERLAP;
 		
-		if(merger->owner->level != (level = chdesc_level(chdesc)))
-			propagate_level_change_thru_noop(chdesc, merger->owner->level, level);
+		if(merger->owner->level != (level = patch_level(patch)))
+			propagate_level_change_thru_noop(patch, merger->owner->level, level);
 	}
-# if CHDESC_MERGE_RBS_NRB_STATS
+# if PATCH_MERGE_RBS_NRB_STATS
 	if(nmerged)
 	{
 		ncalls++;
@@ -1770,23 +1770,23 @@ static void merge_rbs(bdesc_t * block)
 }
 #endif
 
-/* Attempt to merge into an existing chdesc instead of create a new chdesc.
- * Returns 1 on successful merge (*merged points merged chdesc),
+/* Attempt to merge into an existing patch instead of create a new patch.
+ * Returns 1 on successful merge (*merged points merged patch),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, chdesc_pass_set_t * befores)
+static int patch_create_merge(bdesc_t * block, BD_t * owner, patch_t ** tail, patch_pass_set_t * befores)
 {
-#if CHDESC_NRB
-	chdesc_t * merger;
-# if CHDESC_MERGE_RBS_NRB
-	if(!new_chdescs_require_data(block) && !WEAK(block->nrb))
+#if PATCH_NRB
+	patch_t * merger;
+# if PATCH_MERGE_RBS_NRB
+	if(!new_patchs_require_data(block) && !WEAK(block->nrb))
 		merge_rbs(block);
 # endif
-	if(!(merger = select_chdesc_merger(block)))
+	if(!(merger = select_patch_merger(block)))
 		return 0;
 	for(; befores; befores = befores->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(befores->size > 0)
 		{
 			size = befores->size;
@@ -1804,9 +1804,9 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 	
 	/* move merger to correct owner */
 	if (merger->owner != owner) {
-		chdesc_unlink_index_changes(merger);
+		patch_unlink_index_changes(merger);
 		merger->owner = owner;
-		chdesc_link_index_changes(merger);
+		patch_link_index_changes(merger);
 	}
 	
 	*tail = merger;
@@ -1816,9 +1816,9 @@ static int chdesc_create_merge(bdesc_t * block, BD_t * owner, chdesc_t ** tail, 
 #endif
 }
 
-#if CHDESC_BYTE_MERGE_OVERLAP
+#if PATCH_BYTE_MERGE_OVERLAP
 /* Conservatively return true iff left's befores are a subset of right's befores */
-static bool quick_befores_subset(const chdesc_t * left, const chdesc_t * right)
+static bool quick_befores_subset(const patch_t * left, const patch_t * right)
 {
 	const size_t max_nleft_befores = 2;
 	const chdepdesc_t * left_dep = left->befores;
@@ -1839,18 +1839,18 @@ static bool quick_befores_subset(const chdesc_t * left, const chdesc_t * right)
 	return 1;
 }
 
-#if !CHDESC_OVERLAPS2
+#if !PATCH_OVERLAPS2
 /* A simple RB merge opportunity:
- * chdesc has no explicit befores and has a single overlap.
- * Returns 1 on successful merge (*tail points to merged chdesc),
+ * patch has no explicit befores and has a single overlap.
+ * Returns 1 on successful merge (*tail points to merged patch),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, chdesc_pass_set_t * befores)
+static int patch_create_byte_merge_overlap(patch_t ** tail, patch_t ** new, patch_pass_set_t * befores)
 {
 	chdepdesc_t * dep;
-	chdesc_t * overlap = NULL;
+	patch_t * overlap = NULL;
 	uint16_t overlap_end, new_end, merge_offset, merge_length, merge_end;
 	bdesc_t * bdesc = (*new)->block;
-	chdesc_pass_set_t * scan;
+	patch_pass_set_t * scan;
 	int r;
 	
 	/* determine whether we can merge new into an overlap */
@@ -1858,19 +1858,19 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 	 * be wise to check befores[i] for befores before looking at overlaps */
 	for(dep = (*new)->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * before = dep->before.desc;
-		if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+		patch_t * before = dep->before.desc;
+		if(before->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 			continue;
 		if(before->block && (*new)->block == before->block
-		   && chdesc_overlap_check(*new, before))
+		   && patch_overlap_check(*new, before))
 		{
 			/* note: *new may overlap a before[i] */
 			if(before->type != BYTE)
 				return 0;
 			if(overlap && overlap != before)
 			{
-#if CHDESC_RB_NRB_READY
-				/* TODO: does this actually require CHDESC_RB_NRB_READY? */
+#if PATCH_RB_NRB_READY
+				/* TODO: does this actually require PATCH_RB_NRB_READY? */
 				/* nrb depends on nothing on this block so an above is ok */
 				if(before == WEAK(before->block->nrb))
 					continue;
@@ -1891,7 +1891,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 			for(scan = befores; scan; scan = scan->next)
 			{
 				size_t i, size;
-				chdesc_t ** array;
+				patch_t ** array;
 				if(scan->size > 0)
 				{
 					size = scan->size;
@@ -1904,7 +1904,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 				}
 				for(i = 0; i < size; i++)
 				{
-					if(array[i] && array[i]->flags & CHDESC_SET_NOOP)
+					if(array[i] && array[i]->flags & PATCH_SET_NOOP)
 					{
 						chdepdesc_t * dep;
 						for(dep = array[i]->befores; dep; dep = dep->before.next)
@@ -1924,11 +1924,11 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 	if(!overlap)
 		return 0;
 	
-	/* Check that *new's explicit befores will not induce chdesc cycles */
+	/* Check that *new's explicit befores will not induce patch cycles */
 	for(scan = befores; scan; scan = scan->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(scan->size > 0)
 		{
 			size = scan->size;
@@ -1941,26 +1941,26 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 		}
 		for(i = 0; i < size; i++)
 		{
-			chdesc_t * before = array[i];
+			patch_t * before = array[i];
 			
 			if(!before)
 				continue;
-			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+			if(before->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 				continue;
 			if(before->block && (*new)->block == before->block
-			   && chdesc_overlap_check(*new, before))
+			   && patch_overlap_check(*new, before))
 				continue;
 			
 			if(before->befores)
 			{
-				/* Check that before's befores will not induce chdesc cycles */
-				chdesc_t * before2 = before->befores->before.desc;
+				/* Check that before's befores will not induce patch cycles */
+				patch_t * before2 = before->befores->before.desc;
 				/* there cannot be a cycle if overlap already depends on before
 				 * or depends on all of before's befores */
 				if(!quick_depends_on(overlap, before) && !quick_befores_subset(before, overlap))
 				{
 					/* we did not detect that overlap depends on before or its befores,
-					 * so we must check before's befores for chdesc cycles: */
+					 * so we must check before's befores for patch cycles: */
 					if(before2->block && before2->block == bdesc)
 						return 0;
 					if(before->befores->before.next)
@@ -1973,7 +1973,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 	}
 
 	/* could support this, but it is not necessary to do so */
-	assert(!(overlap->flags & CHDESC_ROLLBACK));
+	assert(!(overlap->flags & PATCH_ROLLBACK));
 	
 	overlap_end = overlap->offset + overlap->length;
 	new_end = (*new)->offset + (*new)->length;
@@ -1981,12 +1981,12 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 	merge_length = MAX(overlap_end, new_end) - merge_offset;
 	merge_end = merge_offset + merge_length;
 	
-	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->offset, overlap->length, overlap, merge_offset, merge_length, (*new)->block->number);
+	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", patch_is_rollbackable(overlap) ? ' ' : 'N', overlap->offset, overlap->length, overlap, merge_offset, merge_length, (*new)->block->number);
 
 	for(scan = befores; scan; scan = scan->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(scan->size > 0)
 		{
 			size = scan->size;
@@ -2001,39 +2001,39 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 			if(array[i] && overlap != array[i])
 			{
 				uint16_t flags = overlap->flags;
-				overlap->flags |= CHDESC_SAFE_AFTER;
-				if((r = chdesc_add_depend(overlap, array[i])) < 0)
+				overlap->flags |= PATCH_SAFE_AFTER;
+				if((r = patch_add_depend(overlap, array[i])) < 0)
 					return r;
 				overlap->flags = flags;
 			}
 	}
 	
-	/* Restore ddesc->overlaps if new fully overlapped some chdesc(s).
+	/* Restore ddesc->overlaps if new fully overlapped some patch(s).
 	 * Restore before the size update to simplify error recovery. */
-	if((*new)->flags & CHDESC_OVERLAP)
+	if((*new)->flags & PATCH_OVERLAP)
 	{
-		if(chdesc_overlap_check(*new, overlap) == 2)
+		if(patch_overlap_check(*new, overlap) == 2)
 		{
-			chdesc_link_overlap(overlap);
+			patch_link_overlap(overlap);
 		}
 		/* note: no need to restore fully overlapped WRITTENs or INFLIGHTs */
-		(*new)->flags &= ~CHDESC_OVERLAP;
+		(*new)->flags &= ~PATCH_OVERLAP;
 	}
 	
 	if(merge_offset != overlap->offset || merge_length != overlap->length)
 	{
 		/* handle updated data size change */
 		void * merge_data;
-		assert(chdesc_is_rollbackable(overlap));
+		assert(patch_is_rollbackable(overlap));
 
-		if(merge_length <= CHDESC_LOCALDATA)
+		if(merge_length <= PATCH_LOCALDATA)
 			merge_data = &overlap->byte.ldata[0];
 		else
 		{
 			if(!(merge_data = malloc(merge_length)))
 			{
-				if((*new)->flags & CHDESC_OVERLAP)
-					chdesc_unlink_overlap(overlap); /* XXX? */
+				if((*new)->flags & PATCH_OVERLAP)
+					patch_unlink_overlap(overlap); /* XXX? */
 				return -ENOMEM;
 			}
 			account_update_realloc(&act_data, overlap->length, merge_length);
@@ -2043,29 +2043,29 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 			memcpy(merge_data, &bdesc->data[merge_offset], overlap->offset - merge_offset);
 		if(overlap_end < merge_end)
 			memcpy(merge_data + overlap_end - merge_offset, &bdesc->data[overlap_end], merge_end - overlap_end);
-		chdesc_free_byte_data(overlap);
+		patch_free_byte_data(overlap);
 		overlap->byte.data = merge_data;
 
-		chdesc_unlink_overlap(overlap);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, overlap, merge_offset);
+		patch_unlink_overlap(overlap);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OFFSET, overlap, merge_offset);
 		overlap->offset = merge_offset;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, overlap, merge_length);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_LENGTH, overlap, merge_length);
 		overlap->length = merge_length;
-# if CHDESC_BYTE_SUM
-		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
-		overlap->byte.new_sum = chdesc_byte_sum(&bdesc->data[merge_offset], merge_length);
+# if PATCH_BYTE_SUM
+		overlap->byte.old_sum = patch_byte_sum(overlap->byte.data, merge_length);
+		overlap->byte.new_sum = patch_byte_sum(&bdesc->data[merge_offset], merge_length);
 # endif
-		chdesc_link_overlap(overlap);
+		patch_link_overlap(overlap);
 	}
 	
 	/* move merger to correct owner */
 	if (overlap->owner != (*new)->owner) {
-		chdesc_unlink_index_changes(overlap);
+		patch_unlink_index_changes(overlap);
 		overlap->owner = (*new)->owner;
-		chdesc_link_index_changes(overlap);
+		patch_link_index_changes(overlap);
 	}
 	
-	chdesc_destroy(new);
+	patch_destroy(new);
 	*tail = overlap;
 	return 1;
 }
@@ -2081,7 +2081,7 @@ static int chdesc_create_byte_merge_overlap(chdesc_t ** tail, chdesc_t ** new, c
 #endif
 
 /* Return true if after may depend on before. External callers pass depth=0. */
-static recursive_inline bool chdesc_may_have_before(const chdesc_t * after, const chdesc_t * before, unsigned depth)
+static recursive_inline bool patch_may_have_before(const patch_t * after, const patch_t * before, unsigned depth)
 {
 /* Limit the search.
  * These values do not use noticable cpu and give pretty good answers. */
@@ -2100,7 +2100,7 @@ static recursive_inline bool chdesc_may_have_before(const chdesc_t * after, cons
 		{
 			if(depth >= MAX_DEPTH)
 				return 1;
-			if(chdesc_may_have_before(dep->before.desc, before, depth + 1))
+			if(patch_may_have_before(dep->before.desc, before, depth + 1))
 				return 1;
 		}
 	}
@@ -2108,27 +2108,27 @@ static recursive_inline bool chdesc_may_have_before(const chdesc_t * after, cons
 }
 
 /* A simple RB merge opportunity:
- * chdesc has no explicit befores and has a single overlap.
- * Returns 1 on successful merge (*tail points to merged chdesc),
+ * patch has no explicit befores and has a single overlap.
+ * Returns 1 on successful merge (*tail points to merged patch),
  * 0 if no merge could be made, or < 0 upon error. */
-static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chdesc_t *overlaps, uint32_t offset, uint32_t length, chdesc_pass_set_t * befores)
+static int patch_create_byte_merge_overlap2(patch_t ** tail, BD_t *owner, patch_t *overlaps, uint32_t offset, uint32_t length, patch_pass_set_t * befores)
 {
-	chdesc_t * overlap = NULL, *o, *next;
+	patch_t * overlap = NULL, *o, *next;
 	uint16_t overlap_end, merge_offset, merge_length, merge_end;
-	chdesc_pass_set_t * scan;
+	patch_pass_set_t * scan;
 	int r;
 	
 	/* determine whether we can merge new into an overlap */
 	/* NOTE: if a befores[i] has a before and there are many overlaps, it may
 	 * be wise to check befores[i] for befores before looking at overlaps */
 	for (o = overlaps; o; o = o->tmp_next) {
-		if (o->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+		if (o->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 			continue;
 		if (o->type != BYTE)
 			return 0;
 		if (overlap) {
-#if CHDESC_RB_NRB_READY
-			/* TODO: does this actually require CHDESC_RB_NRB_READY? */
+#if PATCH_RB_NRB_READY
+			/* TODO: does this actually require PATCH_RB_NRB_READY? */
 			/* nrb depends on nothing on this block so an above is ok */
 			if (o == WEAK(o->block->nrb))
 				continue;
@@ -2145,11 +2145,11 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 	if(!overlap)
 		return 0;
 	
-	/* Check that *new's explicit befores will not induce chdesc cycles */
+	/* Check that *new's explicit befores will not induce patch cycles */
 	for(scan = befores; scan; scan = scan->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(scan->size > 0)
 		{
 			size = scan->size;
@@ -2162,27 +2162,27 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 		}
 		for(i = 0; i < size; i++)
 		{
-			chdesc_t * before = array[i];
+			patch_t * before = array[i];
 			
 			if(!before)
 				continue;
-			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+			if(before->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 				continue;
 			/* note: overlaps are not explicitly on the list any more */
 			
 			if(before->befores)
 			{
-				/* Check that before's befores will not induce chdesc cycles */
+				/* Check that before's befores will not induce patch cycles */
 				/* There cannot be a cycle if overlap already depends on before
 				 * or depends on all of before's befores */
 				if(!quick_depends_on(overlap, before) && !quick_befores_subset(before, overlap))
 				{
 					/* We did not detect that overlap depends on before or
 					 * its befores, so we must check before's befores for
-					 * a possible path to overlap (would-be chdesc cycle).
+					 * a possible path to overlap (would-be patch cycle).
 					 * Deep, newly created directory hierarchies in SU
 					 * benefit from descending their dependencies. */
-					if(chdesc_may_have_before(before, overlap, 0))
+					if(patch_may_have_before(before, overlap, 0))
 						return 0;
 				}
 			}
@@ -2190,7 +2190,7 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 	}
 
 	/* could support this, but it is not necessary to do so */
-	assert(!(overlap->flags & CHDESC_ROLLBACK));
+	assert(!(overlap->flags & PATCH_ROLLBACK));
 	
 	/* clear overlap tmp_next entries; do this now because all error exits
 	   are NOMEM (really bad, fuck semantics) */
@@ -2204,12 +2204,12 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 	merge_length = MAX(overlap_end, offset + length) - merge_offset;
 	merge_end = merge_offset + merge_length;
 	
-	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", chdesc_is_rollbackable(overlap) ? ' ' : 'N', overlap->offset, overlap->length, overlap, merge_offset, merge_length, (*new)->block->number);
+	//printf("overlap merge %c (%u, %u)@%p to (%u, %u) for block %u\n", patch_is_rollbackable(overlap) ? ' ' : 'N', overlap->offset, overlap->length, overlap, merge_offset, merge_length, (*new)->block->number);
 
 	for(scan = befores; scan; scan = scan->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(scan->size > 0)
 		{
 			size = scan->size;
@@ -2224,8 +2224,8 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 			if(array[i] && overlap != array[i])
 			{
 				uint16_t flags = overlap->flags;
-				overlap->flags |= CHDESC_SAFE_AFTER;
-				if((r = chdesc_add_depend(overlap, array[i])) < 0)
+				overlap->flags |= PATCH_SAFE_AFTER;
+				if((r = patch_add_depend(overlap, array[i])) < 0)
 					return r;
 				overlap->flags = flags;
 			}
@@ -2235,9 +2235,9 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 	{
 		/* handle updated data size change */
 		void * merge_data;
-		assert(chdesc_is_rollbackable(overlap));
+		assert(patch_is_rollbackable(overlap));
 
-		if(merge_length <= CHDESC_LOCALDATA)
+		if(merge_length <= PATCH_LOCALDATA)
 			merge_data = &overlap->byte.ldata[0];
 		else
 		{
@@ -2250,70 +2250,70 @@ static int chdesc_create_byte_merge_overlap2(chdesc_t ** tail, BD_t *owner, chde
 			memcpy(merge_data, &bdesc_data(overlap->block)[merge_offset], overlap->offset - merge_offset);
 		if(overlap_end < merge_end)
 			memcpy(merge_data + overlap_end - merge_offset, &bdesc_data(overlap->block)[overlap_end], merge_end - overlap_end);
-		chdesc_free_byte_data(overlap);
+		patch_free_byte_data(overlap);
 		overlap->byte.data = merge_data;
 
-		chdesc_unlink_overlap(overlap);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_OFFSET, overlap, merge_offset);
+		patch_unlink_overlap(overlap);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OFFSET, overlap, merge_offset);
 		overlap->offset = merge_offset;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_LENGTH, overlap, merge_length);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_LENGTH, overlap, merge_length);
 		overlap->length = merge_length;
-# if CHDESC_BYTE_SUM
-		overlap->byte.old_sum = chdesc_byte_sum(overlap->byte.data, merge_length);
-		overlap->byte.new_sum = chdesc_byte_sum(&bdesc_data(overlap->block)[merge_offset], merge_length);
+# if PATCH_BYTE_SUM
+		overlap->byte.old_sum = patch_byte_sum(overlap->byte.data, merge_length);
+		overlap->byte.new_sum = patch_byte_sum(&bdesc_data(overlap->block)[merge_offset], merge_length);
 # endif
-		chdesc_link_overlap(overlap);
+		patch_link_overlap(overlap);
 	}
 	
 	/* move merger to correct owner */
 	if (overlap->owner != owner) {
-		chdesc_unlink_index_changes(overlap);
+		patch_unlink_index_changes(overlap);
 		overlap->owner = owner;
-		chdesc_link_index_changes(overlap);
+		patch_link_index_changes(overlap);
 	}
 
 	*tail = overlap;
 	return 1;
 }
-#endif /* !CHDESC_OVERLAPS2 */
-#endif /* CHDESC_BYTE_MERGE_OVERLAP */
+#endif /* !PATCH_OVERLAPS2 */
+#endif /* PATCH_BYTE_MERGE_OVERLAP */
 
-int chdesc_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, chdesc_t ** head)
+int patch_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, const void * data, patch_t ** head)
 {
 	uint16_t atomic_size = owner->atomicsize;
 	uint16_t init_offset = offset % atomic_size;
 	uint16_t count = (length + init_offset + atomic_size - 1) / atomic_size;
 	
 	if(count == 1)
-		return chdesc_create_byte(block, owner, offset, length, data, head);
+		return patch_create_byte(block, owner, offset, length, data, head);
 	return -EINVAL;
 }
 
-/* common code to create a byte chdesc */
-int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, chdesc_t ** tail, chdesc_pass_set_t * befores)
+/* common code to create a byte patch */
+int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, patch_t ** tail, patch_pass_set_t * befores)
 {
-	bool data_required = new_chdescs_require_data(block);
-	chdesc_pass_set_t * scan;
-	chdesc_t * chdesc;
-#if CHDESC_OVERLAPS2
-	chdesc_t * overlap_list;
+	bool data_required = new_patchs_require_data(block);
+	patch_pass_set_t * scan;
+	patch_t * patch;
+#if PATCH_OVERLAPS2
+	patch_t * overlap_list;
 #endif
 	int r;
 	
 	assert(block && owner && tail);
 	assert(offset + length <= block->length);
 	
-	r = chdesc_create_merge(block, owner, tail, befores);
+	r = patch_create_merge(block, owner, tail, befores);
 	if(r < 0)
 		return r;
 	else if(r == 1)
 		return 0;
 
-#if CHDESC_OVERLAPS2
-	overlap_list = chdesc_find_overlaps(block, offset, length, ~0U);
+#if PATCH_OVERLAPS2
+	overlap_list = patch_find_overlaps(block, offset, length, ~0U);
 
 	if (overlap_list) {
-		r = chdesc_create_byte_merge_overlap2(tail, owner, overlap_list, offset, length, befores);
+		r = patch_create_byte_merge_overlap2(tail, owner, overlap_list, offset, length, befores);
 		if (r < 0)
 			return r;
 		else if (r == 1)
@@ -2321,76 +2321,76 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 	}
 #endif
 	
-	chdesc = chdesc_alloc();
-	if(!chdesc)
+	patch = patch_alloc();
+	if(!patch)
 		return -ENOMEM;
-	account_nchdescs(BYTE, 1);	
+	account_npatchs(BYTE, 1);	
 	
-	chdesc->owner = owner;		
-	chdesc->block = block;
-	chdesc->type = BYTE;
-	//chdesc->byte.satisfy_freed = 0;
+	patch->owner = owner;		
+	patch->block = block;
+	patch->type = BYTE;
+	//patch->byte.satisfy_freed = 0;
 	
 	if(data_required)
 	{
-		chdesc->offset = offset;
-		chdesc->length = length;
-		chdesc->byte.data = NULL; /* XXX Is this OK? */
+		patch->offset = offset;
+		patch->length = length;
+		patch->byte.data = NULL; /* XXX Is this OK? */
 	}
 	else
 	{
-		/* Expand to cover entire block. This is safe since all chdescs on
+		/* Expand to cover entire block. This is safe since all patchs on
 		 * this block at least implicitly have all nonrollbackables as befores.
 		 * Leave 'offset' and 'length' as is to copy source data. */
-		chdesc->offset = 0;
-		chdesc->length = block->length;
-		chdesc->byte.data = NULL;
-#if CHDESC_BYTE_SUM
-		chdesc->byte.old_sum = 0;
-		chdesc->byte.new_sum = 0;
+		patch->offset = 0;
+		patch->length = block->length;
+		patch->byte.data = NULL;
+#if PATCH_BYTE_SUM
+		patch->byte.old_sum = 0;
+		patch->byte.new_sum = 0;
 #endif
 		//account_update(&act_nnrb, 1);
 	}
 	
-	chdesc->befores = NULL;
-	chdesc->befores_tail = &chdesc->befores;
-	chdesc->afters = NULL;
-	chdesc->afters_tail = &chdesc->afters;
-	chdesc->weak_refs = NULL;
-	memset(chdesc->nbefores, 0, sizeof(chdesc->nbefores));
-	chdesc->free_prev = NULL;
-	chdesc->free_next = NULL;
-	chdesc->ddesc_next = NULL;
-	chdesc->ddesc_pprev = NULL;
-	chdesc->ddesc_ready_next = NULL;
-	chdesc->ddesc_ready_pprev = NULL;
-	chdesc->ddesc_index_next = NULL;
-	chdesc->ddesc_index_pprev = NULL;
-	chdesc->tmp_next = NULL;
-	chdesc->tmp_pprev = NULL;
-	chdesc->overlap_next = NULL;
-	chdesc->overlap_pprev = NULL;
-	chdesc->flags = CHDESC_SAFE_AFTER;
+	patch->befores = NULL;
+	patch->befores_tail = &patch->befores;
+	patch->afters = NULL;
+	patch->afters_tail = &patch->afters;
+	patch->weak_refs = NULL;
+	memset(patch->nbefores, 0, sizeof(patch->nbefores));
+	patch->free_prev = NULL;
+	patch->free_next = NULL;
+	patch->ddesc_next = NULL;
+	patch->ddesc_pprev = NULL;
+	patch->ddesc_ready_next = NULL;
+	patch->ddesc_ready_pprev = NULL;
+	patch->ddesc_index_next = NULL;
+	patch->ddesc_index_pprev = NULL;
+	patch->tmp_next = NULL;
+	patch->tmp_pprev = NULL;
+	patch->overlap_next = NULL;
+	patch->overlap_pprev = NULL;
+	patch->flags = PATCH_SAFE_AFTER;
 		
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BYTE, chdesc, block, owner, chdesc->offset, chdesc->length);
-#if COUNT_CHDESCS
-	chdesc_counts[BYTE]++;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_BYTE, patch, block, owner, patch->offset, patch->length);
+#if COUNT_PATCHS
+	patch_counts[BYTE]++;
 	dump_counts();
 #endif
 	
 	/* make sure our block sticks around */
 	bdesc_retain(block);
 	
-	chdesc_link_all_changes(chdesc);
-	chdesc_link_ready_changes(chdesc);
-	chdesc_link_index_changes(chdesc);
+	patch_link_all_changes(patch);
+	patch_link_ready_changes(patch);
+	patch_link_index_changes(patch);
 	
-	/* this is a new chdesc, so we don't need to check for loops. but we
+	/* this is a new patch, so we don't need to check for loops. but we
 	 * should check to make sure each before has not already been written. */
 	for(scan = befores; scan; scan = scan->next)
 	{
 		size_t i, size;
-		chdesc_t ** array;
+		patch_t ** array;
 		if(scan->size > 0)
 		{
 			size = scan->size;
@@ -2403,91 +2403,91 @@ int chdesc_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 		}
 		for(i = 0; i < size; i++)
 		{
-			if(array[i] && !((array[i])->flags & CHDESC_WRITTEN))
-				if((r = chdesc_add_depend_no_cycles(chdesc, array[i])) < 0)
+			if(array[i] && !((array[i])->flags & PATCH_WRITTEN))
+				if((r = patch_add_depend_no_cycles(patch, array[i])) < 0)
 				{
-					chdesc_destroy(&chdesc);
+					patch_destroy(&patch);
 					return r;
 				}
 		}
 	}
 
-	chdesc_link_overlap(chdesc);
+	patch_link_overlap(patch);
 
-#if CHDESC_OVERLAPS2
-	chdesc_apply_overlaps(chdesc, overlap_list);
+#if PATCH_OVERLAPS2
+	patch_apply_overlaps(patch, overlap_list);
 #else
-	/* make sure it is after upon any pre-existing chdescs */
-	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
+	/* make sure it is after upon any pre-existing patchs */
+	if((r = patch_overlap_multiattach(patch, block)) < 0)
 	{
-		chdesc_destroy(&chdesc);
+		patch_destroy(&patch);
 		return r;
 	}
 	
-# if (CHDESC_BYTE_MERGE_OVERLAP && !CHDESC_OVERLAPS2)
-	/* after the above work towards chdesc to avoid multiple overlap scans */
+# if (PATCH_BYTE_MERGE_OVERLAP && !PATCH_OVERLAPS2)
+	/* after the above work towards patch to avoid multiple overlap scans */
 	if(data_required)
 	{
-		if((r = chdesc_create_byte_merge_overlap(tail, &chdesc, befores)) < 0)
+		if((r = patch_create_byte_merge_overlap(tail, &patch, befores)) < 0)
 		{
-			chdesc_destroy(&chdesc);
+			patch_destroy(&patch);
 			return r;
 		}
 		else if(r == 1)
 			return 0;
 	}
 # endif
-#endif /* CHDESC_OVERLAPS2 */
+#endif /* PATCH_OVERLAPS2 */
 	
 	if(data_required)
 	{	
-		void * block_data = &bdesc_data(chdesc->block)[offset];
+		void * block_data = &bdesc_data(patch->block)[offset];
 
-		if(length <= CHDESC_LOCALDATA)
-			chdesc->byte.data = &chdesc->byte.ldata[0];
+		if(length <= PATCH_LOCALDATA)
+			patch->byte.data = &patch->byte.ldata[0];
 		else
 		{
-			if(!(chdesc->byte.data = malloc(length)))
+			if(!(patch->byte.data = malloc(length)))
 			{
-				chdesc_destroy(&chdesc);
+				patch_destroy(&patch);
 				return -ENOMEM;
 			}
 			account_update(&act_data, length);
 		}
 
-		memcpy(chdesc->byte.data, block_data, length);
-#if CHDESC_BYTE_SUM
-		chdesc->byte.new_sum = chdesc_byte_sum(block_data, length);
-		chdesc->byte.old_sum = chdesc_byte_sum(chdesc->byte.data, length);
+		memcpy(patch->byte.data, block_data, length);
+#if PATCH_BYTE_SUM
+		patch->byte.new_sum = patch_byte_sum(block_data, length);
+		patch->byte.old_sum = patch_byte_sum(patch->byte.data, length);
 #endif
 	}
 	else
 	{
-#if CHDESC_NRB
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
+#if PATCH_NRB
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_APPLY, patch);
 		assert(!WEAK(block->nrb));
-		chdesc_weak_retain(chdesc, &block->nrb, NULL, NULL);
+		patch_weak_retain(patch, &block->nrb, NULL, NULL);
 #else
 		assert(0);
 #endif
 	}
 	
-	chdesc->flags &= ~CHDESC_SAFE_AFTER;
-	*tail = chdesc;
+	patch->flags &= ~PATCH_SAFE_AFTER;
+	*tail = patch;
 	block->synthetic = 0;
 	
 	return 0;
 }
 
-#if CHDESC_BIT_MERGE_OVERLAP
+#if PATCH_BIT_MERGE_OVERLAP
 /* Quickly check whether creating head->merge may induce a cycle:
- * determine (heuristically) whether there exist chdescs x,y such that
+ * determine (heuristically) whether there exist patchs x,y such that
  * merge->x->y and head->y and (conservatively) check that head~>merge
  * does not exist. */
-static bool merge_head_dep_safe(const chdesc_t * head, const chdesc_t * merge)
+static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
 {
 #define MAX_WIDTH 2
-	chdesc_t * common[MAX_WIDTH + 1] = {NULL, NULL, NULL};
+	patch_t * common[MAX_WIDTH + 1] = {NULL, NULL, NULL};
 	size_t common_index = 0;
 	chdepdesc_t * head_b = head->befores;
 	size_t i = 0;
@@ -2508,7 +2508,7 @@ static bool merge_head_dep_safe(const chdesc_t * head, const chdesc_t * merge)
 					common[common_index++] = head_b->before.desc;
 					if(common_index > MAX_WIDTH)
 					{
-						printf("%s(): More common chdescs found than can handle\n", __FUNCTION__);
+						printf("%s(): More common patchs found than can handle\n", __FUNCTION__);
 						i = MAX_WIDTH; /* end search since 'common' is full */
 					}
 					goto next_head_b;
@@ -2524,7 +2524,7 @@ static bool merge_head_dep_safe(const chdesc_t * head, const chdesc_t * merge)
 	/* Check for head~>merge paths */
 	for(head_b = head->befores; head_b; head_b = head_b->before.next)
 	{
-		chdesc_t * before = head_b->before.desc;
+		patch_t * before = head_b->before.desc;
 		for(i = 0; i < MAX_WIDTH; i++)
 			if(before == common[i])
 				break;
@@ -2546,11 +2546,11 @@ static bool merge_head_dep_safe(const chdesc_t * head, const chdesc_t * merge)
 	return 1;
 }
 
-/* Return whether it is safe, chdesc dependency wise, to merge
- * a new bit chdesc with the before 'head' into 'overlap'. */
-static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * overlap)
+/* Return whether it is safe, patch dependency wise, to merge
+ * a new bit patch with the before 'head' into 'overlap'. */
+static bool bit_merge_overlap_ok_head(const patch_t * head, const patch_t * overlap)
 {
-	if(head && head != overlap && !(head->flags & CHDESC_INFLIGHT))
+	if(head && head != overlap && !(head->flags & PATCH_INFLIGHT))
 	{
 		/* Check whether creating overlap->head may induce a cycle.
 		 * If overlap->head already exists the answer is of course no: */
@@ -2569,28 +2569,28 @@ static bool bit_merge_overlap_ok_head(const chdesc_t * head, const chdesc_t * ov
 }
 #endif
 
-#if CHDESC_BIT_MERGE_OVERLAP
-static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t * bit_changes, chdesc_t ** head)
+#if PATCH_BIT_MERGE_OVERLAP
+static int patch_create_bit_merge_overlap(BD_t * owner, uint32_t xor, patch_t * bit_changes, patch_t ** head)
 {
 	chdepdesc_t * dep;
-	chdesc_t * overlap_bit = NULL;
-	chdesc_t * overlap_word = NULL;
-	chdesc_t * overlap;
+	patch_t * overlap_bit = NULL;
+	patch_t * overlap_word = NULL;
+	patch_t * overlap;
 	uint16_t flags;
 	int r;
 	
 	for(dep = bit_changes->befores; dep; dep = dep->before.next)
 	{
-		chdesc_t * before = dep->before.desc;
-		if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+		patch_t * before = dep->before.desc;
+		if(before->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 			continue;
-		overlap_word = overlap_word ? (chdesc_t *) 1 : before;
+		overlap_word = overlap_word ? (patch_t *) 1 : before;
 		if(xor & before->bit.or)
-			overlap_bit = overlap_bit ? (chdesc_t *) 1 : before;
+			overlap_bit = overlap_bit ? (patch_t *) 1 : before;
 	}
-	if(overlap_bit > (chdesc_t *) 1)
+	if(overlap_bit > (patch_t *) 1)
 		overlap = overlap_bit;
-	else if(overlap_word > (chdesc_t *) 1)
+	else if(overlap_word > (patch_t *) 1)
 		overlap = overlap_word;
 	else
 		return 0;
@@ -2600,47 +2600,47 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 	
 	{
 		int list = 0;
-		chdesc_t *before;
+		patch_t *before;
 
 	    retry:
 		for (before = overlap->block->overlap1[list]; before; before = before->overlap_next) {
-#if CHDESC_RB_NRB_READY
-			/* NOTE: this wouldn't need CHDESC_RB_NRB_READY if an NRB
-			 * CHDESC_OVERLAPed the underlying bits */
+#if PATCH_RB_NRB_READY
+			/* NOTE: this wouldn't need PATCH_RB_NRB_READY if an NRB
+			 * PATCH_OVERLAPed the underlying bits */
 			/* nrb is guaranteed to not depend on overlap */
 			if(before == WEAK(overlap->block->nrb))
 				continue;
 #endif
-			if(before->flags & (CHDESC_WRITTEN | CHDESC_INFLIGHT))
+			if(before->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 				continue;
-			if(chdesc_overlap_check(overlap, before))
+			if(patch_overlap_check(overlap, before))
 				/* uncommon. 'before' may need a rollback update. */
 				return 0;
 		}
 
-		if (list == 0 && (list = chdesc_overlap_list(overlap)))
+		if (list == 0 && (list = patch_overlap_list(overlap)))
 			goto retry;
 	}
 	
 	if(*head && overlap != *head)
 	{
 		flags = overlap->flags;
-		overlap->flags |= CHDESC_SAFE_AFTER;
-		if((r = chdesc_add_depend(overlap, *head)) < 0)
+		overlap->flags |= PATCH_SAFE_AFTER;
+		if((r = patch_add_depend(overlap, *head)) < 0)
 			return r;
 		overlap->flags = flags;
 	}
 	
 	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_XOR, overlap, overlap->bit.xor);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_XOR, overlap, overlap->bit.xor);
 	*((uint32_t *) (bdesc_data(overlap->block) + overlap->offset)) ^= xor;
 	
 	/* move merger to correct owner */
 	if (overlap->owner != owner) {
-		chdesc_unlink_index_changes(overlap);
+		patch_unlink_index_changes(overlap);
 		overlap->owner = owner;
-		chdesc_link_index_changes(overlap);
+		patch_link_index_changes(overlap);
 	}
 	
 	*head = overlap;
@@ -2648,43 +2648,43 @@ static int chdesc_create_bit_merge_overlap(BD_t * owner, uint32_t xor, chdesc_t 
 }
 #endif
 
-#if CHDESC_BIT_MERGE_OVERLAP
-/* Returns whether chdesc has in-ram befores */
-static bool has_inram_befores(const chdesc_t * chdesc)
+#if PATCH_BIT_MERGE_OVERLAP
+/* Returns whether patch has in-ram befores */
+static bool has_inram_befores(const patch_t * patch)
 {
 	chdepdesc_t * dep;
-	for(dep = chdesc->befores; dep; dep = dep->before.next)
-		if(!(dep->before.desc->flags & CHDESC_INFLIGHT))
+	for(dep = patch->befores; dep; dep = dep->before.next)
+		if(!(dep->before.desc->flags & PATCH_INFLIGHT))
 			return 1;
 	return 0;
 }
 
-# if CHDESC_NRB
-/* Returns whether chdesc is the only chdesc on its ddesc and in ram */
-static bool is_sole_inram_chdesc(const chdesc_t * chdesc)
+# if PATCH_NRB
+/* Returns whether patch is the only patch on its ddesc and in ram */
+static bool is_sole_inram_patch(const patch_t * patch)
 {
-	chdesc_t * c;
-	for(c = chdesc->block->all_changes; c; c = c->ddesc_next)
-		if(c != chdesc && !(c->flags & CHDESC_INFLIGHT))
+	patch_t * c;
+	for(c = patch->block->all_changes; c; c = c->ddesc_next)
+		if(c != patch && !(c->flags & PATCH_INFLIGHT))
 			return 0;
 	return 1;
 }
 # endif
 #endif
 
-int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, chdesc_t ** head)
+int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xor, patch_t ** head)
 {
 	//uint32_t data = ((uint32_t *) bdesc_data(block))[offset] ^ xor;
-	//return _chdesc_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
+	//return _patch_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 
 	int r;
-	bool data_required = new_chdescs_require_data(block);
-	chdesc_t * chdesc;
-	chdesc_t * bit_changes = NULL;
-	DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+	bool data_required = new_patchs_require_data(block);
+	patch_t * patch;
+	patch_t * bit_changes = NULL;
+	DEFINE_PATCH_PASS_SET(set, 1, NULL);
 	set.array[0] = *head;
 
-	r = chdesc_create_merge(block, owner, head, PASS_CHDESC_SET(set));
+	r = patch_create_merge(block, owner, head, PASS_PATCH_SET(set));
 	if(r < 0)
 		return r;
 	else if(r == 1)
@@ -2697,100 +2697,100 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	{
 		uint32_t data = ((uint32_t *) bdesc_data(block))[offset] ^ xor;
 		set.array[0] = *head;
-#if CHDESC_NRB_MERGE_STATS
-		chdesc_nrb_merge_stats[chdesc_nrb_merge_stats_idx]--; /* don't double count */
+#if PATCH_NRB_MERGE_STATS
+		patch_nrb_merge_stats[patch_nrb_merge_stats_idx]--; /* don't double count */
 #endif
-		return chdesc_create_byte_set(block, owner, offset << 2, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
+		return patch_create_byte_set(block, owner, offset << 2, 4, (uint8_t *) &data, head, PASS_PATCH_SET(set));
 	}
 	
-#if CHDESC_BIT_MERGE_OVERLAP
-	bit_changes = chdesc_bit_changes(block, offset << 2);
+#if PATCH_BIT_MERGE_OVERLAP
+	bit_changes = patch_bit_changes(block, offset << 2);
 	if(bit_changes && has_inram_befores(bit_changes))
 	{
-		r = chdesc_create_bit_merge_overlap(owner, xor, bit_changes, head);
+		r = patch_create_bit_merge_overlap(owner, xor, bit_changes, head);
 		if(r < 0)
 			return r;
 		else if(r == 1)
 			return 0;
 	}
-# if CHDESC_NRB
+# if PATCH_NRB
 	else if(WEAK(block->nrb) &&
-	        is_sole_inram_chdesc(WEAK(block->nrb)) &&
+	        is_sole_inram_patch(WEAK(block->nrb)) &&
 	        bit_merge_overlap_ok_head(*head, WEAK(block->nrb)))
 	{
 		uint32_t data = ((uint32_t *) bdesc_data(block))[offset] ^ xor;
-		DEFINE_CHDESC_PASS_SET(set, 1, NULL);
+		DEFINE_PATCH_PASS_SET(set, 1, NULL);
 		set.array[0] = *head;
-		return chdesc_create_byte_set(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_CHDESC_SET(set));
+		return patch_create_byte_set(block, owner, offset * 4, 4, (uint8_t *) &data, head, PASS_PATCH_SET(set));
 	}
 # endif
 #endif
 	
-	chdesc = chdesc_alloc();
-	if(!chdesc)
+	patch = patch_alloc();
+	if(!patch)
 		return -ENOMEM;
-	account_nchdescs(BIT, 1);
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CREATE_BIT, chdesc, block, owner, offset, xor);
-#if COUNT_CHDESCS
-	chdesc_counts[BIT]++;
+	account_npatchs(BIT, 1);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_BIT, patch, block, owner, offset, xor);
+#if COUNT_PATCHS
+	patch_counts[BIT]++;
 	dump_counts();
 #endif
 	
-	chdesc->owner = owner;
-	chdesc->block = block;
-	chdesc->type = BIT;
-	chdesc->offset = offset << 2;
-	chdesc->length = 4;
-	chdesc->bit.xor = xor;
-	chdesc->bit.or = xor;
-	chdesc->befores = NULL;
-	chdesc->befores_tail = &chdesc->befores;
-	chdesc->afters = NULL;
-	chdesc->afters_tail = &chdesc->afters;
-	chdesc->weak_refs = NULL;
-	memset(chdesc->nbefores, 0, sizeof(chdesc->nbefores));
-	chdesc->free_prev = NULL;
-	chdesc->free_next = NULL;
-	chdesc->ddesc_next = NULL;
-	chdesc->ddesc_pprev = NULL;
-	chdesc->ddesc_ready_next = NULL;
-	chdesc->ddesc_ready_pprev = NULL;
-	chdesc->ddesc_index_next = NULL;
-	chdesc->ddesc_index_pprev = NULL;
-	chdesc->tmp_next = NULL;
-	chdesc->tmp_pprev = NULL;
-	chdesc->overlap_next = NULL;
-	chdesc->overlap_pprev = NULL;
-	chdesc->flags = CHDESC_SAFE_AFTER;
+	patch->owner = owner;
+	patch->block = block;
+	patch->type = BIT;
+	patch->offset = offset << 2;
+	patch->length = 4;
+	patch->bit.xor = xor;
+	patch->bit.or = xor;
+	patch->befores = NULL;
+	patch->befores_tail = &patch->befores;
+	patch->afters = NULL;
+	patch->afters_tail = &patch->afters;
+	patch->weak_refs = NULL;
+	memset(patch->nbefores, 0, sizeof(patch->nbefores));
+	patch->free_prev = NULL;
+	patch->free_next = NULL;
+	patch->ddesc_next = NULL;
+	patch->ddesc_pprev = NULL;
+	patch->ddesc_ready_next = NULL;
+	patch->ddesc_ready_pprev = NULL;
+	patch->ddesc_index_next = NULL;
+	patch->ddesc_index_pprev = NULL;
+	patch->tmp_next = NULL;
+	patch->tmp_pprev = NULL;
+	patch->overlap_next = NULL;
+	patch->overlap_pprev = NULL;
+	patch->flags = PATCH_SAFE_AFTER;
 
-	chdesc_link_all_changes(chdesc);
-	chdesc_link_ready_changes(chdesc);
-	chdesc_link_index_changes(chdesc);
+	patch_link_all_changes(patch);
+	patch_link_ready_changes(patch);
+	patch_link_index_changes(patch);
 	
-	/* add chdesc to block's befores */
+	/* add patch to block's befores */
 	if(!bit_changes && !(bit_changes = ensure_bdesc_has_bit_changes(block, offset)))
 	{
 		r = -ENOMEM;
 		goto error;
 	}
-	if((r = chdesc_add_depend_no_cycles(bit_changes, chdesc)) < 0)
+	if((r = patch_add_depend_no_cycles(bit_changes, patch)) < 0)
 		goto error;
 	
-	/* make sure it is after upon any pre-existing chdescs */
-	if((r = chdesc_overlap_multiattach(chdesc, block)) < 0)
+	/* make sure it is after upon any pre-existing patchs */
+	if((r = patch_overlap_multiattach(patch, block)) < 0)
 		goto error;
 	
-	/* this is a new chdesc, so we don't need to check for loops.
+	/* this is a new patch, so we don't need to check for loops.
 	 * but we should check to make sure head has not already been written. */
-	if(*head && !((*head)->flags & CHDESC_WRITTEN))
-		if((r = chdesc_add_depend_no_cycles(chdesc, *head)) < 0)
+	if(*head && !((*head)->flags & PATCH_WRITTEN))
+		if((r = patch_add_depend_no_cycles(patch, *head)) < 0)
 			goto error;
 	
 	/* apply the change manually */
 	((uint32_t *) bdesc_data(block))[offset] ^= xor;
 	
-	chdesc->flags &= ~CHDESC_SAFE_AFTER;
-	*head = chdesc;
+	patch->flags &= ~PATCH_SAFE_AFTER;
+	*head = patch;
 	
 	/* make sure our block sticks around */
 	bdesc_retain(block);
@@ -2799,16 +2799,16 @@ int chdesc_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t x
 	return 0;
 	
   error:
-	chdesc_destroy(&chdesc);
+	patch_destroy(&patch);
 	return r;
 }
 
-#if CHDESC_CYCLE_CHECK
-static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
+#if PATCH_CYCLE_CHECK
+static int patch_has_before(patch_t * after, patch_t * before)
 {
 	/* recursion-on-the-heap support */
 	struct state {
-		chdesc_t * after;
+		patch_t * after;
 		chdepdesc_t * dep;
 	};
 	typedef struct state state_t;
@@ -2821,13 +2821,13 @@ static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 	chdepdesc_t * dep;
 	
   recurse_enter:
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, after, CHDESC_MARKED);
-	after->flags |= CHDESC_MARKED;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, after, PATCH_MARKED);
+	after->flags |= PATCH_MARKED;
 	for(dep = after->befores; dep; dep = dep->before.next)
 	{
 		if(dep->before.desc == before)
 		{
-#if CHDESC_CYCLE_PRINT
+#if PATCH_CYCLE_PRINT
 			static const char * names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [NOOP] = "NOOP"};
 			state_t * scan = state;
 			printf("%p[%s] <- %p[%s]", before, names[before->type], after, names[after->type]);
@@ -2840,10 +2840,10 @@ static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 			has_before = 1;
 			goto recurse_done;
 		}
-		if(!(dep->before.desc->flags & CHDESC_MARKED))
+		if(!(dep->before.desc->flags & PATCH_MARKED))
 		{
 			/* Recursively check befores; equivalent to:
-			 * if(chdesc_has_before(dep->before.desc, before))
+			 * if(patch_has_before(dep->before.desc, before))
 			 *	return 1; */
 			state->after = after;
 			state->dep = dep;
@@ -2863,7 +2863,7 @@ static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 		state--;
 		after = state->after;
 		dep = state->dep;
-		/* the chdesc graph is a DAG, so unmarking here would defeat the purpose */
+		/* the patch graph is a DAG, so unmarking here would defeat the purpose */
 		goto recurse_resume;
 	}
 	
@@ -2874,18 +2874,18 @@ static int chdesc_has_before(chdesc_t * after, chdesc_t * before)
 }
 #endif
 
-void chdesc_dep_remove(chdepdesc_t * dep)
+void patch_dep_remove(chdepdesc_t * dep)
 {
 	propagate_depend_remove(dep->after.desc, dep->before.desc);
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_BEFORE, dep->after.desc, dep->before.desc);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REM_BEFORE, dep->after.desc, dep->before.desc);
 	*dep->before.ptr = dep->before.next;
 	if(dep->before.next)
 		dep->before.next->before.ptr = dep->before.ptr;
 	else
 		dep->after.desc->befores_tail = dep->before.ptr;
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_REM_AFTER, dep->before.desc, dep->after.desc);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REM_AFTER, dep->before.desc, dep->after.desc);
 	*dep->after.ptr = dep->after.next;
 	if(dep->after.next)
 		dep->after.next->after.ptr = dep->after.ptr;
@@ -2893,8 +2893,8 @@ void chdesc_dep_remove(chdepdesc_t * dep)
 		dep->before.desc->afters_tail = dep->after.ptr;
 	
 	if(dep->after.desc->type == NOOP && !dep->after.desc->befores)
-		/* we just removed the last before of a NOOP chdesc, so satisfy it */
-		chdesc_satisfy(&dep->after.desc);
+		/* we just removed the last before of a NOOP patch, so satisfy it */
+		patch_satisfy(&dep->after.desc);
 
 #if 0 /* YOU_HAVE_TIME_TO_WASTE */
 	memset(dep, 0, sizeof(*dep));
@@ -2903,7 +2903,7 @@ void chdesc_dep_remove(chdepdesc_t * dep)
 	account_update(&act_ndeps, -1);
 }
 
-void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
+void patch_remove_depend(patch_t * after, patch_t * before)
 {
 	chdepdesc_t * scan_befores = after->befores;
 	chdepdesc_t * scan_afters = before->afters;
@@ -2915,9 +2915,9 @@ void chdesc_remove_depend(chdesc_t * after, chdesc_t * before)
 		scan_afters = scan_afters->after.next;
 	}
 	if(scan_befores && scan_befores->before.desc == before)
-		chdesc_dep_remove(scan_befores);
+		patch_dep_remove(scan_befores);
 	else if(scan_afters && scan_afters->after.desc == after)
-		chdesc_dep_remove(scan_afters);
+		patch_dep_remove(scan_afters);
 }
 
 #if REVISION_TAIL_INPLACE
@@ -2950,396 +2950,396 @@ static void memxchg(void * p, void * q, size_t n)
 }
 #endif
 
-int chdesc_apply(chdesc_t * chdesc)
+int patch_apply(patch_t * patch)
 {
-	if(!(chdesc->flags & CHDESC_ROLLBACK))
+	if(!(patch->flags & PATCH_ROLLBACK))
 		return -EINVAL;
 #if REVISION_TAIL_INPLACE
-	switch(chdesc->type)
+	switch(patch->type)
 	{
 		case BIT:
-			*(uint32_t *) (bdesc_data(chdesc->block) + chdesc->offset) ^= chdesc->bit.xor;
+			*(uint32_t *) (bdesc_data(patch->block) + patch->offset) ^= patch->bit.xor;
 			break;
 		case BYTE:
-			if(!chdesc->byte.data)
+			if(!patch->byte.data)
 				return -EINVAL;
-#if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.new_sum)
-				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+#if PATCH_BYTE_SUM
+			if(patch_byte_sum(patch->byte.data, patch->length) != patch->byte.new_sum)
+				printf("%s(): (%s:%d): BYTE patch %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, patch, FSTITCH_DEBUG_COUNT());
 #endif
 #if SWAP_FULLBLOCK_DATA
-			if(chdesc->length == chdesc->block->length)
+			if(patch->length == patch->block->length)
 			{
-				uint8_t * old_block = bdesc_data(chdesc->block);
-				assert(!chdesc->offset);
+				uint8_t * old_block = bdesc_data(patch->block);
+				assert(!patch->offset);
 				/* NOTE: these three lines need to be updated for the
-				 * integrated linux-kudos buffer cache */
-				assert(chdesc->byte.data != chdesc->byte.ldata);
-				chdesc->block->data = chdesc->byte.data;
-				chdesc->byte.data = old_block;
+				 * integrated linux-fsttich buffer cache */
+				assert(patch->byte.data != patch->byte.ldata);
+				patch->block->data = patch->byte.data;
+				patch->byte.data = old_block;
 			}
 			else
 #endif
-				memxchg(&chdesc->block->data[chdesc->offset], chdesc->byte.data, chdesc->length);
-#if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.old_sum)
-				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+				memxchg(&patch->block->data[patch->offset], patch->byte.data, patch->length);
+#if PATCH_BYTE_SUM
+			if(patch_byte_sum(patch->byte.data, patch->length) != patch->byte.old_sum)
+				printf("%s(): (%s:%d): BYTE patch %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, patch, FSTITCH_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
 			/* NOOP application is easy! */
 			break;
 		default:
-			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			printf("%s(): (%s:%d): unexpected patch of type %d!\n", __FUNCTION__, __FILE__, __LINE__, patch->type);
 			return -EINVAL;
 	}
 #endif /* REVISION_TAIL_INPLACE */
-	chdesc->flags &= ~CHDESC_ROLLBACK;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_APPLY, chdesc);
+	patch->flags &= ~PATCH_ROLLBACK;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_APPLY, patch);
 	return 0;
 }
 
 #if REVISION_TAIL_INPLACE
-int chdesc_rollback(chdesc_t * chdesc)
+int patch_rollback(patch_t * patch)
 #else
-int chdesc_rollback(chdesc_t * chdesc, uint8_t * buffer)
+int patch_rollback(patch_t * patch, uint8_t * buffer)
 #endif
 {
-	if(chdesc->flags & CHDESC_ROLLBACK)
+	if(patch->flags & PATCH_ROLLBACK)
 		return -EINVAL;
-	switch(chdesc->type)
+	switch(patch->type)
 	{
 		case BIT:
 #if REVISION_TAIL_INPLACE
-			*(uint32_t *) (chdesc->block->data + chdesc->offset) ^= chdesc->bit.xor;
+			*(uint32_t *) (patch->block->data + patch->offset) ^= patch->bit.xor;
 #else
-			*(uint32_t *) (buffer + chdesc->offset) ^= chdesc->bit.xor;
+			*(uint32_t *) (buffer + patch->offset) ^= patch->bit.xor;
 #endif
 			break;
 		case BYTE:
-			if(!chdesc->byte.data)
+			if(!patch->byte.data)
 				return -EINVAL;
-#if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.old_sum)
-				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+#if PATCH_BYTE_SUM
+			if(patch_byte_sum(patch->byte.data, patch->length) != patch->byte.old_sum)
+				printf("%s(): (%s:%d): BYTE patch %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, patch, FSTITCH_DEBUG_COUNT());
 #endif
 #if SWAP_FULLBLOCK_DATA
-			if(chdesc->length == chdesc->block->length)
+			if(patch->length == patch->block->length)
 			{
-				uint8_t * new_block = chdesc->block->data;
-				assert(!chdesc->offset);
-				assert(chdesc->byte.data != chdesc->byte.ldata);
-				chdesc->block->data = chdesc->byte.data;
-				chdesc->byte.data = new_block;
+				uint8_t * new_block = patch->block->data;
+				assert(!patch->offset);
+				assert(patch->byte.data != patch->byte.ldata);
+				patch->block->data = patch->byte.data;
+				patch->byte.data = new_block;
 			}
 			else
 #endif
 #if REVISION_TAIL_INPLACE
-				memxchg(&chdesc->block->data[chdesc->offset], chdesc->byte.data, chdesc->length);
+				memxchg(&patch->block->data[patch->offset], patch->byte.data, patch->length);
 #else
-			memcpy(&buffer[chdesc->offset], chdesc->byte.data, chdesc->length);
+			memcpy(&buffer[patch->offset], patch->byte.data, patch->length);
 #endif
-#if CHDESC_BYTE_SUM
-			if(chdesc_byte_sum(chdesc->byte.data, chdesc->length) != chdesc->byte.new_sum)
-				printf("%s(): (%s:%d): BYTE chdesc %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, chdesc, KFS_DEBUG_COUNT());
+#if PATCH_BYTE_SUM
+			if(patch_byte_sum(patch->byte.data, patch->length) != patch->byte.new_sum)
+				printf("%s(): (%s:%d): BYTE patch %p is corrupted! (debug = %d)\n", __FUNCTION__, __FILE__, __LINE__, patch, FSTITCH_DEBUG_COUNT());
 #endif
 			break;
 		case NOOP:
 			/* NOOP rollback is easy! */
 			break;
 		default:
-			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, chdesc->type);
+			printf("%s(): (%s:%d): unexpected patch of type %d!\n", __FUNCTION__, __FILE__, __LINE__, patch->type);
 			return -EINVAL;
 	}
-	chdesc->flags |= CHDESC_ROLLBACK;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_ROLLBACK, chdesc);
+	patch->flags |= PATCH_ROLLBACK;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_ROLLBACK, patch);
 	return 0;
 }
 
-void chdesc_set_inflight(chdesc_t * chdesc)
+void patch_set_inflight(patch_t * patch)
 {
-	uint16_t owner_level = chdesc_level(chdesc);
+	uint16_t owner_level = patch_level(patch);
 #if BDESC_EXTERN_AFTER_COUNT
 	chdepdesc_t * dep;
 #endif
 	
-	assert(!(chdesc->flags & CHDESC_INFLIGHT));
-	assert(chdesc->type != NOOP);
+	assert(!(patch->flags & PATCH_INFLIGHT));
+	assert(patch->type != NOOP);
 	
 #if BDESC_EXTERN_AFTER_COUNT
 	/* Pre-decrement extern_after_count to give a more useful view for
-	 * optimizations (eg allow a new NRB on chdesc's block).
+	 * optimizations (eg allow a new NRB on patch's block).
 	 * propagate_depend_remove() takes this pre-decrement into account. */
-	for(dep = chdesc->afters; dep; dep = dep->after.next)
-		propagate_extern_after_change(dep->after.desc, chdesc, 0);
+	for(dep = patch->afters; dep; dep = dep->after.next)
+		propagate_extern_after_change(dep->after.desc, patch, 0);
 #endif
 	
-#if CHDESC_NRB
-	/* New chdescs cannot be merged into an inflight chdesc so allow
+#if PATCH_NRB
+	/* New patchs cannot be merged into an inflight patch so allow
 	 * for a new NRB */
-	if(chdesc == WEAK(chdesc->block->nrb))
-		(void) chdesc_weak_release(&chdesc->block->nrb, 0);
+	if(patch == WEAK(patch->block->nrb))
+		(void) patch_weak_release(&patch->block->nrb, 0);
 #endif
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_INFLIGHT);
-	chdesc->flags |= CHDESC_INFLIGHT;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_INFLIGHT);
+	patch->flags |= PATCH_INFLIGHT;
 	
-	/* in-flight chdescs +1 their level to prevent afters from following */
-	chdesc_propagate_level_change(chdesc, owner_level, chdesc_level(chdesc));
+	/* in-flight patchs +1 their level to prevent afters from following */
+	patch_propagate_level_change(patch, owner_level, patch_level(patch));
 }
 
-static inline void chdesc_weak_collect(chdesc_t * chdesc)
+static inline void patch_weak_collect(patch_t * patch)
 {
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_WEAK_COLLECT, chdesc);
-	while(chdesc->weak_refs)
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_WEAK_COLLECT, patch);
+	while(patch->weak_refs)
 	{
-		assert(chdesc->weak_refs->chdesc == chdesc);
-		assert(chdesc->weak_refs->pprev == &chdesc->weak_refs);
-		chdesc_weak_release(chdesc->weak_refs, 1);
+		assert(patch->weak_refs->patch == patch);
+		assert(patch->weak_refs->pprev == &patch->weak_refs);
+		patch_weak_release(patch->weak_refs, 1);
 	}
 }
 
-/* satisfy a change descriptor, i.e. remove it from all afters and add it to the list of written chdescs */
-int chdesc_satisfy(chdesc_t ** chdesc)
+/* satisfy a change descriptor, i.e. remove it from all afters and add it to the list of written patchs */
+int patch_satisfy(patch_t ** patch)
 {
-	if((*chdesc)->flags & CHDESC_WRITTEN)
+	if((*patch)->flags & PATCH_WRITTEN)
 	{
-		printf("%s(): (%s:%d): satisfaction of already satisfied chdesc!\n", __FUNCTION__, __FILE__, __LINE__);
+		printf("%s(): (%s:%d): satisfaction of already satisfied patch!\n", __FUNCTION__, __FILE__, __LINE__);
 		return 0;
 	}
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_INFO, KDB_CHDESC_SATISFY, *chdesc);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_SATISFY, *patch);
 	
-	if((*chdesc)->befores)
+	if((*patch)->befores)
 	{
-		/* We are trying to satisfy a chdesc with befores, which means
+		/* We are trying to satisfy a patch with befores, which means
 		 * we are writing data out of order. If it is a NOOP, allow it
 		 * silently, but otherwise this is an error. If it is a NOOP,
 		 * collect any weak references to it in case anybody is watching
 		 * it to see when it gets "satisfied." */
-		assert((*chdesc)->type == NOOP);
+		assert((*patch)->type == NOOP);
 	}
 	else
 	{
-		while((*chdesc)->afters)
-			chdesc_dep_remove((*chdesc)->afters);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_WRITTEN);
-		(*chdesc)->flags |= CHDESC_WRITTEN;
+		while((*patch)->afters)
+			patch_dep_remove((*patch)->afters);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, *patch, PATCH_WRITTEN);
+		(*patch)->flags |= PATCH_WRITTEN;
 		
 		/* we don't need the data in byte change descriptors anymore */
-		if((*chdesc)->type == BYTE)
+		if((*patch)->type == BYTE)
 		{
-			if((*chdesc)->byte.data)
+			if((*patch)->byte.data)
 			{
-				chdesc_free_byte_data(*chdesc);
-				(*chdesc)->byte.data = NULL;
-				/* data == NULL does not mean "cannot be rolled back" since the chdesc is satisfied */
+				patch_free_byte_data(*patch);
+				(*patch)->byte.data = NULL;
+				/* data == NULL does not mean "cannot be rolled back" since the patch is satisfied */
 			}
 		}
 		
-		/* make sure we're not already destroying this chdesc */
-		if(!((*chdesc)->flags & CHDESC_FREEING))
+		/* make sure we're not already destroying this patch */
+		if(!((*patch)->flags & PATCH_FREEING))
 		{
-			assert(!(*chdesc)->free_prev && !(*chdesc)->free_next);
-			chdesc_free_push(*chdesc);
+			assert(!(*patch)->free_prev && !(*patch)->free_next);
+			patch_free_push(*patch);
 		}
 	}
 	
-	chdesc_unlink_overlap(*chdesc);
-	chdesc_unlink_index_changes(*chdesc);
-	chdesc_unlink_ready_changes(*chdesc);
-	chdesc_unlink_all_changes(*chdesc);
+	patch_unlink_overlap(*patch);
+	patch_unlink_index_changes(*patch);
+	patch_unlink_ready_changes(*patch);
+	patch_unlink_all_changes(*patch);
 	
-	chdesc_weak_collect(*chdesc);
+	patch_weak_collect(*patch);
 	
-	if((*chdesc)->flags & CHDESC_BIT_NOOP)
+	if((*patch)->flags & PATCH_BIT_NOOP)
 	{
-		assert((*chdesc)->noop.bit_changes);
-		assert(hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key) == *chdesc);
-		hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_CLEAR_FLAGS, *chdesc, CHDESC_BIT_NOOP);
-		(*chdesc)->flags &= ~CHDESC_BIT_NOOP;
+		assert((*patch)->noop.bit_changes);
+		assert(hash_map_find_val((*patch)->noop.bit_changes, (*patch)->noop.hash_key) == *patch);
+		hash_map_erase((*patch)->noop.bit_changes, (*patch)->noop.hash_key);
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, *patch, PATCH_BIT_NOOP);
+		(*patch)->flags &= ~PATCH_BIT_NOOP;
 	}
 	
-	*chdesc = NULL;
+	*patch = NULL;
 	return 0;
 }
 
-void chdesc_weak_retain(chdesc_t * chdesc, chweakref_t * weak, chdesc_satisfy_callback_t callback, void * callback_data)
+void patch_weak_retain(patch_t * patch, chweakref_t * weak, patch_satisfy_callback_t callback, void * callback_data)
 {
-	if(weak->chdesc)
+	if(weak->patch)
 	{
-		if(weak->chdesc == chdesc)
+		if(weak->patch == patch)
 		{
-#if CHDESC_WEAKREF_CALLBACKS
+#if PATCH_WEAKREF_CALLBACKS
 			weak->callback = callback;
 			weak->callback_data = callback_data;
 #endif
 			return;
 		}
 		else
-			chdesc_weak_release(weak, 0);
+			patch_weak_release(weak, 0);
 	}
 	
-	if(chdesc)
+	if(patch)
 	{
-		assert(!(chdesc->flags & CHDESC_SET_NOOP));
-		weak->chdesc = chdesc;
-#if CHDESC_WEAKREF_CALLBACKS
+		assert(!(patch->flags & PATCH_SET_NOOP));
+		weak->patch = patch;
+#if PATCH_WEAKREF_CALLBACKS
 		weak->callback = callback;
 		weak->callback_data = callback_data;
 #endif
-		weak->pprev = &chdesc->weak_refs;
-		weak->next = chdesc->weak_refs;
-		if(chdesc->weak_refs)
-			chdesc->weak_refs->pprev = &weak->next;
-		chdesc->weak_refs = weak;
-		KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_WEAK_RETAIN, chdesc, weak);
+		weak->pprev = &patch->weak_refs;
+		weak->next = patch->weak_refs;
+		if(patch->weak_refs)
+			patch->weak_refs->pprev = &weak->next;
+		patch->weak_refs = weak;
+		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_WEAK_RETAIN, patch, weak);
 	}
 }
 
-void chdesc_destroy(chdesc_t ** chdesc)
+void patch_destroy(patch_t ** patch)
 {
-	/* were we recursively called by chdesc_remove_depend()? */
-	if((*chdesc)->flags & CHDESC_FREEING)
+	/* were we recursively called by patch_remove_depend()? */
+	if((*patch)->flags & PATCH_FREEING)
 		return;
-	(*chdesc)->flags |= CHDESC_FREEING;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, *chdesc, CHDESC_FREEING);
+	(*patch)->flags |= PATCH_FREEING;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, *patch, PATCH_FREEING);
 	
-	if((*chdesc)->flags & CHDESC_WRITTEN)
+	if((*patch)->flags & PATCH_WRITTEN)
 	{
-		assert(!(*chdesc)->afters && !(*chdesc)->befores);
-		if(free_head == *chdesc || (*chdesc)->free_prev)
-			chdesc_free_remove(*chdesc);
-		account_nchdescs((*chdesc)->type, -1);
+		assert(!(*patch)->afters && !(*patch)->befores);
+		if(free_head == *patch || (*patch)->free_prev)
+			patch_free_remove(*patch);
+		account_npatchs((*patch)->type, -1);
 	}
 	else
 	{
-		if((*chdesc)->type != NOOP)
+		if((*patch)->type != NOOP)
 		{
-			if((*chdesc)->afters && (*chdesc)->flags & CHDESC_OVERLAP)
+			if((*patch)->afters && (*patch)->flags & PATCH_OVERLAP)
 			{
 				/* this is perfectly allowed, but while we are switching to this new system, print a warning */
-				printf("%s(): (%s:%d): destroying completely overlapping unwritten chdesc: %p!\n", __FUNCTION__, __FILE__, __LINE__, *chdesc);
+				printf("%s(): (%s:%d): destroying completely overlapping unwritten patch: %p!\n", __FUNCTION__, __FILE__, __LINE__, *patch);
 			}
 		}
-		else if(free_head == *chdesc || (*chdesc)->free_prev)
+		else if(free_head == *patch || (*patch)->free_prev)
 		{
-			assert(!(*chdesc)->befores);
-			chdesc_free_remove(*chdesc);
+			assert(!(*patch)->befores);
+			patch_free_remove(*patch);
 		}
-		account_nchdescs_undo((*chdesc)->type);
+		account_npatchs_undo((*patch)->type);
 	}
 	
-	/* remove befores first, so chdesc_satisfy() won't complain */
-	while((*chdesc)->befores)
-		chdesc_dep_remove((*chdesc)->befores);
-	if((*chdesc)->afters)
+	/* remove befores first, so patch_satisfy() won't complain */
+	while((*patch)->befores)
+		patch_dep_remove((*patch)->befores);
+	if((*patch)->afters)
 	{
-		/* chdesc_satisfy will set it to NULL */
-		chdesc_t * desc = *chdesc;
-		chdesc_satisfy(&desc);
+		/* patch_satisfy will set it to NULL */
+		patch_t * desc = *patch;
+		patch_satisfy(&desc);
 	}
 
-	chdesc_unlink_overlap(*chdesc);
-	chdesc_unlink_index_changes(*chdesc);
-	chdesc_unlink_ready_changes(*chdesc);
-	chdesc_unlink_all_changes(*chdesc);
+	patch_unlink_overlap(*patch);
+	patch_unlink_index_changes(*patch);
+	patch_unlink_ready_changes(*patch);
+	patch_unlink_all_changes(*patch);
 	
-	chdesc_weak_collect(*chdesc);
+	patch_weak_collect(*patch);
 	
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_DESTROY, *chdesc);
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_DESTROY, *patch);
 	
-	switch((*chdesc)->type)
+	switch((*patch)->type)
 	{
 		case BYTE:
-			/* chdesc_satisfy() does free 'data', but error cases may not */
-			//if(!(*chdesc)->byte.satisfy_freed)
+			/* patch_satisfy() does free 'data', but error cases may not */
+			//if(!(*patch)->byte.satisfy_freed)
 			{
-				if(chdesc_is_rollbackable(*chdesc))
+				if(patch_is_rollbackable(*patch))
 				{
-					chdesc_free_byte_data(*chdesc);
-					(*chdesc)->byte.data = NULL;
+					patch_free_byte_data(*patch);
+					(*patch)->byte.data = NULL;
 				}
 				//else
 				//	account_update(&act_nnrb, -1);
 			}
 			break;
 		case NOOP:
-			if((*chdesc)->flags & CHDESC_BIT_NOOP)
+			if((*patch)->flags & PATCH_BIT_NOOP)
 			{
-				assert((*chdesc)->noop.bit_changes);
-				assert(hash_map_find_val((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key) == *chdesc);
-				hash_map_erase((*chdesc)->noop.bit_changes, (*chdesc)->noop.hash_key);
+				assert((*patch)->noop.bit_changes);
+				assert(hash_map_find_val((*patch)->noop.bit_changes, (*patch)->noop.hash_key) == *patch);
+				hash_map_erase((*patch)->noop.bit_changes, (*patch)->noop.hash_key);
 			}
 			/* fall through */
 		case BIT:
 			break;
 		default:
-			printf("%s(): (%s:%d): unexpected chdesc of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*chdesc)->type);
+			printf("%s(): (%s:%d): unexpected patch of type %d!\n", __FUNCTION__, __FILE__, __LINE__, (*patch)->type);
 	}
 	
-	if((*chdesc)->block)
-		bdesc_release(&(*chdesc)->block);
+	if((*patch)->block)
+		bdesc_release(&(*patch)->block);
 	
-#if COUNT_CHDESCS && !COUNT_CHDESCS_IS_TOTAL
-	chdesc_counts[(*chdesc)->type]--;
+#if COUNT_PATCHS && !COUNT_PATCHS_IS_TOTAL
+	patch_counts[(*patch)->type]--;
 	dump_counts();
 #endif
 #if 0 /* YOU_HAVE_TIME_TO_WASTE */
-	memset(*chdesc, 0, sizeof(**chdesc));
+	memset(*patch, 0, sizeof(**patch));
 #endif
-	chdesc_free(*chdesc);
-	*chdesc = NULL;
+	patch_free(*patch);
+	*patch = NULL;
 }
 
-void chdesc_claim_noop(chdesc_t * chdesc)
+void patch_claim_noop(patch_t * patch)
 {
-	assert(chdesc->type == NOOP && !chdesc->befores);
-	assert(chdesc_before_level(chdesc) == BDLEVEL_NONE);
-	if(chdesc->free_prev || free_head == chdesc)
-		chdesc_free_remove(chdesc);
+	assert(patch->type == NOOP && !patch->befores);
+	assert(patch_before_level(patch) == BDLEVEL_NONE);
+	if(patch->free_prev || free_head == patch)
+		patch_free_remove(patch);
 }
 
-void chdesc_autorelease_noop(chdesc_t * chdesc)
+void patch_autorelease_noop(patch_t * patch)
 {
-	assert(chdesc->type == NOOP && !chdesc->befores && !(chdesc->flags & CHDESC_WRITTEN));
-	assert(chdesc_before_level(chdesc) == BDLEVEL_NONE);
-	while(chdesc->afters)
-		chdesc_dep_remove(chdesc->afters);
-	if(!chdesc->free_prev && free_head != chdesc)
-		chdesc_free_push(chdesc);
+	assert(patch->type == NOOP && !patch->befores && !(patch->flags & PATCH_WRITTEN));
+	assert(patch_before_level(patch) == BDLEVEL_NONE);
+	while(patch->afters)
+		patch_dep_remove(patch->afters);
+	if(!patch->free_prev && free_head != patch)
+		patch_free_push(patch);
 }
 
-void chdesc_set_noop_declare(chdesc_t * chdesc)
+void patch_set_noop_declare(patch_t * patch)
 {
-	assert(chdesc->type == NOOP && !chdesc->afters && !(chdesc->flags & CHDESC_WRITTEN));
-	chdesc->flags |= CHDESC_SET_NOOP;
-	KFS_DEBUG_SEND(KDB_MODULE_CHDESC_ALTER, KDB_CHDESC_SET_FLAGS, chdesc, CHDESC_SET_NOOP);
-	if(!chdesc->free_prev && free_head != chdesc)
-		chdesc_free_push(chdesc);
+	assert(patch->type == NOOP && !patch->afters && !(patch->flags & PATCH_WRITTEN));
+	patch->flags |= PATCH_SET_NOOP;
+	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_SET_NOOP);
+	if(!patch->free_prev && free_head != patch)
+		patch_free_push(patch);
 }
 
-void chdesc_reclaim_written(void)
+void patch_reclaim_written(void)
 {
 	while(free_head)
 	{
-		chdesc_t * first = free_head;
-		chdesc_free_remove(first);
-		if(first->flags & CHDESC_SET_NOOP)
+		patch_t * first = free_head;
+		patch_free_remove(first);
+		if(first->flags & PATCH_SET_NOOP)
 		{
 			assert(first->type == NOOP);
 			assert(!first->afters);
 			while(first->befores)
-				chdesc_dep_remove(first->befores);
+				patch_dep_remove(first->befores);
 		}
-		chdesc_destroy(&first);
+		patch_destroy(&first);
 	}
 }
 
-int chdesc_init(void)
+int patch_init(void)
 {
-	int r = kfsd_register_shutdown_module(chpools_free_all, NULL, SHUTDOWN_POSTMODULES);
+	int r = fstitchd_register_shutdown_module(chpools_free_all, NULL, SHUTDOWN_POSTMODULES);
 	if (r < 0)
 		return r;
 	return account_init_all();

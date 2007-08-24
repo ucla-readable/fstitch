@@ -1,18 +1,18 @@
 #include <lib/platform.h>
 #include <lib/vector.h>
 
-#include <kfs/cfs.h>
-#include <kfs/lfs.h>
-#include <kfs/bd.h>
-#include <kfs/journal_bd.h>
-#include <kfs/modman.h>
-#include <kfs/destroy.h>
+#include <fscore/cfs.h>
+#include <fscore/lfs.h>
+#include <fscore/bd.h>
+#include <fscore/journal_bd.h>
+#include <fscore/modman.h>
+#include <fscore/destroy.h>
 
 
 // Destroy all modules of type 'module' that have no users.
 // Note:
 // Right now destroying modules does not cause data writes, but if modules
-// begin to do this we will need to call chdesc_reclaim_written() before
+// begin to do this we will need to call patch_reclaim_written() before
 // destroying blockman-using BDs.
 #define DESTROY_ALL(module, type) \
 static size_t destroy_all_##type(void) \
@@ -60,7 +60,7 @@ DESTROY_ALL(BD_t, bd);
 
 
 // Destroy all journal_bd journal uses to ensure there are no journal-induced
-// cycles. It is safe to just remove the journal use because kfsd has synced.
+// cycles. It is safe to just remove the journal use because fstitchd has synced.
 void destroy_journal_uses(void)
 {
 	modman_it_t it;
