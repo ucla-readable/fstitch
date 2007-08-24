@@ -26,7 +26,7 @@
 /* "head" parameter:
  * - The functions below that take a head parameter are mutators and
  *   will pass back the changes they make using that pointer. The
- *   change descriptor subgraphs they generate will be set up so that
+ *   patch subgraphs they generate will be set up so that
  *   the head pointer depends on the whole subgraph.
  *   To make something depend on the resulting subgraph, make it depend
  *   on the head.
@@ -34,7 +34,7 @@
  *   non-NULL, the newly created subgraph will be made to depend on it.
  *   Thus to make the resulting subgraph depend on something else, pass
  *   that something else in as *head. If that something else is not
- *   known ahead of time, create a null change descriptor, claim it,
+ *   known ahead of time, create a null patch, claim it,
  *   and pass it in as *head. Afterwards, hook up the null change
  *   descriptor appropriately and unclaim it.
  */

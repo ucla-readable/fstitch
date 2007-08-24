@@ -32,7 +32,7 @@ static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patc
 	fprintf(stderr, "%s() is very confused! (debug = %d)\n", function, FSTITCH_DEBUG_COUNT());
 	for(i = 0; i != count; i++)
 	{
-		chdepdesc_t * scan;
+		patchdep_t * scan;
 		int total = 0;
 		if(!patchs[i])
 		{
@@ -133,12 +133,12 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	memcpy(buffer, bdesc_data(block), block->length);
 #endif
 	
-	if(!block->all_changes)
+	if(!block->all_patches)
 		return 0;
 	
 	/* find out how many patchs are to be rolled back */
-	/* TODO: look into using ready_changes here? */
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	/* TODO: look into using ready_patches here? */
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
@@ -148,7 +148,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	if(!patchs)
 		return -ENOMEM;
 	
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			patchs[i++] = scan;
 	
@@ -158,7 +158,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 		int progress = 0;
 		for(i = 0; i != count; i++)
 		{
-			chdepdesc_t * scan;
+			patchdep_t * scan;
 			/* already rolled back? */
 			if(patchs[i]->flags & PATCH_ROLLBACK)
 				continue;
@@ -222,11 +222,11 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 	patch_t ** patchs;
 	int i = 0, count = 0;
 	
-	if(!block->all_changes)
+	if(!block->all_patches)
 		return 0;
 	
 	/* find out how many patchs are to be rolled forward */
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
@@ -236,7 +236,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 	if(!patchs)
 		return -ENOMEM;
 	
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			patchs[i++] = scan;
 	
@@ -246,7 +246,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 		int progress = 0;
 		for(i = count - 1; i != -1; i--)
 		{
-			chdepdesc_t * scan;
+			patchdep_t * scan;
 			/* already rolled forward? */
 			if(!(patchs[i]->flags & PATCH_ROLLBACK))
 				continue;
@@ -284,11 +284,11 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 #else
 	int count = 0;
 	
-	if(!block->all_changes)
+	if(!block->all_patches)
 		return 0;
 	
 	/* we can roll them forward in any order we want, since it just marks it as rolled forward */
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 		{
 			patch_apply(scan);
@@ -310,11 +310,11 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 	patch_t ** patchs;
 	int i = 0, count = 0;
 	
-	if(!block->all_changes)
+	if(!block->all_patches)
 		return 0;
 	
 	/* find out how many patchs are to be satisfied */
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			count++;
 	if(!count)
@@ -324,7 +324,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 	if(!patchs)
 		return -ENOMEM;
 	
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			patchs[i++] = scan;
 	
@@ -423,10 +423,10 @@ int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd)
 	patch_t * scan;
 	int r;
 	
-	if(!block->all_changes)
+	if(!block->all_patches)
 		return 0;
 	
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(scan->owner == bd)
 			patch_set_inflight(scan);
 		else if(!patch_is_rollbackable(scan))
@@ -504,14 +504,14 @@ void revision_tail_wait_for_landing_requests(void)
  * or below them. But that's OK, because they don't need to. Hence there is no
  * revision_slice_prepare() function, because modules don't need to apply or
  * roll back any patchs to use revision slices. Basically a revision slice is a
- * set of change descriptors at a particular time, organized in a nice way so
+ * set of patchs at a particular time, organized in a nice way so
  * that we can figure out which ones are ready to be written down and which ones
  * are not. */
 
-/* move 'patch' from its ddesc's all_changes list to the list 'tmp_ready' and preserve its all_changes neighbors its tmp list */
+/* move 'patch' from its ddesc's all_patches list to the list 'tmp_ready' and preserve its all_patches neighbors its tmp list */
 static void link_tmp_ready(patch_t ** tmp_ready, patch_t *** tmp_ready_tail, patch_t * patch)
 {
-	patch_tmpize_all_changes(patch);
+	patch_tmpize_all_patches(patch);
 
 	patch->ddesc_pprev = tmp_ready;
 	patch->ddesc_next = *tmp_ready;
@@ -522,7 +522,7 @@ static void link_tmp_ready(patch_t ** tmp_ready, patch_t *** tmp_ready_tail, pat
 		*tmp_ready_tail = &patch->ddesc_next;
 }
 
-/* move 'patch' back from the list 'tmp_ready' to its ddesc's all_changes */
+/* move 'patch' back from the list 'tmp_ready' to its ddesc's all_patches */
 static void unlink_tmp_ready(patch_t ** tmp_ready, patch_t *** tmp_ready_tail, patch_t * patch)
 {
 	assert(patch->block && patch->owner);
@@ -539,14 +539,14 @@ static void unlink_tmp_ready(patch_t ** tmp_ready, patch_t *** tmp_ready_tail, p
 	else
 		assert(!patch->ddesc_next);
 
-	patch_untmpize_all_changes(patch);
+	patch_untmpize_all_patches(patch);
 }
 
 int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision_slice_t * slice)
 {
 	patch_t * tmp_ready = NULL;
 	patch_t ** tmp_ready_tail = &tmp_ready;
-	patch_dlist_t * rcl = &block->ready_changes[owner->level];
+	patch_dlist_t * rcl = &block->ready_patches[owner->level];
 	patch_t * scan;
 	/* To write a block revision, all non-ready patchs on the block must
 	 * first be rolled back. Thus when there are non-ready patchs with
@@ -569,13 +569,13 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 
 		/* push down to update the ready list */
 		link_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
-		patch_unlink_index_changes(scan);
-		patch_unlink_ready_changes(scan);
+		patch_unlink_index_patches(scan);
+		patch_unlink_ready_patches(scan);
 		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, scan, target);
 		scan->owner = target;
 		patch_propagate_level_change(scan, owner->level, target->level);
-		patch_update_ready_changes(scan);
-		patch_link_index_changes(scan);
+		patch_update_ready_patches(scan);
+		patch_link_index_patches(scan);
 	}
 
 #if PATCH_NRB && !PATCH_RB_NRB_READY
@@ -584,7 +584,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 #endif
 
 	/* TODO: instead of scanning, we could keep and read a running count in the ddesc */
-	for(scan = block->all_changes; scan; scan = scan->ddesc_next)
+	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(scan->owner == owner)
 		{
 			slice->all_ready = 0;
@@ -605,14 +605,14 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 			for(scan = tmp_ready; scan;)
 			{
 				patch_t * next = scan->ddesc_next;
-				patch_unlink_index_changes(scan);
-				patch_unlink_ready_changes(scan);
+				patch_unlink_index_patches(scan);
+				patch_unlink_ready_patches(scan);
 				FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, scan, owner);
 				scan->owner = owner;
 				patch_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
-				patch_update_ready_changes(scan);
-				patch_link_index_changes(scan);
+				patch_update_ready_patches(scan);
+				patch_link_index_patches(scan);
 				scan = next;
 			}
 			
@@ -651,11 +651,11 @@ void revision_slice_push_down(revision_slice_t * slice)
 		{
 			uint16_t prev_level = patch_level(slice->ready[i]);
 			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, slice->ready[i], slice->target);
-			patch_unlink_index_changes(slice->ready[i]);
-			patch_unlink_ready_changes(slice->ready[i]);
+			patch_unlink_index_patches(slice->ready[i]);
+			patch_unlink_ready_patches(slice->ready[i]);
 			slice->ready[i]->owner = slice->target;
-			patch_update_ready_changes(slice->ready[i]);
-			patch_link_index_changes(slice->ready[i]);
+			patch_update_ready_patches(slice->ready[i]);
+			patch_link_index_patches(slice->ready[i]);
 			if(prev_level != patch_level(slice->ready[i]))
 				patch_propagate_level_change(slice->ready[i], prev_level, patch_level(slice->ready[i]));
 		}
@@ -676,11 +676,11 @@ void revision_slice_pull_up(revision_slice_t * slice)
 		{
 			uint16_t prev_level = patch_level(slice->ready[i]);
 			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, slice->ready[i], slice->owner);
-			patch_unlink_index_changes(slice->ready[i]);
-			patch_unlink_ready_changes(slice->ready[i]);
+			patch_unlink_index_patches(slice->ready[i]);
+			patch_unlink_ready_patches(slice->ready[i]);
 			slice->ready[i]->owner = slice->owner;
-			patch_update_ready_changes(slice->ready[i]);
-			patch_link_index_changes(slice->ready[i]);
+			patch_update_ready_patches(slice->ready[i]);
+			patch_link_index_patches(slice->ready[i]);
 			if(prev_level != patch_level(slice->ready[i]))
 				patch_propagate_level_change(slice->ready[i], prev_level, patch_level(slice->ready[i]));
 		}

@@ -193,7 +193,7 @@ static int wbr_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	if(!block->ddesc->index_changes[object->graph_index].head)
+	if(!block->ddesc->index_patches[object->graph_index].head)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->bd, &slice);

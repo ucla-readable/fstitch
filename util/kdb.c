@@ -662,7 +662,7 @@ struct patch {
 	uint32_t address;
 	int opcode;
 	uint32_t owner, block;
-	enum {BIT, BYTE, NOOP} type;
+	enum {BIT, BYTE, EMPTY} type;
 	union {
 		struct {
 			uint16_t offset;
@@ -684,7 +684,7 @@ struct patch {
 	struct patch * group_next[2];
 };
 
-static const char * type_names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [NOOP] = "NOOP"};
+static const char * type_names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [EMPTY] = "EMPTY"};
 
 static struct bd * bds = NULL;
 static struct block * blocks[HASH_TABLE_SIZE];
@@ -860,13 +860,13 @@ static struct patch * patch_create_byte(uint32_t address, uint32_t owner, uint32
 	return patch;
 }
 
-static struct patch * patch_create_noop(uint32_t address, uint32_t owner)
+static struct patch * patch_create_empty(uint32_t address, uint32_t owner)
 {
 	struct patch * patch = _patch_create(address, owner);
 	if(!patch)
 		return NULL;
 	patch->block = 0;
-	patch->type = NOOP;
+	patch->type = EMPTY;
 	return patch;
 }
 
@@ -1289,7 +1289,7 @@ static void render_patch(FILE * output, struct patch * patch, int render_free)
 	mark = mark_find(patch->address, patch->opcode);
 	switch(patch->type)
 	{
-		case NOOP:
+		case EMPTY:
 			render_block_owner(output, patch);
 			if(mark)
 				fprintf(output, "\",fillcolor=orange,style=\"filled");
@@ -1595,7 +1595,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			/* unsupported */
 			break;
 		
-		case KDB_PATCH_CREATE_NOOP:
+		case KDB_PATCH_CREATE_EMPTY:
 		{
 			struct debug_param params[] = {
 				{{.name = "patch"}},
@@ -1606,7 +1606,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			if(r < 0)
 				break;
 			assert(params[0].size == 4 && params[1].size == 4);
-			if(!patch_create_noop(params[0].data_4, params[1].data_4))
+			if(!patch_create_empty(params[0].data_4, params[1].data_4))
 				r = -ENOMEM;
 			break;
 		}
@@ -1650,7 +1650,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_PATCH_CONVERT_NOOP:
+		case KDB_PATCH_CONVERT_EMPTY:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1667,7 +1667,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -EFAULT;
 				break;
 			}
-			patch->type = NOOP;
+			patch->type = EMPTY;
 			break;
 		}
 		case KDB_PATCH_CONVERT_BIT:
@@ -2172,7 +2172,7 @@ static int patch_is_ready(struct patch * patch, uint32_t block)
 	{
 		struct patch * before = lookup_patch(scan->patch);
 		assert(before);
-		if(before->type == NOOP)
+		if(before->type == EMPTY)
 		{
 			/* recursive */
 			if(!patch_is_ready(before, block))
@@ -2188,7 +2188,7 @@ static int patch_is_ready(struct patch * patch, uint32_t block)
 
 static void dblock_update(struct patch * depender, struct patch * patch)
 {
-	if(depender == patch || patch->type == NOOP)
+	if(depender == patch || patch->type == EMPTY)
 	{
 		struct arrow * scan;
 		for(scan = patch->befores; scan; scan = scan->next)
@@ -2210,9 +2210,9 @@ static void dblock_update(struct patch * depender, struct patch * patch)
 	}
 }
 
-/* Look at all change descriptors, and determine which blocks on the given cache
+/* Look at all patchs, and determine which blocks on the given cache
  * can be completely written, partially written, or not written. Note that
- * blocks containing in-flight change descriptors may not be written at all. */
+ * blocks containing in-flight patchs may not be written at all. */
 static void cache_situation_snapshot(uint32_t cache, struct cache_situation * info)
 {
 	int i;
@@ -2916,7 +2916,7 @@ static int command_find(int argc, const char * argv[])
 	if(tty)
 		printf("\e[4D100%%\n");
 	
-	printf("The %simum change descriptor count of %d %sfirst occurs at opcode #%d\n", argv[1], extreme, range, count);
+	printf("The %simum patch count of %d %sfirst occurs at opcode #%d\n", argv[1], extreme, range, count);
 	return 0;
 }
 
@@ -2945,7 +2945,7 @@ static void print_patch_brief(struct patch * patch)
 		case BYTE:
 			printf("offset %d, length %d, ", patch->byte.offset, patch->byte.length);
 			break;
-		case NOOP:
+		case EMPTY:
 			break;
 	}
 	printf("nafters %d, nbefores %d\n", afters, befores);
@@ -2999,7 +2999,7 @@ static int command_lookup(int argc, const char * argv[])
 				{
 					int index;
 					struct patch * scan;
-					printf("Change descriptors:\n");
+					printf("Patchs:\n");
 					for(index = 0; index < HASH_TABLE_SIZE; index++)
 						for(scan = patchs[index]; scan; scan = scan->next)
 						{
@@ -3030,7 +3030,7 @@ static int command_mark(int argc, const char * argv[])
 	{
 		struct mark * scan;
 		i = 0;
-		printf("Marked change descriptors:\n");
+		printf("Marked patchs:\n");
 		for(scan = marks; scan; scan = scan->next)
 			printf("  #%d: 0x%08x from opcode #%d\n", ++i, scan->address, scan->opcode);
 		return 0;
@@ -3152,7 +3152,7 @@ static int command_option(int argc, const char * argv[])
 			render_block = current_grouping == OFF || current_grouping == OWNER;
 			render_owner = current_grouping == OFF || current_grouping == BLOCK;
 		}
-		printf("Change descriptor grouping is %s%s\n", now, grouping_names[current_grouping]);
+		printf("Patch grouping is %s%s\n", now, grouping_names[current_grouping]);
 	}
 	else
 	{
@@ -3504,9 +3504,9 @@ struct {
 	{"gui", "Start GUI control panel, optionally rendering to PostScript.", command_gui, 0},
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump, 0},
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list, 0},
-	{"find", "Find max or min change descriptor count, optionally in an opcode range.", command_find, 0},
+	{"find", "Find max or min patch count, optionally in an opcode range.", command_find, 0},
 	{"lookup", "Lookup block numbers or block devices by address.", command_lookup, 0},
-	{"mark", "Mark a change descriptor to be highlighted in output.", command_mark, 0},
+	{"mark", "Mark a patch to be highlighted in output.", command_mark, 0},
 	{"option", "Get or set rendering options: freelist, grouping.", command_option, 0},
 	{"ps", "Render system state to a PostScript file, or standard output by default.", command_ps, 1},
 	{"render", "Render system state to a GraphViz dot file, or standard output by default.", command_render, 0},
@@ -3514,7 +3514,7 @@ struct {
 	{"run", "Apply all opcodes to system state.", command_run, 0},
 	{"status", "Displays system state status.", command_status, 0},
 	{"step", "Step system state by a specified number of opcodes, or 1 by default.", command_step, 0},
-	{"unmark", "Unmark a change descriptor from being highlighted.", command_mark, 0},
+	{"unmark", "Unmark a patch from being highlighted.", command_mark, 0},
 	{"view", "View system state graphically, optionally in a new window.", command_view, 1},
 	{"help", "Displays help.", command_help, 0},
 	{"quit", "Quits the program.", command_quit, 1}

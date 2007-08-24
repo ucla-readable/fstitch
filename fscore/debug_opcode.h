@@ -32,10 +32,10 @@ enum kdb_debug_opcode {
 	KDB_BDESC_AR_POOL_POP =          109,
 	
 	/* patch alter (2xx) */
-	KDB_PATCH_CREATE_NOOP =         201,
+	KDB_PATCH_CREATE_EMPTY =         201,
 	KDB_PATCH_CREATE_BIT =          202,
 	KDB_PATCH_CREATE_BYTE =         203,
-	KDB_PATCH_CONVERT_NOOP =        204,
+	KDB_PATCH_CONVERT_EMPTY =        204,
 	KDB_PATCH_CONVERT_BIT =         205,
 	KDB_PATCH_CONVERT_BYTE =        206,
 	KDB_PATCH_REWRITE_BYTE =        207,
@@ -190,7 +190,7 @@ static const struct param * params_bdesc_ar_push_pop[] = {
 	&param_depth,
 	&last_param
 };
-static const struct param * params_patch_create_noop[] = {
+static const struct param * params_patch_create_empty[] = {
 	&param_patch,
 	&param_owner,
 	&last_param
@@ -320,10 +320,10 @@ static const struct opcode
 	opcode_bdesc_ar_reset =             OPCODE(KDB_BDESC_AR_RESET,             params_bdesc_retain_release),
 	opcode_bdesc_ar_pool_push =         OPCODE(KDB_BDESC_AR_POOL_PUSH,         params_bdesc_ar_push_pop),
 	opcode_bdesc_ar_pool_pop =          OPCODE(KDB_BDESC_AR_POOL_POP,          params_bdesc_ar_push_pop),
-	opcode_patch_create_noop =         OPCODE(KDB_PATCH_CREATE_NOOP,         params_patch_create_noop),
+	opcode_patch_create_empty =         OPCODE(KDB_PATCH_CREATE_EMPTY,         params_patch_create_empty),
 	opcode_patch_create_bit =          OPCODE(KDB_PATCH_CREATE_BIT,          params_patch_create_bit),
 	opcode_patch_create_byte =         OPCODE(KDB_PATCH_CREATE_BYTE,         params_patch_create_byte),
-	opcode_patch_convert_noop =        OPCODE(KDB_PATCH_CONVERT_NOOP,        params_patch_only),
+	opcode_patch_convert_empty =        OPCODE(KDB_PATCH_CONVERT_EMPTY,        params_patch_only),
 	opcode_patch_convert_bit =         OPCODE(KDB_PATCH_CONVERT_BIT,         params_patch_convert_bit),
 	opcode_patch_convert_byte =        OPCODE(KDB_PATCH_CONVERT_BYTE,        params_patch_convert_byte),
 	opcode_patch_rewrite_byte =        OPCODE(KDB_PATCH_REWRITE_BYTE,        params_patch_only),
@@ -377,10 +377,10 @@ static const struct opcode * opcodes_bdesc[] = {
 	&last_opcode
 };
 static const struct opcode * opcodes_patch_alter[] = {
-	&opcode_patch_create_noop,
+	&opcode_patch_create_empty,
 	&opcode_patch_create_bit,
 	&opcode_patch_create_byte,
-	&opcode_patch_convert_noop,
+	&opcode_patch_convert_empty,
 	&opcode_patch_convert_bit,
 	&opcode_patch_convert_byte,
 	&opcode_patch_rewrite_byte,

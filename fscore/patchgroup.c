@@ -31,10 +31,10 @@
 
 struct patchgroup {
 	patchgroup_id_t id;
-	chweakref_t head;
+	patchweakref_t head;
 	/* head_keep stays until we get an after */
 	patch_t * head_keep;
-	chweakref_t tail;
+	patchweakref_t tail;
 	/* tail_keep stays until we are released */
 	patch_t * tail_keep;
 	uint32_t references:30;
@@ -59,7 +59,7 @@ struct patchgroup_scope {
 	patch_t * top;
 	/* top_keep stays until we change the engaged set */
 	patch_t * top_keep;
-	chweakref_t bottom;
+	patchweakref_t bottom;
 	int engaged_count;
 };
 
@@ -106,11 +106,11 @@ patchgroup_scope_t * patchgroup_scope_copy(patchgroup_scope_t * scope)
 	if(scope->top)
 	{
 		/* we need our own top_keep */
-		if(patch_create_noop_list(NULL, &copy->top_keep, NULL) < 0)
+		if(patch_create_empty_list(NULL, &copy->top_keep, NULL) < 0)
 			goto error_copy;
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, copy->top_keep, "top_keep");
-		patch_claim_noop(copy->top_keep);
-		if(patch_create_noop_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
+		patch_claim_empty(copy->top_keep);
+		if(patch_create_empty_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
 			goto error_top_keep;
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, copy->top, "top");
 		copy->top->flags |= PATCH_NO_PATCHGROUP;
@@ -244,22 +244,22 @@ patchgroup_t * patchgroup_create(int flags)
 	state->patchgroup = op;
 	state->engaged = 0;
 	
-	if(patch_create_noop_list(NULL, &op->head_keep, NULL) < 0)
+	if(patch_create_empty_list(NULL, &op->head_keep, NULL) < 0)
 		goto error_state;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, op->head_keep, "head_keep");
-	patch_claim_noop(op->head_keep);
+	patch_claim_empty(op->head_keep);
 	
-	if(patch_create_noop_list(NULL, &op->tail_keep, NULL) < 0)
+	if(patch_create_empty_list(NULL, &op->tail_keep, NULL) < 0)
 		goto error_head_keep;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, op->tail_keep, "tail_keep");
-	patch_claim_noop(op->tail_keep);
+	patch_claim_empty(op->tail_keep);
 	
-	if(patch_create_noop_list(NULL, &tail, op->tail_keep, NULL) < 0)
+	if(patch_create_empty_list(NULL, &tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, tail, "tail");
 	patch_weak_retain(tail, &op->tail, NULL, NULL);
 	
-	if(patch_create_noop_list(NULL, &head, op->head_keep, NULL) < 0)
+	if(patch_create_empty_list(NULL, &head, op->head_keep, NULL) < 0)
 		goto error_tail;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "head");
 	patch_weak_retain(head, &op->head, NULL, NULL);
@@ -302,7 +302,7 @@ int patchgroup_add_depend(patchgroup_t * after, patchgroup_t * before)
 	if(!(before->flags & PATCHGROUP_FLAG_ATOMIC) && before->engaged_count)
 		return -EBUSY;
 	/* from after's perspective, we are adding a before
-	 *   => after must not be released (standard case) or have an after (noop case) */
+	 *   => after must not be released (standard case) or have an after (empty case) */
 	assert(!after->tail_keep == after->is_released);
 	if(after->is_released || after->has_afters)
 		return -EINVAL;
@@ -416,13 +416,13 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 	}
 	
 	/* create new top and bottom */
-	r = patch_create_noop_list(NULL, &top_keep, NULL);
+	r = patch_create_empty_list(NULL, &top_keep, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, top_keep, "top_keep");
-	patch_claim_noop(top_keep);
+	patch_claim_empty(top_keep);
 	
-	r = patch_create_noop_list(NULL, &bottom, NULL);
+	r = patch_create_empty_list(NULL, &bottom, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, bottom, "bottom");
@@ -437,7 +437,7 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 			count++;
 		}
 	
-	r = patch_create_noop_list(NULL, &top, top_keep, NULL);
+	r = patch_create_empty_list(NULL, &top, top_keep, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, top, "top");
@@ -674,11 +674,11 @@ int patchgroup_prepare_head(patch_t ** head)
 			*head = WEAK(current_scope->bottom);
 			return 0;
 		}
-		r = patch_create_noop_list(NULL, head, WEAK(current_scope->bottom), *head, NULL);
+		r = patch_create_empty_list(NULL, head, WEAK(current_scope->bottom), *head, NULL);
 		if(r < 0)
 			return r;
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "and");
-		patch_set_noop_declare(*head);
+		patch_set_empty_declare(*head);
 	}
 	else
 		*head = WEAK(current_scope->bottom);

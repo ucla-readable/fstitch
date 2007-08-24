@@ -6,7 +6,7 @@
 
 void patch_mark_graph(patch_t * root)
 {
-	chdepdesc_t * dep;
+	patchdep_t * dep;
 	root->flags |= PATCH_MARKED;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, root, PATCH_MARKED);
 	for(dep = root->befores; dep; dep = dep->before.next)
@@ -16,7 +16,7 @@ void patch_mark_graph(patch_t * root)
 
 void patch_unmark_graph(patch_t * root)
 {
-	chdepdesc_t * dep;
+	patchdep_t * dep;
 	root->flags &= ~PATCH_MARKED;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, root, PATCH_MARKED);
 	for(dep = root->befores; dep; dep = dep->before.next)
@@ -26,7 +26,7 @@ void patch_unmark_graph(patch_t * root)
 
 int patch_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)
 {
-	patch_dlist_t * dlist = block->index_changes;
+	patch_dlist_t * dlist = block->index_patches;
 	assert(current_bd && target_bd);
 	assert(current_bd->level == target_bd->level);
 	if(dlist[current_bd->graph_index].head)

@@ -103,7 +103,7 @@ static void fstitchd_shutdown(void)
 
 	// Reclaim patchs written by sync and shutdowns so that when destroy_all()
 	// destroys BDs that destroy a blockman no ddescs are orphaned.
-	Dprintf("Reclaiming written change descriptors.\n");
+	Dprintf("Reclaiming written patchs.\n");
 	patch_reclaim_written();
 
 	Dprintf("Destroying all modules.\n");
@@ -118,7 +118,7 @@ static void fstitchd_shutdown(void)
 	}
 
 	// Run patch reclamation
-	Dprintf("Reclaiming written change descriptors.\n");
+	Dprintf("Reclaiming written patchs.\n");
 	patch_reclaim_written();
 
 	Dprintf("Calling post-shutdown callbacks.\n");

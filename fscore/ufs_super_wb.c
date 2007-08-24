@@ -360,7 +360,7 @@ static int ufs_super_wb_sync(UFSmod_super_t * object, patch_t ** head)
 
 	if (vector_size(oldheads))
 	{
-		r = patch_create_noop_array(NULL, head, vector_size(oldheads), (patch_t **) oldheads->elts);
+		r = patch_create_empty_array(NULL, head, vector_size(oldheads), (patch_t **) oldheads->elts);
 		if (r < 0)
 			goto exit;
 	}

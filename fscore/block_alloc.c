@@ -10,11 +10,11 @@
 
 typedef struct {
 	/* clear must be the first element! */
-	chweakref_t clear;
+	patchweakref_t clear;
 	uint32_t block;
 } alloc_record_t;
 
-static void block_alloc_satisfy_callback(chweakref_t * weak, patch_t * old, void * data)
+static void block_alloc_satisfy_callback(patchweakref_t * weak, patch_t * old, void * data)
 {
 	/* count on clear being the first element */
 	alloc_record_t * record = (alloc_record_t *) weak;
@@ -52,11 +52,11 @@ int block_alloc_get_freed(block_alloc_head_t * alloc, uint32_t block, patch_t **
 		*head = WEAK(record->clear);
 	else
 	{
-		patch_t * noop;
-		int r = patch_create_noop_list(NULL, &noop, record->clear, *head, NULL);
+		patch_t * empty;
+		int r = patch_create_empty_list(NULL, &empty, record->clear, *head, NULL);
 		if(r < 0)
 			return r;
-		*head = noop;
+		*head = empty;
 	}
 	return 0;
 }

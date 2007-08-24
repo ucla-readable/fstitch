@@ -200,7 +200,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	if(!block->index_changes[object->graph_index].head)
+	if(!block->index_patches[object->graph_index].head)
 		return FLUSH_EMPTY;
 	
 	r = revision_slice_create(block, object, info->bd, &slice);
@@ -242,7 +242,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 #if DIRTY_QUEUE_REORDERING
 static bdesc_t * wb2_find_block_before(BD_t * object, patch_t * patch, bdesc_t * start_block)
 {
-	chdepdesc_t * dep = patch->befores;
+	patchdep_t * dep = patch->befores;
 	for(; dep; dep = dep->before.next)
 	{
 		patch_t * before = dep->before.desc;
@@ -334,7 +334,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 			bdesc_t * scan_block = NULL;
 			if(!block->in_flight)
 			{
-				patch_t * scan = block->index_changes[object->graph_index].head;
+				patch_t * scan = block->index_patches[object->graph_index].head;
 				for(; !scan_block && scan; scan = scan->ddesc_index_next)
 					scan_block = wb2_find_block_before(object, scan, slot->block);
 			}

@@ -45,9 +45,9 @@ struct bdesc {
 	unsigned synthetic : 1;
 	unsigned flags : 30;
 	
-	// CHANGE DESCRIPTOR INFORMATION
-	patch_t * all_changes;
-	patch_t ** all_changes_tail;
+	// PATCH INFORMATION
+	patch_t * all_patches;
+	patch_t ** all_patches_tail;
 
 #if BDESC_EXTERN_AFTER_COUNT
 	uint32_t extern_after_count;
@@ -55,20 +55,20 @@ struct bdesc {
 	
 	/* For each level (at most 1 BD per level), the level's ready patchs.
 	 * ready patch: patch with no befores at its level or higher. */
-	patch_dlist_t ready_changes[NBDLEVEL];
+	patch_dlist_t ready_patches[NBDLEVEL];
 
 	/* For each graph index, the patchs owned by that BD. */
-	patch_dlist_t index_changes[NBDINDEX];
+	patch_dlist_t index_patches[NBDINDEX];
 	
 #if PATCH_NRB
-	chweakref_t nrb;
+	patchweakref_t nrb;
 #endif
 
 #define OVERLAP1SHIFT	5
 #define NOVERLAP1	32
 	patch_t *overlap1[1 + NOVERLAP1];
 	
-	hash_map_t * bit_changes;
+	hash_map_t * bit_patches;
 	
 	// WB CACHE INFORMATION
 	uint32_t cache_number;

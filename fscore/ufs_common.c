@@ -373,7 +373,7 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, pat
 		goto write_inode_bitmap_end;
 	*(oldheads++) = *head;
 
-	r = patch_create_noop_set(NULL, head, PASS_PATCH_SET(oldheads_set));
+	r = patch_create_empty_set(NULL, head, PASS_PATCH_SET(oldheads_set));
 	if (r < 0)
 		goto write_inode_bitmap_end;
 
@@ -604,7 +604,7 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, pat
 		return r;
 	*(oldheads++) = *head;
 
-	return patch_create_noop_set(NULL, head, PASS_PATCH_SET(oldheads_set));
+	return patch_create_empty_set(NULL, head, PASS_PATCH_SET(oldheads_set));
 }
 
 // [ndir, ..., nffree] parameters are deltas
@@ -680,7 +680,7 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 		assert(*head == oldhead);
 		return 0;
 	}
-	return patch_create_noop_set(NULL, head, PASS_PATCH_SET(oldheads_set));
+	return patch_create_empty_set(NULL, head, PASS_PATCH_SET(oldheads_set));
 }
 
 int ufs_check_name(const char * p)

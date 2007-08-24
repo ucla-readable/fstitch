@@ -10,24 +10,24 @@ typedef struct page page_t;
 typedef struct blockman blockman_t;
 
 typedef struct patch patch_t;
-typedef struct chweakref chweakref_t;
+typedef struct patchweakref patchweakref_t;
 typedef struct patch_dlist patch_dlist_t;
 typedef struct patch_pass_set patch_pass_set_t;
 
-typedef struct chdepdesc chdepdesc_t;
+typedef struct patchdep patchdep_t;
 
 #if PATCH_WEAKREF_CALLBACKS
-typedef void (*patch_satisfy_callback_t)(chweakref_t * weak, patch_t * old, void * data);
+typedef void (*patch_satisfy_callback_t)(patchweakref_t * weak, patch_t * old, void * data);
 #endif
 
-struct chweakref {
+struct patchweakref {
 	patch_t * patch;
 #if PATCH_WEAKREF_CALLBACKS
 	patch_satisfy_callback_t callback;
 	void * callback_data;
 #endif
-	chweakref_t ** pprev;
-	chweakref_t * next;
+	patchweakref_t ** pprev;
+	patchweakref_t * next;
 };
 
 struct patch_dlist {

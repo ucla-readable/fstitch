@@ -31,7 +31,7 @@
 #define TRANSACTION_SIZE (512 * 4096)
 
 /* In principle we can stack journal slots with later transactions, but this
- * really hurts performance because of the effect it has on change descriptor
+ * really hurts performance because of the effect it has on patch
  * optimizations and rollback. The simple and surprisingly effective fix is to
  * cause the device to flush when this happens, to avoid ever needing to stack
  * transactions. This could be made asynchronous later if necessary. */
@@ -59,7 +59,7 @@
  * At runtime, to keep track of which slots are busy (i.e. they have not been
  * completely written to disk), we weak retain the last patch in a transaction
  * in an array of patchs whose indices correspond to slot numbers. Because we
- * can have "chained" slots, we have a special NOOP patch that represents the
+ * can have "chained" slots, we have a special EMPTY patch that represents the
  * whole transaction (since the commit record cancellation patch will not be
  * created until the end of the transaction, and we need to do the weak retains
  * as we claim slots for use during the transaction).
@@ -74,7 +74,7 @@
  * 
  * Here is the patch structure of a transaction:
  * 
- *   +-------------+------ NOOPs ---------+--------------------+---------------------+
+ *   +-------------+------ EMPTYs ---------+--------------------+---------------------+
  *   |             |                      |                    |                     |
  *   |             |                      |                    |                     |
  *   v             |      "keep_h" <---   |                    |                     |
@@ -86,14 +86,14 @@
  *           |                 |         | |                   |           |
  * prev_cr <-+                 |         | +--> prev_cancel <--+           |
  *                             |         |                                 |
- *                             |         +--- Managed NOOP patch          |
+ *                             |         +--- Managed EMPTY patch          |
  *                             |                                           |
  *                             +------ Created at end of transaction ------+
  * 
- * Purposes of various NOOP patchs:
+ * Purposes of various EMPTY patchs:
  * keep_w:
  *   keep "wait" from becoming satisfied as the jrdata (journal data) patchs
- *   are written to disk and satisfied (all the other NOOPs depend on things
+ *   are written to disk and satisfied (all the other EMPTYs depend on things
  *   that won't get satisfied until we send the whole transaction off into
  *   the cache)
  * wait:
@@ -140,11 +140,11 @@ struct journal_info {
 	/* If we are reusing a transaction slot, jdata_head stores a weak reference
 	 * to the previous "done" patch. Notice that we cannot reuse a transaction
 	 * slot during the same transaction as the last time it was used. */
-	chweakref_t jdata_head;
-	chweakref_t prev_cr;
-	chweakref_t prev_cancel;
+	patchweakref_t jdata_head;
+	patchweakref_t prev_cr;
+	patchweakref_t prev_cancel;
 	struct {
-		chweakref_t cr;
+		patchweakref_t cr;
 		uint32_t seq;
 	} * cr_retain;
 	/* map from FS block number -> journal block number (note 0 is invalid) */
@@ -367,40 +367,40 @@ static int journal_bd_start_transaction(BD_t * object)
 	if(info->keep_w)
 		return 0;
 
-#define CREATE_NOOP(name) \
+#define CREATE_EMPTY(name) \
 	do { \
-		r = patch_create_noop_list(NULL, &info->name, NULL); \
+		r = patch_create_empty_list(NULL, &info->name, NULL); \
 		if(r < 0) \
 			goto fail_##name; \
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->name, #name); \
-		patch_claim_noop(info->name); \
+		patch_claim_empty(info->name); \
 	} while(0)
 	
 	/* this order is important due to the error recovery code */
-	CREATE_NOOP(keep_w);
+	CREATE_EMPTY(keep_w);
 	/* make the new commit record (via wait) depend on the previous via info->prev_cr */
-	assert(info->keep_w); /* keep_w must be non-NULL for patch_create_noop_list */
-	r = patch_create_noop_list(NULL, &info->wait, info->keep_w, WEAK(info->prev_cr), NULL);
+	assert(info->keep_w); /* keep_w must be non-NULL for patch_create_empty_list */
+	r = patch_create_empty_list(NULL, &info->wait, info->keep_w, WEAK(info->prev_cr), NULL);
 	if(r < 0)
 		goto fail_wait;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->wait, "wait");
-	CREATE_NOOP(keep_h);
+	CREATE_EMPTY(keep_h);
 	assert(info->keep_h);
 	/* this one is managed, and temporarily depends on prev_cancel */
-	r = patch_create_noop_list(object, &info->hold, info->keep_h, WEAK(info->prev_cancel), NULL);
+	r = patch_create_empty_list(object, &info->hold, info->keep_h, WEAK(info->prev_cancel), NULL);
 	if(r < 0)
 		goto fail_hold;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->hold, "hold");
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, info->hold, PATCH_NO_PATCHGROUP);
 	info->hold->flags |= PATCH_NO_PATCHGROUP;
-	CREATE_NOOP(keep_d);
+	CREATE_EMPTY(keep_d);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
-	assert(info->keep_d); /* keep_d must be non-NULL for patch_create_noop_list */
-	r = patch_create_noop_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
+	assert(info->keep_d); /* keep_d must be non-NULL for patch_create_empty_list */
+	r = patch_create_empty_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 	if(r < 0)
 		goto fail_data;
 	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->data, "data");
-	CREATE_NOOP(done);
+	CREATE_EMPTY(done);
 
 	Dprintf("%s(): starting new transaction (sequence %u, wait %p, hold %p, data %p, done %p)\n", __FUNCTION__, info->trans_seq, info->wait, info->hold, info->data, info->done);
 	info->trans_slot_count = 0;
@@ -499,10 +499,10 @@ static int journal_bd_stop_transaction(BD_t * object)
 	/* set the new previous cancellation record */
 	patch_weak_retain(head, &info->prev_cancel, NULL, NULL);
 	
-	/* unmanage the hold NOOP */
+	/* unmanage the hold EMPTY */
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, info->hold, NULL);
 	info->hold->owner = NULL;
-	/* satisfy the keep NOOPs */
+	/* satisfy the keep EMPTYs */
 	patch_satisfy(&info->keep_w);
 	patch_satisfy(&info->keep_h);
 	patch_satisfy(&info->keep_d);
@@ -570,13 +570,13 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	
 	if(info->recursion)
 	{
-		/* only used to write the journal itself: many fewer change descriptors there! */
+		/* only used to write the journal itself: many fewer patchs there! */
 		patch_push_down(block, object, info->bd);
 		return CALL(info->bd, write_block, block, block_number);
 	}
 	
 	/* why write a block with no new changes? */
-	if(!block->index_changes[object->graph_index].head)
+	if(!block->index_patches[object->graph_index].head)
 		return 0;
 	
 	/* there is supposed to always be a transaction going on */
@@ -595,7 +595,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			metadata = 1;
 		else
 			/* otherwise, scan for metadata */
-			for(patch = block->index_changes[object->graph_index].head; patch; patch = patch->ddesc_index_next)
+			for(patch = block->index_patches[object->graph_index].head; patch; patch = patch->ddesc_index_next)
 				if(!(patch->flags & PATCH_DATA))
 				{
 					metadata = 1;
@@ -604,10 +604,10 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	}
 	
 	/* inspect and modify all patchs passing through */
-	for(patch = block->index_changes[object->graph_index].head; patch; patch = patch_index_next)
+	for(patch = block->index_patches[object->graph_index].head; patch; patch = patch_index_next)
 	{
 		int needs_hold = 1;
-		chdepdesc_t ** deps = &patch->befores;
+		patchdep_t ** deps = &patch->befores;
 		
 		assert(patch->owner == object);
 		patch_index_next = patch->ddesc_index_next; /* in case changes */
@@ -653,7 +653,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			/* WARNING: see warning above */
 			deps = &patch->afters;
 			while(*deps)
-				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == NOOP)
+				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == EMPTY)
 					patch_dep_remove(*deps);
 				else
 					deps = &(*deps)->before.next;
@@ -674,11 +674,11 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		
 		/* copy it to the journal */
 		head = WEAK(info->jdata_head);
-		if(fresh || !journal_block->all_changes || (journal_block->all_changes->flags & PATCH_INFLIGHT))
+		if(fresh || !journal_block->all_patches || (journal_block->all_patches->flags & PATCH_INFLIGHT))
 		{
 #if DEBUG_JOURNAL
 			if(!fresh)
-				Dprintf("%s() new layer on journal block (in flight: %s)\n", __FUNCTION__, journal_block->all_changes ? "yes" : "no");
+				Dprintf("%s() new layer on journal block (in flight: %s)\n", __FUNCTION__, journal_block->all_patches ? "yes" : "no");
 #endif
 			r = patch_create_full(journal_block, info->journal, bdesc_data(block), &head);
 			assert(r >= 0);
@@ -688,18 +688,18 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 #ifndef NDEBUG
 			if(head)
 			{
-				chdepdesc_t * befores;
-				for(befores = journal_block->all_changes->befores; befores; befores = befores->before.next)
+				patchdep_t * befores;
+				for(befores = journal_block->all_patches->befores; befores; befores = befores->before.next)
 					if(befores->before.desc == head)
 						break;
 				assert(befores);
 			}
 #endif
-			assert(!(journal_block->all_changes->flags & PATCH_ROLLBACK));
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REWRITE_BYTE, journal_block->all_changes);
+			assert(!(journal_block->all_patches->flags & PATCH_ROLLBACK));
+			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REWRITE_BYTE, journal_block->all_patches);
 			memcpy(bdesc_data(journal_block), bdesc_data(block), object->blocksize);
 #if PATCH_BYTE_SUM
-			journal_block->all_changes->byte.new_sum = patch_byte_sum(block->data, object->blocksize);
+			journal_block->all_patches->byte.new_sum = patch_byte_sum(block->data, object->blocksize);
 #endif
 		}
 		if(head)
@@ -835,18 +835,18 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 	
 	if(expected_type == CRCOMMIT)
 	{
-		/* create the three NOOPs we will need for this chain */
-		r = patch_create_noop_list(NULL, &info->keep_d, NULL);
+		/* create the three EMPTYs we will need for this chain */
+		r = patch_create_empty_list(NULL, &info->keep_d, NULL);
 		if(r < 0)
 			goto error_1;
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->keep_d, "keep_d");
-		patch_claim_noop(info->keep_d);
+		patch_claim_empty(info->keep_d);
 		/* make the new complete record (via data) depend on the previous via info->prev_cancel */
-		r = patch_create_noop_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
+		r = patch_create_empty_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 		if(r < 0)
 			goto error_2;
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->data, "data");
-		r = patch_create_noop_list(NULL, &info->done, NULL);
+		r = patch_create_empty_list(NULL, &info->done, NULL);
 		if(r < 0)
 		{
 			patch_destroy(&info->data);
@@ -856,7 +856,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			return r;
 		}
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->done, "done");
-		patch_claim_noop(info->done);
+		patch_claim_empty(info->done);
 	}
 	
 	/* check for chained transaction */

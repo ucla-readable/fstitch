@@ -36,11 +36,11 @@
  * 0 1 0 1   A   R   W
  * 0 1 1 0   A   R   W
  * 0 1 1 1   A   R   W
- * 1 0 0 0   A   R          <--- these are "noop" patchgroups. B is disallowed to easily prevent cycles.
+ * 1 0 0 0   A   R          <--- these are "empty" patchgroups. B is disallowed to easily prevent cycles.
  * 1 0 0 1   A   R          <-/
  * 1 0 1 0   A   R       B  <--- initially, these states cannot exist due to (W)
  * 1 0 1 1   A   R       B  <-/
- * 1 1 0 0   A   R          <--- these are "noop" patchgroups (the first is "dead")
+ * 1 1 0 0   A   R          <--- these are "empty" patchgroups (the first is "dead")
  * 1 1 0 1   A   R          <-/
  * 1 1 1 0   A   R
  * 1 1 1 1   A   R
@@ -93,7 +93,7 @@ int patchgroup_engaged(void);
 void patchgroup_masquerade(void);
 void patchgroup_demasquerade(void);
 
-/* add change descriptors to the engaged patchgroups in the current scope */
+/* add patchs to the engaged patchgroups in the current scope */
 int patchgroup_prepare_head(patch_t ** head);
 int patchgroup_finish_head(patch_t * head);
 

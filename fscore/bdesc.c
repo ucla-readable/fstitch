@@ -102,17 +102,17 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 	bdesc->synthetic = 0;
 	bdesc->in_flight = 0;
 	bdesc->flags = 0;
-	bdesc->all_changes = NULL;
-	bdesc->all_changes_tail = &bdesc->all_changes;
+	bdesc->all_patches = NULL;
+	bdesc->all_patches_tail = &bdesc->all_patches;
 	for(i = 0; i < NBDLEVEL; i++)
 	{
-		bdesc->ready_changes[i].head = NULL;
-		bdesc->ready_changes[i].tail = &bdesc->ready_changes[i].head;
+		bdesc->ready_patches[i].head = NULL;
+		bdesc->ready_patches[i].tail = &bdesc->ready_patches[i].head;
 	}
 	for(i = 0; i < NBDINDEX; i++)
 	{
-		bdesc->index_changes[i].head = NULL;
-		bdesc->index_changes[i].tail = &bdesc->index_changes[i].head;
+		bdesc->index_patches[i].head = NULL;
+		bdesc->index_patches[i].tail = &bdesc->index_patches[i].head;
 	}
 #if BDESC_EXTERN_AFTER_COUNT
 	bdesc->extern_after_count = 0;
@@ -122,7 +122,7 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 #endif
 	for (i = 0; i < NOVERLAP1 + 1; i++)
 		bdesc->overlap1[i] = NULL;
-	bdesc->bit_changes = NULL;
+	bdesc->bit_patches = NULL;
 	bdesc->disk_hash.pprev = NULL;
 	bdesc->length = blocksize * count;
 	bdesc->ddesc = bdesc; /* ha ha */
@@ -135,7 +135,7 @@ void __bdesc_release(bdesc_t *bdesc)
 	assert(bdesc && bdesc->ref_count == 0 && bdesc->ar_count == 0);
 	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, bdesc, bdesc);
 	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, bdesc, bdesc);
-	assert(!bdesc->all_changes);
+	assert(!bdesc->all_patches);
 	assert(!bdesc->overlap1[0]);
 	/* XXX don't bother checking other overlap1[] */
 #if BDESC_EXTERN_AFTER_COUNT
@@ -146,10 +146,10 @@ void __bdesc_release(bdesc_t *bdesc)
 #endif
 	int i;
 	for(i = 0; i < NBDLEVEL; i++)
-		assert(!bdesc->ready_changes[i].head);
-	if(bdesc->bit_changes) {
-		assert(hash_map_empty(bdesc->bit_changes));
-		hash_map_destroy(bdesc->bit_changes);
+		assert(!bdesc->ready_patches[i].head);
+	if(bdesc->bit_patches) {
+		assert(hash_map_empty(bdesc->bit_patches));
+		hash_map_destroy(bdesc->bit_patches);
 	}
 	blockman_remove(bdesc);
 #ifdef __KERNEL__

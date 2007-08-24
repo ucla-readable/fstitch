@@ -131,12 +131,12 @@ static int wb_flush_block(BD_t * object, struct cache_slot * slot)
 		return FLUSH_NONE;
 	
 	/* already flushed? */
-	for(patch = slot->block->ddesc->all_changes; patch; patch = patch->ddesc_next)
+	for(patch = slot->block->ddesc->all_patches; patch; patch = patch->ddesc_next)
 		if(patch->owner == object)
 			break;
 	if(!patch)
 		return FLUSH_EMPTY;
-	if(!slot->block->ddesc->ready_changes[object->level].head)
+	if(!slot->block->ddesc->ready_patches[object->level].head)
 		return FLUSH_NONE;
 	
 	r = revision_slice_create(slot->block, object, info->bd, &slice);
@@ -513,9 +513,9 @@ uint32_t wb_cache_dirty_count(BD_t * bd)
 		return INVALID_BLOCK;
 	
 	for(i = 1; i <= info->size; i++)
-		if(info->blocks[i].block && info->blocks[i].block->ddesc->all_changes)
+		if(info->blocks[i].block && info->blocks[i].block->ddesc->all_patches)
 		{
-			patch_t * scan = info->blocks[i].block->ddesc->all_changes;
+			patch_t * scan = info->blocks[i].block->ddesc->all_patches;
 			while(scan)
 			{
 				if(scan->owner == bd)

@@ -56,13 +56,13 @@ sub createMeasurement {
 
 my %nbits = createMeasurement();
 my %nbytes = createMeasurement();
-my %nnoops = createMeasurement();
+my %nemptys = createMeasurement();
 my %ntotal = createMeasurement();
 my %ndeps = createMeasurement();
 my %data = createMeasurement();
 
-my %measurements = ("npatchs (bit)" => \%nbits, "npatchs (byte)" => \%nbytes, "npatchs (noop)" => \%nnoops, "npatchs (total)" => \%ntotal, "ndeps" => \%ndeps, "data" => \%data);
-my @measurementsa = (\%nbits, \%nbytes, \%nnoops, \%ntotal, \%ndeps, \%data);
+my %measurements = ("npatchs (bit)" => \%nbits, "npatchs (byte)" => \%nbytes, "npatchs (empty)" => \%nemptys, "npatchs (total)" => \%ntotal, "ndeps" => \%ndeps, "data" => \%data);
+my @measurementsa = (\%nbits, \%nbytes, \%nemptys, \%ntotal, \%ndeps, \%data);
 
 # update mean, max, or total
 sub updateStat {
@@ -89,7 +89,7 @@ sub updateMeasurement {
 	$measurement->{"sizeof"} = $sizeof;
 }
 
-%careabouts = ("npatchs (bit)" => 1, "npatchs (byte)" => 1, "npatchs (noop)" => 1, "npatchs (total)" => 1, "ndeps" => 1, "data" => 1);
+%careabouts = ("npatchs (bit)" => 1, "npatchs (byte)" => 1, "npatchs (empty)" => 1, "npatchs (total)" => 1, "ndeps" => 1, "data" => 1);
 
 foreach $run (<$testdir/$testname-mem.sys.*>) {
 	open(R, "<$run") || die;

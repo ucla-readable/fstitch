@@ -14,11 +14,11 @@
 int revision_init(void);
 
 #if REVISION_TAIL_INPLACE
-/* roll back change descriptors on the passed block which are not yet ready to
+/* roll back patchs on the passed block which are not yet ready to
  * go to disk, constructing the previous version of the block in place */
 int revision_tail_prepare(bdesc_t * block, BD_t * bd);
 #else
-/* roll back change descriptors on the passed block which are not yet ready to
+/* roll back patchs on the passed block which are not yet ready to
  * go to disk, constructing the previous version of the block in the buffer */
 int revision_tail_prepare(bdesc_t * block, BD_t * bd, uint8_t * buffer);
 #endif
@@ -31,7 +31,7 @@ int revision_tail_revert(bdesc_t * block, BD_t * bd);
 int revision_tail_acknowledge(bdesc_t * block, BD_t * bd);
 
 #if __KERNEL__
-/* this function marks the non-rolled back change descriptors as "in flight" and
+/* this function marks the non-rolled back patchs as "in flight" and
  * rolls the others forward again */
 int revision_tail_inflight_ack(bdesc_t * block, BD_t * bd);
 

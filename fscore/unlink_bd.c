@@ -34,10 +34,10 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 	int r;
 	
 	/* inspect and modify all patchs passing through */
-	for(patch = block->ddesc->index_changes[object->graph_index].head; patch; patch = next)
+	for(patch = block->ddesc->index_patches[object->graph_index].head; patch; patch = next)
 	{
 		int needs_head = 1;
-		chdepdesc_t ** deps = &patch->befores;
+		patchdep_t ** deps = &patch->befores;
 		
 		assert(patch->owner == object);
 		next = patch->ddesc_index_next;
@@ -76,7 +76,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 			/* WARNING: see warning above */
 			deps = &patch->afters;
 			while(*deps)
-				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == NOOP)
+				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == EMPTY)
 					patch_dep_remove(*deps);
 				else
 					deps = &(*deps)->before.next;

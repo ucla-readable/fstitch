@@ -48,7 +48,7 @@ typedef struct ext2_fdesc ext2_fdesc_t;
 /* directory entry cache */
 struct ext2_minode {
 	inode_t ino;
-	chweakref_t create;
+	patchweakref_t create;
 	unsigned ref_count;
 };
 
@@ -65,7 +65,7 @@ struct ext2_mdirent {
 	EXT2_Dir_entry_t dirent;
 	char name_term; /* ensure room for dirent.name null termination */
 	uint32_t offset;
-	chweakref_t create; /* patch that created this dirent */
+	patchweakref_t create; /* patch that created this dirent */
 	ext2_minode_t * minode; /* the patch that created this dirent's inode */
 	mdirent_dlist_t offsetl;
 	mdirent_dlist_t freel;
