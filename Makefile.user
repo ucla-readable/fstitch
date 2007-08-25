@@ -44,7 +44,7 @@ all: tags TAGS
 	$(OBJDIR)/lib/%.o $(OBJDIR)/fscore/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
 
 $(OBJDIR)/lib/%.o: lib/%.c
-	@echo + cc[LIB] $<
+	@echo + cc[lib] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -c -o $@ $<
 
