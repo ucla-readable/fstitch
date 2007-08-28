@@ -689,7 +689,7 @@ static const char * type_names[] = {[BIT] = "BIT", [BYTE] = "BYTE", [EMPTY] = "E
 
 static struct bd * bds = NULL;
 static struct block * blocks[HASH_TABLE_SIZE];
-static struct patch * patchs[HASH_TABLE_SIZE];
+static struct patch * patches[HASH_TABLE_SIZE];
 static uint32_t patch_free_head = 0;
 static int patch_count = 0;
 static int arrow_count = 0;
@@ -734,10 +734,10 @@ static void reset_state(void)
 			free(old);
 		}
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
-		while(patchs[i])
+		while(patches[i])
 		{
-			struct patch * old = patchs[i];
-			patchs[i] = old->next;
+			struct patch * old = patches[i];
+			patches[i] = old->next;
 			free_arrows(&old->befores);
 			free_arrows(&old->afters);
 			free_labels(&old->labels);
@@ -771,7 +771,7 @@ static struct patch * lookup_patch(uint32_t address)
 {
 	struct patch * scan;
 	int index = address % HASH_TABLE_SIZE;
-	for(scan = patchs[index]; scan; scan = scan->next)
+	for(scan = patches[index]; scan; scan = scan->next)
 		if(scan->address == address)
 			break;
 	return scan;
@@ -832,8 +832,8 @@ static struct patch * _patch_create(uint32_t address, uint32_t owner)
 	patch->labels = NULL;
 	patch->free_prev = 0;
 	patch->free_next = 0;
-	patch->next = patchs[index];
-	patchs[index] = patch;
+	patch->next = patches[index];
+	patches[index] = patch;
 	patch_count++;
 	return patch;
 }
@@ -977,7 +977,7 @@ static int patch_destroy(uint32_t address)
 {
 	int index = address % HASH_TABLE_SIZE;
 	struct patch ** point;
-	for(point = &patchs[index]; *point; point = &(*point)->next)
+	for(point = &patches[index]; *point; point = &(*point)->next)
 		if((*point)->address == address)
 		{
 			struct patch * old = *point;
@@ -1036,7 +1036,7 @@ static struct mark * marks = NULL;
 struct group_hash;
 struct group {
 	uint32_t key;
-	struct patch * patchs;
+	struct patch * patches;
 	struct group_hash * sub;
 	struct group * next;
 };
@@ -1112,13 +1112,13 @@ static struct group * patch_group_key(struct group_hash * hash, uint32_t key, in
 	{
 		group = malloc(sizeof(*group));
 		group->key = key;
-		group->patchs = NULL;
+		group->patches = NULL;
 		group->sub = NULL;
 		group->next = hash->hash_table[index];
 		hash->hash_table[index] = group;
 	}
-	patch->group_next[level] = group->patchs;
-	group->patchs = patch;
+	patch->group_next[level] = group->patches;
+	group->patches = patch;
 	return group;
 }
 
@@ -1216,9 +1216,9 @@ static int render_group(FILE * output, struct group * group, int level)
 	}
 	if(level == 1 || current_grouping == BLOCK || current_grouping == OWNER)
 	{
-		/* actually list the patchs */
+		/* actually list the patches */
 		struct patch * patch;
-		for(patch = group->patchs; patch; patch = patch->group_next[level])
+		for(patch = group->patches; patch; patch = patch->group_next[level])
 			fprintf(output, "\"ch0x%08x-hc%p\"\n", patch->address, (void *) patch);
 	}
 	return !!group->key;
@@ -1372,7 +1372,7 @@ static void render(FILE * output, const char * title, int landscape)
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
 	{
 		struct patch * patch;
-		for(patch = patchs[i]; patch; patch = patch->next)
+		for(patch = patches[i]; patch; patch = patch->next)
 		{
 			int is_free = patch->address == patch_free_head || patch->free_prev;
 			if(is_free)
@@ -2110,7 +2110,7 @@ static struct cache_block {
 	uint32_t address;
 	uint32_t local_flags;
 	struct block * block;
-	struct patch * patchs;
+	struct patch * patches;
 	int patch_count;
 	struct patch * ready;
 	int ready_count;
@@ -2146,7 +2146,7 @@ static struct cache_block * cache_block_lookup(uint32_t address)
 	scan->address = address;
 	scan->local_flags = 0;
 	scan->block = lookup_block(address);
-	scan->patchs = NULL;
+	scan->patches = NULL;
 	scan->patch_count = 0;
 	scan->ready = NULL;
 	scan->ready_count = 0;
@@ -2215,16 +2215,16 @@ static void dblock_update(struct patch * depender, struct patch * patch)
 	}
 }
 
-/* Look at all patchs, and determine which blocks on the given cache
+/* Look at all patches, and determine which blocks on the given cache
  * can be completely written, partially written, or not written. Note that
- * blocks containing in-flight patchs may not be written at all. */
+ * blocks containing in-flight patches may not be written at all. */
 static void cache_situation_snapshot(uint32_t cache, struct cache_situation * info)
 {
 	int i;
 	struct patch * patch;
 	memset(info, 0, sizeof(*info));
 	for(i = 0; i < HASH_TABLE_SIZE; i++)
-		for(patch = patchs[i]; patch; patch = patch->next)
+		for(patch = patches[i]; patch; patch = patch->next)
 		{
 			struct cache_block * block;
 			/* the local flags will be used to track readiness */
@@ -2237,7 +2237,7 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 				if(!(block->local_flags & CACHE_BLOCK_INFLIGHT))
 				{
 					info->inflight++;
-					if(block->patchs)
+					if(block->patches)
 						info->dirty_inflight++;
 					block->local_flags |= CACHE_BLOCK_INFLIGHT;
 				}
@@ -2253,10 +2253,10 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 						info->dirty_inflight++;
 					block->local_flags |= CACHE_BLOCK_DIRTY;
 				}
-				/* use the group_next fields in the patchs to keep
-				 * track of which patchs are on the block or ready */
-				patch->group_next[0] = block->patchs;
-				block->patchs = patch;
+				/* use the group_next fields in the patches to keep
+				 * track of which patches are on the block or ready */
+				patch->group_next[0] = block->patches;
+				block->patches = patch;
 				block->patch_count++;
 			}
 		}
@@ -2271,7 +2271,7 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 				continue;
 			do {
 				change = 0;
-				for(patch = scan->patchs; patch; patch = patch->group_next[0])
+				for(patch = scan->patches; patch; patch = patch->group_next[0])
 				{
 					/* already found to be ready */
 					if(patch->local_flags & CACHE_PATCH_READY)
@@ -2305,7 +2305,7 @@ static void cache_situation_snapshot(uint32_t cache, struct cache_situation * in
 	{
 		struct cache_block * scan = cache_blocks[i];
 		for(; scan; scan = scan->next)
-			for(patch = scan->patchs; patch; patch = patch->group_next[0])
+			for(patch = scan->patches; patch; patch = patch->group_next[0])
 				dblock_update(patch, patch);
 	}
 }
@@ -3039,7 +3039,7 @@ static int command_lookup(int argc, const char * argv[])
 					struct patch * scan;
 					printf("Patchs:\n");
 					for(index = 0; index < HASH_TABLE_SIZE; index++)
-						for(scan = patchs[index]; scan; scan = scan->next)
+						for(scan = patches[index]; scan; scan = scan->next)
 						{
 							struct block * compare = lookup_block(scan->block);
 							if(scan->block == block->address)
@@ -3068,7 +3068,7 @@ static int command_mark(int argc, const char * argv[])
 	{
 		struct mark * scan;
 		i = 0;
-		printf("Marked patchs:\n");
+		printf("Marked patches:\n");
 		for(scan = marks; scan; scan = scan->next)
 			printf("  #%d: 0x%08x from opcode #%d\n", ++i, scan->address, scan->opcode);
 		return 0;
@@ -3741,7 +3741,7 @@ static char * command_complete(const char * text, int state)
 			char name[11];
 			do {
 				while(!local.patch.last && index < HASH_TABLE_SIZE)
-					local.patch.last = patchs[index++];
+					local.patch.last = patches[index++];
 				for(; local.patch.last; local.patch.last = local.patch.last->next)
 				{
 					sprintf(name, "0x%08x", local.patch.last->address);
