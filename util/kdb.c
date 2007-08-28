@@ -676,6 +676,7 @@ struct patch {
 	struct weak * weak_refs;
 	struct arrow * befores;
 	struct arrow * afters;
+	struct arrow ** after_next;
 	struct label * labels;
 	uint32_t free_prev, free_next;
 	/* hash table */
@@ -827,6 +828,7 @@ static struct patch * _patch_create(uint32_t address, uint32_t owner)
 	patch->weak_refs = NULL;
 	patch->befores = NULL;
 	patch->afters = NULL;
+	patch->after_next = &patch->afters;
 	patch->labels = NULL;
 	patch->free_prev = 0;
 	patch->free_next = 0;
@@ -932,8 +934,9 @@ static int patch_add_after(struct patch * before, uint32_t after)
 	if(!arrow)
 		return -ENOMEM;
 	arrow->patch = after;
-	arrow->next = before->afters;
-	before->afters = arrow;
+	arrow->next = NULL;
+	*before->after_next = arrow;
+	before->after_next = &arrow->next;
 	arrow_count++;
 	return 0;
 }
@@ -961,6 +964,8 @@ static int patch_rem_after(struct patch * before, uint32_t after)
 		{
 			struct arrow * old = *point;
 			*point = old->next;
+			if(!old->next)
+				before->after_next = point;
 			free(old);
 			arrow_count--;
 			return 0;
