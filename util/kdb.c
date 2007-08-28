@@ -1986,15 +1986,15 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 	return r;
 }
 
-static void print_opcode(int number, struct debug_opcode * opcode, int show_trace)
+static void print_opcode(int number, struct debug_opcode * opcode, int show_trace, FILE * output)
 {
 	int m, o, p;
 	m = opcode->module_idx;
 	o = opcode->opcode_idx;
-	printf("#%d @%u %s", number, opcode->timestamp, modules[m].opcodes[o]->name);
+	fprintf(output, "#%d @%u %s", number, opcode->timestamp, modules[m].opcodes[o]->name);
 	for(p = 0; modules[m].opcodes[o]->params[p]->name; p++)
 	{
-		printf("%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
+		fprintf(output, "%c %s = ", p ? ',' : ':', modules[m].opcodes[o]->params[p]->name);
 		if(opcode->params[p].size == 4)
 		{
 			const char * format = "0x%08x";
@@ -2002,36 +2002,36 @@ static void print_opcode(int number, struct debug_opcode * opcode, int show_trac
 				format = "%u";
 			else if(modules[m].opcodes[o]->params[p]->type == INT32)
 				format = "%d";
-			printf(format, opcode->params[p].data_4);
+			fprintf(output, format, opcode->params[p].data_4);
 		}
 		else if(opcode->params[p].size == 2)
 		{
 			if(modules[m].opcodes[o]->params[p]->type == UINT16)
-				printf("%d", opcode->params[p].data_2);
+				fprintf(output, "%d", opcode->params[p].data_2);
 			else if(modules[m].opcodes[o]->params[p]->type == INT16)
-				printf("%d", (int) (int16_t) opcode->params[p].data_2);
+				fprintf(output, "%d", (int) (int16_t) opcode->params[p].data_2);
 			else
-				printf("0x%04x", opcode->params[p].data_2);
+				fprintf(output, "0x%04x", opcode->params[p].data_2);
 		}
 		else if(opcode->params[p].size == 1)
 		{
 			if(modules[m].opcodes[o]->params[p]->type == BOOL)
-				printf(opcode->params[p].data_1 ? "true" : "false");
+				fprintf(output, opcode->params[p].data_1 ? "true" : "false");
 			else
-				printf("%d", opcode->params[p].data_1);
+				fprintf(output, "%d", opcode->params[p].data_1);
 		}
 		else if(opcode->params[p].size == (uint8_t) -1)
-			printf("%s", opcode->params[p].data_v);
+			fprintf(output, "%s", opcode->params[p].data_v);
 	}
 	if(opcode->function[0] || opcode->file[0])
-		printf("\n    from %s() at %s:%d\n", opcode->function, opcode->file, opcode->line);
+		fprintf(output, "\n    from %s() at %s:%d\n", opcode->function, opcode->file, opcode->line);
 	else
-		printf(" (line %d)\n", opcode->line);
+		fprintf(output, " (line %d)\n", opcode->line);
 	if(show_trace && opcode->stack[0])
 	{
 		for(p = 0; opcode->stack[p]; p++)
-			printf("  [%d]: 0x%08x", p, opcode->stack[p]);
-		printf("\n");
+			fprintf(output, "  [%d]: 0x%08x", p, opcode->stack[p]);
+		fprintf(output, "\n");
 	}
 }
 
@@ -2740,6 +2740,8 @@ static int command_list(int argc, const char * argv[])
 	int min = 0, max = opcodes - 1;
 	const char * prefix = NULL;
 	int prefix_length = -1;
+	const char * filename = NULL;
+	FILE * output = stdout;
 	if(argc > 1)
 		/* filter by opcode type prefix */
 		if(argv[1][0] == 'K')
@@ -2750,6 +2752,25 @@ static int command_list(int argc, const char * argv[])
 			argv = &argv[1];
 			argc--;
 		}
+	if(argc > 1)
+	{
+		if(!strcmp(argv[argc - 2], ">"))
+		{
+			filename = argv[argc - 1];
+			argc -= 2;
+		}
+		else if(argv[argc - 1][0] == '>')
+			filename = &argv[--argc][1];
+		if(filename)
+		{
+			output = fopen(filename, "w");
+			if(!output)
+			{
+				printf("Error opening %s.\n", filename);
+				return -1;
+			}
+		}
+	}
 	if(argc == 2)
 	{
 		/* show a single opcode */
@@ -2757,7 +2778,7 @@ static int command_list(int argc, const char * argv[])
 		if(min < 0 || max >= opcodes)
 		{
 			printf("No such opcode.\n");
-			return -1;
+			goto error_file;
 		}
 		show_trace = 1;
 	}
@@ -2769,7 +2790,7 @@ static int command_list(int argc, const char * argv[])
 		if(min < 0 || min > max)
 		{
 			printf("Invalid range.\n");
-			return -1;
+			goto error_file;
 		}
 		if(max >= opcodes)
 			max = opcodes - 1;
@@ -2780,19 +2801,31 @@ static int command_list(int argc, const char * argv[])
 		int r = get_opcode(i, &opcode);
 		if(r < 0)
 		{
-			printf("Error %d reading opcode %d (%s)\n", -r, i + 1, strerror(-r));
+			fprintf(output, "Error %d reading opcode %d (%s)\n", -r, i + 1, strerror(-r));
+			if(filename)
+				fclose(output);
 			return r;
 		}
 		if(!prefix || !strncmp(prefix, modules[opcode.module_idx].opcodes[opcode.opcode_idx]->name, prefix_length))
 		{
-			print_opcode(i + 1, &opcode, show_trace);
+			print_opcode(i + 1, &opcode, show_trace, output);
 			matches++;
 		}
 		put_opcode(&opcode);
 	}
 	if(prefix)
-		printf("Matched %d opcodes.\n", matches);
+		fprintf(output, "Matched %d/%d opcodes.\n", matches, max - min + 1);
+	if(filename)
+		fclose(output);
 	return 0;
+	
+error_file:
+	if(filename)
+	{
+		fclose(output);
+		unlink(filename);
+	}
+	return -1;
 }
 
 static int command_find(int argc, const char * argv[])
@@ -3567,7 +3600,8 @@ static char * command_complete(const char * text, int state)
 		MAXMIN,
 		LOOKUP,
 		OPTION,
-		GROUPING
+		GROUPING,
+		FILENAME
 	} type = COMMAND;
 	static union {
 		struct {
@@ -3590,6 +3624,7 @@ static char * command_complete(const char * text, int state)
 	{
 		int i, spaces[2] = {-1, -1};
 		char * argv[2] = {NULL, NULL};
+		char * argvn[2] = {NULL, NULL};
 		/* find the first non-whitespace character */
 		for(i = 0; i < rl_point && rl_line_buffer[i] == ' '; i++);
 		if(i < rl_point)
@@ -3612,6 +3647,21 @@ static char * command_complete(const char * text, int state)
 				}
 			}
 		}
+		/* find the last whitespace character */
+		for(i = rl_point - 1; i >= 0 && rl_line_buffer[i] != ' '; i--);
+		if(i < rl_point - 1)
+			argvn[1] = &rl_line_buffer[i + 1];
+		if(i > 0)
+		{
+			/* find the last non-whitespace character before that */
+			for(; i >= 0 && rl_line_buffer[i] == ' '; i--);
+			if(i >= 0)
+			{
+				/* find the last whitespace character before that */
+				for(; i >= 0 && rl_line_buffer[i] != ' '; i--);
+				argvn[0] = &rl_line_buffer[i + 1];
+			}
+		}
 		/* complete only commands at the beginning of the line */
 		if(spaces[0] == -1)
 			type = COMMAND;
@@ -3624,9 +3674,16 @@ static char * command_complete(const char * text, int state)
 			}
 			else if(!strncmp(argv[0], "list ", 5))
 			{
-				type = KDB;
-				local.kdb.module = 0;
-				local.kdb.opcode = 0;
+				if(argvn[0] && !strncmp(argvn[0], "> ", 2))
+					type = FILENAME;
+				else if(argvn[1] && argvn[1][0] == '>')
+					type = FILENAME;
+				else
+				{
+					type = KDB;
+					local.kdb.module = 0;
+					local.kdb.opcode = 0;
+				}
 			}
 			else if(!strncmp(argv[0], "unmark ", 7))
 			{
@@ -3820,6 +3877,8 @@ static char * command_complete(const char * text, int state)
 				index++;
 			}
 			break;
+		case FILENAME:
+			return rl_filename_completion_function(text, state);
 	}
 	return NULL;
 }
