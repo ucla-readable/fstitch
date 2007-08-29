@@ -1,14 +1,14 @@
 #!/bin/bash
 
 function mysvn () {
-	LD_LIBRARY_PATH=$SVNPATH/install/lib:$KUDOSDIR/obj/kernel/lib:$LD_LIBRARY_PATH \
+	LD_LIBRARY_PATH=$SVNPATH/install/lib:$FSTITCHDIR/obj/kernel/lib:$LD_LIBRARY_PATH \
 		PATH=$SVNPATH/install/bin:$PATH \
 		try svn "$@"
 }
 
 function test () {
 	ktime svn mysvn up -q $MNT/trunk/
-	ktime sync fsync $KUDOSDIR $MNT;
+	ktime sync fsync $FSTITCHDIR $MNT;
 }
 
 function run () {
@@ -20,8 +20,8 @@ function run () {
 
 BENCHDIR="`dirname "$0"`"
 . $BENCHDIR/common
-KUDOSDIR="$BENCHDIR/.."
-OUTDIR="$KUDOSDIR/test"
+FSTITCHDIR="$BENCHDIR/.."
+OUTDIR="$FSTITCHDIR/test"
 load_config "$OUTDIR"
 T=svn
 [ -n "$TESTNAME" ] && T="${T}-$TESTNAME"
@@ -38,12 +38,12 @@ if [ $# -ne 0 ]; then
 	exit 1;
 fi
 
-build $T $N $KUDOSDIR $HOST
+build $T $N $FSTITCHDIR $HOST
 # Make an old checkout for the test to update
 try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a start
 [ -f /proc/kkfsd_debug ] && cat /proc/kkfsd_debug > /dev/null &
 mysvn co -q -r 1000 file:///home/kudos/test-repo/trunk $MNT/trunk
-fsync $KUDOSDIR $MNT
+fsync $FSTITCHDIR $MNT
 try $BENCHDIR/init -h $HOST -d $DISKCACHE -f $FS -c $CMODE -a stop
 # Load 1000-HEAD into disk cache
 try svn co -q -r 1000 file:///home/kudos/test-repo/trunk /tmp/test-trunk
@@ -53,4 +53,4 @@ try sync
 
 log_kernel $T $N $OUTDIR $HOST
 run 2>&1 | tee $OUTDIR/$T.run.$N
-finish $T $N $KUDOSDIR $OUTDIR $HOST
+finish $T $N $FSTITCHDIR $OUTDIR $HOST

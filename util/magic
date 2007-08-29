@@ -1,4 +1,4 @@
-# KudOS debug trace information for the "file" command
+# Featherstitch debug trace information for the "file" command
 
 12	string		KDB_		Featherstitch debug trace data
 >0	belong		x		(%d,

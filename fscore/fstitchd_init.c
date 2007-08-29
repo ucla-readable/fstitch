@@ -459,7 +459,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		{
 			uint8_t type = pc_ptable_type(ptbl, i);
 			printf("Partition %d has type %02x\n", i, type);
-			if (type == PTABLE_FSTITCH_TYPE || type == PTABLE_LINUX_TYPE)
+			if (type == PTABLE_JOS_TYPE || type == PTABLE_LINUX_TYPE)
 			{
 				if (! (part = malloc(sizeof(fstitchd_partition_t))) )
 				{
@@ -511,9 +511,9 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 			fprintf(stderr, "OOM, malloc\n");
 			return -ENOMEM;
 		}
-		// No partition table, make it look like a KudOS partition...
+		// No partition table, make it look like a JOS partition...
 		part->bd = bd;
-		part->type = PTABLE_FSTITCH_TYPE;
+		part->type = PTABLE_JOS_TYPE;
 		part->subtype = 0;
 		snprintf(part->description, 32, "<entire disk>");
 		if (vector_push_back(partitions, part))
@@ -533,7 +533,7 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 		if (!part)
 			continue;
 
-		if (part->type == PTABLE_FSTITCH_TYPE)
+		if (part->type == PTABLE_JOS_TYPE)
 		{
 			lfs = construct_lfs(part, cache_nblks, josfs_lfs, 4096);
 		}
