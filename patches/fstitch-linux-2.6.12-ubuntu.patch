@@ -27,9 +27,9 @@ diff -u linux-2.6.12/drivers/fstitch/Kconfig linux-2.6.12/drivers/fstitch/Kconfi
 +++ linux-2.6.12/drivers/fstitch/Kconfig	2006-04-03 16:01:11.000000000 -0700
 @@ -0,0 +1,5 @@
 +config FSTITCH_PROC
-+	boolean "Provide process event hooks for KudOS"
++	boolean "Provide process event hooks for Featherstitch"
 +	---help---
-+	  This option provides hooks for the KudOS kernel module to find out
++	  This option provides hooks for the Featherstitch kernel module to find out
 +          about process events, which it needs to support patchgroups.
 diff -u linux-2.6.12/drivers/fstitch/Makefile linux-2.6.12/drivers/fstitch/Makefile
 --- linux-2.6.12/drivers/fstitch/Makefile	1969-12-31 16:00:00.000000000 -0800
@@ -41,7 +41,7 @@ diff -u linux-2.6.12/drivers/fstitch/fstitch_proc.c linux-2.6.12/drivers/fstitch
 +++ linux-2.6.12/drivers/fstitch/fstitch_proc.c	2006-04-04 01:43:28.000000000 -0700
 @@ -0,0 +1,102 @@
 +/*
-+ * fstitch_proc.c - provide process event hooks for KudOS
++ * fstitch_proc.c - provide process event hooks for Featherstitch
 + *
 + * Copyright (C) 2006 Regents of the University of California
 + * Based loosely on cn_proc.c by Matt Helsley
@@ -166,7 +166,7 @@ diff -u linux-2.6.12/include/linux/fstitch_proc.h linux-2.6.12/include/linux/fst
 +++ linux-2.6.12/include/linux/fstitch_proc.h	2006-04-04 01:43:34.000000000 -0700
 @@ -0,0 +1,61 @@
 +/*
-+ * fstitch_proc.h - provide process event hooks for KudOS
++ * fstitch_proc.h - provide process event hooks for Featherstitch
 + *
 + * Copyright (C) 2006 Regents of the University of California
 + * Based loosely on cn_proc.h by Matt Helsley

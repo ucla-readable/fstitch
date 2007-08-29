@@ -1,10 +1,3 @@
-#include <lib/platform.h>
-
-#define _PARAMS(protos) protos
-#define _DEFUN(fn, types, protos) fn(protos)
-#define _AND ,
-
-
 /*
 FUNCTION
 <<qsort>>---sort an array
@@ -81,8 +74,11 @@ PORTABILITY
  * SUCH DAMAGE.
  */
 
-//#include <_ansi.h>
-//#include <stdlib.h>
+#include <lib/platform.h>
+
+#define _PARAMS(protos) protos
+#define _DEFUN(fn, types, protos) fn(protos)
+#define _AND ,
 
 #ifndef __GNUC__
 #define inline
