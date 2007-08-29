@@ -67,7 +67,7 @@ $(OBJDIR)/lib/libpatchgroup.so: lib/kernel_patchgroup.c
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -std=gnu99 -g -o $@ $< -shared
 
 # Include Makefrags for subdirectories
-include fs/Makefrag
+include images/Makefrag
 include util/Makefrag
 
 # Build vi/emacs tag files
@@ -96,7 +96,7 @@ TAGS: $(TAGDEPS)
 
 # For deleting the build
 fsclean:
-	rm -f $(BASE_OBJDIR)/fs/ufs.img $(BASE_OBJDIR)/fs/ext2.img 
+	rm -f $(BASE_OBJDIR)/images/ufs.img $(BASE_OBJDIR)/images/ext2.img 
 
 clean:
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean

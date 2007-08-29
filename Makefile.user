@@ -41,7 +41,7 @@ all: tags TAGS
 
 # make it so that no intermediate .o files are never deleted
 .PRECIOUS: %.o \
-	$(OBJDIR)/lib/%.o $(OBJDIR)/fscore/%.o $(OBJDIR)/fs/%.o $(OBJDIR)/user/%.o
+	$(OBJDIR)/lib/%.o $(OBJDIR)/fscore/%.o $(OBJDIR)/modules/%.o
 
 $(OBJDIR)/lib/%.o: lib/%.c
 	@echo + cc[lib] $<
@@ -62,7 +62,7 @@ $(OBJDIR)/modules/%.o: modules/%.c
 	$(V)$(CC) -DFSTITCHD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
 
 # Include [UU]Makefrags for subdirectories
-include fs/Makefrag
+include images/Makefrag
 include lib/UUMakefrag
 include fscore/UUMakefrag
 include util/Makefrag
@@ -93,7 +93,7 @@ TAGS: $(TAGDEPS)
 
 # For deleting the build
 fsclean:
-	rm -f $(BASE_OBJDIR)/fs/ufs.img $(BASE_OBJDIR)/fs/ext2.img 
+	rm -f $(BASE_OBJDIR)/images/ufs.img $(BASE_OBJDIR)/images/ext2.img 
 
 clean:
 	rm -rf $(OBJDIR) tags TAGS Module.symvers

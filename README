@@ -12,7 +12,7 @@ the FUSE version.
 To use the kernel version, load fscore/kfstitchd.ko and specify the device to attach to
 in the linux_device module parameter. For example:
 
-$ sudo insmod fscore/kfstitchd.ko linux_device=/dev/sdb
+$ sudo insmod fscore/kfstitchd.ko device=/dev/sdb
 
 Featherstitch will internally mount all detected file systems, but you must tell Linux
 to mount the Featherstitch pseudo-devices (which start with fstitch:). For example:

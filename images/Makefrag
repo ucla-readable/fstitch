@@ -1,0 +1,20 @@
+OBJDIRS += images
+
+# ufs.img is largely a sparse file
+$(BASE_OBJDIR)/images/ufs.img: images/ufs-clean.img.gz
+	@echo + mk $(BASE_OBJDIR)/images/ufs.img
+	@mkdir -p $(@D)
+	$(V)util/gunzip_sparse images/ufs-clean.img.gz $(BASE_OBJDIR)/images/ufs.img
+
+# ext2.img is largely a sparse file
+$(BASE_OBJDIR)/images/ext2.img: images/ext2-clean.img.gz
+	@echo + mk $(BASE_OBJDIR)/images/ext2.img
+	@mkdir -p $(@D)
+	$(V)util/gunzip_sparse images/ext2-clean.img.gz $(BASE_OBJDIR)/images/ext2.img
+
+# ext2-10G.img is largely a sparse file
+$(BASE_OBJDIR)/images/ext2-10G.img: images/ext2-10G.img.gz.gz
+	@echo + mk $(BASE_OBJDIR)/images/ext2-10G.img
+	@mkdir -p $(@D)
+	$(V)zcat images/ext2-10G.img.gz.gz > $(BASE_OBJDIR)/images/ext2-10G.img.gz
+	$(V)util/gunzip_sparse $(BASE_OBJDIR)/images/ext2-10G.img.gz $(BASE_OBJDIR)/images/ext2-10G.img

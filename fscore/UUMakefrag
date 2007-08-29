@@ -61,7 +61,7 @@ FSMODOFILES := \
 			$(OBJDIR)/modules/icase_cfs.o \
 			$(OBJDIR)/modules/uhfs_cfs.o
 
-$(OBJDIR)/fscore/fstitchd: $(FSCOREOFILES) $(FSMODOFILES) $(OBJDIR)/lib/libuser.a obj/fs/ext2.img
+$(OBJDIR)/fscore/fstitchd: $(FSCOREOFILES) $(FSMODOFILES) $(OBJDIR)/lib/libuser.a obj/images/ext2.img
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FSCOREOFILES) $(FSMODOFILES) $(LIBS)
