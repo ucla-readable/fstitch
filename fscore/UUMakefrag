@@ -1,4 +1,4 @@
-OBJDIRS += fscore
+OBJDIRS += fscore modules
 BIN += $(OBJDIR)/fscore/fstitchd
 
 ifeq ($(P),)
