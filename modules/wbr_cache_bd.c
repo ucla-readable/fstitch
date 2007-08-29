@@ -569,7 +569,6 @@ BD_t * wbr_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	}
 	
 	BD_INIT(bd, wbr_cache_bd);
-	OBJMAGIC(bd) = WB_CACHE_MAGIC;
 	
 	info->bd = disk;
 	info->soft_blocks = soft_blocks;

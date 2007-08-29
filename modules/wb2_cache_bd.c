@@ -666,7 +666,6 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 	memset(info->map, 0, info->map_capacity * sizeof(*info->map));
 	
 	BD_INIT(bd, wb2_cache_bd);
-	OBJMAGIC(bd) = WB_CACHE_MAGIC;
 	
 	info->bd = disk;
 	info->soft_blocks = soft_blocks;
