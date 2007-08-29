@@ -25,23 +25,23 @@
 #include <fscore/kernel_serve.h>
 
 #ifdef CONFIG_LBD
-# warning CONFIG_LBD enabled. kfstitchd assumes 32bit sector values.
+# error CONFIG_LBD enabled. kfstitchd assumes 32bit sector values.
 #endif
 
 /* 2.6.12 has only CONFIG_PREEMPT or nothing.
  * By 2.6.13.4 linux added voluntary preemption and changed the defines. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 13)
 # ifndef CONFIG_PREEMPT_NONE
-#  warning CONFIG_PREEMPT_NONE not enabled. kfstitchd does not lock everything it should.
+#  error CONFIG_PREEMPT_NONE not enabled. kfstitchd does not lock everything it should.
 # endif
 #else
 # ifdef CONFIG_PREEMPT
-#  warning CONFIG_PREEMPT enabled. kfstitchd does not lock everything it should.
+#  error CONFIG_PREEMPT enabled. kfstitchd does not lock everything it should.
 # endif
 #endif
 
 #ifdef CONFIG_SMP
-# warning CONFIG_SMP enabled. kfstitchd does not lock everything it should.
+# error CONFIG_SMP enabled. kfstitchd does not lock everything it should.
 #endif
 
 #define KERNEL_SERVE_DEBUG 0
