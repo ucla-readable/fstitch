@@ -273,7 +273,7 @@ static int devfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void *
 		r = CALL(devfd->bd, write_block, bdesc, blockno);
 		if(r < 0)
 		{
-			/* FIXME clean up patchs */
+			/* FIXME clean up patches */
 			break;
 		}
 

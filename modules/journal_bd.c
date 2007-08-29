@@ -40,12 +40,12 @@
 
 /* Theory of operation:
  * 
- * Basically, as patchs pass through the journal_bd module, we copy their
- * blocks into a journal and add a before to each of the patchs to keep
+ * Basically, as patches pass through the journal_bd module, we copy their
+ * blocks into a journal and add a before to each of the patches to keep
  * them from being written to disk. Then, when the transaction is over, we write
  * some bookkeeping stuff to the journal, hook it up to the waiting before
  * of all the data, and watch the cache do all our dirty work as it sorts out
- * the patchs.
+ * the patches.
  * 
  * We break the journal area up into slots. Each slot begins with a commit
  * record followed by block number lists, then actual data blocks. The commit
@@ -59,7 +59,7 @@
  * 
  * At runtime, to keep track of which slots are busy (i.e. they have not been
  * completely written to disk), we weak retain the last patch in a transaction
- * in an array of patchs whose indices correspond to slot numbers. Because we
+ * in an array of patches whose indices correspond to slot numbers. Because we
  * can have "chained" slots, we have a special EMPTY patch that represents the
  * whole transaction (since the commit record cancellation patch will not be
  * created until the end of the transaction, and we need to do the weak retains
@@ -91,9 +91,9 @@
  *                             |                                           |
  *                             +------ Created at end of transaction ------+
  * 
- * Purposes of various EMPTY patchs:
+ * Purposes of various EMPTY patches:
  * keep_w:
- *   keep "wait" from becoming satisfied as the jrdata (journal data) patchs
+ *   keep "wait" from becoming satisfied as the jrdata (journal data) patches
  *   are written to disk and satisfied (all the other EMPTYs depend on things
  *   that won't get satisfied until we send the whole transaction off into
  *   the cache)
@@ -112,7 +112,7 @@
  *   keep "data" from becoming satisfied in the event that prev_cancel does
  * data:
  *   allow the cancellation to easily be hooked up to all the fsdata (filesystem
- *   data) patchs that are part of the transaction, and to the previous one
+ *   data) patches that are part of the transaction, and to the previous one
  * done:
  *   provide a single patch that exists at the beginning of the transaction
  *   which represents the whole transaction, so we can weak retain it to claim
@@ -571,7 +571,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	
 	if(info->recursion)
 	{
-		/* only used to write the journal itself: many fewer patchs there! */
+		/* only used to write the journal itself: many fewer patches there! */
 		patch_push_down(block, object, info->bd);
 		return CALL(info->bd, write_block, block, block_number);
 	}
@@ -604,7 +604,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 				}
 	}
 	
-	/* inspect and modify all patchs passing through */
+	/* inspect and modify all patches passing through */
 	for(patch = block->index_patches[object->graph_index].head; patch; patch = patch_index_next)
 	{
 		int needs_hold = 1;
@@ -650,7 +650,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		
 		if(engaged)
 		{
-			/* scan the afters as well, and unhook any patchgroup patchs */
+			/* scan the afters as well, and unhook any patchgroup patches */
 			/* WARNING: see warning above */
 			deps = &patch->afters;
 			while(*deps)
@@ -920,7 +920,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 			continue;
 			
 		patch_error:
-			/* FIXME clean up patchs */
+			/* FIXME clean up patches */
 			assert(0);
 		output_error:
 			bdesc_release(&data_block);
@@ -1214,7 +1214,7 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal)
 	/* The graph index of the journal must be allowed to be larger than the
 	 * BD: it will be in the common case of an internal journal, for
 	 * instance. But we're more like an LFS module in our use of the
-	 * journal; we create the patchs, not just forward them. So it's OK. */
+	 * journal; we create the patches, not just forward them. So it's OK. */
 	
 	if(modman_inc_bd(journal, bd, "journal") < 0)
 		return -EINVAL;

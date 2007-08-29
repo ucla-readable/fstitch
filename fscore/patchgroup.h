@@ -93,7 +93,7 @@ int patchgroup_engaged(void);
 void patchgroup_masquerade(void);
 void patchgroup_demasquerade(void);
 
-/* add patchs to the engaged patchgroups in the current scope */
+/* add patches to the engaged patchgroups in the current scope */
 int patchgroup_prepare_head(patch_t ** head);
 int patchgroup_finish_head(patch_t * head);
 

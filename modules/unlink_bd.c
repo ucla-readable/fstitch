@@ -34,7 +34,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 	const int engaged = patchgroup_engaged();
 	int r;
 	
-	/* inspect and modify all patchs passing through */
+	/* inspect and modify all patches passing through */
 	for(patch = block->ddesc->index_patches[object->graph_index].head; patch; patch = next)
 	{
 		int needs_head = 1;
@@ -73,7 +73,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 		
 		if(engaged)
 		{
-			/* scan the afters as well, and unhook any patchgroup patchs */
+			/* scan the afters as well, and unhook any patchgroup patches */
 			/* WARNING: see warning above */
 			deps = &patch->afters;
 			while(*deps)

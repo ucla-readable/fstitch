@@ -14,7 +14,7 @@
 
 #ifndef CONSTANTS_ONLY
 
-/* Set to allow non-rollbackable patchs; these patchs omit their data ptr
+/* Set to allow non-rollbackable patches; these patches omit their data ptr
  * and mulitple NRBs on a given ddesc are merged into one */
 /* values: 0 (disable), 1 (enable) */
 #define PATCH_NRB 1
@@ -22,7 +22,7 @@
 /* values: 0 (disable), 1 (enable) */
 #define BDESC_EXTERN_AFTER_COUNT PATCH_NRB
 /* Set to ensure that, for a block with a NRB, all RBs on the block depend
- * on the NRB, thereby ensuring the ready list contains only ready patchs */
+ * on the NRB, thereby ensuring the ready list contains only ready patches */
 /* values: 0 (do not ensure), 1 (do ensure) */
 #define PATCH_RB_NRB_READY (PATCH_NRB && 1)
 
@@ -53,11 +53,11 @@ struct bdesc {
 	uint32_t extern_after_count;
 #endif
 	
-	/* For each level (at most 1 BD per level), the level's ready patchs.
+	/* For each level (at most 1 BD per level), the level's ready patches.
 	 * ready patch: patch with no befores at its level or higher. */
 	patch_dlist_t ready_patches[NBDLEVEL];
 
-	/* For each graph index, the patchs owned by that BD. */
+	/* For each graph index, the patches owned by that BD. */
 	patch_dlist_t index_patches[NBDINDEX];
 	
 #if PATCH_NRB

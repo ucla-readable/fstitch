@@ -938,7 +938,7 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 	else if(!value)
 		return 0;
 	
-	/* bit patchs take offset in increments of 32 bits */
+	/* bit patches take offset in increments of 32 bits */
 	r = patch_create_bit(info->bitmap_cache, info->ubd, block_in_group / 32, 1 << (block_in_group % 32), head);
 	if(r < 0)
 		return r;
@@ -991,7 +991,7 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 	else if(!value)
 		return 0;
 	
-	/* bit patchs take offset in increments of 32 bits */
+	/* bit patches take offset in increments of 32 bits */
 	r = patch_create_bit(info->inode_cache, info->ubd, inode_in_group / 32, 1 << (inode_in_group % 32), head);
 	if (r < 0)
 		return r;	

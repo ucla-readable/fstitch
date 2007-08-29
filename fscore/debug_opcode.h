@@ -115,7 +115,7 @@ static const struct param
 	param_blocks =      {"blocks",      UHEX32},
 	param_cache =       {"cache",       UHEX32},
 	param_patch =      {"patch",      UHEX32},
-	param_patchs =     {"patchs",     UHEX32},
+	param_patches =     {"patches",     UHEX32},
 	param_count =       {"count",       UINT32},
 	param_ddesc =       {"ddesc",       UHEX32},
 	param_depth =       {"depth",       UINT32},

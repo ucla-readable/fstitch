@@ -196,7 +196,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, patch_t **
 	/* does it already have the right value? */
 	if (((uint32_t *) bdesc_data(bdesc))[(blockno % JOSFS_BLKBITSIZE) / 32] >> (blockno % 32) == value)
 		return 0;
-	/* bit patchs take offset in increments of 32 bits */
+	/* bit patches take offset in increments of 32 bits */
 	r = patch_create_bit(bdesc, object->blockdev, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32), head);
 	if (r < 0)
 		return r;

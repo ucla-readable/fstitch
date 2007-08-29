@@ -105,7 +105,7 @@ struct patchdep {
 	} before, after;
 };
 
-/* patch pass sets allow easy prepending of new patchs to argument lists */
+/* patch pass sets allow easy prepending of new patches to argument lists */
 struct patch_pass_set {
 	struct patch_pass_set * next;
 	ssize_t size;
@@ -123,7 +123,7 @@ struct patch_pass_set {
 
 int patch_init(void);
 
-/* create new patchs */
+/* create new patches */
 /* create a empty using a pass set */
 int patch_create_empty_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * befores);
 /* create a empty using befores array */
@@ -151,7 +151,7 @@ static __inline uint16_t patch_level(const patch_t * patch) __attribute__((alway
 /* propagate a level change to patch->afters, from 'prev_level' to 'new_level' */
 void patch_propagate_level_change(patch_t * patch, uint16_t prev_level, uint16_t new_level);
 
-/* check whether two patchs overlap, even on different blocks */
+/* check whether two patches overlap, even on different blocks */
 static inline int patch_overlap_check(const patch_t * a, const patch_t * b);
 
 /* add a dependency from 'after' on 'before' */
@@ -169,7 +169,7 @@ void patch_dep_remove(patchdep_t * dep);
 #error PATCH_BYTE_SUM is incompatible with !REVISION_TAIL_INPLACE
 #endif
 
-/* apply and roll back patchs */
+/* apply and roll back patches */
 int patch_apply(patch_t * patch);
 #if REVISION_TAIL_INPLACE
 int patch_rollback(patch_t * patch);
@@ -180,7 +180,7 @@ int patch_rollback(patch_t * patch, uint8_t * buffer);
 /* mark patch as inflight */
 void patch_set_inflight(patch_t * patch);
 
-/* satisfy a patch, i.e. remove it from all others that depend on it and add it to the list of written patchs */
+/* satisfy a patch, i.e. remove it from all others that depend on it and add it to the list of written patches */
 int patch_satisfy(patch_t ** patch);
 
 /* create and remove weak references to a patch */
@@ -205,7 +205,7 @@ void patch_autorelease_empty(patch_t * patch);
 /* mark a EMPTY patch as a set EMPTY: would-be afters get its befores instead */
 void patch_set_empty_declare(patch_t * patch);
 
-/* reclaim written patchs, by patch_destroy() on them */
+/* reclaim written patches, by patch_destroy() on them */
 void patch_reclaim_written(void);
 
 /* link patch into its ddesc's all_patches list */
@@ -251,7 +251,7 @@ static __inline uint16_t patch_level(const patch_t * patch)
 {
 	const patch_t * __patch = (patch);
 	assert(!__patch->block || __patch->owner);
-	/* in-flight patchs have +1 to their level to prevent other patchs from following */
+	/* in-flight patches have +1 to their level to prevent other patches from following */
 	return __patch->owner ? __patch->owner->level + ((patch->flags & PATCH_INFLIGHT) ? 1 : 0): patch_before_level(__patch);
 }
 
@@ -432,7 +432,7 @@ static inline void patch_weak_release(patchweakref_t * weak, bool callback)
 	}
 }
 
-/* add a dependency between patchs */
+/* add a dependency between patches */
 static inline int patch_add_depend(patch_t * after, patch_t * before)
 {
 	/* compensate for Heisenberg's uncertainty principle */
@@ -453,7 +453,7 @@ static inline int patch_add_depend(patch_t * after, patch_t * before)
 	return patch_add_depend_no_cycles(after, before);
 }
 
-/* CRUCIAL NOTE: does *not* check whether the patchs are on the same ddesc */
+/* CRUCIAL NOTE: does *not* check whether the patches are on the same ddesc */
 /* returns 0 for no overlap, 1 for overlap, and 2 for a overlaps b completely */
 static inline int patch_overlap_check(const patch_t * a, const patch_t * b)
 {
@@ -466,7 +466,7 @@ static inline int patch_overlap_check(const patch_t * a, const patch_t * b)
 	   || b->offset >= a->offset + a->length)
 		return 0;
 	
-	/* two bit patchs overlap if they modify the same bits */
+	/* two bit patches overlap if they modify the same bits */
 	if(a->type == BIT && b->type == BIT)
 	{
 		assert(a->offset == b->offset);

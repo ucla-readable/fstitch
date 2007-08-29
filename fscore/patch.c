@@ -11,14 +11,14 @@
  * PATCH_CYCLE_CHECK. */
 #define PATCH_CYCLE_PRINT 1
 
-/* Set to count patchs by type and display periodic output */
+/* Set to count patches by type and display periodic output */
 #define COUNT_PATCHS 0
 /* Set for count to be a total instead of the current */
 #define COUNT_PATCHS_IS_TOTAL 0
 
 /* Patch multigraphs allow more than one dependency between the same
- * two patchs. This currently saves us the trouble of making sure we
- * don't create a duplicate dependency between patchs, though it also causes us
+ * two patches. This currently saves us the trouble of making sure we
+ * don't create a duplicate dependency between patches, though it also causes us
  * to allocate somewhat more memory in many cases where we would otherwise
  * detect the duplicate dependency. Allowing multigraphs results in a reasonable
  * speedup, even though we use more memory, so it is enabled by default. */
@@ -126,7 +126,7 @@ static inline void account_update(account_t * act, int32_t space_change)
 	return account_update_realloc(act, 0, space_change);
 }
 
-static account_t act_npatchs[6], act_ndeps;
+static account_t act_npatches[6], act_ndeps;
 static account_t act_data;
 //static account_t act_nnrb;
 
@@ -134,36 +134,36 @@ static account_t act_data;
 #define NC_CONVERT_EMPTY 4
 #define NC_TOTAL 5
 static account_t * act_all[] =
-    { &act_npatchs[BIT], &act_npatchs[BYTE], &act_npatchs[EMPTY],
-      &act_npatchs[NC_CONVERT_BIT_BYTE], &act_npatchs[NC_CONVERT_EMPTY],
-      &act_npatchs[NC_TOTAL],
+    { &act_npatches[BIT], &act_npatches[BYTE], &act_npatches[EMPTY],
+      &act_npatches[NC_CONVERT_BIT_BYTE], &act_npatches[NC_CONVERT_EMPTY],
+      &act_npatches[NC_TOTAL],
       &act_ndeps, &act_data };
 
-static inline void account_npatchs(int type, int add)
+static inline void account_npatches(int type, int add)
 {
-	account_update(&act_npatchs[type], add);
-	account_update(&act_npatchs[NC_TOTAL], add);
+	account_update(&act_npatches[type], add);
+	account_update(&act_npatches[NC_TOTAL], add);
 }
 
-static inline void account_npatchs_undo(int type)
+static inline void account_npatches_undo(int type)
 {
 	/* count undone in 'total space'? (do not decrement space_total) */
-	account_update(&act_npatchs[type], -1);
-	act_npatchs[type].space_total--;
-	act_npatchs[type].space_total_realloc--;
-	account_update(&act_npatchs[NC_TOTAL], -1);
-	act_npatchs[NC_TOTAL].space_total--;
-	act_npatchs[NC_TOTAL].space_total_realloc--;
+	account_update(&act_npatches[type], -1);
+	act_npatches[type].space_total--;
+	act_npatches[type].space_total_realloc--;
+	account_update(&act_npatches[NC_TOTAL], -1);
+	act_npatches[NC_TOTAL].space_total--;
+	act_npatches[NC_TOTAL].space_total_realloc--;
 }
 
-static inline void account_npatchs_convert(int type_old, int type_new)
+static inline void account_npatches_convert(int type_old, int type_new)
 {
-	account_update(&act_npatchs[type_old], -1);
-	account_update(&act_npatchs[type_new], 1);
+	account_update(&act_npatches[type_old], -1);
+	account_update(&act_npatches[type_new], 1);
 	if(type_old == BIT && type_new == BYTE)
-		account_update(&act_npatchs[NC_CONVERT_BIT_BYTE], 1);
+		account_update(&act_npatches[NC_CONVERT_BIT_BYTE], 1);
 	else if(type_new == EMPTY)
-		account_update(&act_npatchs[NC_CONVERT_EMPTY], 1);
+		account_update(&act_npatches[NC_CONVERT_EMPTY], 1);
 	else
 		assert(0);
 }
@@ -206,12 +206,12 @@ static void account_print_all(void * ignore)
 
 static int account_init_all(void)
 {
-	account_init("npatchs (byte)", sizeof(patch_t), &act_npatchs[BYTE]);
-	account_init("npatchs (bit)", sizeof(patch_t), &act_npatchs[BIT]);
-	account_init("npatchs (empty)", sizeof(patch_t), &act_npatchs[EMPTY]);
-	account_init("npatchs (bit->byte)", 0, &act_npatchs[NC_CONVERT_BIT_BYTE]);
-	account_init("npatchs (->empty)", 0, &act_npatchs[NC_CONVERT_EMPTY]);
-	account_init("npatchs (total)", sizeof(patch_t), &act_npatchs[NC_TOTAL]);
+	account_init("npatches (byte)", sizeof(patch_t), &act_npatches[BYTE]);
+	account_init("npatches (bit)", sizeof(patch_t), &act_npatches[BIT]);
+	account_init("npatches (empty)", sizeof(patch_t), &act_npatches[EMPTY]);
+	account_init("npatches (bit->byte)", 0, &act_npatches[NC_CONVERT_BIT_BYTE]);
+	account_init("npatches (->empty)", 0, &act_npatches[NC_CONVERT_EMPTY]);
+	account_init("npatches (total)", sizeof(patch_t), &act_npatches[NC_TOTAL]);
 	//account_init("nnrb", &act_nnrb);
 	account_init("data", 1, &act_data);
 	account_init("ndeps", sizeof(patchdep_t), &act_ndeps);
@@ -221,9 +221,9 @@ static int account_init_all(void)
 # define account_init(x) do {} while(0)
 # define account_update_realloc(act, sc, ad) do {} while(0)
 # define account_update(act, sc) do {} while(0)
-# define account_npatchs(type, add) do {} while (0)
-# define account_npatchs_undo(type) do {} while (0)
-# define account_npatchs_convert(type_old, type_new) do {} while (0)
+# define account_npatches(type, add) do {} while (0)
+# define account_npatches_undo(type) do {} while (0)
+# define account_npatches_convert(type_old, type_new) do {} while (0)
 # define account_init_all() 0
 #endif
 
@@ -782,7 +782,7 @@ void patch_propagate_level_change(patch_t * patch, uint16_t prev_level, uint16_t
 	}
 }
 
-/* add a dependency between patchs without checking for cycles */
+/* add a dependency between patches without checking for cycles */
 int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 {
 	patchdep_t * dep;
@@ -794,7 +794,7 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 			return -EINVAL;
 	}
 	
-	/* in-flight and on-disk patchs cannot (generally) safely gain befores */
+	/* in-flight and on-disk patches cannot (generally) safely gain befores */
 	if(after->flags & PATCH_INFLIGHT)
 	{
 		printf("%s(): (%s:%d): Adding before to in flight after!\n", __FUNCTION__, __FILE__, __LINE__);
@@ -1176,7 +1176,7 @@ void patch_untmpize_all_patches(patch_t * patch)
 		assert(!patch->tmp_next);
 }
 
-/* EMPTY patchs may have:
+/* EMPTY patches may have:
  * - NULL block and owner, in which case it is a "normal" EMPTY.
  *   (propagates before/after counts. propagates external counts.)
  * - NULL block and non-NULL owner: has a device level and thus prevents its afters
@@ -1196,7 +1196,7 @@ int patch_create_empty_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * bef
 	patch = patch_alloc();
 	if(!patch)
 		return -ENOMEM;
-	account_npatchs(EMPTY, 1);
+	account_npatches(EMPTY, 1);
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_EMPTY, patch, owner);
 #if COUNT_PATCHS
 	patch_counts[EMPTY]++;
@@ -1245,7 +1245,7 @@ int patch_create_empty_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * bef
 			array = befores->list;
 		}
 		for(i = 0; i < size; i++)
-			/* it is convenient to allow NULL and written patchs,
+			/* it is convenient to allow NULL and written patches,
 			   so make sure here to not add these as befores: */
 			if(array[i] && !(array[i]->flags & PATCH_WRITTEN))
 				if((r = patch_add_depend_no_cycles(patch, array[i])) < 0)
@@ -1309,8 +1309,8 @@ int patch_create_empty_list(BD_t * owner, patch_t ** tail, ...)
 	return r;
 }
 
-static __inline bool new_patchs_require_data(const bdesc_t * block) __attribute__((always_inline));
-static __inline bool new_patchs_require_data(const bdesc_t * block)
+static __inline bool new_patches_require_data(const bdesc_t * block) __attribute__((always_inline));
+static __inline bool new_patches_require_data(const bdesc_t * block)
 {
 #if PATCH_NRB
 	/* Rule: When adding patch C to block B,
@@ -1332,35 +1332,35 @@ static bool patch_nrb_merge_stats_callback_registered = 0;
 static void print_patch_nrb_merge_stats(void * ignore)
 {
 	unsigned i;
-	uint32_t npatchs = 0;
-	uint32_t npatchs_notmerged = 0;
+	uint32_t npatches = 0;
+	uint32_t npatches_notmerged = 0;
 	(void) ignore;
 
 	for(i = 0; i < N_PATCH_NRB_MERGE_STATS; i++)
 	{
-		npatchs += patch_nrb_merge_stats[i];
+		npatches += patch_nrb_merge_stats[i];
 		if(i > 0)
-			npatchs_notmerged += patch_nrb_merge_stats[i];
+			npatches_notmerged += patch_nrb_merge_stats[i];
 	}
 	
-	printf("patchs merge stats:\n");
+	printf("patches merge stats:\n");
 	
-	if(!npatchs)
+	if(!npatches)
 	{
 		/* protect against divide by zero */
-		printf("\tno patchs created\n");
+		printf("\tno patches created\n");
 		return;
 	}
-	printf("\tmerged: %u (%3.1f%% all)\n", patch_nrb_merge_stats[0], 100 * ((float) patch_nrb_merge_stats[0]) / ((float) npatchs));
+	printf("\tmerged: %u (%3.1f%% all)\n", patch_nrb_merge_stats[0], 100 * ((float) patch_nrb_merge_stats[0]) / ((float) npatches));
 
-	if(!npatchs_notmerged)
+	if(!npatches_notmerged)
 	{
 		/* protect against divide by zero */
-		printf("\tall patchs merged?!\n");
+		printf("\tall patches merged?!\n");
 		return;
 	}
 	for(i = 1; i < N_PATCH_NRB_MERGE_STATS; i++)
-		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, patch_nrb_merge_stats[i], 100 * ((float) patch_nrb_merge_stats[i]) / ((float) npatchs_notmerged));
+		printf("\tnot merged case %u: %u (%3.1f%% non-merged)\n", i, patch_nrb_merge_stats[i], 100 * ((float) patch_nrb_merge_stats[i]) / ((float) npatches_notmerged));
 }
 
 # include <fscore/fstitchd.h>
@@ -1387,7 +1387,7 @@ static void patch_nrb_merge_stats_log(unsigned idx)
  * Return such a patch if so, else return NULL. */
 static patch_t * select_patch_merger(const bdesc_t * block)
 {
-	if(new_patchs_require_data(block))
+	if(new_patches_require_data(block))
 	{
 		/* rollbackable patch dep relations can be complicated, give up */
 		PATCH_NRB_MERGE_STATS_LOG(1);
@@ -1462,7 +1462,7 @@ static void move_befores_for_merge(patch_t * patch, patch_t * merge_target, bool
 			goto recurse_return;
 		if(patch->type != EMPTY)
 		{
-			/* Treat same-block, data patchs as able to reach merge_target.
+			/* Treat same-block, data patches as able to reach merge_target.
 			 * Caller will ensure they do reach merge_target. */
 			patch->tmp_next = marked_head;
 			patch->tmp_pprev = &marked_head;
@@ -1527,7 +1527,7 @@ static void move_befores_for_merge(patch_t * patch, patch_t * merge_target, bool
 	if(states != static_states)
 		sfree(states, states_capacity * sizeof(*state));
 	
-	/* remove patchs from the marked list only after all traversals
+	/* remove patches from the marked list only after all traversals
 	 * because of multipaths */
 	while(marked_head)
 	{
@@ -1588,7 +1588,7 @@ static patch_t * pprev2patch(patch_t ** patch_ddesc_pprev)
 }
 
 /* Return a data patch on 'block' that has no before path to a patch
- * on its block. Return NULL if there are no data patchs on 'block'. */
+ * on its block. Return NULL if there are no data patches on 'block'. */
 static patch_t * find_patch_without_block_befores(bdesc_t * block)
 {
 	/* The last data patch should be the oldest patch on 'block'
@@ -1633,7 +1633,7 @@ static void merge_rbs(bdesc_t * block)
 	patch_t * merger, * patch, * next;
 	int r;
 	
-	/* choose merger so that it does not depend on any other data patchs
+	/* choose merger so that it does not depend on any other data patches
 	 * on the block to simplify before merging */ 
 	if(!(merger = find_patch_without_block_befores(block)))
 		return;
@@ -1649,7 +1649,7 @@ static void merge_rbs(bdesc_t * block)
 	else if(merger->type == BIT)
 	{
 		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CONVERT_BYTE, merger, 0, merger->owner->level);
-		account_npatchs_convert(BIT, BYTE);
+		account_npatches_convert(BIT, BYTE);
 # if COUNT_PATCHS
 		patch_counts[BIT]--;
 		patch_counts[BYTE]++;
@@ -1680,7 +1680,7 @@ static void merge_rbs(bdesc_t * block)
 	patch_unlink_overlap(merger);
 	patch_link_overlap(merger);
 	
-	/* convert non-merger data patchs into emptys so that pointers to them
+	/* convert non-merger data patches into emptys so that pointers to them
 	 * remain valid.
 	 * TODO: could we destroy the emptys with no afters after the runloop? */
 	/* part a: unpropagate extern after counts (no more data patch afters)
@@ -1740,7 +1740,7 @@ static void merge_rbs(bdesc_t * block)
 			patch_free_byte_data(patch);
 		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CONVERT_EMPTY, patch);
 		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, patch, "rb->nrb mergee");
-		account_npatchs_convert(patch->type, EMPTY);
+		account_npatches_convert(patch->type, EMPTY);
 # if COUNT_PATCHS
 		patch_counts[patch->type]--;
 		patch_counts[EMPTY]++;
@@ -1778,7 +1778,7 @@ static int patch_create_merge(bdesc_t * block, BD_t * owner, patch_t ** tail, pa
 #if PATCH_NRB
 	patch_t * merger;
 # if PATCH_MERGE_RBS_NRB
-	if(!new_patchs_require_data(block) && !WEAK(block->nrb))
+	if(!new_patches_require_data(block) && !WEAK(block->nrb))
 		merge_rbs(block);
 # endif
 	if(!(merger = select_patch_merger(block)))
@@ -2292,7 +2292,7 @@ int patch_create_byte_atomic(bdesc_t * block, BD_t * owner, uint16_t offset, uin
 /* common code to create a byte patch */
 int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint16_t length, patch_t ** tail, patch_pass_set_t * befores)
 {
-	bool data_required = new_patchs_require_data(block);
+	bool data_required = new_patches_require_data(block);
 	patch_pass_set_t * scan;
 	patch_t * patch;
 #if PATCH_OVERLAPS2
@@ -2324,7 +2324,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 	patch = patch_alloc();
 	if(!patch)
 		return -ENOMEM;
-	account_npatchs(BYTE, 1);	
+	account_npatches(BYTE, 1);	
 	
 	patch->owner = owner;		
 	patch->block = block;
@@ -2339,7 +2339,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 	}
 	else
 	{
-		/* Expand to cover entire block. This is safe since all patchs on
+		/* Expand to cover entire block. This is safe since all patches on
 		 * this block at least implicitly have all nonrollbackables as befores.
 		 * Leave 'offset' and 'length' as is to copy source data. */
 		patch->offset = 0;
@@ -2417,7 +2417,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 #if PATCH_OVERLAPS2
 	patch_apply_overlaps(patch, overlap_list);
 #else
-	/* make sure it is after upon any pre-existing patchs */
+	/* make sure it is after upon any pre-existing patches */
 	if((r = patch_overlap_multiattach(patch, block)) < 0)
 	{
 		patch_destroy(&patch);
@@ -2481,7 +2481,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 
 #if PATCH_BIT_MERGE_OVERLAP
 /* Quickly check whether creating head->merge may induce a cycle:
- * determine (heuristically) whether there exist patchs x,y such that
+ * determine (heuristically) whether there exist patches x,y such that
  * merge->x->y and head->y and (conservatively) check that head~>merge
  * does not exist. */
 static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
@@ -2508,7 +2508,7 @@ static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
 					common[common_index++] = head_b->before.desc;
 					if(common_index > MAX_WIDTH)
 					{
-						printf("%s(): More common patchs found than can handle\n", __FUNCTION__);
+						printf("%s(): More common patches found than can handle\n", __FUNCTION__);
 						i = MAX_WIDTH; /* end search since 'common' is full */
 					}
 					goto next_head_b;
@@ -2678,7 +2678,7 @@ int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xo
 	//return _patch_create_byte(block, owner, offset * 4, 4, (uint8_t *) &data, head);
 
 	int r;
-	bool data_required = new_patchs_require_data(block);
+	bool data_required = new_patches_require_data(block);
 	patch_t * patch;
 	patch_t * bit_patches = NULL;
 	DEFINE_PATCH_PASS_SET(set, 1, NULL);
@@ -2729,7 +2729,7 @@ int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xo
 	patch = patch_alloc();
 	if(!patch)
 		return -ENOMEM;
-	account_npatchs(BIT, 1);
+	account_npatches(BIT, 1);
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_BIT, patch, block, owner, offset, xor);
 #if COUNT_PATCHS
 	patch_counts[BIT]++;
@@ -2776,7 +2776,7 @@ int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xo
 	if((r = patch_add_depend_no_cycles(bit_patches, patch)) < 0)
 		goto error;
 	
-	/* make sure it is after upon any pre-existing patchs */
+	/* make sure it is after upon any pre-existing patches */
 	if((r = patch_overlap_multiattach(patch, block)) < 0)
 		goto error;
 	
@@ -3075,7 +3075,7 @@ void patch_set_inflight(patch_t * patch)
 #endif
 	
 #if PATCH_NRB
-	/* New patchs cannot be merged into an inflight patch so allow
+	/* New patches cannot be merged into an inflight patch so allow
 	 * for a new NRB */
 	if(patch == WEAK(patch->block->nrb))
 		(void) patch_weak_release(&patch->block->nrb, 0);
@@ -3084,7 +3084,7 @@ void patch_set_inflight(patch_t * patch)
 	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_INFLIGHT);
 	patch->flags |= PATCH_INFLIGHT;
 	
-	/* in-flight patchs +1 their level to prevent afters from following */
+	/* in-flight patches +1 their level to prevent afters from following */
 	patch_propagate_level_change(patch, owner_level, patch_level(patch));
 }
 
@@ -3099,7 +3099,7 @@ static inline void patch_weak_collect(patch_t * patch)
 	}
 }
 
-/* satisfy a patch, i.e. remove it from all afters and add it to the list of written patchs */
+/* satisfy a patch, i.e. remove it from all afters and add it to the list of written patches */
 int patch_satisfy(patch_t ** patch)
 {
 	if((*patch)->flags & PATCH_WRITTEN)
@@ -3126,7 +3126,7 @@ int patch_satisfy(patch_t ** patch)
 		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, *patch, PATCH_WRITTEN);
 		(*patch)->flags |= PATCH_WRITTEN;
 		
-		/* we don't need the data in byte patchs anymore */
+		/* we don't need the data in byte patches anymore */
 		if((*patch)->type == BYTE)
 		{
 			if((*patch)->byte.data)
@@ -3211,7 +3211,7 @@ void patch_destroy(patch_t ** patch)
 		assert(!(*patch)->afters && !(*patch)->befores);
 		if(free_head == *patch || (*patch)->free_prev)
 			patch_free_remove(*patch);
-		account_npatchs((*patch)->type, -1);
+		account_npatches((*patch)->type, -1);
 	}
 	else
 	{
@@ -3228,7 +3228,7 @@ void patch_destroy(patch_t ** patch)
 			assert(!(*patch)->befores);
 			patch_free_remove(*patch);
 		}
-		account_npatchs_undo((*patch)->type);
+		account_npatches_undo((*patch)->type);
 	}
 	
 	/* remove befores first, so patch_satisfy() won't complain */

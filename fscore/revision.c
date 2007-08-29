@@ -26,7 +26,7 @@ enum decider {
 			kpanic("Unknown decider type %d", type); \
 	%> __result; %>)
 
-static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patchs, const char * function)
+static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patches, const char * function)
 {
 	int i;
 	fprintf(stderr, "%s() is very confused! (debug = %d)\n", function, FSTITCH_DEBUG_COUNT());
@@ -34,16 +34,16 @@ static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patc
 	{
 		patchdep_t * scan;
 		int total = 0;
-		if(!patchs[i])
+		if(!patches[i])
 		{
 			fprintf(stderr, "(slot null)\n");
 			continue;
 		}
-		fprintf(stderr, "%p [T%d, L%d, F%x]", patchs[i], patchs[i]->type, patch_level(patchs[i]), patchs[i]->flags);
-		if(!patch_is_rollbackable(patchs[i]))
+		fprintf(stderr, "%p [T%d, L%d, F%x]", patches[i], patches[i]->type, patch_level(patches[i]), patches[i]->flags);
+		if(!patch_is_rollbackable(patches[i]))
 			fprintf(stderr, "!");
 		fprintf(stderr, " (<-");
-		for(scan = patchs[i]->afters; scan; scan = scan->after.next)
+		for(scan = patches[i]->afters; scan; scan = scan->after.next)
 		{
 			total++;
 			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
@@ -51,14 +51,14 @@ static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patc
 			fprintf(stderr, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
 			if(!patch_is_rollbackable(scan->after.desc))
 				fprintf(stderr, "!");
-			if(patch_overlap_check(scan->after.desc, patchs[i]))
+			if(patch_overlap_check(scan->after.desc, patches[i]))
 				fprintf(stderr, "*");
 			if(scan->after.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (->", total);
 		total = 0;
-		for(scan = patchs[i]->befores; scan; scan = scan->before.next)
+		for(scan = patches[i]->befores; scan; scan = scan->before.next)
 		{
 			total++;
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
@@ -66,13 +66,13 @@ static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patc
 			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
 			if(!patch_is_rollbackable(scan->before.desc))
 				fprintf(stderr, "!");
-			if(patch_overlap_check(scan->before.desc, patchs[i]))
+			if(patch_overlap_check(scan->before.desc, patches[i]))
 				fprintf(stderr, "*");
 			if(scan->before.desc->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (-->", total);
-		for(scan = patchs[i]->befores; scan; scan = scan->before.next)
+		for(scan = patches[i]->befores; scan; scan = scan->before.next)
 		{
 			if(!scan->before.desc->block || scan->before.desc->block->ddesc == block->ddesc)
 				continue;
@@ -126,7 +126,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 #endif
 {
 	patch_t * scan;
-	patch_t ** patchs;
+	patch_t ** patches;
 	int i = 0, count = 0;
 	
 #if !REVISION_TAIL_INPLACE
@@ -136,7 +136,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	if(!block->all_patches)
 		return 0;
 	
-	/* find out how many patchs are to be rolled back */
+	/* find out how many patches are to be rolled back */
 	/* TODO: look into using ready_patches here? */
 	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
@@ -144,13 +144,13 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 	if(!count)
 		return 0;
 	
-	patchs = revision_get_array(count);
-	if(!patchs)
+	patches = revision_get_array(count);
+	if(!patches)
 		return -ENOMEM;
 	
 	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
-			patchs[i++] = scan;
+			patches[i++] = scan;
 	
 	for(;;)
 	{
@@ -160,16 +160,16 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 		{
 			patchdep_t * scan;
 			/* already rolled back? */
-			if(patchs[i]->flags & PATCH_ROLLBACK)
+			if(patches[i]->flags & PATCH_ROLLBACK)
 				continue;
-			/* check for overlapping, non-rolled back patchs above us */
-			for(scan = patchs[i]->afters; scan; scan = scan->after.next)
+			/* check for overlapping, non-rolled back patches above us */
+			for(scan = patches[i]->afters; scan; scan = scan->after.next)
 			{
 				if(scan->after.desc->flags & PATCH_ROLLBACK)
 					continue;
 				if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
 					continue;
-				if(patch_overlap_check(scan->after.desc, patchs[i]))
+				if(patch_overlap_check(scan->after.desc, patches[i]))
 					break;
 			}
 			if(scan)
@@ -177,9 +177,9 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 			else
 			{
 #if REVISION_TAIL_INPLACE
-				int r = patch_rollback(patchs[i]);
+				int r = patch_rollback(patches[i]);
 #else
-				int r = patch_rollback(patchs[i], buffer);
+				int r = patch_rollback(patches[i], buffer);
 #endif
 				if(r < 0)
 				{
@@ -193,7 +193,7 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 			break;
 		if(!progress)
 		{
-			dump_revision_loop_state(block, count, patchs, __FUNCTION__);
+			dump_revision_loop_state(block, count, patches, __FUNCTION__);
 			break;
 		}
 	}
@@ -219,26 +219,26 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 {
 	patch_t * scan;
 #if REVISION_TAIL_INPLACE
-	patch_t ** patchs;
+	patch_t ** patches;
 	int i = 0, count = 0;
 	
 	if(!block->all_patches)
 		return 0;
 	
-	/* find out how many patchs are to be rolled forward */
+	/* find out how many patches are to be rolled forward */
 	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
 			count++;
 	if(!count)
 		return 0;
 	
-	patchs = revision_get_array(count);
-	if(!patchs)
+	patches = revision_get_array(count);
+	if(!patches)
 		return -ENOMEM;
 	
 	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(!decide(decider, scan, data))
-			patchs[i++] = scan;
+			patches[i++] = scan;
 	
 	for(;;)
 	{
@@ -248,23 +248,23 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 		{
 			patchdep_t * scan;
 			/* already rolled forward? */
-			if(!(patchs[i]->flags & PATCH_ROLLBACK))
+			if(!(patches[i]->flags & PATCH_ROLLBACK))
 				continue;
-			/* check for overlapping, rolled back patchs below us */
-			for(scan = patchs[i]->befores; scan; scan = scan->before.next)
+			/* check for overlapping, rolled back patches below us */
+			for(scan = patches[i]->befores; scan; scan = scan->before.next)
 			{
 				if(!(scan->before.desc->flags & PATCH_ROLLBACK))
 					continue;
 				if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
 					continue;
-				if(patch_overlap_check(scan->before.desc, patchs[i]))
+				if(patch_overlap_check(scan->before.desc, patches[i]))
 					break;
 			}
 			if(scan)
 				again = 1;
 			else
 			{
-				int r = patch_apply(patchs[i]);
+				int r = patch_apply(patches[i]);
 				if(r < 0)
 				{
 					fprintf(stderr, "patch_apply() failed!\n");
@@ -277,7 +277,7 @@ static int _revision_tail_revert(bdesc_t * block, enum decider decider, void * d
 			break;
 		if(!progress)
 		{
-			dump_revision_loop_state(block, count, patchs, __FUNCTION__);
+			dump_revision_loop_state(block, count, patches, __FUNCTION__);
 			break;
 		}
 	}
@@ -307,26 +307,26 @@ int revision_tail_revert(bdesc_t * block, BD_t * bd)
 static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, void * data)
 {
 	patch_t * scan;
-	patch_t ** patchs;
+	patch_t ** patches;
 	int i = 0, count = 0;
 	
 	if(!block->all_patches)
 		return 0;
 	
-	/* find out how many patchs are to be satisfied */
+	/* find out how many patches are to be satisfied */
 	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
 			count++;
 	if(!count)
 		return 0;
 	
-	patchs = revision_get_array(count);
-	if(!patchs)
+	patches = revision_get_array(count);
+	if(!patches)
 		return -ENOMEM;
 	
 	for(scan = block->all_patches; scan; scan = scan->ddesc_next)
 		if(decide(decider, scan, data))
-			patchs[i++] = scan;
+			patches[i++] = scan;
 	
 	for(;;)
 	{
@@ -334,13 +334,13 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 		int progress = 0;
 		for(i = count - 1; i != -1; i--)
 		{
-			if(!patchs[i])
+			if(!patches[i])
 				continue;
-			if(patchs[i]->befores)
+			if(patches[i]->befores)
 				again = 1;
 			else
 			{
-				patch_satisfy(&patchs[i]);
+				patch_satisfy(&patches[i]);
 				progress = 1;
 			}
 		}
@@ -348,7 +348,7 @@ static int _revision_tail_acknowledge(bdesc_t * block, enum decider decider, voi
 			break;
 		if(!progress)
 		{
-			dump_revision_loop_state(block, count, patchs, __FUNCTION__);
+			dump_revision_loop_state(block, count, patches, __FUNCTION__);
 			break;
 		}
 	}
@@ -500,11 +500,11 @@ void revision_tail_wait_for_landing_requests(void)
 
 /* ---- Revision slices ---- */
 
-/* Modules don't in general know whether patchs that they don't own are above
+/* Modules don't in general know whether patches that they don't own are above
  * or below them. But that's OK, because they don't need to. Hence there is no
  * revision_slice_prepare() function, because modules don't need to apply or
- * roll back any patchs to use revision slices. Basically a revision slice is a
- * set of patchs at a particular time, organized in a nice way so
+ * roll back any patches to use revision slices. Basically a revision slice is a
+ * set of patches at a particular time, organized in a nice way so
  * that we can figure out which ones are ready to be written down and which ones
  * are not. */
 
@@ -548,9 +548,9 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 	patch_t ** tmp_ready_tail = &tmp_ready;
 	patch_dlist_t * rcl = &block->ready_patches[owner->level];
 	patch_t * scan;
-	/* To write a block revision, all non-ready patchs on the block must
-	 * first be rolled back. Thus when there are non-ready patchs with
-	 * omitted data fields the revision cannot contain any patchs.
+	/* To write a block revision, all non-ready patches on the block must
+	 * first be rolled back. Thus when there are non-ready patches with
+	 * omitted data fields the revision cannot contain any patches.
 	 * 'nonready_nonrollbackable' implements this. */
 	bool nonready_nonrollbackable = 0;
 
@@ -562,7 +562,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 	slice->ready_size = 0;
 	slice->ready = NULL;
 
-	/* move all the patchs down a level that can be moved down a level */
+	/* move all the patches down a level that can be moved down a level */
 	while((scan = rcl->head))
 	{
 		slice->ready_size++;
@@ -641,7 +641,7 @@ void revision_slice_push_down(revision_slice_t * slice)
 {
 	/* like patch_push_down, but without block reassignment (only needed
 	 * for things changing block numbers) and for slices instead of all
-	 * patchs: it only pushes down the ready part of the slice */
+	 * patches: it only pushes down the ready part of the slice */
 	int i;
 	for(i = 0; i != slice->ready_size; i++)
 	{

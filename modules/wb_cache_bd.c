@@ -15,7 +15,7 @@
 #define FLUSH_PERIOD HZ
 
 /* This file implements the first whack at our new WB cache. It's an LRU cache,
- * and it allows you to give it patchs with unsatisfied dependencies. However,
+ * and it allows you to give it patches with unsatisfied dependencies. However,
  * it will fill up and deadlock if you give it too many. If this ever causes a
  * problem, an appropriate error message is displayed on the console and -EBUSY
  * is returned. */
