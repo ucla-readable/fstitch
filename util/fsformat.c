@@ -215,7 +215,7 @@ static void partition_adjust(off_t * size)
 		return;
 	ptable = (struct pc_ptable *) &mbr[PTABLE_OFFSET];
 	for(i = 0; i < 4; i++)
-		if(ptable[i].type == PTABLE_FSTITCH_TYPE)
+		if(ptable[i].type == PTABLE_JOS_TYPE)
 			break;
 	if(i == 4)
 		return;
