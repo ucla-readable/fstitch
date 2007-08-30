@@ -374,7 +374,7 @@ static int read_debug_signature(void)
 	r = read_lit_32(&debug_opcode_rev);
 	if(r < 0)
 		return r;
-	if(debug_rev != 4258 || debug_opcode_rev != 4260)
+	if(debug_rev != 4289 || debug_opcode_rev != 4289)
 		return -EPROTO;
 	
 	r = read_lit_32(&initial_timestamp);
