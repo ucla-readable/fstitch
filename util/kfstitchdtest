@@ -22,7 +22,7 @@ function warning()
 	[ $V != 0 ] && echo "WANING: $@" >&2
 }
 
-DISKIMG=obj/fs/ufs.img
+DISKIMG=obj/images/ufs.img
 PRISTINE=~mdm2000/linux-2.6.15
 DISK=${1:-/dev/sdb}
 

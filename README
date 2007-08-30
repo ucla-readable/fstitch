@@ -26,7 +26,7 @@ directory to /etc, and set a mountpoint (like /mnt/test) to be writable to your
 user. Then run uufstitchd.sh, specifying the file/device to attach to in the
 unix_file command line option. For example:
 
-$ ./uufstitchd.sh /mnt/test unix_file=obj/fs/ext2.img
+$ ./uufstitchd.sh /mnt/test unix_file=obj/images/ext2.img
 
 By default, the userspace version will attempt to mount all detected file
 systems, including the special fstitch:/dev file system. If a dev directory does not

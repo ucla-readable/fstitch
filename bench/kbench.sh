@@ -115,11 +115,11 @@ REAL_USER="$1"
 
 FSIMG=
 if [ "$2" == "ufs" ]; then
-	FSIMG=obj/fs/ufs.img
+	FSIMG=obj/images/ufs.img
 elif [ "$2" == "ext2" ]; then
-	FSIMG=obj/fs/ext2-10G.img
+	FSIMG=obj/images/ext2-10G.img
 elif [ "$2" == "ext2-small" ]; then
-	FSIMG=obj/fs/ext2.img
+	FSIMG=obj/images/ext2.img
 elif [ "$2" != "${2#=}" ]; then
 	FSIMG="${2#=}"
 else

@@ -148,7 +148,7 @@ function finish () {
 			DEV=${DEV:-/dev/sdb}
 			PART=${DEV}${PART:-1}
 		elif [ "$HOST" == "uu" ]; then
-			DEV=${DEV:-$FSTITCHDIR/obj/fs/ext2.img}
+			DEV=${DEV:-$FSTITCHDIR/obj/images/ext2.img}
 			PART=${DEV}${PART:-}
 		fi
 		# run fsck on the file system: don't use "try" because we expect errors
