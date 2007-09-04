@@ -84,7 +84,7 @@ static int fstitch_debug_proc_read(char * page, char ** start, off_t off, int co
 	off_t size;
 	while(proc_buffer_rpos == proc_buffer_wpos)
 	{
-		if(!fstitchd_is_running() || assert_failed)
+		if(fstitchd_is_shutdown || assert_failed)
 			return 0;
 		/* buffer is empty, wait for writes */
 		current->state = TASK_INTERRUPTIBLE;

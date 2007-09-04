@@ -274,7 +274,7 @@ module_param(use_crashsim, int, 0);
 MODULE_PARM_DESC(use_crashsim, "Use crash simulator module");
 #endif
 
-static int fstitchd_is_shutdown = 0;
+int fstitchd_is_shutdown = 0;
 
 static int fstitchd_thread(void * thunk)
 {

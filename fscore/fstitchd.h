@@ -15,5 +15,8 @@ int _fstitchd_register_shutdown_module(const char * name, fstitchd_shutdown_modu
 
 void fstitchd_request_shutdown(void);
 int fstitchd_is_running(void);
+#ifdef __KERNEL__
+extern int fstitchd_is_shutdown;
+#endif
 
 #endif // not __FSTITCH_FSCORE_FSTITCHD
