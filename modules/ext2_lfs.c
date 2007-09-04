@@ -12,6 +12,7 @@
 #include <fscore/debug.h>
 #include <fscore/feature.h>
 
+#include <modules/ext2.h>
 #include <modules/ext2_lfs.h>
 
 #define EXT2_BASE_DEBUG 0
