@@ -74,6 +74,7 @@ static struct proc_dir_entry * proc_entry;
 static uint8_t * proc_buffer;
 static off_t proc_buffer_rpos;
 static off_t proc_buffer_wpos;
+static int proc_shutdown;
 
 #ifdef CONFIG_DEBUG_FS
 static struct dentry * debug_count_dentry;
@@ -84,7 +85,7 @@ static int fstitch_debug_proc_read(char * page, char ** start, off_t off, int co
 	off_t size;
 	while(proc_buffer_rpos == proc_buffer_wpos)
 	{
-		if(fstitchd_is_shutdown || assert_failed)
+		if(proc_shutdown || assert_failed)
 			return 0;
 		/* buffer is empty, wait for writes */
 		current->state = TASK_INTERRUPTIBLE;
@@ -126,9 +127,10 @@ static void fstitch_debug_io_command(void * arg)
 static void fstitch_debug_shutdown(void * ignore)
 {
 	int tries = 0;
+	proc_shutdown = 1;
 	if(atomic_read(&proc_entry->count) > 0)
 	{
-		while (atomic_read(&proc_entry->count) > 0)
+		while(atomic_read(&proc_entry->count) > 0)
 			jsleep(HZ / 4);
 		if(++tries == 2)
 			printf("Please kill /proc/" DEBUG_PROC_FILENAME " reader.\n");
