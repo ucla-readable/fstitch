@@ -13,18 +13,6 @@
  * A) Add afters    W) Write data (i.e. engage)
  * R) Release       B) Add befores
  * 
- * NOTICE: If you read any of this paragraph, read all of it.
- * Of these, adding afters and releasing may always be performed. However,
- * adding a before may only be done before the patchgroup is released, and
- * writing data can only be done if there are no afters. It should also be
- * noted that abandoning an patchgroup before releasing it causes it to be aborted.
- * (Think about abandoning your pet mouse: if you release it beforehand, it can
- * live in the wild. If not, it will die in its cage.) Finally, "writing data"
- * to an patchgroup can occur any time an patchgroup is engaged. Thus any operation
- * which would make writing data invalid (like adding an after) must require
- * that the patchgroup is not currently engaged. (So it's not strictly true that
- * adding afters may always be performed.)
- * 
  * The following table shows the possible states and what operations are valid.
  * Notice that each of A, R, W, and B above sets a bit in the state of an
  * patchgroup. Adding a before means that the patchgroup now has before,
