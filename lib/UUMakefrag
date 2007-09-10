@@ -3,7 +3,6 @@ OBJDIRS += lib
 LIB_SRCFILES := \
 			lib/vector.c \
 			lib/hash_map.c \
-			lib/svnrevtol.c \
 			lib/sleep.c
 
 LIB_OBJFILES := $(patsubst lib/%.c, $(OBJDIR)/lib/%.o, $(LIB_SRCFILES))

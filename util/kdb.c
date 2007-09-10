@@ -360,22 +360,24 @@ static int read_lit_str(const char ** data, int allocate)
 	return 0;
 }
 
-static uint32_t debug_rev, debug_opcode_rev;
 static uint32_t initial_timestamp;
 
 static int read_debug_signature(void)
 {
 	int m, o, r;
 	uint16_t zero;
+	uint32_t magic;
+	const char * compile;
 	
-	r = read_lit_32(&debug_rev);
+	r = read_lit_32(&magic);
 	if(r < 0)
 		return r;
-	r = read_lit_32(&debug_opcode_rev);
-	if(r < 0)
-		return r;
-	if((debug_rev != 4289 && debug_rev != 4304) || debug_opcode_rev != 4289)
+	if(magic != DEBUG_SIG_MAGIC)
 		return -EPROTO;
+	
+	r = read_lit_str(&compile, 0);
+	if(r < 0)
+		return r;
 	
 	r = read_lit_32(&initial_timestamp);
 	if(r < 0)

@@ -8,7 +8,6 @@
 #include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/sleep.h>
-#include <lib/svnrevtol.h>
 
 #include <lib/platform.h>
 
@@ -300,12 +299,8 @@ int fstitch_debug_init(void)
 {
 	int m, o, r;
 	int timestamp = jiffy_time();
-	uint32_t debug_rev, debug_opcode_rev;
 	
-	debug_rev = svnrevtol("$Rev$");
-	debug_opcode_rev = svnrevtol(DEBUG_OPCODE_REV);
-	
-	printf("Initializing featherstitch debugging interface... (%d, %d)\n", debug_rev, debug_opcode_rev);
+	printf("Initializing featherstitch debugging interface...\n");
 	
 	r = sched_register(fstitch_debug_io_command, NULL, HZ / 10);
 	if(r < 0)
@@ -315,7 +310,7 @@ int fstitch_debug_init(void)
 	if(r < 0)
 		return r;
 	
-	fstitch_debug_write(LIT_32, debug_rev, LIT_32, debug_opcode_rev, LIT_32, timestamp, END);
+	fstitch_debug_write(LIT_32, DEBUG_SIG_MAGIC, LIT_STR, __DATE__, LIT_32, timestamp, END);
 	
 	for(m = 0; modules[m].opcodes; m++)
 		for(o = 0; modules[m].opcodes[o]->params; o++)
