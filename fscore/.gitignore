@@ -1,5 +1,7 @@
-kkfsd.ko
-.kkfsd.o.cmd
-.kkfsd.ko.cmd
-.kkfsd.mod.o.cmd
-kkfsd.mod.c
+.kfstitchd.ko.cmd
+.kfstitchd.mod.o.cmd
+.kfstitchd.o.cmd
+kfstitchd.ko
+kfstitchd.mod.c
+kfstitchd.mod.o
+kfstitchd.o
