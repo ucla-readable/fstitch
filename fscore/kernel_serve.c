@@ -28,10 +28,6 @@
 #include <fscore/sched.h>
 #include <fscore/kernel_serve.h>
 
-#ifdef CONFIG_LBD
-# error CONFIG_LBD enabled. kfstitchd assumes 32bit sector values.
-#endif
-
 /* 2.6.12 has only CONFIG_PREEMPT or nothing.
  * By 2.6.13.4 linux added voluntary preemption and changed the defines. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 13)

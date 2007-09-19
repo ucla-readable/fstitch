@@ -53,7 +53,7 @@ static bdesc_t * unix_file_bd_read_block(BD_t * object, uint32_t number, uint16_
 	else
 	{
 		bdesc = bdesc_alloc(number, object->blocksize, count, page);
-		if(bdesc == NULL)
+		if(!bdesc)
 			return NULL;
 		bdesc_autorelease(bdesc);
 	}
@@ -102,7 +102,7 @@ static bdesc_t * unix_file_bd_synthetic_read_block(BD_t * object, uint32_t numbe
 	}
 
 	bdesc = bdesc_alloc(number, object->blocksize, count, page);
-	if(bdesc == NULL)
+	if(!bdesc)
 		return NULL;
 	bdesc_autorelease(bdesc);
 
@@ -210,7 +210,8 @@ static int unix_file_bd_destroy(BD_t * bd)
 	int r;
 
 	r = modman_rem_bd(bd);
-	if(r < 0) return r;
+	if(r < 0)
+		return r;
 
 	blockman_destroy(&info->blockman);
 
@@ -257,7 +258,8 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 	blocks = sb.st_size / blocksize;
 	if(sb.st_size != (blocks * blocksize))
 		kpanic("file %s's size is not block-aligned\n", fname);
-	if(blocks < 1) {
+	if(blocks < 1)
+	{
 		free(info);
 		return NULL;
 	}

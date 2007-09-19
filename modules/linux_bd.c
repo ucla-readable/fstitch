@@ -107,7 +107,7 @@ struct linux_bio_private {
 DECLARE_POOL(bio_private, struct linux_bio_private);
 static int n_linux_instances;
 
-static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
+static int linux_bd_end_io(struct bio * bio, unsigned int done, int error)
 {
 	struct linux_bio_private * private = (struct linux_bio_private *) bio->bi_private;
 	struct linux_info * info = private->info;
@@ -156,14 +156,14 @@ static int linux_bd_end_io(struct bio *bio, unsigned int done, int error)
 		assert(p);
 		if(dir == READ)
 		{
-			len = 4096;
+			len = PAGE_SIZE;
 			if(i + 1 == bio->bi_vcnt)
 			{
-				len = private->nbytes % 4096;
+				len = private->nbytes % PAGE_SIZE;
 				if(!len)
-					len = 4096;
+					len = PAGE_SIZE;
 			}
-			memcpy(bdesc_data(private->bdesc) + (4096 * i), p, len);
+			memcpy(bdesc_data(private->bdesc) + (PAGE_SIZE * i), p, len);
 		}
 		__free_page(bio_iovec_idx(bio, i)->bv_page);
 		bio_iovec_idx(bio, i)->bv_page = NULL;
@@ -230,7 +230,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 	KDprintk(KERN_ERR "entered read (blk: %d, cnt: %d)\n", number, count);
 	
 	/* make sure it's a valid block */
-	assert(count && number + count <= object->numblocks);
+	assert(count && number <= object->numblocks - count && count <= object->numblocks);
 	
 	bdesc = blockman_lookup(&info->blockman, number);
 	if(bdesc)
@@ -257,7 +257,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		bdesc_t * bd;
 		private[i].need_blockman = 0;
 	
-		if(i_number + count > object->numblocks)
+		if(i_number > object->numblocks - count || i_number < number)
 		{
 			blocks[i] = NULL;
 			continue;
@@ -274,15 +274,16 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		}
 		else if(bd)
 			blocks[i] = bd;
-		else {
+		else
+		{
 			blocks[i] = bdesc_alloc(i_number, LINUX_BLOCKSIZE, count, !i ? page : NULL);
-			if(blocks[i] == NULL)
+			if(!blocks[i])
 				return NULL;
 			bdesc_autorelease(blocks[i]);
 			private[i].need_blockman = 1;
 		}
 		
-		assert(count * LINUX_BLOCKSIZE <= 4096);
+		assert(count * LINUX_BLOCKSIZE <= PAGE_SIZE);
 		
 		/* FIXME: these error returns do not clean up */
 		bio = bio_alloc(GFP_KERNEL, 1);
@@ -314,7 +315,7 @@ static bdesc_t * linux_bd_read_block(BD_t * object, uint32_t number, uint16_t co
 		
 		bio->bi_idx = 0;
 		bio->bi_vcnt = 1;
-		bio->bi_sector = i_number;
+		bio->bi_sector = (sector_t) i_number;
 		bio->bi_size = LINUX_BLOCKSIZE * count;
 		bio->bi_bdev = info->bdev;
 		bio->bi_rw = READ;
@@ -425,7 +426,7 @@ static int linux_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number)
 	private = bio_private_alloc();
 	assert(private);
 	
-	assert(block->length <= 4096);
+	assert(block->length <= PAGE_SIZE);
 	
 	bio = bio_alloc(GFP_KERNEL, 1);
 	assert(bio);
@@ -707,7 +708,15 @@ BD_t * linux_bd(const char * linux_bdev_path, bool unsafe_disk_cache)
 	BD_INIT(bd, linux_bd);
 
 	bd->blocksize = LINUX_BLOCKSIZE;
-	bd->numblocks = info->bdev->bd_disk->capacity;
+#ifdef CONFIG_LBD
+	if(info->bdev->bd_disk->capacity > MAX_BLOCK)
+	{
+		printk("Warning: Can only access first 2TB of %s\n", linux_bdev_path);
+		bd->numblocks = MAX_BLOCK;
+	}
+	else
+#endif
+		bd->numblocks = info->bdev->bd_disk->capacity;
 	bd->atomicsize = LINUX_BLOCKSIZE;
 	info->fua = unsafe_disk_cache ? 0 : (1 << BIO_RW_FUA);
 	info->read_ahead_idx = 0;

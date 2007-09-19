@@ -139,7 +139,7 @@ static int mem_bd_destroy(BD_t * bd)
 	return 0;
 }
 
-static void mark_block_free(uint8_t *b8, int blockno)
+static void mark_block_free(uint8_t * b8, int blockno)
 {
 	uint32_t * b32 = (uint32_t *) b8;
 	int word = blockno / 32;
@@ -191,8 +191,7 @@ BD_t * mem_bd(uint32_t blocks, uint16_t blocksize)
 
 	memset(info->blocks, 0, blocks * blocksize);
 
-	// Set up JOS fs on the mem device. in an ideal world this would
-	// be done w/ mkjosfs
+	// Set up JOS fs on the mem device... such a hack
 	s = (struct JOSFS_Super *) &info->blocks[blocksize];
 	s->s_magic = JOSFS_FS_MAGIC;
 	s->s_nblocks = blocks;

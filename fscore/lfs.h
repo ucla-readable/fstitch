@@ -46,7 +46,7 @@
 struct LFS {
 	OBJECT(LFS_t);
 	DECLARE(LFS_t, int, get_root, inode_t * ino);
-	uint32_t blocksize;
+	uint16_t blocksize;
 	BD_t * blockdev;
 	DECLARE(LFS_t, uint32_t, allocate_block, fdesc_t * file, int purpose, patch_t ** head);
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number, page_t * page);
@@ -71,8 +71,8 @@ struct LFS {
 	DECLARE(LFS_t, const bool *, get_feature_array);
 	DECLARE(LFS_t, int, get_metadata_inode, inode_t ino, uint32_t id, size_t size, void * data);
 	DECLARE(LFS_t, int, get_metadata_fdesc, const fdesc_t * file, uint32_t id, size_t size, void * data);
-	DECLARE(LFS_t, int, set_metadata2_inode, inode_t ino, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head);
-	DECLARE(LFS_t, int, set_metadata2_fdesc, fdesc_t * file, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head);
+	DECLARE(LFS_t, int, set_metadata2_inode, inode_t ino, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head);
+	DECLARE(LFS_t, int, set_metadata2_fdesc, fdesc_t * file, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head);
 };
 
 #define LFS_INIT(lfs, module) { \

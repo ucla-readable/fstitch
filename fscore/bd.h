@@ -17,6 +17,7 @@
 
 #define FLUSH_DEVICE 0xFFFFFFFF
 #define INVALID_BLOCK 0xFFFFFFFF
+#define MAX_BLOCK 0xFFFFFFFE
 
 /* flush() should return:
  * FLUSH_EMPTY if no flush was necessary

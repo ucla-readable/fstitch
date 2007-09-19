@@ -93,7 +93,7 @@ static int block_resizer_bd_destroy(BD_t * bd)
 BD_t * block_resizer_bd(BD_t * disk, uint16_t blocksize)
 {
 	struct resize_info * info;
-	uint32_t original_size;
+	uint16_t original_size;
 	BD_t * bd;
 	
 	original_size = disk->blocksize;
