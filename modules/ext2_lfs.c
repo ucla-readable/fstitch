@@ -2372,7 +2372,6 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 	return -ENOENT;
 }
 
-/* XXX: the old and new parent link counts are not propagated correctly to Linux */
 static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t * omdir, ext2_mdirent_t * omdirent, ext2_fdesc_t * fold,
                            ext2_fdesc_t * fnparent, ext2_fdesc_t * fnew, const char * newname, patch_t ** head)
 {
@@ -2582,7 +2581,6 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 
 	if (existing)
 	{
-		/* XXX: this change is not propagated correctly to Linux */
 		DECL_INODE_MOD(fnew);
 		INODE_ADD(fnew, i_links_count, -1);
 		// TODO: the inode update needn't depend on the dirent overwrite

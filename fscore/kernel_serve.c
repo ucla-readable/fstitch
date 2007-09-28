@@ -860,8 +860,13 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 
 	fstitchd_enter();
 	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
-	if (r >= 0 && dentry->d_inode->i_mode & S_IFDIR)
-		dir->i_nlink--;
+	if (r >= 0)
+	{
+		if (dentry->d_inode->i_mode & S_IFDIR)
+			dir->i_nlink--;
+		else
+			dentry->d_inode->i_nlink--;
+	}
 	fstitchd_leave(1);
 	return r;
 }
@@ -1003,15 +1008,29 @@ static int serve_rmdir(struct inode * dir, struct dentry * dentry)
 static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, struct inode * new_dir, struct dentry * new_dentry)
 {
 	Dprintf("%s(old = %lu, oldn = \"%s\", newd = %lu, newn = \"%s\")\n", __FUNCTION__, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
+	struct inode * replace;
+	CFS_t * cfs;
 	int r;
 
 	fstitchd_enter();
-	if (dentry2cfs(old_dentry) != dentry2cfs(new_dentry))
+	cfs = dentry2cfs(old_dentry);
+	if (cfs != dentry2cfs(new_dentry))
 	{
 		fstitchd_leave(1);
 		return -EPERM;
 	}
-	r = CALL(dentry2cfs(old_dentry), rename, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
+	replace = new_dentry->d_inode;
+	r = CALL(cfs, rename, old_dir->i_ino, old_dentry->d_name.name, new_dir->i_ino, new_dentry->d_name.name);
+	/* link counts of parent directories may have changed */
+	if (r >= 0 && old_dentry->d_inode->i_mode & S_IFDIR)
+	{
+		old_dir->i_nlink--;
+		new_dir->i_nlink++;
+	}
+	/* as well as that of the replaced file */
+	if (replace)
+		/* XXX: do we need to do anything special if i_nlink reaches 0 here? */
+		replace->i_nlink--;
 	fstitchd_leave(1);
 	return r;
 }
