@@ -2372,6 +2372,7 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 	return -ENOENT;
 }
 
+/* XXX: the old and new parent link counts are not propagated correctly to Linux */
 static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t * omdir, ext2_mdirent_t * omdirent, ext2_fdesc_t * fold,
                            ext2_fdesc_t * fnparent, ext2_fdesc_t * fnew, const char * newname, patch_t ** head)
 {
@@ -2392,7 +2393,7 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 		goto exit_fnew;
 	}
 
-	/* FIXME: make sure fnparent is not a subdirectory of fold */
+	/* XXX: make sure fnparent is not a subdirectory of fold */
 
 	set.array[0] = *head;
 	/* step 1: create a new hardlink to the directory (also increments link count) */
@@ -2467,7 +2468,6 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 	return r;
 }
 
-// FIXME: directory rename is incorrect (eg parent linkcounts are not updated)
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, patch_t ** head)
 {
 	Dprintf("EXT2DEBUG: ext2_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
@@ -2550,6 +2550,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		nmdirent->dirent.inode = copy.inode;
 		// TODO: can we store *head as the dirent's creation patch?
 
+		/* XXX: should this be before the write_dirent above?? */
 		DECL_INODE_MOD(fold);
 		INODE_ADD(fold, i_links_count, 1);
 		r = ext2_write_inode(info, fold, head, ioff1, ioff2);
@@ -2581,6 +2582,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 
 	if (existing)
 	{
+		/* XXX: this change is not propagated correctly to Linux */
 		DECL_INODE_MOD(fnew);
 		INODE_ADD(fnew, i_links_count, -1);
 		// TODO: the inode update needn't depend on the dirent overwrite
