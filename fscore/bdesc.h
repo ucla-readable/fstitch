@@ -167,7 +167,7 @@ static inline void bdesc_ensure_linked_page(bdesc_t * bdesc, page_t * page)
 static inline bdesc_t * bdesc_retain(bdesc_t * bdesc)
 {
 	bdesc->ref_count++;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_RETAIN, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
 	return bdesc;
 }
 
@@ -175,7 +175,7 @@ static inline void bdesc_release(bdesc_t **bdp)
 {
 	assert((*bdp)->ref_count > (*bdp)->ar_count);
 	(*bdp)->ref_count--;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_RELEASE, *bdp, *bdp, (*bdp)->ref_count, (*bdp)->ar_count);
 	if (!(*bdp)->ref_count)
 		__bdesc_release(*bdp);
 	*bdp = NULL;

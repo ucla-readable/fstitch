@@ -39,7 +39,7 @@
  * input file to test the speed of non-sequential access. */
 #define RANDOM_TEST 0
 
-#define HISTORY_FILE ".kdb_history"
+#define HISTORY_FILE ".fdb_history"
 
 /* Begin unique immutable strings {{{ */
 
@@ -1535,12 +1535,12 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 		*skippable = 0;
 	switch(modules[m].opcodes[o]->opcode)
 	{
-		case KDB_INFO_MARK:
+		case FDB_INFO_MARK:
 			/* nothing */
 			if(effect)
 				*effect = 0;
 			break;
-		case KDB_INFO_BD_NAME:
+		case FDB_INFO_BD_NAME:
 		{
 			struct debug_param params[] = {
 				{{.name = "bd"}},
@@ -1556,7 +1556,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			r = add_bd_name(params[0].data_4, params[1].data_v);
 			break;
 		}
-		case KDB_INFO_BDESC_NUMBER:
+		case FDB_INFO_BDESC_NUMBER:
 		{
 			struct debug_param params[] = {
 				{{.name = "block"}},
@@ -1572,7 +1572,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			r = add_block_number(params[0].data_4, params[1].data_4);
 			break;
 		}
-		case KDB_INFO_PATCH_LABEL:
+		case FDB_INFO_PATCH_LABEL:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1594,19 +1594,19 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			break;
 		}
 		
-		case KDB_BDESC_ALLOC:
-		case KDB_BDESC_RETAIN:
-		case KDB_BDESC_RELEASE:
-		case KDB_BDESC_DESTROY:
-		case KDB_BDESC_FREE_DDESC:
-		case KDB_BDESC_AUTORELEASE:
-		case KDB_BDESC_AR_RESET:
-		case KDB_BDESC_AR_POOL_PUSH:
-		case KDB_BDESC_AR_POOL_POP:
+		case FDB_BDESC_ALLOC:
+		case FDB_BDESC_RETAIN:
+		case FDB_BDESC_RELEASE:
+		case FDB_BDESC_DESTROY:
+		case FDB_BDESC_FREE_DDESC:
+		case FDB_BDESC_AUTORELEASE:
+		case FDB_BDESC_AR_RESET:
+		case FDB_BDESC_AR_POOL_PUSH:
+		case FDB_BDESC_AR_POOL_POP:
 			/* unsupported */
 			break;
 		
-		case KDB_PATCH_CREATE_EMPTY:
+		case FDB_PATCH_CREATE_EMPTY:
 		{
 			struct debug_param params[] = {
 				{{.name = "patch"}},
@@ -1621,7 +1621,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_PATCH_CREATE_BIT:
+		case FDB_PATCH_CREATE_BIT:
 		{
 			struct debug_param params[] = {
 				{{.name = "patch"}},
@@ -1641,7 +1641,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_PATCH_CREATE_BYTE:
+		case FDB_PATCH_CREATE_BYTE:
 		{
 			struct debug_param params[] = {
 				{{.name = "patch"}},
@@ -1661,7 +1661,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -ENOMEM;
 			break;
 		}
-		case KDB_PATCH_CONVERT_EMPTY:
+		case FDB_PATCH_CONVERT_EMPTY:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1681,7 +1681,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->type = EMPTY;
 			break;
 		}
-		case KDB_PATCH_CONVERT_BIT:
+		case FDB_PATCH_CONVERT_BIT:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1706,7 +1706,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->bit.xor = params[2].data_4;
 			break;
 		}
-		case KDB_PATCH_CONVERT_BYTE:
+		case FDB_PATCH_CONVERT_BYTE:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1731,10 +1731,10 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->byte.length = params[2].data_2;
 			break;
 		}
-		case KDB_PATCH_REWRITE_BYTE:
+		case FDB_PATCH_REWRITE_BYTE:
 			/* nothing */
 			break;
-		case KDB_PATCH_APPLY:
+		case FDB_PATCH_APPLY:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1754,7 +1754,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->flags &= ~PATCH_ROLLBACK;
 			break;
 		}
-		case KDB_PATCH_ROLLBACK:
+		case FDB_PATCH_ROLLBACK:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1774,7 +1774,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->flags |= PATCH_ROLLBACK;
 			break;
 		}
-		case KDB_PATCH_SET_FLAGS:
+		case FDB_PATCH_SET_FLAGS:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1795,7 +1795,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->flags |= params[1].data_4;
 			break;
 		}
-		case KDB_PATCH_CLEAR_FLAGS:
+		case FDB_PATCH_CLEAR_FLAGS:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1816,7 +1816,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->flags &= ~params[1].data_4;
 			break;
 		}
-		case KDB_PATCH_DESTROY:
+		case FDB_PATCH_DESTROY:
 		{
 			struct debug_param params[] = {
 				{{.name = "patch"}},
@@ -1829,25 +1829,25 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			r = patch_destroy(params[0].data_4);
 			break;
 		}
-		case KDB_PATCH_ADD_BEFORE:
+		case FDB_PATCH_ADD_BEFORE:
 			r = param_patch_int_apply(opcode, "source", "target", patch_add_before);
 			break;
-		case KDB_PATCH_ADD_AFTER:
+		case FDB_PATCH_ADD_AFTER:
 			r = param_patch_int_apply(opcode, "source", "target", patch_add_after);
 			break;
-		case KDB_PATCH_REM_BEFORE:
+		case FDB_PATCH_REM_BEFORE:
 			r = param_patch_int_apply(opcode, "source", "target", patch_rem_before);
 			break;
-		case KDB_PATCH_REM_AFTER:
+		case FDB_PATCH_REM_AFTER:
 			r = param_patch_int_apply(opcode, "source", "target", patch_rem_after);
 			break;
-		case KDB_PATCH_WEAK_RETAIN:
+		case FDB_PATCH_WEAK_RETAIN:
 			r = param_patch_int_apply(opcode, "patch", "location", patch_add_weak);
 			break;
-		case KDB_PATCH_WEAK_FORGET:
+		case FDB_PATCH_WEAK_FORGET:
 			r = param_patch_int_apply(opcode, "patch", "location", patch_rem_weak);
 			break;
-		case KDB_PATCH_SET_OFFSET:
+		case FDB_PATCH_SET_OFFSET:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1873,7 +1873,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 				r = -ENOMSG;
 			break;
 		}
-		case KDB_PATCH_SET_XOR:
+		case FDB_PATCH_SET_XOR:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1899,7 +1899,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->bit.xor = params[1].data_4;
 			break;
 		}
-		case KDB_PATCH_SET_LENGTH:
+		case FDB_PATCH_SET_LENGTH:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1925,7 +1925,7 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->byte.length = params[1].data_2;
 			break;
 		}
-		case KDB_PATCH_SET_BLOCK:
+		case FDB_PATCH_SET_BLOCK:
 		{
 			struct patch * patch;
 			struct debug_param params[] = {
@@ -1951,16 +1951,16 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			patch->block = params[1].data_4;
 			break;
 		}
-		case KDB_PATCH_SET_OWNER:
+		case FDB_PATCH_SET_OWNER:
 			r = param_patch_set_field(opcode, "patch", "owner", field_offset(struct patch, owner));
 			break;
-		case KDB_PATCH_SET_FREE_PREV:
+		case FDB_PATCH_SET_FREE_PREV:
 			r = param_patch_set_field(opcode, "patch", "free_prev", field_offset(struct patch, free_prev));
 			break;
-		case KDB_PATCH_SET_FREE_NEXT:
+		case FDB_PATCH_SET_FREE_NEXT:
 			r = param_patch_set_field(opcode, "patch", "free_next", field_offset(struct patch, free_next));
 			break;
-		case KDB_PATCH_SET_FREE_HEAD:
+		case FDB_PATCH_SET_FREE_HEAD:
 		{
 			struct debug_param params[] = {
 				{{.name = "patch"}},
@@ -1974,21 +1974,21 @@ static int apply_opcode(struct debug_opcode * opcode, int * effect, int * skippa
 			break;
 		}
 		
-		case KDB_PATCH_SATISFY:
-		case KDB_PATCH_WEAK_COLLECT:
-		case KDB_PATCH_OVERLAP_ATTACH:
-		case KDB_PATCH_OVERLAP_MULTIATTACH:
+		case FDB_PATCH_SATISFY:
+		case FDB_PATCH_WEAK_COLLECT:
+		case FDB_PATCH_OVERLAP_ATTACH:
+		case FDB_PATCH_OVERLAP_MULTIATTACH:
 			/* nothing */
 			if(effect)
 				*effect = 0;
 			break;
 		
-		case KDB_CACHE_NOTIFY:
+		case FDB_CACHE_NOTIFY:
 			if(skippable)
 				*skippable = 1;
-		case KDB_CACHE_FINDBLOCK:
-		case KDB_CACHE_LOOKBLOCK:
-		case KDB_CACHE_WRITEBLOCK:
+		case FDB_CACHE_FINDBLOCK:
+		case FDB_CACHE_LOOKBLOCK:
+		case FDB_CACHE_WRITEBLOCK:
 			/* ... */
 			if(effect)
 				*effect = 0;
@@ -2420,9 +2420,9 @@ static int command_cache(int argc, const char * argv[])
 				fclose(write_log);
 			return r;
 		}
-		if(modules[opcode.module_idx].module == KDB_MODULE_CACHE)
+		if(modules[opcode.module_idx].module == FDB_MODULE_CACHE)
 		{
-			if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_NOTIFY)
+			if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == FDB_CACHE_NOTIFY)
 			{
 				struct bd * bd;
 				struct debug_param params[] = {
@@ -2451,7 +2451,7 @@ static int command_cache(int argc, const char * argv[])
 					fflush(stdout);
 				}
 			}
-			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_FINDBLOCK)
+			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == FDB_CACHE_FINDBLOCK)
 			{
 				struct debug_param params[] = {
 					{{.name = "cache"}},
@@ -2489,7 +2489,7 @@ static int command_cache(int argc, const char * argv[])
 				else
 					alt_finds++;
 			}
-			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_LOOKBLOCK)
+			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == FDB_CACHE_LOOKBLOCK)
 			{
 				struct debug_param params[] = {
 					{{.name = "cache"}},
@@ -2521,7 +2521,7 @@ static int command_cache(int argc, const char * argv[])
 				else
 					alt_looks++;
 			}
-			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == KDB_CACHE_WRITEBLOCK)
+			else if(modules[opcode.module_idx].opcodes[opcode.opcode_idx]->opcode == FDB_CACHE_WRITEBLOCK)
 			{
 				struct debug_param params[] = {
 					{{.name = "cache"}},
@@ -3417,7 +3417,7 @@ static FILE * view_file = NULL;
 static void gtk_view(void);
 static int command_view(int argc, const char * argv[])
 {
-	char tempfile[] = "/tmp/kdb-XXXXXX";
+	char tempfile[] = "/tmp/fdb-XXXXXX";
 	FILE * output;
 	char title[256];
 	int r, fresh = 0;
@@ -3606,7 +3606,7 @@ static char * command_complete(const char * text, int state)
 		PATCH,
 		BLOCK,
 		BD,
-		KDB,
+		FDB,
 		MARK,
 		MAXMIN,
 		LOOKUP,
@@ -3626,7 +3626,7 @@ static char * command_complete(const char * text, int state)
 		} bd;
 		struct {
 			int module, opcode;
-		} kdb;
+		} fdb;
 		struct {
 			struct mark * next;
 		} mark;
@@ -3691,9 +3691,9 @@ static char * command_complete(const char * text, int state)
 					type = FILENAME;
 				else
 				{
-					type = KDB;
-					local.kdb.module = 0;
-					local.kdb.opcode = 0;
+					type = FDB;
+					local.fdb.module = 0;
+					local.fdb.opcode = 0;
 				}
 			}
 			else if(!strncmp(argv[0], "unmark ", 7))
@@ -3822,17 +3822,17 @@ static char * command_complete(const char * text, int state)
 			}
 			break;
 		}
-		case KDB:
-			while(modules[local.kdb.module].opcodes)
+		case FDB:
+			while(modules[local.fdb.module].opcodes)
 			{
-				while(modules[local.kdb.module].opcodes[local.kdb.opcode]->name)
+				while(modules[local.fdb.module].opcodes[local.fdb.opcode]->name)
 				{
-					const char * name = modules[local.kdb.module].opcodes[local.kdb.opcode++]->name;
+					const char * name = modules[local.fdb.module].opcodes[local.fdb.opcode++]->name;
 					if(!strncmp(name, text, length))
 						return strdup(name);
 				}
-				local.kdb.opcode = 0;
-				local.kdb.module++;
+				local.fdb.opcode = 0;
+				local.fdb.module++;
 			}
 			break;
 		case MARK:

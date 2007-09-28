@@ -440,10 +440,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 			r = patch_create_init(block, bd, &head);
 			if (r < 0)
 				goto no_block;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "init data block");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "init data block");
 			/* note that we do not write it - we will write it later */
 
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, head, PATCH_DATA);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, head, PATCH_DATA);
 			head->flags |= PATCH_DATA;
 
 			r = patchgroup_finish_head(head);
@@ -495,9 +495,9 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 		r = patch_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &head);
 		if (r < 0)
 			goto uhfs_write_written_exit;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "write file data");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "write file data");
 
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, head, PATCH_DATA);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, head, PATCH_DATA);
 		head->flags |= PATCH_DATA;
 
 		r = patchgroup_finish_head(head);

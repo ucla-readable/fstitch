@@ -157,7 +157,7 @@ static uint32_t allocate_wholeblock(LFS_t * object, int wipe, fdesc_t * file, pa
 			r = patch_create_init(block, info->ubd, head);
 			if (r >= 0)
 			{
-				FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "wipe block");
+				FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "wipe block");
 				r = CALL(info->ubd, write_block, block, i);
 			}
 			if (r < 0)
@@ -214,7 +214,7 @@ static inline int update_indirect_block(struct ufs_info * info, bdesc_t * block,
 	int r = patch_create_byte(block, info->ubd, offset * sizeof(n), sizeof(n), &n, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "indirect pointer");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "indirect pointer");
 	return CALL(info->ubd, write_block, block, block_number);
 }
 
@@ -561,7 +561,7 @@ static uint32_t find_frags_new_home(LFS_t * object, fdesc_t * file, int purpose,
 		r = patch_create_full(newblock, info->ubd, bdesc_data(block), head);
 		if (r < 0)
 			goto find_frags_new_home_failed;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "move fragment");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "move fragment");
 
 		bdesc_release(&block);
 		r = CALL(info->ubd, write_block, newblock, blockno + i);

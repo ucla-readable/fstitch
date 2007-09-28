@@ -75,7 +75,7 @@ int ufs_write_inode(struct ufs_info * info, uint32_t num, struct UFS_dinode inod
 	/* patch_create_diff() returns 0 for "no change" */
 	if (*head && r > 0)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "update inode");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "update inode");
 		r = CALL(info->ubd, write_block, inode_table, fragno);
 	}
 
@@ -267,7 +267,7 @@ int ufs_write_btot(struct ufs_info * info, uint32_t num, uint32_t value, patch_t
 	r = patch_create_byte(block, info->ubd, ROUNDDOWN32(offset, 4), 4, &value, head);
 	if (r >= 0)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write btotal");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "write btotal");
 		r = CALL(info->ubd, write_block, block, blockno);
 	}
 	if (r < 0)
@@ -306,7 +306,7 @@ int ufs_write_fbp(struct ufs_info * info, uint32_t num, uint16_t value, patch_t 
 	r = patch_create_byte(block, info->ubd, ROUNDDOWN32(offset,2), 2, &value, head);
 	if (r >= 0)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write fbp");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "write fbp");
 		r = CALL(info->ubd, write_block, block, blockno);
 	}
 	if (r < 0)
@@ -366,7 +366,7 @@ int ufs_write_inode_bitmap(struct ufs_info * info, uint32_t num, bool value, pat
 	r = patch_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		goto write_inode_bitmap_end;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "allocate inode" : "free inode");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "allocate inode" : "free inode");
 	*(oldheads++) = *head;
 
 	r = CALL(info->ubd, write_block, block, blockno);
@@ -462,7 +462,7 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 	r = patch_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "free fragment" : "allocate fragment");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "free fragment" : "allocate fragment");
 
 	r = CALL(info->ubd, write_block, block, blockno);
 	if (r < 0)
@@ -502,7 +502,7 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 				&cg->cg_frsum[nfrags_before], head);
 		if (r < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write frsum before");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "write frsum before");
 	}
 	if (nfrags_after > 0 && nfrags_after < 8) {
 		offset = (uint32_t) &((struct UFS_cg *) NULL)->cg_frsum[nfrags_after];
@@ -512,7 +512,7 @@ int ufs_write_fragment_bitmap(struct ufs_info * info, uint32_t num, bool value, 
 				&cg->cg_frsum[nfrags_after], head);
 		if (r < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write frsum after");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "write frsum after");
 	}
 
 	r = CALL(info->ubd, write_block, cgblock, cgblock->xxx_number);
@@ -581,7 +581,7 @@ int ufs_write_block_bitmap(struct ufs_info * info, uint32_t num, bool value, pat
 	r = patch_create_bit(block, info->ubd, (offset % super->fs_fsize) / 4, 1 << (num % 32), head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "free block" : "allocate block");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "free block" : "allocate block");
 	*(oldheads++) = *head;
 	*head = save_head;
 
@@ -660,7 +660,7 @@ int ufs_update_summary(struct ufs_info * info, int cyl, int ndir, int nbfree, in
 			csum, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "update summary");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "update summary");
 	if (*head != oldhead)
 		*(oldheads++) = *head;
 

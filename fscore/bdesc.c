@@ -97,8 +97,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 		return NULL;
 	}
 #endif
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_ALLOC, bdesc, bdesc, number, count);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BDESC_NUMBER, bdesc, number, count);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_ALLOC, bdesc, bdesc, number, count);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->cache_number = (uint32_t) -1;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;
@@ -137,8 +137,8 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 void __bdesc_release(bdesc_t *bdesc)
 {
 	assert(bdesc && bdesc->ref_count == 0 && bdesc->ar_count == 0);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_DESTROY, bdesc, bdesc);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_FREE_DDESC, bdesc, bdesc);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_DESTROY, bdesc, bdesc);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_FREE_DDESC, bdesc, bdesc);
 	assert(!bdesc->all_patches);
 	assert(!bdesc->overlap1[0]);
 	/* XXX don't bother checking other overlap1[] */
@@ -180,7 +180,7 @@ bdesc_t * bdesc_autorelease(bdesc_t * bdesc)
 		bdesc->ar_next = autorelease_stack->list;
 		autorelease_stack->list = bdesc;
 	}
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AUTORELEASE, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_AUTORELEASE, bdesc, bdesc, bdesc->ref_count, bdesc->ar_count);
 	return bdesc;
 }
 
@@ -198,7 +198,7 @@ int bdesc_autorelease_pool_push(void)
 	pool->next = autorelease_stack;
 	autorelease_stack = pool;
 	autorelease_depth++;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_PUSH, bdesc_autorelease_pool_depth());
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_AR_POOL_PUSH, bdesc_autorelease_pool_depth());
 	assert(autorelease_depth > 0);
 	return 0;
 }
@@ -212,14 +212,14 @@ void bdesc_autorelease_pool_pop(void)
 		fprintf(stderr, "%s(): (%s:%d): autorelease pool stack empty!\n", __FUNCTION__, __FILE__, __LINE__);
 		return;
 	}
-	FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_POOL_POP, bdesc_autorelease_pool_depth() - 1);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_AR_POOL_POP, bdesc_autorelease_pool_depth() - 1);
 	while(pool->list)
 	{
 		bdesc_t * head = pool->list;
 		int i = head->ar_count;
 		pool->list = head->ar_next;
 		head->ar_count = 0;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_BDESC, KDB_BDESC_AR_RESET, head, head, head->ref_count, head->ar_count);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_AR_RESET, head, head, head->ref_count, head->ar_count);
 		while(i-- > 0)
 		{
 			bdesc_t * release = head;

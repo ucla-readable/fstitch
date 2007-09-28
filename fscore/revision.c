@@ -575,7 +575,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 		link_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
 		patch_unlink_index_patches(scan);
 		patch_unlink_ready_patches(scan);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, scan, target);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OWNER, scan, target);
 		scan->owner = target;
 		patch_propagate_level_change(scan, owner->level, target->level);
 		patch_update_ready_patches(scan);
@@ -611,7 +611,7 @@ int revision_slice_create(bdesc_t * block, BD_t * owner, BD_t * target, revision
 				patch_t * next = scan->ddesc_next;
 				patch_unlink_index_patches(scan);
 				patch_unlink_ready_patches(scan);
-				FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, scan, owner);
+				FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OWNER, scan, owner);
 				scan->owner = owner;
 				patch_propagate_level_change(scan, target->level, owner->level);
 				unlink_tmp_ready(&tmp_ready, &tmp_ready_tail, scan);
@@ -654,7 +654,7 @@ void revision_slice_push_down(revision_slice_t * slice)
 		if(slice->ready[i]->owner == slice->owner)
 		{
 			uint16_t prev_level = patch_level(slice->ready[i]);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, slice->ready[i], slice->target);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OWNER, slice->ready[i], slice->target);
 			patch_unlink_index_patches(slice->ready[i]);
 			patch_unlink_ready_patches(slice->ready[i]);
 			slice->ready[i]->owner = slice->target;
@@ -679,7 +679,7 @@ void revision_slice_pull_up(revision_slice_t * slice)
 		if(slice->ready[i]->owner == slice->target)
 		{
 			uint16_t prev_level = patch_level(slice->ready[i]);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, slice->ready[i], slice->owner);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OWNER, slice->ready[i], slice->owner);
 			patch_unlink_index_patches(slice->ready[i]);
 			patch_unlink_ready_patches(slice->ready[i]);
 			slice->ready[i]->owner = slice->owner;

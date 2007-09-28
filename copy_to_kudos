@@ -21,7 +21,7 @@ KMACHINE=kudos-$1.cs.ucla.edu
 host $KMACHINE > /dev/null || arg_error "$0"
 
 rsync --rsh=ssh -vaSz \
-	--exclude=/.kdb_history \
+	--exclude=/.fdb_history \
 	--exclude=/linux-2.6.15.tar \
 	--exclude=/TAGS --exclude=/tags \
 	--exclude=/time.log --exclude=/prof.log\

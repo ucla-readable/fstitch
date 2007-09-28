@@ -195,7 +195,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 	struct cache_info * info = (struct cache_info *) object;
 	revision_slice_t slice;
 	int r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_LOOKBLOCK, object, block);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_CACHE, FDB_CACHE_LOOKBLOCK, object, block);
 	
 	if(delay)
 		*delay = 0;
@@ -235,7 +235,7 @@ static int wb2_flush_block(BD_t * object, bdesc_t * block, int * delay)
 			if(delay)
 				*delay = jiffy_time() - start;
 			r = (slice.all_ready ? FLUSH_DONE : FLUSH_SOME);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_WRITEBLOCK, object, block, block->flags);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_CACHE, FDB_CACHE_WRITEBLOCK, object, block, block->flags);
 		}
 	}
 	
@@ -314,7 +314,7 @@ static void wb2_shrink_dblocks(BD_t * object, enum dshrink_strategy strategy)
 #ifdef __KERNEL__
 	revision_tail_process_landing_requests();
 #endif
-	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_FINDBLOCK, object);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_CACHE, FDB_CACHE_FINDBLOCK, object);
 	
 	/* in clip mode, stop as soon as we are below the soft limit */
 	while((info->dblocks > info->soft_dblocks || strategy != CLIP) && block != STOP)
@@ -714,6 +714,6 @@ BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks)
 		return NULL;
 	}
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_CACHE, KDB_CACHE_NOTIFY, bd);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_CACHE, FDB_CACHE_NOTIFY, bd);
 	return bd;
 }

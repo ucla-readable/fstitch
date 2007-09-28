@@ -85,7 +85,7 @@ static int write_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * dirf, struct UFS
 	r = patch_create_byte(block, info->ubd, offset, actual_len, &entry, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "write dirent");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "write dirent");
 
 	return CALL(info->ubd, write_block, block, blockno);
 }
@@ -160,7 +160,7 @@ static int ufs_dirent_linear_insert_dirent(UFSmod_dirent_t * object, ufs_fdesc_t
 			assert(block); // FIXME Leiz == Lazy
 			r = patch_create_init(block, info->ubd, head);
 			assert(r >= 0); // FIXME Leiz == Lazy
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "clear dirblock");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "clear dirblock");
 			r = CALL(info->parts.base, append_file_block, (fdesc_t *) dirf, blockno, head);
 			if (r < 0)
 				return r;

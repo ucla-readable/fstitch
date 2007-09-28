@@ -90,7 +90,7 @@ static int ufs_cg_wb_write_time(UFSmod_cg_t * object, int32_t num, int32_t time,
 			&linfo->cg[num].cgdata.cg_time, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg timestamp");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "cg timestamp");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -129,7 +129,7 @@ static int ufs_cg_wb_write_cs(UFSmod_cg_t * object, int num, const struct UFS_cs
 	/* patch_create_diff() returns 0 for "no change" */
 	if (*head && r > 0)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg checksum");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "cg checksum");
 		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 		if (r < 0)
 			return r;
@@ -167,7 +167,7 @@ static int ufs_cg_wb_write_rotor(UFSmod_cg_t * object, int32_t num, int32_t roto
 			&linfo->cg[num].cgdata.cg_rotor, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg rotor");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "cg rotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -201,7 +201,7 @@ static int ufs_cg_wb_write_frotor(UFSmod_cg_t * object, int32_t num, int32_t fro
 			&linfo->cg[num].cgdata.cg_frotor, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg frotor");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "cg frotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -235,7 +235,7 @@ static int ufs_cg_wb_write_irotor(UFSmod_cg_t * object, int32_t num, int32_t iro
 			&linfo->cg[num].cgdata.cg_irotor, head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg irotor");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "cg irotor");
 	r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 	if (r < 0)
 		return r;
@@ -273,7 +273,7 @@ static int ufs_cg_wb_write_frsum(UFSmod_cg_t * object, int32_t num, const int32_
 	/* patch_create_diff() returns 0 for "no change" */
 	if(*head && r > 0)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "cg frsum");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "cg frsum");
 		r = CALL(linfo->global_info->ubd, write_block, linfo->cg[num].cgblock, linfo->cg[num].cgblock_number);
 		if (r < 0)
 			return r;

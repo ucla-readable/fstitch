@@ -432,7 +432,7 @@ static inline void patch_weak_release(patchweakref_t * weak, bool callback)
 		if(callback && weak->callback)
 			weak->callback(weak, old, weak->callback_data);
 #endif
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_WEAK_FORGET, old, weak);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_WEAK_FORGET, old, weak);
 	}
 }
 

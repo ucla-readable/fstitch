@@ -278,14 +278,14 @@ static patch_t * free_head = NULL;
 static void patch_free_push(patch_t * patch)
 {
 	assert(free_head != patch && !patch->free_prev);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_NEXT, patch, free_head);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_NEXT, patch, free_head);
 	patch->free_next = free_head;
 	if(free_head)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_PREV, free_head, patch);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_PREV, free_head, patch);
 		free_head->free_prev = patch;
 	}
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_HEAD, patch);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_HEAD, patch);
 	free_head = patch;
 }
 
@@ -294,22 +294,22 @@ static void patch_free_remove(patch_t * patch)
 	assert(patch->free_prev || free_head == patch);
 	if(patch->free_prev)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_NEXT, patch->free_prev, patch->free_next);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_NEXT, patch->free_prev, patch->free_next);
 		patch->free_prev->free_next = patch->free_next;
 	}
 	else
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_HEAD, patch->free_next);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_HEAD, patch->free_next);
 		free_head = patch->free_next;
 	}
 	if(patch->free_next)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_PREV, patch->free_next, patch->free_prev);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_PREV, patch->free_next, patch->free_prev);
 		patch->free_next->free_prev = patch->free_prev;
 	}
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_PREV, patch, NULL);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_PREV, patch, NULL);
 	patch->free_prev = NULL;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FREE_NEXT, patch, NULL);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FREE_NEXT, patch, NULL);
 	patch->free_next = NULL;
 }
 
@@ -372,7 +372,7 @@ static patch_t * ensure_bdesc_has_bit_patches(bdesc_t * block, uint16_t offset)
 	r = patch_create_empty_list(NULL, &patch, NULL);
 	if(r < 0)
 		return NULL;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, patch, "bit_patches");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "bit_patches");
 	
 	if(hash_map_insert(block->bit_patches, key, patch) < 0)
 	{
@@ -382,7 +382,7 @@ static patch_t * ensure_bdesc_has_bit_patches(bdesc_t * block, uint16_t offset)
 	
 	/* we don't really need a flag for this, since we could just use the
 	 * empty.bit_patches field to figure it out... but that would be error-prone */
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_BIT_EMPTY);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_BIT_EMPTY);
 	patch->flags |= PATCH_BIT_EMPTY;
 	patch->empty.bit_patches = block->bit_patches;
 	patch->empty.hash_key = key;
@@ -861,7 +861,7 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 	propagate_depend_add(after, before);
 	
 	/* add the before to the after */
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_ADD_BEFORE, after, before);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_ADD_BEFORE, after, before);
 	dep->before.desc = before;
 	dep->before.next = NULL;
 	dep->before.ptr = after->befores_tail;
@@ -869,7 +869,7 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 	after->befores_tail = &dep->before.next;
 	
 	/* add the after to the before */
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_ADD_AFTER, before, after);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_ADD_AFTER, before, after);
 	dep->after.desc = after;
 	dep->after.next = NULL;
 	dep->after.ptr = before->afters_tail;
@@ -913,7 +913,7 @@ static int patch_overlap_attach(patch_t * recent, patch_t * middle, patch_t * or
 {
 	int r, overlap;
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_OVERLAP_ATTACH, recent, original);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_INFO, FDB_PATCH_OVERLAP_ATTACH, recent, original);
 	
 	/* if either is a EMPTY patch, warn about it */
 	if(recent->type == EMPTY || original->type == EMPTY)
@@ -951,7 +951,7 @@ static int patch_overlap_attach(patch_t * recent, patch_t * middle, patch_t * or
 		}
 		else
 			kpanic("Complete overlap of unhandled patch type!");
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, recent, PATCH_OVERLAP);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, recent, PATCH_OVERLAP);
 		recent->flags |= PATCH_OVERLAP;
 	}
 	
@@ -1003,7 +1003,7 @@ static __inline int _patch_overlap_multiattach_x(patch_t * patch, patch_t ** mid
 
 static int patch_overlap_multiattach(patch_t * patch, bdesc_t * block)
 {
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_OVERLAP_MULTIATTACH, patch, block);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_INFO, FDB_PATCH_OVERLAP_MULTIATTACH, patch, block);
 	
 	if(patch->type == BIT)
 	{
@@ -1201,7 +1201,7 @@ int patch_create_empty_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * bef
 	if(!patch)
 		return -ENOMEM;
 	account_npatches(EMPTY, 1);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_EMPTY, patch, owner);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CREATE_EMPTY, patch, owner);
 #if COUNT_PATCHS
 	patch_counts[EMPTY]++;
 	dump_counts();
@@ -1652,7 +1652,7 @@ static void merge_rbs(bdesc_t * block)
 		patch_free_byte_data(merger);
 	else if(merger->type == BIT)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CONVERT_BYTE, merger, 0, merger->owner->level);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CONVERT_BYTE, merger, 0, merger->owner->level);
 		account_npatches_convert(BIT, BYTE);
 # if COUNT_PATCHS
 		patch_counts[BIT]--;
@@ -1663,16 +1663,16 @@ static void merge_rbs(bdesc_t * block)
 	}
 	else
 		assert(0);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OFFSET, merger, 0);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OFFSET, merger, 0);
 	merger->offset = 0;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_LENGTH, merger, block->length);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_LENGTH, merger, block->length);
 	merger->length = block->length;
 	merger->byte.data = NULL;
 # if PATCH_BYTE_SUM
 	merger->byte.old_sum = 0;
 	merger->byte.new_sum = 0;
 # endif
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, merger, PATCH_OVERLAP);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, merger, PATCH_OVERLAP);
 	merger->flags &= ~PATCH_OVERLAP;
 	assert(!WEAK(block->nrb));
 	patch_weak_retain(merger, &block->nrb, NULL, NULL);
@@ -1742,8 +1742,8 @@ static void merge_rbs(bdesc_t * block)
 		patch_unlink_all_patches(patch);
 		if(patch->type == BYTE)
 			patch_free_byte_data(patch);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CONVERT_EMPTY, patch);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, patch, "rb->nrb mergee");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CONVERT_EMPTY, patch);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "rb->nrb mergee");
 		account_npatches_convert(patch->type, EMPTY);
 # if COUNT_PATCHS
 		patch_counts[patch->type]--;
@@ -1751,13 +1751,13 @@ static void merge_rbs(bdesc_t * block)
 		dump_counts();
 # endif
 		patch->type = EMPTY;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_BLOCK, patch, NULL);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_BLOCK, patch, NULL);
 		bdesc_release(&patch->block);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, patch, NULL);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OWNER, patch, NULL);
 		patch->owner = NULL;
 		patch->empty.bit_patches = NULL;
 		patch->empty.hash_key = NULL;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, patch, PATCH_OVERLAP);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, patch, PATCH_OVERLAP);
 		patch->flags &= ~PATCH_OVERLAP;
 		
 		if(merger->owner->level != (level = patch_level(patch)))
@@ -2051,9 +2051,9 @@ static int patch_create_byte_merge_overlap(patch_t ** tail, patch_t ** new, patc
 		overlap->byte.data = merge_data;
 
 		patch_unlink_overlap(overlap);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OFFSET, overlap, merge_offset);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OFFSET, overlap, merge_offset);
 		overlap->offset = merge_offset;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_LENGTH, overlap, merge_length);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_LENGTH, overlap, merge_length);
 		overlap->length = merge_length;
 # if PATCH_BYTE_SUM
 		overlap->byte.old_sum = patch_byte_sum(overlap->byte.data, merge_length);
@@ -2258,9 +2258,9 @@ static int patch_create_byte_merge_overlap2(patch_t ** tail, BD_t *owner, patch_
 		overlap->byte.data = merge_data;
 
 		patch_unlink_overlap(overlap);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OFFSET, overlap, merge_offset);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OFFSET, overlap, merge_offset);
 		overlap->offset = merge_offset;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_LENGTH, overlap, merge_length);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_LENGTH, overlap, merge_length);
 		overlap->length = merge_length;
 # if PATCH_BYTE_SUM
 		overlap->byte.old_sum = patch_byte_sum(overlap->byte.data, merge_length);
@@ -2376,7 +2376,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 	patch->overlap_pprev = NULL;
 	patch->flags = PATCH_SAFE_AFTER;
 		
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_BYTE, patch, block, owner, patch->offset, patch->length);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CREATE_BYTE, patch, block, owner, patch->offset, patch->length);
 #if COUNT_PATCHS
 	patch_counts[BYTE]++;
 	dump_counts();
@@ -2468,7 +2468,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 	else
 	{
 #if PATCH_NRB
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_APPLY, patch);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_APPLY, patch);
 		assert(!WEAK(block->nrb));
 		patch_weak_retain(patch, &block->nrb, NULL, NULL);
 #else
@@ -2637,7 +2637,7 @@ static int patch_create_bit_merge_overlap(BD_t * owner, uint32_t xor, patch_t * 
 	
 	overlap->bit.or |= xor;
 	overlap->bit.xor ^= xor;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_XOR, overlap, overlap->bit.xor);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_XOR, overlap, overlap->bit.xor);
 	*((uint32_t *) (bdesc_data(overlap->block) + overlap->offset)) ^= xor;
 	
 	/* move merger to correct owner */
@@ -2734,7 +2734,7 @@ int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xo
 	if(!patch)
 		return -ENOMEM;
 	account_npatches(BIT, 1);
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CREATE_BIT, patch, block, owner, offset, xor);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CREATE_BIT, patch, block, owner, offset, xor);
 #if COUNT_PATCHS
 	patch_counts[BIT]++;
 	dump_counts();
@@ -2825,7 +2825,7 @@ static int patch_has_before(patch_t * after, patch_t * before)
 	patchdep_t * dep;
 	
   recurse_enter:
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, after, PATCH_MARKED);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, after, PATCH_MARKED);
 	after->flags |= PATCH_MARKED;
 	for(dep = after->befores; dep; dep = dep->before.next)
 	{
@@ -2882,14 +2882,14 @@ void patch_dep_remove(patchdep_t * dep)
 {
 	propagate_depend_remove(dep->after.desc, dep->before.desc);
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REM_BEFORE, dep->after.desc, dep->before.desc);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_BEFORE, dep->after.desc, dep->before.desc);
 	*dep->before.ptr = dep->before.next;
 	if(dep->before.next)
 		dep->before.next->before.ptr = dep->before.ptr;
 	else
 		dep->after.desc->befores_tail = dep->before.ptr;
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REM_AFTER, dep->before.desc, dep->after.desc);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_AFTER, dep->before.desc, dep->after.desc);
 	*dep->after.ptr = dep->after.next;
 	if(dep->after.next)
 		dep->after.next->after.ptr = dep->after.ptr;
@@ -2999,7 +2999,7 @@ int patch_apply(patch_t * patch)
 	}
 #endif /* REVISION_TAIL_INPLACE */
 	patch->flags &= ~PATCH_ROLLBACK;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_APPLY, patch);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_APPLY, patch);
 	return 0;
 }
 
@@ -3056,7 +3056,7 @@ int patch_rollback(patch_t * patch, uint8_t * buffer)
 			return -EINVAL;
 	}
 	patch->flags |= PATCH_ROLLBACK;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_ROLLBACK, patch);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_ROLLBACK, patch);
 	return 0;
 }
 
@@ -3085,7 +3085,7 @@ void patch_set_inflight(patch_t * patch)
 		(void) patch_weak_release(&patch->block->nrb, 0);
 #endif
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_INFLIGHT);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_INFLIGHT);
 	patch->flags |= PATCH_INFLIGHT;
 	
 	/* in-flight patches +1 their level to prevent afters from following */
@@ -3094,7 +3094,7 @@ void patch_set_inflight(patch_t * patch)
 
 static inline void patch_weak_collect(patch_t * patch)
 {
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_WEAK_COLLECT, patch);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_INFO, FDB_PATCH_WEAK_COLLECT, patch);
 	while(patch->weak_refs)
 	{
 		assert(patch->weak_refs->patch == patch);
@@ -3112,7 +3112,7 @@ int patch_satisfy(patch_t ** patch)
 		return 0;
 	}
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_INFO, KDB_PATCH_SATISFY, *patch);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_INFO, FDB_PATCH_SATISFY, *patch);
 	
 	if((*patch)->befores)
 	{
@@ -3127,7 +3127,7 @@ int patch_satisfy(patch_t ** patch)
 	{
 		while((*patch)->afters)
 			patch_dep_remove((*patch)->afters);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, *patch, PATCH_WRITTEN);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, *patch, PATCH_WRITTEN);
 		(*patch)->flags |= PATCH_WRITTEN;
 		
 		/* we don't need the data in byte patches anymore */
@@ -3161,7 +3161,7 @@ int patch_satisfy(patch_t ** patch)
 		assert((*patch)->empty.bit_patches);
 		assert(hash_map_find_val((*patch)->empty.bit_patches, (*patch)->empty.hash_key) == *patch);
 		hash_map_erase((*patch)->empty.bit_patches, (*patch)->empty.hash_key);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, *patch, PATCH_BIT_EMPTY);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, *patch, PATCH_BIT_EMPTY);
 		(*patch)->flags &= ~PATCH_BIT_EMPTY;
 	}
 	
@@ -3198,7 +3198,7 @@ void patch_weak_retain(patch_t * patch, patchweakref_t * weak, patch_satisfy_cal
 		if(patch->weak_refs)
 			patch->weak_refs->pprev = &weak->next;
 		patch->weak_refs = weak;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_WEAK_RETAIN, patch, weak);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_WEAK_RETAIN, patch, weak);
 	}
 }
 
@@ -3208,7 +3208,7 @@ void patch_destroy(patch_t ** patch)
 	if((*patch)->flags & PATCH_FREEING)
 		return;
 	(*patch)->flags |= PATCH_FREEING;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, *patch, PATCH_FREEING);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, *patch, PATCH_FREEING);
 	
 	if((*patch)->flags & PATCH_WRITTEN)
 	{
@@ -3252,7 +3252,7 @@ void patch_destroy(patch_t ** patch)
 	
 	patch_weak_collect(*patch);
 	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_DESTROY, *patch);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_DESTROY, *patch);
 	
 	switch((*patch)->type)
 	{
@@ -3319,7 +3319,7 @@ void patch_set_empty_declare(patch_t * patch)
 {
 	assert(patch->type == EMPTY && !patch->afters && !(patch->flags & PATCH_WRITTEN));
 	patch->flags |= PATCH_SET_EMPTY;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_SET_EMPTY);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_SET_EMPTY);
 	if(!patch->free_prev && free_head != patch)
 		patch_free_push(patch);
 }

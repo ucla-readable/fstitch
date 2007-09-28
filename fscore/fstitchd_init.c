@@ -118,7 +118,7 @@ int fstitchd_init(int nwbblocks)
 		fprintf(stderr, "fstitch_debug_init: %i\n", r);
 		return r;
 	}
-	FSTITCH_DEBUG_COMMAND(FSTITCH_DEBUG_DISABLE, KDB_MODULE_BDESC);
+	FSTITCH_DEBUG_COMMAND(FSTITCH_DEBUG_DISABLE, FDB_MODULE_BDESC);
 
 	if ((r = hash_map_init()) < 0)
 	{

@@ -204,7 +204,7 @@ static int write_bitmap(LFS_t * object, uint32_t blockno, bool value, patch_t **
 	r = patch_create_bit(bdesc, object->blockdev, (blockno % JOSFS_BLKBITSIZE) / 32, 1 << (blockno % 32), head);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "free block" : "allocate block");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "free block" : "allocate block");
 
 	r = CALL(object->blockdev, write_block, bdesc, target);
 
@@ -643,7 +643,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		offset = nblocks * sizeof(uint32_t);
 		if ((r = patch_create_byte(indirect, object->blockdev, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "add indirect block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "add indirect block");
 
 		return CALL(object->blockdev, write_block, indirect, f->file->f_indirect);
 	}
@@ -657,7 +657,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		// Initialize the new indirect block
 		if ((r = patch_create_init(indirect, object->blockdev, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "init indirect block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "init indirect block");
 
 		// Initialize the structure, then point to it
 		dirblock = CALL(object->blockdev, read_block, f->dirb, 1, NULL);
@@ -668,13 +668,13 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		offset = nblocks * sizeof(uint32_t);
 		if ((r = patch_create_byte(indirect, object->blockdev, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "add indirect block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "add indirect block");
 
 		offset = f->index;
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &inumber, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "set indirect block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "set indirect block");
 
 		/* FIXME handle the return values better? */
 		r = CALL(object->blockdev, write_block, indirect, inumber);
@@ -694,7 +694,7 @@ static int josfs_append_file_block(LFS_t * object, fdesc_t * file, uint32_t bloc
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks];
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &block, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "add direct block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "add direct block");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 		if (r < 0)
@@ -769,7 +769,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 				offset = j * sizeof(JOSFS_File_t);
 				if ((r = patch_create_byte(blk, object->blockdev, offset, sizeof(JOSFS_File_t), &temp_file, head)) < 0) 
 					goto allocate_name_exit2;
-				FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "init dirent");
+				FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "init dirent");
 
 				r = CALL(object->blockdev, write_block, blk, number);
 				if (r < 0)
@@ -799,7 +799,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 		goto allocate_name_exit2;
 	if (patch_create_init(blk, object->blockdev, head) < 0)
 		goto allocate_name_exit3;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "init dir block");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "init dir block");
 
 	dir_fdesc = (struct josfs_fdesc *) josfs_lookup_inode(object, parent);
 	assert(dir_fdesc && dir_fdesc->file);
@@ -825,7 +825,7 @@ static fdesc_t * josfs_allocate_name(LFS_t * object, inode_t parent, const char 
 	temp_head = *head;
 	if (patch_create_byte(blk, object->blockdev, 0, sizeof(JOSFS_File_t), &temp_file, head) < 0)
 		goto allocate_name_exit3;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "init dirent");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "init dirent");
 
 	if ((r = CALL(object->blockdev, write_block, blk, number)) < 0)
 		goto allocate_name_exit3;
@@ -933,7 +933,7 @@ static int josfs_rename(LFS_t * object, inode_t oldparent, const char * oldname,
 		josfs_free_fdesc(object, newfdesc);
 		return r;
 	}
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "rename");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "rename");
 
 	josfs_free_fdesc(object, newfdesc);
 	r = CALL(object->blockdev, write_block, dirblock, new->dirb);
@@ -969,7 +969,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, patch_
 		offset = (nblocks - 1) * sizeof(uint32_t);
 		if ((r = patch_create_byte(indirect, object->blockdev, offset, sizeof(uint32_t), &data, head)) < 0)
 			return INVALID_BLOCK;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "detach indirect block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "detach indirect block");
 
 		r = CALL(object->blockdev, write_block, indirect, f->file->f_indirect);
 		return blockno;
@@ -990,7 +990,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, patch_
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_indirect;
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &data, head)) < 0)
 			return INVALID_BLOCK;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "clear indirect block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "clear indirect block");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 
@@ -1012,7 +1012,7 @@ static uint32_t josfs_truncate_file_block(LFS_t * object, fdesc_t * file, patch_
 		offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_direct[nblocks - 1];
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &data, head)) < 0)
 			return INVALID_BLOCK;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "detach direct block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "detach direct block");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 
@@ -1065,7 +1065,7 @@ static int josfs_remove_name(LFS_t * object, inode_t parent, const char * name, 
 	offset += (uint32_t) &((JOSFS_File_t *) NULL)->f_name[0];
 	if ((r = patch_create_byte(dirblock, object->blockdev, offset, 1, &data, head)) < 0)
 		goto remove_name_exit;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "clear name[0]");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "clear name[0]");
 
 	r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 	if (r >= 0)
@@ -1266,7 +1266,7 @@ static int josfs_set_metadata2(LFS_t * object, struct josfs_fdesc * f, const fsm
 		offset = f->index + offsetof(JOSFS_File_t, f_size);
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(int32_t), &fsm->fsm_value.u, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "set file size");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "set file size");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 		if (r < 0)
@@ -1295,7 +1295,7 @@ static int josfs_set_metadata2(LFS_t * object, struct josfs_fdesc * f, const fsm
 		offset = f->index + offsetof(JOSFS_File_t, f_type);
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &fs_type, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "set file type");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "set file type");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 
@@ -1316,7 +1316,7 @@ static int josfs_set_metadata2(LFS_t * object, struct josfs_fdesc * f, const fsm
 			offset += offsetof(JOSFS_File_t, f_atime);
 		if ((r = patch_create_byte(dirblock, object->blockdev, offset, sizeof(uint32_t), &fsm->fsm_value.u, head)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, (fsm->fsm_feature == FSTITCH_FEATURE_MTIME) ? "set file mtime" : "set file atime");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, (fsm->fsm_feature == FSTITCH_FEATURE_MTIME) ? "set file mtime" : "set file atime");
 
 		r = CALL(object->blockdev, write_block, dirblock, f->dirb);
 		if (r < 0)

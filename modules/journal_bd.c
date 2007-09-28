@@ -312,7 +312,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t
 			commit.seq = info->trans_seq;
 			r = patch_create_byte(record, info->journal, 0, sizeof(commit), &commit, &head);
 			assert(r >= 0);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "subcommit");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "subcommit");
 			r = patch_add_depend(info->wait, head);
 			assert(r >= 0);
 			head = WEAK(info->jdata_head);
@@ -339,7 +339,7 @@ static uint32_t journal_bd_lookup_block(BD_t * object, bdesc_t * block, uint32_t
 		
 		r = patch_create_byte(number_block, info->journal, (last % npb) * sizeof(uint32_t), sizeof(uint32_t), &block_number, &head);
 		assert(r >= 0);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "journal number");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "journal number");
 		r = patch_add_depend(info->wait, head);
 		assert(r >= 0);
 		info->recursion = 1;
@@ -377,7 +377,7 @@ static int journal_bd_start_transaction(BD_t * object)
 		r = patch_create_empty_list(NULL, &info->name, NULL); \
 		if(r < 0) \
 			goto fail_##name; \
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->name, #name); \
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->name, #name); \
 		patch_claim_empty(info->name); \
 	} while(0)
 	
@@ -388,15 +388,15 @@ static int journal_bd_start_transaction(BD_t * object)
 	r = patch_create_empty_list(NULL, &info->wait, info->keep_w, WEAK(info->prev_cr), NULL);
 	if(r < 0)
 		goto fail_wait;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->wait, "wait");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->wait, "wait");
 	CREATE_EMPTY(keep_h);
 	assert(info->keep_h);
 	/* this one is managed, and temporarily depends on prev_cancel */
 	r = patch_create_empty_list(object, &info->hold, info->keep_h, WEAK(info->prev_cancel), NULL);
 	if(r < 0)
 		goto fail_hold;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->hold, "hold");
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, info->hold, PATCH_NO_PATCHGROUP);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->hold, "hold");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, info->hold, PATCH_NO_PATCHGROUP);
 	info->hold->flags |= PATCH_NO_PATCHGROUP;
 	CREATE_EMPTY(keep_d);
 	/* make the new complete record (via data) depend on the previous via info->prev_cancel */
@@ -404,7 +404,7 @@ static int journal_bd_start_transaction(BD_t * object)
 	r = patch_create_empty_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 	if(r < 0)
 		goto fail_data;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->data, "data");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->data, "data");
 	CREATE_EMPTY(done);
 
 	Dprintf("%s(): starting new transaction (sequence %u, wait %p, hold %p, data %p, done %p)\n", __FUNCTION__, info->trans_seq, info->wait, info->hold, info->data, info->done);
@@ -474,15 +474,15 @@ static int journal_bd_stop_transaction(BD_t * object)
 	r = patch_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "commit");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "commit");
 	/* ...and make hold depend on it */
 	info->hold->flags |= PATCH_SAFE_AFTER;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, info->hold, PATCH_SAFE_AFTER);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, info->hold, PATCH_SAFE_AFTER);
 	r = patch_add_depend(info->hold, head);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
 	info->hold->flags &= ~PATCH_SAFE_AFTER;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, info->hold, PATCH_SAFE_AFTER);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, info->hold, PATCH_SAFE_AFTER);
 	/* set the new previous commit record */
 	patch_weak_retain(head, &info->prev_cr, NULL, NULL);
 	
@@ -496,7 +496,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	r = patch_create_byte(block, info->journal, 0, sizeof(commit), &commit, &head);
 	if(r < 0)
 		kpanic("Holy Mackerel!");
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "complete");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "complete");
 	/* ...and make done depend on it */
 	r = patch_add_depend(info->done, head);
 	if(r < 0)
@@ -505,7 +505,7 @@ static int journal_bd_stop_transaction(BD_t * object)
 	patch_weak_retain(head, &info->prev_cancel, NULL, NULL);
 	
 	/* unmanage the hold EMPTY */
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_OWNER, info->hold, NULL);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_OWNER, info->hold, NULL);
 	info->hold->owner = NULL;
 	/* satisfy the keep EMPTYs */
 	patch_satisfy(&info->keep_w);
@@ -644,12 +644,12 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		if(needs_hold)
 		{
 			patch->flags |= PATCH_SAFE_AFTER;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
 			r = patch_add_depend(patch, info->hold);
 			if(r < 0)
 				kpanic("Holy Mackerel!");
 			patch->flags &= ~PATCH_SAFE_AFTER;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
 		}
 		
 		if(engaged)
@@ -664,7 +664,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 					deps = &(*deps)->before.next;
 			/* and set the patchgroup exemption flag */
 			patch->flags |= PATCH_NO_PATCHGROUP;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_NO_PATCHGROUP);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_NO_PATCHGROUP);
 		}
 	}
 	
@@ -701,7 +701,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			}
 #endif
 			assert(!(journal_block->all_patches->flags & PATCH_ROLLBACK));
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_REWRITE_BYTE, journal_block->all_patches);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REWRITE_BYTE, journal_block->all_patches);
 			memcpy(bdesc_data(journal_block), bdesc_data(block), object->blocksize);
 #if PATCH_BYTE_SUM
 			journal_block->all_patches->byte.new_sum = patch_byte_sum(block->data, object->blocksize);
@@ -844,13 +844,13 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		r = patch_create_empty_list(NULL, &info->keep_d, NULL);
 		if(r < 0)
 			goto error_1;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->keep_d, "keep_d");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->keep_d, "keep_d");
 		patch_claim_empty(info->keep_d);
 		/* make the new complete record (via data) depend on the previous via info->prev_cancel */
 		r = patch_create_empty_list(NULL, &info->data, info->keep_d, WEAK(info->prev_cancel), NULL);
 		if(r < 0)
 			goto error_2;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->data, "data");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->data, "data");
 		r = patch_create_empty_list(NULL, &info->done, NULL);
 		if(r < 0)
 		{
@@ -860,7 +860,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		error_1:
 			return r;
 		}
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, info->done, "done");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->done, "done");
 		patch_claim_empty(info->done);
 	}
 	
@@ -947,7 +947,7 @@ static int replay_single_transaction(BD_t * bd, uint32_t transaction_start, uint
 		r = patch_create_byte_atomic(commit_block, info->journal, (uint16_t) &((struct commit_record *) NULL)->type, sizeof(cr->type), &empty, &head);
 		if(r < 0)
 			kpanic("Holy Mackerel!");
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "complete");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "complete");
 		r = patch_add_depend(info->done, head);
 		if(r < 0)
 			kpanic("Holy Mackerel!");

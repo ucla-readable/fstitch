@@ -113,13 +113,13 @@ patchgroup_scope_t * patchgroup_scope_copy(patchgroup_scope_t * scope)
 		/* we need our own top_keep */
 		if(patch_create_empty_list(NULL, &copy->top_keep, NULL) < 0)
 			goto error_copy;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, copy->top_keep, "top_keep");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, copy->top_keep, "top_keep");
 		patch_claim_empty(copy->top_keep);
 		if(patch_create_empty_list(NULL, &copy->top, copy->top_keep, NULL) < 0)
 			goto error_top_keep;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, copy->top, "top");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, copy->top, "top");
 		copy->top->flags |= PATCH_NO_PATCHGROUP;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, copy->top, PATCH_NO_PATCHGROUP);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, copy->top, PATCH_NO_PATCHGROUP);
 	}
 	patch_weak_retain(WEAK(scope->bottom), &copy->bottom, NULL, NULL);
 	
@@ -251,22 +251,22 @@ patchgroup_t * patchgroup_create(int flags)
 	
 	if(patch_create_empty_list(NULL, &op->head_keep, NULL) < 0)
 		goto error_state;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, op->head_keep, "head_keep");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, op->head_keep, "head_keep");
 	patch_claim_empty(op->head_keep);
 	
 	if(patch_create_empty_list(NULL, &op->tail_keep, NULL) < 0)
 		goto error_head_keep;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, op->tail_keep, "tail_keep");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, op->tail_keep, "tail_keep");
 	patch_claim_empty(op->tail_keep);
 	
 	if(patch_create_empty_list(NULL, &tail, op->tail_keep, NULL) < 0)
 		goto error_tail_keep;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, tail, "tail");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, tail, "tail");
 	patch_weak_retain(tail, &op->tail, NULL, NULL);
 	
 	if(patch_create_empty_list(NULL, &head, op->head_keep, NULL) < 0)
 		goto error_tail;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "head");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "head");
 	patch_weak_retain(head, &op->head, NULL, NULL);
 	
 	if(hash_map_insert(current_scope->id_map, (void *) op->id, state) < 0)
@@ -344,7 +344,7 @@ int patchgroup_add_depend(patchgroup_t * after, patchgroup_t * before)
 				patch_remove_depend(WEAK(after->tail), after->tail_keep);
 				patch_weak_release(&after->tail, 0);
 				patch_weak_retain(WEAK(before->head), &after->tail, NULL, NULL);
-				FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(after->tail), "tail");
+				FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, WEAK(after->tail), "tail");
 			}
 			else
 				goto oh_well;
@@ -402,7 +402,7 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 						patch_remove_depend(WEAK(state->patchgroup->head), state->patchgroup->head_keep);
 						patch_weak_release(&state->patchgroup->head, 0);
 						patch_weak_retain(save_top, &state->patchgroup->head, NULL, NULL);
-						FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(state->patchgroup->head), "head");
+						FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, WEAK(state->patchgroup->head), "head");
 					}
 					else
 						goto oh_well;
@@ -424,13 +424,13 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 	r = patch_create_empty_list(NULL, &top_keep, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, top_keep, "top_keep");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, top_keep, "top_keep");
 	patch_claim_empty(top_keep);
 	
 	r = patch_create_empty_list(NULL, &bottom, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, bottom, "bottom");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, bottom, "bottom");
 	
 	hash_map_it_init(&it, current_scope->id_map);
 	while((state = hash_map_val_next(&it)))
@@ -445,9 +445,9 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 	r = patch_create_empty_list(NULL, &top, top_keep, NULL);
 	if(r < 0)
 		kpanic("Can't recover from failure!");
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, top, "top");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, top, "top");
 	top->flags |= PATCH_NO_PATCHGROUP;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, top, PATCH_NO_PATCHGROUP);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, top, PATCH_NO_PATCHGROUP);
 	
 	if(!bottom->befores)
 	{
@@ -461,7 +461,7 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 		patch_t * old = bottom;
 		bottom = bottom->befores->before.desc;
 		patch_remove_depend(old, bottom);
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, bottom, "bottom");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, bottom, "bottom");
 	}
 #endif
 	
@@ -682,7 +682,7 @@ int patchgroup_prepare_head(patch_t ** head)
 		r = patch_create_empty_list(NULL, head, WEAK(current_scope->bottom), *head, NULL);
 		if(r < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, "and");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, "and");
 		patch_set_empty_declare(*head);
 	}
 	else
@@ -705,8 +705,8 @@ int patchgroup_label(patchgroup_t * patchgroup, const char * label)
 	if(!patchgroup)
 		return -EINVAL;
 	if(WEAK(patchgroup->head))
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(patchgroup->head), "og head: %s", label);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, WEAK(patchgroup->head), "og head: %s", label);
 	if(WEAK(patchgroup->tail))
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, WEAK(patchgroup->tail), "og tail: %s", label);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, WEAK(patchgroup->tail), "og tail: %s", label);
 	return 0;
 }

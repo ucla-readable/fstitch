@@ -67,12 +67,12 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 		if(needs_head && write_head)
 		{
 			patch->flags |= PATCH_SAFE_AFTER;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
 			r = patch_add_depend(patch, write_head);
 			if(r < 0)
 				kpanic("Holy Mackerel!");
 			patch->flags &= ~PATCH_SAFE_AFTER;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
 		}
 		
 		if(engaged)
@@ -87,7 +87,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 					deps = &(*deps)->before.next;
 			/* and set the patchgroup exemption flag */
 			patch->flags |= PATCH_NO_PATCHGROUP;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_PATCH_ALTER, KDB_PATCH_SET_FLAGS, patch, PATCH_NO_PATCHGROUP);
+			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_NO_PATCHGROUP);
 		}
 	}
 	

@@ -343,7 +343,7 @@ void fstitch_debug_command(uint16_t command, uint16_t module, const char * file,
 	{
 		case FSTITCH_DEBUG_MARK:
 			printf("Sent mark [%04x] from %s() at %s:%d\n", module, function, file, line);
-			fstitch_debug_send(KDB_MODULE_INFO, KDB_INFO_MARK, file, line, function, module);
+			fstitch_debug_send(FDB_MODULE_INFO, FDB_INFO_MARK, file, line, function, module);
 			break;
 		case FSTITCH_DEBUG_DISABLE:
 		{

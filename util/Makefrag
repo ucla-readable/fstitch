@@ -1,5 +1,5 @@
 OBJDIRS += util
-BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/kdb
+BIN += $(UTILDIR)/bdsplit $(UTILDIR)/check_writes $(UTILDIR)/fsck.jos $(UTILDIR)/fsformat $(UTILDIR)/fsync $(UTILDIR)/fdb
 ifeq ($(OBJDIR),$(BASE_OBJDIR)/kernel)
 BIN += $(UTILDIR)/testpatchgroup
 endif
@@ -36,7 +36,7 @@ $(UTILDIR)/testpatchgroup: util/testpatchgroup.c $(OBJDIR)/lib/libpatchgroup.so
 
 GTKFLAGS:=$(shell pkg-config gtk+-2.0 --cflags --libs)
 
-$(UTILDIR)/kdb: util/kdb.c fscore/debug_opcode.h fscore/patch.h fscore/bdesc.h
+$(UTILDIR)/fdb: util/fdb.c fscore/debug_opcode.h fscore/patch.h fscore/bdesc.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
 	$(V)$(CC) $(CFLAGS) -I. -o $@ $< $(GTKFLAGS) -lreadline -ltermcap -lm

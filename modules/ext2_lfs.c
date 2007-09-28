@@ -947,7 +947,7 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 	r = patch_create_bit(info->bitmap_cache, info->ubd, block_in_group / 32, 1 << (block_in_group % 32), head);
 	if(r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "allocate block" : "free block");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "allocate block" : "free block");
 	
 	r = CALL(info->ubd, write_block, info->bitmap_cache, info->bitmap_cache_number);
 	if(r < 0)
@@ -1000,7 +1000,7 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 	r = patch_create_bit(info->inode_cache, info->ubd, inode_in_group / 32, 1 << (inode_in_group % 32), head);
 	if (r < 0)
 		return r;	
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *head, value ? "allocate inode" : "free inode");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "allocate inode" : "free inode");
 	
 	r = CALL(info->ubd, write_block, info->inode_cache, info->inode_cache_number);
 	if (r < 0)
@@ -1467,7 +1467,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			r = patch_create_init(indirect, info->ubd, &set.array[0]);
 			if(r < 0)
 				return r;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, set.array[0], "init indirect block");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, set.array[0], "init indirect block");
 			
 			/* there are no references to the indirect block yet, so we can update it without depending on befores */
 			r = patch_create_byte(indirect, info->ubd, 0, sizeof(uint32_t), &block, &set.array[0]);
@@ -1492,7 +1492,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			if(r < 0)
 				return r;
 		}
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, set.array[0], "add block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, set.array[0], "add block");
 		indirect->flags |= BDESC_FLAG_INDIR;
 
 		r = CALL(info->ubd, write_block, indirect, indirect_number);
@@ -1523,7 +1523,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			r = patch_create_init(dindirect, info->ubd, &dindir_init);
 			if(r < 0)
 				return r;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, dindir_init, "init double indirect block");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, dindir_init, "init double indirect block");
 			
 			/* these changes will be written later, depending on inode_dep (set) */
 			INODE_ADD(f, i_blocks, object->blocksize / 512);
@@ -1550,7 +1550,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			r = patch_create_init(indirect, info->ubd, &indir_init);
 			if(r < 0)
 				return r;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, indir_init, "init indirect block");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, indir_init, "init indirect block");
 			
 			set.next = befores;
 			if(!nblocks)
@@ -1570,7 +1570,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			}
 			if(r < 0)
 				return r;
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, set.array[1], "add indirect block");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, set.array[1], "add indirect block");
 			
 			/* the cases involving allocating an indirect block require a larger set */
 			set.size = 2;
@@ -1595,7 +1595,7 @@ static int ext2_append_file_block_set(LFS_t * object, fdesc_t * file, uint32_t b
 			if(r < 0)
 				return r;
 		}
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, set.array[0], "add block");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, set.array[0], "add block");
 		indirect->flags |= BDESC_FLAG_INDIR;
 		
 		r = CALL(info->ubd, write_block, indirect, indirect_number);
@@ -1666,7 +1666,7 @@ static int ext2_write_dirent_extend_set(LFS_t * object, ext2_fdesc_t * parent,
 
 		if ((r = patch_create_byte_set(dirblock, info->ubd, basep, exists_rec_len_actual + new_rec_len_actual, (void *) entries, tail, befores )) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *tail, "write dirent '%s'", dirent_new->name);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *tail, "write dirent '%s'", dirent_new->name);
 		dirblock->flags |= BDESC_FLAG_DIRENT;
 
 		r = CALL(info->ubd, write_block, dirblock, blockno);
@@ -1708,7 +1708,7 @@ static int ext2_write_dirent_set(LFS_t * object, ext2_fdesc_t * parent, EXT2_Dir
 
 		if ((r = patch_create_byte_set(dirblock, info->ubd, basep, actual_rec_len, (void *) dirent, tail, befores)) < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *tail, "write dirent '%s'", dirent->name);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *tail, "write dirent '%s'", dirent->name);
 		dirblock->flags |= BDESC_FLAG_DIRENT;
 
 		r = CALL(info->ubd, write_block, dirblock, blockno);
@@ -1811,7 +1811,7 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, ext2_md
 	r = patch_create_init(block, info->ubd, &set.array[0]);
 	if (r < 0)
 		return r;
-	FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, set.array[0], "init new dirent block");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, set.array[0], "init new dirent block");
 	block->flags |= BDESC_FLAG_DIRENT;
 	r = CALL(info->ubd, write_block, block, new_block);
 	if (r < 0)
@@ -2084,7 +2084,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			dirblock_bdesc = CALL(info->ubd, synthetic_read_block, dirblock_no, 1, NULL);
 			r = patch_create_init(dirblock_bdesc, info->ubd, &init_head);
 			assert(r >= 0);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, init_head, "init new dirent block");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, init_head, "init new dirent block");
 			new_file->f_xinode.i_block[0] = dirblock_no;
 			new_file->f_xinode.i_size = object->blocksize;
 			new_file->f_xinode.i_blocks = object->blocksize / 512;
@@ -2101,7 +2101,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			inode_set.array[2] = init_head;
 			r = patch_create_byte(dirblock_bdesc, info->ubd, 0, dir_dirent.rec_len, &dir_dirent, &inode_set.array[2]);
 			assert(r >= 0);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, inode_set.array[2], "write dirent '.'");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, inode_set.array[2], "write dirent '.'");
 			new_file->f_xinode.i_links_count++;
 			prev_basep = dir_dirent.rec_len;
 
@@ -2110,7 +2110,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			inode_set.array[3] = info->write_head ? *info->write_head : NULL;
 			r = ext2_write_inode(info, parent_file, &inode_set.array[3], ioff1, ioff2);
 			assert(r >= 0);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, inode_set.array[3], "linkcount++");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, inode_set.array[3], "linkcount++");
 
 			// insert ".."
 			dir_dirent.inode = parent_ino;
@@ -2121,7 +2121,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 			inode_set.array[4] = init_head;
 			r = patch_create_byte(dirblock_bdesc, info->ubd, prev_basep, dirent_rec_len(dir_dirent.name_len), &dir_dirent, &inode_set.array[4]);
 			assert(r >= 0);
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, inode_set.array[4], "write dirent '..'");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, inode_set.array[4], "write dirent '..'");
 			prev_basep = dir_dirent.rec_len;
 
 			dirblock_bdesc->flags |= BDESC_FLAG_DIRENT;
@@ -2685,7 +2685,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		r = patch_create_byte(dirblock, info->ubd, 0, 6, &jump_dirent, &head);
 		if(r < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "delete dirent '%s', add jump dirent", mdirent->dirent.name);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "delete dirent '%s', add jump dirent", mdirent->dirent.name);
 		r = CALL(info->ubd, write_block, dirblock, base_blockno);
 	}
 	else
@@ -2704,7 +2704,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		r = patch_create_byte(dirblock, info->ubd, (prev_base + 4) % object->blocksize, sizeof(len), (void *) &len, &head);
 		if(r < 0)
 			return r;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "delete dirent '%s'", mdirent->dirent.name);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "delete dirent '%s'", mdirent->dirent.name);
 	
 		r = CALL(info->ubd, write_block, dirblock, prev_base_blockno);
 	}
@@ -3295,7 +3295,7 @@ static int ext2_write_inode_set(struct ext2_info * info, ext2_fdesc_t *f, patch_
 
 	if (*tail)
 	{
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, *tail, "write inode");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *tail, "write inode");
 		lfs_add_fork_head(*tail); // TODO: why do this?
 		r = CALL(info->ubd, write_block, f->f_inode_cache, block);
 	}
@@ -3322,7 +3322,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 				       off1 + 1024, off2 - off1,
 				       ((const uint8_t *) super) + off1, &head);
 		if (r >= 0 && head) {
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "write superblock");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "write superblock");
 			lfs_add_fork_head(head);
 			r = CALL(info->ubd, write_block, info->super_cache, SUPER_BLOCKNO);
 		}
@@ -3348,7 +3348,7 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 				       group_offset + off1, off2 - off1,
 				       ((const uint8_t *) gd) + off1, &head);
 		if (r >= 0 && head) {
-			FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_PATCH_LABEL, head, "write group desc");
+			FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "write group desc");
 			lfs_add_fork_head(head);
 			r = CALL(info->ubd, write_block, info->gdescs[group_bdesc], GDESC_BLOCKNO(group_bdesc));
 		}

@@ -75,7 +75,7 @@ static int modman_add(hash_map_t * map, void * module, const char * name)
 		r = devfs_bd_add(modman_devfs, mod->name, (BD_t *) module);
 		if(r < 0)
 			goto error_hack;
-		FSTITCH_DEBUG_SEND(KDB_MODULE_INFO, KDB_INFO_BD_NAME, module, name);
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_BD_NAME, module, name);
 		/* usage count will have increased to 1, put it down to 0 again */
 		mod->usage = 0;
 		vector_pop_back(mod->users);
