@@ -104,7 +104,7 @@ struct ext2_info {
 	patch_t ** write_head;
 	const EXT2_Super_t *super; /* const to limit who can change it */
 	const EXT2_group_desc_t *groups; /* const to limit who can change it */
-	ext2_fdesc_t *filecache;
+	ext2_fdesc_t * filecache;
 	ext2_mdir_cache_t mdir_cache;
 	ext2_minode_cache_t minode_cache;
 	bdesc_t ** gdescs;
@@ -1150,17 +1150,20 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	if(ino <= 0)
 		return NULL;
 
-	if (++age == 0)
+	if(!++age)
 		++age;
 
-	for (fd = info->filecache; fd; fd = fd->f_cache_next)
-		if (fd->f_ino == ino) {
+	for(fd = info->filecache; fd; fd = fd->f_cache_next)
+		if(fd->f_ino == ino)
+		{
 			fd->f_nopen += (fd->f_age ? 1 : 2);
 			fd->f_age = age;
 			return (fdesc_t *) fd;
-		} else if (fd->f_age) {
+		}
+		else if(fd->f_age)
+		{
 			++nincache;
-			if (!oldest_fd || (int32_t) (oldest_fd->f_age - fd->f_age) > 0)
+			if(!oldest_fd || (int32_t) (oldest_fd->f_age - fd->f_age) > 0)
 				oldest_fd = fd;
 		}
 
@@ -1184,14 +1187,15 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	fd->f_type = ext2_to_fstitch_type(fd->f_ip->i_mode);
 
 	// stick in cache
-	if (oldest_fd && nincache >= 4) {
+	if(oldest_fd && nincache >= 4)
+	{
 		oldest_fd->f_age = 0;
 		ext2_free_fdesc(object, (fdesc_t *) oldest_fd);
 	}
 	fd->f_cache_pprev = &info->filecache;
 	fd->f_cache_next = info->filecache;
 	info->filecache = fd;
-	if (fd->f_cache_next)
+	if(fd->f_cache_next)
 		fd->f_cache_next->f_cache_pprev = &fd->f_cache_next;
 	
 	return (fdesc_t*) fd;
@@ -3187,9 +3191,9 @@ static int ext2_destroy(LFS_t * lfs)
 		bdesc_release(&info->super_cache);
 	for(i = 0; i < info->ngroupblocks; i++)
 		bdesc_release(&(info->gdescs[i]));
-	for (f = info->filecache; f; f = f->f_cache_next)
+	for(f = info->filecache; f; f = f->f_cache_next)
 		assert(f->f_nopen == 1 && f->f_age != 0);
-	while (info->filecache)
+	while(info->filecache)
 		ext2_free_fdesc(lfs, (fdesc_t *) info->filecache);
 
 	ext2_mdir_cache_deinit(&info->mdir_cache);
@@ -3467,7 +3471,7 @@ LFS_t * ext2_lfs(BD_t * block_device)
 	info->ubd = lfs->blockdev = block_device;
 	info->write_head = CALL(block_device, get_write_head);
 
-	info->filecache = 0;
+	info->filecache = NULL;
 
 	r = ext2_minode_cache_init(&info->minode_cache);
 	if(r < 0)

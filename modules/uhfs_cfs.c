@@ -232,15 +232,24 @@ static int uhfs_open(CFS_t * cfs, inode_t ino, int mode, fdesc_t ** fdesc)
 		if (check_type_supported(state->lfs, inner, &filetype))
 		{
 			if (filetype == TYPE_DIR)
+			{
+				CALL(state->lfs, free_fdesc, inner);
 				return -1; // -EISDIR
-			else if (filetype == TYPE_INVAL)
+			}
+			if (filetype == TYPE_INVAL)
+			{
+				CALL(state->lfs, free_fdesc, inner);
 				return -1; // This seems bad too
+			}
 		}
 	}
 
 	r = open_common(state, inner, ino, fdesc);
 	if (r < 0)
+	{
+		CALL(state->lfs, free_fdesc, inner);
 		return r;
+	}
 
 	/* HACK: don't do this for wholedisk LFS modules */
 	if ((mode & O_TRUNC) && OBJMAGIC(state->lfs) != WHOLEDISK_MAGIC)
@@ -368,7 +377,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 	patch_t * head = write_head, * tail;
 	int r = 0;
 
-	if (uf->size_id) {
+	if (uf->size_id)
+	{
 		r = CALL(state->lfs, get_metadata_fdesc, uf->inner, uf->size_id, sizeof(filesize), &filesize);
 		if (r < 0)
 			goto uhfs_write_exit;
@@ -379,7 +389,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 	target_size = filesize;
 
 	// FIXME: support sparse files in some way
-	if (offset > filesize) {
+	if (offset > filesize)
+	{
 		while (offset > filesize)
 		{
 			r = uhfs_write(cfs, fdesc, NULL, NULL, filesize, offset - filesize);
@@ -515,8 +526,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 		dataoffset = 0; /* dataoffset only needed for first block */
 	}
 
-	if (uf->size_id) {
-		if (offset + size_written > target_size) {
+	if (uf->size_id)
+	{
+		if (offset + size_written > target_size)
+		{
 			fsmetadata_t fsm;
 			fsm.fsm_feature = uf->size_id;
 			fsm.fsm_value.u = offset + size_written;
@@ -551,28 +564,34 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 	const bool delete_supported = lfs_feature_supported(state->lfs, FSTITCH_FEATURE_DELETE);
 	int r;
 
-	if (link_supported) {
+	if (link_supported)
+	{
 		uint32_t nlinks;
 		r = CALL(state->lfs, get_metadata_fdesc, f, FSTITCH_FEATURE_NLINKS, sizeof(nlinks), &nlinks);
-		if (r < 0) {
+		if (r < 0)
+		{
 			CALL(state->lfs, free_fdesc, f);
 			return r;
 		}
 		assert(r == sizeof(nlinks));
 
-		if (nlinks > 1) {
+		if (nlinks > 1)
+		{
 			CALL(state->lfs, free_fdesc, f);
 			return CALL(state->lfs, remove_name, parent, name, prev_head);
 		}
 	}
 
-	if (!delete_supported) {
+	if (!delete_supported)
+	{
 		int i;
 		patch_t * save_head;
 		uint32_t nblocks = CALL(state->lfs, get_file_numblocks, f);
-		for (i = 0 ; i < nblocks; i++) {
+		for (i = 0 ; i < nblocks; i++)
+		{
 			uint32_t number = CALL(state->lfs, truncate_file_block, f, prev_head);
-			if (number == INVALID_BLOCK) {
+			if (number == INVALID_BLOCK)
+			{
 				CALL(state->lfs, free_fdesc, f);
 				return -EINVAL;
 			}
@@ -580,7 +599,8 @@ static int unlink_file(CFS_t * cfs, inode_t ino, inode_t parent, const char * na
 			save_head = *prev_head;
 
 			r = CALL(state->lfs, free_block, f, number, prev_head);
-			if (r < 0) {
+			if (r < 0)
+			{
 				CALL(state->lfs, free_fdesc, f);
 				return r;
 			}
@@ -613,13 +633,16 @@ static int unlink_name(CFS_t * cfs, inode_t parent, const char * name, patch_t *
 		return -1;
 
 	dir_supported = check_type_supported(state->lfs, f, &filetype);
-	if (dir_supported) {
-		if (filetype == TYPE_INVAL) {
+	if (dir_supported)
+	{
+		if (filetype == TYPE_INVAL)
+		{
 			CALL(state->lfs, free_fdesc, f);
 			return -1;
 		}
 
-		if (filetype == TYPE_DIR) {
+		if (filetype == TYPE_DIR)
+		{
 			CALL(state->lfs, free_fdesc, f);
 			return -EINVAL;
 		}
@@ -784,28 +807,33 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 	f->common->parent = parent;
 
 	dir_supported = check_type_supported(state->lfs, f, &filetype);
-	if (dir_supported) {
-		if (filetype == TYPE_INVAL) {
+	if (dir_supported)
+	{
+		if (filetype == TYPE_INVAL)
+		{
 			CALL(state->lfs, free_fdesc, f);
 			return -1;
 		}
 
-		if (filetype == TYPE_DIR) {
+		if (filetype == TYPE_DIR)
+		{
 			do {
 				r = CALL(state->lfs, get_dirent, f, &entry, sizeof(struct dirent), &basep);
-				if (!strcmp(entry.d_name, ".")
-					|| !strcmp(entry.d_name, "..")) {
+				if (!strcmp(entry.d_name, ".") || !strcmp(entry.d_name, ".."))
+				{
 					r = 1;
 					entry.d_name[0] = 0;
 				}
-				if (r < 0) {
+				if (r < 0)
+				{
 					patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 					return unlink_file(cfs, ino, parent, name, f, &prev_head);
 				}
 			} while (r != 0);
 			retval = -ENOTEMPTY;
 		}
-		else {
+		else
+		{
 			retval = -ENOTDIR;
 		}
 	}
@@ -816,14 +844,14 @@ static int uhfs_rmdir(CFS_t * cfs, inode_t parent, const char * name)
 
 static size_t uhfs_get_max_feature_id(CFS_t * cfs)
 {
-	Dprintf("%s(%u)\n", __FUNCTION__, ino);
+	Dprintf("%s()\n", __FUNCTION__);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	return CALL(state->lfs, get_max_feature_id);
 }
 
 static const bool * uhfs_get_feature_array(CFS_t * cfs)
 {
-	Dprintf("%s(%u, 0x%x)\n", __FUNCTION__, ino, num);
+	Dprintf("%s()\n", __FUNCTION__);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	return CALL(state->lfs, get_feature_array);
 }
@@ -836,9 +864,9 @@ static int uhfs_get_metadata(CFS_t * cfs, inode_t ino, uint32_t id, size_t size,
 	return CALL(state->lfs, get_metadata_inode, ino, id, size, data);
 }
 
-static int uhfs_set_metadata2(CFS_t * cfs, inode_t ino, const fsmetadata_t *fsm, size_t nfsm)
+static int uhfs_set_metadata2(CFS_t * cfs, inode_t ino, const fsmetadata_t * fsm, size_t nfsm)
 {
-	Dprintf("%s(%u, 0x%x, 0x%x, %p)\n", __FUNCTION__, ino, id, nfsm, fsm);
+	Dprintf("%s(%u, 0x%x, %p)\n", __FUNCTION__, ino, nfsm, fsm);
 	struct uhfs_state * state = (struct uhfs_state *) cfs;
 	patch_t * prev_head = state->write_head ? *state->write_head : NULL;
 

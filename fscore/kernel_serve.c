@@ -707,12 +707,13 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 
 static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 {
-	Dprintf("%s(\"%s\", attributes %u)\n", __FUNCTION__, dentry->d_name.name, attr->ia_valid);
+	Dprintf("%s(\"%s\", attributes 0x%x)\n", __FUNCTION__, dentry->d_name.name, attr->ia_valid);
 	CFS_t * cfs;
 	struct inode * inode = dentry->d_inode;
 	unsigned int supported = ATTR_SIZE;
 	fdesc_t * fdesc;
 	struct timespec now = current_fs_time(inode->i_sb);
+	bool do_close = 0;
 	int r;
 
 	fstitchd_enter();
@@ -737,7 +738,7 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 
 	if(attr->ia_valid & ~supported)
 	{
-		Dprintf("%s: attribute set %u (out of %u) not supported\n", __FUNCTION__, attr->ia_valid & ~supported, attr->ia_valid);
+		Dprintf("%s: attribute set 0x%x (out of 0x%x) not supported\n", __FUNCTION__, attr->ia_valid & ~supported, attr->ia_valid);
 		fstitchd_leave(0);
 		return -ENOSYS;
 	}
@@ -749,12 +750,13 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 #endif
 	{
 		/* it would be nice if we didn't have to open the file to change the permissions, etc. */
-		r = CALL(cfs, open, inode->i_ino, O_RDWR, &fdesc);
+		r = CALL(cfs, open, inode->i_ino, O_RDONLY, &fdesc);
 		if(r < 0)
 		{
 			fstitchd_leave(0);
 			return r;
 		}
+		do_close = 1;
 	}
 
 	/* check if the change is ok */
@@ -766,11 +768,13 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	{
 		if(inode->i_mode & S_IFDIR)
 		{
-			r = -EPERM; /* operation not permitted */
-			goto error;
+			if(inode->i_size != attr->ia_size)
+			{
+				r = -EPERM; /* operation not permitted */
+				goto error;
+			}
 		}
-
-		if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
+		else if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
 			goto error;
 	}
 
@@ -815,17 +819,16 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 		nfsm++;
 	}
 
-	if (nfsm > 0) {
+	if(nfsm > 0)
 		if((r = CALL(cfs, set_metadata2, inode->i_ino, fsm, nfsm)) < 0)
 			goto error;
-	}
 
 	/* import the change to the inode */
 	r = inode_setattr(inode, attr);
 	assert(r >= 0);
 	
 error:
-	if(!(attr->ia_valid & ATTR_FILE))
+	if(do_close)
 		if(CALL(cfs, close, fdesc) < 0)
 			fprintf(stderr, "%s: unable to CALL(%s, close, %p)\n", __FUNCTION__, modman_name_cfs(cfs), fdesc);
 	fstitchd_leave(1);
@@ -1241,8 +1244,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 }
 
 
-static ssize_t serve_write_page(struct file * filp, loff_t pos,
-                                struct page * page,
+static ssize_t serve_write_page(struct file * filp, loff_t pos, struct page * page,
                                 const char __user * buf, size_t len)
 {
 	struct address_space * mapping = page->mapping;
@@ -1251,7 +1253,7 @@ static ssize_t serve_write_page(struct file * filp, loff_t pos,
 	fdesc_t * fdesc;
 	ssize_t written;
 
-	Dprintf("%s(file = \"%s\", pos = %lu, len = %u)\n", __FUNCTION__, filp->f_dentry->d_name.name, pos, len);
+	Dprintf("%s(file = \"%s\", pos = %lu, len = %u)\n", __FUNCTION__, filp->f_dentry->d_name.name, (unsigned long) pos, len);
 
 	fstitchd_enter();
 
@@ -1523,6 +1525,7 @@ static struct file_operations fstitch_reg_file_ops = {
 };
 
 static struct inode_operations fstitch_dir_inode_ops = {
+	.setattr = serve_setattr,
 	.lookup	= serve_dir_lookup,
 	.link = serve_link,
 	.unlink	= serve_unlink,
