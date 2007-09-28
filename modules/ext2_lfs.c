@@ -2373,9 +2373,9 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 }
 
 static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t * omdir, ext2_mdirent_t * omdirent, ext2_fdesc_t * fold,
-                           inode_t newparent, ext2_fdesc_t * fnparent, ext2_fdesc_t * fnew, const char * newname, patch_t ** head)
+                           ext2_fdesc_t * fnparent, ext2_fdesc_t * fnew, const char * newname, patch_t ** head)
 {
-	Dprintf("EXT2DEBUG: ext2_dir_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
+	Dprintf("EXT2DEBUG: ext2_dir_rename %u:%u -> %u:%s\n", foparent->f_ino, fold->f_ino, fnparent->f_ino, newname);
 	struct ext2_info * info = (struct ext2_info *) object;
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
 	DEFINE_PATCH_PASS_SET(set, 2, NULL);
@@ -2396,7 +2396,7 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 
 	set.array[0] = *head;
 	/* step 1: create a new hardlink to the directory (also increments link count) */
-	fnew = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, fold->f_type, (fdesc_t *) fold, &emptymd, &newino, &set.array[0]);
+	fnew = (ext2_fdesc_t *) ext2_allocate_name(object, fnparent->f_ino, newname, fold->f_type, (fdesc_t *) fold, &emptymd, &newino, &set.array[0]);
 	if (!fnew)
 	{
 		r = -1;
@@ -2425,7 +2425,7 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 		goto exit_fnew;
 	}
 	memcpy(&copy, &dotdot->dirent, MIN(dotdot->dirent.rec_len, sizeof(copy)));
-	copy.inode = newparent;
+	copy.inode = fnparent->f_ino;
 	r = ext2_write_dirent_set(object, fold, &copy, dotdot->offset, head, PASS_PATCH_SET(set));
 	if (r < 0)
 		goto exit_fnew;
@@ -2524,7 +2524,7 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		fnew = NULL;
 	
 	if (fold->f_type == TYPE_DIR)
-		return ext2_dir_rename(object, foparent, omdir, omdirent, fold, newparent, fnparent, fnew, newname, head);
+		return ext2_dir_rename(object, foparent, omdir, omdirent, fold, fnparent, fnew, newname, head);
 
 	if (fnew)
 	{
@@ -3078,9 +3078,9 @@ static int ext2_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint32_
 	return ext2_get_metadata(object, f, id, size, data);
 }
 
-static int ext2_set_metadata2(LFS_t * object, ext2_fdesc_t * f, const fsmetadata_t *fsm, size_t nfsm, patch_t ** head)
+static int ext2_set_metadata2(LFS_t * object, ext2_fdesc_t * f, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head)
 {
-	Dprintf("EXT2DEBUG: ext2_set_metadata %u, %u\n", id, size);
+	Dprintf("EXT2DEBUG: ext2_set_metadata %u\n", f->f_ino);
 	struct ext2_info * info = (struct ext2_info *) object;
 
 	assert(head && f && (!nfsm || fsm));
