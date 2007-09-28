@@ -15,7 +15,7 @@
 #include <modules/ext2.h>
 #include <modules/ext2_lfs.h>
 
-#define EXT2_BASE_DEBUG 0
+#define EXT2_LFS_DEBUG 0
 
 #ifndef NDEBUG
 # define DELETE_MERGE_STATS 1
@@ -25,7 +25,7 @@
 
 #define ROUND_ROBIN_ALLOC 1
 
-#if EXT2_BASE_DEBUG
+#if EXT2_LFS_DEBUG
 #define Dprintf(x...) printf(x)
 #else
 #define Dprintf(x...)
