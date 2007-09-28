@@ -26,7 +26,7 @@ static size_t block_log_users = 0;
 struct unix_file_info {
 	BD_t my_bd;
 	
-	char *fname;
+	char * fname;
 	int fd;
 	blockman_t blockman;
 	int user_name;
@@ -237,7 +237,7 @@ static int unix_file_bd_destroy(BD_t * bd)
 	return 0;
 }
 
-BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
+BD_t * unix_file_bd(const char * fname, uint16_t blocksize)
 {
 	struct unix_file_info * info = malloc(sizeof(*info));
 	BD_t * bd;
@@ -253,7 +253,7 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 	if(r == -1)
 	{
 		perror("stat");
-		kpanic("unable to stat %s\n", fname);
+		kpanic("unable to stat '%s'\n", fname);
 	}
 	blocks = sb.st_size / blocksize;
 	if(sb.st_size != (blocks * blocksize))
@@ -277,7 +277,8 @@ BD_t * unix_file_bd(const char *fname, uint16_t blocksize)
 		free(info);
 		return NULL;
 	}
-	if (blockman_init(&info->blockman) < 0) {
+	if(blockman_init(&info->blockman) < 0)
+	{
 		close(info->fd);
 		free(info);
 		return NULL;

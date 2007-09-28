@@ -56,7 +56,7 @@ fscore/kfstitchd.ko: always
 	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" == "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	@echo "$(KERNELRELEASE)" > .kernel_version
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
-	@[ -f .user ] && $(MAKE) -f Makefile.user || true
+	@[ ! -f .user ] || $(MAKE) -f Makefile.user
 
 install: fscore/kfstitchd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install

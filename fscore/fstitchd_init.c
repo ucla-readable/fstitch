@@ -252,7 +252,7 @@ int fstitchd_init(int nwbblocks)
 		extern char * unix_file;
 		if (unix_file)
 		{
-			printf("Using file %s\n", unix_file);
+			printf("Using file '%s'\n", unix_file);
 			if (! (bd = unix_file_bd(unix_file, 512)) )
 				fprintf(stderr, "unix_file_bd(\"%s\") failed\n", unix_file);
 #endif
