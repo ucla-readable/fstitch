@@ -20,14 +20,13 @@ if [ $# -ne 1 ]; then arg_error "$0"; fi
 KMACHINE=kudos-$1.cs.ucla.edu
 host $KMACHINE > /dev/null || arg_error "$0"
 
-rsync --rsh=ssh -vaSz \
+rsync --rsh=ssh -vaSz --exclude=/obj/ \
 	--exclude=/.fdb_history \
 	--exclude=/linux-2.6.15.tar \
 	--exclude=/TAGS --exclude=/tags \
 	--exclude=/time.log --exclude=/prof.log\
 	--exclude=/test --exclude=/tests/ \
 	--exclude=/core --exclude=/uufstitchd_debug \
-	--exclude=/obj/ --exclude=/emukern/ \
 	--exclude=/fscore/kfstitchd.ko --exclude=/fscore/kfstitchd.o \
 	--exclude=/fscore/kfstitchd.mod.c --exclude=/fscore/kfstitchd.mod.o \
 	--exclude=/Module.symvers --exclude=/fscore/.kfstitchd.*.cmd \
