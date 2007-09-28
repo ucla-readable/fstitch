@@ -85,7 +85,7 @@ function log_kernel () {
 	fi
 }
 
-# start kdb and block logging
+# start fdb and block logging
 function prepare_postinit () {
 	T=$1
 	N=$2
@@ -94,13 +94,13 @@ function prepare_postinit () {
 
 	if [ "$HOST" == "fsttich" ] && [ -f /proc/kfstitchd_debug ]; then
 		echo "+ sudo log /proc/kfstitchd_debug"
-		sudo cat /proc/kfstitchd_debug &>$OUTDIR/$T.kdb.$N </dev/null &
-		KDBCAT=$!
+		sudo cat /proc/kfstitchd_debug &>$OUTDIR/$T.fdb.$N </dev/null &
+		FDBCAT=$!
 		sudo tail -f -n 1 /var/log/syslog 2>&1 </dev/null \
 			| while read line; do
 				echo "$line" | grep -q "Please kill /proc/kfstitchd_debug"
 				[ $? -eq 0 ] || continue
-				sudo kill $KDBCAT
+				sudo kill $FDBCAT
 				break
 			done &>/dev/null &
 	fi
