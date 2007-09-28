@@ -2372,6 +2372,64 @@ static int empty_get_metadata(void * arg, feature_id_t id, size_t size, void * d
 	return -ENOENT;
 }
 
+static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t * omdir, ext2_mdirent_t * omdirent, ext2_fdesc_t * fold,
+                           inode_t newparent, ext2_fdesc_t * fnparent, ext2_fdesc_t * fnew, const char * newname, patch_t ** head)
+{
+	Dprintf("EXT2DEBUG: ext2_dir_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
+	struct ext2_info * info = (struct ext2_info *) object;
+	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
+	inode_t newino;
+	int r;
+
+	/* cannot overwrite anything with a directory */
+	if (fnew)
+	{
+		r = -EPERM;
+		goto exit_fnew;
+	}
+
+	/* FIXME: make sure fnparent is not a subdirectory of fold */
+
+	/* step 1: create a new hardlink to the directory (also increments link count) */
+	fnew = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, fold->f_type, (fdesc_t *) fold, &emptymd, &newino, head);
+	if (!fnew)
+	{
+		r = -1;
+		goto exit_fnparent;
+	}
+	assert(fold->f_ino == newino);
+
+	/* step 2: increment the new parent link count */
+
+	/* step 3: reset .. in the directory, depending on steps 1 and 2 */
+
+	/* step 4: decrement the old parent link count, depending on step 3 */
+
+	/* step 5: remove the original hardlink, depending on step 3 */
+	r = ext2_delete_dirent(object, foparent, omdir, omdirent, head);
+	if (r < 0)
+		goto exit_fnew;
+
+	/* step 6: decrement the link count, depending on step 5 */
+	{
+		DECL_INODE_MOD(fold);
+		INODE_ADD(fold, i_links_count, -1);
+		r = ext2_write_inode(info, fold, head, ioff1, ioff2);
+		if (r < 0)
+			goto exit_fnew;
+	}
+
+	r = 0;
+
+  exit_fnew:
+	ext2_free_fdesc(object, (fdesc_t *) fnew);
+  exit_fnparent:
+	ext2_free_fdesc(object, (fdesc_t *) fnparent);
+	ext2_free_fdesc(object, (fdesc_t *) fold);
+	ext2_free_fdesc(object, (fdesc_t *) foparent);
+	return r;
+}
+
 // FIXME: directory rename is incorrect (eg parent linkcounts are not updated)
 static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, patch_t ** head)
 {
@@ -2427,6 +2485,9 @@ static int ext2_rename(LFS_t * object, inode_t oldparent, const char * oldname, 
 		fnew = (ext2_fdesc_t *) ext2_lookup_inode(object, nmdirent->dirent.inode);
 	else
 		fnew = NULL;
+	
+	if (fold->f_type == TYPE_DIR)
+		return ext2_dir_rename(object, foparent, omdir, omdirent, fold, newparent, fnparent, fnew, newname, head);
 
 	if (fnew)
 	{
