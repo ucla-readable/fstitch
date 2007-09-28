@@ -2378,6 +2378,10 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 	Dprintf("EXT2DEBUG: ext2_dir_rename %u:%s -> %u:%s\n", oldparent, oldname, newparent, newname);
 	struct ext2_info * info = (struct ext2_info *) object;
 	metadata_set_t emptymd = { .get = empty_get_metadata, .arg = NULL };
+	DEFINE_PATCH_PASS_SET(set, 2, NULL);
+	ext2_mdir_t * rdir;
+	ext2_mdirent_t * dotdot;
+	EXT2_Dir_entry_t copy;
 	inode_t newino;
 	int r;
 
@@ -2390,8 +2394,9 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 
 	/* FIXME: make sure fnparent is not a subdirectory of fold */
 
+	set.array[0] = *head;
 	/* step 1: create a new hardlink to the directory (also increments link count) */
-	fnew = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, fold->f_type, (fdesc_t *) fold, &emptymd, &newino, head);
+	fnew = (ext2_fdesc_t *) ext2_allocate_name(object, newparent, newname, fold->f_type, (fdesc_t *) fold, &emptymd, &newino, &set.array[0]);
 	if (!fnew)
 	{
 		r = -1;
@@ -2400,10 +2405,42 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 	assert(fold->f_ino == newino);
 
 	/* step 2: increment the new parent link count */
+	{
+		DECL_INODE_MOD(fnparent);
+		INODE_ADD(fnparent, i_links_count, 1);
+		set.array[1] = *head;
+		r = ext2_write_inode(info, fnparent, &set.array[1], ioff1, ioff2);
+		if (r < 0)
+			goto exit_fnew;
+	}
 
 	/* step 3: reset .. in the directory, depending on steps 1 and 2 */
+	r = ext2_mdir_get(object, fold, &rdir);
+	if (r < 0)
+		goto exit_fnew;
+	dotdot = ext2_mdirent_get(rdir, "..");
+	if (!dotdot)
+	{
+		r = -1;
+		goto exit_fnew;
+	}
+	memcpy(&copy, &dotdot->dirent, MIN(dotdot->dirent.rec_len, sizeof(copy)));
+	copy.inode = newparent;
+	r = ext2_write_dirent_set(object, fold, &copy, dotdot->offset, head, PASS_PATCH_SET(set));
+	if (r < 0)
+		goto exit_fnew;
+	dotdot->dirent.inode = copy.inode;
 
 	/* step 4: decrement the old parent link count, depending on step 3 */
+	{
+		patch_t * fork_head = *head;
+		DECL_INODE_MOD(foparent);
+		INODE_ADD(foparent, i_links_count, -1);
+		r = ext2_write_inode(info, foparent, &fork_head, ioff1, ioff2);
+		if (r < 0)
+			goto exit_fnew;
+		lfs_add_fork_head(fork_head);
+	}
 
 	/* step 5: remove the original hardlink, depending on step 3 */
 	r = ext2_delete_dirent(object, foparent, omdir, omdirent, head);
