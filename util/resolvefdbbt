@@ -1,11 +1,11 @@
 #!/bin/bash
-# read kdb backtrace and corresponding symbols
+# read fdb backtrace and corresponding symbols
 
 BIN=obj/unix-user/fscore/fstitchd
 
 if [ $# -ge 1 ] && [ "$1" == "-h" ] || [ "$1" == "--help" ]
 then
-	echo "About: read a KDB backtrace (eg [0]: 0x0804c5bb  [1]: 0x0804c8ae) from stdin" 1>&2
+	echo "About: read a FDB backtrace (eg [0]: 0x0804c5bb  [1]: 0x0804c8ae) from stdin" 1>&2
 	echo "or on the command line and output the corresponding function name-file pairs" 1>&2
 	echo "Usage: `basename "$0"` [-e PROGRAM] [BACKTRACE ...]" 1>&2
 	exit 0

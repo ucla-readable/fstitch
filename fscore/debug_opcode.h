@@ -8,7 +8,7 @@
 #define DEBUG_SIG_MAGIC 0x40464442
 
 /* modules */
-enum kdb_debug_module {
+enum fdb_debug_module {
 	FDB_MODULE_INFO =                  1,
 	FDB_MODULE_BDESC =               100,
 	FDB_MODULE_PATCH_ALTER =         200,
@@ -17,7 +17,7 @@ enum kdb_debug_module {
 };
 
 /* opcodes */
-enum kdb_debug_opcode {
+enum fdb_debug_opcode {
 	/* info (0xx) */
 	FDB_INFO_MARK =                    0,
 	FDB_INFO_BD_NAME =                 1,
@@ -96,13 +96,13 @@ struct param {
 };
 
 struct opcode {
-	enum kdb_debug_opcode opcode;
+	enum fdb_debug_opcode opcode;
 	const char * name;
 	const struct param ** params;
 };
 
 struct module {
-	enum kdb_debug_module module;
+	enum fdb_debug_module module;
 	const struct opcode ** opcodes;
 };
 
