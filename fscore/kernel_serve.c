@@ -768,13 +768,10 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	{
 		if(inode->i_mode & S_IFDIR)
 		{
-			if(inode->i_size != attr->ia_size)
-			{
-				r = -EPERM; /* operation not permitted */
-				goto error;
-			}
+			r = -EISDIR;
+			goto error;
 		}
-		else if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
+		if((r = CALL(cfs, truncate, fdesc, attr->ia_size)) < 0)
 			goto error;
 	}
 
