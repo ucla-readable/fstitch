@@ -2396,7 +2396,9 @@ static int ext2_dir_rename(LFS_t * object, ext2_fdesc_t * foparent, ext2_mdir_t 
 		goto exit_fnew;
 	}
 
-	/* XXX: make sure fnparent is not a subdirectory of fold */
+	/* Linux has already made sure that fnparent is not a subdirectory of
+	 * fold, so we need not check that here. However, this is where we'd do
+	 * it if we had to. */
 
 	set.array[0] = *head;
 	/* step 1: create a new hardlink to the directory (also increments link count) */
