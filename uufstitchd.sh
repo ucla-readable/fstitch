@@ -18,8 +18,8 @@ fi
 MNT="$1"
 shift
 
-FSTITCHD=./obj/unix-user/fscore/fstitchd
-# -s because kfstitchd is not multithread safe
+FSTITCHD=./obj/unix-user/fstitchd
+# -s because fstitchd is not multithread safe
 # '-o allow_root' so that the (suid) fusermount can mount nested mountpoints
 FSTITCHD_OPTS="-s -o allow_root"
 

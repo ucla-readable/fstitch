@@ -41,12 +41,7 @@ all: tags TAGS
 
 # make it so that no intermediate .o files are never deleted
 .PRECIOUS: %.o \
-	$(OBJDIR)/lib/%.o $(OBJDIR)/fscore/%.o $(OBJDIR)/modules/%.o
-
-$(OBJDIR)/lib/%.o: lib/%.c
-	@echo + cc[lib] $<
-	@mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) -c -o $@ $<
+	$(OBJDIR)/fscore/%.o $(OBJDIR)/modules/%.o $(OBJDIR)/lib/%.o
 
 FUSE_CFLAGS := $(shell pkg-config fuse --cflags) -DFUSE_USE_VERSION=25
 FUSE_LDFLAGS := $(shell pkg-config fuse --libs)
@@ -61,9 +56,13 @@ $(OBJDIR)/modules/%.o: modules/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -DFSTITCHD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
 
+$(OBJDIR)/lib/%.o: lib/%.c
+	@echo + cc[lib] $<
+	@mkdir -p $(@D)
+	$(V)$(CC) -DFSTITCHD $(CFLAGS) $(FUSE_CFLAGS) -c -o $@ $<
+
 # Include [UU]Makefrags for subdirectories
 include images/Makefrag
-include lib/UUMakefrag
 include fscore/UUMakefrag
 include util/Makefrag
 

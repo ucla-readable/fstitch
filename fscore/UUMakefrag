@@ -1,15 +1,15 @@
-OBJDIRS += fscore modules
-BIN += $(OBJDIR)/fscore/fstitchd
+OBJDIRS += fscore modules lib
+BIN += $(OBJDIR)/fstitchd
 
 ifeq ($(P),)
 LDFLAGS =
-LIBS = -L$(OBJDIR)/lib $(FUSE_LDFLAGS) -luser -lpthread
+LIBS = $(FUSE_LDFLAGS) -lpthread
 else
 # For profiling, you'll need debian/ubuntu's libc6-prof package.
 CFLAGS += -pg
 LDFLAGS =
 FUSE_LDFLAGS_P = $(shell echo "$(FUSE_LDFLAGS)" | sed s/-lpthread/-lpthread_p/)
-LIBS = -L$(OBJDIR)/lib $(FUSE_LDFLAGS_P) -luser
+LIBS = $(FUSE_LDFLAGS_P)
 endif
 
 FSCOREOFILES := \
@@ -61,7 +61,12 @@ FSMODOFILES := \
 			$(OBJDIR)/modules/icase_cfs.o \
 			$(OBJDIR)/modules/uhfs_cfs.o
 
-$(OBJDIR)/fscore/fstitchd: $(FSCOREOFILES) $(FSMODOFILES) $(OBJDIR)/lib/libuser.a obj/images/ext2.img
+LIBOFILES := \
+			$(OBJDIR)/lib/vector.o \
+			$(OBJDIR)/lib/hash_map.o \
+			$(OBJDIR)/lib/sleep.o
+
+$(OBJDIR)/fstitchd: $(FSCOREOFILES) $(FSMODOFILES) $(LIBOFILES) obj/images/ext2.img
 	@echo + ld $@
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FSCOREOFILES) $(FSMODOFILES) $(LIBS)
+	$(V)$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FSCOREOFILES) $(FSMODOFILES) $(LIBOFILES) $(LIBS)
