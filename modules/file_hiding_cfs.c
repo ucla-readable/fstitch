@@ -8,7 +8,8 @@
 
 #include <fscore/modman.h>
 #include <fscore/cfs.h>
-#include <fscore/file_hiding_cfs.h>
+
+#include <modules/file_hiding_cfs.h>
 
 #define FILE_HIDING_DEBUG 0
 
