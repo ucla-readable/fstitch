@@ -28,6 +28,7 @@
 #include <modules/mem_bd.h>
 #include <modules/loop_bd.h>
 #include <modules/ext2_lfs.h>
+#include <modules/waffle_lfs.h>
 #include <modules/journal_bd.h>
 #include <modules/unlink_bd.h>
 #include <modules/wholedisk_lfs.h>
@@ -535,7 +536,10 @@ int construct_uhfses(BD_t * bd, uint32_t cache_nblks, vector_t * uhfses)
 
 		if (part->type == PTABLE_JOS_TYPE)
 		{
-			lfs = construct_lfs(part, cache_nblks, josfs_lfs, 4096);
+			/* try waffle before josfs */
+			lfs = construct_lfs(part, cache_nblks, waffle_lfs, 4096);
+			if (!lfs)
+				lfs = construct_lfs(part, cache_nblks, josfs_lfs, 4096);
 		}
 		else if (part->type == PTABLE_FREEBSD_TYPE)
 		{

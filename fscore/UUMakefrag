@@ -48,6 +48,7 @@ FSMODOFILES := \
 			$(OBJDIR)/modules/wt_cache_bd.o \
 			$(OBJDIR)/modules/josfs_lfs.o \
 			$(OBJDIR)/modules/ext2_lfs.o \
+			$(OBJDIR)/modules/waffle_lfs.o \
 			$(OBJDIR)/modules/ufs_lfs.o \
 			$(OBJDIR)/modules/ufs_common.o \
 			$(OBJDIR)/modules/ufs_alloc_lastpos.o \

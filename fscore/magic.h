@@ -13,6 +13,7 @@
 
 /* use the same magic number for objects as in the FS */
 #define JOSFS_MAGIC JOSFS_FS_MAGIC
+#define WAFFLE_MAGIC WAFFLE_FS_MAGIC
 
 /* "SAFEDATA" */
 #define JOURNAL_MAGIC 0x5AFEDA7A

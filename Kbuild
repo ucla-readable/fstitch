@@ -61,6 +61,7 @@ KFSTITCHD_MODULE_OBJS := \
               wbr_cache_bd.o \
               wt_cache_bd.o \
               ext2_lfs.o \
+              waffle_lfs.o \
               josfs_lfs.o \
               ufs_lfs.o \
               ufs_alloc_lastpos.o \

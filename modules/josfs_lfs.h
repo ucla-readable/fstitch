@@ -2,8 +2,8 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#ifndef __FSTITCH_MODULES_JOSFS_BASE_H
-#define __FSTITCH_MODULES_JOSFS_BASE_H
+#ifndef __FSTITCH_MODULES_JOSFS_LFS_H
+#define __FSTITCH_MODULES_JOSFS_LFS_H
 
 #ifdef FSTITCHD
 #include <fscore/bd.h>
@@ -62,4 +62,4 @@ struct JOSFS_Super {
 LFS_t * josfs_lfs(BD_t * block_device);
 #endif
 
-#endif /* __FSTITCH_MODULES_JOSFS_BASE_H */
+#endif /* __FSTITCH_MODULES_JOSFS_LFS_H */
