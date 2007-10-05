@@ -9,10 +9,10 @@ installed. Then run make -f Makefile.user. Alternately, if you create a file
 called .user, you can just run make to compile first the kernel version and then
 the FUSE version.
 
-To use the kernel version, load fscore/kfstitchd.ko and specify the device to attach to
+To use the kernel version, load kfstitchd.ko and specify the device to attach to
 in the linux_device module parameter. For example:
 
-$ sudo insmod fscore/kfstitchd.ko device=/dev/sdb
+$ sudo insmod kfstitchd.ko device=/dev/sdb
 
 Featherstitch will internally mount all detected file systems, but you must tell Linux
 to mount the Featherstitch pseudo-devices (which start with fstitch:). For example:

@@ -20,9 +20,9 @@ function start_fstitchd() {
 	#~frost/acctrd/acctrdctl -s $DISK || exit 1
 
 	if [ "$NWBBLOCKS" == "" ]; then
-		insmod fscore/kfstitchd.ko linux_device=$DISK use_journal=$JOURNAL || exit 1
+		insmod kfstitchd.ko linux_device=$DISK use_journal=$JOURNAL || exit 1
 	else
-		insmod fscore/kfstitchd.ko linux_device=$DISK use_journal=$JOURNAL nwbblocks="$NWBBLOCKS" || exit 1
+		insmod kfstitchd.ko linux_device=$DISK use_journal=$JOURNAL nwbblocks="$NWBBLOCKS" || exit 1
 	fi
 	if [ -f /proc/kfstitchd_debug ]
 	then

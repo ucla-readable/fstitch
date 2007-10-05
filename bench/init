@@ -94,9 +94,9 @@ if [ "$ACTION" == "start" ]; then
 			fi
 		fi
 		if [ "$NWBBLOCKS" == "" ]; then
-			try sudo insmod $FSTITCHDIR/fscore/kfstitchd.ko linux_device=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM
+			try sudo insmod $FSTITCHDIR/kfstitchd.ko linux_device=$DEV use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM
 		else
-			try sudo insmod $FSTITCHDIR/fscore/kfstitchd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM
+			try sudo insmod $FSTITCHDIR/kfstitchd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS" use_journal=$JOURNAL use_unlink=$UNLINK use_unsafe_disk_cache=$UNSAFE use_crashsim=$CRASHSIM
 		fi
 		try sudo mount -t fstitch $KMNT $MNT
 		try sudo chmod 777 $MNT

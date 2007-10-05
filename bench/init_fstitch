@@ -20,9 +20,9 @@ if [ "$1" == "start" ]; then
 	sync
 	try sudo mkfs.$TYPE $PART
 	if [ "$NWBBLOCKS" == "" ]; then
-		try sudo insmod ../fscore/kfstitchd.ko linux_device=$DEV
+		try sudo insmod ../kfstitchd.ko linux_device=$DEV
 	else
-		try sudo insmod ../fscore/kfstitchd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS"
+		try sudo insmod ../kfstitchd.ko linux_device=$DEV nwbblocks="$NWBBLOCKS"
 	fi
 	try sudo mount -t fstitch $KMNT $MNT
 	try sudo chmod 777 $MNT

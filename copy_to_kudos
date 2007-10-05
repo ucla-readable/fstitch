@@ -27,9 +27,9 @@ rsync --rsh=ssh -vaSz --exclude=/obj/ \
 	--exclude=/time.log --exclude=/prof.log\
 	--exclude=/test --exclude=/tests/ \
 	--exclude=/core --exclude=/uufstitchd_debug \
-	--exclude=/fscore/kfstitchd.ko --exclude=/fscore/kfstitchd.o \
-	--exclude=/fscore/kfstitchd.mod.c --exclude=/fscore/kfstitchd.mod.o \
-	--exclude=/Module.symvers --exclude=/fscore/.kfstitchd.*.cmd \
+	--exclude=/kfstitchd.ko --exclude=/kfstitchd.o \
+	--exclude=/kfstitchd.mod.c --exclude=/kfstitchd.mod.o \
+	--exclude=/Module.symvers --exclude=/.kfstitchd.*.cmd \
 	--exclude=/.tmp_versions/ --exclude=/.kernel_version \
 	--exclude=.*.swp --exclude=.*.swo --exclude=.*.swn \
 	. $KMACHINE:$TARGET/

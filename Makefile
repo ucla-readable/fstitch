@@ -6,7 +6,7 @@ UTILDIR := $(BASE_OBJDIR)/util
 
 V = @
 
-BIN = fscore/kfstitchd.ko $(OBJDIR)/lib/libpatchgroup.so
+BIN = kfstitchd.ko $(OBJDIR)/lib/libpatchgroup.so
 
 ifeq ($(KERNELRELEASE),)
 KERNELRELEASE = $(shell uname -r)
@@ -52,13 +52,13 @@ andrew: bench/ab-leiz.tar.gz
 	tar -Cobj -xzf bench/ab-leiz.tar.gz
 	sed -i "s,/home/leiz,`pwd`/obj," obj/ab/original/Makefile
 
-fscore/kfstitchd.ko: always
+kfstitchd.ko: always
 	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" == "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	@echo "$(KERNELRELEASE)" > .kernel_version
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
 	@[ ! -f .user ] || $(MAKE) -f Makefile.user
 
-install: fscore/kfstitchd.ko
+install: kfstitchd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
 
 $(OBJDIR)/lib/libpatchgroup.so: lib/kernel_patchgroup.c

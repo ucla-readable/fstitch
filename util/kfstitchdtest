@@ -52,7 +52,7 @@ DISKIMGSIZE=`du -m --apparent-size $DISKIMG | cut -f 1`
 mount | grep -q /debug || sudo mount /debug
 assert sync
 
-assert sudo insmod fscore/kfstitchd.ko linux_device=$DISK
+assert sudo insmod kfstitchd.ko linux_device=$DISK
 if [ -f /proc/kfstitchd_debug ]
 then
 	sudo cat /proc/kfstitchd_debug > debug/kfstitchd_debug &
@@ -69,7 +69,7 @@ assert sudo rmmod kfstitchd
 sudo dd if=$DISK of=debug/disk.img bs=1M count=$DISKIMGSIZE
 assert sync
 
-assert sudo insmod fscore/kfstitchd.ko linux_device=$DISK
+assert sudo insmod kfstitchd.ko linux_device=$DISK
 assert sudo mount fstitch:/ /mnt/test -t kfs
 warning find /mnt/test > list
 [ `wc -l list | cut -f 1 -d\ ` -eq 20158 ] || echo "list length mismatch: `wc -l list`"
