@@ -2,6 +2,13 @@ TAGS
 tags
 obj
 Module.symvers
+.kfstitchd.ko.cmd
+.kfstitchd.mod.o.cmd
+.kfstitchd.o.cmd
+kfstitchd.ko
+kfstitchd.mod.c
+kfstitchd.mod.o
+kfstitchd.o
 .tmp_versions
 .copy_to_kudos
 .kernel_version

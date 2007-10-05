@@ -1,7 +1,0 @@
-.kfstitchd.ko.cmd
-.kfstitchd.mod.o.cmd
-.kfstitchd.o.cmd
-kfstitchd.ko
-kfstitchd.mod.c
-kfstitchd.mod.o
-kfstitchd.o
