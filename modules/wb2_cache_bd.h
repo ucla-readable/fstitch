@@ -2,11 +2,11 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#ifndef __FSTITCH_FSCORE_WB2_CACHE_BD_H
-#define __FSTITCH_FSCORE_WB2_CACHE_BD_H
+#ifndef __FSTITCH_MODULES_WB2_CACHE_BD_H
+#define __FSTITCH_MODULES_WB2_CACHE_BD_H
 
 #include <fscore/bd.h>
 
 BD_t * wb2_cache_bd(BD_t * disk, uint32_t soft_dblocks, uint32_t soft_blocks);
 
-#endif /* __FSTITCH_FSCORE_WB2_CACHE_BD_H */
+#endif /* __FSTITCH_MODULES_WB2_CACHE_BD_H */

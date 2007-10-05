@@ -2,8 +2,8 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#ifndef __FSTITCH_FSCORE_EXT2_H
-#define __FSTITCH_FSCORE_EXT2_H
+#ifndef __FSTITCH_MODULES_EXT2_H
+#define __FSTITCH_MODULES_EXT2_H
 
 /*
  * Constants relative to the data blocks
@@ -242,5 +242,4 @@ struct EXT2_Dir_entry {
 };
 typedef struct EXT2_Dir_entry EXT2_Dir_entry_t;
 
-#endif /* __FSTITCH_FSCORE_EXT2_H */
-
+#endif /* __FSTITCH_MODULES_EXT2_H */

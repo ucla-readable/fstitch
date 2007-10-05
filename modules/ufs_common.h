@@ -2,8 +2,8 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#ifndef __FSTITCH_FSCORE_UFS_COMMON_H
-#define __FSTITCH_FSCORE_UFS_COMMON_H
+#ifndef __FSTITCH_MODULES_UFS_COMMON_H
+#define __FSTITCH_MODULES_UFS_COMMON_H
 
 #include <fscore/lfs.h>
 
@@ -54,4 +54,4 @@ int ufs_check_name(const char * p);
 uint8_t fstitch_to_ufs_type(uint8_t type);
 uint8_t ufs_to_fstitch_type(uint8_t type);
 
-#endif /* __FSTITCH_FSCORE_UFS_COMMON_H */
+#endif /* __FSTITCH_MODULES_UFS_COMMON_H */

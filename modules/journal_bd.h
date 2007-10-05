@@ -2,8 +2,8 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#ifndef __FSTITCH_FSCORE_JOURNAL_BD_H
-#define __FSTITCH_FSCORE_JOURNAL_BD_H
+#ifndef __FSTITCH_MODULES_JOURNAL_BD_H
+#define __FSTITCH_MODULES_JOURNAL_BD_H
 
 #include <fscore/bd.h>
 
@@ -18,4 +18,4 @@ int journal_bd_set_journal(BD_t * bd, BD_t * journal);
 void journal_bd_add_hold(void);
 void journal_bd_remove_hold(void);
 
-#endif /* __FSTITCH_FSCORE_JOURNAL_BD_H */
+#endif /* __FSTITCH_MODULES_JOURNAL_BD_H */

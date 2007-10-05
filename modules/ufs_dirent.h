@@ -2,8 +2,8 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#ifndef __FSTITCH_FSCORE_UFS_DIRENT_H
-#define __FSTITCH_FSCORE_UFS_DIRENT_H
+#ifndef __FSTITCH_MODULES_UFS_DIRENT_H
+#define __FSTITCH_MODULES_UFS_DIRENT_H
 
 #include <lib/dirent.h>
 
@@ -50,4 +50,4 @@ struct UFSmod_dirent {
 	ASSIGN(ufs, module, modify_dirent); \
 }
 
-#endif /* __FSTITCH_FSCORE_UFS_DIRENT_H */
+#endif /* __FSTITCH_MODULES_UFS_DIRENT_H */
