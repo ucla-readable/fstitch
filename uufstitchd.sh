@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ $1 = '--gdb' -o $1 = '--valgrind' -o $1 = '--callgrind' -o $1 = '--strace' ]; then
+if [ "$1" = '--gdb' -o "$1" = '--valgrind' -o "$1" = '--callgrind' -o "$1" = '--strace' ]; then
 	FSTITCHD_WRAP=`echo "$1" | sed s/--//`
 	shift
 fi
