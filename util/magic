@@ -1,4 +1,7 @@
-# Featherstitch debug trace information for the "file" command
+# Featherstitch-related magic for the "file" command
+
+
+# Featherstitch debug trace information
 
 0	string		@FDB		Featherstitch debug trace data
 >4	string		>\0		(From code compiled %s)
@@ -12,3 +15,10 @@
 >4	belong		x		%d)
 
 4	string		KDB_		Old Kudos debug trace data (prior to r1289)
+
+
+# Waffle file system
+
+4096	lelong		0x3AFF1EF5	Waffle file system image
+>4100	lelong		x		(%u blocks,
+>4104	lelong		x		%u inodes)

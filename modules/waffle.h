@@ -65,6 +65,7 @@ struct waffle_super {
 	uint32_t s_blocks;
 	uint32_t s_inodes;
 	struct waffle_snapshot s_active;
+	struct waffle_snapshot s_checkpoint;
 	struct waffle_snapshot s_snapshot;
 };
 

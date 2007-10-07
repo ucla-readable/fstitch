@@ -464,13 +464,14 @@ static int update_blocks(void)
 	return 0;
 }
 
-static int init_snapshot(void)
+static int init_snapshots(void)
 {
 	struct waffle_super * super;
 	struct block * block = get_block(1);
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
+	super->s_checkpoint = super->s_active;
 	super->s_snapshot = super->s_active;
 	put_block(block);
 	return 0;
@@ -527,7 +528,7 @@ int main(int argc, char * argv[])
 	init_inodes();
 	init_root();
 	update_blocks();
-	init_snapshot();
+	init_snapshots();
 	
 	flush_cache();
 	return 0;
