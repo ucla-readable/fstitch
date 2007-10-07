@@ -3,6 +3,8 @@
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
 #define _BSD_EXTENSION
+#define _LARGEFILE_SOURCE
+#define _FILE_OFFSET_BITS 64
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +12,8 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
@@ -129,7 +133,7 @@ static void put_block(struct block * b)
 
 #if BYTE_ORDER == LITTLE_ENDIAN
 /* check for a partition table and use the first JOSFS/WAFFLE partition if there is one */
-static void partition_adjust(off_t * size)
+static void partition_adjust(uint64_t * size)
 {
 	unsigned char mbr[512];
 	struct pc_ptable * ptable;
@@ -156,37 +160,52 @@ static void partition_adjust(off_t * size)
 static int open_disk(const char * name, int use_ptable)
 {
 	struct stat s;
+	uint64_t size;
 	
 	if((diskfd = open(name, O_RDWR)) < 0)
 	{
-		fprintf(stderr, "open: ");
 		perror(name);
 		return -1;
 	}
 	
 	if(fstat(diskfd, &s) < 0)
 	{
-		/* FIXME: use device ioctl() */
-		fprintf(stderr, "stat: ");
 		perror(name);
+		close(diskfd);
 		return -1;
 	}
 	
+	if(s.st_mode & S_IFBLK)
+	{
+		/* it's a block device; stat size will be zero */
+		if(ioctl(diskfd, BLKGETSIZE64, &size) < 0)
+		{
+			perror(name);
+			close(diskfd);
+			return -1;
+		}
+	}
+	else
+		size = s.st_size;
 #if BYTE_ORDER == LITTLE_ENDIAN
 	/* if requested, and if there is a partition table, use only the JOSFS/WAFFLE partition */
 	if(use_ptable)
-		partition_adjust(&s.st_size);
+		partition_adjust(&size);
 #endif
+	nblocks = size / WAFFLE_BLOCK_SIZE;
 	
-	/* minimally, we have a reserved block and a superblock */
-	if(s.st_size < 3 * WAFFLE_BLOCK_SIZE)
+	/* minimally, we have a reserved block, a superblock, a bitmap
+	 * block, an inode block, and a root directory block */
+	if(nblocks < 5)
 	{
-		fprintf(stderr, "Bad disk size %lu\n", (unsigned long) s.st_size);
+		fprintf(stderr, "Bad disk size (%u blocks)\n", nblocks);
+		close(diskfd);
 		return -1;
 	}
-	nblocks = s.st_size / WAFFLE_BLOCK_SIZE;
 	/* by default, half as many inodes as blocks */
 	ninodes = nblocks / 2;
+	
+	printf("Initializing waffle file system: %u blocks, %u inodes\n", nblocks, ninodes);
 	
 	return 0;
 }
