@@ -25,7 +25,7 @@
 static int diskfd;
 static off_t diskoff;
 static uint32_t nblocks, ninodes;
-static uint32_t next_free = 2;
+static uint32_t next_free = WAFFLE_SUPER_BLOCK + 1;
 
 struct block {
 	uint32_t busy, used, number;

@@ -77,6 +77,7 @@ struct waffle_dentry {
 	char d_name[WAFFLE_NAME_LEN];
 };
 
+#define WAFFLE_SUPER_BLOCK 1
 #define WAFFLE_ROOT_INODE 1
 #define WAFFLE_LINK_MAX 32000
 
