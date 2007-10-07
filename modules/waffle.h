@@ -10,9 +10,25 @@
  * Block 1 is reserved for the superblock, which contains the snapshots.
  * All other blocks are referred to in some way by a snapshot.
  * As in WAFL, waffle inodes may store file data in the inode if the file is
- * small, and the height of the indirect block tree is kept constant. */
+ * small, but the indirect block tree is not always constant height. */
 
-#define WAFFLE_POINTERS 26
+#define WAFFLE_BLOCK_SIZE 4096
+#define WAFFLE_DIRECT_POINTERS 24
+#define WAFFLE_BLOCK_POINTERS (WAFFLE_BLOCK_SIZE / 4)
+
+/* max size (in bytes) of an inode using blocks of type X */
+#define WAFFLE_INLINE_SIZE ((WAFFLE_DIRECT_POINTERS + 2) * 4)
+#define WAFFLE_DIRECT_SIZE (WAFFLE_BLOCK_SIZE * WAFFLE_DIRECT_POINTERS)
+#define WAFFLE_INDIRECT_SIZE (WAFFLE_DIRECT_SIZE + WAFFLE_BLOCK_SIZE * WAFFLE_BLOCK_POINTERS)
+/* This is larger than WAFFLE_SIZE_FILE_SIZE below, so we exclude it. */
+/* #define WAFFLE_DINDIRECT_SIZE (WAFFLE_INDIRECT_SIZE + WAFFLE_BLOCK_SIZE * WAFFLE_BLOCK_POINTERS * WAFFLE_BLOCK_POINTERS) */
+
+/* max number of blocks of an inode using blocks of type X */
+#define WAFFLE_DIRECT_BLOCKS WAFFLE_DIRECT_POINTERS
+#define WAFFLE_INDIRECT_BLOCKS (WAFFLE_DIRECT_BLOCKS + WAFFLE_BLOCK_POINTERS)
+#define WAFFLE_DINDIRECT_BLOCKS (WAFFLE_INDIRECT_BLOCKS + WAFFLE_BLOCK_POINTERS * WAFFLE_BLOCK_POINTERS)
+
+#define WAFFLE_SIZE_FILE_SIZE 0xFFFFFFFF
 
 struct waffle_inode {
 	uint16_t i_mode;
@@ -24,10 +40,16 @@ struct waffle_inode {
 	uint32_t i_ctime;
 	uint32_t i_mtime;
 	union {
-		uint32_t i_block[WAFFLE_POINTERS];
-		uint8_t i_inline[WAFFLE_POINTERS * 4];
+		struct {
+			uint32_t i_direct[WAFFLE_DIRECT_POINTERS];
+			uint32_t i_indirect;
+			uint32_t i_dindirect;
+		};
+		uint8_t i_inline[WAFFLE_INLINE_SIZE];
 	};
 };
+
+#define WAFFLE_BLOCK_INODES (WAFFLE_BLOCK_SIZE / sizeof(struct waffle_inode))
 
 struct waffle_snapshot {
 	uint32_t sn_blocks;
@@ -51,12 +73,11 @@ struct waffle_super {
 /* names must be null-terminated */
 struct waffle_dentry {
 	uint32_t d_inode;
-	char name[WAFFLE_NAME_LEN];
+	char d_name[WAFFLE_NAME_LEN];
 };
 
 #define WAFFLE_ROOT_INODE 1
 #define WAFFLE_LINK_MAX 32000
-#define WAFFLE_BLOCK_SIZE 4096
 
 #define WAFFLE_S_IFMT   0xF000
 #define WAFFLE_S_IFSOCK 0xC000
@@ -91,7 +112,5 @@ struct waffle_dentry {
 #define WAFFLE_TYPE_FIFO     5
 #define WAFFLE_TYPE_SOCK     6
 #define WAFFLE_TYPE_SYMLINK  7
-
-#define WAFFLE_MAX_FILE_SIZE 0xFFFFFFFF
 
 #endif /* __FSTITCH_MODULES_WAFFLE_H */
