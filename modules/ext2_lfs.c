@@ -1222,9 +1222,6 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 	
 	// TODO do some sanity checks on name
 	
-	// "." and ".." are (at least right now) supported by code further up
-	// (this seems hacky, but it would be hard to figure out parent's parent from here)
-	
 	fd = (ext2_fdesc_t *) ext2_lookup_inode(object, parent);
 	if(!fd)
 		return -ENOENT;
