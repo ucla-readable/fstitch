@@ -211,7 +211,7 @@ static inline uint8_t ext2_to_fstitch_type(uint16_t type)
 		case EXT2_S_IFREG:
 			return TYPE_FILE;
 		case EXT2_S_IFLNK:
-			return TYPE_SYMLINK;	
+			return TYPE_SYMLINK;
 		default:
 			return TYPE_INVAL;
 	}
@@ -810,7 +810,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 		if(info->gnum != block_group || !info->bitmap_cache)
 		{
 			if(info->bitmap_cache)
-				bdesc_release(&info->bitmap_cache);	
+				bdesc_release(&info->bitmap_cache);
 			info->gnum = block_group;
 			bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_block_bitmap, 1, NULL);
 			if(!bitmap)
@@ -887,7 +887,7 @@ static int ext2_read_block_bitmap(LFS_t * object, uint32_t blockno)
 	if(info->gnum != block_group || !info->bitmap_cache)
 	{
 		if(info->bitmap_cache)
-			bdesc_release(&info->bitmap_cache);	
+			bdesc_release(&info->bitmap_cache);
 		info->gnum = block_group;
 		info->bitmap_cache = CALL(info->ubd, read_block, info->groups[block_group].bg_block_bitmap, 1, NULL);
 		if(!info->bitmap_cache)
@@ -929,7 +929,7 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 	if(info->gnum != block_group || !info->bitmap_cache)
 	{
 		if(info->bitmap_cache)
-			bdesc_release(&info->bitmap_cache);	
+			bdesc_release(&info->bitmap_cache);
 		info->gnum = block_group;
 		info->bitmap_cache = CALL(info->ubd, read_block, info->groups[block_group].bg_block_bitmap, 1, NULL);
 		if(!info->bitmap_cache)
@@ -939,7 +939,7 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 		info->bitmap_cache_number = info->groups[block_group].bg_block_bitmap;
 	}
 	
-	block_in_group = blockno % info->super->s_blocks_per_group;	
+	block_in_group = blockno % info->super->s_blocks_per_group;
 	/* does it already have the right value? */
 	if(((uint32_t *) bdesc_data(info->bitmap_cache))[block_in_group / 32] & (1 << (block_in_group % 32)))
 	{
@@ -982,7 +982,7 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 	if(info->inode_gdesc != block_group || !info->inode_cache)
 	{
 		if(info->inode_cache)
-			bdesc_release(&info->inode_cache);	
+			bdesc_release(&info->inode_cache);
 		info->inode_gdesc = block_group;
 		info->inode_cache = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1, NULL);
 		if(!info->inode_cache)
@@ -1005,7 +1005,7 @@ static int ext2_write_inode_bitmap(LFS_t * object, inode_t inode_no, bool value,
 	/* bit patches take offset in increments of 32 bits */
 	r = patch_create_bit(info->inode_cache, info->ubd, inode_in_group / 32, 1 << (inode_in_group % 32), head);
 	if(r < 0)
-		return r;	
+		return r;
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, *head, value ? "allocate inode" : "free inode");
 	
 	r = CALL(info->ubd, write_block, info->inode_cache, info->inode_cache_number);
@@ -1048,7 +1048,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 	if(f->f_lastblock != 0)
 		blockno = f->f_lastblock;
 	else
-		blockno = get_file_block(object, (ext2_fdesc_t *) f, f->f_ip->i_size - 1);	
+		blockno = get_file_block(object, (ext2_fdesc_t *) f, f->f_ip->i_size - 1);
 	if(blockno == INVALID_BLOCK)
 		return INVALID_BLOCK;
 	lastblock = blockno;
@@ -1064,7 +1064,7 @@ static uint32_t ext2_allocate_block(LFS_t * object, fdesc_t * file, int purpose,
 			return INVALID_BLOCK;
 	}
 	
-inode_search:	
+inode_search:
 	// Look for free blocks in same block group as the inode
 	block_group = (f->f_ino - 1) / info->super->s_inodes_per_group;
 	if(purpose == PURPOSE_DIRDATA)
@@ -1306,7 +1306,7 @@ static uint32_t get_file_block(LFS_t * object, ext2_fdesc_t * file, uint32_t off
 		inode_nums = (uint32_t *) bdesc_data(block_desc);
 		blocknum %= n_per_block;
 		return inode_nums[blocknum];
-	}	
+	}
 	else if(blocknum >= EXT2_NDIRECT)
 	{
 		blocknum -= EXT2_NDIRECT;
@@ -1872,7 +1872,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino)
 		if(info->inode_gdesc != block_group || info->inode_cache == NULL)
 		{
 			if(info->inode_cache != NULL)
-				bdesc_release(&info->inode_cache);	
+				bdesc_release(&info->inode_cache);
 			info->inode_gdesc = block_group;
 			bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1, NULL);
 			if(!bitmap)
@@ -1896,7 +1896,7 @@ static int find_free_inode_block_group(LFS_t * object, inode_t * ino)
 		
 		firstrun = 0;
 		block_group = (block_group + 1) % info->ngroups;
-		curr = block_group * info->super->s_inodes_per_group;	
+		curr = block_group * info->super->s_inodes_per_group;
 	}
 	
 	return -ENOSPC;
@@ -2798,7 +2798,7 @@ static int ext2_remove_name(LFS_t * object, inode_t parent, const char * name, p
 	{
 		r = -ENOTDIR;
 		goto remove_name_exit;
-	}	
+	}
 	
 	r = ext2_mdir_get(object, pfile, &mdir);
 	if(r < 0)
@@ -3114,7 +3114,7 @@ static int ext2_get_metadata(LFS_t * object, const ext2_fdesc_t * f, uint32_t id
 			if(!symlink_block)
 				return -1;
 			memcpy(data, bdesc_data(symlink_block), f->f_ip->i_size);
-		}	
+		}
 	}
 	else
 		return -EINVAL;
@@ -3236,7 +3236,7 @@ static int ext2_destroy(LFS_t * lfs)
 	r = modman_rem_lfs(lfs);
 	if(r < 0)
 		return r;
-	modman_dec_bd(info->ubd, lfs);	
+	modman_dec_bd(info->ubd, lfs);
 	if(info->bitmap_cache != NULL)
 		bdesc_release(&info->bitmap_cache);
 	if(info->inode_cache != NULL)
@@ -3492,8 +3492,8 @@ static int ext2_load_super(LFS_t * lfs)
 			goto wb_fail2;
 		bdesc_retain(info->gdescs[i]);
 	}
-	info->ngroupblocks = ngroupblocks;	
-	return 1;	
+	info->ngroupblocks = ngroupblocks;
+	return 1;
 	
   wb_fail2:
 	for(i = 0; i < ngroupblocks; i++)
