@@ -54,6 +54,7 @@ struct waffle_info {
 	patch_t ** write_head;
 	bdesc_t * super_cache;
 	const struct waffle_super * super;
+	struct waffle_snapshot s_active;
 	struct {
 		bdesc_t * bb_cache;
 		uint32_t bb_number;
@@ -121,7 +122,7 @@ static inode_t waffle_get_inode(struct waffle_info * info, struct waffle_fdesc *
 	assert(!fdesc->f_inode_cache);
 	
 	offset = fdesc->f_inode * sizeof(struct waffle_inode);
-	block = waffle_get_inode_block(info, &info->super->s_active.sn_inode, offset);
+	block = waffle_get_inode_block(info, &info->s_active.sn_inode, offset);
 	if(block == INVALID_BLOCK)
 		return -1;
 	fdesc->f_inode_cache = CALL(info->ubd, read_block, block, 1, NULL);
@@ -664,9 +665,8 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	}
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
+	info->s_active = info->super->s_checkpoint;
 	
-	/* FIXME: recover from unclean shutdown? */
-	/* FIXME: index blocks to compare active image to snapshot? */
 	/* FIXME: count the free blocks */
 	
 	n_waffle_instances++;

@@ -348,14 +348,14 @@ static int init_blocks(void)
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
-	super->s_active.sn_blocks = nblocks;
+	super->s_checkpoint.sn_blocks = nblocks;
 	blocks = (nblocks + WAFFLE_BLOCK_SIZE * 8 - 1) / (WAFFLE_BLOCK_SIZE * 8);
-	if(setup_inode(&super->s_active.sn_block, blocks * WAFFLE_BLOCK_SIZE) < 0)
+	if(setup_inode(&super->s_checkpoint.sn_block, blocks * WAFFLE_BLOCK_SIZE) < 0)
 	{
 		put_block(block);
 		return -1;
 	}
-	printf("Block bitmap inode is %d bytes\n", super->s_active.sn_block.i_size);
+	printf("Block bitmap inode is %d bytes\n", super->s_checkpoint.sn_block.i_size);
 	put_block(block);
 	return 0;
 }
@@ -368,14 +368,14 @@ static int init_inodes(void)
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
-	super->s_active.sn_inodes = ninodes;
+	super->s_checkpoint.sn_inodes = ninodes;
 	blocks = (ninodes + WAFFLE_BLOCK_INODES - 1) / WAFFLE_BLOCK_INODES;
-	if(setup_inode(&super->s_active.sn_inode, blocks * WAFFLE_BLOCK_SIZE) < 0)
+	if(setup_inode(&super->s_checkpoint.sn_inode, blocks * WAFFLE_BLOCK_SIZE) < 0)
 	{
 		put_block(block);
 		return -1;
 	}
-	printf("Inode table inode is %d bytes\n", super->s_active.sn_inode.i_size);
+	printf("Inode table inode is %d bytes\n", super->s_checkpoint.sn_inode.i_size);
 	put_block(block);
 	return 0;
 }
@@ -391,7 +391,7 @@ static int init_root(void)
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
-	i_block = get_inode_block(&super->s_active.sn_inode, WAFFLE_ROOT_INODE / WAFFLE_BLOCK_INODES);
+	i_block = get_inode_block(&super->s_checkpoint.sn_inode, WAFFLE_ROOT_INODE / WAFFLE_BLOCK_INODES);
 	if(!i_block)
 	{
 		put_block(block);
@@ -442,7 +442,7 @@ static int update_blocks(void)
 		return -1;
 	super = (struct waffle_super *) block->data;
 	/* total number of bits in free block bitmap */
-	max = super->s_active.sn_block.i_size * 8;
+	max = super->s_checkpoint.sn_block.i_size * 8;
 	for(i = next_free; i < max; i++)
 	{
 		uint32_t need = i / (WAFFLE_BLOCK_SIZE * 8);
@@ -450,7 +450,7 @@ static int update_blocks(void)
 		{
 			if(b_block)
 				put_block(b_block);
-			b_block = get_inode_block(&super->s_active.sn_block, need);
+			b_block = get_inode_block(&super->s_checkpoint.sn_block, need);
 			if(!b_block)
 			{
 				put_block(block);
@@ -473,8 +473,7 @@ static int init_snapshots(void)
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
-	super->s_checkpoint = super->s_active;
-	super->s_snapshot = super->s_active;
+	super->s_snapshot = super->s_checkpoint;
 	put_block(block);
 	return 0;
 }
