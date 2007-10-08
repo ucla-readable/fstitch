@@ -8,9 +8,9 @@
 #include <fscore/oo.h>
 #include <fscore/types.h>
 #include <fscore/feature.h>
+#include <fscore/dirent.h>
 #include <fscore/inode.h>
 #include <fscore/fdesc.h>
-#include <lib/dirent.h>
 
 struct CFS {
 	OBJECT(CFS_t);

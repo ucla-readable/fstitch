@@ -11,9 +11,9 @@
 #include <fscore/patch.h>
 #include <fscore/fdesc.h>
 #include <fscore/feature.h>
+#include <fscore/dirent.h>
 #include <fscore/inode.h>
 #include <fscore/lfs.h>
-#include <lib/dirent.h>
 
 struct UFSmod_alloc;
 typedef struct UFSmod_alloc UFSmod_alloc_t;

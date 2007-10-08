@@ -4,7 +4,6 @@
 
 #define __USE_BSD // for timersub()
 #include <lib/platform.h>
-#include <lib/dirent.h>
 #include <lib/jiffies.h>
 
 #include <fuse.h>
@@ -18,6 +17,7 @@
 #include <fscore/fstitchd.h>
 #include <fscore/sync.h>
 #include <fscore/modman.h>
+#include <fscore/dirent.h>
 #include <fscore/sched.h>
 #include <fscore/fuse_serve.h>
 #include <fscore/fuse_serve_mount.h>

@@ -5,14 +5,13 @@
 #ifndef __FSTITCH_MODULES_UFS_DIRENT_H
 #define __FSTITCH_MODULES_UFS_DIRENT_H
 
-#include <lib/dirent.h>
-
 #include <fscore/oo.h>
 #include <fscore/bd.h>
 #include <fscore/bdesc.h>
 #include <fscore/patch.h>
 #include <fscore/fdesc.h>
 #include <fscore/feature.h>
+#include <fscore/dirent.h>
 #include <fscore/inode.h>
 #include <fscore/lfs.h>
 

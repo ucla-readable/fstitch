@@ -4,9 +4,9 @@
 
 #include <lib/platform.h>
 #include <lib/vector.h>
-#include <lib/dirent.h>
 
 #include <fscore/modman.h>
+#include <fscore/dirent.h>
 #include <fscore/cfs.h>
 
 #include <modules/file_hiding_cfs.h>

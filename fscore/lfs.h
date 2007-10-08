@@ -11,9 +11,9 @@
 #include <fscore/patch.h>
 #include <fscore/fdesc.h>
 #include <fscore/feature.h>
+#include <fscore/dirent.h>
 #include <fscore/inode.h>
 #include <fscore/patchgroup.h>
-#include <lib/dirent.h>
 
 /* lfs_add_fork_head() should be called inside an LFS operation for each
  * patch graph fork head not reachable from *head upon return */
