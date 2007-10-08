@@ -1058,7 +1058,6 @@ static fdesc_t * allocate_name(LFS_t * object, inode_t parent, const char * name
 
 	// Create directory entry
 	dirinfo.d_fileno = nf->f_num;
-	dirinfo.d_filesize = nf->f_inode.di_size;
 	dirinfo.d_type = nf->f_type;
 	strcpy(dirinfo.d_name, name);
 	dirinfo.d_namelen = strlen(name);

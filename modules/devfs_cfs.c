@@ -295,7 +295,6 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 	uint16_t reclen = sizeof(*dirent) - sizeof(dirent->d_name) + 1;
 	const char * name;
 	inode_t inode;
-	uint32_t filesize;
 	uint8_t type;
 	uint8_t namelen;
 	
@@ -306,14 +305,12 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 	{
 		name = ".";
 		inode = state->root_fdesc.inode;
-		filesize = 0;
 		type = TYPE_DIR;
 	}
 	else if(*basep == 1)
 	{
 		name = "..";
 		inode = state->root_fdesc.inode;
-		filesize = 0;
 		type = TYPE_DIR;
 	}
 	else
@@ -321,7 +318,6 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 		devfs_fdesc_t * fdesc = (devfs_fdesc_t *) vector_elt(state->bd_table, *basep - 2);
 		name = fdesc->name;
 		inode = fdesc->inode;
-		filesize = fdesc->bd->blocksize * fdesc->bd->numblocks;
 		type = TYPE_DEVICE;
 	}
 	
@@ -333,7 +329,6 @@ static int devfs_get_dirent_helper(devfs_state_t * state, dirent_t * dirent, int
 	(*basep)++;
 	
 	dirent->d_fileno = inode;
-	dirent->d_filesize = filesize;
 	dirent->d_reclen = reclen;
 	dirent->d_type = type;
 	dirent->d_namelen = namelen;

@@ -516,7 +516,6 @@ static int fill_dirent(JOSFS_File_t * dirfile, inode_t ino, struct dirent * entr
 		default:
 			entry->d_type = TYPE_INVAL;
 	}
-	entry->d_filesize = dirfile->f_size;
 	entry->d_reclen = reclen;
 	entry->d_namelen = namelen;
 	strncpy(entry->d_name, dirfile->f_name, namelen + 1);

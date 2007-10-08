@@ -109,7 +109,6 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			entry->d_type = TYPE_DIR;
 			entry->d_fileno = INODE_ROOT;
 			entry->d_namelen = 1;
-			entry->d_filesize = 0;
 			name = ".";
 			break;
 		case 1:
@@ -117,7 +116,6 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			entry->d_type = TYPE_DIR;
 			entry->d_fileno = INODE_ROOT;
 			entry->d_namelen = 2;
-			entry->d_filesize = 0;
 			name = "..";
 			break;
 		case 2:
@@ -130,7 +128,6 @@ static int wholedisk_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * 
 			 * destination with nulls which we can't do here! */
 			assert(namelen < DIRENT_MAXNAMELEN);
 			entry->d_namelen = namelen;
-			entry->d_filesize = object->blocksize * object->blockdev->numblocks;
 			name = DISK_NAME;
 			break;
 		default:

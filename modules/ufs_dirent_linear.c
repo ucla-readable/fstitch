@@ -225,10 +225,7 @@ static int ufs_dirent_linear_get_dirent(UFSmod_dirent_t * object, ufs_fdesc_t * 
 			printf("%s: file too big?\n", __FUNCTION__);
 			inode.di_size &= UFS_MAXFILESIZE;
 		}
-		entry->d_filesize = inode.di_size;
 	}
-	else
-		entry->d_filesize = 0;
 
 	entry->d_type = ufs_to_fstitch_type(dirent.d_type);
 	entry->d_fileno = dirent.d_ino;
