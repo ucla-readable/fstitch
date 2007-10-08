@@ -23,6 +23,4 @@ struct dirent {
 };
 typedef struct dirent dirent_t;
 
-// int getdirentries(int fd, char * buf, int nbytes, long * basep);
-
 #endif /* __FSTITCH_FSCORE_DIRENT_H */
