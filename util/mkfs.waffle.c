@@ -100,16 +100,14 @@ static struct block * get_block(uint32_t number)
 		/* evict block b */
 		if(lseek(diskfd, diskoff + b->number * WAFFLE_BLOCK_SIZE, SEEK_SET) < 0 || write(diskfd, b->data, WAFFLE_BLOCK_SIZE) != WAFFLE_BLOCK_SIZE)
 		{
-			fprintf(stderr, "write block %d: ", b->number);
-			perror("");
+			fprintf(stderr, "panic: error writing block %d\n", b->number);
 			return NULL;
 		}
 	}
 	
 	if(lseek(diskfd, diskoff + number * WAFFLE_BLOCK_SIZE, SEEK_SET) < 0 || readn(diskfd, b->data, WAFFLE_BLOCK_SIZE) != WAFFLE_BLOCK_SIZE)
 	{
-		fprintf(stderr, "read block %d: ", number);
-		perror("");
+		fprintf(stderr, "panic: error reading block %d\n", number);
 		return NULL;
 	}
 	b->number = number;
@@ -357,6 +355,7 @@ static int init_blocks(void)
 		put_block(block);
 		return -1;
 	}
+	printf("Block bitmap inode is %d bytes\n", super->s_active.sn_block.i_size);
 	put_block(block);
 	return 0;
 }
@@ -376,6 +375,7 @@ static int init_inodes(void)
 		put_block(block);
 		return -1;
 	}
+	printf("Inode table inode is %d bytes\n", super->s_active.sn_inode.i_size);
 	put_block(block);
 	return 0;
 }
