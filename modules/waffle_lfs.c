@@ -4,6 +4,7 @@
 
 #include <lib/platform.h>
 #include <lib/jiffies.h>
+#include <lib/pool.h>
 
 #include <fscore/bd.h>
 #include <fscore/lfs.h>
@@ -28,6 +29,23 @@
 #define PURPOSE_INDIRECT 2
 #define PURPOSE_DINDIRECT 3
 
+struct waffle_fdesc {
+	/* extend struct fdesc */
+	struct fdesc_common * common;
+	struct fdesc_common base;
+	
+	struct waffle_fdesc ** f_cache_pprev;
+	struct waffle_fdesc * f_cache_next;
+	uint32_t f_nopen;
+	uint32_t f_age;
+	
+	inode_t f_inode;
+	uint8_t f_type;
+	bdesc_t * f_inode_cache;
+	uint32_t f_inode_number;
+	const struct waffle_inode * f_ip;
+};
+
 /* waffle LFS structure */
 struct waffle_info {
 	LFS_t lfs;
@@ -36,17 +54,18 @@ struct waffle_info {
 	patch_t ** write_head;
 	bdesc_t * super_cache;
 	const struct waffle_super * super;
+	struct {
+		bdesc_t * bb_cache;
+		uint32_t bb_number;
+		/* block bitmap block index */
+		uint32_t bb_index;
+	} active, shapshot;
+	struct waffle_fdesc * filecache;
 	int fdesc_count;
 };
 
-struct waffle_fdesc {
-	/* extend struct fdesc */
-	struct fdesc_common * common;
-	struct fdesc_common base;
-	
-	inode_t f_inode;
-	uint32_t f_nopen;
-};
+DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
+static int n_waffle_instances = 0;
 
 static inline uint8_t waffle_to_fstitch_type(uint16_t type)
 {
@@ -61,6 +80,35 @@ static inline uint8_t waffle_to_fstitch_type(uint16_t type)
 		default:
 			return TYPE_INVAL;
 	}
+}
+
+static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset)
+{
+	/* FIXME */
+	return INVALID_BLOCK;
+}
+
+static inode_t waffle_get_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
+{
+	uint32_t offset, block;
+	assert(fdesc);
+	assert(fdesc->f_inode >= WAFFLE_ROOT_INODE && fdesc->f_inode <= info->super->s_inodes);
+	assert(!fdesc->f_inode_cache);
+	
+	offset = fdesc->f_inode * sizeof(struct waffle_inode);
+	block = waffle_get_inode_block(info, &info->super->s_active.sn_inode, offset);
+	if(block == INVALID_BLOCK)
+		return -1;
+	fdesc->f_inode_cache = CALL(info->ubd, read_block, block, 1, NULL);
+	if(!fdesc->f_inode_cache)
+		return -1;
+	/* TODO: make it so we can track this and change it later if we COW this block */
+	bdesc_retain(fdesc->f_inode_cache);
+	
+	offset %= WAFFLE_BLOCK_SIZE;
+	fdesc->f_ip = (struct waffle_inode *) (bdesc_data(fdesc->f_inode_cache) + offset);
+	
+	return fdesc->f_inode;
 }
 
 
@@ -91,10 +139,70 @@ static bdesc_t * waffle_synthetic_lookup_block(LFS_t * object, uint32_t number, 
 	return CALL(info->ubd, synthetic_read_block, number, 1, page);
 }
 
+static void waffle_free_fdesc(LFS_t * object, fdesc_t * fdesc);
+
 static fdesc_t * waffle_lookup_inode(LFS_t * object, inode_t inode)
 {
 	Dprintf("%s %u\n", __FUNCTION__, inode);
-	/* FIXME */
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_fdesc * fd = NULL;
+	struct waffle_fdesc * oldest_fd = NULL;
+	static uint32_t age = 0;
+	int r, nincache = 0;
+	
+	if(inode <= 0)
+		return NULL;
+	
+	if(!++age)
+		++age;
+	
+	for(fd = info->filecache; fd; fd = fd->f_cache_next)
+		if(fd->f_inode == inode)
+		{
+			fd->f_nopen += (fd->f_age ? 1 : 2);
+			fd->f_age = age;
+			return (fdesc_t *) fd;
+		}
+		else if(fd->f_age)
+		{
+			++nincache;
+			if(!oldest_fd || (int32_t) (oldest_fd->f_age - fd->f_age) > 0)
+				oldest_fd = fd;
+		}
+	
+	fd = waffle_fdesc_pool_alloc();
+	if(!fd)
+		goto waffle_lookup_inode_exit;
+	
+	fd->common = &fd->base;
+	fd->base.parent = INODE_NONE;
+	fd->f_nopen = 1;
+	fd->f_age = age;
+	fd->f_inode = inode;
+	fd->f_inode_cache = NULL;
+	fd->f_ip = NULL;
+	
+	r = waffle_get_inode(info, fd);
+	if(r < 0)
+		goto waffle_lookup_inode_exit;
+	fd->f_type = waffle_to_fstitch_type(fd->f_ip->i_mode);
+	
+	/* stick in cache */
+	if(oldest_fd && nincache >= 4)
+	{
+		oldest_fd->f_age = 0;
+		waffle_free_fdesc(object, (fdesc_t *) oldest_fd);
+	}
+	fd->f_cache_pprev = &info->filecache;
+	fd->f_cache_next = info->filecache;
+	info->filecache = fd;
+	if(fd->f_cache_next)
+		fd->f_cache_next->f_cache_pprev = &fd->f_cache_next;
+	
+	return (fdesc_t *) fd;
+	
+  waffle_lookup_inode_exit:
+	waffle_fdesc_pool_free(fd);
 	return NULL;
 }
 
@@ -105,10 +213,22 @@ static int waffle_lookup_name(LFS_t * object, inode_t parent, const char * name,
 	return -ENOSYS;
 }
 
+static void __waffle_free_fdesc(struct waffle_fdesc * fdesc)
+{
+	assert(fdesc && !fdesc->f_nopen);
+	if(fdesc->f_inode_cache)
+		bdesc_release(&fdesc->f_inode_cache);
+	if((*fdesc->f_cache_pprev = fdesc->f_cache_next))
+		fdesc->f_cache_next->f_cache_pprev = fdesc->f_cache_pprev;
+	waffle_fdesc_pool_free(fdesc);
+}
+
 static void waffle_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 {
 	Dprintf("%s %p\n", __FUNCTION__, fdesc);
-	/* FIXME */
+	struct waffle_fdesc * fd = (struct waffle_fdesc *) fdesc;
+	if(fd && !--fd->f_nopen)
+		__waffle_free_fdesc(fd);
 }
 
 static uint32_t waffle_get_file_numblocks(LFS_t * object, fdesc_t * file)
@@ -240,6 +360,7 @@ static int waffle_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsme
 static int waffle_destroy(LFS_t * lfs)
 {
 	struct waffle_info * info = (struct waffle_info *) lfs;
+	struct waffle_fdesc * fd;
 	int r;
 	
 	if(info->fdesc_count)
@@ -252,6 +373,13 @@ static int waffle_destroy(LFS_t * lfs)
 	
 	if(info->super_cache)
 		bdesc_release(&info->super_cache);
+	for(fd = info->filecache; fd; fd = fd->f_cache_next)
+		assert(fd->f_nopen == 1 && fd->f_age != 0);
+	while(info->filecache)
+		waffle_free_fdesc(lfs, (fdesc_t *) info->filecache);
+	
+	if(!--n_waffle_instances)
+		waffle_fdesc_pool_free_all();
 	
 	memset(info, 0, sizeof(*info));
 	free(info);
@@ -280,6 +408,11 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	
 	info->ubd = lfs->blockdev = block_device;
 	info->write_head = CALL(block_device, get_write_head);
+	info->active.bb_cache = NULL;
+	info->active.bb_number = INVALID_BLOCK;
+	info->active.bb_index = INVALID_BLOCK;
+	info->shapshot = info->active;
+	info->filecache = NULL;
 	info->fdesc_count = 0;
 	
 	/* superblock */
@@ -291,6 +424,11 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	}
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
+	
+	/* FIXME: recover from unclean shutdown? */
+	/* FIXME: index blocks to compare active image to snapshot? */
+	
+	n_waffle_instances++;
 	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{
