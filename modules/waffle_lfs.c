@@ -136,6 +136,39 @@ static inode_t waffle_get_inode(struct waffle_info * info, struct waffle_fdesc *
 	return fdesc->f_inode;
 }
 
+/* returns 0 on error (including not found), otherwise the inode number */
+static inode_t waffle_directory_search(struct waffle_info * info, struct waffle_fdesc * fdesc, const char * name, bdesc_t ** block_p, uint32_t * number_p, uint16_t * offset_p)
+{
+	uint32_t index;
+	for(index = 0; index < fdesc->f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
+	{
+		bdesc_t * block;
+		uint16_t offset;
+		uint32_t number = waffle_get_inode_block(info, fdesc->f_ip, index);
+		if(!number || number == INVALID_BLOCK)
+			return 0;
+		block = CALL(info->ubd, read_block, number, 1, NULL);
+		if(!block)
+			return 0;
+		for(offset = 0; offset < WAFFLE_BLOCK_SIZE; offset += sizeof(struct waffle_dentry))
+		{
+			struct waffle_dentry * dirent = (struct waffle_dentry *) (bdesc_data(block) + offset);
+			if(!dirent->d_inode)
+				continue;
+			if(strcmp(dirent->d_name, name))
+				continue;
+			if(block_p)
+				*block_p = block;
+			if(number_p)
+				*number_p = number;
+			if(offset_p)
+				*offset_p = offset;
+			return dirent->d_inode;
+		}
+	}
+	return 0;
+}
+
 static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, uint32_t id, size_t size, void * data)
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, fd, id);
@@ -366,8 +399,12 @@ static fdesc_t * waffle_lookup_inode(LFS_t * object, inode_t inode)
 static int waffle_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * inode)
 {
 	Dprintf("%s %u:%s\n", __FUNCTION__, parent, name);
-	/* FIXME */
-	return -ENOSYS;
+	struct waffle_fdesc * fd = (struct waffle_fdesc *) waffle_lookup_inode(object, parent);
+	if(!fd)
+		return -EINVAL;
+	*inode = waffle_directory_search((struct waffle_info *) object, fd, name, NULL, NULL, NULL);
+	waffle_free_fdesc(object, (fdesc_t *) fd);
+	return *inode ? 0 : -ENOENT;
 }
 
 static void __waffle_free_fdesc(struct waffle_fdesc * fdesc)
@@ -408,8 +445,46 @@ static uint32_t waffle_get_file_block(LFS_t * object, fdesc_t * file, uint32_t o
 static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, basep, *basep);
-	/* FIXME */
-	return -ENOSYS;
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_fdesc * fd = (struct waffle_fdesc *) file;
+	uint32_t index = *basep * sizeof(struct waffle_dentry);
+	uint16_t offset = index % WAFFLE_BLOCK_SIZE;
+	if(fd->f_type != TYPE_DIR)
+		return -ENOTDIR;
+	for(index -= offset; index < fd->f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
+	{
+		bdesc_t * block;
+		uint32_t number = waffle_get_inode_block(info, fd->f_ip, offset);
+		if(!number || number == INVALID_BLOCK)
+			return -ENOENT;
+		block = CALL(info->ubd, read_block, number, 1, NULL);
+		if(!block)
+			return -ENOENT;
+		for(; offset < WAFFLE_BLOCK_SIZE; offset += sizeof(struct waffle_dentry))
+		{
+			struct waffle_dentry * dirent = (struct waffle_dentry *) (bdesc_data(block) + offset);
+			uint16_t namelen, reclen;
+			if(!dirent->d_inode)
+			{
+				++*basep;
+				continue;
+			}
+			namelen = strlen(dirent->d_name);
+			reclen = sizeof(*entry) - sizeof(entry->d_name) + namelen + 1;
+			if(size < reclen)
+				return -ENOSPC;
+			entry->d_fileno = dirent->d_inode;
+			entry->d_reclen = reclen;
+			entry->d_type = waffle_to_fstitch_type(dirent->d_type);
+			entry->d_namelen = namelen;
+			strcpy(entry->d_name, dirent->d_name);
+			++*basep;
+			return 0;
+		}
+		offset = 0;
+	}
+	/* end of directory */
+	return -1;
 }
 
 static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)

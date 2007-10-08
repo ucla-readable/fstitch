@@ -418,8 +418,10 @@ static int init_root(void)
 	}
 	dirent = (struct waffle_dentry *) d_block->data;
 	dirent[0].d_inode = WAFFLE_ROOT_INODE;
+	dirent[0].d_type = WAFFLE_S_IFDIR;
 	strcpy(dirent[0].d_name, ".");
 	dirent[1].d_inode = WAFFLE_ROOT_INODE;
+	dirent[1].d_type = WAFFLE_S_IFDIR;
 	strcpy(dirent[1].d_name, "..");
 	put_block(d_block);
 	inode->i_atime = time(NULL);

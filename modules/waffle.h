@@ -69,11 +69,13 @@ struct waffle_super {
 	struct waffle_snapshot s_snapshot;
 };
 
-#define WAFFLE_NAME_LEN 124
+#define WAFFLE_NAME_LEN 122
 
 /* names must be null-terminated */
 struct waffle_dentry {
 	uint32_t d_inode;
+	/* same as i_mode but the permission bits are ignored */
+	uint16_t d_type;
 	char d_name[WAFFLE_NAME_LEN];
 };
 
