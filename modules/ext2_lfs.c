@@ -825,7 +825,7 @@ static int ext2_find_free_block(LFS_t * object, uint32_t * blockno)
 #if ROUND_ROBIN_ALLOC
 		/* adjust array for offset */
 		array = &array[offset];
-	retry:
+	  retry:
 		index = find_first_zero_bit(array, info->super->s_blocks_per_group - offset_bits);
 		/* adjust result for offset */
 		index += offset_bits;
@@ -1093,7 +1093,7 @@ inode_search:
 	
 	return INVALID_BLOCK;
 	
-claim_block:
+  claim_block:
 	*tail = info->write_head ? *info->write_head : NULL;
 	if(ext2_write_block_bitmap(object, blockno, 1, tail) < 0)
 	{
@@ -1150,7 +1150,7 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 {
 	ext2_fdesc_t * fd = NULL, * oldest_fd = NULL;
 	struct ext2_info * info = (struct ext2_info *) object;
-	static uint32_t age;
+	static uint32_t age = 0;
 	int r, nincache = 0;
 	
 	if(ino <= 0)
@@ -1206,7 +1206,7 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 	
 	return (fdesc_t *) fd;
 	
-ext2_lookup_inode_exit:
+  ext2_lookup_inode_exit:
 	ext2_fdesc_pool_free(fd);
 	return NULL;
 }
@@ -2241,7 +2241,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 	ext2_free_fdesc(object, (fdesc_t *)new_file);
 	if(!ln && minode)
 		ext2_minode_destroy(&info->minode_cache, minode);
-allocate_name_exit:
+  allocate_name_exit:
 	ext2_free_fdesc(object, (fdesc_t *)parent_file);
 	return NULL;
 }
@@ -2752,7 +2752,7 @@ static int ext2_delete_dirent(LFS_t * object, ext2_fdesc_t * dir_file, ext2_mdir
 		return r;
 	}
 	
-	// Will the dirent never exist on disk?:
+	// Will the dirent never exist on disk?
 	if(head == WEAK(mdirent->create))
 	{
 		// Create and delete merged so the dirent will never exist on disk.
@@ -3147,7 +3147,7 @@ static int ext2_set_metadata2(LFS_t * object, ext2_fdesc_t * f, const fsmetadata
 	assert(head && f && (!nfsm || fsm));
 	DECL_INODE_MOD(f);
 	
- retry:
+  retry:
 	if(!nfsm)
 		return ext2_write_inode(info, f, head, ioff1, ioff2);
 	
