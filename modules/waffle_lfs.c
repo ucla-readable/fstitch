@@ -82,10 +82,30 @@ static inline uint8_t waffle_to_fstitch_type(uint16_t type)
 	}
 }
 
+/* NOTE: both 0 and INVALID_BLOCK may be returned as errors from this function */
 static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset)
 {
-	/* FIXME */
-	return INVALID_BLOCK;
+	bdesc_t * indirect;
+	bdesc_t * dindirect;
+	offset /= WAFFLE_BLOCK_SIZE;
+	if(offset >= (inode->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE)
+		return INVALID_BLOCK;
+	if(offset < WAFFLE_DIRECT_BLOCKS)
+		return inode->i_direct[offset];
+	if(offset < WAFFLE_INDIRECT_BLOCKS)
+	{
+		indirect = CALL(info->ubd, read_block, inode->i_indirect, 1, NULL);
+		if(!indirect)
+			return INVALID_BLOCK;
+		return ((uint32_t *) bdesc_data(indirect))[offset - WAFFLE_DIRECT_BLOCKS];
+	}
+	dindirect = CALL(info->ubd, read_block, inode->i_dindirect, 1, NULL);
+	if(!dindirect)
+		return INVALID_BLOCK;
+	indirect = CALL(info->ubd, read_block, ((uint32_t *) bdesc_data(dindirect))[(offset - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS], 1, NULL);
+	if(!indirect)
+		return INVALID_BLOCK;
+	return ((uint32_t *) bdesc_data(indirect))[(offset - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
 }
 
 static inode_t waffle_get_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
