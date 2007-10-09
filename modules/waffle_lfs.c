@@ -5,6 +5,7 @@
 #include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/pool.h>
+#include <lib/hash_map.h>
 
 #include <fscore/bd.h>
 #include <fscore/lfs.h>
@@ -23,11 +24,32 @@
 #define Dprintf(x...)
 #endif
 
-/* values for the "purpose" parameter */
-#define PURPOSE_FILEDATA 0
-#define PURPOSE_DIRDATA 1
-#define PURPOSE_INDIRECT 2
-#define PURPOSE_DINDIRECT 3
+/* Every active block is ultimately pointed to via some chain of pointers by the
+ * superblock. When we need to clone a block, we may need to clone all the
+ * blocks up to the superblock. Since we will discover that we need to do this
+ * at the leaves of the pointer tree (and it is a tree, not a DAG), we need a
+ * way to track backwards to the root. This structure helps us do that by
+ * encapsulating a block number along with the unique location in some other
+ * block that points to it, and a pointer to the same structure for that block
+ * pointer. Some of these are kept in a hash map keyed by block number; others
+ * can be stored on the stack if they are only to be used temporarily. */
+
+struct blkptr {
+	/* the block number */
+	uint32_t number;
+	/* the block itself */
+	bdesc_t * block;
+	/* the offset within the parent block */
+	uint16_t parent_offset;
+	/* the parent block pointer structure - NULL for superblock pointers */
+	struct blkptr * parent;
+	/* the number of children that refer to this structure */
+	int references;
+};
+
+/* macros for stack-based blkptrs */
+#define DECLARE_BLKPTR(name, parent_) struct blkptr name = {.number = INVALID_BLOCK, .block = NULL, .parent_offset = -1, .parent = parent_, .references = 0}
+#define BIND_BLKPTR(name, number_, block_, offset) name.number = number_, name.block = block_, name.parent_offset = offset
 
 struct waffle_fdesc {
 	/* extend struct fdesc */
@@ -41,8 +63,8 @@ struct waffle_fdesc {
 	
 	inode_t f_inode;
 	uint8_t f_type;
-	bdesc_t * f_inode_cache;
-	uint32_t f_inode_number;
+	/* the struct blkptr for the inode block */
+	struct blkptr * f_inode_blkptr;
 	const struct waffle_inode * f_ip;
 };
 
@@ -60,12 +82,15 @@ struct waffle_info {
 		uint32_t bb_number;
 		/* block bitmap block index */
 		uint32_t bb_index;
-	} active, shapshot;
+	} active, checkpoint, shapshot;
 	uint32_t free_blocks;
 	struct waffle_fdesc * filecache;
+	/* map from block number -> struct blkptr */
+	hash_map_t * blkptr_map;
 	int fdesc_count;
 };
 
+DECLARE_POOL(waffle_blkptr_pool, struct blkptr);
 DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
 static int n_waffle_instances = 0;
 
@@ -83,6 +108,46 @@ static inline uint8_t waffle_to_fstitch_type(uint16_t type)
 			return TYPE_INVAL;
 	}
 }
+
+static struct blkptr * waffle_get_blkptr(struct waffle_info * info, struct blkptr * parent, uint32_t number, bdesc_t * block, uint16_t parent_offset)
+{
+	struct blkptr * blkptr = (struct blkptr *) hash_map_find_val(info->blkptr_map, (void *) number);
+	if(blkptr)
+	{
+		blkptr->references++;
+		return blkptr;
+	}
+	blkptr = waffle_blkptr_pool_alloc();
+	if(!blkptr)
+		return NULL;
+	blkptr->number = number;
+	blkptr->block = block;
+	blkptr->parent_offset = parent_offset;
+	blkptr->parent = parent;
+	blkptr->references = 1;
+	if(hash_map_insert(info->blkptr_map, (void *) number, blkptr) < 0)
+	{
+		waffle_blkptr_pool_free(blkptr);
+		return NULL;
+	}
+	bdesc_retain(block);
+	if(parent)
+		parent->references++;
+	return blkptr;
+}
+
+static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
+{
+	if(!--blkptr->references)
+	{
+		if(blkptr->parent)
+			waffle_put_blkptr(info, blkptr->parent);
+		bdesc_release(&blkptr->block);
+		hash_map_erase(info->blkptr_map, (void *) blkptr->number);
+		waffle_blkptr_pool_free(blkptr);
+	}
+}
+#define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
 /* NOTE: both 0 and INVALID_BLOCK may be returned as errors from this function */
 static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset)
@@ -116,23 +181,26 @@ static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct w
 
 static inode_t waffle_get_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
 {
-	uint32_t offset, block;
+	uint32_t offset, number;
+	bdesc_t * block;
 	assert(fdesc);
 	assert(fdesc->f_inode >= WAFFLE_ROOT_INODE && fdesc->f_inode <= info->super->s_inodes);
-	assert(!fdesc->f_inode_cache);
+	assert(!fdesc->f_inode_blkptr);
 	
 	offset = fdesc->f_inode * sizeof(struct waffle_inode);
-	block = waffle_get_inode_block(info, &info->s_active.sn_inode, offset);
-	if(block == INVALID_BLOCK)
+	number = waffle_get_inode_block(info, &info->s_active.sn_inode, offset);
+	if(number == INVALID_BLOCK)
 		return -1;
-	fdesc->f_inode_cache = CALL(info->ubd, read_block, block, 1, NULL);
-	if(!fdesc->f_inode_cache)
+	block = CALL(info->ubd, read_block, number, 1, NULL);
+	if(!block)
 		return -1;
-	/* TODO: make it so we can track this and change it later if we COW this block */
-	bdesc_retain(fdesc->f_inode_cache);
+	/* FIXME: parent should not be NULL, offset should not be -1 */
+	fdesc->f_inode_blkptr = waffle_get_blkptr(info, NULL, number, block, -1);
+	if(!fdesc->f_inode_blkptr)
+		return -1;
 	
 	offset %= WAFFLE_BLOCK_SIZE;
-	fdesc->f_ip = (struct waffle_inode *) (bdesc_data(fdesc->f_inode_cache) + offset);
+	fdesc->f_ip = (struct waffle_inode *) (bdesc_data(block) + offset);
 	
 	return fdesc->f_inode;
 }
@@ -370,7 +438,7 @@ static fdesc_t * waffle_lookup_inode(LFS_t * object, inode_t inode)
 	fd->f_nopen = 1;
 	fd->f_age = age;
 	fd->f_inode = inode;
-	fd->f_inode_cache = NULL;
+	fd->f_inode_blkptr = NULL;
 	fd->f_ip = NULL;
 	
 	r = waffle_get_inode(info, fd);
@@ -408,11 +476,11 @@ static int waffle_lookup_name(LFS_t * object, inode_t parent, const char * name,
 	return *inode ? 0 : -ENOENT;
 }
 
-static void __waffle_free_fdesc(struct waffle_fdesc * fdesc)
+static void __waffle_free_fdesc(struct waffle_info * info, struct waffle_fdesc * fdesc)
 {
 	assert(fdesc && !fdesc->f_nopen);
-	if(fdesc->f_inode_cache)
-		bdesc_release(&fdesc->f_inode_cache);
+	if(fdesc->f_inode_blkptr)
+		waffle_put_blkptr(info, &fdesc->f_inode_blkptr);
 	if((*fdesc->f_cache_pprev = fdesc->f_cache_next))
 		fdesc->f_cache_next->f_cache_pprev = fdesc->f_cache_pprev;
 	waffle_fdesc_pool_free(fdesc);
@@ -423,7 +491,7 @@ static void waffle_free_fdesc(LFS_t * object, fdesc_t * fdesc)
 	Dprintf("%s %p\n", __FUNCTION__, fdesc);
 	struct waffle_fdesc * fd = (struct waffle_fdesc *) fdesc;
 	if(fd && !--fd->f_nopen)
-		__waffle_free_fdesc(fd);
+		__waffle_free_fdesc((struct waffle_info *) object, fd);
 }
 
 static uint32_t waffle_get_file_numblocks(LFS_t * object, fdesc_t * file)
@@ -617,9 +685,15 @@ static int waffle_destroy(LFS_t * lfs)
 		assert(fd->f_nopen == 1 && fd->f_age != 0);
 	while(info->filecache)
 		waffle_free_fdesc(lfs, (fdesc_t *) info->filecache);
+	if(!hash_map_empty(info->blkptr_map))
+		fprintf(stderr, "%s(): warning: blkptr hash map is not empty!\n", __FUNCTION__);
+	hash_map_destroy(info->blkptr_map);
 	
 	if(!--n_waffle_instances)
+	{
 		waffle_fdesc_pool_free_all();
+		waffle_blkptr_pool_free_all();
+	}
 	
 	memset(info, 0, sizeof(*info));
 	free(info);
@@ -651,15 +725,23 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	info->active.bb_cache = NULL;
 	info->active.bb_number = INVALID_BLOCK;
 	info->active.bb_index = INVALID_BLOCK;
+	info->checkpoint = info->active;
 	info->shapshot = info->active;
 	info->free_blocks = 0;
 	info->filecache = NULL;
+	info->blkptr_map = hash_map_create();
+	if(!info->blkptr_map)
+	{
+		free(info);
+		return NULL;
+	}
 	info->fdesc_count = 0;
 	
 	/* superblock */
 	info->super_cache = CALL(info->ubd, read_block, WAFFLE_SUPER_BLOCK, 1, NULL);
 	if(!info->super_cache)
 	{
+		hash_map_destroy(info->blkptr_map);
 		free(info);
 		return NULL;
 	}
@@ -670,6 +752,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	/* FIXME: count the free blocks */
 	
 	n_waffle_instances++;
+	printf("Mounted waffle file system: %u blocks, %u inodes\n", info->super->s_blocks, info->super->s_inodes);
 	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{
