@@ -304,7 +304,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 /* This function returns -EAGAIN if it had to clone the bitmap, since this might
  * have caused the requested block to be allocated for that purpose. The caller
  * must find another block (using waffle_find_free_block()) and try again. */
-static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int allocated)
+static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int is_free)
 {
 	int r;
 	patch_t * patch = NULL;
@@ -318,7 +318,9 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 		return (r >= 0) ? -EAGAIN : r;
 	}
 	number %= WAFFLE_BITS_PER_BLOCK;
-	/* FIXME: check to see if it's already in the right state and return 0 */
+	if(((((uint32_t *) blkptr_data(bitmap))[number / 32] >> (number % 32)) & 1) == !!is_free)
+		/* already in the right state */
+		return 0;
 	r = patch_create_bit(bitmap->block, info->ubd, number / 32, 1 << (number % 32), &patch);
 	if(r < 0)
 	{
@@ -329,10 +331,10 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 	waffle_put_blkptr(info, &bitmap);
 	return r;
 }
-#define waffle_mark_allocated(info, number) waffle_change_allocation(info, number, 1)
-#define waffle_mark_deallocated(info, number) waffle_change_allocation(info, number, 0)
+#define waffle_mark_allocated(info, number) waffle_change_allocation(info, number, 0)
+#define waffle_mark_deallocated(info, number) waffle_change_allocation(info, number, 1)
 
-/* FIXME: update try_next_free somewhere in here? */
+/* TODO: update try_next_free somewhere in here? */
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
 	uint32_t number;
@@ -381,6 +383,13 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	{
 		kpanic("unexpected error changing hash map keys: %d", r);
 		return r;
+	}
+	/* update the active block bitmap cache if needed */
+	if(info->active.bb_number == number)
+	{
+		bdesc_release(&info->active.bb_cache);
+		info->active.bb_cache = bdesc_retain(copy);
+		info->active.bb_number = number;
 	}
 	blkptr->number = number;
 	bdesc_release(&blkptr->block);
@@ -438,26 +447,18 @@ static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct w
 
 static inode_t waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
 {
-	uint32_t offset, number;
-	bdesc_t * block;
+	uint32_t offset;
 	assert(fdesc);
 	assert(fdesc->f_inode >= WAFFLE_ROOT_INODE && fdesc->f_inode <= info->super->s_inodes);
 	assert(!fdesc->f_inode_blkptr);
 	
 	offset = fdesc->f_inode * sizeof(struct waffle_inode);
-	number = waffle_get_inode_block(info, &info->s_active.sn_inode, offset);
-	if(number == INVALID_BLOCK)
-		return -1;
-	block = CALL(info->ubd, read_block, number, 1, NULL);
-	if(!block)
-		return -1;
-	/* FIXME: parent should not be NULL, offset should not be -1 */
-	fdesc->f_inode_blkptr = waffle_get_blkptr(info, NULL, number, block, -1);
+	fdesc->f_inode_blkptr = waffle_get_data_blkptr(info, &info->s_active.sn_inode, NULL, offset);
 	if(!fdesc->f_inode_blkptr)
 		return -1;
 	
 	offset %= WAFFLE_BLOCK_SIZE;
-	fdesc->f_ip = (struct waffle_inode *) (bdesc_data(block) + offset);
+	fdesc->f_ip = (struct waffle_inode *) (blkptr_data(fdesc->f_inode_blkptr) + offset);
 	
 	return fdesc->f_inode;
 }
@@ -988,6 +989,12 @@ static int waffle_destroy(LFS_t * lfs)
 	if(!hash_map_empty(info->blkptr_map))
 		fprintf(stderr, "%s(): warning: blkptr hash map is not empty!\n", __FUNCTION__);
 	hash_map_destroy(info->blkptr_map);
+	if(info->active.bb_cache)
+		bdesc_release(&info->active.bb_cache);
+	if(info->checkpoint.bb_cache)
+		bdesc_release(&info->checkpoint.bb_cache);
+	if(info->snapshot.bb_cache)
+		bdesc_release(&info->snapshot.bb_cache);
 	if(info->super_cache)
 		bdesc_release(&info->super_cache);
 	
@@ -1044,7 +1051,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
 	info->s_active = info->super->s_checkpoint;
 	info->cloned_since_checkpoint = 0;
-	/* FIXME: something better than this could be nice */
+	/* TODO: something better than this could be nice */
 	info->try_next_free = WAFFLE_SUPER_BLOCK + 1;
 	
 	if(patch_create_empty_list(NULL, &info->checkpoint_tail, NULL) < 0)
