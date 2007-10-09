@@ -149,6 +149,54 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 }
 #define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
+static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
+{
+	/* FIXME: look in info->checkpoint and info->snapshot and
+	 * return 1 if either uses this block number (else 0) */
+	return 1;
+}
+
+static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
+{
+	/* FIXME: look in info->active, info->checkpoint, and info->snapshot
+	 * and return 1 if none of them use this block number (else 0) */
+	return 0;
+}
+
+static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
+{
+	/* FIXME: find a free block (i.e. waffle_can_allocate() returns 1) */
+	return INVALID_BLOCK;
+}
+
+static int waffle_mark_allocated(struct waffle_info * info, uint32_t number)
+{
+	/* returns -EAGAIN if it had to clone the bitmap, since this might have
+	 * caused the requested block to be allocated for that purpose - the
+	 * caller has to find another block and try again */
+	return -ENOSYS;
+}
+
+static uint32_t waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
+{
+	/* pseudocode:
+	 * loop {
+	 * 	n = find_free_block()
+	 * 	r = allocate_block(n)
+	 * } while(r == -EAGAIN)
+	 * b = read(n)
+	 * memcpy(b, blkptr->block)
+	 * write(b)
+	 * if(in_snapshot(blkptr->parent->number))
+	 * 	clone_block(blkptr->parent)
+	 * blkptr->parent->block[blkptr->parent_offset] = n
+	 * update hash map entry for blkptr->number to n, b
+	 * blkptr->number = n
+	 * blkptr->block = b
+	 * */
+	return INVALID_BLOCK;
+}
+
 /* NOTE: both 0 and INVALID_BLOCK may be returned as errors from this function */
 static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset)
 {
