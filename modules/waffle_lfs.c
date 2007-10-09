@@ -148,7 +148,8 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
 {
 	uint32_t need = number / WAFFLE_BITS_PER_BLOCK;
-	if(!cache->bb_cache || cache->bb_index != need) {
+	if(!cache->bb_cache || cache->bb_index != need)
+	{
 		if(cache->bb_cache)
 			bdesc_release(&cache->bb_cache);
 		uint32_t bitmap_block = waffle_get_inode_block(info, &snapshot->sn_block, number*4);
@@ -169,7 +170,9 @@ static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * 
 /* returns true if the specified photograph contains an eggo... */
 static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 {
-	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks) {
+	/* TODO: technically, the block is not in use if it is beyond the end of a snapshot... */
+	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks)
+	{
 		printf("%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
 		return -EINVAL;
 	}
@@ -179,16 +182,16 @@ static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 	if(snapshot < 0 || checkpoint < 0)
 		return -ENOENT;
 	
-	if(snapshot || checkpoint)
-		return 1;
-	else
-		return 0;
+	return snapshot || checkpoint;
 }
 
 static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 {
-	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks ||
-	   number >= info->s_active.sn_blocks) {
+	/* TODO: technically, the block is not in use if it is beyond the end of a snapshot... */
+	if(number >= info->super->s_checkpoint.sn_blocks ||
+	   number >= info->super->s_snapshot.sn_blocks ||
+	   number >= info->s_active.sn_blocks)
+	{
 		printf("%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
 		return -EINVAL;
 	}
@@ -199,10 +202,7 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 	if(snapshot < 0 || checkpoint < 0 || active < 0)
 		return -ENOENT;
 	
-	if(!snapshot && !checkpoint && !active)
-		return 1;
-	else
-		return 0;
+	return !snapshot && !checkpoint && !active;
 }
 
 static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
@@ -317,7 +317,7 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 		waffle_put_blkptr(info, &bitmap);
 		return (r >= 0) ? -EAGAIN : r;
 	}
-	number %= WAFFLE_BLOCK_SIZE * 8;
+	number %= WAFFLE_BITS_PER_BLOCK;
 	/* FIXME: check to see if it's already in the right state and return 0 */
 	r = patch_create_bit(bitmap->block, info->ubd, number / 32, 1 << (number % 32), &patch);
 	if(r < 0)
