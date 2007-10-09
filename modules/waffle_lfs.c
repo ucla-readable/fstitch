@@ -46,6 +46,7 @@ struct blkptr {
 	/* the number of children that refer to this structure */
 	int references;
 };
+#define blkptr_data(blkptr) bdesc_data((blkptr)->block)
 
 /* macros for stack-based blkptrs */
 #define DECLARE_BLKPTR(name, parent_) struct blkptr name = {.number = INVALID_BLOCK, .block = NULL, .parent_offset = -1, .parent = parent_, .references = 0}
@@ -169,22 +170,95 @@ static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t numbe
 	return INVALID_BLOCK;
 }
 
+/* returns the requested blkptr with its reference count increased */
+static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct blkptr * parent, const uint32_t * pointer)
+{
+	bdesc_t * block;
+	uint32_t offset;
+	if(parent)
+	{
+		offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(parent);
+		if(offset > WAFFLE_BLOCK_SIZE - sizeof(*pointer))
+			return NULL;
+	}
+	else
+	{
+		/* root blkptr: relative to info->s_active */
+		offset = ((uintptr_t) pointer) - (uintptr_t) &info->s_active;
+		if(offset > sizeof(info->s_active) - sizeof(*pointer))
+			return NULL;
+	}
+	block = CALL(info->ubd, read_block, *pointer, 1, NULL);
+	if(!block)
+		return NULL;
+	return waffle_get_blkptr(info, parent, *pointer, block, offset);
+}
+
+/* returns the requested blkptr with its reference count increased */
+static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const struct waffle_inode * inode, struct blkptr * inode_blkptr, uint32_t inode_offset)
+{
+	struct blkptr * blkptr;
+	uint32_t * pointer;
+	struct blkptr * indirect_blkptr;
+	struct blkptr * dindirect_blkptr;
+	inode_offset /= WAFFLE_BLOCK_SIZE;
+	if(inode_offset >= (inode->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE)
+		/* asked for an offset past the last block */
+		return NULL;
+	if(inode_offset < WAFFLE_DIRECT_BLOCKS)
+		return waffle_follow_pointer(info, inode_blkptr, &inode->i_direct[inode_offset]);
+	if(inode_offset < WAFFLE_INDIRECT_BLOCKS)
+	{
+		indirect_blkptr = waffle_follow_pointer(info, inode_blkptr, &inode->i_indirect);
+		if(!indirect_blkptr)
+			return NULL;
+		pointer = &((uint32_t *) blkptr_data(indirect_blkptr))[inode_offset - WAFFLE_DIRECT_BLOCKS];
+		blkptr = waffle_follow_pointer(info, indirect_blkptr, pointer);
+		waffle_put_blkptr(info, &indirect_blkptr);
+		return blkptr;
+	}
+	dindirect_blkptr = waffle_follow_pointer(info, inode_blkptr, &inode->i_dindirect);
+	if(!dindirect_blkptr)
+		return NULL;
+	pointer = &((uint32_t *) blkptr_data(dindirect_blkptr))[(inode_offset - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS];
+	indirect_blkptr = waffle_follow_pointer(info, dindirect_blkptr, pointer);
+	waffle_put_blkptr(info, &indirect_blkptr);
+	if(!indirect_blkptr)
+		return NULL;
+	pointer = &((uint32_t *) blkptr_data(indirect_blkptr))[(inode_offset - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
+	blkptr = waffle_follow_pointer(info, indirect_blkptr, pointer);
+	waffle_put_blkptr(info, &indirect_blkptr);
+	return blkptr;
+}
+
+static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr);
+
+/* This function returns -EAGAIN if it had to clone the bitmap, since this might
+ * have caused the requested block to be allocated for that purpose. The caller
+ * must find another block (using waffle_find_free_block()) and try again. */
 static int waffle_mark_allocated(struct waffle_info * info, uint32_t number)
 {
-	/* returns -EAGAIN if it had to clone the bitmap, since this might have
-	 * caused the requested block to be allocated for that purpose - the
-	 * caller has to find another block and try again */
+	struct blkptr * bitmap = waffle_get_data_blkptr(info, &info->s_active.sn_block, NULL, number / 8);
+	if(!bitmap)
+		return -1;
+	if(waffle_in_snapshot(info, bitmap->number))
+	{
+		int r = waffle_clone_block(info, bitmap);
+		waffle_put_blkptr(info, &bitmap);
+		return (r >= 0) ? -EAGAIN : r;
+	}
+	/* FIXME: create the patch to actually do it, it's OK */
 	return -ENOSYS;
 }
 
-static uint32_t waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
+static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
 	/* pseudocode:
 	 * loop {
 	 * 	n = find_free_block()
-	 * 	r = allocate_block(n)
+	 * 	r = mark_allocated(n)
 	 * } while(r == -EAGAIN)
-	 * b = read(n)
+	 * b = synthetic_read(n)
 	 * memcpy(b, blkptr->block)
 	 * write(b)
 	 * if(in_snapshot(blkptr->parent->number))

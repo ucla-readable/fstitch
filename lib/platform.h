@@ -141,4 +141,7 @@ static __inline int find_first_zero_bit(const unsigned long * addr, unsigned siz
 // static_assert(x) will generate a compile-time error if 'x' is false.
 #define static_assert(x) switch (x) case 0: case (x):
 
+/* assume 32-bit machine */
+typedef uint32_t uintptr_t;
+
 #endif /* __FSTITCH_FSCORE_PLATFORM_H */
