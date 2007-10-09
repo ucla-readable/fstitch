@@ -82,7 +82,7 @@ struct waffle_info {
 		uint32_t bb_number;
 		/* block bitmap block index */
 		uint32_t bb_index;
-	} active, checkpoint, shapshot;
+	} active, checkpoint, snapshot;
 	uint32_t free_blocks;
 	struct waffle_fdesc * filecache;
 	/* map from block number -> struct blkptr */
@@ -774,7 +774,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	info->active.bb_number = INVALID_BLOCK;
 	info->active.bb_index = INVALID_BLOCK;
 	info->checkpoint = info->active;
-	info->shapshot = info->active;
+	info->snapshot = info->active;
 	info->free_blocks = 0;
 	info->filecache = NULL;
 	info->blkptr_map = hash_map_create();
