@@ -10,13 +10,13 @@
 #define PATCH_WRITTEN         0x04 /* patch has been written to disk */
 #define PATCH_FREEING         0x08 /* patch is being freed */
 #define PATCH_DATA            0x10 /* user data change (not metadata) */
-#define PATCH_BIT_EMPTY        0x20 /* bit_patches EMPTY patch */
+#define PATCH_BIT_EMPTY       0x20 /* bit_patches EMPTY patch */
 #define PATCH_OVERLAP         0x40 /* overlaps another patch completely */
 #define PATCH_SAFE_AFTER      0x80 /* add depend: assume this is a safe after */
 #define PATCH_SET_EMPTY       0x100 /* EMPTY whose would-be afters get its befores instead */
-#define PATCH_INFLIGHT       0x200 /* patch is being written to disk */
-#define PATCH_NO_PATCHGROUP     0x400 /* patch is exempt from patchgroup tops */
-#define PATCH_FULLOVERLAP    0x800 /* overlapped by current patch completely */
+#define PATCH_INFLIGHT        0x200 /* patch is being written to disk */
+#define PATCH_NO_PATCHGROUP   0x400 /* patch is exempt from patchgroup tops */
+#define PATCH_FULLOVERLAP     0x800 /* overlapped by current patch completely */
 
 #define PATCH_CYCLE_CHECK 0
 #define PATCH_BYTE_SUM 0

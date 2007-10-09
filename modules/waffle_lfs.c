@@ -10,6 +10,8 @@
 #include <fscore/bd.h>
 #include <fscore/lfs.h>
 #include <fscore/modman.h>
+#include <fscore/patch.h>
+#include <fscore/sched.h>
 #include <fscore/debug.h>
 #include <fscore/feature.h>
 
@@ -79,6 +81,9 @@ struct waffle_info {
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
 	int cloned_since_checkpoint;
+	/* should PATCH_SET_EMPTY be set on checkpoint_changes? */
+	patch_t * checkpoint_changes;
+	patch_t * checkpoint_tail;
 	int try_next_free;
 	struct {
 		bdesc_t * bb_cache;
@@ -137,6 +142,7 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 }
 #define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
+/* returns true if the specified photograph contains an eggo... */
 static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 {
 	/* FIXME: look in info->checkpoint and info->snapshot and
@@ -845,6 +851,14 @@ static int waffle_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsme
 	return -ENOSYS;
 }
 
+static void waffle_callback(void * arg)
+{
+	struct waffle_info * info = (struct waffle_info *) arg;
+	if(!info->cloned_since_checkpoint)
+		return;
+	/* FIXME: copy s_active to super->s_checkpoint depending on info->checkpoint_changes */
+}
+
 static int waffle_destroy(LFS_t * lfs)
 {
 	struct waffle_info * info = (struct waffle_info *) lfs;
@@ -859,8 +873,17 @@ static int waffle_destroy(LFS_t * lfs)
 		return r;
 	modman_dec_bd(info->ubd, lfs);
 	
-	if(info->super_cache)
-		bdesc_release(&info->super_cache);
+	r = sched_unregister(waffle_callback, info);
+	/* should not fail */
+	assert(r >= 0);
+	
+	if(info->cloned_since_checkpoint)
+		waffle_callback(info);
+	
+	if(info->checkpoint_changes->befores->before.next)
+		fprintf(stderr, "%s(): warning: checkpoint changes still exist!\n", __FUNCTION__);
+	patch_satisfy(&info->checkpoint_tail);
+	
 	for(fd = info->filecache; fd; fd = fd->f_cache_next)
 		assert(fd->f_nopen == 1 && fd->f_age != 0);
 	while(info->filecache)
@@ -868,6 +891,8 @@ static int waffle_destroy(LFS_t * lfs)
 	if(!hash_map_empty(info->blkptr_map))
 		fprintf(stderr, "%s(): warning: blkptr hash map is not empty!\n", __FUNCTION__);
 	hash_map_destroy(info->blkptr_map);
+	if(info->super_cache)
+		bdesc_release(&info->super_cache);
 	
 	if(!--n_waffle_instances)
 	{
@@ -911,26 +936,27 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	info->filecache = NULL;
 	info->blkptr_map = hash_map_create();
 	if(!info->blkptr_map)
-	{
-		free(info);
-		return NULL;
-	}
+		goto fail_info;
 	info->fdesc_count = 0;
 	
 	/* superblock */
 	info->super_cache = CALL(info->ubd, read_block, WAFFLE_SUPER_BLOCK, 1, NULL);
 	if(!info->super_cache)
-	{
-		hash_map_destroy(info->blkptr_map);
-		free(info);
-		return NULL;
-	}
+		goto fail_hash;
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
 	info->s_active = info->super->s_checkpoint;
 	info->cloned_since_checkpoint = 0;
 	/* FIXME: something better than this could be nice */
 	info->try_next_free = WAFFLE_SUPER_BLOCK + 1;
+	
+	if(patch_create_empty_list(NULL, &info->checkpoint_tail, NULL) < 0)
+		goto fail_super;
+	patch_claim_empty(info->checkpoint_tail);
+	if(patch_create_empty_list(NULL, &info->checkpoint_changes, info->checkpoint_tail, NULL) < 0)
+		goto fail_tail;
+	if(sched_register(waffle_callback, info, 10 * HZ) < 0)
+		goto fail_tail;
 	
 	/* FIXME: count the free blocks */
 	
@@ -950,4 +976,14 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	}
 	
 	return lfs;
+	
+fail_tail:
+	patch_satisfy(&info->checkpoint_tail);
+fail_super:
+	bdesc_release(&info->super_cache);
+fail_hash:
+	hash_map_destroy(info->blkptr_map);
+fail_info:
+	free(info);
+	return NULL;
 }
