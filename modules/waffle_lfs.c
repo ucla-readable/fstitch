@@ -78,6 +78,8 @@ struct waffle_info {
 	bdesc_t * super_cache;
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
+	int cloned_since_checkpoint;
+	int try_next_free;
 	struct {
 		bdesc_t * bb_cache;
 		uint32_t bb_number;
@@ -94,21 +96,6 @@ struct waffle_info {
 DECLARE_POOL(waffle_blkptr_pool, struct blkptr);
 DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
 static int n_waffle_instances = 0;
-
-static inline uint8_t waffle_to_fstitch_type(uint16_t type)
-{
-	switch(type & WAFFLE_S_IFMT)
-	{
-		case WAFFLE_S_IFDIR:
-			return TYPE_DIR;
-		case WAFFLE_S_IFREG:
-			return TYPE_FILE;
-		case WAFFLE_S_IFLNK:
-			return TYPE_SYMLINK;	
-		default:
-			return TYPE_INVAL;
-	}
-}
 
 static struct blkptr * waffle_get_blkptr(struct waffle_info * info, struct blkptr * parent, uint32_t number, bdesc_t * block, uint16_t parent_offset)
 {
@@ -166,8 +153,16 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 
 static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
 {
-	/* FIXME: find a free block (i.e. waffle_can_allocate() returns 1) */
-	return INVALID_BLOCK;
+	uint32_t start = number;
+	/* FIXME: this is a really stupid way to do this; can we do better? */
+	while(!waffle_can_allocate(info, number))
+	{
+		if(++number >= info->super->s_blocks)
+			number = WAFFLE_SUPER_BLOCK + 1;
+		if(number == start)
+			return INVALID_BLOCK;
+	}
+	return number;
 }
 
 /* returns the requested blkptr with its reference count increased */
@@ -192,6 +187,20 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 	if(!block)
 		return NULL;
 	return waffle_get_blkptr(info, parent, *pointer, block, offset);
+}
+
+static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block)
+{
+	if(blkptr->parent)
+	{
+		/* FIXME: create the patch to update the parent's pointer, and write the parent block */
+	}
+	else
+	{
+		/* root blkptr: relative to info->s_active */
+		*((uint32_t *) (((void *) &info->s_active) + blkptr->parent_offset)) = block;
+		return 0;
+	}
 }
 
 /* returns the requested blkptr with its reference count increased */
@@ -236,7 +245,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 /* This function returns -EAGAIN if it had to clone the bitmap, since this might
  * have caused the requested block to be allocated for that purpose. The caller
  * must find another block (using waffle_find_free_block()) and try again. */
-static int waffle_mark_allocated(struct waffle_info * info, uint32_t number)
+static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int allocated)
 {
 	struct blkptr * bitmap = waffle_get_data_blkptr(info, &info->s_active.sn_block, NULL, number / 8);
 	if(!bitmap)
@@ -250,25 +259,74 @@ static int waffle_mark_allocated(struct waffle_info * info, uint32_t number)
 	/* FIXME: create the patch to actually do it, it's OK */
 	return -ENOSYS;
 }
+#define waffle_mark_allocated(info, number) waffle_change_allocation(info, number, 1)
+#define waffle_mark_deallocated(info, number) waffle_change_allocation(info, number, 0)
 
+/* FIXME: update try_next_free somewhere in here? */
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
-	/* pseudocode:
-	 * loop {
-	 * 	n = find_free_block()
-	 * 	r = mark_allocated(n)
-	 * } while(r == -EAGAIN)
-	 * b = synthetic_read(n)
-	 * memcpy(b, blkptr->block)
-	 * write(b)
-	 * if(in_snapshot(blkptr->parent->number))
-	 * 	clone_block(blkptr->parent)
-	 * blkptr->parent->block[blkptr->parent_offset] = n
-	 * update hash map entry for blkptr->number to n, b
-	 * blkptr->number = n
-	 * blkptr->block = b
-	 * */
-	return INVALID_BLOCK;
+	uint32_t number;
+	bdesc_t * copy;
+	int r;
+	do {
+		number = waffle_find_free_block(info, info->try_next_free);
+		if(!number || number == INVALID_BLOCK)
+			return -ENOSPC;
+		r = waffle_mark_allocated(info, number);
+	} while(r == -EAGAIN);
+	if(r < 0)
+		return r;
+	copy = CALL(info->ubd, synthetic_read_block, number, 1, NULL);
+	if(!copy)
+	{
+		waffle_mark_deallocated(info, number);
+		return -1;
+	}
+	/* FIXME: create the patch to copy the data to copy */
+	r = CALL(info->ubd, write_block, copy, number);
+	if(r < 0)
+	{
+	  fail_r:
+		waffle_mark_deallocated(info, number);
+		return r;
+	}
+	if(waffle_in_snapshot(info, blkptr->parent->number))
+	{
+		r = waffle_clone_block(info, blkptr->parent);
+		if(r < 0)
+			goto fail_r;
+	}
+	r = waffle_update_pointer(info, blkptr, number);
+	if(r < 0)
+		goto fail_r;
+	r = hash_map_change_key(info->blkptr_map, (void *) blkptr->number, (void *) number);
+	if(r < 0 && r != -ENOENT)
+	{
+		kpanic("unexpected error changing hash map keys: %d", r);
+		return r;
+	}
+	blkptr->number = number;
+	bdesc_release(&blkptr->block);
+	blkptr->block = bdesc_retain(copy);
+	info->cloned_since_checkpoint++;
+	return 0;
+}
+
+/* now the simple read-only stuff */
+
+static inline uint8_t waffle_to_fstitch_type(uint16_t type)
+{
+	switch(type & WAFFLE_S_IFMT)
+	{
+		case WAFFLE_S_IFDIR:
+			return TYPE_DIR;
+		case WAFFLE_S_IFREG:
+			return TYPE_FILE;
+		case WAFFLE_S_IFLNK:
+			return TYPE_SYMLINK;	
+		default:
+			return TYPE_INVAL;
+	}
 }
 
 /* NOTE: both 0 and INVALID_BLOCK may be returned as errors from this function */
@@ -870,6 +928,9 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
 	info->s_active = info->super->s_checkpoint;
+	info->cloned_since_checkpoint = 0;
+	/* FIXME: something better than this could be nice */
+	info->try_next_free = WAFFLE_SUPER_BLOCK + 1;
 	
 	/* FIXME: count the free blocks */
 	
