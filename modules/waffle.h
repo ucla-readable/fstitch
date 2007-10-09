@@ -13,6 +13,7 @@
  * small, but the indirect block tree is not always constant height. */
 
 #define WAFFLE_BLOCK_SIZE 4096
+#define WAFFLE_BITS_PER_BLOCK (WAFFLE_BLOCK_SIZE * 8)
 #define WAFFLE_DIRECT_POINTERS 24
 #define WAFFLE_BLOCK_POINTERS (WAFFLE_BLOCK_SIZE / 4)
 
