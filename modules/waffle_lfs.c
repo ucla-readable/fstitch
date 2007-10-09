@@ -81,7 +81,6 @@ struct waffle_info {
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
 	int cloned_since_checkpoint;
-	/* should PATCH_SET_EMPTY be set on checkpoint_changes? */
 	patch_t * checkpoint_changes;
 	patch_t * checkpoint_tail;
 	int try_next_free;
@@ -199,14 +198,19 @@ static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkp
 {
 	if(blkptr->parent)
 	{
-		/* FIXME: create the patch to update the parent's pointer, and write the parent block */
+		patch_t * patch = NULL;
+		int r = patch_create_byte(blkptr->parent->block, info->ubd, blkptr->parent_offset, sizeof(block), &block, &patch);
+		if(r < 0)
+			return r;
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "update pointer");
+		r = patch_add_depend(info->checkpoint_changes, patch);
+		if(r < 0)
+			kpanic("unrecoverable error adding patch dependency: %d", r);
+		return CALL(info->ubd, write_block, blkptr->parent->block, blkptr->parent->number);
 	}
-	else
-	{
-		/* root blkptr: relative to info->s_active */
-		*((uint32_t *) (((void *) &info->s_active) + blkptr->parent_offset)) = block;
-		return 0;
-	}
+	/* root blkptr: relative to info->s_active */
+	*((uint32_t *) (((void *) &info->s_active) + blkptr->parent_offset)) = block;
+	return 0;
 }
 
 /* returns the requested blkptr with its reference count increased */
@@ -253,6 +257,8 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
  * must find another block (using waffle_find_free_block()) and try again. */
 static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int allocated)
 {
+	int r;
+	patch_t * patch = NULL;
 	struct blkptr * bitmap = waffle_get_data_blkptr(info, &info->s_active.sn_block, NULL, number / 8);
 	if(!bitmap)
 		return -1;
@@ -262,8 +268,17 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 		waffle_put_blkptr(info, &bitmap);
 		return (r >= 0) ? -EAGAIN : r;
 	}
-	/* FIXME: create the patch to actually do it, it's OK */
-	return -ENOSYS;
+	number %= WAFFLE_BLOCK_SIZE * 8;
+	/* FIXME: check to see if it's already in the right state and return 0 */
+	r = patch_create_bit(bitmap->block, info->ubd, number / 32, 1 << (number % 32), &patch);
+	if(r < 0)
+	{
+		waffle_put_blkptr(info, &bitmap);
+		return r;
+	}
+	r = CALL(info->ubd, write_block, bitmap->block, bitmap->number);
+	waffle_put_blkptr(info, &bitmap);
+	return r;
 }
 #define waffle_mark_allocated(info, number) waffle_change_allocation(info, number, 1)
 #define waffle_mark_deallocated(info, number) waffle_change_allocation(info, number, 0)
@@ -273,6 +288,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
 	uint32_t number;
 	bdesc_t * copy;
+	patch_t * patch = NULL;
 	int r;
 	do {
 		number = waffle_find_free_block(info, info->try_next_free);
@@ -288,14 +304,20 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 		waffle_mark_deallocated(info, number);
 		return -1;
 	}
-	/* FIXME: create the patch to copy the data to copy */
-	r = CALL(info->ubd, write_block, copy, number);
+	r = patch_create_full(copy, info->ubd, blkptr_data(blkptr), &patch);
 	if(r < 0)
 	{
 	  fail_r:
 		waffle_mark_deallocated(info, number);
 		return r;
 	}
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "init copy");
+	r = patch_add_depend(info->checkpoint_changes, patch);
+	if(r < 0)
+		kpanic("unrecoverable error adding patch dependency: %d", r);
+	r = CALL(info->ubd, write_block, copy, number);
+	if(r < 0)
+		goto fail_r;
 	if(waffle_in_snapshot(info, blkptr->parent->number))
 	{
 		r = waffle_clone_block(info, blkptr->parent);
@@ -365,7 +387,7 @@ static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct w
 	return ((uint32_t *) bdesc_data(indirect))[(offset - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
 }
 
-static inode_t waffle_get_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
+static inode_t waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
 {
 	uint32_t offset, number;
 	bdesc_t * block;
@@ -627,7 +649,7 @@ static fdesc_t * waffle_lookup_inode(LFS_t * object, inode_t inode)
 	fd->f_inode_blkptr = NULL;
 	fd->f_ip = NULL;
 	
-	r = waffle_get_inode(info, fd);
+	r = waffle_fetch_inode(info, fd);
 	if(r < 0)
 		goto waffle_lookup_inode_exit;
 	fd->f_type = waffle_to_fstitch_type(fd->f_ip->i_mode);
@@ -854,9 +876,35 @@ static int waffle_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsme
 static void waffle_callback(void * arg)
 {
 	struct waffle_info * info = (struct waffle_info *) arg;
+	patch_t * patch = info->checkpoint_changes;
+	int r;
 	if(!info->cloned_since_checkpoint)
 		return;
-	/* FIXME: copy s_active to super->s_checkpoint depending on info->checkpoint_changes */
+	r = patch_create_byte_atomic(info->super_cache, info->ubd, offsetof(struct waffle_super, s_checkpoint), sizeof(struct waffle_snapshot), &info->s_active, &patch);
+	if(r < 0)
+	{
+		fprintf(stderr, "%s(): warning: failed to create checkpoint!\n", __FUNCTION__);
+		return;
+	}
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "checkpoint");
+	patch_satisfy(&info->checkpoint_tail);
+	/* for safety, in case we fail below and try to use it after that */
+	info->checkpoint_changes = NULL;
+	r = CALL(info->ubd, write_block, info->super_cache, WAFFLE_SUPER_BLOCK);
+	if(r < 0)
+		fprintf(stderr, "%s(): warning: failed to write superblock!\n", __FUNCTION__);
+	r = patch_create_empty_list(NULL, &info->checkpoint_tail, NULL);
+	if(r < 0)
+		kpanic("failed to create new checkpoint: %d", r);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->checkpoint_tail, "checkpoint tail");
+	patch_claim_empty(info->checkpoint_tail);
+	r = patch_create_empty_list(NULL, &info->checkpoint_changes, info->checkpoint_tail, NULL);
+	if(r < 0)
+		kpanic("failed to create new checkpoint: %d", r);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->checkpoint_changes, "checkpoint changes");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, info->checkpoint_changes, PATCH_SET_EMPTY);
+	info->checkpoint_changes->flags |= PATCH_SET_EMPTY;
+	info->cloned_since_checkpoint = 0;
 }
 
 static int waffle_destroy(LFS_t * lfs)
@@ -952,9 +1000,13 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	
 	if(patch_create_empty_list(NULL, &info->checkpoint_tail, NULL) < 0)
 		goto fail_super;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->checkpoint_tail, "checkpoint tail");
 	patch_claim_empty(info->checkpoint_tail);
 	if(patch_create_empty_list(NULL, &info->checkpoint_changes, info->checkpoint_tail, NULL) < 0)
 		goto fail_tail;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->checkpoint_changes, "checkpoint changes");
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, info->checkpoint_changes, PATCH_SET_EMPTY);
+	info->checkpoint_changes->flags |= PATCH_SET_EMPTY;
 	if(sched_register(waffle_callback, info, 10 * HZ) < 0)
 		goto fail_tail;
 	
@@ -977,13 +1029,13 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	
 	return lfs;
 	
-fail_tail:
+  fail_tail:
 	patch_satisfy(&info->checkpoint_tail);
-fail_super:
+  fail_super:
 	bdesc_release(&info->super_cache);
-fail_hash:
+  fail_hash:
 	hash_map_destroy(info->blkptr_map);
-fail_info:
+  fail_info:
 	free(info);
 	return NULL;
 }
