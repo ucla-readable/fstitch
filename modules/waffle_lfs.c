@@ -70,6 +70,13 @@ struct waffle_fdesc {
 	struct blkptr * f_inode_blkptr;
 	const struct waffle_inode * f_ip;
 };
+	
+struct bitmap_cache {
+	bdesc_t * bb_cache;
+	uint32_t bb_number;
+	/* block bitmap block index */
+	uint32_t bb_index;
+};
 
 /* waffle LFS structure */
 struct waffle_info {
@@ -80,16 +87,11 @@ struct waffle_info {
 	bdesc_t * super_cache;
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
+	struct bitmap_cache active, checkpoint, snapshot;
 	int cloned_since_checkpoint;
 	patch_t * checkpoint_changes;
 	patch_t * checkpoint_tail;
 	int try_next_free;
-	struct {
-		bdesc_t * bb_cache;
-		uint32_t bb_number;
-		/* block bitmap block index */
-		uint32_t bb_index;
-	} active, checkpoint, snapshot;
 	uint32_t free_blocks;
 	struct waffle_fdesc * filecache;
 	/* map from block number -> struct blkptr */
@@ -100,6 +102,8 @@ struct waffle_info {
 DECLARE_POOL(waffle_blkptr_pool, struct blkptr);
 DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
 static int n_waffle_instances = 0;
+
+static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset);
 
 static struct blkptr * waffle_get_blkptr(struct waffle_info * info, struct blkptr * parent, uint32_t number, bdesc_t * block, uint16_t parent_offset)
 {
@@ -141,19 +145,64 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 }
 #define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
+static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
+{
+	uint32_t need = number / WAFFLE_BITS_PER_BLOCK;
+	if(!cache->bb_cache || cache->bb_index != need) {
+		if(cache->bb_cache)
+			bdesc_release(&cache->bb_cache);
+		uint32_t bitmap_block = waffle_get_inode_block(info, &snapshot->sn_block, number*4);
+		if(!bitmap_block || bitmap_block == INVALID_BLOCK)
+			return -1;
+		cache->bb_cache = CALL(info->ubd, read_block, bitmap_block, 1, NULL);
+		if(!cache->bb_cache)
+			return -1;
+		bdesc_retain(cache->bb_cache);
+		cache->bb_cache->flags |= BDESC_FLAG_BITMAP;
+		cache->bb_number = bitmap_block;
+		cache->bb_index = need;
+	}
+	need = number % WAFFLE_BITS_PER_BLOCK;
+	return ((uint32_t *) bdesc_data(cache->bb_cache))[need / 32] & 1 << (need % 32);
+}
+
 /* returns true if the specified photograph contains an eggo... */
 static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 {
-	/* FIXME: look in info->checkpoint and info->snapshot and
-	 * return 1 if either uses this block number (else 0) */
-	return 1;
+	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks) {
+		printf("%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
+		return -EINVAL;
+	}
+
+	int checkpoint = waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number);
+	int snapshot = waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number);
+	if(snapshot < 0 || checkpoint < 0)
+		return -ENOENT;
+	
+	if(snapshot || checkpoint)
+		return 1;
+	else
+		return 0;
 }
 
 static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 {
-	/* FIXME: look in info->active, info->checkpoint, and info->snapshot
-	 * and return 1 if none of them use this block number (else 0) */
-	return 0;
+	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks ||
+	   number >= info->s_active.sn_blocks) {
+		printf("%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
+		return -EINVAL;
+	}
+
+	int checkpoint = waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number);
+	int snapshot = waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number);
+	int active = waffle_block_in_use(info, &info->active, &info->s_active, number);
+	if(snapshot < 0 || checkpoint < 0 || active < 0)
+		return -ENOENT;
+	
+	if(!snapshot && !checkpoint && !active)
+		return 1;
+	else
+		return 0;
 }
 
 static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
