@@ -14,7 +14,7 @@
 
 #define WAFFLE_BLOCK_SIZE 4096
 #define WAFFLE_BITS_PER_BLOCK (WAFFLE_BLOCK_SIZE * 8)
-#define WAFFLE_DIRECT_POINTERS 24
+#define WAFFLE_DIRECT_POINTERS 9
 #define WAFFLE_BLOCK_POINTERS (WAFFLE_BLOCK_SIZE / 4)
 
 /* max size (in bytes) of an inode using blocks of type X */
@@ -38,7 +38,6 @@ struct waffle_inode {
 	uint16_t i_links;
 	uint32_t i_size;
 	uint32_t i_atime;
-	uint32_t i_ctime;
 	uint32_t i_mtime;
 	union {
 		struct {

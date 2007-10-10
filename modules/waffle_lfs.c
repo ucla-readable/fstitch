@@ -68,6 +68,7 @@ struct waffle_fdesc {
 	uint8_t f_type;
 	/* the struct blkptr for the inode block */
 	struct blkptr * f_inode_blkptr;
+	/* XXX FIXME: this pointer needs to be updated when f_inode_blkptr gets a new bdesc! */
 	const struct waffle_inode * f_ip;
 };
 	
@@ -208,7 +209,7 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
 {
 	uint32_t start = number;
-	/* FIXME: this is a really stupid way to do this; can we do better? */
+	/* TODO: this is a really stupid way to do this; can we do better? */
 	while(!waffle_can_allocate(info, number))
 	{
 		if(++number >= info->super->s_blocks)
@@ -243,10 +244,12 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 	return waffle_get_blkptr(info, parent, *pointer, block, offset);
 }
 
+/* updates the pointer to this blkptr (mid clone); parent must already be cloned */
 static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block)
 {
 	if(blkptr->parent)
 	{
+		assert(!waffle_in_snapshot(info, blkptr->parent->number));
 		patch_t * patch = NULL;
 		int r = patch_create_byte(blkptr->parent->block, info->ubd, blkptr->parent_offset, sizeof(block), &block, &patch);
 		if(r < 0)
@@ -260,6 +263,32 @@ static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkp
 	/* root blkptr: relative to info->s_active */
 	*((uint32_t *) (((void *) &info->s_active) + blkptr->parent_offset)) = block;
 	return 0;
+}
+
+static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr);
+
+/* updates the indicated value on the block pointed to by this blkptr */
+static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr, const void * pointer, void * value, size_t size)
+{
+	int r;
+	patch_t * patch = NULL;
+	uint32_t offset = offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(blkptr);
+	if(size < 1 || size > WAFFLE_BLOCK_SIZE || offset > WAFFLE_BLOCK_SIZE - size)
+		return -EINVAL;
+	if(waffle_in_snapshot(info, blkptr->number))
+	{
+		r = waffle_clone_block(info, blkptr);
+		if(r < 0)
+			return r;
+	}
+	r = patch_create_byte(blkptr->block, info->ubd, offset, size, blkptr->block, &patch);
+	if(r < 0)
+		return r;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "update value");
+	r = patch_add_depend(info->checkpoint_changes, patch);
+	if(r < 0)
+		kpanic("unrecoverable error adding patch dependency: %d", r);
+	return CALL(info->ubd, write_block, blkptr->block, blkptr->number);
 }
 
 /* returns the requested blkptr with its reference count increased */
@@ -298,8 +327,6 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	waffle_put_blkptr(info, &indirect_blkptr);
 	return blkptr;
 }
-
-static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr);
 
 /* This function returns -EAGAIN if it had to clone the bitmap, since this might
  * have caused the requested block to be allocated for that purpose. The caller
@@ -627,6 +654,29 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 	return size;
 }
 
+static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr ** inode_blkptr, const struct waffle_inode ** inode)
+{
+	Dprintf("%s\n", __FUNCTION__);
+	inode_t number;
+	
+	/* TODO: this is a really stupid way to do this; can we do better? */
+	for(number = WAFFLE_ROOT_INODE + 1; number < info->super->s_inodes; number++)
+	{
+		uint32_t offset = number * sizeof(struct waffle_inode);
+		*inode_blkptr = waffle_get_data_blkptr(info, &info->s_active.sn_inode, NULL, offset);
+		if(!*inode_blkptr)
+			break;
+		offset %= WAFFLE_BLOCK_SIZE;
+		*inode = (struct waffle_inode *) (blkptr_data(*inode_blkptr) + offset);
+		if(!(*inode)->i_links)
+			return number;
+		waffle_put_blkptr(info, inode_blkptr);
+	}
+	
+	*inode = NULL;
+	return -1;
+}
+
 /* LFS functions start here */
 
 static int waffle_get_root(LFS_t * object, inode_t * inode)
@@ -821,11 +871,109 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	return -ENOSYS;
 }
 
+/* FIXME: finish this function */
 static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, const char * name,
                                       uint8_t type, fdesc_t * link, const metadata_set_t * initialmd,
                                       inode_t * new_inode, patch_t ** head)
 {
 	Dprintf("%s %u:%s\n", __FUNCTION__, parent_inode, name);
+	struct waffle_info * info = (struct waffle_info *) object;
+	inode_t inode;
+	struct waffle_fdesc * fd;
+	const struct waffle_inode * ip;
+	struct blkptr * inode_blkptr;
+	struct waffle_fdesc * parent;
+	int r = waffle_lookup_name(object, parent_inode, name, &inode);
+	if(r != -ENOENT)
+		return NULL;
+	if(link)
+	{
+		uint16_t i_links;
+		fd = (struct waffle_fdesc *) link;
+		/* increase refcount */
+		i_links = fd->f_ip->i_links + 1;
+		r = waffle_update_value(info, fd->f_inode_blkptr, &fd->f_ip->i_links, &i_links, sizeof(fd->f_ip->i_links));
+		if(r < 0)
+			return NULL;
+		inode = fd->f_inode;
+		ip = fd->f_ip;
+	}
+	else
+	{
+		uint32_t x32;
+		uint16_t x16;
+		struct waffle_inode init;
+		memset(&init, 0, sizeof(init));
+		init.i_links = (type == TYPE_DIR) ? 2 : 1;
+		switch(type)
+		{
+			case TYPE_FILE:
+				init.i_mode = WAFFLE_S_IFREG;
+				break;
+			case TYPE_DIR:
+				init.i_mode = WAFFLE_S_IFDIR;
+				break;
+			case TYPE_SYMLINK:
+				init.i_mode = WAFFLE_S_IFLNK;
+				break;
+			default:
+				return NULL;
+		}
+		init.i_mode |= WAFFLE_S_IRUSR | WAFFLE_S_IWUSR;
+		
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_UNIX_PERM, sizeof(x16), &x16);
+		if(r > 0)
+			init.i_mode |= x16;
+		else if(r != -ENOENT)
+			assert(0);
+		
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_UID, sizeof(x32), &x32);
+		if(r > 0)
+			init.i_uid = x32;
+		else if(r == -ENOENT)
+			init.i_uid = 0;
+		else
+			assert(0);
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_GID, sizeof(x32), &x32);
+		if(r > 0)
+			init.i_gid = x32;
+		else if(r == -ENOENT)
+			init.i_gid = 0;
+		else
+			assert(0);
+		
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_ATIME, sizeof(x32), &x32);
+		if(r > 0)
+			init.i_atime = x32;
+		else if(r == -ENOENT)
+			init.i_atime = 0;
+		else
+			assert(0);
+		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_MTIME, sizeof(x32), &x32);
+		if(r > 0)
+			init.i_mtime = x32;
+		else if(r == -ENOENT)
+			init.i_mtime = 0;
+		else
+			assert(0);
+		
+		/* FIXME: handle symlinks */
+		/* FIXME: handle directories */
+		if(type != TYPE_FILE)
+			kpanic("only files supported right now");
+		
+		inode = waffle_find_free_inode(info, &inode_blkptr, &ip);
+		if(inode <= WAFFLE_ROOT_INODE)
+			return NULL;
+		/* set up initial inode and link count */
+		/* ... */
+		/* put blkptr */
+	}
+	
+	parent = (struct waffle_fdesc *) waffle_lookup_inode(object, parent_inode);
+	/* write dentry */
+	/* ... */
+	
 	/* FIXME */
 	return NULL;
 }

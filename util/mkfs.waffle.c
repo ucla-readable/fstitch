@@ -326,7 +326,6 @@ static int setup_inode(struct waffle_inode * inode, uint32_t size)
 	inode->i_links = 1;
 	inode->i_size = 0;
 	inode->i_atime = time(NULL);
-	inode->i_ctime = inode->i_atime;
 	inode->i_mtime = inode->i_atime;
 	if(size > WAFFLE_INLINE_SIZE)
 	{
@@ -425,7 +424,6 @@ static int init_root(void)
 	strcpy(dirent[1].d_name, "..");
 	put_block(d_block);
 	inode->i_atime = time(NULL);
-	inode->i_ctime = inode->i_atime;
 	inode->i_mtime = inode->i_atime;
 	put_block(i_block);
 	put_block(block);
