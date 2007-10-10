@@ -68,7 +68,6 @@ struct waffle_fdesc {
 	uint8_t f_type;
 	/* the struct blkptr for the inode block */
 	struct blkptr * f_inode_blkptr;
-	/* XXX FIXME: this pointer needs to be updated when f_inode_blkptr gets a new bdesc! */
 	uint16_t f_inode_offset;
 };
 #define f_ip(wfd) ((const struct waffle_inode *) (blkptr_data((wfd)->f_inode_blkptr) + (wfd)->f_inode_offset))
@@ -426,6 +425,52 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	return 0;
 }
 
+static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * directory, const char * name, inode_t inode, uint16_t waffle_type)
+{
+	int r;
+	uint32_t index;
+	struct waffle_dentry init;
+	struct waffle_dentry * dirent = NULL;
+	struct blkptr * dir_blkptr = NULL;
+	const struct waffle_inode * f_ip = f_ip(directory);
+	
+	/* search for an empty dentry */
+	for(index = 0; index < f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
+	{
+		uint16_t offset;
+		dir_blkptr = waffle_get_data_blkptr(info, f_ip, directory->f_inode_blkptr, index);
+		if(!dir_blkptr)
+			return -1;
+		for(offset = 0; offset < WAFFLE_BLOCK_SIZE; offset += sizeof(struct waffle_dentry))
+		{
+			dirent = (struct waffle_dentry *) (blkptr_data(dir_blkptr) + offset);
+			if(!dirent->d_inode)
+				break;
+		}
+		if(offset < WAFFLE_BLOCK_SIZE)
+			break;
+		waffle_put_blkptr(info, &dir_blkptr);
+	}
+	
+	if(!dir_blkptr)
+	{
+		/* FIXME: append to directory */
+		return -1;
+	}
+	
+	/* add dentry */
+	init.d_inode = inode;
+	init.d_type = waffle_type;
+	memset(init.d_name, 0, sizeof(init.d_name));
+	strncpy(init.d_name, name, sizeof(init.d_name));
+	init.d_name[sizeof(init.d_name) - 1] = 0;
+	
+	/* write dentry */
+	r = waffle_update_value(info, dir_blkptr, dirent, &init, sizeof(*dirent));
+	waffle_put_blkptr(info, &dir_blkptr);
+	return r;
+}
+
 /* now the simple read-only stuff */
 
 static inline uint8_t waffle_to_fstitch_type(uint16_t type)
@@ -440,6 +485,21 @@ static inline uint8_t waffle_to_fstitch_type(uint16_t type)
 			return TYPE_SYMLINK;	
 		default:
 			return TYPE_INVAL;
+	}
+}
+
+static inline uint16_t fstitch_to_waffle_type(uint8_t type)
+{
+	switch(type)
+	{
+		case TYPE_DIR:
+			return WAFFLE_S_IFDIR;
+		case TYPE_FILE:
+			return WAFFLE_S_IFREG;
+		case TYPE_SYMLINK:
+			return WAFFLE_S_IFLNK;
+		default:
+			return 0;
 	}
 }
 
@@ -883,53 +943,45 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 {
 	Dprintf("%s %u:%s\n", __FUNCTION__, parent_inode, name);
 	struct waffle_info * info = (struct waffle_info *) object;
-	inode_t inode;
 	struct waffle_fdesc * fd;
-	const struct waffle_inode * f_ip;
-	struct blkptr * inode_blkptr;
+	struct blkptr * inode_blkptr = NULL;
 	struct waffle_fdesc * parent;
-	int r = waffle_lookup_name(object, parent_inode, name, &inode);
+	int r = waffle_lookup_name(object, parent_inode, name, new_inode);
 	if(r != -ENOENT)
 		return NULL;
 	if(link)
 	{
 		uint16_t i_links;
+		const struct waffle_inode * f_ip;
 		fd = (struct waffle_fdesc *) link;
+		if(fd->f_type == TYPE_DIR)
+			return NULL;
 		/* increase refcount */
 		f_ip = f_ip(fd);
 		i_links = f_ip->i_links + 1;
 		r = waffle_update_value(info, fd->f_inode_blkptr, &f_ip->i_links, &i_links, sizeof(f_ip->i_links));
 		if(r < 0)
 			return NULL;
-		inode = fd->f_inode;
-		f_ip = f_ip(fd);
+		*new_inode = fd->f_inode;
+		type = fd->f_type;
 	}
 	else
 	{
 		uint32_t x32;
 		uint16_t x16;
 		struct waffle_inode init;
+		const struct waffle_inode * f_ip;
 		memset(&init, 0, sizeof(init));
-		init.i_links = (type == TYPE_DIR) ? 2 : 1;
-		switch(type)
-		{
-			case TYPE_FILE:
-				init.i_mode = WAFFLE_S_IFREG;
-				break;
-			case TYPE_DIR:
-				init.i_mode = WAFFLE_S_IFDIR;
-				break;
-			case TYPE_SYMLINK:
-				init.i_mode = WAFFLE_S_IFLNK;
-				break;
-			default:
-				return NULL;
-		}
+		init.i_mode = fstitch_to_waffle_type(type);
+		if(!init.i_mode)
+			return NULL;
 		init.i_mode |= WAFFLE_S_IRUSR | WAFFLE_S_IWUSR;
+		init.i_links = (type == TYPE_DIR) ? 2 : 1;
+		init.i_size = 0;
 		
 		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_UNIX_PERM, sizeof(x16), &x16);
 		if(r > 0)
-			init.i_mode |= x16;
+			init.i_mode = (init.i_mode & WAFFLE_S_IFMT) | x16;
 		else if(r != -ENOENT)
 			assert(0);
 		
@@ -968,20 +1020,26 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		if(type != TYPE_FILE)
 			kpanic("only files supported right now");
 		
-		inode = waffle_find_free_inode(info, &inode_blkptr, &f_ip);
-		if(inode <= WAFFLE_ROOT_INODE)
+		/* set up initial inode */
+		*new_inode = waffle_find_free_inode(info, &inode_blkptr, &f_ip);
+		if(*new_inode <= WAFFLE_ROOT_INODE)
 			return NULL;
-		/* set up initial inode and link count */
-		/* ... */
-		/* put blkptr */
+		r = waffle_update_value(info, inode_blkptr, f_ip, &init, sizeof(*f_ip));
+		waffle_put_blkptr(info, &inode_blkptr);
+		if(r < 0)
+			return NULL;
 	}
+	/* we now would have to reset the inode if we encounter any failures... */
 	
 	parent = (struct waffle_fdesc *) waffle_lookup_inode(object, parent_inode);
-	/* write dentry */
-	/* ... */
+	if(!parent)
+		kpanic("unrecoverable failure after inode update");
+	r = waffle_add_dentry(info, parent, name, *new_inode, fstitch_to_waffle_type(type));
+	if(r < 0)
+		kpanic("unrecoverable failure after inode update");
+	waffle_free_fdesc(object, (fdesc_t *) parent);
 	
-	/* FIXME */
-	return NULL;
+	return waffle_lookup_inode(object, *new_inode);
 }
 
 static int waffle_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, patch_t ** head)
