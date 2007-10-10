@@ -69,8 +69,9 @@ struct waffle_fdesc {
 	/* the struct blkptr for the inode block */
 	struct blkptr * f_inode_blkptr;
 	/* XXX FIXME: this pointer needs to be updated when f_inode_blkptr gets a new bdesc! */
-	const struct waffle_inode * f_ip;
+	uint16_t f_inode_offset;
 };
+#define f_ip(wfd) ((const struct waffle_inode *) (blkptr_data((wfd)->f_inode_blkptr) + (wfd)->f_inode_offset))
 	
 struct bitmap_cache {
 	bdesc_t * bb_cache;
@@ -484,8 +485,7 @@ static inode_t waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc
 	if(!fdesc->f_inode_blkptr)
 		return -1;
 	
-	offset %= WAFFLE_BLOCK_SIZE;
-	fdesc->f_ip = (struct waffle_inode *) (blkptr_data(fdesc->f_inode_blkptr) + offset);
+	fdesc->f_inode_offset = offset % WAFFLE_BLOCK_SIZE;
 	
 	return fdesc->f_inode;
 }
@@ -494,11 +494,12 @@ static inode_t waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc
 static inode_t waffle_directory_search(struct waffle_info * info, struct waffle_fdesc * fdesc, const char * name, bdesc_t ** block_p, uint32_t * number_p, uint16_t * offset_p)
 {
 	uint32_t index;
-	for(index = 0; index < fdesc->f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
+	const struct waffle_inode * f_ip = f_ip(fdesc);
+	for(index = 0; index < f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
 	{
 		bdesc_t * block;
 		uint16_t offset;
-		uint32_t number = waffle_get_inode_block(info, fdesc->f_ip, index);
+		uint32_t number = waffle_get_inode_block(info, f_ip, index);
 		if(!number || number == INVALID_BLOCK)
 			return 0;
 		block = CALL(info->ubd, read_block, number, 1, NULL);
@@ -534,7 +535,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
-		*((uint32_t *) data) = fd->f_ip->i_size;
+		*((uint32_t *) data) = f_ip(fd)->i_size;
 	}
 	else if(id == FSTITCH_FEATURE_FILETYPE)
 	{
@@ -581,7 +582,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
-		*((uint32_t *) data) = (uint32_t) fd->f_ip->i_links;
+		*((uint32_t *) data) = (uint32_t) f_ip(fd)->i_links;
 	}
 	else if(id == FSTITCH_FEATURE_UID)
 	{
@@ -590,7 +591,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
-		*((uint32_t *) data) = fd->f_ip->i_uid;
+		*((uint32_t *) data) = f_ip(fd)->i_uid;
 	}
 	else if(id == FSTITCH_FEATURE_GID)
 	{
@@ -599,7 +600,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
-		*((uint32_t *) data) = fd->f_ip->i_gid;
+		*((uint32_t *) data) = f_ip(fd)->i_gid;
 	}
 	else if(id == FSTITCH_FEATURE_UNIX_PERM)
 	{
@@ -608,7 +609,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint16_t))
 			return -ENOMEM;
 		size = sizeof(uint16_t);
-		*((uint16_t *) data) = fd->f_ip->i_mode & ~WAFFLE_S_IFMT;
+		*((uint16_t *) data) = f_ip(fd)->i_mode & ~WAFFLE_S_IFMT;
 	}
 	else if(id == FSTITCH_FEATURE_MTIME)
 	{
@@ -617,7 +618,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
-		*((uint32_t *) data) = fd->f_ip->i_mtime;
+		*((uint32_t *) data) = f_ip(fd)->i_mtime;
 	}
 	else if(id == FSTITCH_FEATURE_ATIME)
 	{
@@ -626,26 +627,28 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 		if(size < sizeof(uint32_t))
 			return -ENOMEM;
 		size = sizeof(uint32_t);
-		*((uint32_t *) data) = fd->f_ip->i_atime;
+		*((uint32_t *) data) = f_ip(fd)->i_atime;
 	}
 	else if(id == FSTITCH_FEATURE_SYMLINK)
 	{
+		const struct waffle_inode * f_ip;
 		struct waffle_info * info = (struct waffle_info *) object;
 		if(!fd || fd->f_type != TYPE_SYMLINK)
 			return -EINVAL;
+		f_ip = f_ip(fd);
 		/* fd->f_ip->i_size includes the zero byte */
-		if(size < fd->f_ip->i_size)
+		if(size < f_ip->i_size)
 			return -ENOMEM;
-		size = fd->f_ip->i_size;
+		size = f_ip->i_size;
 		if(size <= WAFFLE_INLINE_SIZE)
-			memcpy(data, fd->f_ip->i_inline, size);
+			memcpy(data, f_ip->i_inline, size);
 		else
 		{
 			bdesc_t * symlink_block;
-			symlink_block = CALL(info->ubd, read_block, fd->f_ip->i_direct[0], 1, NULL);
+			symlink_block = CALL(info->ubd, read_block, f_ip->i_direct[0], 1, NULL);
 			if(!symlink_block)
 				return -1;
-			memcpy(data, bdesc_data(symlink_block), fd->f_ip->i_size);
+			memcpy(data, bdesc_data(symlink_block), f_ip->i_size);
 		}
 	}
 	else
@@ -747,12 +750,12 @@ static fdesc_t * waffle_lookup_inode(LFS_t * object, inode_t inode)
 	fd->f_age = age;
 	fd->f_inode = inode;
 	fd->f_inode_blkptr = NULL;
-	fd->f_ip = NULL;
+	fd->f_inode_offset = -1;
 	
 	r = waffle_fetch_inode(info, fd);
 	if(r < 0)
 		goto waffle_lookup_inode_exit;
-	fd->f_type = waffle_to_fstitch_type(fd->f_ip->i_mode);
+	fd->f_type = waffle_to_fstitch_type(f_ip(fd)->i_mode);
 	
 	/* stick in cache */
 	if(oldest_fd && nincache >= 4)
@@ -806,9 +809,10 @@ static uint32_t waffle_get_file_numblocks(LFS_t * object, fdesc_t * file)
 {
 	Dprintf("%s %p\n", __FUNCTION__, file);
 	struct waffle_fdesc * fdesc = (struct waffle_fdesc *) file;
-	if(fdesc->f_type == TYPE_SYMLINK || fdesc->f_ip->i_size <= WAFFLE_INLINE_SIZE)
+	const struct waffle_inode * f_ip = f_ip(fdesc);
+	if(fdesc->f_type == TYPE_SYMLINK || f_ip->i_size <= WAFFLE_INLINE_SIZE)
 		return 0;
-	return (fdesc->f_ip->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE;
+	return (f_ip->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE;
 }
 
 /* XXX: we need to do some fancy stuff to support writing to the blocks returned by this */
@@ -816,7 +820,7 @@ static uint32_t waffle_get_file_block(LFS_t * object, fdesc_t * file, uint32_t o
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, file, offset);
 	struct waffle_fdesc * fdesc = (struct waffle_fdesc *) file;
-	return waffle_get_inode_block((struct waffle_info *) object, fdesc->f_ip, offset);
+	return waffle_get_inode_block((struct waffle_info *) object, f_ip(fdesc), offset);
 }
 
 static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -824,14 +828,15 @@ static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * ent
 	Dprintf("%s %p, %u\n", __FUNCTION__, basep, *basep);
 	struct waffle_info * info = (struct waffle_info *) object;
 	struct waffle_fdesc * fd = (struct waffle_fdesc *) file;
+	const struct waffle_inode * f_ip = f_ip(fd);
 	uint32_t index = *basep * sizeof(struct waffle_dentry);
 	uint16_t offset = index % WAFFLE_BLOCK_SIZE;
 	if(fd->f_type != TYPE_DIR)
 		return -ENOTDIR;
-	for(index -= offset; index < fd->f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
+	for(index -= offset; index < f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
 	{
 		bdesc_t * block;
-		uint32_t number = waffle_get_inode_block(info, fd->f_ip, offset);
+		uint32_t number = waffle_get_inode_block(info, f_ip, offset);
 		if(!number || number == INVALID_BLOCK)
 			return -ENOENT;
 		block = CALL(info->ubd, read_block, number, 1, NULL);
@@ -880,7 +885,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 	struct waffle_info * info = (struct waffle_info *) object;
 	inode_t inode;
 	struct waffle_fdesc * fd;
-	const struct waffle_inode * ip;
+	const struct waffle_inode * f_ip;
 	struct blkptr * inode_blkptr;
 	struct waffle_fdesc * parent;
 	int r = waffle_lookup_name(object, parent_inode, name, &inode);
@@ -891,12 +896,13 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		uint16_t i_links;
 		fd = (struct waffle_fdesc *) link;
 		/* increase refcount */
-		i_links = fd->f_ip->i_links + 1;
-		r = waffle_update_value(info, fd->f_inode_blkptr, &fd->f_ip->i_links, &i_links, sizeof(fd->f_ip->i_links));
+		f_ip = f_ip(fd);
+		i_links = f_ip->i_links + 1;
+		r = waffle_update_value(info, fd->f_inode_blkptr, &f_ip->i_links, &i_links, sizeof(f_ip->i_links));
 		if(r < 0)
 			return NULL;
 		inode = fd->f_inode;
-		ip = fd->f_ip;
+		f_ip = f_ip(fd);
 	}
 	else
 	{
@@ -962,7 +968,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		if(type != TYPE_FILE)
 			kpanic("only files supported right now");
 		
-		inode = waffle_find_free_inode(info, &inode_blkptr, &ip);
+		inode = waffle_find_free_inode(info, &inode_blkptr, &f_ip);
 		if(inode <= WAFFLE_ROOT_INODE)
 			return NULL;
 		/* set up initial inode and link count */
