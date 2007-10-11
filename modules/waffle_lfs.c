@@ -153,7 +153,7 @@ static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * 
 	{
 		if(cache->bb_cache)
 			bdesc_release(&cache->bb_cache);
-		uint32_t bitmap_block = waffle_get_inode_block(info, &snapshot->sn_block, number*4);
+		uint32_t bitmap_block = waffle_get_inode_block(info, &snapshot->sn_block, need * WAFFLE_BLOCK_SIZE);
 		if(!bitmap_block || bitmap_block == INVALID_BLOCK)
 			return -1;
 		cache->bb_cache = CALL(info->ubd, read_block, bitmap_block, 1, NULL);
@@ -165,7 +165,7 @@ static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * 
 		cache->bb_index = need;
 	}
 	need = number % WAFFLE_BITS_PER_BLOCK;
-	return ((uint32_t *) bdesc_data(cache->bb_cache))[need / 32] & 1 << (need % 32);
+	return !((((uint32_t *) bdesc_data(cache->bb_cache))[need / 32] >> (need % 32)) & 1);
 }
 
 /* returns true if the specified photograph contains an eggo... */
@@ -174,7 +174,7 @@ static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 	/* TODO: technically, the block is not in use if it is beyond the end of a snapshot... */
 	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks)
 	{
-		printf("%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
+		fprintf(stderr, "%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
 		return -EINVAL;
 	}
 
@@ -193,7 +193,7 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 	   number >= info->super->s_snapshot.sn_blocks ||
 	   number >= info->s_active.sn_blocks)
 	{
-		printf("%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
+		fprintf(stderr, "%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
 		return -EINVAL;
 	}
 
@@ -247,6 +247,7 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 /* updates the pointer to this blkptr (mid clone); parent must already be cloned */
 static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block)
 {
+	Dprintf("%s\n", __FUNCTION__);
 	if(blkptr->parent)
 	{
 		assert(!waffle_in_snapshot(info, blkptr->parent->number));
@@ -270,6 +271,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 /* updates the indicated value on the block pointed to by this blkptr */
 static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr, const void * pointer, void * value, size_t size)
 {
+	Dprintf("%s\n", __FUNCTION__);
 	int r;
 	patch_t * patch = NULL;
 	uint32_t offset = offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(blkptr);
@@ -281,7 +283,7 @@ static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr
 		if(r < 0)
 			return r;
 	}
-	r = patch_create_byte(blkptr->block, info->ubd, offset, size, blkptr->block, &patch);
+	r = patch_create_byte(blkptr->block, info->ubd, offset, size, value, &patch);
 	if(r < 0)
 		return r;
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "update value");
@@ -328,33 +330,134 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	return blkptr;
 }
 
-/* This function returns -EAGAIN if it had to clone the bitmap, since this might
- * have caused the requested block to be allocated for that purpose. The caller
- * must find another block (using waffle_find_free_block()) and try again. */
+/* FIXME: we must also mark the old blocks as deallocated */
+static int waffle_allocate_base(struct waffle_info * info, struct blkptr * bitmap, uint32_t number)
+{
+	Dprintf("%s\n", __FUNCTION__);
+	int r, needed = 1, have;
+	uint32_t index = number / WAFFLE_BITS_PER_BLOCK;
+	uint32_t numbers[3] = {number, INVALID_BLOCK, INVALID_BLOCK};
+	struct blkptr * top = bitmap;
+	while(top->parent && waffle_in_snapshot(info, top->parent->number))
+	{
+		top = top->parent;
+		needed++;
+	}
+	if(needed > 3)
+		kpanic("need more than 3 blocks to update bitmap");
+	for(have = 1; have < needed; have++)
+	{
+		uint32_t next = numbers[have - 1] + 1;
+		if(next >= info->super->s_blocks)
+			next = WAFFLE_SUPER_BLOCK + 1;
+		numbers[have] = waffle_find_free_block(info, next);
+		if(!numbers[have] || numbers[have] == INVALID_BLOCK || numbers[have] == number)
+			return -ENOSPC;
+		if(numbers[have] / WAFFLE_BITS_PER_BLOCK != index)
+		{
+			numbers[0] = numbers[have];
+			index = numbers[0] / WAFFLE_BITS_PER_BLOCK;
+			have = 0;
+		}
+	}
+	for(have = 0; waffle_in_snapshot(info, bitmap->number); have++)
+	{
+		int r;
+		patch_t * patch;
+		bdesc_t * copy = CALL(info->ubd, synthetic_read_block, numbers[have], 1, NULL);
+		if(!copy)
+			kpanic("unrecoverable error in allocation base case");
+		top = bitmap;
+		while(top->parent && waffle_in_snapshot(info, top->parent->number))
+			top = top->parent;
+		patch = NULL;
+		r = patch_create_full(copy, info->ubd, blkptr_data(top), &patch);
+		if(r < 0)
+			kpanic("unrecoverable error in allocation base case");
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "init copy");
+		r = patch_add_depend(info->checkpoint_changes, patch);
+		if(r < 0)
+			kpanic("unrecoverable error in allocation base case");
+		r = waffle_update_pointer(info, top, numbers[have]);
+		if(r < 0)
+			kpanic("unrecoverable error in allocation base case");
+		r = hash_map_change_key(info->blkptr_map, (void *) top->number, (void *) numbers[have]);
+		if(r < 0 && r != -ENOENT)
+			kpanic("unrecoverable error in allocation base case");
+		/* update the active block bitmap cache if needed */
+		if(info->active.bb_number == top->number)
+		{
+			bdesc_release(&info->active.bb_cache);
+			info->active.bb_cache = bdesc_retain(copy);
+			info->active.bb_number = numbers[have];
+		}
+		top->number = numbers[have];
+		bdesc_release(&top->block);
+		top->block = bdesc_retain(copy);
+		info->cloned_since_checkpoint++;
+	}
+	assert(top == bitmap);
+	for(have = 0; have < needed; have++)
+	{
+		patch_t * patch = NULL;
+		index = numbers[have] % WAFFLE_BITS_PER_BLOCK;
+		r = patch_create_bit(bitmap->block, info->ubd, index / 32, 1 << (index % 32), &patch);
+		if(r < 0)
+			kpanic("unrecoverable error in allocation base case");
+		r = patch_add_depend(info->checkpoint_changes, patch);
+		if(r < 0)
+			kpanic("unrecoverable error in allocation base case");
+		assert(waffle_block_in_use(info, &info->active, &info->s_active, numbers[have]));
+	}
+	r = CALL(info->ubd, write_block, bitmap->block, bitmap->number);
+	if(r < 0)
+		kpanic("unrecoverable error in allocation base case");
+	return 0;
+}
+
+/* This function returns -EAGAIN if it had to clone the bitmap to mark the block
+ * as allocated, since to it uses the block to clone the bitmap. The caller must
+ * find another block (using waffle_find_free_block()) and try again. Due to
+ * bitmap inode indirection, this procedure may need to be repeated several
+ * times, so the caller should use a loop. */
 static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int is_free)
 {
-	int r;
+	Dprintf("%s\n", __FUNCTION__);
+	int r = 0;
 	patch_t * patch = NULL;
+	uint32_t index = number % WAFFLE_BITS_PER_BLOCK;
 	struct blkptr * bitmap = waffle_get_data_blkptr(info, &info->s_active.sn_block, NULL, number / 8);
 	if(!bitmap)
 		return -1;
+	if(((((uint32_t *) blkptr_data(bitmap))[index / 32] >> (index % 32)) & 1) == !!is_free)
+		/* already in the right state */
+		goto exit_r;
 	if(waffle_in_snapshot(info, bitmap->number))
 	{
-		int r = waffle_clone_block(info, bitmap);
-		waffle_put_blkptr(info, &bitmap);
-		return (r >= 0) ? -EAGAIN : r;
+		if(!is_free)
+		{
+			/* We can't use waffle_clone_block() here, because that
+			 * causes an unfortunate mutually recursive loop trying
+			 * to mark the block as allocated. So, we must clone the
+			 * bitmap pointer chain with waffle_allocate_base(). */
+			r = waffle_allocate_base(info, bitmap, number);
+			if(r >= 0)
+				r = -EAGAIN;
+			goto exit_r;
+		}
+		/* this case will turn into the case above after some recursion */
+		r = waffle_clone_block(info, bitmap);
+		if(r < 0)
+			goto exit_r;
 	}
-	number %= WAFFLE_BITS_PER_BLOCK;
-	if(((((uint32_t *) blkptr_data(bitmap))[number / 32] >> (number % 32)) & 1) == !!is_free)
-		/* already in the right state */
-		return 0;
-	r = patch_create_bit(bitmap->block, info->ubd, number / 32, 1 << (number % 32), &patch);
+	r = patch_create_bit(bitmap->block, info->ubd, index / 32, 1 << (index % 32), &patch);
 	if(r < 0)
-	{
-		waffle_put_blkptr(info, &bitmap);
-		return r;
-	}
+		goto exit_r;
+	r = patch_add_depend(info->checkpoint_changes, patch);
+	if(r < 0)
+		goto exit_r;
 	r = CALL(info->ubd, write_block, bitmap->block, bitmap->number);
+  exit_r:
 	waffle_put_blkptr(info, &bitmap);
 	return r;
 }
@@ -364,6 +467,7 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 /* TODO: update try_next_free somewhere in here? */
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
+	Dprintf("%s\n", __FUNCTION__);
 	uint32_t number;
 	bdesc_t * copy;
 	patch_t * patch = NULL;
@@ -396,7 +500,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	r = CALL(info->ubd, write_block, copy, number);
 	if(r < 0)
 		goto fail_r;
-	if(waffle_in_snapshot(info, blkptr->parent->number))
+	if(blkptr->parent && waffle_in_snapshot(info, blkptr->parent->number))
 	{
 		r = waffle_clone_block(info, blkptr->parent);
 		if(r < 0)
@@ -412,7 +516,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 		return r;
 	}
 	/* update the active block bitmap cache if needed */
-	if(info->active.bb_number == number)
+	if(info->active.bb_number == blkptr->number)
 	{
 		bdesc_release(&info->active.bb_cache);
 		info->active.bb_cache = bdesc_retain(copy);
@@ -427,6 +531,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 
 static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * directory, const char * name, inode_t inode, uint16_t waffle_type)
 {
+	Dprintf("%s\n", __FUNCTION__);
 	int r;
 	uint32_t index;
 	struct waffle_dentry init;
@@ -533,7 +638,7 @@ static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct w
 	return ((uint32_t *) bdesc_data(indirect))[(offset - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
 }
 
-static inode_t waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
+static int waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc * fdesc)
 {
 	uint32_t offset;
 	assert(fdesc);
@@ -547,7 +652,7 @@ static inode_t waffle_fetch_inode(struct waffle_info * info, struct waffle_fdesc
 	
 	fdesc->f_inode_offset = offset % WAFFLE_BLOCK_SIZE;
 	
-	return fdesc->f_inode;
+	return 0;
 }
 
 /* returns 0 on error (including not found), otherwise the inode number */
@@ -1224,7 +1329,7 @@ static int waffle_destroy(LFS_t * lfs)
 
 LFS_t * waffle_lfs(BD_t * block_device)
 {
-	Dprintf("WAFFLEDEBUG: %s\n", __FUNCTION__);
+	Dprintf("%s\n", __FUNCTION__);
 	struct waffle_info * info;
 	LFS_t * lfs;
 	
