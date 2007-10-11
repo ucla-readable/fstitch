@@ -50,10 +50,6 @@ struct blkptr {
 };
 #define blkptr_data(blkptr) bdesc_data((blkptr)->block)
 
-/* macros for stack-based blkptrs */
-#define DECLARE_BLKPTR(name, parent_) struct blkptr name = {.number = INVALID_BLOCK, .block = NULL, .parent_offset = -1, .parent = parent_, .references = 0}
-#define BIND_BLKPTR(name, number_, block_, offset) name.number = number_, name.block = block_, name.parent_offset = offset
-
 struct waffle_fdesc {
 	/* extend struct fdesc */
 	struct fdesc_common * common;
@@ -72,11 +68,18 @@ struct waffle_fdesc {
 };
 #define f_ip(wfd) ((const struct waffle_inode *) (blkptr_data((wfd)->f_inode_blkptr) + (wfd)->f_inode_offset))
 	
-struct bitmap_cache {
+struct waffle_bitmap_cache {
 	bdesc_t * bb_cache;
 	uint32_t bb_number;
 	/* block bitmap block index */
 	uint32_t bb_index;
+};
+
+struct waffle_old_snapshot {
+	patchweakref_t overwrite;
+	struct waffle_bitmap_cache bitmap;
+	struct waffle_snapshot snapshot;
+	struct waffle_old_snapshot * next;
 };
 
 /* waffle LFS structure */
@@ -88,7 +91,8 @@ struct waffle_info {
 	bdesc_t * super_cache;
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
-	struct bitmap_cache active, checkpoint, snapshot;
+	struct waffle_bitmap_cache active, checkpoint, snapshot;
+	struct waffle_old_snapshot * old_snapshots;
 	int cloned_since_checkpoint;
 	patch_t * checkpoint_changes;
 	patch_t * checkpoint_tail;
@@ -102,6 +106,7 @@ struct waffle_info {
 
 DECLARE_POOL(waffle_blkptr_pool, struct blkptr);
 DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
+DECLARE_POOL(waffle_snapshot_pool, struct waffle_old_snapshot);
 static int n_waffle_instances = 0;
 
 static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset);
@@ -146,9 +151,12 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 }
 #define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
-static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
+static int waffle_block_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
 {
 	uint32_t need = number / WAFFLE_BITS_PER_BLOCK;
+	if(number >= snapshot->sn_blocks)
+		/* it's not even in this snapshot */
+		return 0;
 	if(!cache->bb_cache || cache->bb_index != need)
 	{
 		if(cache->bb_cache)
@@ -171,39 +179,66 @@ static int waffle_block_in_use(struct waffle_info * info, struct bitmap_cache * 
 /* returns true if the specified photograph contains an eggo... */
 static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 {
-	/* TODO: technically, the block is not in use if it is beyond the end of a snapshot... */
-	if(number >= info->super->s_checkpoint.sn_blocks || number >= info->super->s_snapshot.sn_blocks)
-	{
-		fprintf(stderr, "%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
-		return -EINVAL;
-	}
-
-	int checkpoint = waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number);
-	int snapshot = waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number);
-	if(snapshot < 0 || checkpoint < 0)
-		return -ENOENT;
+	struct waffle_old_snapshot ** next = &info->old_snapshots;
 	
-	return snapshot || checkpoint;
+	if(number >= info->super->s_blocks)
+		return -EINVAL;
+	
+	if(waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number))
+		return 1;
+	if(waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number))
+		return 1;
+	
+	while(*next)
+	{
+		if(!WEAK((*next)->overwrite))
+		{
+			struct waffle_old_snapshot * old = *next;
+			*next = old->next;
+			if(old->bitmap.bb_cache)
+				bdesc_release(&old->bitmap.bb_cache);
+			waffle_snapshot_pool_free(old);
+			continue;
+		}
+		if(waffle_block_in_use(info, &(*next)->bitmap, &(*next)->snapshot, number))
+			return 1;
+		next = &(*next)->next;
+	}
+	
+	return 0;
 }
 
 static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 {
-	/* TODO: technically, the block is not in use if it is beyond the end of a snapshot... */
-	if(number >= info->super->s_checkpoint.sn_blocks ||
-	   number >= info->super->s_snapshot.sn_blocks ||
-	   number >= info->s_active.sn_blocks)
-	{
-		fprintf(stderr, "%s(): requested status of block %u past end of file system!\n", __FUNCTION__, number);
-		return -EINVAL;
-	}
-
-	int checkpoint = waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number);
-	int snapshot = waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number);
-	int active = waffle_block_in_use(info, &info->active, &info->s_active, number);
-	if(snapshot < 0 || checkpoint < 0 || active < 0)
-		return -ENOENT;
+	struct waffle_old_snapshot ** next = &info->old_snapshots;
 	
-	return !snapshot && !checkpoint && !active;
+	if(number >= info->super->s_blocks)
+		return 0;
+	
+	if(waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number))
+		return 0;
+	if(waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number))
+		return 0;
+	if(waffle_block_in_use(info, &info->active, &info->s_active, number))
+		return 0;
+	
+	while(*next)
+	{
+		if(!WEAK((*next)->overwrite))
+		{
+			struct waffle_old_snapshot * old = *next;
+			*next = old->next;
+			if(old->bitmap.bb_cache)
+				bdesc_release(&old->bitmap.bb_cache);
+			waffle_snapshot_pool_free(old);
+			continue;
+		}
+		if(waffle_block_in_use(info, &(*next)->bitmap, &(*next)->snapshot, number))
+			return 0;
+		next = &(*next)->next;
+	}
+	
+	return 1;
 }
 
 static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
@@ -563,7 +598,7 @@ static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * di
 		return -1;
 	}
 	
-	/* add dentry */
+	/* set up dentry */
 	init.d_inode = inode;
 	init.d_type = waffle_type;
 	memset(init.d_name, 0, sizeof(init.d_name));
@@ -1243,17 +1278,39 @@ static int waffle_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsme
 static void waffle_callback(void * arg)
 {
 	struct waffle_info * info = (struct waffle_info *) arg;
+	struct waffle_old_snapshot * old_snapshot;
 	patch_t * patch = info->checkpoint_changes;
 	int r;
 	if(!info->cloned_since_checkpoint)
 		return;
+	old_snapshot = waffle_snapshot_pool_alloc();
+	if(!old_snapshot)
+	{
+		fprintf(stderr, "%s(): warning: failed to allocate snapshot!\n", __FUNCTION__);
+		return;
+	}
+	/* save the old snapshot */
+	WEAK_INIT(old_snapshot->overwrite);
+	old_snapshot->bitmap = info->checkpoint;
+	old_snapshot->snapshot = info->super->s_checkpoint;
+	old_snapshot->next = info->old_snapshots;
+	
 	r = patch_create_byte_atomic(info->super_cache, info->ubd, offsetof(struct waffle_super, s_checkpoint), sizeof(struct waffle_snapshot), &info->s_active, &patch);
 	if(r < 0)
 	{
+		waffle_snapshot_pool_free(old_snapshot);
 		fprintf(stderr, "%s(): warning: failed to create checkpoint!\n", __FUNCTION__);
 		return;
 	}
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "checkpoint");
+	/* weak retain the new checkpoint so we know when the old one is no longer on disk */
+	patch_weak_retain(patch, &old_snapshot->overwrite, NULL, NULL);
+	info->old_snapshots = old_snapshot;
+	info->checkpoint = info->active;
+	/* increase the reference count of the bitmap cache we copied */
+	if(info->checkpoint.bb_cache)
+		bdesc_retain(info->checkpoint.bb_cache);
+	
 	patch_satisfy(&info->checkpoint_tail);
 	/* for safety, in case we fail below and try to use it after that */
 	info->checkpoint_changes = NULL;
@@ -1299,6 +1356,17 @@ static int waffle_destroy(LFS_t * lfs)
 		fprintf(stderr, "%s(): warning: checkpoint changes still exist!\n", __FUNCTION__);
 	patch_satisfy(&info->checkpoint_tail);
 	
+	while(info->old_snapshots)
+	{
+		struct waffle_old_snapshot * old = info->old_snapshots;
+		info->old_snapshots = old->next;
+		if(WEAK(old->overwrite))
+			patch_weak_release(&old->overwrite, 0);
+		if(old->bitmap.bb_cache)
+			bdesc_release(&old->bitmap.bb_cache);
+		waffle_snapshot_pool_free(old);
+	}
+	
 	for(fd = info->filecache; fd; fd = fd->f_cache_next)
 		assert(fd->f_nopen == 1 && fd->f_age != 0);
 	while(info->filecache)
@@ -1317,6 +1385,7 @@ static int waffle_destroy(LFS_t * lfs)
 	
 	if(!--n_waffle_instances)
 	{
+		waffle_snapshot_pool_free_all();
 		waffle_fdesc_pool_free_all();
 		waffle_blkptr_pool_free_all();
 	}
@@ -1367,6 +1436,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
 	info->s_active = info->super->s_checkpoint;
+	info->old_snapshots = NULL;
 	info->cloned_since_checkpoint = 0;
 	/* TODO: something better than this could be nice */
 	info->try_next_free = WAFFLE_SUPER_BLOCK + 1;
