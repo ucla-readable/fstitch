@@ -1309,7 +1309,7 @@ __grab_cache_page(struct address_space *mapping, unsigned long index,
 }
 
 // Reimplementation of 2.6.20.1 generic_file_buffered_write() to work with
-// integrated linux-fsttich cache
+// integrated linux-fstitch cache
 static ssize_t serve_generic_file_buffered_write(struct file * filp,
                                                  loff_t * ppos,
                                                  const char __user * buf,

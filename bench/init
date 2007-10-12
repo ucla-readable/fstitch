@@ -11,8 +11,8 @@ JOURNALSIZE=64
 function usage () {
 	echo "About: start and stop a file system" 
 	echo "Usage: `basename "$0"` <-a start|stop> [-h HOST] [-d DISKCACHE] [-f FS] [-c CMODE] [-k] [-C]"
-	echo "       where HOST-DISKCACHE-FS-CMODE may be fsttich-(safe|unsafe)-ext2-(su|meta|full|none), linux-(safe|unsafe)-ext2-none, or linux-(safe|unsafe)-ext3-(writeback|ordered|journal)"
-	echo "           default is fsttich-safe-ext2-su"
+	echo "       where HOST-DISKCACHE-FS-CMODE may be fstitch-(safe|unsafe)-ext2-(su|meta|full|none), linux-(safe|unsafe)-ext2-none, or linux-(safe|unsafe)-ext3-(writeback|ordered|journal)"
+	echo "           default is fstitch-safe-ext2-su"
 	echo "       -k keeps the existing file system"
 	echo "           default is to format at start"
 	echo "       -C enables random simulated crashing"
@@ -21,7 +21,7 @@ function usage () {
 DISKCACHE=
 FS=ext2
 CMODE=
-HOST=fsttich
+HOST=fstitch
 FORMAT=1
 CRASHSIM=0
 ACTION=
@@ -53,14 +53,14 @@ if ! supported_host_fs "${HOST}-${DISKCACHE}-${FS}-${CMODE}-${ACMODE}"; then
 	exit 1
 fi
 
-if [ "$HOST" != "fsttich" -a "$CRASHSIM" != 0 ]; then
-	echo "Crash simulation only possible for fsttich host" 1>&2
+if [ "$HOST" != "fstitch" -a "$CRASHSIM" != 0 ]; then
+	echo "Crash simulation only possible for fstitch host" 1>&2
 	exit 1
 fi
 
 DEV=
 PART=
-if [ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]; then
+if [ "$HOST" == "fstitch" ] || [ "$HOST" == "linux" ]; then
 	DEV=${DEV:-/dev/sdb}
 	PART=${DEV}${PART:-1}
 elif [ "$HOST" == "uu" ]; then
@@ -79,7 +79,7 @@ if [ "$ACTION" == "start" ]; then
 		unsafe) UNSAFE=1;;
 		*) echo "Unknown DISKCACHE $DISKCACHE" 1>&2; exit 1;;
 	esac
-	if [ "$HOST" == "fsttich" ]; then
+	if [ "$HOST" == "fstitch" ]; then
 		if [ "$CMODE" == "meta" ]; then JOURNAL=1
 		elif [ "$CMODE" == "full" ]; then JOURNAL=2
 		else JOURNAL=0
@@ -130,7 +130,7 @@ if [ "$ACTION" == "start" ]; then
 	fi
 	sleep 1 # give fstitchd time to init
 
-	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]); then
+	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "fstitch" ] || [ "$HOST" == "linux" ]); then
 		if [ ! $VMLINUX ]; then
 			echo "vmlinux \"$VMLINUX\" does not exist, cannot profile" 1>&2
 			exit 1
@@ -149,7 +149,7 @@ elif [ "$ACTION" == "stop" ]; then
 			try sudo opcontrol --dump
 		fi
 		try sudo umount $MNT
-		if [ "$HOST" == "fsttich" ]; then try sudo rmmod kfstitchd
+		if [ "$HOST" == "fstitch" ]; then try sudo rmmod kfstitchd
 		elif [ "$HOST" == "linux" ]; then try sudo hdparm -W 1 $DEV
 		fi
 	fi

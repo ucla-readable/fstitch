@@ -55,12 +55,12 @@ JSFILE="$OUTDIR/${MEASUREMENT}_${TESTNAME}.js"
 echo "var $ARRAYNAME = new Array();" > $JSFILE
 I=0
 for sys in \
-	"fsttich safe ext2 su patchgroup" \
-	"fsttich safe ext2 meta patchgroup" \
-	"fsttich safe ext2 full patchgroup" \
-	"fsttich safe ext2 none patchgroup" \
-	"fsttich safe ext2 full linearom" \
-	"fsttich safe ext2 full linear" \
+	"fstitch safe ext2 su patchgroup" \
+	"fstitch safe ext2 meta patchgroup" \
+	"fstitch safe ext2 full patchgroup" \
+	"fstitch safe ext2 none patchgroup" \
+	"fstitch safe ext2 full linearom" \
+	"fstitch safe ext2 full linear" \
 	"linux unsafe ext2 none fsync" \
 	"linux unsafe ext3 ordered fsync" \
 	"linux unsafe ext3 journal fsync" \

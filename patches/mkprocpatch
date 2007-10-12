@@ -1,6 +1,6 @@
 #/bin/bash
 
-FILES="fs/exec.c fs/Kconfig fs/fsttich/Kconfig fs/fsttich/fsttich_proc.c fs/fsttich/Makefile fs/Makefile include/linux/fsttich_proc.h kernel/exit.c kernel/fork.c"
+FILES="fs/exec.c fs/Kconfig fs/fstitch/Kconfig fs/fstitch/fstitch_proc.c fs/fstitch/Makefile fs/Makefile include/linux/fstitch_proc.h kernel/exit.c kernel/fork.c"
 
 if [ $# -ne 1 ]; then
 	echo "About: Create a feathersttich proc diff" 1>&2
@@ -13,6 +13,6 @@ KV=$1
 for FILE in $FILES
 do
   echo "diff -Nrud linux-$KV/$FILE linux-$KV/$FILE"
-  diff -Nrud linux-$KV/$FILE linux-$KV-fsttich/$FILE \
-	  | sed "s/linux-$KV-fsttich/linux-$KV/"
+  diff -Nrud linux-$KV/$FILE linux-$KV-fstitch/$FILE \
+	  | sed "s/linux-$KV-fstitch/linux-$KV/"
 done
