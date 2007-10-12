@@ -365,7 +365,12 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	return blkptr;
 }
 
-/* FIXME: we must also mark the old blocks as deallocated */
+/* this is the base case that keeps waffle_change_allocation()
+ * and waffle_clone_block() from recursing forever */
+/* FIXME: we must also mark the old blocks as deallocated (possibly + 2-4 more blocks?) */
+/* FIXME: if we don't end up allocating block "number", is this still correct? will we need 4? */
+/* TODO: this function essentially unwinds and combines several other more generic cases;
+ * can we split those functions up differently so that we can reuse the logic here? */
 static int waffle_allocate_base(struct waffle_info * info, struct blkptr * bitmap, uint32_t number)
 {
 	Dprintf("%s\n", __FUNCTION__);
@@ -545,6 +550,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	if(r < 0)
 		goto fail_r;
 	r = hash_map_change_key(info->blkptr_map, (void *) blkptr->number, (void *) number);
+	/* XXX: this has returned -EEXIST in the kernel; why?? */
 	if(r < 0 && r != -ENOENT)
 	{
 		kpanic("unexpected error changing hash map keys: %d", r);
@@ -561,6 +567,9 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	bdesc_release(&blkptr->block);
 	blkptr->block = bdesc_retain(copy);
 	info->cloned_since_checkpoint++;
+	r = waffle_mark_deallocated(info, blkptr->number);
+	if(r < 0)
+		kpanic("unrecoverable error deallocating cloned block: %d", r);
 	return 0;
 }
 
