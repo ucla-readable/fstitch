@@ -39,7 +39,7 @@ function waitkfstitchd () {
 	sleep 1 # try to wait for syslogd to log kfstitchd exit output
 }
 
-# fsync after a test (both fsttich and linux)
+# fsync after a test (both fstitch and linux)
 function fsync () {
 	FSTITCHDIR=$1
 	MNT=$2
@@ -57,7 +57,7 @@ function build () {
 	echo "* Start test $T ($N)"
 
 	case "$HOST" in
-		fsttich)
+		fstitch)
 			pushd $FSTITCHDIR; try make; popd;;
 		uu)
 			pushd $FSTITCHDIR; try make -f Makefile.user; popd;;
@@ -77,7 +77,7 @@ function log_kernel () {
 	OUTDIR=$3
 	HOST=$4
 
-	if [ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]; then
+	if [ "$HOST" == "fstitch" ] || [ "$HOST" == "linux" ]; then
 		echo "+ tail /var/log/syslog"
 		sudo tail -f -n 0 /var/log/syslog &>$OUTDIR/$T.sys.$N </dev/null &
 		SYSTAIL=$!
@@ -92,7 +92,7 @@ function prepare_postinit () {
 	OUTDIR=$3
 	HOST=$4
 
-	if [ "$HOST" == "fsttich" ] && [ -f /proc/kfstitchd_debug ]; then
+	if [ "$HOST" == "fstitch" ] && [ -f /proc/kfstitchd_debug ]; then
 		echo "+ sudo log /proc/kfstitchd_debug"
 		sudo cat /proc/kfstitchd_debug &>$OUTDIR/$T.fdb.$N </dev/null &
 		FDBCAT=$!
@@ -105,7 +105,7 @@ function prepare_postinit () {
 			done &>/dev/null &
 	fi
 
-	if [ "$NOBLKTRACE" == "" ] && [ "$HOST" == "fsttich" -o "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
+	if [ "$NOBLKTRACE" == "" ] && [ "$HOST" == "fstitch" -o "$HOST" == "linux" ] && zgrep -q BLK_DEV_IO_TRACE=y /proc/config.gz && [ -n "`which blktrace`" ]; then
 		if ! mount | grep -q /debug; then
 			sudo mount /debug
 		fi
@@ -132,7 +132,7 @@ function finish () {
 	HOST=$5
 	CRASHSIM=$6
 	PROFILE=`lsmod | grep -q ^oprofile && echo 1 || echo 0`
-	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]); then
+	if [ $PROFILE -eq 1 ] && ([ "$HOST" == "fstitch" ] || [ "$HOST" == "linux" ]); then
 		grep -q idle=poll /proc/cmdline && TP=.2 || TP=1
 		try sudo opreport -l -g -p $FSTITCHDIR/fscore/ -t $TP | tee -a $OUTDIR/$T.oprof.$N
 	fi
@@ -144,7 +144,7 @@ function finish () {
 		# ugly. can we avoid this duplication of code with bench/init easily?
 		DEV=
 		PART=
-		if [ "$HOST" == "fsttich" ] || [ "$HOST" == "linux" ]; then
+		if [ "$HOST" == "fstitch" ] || [ "$HOST" == "linux" ]; then
 			DEV=${DEV:-/dev/sdb}
 			PART=${DEV}${PART:-1}
 		elif [ "$HOST" == "uu" ]; then
@@ -165,8 +165,8 @@ function finish () {
 function supported_host_fs () {
 	# note: the below case @() notation requires extglob
 	case "$1" in
-		fsttich-@(safe|unsafe)-ext2-@(su|meta|full|none)-@(patchgroup|fsync)) true;;
-		fsttich-@(safe|unsafe)-ext2-full-@(linearom|linear)) true;;
+		fstitch-@(safe|unsafe)-ext2-@(su|meta|full|none)-@(patchgroup|fsync)) true;;
+		fstitch-@(safe|unsafe)-ext2-full-@(linearom|linear)) true;;
 		uu-unsafe-ext2-@(su|meta|full|none)-none) true;;
 		uu-unsafe-ext2-full-@(linearom|linear)) true;;
 		linux-@(safe|unsafe)-@(ext2-none|ext3-@(writeback|ordered|journal))-fsync) true;;
@@ -185,7 +185,7 @@ function canonicalize_modes () {
 	ACMODE="$5"
 	if [ -z "$DISKCACHE" ]; then
 		case "$HOST" in
-			fsttich) DISKCACHE=safe;;
+			fstitch) DISKCACHE=safe;;
 			linux) DISKCACHE=unsafe;;
 			uu) DISKCACHE=unsafe;;
 			*) echo "Unsupported HOST $HOST"; exit 1;;
@@ -193,7 +193,7 @@ function canonicalize_modes () {
 	fi
 	if [ -z "$CMODE" ]; then
 		case "$HOST" in
-			uu|fsttich)
+			uu|fstitch)
 				case "$FS" in
 					ext2) CMODE=su;;
 					*) echo "Unsupported $HOST FS $FS"; exit 1;;
@@ -211,7 +211,7 @@ function canonicalize_modes () {
 	fi
 	if [ -z "$ACMODE" ]; then
 		case "$HOST" in
-			fsttich) ACMODE=patchgroup;;
+			fstitch) ACMODE=patchgroup;;
 			linux) ACMODE=fsync;;
 			uu) ACMODE=none;;
 			*) echo "Unsupported HOST $HOST"; exit 1;;

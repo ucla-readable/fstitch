@@ -2977,7 +2977,7 @@ int patch_apply(patch_t * patch)
 				uint8_t * old_block = bdesc_data(patch->block);
 				assert(!patch->offset);
 				/* NOTE: these three lines need to be updated for the
-				 * integrated linux-fsttich buffer cache */
+				 * integrated linux-fstitch buffer cache */
 				assert(patch->byte.data != patch->byte.ldata);
 				patch->block->data = patch->byte.data;
 				patch->byte.data = old_block;

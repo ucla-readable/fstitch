@@ -157,9 +157,9 @@ struct task_struct * fstitchd_task;
 struct stealth_lock fstitchd_global_lock;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
-static void fsttich_sysrq_unlock(int key, struct pt_regs * regs, struct tty_struct * tty)
+static void fstitch_sysrq_unlock(int key, struct pt_regs * regs, struct tty_struct * tty)
 #else
-static void fsttich_sysrq_unlock(int key, struct tty_struct * tty)
+static void fstitch_sysrq_unlock(int key, struct tty_struct * tty)
 #endif
 {
 	spin_lock(&fstitchd_global_lock.lock);
@@ -177,7 +177,7 @@ static void fsttich_sysrq_unlock(int key, struct tty_struct * tty)
 #define PRINT_STACK_DEPTH 128
 
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
-static void fsttich_sysrq_showlock(int key, struct tty_struct * tty)
+static void fstitch_sysrq_showlock(int key, struct tty_struct * tty)
 {
 	spin_lock(&fstitchd_global_lock.lock);
 	if(fstitchd_global_lock.locked)
@@ -205,10 +205,10 @@ static struct {
 	int key;
 	struct sysrq_key_op op;
 } fstitchd_sysrqs[] = {
-	{'c', {handler: fsttich_sysrq_unlock, help_msg: "fstitchd_unlock(C)", action_msg: "Unlocked fstitchd_lock", enable_mask: 1}},
+	{'c', {handler: fstitch_sysrq_unlock, help_msg: "fstitchd_unlock(C)", action_msg: "Unlocked fstitchd_lock", enable_mask: 1}},
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 18)
 #if defined(CONFIG_STACKTRACE) && EXPORTED_PRINT_STACK
-	{'w', {handler: fsttich_sysrq_showlock, help_msg: "fstitchd_tracelock(W)", action_msg: "Showing fstitchd_lock owner trace", enable_mask: 1}},
+	{'w', {handler: fstitch_sysrq_showlock, help_msg: "fstitchd_tracelock(W)", action_msg: "Showing fstitchd_lock owner trace", enable_mask: 1}},
 #endif
 #endif
 };

@@ -40,7 +40,7 @@ DATA=`mktemp plot_io.XXXXXX` || exit 1
 trap "rm -f $DATA" EXIT
 
 for test in `ls $FSTITCHDIR/tests/`; do
-	if [ "`cat $FSTITCHDIR/tests/$test/host`" != "fsttich" ] || [ "`cat $FSTITCHDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $FSTITCHDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $FSTITCHDIR/tests/$test/consistency_mode`" != "su" ] || [ "`cat $FSTITCHDIR/tests/$test/app_consistency_mode`" != "patchgroup" ]; then continue; fi
+	if [ "`cat $FSTITCHDIR/tests/$test/host`" != "fstitch" ] || [ "`cat $FSTITCHDIR/tests/$test/diskcache`" != "safe" ] || [ "`cat $FSTITCHDIR/tests/$test/fs`" != "ext2" ] || [ "`cat $FSTITCHDIR/tests/$test/consistency_mode`" != "su" ] || [ "`cat $FSTITCHDIR/tests/$test/app_consistency_mode`" != "patchgroup" ]; then continue; fi
 
 	LINE="`$BENCHDIR/ex_io -d $FSTITCHDIR/tests/$test -t $TESTNAME`"
 	[ -n "$LINE" ] || continue
