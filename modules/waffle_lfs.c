@@ -289,17 +289,20 @@ static int waffle_clone_bitmap_dindir(struct waffle_info * info, struct blkptr *
 	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
 	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
 	assert(!blkptr->parent);
-	for(check = group; check != max; check++)
+	for(;;)
 	{
-		if(check == blkptr->number)
-			continue;
-		if(waffle_bitmap_dindir_in_snapshot(info, check, index))
-			continue;
-		return waffle_clone_bitmap_guts(info, blkptr, check);
+		for(check = group; check != max; check++)
+		{
+			if(check == blkptr->number)
+				continue;
+			if(waffle_bitmap_dindir_in_snapshot(info, check, index))
+				continue;
+			return waffle_clone_bitmap_guts(info, blkptr, check);
+		}
+		/* all the bitmap blocks for this location are in use; force some of the old uses to be overwritten */
+		if(CALL(info->ubd, flush, FLUSH_DEVICE, NULL) == FLUSH_NONE)
+			kpanic("could not flush snapshots!");
 	}
-	/* should never happen */
-	kpanic("could not find free bitmap block");
-	return -ENOSPC;
 }
 
 /* the blkptr is of the indirect block; the index is of the referenced block */
@@ -308,17 +311,20 @@ static int waffle_clone_bitmap_indir(struct waffle_info * info, struct blkptr * 
 	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
 	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
 	assert(blkptr->parent && !blkptr->parent->parent);
-	for(check = group; check != max; check++)
+	for(;;)
 	{
-		if(check == blkptr->number)
-			continue;
-		if(waffle_bitmap_indir_in_snapshot(info, check, index))
-			continue;
-		return waffle_clone_bitmap_guts(info, blkptr, check);
+		for(check = group; check != max; check++)
+		{
+			if(check == blkptr->number)
+				continue;
+			if(waffle_bitmap_indir_in_snapshot(info, check, index))
+				continue;
+			return waffle_clone_bitmap_guts(info, blkptr, check);
+		}
+		/* all the bitmap blocks for this location are in use; force some of the old uses to be overwritten */
+		if(CALL(info->ubd, flush, FLUSH_DEVICE, NULL) == FLUSH_NONE)
+			kpanic("could not flush snapshots!");
 	}
-	/* should never happen */
-	kpanic("could not find free bitmap block");
-	return -ENOSPC;
 }
 
 static int waffle_clone_bitmap_block(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
@@ -339,17 +345,20 @@ static int waffle_clone_bitmap_block(struct waffle_info * info, struct blkptr * 
 		if(r < 0)
 			return r;
 	}
-	for(check = group; check != max; check++)
+	for(;;)
 	{
-		if(check == blkptr->number)
-			continue;
-		if(waffle_bitmap_block_in_snapshot(info, check, index))
-			continue;
-		return waffle_clone_bitmap_guts(info, blkptr, check);
+		for(check = group; check != max; check++)
+		{
+			if(check == blkptr->number)
+				continue;
+			if(waffle_bitmap_block_in_snapshot(info, check, index))
+				continue;
+			return waffle_clone_bitmap_guts(info, blkptr, check);
+		}
+		/* all the bitmap blocks for this location are in use; force some of the old uses to be overwritten */
+		if(CALL(info->ubd, flush, FLUSH_DEVICE, NULL) == FLUSH_NONE)
+			kpanic("could not flush snapshots!");
 	}
-	/* should never happen */
-	kpanic("could not find free bitmap block");
-	return -ENOSPC;
 }
 
 /* Now the regular (non-bitmap) block allocation and cloning routines... */

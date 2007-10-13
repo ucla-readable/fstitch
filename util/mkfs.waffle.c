@@ -469,6 +469,7 @@ static int update_blocks(void)
 	super = (struct waffle_super *) block->data;
 	/* total number of bits in free block bitmap */
 	max = super->s_checkpoint.sn_block.i_size * 8;
+  mark_free:
 	for(i = next_free; i < max; i++)
 	{
 		uint32_t need = i / (WAFFLE_BLOCK_SIZE * 8);
@@ -485,6 +486,13 @@ static int update_blocks(void)
 		}
 		need = i % (WAFFLE_BLOCK_SIZE * 8);
 		((uint32_t *) b_block->data)[need / 32] |= 1 << (need % 32);
+	}
+	if(hole_left)
+	{
+		next_free = hole_start;
+		max = hole_start + hole_left;
+		hole_left = 0;
+		goto mark_free;
 	}
 	if(b_block)
 		put_block(b_block);

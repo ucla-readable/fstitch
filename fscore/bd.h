@@ -44,7 +44,7 @@ struct BD {
 	 * because this is where it really hurts to do unnecessary reads. */
 	DECLARE(BD_t, bdesc_t *, synthetic_read_block, uint32_t number, uint16_t count, page_t * page);
 	DECLARE(BD_t, int, write_block, bdesc_t * block, uint32_t number);
-	DECLARE(BD_t, int, flush, uint32_t block, patch_t * ch);
+	DECLARE(BD_t, int, flush, uint32_t block, patch_t * patch);
 	DECLARE(BD_t, patch_t **, get_write_head);
 	/* This function returns the number of dirtyable cache blocks in the
 	 * earliest cache. It returns negative numbers to indicate that a cache
