@@ -1647,8 +1647,52 @@ static int waffle_rename(LFS_t * object, inode_t oldparent, const char * oldname
 static uint32_t waffle_truncate_file_block(LFS_t * object, fdesc_t * file, patch_t ** head)
 {
 	Dprintf("%s %p\n", __FUNCTION__, file);
-	/* FIXME */
-	return INVALID_BLOCK;
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_fdesc * fd = (struct waffle_fdesc *) file;
+	const struct waffle_inode * f_ip = f_ip(fd);
+	uint32_t i_blocks, number, indirect = 0;
+	struct blkptr * old;
+	int r;
+	if(!f_ip->i_blocks)
+		return INVALID_BLOCK;
+	i_blocks = f_ip->i_blocks - 1;
+	old = waffle_get_data_blkptr(info, f_ip, fd->f_inode_blkptr, i_blocks * WAFFLE_BLOCK_SIZE);
+	if(!old)
+		return INVALID_BLOCK;
+	if(old->parent)
+		indirect = old->parent->number;
+	number = old->number;
+	r = waffle_update_value(info, fd->f_inode_blkptr, &f_ip->i_blocks, &i_blocks, sizeof(f_ip->i_blocks));
+	waffle_put_blkptr(info, &old);
+	if(r < 0)
+		return INVALID_BLOCK;
+	if(i_blocks == WAFFLE_DIRECT_BLOCKS)
+	{
+		/* we no longer need the indirect block, so free that too */
+		assert(indirect == f_ip(fd)->i_indirect);
+		r = waffle_mark_deallocated(info, indirect);
+		if(r < 0)
+			kpanic("TODO: better error handling");
+	}
+	else if(i_blocks >= WAFFLE_INDIRECT_BLOCKS)
+	{
+		if(!((i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS))
+		{
+			/* we no longer need this indirect block */
+			assert(indirect);
+			r = waffle_mark_deallocated(info, indirect);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+		}
+		if(i_blocks == WAFFLE_INDIRECT_BLOCKS)
+		{
+			/* we no longer need the double indirect block */
+			r = waffle_mark_deallocated(info, f_ip(fd)->i_dindirect);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+		}
+	}
+	return number;
 }
 
 static int waffle_free_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
