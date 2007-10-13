@@ -109,7 +109,9 @@ DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
 DECLARE_POOL(waffle_snapshot_pool, struct waffle_old_snapshot);
 static int n_waffle_instances = 0;
 
+/* prototypes */
 static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset);
+static int waffle_write_inode(LFS_t * object, struct waffle_fdesc * f, struct waffle_inode * new_inode, patch_t ** head);
 
 static struct blkptr * waffle_get_blkptr(struct waffle_info * info, struct blkptr * parent, uint32_t number, bdesc_t * block, uint16_t parent_offset)
 {
@@ -151,7 +153,7 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 }
 #define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
-static int waffle_block_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
+static inline int waffle_block_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
 {
 	uint32_t need = number / WAFFLE_BITS_PER_BLOCK;
 	if(number >= snapshot->sn_blocks)
@@ -1261,18 +1263,90 @@ static int waffle_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint3
 	return waffle_get_metadata(object, fd, id, size, data);
 }
 
+static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * f, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head)
+{
+	Dprintf("%s %u\n", __FUNCTION__, f->f_inode);
+
+	assert(head && f && (!nfsm || fsm));
+  
+	struct waffle_inode init = *f_ip(f);
+
+retry:
+	if(!nfsm)
+			return waffle_write_inode(object, f, &init, head);
+
+	if(fsm->fsm_feature == FSTITCH_FEATURE_SIZE)
+	{
+			if(fsm->fsm_value.u >= WAFFLE_MAX_FILE_SIZE)
+					return -1;
+			init.i_size = fsm->fsm_value.u; 
+	}
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_FILETYPE)
+	{
+			uint32_t fs_type;
+			switch(fsm->fsm_value.u)
+			{
+					case TYPE_FILE:
+							fs_type = WAFFLE_S_IFREG;
+							break;
+					case TYPE_DIR:
+							fs_type = WAFFLE_S_IFDIR;
+							break;
+					default:
+							return -EINVAL;
+			}
+
+			init.i_mode = (init.i_mode & ~WAFFLE_S_IFMT) | (fs_type);
+			f->f_type = fsm->fsm_value.u;
+	}
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_UID)
+			init.i_uid = fsm->fsm_value.u;
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_GID)
+			init.i_gid = fsm->fsm_value.u;
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_UNIX_PERM)
+			init.i_mode = (init.i_mode & WAFFLE_S_IFMT) | (fsm->fsm_value.u & ~WAFFLE_S_IFMT);
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_MTIME)
+			init.i_mtime = fsm->fsm_value.u;
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_ATIME)
+			init.i_atime = fsm->fsm_value.u;
+	else if(fsm->fsm_feature == FSTITCH_FEATURE_SYMLINK)
+	{
+			if(f->f_type != TYPE_SYMLINK)
+					return -EINVAL;
+			/* Implement symlinks */
+			return -1;
+	}
+	else
+			return -1;
+
+	fsm++;
+	nfsm--;
+	goto retry;
+}
+
 static int waffle_set_metadata2_inode(LFS_t * object, inode_t inode, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head)
 {
 	Dprintf("%s %u\n", __FUNCTION__, inode);
-	/* FIXME */
-	return -ENOSYS;
+	struct waffle_fdesc * f = (struct waffle_fdesc *) waffle_lookup_inode(object, inode); 
+	if(!f)
+		return -1;
+	int r = waffle_set_metadata2(object, f, fsm, nfsm, head);
+	waffle_free_fdesc(object, (fdesc_t *) f);
+	return r;
 }
 
 static int waffle_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head)
 {
 	Dprintf("%s %p\n", __FUNCTION__, file);
-	/* FIXME */
-	return -ENOSYS;
+	struct waffle_fdesc * f = (struct waffle_fdesc *) file;
+	return waffle_set_metadata2(object, f, fsm, nfsm, head);
+}
+
+static int waffle_write_inode(LFS_t * object, struct waffle_fdesc * f, struct waffle_inode * new_inode, patch_t ** head)
+{
+	Dprintf("%s file: %p inode: %u\n", __FUNCTION__, f, f->f_inode);
+	assert(f && new_inode);
+	return -1;
 }
 
 static void waffle_callback(void * arg)
