@@ -708,7 +708,7 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 
 static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * directory, const char * name, inode_t inode, uint16_t waffle_type)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u:%s -> %u\n", __FUNCTION__, directory->f_inode, name, inode);
 	int r;
 	uint32_t index;
 	struct waffle_dentry init;
@@ -781,6 +781,43 @@ static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * di
 	
 	/* write dentry */
 	r = waffle_update_value(info, dir_blkptr, dirent, &init, sizeof(*dirent));
+	waffle_put_blkptr(info, &dir_blkptr);
+	return r;
+}
+
+static int waffle_clear_dentry(struct waffle_info * info, struct waffle_fdesc * directory, const char * name)
+{
+	Dprintf("%s %u:%s\n", __FUNCTION__, directory->f_inode, name);
+	uint32_t index;
+	struct waffle_dentry * dirent = NULL;
+	struct blkptr * dir_blkptr = NULL;
+	const struct waffle_inode * f_ip = f_ip(directory);
+	inode_t zero = 0;
+	int r;
+	
+	/* search for an empty dentry */
+	for(index = 0; index < f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
+	{
+		uint16_t offset;
+		dir_blkptr = waffle_get_data_blkptr(info, f_ip, directory->f_inode_blkptr, index);
+		if(!dir_blkptr)
+			return -1;
+		for(offset = 0; offset < WAFFLE_BLOCK_SIZE; offset += sizeof(struct waffle_dentry))
+		{
+			dirent = (struct waffle_dentry *) (blkptr_data(dir_blkptr) + offset);
+			if(dirent->d_inode && !strcmp(dirent->d_name, name))
+				break;
+		}
+		if(offset < WAFFLE_BLOCK_SIZE)
+			break;
+		waffle_put_blkptr(info, &dir_blkptr);
+	}
+	
+	if(!dir_blkptr)
+		return -ENOENT;
+	
+	/* write dentry */
+	r = waffle_update_value(info, dir_blkptr, &dirent->d_inode, &zero, sizeof(dirent->d_inode));
 	waffle_put_blkptr(info, &dir_blkptr);
 	return r;
 }
@@ -1408,7 +1445,6 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	return r;
 }
 
-/* FIXME: finish this function */
 static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, const char * name,
                                       uint8_t type, fdesc_t * link, const metadata_set_t * initialmd,
                                       inode_t * new_inode, patch_t ** head)
@@ -1563,11 +1599,49 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 	return waffle_lookup_inode(object, *new_inode);
 }
 
+static int waffle_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * inode);
+
 static int waffle_rename(LFS_t * object, inode_t oldparent, const char * oldname, inode_t newparent, const char * newname, patch_t ** head)
 {
 	Dprintf("%s %u:%s -> %u:%s\n", __FUNCTION__, oldparent, oldname, newparent, newname);
-	/* FIXME */
-	return -ENOSYS;
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_fdesc * file = NULL;
+	struct waffle_fdesc * parent = NULL;
+	inode_t inode;
+	int r = waffle_lookup_name(object, oldparent, oldname, &inode);
+	if(r < 0)
+		return r;
+	file = (struct waffle_fdesc *) waffle_lookup_inode(object, inode);
+	if(!file)
+		return -1;
+	
+	parent = (struct waffle_fdesc *) waffle_lookup_inode(object, newparent);
+	if(!parent)
+	{
+		r = -1;
+		goto out;
+	}
+	r = waffle_add_dentry(info, parent, newname, inode, fstitch_to_waffle_type(file->f_type));
+	if(r < 0)
+		goto out;
+	waffle_free_fdesc(object, (fdesc_t *) parent);
+	
+	parent = (struct waffle_fdesc *) waffle_lookup_inode(object, oldparent);
+	if(!parent)
+	{
+		r = -1;
+		goto out;
+	}
+	r = waffle_clear_dentry(info, parent, oldname);
+	if(r < 0)
+		kpanic("unrecoverable failure after link creation");
+	
+  out:
+	if(file)
+		waffle_free_fdesc(object, (fdesc_t *) file);
+	if(parent)
+		waffle_free_fdesc(object, (fdesc_t *) parent);
+	return r;
 }
 
 static uint32_t waffle_truncate_file_block(LFS_t * object, fdesc_t * file, patch_t ** head)
