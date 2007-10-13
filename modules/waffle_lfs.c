@@ -1039,8 +1039,13 @@ static int waffle_get_root(LFS_t * object, inode_t * inode)
 static uint32_t waffle_allocate_block(LFS_t * object, fdesc_t * file, int purpose, patch_t ** tail)
 {
 	Dprintf("%s %p\n", __FUNCTION__, file);
-	/* FIXME */
-	return INVALID_BLOCK;
+	struct waffle_info * info = (struct waffle_info *) object;
+	uint32_t number = waffle_find_free_block(info, info->try_next_free);
+	if(number == INVALID_BLOCK)
+		return INVALID_BLOCK;
+	if(waffle_mark_allocated(info, number) < 0)
+		return INVALID_BLOCK;
+	return number;
 }
 
 static bdesc_t * waffle_lookup_block(LFS_t * object, uint32_t number, page_t * page)
@@ -1347,8 +1352,8 @@ static uint32_t waffle_truncate_file_block(LFS_t * object, fdesc_t * file, patch
 static int waffle_free_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, file, block);
-	/* FIXME */
-	return -ENOSYS;
+	struct waffle_info * info = (struct waffle_info *) object;
+	return waffle_mark_deallocated(info, block);
 }
 
 static int waffle_remove_name(LFS_t * object, inode_t parent, const char * name, patch_t ** head)
@@ -1362,9 +1367,13 @@ static int waffle_write_block(LFS_t * object, bdesc_t * block, uint32_t number, 
 {
 	Dprintf("%s %u\n", __FUNCTION__, number);
 	struct waffle_info * info = (struct waffle_info *) object;
-	assert(head);
 	
-	/* XXX: we must do COW here! */
+	if(waffle_in_snapshot(info, number))
+		/* XXX: we must do COW here! */
+		kpanic("can't write blocks still in a snapshot yet");
+	
+	/* FIXME: add dependencies from checkpoint_changes -> (patches on block) */
+	
 	return CALL(info->ubd, write_block, block, number);
 }
 
