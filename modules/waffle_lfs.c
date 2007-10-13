@@ -91,7 +91,7 @@ struct waffle_info {
 	bdesc_t * super_cache;
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
-	struct waffle_bitmap_cache active, checkpoint, snapshot;
+	struct waffle_bitmap_cache active, checkpoint, snapshot[WAFFLE_SNAPSHOT_COUNT];
 	struct waffle_old_snapshot * old_snapshots;
 	int cloned_since_checkpoint;
 	patch_t * checkpoint_changes;
@@ -151,6 +151,209 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
 }
 #define waffle_put_blkptr(info, blkptr) waffle_put_blkptr(info, *(blkptr)), *(blkptr) = NULL
 
+/* In order to avoid infinite recursion trying to allocate a block to clone a
+ * bitmap to allocate a block, enough bitmap blocks for n + 1 copies of the
+ * bitmap (where there are n on-disk snapshots) are preallocated and always
+ * marked as in use. They are set up in consecutive sets of n + 1, where for any
+ * given position in the block bitmap each snapshot must use one of the
+ * consecutive n + 1 blocks assigned to that position. This allows a fast check
+ * to see which of those blocks are in use, without using a bitmap that would
+ * have to be modified (and thus cloned). */
+
+static int waffle_bitmap_block_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number, uint32_t index)
+{
+	if(index >= snapshot->sn_blocks)
+		/* it's not even in this snapshot */
+		return 0;
+	if(cache->bb_cache && cache->bb_number == number)
+	{
+		/* it's not only in use but it's the currently cached block */
+		assert(cache->bb_index == index);
+		return 1;
+	}
+	return number == waffle_get_inode_block(info, &snapshot->sn_block, index * WAFFLE_BLOCK_SIZE);
+}
+
+/* the number is of the indirect block; the index is of the referenced bitmap block */
+static int waffle_bitmap_indir_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number, uint32_t index)
+{
+	bdesc_t * dindirect;
+	assert(index > WAFFLE_DIRECT_BLOCKS);
+	if(index >= snapshot->sn_blocks)
+		/* it's not even in this snapshot */
+		return 0;
+	if(index <= WAFFLE_INDIRECT_BLOCKS)
+		return number == snapshot->sn_block.i_indirect;
+	dindirect = CALL(info->ubd, read_block, snapshot->sn_block.i_dindirect, 1, NULL);
+	if(!dindirect)
+	{
+		fprintf(stderr, "%s(): warning: could not read bitmap double indirect block!\n", __FUNCTION__);
+		return 1;
+	}
+	index -= WAFFLE_DIRECT_BLOCKS;
+	index %= WAFFLE_BLOCK_POINTERS;
+	return number == ((uint32_t *) bdesc_data(dindirect))[index];
+}
+
+/* the number is of the double indirect block; the index is of the referenced bitmap block */
+static int waffle_bitmap_dindir_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number, uint32_t index)
+{
+	assert(index > WAFFLE_INDIRECT_BLOCKS);
+	return number == snapshot->sn_block.i_dindirect;
+}
+
+#define DEFINE_WAFFLE_BITMAP_X_IN_SNAPSHOT(x) \
+static int waffle_bitmap_##x##_in_snapshot(struct waffle_info * info, uint32_t number, uint32_t index) \
+{ \
+	struct waffle_old_snapshot ** next = &info->old_snapshots; \
+	int i; \
+	\
+	if(number >= info->super->s_blocks) \
+		return -EINVAL; \
+	\
+	if(waffle_bitmap_##x##_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number, index)) \
+		return 1; \
+	for(i = 0; i < WAFFLE_SNAPSHOT_COUNT; i++) \
+		if(waffle_bitmap_##x##_in_use(info, &info->snapshot[i], &info->super->s_snapshot[i], number, index)) \
+			return 1; \
+	\
+	while(*next) \
+	{ \
+		if(!WEAK((*next)->overwrite)) \
+		{ \
+			struct waffle_old_snapshot * old = *next; \
+			*next = old->next; \
+			if(old->bitmap.bb_cache) \
+				bdesc_release(&old->bitmap.bb_cache); \
+			waffle_snapshot_pool_free(old); \
+			continue; \
+		} \
+		if(waffle_bitmap_##x##_in_use(info, &(*next)->bitmap, &(*next)->snapshot, number, index)) \
+			return 1; \
+		next = &(*next)->next; \
+	} \
+	\
+	return 0; \
+}
+
+DEFINE_WAFFLE_BITMAP_X_IN_SNAPSHOT(block);
+DEFINE_WAFFLE_BITMAP_X_IN_SNAPSHOT(indir);
+DEFINE_WAFFLE_BITMAP_X_IN_SNAPSHOT(dindir);
+
+/* we can use the same waffle_update_pointer() from below, with is_bitmap = 1 */
+static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block, int is_bitmap);
+
+static int waffle_clone_bitmap_guts(struct waffle_info * info, struct blkptr * blkptr, uint32_t target)
+{
+	int r;
+	patch_t * patch = NULL;
+	bdesc_t * copy = CALL(info->ubd, synthetic_read_block, target, 1, NULL);
+	if(!copy)
+		return -1;
+	r = patch_create_full(copy, info->ubd, blkptr_data(blkptr), &patch);
+	if(r < 0)
+		return r;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "init bitmap copy");
+	r = patch_add_depend(info->checkpoint_changes, patch);
+	if(r < 0)
+		kpanic("unrecoverable error adding patch dependency: %d", r);
+	r = CALL(info->ubd, write_block, copy, target);
+	if(r < 0)
+		kpanic("unrecoverable error writing block: %d", r);
+	r = waffle_update_pointer(info, blkptr, target, 1);
+	if(r < 0)
+		return r;
+	r = hash_map_change_key(info->blkptr_map, (void *) blkptr->number, (void *) target);
+	if(r < 0 && r != -ENOENT)
+	{
+		kpanic("unexpected error changing hash map keys: %d", r);
+		return r;
+	}
+	/* update the active block bitmap cache if needed */
+	if(info->active.bb_number == blkptr->number)
+	{
+		bdesc_release(&info->active.bb_cache);
+		info->active.bb_cache = bdesc_retain(copy);
+		info->active.bb_number = target;
+	}
+	blkptr->number = target;
+	bdesc_release(&blkptr->block);
+	blkptr->block = bdesc_retain(copy);
+	info->cloned_since_checkpoint++;
+	return 0;
+}
+
+/* the blkptr is of the double indirect block; the index is of the referenced block */
+static int waffle_clone_bitmap_dindir(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
+{
+	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
+	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
+	assert(!blkptr->parent);
+	for(check = group; check != max; check++)
+	{
+		if(check == blkptr->number)
+			continue;
+		if(waffle_bitmap_dindir_in_snapshot(info, check, index))
+			continue;
+		return waffle_clone_bitmap_guts(info, blkptr, check);
+	}
+	/* should never happen */
+	kpanic("could not find free bitmap block");
+	return -ENOSPC;
+}
+
+/* the blkptr is of the indirect block; the index is of the referenced block */
+static int waffle_clone_bitmap_indir(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
+{
+	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
+	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
+	assert(blkptr->parent && !blkptr->parent->parent);
+	for(check = group; check != max; check++)
+	{
+		if(check == blkptr->number)
+			continue;
+		if(waffle_bitmap_indir_in_snapshot(info, check, index))
+			continue;
+		return waffle_clone_bitmap_guts(info, blkptr, check);
+	}
+	/* should never happen */
+	kpanic("could not find free bitmap block");
+	return -ENOSPC;
+}
+
+static int waffle_clone_bitmap_block(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
+{
+	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
+	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
+	if(blkptr->parent && waffle_bitmap_indir_in_snapshot(info, blkptr->parent->number, index))
+	{
+		int r;
+		struct blkptr * parent = blkptr->parent;
+		if(parent->parent && waffle_bitmap_dindir_in_snapshot(info, parent->parent->number, index))
+		{
+			r = waffle_clone_bitmap_dindir(info, parent->parent, index);
+			if(r < 0)
+				return r;
+		}
+		r = waffle_clone_bitmap_indir(info, parent, index);
+		if(r < 0)
+			return r;
+	}
+	for(check = group; check != max; check++)
+	{
+		if(check == blkptr->number)
+			continue;
+		if(waffle_bitmap_block_in_snapshot(info, check, index))
+			continue;
+		return waffle_clone_bitmap_guts(info, blkptr, check);
+	}
+	/* should never happen */
+	kpanic("could not find free bitmap block");
+	return -ENOSPC;
+}
+
+/* Now the regular (non-bitmap) block allocation and cloning routines... */
+
 static int waffle_block_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number)
 {
 	uint32_t need = number / WAFFLE_BITS_PER_BLOCK;
@@ -180,14 +383,16 @@ static int waffle_block_in_use(struct waffle_info * info, struct waffle_bitmap_c
 static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 {
 	struct waffle_old_snapshot ** next = &info->old_snapshots;
+	int i;
 	
 	if(number >= info->super->s_blocks)
 		return -EINVAL;
 	
 	if(waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number))
 		return 1;
-	if(waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number))
-		return 1;
+	for(i = 0; i < WAFFLE_SNAPSHOT_COUNT; i++)
+		if(waffle_block_in_use(info, &info->snapshot[i], &info->super->s_snapshot[i], number))
+			return 1;
 	
 	while(*next)
 	{
@@ -211,14 +416,16 @@ static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 {
 	struct waffle_old_snapshot ** next = &info->old_snapshots;
+	int i;
 	
 	if(number >= info->super->s_blocks)
 		return 0;
 	
 	if(waffle_block_in_use(info, &info->checkpoint, &info->super->s_checkpoint, number))
 		return 0;
-	if(waffle_block_in_use(info, &info->snapshot, &info->super->s_snapshot, number))
-		return 0;
+	for(i = 0; i < WAFFLE_SNAPSHOT_COUNT; i++)
+		if(waffle_block_in_use(info, &info->snapshot[i], &info->super->s_snapshot[i], number))
+			return 0;
 	if(waffle_block_in_use(info, &info->active, &info->s_active, number))
 		return 0;
 	
@@ -280,12 +487,12 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 }
 
 /* updates the pointer to this blkptr (mid clone); parent must already be cloned */
-static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block)
+static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block, int is_bitmap)
 {
 	Dprintf("%s\n", __FUNCTION__);
 	if(blkptr->parent)
 	{
-		assert(!waffle_in_snapshot(info, blkptr->parent->number));
+		assert(is_bitmap || !waffle_in_snapshot(info, blkptr->parent->number));
 		patch_t * patch = NULL;
 		int r = patch_create_byte(blkptr->parent->block, info->ubd, blkptr->parent_offset, sizeof(block), &block, &patch);
 		if(r < 0)
@@ -300,6 +507,7 @@ static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkp
 	*((uint32_t *) (((void *) &info->s_active) + blkptr->parent_offset)) = block;
 	return 0;
 }
+#define waffle_update_pointer(info, blkptr, block) waffle_update_pointer(info, blkptr, block, 0)
 
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr);
 
@@ -365,128 +573,22 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	return blkptr;
 }
 
-/* this is the base case that keeps waffle_change_allocation()
- * and waffle_clone_block() from recursing forever */
-/* FIXME: we must also mark the old blocks as deallocated (possibly + 2-4 more blocks?) */
-/* FIXME: if we don't end up allocating block "number", is this still correct? will we need 4? */
-/* TODO: this function essentially unwinds and combines several other more generic cases;
- * can we split those functions up differently so that we can reuse the logic here? */
-static int waffle_allocate_base(struct waffle_info * info, struct blkptr * bitmap, uint32_t number)
-{
-	Dprintf("%s\n", __FUNCTION__);
-	int r, needed = 1, have;
-	uint32_t index = number / WAFFLE_BITS_PER_BLOCK;
-	uint32_t numbers[3] = {number, INVALID_BLOCK, INVALID_BLOCK};
-	struct blkptr * top = bitmap;
-	while(top->parent && waffle_in_snapshot(info, top->parent->number))
-	{
-		top = top->parent;
-		needed++;
-	}
-	if(needed > 3)
-		kpanic("need more than 3 blocks to update bitmap");
-	for(have = 1; have < needed; have++)
-	{
-		uint32_t next = numbers[have - 1] + 1;
-		if(next >= info->super->s_blocks)
-			next = WAFFLE_SUPER_BLOCK + 1;
-		numbers[have] = waffle_find_free_block(info, next);
-		if(!numbers[have] || numbers[have] == INVALID_BLOCK || numbers[have] == number)
-			return -ENOSPC;
-		if(numbers[have] / WAFFLE_BITS_PER_BLOCK != index)
-		{
-			numbers[0] = numbers[have];
-			index = numbers[0] / WAFFLE_BITS_PER_BLOCK;
-			have = 0;
-		}
-	}
-	for(have = 0; waffle_in_snapshot(info, bitmap->number); have++)
-	{
-		int r;
-		patch_t * patch;
-		bdesc_t * copy = CALL(info->ubd, synthetic_read_block, numbers[have], 1, NULL);
-		if(!copy)
-			kpanic("unrecoverable error in allocation base case");
-		top = bitmap;
-		while(top->parent && waffle_in_snapshot(info, top->parent->number))
-			top = top->parent;
-		patch = NULL;
-		r = patch_create_full(copy, info->ubd, blkptr_data(top), &patch);
-		if(r < 0)
-			kpanic("unrecoverable error in allocation base case");
-		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "init copy");
-		r = patch_add_depend(info->checkpoint_changes, patch);
-		if(r < 0)
-			kpanic("unrecoverable error in allocation base case");
-		r = waffle_update_pointer(info, top, numbers[have]);
-		if(r < 0)
-			kpanic("unrecoverable error in allocation base case");
-		r = hash_map_change_key(info->blkptr_map, (void *) top->number, (void *) numbers[have]);
-		if(r < 0 && r != -ENOENT)
-			kpanic("unrecoverable error in allocation base case");
-		/* update the active block bitmap cache if needed */
-		if(info->active.bb_number == top->number)
-		{
-			bdesc_release(&info->active.bb_cache);
-			info->active.bb_cache = bdesc_retain(copy);
-			info->active.bb_number = numbers[have];
-		}
-		top->number = numbers[have];
-		bdesc_release(&top->block);
-		top->block = bdesc_retain(copy);
-		info->cloned_since_checkpoint++;
-	}
-	assert(top == bitmap);
-	for(have = 0; have < needed; have++)
-	{
-		patch_t * patch = NULL;
-		index = numbers[have] % WAFFLE_BITS_PER_BLOCK;
-		r = patch_create_bit(bitmap->block, info->ubd, index / 32, 1 << (index % 32), &patch);
-		if(r < 0)
-			kpanic("unrecoverable error in allocation base case");
-		r = patch_add_depend(info->checkpoint_changes, patch);
-		if(r < 0)
-			kpanic("unrecoverable error in allocation base case");
-		assert(waffle_block_in_use(info, &info->active, &info->s_active, numbers[have]));
-	}
-	r = CALL(info->ubd, write_block, bitmap->block, bitmap->number);
-	if(r < 0)
-		kpanic("unrecoverable error in allocation base case");
-	return 0;
-}
-
-/* This function returns -EAGAIN if it had to clone the bitmap to mark the block
- * as allocated, since to it uses the block to clone the bitmap. The caller must
- * find another block (using waffle_find_free_block()) and try again. Due to
- * bitmap inode indirection, this procedure may need to be repeated several
- * times, so the caller should use a loop. */
 static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int is_free)
 {
 	Dprintf("%s\n", __FUNCTION__);
 	int r = 0;
 	patch_t * patch = NULL;
 	uint32_t index = number % WAFFLE_BITS_PER_BLOCK;
+	uint32_t bitmap_index = number / WAFFLE_BITS_PER_BLOCK;
 	struct blkptr * bitmap = waffle_get_data_blkptr(info, &info->s_active.sn_block, NULL, number / 8);
 	if(!bitmap)
 		return -1;
 	if(((((uint32_t *) blkptr_data(bitmap))[index / 32] >> (index % 32)) & 1) == !!is_free)
 		/* already in the right state */
 		goto exit_r;
-	if(waffle_in_snapshot(info, bitmap->number))
+	if(waffle_bitmap_block_in_snapshot(info, bitmap->number, bitmap_index))
 	{
-		if(!is_free)
-		{
-			/* We can't use waffle_clone_block() here, because that
-			 * causes an unfortunate mutually recursive loop trying
-			 * to mark the block as allocated. So, we must clone the
-			 * bitmap pointer chain with waffle_allocate_base(). */
-			r = waffle_allocate_base(info, bitmap, number);
-			if(r >= 0)
-				r = -EAGAIN;
-			goto exit_r;
-		}
-		/* this case will turn into the case above after some recursion */
-		r = waffle_clone_block(info, bitmap);
+		r = waffle_clone_bitmap_block(info, bitmap, bitmap_index);
 		if(r < 0)
 			goto exit_r;
 	}
@@ -512,12 +614,11 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	bdesc_t * copy;
 	patch_t * patch = NULL;
 	int r;
-	do {
-		number = waffle_find_free_block(info, info->try_next_free);
-		if(!number || number == INVALID_BLOCK)
-			return -ENOSPC;
-		r = waffle_mark_allocated(info, number);
-	} while(r == -EAGAIN);
+	
+	number = waffle_find_free_block(info, info->try_next_free);
+	if(!number || number == INVALID_BLOCK)
+		return -ENOSPC;
+	r = waffle_mark_allocated(info, number);
 	if(r < 0)
 		return r;
 	copy = CALL(info->ubd, synthetic_read_block, number, 1, NULL);
@@ -563,13 +664,13 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 		info->active.bb_cache = bdesc_retain(copy);
 		info->active.bb_number = number;
 	}
+	r = waffle_mark_deallocated(info, blkptr->number);
+	if(r < 0)
+		kpanic("unrecoverable error deallocating cloned block: %d", r);
 	blkptr->number = number;
 	bdesc_release(&blkptr->block);
 	blkptr->block = bdesc_retain(copy);
 	info->cloned_since_checkpoint++;
-	r = waffle_mark_deallocated(info, blkptr->number);
-	if(r < 0)
-		kpanic("unrecoverable error deallocating cloned block: %d", r);
 	return 0;
 }
 
@@ -1387,8 +1488,9 @@ static int waffle_destroy(LFS_t * lfs)
 		bdesc_release(&info->active.bb_cache);
 	if(info->checkpoint.bb_cache)
 		bdesc_release(&info->checkpoint.bb_cache);
-	if(info->snapshot.bb_cache)
-		bdesc_release(&info->snapshot.bb_cache);
+	for(r = 0; r < WAFFLE_SNAPSHOT_COUNT; r++)
+		if(info->snapshot[r].bb_cache)
+			bdesc_release(&info->snapshot[r].bb_cache);
 	if(info->super_cache)
 		bdesc_release(&info->super_cache);
 	
@@ -1410,6 +1512,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	Dprintf("%s\n", __FUNCTION__);
 	struct waffle_info * info;
 	LFS_t * lfs;
+	int i;
 	
 	if(!block_device)
 		return NULL;
@@ -1430,7 +1533,8 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	info->active.bb_number = INVALID_BLOCK;
 	info->active.bb_index = INVALID_BLOCK;
 	info->checkpoint = info->active;
-	info->snapshot = info->active;
+	for(i = 0; i < WAFFLE_SNAPSHOT_COUNT; i++)
+		info->snapshot[i] = info->active;
 	info->free_blocks = 0;
 	info->filecache = NULL;
 	info->blkptr_map = hash_map_create();

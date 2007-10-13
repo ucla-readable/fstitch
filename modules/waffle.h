@@ -60,12 +60,14 @@ struct waffle_snapshot {
 
 #define WAFFLE_FS_MAGIC 0x3AFF1EF5
 
+#define WAFFLE_SNAPSHOT_COUNT 2
+
 struct waffle_super {
 	uint32_t s_magic;
 	uint32_t s_blocks;
 	uint32_t s_inodes;
 	struct waffle_snapshot s_checkpoint;
-	struct waffle_snapshot s_snapshot;
+	struct waffle_snapshot s_snapshot[WAFFLE_SNAPSHOT_COUNT];
 };
 
 #define WAFFLE_NAME_LEN 122
@@ -80,6 +82,7 @@ struct waffle_dentry {
 
 #define WAFFLE_SUPER_BLOCK 1
 #define WAFFLE_ROOT_INODE 1
+#define WAFFLE_BITMAP_MODULUS (WAFFLE_SNAPSHOT_COUNT + 2)
 #define WAFFLE_LINK_MAX 32000
 
 #define WAFFLE_S_IFMT   0xF000

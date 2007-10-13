@@ -26,6 +26,7 @@ static int diskfd;
 static off_t diskoff;
 static uint32_t nblocks, ninodes;
 static uint32_t next_free = WAFFLE_SUPER_BLOCK + 1;
+static uint32_t hole_start, hole_left = 0;
 
 struct block {
 	uint32_t busy, used, number;
@@ -226,9 +227,22 @@ static int init_super(void)
 	return 0;
 }
 
-static int alloc_block(uint32_t * pointer)
+static int alloc_block(uint32_t * pointer, uint32_t count)
 {
-	struct block * block = get_block(next_free++);
+	uint32_t number;
+	struct block * block;
+	if(count <= hole_left)
+	{
+		number = hole_start;
+		hole_start += count;
+		hole_left -= count;
+	}
+	else
+	{
+		number = next_free;
+		next_free += count;
+	}
+	block = get_block(number);
 	if(!block)
 		return -1;
 	memset(block->data, 0, sizeof(block->data));
@@ -237,23 +251,25 @@ static int alloc_block(uint32_t * pointer)
 	return 0;
 }
 
-static int append_block(struct waffle_inode * inode)
+static int append_block(struct waffle_inode * inode, uint32_t count)
 {
 	uint32_t i_blocks = inode->i_size / WAFFLE_BLOCK_SIZE;
 	struct block * dindirect;
 	struct block * indirect;
+	uint32_t * pointer;
 	inode->i_size += WAFFLE_BLOCK_SIZE;
 	if(i_blocks < WAFFLE_DIRECT_BLOCKS)
-		return alloc_block(&inode->i_direct[i_blocks]);
+		return alloc_block(&inode->i_direct[i_blocks], count);
 	if(i_blocks == WAFFLE_DIRECT_BLOCKS)
-		if(alloc_block(&inode->i_indirect) < 0)
+		if(alloc_block(&inode->i_indirect, count) < 0)
 			return -1;
 	if(i_blocks < WAFFLE_INDIRECT_BLOCKS)
 	{
 		indirect = get_block(inode->i_indirect);
 		if(!indirect)
 			return -1;
-		if(alloc_block(&((uint32_t *) indirect->data)[i_blocks - WAFFLE_DIRECT_BLOCKS]) < 0)
+		pointer = &((uint32_t *) indirect->data)[i_blocks - WAFFLE_DIRECT_BLOCKS];
+		if(alloc_block(pointer, count) < 0)
 		{
 			put_block(indirect);
 			return -1;
@@ -262,14 +278,15 @@ static int append_block(struct waffle_inode * inode)
 		return 0;
 	}
 	if(i_blocks == WAFFLE_INDIRECT_BLOCKS)
-		if(alloc_block(&inode->i_dindirect) < 0)
+		if(alloc_block(&inode->i_dindirect, count) < 0)
 			return -1;
 	dindirect = get_block(inode->i_dindirect);
 	if(!dindirect)
 		return -1;
 	if(!((i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS))
 	{
-		if(alloc_block(&((uint32_t *) dindirect->data)[(i_blocks - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS]) < 0)
+		pointer = &((uint32_t *) dindirect->data)[(i_blocks - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS];
+		if(alloc_block(pointer, count) < 0)
 		{
 			put_block(dindirect);
 			return -1;
@@ -281,7 +298,8 @@ static int append_block(struct waffle_inode * inode)
 		put_block(dindirect);
 		return -1;
 	}
-	if(alloc_block(&((uint32_t *) indirect->data)[(i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS]) < 0)
+	pointer = &((uint32_t *) indirect->data)[(i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
+	if(alloc_block(pointer, count) < 0)
 	{
 		put_block(indirect);
 		put_block(dindirect);
@@ -320,7 +338,7 @@ static struct block * get_inode_block(struct waffle_inode * inode, uint32_t inde
 	return block;
 }
 
-static int setup_inode(struct waffle_inode * inode, uint32_t size)
+static int setup_inode(struct waffle_inode * inode, uint32_t size, uint32_t count)
 {
 	inode->i_mode = WAFFLE_S_IRWXU | WAFFLE_S_IRWXG | WAFFLE_S_IRWXO;
 	inode->i_links = 1;
@@ -331,7 +349,7 @@ static int setup_inode(struct waffle_inode * inode, uint32_t size)
 	{
 		uint32_t i, blocks = (size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE;
 		for(i = 0; i < blocks; i++)
-			if(append_block(inode) < 0)
+			if(append_block(inode, count) < 0)
 				return -1;
 	}
 	assert(inode->i_size >= size);
@@ -349,7 +367,17 @@ static int init_blocks(void)
 	super = (struct waffle_super *) block->data;
 	super->s_checkpoint.sn_blocks = nblocks;
 	blocks = (nblocks + WAFFLE_BLOCK_SIZE * 8 - 1) / (WAFFLE_BLOCK_SIZE * 8);
-	if(setup_inode(&super->s_checkpoint.sn_block, blocks * WAFFLE_BLOCK_SIZE) < 0)
+	if(next_free % WAFFLE_BITMAP_MODULUS)
+	{
+		if(hole_left)
+			fprintf(stderr, "Warning: leaking %u blocks starting at block %u\n", hole_left, hole_start);
+		hole_start = next_free;
+		/* round next_free up to the next multiple of WAFFLE_BITMAP_MODULUS */
+		next_free = (next_free + WAFFLE_BITMAP_MODULUS - 1);
+		next_free -= next_free % WAFFLE_BITMAP_MODULUS;
+		hole_left = next_free - hole_start;
+	}
+	if(setup_inode(&super->s_checkpoint.sn_block, blocks * WAFFLE_BLOCK_SIZE, WAFFLE_BITMAP_MODULUS) < 0)
 	{
 		put_block(block);
 		return -1;
@@ -369,7 +397,7 @@ static int init_inodes(void)
 	super = (struct waffle_super *) block->data;
 	super->s_checkpoint.sn_inodes = ninodes;
 	blocks = (ninodes + WAFFLE_BLOCK_INODES - 1) / WAFFLE_BLOCK_INODES;
-	if(setup_inode(&super->s_checkpoint.sn_inode, blocks * WAFFLE_BLOCK_SIZE) < 0)
+	if(setup_inode(&super->s_checkpoint.sn_inode, blocks * WAFFLE_BLOCK_SIZE, 1) < 0)
 	{
 		put_block(block);
 		return -1;
@@ -402,7 +430,7 @@ static int init_root(void)
 	inode->i_uid = 0;
 	inode->i_gid = 0;
 	inode->i_links = 2;
-	if(append_block(inode) < 0)
+	if(append_block(inode, 1) < 0)
 	{
 		put_block(i_block);
 		put_block(block);
@@ -468,10 +496,12 @@ static int init_snapshots(void)
 {
 	struct waffle_super * super;
 	struct block * block = get_block(1);
+	int i;
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
-	super->s_snapshot = super->s_checkpoint;
+	for(i = 0; i < WAFFLE_SNAPSHOT_COUNT; i++)
+		super->s_snapshot[i] = super->s_checkpoint;
 	put_block(block);
 	return 0;
 }
