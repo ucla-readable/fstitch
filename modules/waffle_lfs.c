@@ -1028,7 +1028,7 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 	return size;
 }
 
-static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr ** inode_blkptr, const struct waffle_inode ** inode)
+static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr ** inode_blkptr, uint16_t * i_offset)
 {
 	Dprintf("%s\n", __FUNCTION__);
 	inode_t number;
@@ -1037,17 +1037,21 @@ static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr *
 	for(number = WAFFLE_ROOT_INODE + 1; number < info->super->s_inodes; number++)
 	{
 		uint32_t offset = number * sizeof(struct waffle_inode);
+		const struct waffle_inode * inode;
 		*inode_blkptr = waffle_get_data_blkptr(info, &info->s_active.sn_inode, NULL, offset);
 		if(!*inode_blkptr)
 			break;
 		offset %= WAFFLE_BLOCK_SIZE;
-		*inode = (struct waffle_inode *) (blkptr_data(*inode_blkptr) + offset);
-		if(!(*inode)->i_links)
+		inode = (struct waffle_inode *) (blkptr_data(*inode_blkptr) + offset);
+		if(!inode->i_links)
+		{
+			*i_offset = offset;
 			return number;
+		}
 		waffle_put_blkptr(info, inode_blkptr);
 	}
 	
-	*inode = NULL;
+	*i_offset = -1;
 	return -1;
 }
 
@@ -1436,7 +1440,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 	else
 	{
 		uint32_t x32;
-		uint16_t x16;
+		uint16_t x16, inode_offset;
 		struct waffle_inode init;
 		const struct waffle_inode * f_ip;
 		memset(&init, 0, sizeof(init));
@@ -1444,7 +1448,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		if(!init.i_mode)
 			return NULL;
 		init.i_mode |= WAFFLE_S_IRUSR | WAFFLE_S_IWUSR;
-		init.i_links = (type == TYPE_DIR) ? 2 : 1;
+		init.i_links = 1;
 		init.i_size = 0;
 		init.i_blocks = 0;
 		
@@ -1484,16 +1488,64 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		else
 			assert(0);
 		
-		/* FIXME: handle symlinks */
-		/* FIXME: handle directories */
-		if(type != TYPE_FILE)
-			kpanic("only files supported right now");
-		
 		/* set up initial inode */
-		*new_inode = waffle_find_free_inode(info, &inode_blkptr, &f_ip);
+		*new_inode = waffle_find_free_inode(info, &inode_blkptr, &inode_offset);
 		if(*new_inode <= WAFFLE_ROOT_INODE)
 			return NULL;
-		r = waffle_update_value(info, inode_blkptr, f_ip, &init, sizeof(*f_ip));
+		
+		if(type == TYPE_DIR)
+		{
+			bdesc_t * block;
+			patch_t * patch = NULL;
+			struct waffle_dentry dots[2];
+			uint32_t number = waffle_find_free_block(info, info->try_next_free);
+			if(number == INVALID_BLOCK)
+				kpanic("TODO: better error handling");
+			assert(!waffle_in_snapshot(info, number));
+			init.i_links++;
+			init.i_size += WAFFLE_BLOCK_SIZE;
+			init.i_direct[init.i_blocks++] = number;
+			block = CALL(info->ubd, synthetic_read_block, number, 1, NULL);
+			if(!block)
+				kpanic("TODO: better error handling");
+			r = patch_create_init(block, info->ubd, &patch);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+			memset(dots, 0, sizeof(dots));
+			dots[0].d_inode = *new_inode;
+			dots[0].d_type = WAFFLE_S_IFDIR;
+			strcpy(dots[0].d_name, ".");
+			dots[1].d_inode = parent_inode;
+			dots[1].d_type = WAFFLE_S_IFDIR;
+			strcpy(dots[1].d_name, "..");
+			r = patch_create_byte(block, info->ubd, 0, sizeof(dots), &dots, &patch);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+			r = patch_add_depend(info->checkpoint_changes, patch);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+			r = CALL(info->ubd, write_block, block, number);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+			r = waffle_mark_allocated(info, number);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+			parent = (struct waffle_fdesc *) waffle_lookup_inode(object, parent_inode);
+			if(!parent)
+				kpanic("TODO: better error handling");
+			f_ip = f_ip(parent);
+			x16 = f_ip->i_links + 1;
+			r = waffle_update_value(info, parent->f_inode_blkptr, &f_ip->i_links, &x16, sizeof(&f_ip->i_links));
+			waffle_free_fdesc(object, (fdesc_t *) parent);
+			if(r < 0)
+				kpanic("TODO: better error handling");
+		}
+		
+		/* FIXME: handle symlinks */
+		if(type != TYPE_FILE && type != TYPE_DIR)
+			kpanic("only files and directories supported right now");
+		
+		r = waffle_update_value(info, inode_blkptr, blkptr_data(inode_blkptr) + inode_offset, &init, sizeof(*f_ip));
 		waffle_put_blkptr(info, &inode_blkptr);
 		if(r < 0)
 			return NULL;
