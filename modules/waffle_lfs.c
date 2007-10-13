@@ -26,7 +26,7 @@
 #define Dprintf(x...)
 #endif
 
-/* structures, globals, and prototypes {{{ */
+/* structures and globals {{{ */
 
 /* Every active block is ultimately pointed to via some chain of pointers by the
  * superblock. When we need to clone a block, we may need to clone all the
@@ -111,10 +111,6 @@ DECLARE_POOL(waffle_fdesc_pool, struct waffle_fdesc);
 DECLARE_POOL(waffle_snapshot_pool, struct waffle_old_snapshot);
 static int n_waffle_instances = 0;
 
-/* prototypes */
-static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset);
-static int waffle_write_inode(LFS_t * object, struct waffle_fdesc * f, struct waffle_inode * new_inode, patch_t ** head);
-
 /* }}} */
 
 /* blkptr library {{{ */
@@ -171,6 +167,8 @@ static void waffle_put_blkptr(struct waffle_info * info, struct blkptr * blkptr)
  * consecutive n + 2 blocks assigned to that position. This allows a fast check
  * to see which of those blocks are in use, without using a bitmap that would
  * have to be modified (and thus cloned). */
+
+static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct waffle_inode * inode, uint32_t offset);
 
 static inline int waffle_bitmap_block_in_use(struct waffle_info * info, struct waffle_bitmap_cache * cache, const struct waffle_snapshot * snapshot, uint32_t number, uint32_t index)
 {
@@ -517,7 +515,7 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 /* updates the pointer to this blkptr (mid clone); parent must already be cloned */
 static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block, int is_bitmap)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u -> %u\n", __FUNCTION__, blkptr->number, block);
 	if(blkptr->parent)
 	{
 		assert(is_bitmap || !waffle_in_snapshot(info, blkptr->parent->number));
@@ -540,7 +538,7 @@ static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkp
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr);
 
 /* updates the indicated value on the block pointed to by this blkptr */
-static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr, const void * pointer, void * value, size_t size)
+static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr, const void * pointer, const void * value, size_t size)
 {
 	Dprintf("%s\n", __FUNCTION__);
 	int r;
@@ -1022,6 +1020,12 @@ static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr *
 	return -1;
 }
 
+static inline int waffle_update_inode(struct waffle_info * info, struct waffle_fdesc * fdesc, const struct waffle_inode * update)
+{
+	const struct waffle_inode * f_ip = f_ip(fdesc);
+	return waffle_update_value(info, fdesc->f_inode_blkptr, f_ip, update, sizeof(*f_ip));
+}
+
 /* }}} */
 
 /* LFS functions {{{ */
@@ -1405,16 +1409,17 @@ static int waffle_get_metadata_fdesc(LFS_t * object, const fdesc_t * file, uint3
 	return waffle_get_metadata(object, fd, id, size, data);
 }
 
-static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * f, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head)
+static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * fd, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head)
 {
-	Dprintf("%s %u\n", __FUNCTION__, f->f_inode);
-	assert(head && f && (!nfsm || fsm));
+	Dprintf("%s %u\n", __FUNCTION__, fd->f_inode);
+	struct waffle_info * info = (struct waffle_info *) object;
+	assert(head && fd && (!nfsm || fsm));
 	
-	struct waffle_inode init = *f_ip(f);
+	struct waffle_inode init = *f_ip(fd);
 	
   retry:
 	if(!nfsm)
-		return waffle_write_inode(object, f, &init, head);
+		return waffle_update_inode(info, fd, &init);
 	
 	if(fsm->fsm_feature == FSTITCH_FEATURE_SIZE)
 	{
@@ -1438,7 +1443,7 @@ static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * f, const f
 		}
 		
 		init.i_mode = (init.i_mode & ~WAFFLE_S_IFMT) | (fs_type);
-		f->f_type = fsm->fsm_value.u;
+		fd->f_type = fsm->fsm_value.u;
 	}
 	else if(fsm->fsm_feature == FSTITCH_FEATURE_UID)
 		init.i_uid = fsm->fsm_value.u;
@@ -1452,9 +1457,9 @@ static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * f, const f
 		init.i_atime = fsm->fsm_value.u;
 	else if(fsm->fsm_feature == FSTITCH_FEATURE_SYMLINK)
 	{
-		if(f->f_type != TYPE_SYMLINK)
+		if(fd->f_type != TYPE_SYMLINK)
 			return -EINVAL;
-		/* Implement symlinks */
+		/* FIXME: implement symlinks */
 		return -1;
 	}
 	else
@@ -1482,13 +1487,6 @@ static int waffle_set_metadata2_fdesc(LFS_t * object, fdesc_t * file, const fsme
 	Dprintf("%s %p\n", __FUNCTION__, file);
 	struct waffle_fdesc * fd = (struct waffle_fdesc *) file;
 	return waffle_set_metadata2(object, fd, fsm, nfsm, head);
-}
-
-static int waffle_write_inode(LFS_t * object, struct waffle_fdesc * f, struct waffle_inode * new_inode, patch_t ** head)
-{
-	Dprintf("%s file: %p inode: %u\n", __FUNCTION__, f, f->f_inode);
-	assert(f && new_inode);
-	return -1;
 }
 
 static void waffle_callback(void * arg)
@@ -1615,6 +1613,8 @@ static int waffle_destroy(LFS_t * lfs)
 
 /* }}} */
 
+/* constructor {{{ */
+
 LFS_t * waffle_lfs(BD_t * block_device)
 {
 	Dprintf("%s\n", __FUNCTION__);
@@ -1703,3 +1703,5 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	free(info);
 	return NULL;
 }
+
+/* }}} */
