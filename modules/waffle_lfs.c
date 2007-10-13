@@ -297,7 +297,7 @@ static int waffle_clone_bitmap_guts(struct waffle_info * info, struct blkptr * b
 static int waffle_clone_bitmap_dindir(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
 {
 	Dprintf("%s %u [%u]\n", __FUNCTION__, blkptr->number, index);
-	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
+	uint32_t group = blkptr->number - (blkptr->number % WAFFLE_BITMAP_MODULUS);
 	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
 	assert(!blkptr->parent);
 	for(;;)
@@ -320,7 +320,7 @@ static int waffle_clone_bitmap_dindir(struct waffle_info * info, struct blkptr *
 static int waffle_clone_bitmap_indir(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
 {
 	Dprintf("%s %u [%u]\n", __FUNCTION__, blkptr->number, index);
-	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
+	uint32_t group = blkptr->number - (blkptr->number % WAFFLE_BITMAP_MODULUS);
 	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
 	assert(blkptr->parent && !blkptr->parent->parent);
 	for(;;)
@@ -342,7 +342,7 @@ static int waffle_clone_bitmap_indir(struct waffle_info * info, struct blkptr * 
 static int waffle_clone_bitmap_block(struct waffle_info * info, struct blkptr * blkptr, uint32_t index)
 {
 	Dprintf("%s %u [%u]\n", __FUNCTION__, blkptr->number, index);
-	uint32_t group = blkptr->number % WAFFLE_BITMAP_MODULUS;
+	uint32_t group = blkptr->number - (blkptr->number % WAFFLE_BITMAP_MODULUS);
 	uint32_t check, max = group + WAFFLE_BITMAP_MODULUS;
 	if(blkptr->parent && waffle_bitmap_indir_in_snapshot(info, blkptr->parent->number, index))
 	{
@@ -570,7 +570,7 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	struct blkptr * indirect_blkptr;
 	struct blkptr * dindirect_blkptr;
 	inode_offset /= WAFFLE_BLOCK_SIZE;
-	if(inode_offset >= (inode->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE)
+	if(inode_offset >= inode->i_blocks)
 		/* asked for an offset past the last block */
 		return NULL;
 	if(inode_offset < WAFFLE_DIRECT_BLOCKS)
@@ -788,11 +788,8 @@ static uint32_t waffle_get_inode_block(struct waffle_info * info, const struct w
 {
 	bdesc_t * indirect;
 	bdesc_t * dindirect;
-	if(inode->i_size <= WAFFLE_INLINE_SIZE)
-		/* inode has no blocks; data is inline */
-		return INVALID_BLOCK;
 	offset /= WAFFLE_BLOCK_SIZE;
-	if(offset >= (inode->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE)
+	if(offset >= inode->i_blocks)
 		/* asked for an offset past the last block */
 		return INVALID_BLOCK;
 	if(offset < WAFFLE_DIRECT_BLOCKS)
@@ -1026,6 +1023,11 @@ static inline int waffle_update_inode(struct waffle_info * info, struct waffle_f
 	return waffle_update_value(info, fdesc->f_inode_blkptr, f_ip, update, sizeof(*f_ip));
 }
 
+static inline int waffle_set_pointer(struct waffle_info * info, struct blkptr * indirect, uint32_t index, uint32_t block)
+{
+	return waffle_update_value(info, indirect, &((uint32_t *) blkptr_data(indirect))[index], &block, sizeof(block));
+}
+
 /* }}} */
 
 /* LFS functions {{{ */
@@ -1163,9 +1165,7 @@ static uint32_t waffle_get_file_numblocks(LFS_t * object, fdesc_t * file)
 	Dprintf("%s %p\n", __FUNCTION__, file);
 	struct waffle_fdesc * fdesc = (struct waffle_fdesc *) file;
 	const struct waffle_inode * f_ip = f_ip(fdesc);
-	if(fdesc->f_type == TYPE_SYMLINK || f_ip->i_size <= WAFFLE_INLINE_SIZE)
-		return 0;
-	return (f_ip->i_size + WAFFLE_BLOCK_SIZE - 1) / WAFFLE_BLOCK_SIZE;
+	return f_ip->i_blocks;
 }
 
 /* XXX: we need to do some fancy stuff to support writing to the blocks returned by this */
@@ -1225,8 +1225,66 @@ static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * ent
 static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head)
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, file, block);
-	/* FIXME */
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_fdesc * fd = (struct waffle_fdesc *) file;
+	struct waffle_inode init = *f_ip(fd);
+	struct blkptr * indirect;
+	int r = 0;
+	if(init.i_blocks < WAFFLE_DIRECT_BLOCKS)
+	{
+		init.i_direct[init.i_blocks++] = block;
+		return waffle_update_inode(info, fd, &init);
+	}
+	if(init.i_blocks == WAFFLE_DIRECT_BLOCKS)
+	{
+		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		if(number == INVALID_BLOCK)
+			return -ENOSPC;
+		r = waffle_mark_allocated(info, number);
+		if(r < 0)
+			return r;
+		init.i_indirect = number;
+		r = waffle_update_inode(info, fd, &init);
+		if(r < 0)
+		{
+			waffle_mark_deallocated(info, number);
+			return r;
+		}
+	}
+	if(init.i_blocks < WAFFLE_INDIRECT_BLOCKS)
+	{
+		indirect = waffle_follow_pointer(info, fd->f_inode_blkptr, &f_ip(fd)->i_indirect);
+		if(!indirect)
+		{
+			r = -1;
+			goto fail_undo;
+		}
+		if(waffle_in_snapshot(info, init.i_indirect))
+		{
+			r = waffle_clone_block(info, indirect);
+			if(r < 0)
+			{
+				waffle_put_blkptr(info, &indirect);
+				goto fail_undo;
+			}
+		}
+		r = waffle_set_pointer(info, indirect, init.i_blocks - WAFFLE_DIRECT_BLOCKS, block);
+		waffle_put_blkptr(info, &indirect);
+		if(r < 0)
+			goto fail_undo;
+		init.i_blocks++;
+		r = waffle_update_inode(info, fd, &init);
+		if(r < 0)
+			kpanic("unexpected error updating inode");
+		return 0;
+	}
+	
+	/* FIXME: double indirect blocks */
 	return -ENOSYS;
+  fail_undo:
+	if(init.i_blocks == WAFFLE_DIRECT_BLOCKS)
+		waffle_mark_deallocated(info, init.i_indirect);
+	return r;
 }
 
 /* FIXME: finish this function */
@@ -1271,6 +1329,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		init.i_mode |= WAFFLE_S_IRUSR | WAFFLE_S_IWUSR;
 		init.i_links = (type == TYPE_DIR) ? 2 : 1;
 		init.i_size = 0;
+		init.i_blocks = 0;
 		
 		r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_UNIX_PERM, sizeof(x16), &x16);
 		if(r > 0)
@@ -1432,8 +1491,10 @@ static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * fd, const 
 	
 	if(fsm->fsm_feature == FSTITCH_FEATURE_SIZE)
 	{
+		if(fd->f_type == TYPE_DIR)
+			return -EINVAL;
 		if(fsm->fsm_value.u >= WAFFLE_MAX_FILE_SIZE)
-			return -1;
+			return -EINVAL;
 		init.i_size = fsm->fsm_value.u; 
 	}
 	else if(fsm->fsm_feature == FSTITCH_FEATURE_FILETYPE)
@@ -1644,6 +1705,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	LFS_INIT(lfs, waffle);
 	OBJMAGIC(lfs) = WAFFLE_FS_MAGIC;
 	
+	lfs->blocksize = WAFFLE_BLOCK_SIZE;
 	info->ubd = lfs->blockdev = block_device;
 	info->write_head = CALL(block_device, get_write_head);
 	info->active.bb_cache = NULL;

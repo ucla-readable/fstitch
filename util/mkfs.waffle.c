@@ -258,6 +258,7 @@ static int append_block(struct waffle_inode * inode, uint32_t count)
 	struct block * indirect;
 	uint32_t * pointer;
 	inode->i_size += WAFFLE_BLOCK_SIZE;
+	inode->i_blocks++;
 	if(i_blocks < WAFFLE_DIRECT_BLOCKS)
 		return alloc_block(&inode->i_direct[i_blocks], count);
 	if(i_blocks == WAFFLE_DIRECT_BLOCKS)
@@ -343,6 +344,7 @@ static int setup_inode(struct waffle_inode * inode, uint32_t size, uint32_t coun
 	inode->i_mode = WAFFLE_S_IRWXU | WAFFLE_S_IRWXG | WAFFLE_S_IRWXO;
 	inode->i_links = 1;
 	inode->i_size = 0;
+	inode->i_blocks = 0;
 	inode->i_atime = time(NULL);
 	inode->i_mtime = inode->i_atime;
 	if(size > WAFFLE_INLINE_SIZE)
