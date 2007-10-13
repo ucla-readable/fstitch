@@ -193,7 +193,7 @@ static inline int waffle_bitmap_indir_in_use(struct waffle_info * info, struct w
 		return 1;
 	}
 	index -= WAFFLE_DIRECT_BLOCKS;
-	index %= WAFFLE_BLOCK_POINTERS;
+	index /= WAFFLE_BLOCK_POINTERS;
 	return number == ((uint32_t *) bdesc_data(dindirect))[index];
 }
 
