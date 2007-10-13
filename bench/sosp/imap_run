@@ -31,24 +31,24 @@ fi
 
 # unsafe
 # patchgroup
-#run fsttich unsafe ext2 none patchgroup
-#run fsttich unsafe ext2 full patchgroup
+#run fstitch unsafe ext2 none patchgroup
+#run fstitch unsafe ext2 full patchgroup
 # fsyncs
 #run linux unsafe ext2 none fsync
 #run linux unsafe ext3 journal fsync
 
 # safe
 # patchgroup
-run fsttich safe ext2 su patchgroup
-run fsttich safe ext2 meta patchgroup
-run fsttich safe ext2 full patchgroup
+run fstitch safe ext2 su patchgroup
+run fstitch safe ext2 meta patchgroup
+run fstitch safe ext2 full patchgroup
 # linear
-#run fsttich safe ext2 full linear
+#run fstitch safe ext2 full linear
 run linux safe ext3 journal linear
 # fsync
-run fsttich safe ext2 su fsync
-run fsttich safe ext2 meta fsync
-run fsttich safe ext2 full fsync
+run fstitch safe ext2 su fsync
+run fstitch safe ext2 meta fsync
+run fstitch safe ext2 full fsync
 #run linux safe ext2 none fsync
 run linux safe ext3 writeback fsync
 run linux safe ext3 journal fsync

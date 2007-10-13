@@ -26,9 +26,9 @@ T=imap
 N=`get_test_num $OUTDIR/$T`
 
 case "$ACMODE" in
-	fsync)   IMAPD=/home/fsttich/ouwimap/imapd/imapd;;
-	linear)  IMAPD=/home/fsttich/juwimap/imapd/imapd;;
-	patchgroup) IMAPD=/home/fsttich/puwimap/imapd/imapd;;
+	fsync)   IMAPD=/home/fstitch/ouwimap/imapd/imapd;;
+	linear)  IMAPD=/home/fstitch/juwimap/imapd/imapd;;
+	patchgroup) IMAPD=/home/fstitch/puwimap/imapd/imapd;;
 	*) echo "Unsupported ACMODE $ACMODE" 1>&2; exit 1;;
 esac
 
