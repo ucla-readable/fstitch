@@ -601,7 +601,7 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 
 static int waffle_change_allocation(struct waffle_info * info, uint32_t number, int is_free)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u (%s)\n", __FUNCTION__, number, is_free ? "free" : "used");
 	int r = 0;
 	patch_t * patch = NULL;
 	uint32_t index = number % WAFFLE_BITS_PER_BLOCK;
@@ -704,6 +704,8 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 
 /* LFS helper functions {{{ */
 
+static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t block, patch_t ** head);
+
 static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * directory, const char * name, inode_t inode, uint16_t waffle_type)
 {
 	Dprintf("%s\n", __FUNCTION__);
@@ -734,8 +736,40 @@ static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * di
 	
 	if(!dir_blkptr)
 	{
-		/* FIXME: append to directory */
-		return -1;
+		bdesc_t * zero;
+		patch_t * patch = NULL;
+		uint32_t new_size = f_ip->i_size + WAFFLE_BLOCK_SIZE;
+		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		if(number == INVALID_BLOCK)
+			return -ENOSPC;
+		assert(!waffle_in_snapshot(info, number));
+		zero = CALL(info->ubd, synthetic_read_block, number, 1, NULL);
+		if(!zero)
+			return -1;
+		/* TODO: technically we might want to hook this up to checkpoint_changes */
+		r = patch_create_init(zero, info->ubd, &patch);
+		if(r < 0)
+			return r;
+		r = CALL(info->ubd, write_block, zero, number);
+		if(r < 0)
+			return r;
+		r = waffle_mark_allocated(info, number);
+		if(r < 0)
+			return r;
+		r = waffle_append_file_block(&info->lfs, (fdesc_t *) directory, number, NULL);
+		if(r < 0)
+		{
+			waffle_mark_deallocated(info, number);
+			return r;
+		}
+		r = waffle_update_value(info, directory->f_inode_blkptr, &f_ip->i_size, &new_size, sizeof(f_ip->i_size));
+		if(r < 0)
+			kpanic("unexpected error updating inode");
+		f_ip = f_ip(directory);
+		dir_blkptr = waffle_get_data_blkptr(info, f_ip, directory->f_inode_blkptr, index);
+		if(!dir_blkptr)
+			return -1;
+		dirent = (struct waffle_dentry *) blkptr_data(dir_blkptr);
 	}
 	
 	/* set up dentry */
@@ -1189,7 +1223,7 @@ static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * ent
 	for(index -= offset; index < f_ip->i_size; index += WAFFLE_BLOCK_SIZE)
 	{
 		bdesc_t * block;
-		uint32_t number = waffle_get_inode_block(info, f_ip, offset);
+		uint32_t number = waffle_get_inode_block(info, f_ip, index);
 		if(!number || number == INVALID_BLOCK)
 			return -ENOENT;
 		block = CALL(info->ubd, read_block, number, 1, NULL);
@@ -1229,12 +1263,16 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	struct waffle_fdesc * fd = (struct waffle_fdesc *) file;
 	struct waffle_inode init = *f_ip(fd);
 	struct blkptr * indirect;
+	struct blkptr * dindirect;
+	uint32_t * pointer;
 	int r = 0;
 	if(init.i_blocks < WAFFLE_DIRECT_BLOCKS)
 	{
 		init.i_direct[init.i_blocks++] = block;
 		return waffle_update_inode(info, fd, &init);
 	}
+	
+	/* inode has/needs indirect block */
 	if(init.i_blocks == WAFFLE_DIRECT_BLOCKS)
 	{
 		uint32_t number = waffle_find_free_block(info, info->try_next_free);
@@ -1257,7 +1295,7 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 		if(!indirect)
 		{
 			r = -1;
-			goto fail_undo;
+			goto fail_undo_1;
 		}
 		if(waffle_in_snapshot(info, init.i_indirect))
 		{
@@ -1265,13 +1303,13 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 			if(r < 0)
 			{
 				waffle_put_blkptr(info, &indirect);
-				goto fail_undo;
+				goto fail_undo_1;
 			}
 		}
 		r = waffle_set_pointer(info, indirect, init.i_blocks - WAFFLE_DIRECT_BLOCKS, block);
 		waffle_put_blkptr(info, &indirect);
 		if(r < 0)
-			goto fail_undo;
+			goto fail_undo_1;
 		init.i_blocks++;
 		r = waffle_update_inode(info, fd, &init);
 		if(r < 0)
@@ -1279,9 +1317,88 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 		return 0;
 	}
 	
-	/* FIXME: double indirect blocks */
-	return -ENOSYS;
-  fail_undo:
+	/* inode has/needs double indirect block */
+	if(init.i_blocks == WAFFLE_INDIRECT_BLOCKS)
+	{
+		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		if(number == INVALID_BLOCK)
+			return -ENOSPC;
+		r = waffle_mark_allocated(info, number);
+		if(r < 0)
+			return r;
+		init.i_dindirect = number;
+		r = waffle_update_inode(info, fd, &init);
+		if(r < 0)
+		{
+			waffle_mark_deallocated(info, number);
+			return r;
+		}
+	}
+	dindirect = waffle_follow_pointer(info, fd->f_inode_blkptr, &f_ip(fd)->i_dindirect);
+	if(!dindirect)
+	{
+		r = -1;
+		goto fail_undo_1;
+	}
+	if(!((init.i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS))
+	{
+		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		if(number == INVALID_BLOCK)
+		{
+			r = -ENOSPC;
+			goto fail_undo_2;
+		}
+		r = waffle_mark_allocated(info, number);
+		if(r < 0)
+			goto fail_undo_2;
+		if(waffle_in_snapshot(info, init.i_dindirect))
+		{
+			r = waffle_clone_block(info, dindirect);
+			if(r < 0)
+			{
+				waffle_mark_deallocated(info, number);
+				goto fail_undo_2;
+			}
+		}
+		r = waffle_set_pointer(info, dindirect, (init.i_blocks - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS, number);
+		if(r < 0)
+			goto fail_undo_2;
+	}
+	pointer = &((uint32_t *) blkptr_data(dindirect))[(init.i_blocks - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS];
+	indirect = waffle_follow_pointer(info, dindirect, pointer);
+	if(!indirect)
+	{
+		r = -1;
+		goto fail_undo_3;
+	}
+	if(waffle_in_snapshot(info, indirect->number))
+	{
+		r = waffle_clone_block(info, indirect);
+		if(r < 0)
+			goto fail_undo_4;
+	}
+	r = waffle_set_pointer(info, indirect, (init.i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS, block);
+	if(r < 0)
+		goto fail_undo_4;
+	init.i_blocks++;
+	r = waffle_update_inode(info, fd, &init);
+	if(r < 0)
+		kpanic("unexpected error updating inode");
+	
+	waffle_put_blkptr(info, &indirect);
+	waffle_put_blkptr(info, &dindirect);
+	return 0;
+	
+  fail_undo_4:
+	waffle_put_blkptr(info, &indirect);
+  fail_undo_3:
+	if(!((init.i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS))
+		waffle_mark_deallocated(info, *pointer);
+  fail_undo_2:
+	waffle_put_blkptr(info, &dindirect);
+  fail_undo_1:
+	if(init.i_blocks == WAFFLE_INDIRECT_BLOCKS)
+		waffle_mark_deallocated(info, init.i_dindirect);
 	if(init.i_blocks == WAFFLE_DIRECT_BLOCKS)
 		waffle_mark_deallocated(info, init.i_indirect);
 	return r;
