@@ -18,7 +18,7 @@
 #include <modules/waffle.h>
 #include <modules/waffle_lfs.h>
 
-#define WAFFLE_LFS_DEBUG 1
+#define WAFFLE_LFS_DEBUG 0
 
 #if WAFFLE_LFS_DEBUG
 #define Dprintf(x...) printf("WAFFLEDEBUG: " x)
@@ -1571,7 +1571,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 				kpanic("TODO: better error handling");
 			f_ip = f_ip(parent);
 			x16 = f_ip->i_links + 1;
-			r = waffle_update_value(info, parent->f_inode_blkptr, &f_ip->i_links, &x16, sizeof(&f_ip->i_links));
+			r = waffle_update_value(info, parent->f_inode_blkptr, &f_ip->i_links, &x16, sizeof(f_ip->i_links));
 			waffle_free_fdesc(object, (fdesc_t *) parent);
 			if(r < 0)
 				kpanic("TODO: better error handling");
