@@ -543,7 +543,7 @@ static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr
 	Dprintf("%s\n", __FUNCTION__);
 	int r;
 	patch_t * patch = NULL;
-	uint32_t offset = offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(blkptr);
+	uint32_t offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(blkptr);
 	if(size < 1 || size > WAFFLE_BLOCK_SIZE || offset > WAFFLE_BLOCK_SIZE - size)
 		return -EINVAL;
 	if(waffle_in_snapshot(info, blkptr->number))
