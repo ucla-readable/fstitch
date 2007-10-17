@@ -677,7 +677,6 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	if(r < 0)
 		goto fail_r;
 	r = hash_map_change_key(info->blkptr_map, (void *) blkptr->number, (void *) number);
-	/* XXX: this has returned -EEXIST in the kernel; why?? */
 	if(r < 0 && r != -ENOENT)
 	{
 		kpanic("unexpected error changing hash map keys: %d", r);
@@ -1576,17 +1575,33 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 			if(r < 0)
 				kpanic("TODO: better error handling");
 		}
-		
-		/* FIXME: handle symlinks */
-		if(type != TYPE_FILE && type != TYPE_DIR)
-			kpanic("only files and directories supported right now");
+		else if(type == TYPE_SYMLINK)
+		{
+			void * link_buf = malloc(WAFFLE_BLOCK_SIZE);
+			size_t size;
+			if(!link_buf)
+				return NULL;
+			r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_SYMLINK, WAFFLE_BLOCK_SIZE, link_buf);
+			if(r <= 0)
+				return NULL;
+			size = r;
+			if(size < WAFFLE_INLINE_SIZE)
+			{
+			}
+			/* FIXME: handle the symlink here */
+			kpanic("symlinks not supported yet");
+			free(link_buf);
+		}
+		else if(type != TYPE_FILE)
+			return NULL;
+		/* FIXME: handle failures here and below if type != TYPE_FILE */
 		
 		r = waffle_update_value(info, inode_blkptr, blkptr_data(inode_blkptr) + inode_offset, &init, sizeof(*f_ip));
 		waffle_put_blkptr(info, &inode_blkptr);
 		if(r < 0)
 			return NULL;
 	}
-	/* we now would have to reset the inode if we encounter any failures... */
+	/* FIXME: we now would have to reset the inode if we encounter any failures... */
 	
 	parent = (struct waffle_fdesc *) waffle_lookup_inode(object, parent_inode);
 	if(!parent)
@@ -1706,14 +1721,16 @@ static int waffle_remove_name(LFS_t * object, inode_t parent, const char * name,
 {
 	Dprintf("%s %u:%s\n", __FUNCTION__, parent, name);
 	struct waffle_info * info = (struct waffle_info *) object;
-	struct waffle_fdesc * pfile = NULL, * file = NULL;
-	uint16_t minlinks = 1, new_links;
+	struct waffle_fdesc * pfile = NULL;
+	struct waffle_fdesc * file = NULL;
+	const struct waffle_inode * f_ip;
+	uint16_t min_links = 1, new_links;
 	inode_t inode_number;
 	int r = -1;
-
+	
 	if(!strcmp(name, ".") || !strcmp(name, ".."))
 		return -EPERM;
-
+	
 	pfile = (struct waffle_fdesc *) waffle_lookup_inode(object, parent);
 	if(!pfile)
 		return -EINVAL;
@@ -1726,29 +1743,29 @@ static int waffle_remove_name(LFS_t * object, inode_t parent, const char * name,
 	if(!file)
 		goto remove_name_exit;
 	
-	const struct waffle_inode * file_inode = f_ip(file);
-	new_links = file_inode->i_links - 1;
+	f_ip = f_ip(file);
+	new_links = f_ip->i_links - 1;
 	if(file->f_type == TYPE_DIR)
 	{
-		if(file_inode->i_links > 2)
+		if(f_ip->i_links > 2)
 		{
 			r = -ENOTEMPTY;
 			goto remove_name_exit;
 		}
-		else if(file_inode->i_links < 2)
+		else if(f_ip->i_links < 2)
 		{
-			fprintf(stderr, "%s(): warning: directory (inode %u) with %u links\n", __FUNCTION__, inode_number, file_inode->i_links);
-			minlinks = file_inode->i_links;
+			fprintf(stderr, "%s(): warning: directory (inode %u) with %u links\n", __FUNCTION__, inode_number, f_ip->i_links);
+			min_links = f_ip->i_links;
 		}
 		else
-			minlinks = 2;
+			min_links = 2;
 	}
-
+	
 	/* delete the dirent at this point */
 	r = waffle_clear_dentry(info, pfile, name);
 	if(r < 0)
 		goto remove_name_exit;
-
+	
 	/* decrement parent's link count */
 	if(file->f_type == TYPE_DIR)
 	{
@@ -1761,16 +1778,16 @@ static int waffle_remove_name(LFS_t * object, inode_t parent, const char * name,
 	}
 	
 	/* need to refresh this pointer in case we had to clone a block above */
-	file_inode = f_ip(file);
-
+	f_ip = f_ip(file);
+	
 	/* free inode if need be */
-	if(file_inode->i_links == minlinks)
+	if(f_ip->i_links == min_links)
 	{
-		uint32_t iblocks = file_inode->i_blocks;
-		/* TODO: we can just use waffle_truncate_file_block() and waffle_mark_deallocated() here,
+		uint32_t iblocks;
+		/* we can just use waffle_truncate_file_block() and waffle_mark_deallocated() here,
 		 * since there is no benefit to creating patches optimized for this remove case when
 		 * using waffle-style dependencies (unlike soft updates, where it is important) */
-		while(iblocks > 0)
+		for(iblocks = f_ip->i_blocks; iblocks > 0; iblocks--)
 		{
 			uint32_t block_number = waffle_truncate_file_block(object, (fdesc_t *) file, NULL);
 			if(!block_number)
@@ -1782,17 +1799,13 @@ static int waffle_remove_name(LFS_t * object, inode_t parent, const char * name,
 			r = waffle_mark_deallocated(info, block_number);
 			if(r < 0)
 				goto remove_name_exit;
-			
-			--iblocks;
 		}
 		new_links = 0;
 	}
 	
 	/* we want to do this whether or not the file is actually removed by it */
-	r = waffle_update_value(info, file->f_inode_blkptr, &file_inode->i_links, &new_links, sizeof(file_inode->i_links));
-	if(r < 0)
-		goto remove_name_exit;
-
+	r = waffle_update_value(info, file->f_inode_blkptr, &f_ip->i_links, &new_links, sizeof(f_ip->i_links));
+	
   remove_name_exit:
 	if(file)
 		waffle_free_fdesc(object, (fdesc_t *) file);
@@ -1804,14 +1817,23 @@ static int waffle_write_block(LFS_t * object, bdesc_t * block, uint32_t number, 
 {
 	Dprintf("%s %u\n", __FUNCTION__, number);
 	struct waffle_info * info = (struct waffle_info *) object;
+	patch_t * patch = block->index_patches[info->ubd->graph_index].head;
 	
 	if(waffle_in_snapshot(info, number))
 	{
 		/* XXX: we must do COW here! */
-		kpanic("can't write blocks still in a snapshot yet");
+		fprintf(stderr, "%s(): warning: writing block %u still in snapshot!\n", __FUNCTION__, number);
 	}
 	
-	/* FIXME: add dependencies from checkpoint_changes -> (patches on block) */
+	/* add dependencies from checkpoint_changes -> (patches on block) */
+	for(; patch; patch = patch->ddesc_index_next)
+	{
+		/* this will probably not add lots of extra dependencies
+		 * because of the heuristics in patch_add_depend() */
+		int r = patch_add_depend(info->checkpoint_changes, patch);
+		if(r < 0)
+			kpanic("TODO: better error handling");
+	}
 	
 	return CALL(info->ubd, write_block, block, number);
 }
