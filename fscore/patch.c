@@ -420,7 +420,7 @@ static patch_t * patch_bit_patches(bdesc_t * block, uint16_t offset)
 			else \
 				states = srealloc(states, cur_size, states_capacity * sizeof(*states)); \
 			if(!states) \
-				kpanic("smalloc/srealloc(%u bytes) failed", states_capacity * sizeof(states)); \
+				kpanic("smalloc/srealloc(%u bytes) failed", (unsigned) (states_capacity * sizeof(states))); \
 			state = &states[next_index]; \
 		} \
 	} while(0)
@@ -432,7 +432,7 @@ static patch_t * patch_bit_patches(bdesc_t * block, uint16_t offset)
 		if(next_index < states_capacity) \
 			state++; \
 		else \
-			kpanic("recursion-on-the-heap needs %d bytes!", states_capacity * sizeof(*states)); \
+			kpanic("recursion-on-the-heap needs %u bytes!", (unsigned) (states_capacity * sizeof(*states))); \
 	} while(0)
 #endif
 

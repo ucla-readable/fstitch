@@ -229,17 +229,17 @@ static int check_super(LFS_t * object)
 	struct ext2_info * info = (struct ext2_info *) object;
 		
 	/* the superblock is in block 1 */
-	printf("\tMagic Number 0x%x \n", info->super->s_magic);
-	printf("\tBlocksize might be %i\n", info->ubd->blocksize);
-	printf("\tNumber of inodes %i\n", info->super->s_inodes_count);
-	printf("\tSize of inode sturcture %i\n", info->super->s_inode_size);
-	printf("\tNumber of free inodes %i\n", info->super->s_free_inodes_count);
-	printf("\tNumber of blocks %i\n", info->super->s_blocks_count);
-	printf("\tEXT2 Block size %i\n", 1024 << info->super->s_log_block_size);
-	printf("\tNumber of free blocks %i\n", info->super->s_free_blocks_count);
-	printf("\tSize of block group is %i\n", sizeof(EXT2_group_desc_t));
-	printf("\tNumber of blocks per group %i\n", info->super->s_blocks_per_group);
-	printf("\tNumber of inodes per group %i\n", info->super->s_inodes_per_group);
+	printf("\tMagic Number 0x%x\n", info->super->s_magic);
+	printf("\tBlocksize might be %d\n", info->ubd->blocksize);
+	printf("\tNumber of inodes %d\n", info->super->s_inodes_count);
+	printf("\tSize of inode sturcture %d\n", info->super->s_inode_size);
+	printf("\tNumber of free inodes %d\n", info->super->s_free_inodes_count);
+	printf("\tNumber of blocks %d\n", info->super->s_blocks_count);
+	printf("\tEXT2 Block size %d\n", 1024 << info->super->s_log_block_size);
+	printf("\tNumber of free blocks %d\n", info->super->s_free_blocks_count);
+	printf("\tSize of block group is %d\n", (int) sizeof(EXT2_group_desc_t));
+	printf("\tNumber of blocks per group %d\n", info->super->s_blocks_per_group);
+	printf("\tNumber of inodes per group %d\n", info->super->s_inodes_per_group);
 	
 	if(info->super->s_magic != EXT2_FS_MAGIC)
 	{

@@ -111,7 +111,7 @@ static int crashsim_bd_write_block(BD_t * object, bdesc_t * block, uint32_t numb
 		static uint8_t buffer[4096];
 		if(block->length > sizeof(buffer))
 		{
-			printf("%s(): block size larger than buffer! (%d, %d)\n", __FUNCTION__, block->length, sizeof(buffer));
+			printf("%s(): block size larger than buffer! (%d, %d)\n", __FUNCTION__, block->length, (int) sizeof(buffer));
 			return -EFAULT;
 		}
 		

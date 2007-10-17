@@ -105,7 +105,7 @@ error_name:
 static int modman_add_anon(hash_map_t * map, void * module, const char * prefix)
 {
 	char name[64];
-	snprintf(name, 64, "%s-%x", prefix, (size_t) module);
+	snprintf(name, 64, "%s-%x", prefix, (int) module);
 	return modman_add(map, module, name);
 }
 

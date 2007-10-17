@@ -1004,7 +1004,7 @@ static void serve_readdir(fuse_req_t req, fuse_ino_t fuse_ino, size_t size,
 			break;
 		else if (nbytes < 0)
 		{
-			fprintf(stderr, "%s:%s(): CALL(cfs, get_dirent, fdesc = %p, off = %d) = %d\n", __FILE__, __FUNCTION__, fdesc, off, nbytes);
+			fprintf(stderr, "%s:%s(): CALL(cfs, get_dirent, fdesc = %p, off = %d) = %d (%s)\n", __FILE__, __FUNCTION__, fdesc, off, nbytes, strerror(nbytes));
 			assert(nbytes >= 0);
 		}
 
@@ -1293,11 +1293,11 @@ int fuse_serve_init(int argc, char ** argv)
 	remove_activity = r;
 
 	channel_buf_len = fuse_serve_mount_chan_bufsize();
-    if (!(channel_buf = (char *) malloc(channel_buf_len)))
+	if (!(channel_buf = (char *) malloc(channel_buf_len)))
 	{
-        fprintf(stderr, "%s(): malloc(%u) failed to allocate read buffer\n", __FUNCTION__, channel_buf_len);
+		fprintf(stderr, "%s(): malloc(%u) failed to allocate read buffer\n", __FUNCTION__, (unsigned) channel_buf_len);
 		goto error_buf_len;
-    }
+	}
 
 	if ((r = set_signal_handlers()) < 0)
 		goto error_buf_malloc;

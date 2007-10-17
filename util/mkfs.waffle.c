@@ -130,7 +130,19 @@ static void put_block(struct block * b)
 	b->busy--;
 }
 
-#if BYTE_ORDER == LITTLE_ENDIAN
+static void swizzle(uint32_t * x)
+{
+	uint32_t y;
+	uint8_t * z;
+
+	z = (uint8_t *) x;
+	y = *x;
+	z[0] = y & 0xFF;
+	z[1] = (y >> 8) & 0xFF;
+	z[2] = (y >> 16) & 0xFF;
+	z[3] = (y >> 24) & 0xFF;
+}
+
 /* check for a partition table and use the first JOSFS/WAFFLE partition if there is one */
 static void partition_adjust(uint64_t * size)
 {
@@ -148,12 +160,13 @@ static void partition_adjust(uint64_t * size)
 			break;
 	if(i == 4)
 		return;
+	swizzle(&ptable[i].lba_start);
+	swizzle(&ptable[i].lba_length);
 	printf("Using JOSFS/WAFFLE partition %d, sector offset %d, size %d (%d blocks)\n", i + 1,
 	       ptable[i].lba_start, ptable[i].lba_length, ptable[i].lba_length / (WAFFLE_BLOCK_SIZE / 512));
 	diskoff = ptable[i].lba_start << 9;
 	*size = ptable[i].lba_length << 9;
 }
-#endif
 
 /* open the disk, check the superblock, and check the block bitmap for sanity */
 static int open_disk(const char * name, int use_ptable)
@@ -176,6 +189,7 @@ static int open_disk(const char * name, int use_ptable)
 	
 	if(s.st_mode & S_IFBLK)
 	{
+#ifdef BLKGETSIZE64
 		/* it's a block device; stat size will be zero */
 		if(ioctl(diskfd, BLKGETSIZE64, &size) < 0)
 		{
@@ -183,14 +197,16 @@ static int open_disk(const char * name, int use_ptable)
 			close(diskfd);
 			return -1;
 		}
+#else
+		fprintf(stderr, "%s is a block device\n", name);
+		return -1;
+#endif
 	}
 	else
 		size = s.st_size;
-#if BYTE_ORDER == LITTLE_ENDIAN
 	/* if requested, and if there is a partition table, use only the JOSFS/WAFFLE partition */
 	if(use_ptable)
 		partition_adjust(&size);
-#endif
 	nblocks = size / WAFFLE_BLOCK_SIZE;
 	
 	/* minimally, we have a reserved block, a superblock, a bitmap
@@ -537,13 +553,10 @@ static void flush_cache(void)
 int main(int argc, char * argv[])
 {
 	int use_ptable = 0;
-	const char * ptable_help = "";
 	
 	assert(WAFFLE_BLOCK_SIZE % sizeof(struct waffle_inode) == 0);
 	assert(WAFFLE_BLOCK_SIZE % sizeof(struct waffle_dentry) == 0);
 	
-#if BYTE_ORDER == LITTLE_ENDIAN
-	ptable_help = "[--ptable] ";
 	if(argc > 1 && !strcmp(argv[1], "--ptable"))
 	{
 		argc--;
@@ -551,11 +564,10 @@ int main(int argc, char * argv[])
 		argv++;
 		use_ptable = 1;
 	}
-#endif
 	
 	if(argc != 2)
 	{
-		fprintf(stderr, "Usage: %s %s<device>\n", argv[0], ptable_help);
+		fprintf(stderr, "Usage: %s [--ptable] <device>\n", argv[0]);
 		return 1;
 	}
 	

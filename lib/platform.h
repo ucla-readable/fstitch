@@ -112,7 +112,48 @@ static __inline int find_first_zero_bit(const unsigned long * addr, unsigned siz
 	return res;
 }
 #else
-#error Implement find_first_zero_bit in C
+static __inline int find_first_zero_bit(const unsigned long * addr, unsigned size)
+{
+	static const unsigned char lookup[] =
+ 	{
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 6, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 7, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 6, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 5, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, 
+ 		0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 0 
+ 	};
+	int value = 0;
+	assert(!(size % 32));
+	for(value = 0; value < size; addr++)
+	{
+ 		uint32_t word = *addr;
+ 		if(word != 0xFFFFFFFF)
+		{
+			value *= 32;
+ 			if((word & 255) != 0xFF) 
+ 				value += lookup[word & 255];
+ 			else if(((word >> 8) & 255) != 0xFF)
+ 				value += lookup[(word >> 8) & 255] + 8;
+ 			else if(((word >> 16) & 255) != 0xFF)
+ 				value += lookup[(word >> 16) & 255] + 16;
+ 			else 
+ 				value += lookup[(word >> 24) & 255] + 24;
+			return value;
+ 		}
+ 	}
+	return size;
+}
 #endif
 
 #endif /* __KERNEL__, UNIXUSER */
@@ -142,6 +183,9 @@ static __inline int find_first_zero_bit(const unsigned long * addr, unsigned siz
 #define static_assert(x) switch (x) case 0: case (x):
 
 /* assume 32-bit machine */
+#ifndef _UINTPTR_T
+#define _UINTPTR_T
 typedef uint32_t uintptr_t;
+#endif
 
 #endif /* __FSTITCH_FSCORE_PLATFORM_H */

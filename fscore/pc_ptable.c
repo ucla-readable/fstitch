@@ -26,7 +26,20 @@ struct ptable_info {
 
 #define SECTSIZE 512
 
-static void condense_ptable(struct pc_ptable * ptable, struct partition * partition)
+static void swizzle(uint32_t * x)
+{
+	uint32_t y;
+	uint8_t * z;
+
+	z = (uint8_t *) x;
+	y = *x;
+	z[0] = y & 0xFF;
+	z[1] = (y >> 8) & 0xFF;
+	z[2] = (y >> 16) & 0xFF;
+	z[3] = (y >> 24) & 0xFF;
+}
+
+static void condense_ptable(const struct pc_ptable * ptable, struct partition * partition)
 {
 	int i;
 	for(i = 0; i != 4; i++)
@@ -35,6 +48,8 @@ static void condense_ptable(struct pc_ptable * ptable, struct partition * partit
 		partition[i].type = ptable[i].type;
 		partition[i].start = ptable[i].lba_start;
 		partition[i].length = ptable[i].lba_length;
+		swizzle(&partition[i].start);
+		swizzle(&partition[i].length);
 	}
 }
 
@@ -46,7 +61,7 @@ static int _detect_extended(struct ptable_info * info, uint32_t table_offset, ui
 	
 	if(!table)
 		return -1;
-	condense_ptable((struct pc_ptable *) &bdesc_data(table)[PTABLE_OFFSET], ptable);
+	condense_ptable((const struct pc_ptable *) &bdesc_data(table)[PTABLE_OFFSET], ptable);
 	
 	for(i = 0; i != 4; i++)
 	{
@@ -98,7 +113,7 @@ static int detect_extended(struct ptable_info * info)
 void * pc_ptable_init(BD_t * bd)
 {
 	struct ptable_info * info;
-	struct pc_ptable * ptable;
+	const struct pc_ptable * ptable;
 	bdesc_t * mbr;
 	
 	/* make sure the block size is SECTSIZE */
@@ -117,7 +132,7 @@ void * pc_ptable_init(BD_t * bd)
 	mbr = CALL(bd, read_block, 0, 1, NULL);
 	if(!mbr)
 		goto error_mbr;
-	ptable = (struct pc_ptable *) &bdesc_data(mbr)[PTABLE_OFFSET];
+	ptable = (const struct pc_ptable *) &bdesc_data(mbr)[PTABLE_OFFSET];
 	
 	/* FIXME: support EZDrive partition tables here!
 	 * They have shadow partitions of type PTABLE_EZDRIVE_TYPE listed
