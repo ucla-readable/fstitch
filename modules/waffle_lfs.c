@@ -2,6 +2,9 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
+/* NOTE: this module is not yet complete, but its core functionality is in place
+ * and mostly works even though there is at least one bug in the module. */
+
 #include <lib/platform.h>
 #include <lib/jiffies.h>
 #include <lib/pool.h>
@@ -68,6 +71,9 @@ struct waffle_fdesc {
 	struct blkptr * f_inode_blkptr;
 	uint16_t f_inode_offset;
 };
+/* NOTE: the value returned by this macro will become stale if the inode block
+ * is cloned, e.g. if it is currently in a snapshot and is updated either
+ * directly or indirectly (by updating something it [indirectly] points to) */
 #define f_ip(wfd) ((const struct waffle_inode *) (blkptr_data((wfd)->f_inode_blkptr) + (wfd)->f_inode_offset))
 	
 struct waffle_bitmap_cache {
@@ -98,7 +104,8 @@ struct waffle_info {
 	int cloned_since_checkpoint;
 	patch_t * checkpoint_changes;
 	patch_t * checkpoint_tail;
-	int try_next_free;
+	uint32_t try_next_free_block;
+	inode_t try_next_free_inode;
 	uint32_t free_blocks;
 	struct waffle_fdesc * filecache;
 	/* map from block number -> struct blkptr */
@@ -477,7 +484,9 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t number)
 {
 	uint32_t start = number;
-	/* TODO: this is a really stupid way to do this; can we do better? */
+	if(start >= info->super->s_blocks)
+		start = info->super->s_blocks;
+	/* TODO: this is a stupid way to do this; can we do better? */
 	while(!waffle_can_allocate(info, number))
 	{
 		if(++number >= info->super->s_blocks)
@@ -485,6 +494,7 @@ static uint32_t waffle_find_free_block(struct waffle_info * info, uint32_t numbe
 		if(number == start)
 			return INVALID_BLOCK;
 	}
+	info->try_next_free_block = number;
 	return number;
 }
 
@@ -632,7 +642,6 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 #define waffle_mark_allocated(info, number) waffle_change_allocation(info, number, 0)
 #define waffle_mark_deallocated(info, number) waffle_change_allocation(info, number, 1)
 
-/* TODO: update try_next_free somewhere in here? */
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
 	Dprintf("%s\n", __FUNCTION__);
@@ -641,7 +650,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 	patch_t * patch = NULL;
 	int r;
 	
-	number = waffle_find_free_block(info, info->try_next_free);
+	number = waffle_find_free_block(info, info->try_next_free_block);
 	if(!number || number == INVALID_BLOCK)
 		return -ENOSPC;
 	r = waffle_mark_allocated(info, number);
@@ -738,7 +747,7 @@ static int waffle_add_dentry(struct waffle_info * info, struct waffle_fdesc * di
 		bdesc_t * zero;
 		patch_t * patch = NULL;
 		uint32_t new_size = f_ip->i_size + WAFFLE_BLOCK_SIZE;
-		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		uint32_t number = waffle_find_free_block(info, info->try_next_free_block);
 		if(number == INVALID_BLOCK)
 			return -ENOSPC;
 		assert(!waffle_in_snapshot(info, number));
@@ -1064,16 +1073,25 @@ static int waffle_get_metadata(LFS_t * object, const struct waffle_fdesc * fd, u
 	return size;
 }
 
-static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr ** inode_blkptr, uint16_t * i_offset)
+static inode_t waffle_find_free_inode(struct waffle_info * info, inode_t number, struct blkptr ** inode_blkptr, uint16_t * i_offset)
 {
 	Dprintf("%s\n", __FUNCTION__);
-	inode_t number;
+	inode_t start = number;
 	
+	if(start >= info->super->s_inodes)
+		start = info->super->s_inodes;
 	/* TODO: this is a really stupid way to do this; can we do better? */
-	for(number = WAFFLE_ROOT_INODE + 1; number < info->super->s_inodes; number++)
+	for(;;)
 	{
-		uint32_t offset = number * sizeof(struct waffle_inode);
+		uint32_t offset;
 		const struct waffle_inode * inode;
+		
+		if(++number >= info->super->s_inodes)
+			number = WAFFLE_ROOT_INODE + 1;
+		if(number == start)
+			break;
+		
+		offset = number * sizeof(struct waffle_inode);
 		*inode_blkptr = waffle_get_data_blkptr(info, &info->s_active.sn_inode, NULL, offset);
 		if(!*inode_blkptr)
 			break;
@@ -1082,6 +1100,7 @@ static inode_t waffle_find_free_inode(struct waffle_info * info, struct blkptr *
 		if(!inode->i_links)
 		{
 			*i_offset = offset;
+			info->try_next_free_inode = number;
 			return number;
 		}
 		waffle_put_blkptr(info, inode_blkptr);
@@ -1116,7 +1135,7 @@ static uint32_t waffle_allocate_block(LFS_t * object, fdesc_t * file, int purpos
 {
 	Dprintf("%s %p\n", __FUNCTION__, file);
 	struct waffle_info * info = (struct waffle_info *) object;
-	uint32_t number = waffle_find_free_block(info, info->try_next_free);
+	uint32_t number = waffle_find_free_block(info, info->try_next_free_block);
 	if(number == INVALID_BLOCK)
 		return INVALID_BLOCK;
 	if(waffle_mark_allocated(info, number) < 0)
@@ -1315,7 +1334,7 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	/* inode has/needs indirect block */
 	if(init.i_blocks == WAFFLE_DIRECT_BLOCKS)
 	{
-		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		uint32_t number = waffle_find_free_block(info, info->try_next_free_block);
 		if(number == INVALID_BLOCK)
 			return -ENOSPC;
 		r = waffle_mark_allocated(info, number);
@@ -1360,7 +1379,7 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	/* inode has/needs double indirect block */
 	if(init.i_blocks == WAFFLE_INDIRECT_BLOCKS)
 	{
-		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		uint32_t number = waffle_find_free_block(info, info->try_next_free_block);
 		if(number == INVALID_BLOCK)
 			return -ENOSPC;
 		r = waffle_mark_allocated(info, number);
@@ -1382,7 +1401,7 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	}
 	if(!((init.i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS))
 	{
-		uint32_t number = waffle_find_free_block(info, info->try_next_free);
+		uint32_t number = waffle_find_free_block(info, info->try_next_free_block);
 		if(number == INVALID_BLOCK)
 		{
 			r = -ENOSPC;
@@ -1524,7 +1543,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 			assert(0);
 		
 		/* set up initial inode */
-		*new_inode = waffle_find_free_inode(info, &inode_blkptr, &inode_offset);
+		*new_inode = waffle_find_free_inode(info, info->try_next_free_inode, &inode_blkptr, &inode_offset);
 		if(*new_inode <= WAFFLE_ROOT_INODE)
 			return NULL;
 		
@@ -1533,7 +1552,7 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 			bdesc_t * block;
 			patch_t * patch = NULL;
 			struct waffle_dentry dots[2];
-			uint32_t number = waffle_find_free_block(info, info->try_next_free);
+			uint32_t number = waffle_find_free_block(info, info->try_next_free_block);
 			if(number == INVALID_BLOCK)
 				kpanic("TODO: better error handling");
 			assert(!waffle_in_snapshot(info, number));
@@ -1577,19 +1596,28 @@ static fdesc_t * waffle_allocate_name(LFS_t * object, inode_t parent_inode, cons
 		}
 		else if(type == TYPE_SYMLINK)
 		{
-			void * link_buf = malloc(WAFFLE_BLOCK_SIZE);
+			char * link_buf = malloc(WAFFLE_BLOCK_SIZE);
 			size_t size;
 			if(!link_buf)
 				return NULL;
-			r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_SYMLINK, WAFFLE_BLOCK_SIZE, link_buf);
+			/* leave room to add a null terminator... */
+			r = initialmd->get(initialmd->arg, FSTITCH_FEATURE_SYMLINK, WAFFLE_BLOCK_SIZE - 1, link_buf);
 			if(r <= 0)
-				return NULL;
-			size = r;
-			if(size < WAFFLE_INLINE_SIZE)
 			{
+				free(link_buf);
+				return NULL;
 			}
-			/* FIXME: handle the symlink here */
-			kpanic("symlinks not supported yet");
+			/* make sure it's null terminated */
+			link_buf[size = r] = 0;
+			if(size < WAFFLE_INLINE_SIZE)
+				strcpy((void *) init.i_inline, link_buf);
+			else
+			{
+				/* FIXME: handle "slow" symlinks here */
+				free(link_buf);
+				return NULL;
+			}
+			init.i_size = size;
 			free(link_buf);
 		}
 		else if(type != TYPE_FILE)
@@ -1931,8 +1959,18 @@ static int waffle_set_metadata2(LFS_t * object, struct waffle_fdesc * fd, const 
 	{
 		if(fd->f_type != TYPE_SYMLINK)
 			return -EINVAL;
-		/* FIXME: implement symlinks */
-		return -1;
+		/* FIXME: handle "slow" symlinks here */
+		if(init.i_size >= WAFFLE_INLINE_SIZE)
+			return -ENOSYS;
+		if(fsm->fsm_value.p.length < WAFFLE_INLINE_SIZE)
+		{
+			memcpy((void *) init.i_inline, fsm->fsm_value.p.data, fsm->fsm_value.p.length);
+			init.i_inline[fsm->fsm_value.p.length] = 0;
+		}
+		else
+			/* FIXME: handle "slow" symlinks here */
+			return -ENOSYS;
+		init.i_size = fsm->fsm_value.p.length;
 	}
 	else
 		return -1;
@@ -2132,8 +2170,9 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	info->s_active = info->super->s_checkpoint;
 	info->old_snapshots = NULL;
 	info->cloned_since_checkpoint = 0;
-	/* TODO: something better than this could be nice */
-	info->try_next_free = WAFFLE_SUPER_BLOCK + 1;
+	/* TODO: something better than these might be nice */
+	info->try_next_free_block = WAFFLE_SUPER_BLOCK + 1;
+	info->try_next_free_inode = WAFFLE_ROOT_INODE + 1;
 	
 	if(patch_create_empty_list(NULL, &info->checkpoint_tail, NULL) < 0)
 		goto fail_super;
