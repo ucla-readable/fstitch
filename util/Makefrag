@@ -41,7 +41,14 @@ $(UTILDIR)/testpatchgroup: util/testpatchgroup.c $(OBJDIR)/lib/libpatchgroup.so
 
 GTKFLAGS:=$(shell pkg-config gtk+-2.0 --cflags --libs)
 
+RLFLAGS=
+SYSTEM:=$(shell uname -s)
+ifeq ($(SYSTEM),Darwin)
+# We assume Fink on OS X
+RLFLAGS+=-I/sw/include -bind_at_load
+endif
+
 $(UTILDIR)/fdb: util/fdb.c fscore/debug_opcode.h fscore/patch.h fscore/bdesc.h
 	@echo + cc[UTIL] $<
 	$(V)mkdir -p $(@D)
-	$(V)$(CC) $(CFLAGS) -I. -o $@ $< $(GTKFLAGS) -lreadline -ltermcap -lm
+	$(V)$(CC) $(CFLAGS) -I. -o $@ $< $(GTKFLAGS) $(RLFLAGS) -lreadline -ltermcap -lm

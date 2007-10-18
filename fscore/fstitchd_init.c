@@ -326,12 +326,16 @@ int fstitchd_init(int nwbblocks)
 		uhfses = NULL;
 	}
 
+#ifndef __MACH__
 	r = fstitchd_add_mount("/dev", modman_devfs);
 	if (r < 0)
 	{
 		fprintf(stderr, "fstitchd_add_mount: %i\n", r);
 		return r;
 	}
+#else
+#warning Disabling /dev file system for MacFUSE.
+#endif
 
 	return 0;
 }
