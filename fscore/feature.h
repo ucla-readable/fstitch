@@ -29,7 +29,7 @@ typedef struct fsmetadata {
 	union {
 		uint32_t u;
 		struct {
-			void *data;
+			void * data;
 			size_t length;
 		} p;
 	} fsm_value;

@@ -1455,7 +1455,9 @@ int fuse_serve_loop(void)
 				if ((*mp)->mounted && FD_ISSET((*mp)->channel_fd, &rfds))
 				{
 					r = fuse_chan_receive((*mp)->channel, channel_buf, channel_buf_len);
-					assert(r > 0); // what would this error mean?
+					if(r <= 0)
+						fprintf(stderr, "fuse_chan_receive() returned %d, ignoring!\n", r);
+					//assert(r > 0); // this happens during shutdown on MacFUSE...
 
 					Dprintf("fuse_serve: request for mount \"%s\"\n", (*mp)->fstitch_path);
 					fuse_session_process((*mp)->session, channel_buf, r, (*mp)->channel);
