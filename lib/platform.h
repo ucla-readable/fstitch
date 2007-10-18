@@ -183,7 +183,7 @@ static __inline int find_first_zero_bit(const unsigned long * addr, unsigned siz
 #define static_assert(x) switch (x) case 0: case (x):
 
 /* assume 32-bit machine */
-#ifndef _UINTPTR_T
+#if !defined(_UINTPTR_T) && !defined(__intptr_t_defined)
 #define _UINTPTR_T
 typedef uint32_t uintptr_t;
 #endif
