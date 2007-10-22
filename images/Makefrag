@@ -18,3 +18,10 @@ $(BASE_OBJDIR)/images/ext2-10G.img: images/ext2-10G.img.gz.gz
 	@mkdir -p $(@D)
 	$(V)zcat images/ext2-10G.img.gz.gz > $(BASE_OBJDIR)/images/ext2-10G.img.gz
 	$(V)util/gunzip_sparse $(BASE_OBJDIR)/images/ext2-10G.img.gz $(BASE_OBJDIR)/images/ext2-10G.img
+
+# waffle.img is largely a sparse file
+$(BASE_OBJDIR)/images/waffle.img: images/waffle.img.gz.gz
+	@echo + mk $(BASE_OBJDIR)/images/waffle.img
+	@mkdir -p $(@D)
+	$(V)zcat images/waffle.img.gz.gz > $(BASE_OBJDIR)/images/waffle.img.gz
+	$(V)util/gunzip_sparse $(BASE_OBJDIR)/images/waffle.img.gz $(BASE_OBJDIR)/images/waffle.img
