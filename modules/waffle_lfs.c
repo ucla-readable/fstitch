@@ -1831,6 +1831,9 @@ static int waffle_remove_name(LFS_t * object, inode_t parent, const char * name,
 		new_links = 0;
 	}
 	
+	/* need to refresh this pointer again in case we had to clone a block above */
+	f_ip = f_ip(file);
+
 	/* we want to do this whether or not the file is actually removed by it */
 	r = waffle_update_value(info, file->f_inode_blkptr, &f_ip->i_links, &new_links, sizeof(f_ip->i_links));
 	
