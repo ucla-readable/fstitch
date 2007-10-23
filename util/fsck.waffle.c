@@ -729,11 +729,14 @@ static int scan_waffles(void)
 		return -1;
 	}
 	for(i = 0; i < WAFFLE_SNAPSHOT_COUNT; i++)
+	{
+		snprintf(current_snapshot, sizeof(current_snapshot), "snapshot %d", i + 1);
 		if(scan_snapshot(&super->s_snapshot[i]) < 0)
 		{
 			put_block(b);
 			return -1;
 		}
+	}
 	put_block(b);
 	return 0;
 }
