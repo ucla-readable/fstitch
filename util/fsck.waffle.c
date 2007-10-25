@@ -23,6 +23,8 @@
 #include <lib/partition.h>
 #include <modules/waffle.h>
 
+static int fix = 0;
+
 static int diskfd;
 static off_t diskoff;
 static int nblocks, ninodes;
@@ -191,7 +193,7 @@ static int open_disk(const char * name, int use_ptable)
 	struct block * b;
 	struct waffle_super * super;
 	
-	if((diskfd = open(name, O_RDONLY)) < 0)
+	if((diskfd = open(name, fix ? O_RDWR : O_RDONLY)) < 0)
 	{
 		perror(name);
 		return -1;
@@ -363,6 +365,24 @@ static int block_marked_free(struct waffle_snapshot * snapshot, uint32_t number)
 	return value;
 }
 
+static int mark_block(struct waffle_snapshot * snapshot, uint32_t number, int free)
+{
+	struct block * b;
+	if(block_marked_free(snapshot, number) != !free)
+		return 0;
+	b = get_inode_block(&snapshot->sn_block, number / 8);
+	if(!b)
+	{
+		fprintf(stderr, "panic: failed to read bitmap\n");
+		return -1;
+	}
+	number %= WAFFLE_BITS_PER_BLOCK;
+	((uint32_t *) b->data)[number / 32] ^= 1 << (number % 32);
+	b->dirty = 1;
+	put_block(b);
+	return 0;
+}
+
 /* make sure all referenced blocks are not free, and all unreferenced blocks are free */
 static int scan_free(struct waffle_snapshot * snapshot)
 {
@@ -394,8 +414,9 @@ static int scan_free(struct waffle_snapshot * snapshot)
 	for(; i < nbitblocks * WAFFLE_BITS_PER_BLOCK; i++)
 		if(block_marked_free(snapshot, i))
 		{
-			fprintf(stderr, "Trailing block %u is marked available [%s]\n", i, current_snapshot);
-			return -1;
+			fprintf(stderr, "Trailing block %u is marked available [%s] (fixed)\n", i, current_snapshot);
+			if(!fix || mark_block(snapshot, i, 0) < 0)
+				return -1;
 		}
 	return 0;
 }
@@ -439,8 +460,20 @@ static int scan_inode(struct waffle_inode * inode, uint32_t number, const char *
 	}
 	else if(type != WAFFLE_S_IFREG && type != WAFFLE_S_IFDIR)
 	{
-		inode_error(number, name, "has invalid type 0x%04X\n", type);
-		return -1;
+		struct block * b;
+		if(!fix || number)
+		{
+			inode_error(number, name, "has invalid type 0x%04X\n", type);
+			return -1;
+		}
+		b = get_block(WAFFLE_SUPER_BLOCK);
+		if(!b)
+			return -1;
+		fprintf(stderr, "Inode <%s> [%s] has invalid type 0x%04X (fixed)\n", name, current_snapshot, type);
+		inode->i_mode &= ~WAFFLE_S_IFMT;
+		inode->i_mode |= WAFFLE_S_IFREG;
+		b->dirty = 1;
+		put_block(b);
 	}
 	
 	for(i = 0; i < inode->i_blocks; i++)
@@ -764,9 +797,17 @@ int main(int argc, char * argv[])
 	assert(WAFFLE_BLOCK_SIZE % sizeof(struct waffle_inode) == 0);
 	assert(WAFFLE_BLOCK_SIZE % sizeof(struct waffle_dentry) == 0);
 	
+	if(argc > 1 && !strcmp(argv[1], "-fix"))
+	{
+		argv[1] = argv[0];
+		argc--;
+		argv++;
+		fix = 1;
+	}
+	
 	if(argc != 2)
 	{
-		fprintf(stderr, "Usage: %s <device>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-fix] <device>\n", argv[0]);
 		return 1;
 	}
 	
