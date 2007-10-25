@@ -24,6 +24,7 @@
 #include <modules/waffle.h>
 
 static int fix = 0;
+static int verbose = 0;
 
 static int diskfd;
 static off_t diskoff;
@@ -304,7 +305,7 @@ static void inode_error(uint32_t inode, const char * name, const char * message,
 	va_end(ap);
 }
 
-/* "inode" and "name" are for error messages only */
+/* "inode" and "name" are for messages only */
 static int set_block_referenced(uint32_t block, uint32_t inode, const char * name)
 {
 	if(block >= nblocks)
@@ -316,6 +317,13 @@ static int set_block_referenced(uint32_t block, uint32_t inode, const char * nam
 	{
 		inode_error(inode, name, "references already-referenced block %u\n", block);
 		return -1;
+	}
+	if(verbose > 3)
+	{
+		if(inode)
+			printf("+ Inode %u uses block %u [%s]\n", inode, block, current_snapshot);
+		else
+			printf("+ Inode <%s> uses block %u [%s]\n", name, block, current_snapshot);
 	}
 	referenced_bitmap[block / 32] |= 1 << (block % 32);
 	return 0;
@@ -426,10 +434,13 @@ static int scan_inode(struct waffle_inode * inode, uint32_t number, const char *
 {
 	uint32_t i, size_blocks;
 	uint16_t type;
-	if(number)
-		printf("Scanning inode %u [%s]\n", number, current_snapshot);
-	else
-		printf("Scanning inode <%s> [%s]\n", name, current_snapshot);
+	if(verbose > 2)
+	{
+		if(number)
+			printf("Scanning inode %u [%s]\n", number, current_snapshot);
+		else
+			printf("Scanning inode <%s> [%s]\n", name, current_snapshot);
+	}
 	
 	type = inode->i_mode & WAFFLE_S_IFMT;
 	if(type == WAFFLE_S_IFLNK)
@@ -550,7 +561,8 @@ static int scan_bitmap_inode(struct waffle_inode * inode, const char * name)
 {
 	uint32_t i;
 	uint16_t type;
-	printf("Scanning block bitmap inode [%s]\n", current_snapshot);
+	if(verbose)
+		printf("Scanning block bitmap inode [%s]\n", current_snapshot);
 	
 	type = inode->i_mode & WAFFLE_S_IFMT;
 	if(type != WAFFLE_S_IFREG)
@@ -622,7 +634,8 @@ static int scan_dir(struct waffle_snapshot * snapshot, struct waffle_inode * ino
 {
 	uint32_t offset;
 	assert((inode->i_mode & WAFFLE_S_IFMT) == WAFFLE_S_IFDIR);
-	printf("Scanning directory inode %u [%s] (\"%s\")\n", number, current_snapshot, name);
+	if(verbose > 1)
+		printf("Scanning directory inode %u [%s] (\"%s\")\n", number, current_snapshot, name);
 	if(inode->i_size % sizeof(struct waffle_dentry))
 	{
 		fprintf(stderr, "Directory inode %u [%s] has invalid size %d\n", number, current_snapshot, inode->i_size);
@@ -667,13 +680,16 @@ static int scan_dir(struct waffle_snapshot * snapshot, struct waffle_inode * ino
 		}
 		put_block(b);
 	}
-	printf("Done scanning directory inode %u [%s]\n", number, current_snapshot);
+	if(verbose > 1)
+		printf("Done scanning directory inode %u [%s]\n", number, current_snapshot);
 	return 0;
 }
 
 static int scan_inodes(struct waffle_snapshot * snapshot)
 {
 	uint32_t inode;
+	if(verbose)
+		printf("Scanning inode table [%s]\n", current_snapshot);
 	for(inode = WAFFLE_ROOT_INODE; inode < ninodes; inode++)
 	{
 		struct block * ib;
@@ -697,6 +713,8 @@ static int scan_inodes(struct waffle_snapshot * snapshot)
 static int rescan_inodes(void)
 {
 	uint32_t inode;
+	if(verbose)
+		printf("Checking link counts in inode table [%s]\n", current_snapshot);
 	for(inode = WAFFLE_ROOT_INODE; inode < ninodes; inode++)
 		if(link_counts[inode])
 		{
@@ -734,6 +752,8 @@ static int scan_snapshot(struct waffle_snapshot * snapshot)
 	root = get_inode(snapshot, WAFFLE_ROOT_INODE, &ib);
 	if(!root)
 		return -1;
+	if(verbose)
+		printf("Checking directory structure [%s]\n", current_snapshot);
 	if(scan_dir(snapshot, root, WAFFLE_ROOT_INODE, "/") < 0)
 	{
 		put_block(ib);
@@ -792,22 +812,38 @@ static void flush_cache(void)
 	}
 }
 
+static struct {
+	const char * flag;
+	int * variable;
+} cmd_option[] = {
+	{"--verbose", &verbose},
+	{"-V", &verbose},
+	{"--fix", &fix}
+};
+#define OPTIONS (sizeof(cmd_option) / sizeof(cmd_option[0]))
+
 int main(int argc, char * argv[])
 {
 	assert(WAFFLE_BLOCK_SIZE % sizeof(struct waffle_inode) == 0);
 	assert(WAFFLE_BLOCK_SIZE % sizeof(struct waffle_dentry) == 0);
 	
-	if(argc > 1 && !strcmp(argv[1], "-fix"))
+	while(argc > 1)
 	{
+		int i;
+		for(i = 0; i != OPTIONS; i++)
+			if(!strcmp(argv[1], cmd_option[i].flag))
+				break;
+		if(i == OPTIONS)
+			break;
 		argv[1] = argv[0];
 		argc--;
 		argv++;
-		fix = 1;
+		++*cmd_option[i].variable;
 	}
 	
 	if(argc != 2)
 	{
-		fprintf(stderr, "Usage: %s [-fix] <device>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [--verbose|-V] [--fix] <device>\n", argv[0]);
 		return 1;
 	}
 	
