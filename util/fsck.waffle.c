@@ -297,7 +297,7 @@ static void inode_error(uint32_t inode, const char * name, const char * message,
 {
 	va_list ap;
 	if(inode)
-		fprintf(stderr, "Inode %u (\"%s\") [%s] ", inode, name, current_snapshot);
+		fprintf(stderr, "Inode %u [%s] ", inode, current_snapshot);
 	else
 		fprintf(stderr, "Inode <%s> [%s] ", name, current_snapshot);
 	va_start(ap, message);
@@ -437,9 +437,9 @@ static int scan_inode(struct waffle_inode * inode, uint32_t number, const char *
 	if(verbose > 2)
 	{
 		if(number)
-			printf("Scanning inode %u [%s]\n", number, current_snapshot);
+			printf("Scanning inode %u (size %d, %u blocks) [%s]\n", number, inode->i_size, inode->i_blocks, current_snapshot);
 		else
-			printf("Scanning inode <%s> [%s]\n", name, current_snapshot);
+			printf("Scanning inode <%s> (size %d, %u blocks) [%s]\n", name, inode->i_size, inode->i_blocks, current_snapshot);
 	}
 	
 	type = inode->i_mode & WAFFLE_S_IFMT;
