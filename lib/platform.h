@@ -15,6 +15,7 @@
 #include <linux/ctype.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
+#include <linux/random.h>
 
 /* stdio.h */
 #define printf(format, ...) printk(format, ## __VA_ARGS__)
@@ -56,6 +57,7 @@ typedef unsigned char bool;
 #include <fcntl.h>
 #include <errno.h>
 #include <limits.h>
+#include <unistd.h>
 
 #include <stdio.h>
 
@@ -89,6 +91,13 @@ typedef unsigned char bool;
 #endif
 
 #define container_of(ptr, type, member) ({typeof(((type *) 0)->member) * __mptr = (ptr); (type *) (unsigned long) ((char *) __mptr - offsetof(type,member));})
+
+static __inline void get_random_bytes(void * buf, int nbytes)
+{
+	int fd = open("/dev/random", O_RDONLY);
+	read(fd, buf, nbytes);
+	close(fd);
+}
 
 #ifdef __i386__
 static __inline int find_first_zero_bit(const unsigned long * addr, unsigned size)
