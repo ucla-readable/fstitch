@@ -168,7 +168,6 @@ static void partition_adjust(uint64_t * size)
 	*size = ptable[i].lba_length << 9;
 }
 
-/* open the disk, check the superblock, and check the block bitmap for sanity */
 static int open_disk(const char * name, int use_ptable)
 {
 	struct stat s;
@@ -357,7 +356,7 @@ static struct block * get_inode_block(struct waffle_inode * inode, uint32_t inde
 
 static int setup_inode(struct waffle_inode * inode, uint32_t size, uint32_t count)
 {
-	inode->i_mode = WAFFLE_S_IRWXU | WAFFLE_S_IRWXG | WAFFLE_S_IRWXO;
+	inode->i_mode = WAFFLE_S_IFREG | WAFFLE_S_IRWXU | WAFFLE_S_IRWXG | WAFFLE_S_IRWXO;
 	inode->i_links = 1;
 	inode->i_size = 0;
 	inode->i_blocks = 0;
@@ -485,8 +484,7 @@ static int update_blocks(void)
 	if(!block)
 		return -1;
 	super = (struct waffle_super *) block->data;
-	/* total number of bits in free block bitmap */
-	max = super->s_checkpoint.sn_block.i_size * 8;
+	max = nblocks;
   mark_free:
 	for(i = next_free; i < max; i++)
 	{
