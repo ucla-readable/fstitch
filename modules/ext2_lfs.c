@@ -24,6 +24,7 @@
 #endif
 
 #define ROUND_ROBIN_ALLOC 1
+#define EXT2_NEW_ALLOC 1
 
 #if EXT2_LFS_DEBUG
 #define Dprintf(x...) printf(x)
@@ -121,6 +122,11 @@ struct ext2_info {
 	/* the last block number allocated for each of file
 	 * data, directory data, and [d]indirect pointers */
 	uint32_t last_fblock, last_dblock, last_iblock;
+#endif
+#if EXT2_NEW_ALLOC
+	//Keep track of the total number of directories in the system
+	uint32_t ndirs;
+	uint8_t * debts;
 #endif
 #if DELETE_MERGE_STATS
 	struct {
@@ -1844,76 +1850,203 @@ static int ext2_insert_dirent_set(LFS_t * object, ext2_fdesc_t * parent, ext2_md
 	*pmdirent = mdirent;
 	return r;
 }
-
-static int find_free_inode_block_group(LFS_t * object, inode_t * ino)
+static int find_inode_group_other(LFS_t * object, inode_t parent)
 {
-	Dprintf("EXT2DEBUG: %s inode number is %u\n", __FUNCTION__, *ino);
+	Dprintf("EXT2DEBUG: %s parent inode number is %u\n", __FUNCTION__, parent);
 	struct ext2_info * info = (struct ext2_info *) object;
-	bdesc_t * bitmap;
-	inode_t curr = 0;
-	
-	if(*ino > info->super->s_inodes_count)
+	uint32_t ngroups = info->ngroups;
+	uint32_t inodes_per_group = info->super->s_inodes_per_group;
+	int32_t parent_group = parent / inodes_per_group; 
+	int32_t group, i;
+
+	group = parent_group;
+	if(info->groups[group].bg_free_inodes_count && 
+	   info->groups[group].bg_free_blocks_count)
+			goto found;
+
+	group = (group + parent) % ngroups;
+
+	//Fancy search
+	for(i = 1; i < ngroups; i <<= 1)
 	{
-		printf("%s requested status of inode %u too large!\n",__FUNCTION__, *ino);
-		return -ENOSPC;
+			group += i;
+			if(group >= ngroups)
+					group -= ngroups;
+			if(info->groups[group].bg_free_inodes_count &&
+			   info->groups[group].bg_free_blocks_count)
+					goto found;
+	}
+
+	//Stupid search
+	for(i = 0; i < ngroups; ++i)
+	{
+			if(++group >= ngroups)
+					group = 0;
+			if(info->groups[group].bg_free_inodes_count)
+					goto found;
+	}
+
+	return -ENOSPC;
+
+  found:
+	return group;
+}
+
+static int find_inode_group_orlov(LFS_t * object, inode_t parent)
+{
+	Dprintf("EXT2DEBUG: %s parent inode number is %u\n", __FUNCTION__, parent);
+	struct ext2_info * info = (struct ext2_info *) object;
+	uint32_t ngroups = info->ngroups;
+	uint32_t inodes_per_group = info->super->s_inodes_per_group;
+	uint32_t freei, avefreei, free_blocks, avefreeb;
+	uint32_t blocks_per_dir, ndirs;
+	uint32_t max_debt, max_dirs, min_blocks, min_inodes;
+	int32_t parent_group = parent / inodes_per_group; 
+	int32_t group = -1;
+	int32_t i;
+	//Magic numbers from the linux kernel
+	const int INODE_COST = 64;
+	const int BLOCK_COST = 256;
+	
+	freei = info->super->s_free_inodes_count;
+	avefreei = freei / ngroups;
+	free_blocks = info->super->s_free_blocks_count;
+	avefreeb = free_blocks / ngroups;
+	ndirs = info->ndirs;
+
+	if(parent == EXT2_ROOT_INO)
+	{
+		int best_ndir = inodes_per_group;
+		int best_group = -1;
+		
+		get_random_bytes(&group, sizeof(group));
+		parent_group = (unsigned)group % ngroups;
+		for(i = 0; i < ngroups; ++i)
+		{
+			group = (parent_group + i) % ngroups;
+			if(!info->groups[group].bg_free_inodes_count)
+				continue;
+			if (info->groups[group].bg_used_dirs_count >= best_ndir)
+				continue;
+			if (info->groups[group].bg_free_inodes_count < avefreei)
+				continue;
+			if (info->groups[group].bg_free_blocks_count < avefreeb)
+				continue;
+			best_group = group;
+			best_ndir = info->groups[group].bg_used_dirs_count;
+		}
+		if(best_group >= 0)
+		{
+				group = best_group;
+				goto found;
+		}
+		goto fallback;
 	}
 	
-	curr = *ino;
-	
-	uint32_t block_group = curr / info->super->s_inodes_per_group;
-	
-	/* TODO: clean this up like ext2_find_free_block() */
-	short firstrun = 1;
-	while(block_group != (*ino / info->super->s_inodes_per_group) || firstrun)
+	if(ndirs == 0)
+		ndirs = 1;
+
+	blocks_per_dir = ((info->super->s_blocks_count) - free_blocks) / ndirs;
+	max_dirs = ndirs / ngroups + inodes_per_group / 16;
+	min_inodes = avefreei - inodes_per_group / 4;
+	min_blocks = avefreeb - info->super->s_blocks_per_group / 4;
+	max_debt = info->super->s_blocks_per_group / MAX(blocks_per_dir, BLOCK_COST);
+	if(max_debt * INODE_COST > inodes_per_group)
+		max_debt = inodes_per_group / INODE_COST;
+	if(max_debt > 255)
+		max_debt = 255;
+	if(max_debt == 0)
+		max_debt = 1;
+
+	for(i = 0; i < ngroups; ++i)
 	{
-		if(info->inode_gdesc != block_group || info->inode_cache == NULL)
+		group = (parent_group + i) % ngroups;
+		if(!info->groups[group].bg_free_inodes_count)
+			continue;
+		if(info->debts[group] >= max_debt)
+			continue;
+		if (info->groups[group].bg_used_dirs_count >= max_dirs)
+		                continue;
+		if (info->groups[group].bg_free_inodes_count < min_inodes)
+		                continue;
+		if (info->groups[group].bg_free_blocks_count < min_blocks)
+		                continue;
+		goto found;
+	}
+
+  fallback:
+	for (i = 0; i < ngroups; i++) {
+		group = (parent_group + i) % ngroups;
+		if (!info->groups[group].bg_free_inodes_count)
+			continue;
+		if (info->groups[group].bg_free_inodes_count >= avefreei)
+			goto found;
+	}
+
+	if (avefreei) {
+		avefreei = 0;
+		goto fallback;
+	}
+
+	
+	return -ENOSPC;
+
+  found:
+	return group;
+}
+
+static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent, uint8_t type)
+{
+	Dprintf("EXT2DEBUG: %s parent is %u\n", __FUNCTION__, parent);
+	struct ext2_info * info = (struct ext2_info *) object;
+	inode_t ino = 0;
+	bdesc_t * bitmap;
+	int i;
+	int32_t group;
+	if(type == TYPE_DIR)
+		group = find_inode_group_orlov(object, parent);
+	else
+		group = find_inode_group_other(object, parent);
+	if(group == -ENOSPC)
+	{
+		return EXT2_BAD_INO;
+	}
+	
+	for(i = 0; i < info->ngroups; ++i)
+	{
+		if(info->inode_gdesc != group || info->inode_cache == NULL)
 		{
 			if(info->inode_cache != NULL)
 				bdesc_release(&info->inode_cache);
-			info->inode_gdesc = block_group;
-			bitmap = CALL(info->ubd, read_block, info->groups[block_group].bg_inode_bitmap, 1, NULL);
+			info->inode_gdesc = group;
+			bitmap = CALL(info->ubd, read_block, info->groups[group].bg_inode_bitmap, 1, NULL);
 			if(!bitmap)
 				return -ENOSPC;
 			bdesc_retain(bitmap);
 			bitmap->flags |= BDESC_FLAG_BITMAP;
 			info->inode_cache = bitmap;
-			info->inode_cache_number = info->groups[block_group].bg_inode_bitmap;
+			info->inode_cache_number = info->groups[group].bg_inode_bitmap;
 		}
-		
-		const unsigned long * array = (unsigned long *) bdesc_data(info->inode_cache);
-		//assert(!(curr % info->super->s_inodes_per_group));
-		int index = find_first_zero_bit(array, info->super->s_inodes_per_group/*, (curr % info->super->s_inodes_per_group)*/ );
-		if(index < (info->super->s_inodes_per_group))
-		{
-			curr += index + 1;
-			*ino = curr;
-			//printf("returning inode number %d\n", *ino);
-			return EXT2_FREE;
-		}
-		
-		firstrun = 0;
-		block_group = (block_group + 1) % info->ngroups;
-		curr = block_group * info->super->s_inodes_per_group;
-	}
-	
-	return -ENOSPC;
-}
 
-static inode_t ext2_find_free_inode(LFS_t * object, inode_t parent)
-{
-	Dprintf("EXT2DEBUG: %s parent is %u\n", __FUNCTION__, parent);
-	struct ext2_info * info = (struct ext2_info *) object;
-	inode_t ino = 0;
-	int r;
-	
-	ino = (parent / info->super->s_inodes_per_group) * info->super->s_inodes_per_group;
-	r = find_free_inode_block_group(object, &ino);
-	if(r != -ENOSPC)
-	{
-		return ino;
+		ino = 0;
+
+		const unsigned long * array = (unsigned long *) bdesc_data(info->inode_cache);
+		ino = find_first_zero_bit(array, info->super->s_inodes_per_group);
+		if(ino >= info->super->s_inodes_per_group)
+		{
+			if(++group == info->ngroups)
+					group = 0;
+			continue;
+		}
+		goto got;	
 	}
-	
+
 	return EXT2_BAD_INO;
+
+  got:
+	ino += (group * info->super->s_inodes_per_group) + 1;
+	return ino;
+
 }
 
 static int ext2_set_symlink(LFS_t * object, ext2_fdesc_t * f, const void * data, uint32_t size, patch_t ** head, int * ioff1p, int * ioff2p)
@@ -2027,7 +2160,7 @@ static fdesc_t * ext2_allocate_name(LFS_t * object, inode_t parent_ino, const ch
 	
 	if(!ln)
 	{
-		inode_t ino = ext2_find_free_inode(object, parent_ino);
+		inode_t ino = ext2_find_free_inode(object, parent_ino, type);
 		uint32_t x32;
 		uint16_t x16;
 		
@@ -3259,6 +3392,9 @@ static int ext2_destroy(LFS_t * lfs)
 	free(info->gdescs);
 	free((EXT2_Super_t *) info->super);
 	free((EXT2_group_desc_t *) info->groups);
+#if EXT2_NEW_ALLOC
+	free((int8_t *)info->debts);
+#endif
 	memset(info, 0, sizeof(*info));
 	free(info);
 	
@@ -3388,6 +3524,13 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 		gd->bg_free_blocks_count += blocks;
 		gd->bg_free_inodes_count += inodes;
 		gd->bg_used_dirs_count += dirs;
+#if EXT2_NEW_ALLOC
+		info->ndirs += dirs;
+		if(dirs == 1 && info->debts[group] < 255)
+				info->debts[group]++;
+		if(inodes == 1 && info->debts[group])
+				info->debts[group]--;
+#endif
 	
 		head = info->write_head ? *info->write_head : NULL;
 	
@@ -3453,7 +3596,7 @@ static int ext2_load_super(LFS_t * lfs)
 	info->last_iblock = info->super->s_blocks_count / 2;
 	info->last_dblock = 3 * (info->super->s_blocks_count / 4);
 #endif
-	
+
 	// now load the gdescs
 	uint32_t i;
 	uint32_t ngroupblocks;
@@ -3473,6 +3616,9 @@ static int ext2_load_super(LFS_t * lfs)
 	
 	info->gdescs = malloc(ngroupblocks * sizeof(bdesc_t *));
 	int nbytes = 0;
+#if EXT2_NEW_ALLOC
+	info->ndirs = 0;
+#endif
 	for(i = 0; i < ngroupblocks; i++)
 	{
 		info->gdescs[i] = CALL(info->ubd, read_block, GDESC_BLOCKNO(i), 1, NULL);
@@ -3483,13 +3629,21 @@ static int ext2_load_super(LFS_t * lfs)
 			nbytes = (sizeof(EXT2_group_desc_t) * ngroups) % lfs->blocksize;
 		else
 			nbytes = lfs->blocksize;
-		
+			
 		if(!memcpy((EXT2_group_desc_t *) info->groups + (i * info->block_descs),
 		           bdesc_data(info->gdescs[i]), nbytes))
 			goto wb_fail2;
 		bdesc_retain(info->gdescs[i]);
 	}
 	info->ngroupblocks = ngroupblocks;
+#if EXT2_NEW_ALLOC
+	for(i = 0; i < ngroups; i++)
+		info->ndirs += info->groups[i].bg_used_dirs_count;
+	info->debts = calloc(ngroups, sizeof(int8_t));
+	if(!info->debts)
+		goto wb_fail2;
+#endif
+	
 	return 1;
 	
   wb_fail2:
