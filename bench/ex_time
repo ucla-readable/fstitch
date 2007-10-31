@@ -14,6 +14,10 @@ sub svnversion() {
 	open(R, "<$dir/svnversion") || die;
 	while(<R>) {
 		my $line = $_;
+		if ($line =~ m/exported/) {
+			# git checkouts get "exported" r4308 was the last svn version
+			return 4308;
+		}
 		$line =~ m/(\d+\:)?(\d+).*/;
 		# Given a revision range, we probably care about the latest
 		# since we may be testing an old fstitch with updated bench scripts
