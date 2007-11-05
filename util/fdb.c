@@ -1030,6 +1030,7 @@ static const char * grouping_names[] = {
 	[BLOCK_OWNER] = "block[gold]-owner[red]",
 	[OWNER_BLOCK] = "owner[gold]-block[red]"
 };
+static int patch_simplify = 0;
 
 struct mark {
 	uint32_t address;
@@ -3145,7 +3146,7 @@ static int command_mark(int argc, const char * argv[])
 	return 0;
 }
 
-static const char * options[] = {"freelist", "grouping"};
+static const char * options[] = {"freelist", "grouping", "simplify"};
 #define OPTIONS (sizeof(options) / sizeof(options[0]))
 static int command_option(int argc, const char * argv[])
 {
@@ -3198,6 +3199,24 @@ static int command_option(int argc, const char * argv[])
 		}
 		printf("Patch grouping is %s%s\n", now, grouping_names[current_grouping]);
 	}
+	else if(!strcmp(argv[1], "simplify"))
+	{
+		const char * now = "";
+		if(argc > 2)
+		{
+			if(!strcmp(argv[2], "on"))
+				patch_simplify = 1;
+			else if(!strcmp(argv[2], "off"))
+				patch_simplify = 0;
+			else
+			{
+				printf("Invalid setting: %s\n", argv[2]);
+				return -1;
+			}
+			now = "now ";
+		}
+		printf("Patch graph simplifying is %so%s\n", now, patch_simplify ? "n" : "ff");
+	}
 	else
 	{
 		printf("Invalid option: %s\n", argv[1]);
@@ -3211,9 +3230,9 @@ static int command_ps(int argc, const char * argv[])
 	FILE * output;
 	char title[256];
 	if(argc > 1)
-		snprintf(title, sizeof(title), "dot -Tps -o %s", argv[1]);
+		snprintf(title, sizeof(title), "%sdot -Tps -o %s", patch_simplify ? "util/" : "", argv[1]);
 	else
-		snprintf(title, sizeof(title), "dot -Tps");
+		snprintf(title, sizeof(title), "%sdot -Tps", patch_simplify ? "util/" : "");
 	output = popen(title, "w");
 	if(!output)
 	{
@@ -3439,7 +3458,7 @@ static int command_view(int argc, const char * argv[])
 	close(r);
 	
 	/* this section is very similar to the ps command */
-	snprintf(title, sizeof(title), "dot -Tpng -o %s", tempfile);
+	snprintf(title, sizeof(title), "%sdot -Tpng -o %s", patch_simplify ? "util/" : "", tempfile);
 	output = popen(title, "w");
 	if(!output)
 	{
