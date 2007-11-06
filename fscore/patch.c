@@ -16,9 +16,9 @@
 #define PATCH_CYCLE_PRINT 1
 
 /* Set to count patches by type and display periodic output */
-#define COUNT_PATCHS 0
+#define COUNT_PATCHES 0
 /* Set for count to be a total instead of the current */
-#define COUNT_PATCHS_IS_TOTAL 0
+#define COUNT_PATCHES_IS_TOTAL 0
 
 /* Patch multigraphs allow more than one dependency between the same
  * two patches. This currently saves us the trouble of making sure we
@@ -241,7 +241,7 @@ static void patchpools_free_all(void * ignore)
 }
 
 
-#if COUNT_PATCHS
+#if COUNT_PATCHES
 #include <lib/jiffies.h>
 /* indices match patch->type */
 static uint32_t patch_counts[3];
@@ -1202,7 +1202,7 @@ int patch_create_empty_set(BD_t * owner, patch_t ** tail, patch_pass_set_t * bef
 		return -ENOMEM;
 	account_npatches(EMPTY, 1);
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CREATE_EMPTY, patch, owner);
-#if COUNT_PATCHS
+#if COUNT_PATCHES
 	patch_counts[EMPTY]++;
 	dump_counts();
 #endif
@@ -1654,7 +1654,7 @@ static void merge_rbs(bdesc_t * block)
 	{
 		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CONVERT_BYTE, merger, 0, merger->owner->level);
 		account_npatches_convert(BIT, BYTE);
-# if COUNT_PATCHS
+# if COUNT_PATCHES
 		patch_counts[BIT]--;
 		patch_counts[BYTE]++;
 		dump_counts();
@@ -1745,7 +1745,7 @@ static void merge_rbs(bdesc_t * block)
 		FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CONVERT_EMPTY, patch);
 		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "rb->nrb mergee");
 		account_npatches_convert(patch->type, EMPTY);
-# if COUNT_PATCHS
+# if COUNT_PATCHES
 		patch_counts[patch->type]--;
 		patch_counts[EMPTY]++;
 		dump_counts();
@@ -2377,7 +2377,7 @@ int patch_create_byte_basic(bdesc_t * block, BD_t * owner, uint16_t offset, uint
 	patch->flags = PATCH_SAFE_AFTER;
 		
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CREATE_BYTE, patch, block, owner, patch->offset, patch->length);
-#if COUNT_PATCHS
+#if COUNT_PATCHES
 	patch_counts[BYTE]++;
 	dump_counts();
 #endif
@@ -2735,7 +2735,7 @@ int patch_create_bit(bdesc_t * block, BD_t * owner, uint16_t offset, uint32_t xo
 		return -ENOMEM;
 	account_npatches(BIT, 1);
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CREATE_BIT, patch, block, owner, offset, xor);
-#if COUNT_PATCHS
+#if COUNT_PATCHES
 	patch_counts[BIT]++;
 	dump_counts();
 #endif
@@ -3286,7 +3286,7 @@ void patch_destroy(patch_t ** patch)
 	if((*patch)->block)
 		bdesc_release(&(*patch)->block);
 	
-#if COUNT_PATCHS && !COUNT_PATCHS_IS_TOTAL
+#if COUNT_PATCHES && !COUNT_PATCHES_IS_TOTAL
 	patch_counts[(*patch)->type]--;
 	dump_counts();
 #endif

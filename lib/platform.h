@@ -69,7 +69,7 @@ typedef unsigned char bool;
 typedef unsigned char bool;
 
 /* Duplicate some things we do in the Linux kernel */
-#define kpanic(x...) do { fprintf(stderr, x); abort(); } while(0)
+#define kpanic(x...) do { fprintf(stderr, x); fprintf(stderr, "\n"); abort(); } while(0)
 #define smalloc(x) malloc(x)
 #define scalloc(x, y) calloc(x, y)
 #define srealloc(x, y, z) realloc(x, z)

@@ -68,6 +68,7 @@ static inline void wb2_map_put_block(struct cache_info * info, bdesc_t * block, 
 		(*b)->block_hash.pprev = &block->block_hash.next;
 	block->block_hash.pprev = b;
 	block->cache_number = number;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_BDESC_NUMBER, block, number, 1);
 	*b = block;
 }
 
