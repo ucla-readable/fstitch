@@ -102,6 +102,7 @@ struct waffle_info {
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
 	struct waffle_bitmap_cache active, checkpoint, snapshot[WAFFLE_SNAPSHOT_COUNT];
+	struct waffle_old_snapshot * last_checkpoint;
 	struct waffle_old_snapshot * old_snapshots;
 	int cloned_since_checkpoint;
 	patch_t * checkpoint_changes;
@@ -246,6 +247,8 @@ static int waffle_bitmap_##x##_in_snapshot(struct waffle_info * info, uint32_t n
 			*next = old->next; \
 			if(old->bitmap.bb_cache) \
 				bdesc_release(&old->bitmap.bb_cache); \
+			if(old == info->last_checkpoint) \
+				info->last_checkpoint = NULL; \
 			waffle_snapshot_pool_free(old); \
 			continue; \
 		} \
@@ -439,6 +442,8 @@ static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 			*next = old->next;
 			if(old->bitmap.bb_cache)
 				bdesc_release(&old->bitmap.bb_cache);
+			if(old == info->last_checkpoint)
+				info->last_checkpoint = NULL;
 			waffle_snapshot_pool_free(old);
 			continue;
 		}
@@ -474,6 +479,8 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 			*next = old->next;
 			if(old->bitmap.bb_cache)
 				bdesc_release(&old->bitmap.bb_cache);
+			if(old == info->last_checkpoint)
+				info->last_checkpoint = NULL;
 			waffle_snapshot_pool_free(old);
 			continue;
 		}
@@ -2046,6 +2053,7 @@ static void waffle_callback(void * arg)
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "checkpoint");
 	/* weak retain the new checkpoint so we know when the old one is no longer on disk */
 	patch_weak_retain(patch, &old_snapshot->overwrite, NULL, NULL);
+	info->last_checkpoint = old_snapshot;
 	info->old_snapshots = old_snapshot;
 	info->checkpoint = info->active;
 	/* increase the reference count of the bitmap cache we copied */
@@ -2185,6 +2193,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
 	info->s_active = info->super->s_checkpoint;
+	info->last_checkpoint = NULL;
 	info->old_snapshots = NULL;
 	info->cloned_since_checkpoint = 0;
 	/* TODO: something better than these might be nice */
@@ -2241,12 +2250,19 @@ int waffle_take_snapshot(LFS_t * object, int number)
 {
 	struct waffle_info * info = (struct waffle_info *) object;
 	struct waffle_old_snapshot * old_snapshot;
-	patch_t * patch = info->checkpoint_changes;
+	patch_t * patch = NULL;
 	int r;
 	if(OBJMAGIC(object) != WAFFLE_FS_MAGIC)
 		return -EINVAL;
 	if(number < 0 || number >= WAFFLE_SNAPSHOT_COUNT)
 		return -EINVAL;
+	/* make a checkpoint if necessary */
+	if(info->cloned_since_checkpoint)
+	{
+		waffle_callback(object);
+		if(info->cloned_since_checkpoint)
+			return -EBUSY;
+	}
 	old_snapshot = waffle_snapshot_pool_alloc();
 	if(!old_snapshot)
 	{
@@ -2259,7 +2275,9 @@ int waffle_take_snapshot(LFS_t * object, int number)
 	old_snapshot->snapshot = info->super->s_snapshot[number];
 	old_snapshot->next = info->old_snapshots;
 	
-	r = patch_create_byte_atomic(info->super_cache, info->ubd, offsetof(struct waffle_super, s_snapshot[number]), sizeof(struct waffle_snapshot), &info->s_active, &patch);
+	if(info->last_checkpoint)
+		patch = WEAK(info->last_checkpoint->overwrite);
+	r = patch_create_byte_atomic(info->super_cache, info->ubd, offsetof(struct waffle_super, s_snapshot[number]), sizeof(struct waffle_snapshot), &info->super->s_checkpoint, &patch);
 	if(r < 0)
 	{
 		waffle_snapshot_pool_free(old_snapshot);
@@ -2270,7 +2288,7 @@ int waffle_take_snapshot(LFS_t * object, int number)
 	/* weak retain the new snapshot so we know when the old one is no longer on disk */
 	patch_weak_retain(patch, &old_snapshot->overwrite, NULL, NULL);
 	info->old_snapshots = old_snapshot;
-	info->snapshot[number] = info->active;
+	info->snapshot[number] = info->checkpoint;
 	/* increase the reference count of the bitmap cache we copied */
 	if(info->snapshot[number].bb_cache)
 		bdesc_retain(info->snapshot[number].bb_cache);
