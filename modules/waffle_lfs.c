@@ -21,6 +21,8 @@
 #include <modules/waffle.h>
 #include <modules/waffle_lfs.h>
 
+#define CHECKPOINT_INTERVAL (10 * HZ)
+
 #define WAFFLE_LFS_DEBUG 0
 
 #if WAFFLE_LFS_DEBUG
@@ -127,6 +129,8 @@ static struct blkptr * waffle_get_blkptr(struct waffle_info * info, struct blkpt
 	struct blkptr * blkptr = (struct blkptr *) hash_map_find_val(info->blkptr_map, (void *) number);
 	if(blkptr)
 	{
+		assert(blkptr->block == block);
+		assert(blkptr->parent_offset == parent_offset);
 		blkptr->references++;
 		return blkptr;
 	}
@@ -525,7 +529,7 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 /* updates the pointer to this blkptr (mid clone); parent must already be cloned */
 static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block, int is_bitmap)
 {
-	Dprintf("%s %u -> %u\n", __FUNCTION__, blkptr->number, block);
+	Dprintf("%s %u[%d]: %u -> %u\n", __FUNCTION__, blkptr->parent ? blkptr->parent->number : WAFFLE_SUPER_BLOCK, blkptr->parent_offset, blkptr->number, block);
 	if(blkptr->parent)
 	{
 		assert(is_bitmap || !waffle_in_snapshot(info, blkptr->parent->number));
@@ -550,7 +554,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 /* updates the indicated value on the block pointed to by this blkptr */
 static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr, const void * pointer, const void * value, size_t size)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u, [%d]\n", __FUNCTION__, blkptr->number, size);
 	int r;
 	patch_t * patch = NULL;
 	uint32_t offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(blkptr);
@@ -580,6 +584,7 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	struct blkptr * indirect_blkptr;
 	struct blkptr * dindirect_blkptr;
 	inode_offset /= WAFFLE_BLOCK_SIZE;
+	Dprintf("%s [%u]\n", __FUNCTION__, inode_offset);
 	if(inode_offset >= inode->i_blocks)
 		/* asked for an offset past the last block */
 		return NULL;
@@ -600,7 +605,7 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 		return NULL;
 	pointer = &((uint32_t *) blkptr_data(dindirect_blkptr))[(inode_offset - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS];
 	indirect_blkptr = waffle_follow_pointer(info, dindirect_blkptr, pointer);
-	waffle_put_blkptr(info, &indirect_blkptr);
+	waffle_put_blkptr(info, &dindirect_blkptr);
 	if(!indirect_blkptr)
 		return NULL;
 	pointer = &((uint32_t *) blkptr_data(indirect_blkptr))[(inode_offset - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
@@ -644,7 +649,7 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u\n", __FUNCTION__, blkptr->number);
 	uint32_t number;
 	bdesc_t * copy;
 	patch_t * patch = NULL;
@@ -1265,8 +1270,9 @@ static uint32_t waffle_get_file_numblocks(LFS_t * object, fdesc_t * file)
 static uint32_t waffle_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, file, offset);
+	struct waffle_info * info = (struct waffle_info *) object;
 	struct waffle_fdesc * fdesc = (struct waffle_fdesc *) file;
-	return waffle_get_inode_block((struct waffle_info *) object, f_ip(fdesc), offset);
+	return waffle_get_inode_block(info, f_ip(fdesc), offset);
 }
 
 static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -1325,6 +1331,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	struct blkptr * dindirect;
 	uint32_t * pointer;
 	int r = 0;
+	if(block <= WAFFLE_SUPER_BLOCK || block >= info->super->s_blocks)
+		return -EINVAL;
 	if(init.i_blocks < WAFFLE_DIRECT_BLOCKS)
 	{
 		init.i_direct[init.i_blocks++] = block;
@@ -1364,6 +1372,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 				waffle_put_blkptr(info, &indirect);
 				goto fail_undo_1;
 			}
+			/* the indirect block number is now different */
+			init = *f_ip(fd);
 		}
 		r = waffle_set_pointer(info, indirect, init.i_blocks - WAFFLE_DIRECT_BLOCKS, block);
 		waffle_put_blkptr(info, &indirect);
@@ -1418,6 +1428,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 				waffle_mark_deallocated(info, number);
 				goto fail_undo_2;
 			}
+			/* the double indirect block number is now different */
+			init = *f_ip(fd);
 		}
 		r = waffle_set_pointer(info, dindirect, (init.i_blocks - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS, number);
 		if(r < 0)
@@ -1435,6 +1447,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 		r = waffle_clone_block(info, indirect);
 		if(r < 0)
 			goto fail_undo_4;
+		/* nothing should have changed on the inode */
+		assert(!memcmp(&init, f_ip(fd), sizeof(init)));
 	}
 	r = waffle_set_pointer(info, indirect, (init.i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS, block);
 	if(r < 0)
@@ -2186,7 +2200,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->checkpoint_changes, "checkpoint changes");
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, info->checkpoint_changes, PATCH_SET_EMPTY);
 	info->checkpoint_changes->flags |= PATCH_SET_EMPTY;
-	if(sched_register(waffle_callback, info, 10 * HZ) < 0)
+	if(sched_register(waffle_callback, info, CHECKPOINT_INTERVAL) < 0)
 		goto fail_tail;
 	
 	/* FIXME: count the free blocks */
