@@ -2234,3 +2234,51 @@ LFS_t * waffle_lfs(BD_t * block_device)
 }
 
 /* }}} */
+
+/* user snapshots {{{ */
+
+int waffle_take_snapshot(LFS_t * object, int number)
+{
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_old_snapshot * old_snapshot;
+	patch_t * patch = info->checkpoint_changes;
+	int r;
+	if(OBJMAGIC(object) != WAFFLE_FS_MAGIC)
+		return -EINVAL;
+	if(number < 0 || number >= WAFFLE_SNAPSHOT_COUNT)
+		return -EINVAL;
+	old_snapshot = waffle_snapshot_pool_alloc();
+	if(!old_snapshot)
+	{
+		fprintf(stderr, "%s(): warning: failed to allocate snapshot!\n", __FUNCTION__);
+		return -ENOMEM;
+	}
+	/* save the old snapshot */
+	WEAK_INIT(old_snapshot->overwrite);
+	old_snapshot->bitmap = info->snapshot[number];
+	old_snapshot->snapshot = info->super->s_snapshot[number];
+	old_snapshot->next = info->old_snapshots;
+	
+	r = patch_create_byte_atomic(info->super_cache, info->ubd, offsetof(struct waffle_super, s_snapshot[number]), sizeof(struct waffle_snapshot), &info->s_active, &patch);
+	if(r < 0)
+	{
+		waffle_snapshot_pool_free(old_snapshot);
+		fprintf(stderr, "%s(): warning: failed to create checkpoint!\n", __FUNCTION__);
+		return r;
+	}
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "snapshot");
+	/* weak retain the new snapshot so we know when the old one is no longer on disk */
+	patch_weak_retain(patch, &old_snapshot->overwrite, NULL, NULL);
+	info->old_snapshots = old_snapshot;
+	info->snapshot[number] = info->active;
+	/* increase the reference count of the bitmap cache we copied */
+	if(info->snapshot[number].bb_cache)
+		bdesc_retain(info->snapshot[number].bb_cache);
+	
+	r = CALL(info->ubd, write_block, info->super_cache, WAFFLE_SUPER_BLOCK);
+	if(r < 0)
+		fprintf(stderr, "%s(): warning: failed to write superblock!\n", __FUNCTION__);
+	return 0;
+}
+
+/* }}} */
